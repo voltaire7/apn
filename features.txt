@@ -1,0 +1,189 @@
+# =========================================================
+#  SLOTH feature showcase
+#  A lazy, Haskell-like, untyped (JS-like) scripting language.
+#  Run:  deno run --allow-read main.ts features.txt
+# =========================================================
+
+# ---------------------------------------------------------
+# 1. DATA TYPES (variants / ADTs)
+#    Unary constructor `Just` wraps a value; bare `Nothing` is a tag.
+# ---------------------------------------------------------
+data Maybe a = Just a | Nothing
+
+print (Just 42)        # => Just 42
+print Nothing          # => Nothing
+
+# ---------------------------------------------------------
+# 2. FUNCTIONS & LAMBDAS
+#    Two styles to define a function:
+#      - lambda:     name = x -> body   (multi-param: a b c -> body)
+#      - Haskell:    name x = body      (params attached to the left of `=`)
+#    Both support recursion and partial application.
+# ---------------------------------------------------------
+func x = x + x                # Haskell style
+print (func 21)               # => 42
+
+double = x -> x * 2           # lambda style
+print (double 21)             # => 42
+
+add a b = a + b               # Haskell style, multi-param
+print (add 3 4)               # => 7
+
+addTwo = add 2                # partial application
+print (addTwo 10)             # => 12
+
+# ---------------------------------------------------------
+# 3. RECURSION
+# ---------------------------------------------------------
+factorial n =
+  case n of
+    0 -> 1
+    _ -> n * factorial (n - 1)
+print (factorial 10)   # => 3628800
+
+fib n =
+  case n of
+    0 -> 0
+    1 -> 1
+    _ -> fib (n - 1) + fib (n - 2)
+print (fib 10)         # => 55
+
+# ---------------------------------------------------------
+# 4. PATTERN MATCHING (case)
+#    Patterns: literals, wildcard _, cons x:rest, lists, variants, guards.
+# ---------------------------------------------------------
+data Maybe a = Just a | Nothing
+
+safeHead xs =
+  case xs of
+    [] -> Nothing
+    x:rest -> Just x
+print (safeHead [1, 2, 3])   # => Just 1
+print (safeHead [])          # => Nothing
+
+sumList xs =
+  case xs of
+    [] -> 0
+    x:rest -> x + sumList rest
+print (sumList [1, 2, 3, 4, 5])  # => 15
+
+# exact-length list pattern — binds each element
+pairSum xs =
+  case xs of
+    [a, b] -> a + b
+    _ -> 0
+print (pairSum [10, 20])   # => 30
+print (pairSum [1])        # => 0
+
+# guards
+classify n =
+  case n of
+    x | x < 0 -> "negative"
+    x | x == 0 -> "zero"
+    _ -> "positive"
+print (classify (-5))   # => "negative"
+print (classify 0)      # => "zero"
+print (classify 7)      # => "positive"
+
+# ---------------------------------------------------------
+# 5. LISTS — heterogeneous, like JS arrays, but almost lazy.
+#    Literal lists stay in an unevaluated (lazy) state until used.
+# ---------------------------------------------------------
+print [213, "hello"]          # => [213, "hello"]
+print [1, 2, 3]               # => [1, 2, 3]
+print ([] ++ [1, 2] ++ [3])   # => [1, 2, 3]
+
+head [1, 2, 3] |> print        # => 1
+print (tail [1, 2, 3])        # => [2, 3]
+print (length "hello")        # => 5
+print (length [1, 2, 3])      # => 3
+print (null [])               # => true
+print (null [1])              # => false
+
+# A list literal whose elements are unbound identifiers is lazy:
+#   use it as a record/template  ->  the names become field names
+#   use it as a list             ->  the names resolve to variables
+a = 100
+b = 200
+vals = [a, b]
+print vals                     # => [100, 200]   (used as a list)
+print (map (x -> x * 2) vals)  # => [200, 400]
+
+# ---------------------------------------------------------
+# 6. RECORDS — [name: value, ...] and field access
+# ---------------------------------------------------------
+person = [name: "Alice", age: 30]
+print person.name        # => "Alice"
+print person.age         # => 30
+print person             # => [name: "Alice", age: 30]
+
+# nested records + chained access
+nested = [inner: [z: 99]]
+print nested.inner.z     # => 99
+
+# ---------------------------------------------------------
+# 7. LIST -> RECORD (zip a name template with a value list)
+#    Bare identifiers make a template; lengths must match.
+# ---------------------------------------------------------
+pair = [name, value].[213, "hello"]
+print pair                 # => [name: 213, value: "hello"]
+print pair.value           # => "hello"
+
+Template = [count, label]
+made = Template.[7, "seven"]
+print made                 # => [count: 7, label: "seven"]
+print made.label           # => "seven"
+
+# ---------------------------------------------------------
+# 8. TERNARY — cond ? a : b  (replaces if/then/else)
+# ---------------------------------------------------------
+max a b = a > b ? a : b
+print (max 4 9)            # => 9
+
+smallest a b c = (a < b ? a : b) < c ? (a < b ? a : b) : c
+print (smallest 7 2 9)     # => 2
+
+# ---------------------------------------------------------
+# 9. let ... in  (with multiple bindings)
+# ---------------------------------------------------------
+greeting =
+  let name = "world"
+      hello = "Hello"
+  in hello ++ ", " ++ name ++ "!"
+print greeting             # => "Hello, world!"
+
+# ---------------------------------------------------------
+# 10. PIPES — x |> f  feeds x into f
+# ---------------------------------------------------------
+negate x = -x
+print (5 |> negate)                       # => -5
+print ([1, 2, 3] |> map (x -> x * 10))    # => [10, 20, 30]
+
+# ---------------------------------------------------------
+# 11. HIGHER-ORDER FUNCTIONS — map / filter / foldl / foldr
+# ---------------------------------------------------------
+nums = [1, 2, 3, 4, 5]
+print (map (x -> x * x) nums)                 # => [1, 4, 9, 16, 25]
+print (filter (x -> x > 2) nums)              # => [3, 4, 5]
+print (foldl (acc x -> acc + x) 0 nums)       # => 15
+print (foldr (x acc -> x - acc) 0 [1, 2, 3])  # => 2
+
+# ---------------------------------------------------------
+# 12. STRINGS, CHARS, FLOATS, BOOLS, CONVERSION
+# ---------------------------------------------------------
+print "a string"
+print 'c'
+print 3.14
+print true
+print false
+print (intToString 42)    # => "42"
+print (true ? "yes" : "no")
+print (1 == 1)            # => true
+print (1 < 2)             # => true
+print ("a" != "b")        # => true
+
+# ---------------------------------------------------------
+# 13. TYPE ANNOTATIONS — accepted and ignored at runtime
+# ---------------------------------------------------------
+print (let x: Int = 20 in x * 2)   # => 40
+print (let x: Int = 5 in x)        # => 5
