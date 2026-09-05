@@ -20,9 +20,10 @@
 
 ## Project
 
-Sloth (`sloth/`) is a lazy, Haskell-like, dynamically-typed (JS-like) scripting
-language implemented as a single-file Deno/TypeScript interpreter. It runs from
-the command line and has a REPL.
+APN — **A**pplicative **P**olish **N**otation (`sloth/` is the project folder) —
+is a lazy, Haskell-like, dynamically-typed (JS-like) scripting language
+implemented as a single-file Deno/TypeScript interpreter. It runs from the
+command line and has a REPL.
 
 Three files only, all project root:
 - `main.ts` — the entire interpreter (lexer, parser, evaluator, REPL)
@@ -39,7 +40,7 @@ Deno required. From `sloth/`:
 - Run the showcase (use this as the smoke test after any change):
     deno run --allow-read main.ts features.txt
 - Start the REPL:               deno run --allow-read --allow-write --allow-env=HOME main.ts
-  (the extra flags persist history in ~/.sloth_history; the REPL also runs
+  (the extra flags persist history in ~/.apn_history; the REPL also runs
   with just --allow-read — history then stays in-session only)
 - Type-check (always run after edits):
     deno check main.ts
@@ -298,7 +299,7 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
 - **History**: Up/Down walk submitted chunks. In a single-line buffer the
   arrows navigate history; in a multi-line buffer (continuation or a recalled
   multi-line entry) they move between lines instead. Persisted across
-  sessions in `~/.sloth_history` (one JSON string per line, capped at 500 on
+  sessions in `~/.apn_history` (one JSON string per line, capped at 500 on
   load; needs `--allow-write` and `--allow-env=HOME`, else in-session only
   with a one-time hint).
 - **Tab**: completes the word before the cursor from bound names (env walk),

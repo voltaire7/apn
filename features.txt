@@ -1,5 +1,5 @@
 # =========================================================
-#  SLOTH feature showcase
+#  APN — Applicative Polish Notation — feature showcase
 #  A lazy, Haskell-like, untyped (JS-like) scripting language.
 #  Run:  deno run --allow-read main.ts features.txt
 #  NOTE: indentation is strict "4-space layout" — every nested
@@ -528,7 +528,7 @@ halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------
 # The INTERACTIVE REPL (deno run main.ts) has its own feature set —
-# history navigation (Up/Down, persisted in ~/.sloth_history), Tab
+# history navigation (Up/Down, persisted in ~/.apn_history), Tab
 # completion + 4-space tabs, colored input/echo, multi-line chunks
 # with auto-indent. These are interactive-only and cannot run in this
 # file-mode showcase: see :help inside the REPL, or AGENTS.md.

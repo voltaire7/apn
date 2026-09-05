@@ -1,8 +1,9 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env=HOME
 
 // =====================================================================
-//  SLOTH — a lazy, Haskell-like, untyped (JS-like) language interpreter
-//  with optional TypeScript-style type annotations and powerful types.
+//  APN — Applicative Polish Notation: a lazy, Haskell-like, untyped
+//  (JS-like) language interpreter with optional TypeScript-style type
+//  annotations and powerful types.
 //  Run:  deno run --allow-read main.ts   (REPL)
 //        deno run --allow-read main.ts features.txt
 // =====================================================================
@@ -2187,7 +2188,7 @@ function envNames(env: Env): string[] {
   return [...s];
 }
 
-// ---- history persistence (~/.sloth_history, one JSON entry per line) ----
+// ---- history persistence (~/.apn_history, one JSON entry per line) ----
 
 const HIST_CAP = 500;
 let histWriteHinted = false;
@@ -2195,7 +2196,7 @@ let histWriteHinted = false;
 function histFile(): string | null {
   try {
     const home = Deno.env.get("HOME");
-    return home ? `${home}/.sloth_history` : null;
+    return home ? `${home}/.apn_history` : null;
   } catch {
     return null; // no --allow-env / no HOME: skip persistence, keep session history
   }
@@ -2266,7 +2267,7 @@ function helpText(): string {
     `Run: deno run --allow-read main.ts features.txt`,
     ``,
     `REPL:`,
-    `  Up/Down    history (kept in ~/.sloth_history)`,
+    `  Up/Down    history (kept in ~/.apn_history)`,
     `  Tab        complete names/builtins/:commands; with nothing to`,
     `             complete, insert 4 spaces (the indent unit)`,
     `  Backspace  behind a full indent level deletes all 4 spaces; on a blank`,
@@ -2807,8 +2808,8 @@ async function replPiped(): Promise<void> {
 }
 
 async function repl(): Promise<void> {
-  console.log("Sloth interpreter v1.1.0");
-  console.log("Lazy, Haskell-like, untyped like JS, annotated like TS.");
+  console.log("APN interpreter v1.1.0");
+  console.log("Applicative Polish Notation — lazy, Haskell-like, untyped like JS, annotated like TS.");
   if (Deno.stdin.isTerminal()) {
     console.log(":help :quit  |  Up/Down history  |  Tab complete/indent  |  Ctrl+C/D quit");
     await replTTY();
