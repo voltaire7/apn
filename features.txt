@@ -107,25 +107,20 @@ debug (classify 7)      # => "positive"
 # ---------------------------------------------------------
 # 4b. MATCH LAYOUTS —  match scrutinee [ pattern -> expr, ... ]
 #     Alternatives are delimited with [ ], separated by `,` OR a newline.
-#     All three layouts parse: block / same-line-open / fully single-line.
 #     PREFERRED STYLE for a function whose entire body is one match is the
 #     same-line-open form:
 #         f x = match x [
 #             pattern -> body
 #         ]
+#     (The block form `f x =\n    match x [ ... ]` also parses but is not
+#     used in this showcase.) The fully single-line form:
+#         f x = match x [ pat1 -> e1, pat2 -> e2 ]
 # ---------------------------------------------------------
-factA n =
-    match n [
-        0 -> 1
-        _ -> n * factA (n - 1)
-    ]
-debug (factA 10)            # => 3628800
-
-factB n = match n [
+factA n = match n [
     0 -> 1
-    _ -> n * factB (n - 1)
+    _ -> n * factA (n - 1)
 ]
-debug (factB 5)             # => 120
+debug (factA 10)            # => 3628800
 
 factC n = match n [0 -> 1, _ -> n * factC (n - 1)]
 debug (factC 6)             # => 720

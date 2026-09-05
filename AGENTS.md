@@ -255,8 +255,9 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 - **Style — whole-function `match`**: when a function's ENTIRE body is a single
   `match`, write the same-line-open form (`f x = match x [ ... ]`), not the
   block form (`f x =\n  match x [ ... ]`). Examples in `features.txt` follow
-  this. The block and single-line layouts still parse and are shown (once) in
-  the 4b layout matrix.
+  this. The block and fully single-line layouts still parse; only the
+  single-line form is also shown (alongside the preferred one) in the 4b
+  layout section.
 - **Commit after every task.** The user has asked that commits happen
   automatically. After each completed task (workflow green, see above), stage
   the files and commit with a concise, repo-style message:
