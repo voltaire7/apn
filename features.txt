@@ -233,11 +233,8 @@ for (x -> debug x) [1, 2, 3]                 # prints 1, 2, 3
 for ([f, v] -> print (format "%: %" [f, v])) [name: "Alice", age: 30]
                                              # prints name: Alice, age: 30
 
-# the pipe and backtick forms of `for` are synonymous —
-# seq $ for (lam)  ==  seq `for` (lam)   (args accepted in either order)
+# the pipe form feeds the record in as the sequence:  seq $ for (lam)
 [x: 1, y: 2, z: 3] $ for ([field, value] -> format "%: %" [field, value] $ print)
-                                             # prints x: 1, y: 2, z: 3
-[x: 1, y: 2, z: 3] `for` [field, value] -> format "%: %" [field, value] $ print
                                              # prints x: 1, y: 2, z: 3
 
 pairs [a: 1, b: 2] $ debug                   # => [["a", 1], ["b", 2]]
