@@ -366,11 +366,12 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   next chunk (type-ahead).
 - **Paste**: bracketed paste mode is enabled (`ESC[?2004h`), so pasted
   multi-line text is inserted verbatim, never auto-run; Enter then runs it.
-- **Colors**: input is highlighted as typed (comments dim, strings/chars
-  green, numbers yellow, `match`/`data`/bools magenta, natives blue, capital
-  idents cyan, punctuation/operators gray); echoed values are colored by kind
-  with gray structure (brackets, colons, commas; keys plain, variant tags
-  cyan); errors red.
+- **Colors** (Catppuccin Frappé palette, truecolor): input is highlighted as
+  typed (comments overlay0, strings/chars green, numbers yellow,
+  `match`/`data`/bools mauve, natives blue, capital idents sky,
+  punctuation/operators overlay1); echoed values are colored by kind with
+  gray structure (brackets, colons, commas; keys plain, variant tags sky);
+  errors red.
 - **Keys**: Ctrl+C clear input (empty buffer = quit), Ctrl+D quit,
   Ctrl+L clear screen, Ctrl+A/E home/end, Ctrl+U/K kill to line start/end,
   Ctrl+W delete word back, arrows + Home/End/Delete.

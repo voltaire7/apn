@@ -2395,11 +2395,18 @@ function chunkComplete(src: string): boolean {
 }
 
 // ---- ANSI colors (TTY REPL only; piped output stays plain) ----
-
+// Catppuccin Frappé palette, truecolor:
+// https://github.com/catppuccin/nvim/blob/main/lua/catppuccin/palettes/frappe.lua
 const A = {
   reset: "\x1b[0m", bold: "\x1b[1m", dim: "\x1b[2m",
-  red: "\x1b[31m", green: "\x1b[32m", yellow: "\x1b[33m",
-  blue: "\x1b[34m", magenta: "\x1b[35m", cyan: "\x1b[36m", gray: "\x1b[90m",
+  red: "\x1b[38;2;231;130;132m", // #e78284   errors
+  green: "\x1b[38;2;166;209;137m", // #a6d189 strings/chars
+  yellow: "\x1b[38;2;229;200;144m", // #e5c890 numbers
+  blue: "\x1b[38;2;140;170;238m", // #8caaee  natives
+  magenta: "\x1b[38;2;202;158;230m", // #ca9ee6 mauve: match/data/bools
+  cyan: "\x1b[38;2;153;209;219m", // #99d1db  sky: prompts, capital idents
+  gray: "\x1b[38;2;131;139;167m", // #838ba7  overlay1: punctuation, structure
+  comment: "\x1b[38;2;115;121;148m", // #737994 overlay0: comments
 };
 const paint = (code: string, s: string) => code + s + A.reset;
 
@@ -2436,7 +2443,7 @@ function highlightLine(s: string): string {
   const word = (c: string) => /[A-Za-z0-9_]/.test(c);
   while (i < s.length) {
     const c = s[i];
-    if (c === "#") { out += paint(A.dim, s.slice(i)); break; }
+    if (c === "#") { out += paint(A.comment, s.slice(i)); break; }
     if (c === '"') {
       let j = i + 1;
       while (j < s.length && s[j] !== '"') j++;
