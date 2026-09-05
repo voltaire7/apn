@@ -102,8 +102,10 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   `=`) binds UNIT (see `parseDefBody`).
 - **Records**: `[name: "Alice", age: 30]`, accessed with `rec.field` (chaining
   works: `a.b.c`). The old `{ a = b }` syntax is REMOVED.
-- **List→record**: `[name, value].[1, 2]` or `Template.[1, 2]` zips field names
-  with a value list; field count must equal list size, else error.
+- **List→record (object constructor)**: `name.[1, 2]` — `name` (LOWERCASE; capital
+  names are constructors) is a field-name list that gets zipped with the value
+  list, e.g. `template = [count, label]; template.[7, "seven"]` gives
+  `[count: 7, label: "seven"]`. Field count must equal list size, else error.
 - **Ternary, not if/then/else**: `cond ? a : b` (right-associative). Keywords
   `if`, `then`, `else` are removed.
 - **Functions**: two styles, partial application, recursion. `fn` is removed.
@@ -224,13 +226,13 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   that block. The LHS may be a destructuring PATTERN: `[a, b] = expr` (list
   positionally, record by field name), `(Just x) = expr`, or `Just x = expr`
   (Haskell-style, no parens) — a binding error if the pattern doesn't match.
-  A bare name LHS is always a plain value definition, even capitalized
-  (`Template = [count, label]` is a def). An Uppercase LHS destructures ONLY
-  when the constructor was DECLARED via `data`; undeclared, it's a plain def —
-  the idiomatic record constructor `Vector3 x y z = [x: x, y: y, z: z]`
-  makes `Vector3 10 20 30` = `[x: 10, y: 20, z: 30]`. Optional (ignored)
-  `: Type` annotations accepted. A block's value is its last statement.
-  `match` with guards `|`.
+  Capital names are CONSTRUCTORS, never value/function names: a capital LHS
+  def is a parse error unless it's a DECLARED constructor applied to args
+  (`Just v = ...` destructures). A bare capital LHS is always an error —
+  `Template = [count, label]` is invalid; use lowercase defs and build records
+  with the object constructor (`section 7`: `template.[7, "seven"]`). Optional
+  (ignored) `: Type` annotations accepted. A block's value is its last
+  statement. `match` with guards `|`.
 
 ## Evaluator notes
 

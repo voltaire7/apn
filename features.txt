@@ -207,17 +207,23 @@ nested = [inner: [z: 99]]
 debug nested.inner.z     # => 99
 
 # ---------------------------------------------------------
-# 7. LIST -> RECORD (zip a name template with a value list)
-#    Bare identifiers make a template; lengths must match.
+# 7. LIST -> RECORD OBJECT CONSTRUCTOR  name.[values]
+#    The name (LOWERcase — capital names are constructors, so a
+#    `Template = ...` def is rejected) holds a field-name list; `.[...]`
+#    zips it with the value list; lengths must match.
 # ---------------------------------------------------------
 pair = [name, value].[213, "hello"]
 debug pair                 # => [name: 213, value: "hello"]
 debug pair.value           # => "hello"
 
-Template = [count, label]
-made = Template.[7, "seven"]
+template = [count, label]
+made = template.[7, "seven"]
 debug made                 # => [count: 7, label: "seven"]
 debug made.label           # => "seven"
+
+vector3 = [x, y, z]
+debug vector3.[1, 2, 3]    # => [x: 1, y: 2, z: 3]
+debug vector3.[1, 2, 3].z  # => 3
 
 # ---------------------------------------------------------
 # 8. TERNARY — cond ? a : b  (replaces if/then/else)
@@ -249,14 +255,15 @@ debug greeting             # => "Hello, world!"
 
 # Constructor patterns destructure like Haskell — bare (Just v = ...),
 # parenthesized ((Just v) = ...), or nested in a list ([Just v] = [...]).
-# But ONLY a DECLARED constructor (via data) destructures. An undeclared
-# Capitalized LHS is a plain def — the idiomatic record constructor:
+# ONLY a DECLARED constructor (via data) can appear capital on the left of =;
+# a capital name is NEVER a value/function name (Template = ... is an error —
+# use lowercase, and build records with the object constructor from section 7):
 data Maybe a = Just a | Nothing
 Just v = Just 123
 debug v                    # => 123
 
-Vector3 x y z = [x: x, y: y, z: z]
-debug (Vector3 10 20 30)   # => [x: 10, y: 20, z: 30]
+vector3 = [x, y, z]
+debug vector3.[1, 2, 3]    # => [x: 1, y: 2, z: 3]
 
 # ---------------------------------------------------------
 # 10. PIPES, BACKTICK INFIX, OPERATOR SECTIONS

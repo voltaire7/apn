@@ -807,6 +807,13 @@ class Parser {
               if (this.isPatBinding()) {
                 stmts.push(this.parsePatBinding());
               } else {
+                const sb = this.peek();
+                if (sb.k === "ident" && /^[A-Z]/.test(sb.v) && this.isDef()) {
+                  throw new Error(
+                    `Parser: '${(sb as { v: string }).v}' is capitalized — capital names ` +
+                    `are constructors; use a lowercase name here`,
+                  );
+                }
                 stmts.push(this.isDef() ? this.parseBlockDef() : this.parseExpr());
               }
             }
@@ -1222,9 +1229,24 @@ variants.push({ tag: vname, arity });
         //   name = expr            name a b c = expr
         //   name : Type = expr
         // An Uppercase constructor on the LHS is a destructuring BINDING
-        // (Just v = ...), not a function definition, unless it's a signature.
+        // (Just v = ...), not a function definition.
         if (this.isPatBinding()) {
           out.push(this.parsePatBinding() as TopLevel);
+          continue;
+        }
+        // Capital names are CONSTRUCTORS, never value/function names: a plain
+        // capital def is an error (declare it in `data`, destructure with it,
+        // or use a lowercase name).
+        if (/^[A-Z]/.test(t.v)) {
+          if (this.isDef()) {
+            throw new Error(
+              `Parser: '${t.v}' is capitalized — capital names are constructors, ` +
+              `so a value/function must use a lowercase name (or '${t.v}' must be ` +
+              `declared in a \`data\` block to destructure on the left of =)`,
+            );
+          }
+          const e = this.parseExpr();
+          out.push({ t: "expr", value: e });
           continue;
         }
         if (this.isDef()) {
@@ -2000,7 +2022,8 @@ async function repl(): Promise<void> {
             `Language:`,
             `  symbol = value   (the ONLY binding form; top level or inside { } blocks)`,
             `  [a, b] = value (destructuring binding; records match by field name)`,
-            `  Just v = value (declared constructors destructure; undeclared = a def)`,
+            `  Just v = value (declared constructors destructure; capital defs are errors)`,
+            `  name.[1,2,3]  object constructor  (name = [x, y, z]; => [x: 1, y: 2, z: 3])`,
             `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
             `  cond ? a : b   (ternary)`,
             `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,
