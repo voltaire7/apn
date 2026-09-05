@@ -947,11 +947,15 @@ class Parser {
   }
 
   // Lookahead: is the statement  pattern = expr ? Restores the token index.
+  // A bare name LHS (even Uppercase, e.g. `Template = ...`) is a plain value
+  // definition, NOT destructuring — only an actual pattern shape (a list, a
+  // parenthesized/constructed pattern, or a constructor applied to args) is.
   isPatBinding(): boolean {
     if (!this.startsPatBinding()) return false;
     const save = this.i;
     try {
-      this.parseConsPattern();
+      const p = this.parseConsPattern();
+      if (p.p === "var") return false;
       return this.isSym("=");
     } catch {
       return false;

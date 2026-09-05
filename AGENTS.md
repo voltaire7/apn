@@ -224,10 +224,10 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   that block. The LHS may be a destructuring PATTERN: `[a, b] = expr` (list
   positionally, record by field name), `(Just x) = expr`, or `Just x = expr`
   (Haskell-style, no parens) — a binding error if the pattern doesn't match.
-  Because an Uppercase identifier on the LHS means a constructor pattern, value
-  defs must use lowercase names (`Template = ...` is a binding, not a def).
-  Optional (ignored) `: Type` annotations accepted. A block's value is its last
-  statement. `match` with guards `|`.
+  A bare name LHS is always a plain value definition, even capitalized
+  (`Template = [count, label]` is a def; only a constructor APPLIED to args,
+  like `Just v = ...`, destructures). Optional (ignored) `: Type` annotations
+  accepted. A block's value is its last statement. `match` with guards `|`.
 
 ## Evaluator notes
 
