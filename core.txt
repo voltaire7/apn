@@ -1,0 +1,12 @@
+# core.txt — the standard library, loaded with:  load "core.txt"
+#
+#   load "core.txt"              as a statement merges these into the current scope
+#   core = load "core.txt"       as a value returns them as a module record,
+#                                namespaced:  core.halt ; core.sq 4 ...
+#   core = { load "core.txt"; ... }   the merge stays scoped to that block.
+#
+# 0-arg value defs are LAZY, so `halt = exit 0` does nothing on import — it only
+# terminates the process when `halt` is actually used (bare, core.halt, etc.).
+
+halt = exit 0
+sq x = x * x

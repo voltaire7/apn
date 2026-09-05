@@ -29,7 +29,8 @@ type Value =
   | { kind: "closure"; params: string[]; body: Expr; env: Env }
   | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string }
   | { kind: "clauseFn"; clauses: DefClause[]; arity: number; env: Env; applied: Value[] }
-  | { kind: "nomatch" };
+  | { kind: "nomatch" }
+  | { kind: "thunk"; body: Expr; env: Env; value?: Value };
 
 function mkInt(v: number): Value { return { kind: "int", v }; }
 function mkBool(v: boolean): Value { return { kind: "bool", v }; }
@@ -58,6 +59,7 @@ function valueToString(v: Value): string {
       return v.tag + args;
     }
     case "closure": return "<function>";
+    case "thunk": return "<thunk>";
     case "native": return `<native:${v.name}>`;
     case "clauseFn": return "<function>";
     case "nomatch": return "<nomatch>";
@@ -1234,6 +1236,9 @@ const STACK_LIMIT = 100000;
 export class Interpreter {
   env = new Env();
   stack = 0;
+  // Directory of the source file currently being evaluated — `load` resolves
+  // relative paths against it ("relative to your current file").
+  sourceDir: string = ".";
 
   constructor() {
     this.env.setLocal("print", { kind: "native", name: "print", arity: 1, applied: [] });
@@ -1253,7 +1258,7 @@ export class Interpreter {
     this.env.setLocal("parse", { kind: "native", name: "parse", arity: 1, applied: [] });
     this.env.setLocal("debug", { kind: "native", name: "debug", arity: 1, applied: [] });
     this.env.setLocal("exit", { kind: "native", name: "exit", arity: 1, applied: [] });
-    this.env.setLocal("halt", { kind: "native", name: "halt", arity: 0, applied: [] });
+    this.env.setLocal("load", { kind: "native", name: "load", arity: 1, applied: [] });
   }
 
   run(program: TopLevel[]): Value {
@@ -1276,7 +1281,7 @@ export class Interpreter {
         last = this.evalDef(tl.name, tl.clauses);
         continue;
       }
-      last = this.eval(tl.value);
+      last = this.force(this.eval(tl.value));
     }
     return last;
   }
@@ -1304,10 +1309,13 @@ export class Interpreter {
       this.env.setLocal(name, clo);
       return clo;
     }
-    // Otherwise it's an alias to an evaluated value.
-    const v = this.eval(value);
-    this.env.setLocal(name, v);
-    return v;
+    // Otherwise it's a lazy value binding: a THUNK. The body is not run at
+    // definition time — it runs (and is cached) the first time the name is
+    // forced. This is what lets core.txt define `halt = exit 0` without the
+    // process exiting at load time.
+    const thunk: Value = { kind: "thunk", body: value, env: this.env, value: undefined };
+    this.env.setLocal(name, thunk);
+    return thunk;
   }
 
   eval(e: Expr): Value {
@@ -1341,7 +1349,7 @@ export class Interpreter {
       case "app": r = this.apply(this.eval(e.f), this.eval(e.a)); break;
       case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
       case "ternary": {
-        const c = this.eval(e.cond);
+        const c = this.force(this.eval(e.cond));
         r = (c.kind === "bool" && c.v) ? this.eval(e.then) : this.eval(e.els);
         break;
       }
@@ -1349,7 +1357,10 @@ export class Interpreter {
       case "list": r = { kind: "lazyList", exprs: e.v, env: this.env }; break;
       case "record": r = { kind: "record", v: e.v.map(([k, x]) => [k, this.eval(x)] as [string, Value]) }; break;
       case "recordAccess": {
-        const rec = this.eval(e.rec);
+        let rec = this.eval(e.rec);
+        // `core = load "..."` is a thunk; get the module WITHOUT forcing its
+        // fields (a module may contain `halt = exit 0`).
+        if (rec.kind === "thunk") rec = this.unpackThunk(rec);
         if (rec.kind !== "record") throw new Error("Runtime: record access on non-record");
         const f = rec.v.find(([k]) => k === e.field);
         if (!f) throw new Error(`Runtime: record has no field '${e.field}'`);
@@ -1363,7 +1374,8 @@ export class Interpreter {
         if (e.template.t === "recordTemplate") {
           names = e.template.names;
         } else {
-          const src = this.eval(e.template);
+          let src = this.eval(e.template);
+          if (src.kind === "thunk") src = this.unpackThunk(src);
           if (src.kind === "lazyList") {
             names = [];
             for (const ex of src.exprs) {
@@ -1409,6 +1421,9 @@ export class Interpreter {
           for (const s of e.stmts) {
             r = s.t === "stmDef" ? this.evalDef(s.name, s.clauses) : this.eval(s);
           }
+          // A block's value is its last statement's value — force it, so a
+          // trailing `halt`/`exit` (or any thunk) actually runs.
+          r = this.force(r);
         } finally {
           this.env = old;
         }
@@ -1501,6 +1516,8 @@ export class Interpreter {
   }
 
   apply(f: Value, arg: Value): Value {
+    // A lazy 0-param def used as a function (`f = g; f 1`) is a thunk — run it.
+    if (f.kind === "thunk") f = this.force(f);
     switch (f.kind) {
       case "closure": {
         const child = new Env(f.env);
@@ -1562,12 +1579,43 @@ export class Interpreter {
         this.env = old;
       }
     }
+    if (v.kind === "thunk") {
+      if (v.value) return v.value;
+      const old = this.env;
+      this.env = v.env;
+      try {
+        v.value = this.force(this.eval(v.body));
+      } finally {
+        this.env = old;
+      }
+      return v.value;
+    }
     if (v.kind === "list") return mkList(v.v.map((x) => this.force(x)));
     if (v.kind === "variant") return { kind: "variant", tag: v.tag, v: v.v.map((x) => this.force(x)) };
     if (v.kind === "record") {
-      return { kind: "record", v: v.v.map(([k, x]) => [k, this.force(x)] as [string, Value]) };
+      // Keep thunk fields lazy: a `load` module record may contain `halt = exit 0`
+      // and forcing it would terminate the process on import.
+      return { kind: "record", v: v.v.map(([k, x]) => [k, x.kind === "thunk" ? x : this.force(x)] as [string, Value]) };
     }
     return v;
+  }
+
+  // Evaluate a thunk's BODY but keep the result lazy (do NOT recurse/force).
+  // Used where the raw value matters — a `load` module record (whose fields must
+  // NOT be forced, they may contain `halt`) or a template lazyList (whose bare
+  // names must stay unresolved). A non-lazy result is cached like force does.
+  unpackThunk(v: Value): Value {
+    if (v.kind !== "thunk") return v;
+    if (v.value) return v.value;
+    const old = this.env;
+    this.env = v.env;
+    try {
+      const r = this.eval(v.body);
+      if (r.kind !== "lazyList") v.value = r;
+      return r;
+    } finally {
+      this.env = old;
+    }
   }
 
   callNative(name: string, argsIn: Value[], tag?: string): Value {
@@ -1680,9 +1728,48 @@ export class Interpreter {
         // Can be put anywhere in the program: terminates the process instantly.
         if (a.kind !== "int") throw new Error("Runtime: exit expects an int status code");
         return Deno.exit(a.v);
-      case "halt":
-        // Stops the whole program immediately (status 0).
-        return Deno.exit(0);
+      case "load": {
+        // Import a file, resolving the path relative to the CURRENT source file.
+        // Two effects: (1) the loaded file's own definitions are merged into the
+        // current scope ("include"); (2) it returns a module record of them, so
+        //   core = load "core.txt"; core.halt   (or just core.halt) works.
+        // Inside a `{ }` block the merge stays scoped to that block.
+        if (a.kind !== "string") throw new Error("Runtime: load expects a file path string");
+        const p = a.v;
+        const path =
+          this.sourceDir === "." || p.startsWith("/") ? p : `${this.sourceDir}/${p}`;
+        let src: string;
+        try {
+          src = Deno.readTextFileSync(path);
+        } catch (err) {
+          throw new Error(`Runtime: load: can't read '${p}' (looked in '${path}'): ${(err as Error).message}`);
+        }
+        let program: TopLevel[];
+        try {
+          program = parse(src);
+        } catch (err) {
+          throw new Error(`Runtime: load: parse error in '${path}': ${(err as Error).message}`);
+        }
+        const caller = this.env;
+        const oldDir = this.sourceDir;
+        this.sourceDir = dirname(path);
+        const loaded = new Env(caller);
+        this.env = loaded;
+        try {
+          this.run(program);
+        } finally {
+          this.env = caller;
+          this.sourceDir = oldDir;
+        }
+        // Merge the loaded file's own definitions into the current scope,
+        // and return them as a module record (namespaced access: core.halt).
+        const fields: Array<[string, Value]> = [];
+        for (const [k, val] of loaded.map) {
+          caller.setLocal(k, val);
+          fields.push([k, val]);
+        }
+        return { kind: "record", v: fields };
+      }
     }
     throw new Error(`Runtime: unknown native '${name}'`);
   }
@@ -1760,6 +1847,13 @@ export class Interpreter {
     this.env = child;
     try { return this.eval(e); } finally { this.env = old; }
   }
+}
+
+// Directory part of a path (no external deps).
+function dirname(p: string): string {
+  const i = p.lastIndexOf("/");
+  if (i < 0) return ".";
+  return i === 0 ? "/" : p.slice(0, i);
 }
 
 // ---------------- REPL ----------------
@@ -1847,7 +1941,13 @@ async function repl(): Promise<void> {
             ``,
             `Builtins: print (string only) toString parse debug`,
             `          head tail length null map filter foldl foldr`,
-            `          for pairs format intToString exit halt`,
+            `          for pairs format intToString exit load`,
+            ``,
+            `load "core.txt"  imports the standard library (core.txt): as a`,
+            `               statement it merges into the current scope; as a`,
+            `               value it returns a module (core.sq 4). halting is`,
+            `               core.txt's  halt = exit 0  (lazy: fires only when used).`,
+            `0-arg value defs are LAZY:  x = <expr>  runs <expr> on first use.`,
             ``,
             `Type annotations (TS-style) are accepted & ignored at runtime:`,
             `  let x: Int = 5`,
@@ -1897,6 +1997,7 @@ if (import.meta.main) {
     const file = _args[0];
     const src = Deno.readTextFileSync(file);
     const interp = new Interpreter();
+    interp.sourceDir = dirname(file);
     runSource(src, interp);
   } else {
     repl().catch((err) => {

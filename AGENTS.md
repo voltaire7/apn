@@ -29,6 +29,8 @@ Three files only, all project root:
 - `features.txt` — the living spec + smoke test: a runnable showcase of EVERY
   feature. It must always stay in sync with what `main.ts` actually supports.
   (There are no real unit tests — this file IS the test.)
+- `core.txt` — the standard library, imported with `load "core.txt"`. Defines
+  things like `halt = exit 0` (`sq x = x * x` is there as a demo function).
 - `AGENTS.md` — this file
 
 ## Run / verify
@@ -46,7 +48,8 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 
 - `Type` / `Value` — runtime values are tagged objects: int, float, bool,
   string, char, unit, list, lazyList, record, variant, closure, clauseFn,
-  native (internal `nomatch` sentinel is used by multi-clause fallthrough).
+  native, plus `thunk` — the LAZY wrapper for 0-arg value defs (see below;
+  internal `nomatch` sentinel is used by multi-clause fallthrough).
 - `Env` — lexical scope chain (mutable parent-linked maps). Free variables
   resolve at definition site (static/lexical scoping), but bindings are shared
   by reference (JS-like, not immutable).
@@ -157,11 +160,32 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   in the fn slot errors.
   Related natives: `pairs rec` (record → list of `[field, value]`), and
   `format "% %" [a, b]` (`%` = printf-style arg, strings unquoted; `%%` = `%`).
-- **Termination**: `exit n` (n int) ends the whole process with status `n`, and
-  `halt` stops it immediately with status 0. Both are ordinary natives callable
-  from ANYWHERE — top level, inside `{ }` blocks, lambdas, `for`/`map`
-  callbacks, etc. — implemented via an unconditional `Deno.exit` so nothing can
-  be evaluated afterwards. Useful for early-out control flow / scripts.
+- **Termination**: `exit n` (native, n int) ends the whole process with status
+  `n`, callable from ANYWHERE — top level, inside `{ }` blocks, lambdas,
+  `for`/`map` callbacks, etc. implemented via an unconditional `Deno.exit`.
+  `halt` is NOT a builtin — it is defined in core.txt as `halt = exit 0`
+  (see *Lazy 0-arg defs* below), so importing core.txt doesn't exit; `halt`
+  fires only when actually used (bare statement, `core.halt`, last line of a
+  block, …).
+- **`load "file"`** imports a file RELATIVE TO THE CURRENT FILE
+  (`Interpreter.sourceDir`, set per run; REPL defaults to cwd). Two effects:
+  (1) as a STATEMENT it merges the file's own definitions into the current
+  scope (an `include` — inside a `{ }` block that merge stays scoped to the
+  block); (2) as a VALUE it returns them as a `module` record, so
+  `core = load "core.txt"; core.sq 4` is namespaced access. Implemented as a
+  native: reads the file, `run`s it in a fresh child `Env`, then copies the
+  loaded env's OWN entries into the caller env and returns them as a record.
+- **Lazy 0-arg defs (thunks)**: a value def with NO params and NOT a lambda —
+  `x = <expr>`, `r = [a, b]`, `core = load "..."` — is bound lazily: `evalDef`
+  stores a `{ kind: "thunk" }` and `<expr>` evaluates (and caches) the FIRST
+  time `x` is FORCED. `force()` is the single entry point and also recurses
+  into lists/records/variants; `run()` forces each top-level expr statement's
+  result, and a block forces its last statement's value — so a bare `halt`
+  at top level or as a block's last line does fire. `recordAccess` and
+  `fromList` templates use `unpackThunk` instead (evaluate the body but keep
+  the result lazy — needed so `core.halt` doesn't force the whole module).
+  `force(record)` deliberately leaves thunk FIELD values unforced (a `load`
+  module may contain `halt`).
 - **Output & conversion (DELIBERATE split)**:
   - `print s` — STRING ONLY; outputs the raw text (no quotes); anything else
     errors. It is for clean text output.
@@ -212,12 +236,12 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 - Untyped TypeScript; `Value` is a discriminated union. When adding a new kind,
   update `valueToString`, `eval`, and any `force`/pattern/`==` switches — they
   are exhaustive.
-- Keep edits consolidated in `main.ts`; keep the three-file layout (no new deps,
+- Keep edits consolidated in `main.ts`; keep the minimal four-file layout (no new deps,
   no `src/`).
 - Reflect new syntax in `features.txt` and in the REPL `:help` block.
 - **Commit after every task.** The user has asked that commits happen
   automatically. After each completed task (workflow green, see above), stage
-  the three files and commit with a concise, repo-style message:
-      git add main.ts features.txt AGENTS.md
+  the files and commit with a concise, repo-style message:
+      git add main.ts features.txt core.txt AGENTS.md
       git commit -m "short summary of the change"
   Don't commit secrets; there are none.
