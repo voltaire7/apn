@@ -58,6 +58,8 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 - `Expr` / `Pattern` / `TopLevel` — AST.
 - Lexer → Parser → Interpreter (`eval`, `evalBinop`, `apply`, `callNative`,
   `matchPattern`).
+- `APNError` — every user-facing failure (parse/lex/runtime), rendered by
+  `formatError` with a caret at the offending token.
 - `ReplEditor` — the interactive REPL's raw-mode line editor (history,
   completion, colors), plus the piped-stdin fallback loop.
 
@@ -149,7 +151,8 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   `groupClauses` into one `clauseFn` value. See `evalDef` / `apply`:
   `clauseFn` accumulates applied args (supporting partial application), forces
   them, then tries each clause's patterns via `matchPattern`; no clause matches
-  → "Runtime: non-exhaustive function definition". Guards on def clauses are
+  → "no clause of '<name>' matches the given arguments" (the error names the
+  function). Guards on def clauses are
   NOT supported (use `match x [ ... | ... ]` inside the body for guards).
 - **`match` expressions**: `match scrutinee [ pattern -> expr, ... ]` is THE
   pattern-matching form — there is NO `case` (the `case`/`of` keywords were
@@ -274,6 +277,30 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   (assignments like `r = [...]` are silent, and a bare `pairs rec` statement
   prints nothing) — every demo line in `features.txt` uses an explicit `print`.
   In the REPL, unassigned expression results are echoed.
+
+## Errors
+
+All user-facing failures are `APNError` — kinds `parse` / `lex` / `runtime` —
+rendered by `formatError(err, color)`:
+
+- **Parse/lex errors** point at the offending token: bold red headline, dim
+  `--> line L, column C`, the source line with one line of context on each
+  side (syntax-highlighted in the TTY REPL), and a green caret spanning the
+  token. The lexer stamps every token with `pos`; the parser tracks the last
+  token it looked at (`Parser.seen`).
+- **Runtime errors** are a headline plus an optional `hint:` — `did you mean
+  '...'?` for unbound variables (edit distance over bound names + natives)
+  and missing record fields (over the record's fields). The non-exhaustive
+  function error names the function. Operator type errors are uniform:
+  `cannot apply '+' to list and int`.
+- Messages carry no `Parser:`/`Lexer:`/`Runtime:` prefixes — the headline
+  category replaces them. `tokenStr` returns BARE token text (the message
+  templates add the quotes; the old version double-quoted).
+- Unterminated strings/chars are LEX errors now (they used to silently
+  swallow the rest of the file); the REPL treats "unterminated" as
+  incomplete input, so multi-line strings keep working.
+- TTY REPL prints the colored render; piped REPL prints plain; file mode
+  prints to stderr (colored when stderr is a tty) and exits 1.
 
 ## Parser quirks (known, pre-existing)
 

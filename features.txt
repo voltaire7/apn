@@ -527,6 +527,19 @@ debug (lazyNote * 2)      # forcing it prints "lazyNote WAS forced" (side effect
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------
+# ERROR REPORTING — every failure is an APNError rendered with a bold
+# headline, an optional "hint: did you mean ...?", and for parse errors
+# a --> line, source context, and a caret under the offending token
+# (the lexer stamps every token with a position). Runtime errors:
+# unbound variables and missing record fields get "did you mean"
+# suggestions, operator type errors read "cannot apply '+' to list and
+# int", and unterminated strings are real errors now (they used to
+# silently swallow the rest of the file). Errors exit non-zero, so they
+# cannot appear in this showcase's expected output — try `x = 1 + ]`
+# or `prynt 1` in the REPL.
+# ---------------------------------------------------------
+
+# ---------------------------------------------------------
 # The INTERACTIVE REPL (deno run main.ts) has its own feature set —
 # history navigation (Up/Down, persisted in ~/.apn_history), Tab
 # completion + 4-space tabs, colored input/echo, multi-line chunks

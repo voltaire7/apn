@@ -29,7 +29,7 @@ type Value =
   | { kind: "variant"; tag: string; v: Value[] }
   | { kind: "closure"; params: string[]; body: Expr; env: Env }
   | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string }
-  | { kind: "clauseFn"; clauses: DefClause[]; arity: number; env: Env; applied: Value[] }
+  | { kind: "clauseFn"; name: string; clauses: DefClause[]; arity: number; env: Env; applied: Value[] }
   | { kind: "nomatch" }
   | { kind: "thunk"; body: Expr; env: Env; value?: Value };
 
@@ -158,16 +158,17 @@ type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "expr"; 
 // ---------------- Lexer ----------------
 
 type Token =
-  | { k: "int"; v: number }
-  | { k: "float"; v: number }
-  | { k: "bool"; v: boolean }
-  | { k: "str"; v: string }
-  | { k: "char"; v: string }
-  | { k: "ident"; v: string }
-  | { k: "kw"; v: string }                       // keywords
-  | { k: "opw"; v: string }                      // backtick-infix name: `f`
-  | { k: "sym"; v: string }                      // symbols incl. multi-char
-  | { k: "newline" } | { k: "indent" } | { k: "dedent" } | { k: "eof" };
+  | { k: "int"; v: number; pos: number }
+  | { k: "float"; v: number; pos: number }
+  | { k: "bool"; v: boolean; pos: number }
+  | { k: "str"; v: string; pos: number }
+  | { k: "char"; v: string; pos: number }
+  | { k: "ident"; v: string; pos: number }
+  | { k: "kw"; v: string; pos: number }             // keywords
+  | { k: "opw"; v: string; pos: number }            // backtick-infix name: `f`
+  | { k: "sym"; v: string; pos: number }             // symbols incl. multi-char
+  | { k: "newline"; pos: number } | { k: "indent"; pos: number } | { k: "dedent"; pos: number }
+  | { k: "eof"; pos: number };
 
 const KEYWORDS = new Set([
   "where",
@@ -178,6 +179,77 @@ const SYMBOLS = [
   ">>>", "==>", "$", "<<", "<<=", ">>=", "==", "!=", "<=", ">=", "=>", "->", "<-",
   "&&", "||", "++", "::", ":=",
 ];
+
+// ---------------- Errors ----------------
+
+// Every user-facing failure: parse/lex errors carry a source POSITION (the
+// offending token) so the reporter can draw a caret; runtime errors carry an
+// optional hint ("did you mean ...?").
+class APNError extends Error {
+  kind: "parse" | "lex" | "runtime";
+  pos?: number;
+  len?: number;
+  src?: string;
+  hint?: string;
+
+  constructor(
+    kind: APNError["kind"],
+    message: string,
+    opts: { pos?: number; len?: number; hint?: string } = {},
+  ) {
+    super(message);
+    this.kind = kind;
+    this.pos = opts.pos;
+    this.len = opts.len;
+    this.hint = opts.hint;
+  }
+}
+
+// Width of a token's source text (for the caret span).
+function tokLen(t: Token): number {
+  switch (t.k) {
+    case "str": return t.v.length + 2;
+    case "char": return "n\t\\'\"".includes(t.v) ? 4 : 3;
+    case "ident": case "kw": case "opw": return t.v.length;
+    case "int": case "float": return String(t.v).length;
+    case "sym": return t.v.length;
+    default: return 0; // newline / indent / dedent / eof: just point
+  }
+}
+
+function editDistance(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const d = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 1; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      d[i][j] = Math.min(
+        d[i - 1][j] + 1,
+        d[i][j - 1] + 1,
+        d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+  }
+  return d[m][n];
+}
+
+// The closest candidate within a small edit distance, for "did you mean".
+// Longer names tolerate distance 2 (covers transposition typos like
+// "nmae" -> "name"); short ones only 1.
+function didYouMean(name: string, candidates: string[]): string | null {
+  let best: string | null = null;
+  let bestD = Infinity;
+  for (const c of candidates) {
+    if (c === name) continue;
+    const d = editDistance(name, c);
+    const cap = Math.max(name.length, c.length) >= 4 ? 2 : 1;
+    if (d <= cap && d < bestD) {
+      best = c;
+      bestD = d;
+    }
+  }
+  return best;
+}
 
 export function lex(src: string): Token[] {
   const toks: Token[] = [];
@@ -221,11 +293,12 @@ export function lex(src: string): Token[] {
       if (pos >= src.length) break;
       if (src[pos] === '\n') { continue; }
       if (src.startsWith("#", pos) || src.startsWith("{-", pos)) {
+        const cStart = pos;
         skipComment();
         // After a comment, move to next line and re-detect indentation.
         if (pos < src.length && src[pos] === '\n') {
           pos++;
-          toks.push({ k: "newline" });
+          toks.push({ k: "newline", pos: pos - 1 });
           continue;
         }
         continue;
@@ -235,17 +308,21 @@ export function lex(src: string): Token[] {
       if (indent > cur) {
         if (indent === cur + 4) {
           indentStack.push(indent);
-          toks.push({ k: "indent" });
+          toks.push({ k: "indent", pos });
         } else {
-          throw new Error(`Lexer: indentation must increase by exactly 4 spaces (got +${indent - cur}) at ${pos}`);
+          throw new APNError(
+            "lex",
+            `indentation must increase by exactly 4 spaces (got +${indent - cur})`,
+            { pos },
+          );
         }
       } else {
         while (indent < indentStack[indentStack.length - 1]) {
           indentStack.pop();
-          toks.push({ k: "dedent" });
+          toks.push({ k: "dedent", pos });
         }
         if (indent !== indentStack[indentStack.length - 1]) {
-          throw new Error(`Lexer: indentation must be a multiple of 4 spaces at ${pos}`);
+          throw new APNError("lex", `indentation must be a multiple of 4 spaces`, { pos });
         }
       }
     }
@@ -255,12 +332,13 @@ export function lex(src: string): Token[] {
 
     if (skipComment()) { atLineStart = false; continue; }
 
+    const start = pos; // token start for error carets
     const c = src[pos];
 
     if (c === '\n') {
       pos++;
       if (parenDepth === 0) {
-        toks.push({ k: "newline" });
+        toks.push({ k: "newline", pos: pos - 1 });
         atLineStart = true;
       }
       continue;
@@ -273,7 +351,7 @@ export function lex(src: string): Token[] {
         if (s === "<-" || s === "->" || s === "=>") {
           // used contextually as constructor/member token `:` handled separately
         }
-        toks.push({ k: "sym", v: s });
+        toks.push({ k: "sym", v: s, pos: start });
         pos += s.length;
         matchedSym = true;
         break;
@@ -289,13 +367,13 @@ export function lex(src: string): Token[] {
       if (c === '(') parenDepth++;
       if (c === ')') parenDepth--;
       // `:` is cons in this language; `::` handled above as symbol
-      toks.push({ k: "sym", v: c === ":" ? ":" : c });
+      toks.push({ k: "sym", v: c === ":" ? ":" : c, pos: start });
       pos++;
       continue;
     }
 
     if ("=+-*/%<>!&?".includes(c)) {
-      toks.push({ k: "sym", v: c });
+      toks.push({ k: "sym", v: c, pos: start });
       pos++;
       continue;
     }
@@ -310,8 +388,11 @@ export function lex(src: string): Token[] {
         } else s += src[pos];
         pos++;
       }
+      if (pos >= src.length) {
+        throw new APNError("lex", "unterminated string", { pos: start });
+      }
       pos++; // closing quote
-      toks.push({ k: "str", v: s });
+      toks.push({ k: "str", v: s, pos: start });
       continue;
     }
 
@@ -320,23 +401,23 @@ export function lex(src: string): Token[] {
       let ch = src[pos];
       if (ch === '\\') { pos++; ch = ({ n: "\n", t: "\t", '\\': "\\", "'": "'" }[src[pos]] ?? src[pos]); }
       pos += 2; // char + closing quote
-      toks.push({ k: "char", v: ch });
+      toks.push({ k: "char", v: ch, pos: start });
       continue;
     }
 
     if (/\d/.test(c)) {
       let num = "";
       while (pos < src.length && /\d|\./.test(src[pos])) num += src[pos++];
-      if (num.includes(".")) toks.push({ k: "float", v: parseFloat(num) });
-      else toks.push({ k: "int", v: parseInt(num, 10) });
+      if (num.includes(".")) toks.push({ k: "float", v: parseFloat(num), pos: start });
+      else toks.push({ k: "int", v: parseInt(num, 10), pos: start });
       continue;
     }
 
     if (/[A-Za-z_]/.test(c)) {
       let id = "";
       while (pos < src.length && /[A-Za-z0-9_']/.test(src[pos])) id += src[pos++];
-      if (KEYWORDS.has(id)) toks.push({ k: "kw", v: id });
-      else toks.push({ k: "ident", v: id });
+      if (KEYWORDS.has(id)) toks.push({ k: "kw", v: id, pos: start });
+      else toks.push({ k: "ident", v: id, pos: start });
       continue;
     }
 
@@ -345,18 +426,21 @@ export function lex(src: string): Token[] {
       let id = "";
       while (pos < src.length && /[A-Za-z0-9_']/.test(src[pos])) id += src[pos++];
       if (id === "" || src[pos] !== '`') {
-        throw new Error(`Lexer: malformed backtick operator at ${pos}`);
+        throw new APNError("lex", `malformed backtick operator`, { pos: start });
       }
       pos++; // closing backtick
-      toks.push({ k: "opw", v: id });
+      toks.push({ k: "opw", v: id, pos: start });
       continue;
     }
 
-    throw new Error(`Lexer: unexpected character '${c}' at ${pos}`);
+    throw new APNError("lex", `unexpected character '${c}'`, { pos: start });
   }
 
-  while (indentStack.length > 1) { indentStack.pop(); toks.push({ k: "dedent" }); }
-  toks.push({ k: "eof" });
+  while (indentStack.length > 1) {
+    indentStack.pop();
+    toks.push({ k: "dedent", pos: src.length });
+  }
+  toks.push({ k: "eof", pos: src.length });
   return toks;
 }
 
@@ -365,13 +449,20 @@ export function lex(src: string): Token[] {
 class Parser {
   toks: Token[];
   i = 0;
+  seen: Token | null = null; // last token peeked/consumed — where a failure points
 
   constructor(toks: Token[]) { this.toks = toks; }
 
   peek(off = 0): Token {
-    return this.toks[Math.min(this.i + off, this.toks.length - 1)];
+    const t = this.toks[Math.min(this.i + off, this.toks.length - 1)];
+    if (off === 0) this.seen = t;
+    return t;
   }
-  next(): Token { return this.toks[this.i++]; }
+  next(): Token {
+    const t = this.toks[this.i++];
+    this.seen = t;
+    return t;
+  }
   isSym(v: string) { const t = this.peek(); return t.k === "sym" && t.v === v; }
   isKw(v: string) { const t = this.peek(); return t.k === "kw" && t.v === v; }
   eatSym(v: string): boolean {
@@ -385,13 +476,14 @@ class Parser {
   expectSym(v: string) {
     if (!this.eatSym(v)) throw new Error(`Parser: expected '${v}', got '${this.tokenStr(this.peek())}'`);
   }
+  // Bare text of a token for error messages — templates add the quotes.
   tokenStr(t: Token): string {
     switch (t.k) {
-      case "ident": case "kw": case "str": case "char": return `'${t.v}'`;
+      case "ident": case "kw": case "str": case "char": return t.v;
       case "int": return String(t.v);
       case "float": return String(t.v);
-      case "opw": return `\`${t.v}\``;
-      case "sym": return `'${t.v}'`;
+      case "opw": return t.v;
+      case "sym": return t.v;
       case "newline": return "newline";
       case "indent": return "indent";
       case "dedent": return "dedent";
@@ -1316,9 +1408,31 @@ variants.push({ tag: vname, arity });
 let declaredCtors = new Set<string>();
 
 export function parse(src: string): TopLevel[] {
-  const toks = lex(src);
-  const out = new Parser(toks).parseTopLevel();
-  return groupClauses(out);
+  let toks: Token[];
+  try {
+    toks = lex(src);
+  } catch (err) {
+    if (err instanceof APNError) err.src = src;
+    throw err;
+  }
+  const p = new Parser(toks);
+  try {
+    const out = p.parseTopLevel();
+    return groupClauses(out);
+  } catch (err) {
+    if (err instanceof APNError) {
+      err.src = src;
+      throw err;
+    }
+    // a plain parser failure: point the caret at the offending token
+    const t = p.seen;
+    const e = new APNError("parse", (err as Error).message.replace(/^Parser: /, ""), {
+      pos: t ? t.pos : src.length,
+      len: t ? tokLen(t) : 1,
+    });
+    e.src = src;
+    throw e;
+  }
 }
 
 // Merge consecutive Haskell-style clauses of the same function:
@@ -1406,7 +1520,7 @@ export class Interpreter {
       // Capture a shared env containing the binding itself, enabling recursion.
       const child = new Env(this.env);
       const fn: Value = {
-        kind: "clauseFn", clauses, arity, env: child, applied: [],
+        kind: "clauseFn", name, clauses, arity, env: child, applied: [],
       };
       child.setLocal(name, fn);
       this.env.setLocal(name, fn);
@@ -1456,7 +1570,12 @@ export class Interpreter {
       case "unit": r = { kind: "unit" }; break;
       case "var": {
         const v = this.env.get(e.name);
-        if (v === undefined) throw new Error(`Runtime: unbound variable '${e.name}'`);
+        if (v === undefined) {
+          const near = didYouMean(e.name, envNames(this.env));
+          throw new APNError("runtime", `unbound variable '${e.name}'`, {
+            hint: near ? `did you mean '${near}'?` : undefined,
+          });
+        }
         r = v;
         break;
       }
@@ -1497,22 +1616,32 @@ export class Interpreter {
           }
           field = kv.kind === "string" ? kv.v : String(kv.v);
         }
-        if (rec.kind !== "record") throw new Error("Runtime: record access on non-record");
+        if (rec.kind !== "record") throw new Error("record access on non-record");
         const f = rec.v.find(([k]) => k === field);
-        if (!f) throw new Error(`Runtime: record has no field '${field}'`);
+        if (!f) {
+          const near = didYouMean(field, rec.v.map(([k]) => k));
+          throw new APNError("runtime", `record has no field '${field}'`, {
+            hint: near ? `did you mean '${near}'?` : undefined,
+          });
+        }
         r = f[1];
         break;
       }
       case "pluck": {
         let rec = this.eval(e.rec);
         if (rec.kind === "thunk") rec = this.unpackThunk(rec);
-        if (rec.kind !== "record") throw new Error("Runtime: pluck on non-record");
+        if (rec.kind !== "record") throw new Error("pluck on non-record");
         const byKey = new Map(rec.v);
         if (e.entries.every((x) => typeof x === "string")) {
           const out: Value[] = [];
           for (const n of e.entries as string[]) {
             const v = byKey.get(n);
-            if (v === undefined) throw new Error(`Runtime: record has no field '${n}'`);
+            if (v === undefined) {
+              const near = didYouMean(n, rec.v.map(([k]) => k));
+              throw new APNError("runtime", `record has no field '${n}'`, {
+                hint: near ? `did you mean '${near}'?` : undefined,
+              });
+            }
             out.push(v);
           }
           r = { kind: "list", v: out };
@@ -1520,7 +1649,12 @@ export class Interpreter {
           const out: Array<[string, Value]> = [];
           for (const [src, dst] of e.entries as Array<[string, string]>) {
             const v = byKey.get(src);
-            if (v === undefined) throw new Error(`Runtime: record has no field '${src}'`);
+            if (v === undefined) {
+              const near = didYouMean(src, rec.v.map(([k]) => k));
+              throw new APNError("runtime", `record has no field '${src}'`, {
+                hint: near ? `did you mean '${near}'?` : undefined,
+              });
+            }
             out.push([dst, v]);
           }
           r = { kind: "record", v: out };
@@ -1560,29 +1694,32 @@ export class Interpreter {
   evalBinop(e: Extract<Expr, { t: "binop" }>): Value {
     const l = this.force(this.eval(e.l));
     const r = this.force(this.eval(e.r));
+    const bad = (): never => {
+      throw new APNError("runtime", `cannot apply '${e.op}' to ${l.kind} and ${r.kind}`);
+    };
     switch (e.op) {
       case "+":
         if (l.kind === "int" && r.kind === "int") return mkInt(l.v + r.v);
         if (l.kind === "float" && r.kind === "float") return { kind: "float", v: l.v + r.v };
         if (l.kind === "string" && r.kind === "string") return mkStr(l.v + r.v);
-        throw new Error("Runtime: cannot add these values");
+        return bad();
       case "-":
         if (l.kind === "int" && r.kind === "int") return mkInt(l.v - r.v);
         if (l.kind === "float" && r.kind === "float") return { kind: "float", v: l.v - r.v };
-        throw new Error("Runtime: cannot subtract");
+        return bad();
       case "*":
         if (l.kind === "int" && r.kind === "int") return mkInt(l.v * r.v);
         if (l.kind === "float" && r.kind === "float") return { kind: "float", v: l.v * r.v };
-        throw new Error("Runtime: cannot multiply");
+        return bad();
       case "/":
-        if (r.kind === "int" && r.v === 0) throw new Error("Runtime: division by zero");
-        if (r.kind === "float" && r.v === 0) throw new Error("Runtime: division by zero");
+        if (r.kind === "int" && r.v === 0) throw new APNError("runtime", "division by zero");
+        if (r.kind === "float" && r.v === 0) throw new APNError("runtime", "division by zero");
         if (l.kind === "int" && r.kind === "int") return mkInt(Math.trunc(l.v / r.v));
         if (l.kind === "float" && r.kind === "float") return { kind: "float", v: l.v / r.v };
-        throw new Error("Runtime: cannot divide");
+        return bad();
       case "%":
         if (l.kind === "int" && r.kind === "int") return mkInt(l.v % r.v);
-        throw new Error("Runtime: cannot modulo");
+        return bad();
       case "==": return mkBool(this.equals(l, r));
       case "!=": return mkBool(!this.equals(l, r));
       case "<": return this.compare(l, r) < 0 ? mkBool(true) : mkBool(false);
@@ -1591,17 +1728,17 @@ export class Interpreter {
       case ">=": return this.compare(l, r) >= 0 ? mkBool(true) : mkBool(false);
       case "&&":
         if (l.kind === "bool" && r.kind === "bool") return mkBool(l.v && r.v);
-        throw new Error("Runtime: cannot AND");
+        return bad();
       case "||":
         if (l.kind === "bool" && r.kind === "bool") return mkBool(l.v || r.v);
-        throw new Error("Runtime: cannot OR");
+        return bad();
       case "++":
         if (l.kind === "string" && r.kind === "string") return mkStr(l.v + r.v);
         if (l.kind === "list" && r.kind === "list") return mkList([...l.v, ...r.v]);
-        throw new Error("Runtime: cannot concatenate");
+        return bad();
       case ":":
         if (r.kind === "list") return mkList([l, ...r.v]);
-        throw new Error("Runtime: cannot cons to non-list");
+        return bad();
     }
   }
 
@@ -1679,7 +1816,11 @@ export class Interpreter {
           this.env = child;
           try { return this.eval(clause.body); } finally { this.env = old; }
         }
-        throw new Error("Runtime: non-exhaustive function definition");
+        throw new APNError(
+          "runtime",
+          `no clause of '${f.name}' matches the given arguments`,
+          { hint: "the definition's patterns don't cover this input" },
+        );
       }
       case "list":
       case "lazyList": {
@@ -1739,7 +1880,11 @@ export class Interpreter {
         throw new Error("Runtime: applying an object needs a list, a record, or an int index");
       }
       default:
-        throw new Error("Runtime: value is not a function");
+        throw new APNError(
+          "runtime",
+          `cannot call a non-function (${f.kind})`,
+          { hint: "lists index and records clone when applied; ints, strings, bools do nothing" },
+        );
     }
   }
 
@@ -2030,7 +2175,7 @@ export class Interpreter {
       }
       return this.evalWith(binds, alt.body);
     }
-    throw new Error("Runtime: non-exhaustive match");
+    throw new APNError("runtime", "non-exhaustive match: no alternative fits this value");
   }
 
   evalWith(binds: Map<string, Value>, e: Expr): Value {
@@ -2051,6 +2196,49 @@ function dirname(p: string): string {
 
 // ---------------- REPL ----------------
 
+// 1-based line/column of a source offset.
+function locate(src: string, pos: number): { line: number; col: number } {
+  let line = 1, lineStart = 0;
+  for (let i = 0; i < pos && i < src.length; i++) {
+    if (src[i] === "\n") {
+      line++;
+      lineStart = i + 1;
+    }
+  }
+  return { line, col: pos - lineStart + 1 };
+}
+
+// Render an error the pretty way: a red headline, an optional hint, and for
+// parse/lex errors a --> line, the offending source line (syntax-highlighted
+// in color mode) with one line of context on each side, and a caret under the
+// offending token.
+function formatError(err: unknown, color: boolean): string {
+  const e = err instanceof APNError
+    ? err
+    : new APNError("runtime", (err as Error)?.message ?? String(err));
+  const p = (code: string, s: string) => color ? code + s + A.reset : s;
+  const head = e.kind === "runtime" ? "runtime error" : "parse error";
+  const out: string[] = [p(A.bold + A.red, head + ": ") + e.message];
+  if (e.hint) out.push(p(A.dim, "  hint: ") + p(A.yellow, e.hint));
+  if (e.pos !== undefined && e.src) {
+    const { line, col } = locate(e.src, e.pos);
+    const lines = e.src.split("\n");
+    const gutter = String(Math.min(line + 1, lines.length)).length;
+    const show = (n: number) => {
+      const text = lines[n - 1].replace(/\r$/, "");
+      const num = p(A.dim, String(n).padStart(gutter) + " | ");
+      return num + (color ? highlightLine(text) : text);
+    };
+    out.push(p(A.dim, `  --> line ${line}, column ${col}`));
+    if (line >= 2) out.push(show(line - 1));
+    out.push(show(line));
+    const caret = " ".repeat(Math.max(0, col - 1)) + "^".repeat(Math.max(1, e.len ?? 1));
+    out.push(p(A.dim, " ".repeat(gutter) + " | ") + p(A.green, caret));
+    if (line < lines.length) out.push(show(line + 1));
+  }
+  return out.join("\n");
+}
+
 // Run a source chunk; returns the forced value, or null for unit/void.
 // REPL echo uses this (it needs the Value for colored printing).
 function runSourceValue(src: string, interp: Interpreter): Value | null {
@@ -2058,16 +2246,14 @@ function runSourceValue(src: string, interp: Interpreter): Value | null {
   try {
     program = parse(src);
   } catch (err) {
-    throw new Error(
-      `Parse error: ${(err as Error).message}\n` +
-      `  source:\n${src.split("\n").map((l) => "    " + l).join("\n")}`
-    );
+    throw err instanceof APNError ? err : new APNError("parse", (err as Error).message);
   }
   let val: Value;
   try {
     val = interp.run(program);
   } catch (err) {
-    throw new Error(`Runtime error: ${(err as Error).message}`);
+    if (err instanceof APNError) throw err;
+    throw new APNError("runtime", (err as Error).message.replace(/^Runtime: /, ""));
   }
   val = interp.force(val);
   return val.kind === "unit" ? null : val;
@@ -2080,7 +2266,7 @@ function runSource(src: string, interp: Interpreter): string {
 
 // Does this parse error mean "input is still incomplete, keep reading"?
 function isIncompleteError(msg: string): boolean {
-  return /'EOF'|end of file|expected '->'|unexpected 'newline'|unexpected 'indent'|unexpected 'dedent'/.test(msg);
+  return /'EOF'|end of file|unterminated|expected '->'|unexpected 'newline'|unexpected 'indent'|unexpected 'dedent'/.test(msg);
 }
 
 function unbalancedBrackets(src: string): boolean {
@@ -2722,7 +2908,7 @@ async function replTTY(): Promise<void> {
         const val = runSourceValue(src, interp);
         if (val !== null) ed.print(showValue(val));
       } catch (err) {
-        ed.print(paint(A.red, (err as Error).message));
+        ed.print(formatError(err, true));
       }
     }
   } finally {
@@ -2795,7 +2981,7 @@ async function replPiped(): Promise<void> {
           continue;
         }
         // Real error: show it, reset pending.
-        console.log("Error:", msg);
+        console.log(formatError(err, false));
         pending = "";
         await Deno.stdout.write(new TextEncoder().encode(prompt));
         continue;
@@ -2830,7 +3016,12 @@ if (import.meta.main) {
     const src = Deno.readTextFileSync(file);
     const interp = new Interpreter();
     interp.sourceDir = dirname(file);
-    runSource(src, interp);
+    try {
+      runSource(src, interp);
+    } catch (err) {
+      console.error(formatError(err, Deno.stderr.isTerminal()));
+      Deno.exit(1);
+    }
   } else {
     repl().catch((err) => {
       console.error(err);
