@@ -37,19 +37,17 @@ debug (addTwo 10)             # => 12
 # ---------------------------------------------------------
 # 3. RECURSION
 # ---------------------------------------------------------
-factorial n =
-    match n [
-        0 -> 1
-        _ -> n * factorial (n - 1)
-    ]
+factorial n = match n [
+    0 -> 1
+    _ -> n * factorial (n - 1)
+]
 debug (factorial 10)   # => 3628800
 
-fib n =
-    match n [
-        0 -> 0
-        1 -> 1
-        _ -> fib (n - 1) + fib (n - 2)
-    ]
+fib n = match n [
+    0 -> 0
+    1 -> 1
+    _ -> fib (n - 1) + fib (n - 2)
+]
 debug (fib 10)         # => 55
 
 # ---------------------------------------------------------
@@ -65,11 +63,10 @@ debug (fib 10)         # => 55
 # ---------------------------------------------------------
 data Maybe a = Just a | Nothing
 
-safeHead xs =
-    match xs [
-        [] -> Nothing
-        x:rest -> Just x
-    ]
+safeHead xs = match xs [
+    [] -> Nothing
+    x:rest -> Just x
+]
 debug (safeHead [1, 2, 3])   # => Just 1
 debug (safeHead [])          # => Nothing
 
@@ -78,19 +75,17 @@ len [] = 0
 len (x:rest) = 1 + len rest
 debug (len [1, 2, 3])        # => 3
 
-sumList xs =
-    match xs [
-        [] -> 0
-        x:rest -> x + sumList rest
-    ]
+sumList xs = match xs [
+    [] -> 0
+    x:rest -> x + sumList rest
+]
 debug (sumList [1, 2, 3, 4, 5])  # => 15
 
 # exact-length list pattern — binds each element
-pairSum xs =
-    match xs [
-        [a, b] -> a + b
-        _ -> 0
-    ]
+pairSum xs = match xs [
+    [a, b] -> a + b
+    _ -> 0
+]
 debug (pairSum [10, 20])   # => 30
 debug (pairSum [1])        # => 0
 
@@ -100,20 +95,24 @@ debug (sumRec [x: 10, y: 20])  # => 30
 debug (sumRec [10, 20])        # => 30
 
 # guards
-classify n =
-    match n [
-        x | x < 0 -> "negative"
-        x | x == 0 -> "zero"
-        _ -> "positive"
-    ]
+classify n = match n [
+    x | x < 0 -> "negative"
+    x | x == 0 -> "zero"
+    _ -> "positive"
+]
 debug (classify (-5))   # => "negative"
 debug (classify 0)      # => "zero"
 debug (classify 7)      # => "positive"
 
 # ---------------------------------------------------------
 # 4b. MATCH LAYOUTS —  match scrutinee [ pattern -> expr, ... ]
-#     Alternatives are delimited with [ ], separated by `,` OR a newline,
-#     so all three layouts work: block / same-line-open / fully single-line.
+#     Alternatives are delimited with [ ], separated by `,` OR a newline.
+#     All three layouts parse: block / same-line-open / fully single-line.
+#     PREFERRED STYLE for a function whose entire body is one match is the
+#     same-line-open form:
+#         f x = match x [
+#             pattern -> body
+#         ]
 # ---------------------------------------------------------
 factA n =
     match n [
