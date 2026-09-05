@@ -368,7 +368,8 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   multi-line text is inserted verbatim, never auto-run; Enter then runs it.
 - **Colors**: input is highlighted as typed (comments dim, strings/chars
   green, numbers yellow, `match`/`data`/bools magenta, natives blue, capital
-  idents cyan); echoed values are colored by kind (node-style); errors red.
+  idents cyan, punctuation/operators gray); echoed values are colored by kind
+  (node-style); errors red.
 - **Keys**: Ctrl+C clear input (empty buffer = quit), Ctrl+D quit,
   Ctrl+L clear screen, Ctrl+A/E home/end, Ctrl+U/K kill to line start/end,
   Ctrl+W delete word back, arrows + Home/End/Delete.

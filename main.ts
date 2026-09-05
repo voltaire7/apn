@@ -2461,7 +2461,18 @@ function highlightLine(s: string): string {
         : w;
       i = j; continue;
     }
-    out += c; i++;
+    // structural punctuation and operators recede to gray so names and
+    // values pop (spaces stay uncolored)
+    let j = i;
+    while (
+      j < s.length && !/[A-Za-z0-9_]/.test(s[j]) && s[j] !== " " &&
+      !"\"'#".includes(s[j])
+    ) j++;
+    if (j === i) { out += s[i]; i++; } // a space: plain, single char
+    else {
+      out += paint(A.gray, s.slice(i, j));
+      i = j;
+    }
   }
   return out;
 }
