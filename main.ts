@@ -1252,6 +1252,8 @@ export class Interpreter {
     this.env.setLocal("toString", { kind: "native", name: "toString", arity: 1, applied: [] });
     this.env.setLocal("parse", { kind: "native", name: "parse", arity: 1, applied: [] });
     this.env.setLocal("debug", { kind: "native", name: "debug", arity: 1, applied: [] });
+    this.env.setLocal("exit", { kind: "native", name: "exit", arity: 1, applied: [] });
+    this.env.setLocal("halt", { kind: "native", name: "halt", arity: 0, applied: [] });
   }
 
   run(program: TopLevel[]): Value {
@@ -1674,6 +1676,13 @@ export class Interpreter {
       }
       case "__constr":
         return { kind: "variant", tag: tag!, v: args };
+      case "exit":
+        // Can be put anywhere in the program: terminates the process instantly.
+        if (a.kind !== "int") throw new Error("Runtime: exit expects an int status code");
+        return Deno.exit(a.v);
+      case "halt":
+        // Stops the whole program immediately (status 0).
+        return Deno.exit(0);
     }
     throw new Error(`Runtime: unknown native '${name}'`);
   }
@@ -1838,7 +1847,7 @@ async function repl(): Promise<void> {
             ``,
             `Builtins: print (string only) toString parse debug`,
             `          head tail length null map filter foldl foldr`,
-            `          for pairs format intToString`,
+            `          for pairs format intToString exit halt`,
             ``,
             `Type annotations (TS-style) are accepted & ignored at runtime:`,
             `  let x: Int = 5`,

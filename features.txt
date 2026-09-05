@@ -372,6 +372,22 @@ debug (spanArgs)              # => [1, 2, 3, 4]
 #         }
 #   - any indentation that skips a level (0 -> 8) or is not a multiple of 4.
 
+# ---------------------------------------------------------
+# 17. EXIT & HALT — terminate the program from anywhere
+#    exit n    ends the whole process with status code n (n must be an int);
+#              works anywhere: top level, inside blocks, lambdas, for, ...
+#    halt      stops the program immediately (status 0)
+# ---------------------------------------------------------
+# `halt` and `exit 1` behave the same way as `exit 0` here — they just stop
+# with a different status. Only the LAST terminator can actually run in this
+# file without cutting the showcase short, so `exit`/`halt` usage is verified
+# in the REPL and in ad-hoc scripts:
+#     debug "before"; exit 1   -> prints "before", process exits with 1
+#     halt                      -> process exits with 0, nothing after runs
+# The spectrum of shapes (all equivalent placements) is scanned by the parser:
+debug "still running before the exit demo"
+exit 0   # keep this LAST line: it terminates the showcase cleanly (status 0)
+
 print ""
 debug {
     print "hello"

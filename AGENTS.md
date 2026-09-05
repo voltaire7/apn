@@ -157,6 +157,11 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   in the fn slot errors.
   Related natives: `pairs rec` (record → list of `[field, value]`), and
   `format "% %" [a, b]` (`%` = printf-style arg, strings unquoted; `%%` = `%`).
+- **Termination**: `exit n` (n int) ends the whole process with status `n`, and
+  `halt` stops it immediately with status 0. Both are ordinary natives callable
+  from ANYWHERE — top level, inside `{ }` blocks, lambdas, `for`/`map`
+  callbacks, etc. — implemented via an unconditional `Deno.exit` so nothing can
+  be evaluated afterwards. Useful for early-out control flow / scripts.
 - **Output & conversion (DELIBERATE split)**:
   - `print s` — STRING ONLY; outputs the raw text (no quotes); anything else
     errors. It is for clean text output.
