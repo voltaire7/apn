@@ -119,6 +119,18 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   unit. A list iterates per element; a record per entry as `[field, value]`.
   Related natives: `pairs rec` (record → list of `[field, value]`), and
   `format "% %" [a, b]` (`%` = printf-style arg, strings unquoted; `%%` = `%`).
+- **Output & conversion (DELIBERATE split)**:
+  - `print s` — STRING ONLY; outputs the raw text (no quotes); anything else
+    errors. It is for clean text output.
+  - `toString x` — any value → string representation (strings come back
+    *quoted*: `toString "hi"` = the string `"hi"`, i.e. `print (toString "hi")`
+    renders `"hi"`). Use it when you need a string (to concatenate or print).
+  - `parse s` — the inverse of `toString` for literals: `"42"` (int),
+    `"3.5"` (float), `"true"`/`"false"` (bool), else a runtime error.
+  - `debug x` — prints any value's representation (this is the OLD `print`
+    behavior); for inspection/diagnostics.
+  The showcase (`features.txt`) uses `debug` everywhere a value is being
+  inspected and `print` only where the value is a string.
 - **Variants** via `data Maybe a = Just a | Nothing`; constructors and case
   matching. Nullary constructors are bare values; arity>0 constructors are
   curried natives tagged with the constructor name.

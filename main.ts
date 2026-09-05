@@ -1131,6 +1131,9 @@ export class Interpreter {
     this.env.setLocal("for", { kind: "native", name: "for", arity: 2, applied: [] });
     this.env.setLocal("pairs", { kind: "native", name: "pairs", arity: 1, applied: [] });
     this.env.setLocal("format", { kind: "native", name: "format", arity: 2, applied: [] });
+    this.env.setLocal("toString", { kind: "native", name: "toString", arity: 1, applied: [] });
+    this.env.setLocal("parse", { kind: "native", name: "parse", arity: 1, applied: [] });
+    this.env.setLocal("debug", { kind: "native", name: "debug", arity: 1, applied: [] });
   }
 
   run(program: TopLevel[]): Value {
@@ -1435,9 +1438,25 @@ export class Interpreter {
     const args = argsIn.map((x) => this.force(x));
     const a = args[0];
     switch (name) {
-      case "print":
+      case "print": {
+        if (a.kind !== "string") throw new Error("Runtime: print expects a string (use toString or debug for other values)");
+        console.log(a.v);
+        return { kind: "unit" };
+      }
+      case "debug":
         console.log(valueToString(a));
         return { kind: "unit" };
+      case "toString":
+        return mkStr(valueToString(a));
+      case "parse": {
+        if (a.kind !== "string") throw new Error("Runtime: parse expects a string");
+        const s = a.v.trim();
+        if (s === "true") return mkBool(true);
+        if (s === "false") return mkBool(false);
+        if (/^-?\d+$/.test(s)) return mkInt(parseInt(s, 10));
+        if (/^-?\d+\.\d+$/.test(s)) return { kind: "float", v: parseFloat(s) };
+        throw new Error(`Runtime: parse: can't parse '${s}'`);
+      }
       case "head":
         if (a.kind !== "list") throw new Error("Runtime: head expects a list");
         if (a.v.length === 0) throw new Error("Runtime: head of empty list");
@@ -1680,7 +1699,8 @@ async function repl(): Promise<void> {
             `  for (x -> print x) [1,2,3]   for fn seq`,
             `  recursion, higher-order fns, records, variants`,
             ``,
-            `Builtins: print head tail length null map filter foldl foldr`,
+            `Builtins: print (string only) toString parse debug`,
+            `          head tail length null map filter foldl foldr`,
             `          for pairs format intToString`,
             ``,
             `Type annotations (TS-style) are accepted & ignored at runtime:`,

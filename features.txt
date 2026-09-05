@@ -10,8 +10,8 @@
 # ---------------------------------------------------------
 data Maybe a = Just a | Nothing
 
-print (Just 42)        # => Just 42
-print Nothing          # => Nothing
+debug (Just 42)        # => Just 42
+debug Nothing          # => Nothing
 
 # ---------------------------------------------------------
 # 2. FUNCTIONS & LAMBDAS
@@ -21,16 +21,16 @@ print Nothing          # => Nothing
 #    Both support recursion and partial application.
 # ---------------------------------------------------------
 func x = x + x                # Haskell style
-print (func 21)               # => 42
+debug (func 21)               # => 42
 
 double = x -> x * 2           # lambda style
-print (double 21)             # => 42
+debug (double 21)             # => 42
 
 add a b = a + b               # Haskell style, multi-param
-print (add 3 4)               # => 7
+debug (add 3 4)               # => 7
 
 addTwo = add 2                # partial application
-print (addTwo 10)             # => 12
+debug (addTwo 10)             # => 12
 
 # ---------------------------------------------------------
 # 3. RECURSION
@@ -39,14 +39,14 @@ factorial n =
   case n of
     0 -> 1
     _ -> n * factorial (n - 1)
-print (factorial 10)   # => 3628800
+debug (factorial 10)   # => 3628800
 
 fib n =
   case n of
     0 -> 0
     1 -> 1
     _ -> fib (n - 1) + fib (n - 2)
-print (fib 10)         # => 55
+debug (fib 10)         # => 55
 
 # ---------------------------------------------------------
 # 4. PATTERN MATCHING (case) & PATTERN DEFINITIONS
@@ -63,32 +63,32 @@ safeHead xs =
   case xs of
     [] -> Nothing
     x:rest -> Just x
-print (safeHead [1, 2, 3])   # => Just 1
-print (safeHead [])          # => Nothing
+debug (safeHead [1, 2, 3])   # => Just 1
+debug (safeHead [])          # => Nothing
 
 # multiple equations (clauses), like Haskell
 len [] = 0
 len (x:rest) = 1 + len rest
-print (len [1, 2, 3])        # => 3
+debug (len [1, 2, 3])        # => 3
 
 sumList xs =
   case xs of
     [] -> 0
     x:rest -> x + sumList rest
-print (sumList [1, 2, 3, 4, 5])  # => 15
+debug (sumList [1, 2, 3, 4, 5])  # => 15
 
 # exact-length list pattern — binds each element
 pairSum xs =
   case xs of
     [a, b] -> a + b
     _ -> 0
-print (pairSum [10, 20])   # => 30
-print (pairSum [1])        # => 0
+debug (pairSum [10, 20])   # => 30
+debug (pairSum [1])        # => 0
 
 # the same `[x, y]` pattern also destructures a RECORD by field name
 sumRec [x, y] = x + y
-print (sumRec [x: 10, y: 20])  # => 30
-print (sumRec [10, 20])        # => 30
+debug (sumRec [x: 10, y: 20])  # => 30
+debug (sumRec [10, 20])        # => 30
 
 # guards
 classify n =
@@ -96,24 +96,24 @@ classify n =
     x | x < 0 -> "negative"
     x | x == 0 -> "zero"
     _ -> "positive"
-print (classify (-5))   # => "negative"
-print (classify 0)      # => "zero"
-print (classify 7)      # => "positive"
+debug (classify (-5))   # => "negative"
+debug (classify 0)      # => "zero"
+debug (classify 7)      # => "positive"
 
 # ---------------------------------------------------------
 # 5. LISTS — heterogeneous, like JS arrays, but almost lazy.
 #    Literal lists stay in an unevaluated (lazy) state until used.
 # ---------------------------------------------------------
-print [213, "hello"]          # => [213, "hello"]
-print [1, 2, 3]               # => [1, 2, 3]
-print ([] ++ [1, 2] ++ [3])   # => [1, 2, 3]
+debug [213, "hello"]          # => [213, "hello"]
+debug [1, 2, 3]               # => [1, 2, 3]
+debug ([] ++ [1, 2] ++ [3])   # => [1, 2, 3]
 
-[1, 2, 3] $ head $ print   # => 1
-print (tail [1, 2, 3])        # => [2, 3]
-print (length "hello")        # => 5
-print (length [1, 2, 3])      # => 3
-print (null [])               # => true
-print (null [1])              # => false
+[1, 2, 3] $ head $ debug   # => 1
+debug (tail [1, 2, 3])        # => [2, 3]
+debug (length "hello")        # => 5
+debug (length [1, 2, 3])      # => 3
+debug (null [])               # => true
+debug (null [1])              # => false
 
 # A list literal whose elements are unbound identifiers is lazy:
 #   use it as a record/template  ->  the names become field names
@@ -121,42 +121,42 @@ print (null [1])              # => false
 a = 100
 b = 200
 vals = [a, b]
-print vals                     # => [100, 200]   (used as a list)
-print (map (x -> x * 2) vals)  # => [200, 400]
+debug vals                     # => [100, 200]   (used as a list)
+debug (map (x -> x * 2) vals)  # => [200, 400]
 
 # ---------------------------------------------------------
 # 6. RECORDS — [name: value, ...] and field access
 # ---------------------------------------------------------
 person = [name: "Alice", age: 30]
-print person.name        # => "Alice"
-print person.age         # => 30
-print person             # => [name: "Alice", age: 30]
+debug person.name        # => "Alice"
+debug person.age         # => 30
+debug person             # => [name: "Alice", age: 30]
 
 # nested records + chained access
 nested = [inner: [z: 99]]
-print nested.inner.z     # => 99
+debug nested.inner.z     # => 99
 
 # ---------------------------------------------------------
 # 7. LIST -> RECORD (zip a name template with a value list)
 #    Bare identifiers make a template; lengths must match.
 # ---------------------------------------------------------
 pair = [name, value].[213, "hello"]
-print pair                 # => [name: 213, value: "hello"]
-print pair.value           # => "hello"
+debug pair                 # => [name: 213, value: "hello"]
+debug pair.value           # => "hello"
 
 Template = [count, label]
 made = Template.[7, "seven"]
-print made                 # => [count: 7, label: "seven"]
-print made.label           # => "seven"
+debug made                 # => [count: 7, label: "seven"]
+debug made.label           # => "seven"
 
 # ---------------------------------------------------------
 # 8. TERNARY — cond ? a : b  (replaces if/then/else)
 # ---------------------------------------------------------
 max a b = a > b ? a : b
-print (max 4 9)            # => 9
+debug (max 4 9)            # => 9
 
 smallest a b c = (a < b ? a : b) < c ? (a < b ? a : b) : c
-print (smallest 7 2 9)     # => 2
+debug (smallest 7 2 9)     # => 2
 
 # ---------------------------------------------------------
 # 9. let ... in  (with multiple bindings)
@@ -165,7 +165,7 @@ greeting =
   let name = "world"
       hello = "Hello"
   in hello ++ ", " ++ name ++ "!"
-print greeting             # => "Hello, world!"
+debug greeting             # => "Hello, world!"
 
 # ---------------------------------------------------------
 # 10. PIPES, BACKTICK INFIX, OPERATOR SECTIONS
@@ -174,66 +174,84 @@ print greeting             # => "Hello, world!"
 #    (+ 2) / (2 +)    operator sections  ->  \x -> x + 2 / \x -> 2 + x
 # ---------------------------------------------------------
 negate x = -x
-print (5 $ negate)                        # => -5
-print ([1, 2, 3] $ map (x -> x * 10))     # => [10, 20, 30]
-[1, 2, 3] $ map (x -> x * 10) $ print     # => [10, 20, 30]
+debug (5 $ negate)                        # => -5
+debug ([1, 2, 3] $ map (x -> x * 10))     # => [10, 20, 30]
+[1, 2, 3] $ map (x -> x * 10) $ toString $ print  # => [10, 20, 30]
 
 myApp xs ys = xs ++ ys
-print ([1, 2] `myApp` [3, 4])             # => [1, 2, 3, 4]
+debug ([1, 2] `myApp` [3, 4])             # => [1, 2, 3, 4]
 
-print (map (+ 2) [1, 2, 3])               # => [3, 4, 5]
-print (map (2 +) [1, 2, 3])               # => [3, 4, 5]
-print (map (* 10) [1, 2, 3])              # => [10, 20, 30]
-print (filter (2 <) [3, 1, 4, 1, 5])      # => [4, 5]
-print (-2)                                # => -2  ((- 2) is NOT a section:
+debug (map (+ 2) [1, 2, 3])               # => [3, 4, 5]
+debug (map (2 +) [1, 2, 3])               # => [3, 4, 5]
+debug (map (* 10) [1, 2, 3])              # => [10, 20, 30]
+debug (filter (2 <) [3, 1, 4, 1, 5])      # => [4, 5]
+debug (-2)                                # => -2  ((- 2) is NOT a section:
                                           #     unary minus wins; use a lambda)
 
 # ---------------------------------------------------------
 # 11. HIGHER-ORDER FUNCTIONS — map / filter / foldl / foldr
 # ---------------------------------------------------------
 nums = [1, 2, 3, 4, 5]
-print (map (x -> x * x) nums)                 # => [1, 4, 9, 16, 25]
-print (filter (x -> x > 2) nums)              # => [3, 4, 5]
-print (foldl (acc x -> acc + x) 0 nums)       # => 15
-print (foldr (x acc -> x - acc) 0 [1, 2, 3])  # => 2
+debug (map (x -> x * x) nums)                 # => [1, 4, 9, 16, 25]
+debug (filter (x -> x > 2) nums)              # => [3, 4, 5]
+debug (foldl (acc x -> acc + x) 0 nums)       # => 15
+debug (foldr (x acc -> x - acc) 0 [1, 2, 3])  # => 2
 
 # pattern-lambdas: a lambda param may be a pattern (here, destructuring a pair)
-print (map ([a, b] -> a + b) [[1, 2], [3, 4]])  # => [3, 7]
+debug (map ([a, b] -> a + b) [[1, 2], [3, 4]])  # => [3, 7]
 
 # ---------------------------------------------------------
 # 12. STRINGS, CHARS, FLOATS, BOOLS, CONVERSION
 # ---------------------------------------------------------
-print "a string"
-print 'c'
-print 3.14
-print true
-print false
-print (intToString 42)    # => "42"
-print (true ? "yes" : "no")
-print (1 == 1)            # => true
-print (1 < 2)             # => true
-print ("a" != "b")        # => true
+debug "a string"
+debug 'c'
+debug 3.14
+debug true
+debug false
+print (intToString 42)    # => 42       (strings print as raw text)
+print (true ? "yes" : "no")  # => yes   (the ternary yields a string)
+debug (1 == 1)            # => true
+debug (1 < 2)             # => true
+debug ("a" != "b")        # => true
 
 # ---------------------------------------------------------
 # 13. TYPE ANNOTATIONS — accepted and ignored at runtime
 # ---------------------------------------------------------
-print (let x: Int = 20 in x * 2)   # => 40
-print (let x: Int = 5 in x)        # => 5
+debug (let x: Int = 20 in x * 2)   # => 40
+debug (let x: Int = 5 in x)        # => 5
 
 # ---------------------------------------------------------
 # 14. ITERATION (for), pairs, format
 #    for : fn -> seq -> unit   runs fn for its effect; result is discarded.
 #    A list iterates per element; a record per entry as [field, value].
 # ---------------------------------------------------------
-for (x -> print x) [1, 2, 3]                 # prints 1, 2, 3
-[1, 2, 3] $ for (x -> print (x * 10))        # prints 10, 20, 30
+for (x -> debug x) [1, 2, 3]                 # prints 1, 2, 3
+[1, 2, 3] $ for (x -> debug (x * 10))        # prints 10, 20, 30
 
-# records iterate as [field, value] pairs — destructure with a pattern-lambda
+# records iterate as [field, value] pairs — destructure with a pattern-lambda;
+# `format` builds a string, so `print` emits it as raw text
 for ([f, v] -> print (format "%: %" [f, v])) [name: "Alice", age: 30]
-                                             # prints "name: Alice", "age: 30"
+                                             # prints name: Alice, age: 30
 
-pairs [a: 1, b: 2] $ print                   # => [["a", 1], ["b", 2]]
+pairs [a: 1, b: 2] $ debug                   # => [["a", 1], ["b", 2]]
 
-print (format "% / %" [1, 2])                # => "1 / 2"
-print (format "last: %" [9])                 # => "last: 9"
-print (format "100%%" [])                    # => "100%"  (%% is a literal %)
+print (format "% / %" [1, 2])                # => 1 / 2
+print (format "last: %" [9])                 # => last: 9
+print (format "100%%" [])                    # => 100%  (%% is a literal %)
+
+# ---------------------------------------------------------
+# 15. OUTPUT & CONVERSION — print / toString / parse / debug
+#    print s      string only            => raw text, no quotes
+#    toString x   any value -> string    => representation (strings stay quoted)
+#    parse s      string -> value        => int | float | bool, else error
+#    debug x      any value              => prints the representation (old print)
+# ---------------------------------------------------------
+print "a string"                       # => a string      (raw text)
+debug "a string"                       # => "a string"    (debug shows quotes)
+print (toString 42)                    # => 42
+print (toString "hi")                  # => "hi"  (strings render quoted)
+print (toString [1, 2, 3])             # => [1, 2, 3]
+debug (toString Nothing)               # => "Nothing"
+parse "42" + 8 $ intToString $ print   # => 50
+debug (parse "3.5")                    # => 3.5
+debug (parse "true")                   # => true
