@@ -1483,25 +1483,22 @@ export class Interpreter {
         break;
       }
       case "match": r = this.evalMatch(this.force(this.eval(e.scrut)), e.alts); break;
-      case "list": {
-        // An ALL-bare-name list literal is an INDEX ENUM: each name is a
-        // field whose value is its position.  [x, y, z] === [x: 0, y: 1, z: 2].
-        const names = e.v.length > 0 && e.v.every((el) => el.t === "var")
-          ? e.v as { t: "var"; name: string }[]
-          : null;
-        if (names) {
-          r = { kind: "record", v: names.map((el, i) => [el.name, { kind: "int", v: i }] as [string, Value]) };
-        } else {
-          r = { kind: "lazyList", exprs: e.v, env: this.env };
-        }
-        break;
-      }
+      case "list": r = { kind: "lazyList", exprs: e.v, env: this.env }; break;
       case "record": r = { kind: "record", v: e.v.map(([k, x]) => [k, this.eval(x)] as [string, Value]) }; break;
       case "recordAccess": {
         let rec = this.eval(e.rec);
         // `core = load "..."` is a thunk; get the module WITHOUT forcing its
         // fields (a module may contain `halt = exit 0`).
         if (rec.kind === "thunk") rec = this.unpackThunk(rec);
+        if (rec.kind === "lazyList" && rec.exprs.every((ex) => ex.t === "var")) {
+          // A bare-name list used as an OBJECT is its index enum:
+          // field -> position, so  [x, y, z] === [x: 0, y: 1, z: 2]
+          const names = rec.exprs as { t: "var"; name: string }[];
+          const i = names.findIndex((n) => n.name === e.field);
+          if (i < 0) throw new Error(`Runtime: record has no field '${e.field}'`);
+          r = { kind: "int", v: i };
+          break;
+        }
         if (rec.kind !== "record") throw new Error("Runtime: record access on non-record");
         const f = rec.v.find(([k]) => k === e.field);
         if (!f) throw new Error(`Runtime: record has no field '${e.field}'`);
@@ -1552,14 +1549,10 @@ export class Interpreter {
             }
             r = { kind: "record", v: out };
           } else {
-            // Names-only prototype (no defaults): every field must be given.
-            const given = new Set((vals.v as Array<[string, Value]>).map(([k]) => k));
-            const missing = protoNames.filter((n) => !given.has(n));
-            if (missing.length > 0) {
-              throw new Error(`Runtime: name template has no value for '${missing.join("', '")}'`);
-            }
+            // Names-only prototype — it has INDEX DEFAULTS (an index enum):
+            // every omitted field defaults to its position.
             const byName = new Map(vals.v as Array<[string, Value]>);
-            r = { kind: "record", v: protoNames.map((k) => [k, byName.get(k)!]) };
+            r = { kind: "record", v: protoNames.map((k, i) => [k, byName.get(k) ?? { kind: "int", v: i }]) };
           }
         }
         break;
@@ -2087,7 +2080,7 @@ async function repl(): Promise<void> {
             `  symbol = value   (the ONLY binding form; top level or inside { } blocks)`,
             `  [a, b] = value (destructuring binding; records match by field name)`,
             `  Just v = value (declared constructors destructure; capital defs are errors)`,
-            `  [x, y, z] is an index enum: bare names = their index [x: 0, y: 1, z: 2]`,
+            `  bare-name list as OBJECT = index enum ([x, y, z] => [x:0, y:1, z:2]); as list => vars`,
             `  proto.[1,2,3] / proto.[x: 1]  prototype clone: positional or named`,
             `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
             `  cond ? a : b   (ternary)`,
