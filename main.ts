@@ -2271,7 +2271,8 @@ function helpText(): string {
     `             complete, insert 4 spaces (the indent unit)`,
     `  Backspace  behind a full indent level deletes all 4 spaces`,
     `  Enter      runs when the chunk is complete; incomplete input continues`,
-    `             on the next line (auto-indent, file-true layout)`,
+    `             on the next line ("... " prompt, auto-indent); a BLANK`,
+    `             continuation line forces the run, like Python`,
     `  paste      multi-line text is inserted, not run; Enter then runs it`,
     `  Ctrl+C     clear input (empty: quit)  Ctrl+D quit  Ctrl+L clear screen`,
     `  Ctrl+A/E   line start/end  Ctrl+U/K kill to line start/end  Ctrl+W delete word`,
@@ -2308,9 +2309,9 @@ class ReplEditor {
     try { return Deno.consoleSize().columns || 80; } catch { return 80; }
   }
 
-  // Continuation lines render BARE (no prompt) so the code's own 4-space
-  // layout reads exactly like the same code in a file.
-  promptW(i: number): number { return i === 0 ? 2 : 0; }
+  // Python-style prompts: ">>> " opens a chunk, "... " marks continuation
+  // lines. Uniform 4-char width keeps the cursor math trivial.
+  promptW(_i: number): number { return 4; }
 
   emit(s: string): void {
     Deno.stdout.writeSync(ENC.encode(s));
@@ -2334,7 +2335,7 @@ class ReplEditor {
     this.emit("\r\x1b[J");
     let total = 0;
     for (let i = 0; i < this.lines.length; i++) {
-      const p = i === 0 ? paint(A.bold + A.cyan, "> ") : "";
+      const p = i === 0 ? paint(A.bold + A.cyan, ">>> ") : paint(A.cyan, "... ");
       this.emit(p + highlightLine(this.lines[i]) + "\r\n");
       total += this.rowsOf(i, w);
     }
@@ -2430,12 +2431,22 @@ class ReplEditor {
     else if (this.row < this.lines.length - 1) { this.row++; this.col = 0; }
   }
 
+  // Trailing whitespace-only lines never reach the parser.
+  trimmedSrc(): string {
+    return this.src().replace(/(?:\n[ \t]*)+$/, "");
+  }
+
   enter(): KeyAction {
     const atEnd = this.row === this.lines.length - 1 &&
       this.col === this.lines[this.row].length;
     if (!atEnd) { this.splitLine(); return "cont"; }
-    const src = this.src().replace(/\n+$/, "");
-    if (this.isComplete(src)) return "submit";
+    const line = this.lines[this.row];
+    // whitespace-only single line: like Python, just show a fresh prompt
+    if (this.lines.length === 1 && line.trim() === "") return "submit";
+    if (this.isComplete(this.trimmedSrc())) return "submit";
+    // Python's blank-line rule: an empty continuation line forces the run
+    // (an unfinished construct surfaces its parse error, exactly like Python)
+    if (this.lines.length > 1 && line.trim() === "") return "submit";
     this.splitLine();
     return "cont";
   }
@@ -2640,6 +2651,7 @@ class ReplEditor {
         if (queue[i] === "\x1b" && queue.startsWith("\x1b[200~", i)) break;
         action = this.feed(queue[i]);
         if (action !== "cont") break;
+        this.render(); // per keystroke, like a real terminal shows them
       }
       if (this.pastePending) { // marker assembled char-by-char in feed()
         this.pastePending = false;
@@ -2649,14 +2661,13 @@ class ReplEditor {
       if (action === "submit" || action === "quit") {
         this.pendingKeys = queue.slice(i + 1);
         this.emit("\r\n");
-        return action === "submit" ? this.src().replace(/\n+$/, "") : null;
+        return action === "submit" ? this.trimmedSrc() || "" : null;
       }
       if (i < queue.length) { // stopped at a paste marker
         queue = queue.slice(i);
         continue;
       }
       queue = "";
-      this.render();
     }
   }
 }
@@ -2716,7 +2727,7 @@ async function replPiped(): Promise<void> {
   const stdin = Deno.stdin;
 
   let pending = "";
-  const prompt = "> ";
+  const prompt = ">>> ";
 
   const processBuffer = (chunk: string): string[] => {
     return chunk.split("\n");
