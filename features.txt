@@ -194,6 +194,15 @@ vals = [a, b]
 debug vals                       # => [100, 200]
 debug (map (x -> x * 2) vals)    # => [200, 400]
 
+# indexing:  arr.[i]  — negative indices count from the end; multiple
+# indices pick several elements
+nums = [10, 20, 30]
+debug nums.[0]                   # => 10
+debug nums.[1]                   # => 20
+debug nums.[-1]                  # => 30
+debug nums.[0, 2]                # => [10, 30]
+debug (nums.[-1] + nums.[0])     # => 40
+
 # ---------------------------------------------------------
 # 6. RECORDS — [name: value, ...] and field access
 # ---------------------------------------------------------

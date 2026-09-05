@@ -66,6 +66,11 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   `force()` is the single entry point for turning a `lazyList` into a concrete
   list value; it recurses into nested lists/records/variants. Only invoke it
   when a list is actually needed.
+- **Indexing**: `arr.[i]` indexes a list — `arr.[0]` is the first element,
+  `arr.[-1]` the last (negative counts from the end), and `arr.[0, 2]` picks
+  several elements into a list. It is the SAME `.[]` postfix as the prototype
+  clone, dispatched on the left side's kind: record → clone, list/→ index,
+  else error.
   - `force()` is the single entry point for turning a `lazyList` into a concrete
     value; it recurses into nested lists/records/variants. Only invoke it when a
     list is actually needed.
@@ -162,7 +167,8 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   speculative parse falls back to a normal expression when no `->` follows.
 - **Pipes & operators**:
   - `x $ f` feeds `x` into `f` (value-left pipe, replaces the old `|>`). No
-    composition operator; `.` is records-only.
+    composition operator. The `.` postfix is records AND indexing:
+    `rec.field`, `proto.[...]` clone, `arr.[i]` index.
   - **Idiom (DELIBERATE, DO NOT FLIP TO HASKELL `$`)**: the pipe is value-left
     on purpose. `negate 5 $ print` reads left-to-right and is the intended
     style; Haskell's right-associative `print $ negate 5` is *not* supported

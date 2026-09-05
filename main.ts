@@ -1492,8 +1492,28 @@ export class Interpreter {
           if (s.kind === "thunk") s = this.unpackThunk(s);
           return s;
         })();
+        if (src.kind === "lazyList" || src.kind === "list") {
+          // Index access: a LIST left side means the right side is indices.
+          //   arr.[0] -> first element   arr.[-1] -> last element
+          //   arr.[0, 2] -> list of the selected elements
+          if (vals.kind !== "list") {
+            throw new Error("Runtime: indexing a list needs a list of indices on the right of '.'");
+          }
+          const arr = (src.kind === "lazyList" ? this.force(src) : src) as { kind: "list"; v: Value[] };
+          const picks = vals.v.map((ix) => {
+            if (ix.kind !== "int") throw new Error("Runtime: index must be an int");
+            let i = ix.v;
+            if (i < 0) i += arr.v.length;
+            if (i < 0 || i >= arr.v.length) {
+              throw new Error(`Runtime: index ${ix.v} out of range (len ${arr.v.length})`);
+            }
+            return arr.v[i];
+          });
+          r = picks.length === 1 ? picks[0] : { kind: "list", v: picks };
+          break;
+        }
         if (src.kind !== "record") {
-          throw new Error("Runtime: left side of '.' must be a record (object)");
+          throw new Error("Runtime: left side of '.' must be a record (object) or a list (indexing)");
         }
         const protoRec = src.v.slice();
         const protoNames = protoRec.map(([k]) => k);
@@ -2036,8 +2056,7 @@ async function repl(): Promise<void> {
             `  symbol = value   (the ONLY binding form; top level or inside { } blocks)`,
             `  [a, b] = value (destructuring binding; records match by field name)`,
             `  Just v = value (declared constructors destructure; capital defs are errors)`,
-            `  [x, y, z] is ALWAYS a list; objects are [k: v, ...] and clone via proto.[...]`,
-            `  proto.[1,2,3] / proto.[x: 1]  prototype clone: positional or named`,
+            `  proto.[1,2,3] / proto.[x: 1]  clone a record;  arr.[0] / arr.[-1]  index a list`,
             `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
             `  cond ? a : b   (ternary)`,
             `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,
