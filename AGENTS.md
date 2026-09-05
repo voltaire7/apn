@@ -105,6 +105,11 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 - **Pipes & operators**:
   - `x $ f` feeds `x` into `f` (value-left pipe, replaces the old `|>`). No
     composition operator; `.` is records-only.
+  - **Idiom (DELIBERATE, DO NOT FLIP TO HASKELL `$`)**: the pipe is value-left
+    on purpose. `negate 5 $ print` reads left-to-right and is the intended
+    style; Haskell's right-associative `print $ negate 5` is *not* supported
+    and would be a runtime error under this semantics. Use normal application
+    for args and the pipe only for the final feed.
   - Backtick infix: ``a `f` b`` == `f a b` (between ternary and compare, left).
   - Operator sections: `(+ 2)` = `\x -> x + 2`, `(2 +)` = `\x -> 2 + x` for
     `+ - * / % == != < > <= >= ++`. `(-2)` stays unary negation (no whitespace
