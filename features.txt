@@ -207,19 +207,24 @@ nested = [inner: [z: 99]]
 debug nested.inner.z     # => 99
 
 # ---------------------------------------------------------
-# 7. LIST -> RECORD OBJECT CONSTRUCTOR  name.[values]
-#    The name (LOWERcase — capital names are constructors, so a
-#    `Template = ...` def is rejected) holds a field-name list; `.[...]`
-#    zips it with the value list; lengths must match.
+# 7. PROTOTYPE-BASED OBJECTS —  proto.[overrides] CLONES the object
+#    The prototype (LOWERCASE name — capital names are constructors)
+#    is any record; .[values] replaces values positionally, .[f: v, ...]
+#    overrides by name (and may ADD new fields). A naked name list works
+#    too, as a names-only template (positional only).
 # ---------------------------------------------------------
-pair = [name, value].[213, "hello"]
-debug pair                 # => [name: 213, value: "hello"]
-debug pair.value           # => "hello"
+vector3 = [x: 0, y: 0, z: 0]        # prototype with defaults
+debug vector3                       # => [x: 0, y: 0, z: 0]
+debug vector3.[1, 2, 3]             # => [x: 1, y: 2, z: 3]   positional clone
+debug vector3.[x: 1, y: 2, z: 3]    # => [x: 1, y: 2, z: 3]   named override
+debug vector3.[x: 1, y: 2]          # => [x: 1, y: 2, z: 0]   partial — z kept
+debug vector3.[x: 1, y: 2, z: 3, a: 0]  # => [x: 1, y: 2, z: 3, a: 0]  new field
+debug vector3                       # => [x: 0, y: 0, z: 0]   prototype untouched
 
-template = [count, label]
-made = template.[7, "seven"]
-debug made                 # => [count: 7, label: "seven"]
-debug made.label           # => "seven"
+namesOnly = [name, value]
+pair = namesOnly.[213, "hello"]
+debug pair                          # => [name: 213, value: "hello"]
+debug pair.value                    # => "hello"
 
 vector3 = [x, y, z]
 debug vector3.[1, 2, 3]    # => [x: 1, y: 2, z: 3]
@@ -257,13 +262,10 @@ debug greeting             # => "Hello, world!"
 # parenthesized ((Just v) = ...), or nested in a list ([Just v] = [...]).
 # ONLY a DECLARED constructor (via data) can appear capital on the left of =;
 # a capital name is NEVER a value/function name (Template = ... is an error —
-# use lowercase, and build records with the object constructor from section 7):
+# use lowercase, and build objects with the prototype clone from section 7):
 data Maybe a = Just a | Nothing
 Just v = Just 123
 debug v                    # => 123
-
-vector3 = [x, y, z]
-debug vector3.[1, 2, 3]    # => [x: 1, y: 2, z: 3]
 
 # ---------------------------------------------------------
 # 10. PIPES, BACKTICK INFIX, OPERATOR SECTIONS

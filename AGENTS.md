@@ -102,10 +102,14 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   `=`) binds UNIT (see `parseDefBody`).
 - **Records**: `[name: "Alice", age: 30]`, accessed with `rec.field` (chaining
   works: `a.b.c`). The old `{ a = b }` syntax is REMOVED.
-- **List→record (object constructor)**: `name.[1, 2]` — `name` (LOWERCASE; capital
-  names are constructors) is a field-name list that gets zipped with the value
-  list, e.g. `template = [count, label]; template.[7, "seven"]` gives
-  `[count: 7, label: "seven"]`. Field count must equal list size, else error.
+- **Prototype-based objects**: `proto.[overrides]` CLONES a record prototype. A
+  right-side LIST replaces values positionally (one value per field);
+  a right-side RECORD overrides by name — existing fields replaced, new fields
+  appended, so `vector3.[x: 1, y: 2]` keeps the prototype's other defaults and
+  `vector3.[x: 1, y: 2, z: 3, a: 0]` adds `a`. A naked lowercase name list
+  (`namesOnly = [name, value]`) is a names-only template (positional only).
+  The prototype name must be lowercase (capital names are constructors); field
+  count must equal list size for the positional form, else error.
 - **Ternary, not if/then/else**: `cond ? a : b` (right-associative). Keywords
   `if`, `then`, `else` are removed.
 - **Functions**: two styles, partial application, recursion. `fn` is removed.

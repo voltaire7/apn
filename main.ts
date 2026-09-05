@@ -637,22 +637,45 @@ class Parser {
     return f;
   }
 
-  // Postfix:  record access  a.b.c   and  list-to-record  template.[1, 2]
-  parsePostfix(e: Expr): Expr {
-    while (this.isSym(".")) {
-      this.next();
-      if (this.peek().k === "sym" && (this.peek() as { v: string }).v === "[") {
-        // template.[list] — zip a template's field names with a value list.
+  // Postfix:  record access  a.b.c   and  prototype clone  tpl.[...]:
+//   tpl.[1, 2, 3]            positional — one value per prototype field
+//   tpl.[x: 1, y: 2]         named override — clone, replace/add fields
+parsePostfix(e: Expr): Expr {
+  while (this.isSym(".")) {
+    this.next();
+    if (this.peek().k === "sym" && (this.peek() as { v: string }).v === "[") {
+      // A named-override record? Look at the first content token of `[ ... ]`.
+      let j = this.i + 1; // after '['
+      while (this.toks[j] && ["newline", "indent", "dedent"].includes(this.toks[j].k)) j++;
+      const c0 = this.toks[j];
+      const isNamed = c0.k === "ident" && this.toks[j + 1].k === "sym" &&
+        (this.toks[j + 1] as { v: string }).v === ":";
+      if (isNamed) {
+        this.next(); // [
+        this.skipListLeading();
+        const fs: Array<[string, Expr]> = [];
+        for (;;) {
+          this.skipListSeparators();
+          if (this.isSym("]")) { this.next(); break; }
+          const name = this.next();
+          if (name.k !== "ident") throw new Error("Parser: expected field name after '.'");
+          this.expectSym(":");
+          fs.push([name.v, this.parseExpr()]);
+        }
+        e = { t: "fromList", template: this.asRecordTemplate(e), values: { t: "record", v: fs } };
+      } else {
+        // positional: zip the prototype's field names with a value list
         const values = this.parseListLiteral();
         e = { t: "fromList", template: this.asRecordTemplate(e), values };
-      } else {
-        const f = this.next();
-        if (f.k !== "ident") throw new Error("Parser: expected field name after '.'");
-        e = { t: "recordAccess", rec: e, field: f.v };
       }
+    } else {
+      const f = this.next();
+      if (f.k !== "ident") throw new Error("Parser: expected field name after '.'");
+      e = { t: "recordAccess", rec: e, field: f.v };
     }
-    return e;
   }
+  return e;
+}
 
   // A bare-name template is a plain list literal of field-name identifiers,
   // e.g.  [name, value].  Anything else is left as an expression to evaluate
@@ -1475,29 +1498,58 @@ export class Interpreter {
       }
       case "fromList": {
         const vals = this.force(this.eval(e.values));
-        if (vals.kind !== "list") throw new Error("Runtime: right side of '.' must be a list");
-        let names: string[];
+        if (vals.kind !== "list" && vals.kind !== "record") {
+          throw new Error("Runtime: right side of '.' must be a list or a record");
+        }
+        // Resolve the prototype: a record keeps its VALUES (defaults); a
+        // name list (or recordTemplate) is names-only, no defaults.
+        let protoNames: string[];
+        let protoRec: Array<[string, Value]> | undefined;
         if (e.template.t === "recordTemplate") {
-          names = e.template.names;
+          protoNames = e.template.names;
         } else {
           let src = this.eval(e.template);
           if (src.kind === "thunk") src = this.unpackThunk(src);
           if (src.kind === "lazyList") {
-            names = [];
+            protoNames = [];
             for (const ex of src.exprs) {
               if (ex.t !== "var") throw new Error("Runtime: template must be a list of names or a record");
-              names.push(ex.name);
+              protoNames.push(ex.name);
             }
           } else if (src.kind === "record") {
-            names = src.v.map(([k]) => k);
+            protoNames = src.v.map(([k]) => k);
+            protoRec = src.v.slice();
           } else {
             throw new Error("Runtime: left side of '.' must be a name template or a record");
           }
         }
-        if (names.length !== vals.v.length) {
-          throw new Error(`Runtime: field count (${names.length}) does not match list size (${vals.v.length})`);
+        if (vals.kind === "list") {
+          // Positional clone: one value per prototype field, in order.
+          if (protoNames.length !== vals.v.length) {
+            throw new Error(`Runtime: field count (${protoNames.length}) does not match list size (${vals.v.length})`);
+          }
+          r = { kind: "record", v: protoNames.map((k, i) => [k, vals.v[i]] as [string, Value]) };
+        } else {
+          // Named clone: override existing fields, append new ones.
+          if (protoRec !== undefined) {
+            const idx = new Map(protoNames.map((n, i) => [n, i]));
+            const out = protoRec.slice();
+            for (const [k, v] of vals.v as Array<[string, Value]>) {
+              const i = idx.get(k);
+              if (i !== undefined) out[i] = [k, v]; else out.push([k, v]);
+            }
+            r = { kind: "record", v: out };
+          } else {
+            // Names-only prototype (no defaults): every field must be given.
+            const given = new Set((vals.v as Array<[string, Value]>).map(([k]) => k));
+            const missing = protoNames.filter((n) => !given.has(n));
+            if (missing.length > 0) {
+              throw new Error(`Runtime: name template has no value for '${missing.join("', '")}'`);
+            }
+            const byName = new Map(vals.v as Array<[string, Value]>);
+            r = { kind: "record", v: protoNames.map((k) => [k, byName.get(k)!]) };
+          }
         }
-        r = { kind: "record", v: names.map((k, i) => [k, vals.v[i]] as [string, Value]) };
         break;
       }
       case "pipe": r = this.apply(this.eval(e.f), this.eval(e.x)); break;
@@ -2023,7 +2075,7 @@ async function repl(): Promise<void> {
             `  symbol = value   (the ONLY binding form; top level or inside { } blocks)`,
             `  [a, b] = value (destructuring binding; records match by field name)`,
             `  Just v = value (declared constructors destructure; capital defs are errors)`,
-            `  name.[1,2,3]  object constructor  (name = [x, y, z]; => [x: 1, y: 2, z: 3])`,
+            `  proto.[1,2,3] / proto.[x: 1]  prototype clone: positional or named`,
             `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
             `  cond ? a : b   (ternary)`,
             `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,
