@@ -78,9 +78,12 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   a child `Env`; `stmDef` evaluates with a child env).
 - **Layout is strict 4-space (whole language).** Every nested level is exactly
   +4 spaces, and only +4: the lexer rejects +2, +8, or any non-multiple of 4.
-  Blank and comment-only lines are ignored for layout. `(` and `[` suppress
-  newlines (so arguments can span lines inside brackets); `{` does NOT
-  suppress them — brace blocks participate in the global layout.
+  Blank and comment-only lines are ignored for layout. Only `(` suppresses
+  newlines. `{` participates in the layout (brace blocks), and so does `[`:
+  a list literal's elements are separated by `,` OR a newline (commas are
+  optional when each element is on its own line), and a nested list/multi-line
+  record works the same way. `[1 2]` on ONE line is still a single element
+  (the application `1 2`); writing them on separate lines makes two elements.
 - **Newlines are implicit semicolons; an explicit `;` also works.** A newline
   at the SAME indentation ends the current expression/statement; an INDENTED
   (+4) continuation line extends it (parsers `skipContinuation`). This makes

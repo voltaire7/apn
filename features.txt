@@ -110,6 +110,26 @@ debug [213, "hello"]          # => [213, "hello"]
 debug [1, 2, 3]               # => [1, 2, 3]
 debug ([] ++ [1, 2] ++ [3])   # => [1, 2, 3]
 
+# multi-line list literals: elements separate on their own lines, so commas
+# are optional there (a comma also still works):
+arr = [
+    1
+    2
+    3
+]
+debug arr                     # => [1, 2, 3]
+arr = [
+    1,  2,  3
+]
+debug arr                     # => [1, 2, 3]   (commas on one line fine too)
+
+nested = [
+    1
+    [2, 3]
+    4
+]
+debug nested                  # => [1, [2, 3], 4]
+
 [1, 2, 3] $ head $ debug   # => 1
 debug (tail [1, 2, 3])        # => [2, 3]
 debug (length "hello")        # => 5
@@ -333,14 +353,14 @@ debug (toString unitAfter)   # prints: the brace block ran as its OWN statement
                              # => ()      (unitAfter is unit, not a block)
 
 # a function body that continues on a +4-indented line spans lines;
-# `[ ]` (like `( )`) suppresses newlines, so arguments can be written
-# across lines and even in columns:
+# `[ ]` also spans lines and elements separate by newline (commas optional),
+# so arguments can be written across lines and even in columns:
 spanArgs =
     myApp [
-        1,
+        1
         2
     ] [
-        3,
+        3
         4
     ]
 debug (spanArgs)              # => [1, 2, 3, 4]
@@ -351,3 +371,10 @@ debug (spanArgs)              # => [1, 2, 3, 4]
 #       print 1                #   <- must be indented exactly 4 spaces
 #         }
 #   - any indentation that skips a level (0 -> 8) or is not a multiple of 4.
+
+print ""
+debug {
+    print "hello"
+    print "hello"
+    print "hello"
+}

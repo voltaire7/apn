@@ -277,12 +277,13 @@ export function lex(src: string): Token[] {
     }
     if (matchedSym) continue;
 
-    // single-char symbols. NOTE: `{` / `}` are NOT layout-suppressing (unlike
-    // `(`/`[`): a brace block participates in the global 4-space layout, so
-    // newlines and indentation inside it are still significant.
+    // single-char symbols. `(`/`)` suppress layout inside parens (grouping);
+    // `[`/`]` DO NOT: newlines and indentation inside a list literal are
+    // significant, so elements can be separated just by being on their own
+    // lines. `{`/`}` likewise participate in the global 4-space layout.
     if (":()[]{}.,;|".includes(c)) {
-      if (c === '(' || c === '[') parenDepth++;
-      if (c === ')' || c === ']') parenDepth--;
+      if (c === '(') parenDepth++;
+      if (c === ')') parenDepth--;
       // `:` is cons in this language; `::` handled above as symbol
       toks.push({ k: "sym", v: c === ":" ? ":" : c });
       pos++;
@@ -668,14 +669,34 @@ class Parser {
   // Parse a list literal  [a, b, ...]  (used as the values on the right side of .)
   parseListLiteral(): Expr {
     this.expectSym("[");
+    this.skipListLeading();
     const es = [] as Expr[];
-    while (!this.isSym("]")) {
+    if (this.isSym("]")) { this.next(); return { t: "list", v: es }; }
+    for (;;) {
       es.push(this.parseExpr());
-      if (this.eatSym(",")) continue;
+      this.skipListSeparators();
+      if (this.isSym("]")) { this.next(); return { t: "list", v: es }; }
+      if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside list literal");
+    }
+  }
+
+  // Leading layout of a multi-line list literal: newlines plus the single
+  // indent that opens the indented element lines (if any). Dedents are NOT
+  // skipped here — they only occur right before the closing `]`.
+  skipListLeading() {
+    while (this.peek().k === "newline" || this.peek().k === "indent") this.next();
+  }
+
+  // Between list elements / record fields: a `,` OR a newline separates them.
+  // Any dedent tokens present here close the element block and sit right
+  // before the `]`. Indents are left alone — they open nested constructs.
+  skipListSeparators() {
+    for (;;) {
+      if (this.isSym(",")) { this.next(); continue; }
+      if (this.peek().k === "newline") { this.next(); continue; }
+      if (this.peek().k === "dedent") { this.next(); continue; }
       break;
     }
-    this.expectSym("]");
-    return { t: "list", v: es };
   }
 
   parsePrimary(): Expr {
@@ -785,6 +806,9 @@ class Parser {
           }
           case "[": {
             this.next();
+            // A multi-line literal: leading newlines and (optionally) one indent
+            // that puts the elements on their own indented lines.
+            this.skipListLeading();
             // Empty list: []
             if (this.isSym("]")) { this.next(); return { t: "list", v: [] }; }
             // A record literal looks like:  [key: value, ...]
@@ -797,21 +821,21 @@ class Parser {
                 if (f.k !== "ident") throw new Error("Parser: expected field name");
                 this.expectSym(":");
                 fs.push([f.v, this.parseExpr()]);
-                if (this.eatSym(",")) continue;
-                break;
+                this.skipListSeparators();
+                if (this.isSym("]")) { this.next(); return { t: "record", v: fs }; }
+                if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside record literal");
               }
-              this.expectSym("]");
-              return { t: "record", v: fs };
             }
-            // Otherwise it's a list literal: [a, b, ...]
+            // Otherwise it's a list literal: [a, b, ...] — elements separate on
+            // `,` OR a newline (commas are optional when each element is on its
+            // own line;  [1 2] on ONE line is still a single element = 1 applied to 2).
             const es = [] as Expr[];
-            while (!this.isSym("]")) {
+            for (;;) {
               es.push(this.parseExpr());
-              if (this.eatSym(",")) continue;
-              break;
+              this.skipListSeparators();
+              if (this.isSym("]")) { this.next(); return { t: "list", v: es }; }
+              if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside list literal");
             }
-            this.expectSym("]");
-            return { t: "list", v: es };
           }
           default:
             throw new Error(`Parser: unexpected '${this.tokenStr(t)}'`);
@@ -1802,7 +1826,7 @@ async function repl(): Promise<void> {
             `  cond ? a : b   (ternary)`,
             `  case x of { pat -> expr; ... }`,
             `  data Maybe a = Just a | Nothing`,
-            `  [1,2,3]  [name: "x", age: 2]`,
+            `  [1,2,3]  [name: "x", age: 2]   (newlines also separate elements)`,
             `  x $ f             pipe: feeds x into f`,
             `  a \`f\` b            infix call == f a b  (only \`for\` inverts)`,
             `  (+ 2)  (2 +)      operator sections   ((-2) stays unary minus)`,
