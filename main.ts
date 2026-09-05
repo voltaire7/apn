@@ -127,7 +127,6 @@ type Expr =
   | { t: "recordAccess"; rec: Expr; field: string }
   | { t: "fromList"; template: Expr; values: Expr }
   | { t: "recordTemplate"; names: string[] }
-  | { t: "let"; pattern: Pattern; value: Expr }
   | { t: "pipe"; x: Expr; f: Expr }
   | { t: "block"; stmts: Expr[] }
   | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr }[] };
@@ -168,7 +167,7 @@ type Token =
   | { k: "newline" } | { k: "indent" } | { k: "dedent" } | { k: "eof" };
 
 const KEYWORDS = new Set([
-  "let", "where",
+  "where",
   "do", "fn", "data", "import", "type", "match", "true", "false", "rec",
 ]);
 
@@ -850,7 +849,6 @@ class Parser {
   parseKeyword(): Expr {
     const t = this.peek() as { v: string };
     switch (t.v) {
-      case "let": return this.parseLet();
       case "match": return this.parseMatch();
       case "true": this.next(); return { t: "bool", v: true };
       case "false": this.next(); return { t: "bool", v: false };
@@ -969,32 +967,6 @@ class Parser {
   skipAll() {
     while (["newline", "indent", "dedent"].includes(this.peek().k)) this.next();
   }
-
-  // Block-style `let`:  `let name = expr` is a statement that binds a local name
-// in the current scope. Example:
-//     greeting = {
-//         let name = "world"
-//         let [hello, x] = ["Hello", 1]      // may repeat `let` or not
-//         hello ++ ", " ++ name ++ "!"
-//     }
-// The binding name may be a destructuring PATTERN (a single name, or a
-// `[a, b, ...]` / `(Ctor ..)` pattern like in match), with an optional (ignored)
-// `: Type` annotation. Returns an Expr so it can be a statement inside
-// { } / ( ) blocks and at top level; evaluated by the "let" case.
-parseLet(): Expr {
-  this.next(); // let
-  if (this.startsLambdaPattern(this.peek())) {
-    const pattern = this.parseConsPattern();
-    this.expectSym("=");
-    const value = this.parseExpr();
-    return { t: "let", pattern, value };
-  }
-  const name = (this.next() as { v: string }).v;
-  if (this.isSym(":")) { this.next(); this.parseType(); }
-  this.expectSym("=");
-  const value = this.parseExpr();
-  return { t: "let", pattern: { p: "var", name }, value };
-}
 
   //  match scrutinee [ pattern -> expr, ... ]
   // The alternatives are delimited by [ ] (separators: `,` or a newline), so
@@ -1180,7 +1152,7 @@ parseLet(): Expr {
       }
 
       if (t.k === "kw") {
-        // top-level expression starting with a keyword: fn/let/match
+        // top-level expression starting with a keyword: fn/match
         const e = this.parseKeyword();
         out.push({ t: "expr", value: e });
         continue;
@@ -1423,24 +1395,6 @@ export class Interpreter {
       case "pipe": r = this.apply(this.eval(e.f), this.eval(e.x)); break;
       case "recordTemplate":
         throw new Error("Runtime: internal error — record template used as a value");
-      case "let": {
-        // A block-style local binding: binds into the CURRENT environment, so a
-        // `let` statement inside a { } / ( ) block is scoped to that block.
-        // Plain-name binding -> store the value. Destructuring pattern -> match.
-        const v = this.eval(e.value);
-        if (e.pattern.p === "var") {
-          this.env.setLocal(e.pattern.name, v);
-          r = v;
-        } else {
-          const binds = new Map<string, Value>();
-          if (!this.matchPattern(e.pattern, this.force(v), binds)) {
-            throw new Error("Runtime: let pattern mismatch");
-          }
-          for (const [k, bv] of binds) this.env.setLocal(k, bv);
-          r = v;
-        }
-        break;
-      }
       case "block": {
         const child = new Env(this.env);
         const old = this.env;
@@ -1953,7 +1907,7 @@ async function repl(): Promise<void> {
         console.log(
           [
             `Language:`,
-            `  let x = expr      (statement inside { } blocks; let [a, b] = e destructures)`,
+            `  symbol = value   (the ONLY binding form; top level or inside { } blocks)`,
             `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
             `  cond ? a : b   (ternary)`,
             `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,

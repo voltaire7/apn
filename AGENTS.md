@@ -76,10 +76,9 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   `{ }` can be used as a function body. A `{` at end of line REQUIRES its body
   on a following line indented exactly +4 (else parse error).
   Statements inside a block separate on `;` or same-level newlines; local
-  definitions (`x = 40`) and `let` bindings are allowed inside blocks and are
-  scoped to the block (implemented via `{ t: "block" }` + `{ t: "stmDef" }` /
-  `{ t: "let" }` AST nodes — eval creates a child `Env`; `stmDef`/`let` bind
-  into it).
+  definitions (`x = 40`) are allowed inside blocks and are scoped to the block
+  (implemented via `{ t: "block" }` + `{ t: "stmDef" }` AST nodes — eval creates
+  a child `Env`; `stmDef` binds into it).
 - **Layout is strict 4-space (whole language).** Every nested level is exactly
   +4 spaces, and only +4: the lexer rejects +2, +8, or any non-multiple of 4.
   Blank and comment-only lines are ignored for layout. Only `(` suppresses
@@ -220,11 +219,10 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 - **Variants** via `data Maybe a = Just a | Nothing`; constructors and match
   expressions. Nullary constructors are bare values; arity>0 constructors are
   curried natives tagged with the constructor name.
-- **`let`** is a LOCAL-BINDING STATEMENT inside `{ }` / `( )` blocks (there is no
-  `let ... in`). `let name = expr` binds in the current block; the LHS may be a
-  destructuring pattern, `let [a, b] = expr` (matched with `matchPattern`), with
-  an optional (ignored) `: Type` annotation. A block's value is its last
-  statement. `match` with guards `|`.
+- **Bindings** — `symbol = value` is the ONLY form (no `let`, no mutation).
+  It works at top level and inside `{ }` / `( )` blocks, where it is scoped to
+  that block. Optional (ignored) `: Type` annotations accepted. A block's value
+  is its last statement. `match` with guards `|`.
 
 ## Evaluator notes
 

@@ -229,18 +229,14 @@ smallest a b c = (a < b ? a : b) < c ? (a < b ? a : b) : c
 debug (smallest 7 2 9)     # => 2
 
 # ---------------------------------------------------------
-# 9. let — a LOCAL-BINDING STATEMENT inside { } blocks
-#    `let name = expr` or `let pattern = expr` (destructuring).
-#    Bindings are scoped to their block; the block's value is
-#    its LAST statement. (`let ... in` was removed.)
+# 9. BINDINGS —  symbol = value  (the ONLY form; no let, no mutation)
+#    Bindings are scoped to their block; a block's value is its
+#    LAST statement. Inside { } a `symbol = value` statement is
+#    local to that block.
 # ---------------------------------------------------------
 greeting = {
-    let name = "world"
-    let hello = "Hello"
-    hello ++ ", " ++ name ++ "!"
-}
-greeting = {
-    let [name, hello] = ["world", "Hello"]
+    name = "world"
+    hello = "Hello"
     hello ++ ", " ++ name ++ "!"
 }
 debug greeting             # => "Hello, world!"
@@ -296,11 +292,11 @@ debug ("a" != "b")        # => true
 # 13. TYPE ANNOTATIONS — accepted and ignored at runtime
 # ---------------------------------------------------------
 debug {
-    let x: Int = 20
+    x: Int = 20
     x * 2
 }                                   # => 40
 debug {
-    let x: Int = 5
+    x: Int = 5
     x
 }                                   # => 5
 
