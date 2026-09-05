@@ -173,7 +173,7 @@ type Token =
 
 const KEYWORDS = new Set([
   "where",
-  "do", "fn", "data", "import", "type", "match", "true", "false", "rec",
+  "do", "data", "import", "type", "match", "true", "false", "rec",
 ]);
 
 const SYMBOLS = [
@@ -986,8 +986,6 @@ class Parser {
       case "match": return this.parseMatch();
       case "true": this.next(); return { t: "bool", v: true };
       case "false": this.next(); return { t: "bool", v: false };
-      case "fn":
-        throw new Error("`fn` is no longer supported; write `x -> body` (arrow lambda) instead");
       default:
         this.next();
         throw new Error(`Parser: unexpected keyword '${t.v}'`);
@@ -1575,7 +1573,9 @@ export class Interpreter {
         last = this.evalPatBinding(tl);
         continue;
       }
-      last = this.force(this.eval(tl.value));
+      // a bare expression statement: a 0-arg function at STATEMENT position
+      // runs (the bare name is the call)
+      last = this.force(this.callBlockFn(this.eval(tl.value)));
     }
     return last;
   }
@@ -1603,9 +1603,11 @@ export class Interpreter {
       this.env.setLocal(name, clo);
       return clo;
     }
-    // A BLOCK body declares a 0-arg FUNCTION (like Haskell's do-block def):
-    // the bare name is the CALL — each mention re-runs the body.
-    if (value.t === "block") {
+    // An ACTION body (a block, an application, or a pipe — with or without
+    // {}s, `f = print "hi"` == `f = { print "hi" }`) declares a 0-arg
+    // FUNCTION: nothing runs at the definition, expression position yields
+    // the function itself, statement position CALLS it (the bare name runs).
+    if (value.t === "block" || value.t === "app" || value.t === "pipe") {
       const child = new Env(this.env);
       const clo: Value = { kind: "closure", params: [], body: value, env: child };
       child.setLocal(name, clo);
@@ -1634,6 +1636,28 @@ export class Interpreter {
     return v;
   }
 
+  // Run a 0-arg function (an action def: f = { ... } / f = print "hi").
+  // Non-closures pass through unchanged.
+  callBlockFn(v: Value): Value {
+    if (v.kind !== "closure" || v.params.length !== 0) return v;
+    const old = this.env;
+    this.env = v.env;
+    try {
+      return this.eval(v.body);
+    } finally {
+      this.env = old;
+    }
+  }
+
+  // DEMAND a real value: force, and if it is a 0-arg function, RUN it first.
+  // Demand contexts: statement position, operands, record targets,
+  // scrutinees. Natives that SHOW values (debug, toString) force instead —
+  // inspecting a function yields the function.
+  demand(v: Value): Value {
+    const ran = this.callBlockFn(v);
+    return ran === v ? this.force(v) : this.force(ran);
+  }
+
   eval(e: Expr): Value {
     if (++this.stack > STACK_LIMIT) throw new Error("Runtime: stack overflow");
     let r: Value;
@@ -1652,24 +1676,12 @@ export class Interpreter {
             hint: near ? `did you mean '${near}'?` : undefined,
           });
         }
-        // A 0-arg function (a block def) runs when MENTIONED — the bare
-        // name is the call; every mention re-runs the body.
-        if (v.kind === "closure" && v.params.length === 0) {
-          const old = this.env;
-          this.env = v.env;
-          try {
-            r = this.eval(v.body);
-          } finally {
-            this.env = old;
-          }
-        } else {
-          r = v;
-        }
+        r = v;
         break;
       }
       case "binop": r = this.evalBinop(e); break;
       case "unop": {
-        const v = this.eval(e.e);
+        const v = this.demand(this.eval(e.e));
         if (e.op === "neg") {
           r = (v.kind === "int" || v.kind === "float")
             ? { kind: v.kind === "int" ? "int" : "float", v: -v.v } as Value
@@ -1682,15 +1694,15 @@ export class Interpreter {
       case "app": r = this.apply(this.eval(e.f), this.eval(e.a)); break;
       case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
       case "ternary": {
-        const c = this.force(this.eval(e.cond));
+        const c = this.demand(this.eval(e.cond));
         r = (c.kind === "bool" && c.v) ? this.eval(e.then) : this.eval(e.els);
         break;
       }
-      case "match": r = this.evalMatch(this.force(this.eval(e.scrut)), e.alts); break;
+      case "match": r = this.evalMatch(this.demand(this.eval(e.scrut)), e.alts); break;
       case "list": r = { kind: "lazyList", exprs: e.v, env: this.env }; break;
       case "record": r = { kind: "record", v: e.v.map(([k, x]) => [k, this.eval(x)] as [string, Value]) }; break;
       case "recordAccess": {
-        let rec = this.eval(e.rec);
+        let rec = this.callBlockFn(this.eval(e.rec));
         // `core = load "..."` is a thunk; get the module WITHOUT forcing its
         // fields (a module may contain `halt = exit 0`).
         if (rec.kind === "thunk") rec = this.unpackThunk(rec);
@@ -1716,7 +1728,7 @@ export class Interpreter {
         break;
       }
       case "pluck": {
-        let rec = this.eval(e.rec);
+        let rec = this.callBlockFn(this.eval(e.rec));
         if (rec.kind === "thunk") rec = this.unpackThunk(rec);
         if (rec.kind !== "record") throw new Error("pluck on non-record");
         const byKey = new Map(rec.v);
@@ -1752,7 +1764,7 @@ export class Interpreter {
       case "setFields": {
         // eager: read the OLD record and the RHS fully BEFORE building the
         // new one, so  vec.[x, y] = vec.[y, x]  swaps correctly
-        let rec = this.eval(e.rec);
+        let rec = this.callBlockFn(this.eval(e.rec));
         if (rec.kind === "thunk") rec = this.unpackThunk(rec);
         if (rec.kind === "lazyList") rec = this.force(rec);
         let base: Array<[string, Value]> | null = null;
@@ -1792,7 +1804,7 @@ export class Interpreter {
           for (const s of e.stmts) {
             if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
             else if (s.t === "patDef") r = this.evalPatBinding(s);
-            else r = this.eval(s);
+            else r = this.callBlockFn(this.eval(s)); // bare name = call
           }
           // A block's value is its last statement's value — force it, so a
           // trailing `halt`/`exit` (or any thunk) actually runs.
@@ -1813,8 +1825,8 @@ export class Interpreter {
   }
 
   evalBinop(e: Extract<Expr, { t: "binop" }>): Value {
-    const l = this.force(this.eval(e.l));
-    const r = this.force(this.eval(e.r));
+    const l = this.demand(this.eval(e.l));
+    const r = this.demand(this.eval(e.r));
     const bad = (): never => {
       throw new APNError("runtime", `cannot apply '${e.op}' to ${l.kind} and ${r.kind}`);
     };
@@ -1899,6 +1911,12 @@ export class Interpreter {
     if (f.kind === "thunk") f = this.force(f);
     switch (f.kind) {
       case "closure": {
+        if (f.params.length === 0) {
+          // a 0-arg action APPLIED to arguments: run it, then hand the
+          // result the argument — keeps partial application working:
+          //   addTwo = add 2   addTwo 10  ==  (add 2) 10
+          return this.apply(this.callBlockFn(f), arg);
+        }
         const child = new Env(f.env);
         child.setLocal(f.params[0], arg);
         if (f.params.length === 1) {
@@ -2063,7 +2081,10 @@ export class Interpreter {
   }
 
   callNative(name: string, argsIn: Value[], tag?: string): Value {
-    const args = argsIn.map((x) => this.force(x));
+    // SHOWING natives (debug, toString) force: inspecting a 0-arg function
+    // yields the function itself. Everything else demands a real value.
+    const show = name === "debug" || name === "toString";
+    const args = argsIn.map((x) => show ? this.force(x) : this.demand(x));
     const a = args[0];
     switch (name) {
       case "print": {
@@ -2588,8 +2609,10 @@ function helpText(): string {
     `               statement it merges into the current scope; as a`,
     `               value it returns a module (core.sq 4). halting is`,
     `               core.txt's  halt = exit 0  (lazy: fires only when used).`,
-    `0-arg defs: x = <expr> is a LAZY value (runs on first use); f = { ... }`,
-    `               declares a 0-arg FUNCTION — the bare name f is the call`,
+    `0-arg defs: x = <expr> is a LAZY value (runs on first use); an ACTION`,
+    `               body (f = { ... } / f = print "hi" — same thing) declares`,
+    `               a 0-arg FUNCTION: the bare name at statement level runs it`,
+    `               (so does debug (f)); debug f shows <function>`,
     ``,
     `Type annotations (TS-style) are accepted & ignored at runtime:`,
     `  x: Int = 5`,

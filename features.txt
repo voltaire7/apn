@@ -270,7 +270,8 @@ vec.[x, y] = [7, 8]
 debug vec                        # => [x: 7, y: 8, z: 3, w: 99]
 
 # block scope: the update shadows obj only INSIDE the { }  (a bare block
-# statement runs eagerly — a 0-arg DEF like  w = { ... }  would stay LAZY)
+# statement runs eagerly — a 0-arg DEF like  w = { ... } declares a
+# function and does not run here)
 obj = [field: 1]
 {
     obj.field = 10
@@ -303,13 +304,13 @@ greeting = {
     hello = "Hello"
     hello ++ ", " ++ name ++ "!"
 }
-debug greeting             # => "Hello, world!"
+debug (greeting)           # => "Hello, world!"
 
 greeting = {
     [name, hello] = ["world", "Hello"]
     hello ++ ", " ++ name ++ "!"
 }
-debug greeting             # => "Hello, world!"
+debug (greeting)           # => "Hello, world!"
 
 # Constructor patterns destructure like Haskell — bare (Just v = ...),
 # parenthesized ((Just v) = ...), or nested in a list ([Just v] = [...]).
@@ -448,11 +449,11 @@ debug (5)                    # => 5             (parens group like braces)
 debug (4 * 3)                # => 12
 debug {4 * 3}                # => 12
 
-group = { 1; 2; 3 }          # value of a block is its last statement
-debug group                  # => 3
+group = { 1; 2; 3 }          # a 0-arg function: its body is the block
+debug (group)                # => 3    (the parens run it)
 
 inlineBlock = { 1 + 1 }      # a same-line { } block
-debug inlineBlock            # => 2
+debug (inlineBlock)          # => 2
 
 # statements on one line separated by explicit `;`
 print "hello"; print ", world"        # prints: hello
@@ -472,7 +473,7 @@ both = {
     y = 2
     x + y
 }
-debug both                   # => 42
+debug (both)                 # => 42
 
 # blank lines inside a block are fine; statements still stop at same-level
 # newlines (implicit semicolons) and continue on +4-indented lines
@@ -481,7 +482,7 @@ seqOf = {
 
     6 * 7
 }
-debug seqOf                  # prints: one
+debug (seqOf)                # prints: one
                              # => 42
 
 # Whitespace is significant: a def cut off by a same-level newline binds UNIT,
@@ -544,9 +545,11 @@ debug (scoped)              # => 36
 
 debug "still running before the final halt"
 
-# 0-arg defs: a BLOCK body declares a 0-arg FUNCTION — the bare name is the
-# CALL (mentioning it runs the body; every mention re-runs it). Nothing runs
-# at the definition itself:
+# 0-arg defs: an ACTION body (f = { ... } or f = print "x" — the same
+# thing) declares a 0-arg FUNCTION. Nothing runs at the definition; the bare
+# name at STATEMENT level runs it (and so does (f) — the group's statement);
+# demand contexts (operands, record access, consuming natives) run it too;
+# debug f shows <function>:
 lazyNote = {
     debug "lazyNote WAS called"
     6 * 7
