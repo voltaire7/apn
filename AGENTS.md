@@ -117,6 +117,8 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 - **Iteration**: `for` is a native, fn-first like `map`:
   `for f seq` — `for : fn -> seq -> unit`, runs `f` for its effect and returns
   unit. A list iterates per element; a record per entry as `[field, value]`.
+  Its two args are accepted **in either order** (detected by kind), so
+  `seq $ for fn` and `seq \`for\` fn` are synonymous.
   Related natives: `pairs rec` (record → list of `[field, value]`), and
   `format "% %" [a, b]` (`%` = printf-style arg, strings unquoted; `%%` = `%`).
 - **Output & conversion (DELIBERATE split)**:

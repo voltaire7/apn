@@ -1508,9 +1508,15 @@ export class Interpreter {
       case "for": {
         // for : fn -> seq -> unit   (like map, but discards results, runs effects)
         // seq is a list (yields each element) or a record (yields each entry
-        // as a [field, value] list).
+        // as a [field, value] list). The two args may come in either order so
+        //    seq $ for fn    (pipe:   compiles to  for fn seq)
+        //    seq `for` fn    (backtick: compiles to  for seq fn)
+        // are synonymous — the function and the sequence are detected by kind.
+        const isFn = (v: Value) => v.kind === "closure" || v.kind === "native" || v.kind === "clauseFn";
+        if (isFn(args[1])) { [args[0], args[1]] = [args[1], args[0]]; }
         const f = args[0];
         const seq = args[1];
+        if (!isFn(f)) throw new Error("Runtime: for expects a function");
         if (seq.kind === "list") {
           for (const x of seq.v) this.apply(f, x);
         } else if (seq.kind === "record") {
