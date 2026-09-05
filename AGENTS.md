@@ -123,6 +123,25 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   them, then tries each clause's patterns via `matchPattern`; no clause matches
   → "Runtime: non-exhaustive function definition". Guards on def clauses are
   NOT supported (use `case ... of ... | ...` inside the body for guards).
+- **`match` expressions**: `match scrutinee [ pattern -> expr, ... ]` is the
+  bracket-delimited spelling of `case ... of` — identical alternatives,
+  patterns, guards (`|`) and evaluation. The `[` ends the scrutinee, so
+  alternatives separate on `,` or a newline, and ALL layouts work:
+      fact n = match n [0 -> 1, _ -> n * fact (n - 1)]      # single line
+      fact n = match n [                                    # same-line open
+          0 -> 1
+          _ -> n * fact (n - 1)
+      ]
+      fact n =                                               # block layout
+          match n [
+              0 -> 1
+              _ -> n * fact (n - 1)
+          ]
+  `match` shares the `{ t: "case" }` AST (and its `afterCaseHardStop`
+  boundary is only set for the `of` form, which the `]` makes unnecessary).
+  `match ... of` still works too (historical alias). `case ... of` unchanged.
+  A `match` scrutinee may not apply a `[...]` argument directly — parenthesize
+  it (`match (head xs) [0 -> ..., _ -> ...]`).
 - **`[x, y]` pattern matches both lists and records**: in `matchPattern`, a
   var-only list pattern against a record binds each variable to the field of
   the same name (like record destructuring); against a list it binds
@@ -215,13 +234,16 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 
 - `&&` / `||` are NOT wired into the parser (they appear in `evalBinop` but don't
   parse). Use comparisons/ternaries instead.
-- A `case` expression reliably parses when its body starts on an INDENTED (+4)
-  new line (which the strict 4-space layout always requires anyway):
-      f =
-          x -> case x of
-              [] -> 0
-              ...
-  (A same-line `f = x -> case x of ...` can mis-parse the layout.)
+- A `case ... of` (or `match ... of`) alternative block IS a hard boundary for
+  applications: after it, an enclosing `parseApp` stops consuming arguments, so
+  the following same-level statement is not mistaken for another argument
+  (`afterCaseHardStop`, cleared at statement starts and when `)`/`}`/`]` closes).
+  This makes the SAME-LINE form parse correctly everywhere:
+      f = x -> case x of
+          [] -> 0
+          _ -> 1
+      debug (f [])
+  (It used to "mis-parse the layout" when `case` started on the same line as `=`.)
 - `` ` : ` `` cons is only a pattern operator (`x:rest`), not an expression
   operator.
 - `case ... of` and `let ... in` are self-contained constructs: they consume

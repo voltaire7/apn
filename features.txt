@@ -103,6 +103,52 @@ debug (classify 0)      # => "zero"
 debug (classify 7)      # => "positive"
 
 # ---------------------------------------------------------
+# 4b. MATCH —  match scrutinee [ pattern -> expr, ... ]
+#     The same alternatives as `case ... of`, delimited with [ ] instead of
+#     an `of`/dedent block. Separators are `,` or a newline, so it works in
+#     all three layouts (block / same-line-open / fully single-line):
+# ---------------------------------------------------------
+factA n =
+    match n [
+        0 -> 1
+        _ -> n * factA (n - 1)
+    ]
+debug (factA 10)            # => 3628800
+
+factB n = match n [
+    0 -> 1
+    _ -> n * factB (n - 1)
+]
+debug (factB 5)             # => 120
+
+factC n = match n [0 -> 1, _ -> n * factC (n - 1)]
+debug (factC 6)             # => 720
+
+# all the case patterns work too: cons, literals, _ , guards, ...
+safeM xs = match xs [
+    [] -> Nothing
+    x:rest -> Just x
+]
+debug (safeM [3, 4])        # => Just 3
+debug (safeM [])            # => Nothing
+
+classM n = match n [
+    x | x < 0 -> "negative"
+    x | x == 0 -> "zero"
+    _ -> "positive"
+]
+debug (classM (-5))         # => "negative"
+debug (classM 0)            # => "zero"
+debug (classM 7)            # => "positive"
+
+# a `case n of` may now also start on the SAME line as `=`
+caseInline n = case n of
+    0 -> "zero"
+    _ -> "other"
+debug (caseInline 0)        # => "zero"
+debug (caseInline 9)        # => "other"
+
+# ---------------------------------------------------------
 # 5. LISTS — heterogeneous, like JS arrays, but almost lazy.
 #    Literal lists stay in an unevaluated (lazy) state until used.
 # ---------------------------------------------------------

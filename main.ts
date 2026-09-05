@@ -363,6 +363,11 @@ export function lex(src: string): Token[] {
 class Parser {
   toks: Token[];
   i = 0;
+  // Set by parseCase / parseMatch (the `of` form) when their alternative
+  // block closes: an enclosing application must STOP consuming arguments
+  // after a case expression, so a following same-level statement is not
+  // mistaken for another argument. Cleared by the parseApp loop that breaks.
+  afterCaseHardStop = false;
 
   constructor(toks: Token[]) { this.toks = toks; }
 
@@ -623,6 +628,10 @@ class Parser {
     let f = this.parsePostfix(this.parsePrimary());
     // application: f x y  (does NOT cross newline at layout level, nor a `;`)
     for (;;) {
+      // A `case ... of` (or `match ... of`) alternative block is a hard
+      // boundary: don't take the following statement as another argument.
+      // (The flag is cleared at statement starts and when a group closes.)
+      if (this.afterCaseHardStop) break;
       const t = this.peek();
       if (t.k === "newline" || t.k === "dedent" || t.k === "indent" || t.k === "eof") break;
       if (t.k === "sym" && t.v === ";") break;
@@ -673,11 +682,11 @@ class Parser {
     this.expectSym("[");
     this.skipListLeading();
     const es = [] as Expr[];
-    if (this.isSym("]")) { this.next(); return { t: "list", v: es }; }
+    if (this.isSym("]")) { this.next(); this.afterCaseHardStop = false; return { t: "list", v: es }; }
     for (;;) {
       es.push(this.parseExpr());
       this.skipListSeparators();
-      if (this.isSym("]")) { this.next(); return { t: "list", v: es }; }
+      if (this.isSym("]")) { this.next(); this.afterCaseHardStop = false; return { t: "list", v: es }; }
       if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside list literal");
     }
   }
@@ -770,7 +779,7 @@ class Parser {
             const close = t.v === "(" ? ")" : "}";
             this.next();
             // () and {} are the same: a group/block. Empty = unit.
-            if (this.isSym(close)) { this.next(); return { t: "unit" }; }
+            if (this.isSym(close)) { this.next(); this.afterCaseHardStop = false; return { t: "unit" }; }
             if (t.v === "(") {
               const sec = this.tryOperatorSection();
               if (sec) return sec;
@@ -794,7 +803,9 @@ class Parser {
               if (this.isSym(";")) { this.next(); continue; }
               while (this.peek().k === "newline") this.next();
               while (this.peek().k === "dedent") this.next();
-              if (this.isSym(close)) { this.next(); return { t: "block", stmts }; }
+              if (this.isSym(close)) { this.next(); this.afterCaseHardStop = false; return { t: "block", stmts }; }
+              // New statement in the block: a previous case boundary is over.
+              this.afterCaseHardStop = false;
               const tb = this.peek();
               if (tb.k === "eof") throw new Error("Parser: unexpected end of file inside group");
               if (tb.k === "indent") {
@@ -812,7 +823,7 @@ class Parser {
             // that puts the elements on their own indented lines.
             this.skipListLeading();
             // Empty list: []
-            if (this.isSym("]")) { this.next(); return { t: "list", v: [] }; }
+            if (this.isSym("]")) { this.next(); this.afterCaseHardStop = false; return { t: "list", v: [] }; }
             // A record literal looks like:  [key: value, ...]
             // Detect it by checking that the first element is `ident :`.
             if (this.peek().k === "ident" && this.peek(1).k === "sym" &&
@@ -824,7 +835,7 @@ class Parser {
                 this.expectSym(":");
                 fs.push([f.v, this.parseExpr()]);
                 this.skipListSeparators();
-                if (this.isSym("]")) { this.next(); return { t: "record", v: fs }; }
+                if (this.isSym("]")) { this.next(); this.afterCaseHardStop = false; return { t: "record", v: fs }; }
                 if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside record literal");
               }
             }
@@ -835,7 +846,7 @@ class Parser {
             for (;;) {
               es.push(this.parseExpr());
               this.skipListSeparators();
-              if (this.isSym("]")) { this.next(); return { t: "list", v: es }; }
+              if (this.isSym("]")) { this.next(); this.afterCaseHardStop = false; return { t: "list", v: es }; }
               if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside list literal");
             }
           }
@@ -852,7 +863,7 @@ class Parser {
     switch (t.v) {
       case "let": return this.parseLet();
       case "case": return this.parseCase();
-      case "match": return this.parseCase();
+      case "match": return this.parseMatch();
       case "true": this.next(); return { t: "bool", v: true };
       case "false": this.next(); return { t: "bool", v: false };
       case "fn":
@@ -1021,7 +1032,82 @@ class Parser {
     // consume the dedent that closes this case's alternatives block (we pushed
     // exactly one indent entering it, so consume exactly one dedent leaving it)
     if (sawDedent && this.peek().k === "dedent") this.next();
+    // A case block is a hard boundary for any enclosing application.
+    this.afterCaseHardStop = true;
     return { t: "case", scrut, alts };
+  }
+
+  //  match scrutinee [ pattern -> expr, ... ]
+  // The alternatives are delimited by [ ] (separators: `,` or a newline), so
+  // all three layouts work:
+  //    fact n = match n [0 -> 1, _ -> ...]          single line, commas
+  //    fact n = match n [\n   0 -> 1\n   _ -> ...\n]  same-line open, newlines
+  //    fact n =\n    match n [\n       0 -> 1\n       _ -> ...\n    ]
+  // A `|` guard is allowed on each alternative, exactly like `case ... of`.
+  // The alternatives share the `case` AST (and evalCase behaviour).
+  parseMatch(): Expr {
+    this.next(); // match
+    const scrut = this.parseMatchScrut();
+    const alts: Alt[] = [];
+    if (this.isKw("of")) {
+      // `match ... of` (historical alias of case) still works.
+      this.next();
+      this.skipNL();
+      if (this.peek().k === "indent") this.next();
+      this.skipNL();
+      let sawDedent = false;
+      for (;;) {
+        this.skipNL();
+        const t = this.peek();
+        if (t.k === "dedent") { sawDedent = true; break; }
+        if (t.k === "eof") break;
+        alts.push(this.parseMatchAlt());
+        this.skipNL();
+      }
+      if (sawDedent && this.peek().k === "dedent") this.next();
+      this.afterCaseHardStop = true;
+    } else {
+      this.expectSym("[");
+      this.skipListLeading();
+      for (;;) {
+        this.skipListSeparators();
+        if (this.isSym("]")) { this.next(); this.afterCaseHardStop = false; break; }
+        if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside match alternatives");
+        alts.push(this.parseMatchAlt());
+      }
+    }
+    return { t: "case", scrut, alts };
+  }
+
+  // Application for a `match` scrutinee: identical to parseApp, but the first
+  // `[` after the scrutinee starts the alternative list instead of being an
+  // argument. (Nested groups parse normally, so parenthesize a scrutinee that
+  // really applies a list:  match (head [1,2]) [0 -> ..., _ -> ...]).
+  parseMatchScrut(): Expr {
+    let f = this.parsePostfix(this.parsePrimary());
+    for (;;) {
+      const t = this.peek();
+      if (t.k === "newline" || t.k === "dedent" || t.k === "indent" || t.k === "eof") break;
+      if (t.k === "sym" && t.v === ";") break;
+      if (t.k === "sym" && t.v === "[") break;
+      if (t.k === "ident" || t.k === "int" || t.k === "float" || t.k === "bool" ||
+          t.k === "str" || t.k === "char" ||
+          (t.k === "sym" && (t.v === "(" || t.v === "{"))) {
+        const a = this.parsePostfix(this.parsePrimary());
+        f = { t: "app", f, a };
+      } else break;
+    }
+    return f;
+  }
+
+  // One match/case alternative:  pattern [ | guard ] -> expr
+  parseMatchAlt(): Alt {
+    const pattern = this.parseConsPattern();
+    let guard: Expr | undefined;
+    if (this.isSym("|")) { this.next(); guard = this.parsePipe(); }
+    this.expectSym("->");
+    const body = this.parseExpr();
+    return { pattern, guard, body };
   }
 
   // ---- top level
@@ -1111,6 +1197,8 @@ class Parser {
   parseTopLevel(): TopLevel[] {
     const out: TopLevel[] = [];
     for (;;) {
+      // A new top-level statement: any previous case-of boundary is over.
+      this.afterCaseHardStop = false;
       this.skipNL();
       // swallow stray dedents
       while (this.peek().k === "dedent") this.next();
@@ -1928,6 +2016,7 @@ async function repl(): Promise<void> {
             `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
             `  cond ? a : b   (ternary)`,
             `  case x of { pat -> expr; ... }`,
+            `  match x [ pat -> expr, ... ]   (same alts; , or newline sep)`,
             `  data Maybe a = Just a | Nothing`,
             `  [1,2,3]  [name: "x", age: 2]   (newlines also separate elements)`,
             `  x $ f             pipe: feeds x into f`,
