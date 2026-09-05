@@ -2269,7 +2269,9 @@ function helpText(): string {
     `  Up/Down    history (kept in ~/.sloth_history)`,
     `  Tab        complete names/builtins/:commands; with nothing to`,
     `             complete, insert 4 spaces (the indent unit)`,
-    `  Backspace  behind a full indent level deletes all 4 spaces`,
+    `  Backspace  behind a full indent level deletes all 4 spaces; on a blank`,
+    `             continuation line it undoes the line break (cursor at the`,
+    `             end of the line above)`,
     `  Enter      runs when the chunk is complete; incomplete input continues`,
     `             on the next line ("... " prompt, auto-indent);`,
     `             a blank line is just spacing, Ctrl+C clears the input`,
@@ -2378,6 +2380,14 @@ class ReplEditor {
   }
 
   backspace(): void {
+    // a whitespace-only continuation line is just auto-indent: Backspace
+    // undoes the line break — the cursor lands at the END of the line above
+    if (this.row > 0 && /^\s*$/.test(this.lines[this.row])) {
+      this.lines.splice(this.row, 1);
+      this.row--;
+      this.col = this.lines[this.row].length;
+      return;
+    }
     if (this.col > 0) {
       const line = this.lines[this.row];
       // inverse of the dedent assist: deleting a lone ]/} that the assist
