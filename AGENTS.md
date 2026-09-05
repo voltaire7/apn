@@ -111,6 +111,9 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
     and would be a runtime error under this semantics. Use normal application
     for args and the pipe only for the final feed.
   - Backtick infix: ``a `f` b`` == `f a b` (between ternary and compare, left).
+    **Exception: `\`for\`` inverts** so the sequence sits on the left:
+    ``seq `for` fn`` == `seq $ for fn` == `for fn seq`. This is a parser-level
+    inversion only — the `for` native stays strict fn-first (see below).
   - Operator sections: `(+ 2)` = `\x -> x + 2`, `(2 +)` = `\x -> 2 + x` for
     `+ - * / % == != < > <= >= ++`. `(-2)` stays unary negation (no whitespace
     info in the lexer); `(+)` alone is unsupported — use a lambda.
@@ -118,8 +121,10 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   `map`**: `for : fn -> seq -> unit`, strictly fn-first and NOT order-flexible.
   A list iterates per element; a record per entry as `[field, value]`.
   Exactly like `map`, the pipe feeds the collection in last:
-  `for (x -> ...) [1, 2, 3]` == `[1, 2, 3] $ for (x -> ...)`; backtick
-  `seq \`for\` fn` = `for seq fn` puts the collection in the fn slot and errors.
+  `for (x -> ...) [1, 2, 3]` == `[1, 2, 3] $ for (x -> ...)`. The backtick
+  spelling ``[1, 2, 3] `for` (x -> ...)`` also works (it inverts in the parser).
+  Any other backtick (`myApp`, `map`, …) stays `f a b`, so putting a collection
+  in the fn slot errors.
   Related natives: `pairs rec` (record → list of `[field, value]`), and
   `format "% %" [a, b]` (`%` = printf-style arg, strings unquoted; `%%` = `%`).
 - **Output & conversion (DELIBERATE split)**:

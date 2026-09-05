@@ -238,6 +238,11 @@ for ([f, v] -> print (format "%: %" [f, v])) [name: "Alice", age: 30]
 [x: 1, y: 2, z: 3] $ for ([field, value] -> format "%: %" [field, value] $ print)
                                              # prints x: 1, y: 2, z: 3
 
+# `for` is the one backtick that inverts (unlike `f`, which is f a b):
+#   seq `for` fn  ==  seq $ for fn   (the sequence sits on the left)
+[x: 1, y: 2, z: 3] `for` [field, value] -> format "%: %" [field, value] $ print
+                                             # prints x: 1, y: 2, z: 3
+
 pairs [a: 1, b: 2] $ debug                   # => [["a", 1], ["b", 2]]
 
 print (format "% / %" [1, 2])                # => 1 / 2
