@@ -20,10 +20,9 @@
 
 ## Project
 
-APN — **A**pplicative **P**olish **N**otation (`sloth/` is the project folder) —
-is a lazy, Haskell-like, dynamically-typed (JS-like) scripting language
-implemented as a single-file Deno/TypeScript interpreter. It runs from the
-command line and has a REPL.
+APN — **A**pplicative **P**olish **N**otation — is a lazy, Haskell-like,
+dynamically-typed (JS-like) scripting language implemented as a single-file
+Deno/TypeScript interpreter. It runs from the command line and has a REPL.
 
 Three files only, all project root:
 - `main.ts` — the entire interpreter (lexer, parser, evaluator, REPL)
@@ -36,7 +35,7 @@ Three files only, all project root:
 
 ## Run / verify
 
-Deno required. From `sloth/`:
+Deno required. From `apn/`:
 - Run the showcase (use this as the smoke test after any change):
     deno run --allow-read main.ts features.txt
 - Start the REPL:               deno run --allow-read --allow-write --allow-env=HOME main.ts
