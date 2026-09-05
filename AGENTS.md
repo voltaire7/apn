@@ -67,6 +67,33 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
     list is actually needed.
 - **No tuples.** `(a, b)` is invalid — parens are only for grouping/calls.
   Mixed values go in lists: `[213, "hello"]`.
+- **Groups / blocks — `( )` and `{ }` are interchangeable.** Both are a
+  statement sequence whose VALUE is the last statement's value; empty (`()`,
+  `{}`) is unit. So `(4 * 3)` and `{4 * 3}` both equal 12, and a multi-line
+  `{ }` can be used as a function body. A `{` at end of line REQUIRES its body
+  on a following line indented exactly +4 (else parse error).
+  Statements inside a block separate on `;` or same-level newlines; local
+  definitions (`x = 40`) are allowed inside blocks and are scoped to the block
+  (implemented via `{ t: "block" }` + `{ t: "stmDef" }` AST nodes — eval creates
+  a child `Env`; `stmDef` evaluates with a child env).
+- **Layout is strict 4-space (whole language).** Every nested level is exactly
+  +4 spaces, and only +4: the lexer rejects +2, +8, or any non-multiple of 4.
+  Blank and comment-only lines are ignored for layout. `(` and `[` suppress
+  newlines (so arguments can span lines inside brackets); `{` does NOT
+  suppress them — brace blocks participate in the global layout.
+- **Newlines are implicit semicolons; an explicit `;` also works.** A newline
+  at the SAME indentation ends the current expression/statement; an INDENTED
+  (+4) continuation line extends it (parsers `skipContinuation`). This makes
+  whitespace significant:
+      func = { 1 + 1 }        # body on the same line  -> func == 2
+      func =
+          case x of ...       # body continues on +4   -> the case expr
+      func =
+      { 1 + 1 }               # == `func = ; { ... }`: func == unit (RHS cut
+                              #   off by a same-level newline) and the { } is
+                              #   a separate standalone block statement.
+  A def body that ends at a same-level newline (or an explicit `;` right after
+  `=`) binds UNIT (see `parseDefBody`).
 - **Records**: `[name: "Alice", age: 30]`, accessed with `rec.field` (chaining
   works: `a.b.c`). The old `{ a = b }` syntax is REMOVED.
 - **List→record**: `[name, value].[1, 2]` or `Template.[1, 2]` zips field names
@@ -156,14 +183,21 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 
 - `&&` / `||` are NOT wired into the parser (they appear in `evalBinop` but don't
   parse). Use comparisons/ternaries instead.
-- A `case` expression reliably parses when the lambda body starts on an
-  INDENTED new line:
+- A `case` expression reliably parses when its body starts on an INDENTED (+4)
+  new line (which the strict 4-space layout always requires anyway):
       f =
-        x -> case x of
-          [] -> 0
-          ...
+          x -> case x of
+              [] -> 0
+              ...
   (A same-line `f = x -> case x of ...` can mis-parse the layout.)
-- `:` cons is only a pattern operator (`x:rest`), not an expression operator.
+- `` ` : ` `` cons is only a pattern operator (`x:rest`), not an expression
+  operator.
+- `case ... of` and `let ... in` are self-contained constructs: they consume
+  their own newlines/indents/dedents (`parseCase` / `parseLet`), independent of
+  the block/semicolon rules above.
+- Inside `{ }`, block statements are at one flat level (nested constructs like
+  `case` may deepen it); an `indent` token directly before a statement, or a
+  `,`-tuple in `( )`, are rejected with a clear error.
 
 ## Conventions
 

@@ -2,6 +2,8 @@
 #  SLOTH feature showcase
 #  A lazy, Haskell-like, untyped (JS-like) scripting language.
 #  Run:  deno run --allow-read main.ts features.txt
+#  NOTE: indentation is strict "4-space layout" — every nested
+#  level is exactly +4 spaces (and only +4).
 # =========================================================
 
 # ---------------------------------------------------------
@@ -36,16 +38,16 @@ debug (addTwo 10)             # => 12
 # 3. RECURSION
 # ---------------------------------------------------------
 factorial n =
-  case n of
-    0 -> 1
-    _ -> n * factorial (n - 1)
+    case n of
+        0 -> 1
+        _ -> n * factorial (n - 1)
 debug (factorial 10)   # => 3628800
 
 fib n =
-  case n of
-    0 -> 0
-    1 -> 1
-    _ -> fib (n - 1) + fib (n - 2)
+    case n of
+        0 -> 0
+        1 -> 1
+        _ -> fib (n - 1) + fib (n - 2)
 debug (fib 10)         # => 55
 
 # ---------------------------------------------------------
@@ -60,9 +62,9 @@ debug (fib 10)         # => 55
 data Maybe a = Just a | Nothing
 
 safeHead xs =
-  case xs of
-    [] -> Nothing
-    x:rest -> Just x
+    case xs of
+        [] -> Nothing
+        x:rest -> Just x
 debug (safeHead [1, 2, 3])   # => Just 1
 debug (safeHead [])          # => Nothing
 
@@ -72,16 +74,16 @@ len (x:rest) = 1 + len rest
 debug (len [1, 2, 3])        # => 3
 
 sumList xs =
-  case xs of
-    [] -> 0
-    x:rest -> x + sumList rest
+    case xs of
+        [] -> 0
+        x:rest -> x + sumList rest
 debug (sumList [1, 2, 3, 4, 5])  # => 15
 
 # exact-length list pattern — binds each element
 pairSum xs =
-  case xs of
-    [a, b] -> a + b
-    _ -> 0
+    case xs of
+        [a, b] -> a + b
+        _ -> 0
 debug (pairSum [10, 20])   # => 30
 debug (pairSum [1])        # => 0
 
@@ -92,10 +94,10 @@ debug (sumRec [10, 20])        # => 30
 
 # guards
 classify n =
-  case n of
-    x | x < 0 -> "negative"
-    x | x == 0 -> "zero"
-    _ -> "positive"
+    case n of
+        x | x < 0 -> "negative"
+        x | x == 0 -> "zero"
+        _ -> "positive"
 debug (classify (-5))   # => "negative"
 debug (classify 0)      # => "zero"
 debug (classify 7)      # => "positive"
@@ -159,12 +161,13 @@ smallest a b c = (a < b ? a : b) < c ? (a < b ? a : b) : c
 debug (smallest 7 2 9)     # => 2
 
 # ---------------------------------------------------------
-# 9. let ... in  (with multiple bindings)
+# 9. let ... in  (with multiple bindings; the whole construct
+#    is one self-contained, layout-sensitive expression)
 # ---------------------------------------------------------
 greeting =
-  let name = "world"
-      hello = "Hello"
-  in hello ++ ", " ++ name ++ "!"
+    let name = "world"
+        hello = "Hello"
+    in hello ++ ", " ++ name ++ "!"
 debug greeting             # => "Hello, world!"
 
 # ---------------------------------------------------------
@@ -265,3 +268,86 @@ print (toString Nothing)               # => Nothing   (atoms render bare)
 parse "42" + 8 $ intToString $ print   # => 50
 debug (parse "3.5")                    # => 3.5
 debug (parse "true")                   # => true
+
+# ---------------------------------------------------------
+# 16. GROUPS, BLOCKS, INDENTATION & SEMICOLONS
+#    ( ) and { } are interchangeable: both are groups/blocks.
+#    ()  or  { }  alone is unit. A block's value is the LAST statement's value.
+#    Newlines act as implicit semicolons; an explicit `;` also separates
+#    statements. Indentation is rigid: every nested level is exactly +4.
+# ---------------------------------------------------------
+debug ()                     # => ()            (empty group = unit)
+debug {}                     # => ()            (empty block = unit)
+debug {5}                    # => 5             (braces group like parens)
+debug (5)                    # => 5             (parens group like braces)
+debug (4 * 3)                # => 12
+debug {4 * 3}                # => 12
+
+group = { 1; 2; 3 }          # value of a block is its last statement
+debug group                  # => 3
+
+inlineBlock = { 1 + 1 }      # a same-line { } block
+debug inlineBlock            # => 2
+
+# statements on one line separated by explicit `;`
+print "hello"; print ", world"        # prints: hello
+                                      # prints: , world
+
+# a multi-line `{ }` block as a function body (value = last statement)
+area w h =
+    {
+        debug "computing area"
+        w * h
+    }
+debug (area 3 4)             # prints: computing area
+                             # => 12
+
+# local definitions are allowed inside a block
+both =
+    {
+        x = 40
+        y = 2
+        x + y
+    }
+debug both                   # => 42
+
+# blank lines inside a block are fine; statements still stop at same-level
+# newlines (implicit semicolons) and continue on +4-indented lines
+seqOf =
+    {
+        debug "one"
+
+        6 * 7
+    }
+debug seqOf                  # prints: one
+                             # => 42
+
+# Whitespace is significant: a def cut off by a same-level newline binds UNIT,
+# and the next line is a separate statement. So  func =\n{ ... }
+# is  func = unit  PLUS a standalone block statement, NOT a function body.
+unitAfter =
+{
+    debug "the brace block ran as its OWN statement"
+}
+debug (toString unitAfter)   # prints: the brace block ran as its OWN statement
+                             # => ()      (unitAfter is unit, not a block)
+
+# a function body that continues on a +4-indented line spans lines;
+# `[ ]` (like `( )`) suppresses newlines, so arguments can be written
+# across lines and even in columns:
+spanArgs =
+    myApp [
+        1,
+        2
+    ] [
+        3,
+        4
+    ]
+debug (spanArgs)              # => [1, 2, 3, 4]
+
+# INVALID (the lexer rejects these; demoed in comments only):
+#   - a { that ends its own line with a body NOT indented by exactly +4:
+#         func = {
+#       print 1                #   <- must be indented exactly 4 spaces
+#         }
+#   - any indentation that skips a level (0 -> 8) or is not a multiple of 4.

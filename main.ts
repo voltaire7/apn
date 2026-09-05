@@ -126,7 +126,9 @@ type Expr =
   | { t: "fromList"; template: Expr; values: Expr }
   | { t: "recordTemplate"; names: string[] }
   | { t: "let"; bindings: { name: string; value: Expr }[]; body: Expr }
-  | { t: "pipe"; x: Expr; f: Expr };
+  | { t: "pipe"; x: Expr; f: Expr }
+  | { t: "block"; stmts: Expr[] }
+  | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr }[] };
 
 interface Alt {
   pattern: Pattern;
@@ -227,15 +229,19 @@ export function lex(src: string): Token[] {
 
       const cur = indentStack[indentStack.length - 1];
       if (indent > cur) {
-        indentStack.push(indent);
-        toks.push({ k: "indent" });
+        if (indent === cur + 4) {
+          indentStack.push(indent);
+          toks.push({ k: "indent" });
+        } else {
+          throw new Error(`Lexer: indentation must increase by exactly 4 spaces (got +${indent - cur}) at ${pos}`);
+        }
       } else {
         while (indent < indentStack[indentStack.length - 1]) {
           indentStack.pop();
           toks.push({ k: "dedent" });
         }
         if (indent !== indentStack[indentStack.length - 1]) {
-          throw new Error(`Lexer: inconsistent indentation at ${pos}`);
+          throw new Error(`Lexer: indentation must be a multiple of 4 spaces at ${pos}`);
         }
       }
     }
@@ -271,10 +277,12 @@ export function lex(src: string): Token[] {
     }
     if (matchedSym) continue;
 
-    // single-char symbols
+    // single-char symbols. NOTE: `{` / `}` are NOT layout-suppressing (unlike
+    // `(`/`[`): a brace block participates in the global 4-space layout, so
+    // newlines and indentation inside it are still significant.
     if (":()[]{}.,;|".includes(c)) {
-      if (c === '(' || c === '[' || c === '{') parenDepth++;
-      if (c === ')' || c === ']' || c === '}') parenDepth--;
+      if (c === '(' || c === '[') parenDepth++;
+      if (c === ')' || c === ']') parenDepth--;
       // `:` is cons in this language; `::` handled above as symbol
       toks.push({ k: "sym", v: c === ":" ? ":" : c });
       pos++;
@@ -505,13 +513,25 @@ class Parser {
   // ---- expressions
 
   parseExpr(): Expr {
-    // An expression may begin on a fresh (possibly indented) line.
-    this.skipLayout();
+    // A newline at the SAME indentation is an implicit semicolon, so it ends
+    // the current expression. Only an INDENTED continuation (newlines followed
+    // by an indent token) is consumed here to join the next line in.
+    this.skipContinuation();
     return this.parsePipe();
   }
 
-  // Skip newlines and indentation (used at statement/definition entry points,
-  // NOT mid-application, so application stays on a single logical line).
+  // Consume newlines + ONE indent if the following content is indented deeper
+  // (+4), i.e. a continued expression. Leaves same-level newlines in place.
+  skipContinuation(): boolean {
+    let j = this.i;
+    while (this.toks[j] && this.toks[j].k === "newline") j++;
+    if (this.toks[j] && this.toks[j].k === "indent") {
+      this.i = j + 1;
+      return true;
+    }
+    return false;
+  }
+
   skipLayout() {
     while (this.peek().k === "newline" || this.peek().k === "indent") this.next();
   }
@@ -598,13 +618,14 @@ class Parser {
 
   parseApp(): Expr {
     let f = this.parsePostfix(this.parsePrimary());
-    // application: f x y  (does NOT cross newline at layout level)
+    // application: f x y  (does NOT cross newline at layout level, nor a `;`)
     for (;;) {
       const t = this.peek();
       if (t.k === "newline" || t.k === "dedent" || t.k === "indent" || t.k === "eof") break;
+      if (t.k === "sym" && t.v === ";") break;
       if (t.k === "ident" || t.k === "int" || t.k === "float" || t.k === "bool" ||
           t.k === "str" || t.k === "char" ||
-          (t.k === "sym" && (t.v === "(" || t.v === "["))) {
+          (t.k === "sym" && (t.v === "(" || t.v === "[" || t.v === "{"))) {
         const a = this.parsePostfix(this.parsePrimary());
         f = { t: "app", f, a };
       } else break;
@@ -721,17 +742,46 @@ class Parser {
       case "kw": return this.parseKeyword();
       case "sym":
         switch (t.v) {
-          case "(": {
+          case "(":
+          case "{": {
+            const close = t.v === "(" ? ")" : "}";
             this.next();
-            if (this.isSym(")")) { this.next(); return { t: "unit" }; }
-            const sec = this.tryOperatorSection();
-            if (sec) return sec;
-            const e = this.parseExpr();
-            if (this.eatSym(",")) {
-              throw new Error("Parser: tuples are not supported; use a list [a, b, ...] instead");
+            // () and {} are the same: a group/block. Empty = unit.
+            if (this.isSym(close)) { this.next(); return { t: "unit" }; }
+            if (t.v === "(") {
+              const sec = this.tryOperatorSection();
+              if (sec) return sec;
+              if (this.isSym(",")) {
+                throw new Error("Parser: tuples are not supported; use a list [a, b, ...] instead");
+              }
             }
-            this.expectSym(")");
-            return e;
+            // A { block body is a statement sequence; value = last statement.
+            const stmts: Expr[] = [];
+            // A `{` at the end of a line requires its body on the next line to
+            // be indented exactly one level (+4):  func = {\n print ... } is
+            // rejected,  func = {\n    print ... } is accepted.
+            if (t.v === "{" && this.peek().k === "newline") {
+              while (this.peek().k === "newline") this.next();
+              if (this.peek().k !== "indent") {
+                throw new Error("Parser: a { block body must be indented by 4 spaces when { is followed by a newline");
+              }
+              this.next(); // the one indent that opens the block body
+            }
+            for (;;) {
+              if (this.isSym(";")) { this.next(); continue; }
+              while (this.peek().k === "newline") this.next();
+              while (this.peek().k === "dedent") this.next();
+              if (this.isSym(close)) { this.next(); return { t: "block", stmts }; }
+              const tb = this.peek();
+              if (tb.k === "eof") throw new Error("Parser: unexpected end of file inside group");
+              if (tb.k === "indent") {
+                throw new Error("Parser: block statements must stay at one indentation level");
+              }
+              if (tb.k === "sym" && tb.v === "," && t.v === "(") {
+                throw new Error("Parser: tuples are not supported; use a list [a, b, ...] instead");
+              }
+              stmts.push(this.isDef() ? this.parseBlockDef() : this.parseExpr());
+            }
           }
           case "[": {
             this.next();
@@ -981,6 +1031,12 @@ class Parser {
     }
   }
 
+  // A definition inside a `{ }` block (a statement, not a value expression).
+  parseBlockDef(): Expr {
+    const d = this.parseDefStatement();
+    return { t: "stmDef", name: d.name, clauses: d.clauses };
+  }
+
   // A token that can begin a definition parameter pattern.
   startsParam(t: Token): boolean {
     if (t.k === "ident") return t.v !== "_" ? true : true;
@@ -990,6 +1046,42 @@ class Parser {
     return false;
   }
 
+  // Parse  name p1 p2 = body  (isDef() must already have returned true).
+  parseDefStatement(): { name: string; clauses: { params: Pattern[]; body: Expr }[] } {
+    const name = (this.next() as { v: string }).v;
+    const params: Pattern[] = [];
+    // Haskell-style params are PATTERNS:  f [x, y] = ..., f (x:rest) = ...
+    while (this.startsParam(this.peek())) {
+      params.push(this.parseConsPattern());
+      // optional param type annotation:  p : Type
+      if (this.isSym(":")) { this.next(); this.parseType(); }
+    }
+    // optional single return-type annotation:  name : Type = expr
+    if (this.isSym(":")) { this.next(); this.parseType(); }
+    this.next(); // =
+    const body = this.parseDefBody();
+    return { name, clauses: [{ params, body }] };
+  }
+
+  // A definition body is an expression. Whitespace is significant: when `=` is
+  // followed by a newline, the body must continue on an INDENTED (+4) line.
+  // A same-level newline (or explicit `;`) is a semicolon — the body is empty
+  // and binds `unit`, so  func =\n{\n ... \n}  is `func = unit` followed by a
+  // separate block statement (NOT the def body).
+  parseDefBody(): Expr {
+    if (this.peek().k === "newline") {
+      let j = this.i;
+      while (this.toks[j] && this.toks[j].k === "newline") j++;
+      if (this.toks[j] && this.toks[j].k === "indent") return this.parseExpr();
+      return { t: "unit" };
+    }
+    if (this.isSym(";")) {
+      this.next();
+      return { t: "unit" };
+    }
+    return this.parseExpr();
+  }
+
   parseTopLevel(): TopLevel[] {
     const out: TopLevel[] = [];
     for (;;) {
@@ -997,6 +1089,13 @@ class Parser {
       // swallow stray dedents
       while (this.peek().k === "dedent") this.next();
       this.skipNL();
+      // explicit semicolons are statement separators, like newlines
+      while (this.isSym(";")) {
+        this.next();
+        this.skipNL();
+        while (this.peek().k === "dedent") this.next();
+        this.skipNL();
+      }
 
       const t = this.peek();
       if (t.k === "eof") break;
@@ -1047,19 +1146,8 @@ class Parser {
         //   name = expr            name a b c = expr
         //   name : Type = expr
         if (this.isDef()) {
-          const name = (this.next() as { v: string }).v;
-          const params: Pattern[] = [];
-          // Haskell-style params are PATTERNS:  f [x, y] = ..., f (x:rest) = ...
-          while (this.startsParam(this.peek())) {
-            params.push(this.parseConsPattern());
-            // optional param type annotation:  p : Type
-            if (this.isSym(":")) { this.next(); this.parseType(); }
-          }
-          // optional single return-type annotation:  name : Type = expr
-          if (this.isSym(":")) { this.next(); this.parseType(); }
-          this.next(); // =
-          const body = this.parseExpr();
-          out.push({ t: "def", name, clauses: [{ params, body }] });
+          const d = this.parseDefStatement();
+          out.push({ t: "def", name: d.name, clauses: d.clauses });
         } else {
           const e = this.parseExpr();
           out.push({ t: "expr", value: e });
@@ -1286,6 +1374,22 @@ export class Interpreter {
         }
         break;
       }
+      case "block": {
+        const child = new Env(this.env);
+        const old = this.env;
+        this.env = child;
+        try {
+          r = { kind: "unit" };
+          for (const s of e.stmts) {
+            r = s.t === "stmDef" ? this.evalDef(s.name, s.clauses) : this.eval(s);
+          }
+        } finally {
+          this.env = old;
+        }
+        break;
+      }
+      case "stmDef":
+        throw new Error("Runtime: internal error — statement definition used as an expression");
     }
     this.stack--;
     return r;
@@ -1700,8 +1804,11 @@ async function repl(): Promise<void> {
             `  data Maybe a = Just a | Nothing`,
             `  [1,2,3]  [name: "x", age: 2]`,
             `  x $ f             pipe: feeds x into f`,
-            `  a \`f\` b            infix call == f a b`,
+            `  a \`f\` b            infix call == f a b  (only \`for\` inverts)`,
             `  (+ 2)  (2 +)      operator sections   ((-2) stays unary minus)`,
+            `  ( ) and { } are groups/blocks: unit when empty, value = last stmt`,
+            `  ; or newline       statement separators (blocks & top level)`,
+            `  indentation: strict 4-space layout (exactly +4 per level)`,
             `  for (x -> print x) [1,2,3]   for fn seq`,
             `  recursion, higher-order fns, records, variants`,
             ``,
