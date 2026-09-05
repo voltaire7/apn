@@ -1483,7 +1483,19 @@ export class Interpreter {
         break;
       }
       case "match": r = this.evalMatch(this.force(this.eval(e.scrut)), e.alts); break;
-      case "list": r = { kind: "lazyList", exprs: e.v, env: this.env }; break;
+      case "list": {
+        // An ALL-bare-name list literal is an INDEX ENUM: each name is a
+        // field whose value is its position.  [x, y, z] === [x: 0, y: 1, z: 2].
+        const names = e.v.length > 0 && e.v.every((el) => el.t === "var")
+          ? e.v as { t: "var"; name: string }[]
+          : null;
+        if (names) {
+          r = { kind: "record", v: names.map((el, i) => [el.name, { kind: "int", v: i }] as [string, Value]) };
+        } else {
+          r = { kind: "lazyList", exprs: e.v, env: this.env };
+        }
+        break;
+      }
       case "record": r = { kind: "record", v: e.v.map(([k, x]) => [k, this.eval(x)] as [string, Value]) }; break;
       case "recordAccess": {
         let rec = this.eval(e.rec);
@@ -2075,6 +2087,7 @@ async function repl(): Promise<void> {
             `  symbol = value   (the ONLY binding form; top level or inside { } blocks)`,
             `  [a, b] = value (destructuring binding; records match by field name)`,
             `  Just v = value (declared constructors destructure; capital defs are errors)`,
+            `  [x, y, z] is an index enum: bare names = their index [x: 0, y: 1, z: 2]`,
             `  proto.[1,2,3] / proto.[x: 1]  prototype clone: positional or named`,
             `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
             `  cond ? a : b   (ternary)`,

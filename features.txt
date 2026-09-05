@@ -151,8 +151,9 @@ debug (matchInline 0)       # => "zero"
 debug (matchInline 9)       # => "other"
 
 # ---------------------------------------------------------
-# 5. LISTS — heterogeneous, like JS arrays, but almost lazy.
-#    Literal lists stay in an unevaluated (lazy) state until used.
+# 5. LISTS & ENUMS — heterogeneous, like JS arrays, but almost lazy.
+#    Literal lists stay in an unevaluated (lazy) state until used. A list
+#    whose elements are ALL bare names is an INDEX ENUM ([x, y, z] === [x: 0, y: 1, z: 2]).
 # ---------------------------------------------------------
 debug [213, "hello"]          # => [213, "hello"]
 debug [1, 2, 3]               # => [1, 2, 3]
@@ -185,14 +186,12 @@ debug (length [1, 2, 3])      # => 3
 debug (null [])               # => true
 debug (null [1])              # => false
 
-# A list literal whose elements are unbound identifiers is lazy:
-#   use it as a record/template  ->  the names become field names
-#   use it as a list             ->  the names resolve to variables
-a = 100
-b = 200
-vals = [a, b]
-debug vals                     # => [100, 200]   (used as a list)
-debug (map (x -> x * 2) vals)  # => [200, 400]
+# An ALL-bare-name list literal is an INDEX ENUM — each name is a field whose
+# value is its position:  [x, y, z] === [x: 0, y: 1, z: 2]
+vec = [x, y, z]
+debug vec                       # => [x: 0, y: 1, z: 2]
+debug vec.y                     # => 1
+debug ([day, month, year]).year  # => 2
 
 # ---------------------------------------------------------
 # 6. RECORDS — [name: value, ...] and field access
@@ -210,8 +209,8 @@ debug nested.inner.z     # => 99
 # 7. PROTOTYPE-BASED OBJECTS —  proto.[overrides] CLONES the object
 #    The prototype (LOWERCASE name — capital names are constructors)
 #    is any record; .[values] replaces values positionally, .[f: v, ...]
-#    overrides by name (and may ADD new fields). A naked name list works
-#    too, as a names-only template (positional only).
+#    overrides by name (and may ADD new fields). A naked name list is an
+#    index enum — equally a names-only template (positional only).
 # ---------------------------------------------------------
 vector3 = [x: 0, y: 0, z: 0]        # prototype with defaults
 debug vector3                       # => [x: 0, y: 0, z: 0]
@@ -221,7 +220,7 @@ debug vector3.[x: 1, y: 2]          # => [x: 1, y: 2, z: 0]   partial — z kept
 debug vector3.[x: 1, y: 2, z: 3, a: 0]  # => [x: 1, y: 2, z: 3, a: 0]  new field
 debug vector3                       # => [x: 0, y: 0, z: 0]   prototype untouched
 
-namesOnly = [name, value]
+namesOnly = [name, value]      # an enum: [name: 0, value: 1]
 pair = namesOnly.[213, "hello"]
 debug pair                          # => [name: 213, value: "hello"]
 debug pair.value                    # => "hello"

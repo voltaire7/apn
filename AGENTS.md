@@ -59,12 +59,15 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 
 ## Core language semantics (don't break these)
 
-- **Lazy lists**: a list literal `[a, b]` evaluates to a `lazyList` (unevaluated
-  elements + captured env) and is resolved only when forced:
-  - used as a **list** (print, head/map/…, ops, match) → bare identifiers resolve
-    to variables;
-  - used as a **record/template** (left of `.` in fromList) → bare identifiers
-    are read as field names.
+- **Lazy lists & index enums**: a list literal evaluates to a `lazyList`
+  (unevaluated elements + captured env), resolved only when forced — EXCEPT an
+  **all-bare-name list literal, which is an INDEX ENUM record**: `[x, y, z]`
+  === `[x: 0, y: 1, z: 2]` (each name is a field whose value is its index).
+  A `lazyList` used as a **list** (print, head/map/…, ops, match) resolves its
+  elements; used as a **record/template** (left of `.` in fromList) its bare
+  identifiers are read as field names. Because all-name literals are enums now,
+  `[a, b]` no longer builds a value-list from the bound `a`/`b` — write the
+  values out explicitly.
   - `force()` is the single entry point for turning a `lazyList` into a concrete
     value; it recurses into nested lists/records/variants. Only invoke it when a
     list is actually needed.
@@ -107,7 +110,8 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   a right-side RECORD overrides by name — existing fields replaced, new fields
   appended, so `vector3.[x: 1, y: 2]` keeps the prototype's other defaults and
   `vector3.[x: 1, y: 2, z: 3, a: 0]` adds `a`. A naked lowercase name list
-  (`namesOnly = [name, value]`) is a names-only template (positional only).
+  (`namesOnly = [name, value]`) is an enum — usable as a names-only template
+  (positional only).
   The prototype name must be lowercase (capital names are constructors); field
   count must equal list size for the positional form, else error.
 - **Ternary, not if/then/else**: `cond ? a : b` (right-associative). Keywords
