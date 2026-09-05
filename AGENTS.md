@@ -59,15 +59,10 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 
 ## Core language semantics (don't break these)
 
-- **Lazy lists — dual-purpose `[a, b]`**: a list literal evaluates to a
-  `lazyList` (unevaluated elements + captured env), resolved only when forced.
-  A bare-name list is EITHER a list OR an object, decided by use:
-  - as a **list** (print, head/map/…, ops, match) → bare identifiers resolve
-    to the VARIABLES' values (`vals = [a, b]` with a=100, b=200 → `[100, 200]`);
-  - as an **object/record/template** (left of `.` in fromList, or `rec.field`
-    access) → the field names default to their INDEX — an index enum:
-    `[x, y, z]` behaves as `[x: 0, y: 1, z: 2]` (`.z` → 2; a named override
-    `.[y: 5]` leaves the others at their index: `[x: 0, y: 5, z: 2]`).
+- **Lazy lists**: a list literal evaluates to a `lazyList` (unevaluated
+  elements + captured env), resolved only when forced. `[x, y, z]` is ALWAYS a
+  list — bare identifiers resolve to the variables' values when forced. A list
+  is never an object; an OBJECT is a record literal (`[k: v, ...]`).
   `force()` is the single entry point for turning a `lazyList` into a concrete
   list value; it recurses into nested lists/records/variants. Only invoke it
   when a list is actually needed.
@@ -108,16 +103,14 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   `=`) binds UNIT (see `parseDefBody`).
 - **Records**: `[name: "Alice", age: 30]`, accessed with `rec.field` (chaining
   works: `a.b.c`). The old `{ a = b }` syntax is REMOVED.
-- **Prototype-based objects**: `proto.[overrides]` CLONES a record prototype. A
+- **Prototype-based objects**: `proto.[overrides]` CLONES a record prototype
+  (the prototype is a RECORD — a bare-name list is a list, never an object). A
   right-side LIST replaces values positionally (one value per field);
   a right-side RECORD overrides by name — existing fields replaced, new fields
   appended, so `vector3.[x: 1, y: 2]` keeps the prototype's other defaults and
-  `vector3.[x: 1, y: 2, z: 3, a: 0]` adds `a`. A naked lowercase name list
-  (`namesOnly = [name, value]`) is a names-only template with INDEX DEFAULTS —
-  omitted fields default to their position (an index enum; `.[y: 5]` on
-  `[x, y, z]` gives `[x: 0, y: 5, z: 2]`).
-  The prototype name must be lowercase (capital names are constructors); field
-  count must equal list size for the positional form, else error.
+  `vector3.[x: 1, y: 2, z: 3, a: 0]` adds `a`. The prototype name must be
+  lowercase (capital names are constructors); field count must equal list size
+  for the positional form, else error.
 - **Ternary, not if/then/else**: `cond ? a : b` (right-associative). Keywords
   `if`, `then`, `else` are removed.
 - **Functions**: two styles, partial application, recursion. `fn` is removed.
@@ -245,7 +238,7 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   def is a parse error unless it's a DECLARED constructor applied to args
   (`Just v = ...` destructures). A bare capital LHS is always an error —
   `Template = [count, label]` is invalid; use lowercase defs and build records
-  with the object constructor (`section 7`: `template.[7, "seven"]`). Optional
+  with values (or positional/named clone from a record prototype). Optional
   (ignored) `: Type` annotations accepted. A block's value is its last
   statement. `match` with guards `|`.
 

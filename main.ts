@@ -126,7 +126,6 @@ type Expr =
   | { t: "record"; v: Array<[string, Expr]> }
   | { t: "recordAccess"; rec: Expr; field: string }
   | { t: "fromList"; template: Expr; values: Expr }
-  | { t: "recordTemplate"; names: string[] }
   | { t: "pipe"; x: Expr; f: Expr }
   | { t: "block"; stmts: Expr[] }
   | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr }[] }
@@ -662,11 +661,11 @@ parsePostfix(e: Expr): Expr {
           this.expectSym(":");
           fs.push([name.v, this.parseExpr()]);
         }
-        e = { t: "fromList", template: this.asRecordTemplate(e), values: { t: "record", v: fs } };
+        e = { t: "fromList", template: e, values: { t: "record", v: fs } };
       } else {
         // positional: zip the prototype's field names with a value list
         const values = this.parseListLiteral();
-        e = { t: "fromList", template: this.asRecordTemplate(e), values };
+        e = { t: "fromList", template: e, values };
       }
     } else {
       const f = this.next();
@@ -676,21 +675,6 @@ parsePostfix(e: Expr): Expr {
   }
   return e;
 }
-
-  // A bare-name template is a plain list literal of field-name identifiers,
-  // e.g.  [name, value].  Anything else is left as an expression to evaluate
-  // (which must produce a record whose keys are the field names).
-  asRecordTemplate(e: Expr): Expr {
-    if (e.t === "list") {
-      const names: string[] = [];
-      for (const el of e.v) {
-        if (el.t !== "var") return e; // not a pure name template; treat as expr
-        names.push(el.name);
-      }
-      return { t: "recordTemplate", names };
-    }
-    return e;
-  }
 
   // Parse a list literal  [a, b, ...]  (used as the values on the right side of .)
   parseListLiteral(): Expr {
@@ -1490,15 +1474,6 @@ export class Interpreter {
         // `core = load "..."` is a thunk; get the module WITHOUT forcing its
         // fields (a module may contain `halt = exit 0`).
         if (rec.kind === "thunk") rec = this.unpackThunk(rec);
-        if (rec.kind === "lazyList" && rec.exprs.every((ex) => ex.t === "var")) {
-          // A bare-name list used as an OBJECT is its index enum:
-          // field -> position, so  [x, y, z] === [x: 0, y: 1, z: 2]
-          const names = rec.exprs as { t: "var"; name: string }[];
-          const i = names.findIndex((n) => n.name === e.field);
-          if (i < 0) throw new Error(`Runtime: record has no field '${e.field}'`);
-          r = { kind: "int", v: i };
-          break;
-        }
         if (rec.kind !== "record") throw new Error("Runtime: record access on non-record");
         const f = rec.v.find(([k]) => k === e.field);
         if (!f) throw new Error(`Runtime: record has no field '${e.field}'`);
@@ -1510,28 +1485,18 @@ export class Interpreter {
         if (vals.kind !== "list" && vals.kind !== "record") {
           throw new Error("Runtime: right side of '.' must be a list or a record");
         }
-        // Resolve the prototype: a record keeps its VALUES (defaults); a
-        // name list (or recordTemplate) is names-only, no defaults.
-        let protoNames: string[];
-        let protoRec: Array<[string, Value]> | undefined;
-        if (e.template.t === "recordTemplate") {
-          protoNames = e.template.names;
-        } else {
-          let src = this.eval(e.template);
-          if (src.kind === "thunk") src = this.unpackThunk(src);
-          if (src.kind === "lazyList") {
-            protoNames = [];
-            for (const ex of src.exprs) {
-              if (ex.t !== "var") throw new Error("Runtime: template must be a list of names or a record");
-              protoNames.push(ex.name);
-            }
-          } else if (src.kind === "record") {
-            protoNames = src.v.map(([k]) => k);
-            protoRec = src.v.slice();
-          } else {
-            throw new Error("Runtime: left side of '.' must be a name template or a record");
-          }
+        // The prototype is a RECORD (objects always have values); a bare-name
+        // list is always a LIST and so is not a valid prototype.
+        const src = (() => {
+          let s = this.eval(e.template);
+          if (s.kind === "thunk") s = this.unpackThunk(s);
+          return s;
+        })();
+        if (src.kind !== "record") {
+          throw new Error("Runtime: left side of '.' must be a record (object)");
         }
+        const protoRec = src.v.slice();
+        const protoNames = protoRec.map(([k]) => k);
         if (vals.kind === "list") {
           // Positional clone: one value per prototype field, in order.
           if (protoNames.length !== vals.v.length) {
@@ -1540,26 +1505,17 @@ export class Interpreter {
           r = { kind: "record", v: protoNames.map((k, i) => [k, vals.v[i]] as [string, Value]) };
         } else {
           // Named clone: override existing fields, append new ones.
-          if (protoRec !== undefined) {
-            const idx = new Map(protoNames.map((n, i) => [n, i]));
-            const out = protoRec.slice();
-            for (const [k, v] of vals.v as Array<[string, Value]>) {
-              const i = idx.get(k);
-              if (i !== undefined) out[i] = [k, v]; else out.push([k, v]);
-            }
-            r = { kind: "record", v: out };
-          } else {
-            // Names-only prototype — it has INDEX DEFAULTS (an index enum):
-            // every omitted field defaults to its position.
-            const byName = new Map(vals.v as Array<[string, Value]>);
-            r = { kind: "record", v: protoNames.map((k, i) => [k, byName.get(k) ?? { kind: "int", v: i }]) };
+          const idx = new Map(protoNames.map((n, i) => [n, i]));
+          const out = protoRec.slice();
+          for (const [k, v] of vals.v as Array<[string, Value]>) {
+            const i = idx.get(k);
+            if (i !== undefined) out[i] = [k, v]; else out.push([k, v]);
           }
+          r = { kind: "record", v: out };
         }
         break;
       }
       case "pipe": r = this.apply(this.eval(e.f), this.eval(e.x)); break;
-      case "recordTemplate":
-        throw new Error("Runtime: internal error — record template used as a value");
       case "block": {
         const child = new Env(this.env);
         const old = this.env;
@@ -2080,7 +2036,7 @@ async function repl(): Promise<void> {
             `  symbol = value   (the ONLY binding form; top level or inside { } blocks)`,
             `  [a, b] = value (destructuring binding; records match by field name)`,
             `  Just v = value (declared constructors destructure; capital defs are errors)`,
-            `  bare-name list as OBJECT = index enum ([x, y, z] => [x:0, y:1, z:2]); as list => vars`,
+            `  [x, y, z] is ALWAYS a list; objects are [k: v, ...] and clone via proto.[...]`,
             `  proto.[1,2,3] / proto.[x: 1]  prototype clone: positional or named`,
             `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
             `  cond ? a : b   (ternary)`,
