@@ -148,4 +148,9 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 - Keep edits consolidated in `main.ts`; keep the three-file layout (no new deps,
   no `src/`).
 - Reflect new syntax in `features.txt` and in the REPL `:help` block.
-- Don't commit secrets; there are none. Only commit when asked.
+- **Commit after every task.** The user has asked that commits happen
+  automatically. After each completed task (workflow green, see above), stage
+  the three files and commit with a concise, repo-style message:
+      git add main.ts features.txt AGENTS.md
+      git commit -m "short summary of the change"
+  Don't commit secrets; there are none.
