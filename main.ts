@@ -2271,8 +2271,8 @@ function helpText(): string {
     `             complete, insert 4 spaces (the indent unit)`,
     `  Backspace  behind a full indent level deletes all 4 spaces`,
     `  Enter      runs when the chunk is complete; incomplete input continues`,
-    `             on the next line ("... " prompt, auto-indent); a BLANK`,
-    `             continuation line forces the run, like Python`,
+    `             on the next line ("... " prompt, auto-indent);`,
+    `             a blank line is just spacing, Ctrl+C clears the input`,
     `  paste      multi-line text is inserted, not run; Enter then runs it`,
     `  Ctrl+C     clear input (empty: quit)  Ctrl+D quit  Ctrl+L clear screen`,
     `  Ctrl+A/E   line start/end  Ctrl+U/K kill to line start/end  Ctrl+W delete word`,
@@ -2444,9 +2444,6 @@ class ReplEditor {
     // whitespace-only single line: like Python, just show a fresh prompt
     if (this.lines.length === 1 && line.trim() === "") return "submit";
     if (this.isComplete(this.trimmedSrc())) return "submit";
-    // Python's blank-line rule: an empty continuation line forces the run
-    // (an unfinished construct surfaces its parse error, exactly like Python)
-    if (this.lines.length > 1 && line.trim() === "") return "submit";
     this.splitLine();
     return "cont";
   }
