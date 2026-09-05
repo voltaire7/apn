@@ -2404,7 +2404,8 @@ const A = {
 const paint = (code: string, s: string) => code + s + A.reset;
 
 // node-style typed echo: numbers yellow, strings/chars green, bools magenta,
-// lists/records/variants cyan, unit/functions gray.
+// values' structure (brackets, colons, commas) gray, unit/functions gray.
+// Variant tags stay cyan (capital constructors are cyan in input too).
 function showValue(v: Value): string {
   switch (v.kind) {
     case "int": case "float": return paint(A.yellow, String(v.v));
@@ -2413,13 +2414,13 @@ function showValue(v: Value): string {
     case "bool": return paint(A.magenta, String(v.v));
     case "unit": return paint(A.gray, "()");
     case "list":
-      return paint(A.cyan, "[") + v.v.map(showValue).join(paint(A.cyan, ", ")) +
-        paint(A.cyan, "]");
+      return paint(A.gray, "[") + v.v.map(showValue).join(paint(A.gray, ", ")) +
+        paint(A.gray, "]");
     case "lazyList": return paint(A.gray, "<lazy>");
     case "record":
-      return paint(A.cyan, "[") +
-        v.v.map(([k, x]) => `${paint(A.cyan, k)}: ${showValue(x)}`).join(paint(A.cyan, ", ")) +
-        paint(A.cyan, "]");
+      return paint(A.gray, "[") +
+        v.v.map(([k, x]) => `${k}${paint(A.gray, ": ")}${showValue(x)}`).join(paint(A.gray, ", ")) +
+        paint(A.gray, "]");
     case "variant":
       return paint(A.cyan, v.tag) + (v.v.length ? " " + v.v.map(showValue).join(" ") : "");
     default: return paint(A.gray, valueToString(v));
