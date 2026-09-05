@@ -930,10 +930,12 @@ class Parser {
     return `$p${this.freshCounter++}`;
   }
 
-  // Destructuring binding:  pattern = value   (e.g.  [name, hello] = [...])
-  // Only unambiguous pattern starts - `[` or `(` + Uppercase constructor -
-  // are tried, so plain statements like `[1, 2, 3] $ head` or `name = 5`
-  // never reach the pattern path.
+  // Destructuring binding:  pattern = value
+  //   [name, hello] = [...],  (Just x) = ...,  Just v = ...
+  // Only unambiguous pattern starts are tried - `[`, `(` + Uppercase
+  // constructor, or a bare Uppercase constructor - so plain statements like
+  // `[1, 2, 3] $ head`, `name = 5`, or `Just (f x)` never reach the pattern
+  // path.
   startsPatBinding(): boolean {
     const t = this.peek();
     if (t.k === "sym" && t.v === "[") return true;
@@ -941,7 +943,7 @@ class Parser {
       const n1 = this.peek(1);
       return n1.k === "ident" && /^[A-Z]/.test(n1.v);
     }
-    return false;
+    return t.k === "ident" && /^[A-Z]/.test(t.v);
   }
 
   // Lookahead: is the statement  pattern = expr ? Restores the token index.
@@ -1210,6 +1212,12 @@ class Parser {
         // A binding definition. Supports the Haskell-style param form too:
         //   name = expr            name a b c = expr
         //   name : Type = expr
+        // An Uppercase constructor on the LHS is a destructuring BINDING
+        // (Just v = ...), not a function definition, unless it's a signature.
+        if (this.isPatBinding()) {
+          out.push(this.parsePatBinding() as TopLevel);
+          continue;
+        }
         if (this.isDef()) {
           const d = this.parseDefStatement();
           out.push({ t: "def", name: d.name, clauses: d.clauses });

@@ -214,8 +214,8 @@ pair = [name, value].[213, "hello"]
 debug pair                 # => [name: 213, value: "hello"]
 debug pair.value           # => "hello"
 
-Template = [count, label]
-made = Template.[7, "seven"]
+template = [count, label]
+made = template.[7, "seven"]
 debug made                 # => [count: 7, label: "seven"]
 debug made.label           # => "seven"
 
@@ -246,6 +246,12 @@ greeting = {
     hello ++ ", " ++ name ++ "!"
 }
 debug greeting             # => "Hello, world!"
+
+# Constructor patterns destructure like Haskell — bare (Just v = ...),
+# parenthesized ((Just v) = ...), or nested in a list ([Just v] = [...]).
+data Maybe a = Just a | Nothing
+Just v = Just 123
+debug v                    # => 123
 
 # ---------------------------------------------------------
 # 10. PIPES, BACKTICK INFIX, OPERATOR SECTIONS
