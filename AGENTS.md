@@ -76,9 +76,10 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   `{ }` can be used as a function body. A `{` at end of line REQUIRES its body
   on a following line indented exactly +4 (else parse error).
   Statements inside a block separate on `;` or same-level newlines; local
-  definitions (`x = 40`) are allowed inside blocks and are scoped to the block
-  (implemented via `{ t: "block" }` + `{ t: "stmDef" }` AST nodes — eval creates
-  a child `Env`; `stmDef` evaluates with a child env).
+  definitions (`x = 40`) and `let` bindings are allowed inside blocks and are
+  scoped to the block (implemented via `{ t: "block" }` + `{ t: "stmDef" }` /
+  `{ t: "let" }` AST nodes — eval creates a child `Env`; `stmDef`/`let` bind
+  into it).
 - **Layout is strict 4-space (whole language).** Every nested level is exactly
   +4 spaces, and only +4: the lexer rejects +2, +8, or any non-multiple of 4.
   Blank and comment-only lines are ignored for layout. Only `(` suppresses
@@ -219,8 +220,11 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 - **Variants** via `data Maybe a = Just a | Nothing`; constructors and match
   expressions. Nullary constructors are bare values; arity>0 constructors are
   curried natives tagged with the constructor name.
-- `let ... in ...` with multiple bindings and optional (ignored) type
-  annotations. `match` with guards `|`.
+- **`let`** is a LOCAL-BINDING STATEMENT inside `{ }` / `( )` blocks (there is no
+  `let ... in`). `let name = expr` binds in the current block; the LHS may be a
+  destructuring pattern, `let [a, b] = expr` (matched with `matchPattern`), with
+  an optional (ignored) `: Type` annotation. A block's value is its last
+  statement. `match` with guards `|`.
 
 ## Evaluator notes
 
@@ -238,11 +242,10 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 - `match x [ ... ]` is a self-delimiting bracket form: it consumes its own `[ ]`
   (newlines/indents/dedents inside), independent of the block/semicolon rules
   above, and needs no hard-stop flag for the enclosing application (the `]`
-  already ends everything). `let ... in` consumes its own
-  newlines/indents/dedents too (`parseLet`).
+  already ends everything).
 - Inside `{ }`, block statements are at one flat level (nested constructs like
-  `match`/`let` may deepen it); an `indent` token directly before a statement,
-  or a `,`-tuple in `( )`, are rejected with a clear error.
+  `match` may deepen it); an `indent` token directly before a statement, or a
+  `,`-tuple in `( )`, are rejected with a clear error.
 
 ## Conventions
 

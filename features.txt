@@ -229,13 +229,20 @@ smallest a b c = (a < b ? a : b) < c ? (a < b ? a : b) : c
 debug (smallest 7 2 9)     # => 2
 
 # ---------------------------------------------------------
-# 9. let ... in  (with multiple bindings; the whole construct
-#    is one self-contained, layout-sensitive expression)
+# 9. let — a LOCAL-BINDING STATEMENT inside { } blocks
+#    `let name = expr` or `let pattern = expr` (destructuring).
+#    Bindings are scoped to their block; the block's value is
+#    its LAST statement. (`let ... in` was removed.)
 # ---------------------------------------------------------
-greeting =
+greeting = {
     let name = "world"
-        hello = "Hello"
-    in hello ++ ", " ++ name ++ "!"
+    let hello = "Hello"
+    hello ++ ", " ++ name ++ "!"
+}
+greeting = {
+    let [name, hello] = ["world", "Hello"]
+    hello ++ ", " ++ name ++ "!"
+}
 debug greeting             # => "Hello, world!"
 
 # ---------------------------------------------------------
@@ -288,8 +295,14 @@ debug ("a" != "b")        # => true
 # ---------------------------------------------------------
 # 13. TYPE ANNOTATIONS — accepted and ignored at runtime
 # ---------------------------------------------------------
-debug (let x: Int = 20 in x * 2)   # => 40
-debug (let x: Int = 5 in x)        # => 5
+debug {
+    let x: Int = 20
+    x * 2
+}                                   # => 40
+debug {
+    let x: Int = 5
+    x
+}                                   # => 5
 
 # ---------------------------------------------------------
 # 14. ITERATION (for), pairs, format

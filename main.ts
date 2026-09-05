@@ -127,7 +127,7 @@ type Expr =
   | { t: "recordAccess"; rec: Expr; field: string }
   | { t: "fromList"; template: Expr; values: Expr }
   | { t: "recordTemplate"; names: string[] }
-  | { t: "let"; bindings: { name: string; value: Expr }[]; body: Expr }
+  | { t: "let"; pattern: Pattern; value: Expr }
   | { t: "pipe"; x: Expr; f: Expr }
   | { t: "block"; stmts: Expr[] }
   | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr }[] };
@@ -168,7 +168,7 @@ type Token =
   | { k: "newline" } | { k: "indent" } | { k: "dedent" } | { k: "eof" };
 
 const KEYWORDS = new Set([
-  "let", "in", "where",
+  "let", "where",
   "do", "fn", "data", "import", "type", "match", "true", "false", "rec",
 ]);
 
@@ -964,32 +964,37 @@ class Parser {
     return null;
   }
 
-  // Skip newlines, indents, AND dedents (used where layout boundaries separate
-  // the parts of a single logical construct like let...in).
+// Skip newlines, indents, AND dedents (used where layout boundaries separate
+  // the parts of a single construct, e.g. a type signature).
   skipAll() {
     while (["newline", "indent", "dedent"].includes(this.peek().k)) this.next();
   }
 
-  parseLet(): Expr {
-    this.next(); // let
-    const bindings: { name: string; value: Expr }[] = [];
-    for (;;) {
-      this.skipAll();
-      const t = this.peek();
-      if (t.k === "kw" && t.v === "in") break;
-      if (t.k !== "ident" && t.k !== "kw") break;
-      const name = (this.next() as { v: string }).v;
-      // Optional TypeScript-style annotation:  x : Int  (parsed, ignored at runtime)
-      if (this.isSym(":")) { this.next(); this.parseType(); }
-      this.expectSym("=");
-      const value = this.parseExpr();
-      bindings.push({ name, value });
-    }
-    this.skipAll();
-    if (!this.eatKw("in")) throw new Error("Parser: expected 'in'");
-    const body = this.parseExpr();
-    return { t: "let", bindings, body };
+  // Block-style `let`:  `let name = expr` is a statement that binds a local name
+// in the current scope. Example:
+//     greeting = {
+//         let name = "world"
+//         let [hello, x] = ["Hello", 1]      // may repeat `let` or not
+//         hello ++ ", " ++ name ++ "!"
+//     }
+// The binding name may be a destructuring PATTERN (a single name, or a
+// `[a, b, ...]` / `(Ctor ..)` pattern like in match), with an optional (ignored)
+// `: Type` annotation. Returns an Expr so it can be a statement inside
+// { } / ( ) blocks and at top level; evaluated by the "let" case.
+parseLet(): Expr {
+  this.next(); // let
+  if (this.startsLambdaPattern(this.peek())) {
+    const pattern = this.parseConsPattern();
+    this.expectSym("=");
+    const value = this.parseExpr();
+    return { t: "let", pattern, value };
   }
+  const name = (this.next() as { v: string }).v;
+  if (this.isSym(":")) { this.next(); this.parseType(); }
+  this.expectSym("=");
+  const value = this.parseExpr();
+  return { t: "let", pattern: { p: "var", name }, value };
+}
 
   //  match scrutinee [ pattern -> expr, ... ]
   // The alternatives are delimited by [ ] (separators: `,` or a newline), so
@@ -1419,17 +1424,20 @@ export class Interpreter {
       case "recordTemplate":
         throw new Error("Runtime: internal error — record template used as a value");
       case "let": {
-        const child = new Env(this.env);
-        const old = this.env;
-        this.env = child;
-        for (const b of e.bindings) {
-          const v = this.eval(b.value);
-          child.setLocal(b.name, v);
-        }
-        try {
-          r = this.eval(e.body);
-        } finally {
-          this.env = old;
+        // A block-style local binding: binds into the CURRENT environment, so a
+        // `let` statement inside a { } / ( ) block is scoped to that block.
+        // Plain-name binding -> store the value. Destructuring pattern -> match.
+        const v = this.eval(e.value);
+        if (e.pattern.p === "var") {
+          this.env.setLocal(e.pattern.name, v);
+          r = v;
+        } else {
+          const binds = new Map<string, Value>();
+          if (!this.matchPattern(e.pattern, this.force(v), binds)) {
+            throw new Error("Runtime: let pattern mismatch");
+          }
+          for (const [k, bv] of binds) this.env.setLocal(k, bv);
+          r = v;
         }
         break;
       }
@@ -1945,7 +1953,7 @@ async function repl(): Promise<void> {
         console.log(
           [
             `Language:`,
-            `  let x = expr in body`,
+            `  let x = expr      (statement inside { } blocks; let [a, b] = e destructures)`,
             `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
             `  cond ? a : b   (ternary)`,
             `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,
@@ -1991,7 +1999,7 @@ async function repl(): Promise<void> {
         continue;
       } catch (err) {
         const msg = (err as Error).message;
-        if (/expected 'in'|expected '->'|unexpected 'newline'|unexpected 'EOF'|unexpected 'indent'|unexpected 'dedent'|expected 'then'|expected 'else'/.test(msg)) {
+        if (/expected '->'|unexpected 'newline'|unexpected 'EOF'|unexpected 'indent'|unexpected 'dedent'|expected 'then'|expected 'else'/.test(msg)) {
           // Possibly incomplete — keep going.
           await Deno.stdout.write(new TextEncoder().encode("... "));
           continue;
