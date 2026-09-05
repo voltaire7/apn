@@ -127,6 +127,7 @@ type Expr =
   | { t: "record"; v: Array<[string, Expr]> }
   | { t: "recordAccess"; rec: Expr; field: string | Expr }
   | { t: "pluck"; rec: Expr; entries: Array<string | [string, string]> }
+  | { t: "setFields"; rec: Expr; entries: string[]; value: Expr }
   | { t: "pipe"; x: Expr; f: Expr }
   | { t: "block"; stmts: Expr[] }
   | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr }[] }
@@ -920,7 +921,9 @@ class Parser {
               if (tb.k === "sym" && tb.v === "," && t.v === "(") {
                 throw new Error("Parser: tuples are not supported; use a list [a, b, ...] instead");
               }
-              if (this.isPatBinding()) {
+              if (this.isFieldAssignStart()) {
+                stmts.push(this.parseFieldAssign());
+              } else if (this.isPatBinding()) {
                 stmts.push(this.parsePatBinding());
               } else {
                 const sb = this.peek();
@@ -1077,6 +1080,65 @@ class Parser {
   // parenthesized/constructed pattern, or a DECLARED constructor applied to
   // args) is. An undeclared Uppercase LHS like `Vector3 x y z = ...` is a
   // record-constructor function def, not a pattern.
+  // Field/pluck ASSIGNMENT statement:  name.field = expr   name.[fs] = expr
+  // Desugars to an EAGER pattern binding  name = setFields(name, ...)  so the
+  // rebinding is scoped like any def (block statements shadow the outer name).
+  isFieldAssignStart(): boolean {
+    const t0 = this.peek();
+    if (t0.k !== "ident") return false;
+    const t1 = this.peek(1);
+    if (!(t1.k === "sym" && t1.v === ".")) return false;
+    const t2 = this.peek(2);
+    if (t2.k === "ident" || t2.k === "str" || t2.k === "int" || t2.k === "float") {
+      const t3 = this.peek(3);
+      return t3.k === "sym" && t3.v === "=";
+    }
+    if (t2.k === "sym" && t2.v === "[") {
+      let j = this.i + 3;
+      while (this.toks[j] && !(this.toks[j].k === "sym" && (this.toks[j] as { v: string }).v === "]")) {
+        j++;
+      }
+      const after = this.toks[j + 1];
+      return after !== undefined && after.k === "sym" && (after as { v: string }).v === "=";
+    }
+    return false;
+  }
+
+  parseFieldAssign(): Expr {
+    const nt = this.next();
+    if (nt.k !== "ident") throw new Error("Parser: expected a name before '.'");
+    const name = nt.v;
+    this.next(); // "."
+    const entries: string[] = [];
+    if (this.isSym("[")) {
+      this.next();
+      this.skipListLeading();
+      while (!this.isSym("]")) {
+        const k = this.next();
+        entries.push(this.keyTok(k));
+        this.skipListSeparators();
+        if (this.isSym("]")) break;
+        if (this.peek().k === "eof") {
+          throw new Error("Parser: unexpected end of file inside field-assignment entries");
+        }
+      }
+      this.next(); // ]
+    } else {
+      const t = this.next();
+      entries.push(this.keyTok(t));
+    }
+    this.expectSym("=");
+    const rhs = this.parseExpr();
+    // one field takes its value directly; several fields take a LIST of
+    // values — normalize the single form into the list form
+    const value = entries.length === 1 ? { t: "list", v: [rhs] } as Expr : rhs;
+    return {
+      t: "patDef",
+      pattern: { p: "var", name },
+      value: { t: "setFields", rec: { t: "var", name }, entries, value },
+    };
+  }
+
   isPatBinding(): boolean {
     if (!this.startsPatBinding()) return false;
     const t = this.peek();
@@ -1341,6 +1403,11 @@ variants.push({ tag: vname, arity });
           this.next(); // name
           this.next(); // ::
           this.parseFullType();
+          continue;
+        }
+        // Field/pluck assignment:  vec.x = 10   vec.[x, y] = ...
+        if (this.isFieldAssignStart()) {
+          out.push(this.parseFieldAssign() as TopLevel);
           continue;
         }
         // A binding definition. Supports the Haskell-style param form too:
@@ -1659,6 +1726,39 @@ export class Interpreter {
           }
           r = { kind: "record", v: out };
         }
+        break;
+      }
+      case "setFields": {
+        // eager: read the OLD record and the RHS fully BEFORE building the
+        // new one, so  vec.[x, y] = vec.[y, x]  swaps correctly
+        let rec = this.eval(e.rec);
+        if (rec.kind === "thunk") rec = this.unpackThunk(rec);
+        if (rec.kind === "lazyList") rec = this.force(rec);
+        let base: Array<[string, Value]> | null = null;
+        if (rec.kind === "record") base = rec.v;
+        else if (rec.kind === "list" && rec.v.length === 0) base = []; // [] seeds a record
+        if (base === null) {
+          throw new APNError("runtime", `cannot set a field on a ${rec.kind}`, {
+            hint: "only records accept fields (an empty list promotes to a record)",
+          });
+        }
+        const rhs = this.force(this.eval(e.value));
+        if (rhs.kind !== "list") {
+          throw new APNError("runtime", "field assignment needs a list of values on the right");
+        }
+        if (rhs.v.length !== e.entries.length) {
+          throw new APNError(
+            "runtime",
+            `${e.entries.length} field${e.entries.length === 1 ? "" : "s"} need ${e.entries.length} value${e.entries.length === 1 ? "" : "s"} (got ${rhs.v.length})`,
+          );
+        }
+        const out = base.map(([k, v]) => [k, v] as [string, Value]);
+        for (let i = 0; i < e.entries.length; i++) {
+          const idx = out.findIndex(([k]) => k === e.entries[i]);
+          if (idx === -1) out.push([e.entries[i], rhs.v[i]]);
+          else out[idx] = [e.entries[i], rhs.v[i]];
+        }
+        r = { kind: "record", v: out };
         break;
       }
       case "pipe": r = this.apply(this.eval(e.f), this.eval(e.x)); break;
@@ -2424,6 +2524,8 @@ function helpText(): string {
     `  nums 0 / nums (-1) / nums [0, 2]   (apply a list = index)`,
     `  vec [1,2,3] / vec [z: 3, x: 1]   (apply a record = clone)`,
     `  rec.field / rec."key" / rec.(dyn) / rec.[x, y]  (quoted access + pluck)`,
+    `  vec.x = 10 / vec.[x, y] = [1, 2]  (record update: rebinds a modified`,
+    `              copy, scoped like any def — blocks shadow; [] seeds a record)`,
     `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
     `  cond ? a : b   (ternary)`,
     `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,

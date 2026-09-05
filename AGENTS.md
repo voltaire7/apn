@@ -134,6 +134,16 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   keeps the fields under NEW keys (a smaller record). Mixing bare entries and
   `key: name` pairs in one pluck is a parse error. The same `[key: name]`
   shape is also a DESTRUCTURING PATTERN (see Bindings).
+- **Record update (field/pluck assignment)**: `vec.x = 10` and
+  `vec.[x, y] = [1, 2]` rebind the NAME to a modified COPY — records are
+  never mutated in place. The parser desugars the statement to an EAGER
+  pattern binding `vec = setFields(vec, entries, rhs)` (`{ t: "setFields" }`:
+  reads the old record and the RHS fully first, so
+  `vec.[x, y] = vec.[y, x]` swaps). Existing fields keep their position,
+  new fields append. Because it is a binding, it is SCOPED like any def —
+  inside a `{ }` block it shadows the outer name (the outer record is
+  unchanged). An empty list `[]` promotes to a record on first assignment.
+  Errors: non-record targets and value-count mismatches.
 - **Ternary, not if/then/else**: `cond ? a : b` (right-associative). Keywords
   `if`, `then`, `else` are removed.
 - **Functions**: two styles, partial application, recursion. `fn` is removed.

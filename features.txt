@@ -252,6 +252,38 @@ debug (vector3.[z, x, y])           # => [0, 0, 0]     reorder
 debug (vector3.[x: first, y: second])   # => [first: 0, second: 0]  renamed
 
 # ---------------------------------------------------------
+# 7b. RECORD UPDATE —  vec.x = 10  rebinds vec to a MODIFIED COPY
+#     (records are never mutated in place). The rebinding is scoped
+#     like any def, so assignments inside a { } block SHADOW the
+#     outer name. Pluck assignment sets several fields from a list —
+#     the right side is evaluated FIRST, so the classic swap works.
+# ---------------------------------------------------------
+vec = [x: 1, y: 2, z: 3]
+vec.x = 10
+debug vec                        # => [x: 10, y: 2, z: 3]
+vec.w = 99
+debug vec                        # => [x: 10, y: 2, z: 3, w: 99]   new field
+
+vec.[x, y] = vec.[y, x]
+debug vec                        # => [x: 2, y: 10, z: 3, w: 99]  swap!
+vec.[x, y] = [7, 8]
+debug vec                        # => [x: 7, y: 8, z: 3, w: 99]
+
+# block scope: the update shadows obj only INSIDE the { }  (a bare block
+# statement runs eagerly — a 0-arg DEF like  w = { ... }  would stay LAZY)
+obj = [field: 1]
+{
+    obj.field = 10
+    debug obj                   # => [field: 10]
+}
+debug obj                        # => [field: 1]
+
+# an empty list seeds a record on first assignment
+fresh = []
+fresh.field = 1
+debug fresh                      # => [field: 1]
+
+# ---------------------------------------------------------
 # 8. TERNARY — cond ? a : b  (replaces if/then/else)
 # ---------------------------------------------------------
 max a b = a > b ? a : b
