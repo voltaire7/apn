@@ -49,8 +49,13 @@ fib n =
 print (fib 10)         # => 55
 
 # ---------------------------------------------------------
-# 4. PATTERN MATCHING (case)
+# 4. PATTERN MATCHING (case) & PATTERN DEFINITIONS
 #    Patterns: literals, wildcard _, cons x:rest, lists, variants, guards.
+#    A `[x, y]` pattern matches BOTH a list (positionally) and a record
+#    (by field name). A def can also be given as multiple clauses (equations)
+#    like Haskell, dispatched in order on its parameters:
+#         f pat1 = body1
+#         f pat2 = body2
 # ---------------------------------------------------------
 data Maybe a = Just a | Nothing
 
@@ -60,6 +65,11 @@ safeHead xs =
     x:rest -> Just x
 print (safeHead [1, 2, 3])   # => Just 1
 print (safeHead [])          # => Nothing
+
+# multiple equations (clauses), like Haskell
+len [] = 0
+len (x:rest) = 1 + len rest
+print (len [1, 2, 3])        # => 3
 
 sumList xs =
   case xs of
@@ -74,6 +84,11 @@ pairSum xs =
     _ -> 0
 print (pairSum [10, 20])   # => 30
 print (pairSum [1])        # => 0
+
+# the same `[x, y]` pattern also destructures a RECORD by field name
+sumRec [x, y] = x + y
+print (sumRec [x: 10, y: 20])  # => 30
+print (sumRec [10, 20])        # => 30
 
 # guards
 classify n =
@@ -93,7 +108,7 @@ print [213, "hello"]          # => [213, "hello"]
 print [1, 2, 3]               # => [1, 2, 3]
 print ([] ++ [1, 2] ++ [3])   # => [1, 2, 3]
 
-head [1, 2, 3] |> print        # => 1
+[1, 2, 3] $ head $ print   # => 1
 print (tail [1, 2, 3])        # => [2, 3]
 print (length "hello")        # => 5
 print (length [1, 2, 3])      # => 3
@@ -153,11 +168,25 @@ greeting =
 print greeting             # => "Hello, world!"
 
 # ---------------------------------------------------------
-# 10. PIPES — x |> f  feeds x into f
+# 10. PIPES, BACKTICK INFIX, OPERATOR SECTIONS
+#    x $ f            feeds x into f   (\value-left pipe, like F# |>)
+#    a `f` b         == f a b          (backtick infix, like Haskell)
+#    (+ 2) / (2 +)    operator sections  ->  \x -> x + 2 / \x -> 2 + x
 # ---------------------------------------------------------
 negate x = -x
-print (5 |> negate)                       # => -5
-print ([1, 2, 3] |> map (x -> x * 10))    # => [10, 20, 30]
+print (5 $ negate)                        # => -5
+print ([1, 2, 3] $ map (x -> x * 10))     # => [10, 20, 30]
+[1, 2, 3] $ map (x -> x * 10) $ print     # => [10, 20, 30]
+
+myApp xs ys = xs ++ ys
+print ([1, 2] `myApp` [3, 4])             # => [1, 2, 3, 4]
+
+print (map (+ 2) [1, 2, 3])               # => [3, 4, 5]
+print (map (2 +) [1, 2, 3])               # => [3, 4, 5]
+print (map (* 10) [1, 2, 3])              # => [10, 20, 30]
+print (filter (2 <) [3, 1, 4, 1, 5])      # => [4, 5]
+print (-2)                                # => -2  ((- 2) is NOT a section:
+                                          #     unary minus wins; use a lambda)
 
 # ---------------------------------------------------------
 # 11. HIGHER-ORDER FUNCTIONS — map / filter / foldl / foldr
@@ -167,6 +196,9 @@ print (map (x -> x * x) nums)                 # => [1, 4, 9, 16, 25]
 print (filter (x -> x > 2) nums)              # => [3, 4, 5]
 print (foldl (acc x -> acc + x) 0 nums)       # => 15
 print (foldr (x acc -> x - acc) 0 [1, 2, 3])  # => 2
+
+# pattern-lambdas: a lambda param may be a pattern (here, destructuring a pair)
+print (map ([a, b] -> a + b) [[1, 2], [3, 4]])  # => [3, 7]
 
 # ---------------------------------------------------------
 # 12. STRINGS, CHARS, FLOATS, BOOLS, CONVERSION
@@ -187,3 +219,21 @@ print ("a" != "b")        # => true
 # ---------------------------------------------------------
 print (let x: Int = 20 in x * 2)   # => 40
 print (let x: Int = 5 in x)        # => 5
+
+# ---------------------------------------------------------
+# 14. ITERATION (for), pairs, format
+#    for : fn -> seq -> unit   runs fn for its effect; result is discarded.
+#    A list iterates per element; a record per entry as [field, value].
+# ---------------------------------------------------------
+for (x -> print x) [1, 2, 3]                 # prints 1, 2, 3
+[1, 2, 3] $ for (x -> print (x * 10))        # prints 10, 20, 30
+
+# records iterate as [field, value] pairs — destructure with a pattern-lambda
+for ([f, v] -> print (format "%: %" [f, v])) [name: "Alice", age: 30]
+                                             # prints "name: Alice", "age: 30"
+
+pairs [a: 1, b: 2] $ print                   # => [["a", 1], ["b", 2]]
+
+print (format "% / %" [1, 2])                # => "1 / 2"
+print (format "last: %" [9])                 # => "last: 9"
+print (format "100%%" [])                    # => "100%"  (%% is a literal %)

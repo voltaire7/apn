@@ -11,6 +11,9 @@
 
 type Type = string; // lightweight: we represent types as printable strings
 
+// One equation of a Haskell-style function definition:  f p1 p2 ... = body
+interface DefClause { params: Pattern[]; body: Expr; }
+
 // Runtime values (dynamically typed, like JS)
 type Value =
   | { kind: "int"; v: number }
@@ -24,12 +27,19 @@ type Value =
   | { kind: "record"; v: Array<[string, Value]> }
   | { kind: "variant"; tag: string; v: Value[] }
   | { kind: "closure"; params: string[]; body: Expr; env: Env }
-  | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string };
+  | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string }
+  | { kind: "clauseFn"; clauses: DefClause[]; arity: number; env: Env; applied: Value[] }
+  | { kind: "nomatch" };
 
 function mkInt(v: number): Value { return { kind: "int", v }; }
 function mkBool(v: boolean): Value { return { kind: "bool", v }; }
 function mkStr(v: string): Value { return { kind: "string", v }; }
 function mkList(v: Value[]): Value { return { kind: "list", v }; }
+
+// printf-style rendering for `format`: strings appear WITHOUT quotes.
+function rawString(v: Value): string {
+  return v.kind === "string" ? v.v : valueToString(v);
+}
 
 function valueToString(v: Value): string {
   switch (v.kind) {
@@ -49,6 +59,8 @@ function valueToString(v: Value): string {
     }
     case "closure": return "<function>";
     case "native": return `<native:${v.name}>`;
+    case "clauseFn": return "<function>";
+    case "nomatch": return "<nomatch>";
   }
 }
 
@@ -134,7 +146,7 @@ type Pattern =
 
 interface DataDef { name: string; variants: { tag: string; arity: number }[]; }
 
-type TopLevel = { t: "def"; name: string; value: Expr } | { t: "expr"; value: Expr }
+type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "expr"; value: Expr }
   | { t: "data"; def: DataDef };
 
 // ---------------- Lexer ----------------
@@ -147,6 +159,7 @@ type Token =
   | { k: "char"; v: string }
   | { k: "ident"; v: string }
   | { k: "kw"; v: string }                       // keywords
+  | { k: "opw"; v: string }                      // backtick-infix name: `f`
   | { k: "sym"; v: string }                      // symbols incl. multi-char
   | { k: "newline" } | { k: "indent" } | { k: "dedent" } | { k: "eof" };
 
@@ -156,7 +169,7 @@ const KEYWORDS = new Set([
 ]);
 
 const SYMBOLS = [
-  ">>>", "==>", "|>", "<<", "<<=", ">>=", "==", "!=", "<=", ">=", "=>", "->", "<-",
+  ">>>", "==>", "$", "<<", "<<=", ">>=", "==", "!=", "<=", ">=", "=>", "->", "<-",
   "&&", "||", "++", "::", ":=",
 ];
 
@@ -314,6 +327,18 @@ export function lex(src: string): Token[] {
       continue;
     }
 
+    if (c === '`') {
+      pos++;
+      let id = "";
+      while (pos < src.length && /[A-Za-z0-9_']/.test(src[pos])) id += src[pos++];
+      if (id === "" || src[pos] !== '`') {
+        throw new Error(`Lexer: malformed backtick operator at ${pos}`);
+      }
+      pos++; // closing backtick
+      toks.push({ k: "opw", v: id });
+      continue;
+    }
+
     throw new Error(`Lexer: unexpected character '${c}' at ${pos}`);
   }
 
@@ -352,6 +377,7 @@ class Parser {
       case "ident": case "kw": case "str": case "char": return `'${t.v}'`;
       case "int": return String(t.v);
       case "float": return String(t.v);
+      case "opw": return `\`${t.v}\``;
       case "sym": return `'${t.v}'`;
       case "newline": return "newline";
       case "indent": return "indent";
@@ -431,7 +457,7 @@ class Parser {
     if (t.k === "sym" && t.v === "(") {
       this.next();
       if (this.isSym(")")) { this.next(); return { p: "list", v: [] }; }
-      const p = this.parsePattern();
+      const p = this.parseConsPattern();
       if (this.eatSym(",")) {
         throw new Error("Parser: tuple patterns are not supported; use a list pattern [a, b, ...] instead");
       }
@@ -492,7 +518,7 @@ class Parser {
 
   parsePipe(): Expr {
     let e = this.parseTernary();
-    while (this.isSym("|>")) {
+    while (this.isSym("$")) {
       this.next();
       const f = this.parseTernary();
       e = { t: "pipe", x: e, f };
@@ -500,9 +526,21 @@ class Parser {
     return e;
   }
 
+  // Backtick infix:  a `f` b  =>  f a b   (Haskell-style operator via name).
+  // Left-associative. Binds tighter than ternary, looser than comparison.
+  parseBacktick(): Expr {
+    let e = this.parseCompare();
+    while (this.peek().k === "opw") {
+      const op = (this.next() as { v: string }).v;
+      const rhs = this.parseCompare();
+      e = { t: "app", f: { t: "app", f: { t: "var", name: op }, a: e }, a: rhs };
+    }
+    return e;
+  }
+
   // Ternary:  cond ? a : b    (right-associative, lower precedence than comparison)
   parseTernary(): Expr {
-    let e = this.parseCompare();
+    let e = this.parseBacktick();
     if (this.isSym("?")) {
       this.next();
       this.skipLayout();
@@ -654,6 +692,16 @@ class Parser {
       }
       // Otherwise fall through to normal ident handling.
     }
+    // A pattern-lambda:  [a, b] -> ...,  (Just x) -> ...,  0 -> ...,  _ -> ...
+    // Try parsing it; if there's no arrow it falls back to the normal expression.
+    if (this.startsLambdaPattern(t)) {
+      const save = this.i;
+      try {
+        return this.parseLambda();
+      } catch {
+        this.i = save;
+      }
+    }
     switch (t.k) {
       case "int": this.next(); return { t: "int", v: t.v };
       case "float": this.next(); return { t: "float", v: t.v };
@@ -670,6 +718,8 @@ class Parser {
           case "(": {
             this.next();
             if (this.isSym(")")) { this.next(); return { t: "unit" }; }
+            const sec = this.tryOperatorSection();
+            if (sec) return sec;
             const e = this.parseExpr();
             if (this.eatSym(",")) {
               throw new Error("Parser: tuples are not supported; use a list [a, b, ...] instead");
@@ -733,26 +783,104 @@ class Parser {
 
   parseLambda(): Expr {
     const params: string[] = [];
-    // Params may be: `a b ->` (bare) or `(a: Int) (b: Bool) ->` (parenthesized+annotated)
-    while (this.peek().k === "ident" || (this.isSym("(") && this.peek(1).k === "ident")) {
-      if (this.isSym("(")) {
-        this.next(); // (
-        while (this.peek().k === "ident") {
+    let pattern: Pattern | null = null;
+    // A lambda may take a leading PATTERN param (destructuring forms only):
+    //   [a, b] -> ...,   (Just x) -> ...
+    // A `(` + lowercase/colon form stays the annotation syntax `(x: Int) ->`.
+    const t0 = this.peek();
+    if (this.startsLambdaPattern(t0)) {
+      pattern = this.parseConsPattern();
+    } else {
+      // Params may be: `a b ->` (bare) or `(a: Int) (b: Bool) ->` (parenthesized+annotated)
+      while (this.peek().k === "ident" || (this.isSym("(") && this.peek(1).k === "ident")) {
+        if (this.isSym("(")) {
+          this.next(); // (
+          while (this.peek().k === "ident") {
+            params.push((this.next() as { v: string }).v);
+            if (this.isSym(":")) { this.next(); this.parseType(); }
+            if (this.eatSym(",")) continue;
+            break;
+          }
+          this.expectSym(")");
+        } else {
           params.push((this.next() as { v: string }).v);
+          // Optional param type annotation:  x: Int -> ...
           if (this.isSym(":")) { this.next(); this.parseType(); }
-          if (this.eatSym(",")) continue;
-          break;
         }
-        this.expectSym(")");
-      } else {
-        params.push((this.next() as { v: string }).v);
-        // Optional param type annotation:  x: Int -> ...
-        if (this.isSym(":")) { this.next(); this.parseType(); }
       }
     }
     this.expectSym("->");
     const body = this.parseExpr();
+    // A pattern param desugars to:  \$p -> case $p of { pattern -> \rest -> body }
+    if (pattern) {
+      const fresh = this.freshName();
+      const nested: Expr = params.length
+        ? { t: "lambda", params, body }
+        : body;
+      return {
+        t: "lambda",
+        params: [fresh],
+        body: { t: "case", scrut: { t: "var", name: fresh }, alts: [{ pattern, body: nested }] },
+      };
+    }
     return { t: "lambda", params, body };
+  }
+
+  // A token that unambiguously begins a lambda parameter pattern. Only the
+  // destructuring forms are allowed, so that literal/`_` starts can't be
+  // mistaken for expressions (e.g. the guard  x | x < 0 -> ...  must not read
+  // `0 -> ...` as a lambda):
+  //   [a, b] -> ...,   (Just x) -> ...
+  startsLambdaPattern(t: Token): boolean {
+    if (t.k === "sym" && t.v === "[") return true;
+    if (t.k === "sym" && t.v === "(") {
+      const n1 = this.toks[this.i + 1];
+      return n1.k === "ident" && /^[A-Z]/.test(n1.v);
+    }
+    return false;
+  }
+
+  freshCounter = 0;
+  freshName(): string {
+    return `$p${this.freshCounter++}`;
+  }
+
+  // Operator sections:  (+ 2) -> \x -> x + 2    (2 +) -> \x -> 2 + x
+  // (- 2) is NOT a section (no whitespace info in the lexer) — it stays unary
+  // negation; use a lambda for that. `(+)` alone is unsupported.
+  static sectionOps = ["+", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=", "++"];
+
+  tryOperatorSection(): Expr | null {
+    const save = this.i;
+    const t = this.peek();
+    // op-front:  (+ 2)   (op followed by an operand, then ')')
+    if (t.k === "sym" && t.v !== "-" && Parser.sectionOps.includes((t as { v: string }).v)) {
+      try {
+        this.next(); // op
+        const operand = this.parseUnary();
+        this.expectSym(")");
+        const op = t.v as BinOp;
+        return { t: "lambda", params: ["$S"], body: { t: "binop", op, l: { t: "var", name: "$S" }, r: operand } };
+      } catch {
+        this.i = save;
+      }
+    }
+    // operand-front:  (2 +)   (operand, then op, then ')')
+    try {
+      const operand = this.parseUnary();
+      const op = this.peek();
+      if (op.k === "sym" && (op as { v: string }).v !== "-" &&
+          Parser.sectionOps.includes((op as { v: string }).v) &&
+          this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === ")") {
+        this.next(); // op
+        this.next(); // )
+        return { t: "lambda", params: ["$S"], body: { t: "binop", op: (op as { v: string }).v as BinOp, l: operand, r: { t: "var", name: "$S" } } };
+      }
+    } catch {
+      // fall through to the normal parenthesized-expression parse
+    }
+    this.i = save;
+    return null;
   }
 
   // Skip newlines, indents, AND dedents (used where layout boundaries separate
@@ -818,25 +946,41 @@ class Parser {
 
   // Lookahead: is the statement starting at the current identifier a binding
   // definition? Recognizes  name = expr,  name : Type = expr,  and the
-  // Haskell-style  name a b c = expr  (params may carry optional `: Type`).
+  // Haskell-style  name p1 p2 p3 = expr  where each pi is a PATTERN
+  // (in `[x, y]`, `(x:rest)`, `[]`, `(Just x)`, a literal, a bare var, ...),
+  // optionally followed by a `: Type` annotation.
   isDef(): boolean {
-    let j = this.i + 1; // after the definition name
-    // collect params (identifiers), allowing an optional `: Type` after each
-    for (;;) {
-      if (this.toks[j].k === "ident") {
-        j++;
-        if (this.toks[j].k === "sym" && (this.toks[j] as { v: string }).v === ":") {
-          j = this.skipType(j + 1);
-        }
-        continue;
+    const save = this.i;
+    try {
+      const t = this.next(); // definition name
+      if (t.k !== "ident") return false;
+      // collect param patterns; a param must be a self-delimited pattern
+      for (;;) {
+        if (!this.startsParam(this.peek())) break;
+        this.parseConsPattern();
+        // optional param type annotation:  p : Type
+        if (this.isSym(":")) { this.next(); this.parseType(); }
       }
-      break;
+      if (this.isSym("=")) return true;
+      if (this.isSym(":")) {
+        this.next();
+        this.parseFullType();
+        return this.isSym("=");
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      this.i = save;
     }
-    if (this.toks[j].k === "sym" && (this.toks[j] as { v: string }).v === "=") return true;
-    if (this.toks[j].k === "sym" && (this.toks[j] as { v: string }).v === ":") {
-      j = this.skipType(j + 1);
-      return this.toks[j].k === "sym" && (this.toks[j] as { v: string }).v === "=";
-    }
+  }
+
+  // A token that can begin a definition parameter pattern.
+  startsParam(t: Token): boolean {
+    if (t.k === "ident") return t.v !== "_" ? true : true;
+    if (t.k === "int" || t.k === "bool" || t.k === "str") return true;
+    if (t.k === "sym" && (t.v === "(" || t.v === "[")) return true;
+    if (t.k === "sym" && t.v === "_") return true;
     return false;
   }
 
@@ -898,21 +1042,18 @@ class Parser {
         //   name : Type = expr
         if (this.isDef()) {
           const name = (this.next() as { v: string }).v;
-          const params: string[] = [];
-          // Haskell-style params:  name p1 p2 p3 = expr
-          while (this.peek().k === "ident") {
-            params.push((this.next() as { v: string }).v);
+          const params: Pattern[] = [];
+          // Haskell-style params are PATTERNS:  f [x, y] = ..., f (x:rest) = ...
+          while (this.startsParam(this.peek())) {
+            params.push(this.parseConsPattern());
+            // optional param type annotation:  p : Type
             if (this.isSym(":")) { this.next(); this.parseType(); }
           }
           // optional single return-type annotation:  name : Type = expr
           if (this.isSym(":")) { this.next(); this.parseType(); }
           this.next(); // =
-          let value = this.parseExpr();
-          // wrap params into nested lambdas: a b c = body  =>  a -> b -> c -> body
-          for (let i = params.length - 1; i >= 0; i--) {
-            value = { t: "lambda", params: [params[i]], body: value };
-          }
-          out.push({ t: "def", name, value });
+          const body = this.parseExpr();
+          out.push({ t: "def", name, clauses: [{ params, body }] });
         } else {
           const e = this.parseExpr();
           out.push({ t: "expr", value: e });
@@ -926,6 +1067,13 @@ class Parser {
         continue;
       }
 
+      if (t.k === "int" || t.k === "float" || t.k === "bool" ||
+          t.k === "str" || t.k === "char" || t.k === "opw") {
+        const e = this.parseExpr();
+        out.push({ t: "expr", value: e });
+        continue;
+      }
+
       throw new Error(`Parser: unexpected '${this.tokenStr(t)}'`);
     }
     return out;
@@ -934,7 +1082,31 @@ class Parser {
 
 export function parse(src: string): TopLevel[] {
   const toks = lex(src);
-  return new Parser(toks).parseTopLevel();
+  const out = new Parser(toks).parseTopLevel();
+  return groupClauses(out);
+}
+
+// Merge consecutive Haskell-style clauses of the same function:
+//   len [] = 0
+//   len (x:rest) = 1 + len rest
+// becomes one def with two clauses. Only same-name defs that carry parameters
+// (params.length >= 1) with equal arity are grouped; value defs stay separate
+// (consecutive re-bindings still behave as last-wins aliases, as before).
+function groupClauses(program: TopLevel[]): TopLevel[] {
+  const result: TopLevel[] = [];
+  for (const tl of program) {
+    if (tl.t === "def" && tl.clauses[0] && tl.clauses[0].params.length >= 1) {
+      const last = result[result.length - 1];
+      if (last && last.t === "def" &&
+          last.name === tl.name &&
+          last.clauses[0].params.length === tl.clauses[0].params.length) {
+        last.clauses.push(...tl.clauses);
+        continue;
+      }
+    }
+    result.push(tl);
+  }
+  return result;
 }
 
 // ---------------- Evaluator ----------------
@@ -956,6 +1128,9 @@ export class Interpreter {
     this.env.setLocal("foldl", { kind: "native", name: "foldl", arity: 3, applied: [] });
     this.env.setLocal("foldr", { kind: "native", name: "foldr", arity: 3, applied: [] });
     this.env.setLocal("intToString", { kind: "native", name: "intToString", arity: 1, applied: [] });
+    this.env.setLocal("for", { kind: "native", name: "for", arity: 2, applied: [] });
+    this.env.setLocal("pairs", { kind: "native", name: "pairs", arity: 1, applied: [] });
+    this.env.setLocal("format", { kind: "native", name: "format", arity: 2, applied: [] });
   }
 
   run(program: TopLevel[]): Value {
@@ -975,7 +1150,7 @@ export class Interpreter {
         continue;
       }
       if (tl.t === "def") {
-        last = this.evalDef(tl.name, tl.value);
+        last = this.evalDef(tl.name, tl.clauses);
         continue;
       }
       last = this.eval(tl.value);
@@ -983,9 +1158,22 @@ export class Interpreter {
     return last;
   }
 
-  evalDef(name: string, value: Expr): Value {
-    // Closure definitions capture a shared env that contains the binding,
-    // enabling recursion.
+  evalDef(name: string, clauses: DefClause[]): Value {
+    // A def with parameters is a pattern-dispatch function.
+    if (clauses[0].params.length >= 1) {
+      const arity = clauses[0].params.length;
+      // Capture a shared env containing the binding itself, enabling recursion.
+      const child = new Env(this.env);
+      const fn: Value = {
+        kind: "clauseFn", clauses, arity, env: child, applied: [],
+      };
+      child.setLocal(name, fn);
+      this.env.setLocal(name, fn);
+      return fn;
+    }
+    // Value-style def: single clause, no params.
+    const value = clauses[0].body;
+    // Lambda bodies become closures (with recursion via shared env), like before.
     if (value.t === "lambda") {
       const child = new Env(this.env);
       const clo: Value = { kind: "closure", params: value.params, body: value.body, env: child };
@@ -993,8 +1181,7 @@ export class Interpreter {
       this.env.setLocal(name, clo);
       return clo;
     }
-    // If it's not a lambda (e.g. it's a var to another def, an int, etc.)
-    // treat it as an alias.
+    // Otherwise it's an alias to an evaluated value.
     const v = this.eval(value);
     this.env.setLocal(name, v);
     return v;
@@ -1161,6 +1348,7 @@ export class Interpreter {
         const bv = b as any;
         return a.tag === bv.tag && this.equals({ kind: "list", v: a.v }, { kind: "list", v: bv.v });
       }
+      case "nomatch": return true;
       default: return false;
     }
   }
@@ -1194,6 +1382,27 @@ export class Interpreter {
         const args = f.applied;
         f.applied = [];
         return this.callNative(f.name, args, f.tag);
+      }
+      case "clauseFn": {
+        f.applied.push(arg);
+        if (f.applied.length < f.arity) return f;
+        const args = f.applied.map((a) => this.force(a));
+        f.applied = [];
+        // Try each clause in order; a clause matches when ALL its params match.
+        for (const clause of f.clauses) {
+          const binds = new Map<string, Value>();
+          let ok = true;
+          for (let i = 0; i < clause.params.length; i++) {
+            if (!this.matchPattern(clause.params[i], args[i], binds)) { ok = false; break; }
+          }
+          if (!ok) continue;
+          const child = new Env(f.env);
+          for (const [k, v] of binds) child.setLocal(k, v);
+          const old = this.env;
+          this.env = child;
+          try { return this.eval(clause.body); } finally { this.env = old; }
+        }
+        throw new Error("Runtime: non-exhaustive function definition");
       }
       default:
         throw new Error("Runtime: value is not a function");
@@ -1277,6 +1486,39 @@ export class Interpreter {
       case "intToString":
         if (a.kind !== "int") throw new Error("Runtime: intToString expects int");
         return mkStr(String(a.v));
+      case "for": {
+        // for : fn -> seq -> unit   (like map, but discards results, runs effects)
+        // seq is a list (yields each element) or a record (yields each entry
+        // as a [field, value] list).
+        const f = args[0];
+        const seq = args[1];
+        if (seq.kind === "list") {
+          for (const x of seq.v) this.apply(f, x);
+        } else if (seq.kind === "record") {
+          for (const [k, v] of seq.v) {
+            this.apply(f, mkList([mkStr(k), v]));
+          }
+        } else throw new Error("Runtime: for expects a list or a record");
+        return { kind: "unit" };
+      }
+      case "pairs":
+        if (a.kind !== "record") throw new Error("Runtime: pairs expects a record");
+        return mkList(a.v.map(([k, v]) => mkList([mkStr(k), v])));
+      case "format": {
+        const fmt = args[0];
+        if (fmt.kind !== "string") throw new Error("Runtime: format expects a string");
+        const vals = args[1].kind === "list" ? args[1].v : [args[1]];
+        let out = "";
+        let vi = 0;
+        for (let i = 0; i < fmt.v.length; i++) {
+          if (fmt.v[i] === "%") {
+            if (fmt.v[i + 1] === "%") { out += "%"; i++; continue; }
+            out += rawString(vals[vi] ?? { kind: "unit" });
+            vi++;
+          } else out += fmt.v[i];
+        }
+        return mkStr(out);
+      }
       case "__constr":
         return { kind: "variant", tag: tag!, v: args };
     }
@@ -1296,6 +1538,18 @@ export class Interpreter {
       case "bool": return v.kind === "bool" && v.v === p.v;
       case "string": return v.kind === "string" && v.v === p.v;
       case "list": {
+        if (v.kind === "record") {
+          // A var-only list pattern destructures a record by field name:
+          //   [x, y]  matches  [x: 1, y: 2]  binding x=1, y=2
+          const fields = new Map<string, Value>();
+          for (const [k, val] of v.v) fields.set(k, val);
+          for (const el of p.v) {
+            if (el.p !== "var") return false;
+            if (!fields.has(el.name)) return false;
+            binds.set(el.name, fields.get(el.name)!);
+          }
+          return true;
+        }
         if (v.kind !== "list" || v.v.length !== p.v.length) return false;
         for (let i = 0; i < p.v.length; i++) {
           if (!this.matchPattern(p.v[i], v.v[i], binds)) return false;
@@ -1415,14 +1669,19 @@ async function repl(): Promise<void> {
           [
             `Language:`,
             `  let x = expr in body`,
-            `  x -> expr`,
+            `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
             `  cond ? a : b   (ternary)`,
             `  case x of { pat -> expr; ... }`,
             `  data Maybe a = Just a | Nothing`,
             `  [1,2,3]  [name: "x", age: 2]`,
-            `  recursion, higher-order fns, records, variants, pipes`,
+            `  x $ f             pipe: feeds x into f`,
+            `  a \`f\` b            infix call == f a b`,
+            `  (+ 2)  (2 +)      operator sections   ((-2) stays unary minus)`,
+            `  for (x -> print x) [1,2,3]   for fn seq`,
+            `  recursion, higher-order fns, records, variants`,
             ``,
             `Builtins: print head tail length null map filter foldl foldr`,
+            `          for pairs format intToString`,
             ``,
             `Type annotations (TS-style) are accepted & ignored at runtime:`,
             `  let x: Int = 5`,

@@ -45,7 +45,8 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 ## Architecture (all in main.ts, top to bottom)
 
 - `Type` / `Value` — runtime values are tagged objects: int, float, bool,
-  string, char, unit, list, lazyList, record, variant, closure, native.
+  string, char, unit, list, lazyList, record, variant, closure, clauseFn,
+  native (internal `nomatch` sentinel is used by multi-clause fallthrough).
 - `Env` — lexical scope chain (mutable parent-linked maps). Free variables
   resolve at definition site (static/lexical scoping), but bindings are shared
   by reference (JS-like, not immutable).
@@ -77,13 +78,54 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   - Haskell-style: `func x = x + x`, `add a b = a + b` — params go on the left
     of `=` and desugar to nested lambdas. Detected via lookahead (`isDef`),
     which scans params + optional `: Type` then requires `=`. Safe alongside
-    top-level application expressions (`head xs |> print`) because those lack
-    `=`.
+    top-level application expressions (`[1, 2, 3] $ head $ print`) because
+    those lack `=`.
+- **Pattern definitions**: params may be full patterns, and a function may be
+  given as multiple equations (clauses) like Haskell, dispatched in order:
+      len [] = 0
+      len (x:rest) = 1 + len rest
+  Consecutive same-name defs with params of equal arity are merged by
+  `groupClauses` into one `clauseFn` value. See `evalDef` / `apply`:
+  `clauseFn` accumulates applied args (supporting partial application), forces
+  them, then tries each clause's patterns via `matchPattern`; no clause matches
+  → "Runtime: non-exhaustive function definition". Guards on def clauses are
+  NOT supported (use `case ... of ... | ...` inside the body for guards).
+- **`[x, y]` pattern matches both lists and records**: in `matchPattern`, a
+  var-only list pattern against a record binds each variable to the field of
+  the same name (like record destructuring); against a list it binds
+  positionally (existing behavior).
+- **Pattern-lambdas**: a lambda's FIRST param may be a destructuring pattern
+  (and only that — no literal `_`/`0 ->` lambdas, to keep guards like
+  `x | x < 0 -> ...` unambiguous):
+      for ([f, v] -> print (format "%: %" [f, v])) person   # record → [field, value]
+      map ([a, b] -> a + b) [[1, 2], [3, 4]]                # list → positional
+      x -> ...                                               # plain name params as before
+  `startsLambdaPattern` limits the guess to `[ ... ]` and `(Ctor ...)`; the
+  speculative parse falls back to a normal expression when no `->` follows.
+- **Pipes & operators**:
+  - `x $ f` feeds `x` into `f` (value-left pipe, replaces the old `|>`). No
+    composition operator; `.` is records-only.
+  - Backtick infix: ``a `f` b`` == `f a b` (between ternary and compare, left).
+  - Operator sections: `(+ 2)` = `\x -> x + 2`, `(2 +)` = `\x -> 2 + x` for
+    `+ - * / % == != < > <= >= ++`. `(-2)` stays unary negation (no whitespace
+    info in the lexer); `(+)` alone is unsupported — use a lambda.
+- **Iteration**: `for` is a native, fn-first like `map`:
+  `for f seq` — `for : fn -> seq -> unit`, runs `f` for its effect and returns
+  unit. A list iterates per element; a record per entry as `[field, value]`.
+  Related natives: `pairs rec` (record → list of `[field, value]`), and
+  `format "% %" [a, b]` (`%` = printf-style arg, strings unquoted; `%%` = `%`).
 - **Variants** via `data Maybe a = Just a | Nothing`; constructors and case
   matching. Nullary constructors are bare values; arity>0 constructors are
   curried natives tagged with the constructor name.
 - `let ... in ...` with multiple bindings and optional (ignored) type
-  annotations. `case` with guards `|`. Pipes `x |> f`.
+  annotations. `case` with guards `|`.
+
+## Evaluator notes
+
+- In file mode, expressions evaluate for their effects but do NOT auto-print
+  (assignments like `r = [...]` are silent, and a bare `pairs rec` statement
+  prints nothing) — every demo line in `features.txt` uses an explicit `print`.
+  In the REPL, unassigned expression results are echoed.
 
 ## Parser quirks (known, pre-existing)
 
