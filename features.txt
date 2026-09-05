@@ -485,4 +485,17 @@ scoped =
 debug (scoped)              # => 36
 
 debug "still running before the final halt"
+
+# Laziness gotcha: a 0-arg def's { } body does NOT run at definition — it
+# runs the first time the name is FORCED. So nothing prints above until here:
+lazyNote = {
+    debug "lazyNote WAS forced"
+    6 * 7
+}
+debug (lazyNote * 2)      # forcing it prints "lazyNote WAS forced" (side effect)
+                          # then the block's value:          # => 84
+                          # A TRAILING top-level def is ALSO forced by file
+                          # mode's final value pass (its block runs at the
+                          # very end of the file); mid-file defs stay latent
+                          # until used, exactly like lazyNote did above.
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)

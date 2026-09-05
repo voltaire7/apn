@@ -205,7 +205,10 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   time `x` is FORCED. `force()` is the single entry point and also recurses
   into lists/records/variants; `run()` forces each top-level expr statement's
   result, and a block forces its last statement's value — so a bare `halt`
-  at top level or as a block's last line does fire. `recordAccess` and
+  at top level or as a block's last line does fire. **File mode also forces
+  the FINAL top-level value, so a TRAILING 0-arg def's block runs at the end
+  of the file** (mid-file defs stay latent until used; `halt` after them
+  exits before any of that). `recordAccess` and
   `fromList` templates use `unpackThunk` instead (evaluate the body but keep
   the result lazy — needed so `core.halt` doesn't force the whole module).
   `force(record)` deliberately leaves thunk FIELD values unforced (a `load`
@@ -273,6 +276,15 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   this. The block and fully single-line layouts still parse; only the
   single-line form is also shown (alongside the preferred one) in the 4b
   layout section.
+- **Style — `{ }` on the right of `=`**: prefer the same-line-open form
+  (`func = {` with the body on the following lines indented exactly +4 and the
+  closing `}` at the start column) over the block form (`func =\n    { ... }`).
+  Both parse; the user's default is the same-line-open one, e.g.:
+      seqOf = {
+          debug "one"
+
+          6 * 7
+      }
 - **Commit after every task.** The user has asked that commits happen
   automatically. After each completed task (workflow green, see above), stage
   the files and commit with a concise, repo-style message:
