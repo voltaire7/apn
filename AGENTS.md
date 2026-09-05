@@ -38,7 +38,9 @@ Three files only, all project root:
 Deno required. From `sloth/`:
 - Run the showcase (use this as the smoke test after any change):
     deno run --allow-read main.ts features.txt
-- Start the REPL:               deno run --allow-read main.ts
+- Start the REPL:               deno run --allow-read --allow-write --allow-env=HOME main.ts
+  (the extra flags persist history in ~/.sloth_history; the REPL also runs
+  with just --allow-read — history then stays in-session only)
 - Type-check (always run after edits):
     deno check main.ts
 
@@ -56,6 +58,8 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 - `Expr` / `Pattern` / `TopLevel` — AST.
 - Lexer → Parser → Interpreter (`eval`, `evalBinop`, `apply`, `callNative`,
   `matchPattern`).
+- `ReplEditor` — the interactive REPL's raw-mode line editor (history,
+  completion, colors), plus the piped-stdin fallback loop.
 
 ## Core language semantics (don't break these)
 
@@ -284,6 +288,44 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 - Inside `{ }`, block statements are at one flat level (nested constructs like
   `match` may deepen it); an `indent` token directly before a statement, or a
   `,`-tuple in `( )`, are rejected with a clear error.
+
+## The REPL
+
+Two modes, picked automatically: a **TTY** stdin gets the raw-mode line editor
+(`ReplEditor`); a **piped** stdin (`... | deno run main.ts`) gets the plain
+line loop — no colors, no editor, same chunk semantics. Interactive features:
+
+- **History**: Up/Down walk submitted chunks. In a single-line buffer the
+  arrows navigate history; in a multi-line buffer (continuation or a recalled
+  multi-line entry) they move between lines instead. Persisted across
+  sessions in `~/.sloth_history` (one JSON string per line, capped at 500 on
+  load; needs `--allow-write` and `--allow-env=HOME`, else in-session only
+  with a one-time hint).
+- **Tab**: completes the word before the cursor from bound names (env walk),
+  natives (`NATIVES` — same table that registers them), `match`/`data`, and
+  `:commands`. One match completes; several extend the common prefix and a
+  second Tab lists them. With no word (or no candidates) Tab inserts
+  **4 spaces** — the indent unit; Backspace behind a full indent level
+  deletes all 4 at once. Typing `}`/`]` on an indent-only line dedents one
+  level first.
+- **Chunks, not lines**: Enter submits only when the chunk parses
+  (`chunkComplete`: parse success, or an error that is neither EOF-shaped nor
+  an unbalanced-bracket case → real error, shown in red). Incomplete input
+  continues on the next line with a `... ` prompt; Enter mid-buffer splits
+  the line. Auto-indent copies the current line's indent, +4 after `{`/`[`.
+  Trailing blank lines are trimmed before running. Keys typed past a submit
+  are queued and replayed into the next chunk (type-ahead).
+- **Paste**: bracketed paste mode is enabled (`ESC[?2004h`), so pasted
+  multi-line text is inserted verbatim, never auto-run; Enter then runs it.
+- **Colors**: input is highlighted as typed (comments dim, strings/chars
+  green, numbers yellow, `match`/`data`/bools magenta, natives blue, capital
+  idents cyan); echoed values are colored by kind (node-style); errors red.
+- **Keys**: Ctrl+C clear input (empty buffer = quit), Ctrl+D quit,
+  Ctrl+L clear screen, Ctrl+A/E home/end, Ctrl+U/K kill to line start/end,
+  arrows + Home/End/Delete.
+- While the terminal is raw, `print`/`debug` output is routed through the
+  editor so newlines are CRLF-correct (`console.log` is patched in TTY mode).
+- `:help`/`:h` and `:quit`/`:q` work in both modes (`helpText()`).
 
 ## Conventions
 

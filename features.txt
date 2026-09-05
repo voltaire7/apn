@@ -525,3 +525,11 @@ debug (lazyNote * 2)      # forcing it prints "lazyNote WAS forced" (side effect
                           # very end of the file); mid-file defs stay latent
                           # until used, exactly like lazyNote did above.
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
+
+# ---------------------------------------------------------
+# The INTERACTIVE REPL (deno run main.ts) has its own feature set —
+# history navigation (Up/Down, persisted in ~/.sloth_history), Tab
+# completion + 4-space tabs, colored input/echo, multi-line chunks
+# with auto-indent. These are interactive-only and cannot run in this
+# file-mode showcase: see :help inside the REPL, or AGENTS.md.
+# ---------------------------------------------------------
