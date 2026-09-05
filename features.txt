@@ -194,14 +194,18 @@ vals = [a, b]
 debug vals                       # => [100, 200]
 debug (map (x -> x * 2) vals)    # => [200, 400]
 
-# indexing:  arr.[i]  — negative indices count from the end; multiple
-# indices pick several elements
+# indexing by APPLICATION:  a list applied to a number is an element
+# (negative counts from the end); applied to a list of ints picks several.
+# The left side's KIND decides (list -> index, record -> clone — section 7);
+#  arr -1  would be arithmetic, so use parens:  arr (-1)
 nums = [10, 20, 30]
-debug nums.[0]                   # => 10
-debug nums.[1]                   # => 20
-debug nums.[-1]                  # => 30
-debug nums.[0, 2]                # => [10, 30]
-debug (nums.[-1] + nums.[0])     # => 40
+debug (nums 0)                    # => 10
+debug (nums 1)                    # => 20
+debug (nums (-1))                 # => 30
+debug (nums [0, 2])               # => [10, 30]
+debug ((nums (-1)) + (nums 0))    # => 40
+debug ((tail nums) 0)             # => 20   (index a computed list)
+debug ([[1, 2], [3, 4]] 1 0)      # => 3    (nested indexing, left-assoc)
 
 # ---------------------------------------------------------
 # 6. RECORDS — [name: value, ...] and field access
@@ -215,21 +219,37 @@ debug person             # => [name: "Alice", age: 30]
 nested = [inner: [z: 99]]
 debug nested.inner.z     # => 99
 
+# keys may be quoted strings or numbers; access matches, and a
+# parenthesized expression evaluates to a DYNAMIC key
+weird = ["my field": 1, 123: 2]
+debug weird."my field"           # => 1
+debug weird.123                  # => 2
+key = "my field"
+debug weird.(key)                # => 1
+debug (enumerate [10, 20, 30])   # => [0: 10, 1: 20, 2: 30]  int keys
+
 # ---------------------------------------------------------
-# 7. PROTOTYPE-BASED OBJECTS —  proto.[overrides] CLONES the object
+# 7. PROTOTYPE-BASED OBJECTS —  APPLYING a record clones it:  vec [1, 2, 3]
+#    positional (one value per field) or  vec [z: 3, x: 1]  named (override/
+#    add, any order). An int argument indexes positionally -> [field, value].
 #    The prototype is any RECORD (LOWERCASE name — capital names are
-#    constructors); .[values] replaces values positionally, .[f: v, ...]
-#    overrides by name (and may ADD new fields). A bare-name list is a LIST,
-#    never an object.
+#    constructors); a bare-name list is a LIST, never an object.
 # ---------------------------------------------------------
 vector3 = [x: 0, y: 0, z: 0]        # prototype with defaults
 debug vector3                       # => [x: 0, y: 0, z: 0]
-debug vector3.[1, 2, 3]             # => [x: 1, y: 2, z: 3]   positional clone
-debug vector3.[x: 1, y: 2, z: 3]    # => [x: 1, y: 2, z: 3]   named override
-debug vector3.[x: 1, y: 2]          # => [x: 1, y: 2, z: 0]   partial — z kept
-debug vector3.[x: 1, y: 2, z: 3, a: 0]  # => [x: 1, y: 2, z: 3, a: 0]  new field
+debug (vector3 [1, 2, 3])           # => [x: 1, y: 2, z: 3]   positional clone
+debug (vector3 [x: 1, y: 2, z: 3])  # => [x: 1, y: 2, z: 3]   named override
+debug (vector3 [z: 3, x: 1])        # => [x: 1, y: 0, z: 3]  reorder — y keeps default
+debug (vector3 [x: 1, y: 2, z: 3, a: 0])  # => [x: 1, y: 2, z: 3, a: 0]  new field
 debug vector3                       # => [x: 0, y: 0, z: 0]   prototype untouched
-debug vector3.[1, 2, 3].z           # => 3     (.z chains over the clone)
+debug ((vector3 [1, 2, 3]).z)       # => 3     (.z chains over the clone)
+debug (vector3 1)                   # => ["y", 0]   int index -> [field, value]
+
+# .[...] still exists, but as the QUOTED PLUCK:  a.[x, y]  gathers values
+# into a LIST;  a.[x: v1, y: v2]  keeps the fields under NEW keys.
+debug (vector3.[x, y])              # => [0, 0]
+debug (vector3.[z, x, y])           # => [0, 0, 0]     reorder
+debug (vector3.[x: first, y: second])   # => [first: 0, second: 0]  renamed
 
 # ---------------------------------------------------------
 # 8. TERNARY — cond ? a : b  (replaces if/then/else)
@@ -267,6 +287,15 @@ debug greeting             # => "Hello, world!"
 data Maybe a = Just a | Nothing
 Just v = Just 123
 debug v                    # => 123
+
+# RENAME destructuring (Rust-style):  [srcKey: name, ...]  pulls those fields
+# OUT of a record and binds name — [x: val1, y: val2] = [x: 1, y: 2, z: 3]
+point = [x: 1, y: 2, z: 3]
+[x: val1, y: val2] = point
+debug [val1, val2]         # => [1, 2]
+# works in function params and match alternatives too:
+sumXY ([x: xv, y: yv]) = xv + yv
+debug (sumXY point)        # => 3
 
 # ---------------------------------------------------------
 # 10. PIPES, BACKTICK INFIX, OPERATOR SECTIONS

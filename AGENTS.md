@@ -66,11 +66,11 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   `force()` is the single entry point for turning a `lazyList` into a concrete
   list value; it recurses into nested lists/records/variants. Only invoke it
   when a list is actually needed.
-- **Indexing**: `arr.[i]` indexes a list — `arr.[0]` is the first element,
-  `arr.[-1]` the last (negative counts from the end), and `arr.[0, 2]` picks
-  several elements into a list. It is the SAME `.[]` postfix as the prototype
-  clone, dispatched on the left side's kind: record → clone, list/→ index,
-  else error.
+- **Indexing**: applying a LIST to an int indexes it — `nums 0` is the first
+  element, `nums (-1)` the last (negative counts from the end; the parens are
+  needed because `nums -1` is a subtraction). Applying a list to a LIST of
+  ints picks several elements: `nums [0, 2]` → `[10, 30]`. The callee's kind
+  decides: list → index, record → clone (see below), else error.
   - `force()` is the single entry point for turning a `lazyList` into a concrete
     value; it recurses into nested lists/records/variants. Only invoke it when a
     list is actually needed.
@@ -107,15 +107,27 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   A def body that ends at a same-level newline (or an explicit `;` right after
   `=`) binds UNIT (see `parseDefBody`).
 - **Records**: `[name: "Alice", age: 30]`, accessed with `rec.field` (chaining
-  works: `a.b.c`). The old `{ a = b }` syntax is REMOVED.
-- **Prototype-based objects**: `proto.[overrides]` CLONES a record prototype
-  (the prototype is a RECORD — a bare-name list is a list, never an object). A
-  right-side LIST replaces values positionally (one value per field);
-  a right-side RECORD overrides by name — existing fields replaced, new fields
-  appended, so `vector3.[x: 1, y: 2]` keeps the prototype's other defaults and
-  `vector3.[x: 1, y: 2, z: 3, a: 0]` adds `a`. The prototype name must be
-  lowercase (capital names are constructors); field count must equal list size
-  for the positional form, else error.
+  works: `a.b.c`). Keys may be quoted strings or numbers (`["my field": 1]`,
+  `[123: 2]`), accessed the same way (`obj."my field"`, `obj.123`); a
+  parenthesized expression is a DYNAMIC key (`obj.(key)` → the value of `key`).
+  `enumerate list` builds a record with int keys (`[0: 10, 1: 20, 2: 30]`).
+  The old `{ a = b }` syntax is REMOVED.
+- **Prototype-based objects**: APPLYING a record (`vector3 [1, 2, 3]`) CLONES
+  a record prototype (the prototype is a RECORD — a bare-name list is a list,
+  never an object). A LIST argument replaces values positionally (one value per
+  field; field count must match, else error); a RECORD argument overrides by
+  name in any order — existing fields replaced, new fields appended, so
+  `vector3 [z: 3, x: 1]` keeps the prototype's other defaults (→
+  `[x: 1, y: 0, z: 3]`) and `vector3 [x: 1, y: 2, z: 3, a: 0]` adds `a`. An INT
+  argument indexes positionally → the pair `[field, value]` (`vec 1` →
+  `["y", 0]`). The prototype name must be lowercase (capital names are
+  constructors).
+- **Pluck — the QUOTED `.[...]` postfix** (record access -style, so even a
+  bare-name list inside it is treated as field names, never values):
+  `rec.[x, y]` gathers those fields' values into a LIST; `rec.[x: a, y: b]`
+  keeps the fields under NEW keys (a smaller record). Mixing bare entries and
+  `key: name` pairs in one pluck is a parse error. The same `[key: name]`
+  shape is also a DESTRUCTURING PATTERN (see Bindings).
 - **Ternary, not if/then/else**: `cond ? a : b` (right-associative). Keywords
   `if`, `then`, `else` are removed.
 - **Functions**: two styles, partial application, recursion. `fn` is removed.
@@ -156,7 +168,10 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 - **`[x, y]` pattern matches both lists and records**: in `matchPattern`, a
   var-only list pattern against a record binds each variable to the field of
   the same name (like record destructuring); against a list it binds
-  positionally (existing behavior).
+  positionally (existing behavior). A KEYED record pattern `[x: a, y: b]`
+  (Rust-style) extracts fields under NEW names from a record only — usable as
+  a binding LHS, a function-param or match-alternative pattern; against a list
+  it never matches. Bare and keyed entries can't mix in one pattern.
 - **Pattern-lambdas**: a lambda's FIRST param may be a destructuring pattern
   (and only that — no literal `_`/`0 ->` lambdas, to keep guards like
   `x | x < 0 -> ...` unambiguous):
@@ -167,8 +182,9 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   speculative parse falls back to a normal expression when no `->` follows.
 - **Pipes & operators**:
   - `x $ f` feeds `x` into `f` (value-left pipe, replaces the old `|>`). No
-    composition operator. The `.` postfix is records AND indexing:
-    `rec.field`, `proto.[...]` clone, `arr.[i]` index.
+    composition operator. The `.` postfix is record access and the QUOTED
+    pluck only (`rec.field`, `rec.(dynKey)`, `rec.[x, y]` pluck); indexing and
+    cloning happen by APPLICATION (`nums 0`, `vector3 [1, 2, 3]`).
   - **Idiom (DELIBERATE, DO NOT FLIP TO HASKELL `$`)**: the pipe is value-left
     on purpose. `negate 5 $ print` reads left-to-right and is the intended
     style; Haskell's right-associative `print $ negate 5` is *not* supported
@@ -216,7 +232,7 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   the FINAL top-level value, so a TRAILING 0-arg def's block runs at the end
   of the file** (mid-file defs stay latent until used; `halt` after them
   exits before any of that). `recordAccess` and
-  `fromList` templates use `unpackThunk` instead (evaluate the body but keep
+  `pluck` use `unpackThunk` instead (evaluate the body but keep
   the result lazy — needed so `core.halt` doesn't force the whole module).
   `force(record)` deliberately leaves thunk FIELD values unforced (a `load`
   module may contain `halt`).
@@ -244,7 +260,7 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   def is a parse error unless it's a DECLARED constructor applied to args
   (`Just v = ...` destructures). A bare capital LHS is always an error —
   `Template = [count, label]` is invalid; use lowercase defs and build records
-  with values (or positional/named clone from a record prototype). Optional
+  with values (or clone from a record prototype with application — section 7). Optional
   (ignored) `: Type` annotations accepted. A block's value is its last
   statement. `match` with guards `|`.
 

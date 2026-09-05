@@ -124,8 +124,8 @@ type Expr =
   | { t: "match"; scrut: Expr; alts: Alt[] }
   | { t: "list"; v: Expr[] }
   | { t: "record"; v: Array<[string, Expr]> }
-  | { t: "recordAccess"; rec: Expr; field: string }
-  | { t: "fromList"; template: Expr; values: Expr }
+  | { t: "recordAccess"; rec: Expr; field: string | Expr }
+  | { t: "pluck"; rec: Expr; entries: Array<string | [string, string]> }
   | { t: "pipe"; x: Expr; f: Expr }
   | { t: "block"; stmts: Expr[] }
   | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr }[] }
@@ -145,7 +145,8 @@ type Pattern =
   | { p: "string"; v: string }
   | { p: "list"; v: Pattern[] }
   | { p: "cons"; head: Pattern; tail: Pattern }
-  | { p: "constr"; tag: string; args: Pattern[] };
+  | { p: "constr"; tag: string; args: Pattern[] }
+  | { p: "recPat"; v: Array<[string, string]> };
 
 interface DataDef { name: string; variants: { tag: string; arity: number }[]; }
 
@@ -478,13 +479,31 @@ class Parser {
     if (t.k === "sym" && t.v === "[") {
       this.next();
       const ps = [] as Pattern[];
+      const keyed = [] as Array<[string, string]>;
+      let mode: "bare" | "keyed" | undefined;
       while (!this.isSym("]")) {
-        ps.push(this.parsePattern());
+        const k = this.peek();
+        const keyStart = k.k === "ident" || k.k === "str" || k.k === "int" || k.k === "float";
+        const nextSym = this.toks[this.i + 1];
+        if (keyStart && nextSym && nextSym.k === "sym" && (nextSym as { v: string }).v === ":") {
+          if (mode === "bare") throw new Error("Parser: pattern cannot mix bare names and 'key: name' entries");
+          mode = "keyed";
+          this.next();
+          const key = this.keyTok(k);
+          this.next(); // :
+          const nm = this.next();
+          if (nm.k !== "ident") throw new Error("Parser: expected a binding name after ':' in record pattern");
+          keyed.push([key, nm.v]);
+        } else {
+          if (mode === "keyed") throw new Error("Parser: pattern cannot mix bare names and 'key: name' entries");
+          mode = "bare";
+          ps.push(this.parsePattern());
+        }
         if (this.eatSym(",")) continue;
         break;
       }
       this.expectSym("]");
-      return { p: "list", v: ps };
+      return mode === "keyed" ? { p: "recPat", v: keyed } : { p: "list", v: ps };
     }
     if (t.k === "ident") {
       this.next();
@@ -636,58 +655,55 @@ class Parser {
     return f;
   }
 
-  // Postfix:  record access  a.b.c   and  prototype clone  tpl.[...]:
-//   tpl.[1, 2, 3]            positional — one value per prototype field
-//   tpl.[x: 1, y: 2]         named override — clone, replace/add fields
-parsePostfix(e: Expr): Expr {
-  while (this.isSym(".")) {
-    this.next();
-    if (this.peek().k === "sym" && (this.peek() as { v: string }).v === "[") {
-      // A named-override record? Look at the first content token of `[ ... ]`.
-      let j = this.i + 1; // after '['
-      while (this.toks[j] && ["newline", "indent", "dedent"].includes(this.toks[j].k)) j++;
-      const c0 = this.toks[j];
-      const isNamed = c0.k === "ident" && this.toks[j + 1].k === "sym" &&
-        (this.toks[j + 1] as { v: string }).v === ":";
-      if (isNamed) {
+  // Postfix:  quoted OBJECT access  a.b, a."b", a.123, a.(expr)  and the
+  // quoted PLUCK
+  //   a.[x, y]            -> list of those fields' values
+  //   a.[x: v1, y: v2]    -> smaller object: field x kept under the key v1
+  parsePostfix(e: Expr): Expr {
+    while (this.isSym(".")) {
+      this.next();
+      const t = this.peek();
+      if (t.k === "sym" && (t as { v: string }).v === "[") {
         this.next(); // [
         this.skipListLeading();
-        const fs: Array<[string, Expr]> = [];
-        for (;;) {
+        const entries: Array<string | [string, string]> = [];
+        while (!this.isSym("]")) {
+          const k = this.next();
+          const key = this.keyTok(k);
+          if (this.isSym(":")) {
+            this.next();
+            const dst = this.next();
+            if (dst.k !== "ident") throw new Error("Parser: expected a name after ':' in pluck");
+            entries.push([key, dst.v]);
+          } else {
+            entries.push(key);
+          }
           this.skipListSeparators();
-          if (this.isSym("]")) { this.next(); break; }
-          const name = this.next();
-          if (name.k !== "ident") throw new Error("Parser: expected field name after '.'");
-          this.expectSym(":");
-          fs.push([name.v, this.parseExpr()]);
+          if (this.isSym("]")) break;
+          if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside pluck");
         }
-        e = { t: "fromList", template: e, values: { t: "record", v: fs } };
+        this.next(); // ]
+        const mixed = new Set(entries.map((x) => typeof x));
+        if (mixed.size > 1) throw new Error("Parser: pluck cannot mix bare names and 'key: name' pairs");
+        e = { t: "pluck", rec: e, entries };
+      } else if (t.k === "sym" && (t as { v: string }).v === "(") {
+        this.next(); // (
+        const dyn = this.parseExpr();
+        this.expectSym(")");
+        e = { t: "recordAccess", rec: e, field: dyn };
       } else {
-        // positional: zip the prototype's field names with a value list
-        const values = this.parseListLiteral();
-        e = { t: "fromList", template: e, values };
+        this.next();
+        e = { t: "recordAccess", rec: e, field: this.keyTok(t) };
       }
-    } else {
-      const f = this.next();
-      if (f.k !== "ident") throw new Error("Parser: expected field name after '.'");
-      e = { t: "recordAccess", rec: e, field: f.v };
     }
+    return e;
   }
-  return e;
-}
 
-  // Parse a list literal  [a, b, ...]  (used as the values on the right side of .)
-  parseListLiteral(): Expr {
-    this.expectSym("[");
-    this.skipListLeading();
-    const es = [] as Expr[];
-    if (this.isSym("]")) { this.next(); return { t: "list", v: es }; }
-    for (;;) {
-      es.push(this.parseExpr());
-      this.skipListSeparators();
-      if (this.isSym("]")) { this.next(); return { t: "list", v: es }; }
-      if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside list literal");
-    }
+  // Normalize a field/key token (ident, string, or number) to its string form.
+  keyTok(t: Token): string {
+    if (t.k === "ident" || t.k === "str") return t.v;
+    if (t.k === "int" || t.k === "float") return String(t.v);
+    throw new Error(`Parser: expected a field name after '.' (got '${this.tokenStr(t)}')`);
   }
 
   // Leading layout of a multi-line list literal: newlines plus the single
@@ -833,15 +849,17 @@ parsePostfix(e: Expr): Expr {
             // Empty list: []
             if (this.isSym("]")) { this.next(); return { t: "list", v: [] }; }
             // A record literal looks like:  [key: value, ...]
-            // Detect it by checking that the first element is `ident :`.
-            if (this.peek().k === "ident" && this.peek(1).k === "sym" &&
+            // Detect it: the first element is a key token (ident/string/number)
+            // followed by `:`.
+            const k0 = this.peek();
+            const kv = k0.k === "ident" || k0.k === "str" || k0.k === "int" || k0.k === "float";
+            if (kv && this.peek(1).k === "sym" &&
                 (this.peek(1) as { v: string }).v === ":") {
               const fs: Array<[string, Expr]> = [];
               for (;;) {
                 const f = this.next();
-                if (f.k !== "ident") throw new Error("Parser: expected field name");
                 this.expectSym(":");
-                fs.push([f.v, this.parseExpr()]);
+                fs.push([this.keyTok(f), this.parseExpr()]);
                 this.skipListSeparators();
                 if (this.isSym("]")) { this.next(); return { t: "record", v: fs }; }
                 if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside record literal");
@@ -1342,6 +1360,7 @@ export class Interpreter {
     this.env.setLocal("tail", { kind: "native", name: "tail", arity: 1, applied: [] });
     this.env.setLocal("length", { kind: "native", name: "length", arity: 1, applied: [] });
     this.env.setLocal("null", { kind: "native", name: "null", arity: 1, applied: [] });
+    this.env.setLocal("enumerate", { kind: "native", name: "enumerate", arity: 1, applied: [] });
     this.env.setLocal("map", { kind: "native", name: "map", arity: 2, applied: [] });
     this.env.setLocal("filter", { kind: "native", name: "filter", arity: 2, applied: [] });
     this.env.setLocal("foldl", { kind: "native", name: "foldl", arity: 3, applied: [] });
@@ -1474,62 +1493,41 @@ export class Interpreter {
         // `core = load "..."` is a thunk; get the module WITHOUT forcing its
         // fields (a module may contain `halt = exit 0`).
         if (rec.kind === "thunk") rec = this.unpackThunk(rec);
+        let field: string;
+        if (typeof e.field === "string") {
+          field = e.field;
+        } else {
+          const kv = this.force(this.eval(e.field));
+          if (kv.kind !== "string" && kv.kind !== "int" && kv.kind !== "float") {
+            throw new Error("Runtime: dynamic field (parenthesized key) must be a string or number");
+          }
+          field = kv.kind === "string" ? kv.v : String(kv.v);
+        }
         if (rec.kind !== "record") throw new Error("Runtime: record access on non-record");
-        const f = rec.v.find(([k]) => k === e.field);
-        if (!f) throw new Error(`Runtime: record has no field '${e.field}'`);
+        const f = rec.v.find(([k]) => k === field);
+        if (!f) throw new Error(`Runtime: record has no field '${field}'`);
         r = f[1];
         break;
       }
-      case "fromList": {
-        const vals = this.force(this.eval(e.values));
-        if (vals.kind !== "list" && vals.kind !== "record") {
-          throw new Error("Runtime: right side of '.' must be a list or a record");
-        }
-        // The prototype is a RECORD (objects always have values); a bare-name
-        // list is always a LIST and so is not a valid prototype.
-        const src = (() => {
-          let s = this.eval(e.template);
-          if (s.kind === "thunk") s = this.unpackThunk(s);
-          return s;
-        })();
-        if (src.kind === "lazyList" || src.kind === "list") {
-          // Index access: a LIST left side means the right side is indices.
-          //   arr.[0] -> first element   arr.[-1] -> last element
-          //   arr.[0, 2] -> list of the selected elements
-          if (vals.kind !== "list") {
-            throw new Error("Runtime: indexing a list needs a list of indices on the right of '.'");
+      case "pluck": {
+        let rec = this.eval(e.rec);
+        if (rec.kind === "thunk") rec = this.unpackThunk(rec);
+        if (rec.kind !== "record") throw new Error("Runtime: pluck on non-record");
+        const byKey = new Map(rec.v);
+        if (e.entries.every((x) => typeof x === "string")) {
+          const out: Value[] = [];
+          for (const n of e.entries as string[]) {
+            const v = byKey.get(n);
+            if (v === undefined) throw new Error(`Runtime: record has no field '${n}'`);
+            out.push(v);
           }
-          const arr = (src.kind === "lazyList" ? this.force(src) : src) as { kind: "list"; v: Value[] };
-          const picks = vals.v.map((ix) => {
-            if (ix.kind !== "int") throw new Error("Runtime: index must be an int");
-            let i = ix.v;
-            if (i < 0) i += arr.v.length;
-            if (i < 0 || i >= arr.v.length) {
-              throw new Error(`Runtime: index ${ix.v} out of range (len ${arr.v.length})`);
-            }
-            return arr.v[i];
-          });
-          r = picks.length === 1 ? picks[0] : { kind: "list", v: picks };
-          break;
-        }
-        if (src.kind !== "record") {
-          throw new Error("Runtime: left side of '.' must be a record (object) or a list (indexing)");
-        }
-        const protoRec = src.v.slice();
-        const protoNames = protoRec.map(([k]) => k);
-        if (vals.kind === "list") {
-          // Positional clone: one value per prototype field, in order.
-          if (protoNames.length !== vals.v.length) {
-            throw new Error(`Runtime: field count (${protoNames.length}) does not match list size (${vals.v.length})`);
-          }
-          r = { kind: "record", v: protoNames.map((k, i) => [k, vals.v[i]] as [string, Value]) };
+          r = { kind: "list", v: out };
         } else {
-          // Named clone: override existing fields, append new ones.
-          const idx = new Map(protoNames.map((n, i) => [n, i]));
-          const out = protoRec.slice();
-          for (const [k, v] of vals.v as Array<[string, Value]>) {
-            const i = idx.get(k);
-            if (i !== undefined) out[i] = [k, v]; else out.push([k, v]);
+          const out: Array<[string, Value]> = [];
+          for (const [src, dst] of e.entries as Array<[string, string]>) {
+            const v = byKey.get(src);
+            if (v === undefined) throw new Error(`Runtime: record has no field '${src}'`);
+            out.push([dst, v]);
           }
           r = { kind: "record", v: out };
         }
@@ -1689,6 +1687,63 @@ export class Interpreter {
         }
         throw new Error("Runtime: non-exhaustive function definition");
       }
+      case "list":
+      case "lazyList": {
+        // Indexing:  arr 0 -> element,  arr (-1) -> last,  arr [0, 2] -> picks
+        const arr = f.kind === "lazyList" ? this.force(f) : f;
+        if (arr.kind !== "list") throw new Error("Runtime: value is not a list");
+        const carg = this.force(arg);
+        if (carg.kind === "int") {
+          let i = carg.v;
+          if (i < 0) i += arr.v.length;
+          if (i < 0 || i >= arr.v.length) {
+            throw new Error(`Runtime: index ${carg.v} out of range (len ${arr.v.length})`);
+          }
+          return arr.v[i];
+        }
+        if (carg.kind === "list") {
+          const picks = carg.v.map((ix) => {
+            if (ix.kind !== "int") throw new Error("Runtime: index must be an int");
+            let i = ix.v;
+            if (i < 0) i += arr.v.length;
+            if (i < 0 || i >= arr.v.length) {
+              throw new Error(`Runtime: index ${ix.v} out of range (len ${arr.v.length})`);
+            }
+            return arr.v[i];
+          });
+          return picks.length === 1 ? picks[0] : mkList(picks);
+        }
+        throw new Error("Runtime: indexing a list needs an int or a list of ints");
+      }
+      case "record": {
+        // Applying an OBJECT clones it (list = positional, record = named),
+        // or an int argument indexes it positionally -> [field, value].
+        const carg = this.force(arg);
+        if (carg.kind === "list") {
+          if (f.v.length !== carg.v.length) {
+            throw new Error(`Runtime: field count (${f.v.length}) does not match list size (${carg.v.length})`);
+          }
+          return { kind: "record", v: f.v.map(([k], i) => [k, carg.v[i]] as [string, Value]) };
+        }
+        if (carg.kind === "record") {
+          const idx = new Map(f.v.map(([k], i) => [k, i]));
+          const out = f.v.slice();
+          for (const [k, v] of carg.v) {
+            const i = idx.get(k);
+            if (i !== undefined) out[i] = [k, v]; else out.push([k, v]);
+          }
+          return { kind: "record", v: out };
+        }
+        if (carg.kind === "int") {
+          let i = carg.v;
+          if (i < 0) i += f.v.length;
+          if (i < 0 || i >= f.v.length) {
+            throw new Error(`Runtime: index ${carg.v} out of range (len ${f.v.length})`);
+          }
+          return mkList([mkStr(f.v[i][0]), f.v[i][1]]);
+        }
+        throw new Error("Runtime: applying an object needs a list, a record, or an int index");
+      }
       default:
         throw new Error("Runtime: value is not a function");
     }
@@ -1786,6 +1841,9 @@ export class Interpreter {
         if (a.kind === "list") return mkBool(a.v.length === 0);
         if (a.kind === "string") return mkBool(a.v.length === 0);
         throw new Error("Runtime: null expects list or string");
+      case "enumerate":
+        if (a.kind !== "list") throw new Error("Runtime: enumerate expects a list");
+        return { kind: "record", v: a.v.map((x, i) => [String(i), x] as [string, Value]) };
       case "map": {
         const f = args[0];
         if (args[1].kind !== "list") throw new Error("Runtime: map expects a list");
@@ -1934,6 +1992,18 @@ export class Interpreter {
         }
         return true;
       }
+      case "recPat": {
+        // Keyed record pattern (Rust-style):  [x: a, y: b]  extracts fields x, y
+        // from a record and binds a, b to their values.
+        if (v.kind !== "record") return false;
+        const fields = new Map<string, Value>();
+        for (const [k, val] of v.v) fields.set(k, val);
+        for (const [key, name] of p.v) {
+          if (!fields.has(key)) return false;
+          binds.set(name, fields.get(key)!);
+        }
+        return true;
+      }
       case "cons": {
         if (v.kind !== "list" || v.v.length === 0) return false;
         const nm = new Map(binds);
@@ -2056,7 +2126,10 @@ async function repl(): Promise<void> {
             `  symbol = value   (the ONLY binding form; top level or inside { } blocks)`,
             `  [a, b] = value (destructuring binding; records match by field name)`,
             `  Just v = value (declared constructors destructure; capital defs are errors)`,
-            `  proto.[1,2,3] / proto.[x: 1]  clone a record;  arr.[0] / arr.[-1]  index a list`,
+            `  [x: a, y: b] = value  (rename destructure: pull fields out of a record)`,
+            `  nums 0 / nums (-1) / nums [0, 2]   (apply a list = index)`,
+            `  vec [1,2,3] / vec [z: 3, x: 1]   (apply a record = clone)`,
+            `  rec.field / rec."key" / rec.(dyn) / rec.[x, y]  (quoted access + pluck)`,
             `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
             `  cond ? a : b   (ternary)`,
             `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,
