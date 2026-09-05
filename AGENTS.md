@@ -26,6 +26,8 @@ Deno/TypeScript interpreter. It runs from the command line and has a REPL.
 
 Three files only, all project root:
 - `main.ts` — the entire interpreter (lexer, parser, evaluator, REPL)
+- `apn` — tiny sh launcher for the REPL/file runs (the only extra file,
+  user-requested; it adds no logic)
 - `features.txt` — the living spec + smoke test: a runnable showcase of EVERY
   feature. It must always stay in sync with what `main.ts` actually supports.
   (There are no real unit tests — this file IS the test.)
@@ -38,9 +40,12 @@ Three files only, all project root:
 Deno required. From `apn/`:
 - Run the showcase (use this as the smoke test after any change):
     deno run --allow-read main.ts features.txt
-- Start the REPL:               deno run --allow-read --allow-write --allow-env=HOME main.ts
-  (the extra flags persist history in ~/.apn_history; the REPL also runs
-  with just --allow-read — history then stays in-session only)
+- Start the REPL:               ./apn
+  (wrapper script that runs
+   `deno run --allow-read --allow-write --allow-env=HOME main.ts "$@"` —
+   also runs files, e.g. `./apn features.txt`. The extra flags persist
+   history in ~/.apn_history; the bare deno command with just --allow-read
+   works too — history then stays in-session only)
 - Type-check (always run after edits):
     deno check main.ts
 
