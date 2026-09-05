@@ -397,31 +397,28 @@ print "hello"; print ", world"        # prints: hello
                                       # prints: , world
 
 # a multi-line `{ }` block as a function body (value = last statement)
-area w h =
-    {
-        debug "computing area"
-        w * h
-    }
+area w h = {
+    debug "computing area"
+    w * h
+}
 debug (area 3 4)             # prints: computing area
                              # => 12
 
 # local definitions are allowed inside a block
-both =
-    {
-        x = 40
-        y = 2
-        x + y
-    }
+both = {
+    x = 40
+    y = 2
+    x + y
+}
 debug both                   # => 42
 
 # blank lines inside a block are fine; statements still stop at same-level
 # newlines (implicit semicolons) and continue on +4-indented lines
-seqOf =
-    {
-        debug "one"
+seqOf = {
+    debug "one"
 
-        6 * 7
-    }
+    6 * 7
+}
 debug seqOf                  # prints: one
                              # => 42
 
@@ -477,11 +474,10 @@ core = load "core.txt"      # namespaced module record
 debug (core.sq 4)           # => 16
 
 # a load inside a { } block stays in the block's scope
-scoped =
-    {
-        load "core.txt"
-        sq 6
-    }
+scoped = {
+    load "core.txt"
+    sq 6
+}
 debug (scoped)              # => 36
 
 debug "still running before the final halt"
