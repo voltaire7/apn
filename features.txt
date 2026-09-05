@@ -230,13 +230,19 @@ debug (smallest 7 2 9)     # => 2
 
 # ---------------------------------------------------------
 # 9. BINDINGS —  symbol = value  (the ONLY form; no let, no mutation)
-#    Bindings are scoped to their block; a block's value is its
-#    LAST statement. Inside { } a `symbol = value` statement is
-#    local to that block.
+#    The LHS may be a destructuring PATTERN:  [name, hello] = expr
+#    (list positionally, record by field name). Bindings are scoped
+#    to their block; a block's value is its LAST statement.
 # ---------------------------------------------------------
 greeting = {
     name = "world"
     hello = "Hello"
+    hello ++ ", " ++ name ++ "!"
+}
+debug greeting             # => "Hello, world!"
+
+greeting = {
+    [name, hello] = ["world", "Hello"]
     hello ++ ", " ++ name ++ "!"
 }
 debug greeting             # => "Hello, world!"

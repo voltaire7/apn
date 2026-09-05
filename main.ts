@@ -129,7 +129,8 @@ type Expr =
   | { t: "recordTemplate"; names: string[] }
   | { t: "pipe"; x: Expr; f: Expr }
   | { t: "block"; stmts: Expr[] }
-  | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr }[] };
+  | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr }[] }
+  | { t: "patDef"; pattern: Pattern; value: Expr };
 
 interface Alt {
   pattern: Pattern;
@@ -150,7 +151,8 @@ type Pattern =
 interface DataDef { name: string; variants: { tag: string; arity: number }[]; }
 
 type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "expr"; value: Expr }
-  | { t: "data"; def: DataDef };
+  | { t: "data"; def: DataDef }
+  | { t: "patDef"; pattern: Pattern; value: Expr };
 
 // ---------------- Lexer ----------------
 
@@ -802,7 +804,11 @@ class Parser {
               if (tb.k === "sym" && tb.v === "," && t.v === "(") {
                 throw new Error("Parser: tuples are not supported; use a list [a, b, ...] instead");
               }
-              stmts.push(this.isDef() ? this.parseBlockDef() : this.parseExpr());
+              if (this.isPatBinding()) {
+                stmts.push(this.parsePatBinding());
+              } else {
+                stmts.push(this.isDef() ? this.parseBlockDef() : this.parseExpr());
+              }
             }
           }
           case "[": {
@@ -922,6 +928,41 @@ class Parser {
   freshCounter = 0;
   freshName(): string {
     return `$p${this.freshCounter++}`;
+  }
+
+  // Destructuring binding:  pattern = value   (e.g.  [name, hello] = [...])
+  // Only unambiguous pattern starts - `[` or `(` + Uppercase constructor -
+  // are tried, so plain statements like `[1, 2, 3] $ head` or `name = 5`
+  // never reach the pattern path.
+  startsPatBinding(): boolean {
+    const t = this.peek();
+    if (t.k === "sym" && t.v === "[") return true;
+    if (t.k === "sym" && t.v === "(") {
+      const n1 = this.peek(1);
+      return n1.k === "ident" && /^[A-Z]/.test(n1.v);
+    }
+    return false;
+  }
+
+  // Lookahead: is the statement  pattern = expr ? Restores the token index.
+  isPatBinding(): boolean {
+    if (!this.startsPatBinding()) return false;
+    const save = this.i;
+    try {
+      this.parseConsPattern();
+      return this.isSym("=");
+    } catch {
+      return false;
+    } finally {
+      this.i = save;
+    }
+  }
+
+  parsePatBinding(): Expr {
+    const pattern = this.parseConsPattern();
+    this.expectSym("=");
+    const value = this.parseExpr();
+    return { t: "patDef", pattern, value };
   }
 
   // Operator sections:  (+ 2) -> \x -> x + 2    (2 +) -> \x -> 2 + x
@@ -1180,8 +1221,12 @@ class Parser {
       }
 
       if (t.k === "sym") {
-        const e = this.parseExpr();
-        out.push({ t: "expr", value: e });
+        if (this.isPatBinding()) {
+          out.push(this.parsePatBinding() as TopLevel);
+        } else {
+          const e = this.parseExpr();
+          out.push({ t: "expr", value: e });
+        }
         continue;
       }
 
@@ -1279,6 +1324,10 @@ export class Interpreter {
         last = this.evalDef(tl.name, tl.clauses);
         continue;
       }
+      if (tl.t === "patDef") {
+        last = this.evalPatBinding(tl);
+        continue;
+      }
       last = this.force(this.eval(tl.value));
     }
     return last;
@@ -1314,6 +1363,19 @@ export class Interpreter {
     const thunk: Value = { kind: "thunk", body: value, env: this.env, value: undefined };
     this.env.setLocal(name, thunk);
     return thunk;
+  }
+
+  // Destructuring binding:  [name, hello] = value  (or (Just x) = value, ...).
+  // Evaluates the RHS, matches the pattern, and binds the destructured names
+  // in the CURRENT environment (top level or the enclosing block's env).
+  evalPatBinding(b: { pattern: Pattern; value: Expr }): Value {
+    const v = this.force(this.eval(b.value));
+    const binds = new Map<string, Value>();
+    if (!this.matchPattern(b.pattern, v, binds)) {
+      throw new Error("Runtime: binding pattern did not match its value");
+    }
+    for (const [k, bv] of binds) this.env.setLocal(k, bv);
+    return v;
   }
 
   eval(e: Expr): Value {
@@ -1402,7 +1464,9 @@ export class Interpreter {
         try {
           r = { kind: "unit" };
           for (const s of e.stmts) {
-            r = s.t === "stmDef" ? this.evalDef(s.name, s.clauses) : this.eval(s);
+            if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
+            else if (s.t === "patDef") r = this.evalPatBinding(s);
+            else r = this.eval(s);
           }
           // A block's value is its last statement's value — force it, so a
           // trailing `halt`/`exit` (or any thunk) actually runs.
@@ -1414,6 +1478,9 @@ export class Interpreter {
       }
       case "stmDef":
         throw new Error("Runtime: internal error — statement definition used as an expression");
+      case "patDef":
+        r = this.evalPatBinding(e);
+        break;
     }
     this.stack--;
     return r;
@@ -1908,6 +1975,7 @@ async function repl(): Promise<void> {
           [
             `Language:`,
             `  symbol = value   (the ONLY binding form; top level or inside { } blocks)`,
+            `  [a, b] = value (destructuring binding; records match by field name)`,
             `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
             `  cond ? a : b   (ternary)`,
             `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,

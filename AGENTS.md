@@ -221,8 +221,10 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   curried natives tagged with the constructor name.
 - **Bindings** — `symbol = value` is the ONLY form (no `let`, no mutation).
   It works at top level and inside `{ }` / `( )` blocks, where it is scoped to
-  that block. Optional (ignored) `: Type` annotations accepted. A block's value
-  is its last statement. `match` with guards `|`.
+  that block. The LHS may be a destructuring PATTERN: `[a, b] = expr` (list
+  positionally, record by field name), `(Just x) = expr`, etc. — a binding
+  error if the pattern doesn't match. Optional (ignored) `: Type` annotations
+  accepted. A block's value is its last statement. `match` with guards `|`.
 
 ## Evaluator notes
 
