@@ -38,21 +38,25 @@ debug (addTwo 10)             # => 12
 # 3. RECURSION
 # ---------------------------------------------------------
 factorial n =
-    case n of
+    match n [
         0 -> 1
         _ -> n * factorial (n - 1)
+    ]
 debug (factorial 10)   # => 3628800
 
 fib n =
-    case n of
+    match n [
         0 -> 0
         1 -> 1
         _ -> fib (n - 1) + fib (n - 2)
+    ]
 debug (fib 10)         # => 55
 
 # ---------------------------------------------------------
-# 4. PATTERN MATCHING (case) & PATTERN DEFINITIONS
+# 4. PATTERN MATCHING (match) & PATTERN DEFINITIONS
 #    Patterns: literals, wildcard _, cons x:rest, lists, variants, guards.
+#    `match` is THE pattern-matching form (there is no `case`):
+#        match scrutinee [ pattern -> expr, ... ]
 #    A `[x, y]` pattern matches BOTH a list (positionally) and a record
 #    (by field name). A def can also be given as multiple clauses (equations)
 #    like Haskell, dispatched in order on its parameters:
@@ -62,9 +66,10 @@ debug (fib 10)         # => 55
 data Maybe a = Just a | Nothing
 
 safeHead xs =
-    case xs of
+    match xs [
         [] -> Nothing
         x:rest -> Just x
+    ]
 debug (safeHead [1, 2, 3])   # => Just 1
 debug (safeHead [])          # => Nothing
 
@@ -74,16 +79,18 @@ len (x:rest) = 1 + len rest
 debug (len [1, 2, 3])        # => 3
 
 sumList xs =
-    case xs of
+    match xs [
         [] -> 0
         x:rest -> x + sumList rest
+    ]
 debug (sumList [1, 2, 3, 4, 5])  # => 15
 
 # exact-length list pattern — binds each element
 pairSum xs =
-    case xs of
+    match xs [
         [a, b] -> a + b
         _ -> 0
+    ]
 debug (pairSum [10, 20])   # => 30
 debug (pairSum [1])        # => 0
 
@@ -94,19 +101,19 @@ debug (sumRec [10, 20])        # => 30
 
 # guards
 classify n =
-    case n of
+    match n [
         x | x < 0 -> "negative"
         x | x == 0 -> "zero"
         _ -> "positive"
+    ]
 debug (classify (-5))   # => "negative"
 debug (classify 0)      # => "zero"
 debug (classify 7)      # => "positive"
 
 # ---------------------------------------------------------
-# 4b. MATCH —  match scrutinee [ pattern -> expr, ... ]
-#     The same alternatives as `case ... of`, delimited with [ ] instead of
-#     an `of`/dedent block. Separators are `,` or a newline, so it works in
-#     all three layouts (block / same-line-open / fully single-line):
+# 4b. MATCH LAYOUTS —  match scrutinee [ pattern -> expr, ... ]
+#     Alternatives are delimited with [ ], separated by `,` OR a newline,
+#     so all three layouts work: block / same-line-open / fully single-line.
 # ---------------------------------------------------------
 factA n =
     match n [
@@ -124,7 +131,7 @@ debug (factB 5)             # => 120
 factC n = match n [0 -> 1, _ -> n * factC (n - 1)]
 debug (factC 6)             # => 720
 
-# all the case patterns work too: cons, literals, _ , guards, ...
+# all patterns work here too: cons, literals, _ , guards, ...
 safeM xs = match xs [
     [] -> Nothing
     x:rest -> Just x
@@ -141,12 +148,13 @@ debug (classM (-5))         # => "negative"
 debug (classM 0)            # => "zero"
 debug (classM 7)            # => "positive"
 
-# a `case n of` may now also start on the SAME line as `=`
-caseInline n = case n of
+# a def body may also start `match` on the SAME line as `=`
+matchInline n = match n [
     0 -> "zero"
     _ -> "other"
-debug (caseInline 0)        # => "zero"
-debug (caseInline 9)        # => "other"
+]
+debug (matchInline 0)       # => "zero"
+debug (matchInline 9)       # => "other"
 
 # ---------------------------------------------------------
 # 5. LISTS — heterogeneous, like JS arrays, but almost lazy.

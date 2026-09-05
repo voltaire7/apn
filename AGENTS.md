@@ -61,7 +61,7 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 
 - **Lazy lists**: a list literal `[a, b]` evaluates to a `lazyList` (unevaluated
   elements + captured env) and is resolved only when forced:
-  - used as a **list** (print, head/map/…, ops, case) → bare identifiers resolve
+  - used as a **list** (print, head/map/…, ops, match) → bare identifiers resolve
     to variables;
   - used as a **record/template** (left of `.` in fromList) → bare identifiers
     are read as field names.
@@ -93,7 +93,7 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   whitespace significant:
       func = { 1 + 1 }        # body on the same line  -> func == 2
       func =
-          case x of ...       # body continues on +4   -> the case expr
+          match x [...]      # body continues on +4   -> the match expr
       func =
       { 1 + 1 }               # == `func = ; { ... }`: func == unit (RHS cut
                               #   off by a same-level newline) and the { } is
@@ -122,11 +122,13 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   `clauseFn` accumulates applied args (supporting partial application), forces
   them, then tries each clause's patterns via `matchPattern`; no clause matches
   → "Runtime: non-exhaustive function definition". Guards on def clauses are
-  NOT supported (use `case ... of ... | ...` inside the body for guards).
-- **`match` expressions**: `match scrutinee [ pattern -> expr, ... ]` is the
-  bracket-delimited spelling of `case ... of` — identical alternatives,
-  patterns, guards (`|`) and evaluation. The `[` ends the scrutinee, so
-  alternatives separate on `,` or a newline, and ALL layouts work:
+  NOT supported (use `match x [ ... | ... ]` inside the body for guards).
+- **`match` expressions**: `match scrutinee [ pattern -> expr, ... ]` is THE
+  pattern-matching form — there is NO `case` (the `case`/`of` keywords were
+  removed and freed up as identifiers). Alternatives share the `{ t: "match" }`
+  AST; each may carry a `|` guard, evaluation is `evalMatch`. The `[` ends the
+  scrutinee, so alternatives separate on `,` or a newline, and ALL layouts
+  work:
       fact n = match n [0 -> 1, _ -> n * fact (n - 1)]      # single line
       fact n = match n [                                    # same-line open
           0 -> 1
@@ -137,9 +139,6 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
               0 -> 1
               _ -> n * fact (n - 1)
           ]
-  `match` shares the `{ t: "case" }` AST (and its `afterCaseHardStop`
-  boundary is only set for the `of` form, which the `]` makes unnecessary).
-  `match ... of` still works too (historical alias). `case ... of` unchanged.
   A `match` scrutinee may not apply a `[...]` argument directly — parenthesize
   it (`match (head xs) [0 -> ..., _ -> ...]`).
 - **`[x, y]` pattern matches both lists and records**: in `matchPattern`, a
@@ -217,11 +216,11 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
     behavior); for inspection/diagnostics.
   The showcase (`features.txt`) uses `debug` everywhere a value is being
   inspected and `print` only where the value is a string.
-- **Variants** via `data Maybe a = Just a | Nothing`; constructors and case
-  matching. Nullary constructors are bare values; arity>0 constructors are
+- **Variants** via `data Maybe a = Just a | Nothing`; constructors and match
+  expressions. Nullary constructors are bare values; arity>0 constructors are
   curried natives tagged with the constructor name.
 - `let ... in ...` with multiple bindings and optional (ignored) type
-  annotations. `case` with guards `|`.
+  annotations. `match` with guards `|`.
 
 ## Evaluator notes
 
@@ -234,24 +233,16 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 
 - `&&` / `||` are NOT wired into the parser (they appear in `evalBinop` but don't
   parse). Use comparisons/ternaries instead.
-- A `case ... of` (or `match ... of`) alternative block IS a hard boundary for
-  applications: after it, an enclosing `parseApp` stops consuming arguments, so
-  the following same-level statement is not mistaken for another argument
-  (`afterCaseHardStop`, cleared at statement starts and when `)`/`}`/`]` closes).
-  This makes the SAME-LINE form parse correctly everywhere:
-      f = x -> case x of
-          [] -> 0
-          _ -> 1
-      debug (f [])
-  (It used to "mis-parse the layout" when `case` started on the same line as `=`.)
 - `` ` : ` `` cons is only a pattern operator (`x:rest`), not an expression
   operator.
-- `case ... of` and `let ... in` are self-contained constructs: they consume
-  their own newlines/indents/dedents (`parseCase` / `parseLet`), independent of
-  the block/semicolon rules above.
+- `match x [ ... ]` is a self-delimiting bracket form: it consumes its own `[ ]`
+  (newlines/indents/dedents inside), independent of the block/semicolon rules
+  above, and needs no hard-stop flag for the enclosing application (the `]`
+  already ends everything). `let ... in` consumes its own
+  newlines/indents/dedents too (`parseLet`).
 - Inside `{ }`, block statements are at one flat level (nested constructs like
-  `case` may deepen it); an `indent` token directly before a statement, or a
-  `,`-tuple in `( )`, are rejected with a clear error.
+  `match`/`let` may deepen it); an `indent` token directly before a statement,
+  or a `,`-tuple in `( )`, are rejected with a clear error.
 
 ## Conventions
 
