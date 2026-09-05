@@ -307,7 +307,8 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   second Tab lists them. With no word (or no candidates) Tab inserts
   **4 spaces** — the indent unit; Backspace behind a full indent level
   deletes all 4 at once. Typing `}`/`]` on an indent-only line dedents one
-  level first.
+  level first, and deleting a lone `}`/`]` at column 0 of a continuation
+  line restores that indent (the assist is symmetric).
 - **Chunks, not lines (Python-style prompts)**: `>>> ` opens a chunk, `... `
   marks continuation lines. Enter submits only when the chunk parses
   (`chunkComplete`: parse success, or an error that is neither EOF-shaped nor

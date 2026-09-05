@@ -2380,6 +2380,13 @@ class ReplEditor {
   backspace(): void {
     if (this.col > 0) {
       const line = this.lines[this.row];
+      // inverse of the dedent assist: deleting a lone ]/} that the assist
+      // moved to column 0 restores the 4-space continuation indent
+      if (this.row > 0 && this.col === 1 && (line === "]" || line === "}")) {
+        this.lines[this.row] = "    ";
+        this.col = 4;
+        return;
+      }
       // the "opposite of Tab": a Backspace behind a full indent level
       // deletes all 4 spaces at once
       const n = this.col % 4 === 0 && this.col >= 4 &&
