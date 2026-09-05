@@ -314,7 +314,7 @@ debug ([1, 2] `myApp` [3, 4])             # => [1, 2, 3, 4]
 debug (map (+ 2) [1, 2, 3])               # => [3, 4, 5]
 debug (map (2 +) [1, 2, 3])               # => [3, 4, 5]
 debug (map (* 10) [1, 2, 3])              # => [10, 20, 30]
-debug (filter (2 <) [3, 1, 4, 1, 5])      # => [4, 5]
+debug (filter (2 <) [3, 1, 4, 1, 5])      # => [3, 4, 5]
 debug (-2)                                # => -2  ((- 2) is NOT a section:
                                           #     unary minus wins; use a lambda)
 
@@ -460,7 +460,7 @@ unitAfter =
     debug "the brace block ran as its OWN statement"
 }
 debug (toString unitAfter)   # prints: the brace block ran as its OWN statement
-                             # => ()      (unitAfter is unit, not a block)
+                             # => "()"   (unitAfter is unit, not a block)
 
 # a function body that continues on a +4-indented line spans lines;
 # `[ ]` also spans lines and elements separate by newline (commas optional),
