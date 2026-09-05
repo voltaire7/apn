@@ -114,12 +114,12 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   - Operator sections: `(+ 2)` = `\x -> x + 2`, `(2 +)` = `\x -> 2 + x` for
     `+ - * / % == != < > <= >= ++`. `(-2)` stays unary negation (no whitespace
     info in the lexer); `(+)` alone is unsupported — use a lambda.
-- **Iteration**: `for` is a native, fn-first like `map`:
-  `for f seq` — `for : fn -> seq -> unit`, runs `f` for its effect and returns
-  unit. A list iterates per element; a record per entry as `[field, value]`.
-  `for` is strictly fn-first (args are NOT order-flexible): the sequence is fed
-  in with the pipe, `seq $ for fn` (backtick `rec \`for\` fn` = `for rec fn`
-  would put the record in the fn slot and error).
+- **Iteration**: `for` is a native with the **same argument positioning as
+  `map`**: `for : fn -> seq -> unit`, strictly fn-first and NOT order-flexible.
+  A list iterates per element; a record per entry as `[field, value]`.
+  Exactly like `map`, the pipe feeds the collection in last:
+  `for (x -> ...) [1, 2, 3]` == `[1, 2, 3] $ for (x -> ...)`; backtick
+  `seq \`for\` fn` = `for seq fn` puts the collection in the fn slot and errors.
   Related natives: `pairs rec` (record → list of `[field, value]`), and
   `format "% %" [a, b]` (`%` = printf-style arg, strings unquoted; `%%` = `%`).
 - **Output & conversion (DELIBERATE split)**:
