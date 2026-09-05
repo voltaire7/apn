@@ -2270,10 +2270,11 @@ function helpText(): string {
     `  Tab        complete names/builtins/:commands; with nothing to`,
     `             complete, insert 4 spaces (the indent unit)`,
     `  Backspace  behind a full indent level deletes all 4 spaces`,
-    `  Enter      runs when the chunk is complete; incomplete input`,
-    `             continues on the next line ("... " prompt, auto-indent)`,
+    `  Enter      runs when the chunk is complete; incomplete input continues`,
+    `             on the next line (auto-indent, file-true layout)`,
     `  paste      multi-line text is inserted, not run; Enter then runs it`,
     `  Ctrl+C     clear input (empty: quit)  Ctrl+D quit  Ctrl+L clear screen`,
+    `  Ctrl+A/E   line start/end  Ctrl+U/K kill to line start/end  Ctrl+W delete word`,
   ].join("\n");
 }
 
@@ -2307,7 +2308,9 @@ class ReplEditor {
     try { return Deno.consoleSize().columns || 80; } catch { return 80; }
   }
 
-  promptW(i: number): number { return i === 0 ? 2 : 4; }
+  // Continuation lines render BARE (no prompt) so the code's own 4-space
+  // layout reads exactly like the same code in a file.
+  promptW(i: number): number { return i === 0 ? 2 : 0; }
 
   emit(s: string): void {
     Deno.stdout.writeSync(ENC.encode(s));
@@ -2331,7 +2334,7 @@ class ReplEditor {
     this.emit("\r\x1b[J");
     let total = 0;
     for (let i = 0; i < this.lines.length; i++) {
-      const p = i === 0 ? paint(A.bold + A.cyan, "> ") : paint(A.cyan, "... ");
+      const p = i === 0 ? paint(A.bold + A.cyan, "> ") : "";
       this.emit(p + highlightLine(this.lines[i]) + "\r\n");
       total += this.rowsOf(i, w);
     }
@@ -2408,6 +2411,18 @@ class ReplEditor {
   left(): void {
     if (this.col > 0) this.col--;
     else if (this.row > 0) { this.row--; this.col = this.lines[this.row].length; }
+  }
+
+  // Ctrl+W: delete back to the start of the previous word (whitespace-
+  // delimited); at column 0 it falls back to joining with the line above.
+  deleteWordBack(): void {
+    if (this.col === 0) { this.backspace(); return; }
+    const line = this.lines[this.row];
+    let i = this.col;
+    while (i > 0 && line[i - 1] === " ") i--;
+    while (i > 0 && line[i - 1] !== " ") i--;
+    this.lines[this.row] = line.slice(0, i) + line.slice(this.col);
+    this.col = i;
   }
 
   right(): void {
@@ -2512,7 +2527,9 @@ class ReplEditor {
   }
 
   ctrlC(): KeyAction {
-    if (this.src().trim() === "") return "quit";
+    // quit only on a literally empty buffer; indent-only input CLEARS
+    // (the indent may be auto-inserted, invisible to the eye)
+    if (this.lines.length === 1 && this.lines[0] === "") return "quit";
     this.lines = [""]; this.row = 0; this.col = 0; this.histIdx = null;
     return "cont";
   }
@@ -2571,6 +2588,7 @@ class ReplEditor {
         this.lines[this.row] = this.lines[this.row].slice(this.col);
         this.col = 0;
         return "cont";
+      case "\x17": this.deleteWordBack(); return "cont";
       case "\x0b":
         this.lines[this.row] = this.lines[this.row].slice(0, this.col);
         return "cont";

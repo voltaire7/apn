@@ -311,10 +311,13 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
 - **Chunks, not lines**: Enter submits only when the chunk parses
   (`chunkComplete`: parse success, or an error that is neither EOF-shaped nor
   an unbalanced-bracket case → real error, shown in red). Incomplete input
-  continues on the next line with a `... ` prompt; Enter mid-buffer splits
-  the line. Auto-indent copies the current line's indent, +4 after `{`/`[`.
-  Trailing blank lines are trimmed before running. Keys typed past a submit
-  are queued and replayed into the next chunk (type-ahead).
+  continues on the next line; continuation lines render BARE (no prompt), so
+  multi-line code keeps its exact file layout — the user's 4-space indent
+  reads as 4 spaces. Enter mid-buffer splits the line. Auto-indent copies the
+  current line's indent, +4 after `{`/`[`. Typing `}`/`]` on an indent-only
+  line dedents one level first. Trailing blank lines are trimmed before
+  running. Keys typed past a submit are queued and replayed into the next
+  chunk (type-ahead).
 - **Paste**: bracketed paste mode is enabled (`ESC[?2004h`), so pasted
   multi-line text is inserted verbatim, never auto-run; Enter then runs it.
 - **Colors**: input is highlighted as typed (comments dim, strings/chars
@@ -322,7 +325,7 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   idents cyan); echoed values are colored by kind (node-style); errors red.
 - **Keys**: Ctrl+C clear input (empty buffer = quit), Ctrl+D quit,
   Ctrl+L clear screen, Ctrl+A/E home/end, Ctrl+U/K kill to line start/end,
-  arrows + Home/End/Delete.
+  Ctrl+W delete word back, arrows + Home/End/Delete.
 - While the terminal is raw, `print`/`debug` output is routed through the
   editor so newlines are CRLF-correct (`console.log` is patched in TTY mode).
 - `:help`/`:h` and `:quit`/`:q` work in both modes (`helpText()`).
