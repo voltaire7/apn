@@ -525,7 +525,7 @@ debug (spanArgs)              # => [1, 2, 3, 4]
 #                  core = load "core.txt"; core.sq 4 ...  is namespaced access.
 #              Inside a { } block the merge stays scoped to that block.
 #    halt      is NOT a builtin. It is defined in core.txt — the standard
-#              library — as  `halt = exit 0`. 0-arg value defs are LAZY, so
+#              library — as  `halt = exit 0`. Expression 0-arg defs are LAZY, so
 #              importing core.txt doesn't terminate the program; `halt` only
 #              fires (exits 0) when it is actually USED.
 # ---------------------------------------------------------
@@ -544,18 +544,18 @@ debug (scoped)              # => 36
 
 debug "still running before the final halt"
 
-# Laziness gotcha: a 0-arg def's { } body does NOT run at definition — it
-# runs the first time the name is FORCED. So nothing prints above until here:
+# 0-arg defs: a BLOCK body declares a 0-arg FUNCTION — the bare name is the
+# CALL (mentioning it runs the body; every mention re-runs it). Nothing runs
+# at the definition itself:
 lazyNote = {
-    debug "lazyNote WAS forced"
+    debug "lazyNote WAS called"
     6 * 7
 }
-debug (lazyNote * 2)      # forcing it prints "lazyNote WAS forced" (side effect)
-                          # then the block's value:          # => 84
-                          # A TRAILING top-level def is ALSO forced by file
-                          # mode's final value pass (its block runs at the
-                          # very end of the file); mid-file defs stay latent
-                          # until used, exactly like lazyNote did above.
+debug (lazyNote * 2)      # mentioning lazyNote runs the body (side effect)
+                          # then uses the block's value:   # => 84
+                          # An EXPRESSION body stays a lazy THUNK (cached
+                          # after its first use): halt = exit 0, core = load,
+                          # x = 5 all wait untouched until forced.
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

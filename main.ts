@@ -1603,6 +1603,15 @@ export class Interpreter {
       this.env.setLocal(name, clo);
       return clo;
     }
+    // A BLOCK body declares a 0-arg FUNCTION (like Haskell's do-block def):
+    // the bare name is the CALL — each mention re-runs the body.
+    if (value.t === "block") {
+      const child = new Env(this.env);
+      const clo: Value = { kind: "closure", params: [], body: value, env: child };
+      child.setLocal(name, clo);
+      this.env.setLocal(name, clo);
+      return clo;
+    }
     // Otherwise it's a lazy value binding: a THUNK. The body is not run at
     // definition time — it runs (and is cached) the first time the name is
     // forced. This is what lets core.txt define `halt = exit 0` without the
@@ -1643,7 +1652,19 @@ export class Interpreter {
             hint: near ? `did you mean '${near}'?` : undefined,
           });
         }
-        r = v;
+        // A 0-arg function (a block def) runs when MENTIONED — the bare
+        // name is the call; every mention re-runs the body.
+        if (v.kind === "closure" && v.params.length === 0) {
+          const old = this.env;
+          this.env = v.env;
+          try {
+            r = this.eval(v.body);
+          } finally {
+            this.env = old;
+          }
+        } else {
+          r = v;
+        }
         break;
       }
       case "binop": r = this.evalBinop(e); break;
@@ -2567,7 +2588,8 @@ function helpText(): string {
     `               statement it merges into the current scope; as a`,
     `               value it returns a module (core.sq 4). halting is`,
     `               core.txt's  halt = exit 0  (lazy: fires only when used).`,
-    `0-arg value defs are LAZY:  x = <expr>  runs <expr> on first use.`,
+    `0-arg defs: x = <expr> is a LAZY value (runs on first use); f = { ... }`,
+    `               declares a 0-arg FUNCTION — the bare name f is the call`,
     ``,
     `Type annotations (TS-style) are accepted & ignored at runtime:`,
     `  x: Int = 5`,

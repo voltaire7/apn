@@ -244,20 +244,27 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   `core = load "core.txt"; core.sq 4` is namespaced access. Implemented as a
   native: reads the file, `run`s it in a fresh child `Env`, then copies the
   loaded env's OWN entries into the caller env and returns them as a record.
-- **Lazy 0-arg defs (thunks)**: a value def with NO params and NOT a lambda —
-  `x = <expr>`, `r = [a, b]`, `core = load "..."` — is bound lazily: `evalDef`
-  stores a `{ kind: "thunk" }` and `<expr>` evaluates (and caches) the FIRST
-  time `x` is FORCED. `force()` is the single entry point and also recurses
-  into lists/records/variants; `run()` forces each top-level expr statement's
-  result, and a block forces its last statement's value — so a bare `halt`
-  at top level or as a block's last line does fire. **File mode also forces
-  the FINAL top-level value, so a TRAILING 0-arg def's block runs at the end
-  of the file** (mid-file defs stay latent until used; `halt` after them
-  exits before any of that). `recordAccess` and
-  `pluck` use `unpackThunk` instead (evaluate the body but keep
-  the result lazy — needed so `core.halt` doesn't force the whole module).
-  `force(record)` deliberately leaves thunk FIELD values unforced (a `load`
-  module may contain `halt`).
+- **0-arg defs: expression RHS = lazy thunk, block RHS = 0-arg function**:
+  - `x = <expr>`, `r = [a, b]`, `core = load "..."` — bound lazily: `evalDef`
+    stores a `{ kind: "thunk" }` and `<expr>` evaluates (and caches) the FIRST
+    time `x` is FORCED. `force()` is the single entry point and also recurses
+    into lists/records/variants; `run()` forces each top-level expr statement's
+    result, and a block forces its last statement's value — so a bare `halt`
+    at top level or as a block's last line does fire. File mode also forces
+    the FINAL top-level value (a trailing EXPRESSION def evaluates at the
+    end of the file). `recordAccess` and
+    `pluck` use `unpackThunk` instead (evaluate the body but keep
+    the result lazy — needed so `core.halt` doesn't force the whole module).
+    `force(record)` deliberately leaves thunk FIELD values unforced (a `load`
+    module may contain `halt`).
+  - `f = { ... }` (a BLOCK body — `{ }` or `( )`) declares a **0-arg
+    function** (`closure` with `params: []`), like a Haskell do-block def.
+    Nothing runs at the definition; **the bare name IS the call** — `eval` of
+    a `var` that holds a 0-arg closure runs its body, and EVERY mention
+    re-runs it (no caching). Consequently a 0-arg function's value is only
+    observable by calling it (mentioning it in an argument, a list literal,
+    a binop… all call it), and a trailing block def at the end of a file does
+    NOT run (its function is the final value).
 - **Output & conversion (DELIBERATE split)**:
   - `print s` — STRING ONLY; outputs the raw text (no quotes); anything else
     errors. It is for clean text output.
