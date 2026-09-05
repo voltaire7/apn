@@ -249,9 +249,14 @@ debug greeting             # => "Hello, world!"
 
 # Constructor patterns destructure like Haskell — bare (Just v = ...),
 # parenthesized ((Just v) = ...), or nested in a list ([Just v] = [...]).
+# But ONLY a DECLARED constructor (via data) destructures. An undeclared
+# Capitalized LHS is a plain def — the idiomatic record constructor:
 data Maybe a = Just a | Nothing
 Just v = Just 123
 debug v                    # => 123
+
+Vector3 x y z = [x: x, y: y, z: z]
+debug (Vector3 10 20 30)   # => [x: 10, y: 20, z: 30]
 
 # ---------------------------------------------------------
 # 10. PIPES, BACKTICK INFIX, OPERATOR SECTIONS

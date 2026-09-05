@@ -225,9 +225,12 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   positionally, record by field name), `(Just x) = expr`, or `Just x = expr`
   (Haskell-style, no parens) — a binding error if the pattern doesn't match.
   A bare name LHS is always a plain value definition, even capitalized
-  (`Template = [count, label]` is a def; only a constructor APPLIED to args,
-  like `Just v = ...`, destructures). Optional (ignored) `: Type` annotations
-  accepted. A block's value is its last statement. `match` with guards `|`.
+  (`Template = [count, label]` is a def). An Uppercase LHS destructures ONLY
+  when the constructor was DECLARED via `data`; undeclared, it's a plain def —
+  the idiomatic record constructor `Vector3 x y z = [x: x, y: y, z: z]`
+  makes `Vector3 10 20 30` = `[x: 10, y: 20, z: 30]`. Optional (ignored)
+  `: Type` annotations accepted. A block's value is its last statement.
+  `match` with guards `|`.
 
 ## Evaluator notes
 

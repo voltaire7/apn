@@ -949,9 +949,13 @@ class Parser {
   // Lookahead: is the statement  pattern = expr ? Restores the token index.
   // A bare name LHS (even Uppercase, e.g. `Template = ...`) is a plain value
   // definition, NOT destructuring — only an actual pattern shape (a list, a
-  // parenthesized/constructed pattern, or a constructor applied to args) is.
+  // parenthesized/constructed pattern, or a DECLARED constructor applied to
+  // args) is. An undeclared Uppercase LHS like `Vector3 x y z = ...` is a
+  // record-constructor function def, not a pattern.
   isPatBinding(): boolean {
     if (!this.startsPatBinding()) return false;
+    const t = this.peek();
+    if (t.k === "ident" && !declaredCtors.has(t.v)) return false;
     const save = this.i;
     try {
       const p = this.parseConsPattern();
@@ -1191,8 +1195,9 @@ class Parser {
             arity++;
             this.next();
           }
-          variants.push({ tag: vname, arity });
-          if (!this.eatSym("|")) break;
+variants.push({ tag: vname, arity });
+      declaredCtors.add(vname);
+      if (!this.eatSym("|")) break;
         }
         out.push({ t: "data", def: { name, variants } });
         continue;
@@ -1254,6 +1259,13 @@ class Parser {
     return out;
   }
 }
+
+// Constructors declared via `data`. This is what makes an Uppercase LHS with
+// args ambiguous: `Just v = ...` destructures only when `Just` was DECLARED a
+// constructor; otherwise `Vector3 x y z = [x: x, y: y, z: z]` stays a plain
+// (record-constructor) function def. Module-level so declarations persist
+// across REPL lines (each line is re-parsed standalone).
+let declaredCtors = new Set<string>();
 
 export function parse(src: string): TopLevel[] {
   const toks = lex(src);
@@ -1988,6 +2000,7 @@ async function repl(): Promise<void> {
             `Language:`,
             `  symbol = value   (the ONLY binding form; top level or inside { } blocks)`,
             `  [a, b] = value (destructuring binding; records match by field name)`,
+            `  Just v = value (declared constructors destructure; undeclared = a def)`,
             `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
             `  cond ? a : b   (ternary)`,
             `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,
