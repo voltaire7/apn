@@ -321,7 +321,9 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 - In file mode, expressions evaluate for their effects but do NOT auto-print
   (assignments like `r = [...]` are silent, and a bare `pairs rec` statement
   prints nothing) — every demo line in `features.txt` uses an explicit `print`.
-  In the REPL, unassigned expression results are echoed.
+  In the REPL, unassigned expression results are echoed, and ASSIGNMENTS are
+  SILENT (GHCi `let` parity — `lastIsBinding` gates the echo, so `x = x`
+  never hangs the REPL; reference the name to see the value).
 
 ## Errors
 

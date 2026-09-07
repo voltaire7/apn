@@ -2486,7 +2486,7 @@ function formatError(err: unknown, color: boolean): string {
 
 // Run a source chunk; returns the forced value, or null for unit/void.
 // REPL echo uses this (it needs the Value for colored printing).
-function runSourceValue(src: string, interp: Interpreter): Value | null {
+function runSourceValue(src: string, interp: Interpreter, binding = false): Value | null {
   let program: TopLevel[];
   try {
     program = parse(src);
@@ -2500,12 +2500,25 @@ function runSourceValue(src: string, interp: Interpreter): Value | null {
     if (err instanceof APNError) throw err;
     throw new APNError("runtime", (err as Error).message.replace(/^Runtime: /, ""));
   }
+  if (binding) return null; // an assignment binds — never forced, never echoed
   val = interp.force(val);
   return val.kind === "unit" ? null : val;
 }
 
-function runSource(src: string, interp: Interpreter): string {
-  const val = runSourceValue(src, interp);
+// Does the chunk END in a binding (def / pattern binding / data)? Those are
+// SILENT in the REPL — like GHCi's `let`, they bind without echoing a value.
+function lastIsBinding(src: string): boolean {
+  try {
+    const prog = parse(src);
+    const last = prog[prog.length - 1];
+    return last !== undefined && last.t !== "expr";
+  } catch {
+    return false;
+  }
+}
+
+function runSource(src: string, interp: Interpreter, binding = false): string {
+  const val = runSourceValue(src, interp, binding);
   return val === null ? "" : valueToString(val);
 }
 
@@ -3174,7 +3187,7 @@ async function replTTY(): Promise<void> {
         }
       }
       try {
-        const val = runSourceValue(src, interp);
+        const val = runSourceValue(src, interp, lastIsBinding(src));
         if (val !== null) ed.print(showValue(val));
       } catch (err) {
         ed.print(formatError(err, true));
@@ -3237,7 +3250,7 @@ async function replPiped(): Promise<void> {
       // (missing `in`, `->`, or a structural `newline`), keep accumulating so
       // users can enter multi-line constructs. Otherwise report the error.
       try {
-        const out = runSource(pending, interp);
+        const out = runSource(pending, interp, lastIsBinding(pending));
         if (out) console.log(out);
         pending = "";
         await Deno.stdout.write(new TextEncoder().encode(prompt));
