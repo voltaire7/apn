@@ -740,6 +740,7 @@ class Parser {
       if (t.k === "newline" || t.k === "dedent" || t.k === "indent" || t.k === "eof") break;
       if (t.k === "sym" && t.v === ";") break;
       if (t.k === "ident" || t.k === "int" || t.k === "float" || t.k === "bool" ||
+          (t.k === "kw" && (t.v === "true" || t.v === "false")) ||
           t.k === "str" || t.k === "char" ||
           (t.k === "sym" && (t.v === "(" || t.v === "[" || t.v === "{"))) {
         const a = this.parsePostfix(this.parsePrimary());
@@ -1171,6 +1172,17 @@ class Parser {
     // op-front:  (+ 2)   (op followed by an operand, then ')')
     if (t.k === "sym" && t.v !== "-" && Parser.sectionOps.includes((t as { v: string }).v)) {
       try {
+        // lone (op): a 2-arg lambda —  add = (+)
+        if (this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === ")") {
+          const op = t.v as BinOp;
+          this.next(); // op
+          this.next(); // )
+          return {
+            t: "lambda",
+            params: ["$L", "$R"],
+            body: { t: "binop", op, l: { t: "var", name: "$L" }, r: { t: "var", name: "$R" } },
+          };
+        }
         this.next(); // op
         const operand = this.parseUnary();
         this.expectSym(")");
@@ -1240,6 +1252,7 @@ class Parser {
       if (t.k === "sym" && t.v === "[") break;
       if (t.k === "ident" || t.k === "int" || t.k === "float" || t.k === "bool" ||
           t.k === "str" || t.k === "char" ||
+          (t.k === "kw" && (t.v === "true" || t.v === "false")) ||
           (t.k === "sym" && (t.v === "(" || t.v === "{"))) {
         const a = this.parsePostfix(this.parsePrimary());
         f = { t: "app", f, a };
@@ -1573,9 +1586,8 @@ export class Interpreter {
         last = this.evalPatBinding(tl);
         continue;
       }
-      // a bare expression statement: a 0-arg function at STATEMENT position
-      // runs (the bare name is the call)
-      last = this.force(this.callBlockFn(this.eval(tl.value)));
+      // a bare expression statement: 0-arg functions and thunks RUN here
+      last = this.force(this.runStmt(this.eval(tl.value)));
     }
     return last;
   }
@@ -1649,13 +1661,45 @@ export class Interpreter {
     }
   }
 
-  // DEMAND a real value: force, and if it is a 0-arg function, RUN it first.
-  // Demand contexts: statement position, operands, record targets,
-  // scrutinees. Natives that SHOW values (debug, toString) force instead —
-  // inspecting a function yields the function.
+  // DEMAND a real value: run 0-arg functions and force thunks until something
+  // concrete emerges (a lazy argument may unwrap to an action that returns
+  // another action, e.g. a block-local `smaller = filter ...` passed to a
+  // pattern clause), then force containers so pattern matching sees a list.
+  // Demand contexts: operands, record targets, scrutinees, pattern matching.
+  // Natives that SHOW values (debug, toString) force instead — inspecting a
+  // function yields the function.
   demand(v: Value): Value {
-    const ran = this.callBlockFn(v);
-    return ran === v ? this.force(v) : this.force(ran);
+    for (;;) {
+      if (v.kind === "closure" && v.params.length === 0) {
+        v = this.callBlockFn(v);
+      } else if (v.kind === "thunk") {
+        v = this.force(v);
+      } else {
+        return this.force(v);
+      }
+    }
+  }
+
+  // STATEMENT position: a 0-arg function RUNS (the bare name is the call),
+  // and a thunk re-runs UNCACHED (every mention acts). The loop chains:
+  //   halt = (load "core.txt").halt ; halt   runs load, then the field's
+  // action, then exits.  x = x ; x   re-evaluates forever (true divergence).
+  runStmt(v: Value): Value {
+    for (;;) {
+      if (v.kind === "closure" && v.params.length === 0) {
+        v = this.callBlockFn(v);
+      } else if (v.kind === "thunk") {
+        const old = this.env;
+        this.env = v.env;
+        try {
+          v = this.eval(v.body);
+        } finally {
+          this.env = old;
+        }
+      } else {
+        return v;
+      }
+    }
   }
 
   eval(e: Expr): Value {
@@ -1691,7 +1735,11 @@ export class Interpreter {
         }
         break;
       }
-      case "app": r = this.apply(this.eval(e.f), this.eval(e.a)); break;
+      case "app":
+        // ARGUMENTS ARE LAZY (Haskell): the argument is wrapped, unevaluated,
+        // and forced/ran only where a real value is needed
+        r = this.apply(this.eval(e.f), { kind: "thunk", body: e.a, env: this.env });
+        break;
       case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
       case "ternary": {
         const c = this.demand(this.eval(e.cond));
@@ -1794,7 +1842,7 @@ export class Interpreter {
         r = { kind: "record", v: out };
         break;
       }
-      case "pipe": r = this.apply(this.eval(e.f), this.eval(e.x)); break;
+      case "pipe": r = this.apply(this.eval(e.f), { kind: "thunk", body: e.x, env: this.env }); break;
       case "block": {
         const child = new Env(this.env);
         const old = this.env;
@@ -1804,7 +1852,7 @@ export class Interpreter {
           for (const s of e.stmts) {
             if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
             else if (s.t === "patDef") r = this.evalPatBinding(s);
-            else r = this.callBlockFn(this.eval(s)); // bare name = call
+            else r = this.runStmt(this.eval(s)); // bare name = call
           }
           // A block's value is its last statement's value — force it, so a
           // trailing `halt`/`exit` (or any thunk) actually runs.
@@ -1939,12 +1987,20 @@ export class Interpreter {
       case "clauseFn": {
         f.applied.push(arg);
         if (f.applied.length < f.arity) return f;
-        const args = f.applied.map((a) => this.force(a));
+        const raw = f.applied;
         f.applied = [];
+        // DEMANDED args (run 0-arg functions + force), memoized once per call
+        // so pattern clauses never re-run a side-effecting argument.
+        let dem: Value[] | null = null;
+        const demanded = () => dem ?? (dem = raw.map((a) => this.demand(a)));
         // Try each clause in order; a clause matches when ALL its params match.
+        // All-var clauses bind the arguments UNEVALUATED (Haskell laziness);
+        // pattern clauses demand real values to match against.
         for (const clause of f.clauses) {
           const binds = new Map<string, Value>();
           let ok = true;
+          const simple = clause.params.every((p) => p.p === "var");
+          const args = simple ? raw : demanded();
           for (let i = 0; i < clause.params.length; i++) {
             if (!this.matchPattern(clause.params[i], args[i], binds)) { ok = false; break; }
           }
@@ -1966,7 +2022,7 @@ export class Interpreter {
         // Indexing:  arr 0 -> element,  arr (-1) -> last,  arr [0, 2] -> picks
         const arr = f.kind === "lazyList" ? this.force(f) : f;
         if (arr.kind !== "list") throw new Error("Runtime: value is not a list");
-        const carg = this.force(arg);
+        const carg = this.demand(arg);
         if (carg.kind === "int") {
           let i = carg.v;
           if (i < 0) i += arr.v.length;
@@ -1992,7 +2048,7 @@ export class Interpreter {
       case "record": {
         // Applying an OBJECT clones it (list = positional, record = named),
         // or an int argument indexes it positionally -> [field, value].
-        const carg = this.force(arg);
+        const carg = this.demand(arg);
         if (carg.kind === "list") {
           if (f.v.length !== carg.v.length) {
             throw new Error(`Runtime: field count (${f.v.length}) does not match list size (${carg.v.length})`);
@@ -2043,14 +2099,26 @@ export class Interpreter {
     }
     if (v.kind === "thunk") {
       if (v.value) return v.value;
-      const old = this.env;
-      this.env = v.env;
-      try {
-        v.value = this.force(this.eval(v.body));
-      } finally {
-        this.env = old;
+      // Follow thunk chains ITERATIVELY: `x = x` spins here forever (true
+      // divergence, no JS stack overflow); `a = b; b = a` loops the same way.
+      let cur: Value = v;
+      while (cur.kind === "thunk") {
+        if (cur.value) return cur.value;
+        const old = this.env;
+        this.env = cur.env;
+        let out: Value;
+        try {
+          out = this.eval(cur.body);
+        } finally {
+          this.env = old;
+        }
+        if (out === cur) continue; // self-reference: diverge by design
+        cur = out;
       }
-      return v.value;
+      // cur is concrete now; force nested containers and cache the result
+      const forced = this.force(cur);
+      v.value = forced;
+      return forced;
     }
     if (v.kind === "list") return mkList(v.v.map((x) => this.force(x)));
     if (v.kind === "variant") return { kind: "variant", tag: v.tag, v: v.v.map((x) => this.force(x)) };
@@ -2594,7 +2662,7 @@ function helpText(): string {
     `  [1,2,3]  [name: "x", age: 2]   (newlines also separate elements)`,
     `  x $ f             pipe: feeds x into f`,
     `  a \`f\` b            infix call == f a b  (only \`for\` inverts)`,
-    `  (+ 2)  (2 +)      operator sections   ((-2) stays unary minus)`,
+    `  (+ 2)  (2 +)  (+)  operator sections   ((-2) stays unary minus)`,
     `  ( ) and { } are groups/blocks: unit when empty, value = last stmt`,
     `  ; or newline       statement separators (blocks & top level)`,
     `  indentation: strict 4-space layout (exactly +4 per level)`,

@@ -293,6 +293,11 @@ debug (max 4 9)            # => 9
 smallest a b c = (a < b ? a : b) < c ? (a < b ? a : b) : c
 debug (smallest 7 2 9)     # => 2
 
+# lazy arguments make `if` just a function — only the TAKEN branch runs
+ifFn cond then else = cond ? then : else
+ifFn false (print "a") (print "b")     # prints: b
+debug (ifFn true 1 2)                  # => 1
+
 # ---------------------------------------------------------
 # 9. BINDINGS —  symbol = value  (the ONLY form; no let, no mutation)
 #    The LHS may be a destructuring PATTERN:  [name, hello] = expr
@@ -348,6 +353,10 @@ debug (map (+ 2) [1, 2, 3])               # => [3, 4, 5]
 debug (map (2 +) [1, 2, 3])               # => [3, 4, 5]
 debug (map (* 10) [1, 2, 3])              # => [10, 20, 30]
 debug (filter (2 <) [3, 1, 4, 1, 5])      # => [3, 4, 5]
+addOp = (+)                                 # a lone (op) is a 2-arg lambda
+debug (addOp 1 2)                           # => 3
+debug (addOp 1)                             # => <function>   (partial, as usual)
+
 debug (-2)                                # => -2  ((- 2) is NOT a section:
                                           #     unary minus wins; use a lambda)
 
@@ -362,6 +371,15 @@ debug (foldr (x acc -> x - acc) 0 [1, 2, 3])  # => 2
 
 # pattern-lambdas: a lambda param may be a pattern (here, destructuring a pair)
 debug (map ([a, b] -> a + b) [[1, 2], [3, 4]])  # => [3, 7]
+
+# ARGUMENTS ARE LAZY (Haskell): quicksort's block-local `smaller`/`bigger`
+# are 0-arg actions passed unevaluated — pattern clauses demand their values
+quicksort []     = []
+quicksort (x:xs) = {
+    smaller = filter (<= x) xs; bigger = filter (> x) xs
+    quicksort smaller ++ [x] ++ quicksort bigger
+}
+debug (quicksort [82, 15, 4, 95, 36, 32])    # => [4, 15, 32, 36, 82, 95]
 
 # ---------------------------------------------------------
 # 12. STRINGS, CHARS, FLOATS, BOOLS, CONVERSION

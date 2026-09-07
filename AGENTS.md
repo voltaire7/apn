@@ -164,8 +164,11 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
       len (x:rest) = 1 + len rest
   Consecutive same-name defs with params of equal arity are merged by
   `groupClauses` into one `clauseFn` value. See `evalDef` / `apply`:
-  `clauseFn` accumulates applied args (supporting partial application), forces
-  them, then tries each clause's patterns via `matchPattern`; no clause matches
+  `clauseFn` accumulates applied args (supporting partial application) as
+  LAZY thunks; all-var clauses bind them UNEVALUATED (Haskell laziness),
+  pattern clauses DEMAND them (run 0-arg functions + force, memoized once
+  per call so clause fallthrough never re-runs a side-effecting argument),
+  then try each clause's patterns via `matchPattern`; no clause matches
   → "no clause of '<name>' matches the given arguments" (the error names the
   function). Guards on def clauses are
   NOT supported (use `match x [ ... | ... ]` inside the body for guards).
@@ -218,7 +221,7 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
     inversion only — the `for` native stays strict fn-first (see below).
   - Operator sections: `(+ 2)` = `\x -> x + 2`, `(2 +)` = `\x -> 2 + x` for
     `+ - * / % == != < > <= >= ++`. `(-2)` stays unary negation (no whitespace
-    info in the lexer); `(+)` alone is unsupported — use a lambda.
+    info in the lexer); a LONE `(op)` is a 2-arg lambda: `add = (+)`.
 - **Iteration**: `for` is a native with the **same argument positioning as
   `map`**: `for : fn -> seq -> unit`, strictly fn-first and NOT order-flexible.
   A list iterates per element; a record per entry as `[field, value]`.
@@ -260,10 +263,20 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
     **0-arg function** (`closure` with `params: []`), with or without `{}`s:
     `f = print "hello"` == `f = { print "hello" }`. Nothing runs at the
     definition; every call RE-RUNS the body (no caching).
+  - **ARGUMENTS ARE LAZY (Haskell)**: `app`/`pipe` wrap their argument in a
+    thunk, unevaluated. Where a real value is needed it is DEMANDED. This
+    makes `if` just a function —
+    `if cond then else = cond ? then : else`, then
+    `if false (print "a") (print "b")` prints only `b` — and it lets
+    block-local `smaller = filter ...` flow into recursive pattern clauses.
   - **When it runs** (application is left-associative, `debug f` = `(debug f)`):
-    - STATEMENT position: a bare name as a top-level/block statement calls
-      it — so `debug (f)` also CALLS (the `( )` group's statement is the
-      bare name).
+    - STATEMENT position (`runStmt`): a bare name as a top-level/block
+      statement runs 0-arg functions AND re-runs thunks uncached, chaining
+      until a concrete value — so `debug (f)` CALLS (the `( )` group's
+      statement is the bare name), and `halt = (load "core.txt").halt` +
+      bare `halt` runs load, then the field's action, then exits.
+      `x = x; x` diverges FOREVER (thunk chains are followed iteratively in
+      `force` — true divergence, no JS stack overflow).
     - DEMAND contexts (needing a real value): binop/unop operands, ternary
       conditions, match scrutinees, record targets (`core.sq 4` after
       `core = load "..."`), and every consuming native (head, length, map,
