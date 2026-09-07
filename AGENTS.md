@@ -428,7 +428,8 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
 
 ## Conventions
 
-- Untyped TypeScript; `Value` is a discriminated union. When adding a new kind,
+- Untyped TypeScript; `Value` is a discriminated union. **Indent: 4 spaces
+  per level in .ts files** (no autoformatters — manual style only). When adding a new kind,
   update `valueToString`, `eval`, and any `force`/pattern/`==` switches — they
   are exhaustive.
 - Keep edits consolidated in `main.ts`; keep the minimal four-file layout (no new deps,

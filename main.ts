@@ -16,23 +16,23 @@ export { lex } from "./src/lexer.ts";
 // ---------------- main ----------------
 
 if (import.meta.main) {
-  const _args = Deno.args;
+    const _args = Deno.args;
 
-  if (_args.length >= 1 && !_args[0]?.startsWith(":")) {
-    const file = _args[0];
-    const src = Deno.readTextFileSync(file);
-    const interp = new Interpreter();
-    interp.sourceDir = dirname(file);
-    try {
-      runSource(src, interp);
-    } catch (err) {
-      console.error(formatError(err, Deno.stderr.isTerminal()));
-      Deno.exit(1);
+    if (_args.length >= 1 && !_args[0]?.startsWith(":")) {
+        const file = _args[0];
+        const src = Deno.readTextFileSync(file);
+        const interp = new Interpreter();
+        interp.sourceDir = dirname(file);
+        try {
+            runSource(src, interp);
+        } catch (err) {
+            console.error(formatError(err, Deno.stderr.isTerminal()));
+            Deno.exit(1);
+        }
+    } else {
+        repl().catch((err: unknown) => {
+            console.error(err);
+            Deno.exit(1);
+        });
     }
-  } else {
-    repl().catch((err: unknown) => {
-      console.error(err);
-      Deno.exit(1);
-    });
-  }
 }
