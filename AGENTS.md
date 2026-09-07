@@ -15,19 +15,28 @@
    out of date.
 2. **Keep it green.** If a change breaks any existing feature, fix it before
    finishing. Do not leave the project in a broken state.
-3. **Keep the file layout minimal.** `main.ts`, `features.txt`, `AGENTS.md` in
-   the project root only — no `src/`, no package.json, no new dependencies.
+3. **Layout:** `main.ts` + `src/` modules (see Project), plus `features.txt`,
+   `AGENTS.md`, `core.txt`, `apn` in the root — no package.json, no deps.
 
 ## Project
 
 APN — **A**pplicative **P**olish **N**otation — is a lazy, Haskell-like,
-dynamically-typed (JS-like) scripting language implemented as a single-file
-Deno/TypeScript interpreter. It runs from the command line and has a REPL.
+dynamically-typed (JS-like) scripting language implemented as a Deno/
+TypeScript interpreter. It runs from the command line and has a REPL.
 
-Three files only, all project root:
-- `main.ts` — the entire interpreter (lexer, parser, evaluator, REPL)
-- `apn` — tiny sh launcher for the REPL/file runs (the only extra file,
-  user-requested; it adds no logic)
+Layout (user-approved src/ split):
+- `main.ts` — thin entry point: shebang, imports, the `import.meta.main`
+  dispatch; re-exports `parse`/`lex` for ad-hoc tooling
+- `src/types.ts` — `Value`, `Env`, `mk*`, `valueToString` (the runtime world)
+- `src/ast.ts` — `Expr`/`Pattern`/`TopLevel`/`Alt`/`DefClause` type shapes
+- `src/errors.ts` — `APNError` (kinds parse/lex/runtime), `didYouMean`,
+  `tokLen`, `editDistance`
+- `src/lexer.ts` — `Token`, `KEYWORDS`, `SYMBOLS`, `lex`
+- `src/parser.ts` — `Parser`, `parse`, `groupClauses`, `declaredCtors`
+- `src/interp.ts` — `NATIVES`, `Interpreter` (eval/apply/demand/runStmt),
+  `checkInterrupt` + the interrupt flag, `envNames`, `dirname`
+- `src/repl.ts` — REPL editor, colors, history, errors rendering, drivers
+- `apn` — tiny sh launcher (REPL/file runs; no logic)
 - `features.txt` — the living spec + smoke test: a runnable showcase of EVERY
   feature. It must always stay in sync with what `main.ts` actually supports.
   (There are no real unit tests — this file IS the test.)
