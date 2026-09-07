@@ -19,6 +19,7 @@ const KEYWORDS = new Set([
 ]);
 
 const SYMBOLS = [
+  "..",
     ">>>", "==>", "$", "<<", "<<=", ">>=", "==", "!=", "<=", ">=", "=>", "->", "<-",
     "&&", "||", "++", "::", ":=",
 ];
@@ -180,7 +181,7 @@ export function lex(src: string): Token[] {
 
         if (/\d/.test(c)) {
             let num = "";
-            while (pos < src.length && /\d|\./.test(src[pos])) num += src[pos++];
+            while (pos < src.length && (/\d/.test(src[pos]) || (src[pos] === "." && src[pos + 1] !== "."))) num += src[pos++];
             if (num.includes(".")) toks.push({ k: "float", v: parseFloat(num), pos: start });
             else toks.push({ k: "int", v: parseInt(num, 10), pos: start });
             continue;

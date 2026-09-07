@@ -231,16 +231,18 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   - Operator sections: `(+ 2)` = `\x -> x + 2`, `(2 +)` = `\x -> 2 + x` for
     `+ - * / % == != < > <= >= ++`. `(-2)` stays unary negation (no whitespace
     info in the lexer); a LONE `(op)` is a 2-arg lambda: `add = (+)`.
-- **Iteration**: `for` is a native with the **same argument positioning as
-  `map`**: `for : fn -> seq -> unit`, strictly fn-first and NOT order-flexible.
-  A list iterates per element; a record per entry as `[field, value]`.
-  Exactly like `map`, the pipe feeds the collection in last:
-  `for (x -> ...) [1, 2, 3]` == `[1, 2, 3] $ for (x -> ...)`. The backtick
-  spelling ``[1, 2, 3] `for` (x -> ...)`` also works (it inverts in the parser).
-  Any other backtick (`myApp`, `map`, …) stays `f a b`, so putting a collection
-  in the fn slot errors.
-  Related natives: `pairs rec` (record → list of `[field, value]`), and
-  `format "% %" [a, b]` (`%` = printf-style arg, strings unquoted; `%%` = `%`).
+- **Iteration — `*` is OVERLOADED**: `seq * fn` iterates and RETURNS the
+  results list. `for` is REMOVED (no native, no backtick inversion — freed
+  as an identifier). The left side decides what iterates: a LIST yields each
+  element; a RECORD yields each entry as a `[field, value]` list; an INT n
+  runs fn n times with `0..n-1` (a negative n counts `0, -1, ... n+1` —
+  `3 * _ -> print "hello"` runs three times). `*` between two numbers is
+  still multiplication; the overload triggers on a function right operand.
+  Related natives: `pairs rec`, and `format "% %" [a, b]` (`%` = printf-style
+  arg, strings unquoted; `%%` = `%`).
+- **Ranges**: `[0..100]` is an inclusive INT range list (Haskell-style;
+  `[5..3]` is empty; negatives work: `[-3..3]`). Range PATTERNS:
+  `[lo..hi]` matches any int in the range, inclusive (binds nothing).
 - **Termination**: `exit n` (native, n int) ends the whole process with status
   `n`, callable from ANYWHERE — top level, inside `{ }` blocks, lambdas,
   `for`/`map` callbacks, etc. implemented via an unconditional `Deno.exit`.

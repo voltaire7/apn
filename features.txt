@@ -408,27 +408,38 @@ print {
 }                                   # => 5
 
 # ---------------------------------------------------------
-# 14. ITERATION (for), pairs, format
-#    for : fn -> seq -> unit   runs fn for its effect; result is discarded.
+# 14. ITERATION (`*`), pairs, format
+#    seq * fn — iterate and collect the results   runs fn for its effect; result is discarded.
 #    A list iterates per element; a record per entry as [field, value].
 # ---------------------------------------------------------
-for (x -> print x) [1, 2, 3]                 # prints 1, 2, 3
-[1, 2, 3] $ for (x -> print (x * 10))        # prints 10, 20, 30
+[1, 2, 3] * x -> print x                     # prints 1, 2, 3
+[1, 2, 3] * x -> print (x * 10)               # prints 10, 20, 30
 
 # records iterate as [field, value] pairs — destructure with a pattern-lambda;
 # `format` builds a string, so `print` emits it as raw text
-for ([f, v] -> print (format "%: %" [f, v])) [name: "Alice", age: 30]
+[name: "Alice", age: 30] * [f, v] -> format "%: %" [f, v] $ print
                                              # prints name: Alice, age: 30
 
-# like map, for is strictly fn-first:   for f seq  ==  seq $ for f
-# (positioning matches map; the pipe feeds the collection in as the last arg)
-[x: 1, y: 2, z: 3] $ for ([field, value] -> format "%: %" [field, value] $ print)
+[x: 1, y: 2, z: 3] * [field, value] -> format "%: %" [field, value] $ print
                                              # prints x: 1, y: 2, z: 3
 
-# `for` is the one backtick that inverts (unlike `f`, which is f a b):
-#   seq `for` fn  ==  seq $ for fn   (the sequence sits on the left)
-[x: 1, y: 2, z: 3] `for` [field, value] -> format "%: %" [field, value] $ print
-                                             # prints x: 1, y: 2, z: 3
+# `*` is OVERLOADED: numbers multiply, but seq * fn ITERATES (and returns
+# the results). An int count runs fn that many times (0..n-1, negatives
+# count down from 0):
+3 * _ -> print "three"                       # prints three, three, three
+-2 * x -> print x                            # prints 0, -1
+
+# ranges are INCLUSIVE int lists (Haskell-style):
+print ([0..5])                               # => [0, 1, 2, 3, 4, 5]
+[0..3] * x -> print x                        # prints 0, 1, 2, 3
+
+# and ranges PATTERNS-match — [lo..hi] fits any int in the range:
+size n = match n [
+    [0..5] -> "small"
+    _ -> "big"
+]
+print (size 7)                               # => big
+print (size 3)                               # => small
 
 pairs [a: 1, b: 2] $ print                   # => [["a", 1], ["b", 2]]
 

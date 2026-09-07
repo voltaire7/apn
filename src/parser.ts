@@ -131,6 +131,24 @@ class Parser {
         }
         if (t.k === "sym" && t.v === "[") {
             this.next();
+            // RANGE PATTERN: [0..10] matches any int in the range (inclusive)
+            {
+                const a = this.peek();
+                const neg = a.k === "sym" && (a as { v: string }).v === "-";
+                const n0 = (neg ? this.peek(1) : a) as Token;
+                const dots = this.peek(neg ? 2 : 1);
+                if ((n0.k === "int" || n0.k === "float") && dots.k === "sym" &&
+                    (dots as { v: string }).v === "..") {
+                    if (neg) this.next();
+                    const lo = (this.next() as { v: number }).v;
+                    this.next(); // ..
+                    const neg2 = this.isSym("-");
+                    if (neg2) this.next();
+                    const hi = (this.next() as { v: number }).v;
+                    this.expectSym("]");
+                    return { p: "range", lo: neg ? -lo : lo, hi: neg2 ? -hi : hi };
+                }
+            }
             const ps = [] as Pattern[];
             const keyed = [] as Array<[string, string]>;
             let mode: "bare" | "keyed" | undefined;
@@ -230,9 +248,7 @@ class Parser {
         while (this.peek().k === "opw") {
             const op = (this.next() as { v: string }).v;
             const rhs = this.parseCompare();
-            if (op === "for") {
-                e = { t: "app", f: { t: "app", f: { t: "var", name: "for" }, a: rhs }, a: e };
-            } else {
+            {
                 e = { t: "app", f: { t: "app", f: { t: "var", name: op }, a: e }, a: rhs };
             }
         }
@@ -524,6 +540,26 @@ class Parser {
                         // Otherwise it's a list literal: [a, b, ...] — elements separate on
                         // `,` OR a newline (commas are optional when each element is on its
                         // own line;  [1 2] on ONE line is still a single element = 1 applied to 2).
+                        // RANGE: [0..100] — int range list, inclusive (Haskell)
+                        {
+                            const a = this.peek();
+                            const neg = a.k === "sym" && (a as { v: string }).v === "-";
+                            const n0 = (neg ? this.peek(1) : a) as Token;
+                            const dots = this.peek(neg ? 2 : 1);
+                            if ((n0.k === "int" || n0.k === "float") && dots.k === "sym" &&
+                                (dots as { v: string }).v === "..") {
+                                if (neg) this.next();
+                                const lo = Math.trunc((this.next() as { v: number }).v);
+                                this.next(); // ..
+                                const neg2 = this.isSym("-");
+                                if (neg2) this.next();
+                                const hi = Math.trunc((this.next() as { v: number }).v);
+                                this.expectSym("]");
+                                const rs: Expr[] = [];
+                                for (let i = lo; i <= hi; i++) rs.push({ t: "int", v: i });
+                                return { t: "list", v: rs };
+                            }
+                        }
                         const es = [] as Expr[];
                         for (;;) {
                             es.push(this.parseExpr());

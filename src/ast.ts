@@ -46,7 +46,8 @@ export type Pattern =
     | { p: "list"; v: Pattern[] }
     | { p: "cons"; head: Pattern; tail: Pattern }
     | { p: "constr"; tag: string; args: Pattern[] }
-    | { p: "recPat"; v: Array<[string, string]> };
+    | { p: "recPat"; v: Array<[string, string]> }
+    | { p: "range"; lo: number; hi: number };
 
 interface DataDef { name: string; variants: { tag: string; arity: number }[]; }
 

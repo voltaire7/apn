@@ -302,7 +302,7 @@ function helpText(): string {
         `  ( ) and { } are groups/blocks: unit when empty, value = last stmt`,
         `  ; or newline       statement separators (blocks & top level)`,
         `  indentation: strict 4-space layout (exactly +4 per level)`,
-        `  for (x -> print x) [1,2,3]   for fn seq`,
+        `  [1,2,3] * x -> print x      (seq * fn iterates; int * fn counts),
         `  recursion, higher-order fns, records, variants`,
         ``,
         `print x    any value (strings raw), returns x;  emit  = no newline`,

@@ -14,7 +14,7 @@ const STACK_LIMIT = 1000; // below V8's own JS stack, so APN errors first
 export const NATIVES: Array<[string, number]> = [
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
-    ["intToString", 1], ["for", 2], ["pairs", 1], ["format", 2],
+    ["intToString", 1], ["pairs", 1], ["format", 2],
     ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1],
     ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1],
 ];
@@ -216,6 +216,27 @@ export class Interpreter {
         }
         if (expr === null) return val;
         return { kind: "closure", params: [], body: expr, env: this.env };
+    }
+
+
+    // `*` iteration: seq * fn — applies fn over the sequence and returns the
+    // results. seq is a list (elements), a record (entries as [field, value]
+    // lists), or an int n (0..n-1; a negative n counts 0, -1, ... n+1).
+    iterate(seq: Value, f: Value): Value {
+        const out: Value[] = [];
+        if (seq.kind === "list") {
+            for (const x of seq.v) out.push(this.apply(f, x));
+        } else if (seq.kind === "record") {
+            for (const [k, x] of seq.v) out.push(this.apply(f, mkList([mkStr(k), x])));
+        } else if (seq.kind === "int") {
+            const n = Math.abs(seq.v);
+            for (let i = 0; i < n; i++) out.push(this.apply(f, mkInt(seq.v >= 0 ? i : -i)));
+        } else {
+            throw new APNError("runtime", `cannot iterate a ${seq.kind}`, {
+                hint: "expected a list, a record, or an int count",
+            });
+        }
+        return mkList(out);
     }
 
     // Run a 0-arg function (an action def: f = { ... } / f = print "hi").
@@ -472,6 +493,13 @@ export class Interpreter {
                 if (l.kind === "float" && r.kind === "float") return { kind: "float", v: l.v - r.v };
                 return bad();
             case "*":
+                // OVERLOADED: with a function on the right, ITERATE —
+                //   [1,2,3] * x -> print x     (elements)
+                //   [x: 1] * [f, v] -> ...     (entries as [field, value])
+                //   100 * x -> print x          (0..99; negatives count down)
+                if (r.kind === "closure" || r.kind === "clauseFn" || r.kind === "native") {
+                    return this.iterate(l, r);
+                }
                 if (l.kind === "int" && r.kind === "int") return mkInt(l.v * r.v);
                 if (l.kind === "float" && r.kind === "float") return { kind: "float", v: l.v * r.v };
                 return bad();
@@ -842,21 +870,6 @@ export class Interpreter {
             case "intToString":
                 if (a.kind !== "int") throw new Error("Runtime: intToString expects int");
                 return mkStr(String(a.v));
-            case "for": {
-                // for : fn -> seq -> unit   (like map, but discards results, runs effects)
-                // seq is a list (yields each element) or a record (yields each entry
-                // as a [field, value] list).
-                const f = args[0];
-                const seq = args[1];
-                if (seq.kind === "list") {
-                    for (const x of seq.v) this.apply(f, x);
-                } else if (seq.kind === "record") {
-                    for (const [k, v] of seq.v) {
-                        this.apply(f, mkList([mkStr(k), v]));
-                    }
-                } else throw new Error("Runtime: for expects a list or a record");
-                return { kind: "unit" };
-            }
             case "pairs":
                 if (a.kind !== "record") throw new Error("Runtime: pairs expects a record");
                 return mkList(a.v.map(([k, v]) => mkList([mkStr(k), v])));
@@ -958,6 +971,9 @@ export class Interpreter {
                 }
                 return true;
             }
+            case "range":
+                // [0..10] matches any int in the range, inclusive
+                return v.kind === "int" && v.v >= p.lo && v.v <= p.hi;
             case "recPat": {
                 // Keyed record pattern (Rust-style):  [x: a, y: b]  extracts fields x, y
                 // from a record and binds a, b to their values.
