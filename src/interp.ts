@@ -3,7 +3,7 @@ import type { Expr, Pattern, TopLevel, Alt } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
 import { type Value, Env } from "./types.ts";
 import { mkInt, mkBool, mkStr, mkList, valueToString, rawString } from "./types.ts";
-import { parse } from "./parser.ts";
+import { parse, exprToSource } from "./parser.ts";
 
 // ---------------- Evaluator ----------------
 
@@ -16,6 +16,7 @@ export const NATIVES: Array<[string, number]> = [
   ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
   ["intToString", 1], ["for", 2], ["pairs", 1], ["format", 2],
   ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1],
+  ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1],
 ];
 
 export class Interpreter {
@@ -115,6 +116,78 @@ export class Interpreter {
     }
     for (const [k, bv] of binds) this.env.setLocal(k, bv);
     return v;
+  }
+
+
+  // S-expression of an expression: nested APN lists, head first —
+  //   toAST (1 + 2)  =>  [+, 1, 2]
+  sexprOf(e: import("./ast.ts").Expr): Value {
+    switch (e.t) {
+      case "int": return mkInt(e.v);
+      case "float": return { kind: "float", v: e.v };
+      case "bool": return mkBool(e.v);
+      case "string": return mkStr(e.v);
+      case "char": return { kind: "char", v: e.v };
+      case "unit": return { kind: "unit" };
+      case "var": return mkStr(e.name);
+      case "binop": return mkList([mkStr(e.op), this.sexprOf(e.l), this.sexprOf(e.r)]);
+      case "unop": return mkList([mkStr(e.op), this.sexprOf(e.e)]);
+      case "app": return mkList([this.sexprOf(e.f), this.sexprOf(e.a)]);
+      case "lambda": return mkList([mkStr("->"), mkStr(e.params.join(" ")), this.sexprOf(e.body)]);
+      case "list": return mkList(e.v.map((x) => this.sexprOf(x)));
+      case "record":
+        return mkList(e.v.map(([k, x]) => mkList([mkStr(k), this.sexprOf(x)])));
+      case "ternary":
+        return mkList([mkStr("?:") as Value, this.sexprOf(e.cond), this.sexprOf(e.then), this.sexprOf(e.els)]);
+      case "block": {
+        // a single-statement ( ) group is transparent — toAST (1 + 2) => [+, 1, 2]
+        const one = e.stmts.length === 1 && e.style === "(" && e.stmts[0].t !== "stmDef" && e.stmts[0].t !== "patDef";
+        if (one) return this.sexprOf(e.stmts[0]);
+        return mkList(e.stmts.map((st) => this.sexprOf(st.t === "stmDef" ? st.clauses[0].body : st.t === "patDef" ? st.value : st)));
+      }
+      case "match": return mkList([mkStr("match"), this.sexprOf(e.scrut)]);
+      case "pipe": return mkList([mkStr("$"), this.sexprOf(e.x), this.sexprOf(e.f)]);
+      case "recordAccess":
+        return mkList([mkStr("."), this.sexprOf(e.rec), typeof e.field === "string" ? mkStr(e.field) : this.sexprOf(e.field)]);
+      default: return mkList([mkStr(e.t)]);
+    }
+  }
+
+  // step n v — descend n levels into v's unevaluated structure (resolving
+  // names, unwrapping blocks/thunks/0-arg bodies) and return a LIVE 0-arg
+  // action over the level's expression: debug shows its source, print RUNS it.
+  stepNative(argsIn: Value[]): Value {
+    const n = this.demand(argsIn[0]);
+    if (n.kind !== "int" || n.v < 0) {
+      throw new APNError("runtime", "step needs a non-negative int count");
+    }
+    const t = argsIn[1];
+    let expr: import("./ast.ts").Expr | null = t.kind === "thunk" ? t.body : null;
+    let val: Value = t;
+    for (let i = 0; i < n.v; i++) {
+      // free descents: names resolve, blocks expose their last statement
+      for (;;) {
+        if (expr !== null && expr.t === "var") {
+          val = this.env.get(expr.name) ?? { kind: "unit" };
+          expr = null;
+        } else if (expr !== null && expr.t === "block") {
+          const last = expr.stmts[expr.stmts.length - 1];
+          if (last.t === "stmDef" || last.t === "patDef") break;
+          expr = last;
+        } else break;
+      }
+      // the level's unwrap: a 0-arg action or a thunk opens its body
+      const act = val.kind === "closure" && val.params.length === 0
+        ? val
+        : val.kind === "thunk"
+        ? val
+        : null;
+      if (act === null) break;
+      expr = act.body;
+      val = { kind: "unit" };
+    }
+    if (expr === null) return val;
+    return { kind: "closure", params: [], body: expr, env: this.env };
   }
 
   // Run a 0-arg function (an action def: f = { ... } / f = print "hi").
@@ -634,22 +707,44 @@ export class Interpreter {
   callNative(name: string, argsIn: Value[], tag?: string): Value {
     // SHOWING natives (debug, toString) force: inspecting a 0-arg function
     // yields the function itself. Everything else demands a real value.
-    const show = name === "debug" || name === "toString";
-    // SHOWING natives force (a bare `debug fn` shows the function itself) —
-    // except a GROUP argument (`debug (fn)`): the parens mean RUN it.
-    const args = argsIn.map((x) =>
-      show && !(x.kind === "thunk" && x.body.t === "block") ? this.force(x) : this.demand(x)
-    );
+    // expression-level natives: they consume the argument's UNEVALUATED form
+    if (name === "quote" || name === "toAST") {
+      const t = argsIn[0];
+      if (t.kind !== "thunk") throw new APNError("runtime", `${name} needs an expression`);
+      return this.sexprOf(t.body);
+    }
+    if (name === "step") return this.stepNative(argsIn);
+    if (name === "debug") {
+      // debug = SOURCE inspection: show the argument as written; if what it
+      // produces is a 0-arg action (and it wasn't a bare name), show its BODY.
+      const t = argsIn[0];
+      const forced = this.force(t);
+      let text: string;
+      if (t.kind === "thunk") {
+        const isVar = t.body.t === "var";
+        const act = forced.kind === "closure" && forced.params.length === 0
+          ? forced : forced.kind === "thunk" ? forced : null;
+        text = !isVar && act ? exprToSource(act.body) : exprToSource(t.body);
+      } else text = valueToString(t);
+      console.log(text);
+      return { kind: "unit" };
+    }
+    const args = argsIn.map((x) => this.demand(x));
     const a = args[0];
     switch (name) {
       case "print": {
-        if (a.kind !== "string") throw new Error("Runtime: print expects a string (use toString or debug for other values)");
-        console.log(a.v);
-        return { kind: "unit" };
+        // print takes ANY value (strings raw), evaluates 0-arg actions, and
+        // RETURNS the value so pipes can continue.
+        const v = args[0];
+        console.log(rawString(v));
+        return v;
       }
-      case "debug":
-        console.log(valueToString(a));
-        return { kind: "unit" };
+      case "emit": {
+        // like print, but NO trailing newline
+        const v = args[0];
+        Deno.stdout.writeSync(new TextEncoder().encode(rawString(v)));
+        return v;
+      }
       case "toString":
         return mkStr(valueToString(a));
       case "parse": {

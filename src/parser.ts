@@ -472,7 +472,7 @@ class Parser {
               if (this.isSym(";")) { this.next(); continue; }
               while (this.peek().k === "newline") this.next();
               while (this.peek().k === "dedent") this.next();
-              if (this.isSym(close)) { this.next(); return { t: "block", stmts }; }
+              if (this.isSym(close)) { this.next(); return { t: "block", stmts, style: close === ")" ? "(" : "{" }; }
               const tb = this.peek();
               if (tb.k === "eof") throw new Error("Parser: unexpected end of file inside group");
               if (tb.k === "indent") {
@@ -1095,3 +1095,45 @@ export function groupClauses(program: TopLevel[]): TopLevel[] {
   return result;
 }
 
+
+
+// Render an expression back to source text (for debug / quote inspection).
+export function exprToSource(e: Expr): string {
+  switch (e.t) {
+    case "int": case "float": return String(e.v);
+    case "bool": return e.v ? "true" : "false";
+    case "string": return `"${e.v}"`;
+    case "char": return `'${e.v}'`;
+    case "unit": return "()";
+    case "var": return e.name;
+    case "binop": return `${exprToSource(e.l)} ${e.op} ${exprToSource(e.r)}`;
+    case "unop": return `${e.op === "neg" ? "-" : "!"}${exprToSource(e.e)}`;
+    case "app": return `${exprToSource(e.f)} ${exprToSource(e.a)}`;
+    case "lambda": return `${e.params.join(" ")} -> ${exprToSource(e.body)}`;
+    case "list": return `[${e.v.map(exprToSource).join(", ")}]`;
+    case "record": return `[${e.v.map(([k, x]) => `${k}: ${exprToSource(x)}`).join(", ")}]`;
+    case "ternary": return `${exprToSource(e.cond)} ? ${exprToSource(e.then)} : ${exprToSource(e.els)}`;
+    case "pipe": return `${exprToSource(e.x)} $ ${exprToSource(e.f)}`;
+    case "recordAccess":
+      return typeof e.field === "string"
+        ? `${exprToSource(e.rec)}.${e.field}`
+        : `${exprToSource(e.rec)}.(${exprToSource(e.field)})`;
+    case "pluck":
+      return `${exprToSource(e.rec)}.[${e.entries.map((x) => typeof x === "string" ? x : `${x[0]}: ${x[1]}`).join(", ")}]`;
+    case "setFields":
+      return `${exprToSource(e.rec)}.${e.entries.length === 1 ? e.entries[0] : `[${e.entries.join(", ")}]`} = ${exprToSource(e.value)}`;
+    case "block": {
+      const one = e.stmts.length === 1 && e.stmts[0].t !== "stmDef" && e.stmts[0].t !== "patDef";
+      if (one && e.style === "(") return exprToSource(e.stmts[0]);
+      const body = e.stmts.map((st) => {
+        if (st.t === "stmDef") return `${st.name} = ${exprToSource(st.clauses[0].body)}`;
+        if (st.t === "patDef") return `${exprToSource(st.value)}`;
+        return exprToSource(st);
+      }).join("; ");
+      return `${e.style === "(" ? "(" : "{"} ${body} ${e.style === "(" ? ")" : "}"}`;
+    }
+    case "match":
+      return `match ${exprToSource(e.scrut)} [...]`;
+    default: return "<expr>";
+  }
+}

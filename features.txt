@@ -12,8 +12,8 @@
 # ---------------------------------------------------------
 data Maybe a = Just a | Nothing
 
-debug (Just 42)        # => Just 42
-debug Nothing          # => Nothing
+print (Just 42)        # => Just 42
+print Nothing          # => Nothing
 
 # ---------------------------------------------------------
 # 2. FUNCTIONS & LAMBDAS
@@ -23,16 +23,16 @@ debug Nothing          # => Nothing
 #    Both support recursion and partial application.
 # ---------------------------------------------------------
 func x = x + x                # Haskell style
-debug (func 21)               # => 42
+print (func 21)               # => 42
 
 double = x -> x * 2           # lambda style
-debug (double 21)             # => 42
+print (double 21)             # => 42
 
 add a b = a + b               # Haskell style, multi-param
-debug (add 3 4)               # => 7
+print (add 3 4)               # => 7
 
 addTwo = add 2                # partial application
-debug (addTwo 10)             # => 12
+print (addTwo 10)             # => 12
 
 # ---------------------------------------------------------
 # 3. RECURSION
@@ -41,14 +41,14 @@ factorial n = match n [
     0 -> 1
     _ -> n * factorial (n - 1)
 ]
-debug (factorial 10)   # => 3628800
+print (factorial 10)   # => 3628800
 
 fib n = match n [
     0 -> 0
     1 -> 1
     _ -> fib (n - 1) + fib (n - 2)
 ]
-debug (fib 10)         # => 55
+print (fib 10)         # => 55
 
 # ---------------------------------------------------------
 # 4. PATTERN MATCHING (match) & PATTERN DEFINITIONS
@@ -67,32 +67,32 @@ safeHead xs = match xs [
     [] -> Nothing
     x:rest -> Just x
 ]
-debug (safeHead [1, 2, 3])   # => Just 1
-debug (safeHead [])          # => Nothing
+print (safeHead [1, 2, 3])   # => Just 1
+print (safeHead [])          # => Nothing
 
 # multiple equations (clauses), like Haskell
 len [] = 0
 len (x:rest) = 1 + len rest
-debug (len [1, 2, 3])        # => 3
+print (len [1, 2, 3])        # => 3
 
 sumList xs = match xs [
     [] -> 0
     x:rest -> x + sumList rest
 ]
-debug (sumList [1, 2, 3, 4, 5])  # => 15
+print (sumList [1, 2, 3, 4, 5])  # => 15
 
 # exact-length list pattern — binds each element
 pairSum xs = match xs [
     [a, b] -> a + b
     _ -> 0
 ]
-debug (pairSum [10, 20])   # => 30
-debug (pairSum [1])        # => 0
+print (pairSum [10, 20])   # => 30
+print (pairSum [1])        # => 0
 
 # the same `[x, y]` pattern also destructures a RECORD by field name
 sumRec [x, y] = x + y
-debug (sumRec [x: 10, y: 20])  # => 30
-debug (sumRec [10, 20])        # => 30
+print (sumRec [x: 10, y: 20])  # => 30
+print (sumRec [10, 20])        # => 30
 
 # guards
 classify n = match n [
@@ -100,9 +100,9 @@ classify n = match n [
     x | x == 0 -> "zero"
     _ -> "positive"
 ]
-debug (classify (-5))   # => "negative"
-debug (classify 0)      # => "zero"
-debug (classify 7)      # => "positive"
+print (classify (-5))   # => negative
+print (classify 0)      # => zero
+print (classify 7)      # => positive
 
 # ---------------------------------------------------------
 # 4b. MATCH LAYOUTS —  match scrutinee [ pattern -> expr, ... ]
@@ -120,35 +120,35 @@ factA n = match n [
     0 -> 1
     _ -> n * factA (n - 1)
 ]
-debug (factA 10)            # => 3628800
+print (factA 10)            # => 3628800
 
 factC n = match n [0 -> 1, _ -> n * factC (n - 1)]
-debug (factC 6)             # => 720
+print (factC 6)             # => 720
 
 # all patterns work here too: cons, literals, _ , guards, ...
 safeM xs = match xs [
     [] -> Nothing
     x:rest -> Just x
 ]
-debug (safeM [3, 4])        # => Just 3
-debug (safeM [])            # => Nothing
+print (safeM [3, 4])        # => Just 3
+print (safeM [])            # => Nothing
 
 classM n = match n [
     x | x < 0 -> "negative"
     x | x == 0 -> "zero"
     _ -> "positive"
 ]
-debug (classM (-5))         # => "negative"
-debug (classM 0)            # => "zero"
-debug (classM 7)            # => "positive"
+print (classM (-5))         # => negative
+print (classM 0)            # => zero
+print (classM 7)            # => positive
 
 # a def body may also start `match` on the SAME line as `=`
 matchInline n = match n [
     0 -> "zero"
     _ -> "other"
 ]
-debug (matchInline 0)       # => "zero"
-debug (matchInline 9)       # => "other"
+print (matchInline 0)       # => zero
+print (matchInline 9)       # => other
 
 # ---------------------------------------------------------
 # 5. LISTS — heterogeneous, like JS arrays, but almost lazy.
@@ -156,9 +156,9 @@ debug (matchInline 9)       # => "other"
 #    bare names is still a list — the names resolve to the variables' values.
 #    (An OBJECT is a record literal: [x: 1, y: 2, z: 3].)
 # ---------------------------------------------------------
-debug [213, "hello"]          # => [213, "hello"]
-debug [1, 2, 3]               # => [1, 2, 3]
-debug ([] ++ [1, 2] ++ [3])   # => [1, 2, 3]
+print [213, "hello"]          # => [213, "hello"]
+print [1, 2, 3]               # => [1, 2, 3]
+print ([] ++ [1, 2] ++ [3])   # => [1, 2, 3]
 
 # multi-line list literals: elements separate on their own lines, so commas
 # are optional there (a comma also still works):
@@ -167,66 +167,66 @@ arr = [
     2
     3
 ]
-debug arr                     # => [1, 2, 3]
+print arr                     # => [1, 2, 3]
 arr = [
     1,  2,  3
 ]
-debug arr                     # => [1, 2, 3]   (commas on one line fine too)
+print arr                     # => [1, 2, 3]   (commas on one line fine too)
 
 nested = [
     1
     [2, 3]
     4
 ]
-debug nested                  # => [1, [2, 3], 4]
+print nested                  # => [1, [2, 3], 4]
 
-[1, 2, 3] $ head $ debug   # => 1
-debug (tail [1, 2, 3])        # => [2, 3]
-debug (length "hello")        # => 5
-debug (length [1, 2, 3])      # => 3
-debug (null [])               # => true
-debug (null [1])              # => false
+[1, 2, 3] $ head $ print   # => 1
+print (tail [1, 2, 3])        # => [2, 3]
+print (length "hello")        # => 5
+print (length [1, 2, 3])      # => 3
+print (null [])               # => true
+print (null [1])              # => false
 
 # a bare-name list is ALWAYS a list — elements are (lazy) variable refs
 a = 100
 b = 200
 vals = [a, b]
-debug vals                       # => [100, 200]
-debug (map (x -> x * 2) vals)    # => [200, 400]
+print vals                       # => [100, 200]
+print (map (x -> x * 2) vals)    # => [200, 400]
 
 # indexing by APPLICATION:  a list applied to a number is an element
 # (negative counts from the end); applied to a list of ints picks several.
 # The left side's KIND decides (list -> index, record -> clone — section 7);
 #  arr -1  would be arithmetic, so use parens:  arr (-1)
 nums = [10, 20, 30]
-debug (nums 0)                    # => 10
-debug (nums 1)                    # => 20
-debug (nums (-1))                 # => 30
-debug (nums [0, 2])               # => [10, 30]
-debug ((nums (-1)) + (nums 0))    # => 40
-debug ((tail nums) 0)             # => 20   (index a computed list)
-debug ([[1, 2], [3, 4]] 1 0)      # => 3    (nested indexing, left-assoc)
+print (nums 0)                    # => 10
+print (nums 1)                    # => 20
+print (nums (-1))                 # => 30
+print (nums [0, 2])               # => [10, 30]
+print ((nums (-1)) + (nums 0))    # => 40
+print ((tail nums) 0)             # => 20   (index a computed list)
+print ([[1, 2], [3, 4]] 1 0)      # => 3    (nested indexing, left-assoc)
 
 # ---------------------------------------------------------
 # 6. RECORDS — [name: value, ...] and field access
 # ---------------------------------------------------------
 person = [name: "Alice", age: 30]
-debug person.name        # => "Alice"
-debug person.age         # => 30
-debug person             # => [name: "Alice", age: 30]
+print person.name        # => Alice
+print person.age         # => 30
+print person             # => [name: "Alice", age: 30]
 
 # nested records + chained access
 nested = [inner: [z: 99]]
-debug nested.inner.z     # => 99
+print nested.inner.z     # => 99
 
 # keys may be quoted strings or numbers; access matches, and a
 # parenthesized expression evaluates to a DYNAMIC key
 weird = ["my field": 1, 123: 2]
-debug weird."my field"           # => 1
-debug weird.123                  # => 2
+print weird."my field"           # => 1
+print weird.123                  # => 2
 key = "my field"
-debug weird.(key)                # => 1
-debug (enumerate [10, 20, 30])   # => [0: 10, 1: 20, 2: 30]  int keys
+print weird.(key)                # => 1
+print (enumerate [10, 20, 30])   # => [0: 10, 1: 20, 2: 30]  int keys
 
 # ---------------------------------------------------------
 # 7. PROTOTYPE-BASED OBJECTS —  APPLYING a record clones it:  vec [1, 2, 3]
@@ -236,20 +236,20 @@ debug (enumerate [10, 20, 30])   # => [0: 10, 1: 20, 2: 30]  int keys
 #    constructors); a bare-name list is a LIST, never an object.
 # ---------------------------------------------------------
 vector3 = [x: 0, y: 0, z: 0]        # prototype with defaults
-debug vector3                       # => [x: 0, y: 0, z: 0]
-debug (vector3 [1, 2, 3])           # => [x: 1, y: 2, z: 3]   positional clone
-debug (vector3 [x: 1, y: 2, z: 3])  # => [x: 1, y: 2, z: 3]   named override
-debug (vector3 [z: 3, x: 1])        # => [x: 1, y: 0, z: 3]  reorder — y keeps default
-debug (vector3 [x: 1, y: 2, z: 3, a: 0])  # => [x: 1, y: 2, z: 3, a: 0]  new field
-debug vector3                       # => [x: 0, y: 0, z: 0]   prototype untouched
-debug ((vector3 [1, 2, 3]).z)       # => 3     (.z chains over the clone)
-debug (vector3 1)                   # => ["y", 0]   int index -> [field, value]
+print vector3                       # => [x: 0, y: 0, z: 0]
+print (vector3 [1, 2, 3])           # => [x: 1, y: 2, z: 3]   positional clone
+print (vector3 [x: 1, y: 2, z: 3])  # => [x: 1, y: 2, z: 3]   named override
+print (vector3 [z: 3, x: 1])        # => [x: 1, y: 0, z: 3]  reorder — y keeps default
+print (vector3 [x: 1, y: 2, z: 3, a: 0])  # => [x: 1, y: 2, z: 3, a: 0]  new field
+print vector3                       # => [x: 0, y: 0, z: 0]   prototype untouched
+print ((vector3 [1, 2, 3]).z)       # => 3     (.z chains over the clone)
+print (vector3 1)                   # => ["y", 0]   int index -> [field, value]
 
 # .[...] still exists, but as the QUOTED PLUCK:  a.[x, y]  gathers values
 # into a LIST;  a.[x: v1, y: v2]  keeps the fields under NEW keys.
-debug (vector3.[x, y])              # => [0, 0]
-debug (vector3.[z, x, y])           # => [0, 0, 0]     reorder
-debug (vector3.[x: first, y: second])   # => [first: 0, second: 0]  renamed
+print (vector3.[x, y])              # => [0, 0]
+print (vector3.[z, x, y])           # => [0, 0, 0]     reorder
+print (vector3.[x: first, y: second])   # => [first: 0, second: 0]  renamed
 
 # ---------------------------------------------------------
 # 7b. RECORD UPDATE —  vec.x = 10  rebinds vec to a MODIFIED COPY
@@ -260,14 +260,14 @@ debug (vector3.[x: first, y: second])   # => [first: 0, second: 0]  renamed
 # ---------------------------------------------------------
 vec = [x: 1, y: 2, z: 3]
 vec.x = 10
-debug vec                        # => [x: 10, y: 2, z: 3]
+print vec                        # => [x: 10, y: 2, z: 3]
 vec.w = 99
-debug vec                        # => [x: 10, y: 2, z: 3, w: 99]   new field
+print vec                        # => [x: 10, y: 2, z: 3, w: 99]   new field
 
 vec.[x, y] = vec.[y, x]
-debug vec                        # => [x: 2, y: 10, z: 3, w: 99]  swap!
+print vec                        # => [x: 2, y: 10, z: 3, w: 99]  swap!
 vec.[x, y] = [7, 8]
-debug vec                        # => [x: 7, y: 8, z: 3, w: 99]
+print vec                        # => [x: 7, y: 8, z: 3, w: 99]
 
 # block scope: the update shadows obj only INSIDE the { }  (a bare block
 # statement runs eagerly — a 0-arg DEF like  w = { ... } declares a
@@ -275,28 +275,28 @@ debug vec                        # => [x: 7, y: 8, z: 3, w: 99]
 obj = [field: 1]
 {
     obj.field = 10
-    debug obj                   # => [field: 10]
+    print obj                   # => [field: 10]
 }
-debug obj                        # => [field: 1]
+print obj                        # => [field: 1]
 
 # an empty list seeds a record on first assignment
 fresh = []
 fresh.field = 1
-debug fresh                      # => [field: 1]
+print fresh                      # => [field: 1]
 
 # ---------------------------------------------------------
 # 8. TERNARY — cond ? a : b  (replaces if/then/else)
 # ---------------------------------------------------------
 max a b = a > b ? a : b
-debug (max 4 9)            # => 9
+print (max 4 9)            # => 9
 
 smallest a b c = (a < b ? a : b) < c ? (a < b ? a : b) : c
-debug (smallest 7 2 9)     # => 2
+print (smallest 7 2 9)     # => 2
 
 # lazy arguments make `if` just a function — only the TAKEN branch runs
 ifFn cond then else = cond ? then : else
 ifFn false (print "a") (print "b")     # prints: b
-debug (ifFn true 1 2)                  # => 1
+print (ifFn true 1 2)                  # => 1
 
 # ---------------------------------------------------------
 # 9. BINDINGS —  symbol = value  (the ONLY form; no let, no mutation)
@@ -309,13 +309,13 @@ greeting = {
     hello = "Hello"
     hello ++ ", " ++ name ++ "!"
 }
-debug (greeting)           # => "Hello, world!"
+print (greeting)           # => Hello, world!
 
 greeting = {
     [name, hello] = ["world", "Hello"]
     hello ++ ", " ++ name ++ "!"
 }
-debug (greeting)           # => "Hello, world!"
+print (greeting)           # => Hello, world!
 
 # Constructor patterns destructure like Haskell — bare (Just v = ...),
 # parenthesized ((Just v) = ...), or nested in a list ([Just v] = [...]).
@@ -324,16 +324,16 @@ debug (greeting)           # => "Hello, world!"
 # use lowercase, and build objects with the prototype clone from section 7):
 data Maybe a = Just a | Nothing
 Just v = Just 123
-debug v                    # => 123
+print v                    # => 123
 
 # RENAME destructuring (Rust-style):  [srcKey: name, ...]  pulls those fields
 # OUT of a record and binds name — [x: val1, y: val2] = [x: 1, y: 2, z: 3]
 point = [x: 1, y: 2, z: 3]
 [x: val1, y: val2] = point
-debug [val1, val2]         # => [1, 2]
+print [val1, val2]         # => [1, 2]
 # works in function params and match alternatives too:
 sumXY ([x: xv, y: yv]) = xv + yv
-debug (sumXY point)        # => 3
+print (sumXY point)        # => 3
 
 # ---------------------------------------------------------
 # 10. PIPES, BACKTICK INFIX, OPERATOR SECTIONS
@@ -342,35 +342,35 @@ debug (sumXY point)        # => 3
 #    (+ 2) / (2 +)    operator sections  ->  \x -> x + 2 / \x -> 2 + x
 # ---------------------------------------------------------
 negate x = -x
-debug (5 $ negate)                        # => -5
-debug ([1, 2, 3] $ map (x -> x * 10))     # => [10, 20, 30]
+print (5 $ negate)                        # => -5
+print ([1, 2, 3] $ map (x -> x * 10))     # => [10, 20, 30]
 [1, 2, 3] $ map (x -> x * 10) $ toString $ print  # => [10, 20, 30]
 
 myApp xs ys = xs ++ ys
-debug ([1, 2] `myApp` [3, 4])             # => [1, 2, 3, 4]
+print ([1, 2] `myApp` [3, 4])             # => [1, 2, 3, 4]
 
-debug (map (+ 2) [1, 2, 3])               # => [3, 4, 5]
-debug (map (2 +) [1, 2, 3])               # => [3, 4, 5]
-debug (map (* 10) [1, 2, 3])              # => [10, 20, 30]
-debug (filter (2 <) [3, 1, 4, 1, 5])      # => [3, 4, 5]
+print (map (+ 2) [1, 2, 3])               # => [3, 4, 5]
+print (map (2 +) [1, 2, 3])               # => [3, 4, 5]
+print (map (* 10) [1, 2, 3])              # => [10, 20, 30]
+print (filter (2 <) [3, 1, 4, 1, 5])      # => [3, 4, 5]
 addOp = (+)                                 # a lone (op) is a 2-arg lambda
-debug (addOp 1 2)                           # => 3
-debug (addOp 1)                             # => <function>   (partial, as usual)
+print (addOp 1 2)                           # => 3
+print (addOp 1)                             # => <function>   (partial, as usual)
 
-debug (-2)                                # => -2  ((- 2) is NOT a section:
+print (-2)                                # => -2  ((- 2) is NOT a section:
                                           #     unary minus wins; use a lambda)
 
 # ---------------------------------------------------------
 # 11. HIGHER-ORDER FUNCTIONS — map / filter / foldl / foldr
 # ---------------------------------------------------------
 nums = [1, 2, 3, 4, 5]
-debug (map (x -> x * x) nums)                 # => [1, 4, 9, 16, 25]
-debug (filter (x -> x > 2) nums)              # => [3, 4, 5]
-debug (foldl (acc x -> acc + x) 0 nums)       # => 15
-debug (foldr (x acc -> x - acc) 0 [1, 2, 3])  # => 2
+print (map (x -> x * x) nums)                 # => [1, 4, 9, 16, 25]
+print (filter (x -> x > 2) nums)              # => [3, 4, 5]
+print (foldl (acc x -> acc + x) 0 nums)       # => 15
+print (foldr (x acc -> x - acc) 0 [1, 2, 3])  # => 2
 
 # pattern-lambdas: a lambda param may be a pattern (here, destructuring a pair)
-debug (map ([a, b] -> a + b) [[1, 2], [3, 4]])  # => [3, 7]
+print (map ([a, b] -> a + b) [[1, 2], [3, 4]])  # => [3, 7]
 
 # ARGUMENTS ARE LAZY (Haskell): quicksort's block-local `smaller`/`bigger`
 # are 0-arg actions passed unevaluated — pattern clauses demand their values
@@ -379,30 +379,30 @@ quicksort (x:xs) = {
     smaller = filter (<= x) xs; bigger = filter (> x) xs
     quicksort smaller ++ [x] ++ quicksort bigger
 }
-debug (quicksort [82, 15, 4, 95, 36, 32])    # => [4, 15, 32, 36, 82, 95]
+print (quicksort [82, 15, 4, 95, 36, 32])    # => [4, 15, 32, 36, 82, 95]
 
 # ---------------------------------------------------------
 # 12. STRINGS, CHARS, FLOATS, BOOLS, CONVERSION
 # ---------------------------------------------------------
-debug "a string"
-debug 'c'
-debug 3.14
-debug true
-debug false
+print "a string"
+print 'c'
+print 3.14
+print true
+print false
 print (intToString 42)    # => 42       (strings print as raw text)
 print (true ? "yes" : "no")  # => yes   (the ternary yields a string)
-debug (1 == 1)            # => true
-debug (1 < 2)             # => true
-debug ("a" != "b")        # => true
+print (1 == 1)            # => true
+print (1 < 2)             # => true
+print ("a" != "b")        # => true
 
 # ---------------------------------------------------------
 # 13. TYPE ANNOTATIONS — accepted and ignored at runtime
 # ---------------------------------------------------------
-debug {
+print {
     x: Int = 20
     x * 2
 }                                   # => 40
-debug {
+print {
     x: Int = 5
     x
 }                                   # => 5
@@ -412,8 +412,8 @@ debug {
 #    for : fn -> seq -> unit   runs fn for its effect; result is discarded.
 #    A list iterates per element; a record per entry as [field, value].
 # ---------------------------------------------------------
-for (x -> debug x) [1, 2, 3]                 # prints 1, 2, 3
-[1, 2, 3] $ for (x -> debug (x * 10))        # prints 10, 20, 30
+for (x -> print x) [1, 2, 3]                 # prints 1, 2, 3
+[1, 2, 3] $ for (x -> print (x * 10))        # prints 10, 20, 30
 
 # records iterate as [field, value] pairs — destructure with a pattern-lambda;
 # `format` builds a string, so `print` emits it as raw text
@@ -430,48 +430,70 @@ for ([f, v] -> print (format "%: %" [f, v])) [name: "Alice", age: 30]
 [x: 1, y: 2, z: 3] `for` [field, value] -> format "%: %" [field, value] $ print
                                              # prints x: 1, y: 2, z: 3
 
-pairs [a: 1, b: 2] $ debug                   # => [["a", 1], ["b", 2]]
+pairs [a: 1, b: 2] $ print                   # => [["a", 1], ["b", 2]]
 
 print (format "% / %" [1, 2])                # => 1 / 2
 print (format "last: %" [9])                 # => last: 9
 print (format "100%%" [])                    # => 100%  (%% is a literal %)
 
 # ---------------------------------------------------------
-# 15. OUTPUT & CONVERSION — print / toString / parse / debug
-#    print s      string only            => raw text, no quotes
-#    toString x   any value -> string    => representation (strings stay quoted)
-#    parse s      string -> value        => int | float | bool, else error
-#    debug x      any value              => prints the representation (old print)
+# 15. OUTPUT & INTROSPECTION — print / emit / debug / quote / toAST / step
+#     print takes ANY value (strings print raw, unquoted) and RETURNS it,
+#     so pipes continue; it EVALUATES 0-arg actions it is given.
 # ---------------------------------------------------------
-print "a string"                       # => a string      (raw text)
-debug "a string"                       # => "a string"    (debug shows quotes)
-print (toString 42)                    # => 42
-print (toString "hi")                  # => "hi"  (strings render quoted)
-print (toString [1, 2, 3])             # => [1, 2, 3]
-print (toString Nothing)               # => Nothing   (atoms render bare)
-parse "42" + 8 $ intToString $ print   # => 50
-debug (parse "3.5")                    # => 3.5
-debug (parse "true")                   # => true
+print 123                     # => 123
+print "hello"                 # => hello
+print [1, 2, 3, 4]            # => [1, 2, 3, 4]
+print [name: "Alice", age: 30]   # => [name: "Alice", age: 30]
+
+# emit is print WITHOUT the newline (also returns its value)
+emit "same"; emit " line"; print ""     # prints: same line
+
+# debug shows the argument AS WRITTEN — the unevaluated source:
+debug (1 + 1)                 # => 1 + 1
+debug [1 + 2, 3 + 4]          # => [1 + 2, 3 + 4]
+debug 42                      # => 42
+
+# step n descends n levels into a value's unevaluated structure and yields
+# a LIVE action: debug shows the level's source, print RUNS it.
+inner = {
+    print "inner"
+    42
+}
+step 1 inner $ print          # => inner          (prints, returns 42)
+step 1 inner $ debug         # => { print "inner"; 42 }
+step 2 inner $ debug         # => 42     (the block's tail statement)
+
+# quote / toAST — the S-EXPRESSION of an expression, as a list; the argument
+# is never evaluated (scheme-style quoting); toAST quotes automatically.
+print (toAST (1 + 2))         # => ["+", 1, 2]
+print (toAST (1 + 2 * 3))     # => ["+", 1, ["*", 2, 3]]
+print (quote (1 + 1))         # => ["+", 1, 1]
+1 + 1 $ quote $ print         # => ["+", 1, 1]
+
+# toString / parse (string <-> value conversion; toString quotes strings)
+print (toString "hi")         # => "hi"
+print (parse "42")            # => 42
 
 # ---------------------------------------------------------
-# 16. GROUPS, BLOCKS, INDENTATION & SEMICOLONS
+# # 16. GROUPS, BLOCKS, INDENTATION & SEMICOLONS
 #    ( ) and { } are interchangeable: both are groups/blocks.
 #    ()  or  { }  alone is unit. A block's value is the LAST statement's value.
 #    Newlines act as implicit semicolons; an explicit `;` also separates
 #    statements. Indentation is rigid: every nested level is exactly +4.
 # ---------------------------------------------------------
-debug ()                     # => ()            (empty group = unit)
-debug {}                     # => ()            (empty block = unit)
-debug {5}                    # => 5             (braces group like parens)
-debug (5)                    # => 5             (parens group like braces)
-debug (4 * 3)                # => 12
-debug {4 * 3}                # => 12
+print ()                     # => ()            (empty group = unit)
+print {}                     # => ()            (empty block = unit)
+print {5}                    # => 5             (braces group like parens)
+print (5)                    # => 5             (parens group like braces)
+print (4 * 3)                # => 12
+print {4 * 3}                # => 12
 
 group = { 1; 2; 3 }          # a 0-arg function: its body is the block
-debug (group)                # => 3    (the parens run it)
+print (group)                # => 3    (the parens run it)
 
 inlineBlock = { 1 + 1 }      # a same-line { } block
-debug (inlineBlock)          # => 2
+print (inlineBlock)          # => 2
 
 # statements on one line separated by explicit `;`
 print "hello"; print ", world"        # prints: hello
@@ -479,10 +501,10 @@ print "hello"; print ", world"        # prints: hello
 
 # a multi-line `{ }` block as a function body (value = last statement)
 area w h = {
-    debug "computing area"
+    print "computing area"
     w * h
 }
-debug (area 3 4)             # prints: computing area
+print (area 3 4)             # prints: computing area
                              # => 12
 
 # local definitions are allowed inside a block
@@ -491,16 +513,16 @@ both = {
     y = 2
     x + y
 }
-debug (both)                 # => 42
+print (both)                 # => 42
 
 # blank lines inside a block are fine; statements still stop at same-level
 # newlines (implicit semicolons) and continue on +4-indented lines
 seqOf = {
-    debug "one"
+    print "one"
 
     6 * 7
 }
-debug (seqOf)                # prints: one
+print (seqOf)                # prints: one
                              # => 42
 
 # Whitespace is significant: a def cut off by a same-level newline binds UNIT,
@@ -508,10 +530,10 @@ debug (seqOf)                # prints: one
 # is  func = unit  PLUS a standalone block statement, NOT a function body.
 unitAfter =
 {
-    debug "the brace block ran as its OWN statement"
+    print "the brace block ran as its OWN statement"
 }
-debug (toString unitAfter)   # prints: the brace block ran as its OWN statement
-                             # => "()"   (unitAfter is unit, not a block)
+print (toString unitAfter)   # prints: the brace block ran as its OWN statement
+                             # => ()   (unitAfter is unit, not a block)
 
 # a function body that continues on a +4-indented line spans lines;
 # `[ ]` also spans lines and elements separate by newline (commas optional),
@@ -524,7 +546,7 @@ spanArgs =
         3
         4
     ]
-debug (spanArgs)              # => [1, 2, 3, 4]
+print (spanArgs)              # => [1, 2, 3, 4]
 
 # INVALID (the lexer rejects these; demoed in comments only):
 #   - a { that ends its own line with a body NOT indented by exactly +4:
@@ -549,30 +571,35 @@ debug (spanArgs)              # => [1, 2, 3, 4]
 #              fires (exits 0) when it is actually USED.
 # ---------------------------------------------------------
 load "core.txt"             # include: sq and halt join THIS scope
-debug (sq 5)                # => 25
+print (sq 5)                # => 25
 
 core = load "core.txt"      # namespaced module record
-debug (core.sq 4)           # => 16
+print (core.sq 4)           # => 16
+
+# step into the loaded halt (a thunk whose body is  exit 0):
+step 1 halt $ debug          # => exit 0
+# print RUNS the level, so this terminates the program:
+#   step 1 halt $ print
 
 # a load inside a { } block stays in the block's scope
 scoped = {
     load "core.txt"
     sq 6
 }
-debug (scoped)              # => 36
+print (scoped)              # => 36
 
-debug "still running before the final halt"
+print "still running before the final halt"
 
 # 0-arg defs: an ACTION body (f = { ... } or f = print "x" — the same
 # thing) declares a 0-arg FUNCTION. Nothing runs at the definition; the bare
 # name at STATEMENT level runs it (and so does (f) — the group's statement);
 # demand contexts (operands, record access, consuming natives) run it too;
-# debug f shows <function>:
+# print f shows <function>:
 lazyNote = {
-    debug "lazyNote WAS called"
+    print "lazyNote WAS called"
     6 * 7
 }
-debug (lazyNote * 2)      # mentioning lazyNote runs the body (side effect)
+print (lazyNote * 2)      # mentioning lazyNote runs the body (side effect)
                           # then uses the block's value:   # => 84
                           # An EXPRESSION body stays a lazy THUNK (cached
                           # after its first use): halt = exit 0, core = load,

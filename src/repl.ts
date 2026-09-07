@@ -80,6 +80,29 @@ function runSourceValue(src: string, interp: Interpreter, binding = false): Valu
 
 // Does the chunk END in a binding (def / pattern binding / data)? Those are
 // SILENT in the REPL — like GHCi's `let`, they bind without echoing a value.
+// Does the chunk END in a bare print/emit call? Those already produced their
+// output — echoing the RETURNED value would print it twice.
+function lastIsPrintCall(src: string): boolean {
+  try {
+    const prog = parse(src);
+    const last = prog[prog.length - 1];
+    if (!last || last.t !== "expr") return false;
+    let e = last.value;
+    for (;;) {
+      if (e.t === "app" && e.f.t === "var" && (e.f.name === "print" || e.f.name === "emit")) return true;
+      if (e.t === "pipe") {
+        const c = e.f;
+        if (c.t === "var" && (c.name === "print" || c.name === "emit")) return true;
+        e = c;
+        continue;
+      }
+      return false;
+    }
+  } catch {
+    return false;
+  }
+}
+
 function lastIsBinding(src: string): boolean {
   try {
     const prog = parse(src);
@@ -282,8 +305,10 @@ function helpText(): string {
     `  for (x -> print x) [1,2,3]   for fn seq`,
     `  recursion, higher-order fns, records, variants`,
     ``,
-    `Builtins: print (string only) toString parse debug`,
-    `          head tail length null enumerate map filter foldl foldr`,
+    `print x    any value (strings raw), returns x;  emit  = no newline`,
+    `debug x    shows the SOURCE as written;  step n v  descends v's body`,
+    `quote / toAST  the s-expression as a list: toAST (1 + 2) => ["+", 1, 2]`,
+    `Builtins: head tail length null enumerate map filter foldl foldr`,
     `          for pairs format intToString exit load`,
     ``,
     `load "core.txt"  imports the standard library (core.txt): as a`,
@@ -794,7 +819,7 @@ async function replTTY(): Promise<void> {
       // the usual 0x03 clear/quit.
       await setTtyCooked(savedCooked);
       try {
-        const val = runSourceValue(src, interp, lastIsBinding(src));
+        const val = runSourceValue(src, interp, lastIsBinding(src) || lastIsPrintCall(src));
         if (val !== null) ed.print(showValue(val));
       } catch (err) {
         if (err instanceof APNError && err.message === "interrupted") {
@@ -865,7 +890,7 @@ async function replPiped(): Promise<void> {
       // (missing `in`, `->`, or a structural `newline`), keep accumulating so
       // users can enter multi-line constructs. Otherwise report the error.
       try {
-        const out = runSource(pending, interp, lastIsBinding(pending));
+        const out = runSource(pending, interp, lastIsBinding(pending) || lastIsPrintCall(pending));
         if (out) console.log(out);
         pending = "";
         await Deno.stdout.write(new TextEncoder().encode(prompt));

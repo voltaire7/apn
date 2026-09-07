@@ -297,18 +297,23 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
       `toString f` print `<function>`.
   - A trailing action def at the end of a file does NOT run (its function
     is the final value).
-- **Output & conversion (DELIBERATE split)**:
-  - `print s` — STRING ONLY; outputs the raw text (no quotes); anything else
-    errors. It is for clean text output.
-  - `toString x` — any value → string representation (strings come back
-    *quoted*: `toString "hi"` = the string `"hi"`, i.e. `print (toString "hi")`
-    renders `"hi"`). Use it when you need a string (to concatenate or print).
-  - `parse s` — the inverse of `toString` for literals: `"42"` (int),
-    `"3.5"` (float), `"true"`/`"false"` (bool), else a runtime error.
-  - `debug x` — prints any value's representation (this is the OLD `print`
-    behavior); for inspection/diagnostics.
-  The showcase (`features.txt`) uses `debug` everywhere a value is being
-  inspected and `print` only where the value is a string.
+- **Output & introspection**:
+  - `print x` — ANY value (strings print raw/unquoted; lists/records via
+    their representation); EVALUATES 0-arg actions it is given; RETURNS the
+    value so pipes can continue (`x $ print $ f $ print`).
+  - `emit x` — print WITHOUT the trailing newline (also returns the value).
+  - `debug x` — SOURCE inspection: shows the argument as written
+    (`debug (1 + 1)` → `1 + 1`); when the argument's value is a 0-arg action
+    (and the argument wasn't a bare name) it shows the action's BODY.
+  - `step n v` — descends n levels into v's unevaluated structure (resolving
+    names, unwrapping blocks' tail statements and action/thunk bodies) and
+    returns a LIVE 0-arg action over the level's expression: debug shows its
+    source, print runs it.
+  - `quote e` / `toAST e` — the S-EXPRESSION of an expression as a list
+    (`toAST (1 + 2)` → `["+", 1, 2]`); the argument is never evaluated.
+  - `toString x` — value → string (strings come back quoted); `parse s` —
+    the inverse for literals.
+  The showcase uses `print` for values and `debug` for source inspection.
 - **Variants** via `data Maybe a = Just a | Nothing`; constructors and match
   expressions. Nullary constructors are bare values; arity>0 constructors are
   curried natives tagged with the constructor name.
