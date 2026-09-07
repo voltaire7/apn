@@ -4,4 +4,4 @@
 # Grants everything the REPL needs up front: read (load, the showcase),
 # write + env(HOME) for the persistent history in ~/.apn_history.
 DIR="$(cd "$(dirname "$0")" && pwd)"
-exec deno run --allow-read --allow-write --allow-env=HOME "$DIR/main.ts" "$@"
+exec deno run --allow-read --allow-write --allow-env=HOME --allow-run=stty "$DIR/main.ts" "$@"
