@@ -7,7 +7,7 @@ import { parse } from "./parser.ts";
 
 // ---------------- Evaluator ----------------
 
-const STACK_LIMIT = 2000; // below V8's own JS stack, so APN errors first
+const STACK_LIMIT = 1000; // below V8's own JS stack, so APN errors first
 
 // Native registry: name -> arity. One source of truth for env registration
 // and for REPL tab completion.
