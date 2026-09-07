@@ -329,10 +329,10 @@ export class Interpreter {
             if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
             else if (s.t === "patDef") r = this.evalPatBinding(s);
             else if (si === e.stmts.length - 1) {
-              // LAST statement = TAIL POSITION: the value flows up untouched.
-              // A returned 0-arg function is trampolined by the caller's
-              // runStmt loop — so  func = { print "hi"; func }  loops FOREVER
-              // at constant stack (and Ctrl+C breaks it).
+              // LAST statement = TAIL POSITION: the value flows up UNCALLED —
+              // a returned 0-arg function is trampolined by the CALLER's
+              // runStmt loop, so  func = { print "hi"; func }  loops forever
+              // at constant stack (Ctrl+C breaks it).
               r = this.eval(s);
             } else r = this.runStmt(this.eval(s)); // bare name = call
           }
@@ -635,7 +635,11 @@ export class Interpreter {
     // SHOWING natives (debug, toString) force: inspecting a 0-arg function
     // yields the function itself. Everything else demands a real value.
     const show = name === "debug" || name === "toString";
-    const args = argsIn.map((x) => show ? this.force(x) : this.demand(x));
+    // SHOWING natives force (a bare `debug fn` shows the function itself) —
+    // except a GROUP argument (`debug (fn)`): the parens mean RUN it.
+    const args = argsIn.map((x) =>
+      show && !(x.kind === "thunk" && x.body.t === "block") ? this.force(x) : this.demand(x)
+    );
     const a = args[0];
     switch (name) {
       case "print": {
