@@ -743,6 +743,18 @@ function startInterruptWatcher(): { worker: Worker; flag: Int32Array } {
   return { worker, flag: new Int32Array(sab) };
 }
 
+// stty helpers: capture the cooked termios once, restore it around each
+// evaluation so Ctrl+C raises a real SIGINT (needs --allow-run).
+async function ttyCookedSettings(): Promise<string> {
+  const p = new Deno.Command("stty", { args: ["-g"], stdin: "inherit", stdout: "piped", stderr: "null" });
+  const out = await p.output();
+  return new TextDecoder().decode(out.stdout).trim();
+}
+
+async function setTtyCooked(saved: string): Promise<void> {
+  await new Deno.Command("stty", { args: [saved], stdin: "inherit", stdout: "null", stderr: "null" }).output();
+}
+
 async function replTTY(): Promise<void> {
   const interp = new Interpreter();
   const hist = loadHistory();
@@ -757,6 +769,7 @@ async function replTTY(): Promise<void> {
     ed.print(args.map((x) => typeof x === "string" ? x : String(x)).join(" "));
   };
 
+  const savedCooked = await ttyCookedSettings();
   Deno.stdin.setRaw(true);
   ed.emit("\x1b[?2004h"); // ask the terminal to wrap pastes in ESC[200~..ESC[201~
   try {
@@ -779,7 +792,7 @@ async function replTTY(): Promise<void> {
       // raises a real SIGINT (the watcher worker flips the flag and the
       // hot loops throw). Editing happens back in raw mode where Ctrl+C is
       // the usual 0x03 clear/quit.
-      Deno.stdin.setRaw(false);
+      await setTtyCooked(savedCooked);
       try {
         const val = runSourceValue(src, interp, lastIsBinding(src));
         if (val !== null) ed.print(showValue(val));

@@ -51,7 +51,7 @@ Deno required. From `apn/`:
     deno run --allow-read main.ts features.txt
 - Start the REPL:               ./apn
   (wrapper script that runs
-   `deno run --allow-read --allow-write --allow-env=HOME main.ts "$@"` —
+   `deno run --allow-read --allow-write --allow-env=HOME --allow-run=stty main.ts "$@"` —
    also runs files, e.g. `./apn features.txt`. The extra flags persist
    history in ~/.apn_history; the bare deno command with just --allow-read
    works too — history then stays in-session only)
