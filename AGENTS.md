@@ -275,8 +275,9 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
       until a concrete value — so `debug (f)` CALLS (the `( )` group's
       statement is the bare name), and `halt = (load "core.txt").halt` +
       bare `halt` runs load, then the field's action, then exits.
-      `x = x; x` diverges FOREVER (thunk chains are followed iteratively in
-      `force` — true divergence, no JS stack overflow).
+      Self-referential values raise GHC-style `<<loop>>` (thunk/closure
+      chains carry a seen-set in `force`/`runStmt`/`demand` — `x = x` and
+      `a = b; b = a` error instead of hanging the REPL).
     - DEMAND contexts (needing a real value): binop/unop operands, ternary
       conditions, match scrutinees, record targets (`core.sq 4` after
       `core = load "..."`), and every consuming native (head, length, map,

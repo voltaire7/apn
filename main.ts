@@ -1669,8 +1669,17 @@ export class Interpreter {
   // Natives that SHOW values (debug, toString) force instead — inspecting a
   // function yields the function.
   demand(v: Value): Value {
+    const seen = new Set<Value>();
     for (;;) {
       if (v.kind === "closure" && v.params.length === 0) {
+        if (seen.has(v)) {
+          throw new APNError(
+            "runtime",
+            "<<loop>> — this value depends on itself",
+            { hint: "a self-referential definition (like x = x) never produces a value" },
+          );
+        }
+        seen.add(v);
         v = this.callBlockFn(v);
       } else if (v.kind === "thunk") {
         v = this.force(v);
@@ -1685,10 +1694,27 @@ export class Interpreter {
   //   halt = (load "core.txt").halt ; halt   runs load, then the field's
   // action, then exits.  x = x ; x   re-evaluates forever (true divergence).
   runStmt(v: Value): Value {
+    const seen = new Set<Value>();
     for (;;) {
       if (v.kind === "closure" && v.params.length === 0) {
+        if (seen.has(v)) {
+          throw new APNError(
+            "runtime",
+            "<<loop>> — this value depends on itself",
+            { hint: "a self-referential definition (like x = x) never produces a value" },
+          );
+        }
+        seen.add(v);
         v = this.callBlockFn(v);
       } else if (v.kind === "thunk") {
+        if (seen.has(v)) {
+          throw new APNError(
+            "runtime",
+            "<<loop>> — this value depends on itself",
+            { hint: "a self-referential definition (like x = x) never produces a value" },
+          );
+        }
+        seen.add(v);
         const old = this.env;
         this.env = v.env;
         try {
@@ -2099,11 +2125,21 @@ export class Interpreter {
     }
     if (v.kind === "thunk") {
       if (v.value) return v.value;
-      // Follow thunk chains ITERATIVELY: `x = x` spins here forever (true
-      // divergence, no JS stack overflow); `a = b; b = a` loops the same way.
+      // Follow thunk chains ITERATIVELY, with GHC-style black-hole
+      // detection: `x = x` (or `a = b; b = a`) raises <<loop>> instead of
+      // hanging the REPL forever.
       let cur: Value = v;
+      const seen = new Set<Value>();
       while (cur.kind === "thunk") {
         if (cur.value) return cur.value;
+        if (seen.has(cur)) {
+          throw new APNError(
+            "runtime",
+            "<<loop>> — this value depends on itself",
+            { hint: "a self-referential definition (like x = x) never produces a value" },
+          );
+        }
+        seen.add(cur);
         const old = this.env;
         this.env = cur.env;
         let out: Value;
@@ -2112,7 +2148,6 @@ export class Interpreter {
         } finally {
           this.env = old;
         }
-        if (out === cur) continue; // self-reference: diverge by design
         cur = out;
       }
       // cur is concrete now; force nested containers and cache the result
