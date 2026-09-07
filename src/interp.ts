@@ -7,7 +7,7 @@ import { parse } from "./parser.ts";
 
 // ---------------- Evaluator ----------------
 
-const STACK_LIMIT = 100000;
+const STACK_LIMIT = 2000; // below V8's own JS stack, so APN errors first
 
 // Native registry: name -> arity. One source of truth for env registration
 // and for REPL tab completion.
@@ -174,7 +174,11 @@ export class Interpreter {
   }
 
   eval(e: Expr): Value {
-    if (++this.stack > STACK_LIMIT) throw new Error("Runtime: stack overflow");
+    if (++this.stack > STACK_LIMIT) {
+      throw new APNError("runtime", "call stack overflow", {
+        hint: "unbounded recursion? each call adds a stack level",
+      });
+    }
     let r: Value;
     switch (e.t) {
       case "int": r = mkInt(e.v); break;
