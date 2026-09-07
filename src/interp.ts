@@ -14,7 +14,7 @@ const STACK_LIMIT = 1000; // below V8's own JS stack, so APN errors first
 export const NATIVES: Array<[string, number]> = [
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
-    ["intToString", 1], ["pairs", 1], ["format", 2],
+    ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
     ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1],
     ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1],
 ];
@@ -219,6 +219,21 @@ export class Interpreter {
     }
 
 
+
+    // STREAM an infinite range: pieces through `emit`, element by element —
+    // the list is printed AS IT IS CONSTRUCTED (Ctrl+C breaks it).
+    streamRange(v: Value, emit: (s: string) => void): void {
+        if (v.kind !== "range") return;
+        emit("[");
+        let first = true;
+        for (let i = v.lo; ; i += v.step) {
+            checkInterrupt();
+            if (!first) emit(", ");
+            first = false;
+            emit(String(i));
+        }
+    }
+
     // `*` iteration: seq * fn — applies fn over the sequence and returns the
     // results. seq is a list (elements), a record (entries as [field, value]
     // lists), or an int n (0..n-1; a negative n counts 0, -1, ... n+1).
@@ -228,6 +243,11 @@ export class Interpreter {
             for (const x of seq.v) out.push(this.apply(f, x));
         } else if (seq.kind === "record") {
             for (const [k, x] of seq.v) out.push(this.apply(f, mkList([mkStr(k), x])));
+        } else if (seq.kind === "range") {
+            for (let i = seq.lo; seq.hi === null || (seq.step > 0 ? i <= seq.hi : i >= seq.hi); i += seq.step) {
+                checkInterrupt();
+                out.push(this.apply(f, mkInt(i)));
+            }
         } else if (seq.kind === "int") {
             const n = Math.abs(seq.v);
             for (let i = 0; i < n; i++) out.push(this.apply(f, mkInt(seq.v >= 0 ? i : -i)));
@@ -344,6 +364,7 @@ export class Interpreter {
                 break;
             }
             case "match": r = this.evalMatch(this.demand(this.eval(e.scrut)), e.alts); break;
+            case "range": r = { kind: "range", lo: e.lo, step: e.step, hi: e.hi }; break;
             case "list": r = { kind: "lazyList", exprs: e.v, env: this.env }; break;
             case "record": r = { kind: "record", v: e.v.map(([k, x]) => [k, this.eval(x)] as [string, Value]) }; break;
             case "recordAccess": {
@@ -699,6 +720,12 @@ export class Interpreter {
     // as ordinary variables; when used as an object/template it is never forced
     // and its bare identifiers are read as field names.
     force(v: Value): Value {
+        if (v.kind === "range") {
+            if (v.hi === null) return v; // infinite: stays lazy
+            const out: Value[] = [];
+            for (let i = v.lo; v.step > 0 ? i <= v.hi : i >= v.hi; i += v.step) out.push(mkInt(i));
+            return mkList(out);
+        }
         if (v.kind === "lazyList") {
             const old = this.env;
             this.env = v.env;
@@ -797,14 +824,25 @@ export class Interpreter {
         switch (name) {
             case "print": {
                 // print takes ANY value (strings raw), evaluates 0-arg actions, and
-                // RETURNS the value so pipes can continue.
+                // RETURNS the value so pipes can continue. INFINITE ranges STREAM.
                 const v = args[0];
+                if (v.kind === "range" && v.hi === null) {
+                    const enc = new TextEncoder();
+                    this.streamRange(v, (x) => Deno.stdout.writeSync(enc.encode(x)));
+                    Deno.stdout.writeSync(enc.encode("\n"));
+                    return v;
+                }
                 console.log(rawString(v));
                 return v;
             }
             case "emit": {
                 // like print, but NO trailing newline
                 const v = args[0];
+                if (v.kind === "range" && v.hi === null) {
+                    const enc = new TextEncoder();
+                    this.streamRange(v, (x) => Deno.stdout.writeSync(enc.encode(x)));
+                    return v;
+                }
                 Deno.stdout.writeSync(new TextEncoder().encode(rawString(v)));
                 return v;
             }
@@ -820,6 +858,7 @@ export class Interpreter {
                 throw new Error(`Runtime: parse: can't parse '${s}'`);
             }
             case "head":
+                if (a.kind === "range") return mkInt(a.lo);
                 if (a.kind !== "list") throw new Error("Runtime: head expects a list");
                 if (a.v.length === 0) throw new Error("Runtime: head of empty list");
                 return a.v[0];
@@ -890,6 +929,18 @@ export class Interpreter {
             }
             case "__constr":
                 return { kind: "variant", tag: tag!, v: args };
+            case "zipWith": {
+                const f = args[0];
+                const xs = this.force(args[1]);
+                const ys = this.force(args[2]);
+                if (xs.kind !== "list" || ys.kind !== "list") {
+                    throw new APNError("runtime", "zipWith expects two lists");
+                }
+                const n = Math.min(xs.v.length, ys.v.length);
+                const out: Value[] = [];
+                for (let i = 0; i < n; i++) out.push(this.apply(this.apply(f, xs.v[i]), ys.v[i]));
+                return mkList(out);
+            }
             case "exit":
                 // Can be put anywhere in the program: terminates the process instantly.
                 if (a.kind !== "int") throw new Error("Runtime: exit expects an int status code");

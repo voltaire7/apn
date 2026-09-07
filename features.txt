@@ -429,9 +429,22 @@ print {
 3 * _ -> print "three"                       # prints three, three, three
 -2 * x -> print x                            # prints 0, -1
 
-# ranges are INCLUSIVE int lists (Haskell-style):
+# ranges are INCLUSIVE int lists (Haskell-style); the first two elements
+# give the STEP: [2,4..100] counts by 2 — and [0..] is INFINITE: print
+# streams it AS IT IS CONSTRUCTED (Ctrl+C breaks it).
 print ([0..5])                               # => [0, 1, 2, 3, 4, 5]
+print ([2, 4..10])                           # => [2, 4, 6, 8, 10]
 [0..3] * x -> print x                        # prints 0, 1, 2, 3
+#   print ([0..])                            # 0, 1, 2, ... forever
+#   [0..] * x -> print x                     # ditto
+
+# `:` cons works in EXPRESSIONS too (right-associative; parenthesize inside
+# list literals so it doesn't read as record syntax):
+print (0:[])                                 # => [0]
+print (0:1:[])                               # => [0, 1]
+print [(0:[])]                               # => [[0]]
+
+print (zipWith (+) [1, 2, 3] [10, 20, 30])   # => [11, 22, 33]
 
 # and ranges PATTERNS-match — [lo..hi] fits any int in the range:
 size n = match n [

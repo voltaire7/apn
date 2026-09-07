@@ -295,7 +295,7 @@ function helpText(): string {
         `  cond ? a : b   (ternary)`,
         `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,
         `  data Maybe a = Just a | Nothing`,
-        `  [1,2,3]  [name: "x", age: 2]   (newlines also separate elements)`,
+        `  [1,2,3]  [0..5] [2,4..100] [0..]  ranges; 0:[] conses`,
         `  x $ f             pipe: feeds x into f`,
         `  a \`f\` b            infix call == f a b  (only \`for\` inverts)`,
         `  (+ 2)  (2 +)  (+)  operator sections   ((-2) stays unary minus)`,
@@ -820,7 +820,10 @@ async function replTTY(): Promise<void> {
             await setTtyCooked(savedCooked);
             try {
                 const val = runSourceValue(src, interp, lastIsBinding(src) || lastIsPrintCall(src));
-                if (val !== null) ed.print(showValue(val));
+                if (val !== null && val.kind === "range" && val.hi === null) {
+                    interp.streamRange(val, (x) => ed.emit(x)); // printed AS CONSTRUCTED
+                    ed.emit("\n");
+                } else if (val !== null) ed.print(showValue(val));
             } catch (err) {
                 if (err instanceof APNError && err.message === "interrupted") {
                     ed.print(paint(A.dim, "Interrupted."));

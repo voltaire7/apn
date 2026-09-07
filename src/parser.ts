@@ -261,7 +261,10 @@ class Parser {
         if (this.isSym("?")) {
             this.next();
             this.skipLayout();
+            const saved = this.noCons;
+            this.noCons = 1;
             const then = this.parseTernary();
+            this.noCons = saved;
             this.expectSym(":");
             const els = this.parseTernary();
             e = { t: "ternary", cond: e, then, els };
@@ -279,7 +282,17 @@ class Parser {
         return e;
     }
 
-    parseConcat(): Expr { return this.parseAdd(); }
+    noCons = 0; // >0 while parsing a ternary branch (`:` belongs to the ternary)
+
+    parseConcat(): Expr {
+        let e = this.parseAdd();
+        while (this.isSym(":") && this.noCons === 0) {
+            this.next();
+            const r = this.parseConcat(); // right-associative:  0 : 1 : xs
+            e = { t: "binop", op: ":", l: e, r };
+        }
+        return e;
+    }
 
     parseAdd(): Expr {
         let e = this.parseMul();
@@ -540,24 +553,39 @@ class Parser {
                         // Otherwise it's a list literal: [a, b, ...] — elements separate on
                         // `,` OR a newline (commas are optional when each element is on its
                         // own line;  [1 2] on ONE line is still a single element = 1 applied to 2).
-                        // RANGE: [0..100] — int range list, inclusive (Haskell)
+                        // RANGE: [0..100] / [2,4..100] / [0..] / [2,4..] — Haskell-style; the
+                        // first two elements give the STEP; no upper bound = infinite
                         {
                             const a = this.peek();
                             const neg = a.k === "sym" && (a as { v: string }).v === "-";
                             const n0 = (neg ? this.peek(1) : a) as Token;
-                            const dots = this.peek(neg ? 2 : 1);
-                            if ((n0.k === "int" || n0.k === "float") && dots.k === "sym" &&
-                                (dots as { v: string }).v === "..") {
+                            if ((n0.k === "int" || n0.k === "float") &&
+                                ((this.peek(neg ? 2 : 1).k === "sym" &&
+                                    (this.peek(neg ? 2 : 1) as { v: string }).v === "..") ||
+                                    (this.peek(neg ? 2 : 1).k === "sym" &&
+                                        (this.peek(neg ? 2 : 1) as { v: string }).v === "," &&
+                                        this.peek(neg ? 4 : 3).k === "sym" &&
+                                        (this.peek(neg ? 4 : 3) as { v: string }).v === ".."))) {
                                 if (neg) this.next();
                                 const lo = Math.trunc((this.next() as { v: number }).v);
+                                let step = 1;
+                                if (this.isSym(",")) {
+                                    this.next();
+                                    const neg2 = this.isSym("-");
+                                    if (neg2) this.next();
+                                    const second = Math.trunc((this.next() as { v: number }).v);
+                                    step = second - lo;
+                                }
                                 this.next(); // ..
-                                const neg2 = this.isSym("-");
-                                if (neg2) this.next();
+                                if (this.isSym("]")) {
+                                    this.next();
+                                    return { t: "range", lo, step, hi: null };
+                                }
+                                const neg3 = this.isSym("-");
+                                if (neg3) this.next();
                                 const hi = Math.trunc((this.next() as { v: number }).v);
                                 this.expectSym("]");
-                                const rs: Expr[] = [];
-                                for (let i = lo; i <= hi; i++) rs.push({ t: "int", v: i });
-                                return { t: "list", v: rs };
+                                return { t: "range", lo, step, hi: neg3 ? -hi : hi };
                             }
                         }
                         const es = [] as Expr[];
@@ -1148,6 +1176,10 @@ export function exprToSource(e: Expr): string {
         case "lambda": return `${e.params.join(" ")} -> ${exprToSource(e.body)}`;
         case "list": return `[${e.v.map(exprToSource).join(", ")}]`;
         case "record": return `[${e.v.map(([k, x]) => `${k}: ${exprToSource(x)}`).join(", ")}]`;
+    case "range":
+      return e.hi === null
+        ? `[${e.lo}${e.step !== 1 ? `, ${e.lo + e.step}` : ""}..]`
+        : `[${e.lo}${e.step !== 1 ? `, ${e.lo + e.step}` : ""}..${e.hi}]`;
         case "ternary": return `${exprToSource(e.cond)} ? ${exprToSource(e.then)} : ${exprToSource(e.els)}`;
         case "pipe": return `${exprToSource(e.x)} $ ${exprToSource(e.f)}`;
         case "recordAccess":

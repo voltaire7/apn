@@ -22,6 +22,7 @@ export type Value =
     | { kind: "closure"; params: string[]; body: Expr; env: Env }
     | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string }
     | { kind: "clauseFn"; name: string; clauses: DefClause[]; arity: number; env: Env; applied: Value[] }
+    | { kind: "range"; lo: number; step: number; hi: number | null }
     | { kind: "nomatch" }
     | { kind: "thunk"; body: Expr; env: Env; value?: Value };
 
@@ -45,6 +46,12 @@ export function valueToString(v: Value): string {
         case "unit": return "()";
         case "list": return `[${v.v.map(valueToString).join(", ")}]`;
         case "lazyList": return "<lazy>";
+        case "range": {
+            if (v.hi === null) return `[${v.lo}${v.step !== 1 ? `, ${v.lo + v.step}` : ""}..]`;
+            const out: Value[] = [];
+            for (let i = v.lo; v.step > 0 ? i <= v.hi : i >= v.hi; i += v.step) out.push(mkInt(i));
+            return `[${out.map(valueToString).join(", ")}]`;
+        }
         case "record":
             return `[${v.v.map(([k, val]) => `${k}: ${valueToString(val)}`).join(", ")}]`;
         case "variant": {

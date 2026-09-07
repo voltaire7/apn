@@ -240,9 +240,13 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   still multiplication; the overload triggers on a function right operand.
   Related natives: `pairs rec`, and `format "% %" [a, b]` (`%` = printf-style
   arg, strings unquoted; `%%` = `%`).
-- **Ranges**: `[0..100]` is an inclusive INT range list (Haskell-style;
-  `[5..3]` is empty; negatives work: `[-3..3]`). Range PATTERNS:
-  `[lo..hi]` matches any int in the range, inclusive (binds nothing).
+- **Ranges**: `[a..b]` inclusive INT range (Haskell-style; `[5..3]` empty);
+  `[a,b..c]` gives the STEP (`b-a`); `[a..]` / `[a,b..]` are INFINITE — a
+  lazy `range` value that `print`/`emit`/the REPL echo STREAM as constructed
+  (Ctrl+C breaks) and `*` iterates lazily. Range PATTERNS: `[lo..hi]` matches
+  any int in the range, inclusive. `:` also CONSes in expressions
+  (`0:[]` → `[0]`, right-associative; parenthesize inside list literals so
+  it isn't record syntax). `zipWith fn xs ys` zips pairwise.
 - **Termination**: `exit n` (native, n int) ends the whole process with status
   `n`, callable from ANYWHERE — top level, inside `{ }` blocks, lambdas,
   `for`/`map` callbacks, etc. implemented via an unconditional `Deno.exit`.
