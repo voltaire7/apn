@@ -464,12 +464,14 @@ step 1 inner $ print          # => inner          (prints, returns 42)
 step 1 inner $ debug         # => { print "inner"; 42 }
 step 2 inner $ debug         # => 42     (the block's tail statement)
 
-# quote / toAST — the S-EXPRESSION of an expression, as a list; the argument
-# is never evaluated (scheme-style quoting); toAST quotes automatically.
+# quote — the expression's SOURCE TEXT as a string (parens kept), never
+# evaluated:
+print (quote (1 + 1))         # => (1 + 1)
+1 + 1 $ quote $ print         # => 1 + 1
+
+# toAST — the S-EXPRESSION of an expression, as a list (quotes automatically):
 print (toAST (1 + 2))         # => ["+", 1, 2]
 print (toAST (1 + 2 * 3))     # => ["+", 1, ["*", 2, 3]]
-print (quote (1 + 1))         # => ["+", 1, 1]
-1 + 1 $ quote $ print         # => ["+", 1, 1]
 
 # toString / parse (string <-> value conversion; toString quotes strings)
 print (toString "hi")         # => "hi"

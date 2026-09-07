@@ -711,6 +711,13 @@ export class Interpreter {
     if (name === "quote" || name === "toAST") {
       const t = argsIn[0];
       if (t.kind !== "thunk") throw new APNError("runtime", `${name} needs an expression`);
+      if (name === "quote") {
+        // quote: the expression's SOURCE TEXT as a string (parens kept for
+        // ( ) groups); the expression is never evaluated
+        const inner = exprToSource(t.body);
+        const text = t.body.t === "block" && t.body.style === "(" ? `(${inner})` : inner;
+        return mkStr(text);
+      }
       return this.sexprOf(t.body);
     }
     if (name === "step") return this.stepNative(argsIn);

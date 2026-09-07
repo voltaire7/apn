@@ -309,9 +309,10 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
     names, unwrapping blocks' tail statements and action/thunk bodies) and
     returns a LIVE 0-arg action over the level's expression: debug shows its
     source, print runs it.
-  - `quote e` / `toAST e` — the S-EXPRESSION of an expression as a list
-    (`toAST (1 + 2)` → `["+", 1, 2]`); the argument is never evaluated.
-  - `toString x` — value → string (strings come back quoted); `parse s` —
+  - `quote e` — the expression's SOURCE TEXT as a string
+    (`quote (1 + 2)` → `"(1 + 2)"`), never evaluated; `toAST e` — the
+    S-EXPRESSION as a list (`toAST (1 + 2)` → `["+", 1, 2]`), also never
+    evaluated.
     the inverse for literals.
   The showcase uses `print` for values and `debug` for source inspection.
 - **Variants** via `data Maybe a = Just a | Nothing`; constructors and match
