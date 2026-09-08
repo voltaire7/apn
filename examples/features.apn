@@ -742,3 +742,6 @@ halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # REPL: after [ then a newline and an indented 1, Enter adds another indented
 # line. Shift+Enter submits instead. After the closing ], Enter submits.
+
+# REPL echo colors: [1] and [x: 1] show yellow numbers and gray structure;
+# nested strings and booleans retain their scalar colors during lazy streaming.

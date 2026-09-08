@@ -857,7 +857,7 @@ export class Interpreter {
 
     // Rendering is incremental, including nested lists. Consumers decide
     // whether to stream fragments or collect a finite result into a string.
-    render(v: Value, emit: (s: string) => void, raw = false, ancestors = new Set<Value>()): void {
+    render(v: Value, emit: (s: string, kind?: Value["kind"] | "key") => void, raw = false, ancestors = new Set<Value>()): void {
         checkInterrupt();
         v = this.demand(v);
         // Track nested values, not successive spine cells: 1:xs may stream
@@ -878,18 +878,19 @@ export class Interpreter {
                 emit("[");
                 v.v.forEach(([key, val], i) => {
                     if (i) emit(", ");
-                    emit(key + ": ");
+                    emit(key, "key");
+                    emit(": ");
                     // Inspect module actions without running halt; ordinary data
                     // fields still render their memoized values.
                     const field = this.force(val);
-                    if (field.kind === "closure" && !field.params.length) emit(valueToString(field));
+                    if (field.kind === "closure" && !field.params.length) emit(valueToString(field), field.kind);
                     else this.render(field, emit, false, ancestors);
                 });
                 emit("]");
             } else if (v.kind === "variant") {
-                emit(v.tag);
+                emit(v.tag, "variant");
                 for (const arg of v.v) { emit(" "); this.render(arg, emit, false, ancestors); }
-            } else emit(raw ? rawString(v) : valueToString(v));
+            } else emit(raw ? rawString(v) : valueToString(v), v.kind);
         } finally {
             ancestors.delete(v);
         }

@@ -182,6 +182,17 @@ const A = {
 };
 const paint = (code: string, s: string) => code + s + A.reset;
 
+export function renderColored(interp: Interpreter, value: Value, emit: (s: string) => void): void {
+    interp.render(value, (text, kind) => {
+        if (kind === "key") { emit(text); return; }
+        const color = kind === "int" || kind === "float" ? A.yellow
+            : kind === "string" || kind === "char" ? A.green
+            : kind === "bool" ? A.magenta
+            : kind === "variant" ? A.cyan : A.gray;
+        emit(paint(color, text));
+    });
+}
+
 // node-style typed echo: numbers yellow, strings/chars green, bools magenta,
 // values' structure (brackets, colons, commas) gray, unit/functions gray.
 // Variant tags stay cyan (capital constructors are cyan in input too).
@@ -883,7 +894,7 @@ async function replTTY(): Promise<void> {
             try {
                 const val = runSourceValue(src, interp, lastIsBinding(src) || lastIsPrintCall(src));
                 if (val !== null && (interp.isList(val) || val.kind === "variant" || val.kind === "record")) {
-                    interp.render(val, (x) => ed.emit(x));
+                    renderColored(interp, val, (x) => ed.emit(x));
                     ed.emit("\n");
                 } else if (val !== null) ed.print(showValue(val));
             } catch (err) {
