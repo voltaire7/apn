@@ -787,6 +787,8 @@ print (length typedMapNext)          # => 2
 print (typedMapNext $ remove "x")    # => HashMap [["y", 456]]
 print (HashMap [["a", 1], ["b", 2]]) # => HashMap [["a", 1], ["b", 2]]
 
+print (true $ typeOf) # => Bool
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

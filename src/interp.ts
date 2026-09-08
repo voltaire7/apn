@@ -983,7 +983,14 @@ export class Interpreter {
         }
         if (name === "typeOf") {
             const value = this.demand(argsIn[0]);
-            return { kind: "type", name: isNumeric(value) ? numericType(value) : value.kind === "hashmap" ? "HashMap" : value.kind };
+            if (isNumeric(value)) return { kind: "type", name: numericType(value) };
+            if (this.isList(value)) return { kind: "type", name: "List" };
+            const names: Partial<Record<Value["kind"], string>> = {
+                bool: "Bool", string: "String", char: "Char", unit: "Unit",
+                hashmap: "HashMap", record: "Record", variant: "Variant", type: "Type",
+                closure: "Function", clauseFn: "Function", native: "Function",
+            };
+            return { kind: "type", name: names[value.kind] ?? value.kind };
         }
         if (name === "isType") {
             const target = this.demand(argsIn[0]), value = this.demand(argsIn[1]);
