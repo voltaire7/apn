@@ -327,7 +327,7 @@ function helpText(): string {
         `Run: deno run --allow-read main.ts examples/features.apn`,
         ``,
         `REPL:`,
-        `  Up/Down    history (kept in ~/.apn_history)`,
+        `  Up/Down    move between lines; first/last line browses history`,
         `  Tab        complete names/builtins/:commands; with nothing to`,
         `             complete, insert 4 spaces (the indent unit)`,
         `  Backspace  behind a full indent level deletes all 4 spaces; on a blank`,
@@ -526,11 +526,12 @@ class ReplEditor {
         return "cont";
     }
 
-    // Single-line buffer: Up/Down walk history. Multi-line buffer (continuation
-    // or a recalled multi-line entry): Up/Down move between lines instead.
+    // Move within multiline buffers; at the first/last line, browse history.
+    // This also lets recalled multiline entries reach their history neighbors.
     up(): KeyAction {
-        if (this.lines.length > 1) {
-            if (this.row > 0) { this.row--; this.col = Math.min(this.col, this.lines[this.row].length); }
+        if (this.row > 0) {
+            this.row--;
+            this.col = Math.min(this.col, this.lines[this.row].length);
             return "cont";
         }
         if (this.hist.length === 0) return "cont";
@@ -538,13 +539,15 @@ class ReplEditor {
             this.draft = this.src();
             this.histIdx = this.hist.length - 1;
         } else if (this.histIdx > 0) this.histIdx--;
+        else return "cont";
         this.recall(this.hist[this.histIdx]);
         return "cont";
     }
 
     down(): KeyAction {
-        if (this.lines.length > 1) {
-            if (this.row < this.lines.length - 1) { this.row++; this.col = Math.min(this.col, this.lines[this.row].length); }
+        if (this.row < this.lines.length - 1) {
+            this.row++;
+            this.col = Math.min(this.col, this.lines[this.row].length);
             return "cont";
         }
         if (this.histIdx === null) return "cont";

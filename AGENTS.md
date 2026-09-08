@@ -334,7 +334,9 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
 
 - **History**: Up/Down walk submitted chunks. In a single-line buffer the
   arrows navigate history; in a multi-line buffer (continuation or a recalled
-  multi-line entry) they move between lines instead. Persisted across
+  multi-line entry) they move between lines. Up on the first line browses older
+  history; Down on the last line browses newer history, restoring the draft
+  after the newest entry. Persisted across
   sessions in `~/.apn_history` (one JSON string per line, capped at 500 on
   load; needs `--allow-write` and `--allow-env=HOME`, else in-session only
   with a one-time hint).
