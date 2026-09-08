@@ -489,7 +489,7 @@ export class ReplEditor {
         const line = this.lines[this.row];
         const indent = (/^ */.exec(line) ?? [""])[0];
         const prefix = [...this.lines.slice(0, this.row), line.slice(0, this.col)].join("\n");
-        const deeper = afterOpeningBracket(prefix) ? "    " : "";
+        const deeper = line.slice(0, this.col).trim() !== "" && afterOpeningBracket(prefix) ? "    " : "";
         this.lines[this.row] = line.slice(0, this.col);
         this.lines.splice(this.row + 1, 0, indent + deeper + line.slice(this.col));
         this.row++;

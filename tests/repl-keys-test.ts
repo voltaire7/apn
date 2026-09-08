@@ -119,3 +119,19 @@ Deno.test("Enter inside a pasted multiline list uses cursor position", () => {
     equal(ed.enter(), "cont");
     equal(ed.src(), "[\n    1\n    \n]");
 });
+
+Deno.test("blank continuation lines retain indentation without accumulating it", () => {
+    for (const opening of ["[", "{", "("]) {
+        const ed = editor(opening);
+        for (let i = 0; i < 3; i++) {
+            equal(ed.enter(), "cont");
+            equal(ed.lines[ed.row], "    ");
+            equal(ed.col, 4);
+        }
+    }
+    const nested = editor("[\n    [");
+    nested.enter();
+    equal(nested.col, 8);
+    nested.enter();
+    equal(nested.col, 8);
+});
