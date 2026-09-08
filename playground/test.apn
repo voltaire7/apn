@@ -1,5 +1,0 @@
-# this is exclusively for the user to test things quickly.
-
-x = x
-print "hi"
-x

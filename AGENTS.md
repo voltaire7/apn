@@ -19,7 +19,7 @@
 3. **Layout:** `main.ts`, `apn`, `readme.md`, and `AGENTS.md` stay in the root.
    Use `src/` for the interpreter, `lib/` for the standard library, `examples/`
    for runnable examples, `tests/` for regression assertions, `docs/` for
-   documentation, and `playground/` for the user's scratch programs. No deps.
+   documentation. Personal scratch programs live outside the repository. No deps.
 
 ## Project
 
@@ -47,7 +47,7 @@ Layout:
   things like `halt = exit 0` (`sq x = x * x` is there as a demo function).
 - `AGENTS.md` — this file
 - `readme.md` — quick start and directory guide
-- `playground/test.apn` — user-owned scratch program; preserve its edits
+- `~/Desktop/test.apn` — user-owned scratch program outside the repository; preserve its edits
 
 - `docs/semantics.md` — authoritative current evaluation rules and limitations
 - `tests/semantics-test.ts` — dependency-free Deno evaluation assertions
