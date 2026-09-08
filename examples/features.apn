@@ -692,6 +692,20 @@ print (lazyNote * 2)      # mentioning lazyNote runs the body (side effect)
     format "%: %" [field, value]
 } * x -> print x  # => x: 1, y: 2, z: 3 (one per line)
 
+# Required definition layout: same-line {, body +4 spaces, aligned }.
+layoutBlock = {
+    print "layout block"
+    print "aligned close"
+}
+layoutBlock
+layoutInline = { print "inline"; print "block" }
+layoutInline
+layoutExpression =
+    print "indented expression"
+layoutExpression
+# Invalid: an opening { on the next line after =, dedented statements,
+# or a closing } indented to the body level.
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

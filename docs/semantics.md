@@ -188,3 +188,9 @@ A lambda with an explicit `{ ... }` body ends at the closing brace. Operators
 following that brace belong to the surrounding expression: `[1, 2] * x ->
 { x + 1 } * x -> x * 2` produces `[4, 6]`. Unbraced lambda bodies continue
 to consume a full expression.
+
+Definition brace layout is mandatory: write `func = {` on one line. In a
+multiline brace block, each statement starts exactly four spaces deeper than
+that opening line, and the closing `}` aligns with the opening line. Inline
+`func = { expr; expr }` is valid. A newline after `=` may introduce an indented
+expression, but never an opening `{`, even for an inline block.

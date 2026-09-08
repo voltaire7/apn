@@ -401,15 +401,11 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   this. The block and fully single-line layouts still parse; only the
   single-line form is also shown (alongside the preferred one) in the 4b
   layout section.
-- **Style — `{ }` on the right of `=`**: prefer the same-line-open form
-  (`func = {` with the body on the following lines indented exactly +4 and the
-  closing `}` at the start column) over the block form (`func =\n    { ... }`).
-  Both parse; the user's default is the same-line-open one, e.g.:
-      seqOf = {
-          debug "one"
-
-          6 * 7
-      }
+- **Required brace layout**: a definition's opening `{` MUST be on the same
+  line as `=`. Multiline statements are exactly four spaces deeper than the
+  opening line, and `}` aligns with that line. `func = { expr; expr }` is valid.
+  `func =` followed by an indented non-brace expression is valid; an indented
+  `{ ... }` after `=` is a syntax error.
 - **Commit after every task.** The user has asked that commits happen
   automatically. After each completed task (workflow green, see above), stage
   the files and commit with a concise, repo-style message:

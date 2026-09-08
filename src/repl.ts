@@ -291,6 +291,7 @@ function helpText(): string {
         `  rec.field / rec."key" / rec.(dyn) / rec.[x, y]  (quoted access + pluck)`,
         `  vec.x = 10 / vec.[x, y] = [1, 2]  (record update: rebinds a modified`,
         `              copy, scoped like any def — blocks shadow; [] seeds a record)`,
+        `  f = { ... }  ({ stays on the = line; body +4 spaces; } aligned)`,
         `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
         `  xs * x -> { expr } * y -> expr   (braces end the first lambda)`,
         `  cond ? a : b   (ternary)`,

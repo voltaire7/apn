@@ -46,7 +46,13 @@ class Parser {
     i = 0;
     seen: Token | null = null; // last token peeked/consumed — where a failure points
 
-    constructor(toks: Token[]) { this.toks = toks; }
+    constructor(toks: Token[], private source: string) { this.toks = toks; }
+
+    lineIndent(token: Token): number {
+        const start = this.source.lastIndexOf("\n", token.pos - 1) + 1;
+        const whitespace = this.source.slice(start).match(/^[ \t]*/)![0];
+        return [...whitespace].reduce((n, c) => n + (c === "\t" ? 4 : 1), 0);
+    }
 
     peek(off = 0): Token {
         const t = this.toks[Math.min(this.i + off, this.toks.length - 1)];
@@ -536,7 +542,8 @@ class Parser {
                         // A `{` at the end of a line requires its body on the next line to
                         // be indented exactly one level (+4):  func = {\n print ... } is
                         // rejected,  func = {\n    print ... } is accepted.
-                        if (t.v === "{" && this.peek().k === "newline") {
+                        const multilineBrace = t.v === "{" && this.peek().k === "newline";
+                        if (multilineBrace) {
                             while (this.peek().k === "newline") this.next();
                             if (this.peek().k !== "indent") {
                                 throw new Error("Parser: a { block body must be indented by 4 spaces when { is followed by a newline");
@@ -547,9 +554,17 @@ class Parser {
                             if (this.isSym(";")) { this.next(); continue; }
                             while (this.peek().k === "newline") this.next();
                             while (this.peek().k === "dedent") this.next();
-                            if (this.isSym(close)) { this.next(); return { t: "block", stmts, style: close === ")" ? "(" : "{" }; }
+                            if (this.isSym(close)) {
+                                if (multilineBrace && this.lineIndent(this.peek()) !== this.lineIndent(t)) {
+                                    throw new Error("Parser: closing } must align with the line containing {");
+                                }
+                                this.next(); return { t: "block", stmts, style: close === ")" ? "(" : "{" };
+                            }
                             const tb = this.peek();
                             if (tb.k === "eof") throw new Error("Parser: unexpected end of file inside group");
+                            if (multilineBrace && this.lineIndent(tb) !== this.lineIndent(t) + 4) {
+                                throw new Error("Parser: block statements must be indented exactly 4 spaces from the opening line");
+                            }
                             if (tb.k === "indent") {
                                 throw new Error("Parser: block statements must stay at one indentation level");
                             }
@@ -1017,7 +1032,14 @@ class Parser {
         if (this.peek().k === "newline") {
             let j = this.i;
             while (this.toks[j] && this.toks[j].k === "newline") j++;
-            if (this.toks[j] && this.toks[j].k === "indent") return this.parseExpr();
+            if (this.toks[j] && this.toks[j].k === "indent") {
+                const first = this.toks[j + 1];
+                if (first?.k === "sym" && first.v === "{") {
+                    this.i = j + 1;
+                    throw new Error("Parser: a definition's opening { must be on the same line as '='");
+                }
+                return this.parseExpr();
+            }
             throw new Error("Parser: expected an expression after '='; use '_' for an unfinished definition");
         }
         if (this.peek().k === "eof" || this.peek().k === "dedent" ||
@@ -1165,7 +1187,7 @@ export function parse(src: string): TopLevel[] {
         if (err instanceof APNError) err.src = src;
         throw err;
     }
-    const p = new Parser(toks);
+    const p = new Parser(toks, src);
     try {
         const out = p.parseTopLevel();
         return groupClauses(out);
