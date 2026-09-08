@@ -184,8 +184,10 @@ const A = {
 const paint = (code: string, s: string) => code + s + A.reset;
 
 function colorNumber(text: string): string {
-    return text.split(/([+\-/])/).filter(Boolean).map((part) =>
-        paint(/^[+\-/]$/.test(part) ? A.operator : A.yellow, part)).join("");
+    const radix = text.match(/^(0)([xXbBoO])(.+)$/);
+    if (radix) return paint(A.yellow, radix[1]) + paint(A.operator, radix[2]) + paint(A.yellow, radix[3]);
+    return text.split(/([+\-/]|[eE](?=[+-]?\d)|i$)/).filter(Boolean).map((part) =>
+        paint(/^[+\-/eEi]$/.test(part) ? A.operator : A.yellow, part)).join("");
 }
 
 export function renderColored(interp: Interpreter, value: Value, emit: (s: string) => void): void {
@@ -248,7 +250,11 @@ export function highlightLine(s: string, ternaries: number[] = [0]): string {
         }
         if (/\d/.test(c) || (c === "." && /\d/.test(s[i + 1] ?? ""))) {
             const literal = s.slice(i).match(/^(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|(?:\d+(?:\.(?!\.)\d*)?|\.\d+)(?:[eE][+-]?\d+)?)/)?.[0] ?? c;
-            out += paint(A.yellow, literal); i += literal.length; continue;
+            out += colorNumber(literal); i += literal.length;
+            if (s[i] === "i" && !/[A-Za-z0-9_']/.test(s[i + 1] ?? "")) {
+                out += paint(A.operator, "i"); i++;
+            }
+            continue;
         }
         if (word(c)) {
             let j = i;

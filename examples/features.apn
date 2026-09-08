@@ -793,3 +793,6 @@ halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # REPL: Enter on a blank continuation line keeps its indentation; only an
 # opening bracket on the current line adds another four spaces.
+
+# REPL numeric markers: i in 2i, x/b/o in radix literals, and e in 1e3
+# are peach; numeric digits (including hexadecimal letters) stay yellow.

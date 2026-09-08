@@ -77,3 +77,18 @@ Deno.test("ternary colons are peach, record colons and assignment are gray", () 
     highlightLine("true ?", state);
     if (!highlightLine('    "yes" : "no"', state).includes(peach + ":")) throw new Error("Multiline ternary lost color");
 });
+
+Deno.test("numeric markers are peach and digits remain yellow", () => {
+    const peach = "\x1b[38;2;239;159;118m", yellow = "\x1b[38;2;229;200;144m";
+    for (const [source, marker, digits] of [["2i", "i", "2"], ["0xFF", "x", "FF"], ["0b1101", "b", "1101"], ["0o235", "o", "235"], ["0XFE", "X", "FE"], ["1e3", "e", "3"]]) {
+        const output = highlightLine(source);
+        if (!output.includes(peach + marker + "\x1b[0m") || !output.includes(yellow + digits + "\x1b[0m")) throw new Error(`Wrong colors: ${source}`);
+    }
+    if (highlightLine("i") !== "i") throw new Error("Colored standalone variable i");
+    const interp = new Interpreter();
+    const value = interp.run(parse("2i"));
+    if (!showValue(value).includes(peach + "i\x1b[0m")) throw new Error("Missing echoed imaginary marker color");
+    let nested = "";
+    renderColored(interp, { kind: "list", v: [value] }, (text) => { nested += text; });
+    if (!nested.includes(peach + "i\x1b[0m")) throw new Error("Missing nested imaginary marker color");
+});
