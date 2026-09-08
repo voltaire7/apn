@@ -1,6 +1,6 @@
 import { parse } from "../main.ts";
 import { Interpreter } from "../src/interp.ts";
-import { renderColored } from "../src/repl.ts";
+import { renderColored, highlightLine } from "../src/repl.ts";
 
 for (const source of ["[1]", "[x: 1]", '[x: [1, "hi", true]]', "take 3 [1..]"]) {
     Deno.test(`streamed REPL colors: ${source}`, () => {
@@ -24,4 +24,18 @@ Deno.test("colored infinite lists stream without buffering", () => {
         });
     } catch (error) { if (error !== stop) throw error; }
     if (output.replace(/\x1b\[[0-9;]*m/g, "") !== "[1, 2, 3") throw new Error("Not streaming");
+});
+
+Deno.test("operators use peach while structural punctuation stays gray", () => {
+    for (const ch of "+-*/%=!<>$&|?`") {
+        if (highlightLine(ch) !== `\x1b[38;2;239;159;118m${ch}\x1b[0m`) throw new Error(`Operator color: ${ch}`);
+    }
+    for (const ch of "(){}[];,:.") {
+        if (highlightLine(ch) !== `\x1b[38;2;131;139;167m${ch}\x1b[0m`) throw new Error(`Punctuation color: ${ch}`);
+    }
+    const adjacent = highlightLine("(-x)+[1]");
+    if (!adjacent.includes("\x1b[38;2;131;139;167m(\x1b[0m\x1b[38;2;239;159;118m-")) throw new Error("Adjacent tokens share color");
+    for (const source of ['"+"', "'+'", "# +"]) {
+        if (highlightLine(source).includes("239;159;118")) throw new Error("Colored operator inside literal/comment");
+    }
 });

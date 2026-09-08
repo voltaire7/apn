@@ -745,3 +745,5 @@ halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # REPL echo colors: [1] and [x: 1] show yellow numbers and gray structure;
 # nested strings and booleans retain their scalar colors during lazy streaming.
+
+# REPL input colors: unary/binary operators are peach; (){}[];,:. stay gray.

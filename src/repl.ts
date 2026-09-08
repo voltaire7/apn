@@ -178,6 +178,7 @@ const A = {
     magenta: "\x1b[38;2;202;158;230m", // #ca9ee6 mauve: match/data/bools
     cyan: "\x1b[38;2;153;209;219m", // #99d1db  sky: prompts, capital idents
     gray: "\x1b[38;2;131;139;167m", // #838ba7  overlay1: punctuation, structure
+    operator: "\x1b[38;2;239;159;118m", // #ef9f76 peach: operators
     comment: "\x1b[38;2;115;121;148m", // #737994 overlay0: comments
 };
 const paint = (code: string, s: string) => code + s + A.reset;
@@ -221,7 +222,7 @@ const REPL_KEYWORDS = new Set(["match", "data"]);
 const NATIVE_NAMES = new Set(NATIVES.map(([n]) => n));
 
 // Syntax-highlight one buffer line (best-effort, purely cosmetic).
-function highlightLine(s: string): string {
+export function highlightLine(s: string): string {
     let out = "", i = 0;
     const word = (c: string) => /[A-Za-z0-9_]/.test(c);
     while (i < s.length) {
@@ -252,18 +253,12 @@ function highlightLine(s: string): string {
                 : w;
             i = j; continue;
         }
-        // structural punctuation and operators recede to gray so names and
-        // values pop (spaces stay uncolored)
-        let j = i;
-        while (
-            j < s.length && !/[A-Za-z0-9_]/.test(s[j]) && s[j] !== " " &&
-            !"\"'#".includes(s[j])
-        ) j++;
-        if (j === i) { out += s[i]; i++; } // a space: plain, single char
-        else {
-            out += paint(A.gray, s.slice(i, j));
-            i = j;
-        }
+        // Keep delimiters gray; operators use peach even next to punctuation.
+        if ("+-*/%=!<>$&|?`".includes(c)) out += paint(A.operator, c);
+        else if ("(){}[];,:.".includes(c)) out += paint(A.gray, c);
+        else out += c;
+        i++;
+
     }
     return out;
 }

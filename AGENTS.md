@@ -375,7 +375,7 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
 - **Colors** (Catppuccin Frappé palette, truecolor): input is highlighted as
   typed (comments overlay0, strings/chars green, numbers yellow,
   `match`/`data`/bools mauve, natives blue, capital idents sky,
-  punctuation/operators overlay1); echoed values are colored by kind with
+  punctuation overlay1, operators peach); echoed values are colored by kind with
   gray structure (brackets, colons, commas; keys plain, variant tags sky);
   errors red.
 - **Keys**: Ctrl+C clear input (empty buffer = quit), Ctrl+D quit,
