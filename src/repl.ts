@@ -183,11 +183,15 @@ const A = {
 };
 const paint = (code: string, s: string) => code + s + A.reset;
 
+function colorNumber(text: string): string {
+    return text.split("/").map((part) => paint(A.yellow, part)).join(paint(A.operator, "/"));
+}
+
 export function renderColored(interp: Interpreter, value: Value, emit: (s: string) => void): void {
     interp.render(value, (text, kind) => {
         if (kind === "key") { emit(text); return; }
-        const color = kind === "int" || kind === "float" || kind === "rational" || kind === "complex" ? A.yellow
-            : kind === "string" || kind === "char" ? A.green
+        if (kind === "int" || kind === "float" || kind === "rational" || kind === "complex") { emit(colorNumber(text)); return; }
+        const color = kind === "string" || kind === "char" ? A.green
             : kind === "bool" ? A.magenta
             : kind === "variant" ? A.cyan : A.gray;
         emit(paint(color, text));
@@ -197,9 +201,9 @@ export function renderColored(interp: Interpreter, value: Value, emit: (s: strin
 // node-style typed echo: numbers yellow, strings/chars green, bools magenta,
 // values' structure (brackets, colons, commas) gray, unit/functions gray.
 // Variant tags stay cyan (capital constructors are cyan in input too).
-function showValue(v: Value): string {
+export function showValue(v: Value): string {
     switch (v.kind) {
-        case "int": case "float": case "rational": case "complex": return paint(A.yellow, valueToString(v));
+        case "int": case "float": case "rational": case "complex": return colorNumber(valueToString(v));
         case "string": return paint(A.green, `"${v.v}"`);
         case "char": return paint(A.green, `'${v.v}'`);
         case "bool": return paint(A.magenta, String(v.v));

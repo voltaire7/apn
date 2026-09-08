@@ -770,3 +770,5 @@ halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 # nested strings and booleans retain their scalar colors during lazy streaming.
 
 # REPL input colors: unary/binary operators are peach; (){}[];,:. stay gray.
+
+# REPL echo: fractions such as 1/3 have yellow digits and a peach slash.

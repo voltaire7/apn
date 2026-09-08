@@ -1,6 +1,6 @@
 import { parse } from "../main.ts";
 import { Interpreter } from "../src/interp.ts";
-import { renderColored, highlightLine } from "../src/repl.ts";
+import { renderColored, highlightLine, showValue } from "../src/repl.ts";
 
 for (const source of ["[1]", "[x: 1]", '[x: [1, "hi", true]]', "take 3 [1..]"]) {
     Deno.test(`streamed REPL colors: ${source}`, () => {
@@ -37,5 +37,17 @@ Deno.test("operators use peach while structural punctuation stays gray", () => {
     if (!adjacent.includes("\x1b[38;2;131;139;167m(\x1b[0m\x1b[38;2;239;159;118m-")) throw new Error("Adjacent tokens share color");
     for (const source of ['"+"', "'+'", "# +"]) {
         if (highlightLine(source).includes("239;159;118")) throw new Error("Colored operator inside literal/comment");
+    }
+});
+
+Deno.test("fraction slashes are peach in scalar and nested echoes", () => {
+    const interp = new Interpreter();
+    const value = interp.run(parse("1/3"));
+    const expected = "\x1b[38;2;229;200;144m1\x1b[0m\x1b[38;2;239;159;118m/\x1b[0m\x1b[38;2;229;200;144m3\x1b[0m";
+    if (showValue(value) !== expected) throw new Error("Wrong scalar fraction colors");
+    for (const source of ["[1/3]", "[x: 1/3]"]) {
+        let output = "";
+        renderColored(interp, interp.run(parse(source)), (text) => { output += text; });
+        if (!output.includes(expected)) throw new Error("Wrong nested fraction colors");
     }
 });
