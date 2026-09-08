@@ -123,29 +123,27 @@ function isIncompleteError(msg: string): boolean {
     return /'EOF'|end of file|unterminated|expected '->'|unexpected 'newline'|unexpected 'indent'|unexpected 'dedent'/.test(msg);
 }
 
-function unbalancedBrackets(src: string): boolean {
-    try {
-        let d = 0;
-        for (const t of lex(src)) {
-            if (t.k !== "sym") continue;
-            if (t.v === "(" || t.v === "[" || t.v === "{") d++;
-            else if (t.v === ")" || t.v === "]" || t.v === "}") d--;
+// Scan only text before the cursor; tolerate incomplete/invalid source.
+export function insideBrackets(src: string): boolean {
+    const stack: string[] = [];
+    let quote = "", comment = false, escaped = false;
+    for (const ch of src) {
+        if (comment) { if (ch === "\n") comment = false; continue; }
+        if (quote) {
+            if (escaped) escaped = false;
+            else if (ch === "\\") escaped = true;
+            else if (ch === quote) quote = "";
+            continue;
         }
-        return d > 0;
-    } catch {
-        return false;
+        if (ch === "#") { comment = true; continue; }
+        if (ch === '"' || ch === "'") { quote = ch; continue; }
+        if ("([{".includes(ch)) stack.push(ch);
+        else if (")]}".includes(ch)) {
+            const opening = "([{"[")]}".indexOf(ch)];
+            if (stack[stack.length - 1] === opening) stack.pop();
+        }
     }
-}
-
-// A chunk is complete when it parses cleanly. An EOF-shaped parse error or
-// an unclosed bracket means "keep reading" (multi-line input).
-function chunkComplete(src: string): boolean {
-    try {
-        parse(src);
-        return true;
-    } catch (err) {
-        return !(isIncompleteError((err as Error).message) || unbalancedBrackets(src));
-    }
+    return stack.length > 0;
 }
 
 // ---- ANSI colors (TTY REPL only; piped output stays plain) ----
@@ -339,9 +337,10 @@ function helpText(): string {
         `  Backspace  behind a full indent level deletes all 4 spaces; on a blank`,
         `             continuation line it undoes the line break (cursor at the`,
         `             end of the line above)`,
-        `  Enter      runs when the chunk is complete; incomplete input continues`,
+        `  Enter      submits outside brackets; inserts a newline inside`,
         `             on the next line ("... " prompt, auto-indent);`,
-        `             a blank line is just spacing, Ctrl+C clears the input`,
+        `             cursor position decides, regardless of syntax validity`,
+        `  Shift+Enter reverses Enter; Option+Left/Right moves by word`,
         `  paste      multi-line text is inserted, not run; Enter then runs it`,
         `  Ctrl+C     clear input (empty: quit)  Ctrl+D quit  Ctrl+L clear screen`,
         `  Ctrl+A/E   line start/end  Ctrl+U/K kill to line start/end  Ctrl+W delete word`,
@@ -353,7 +352,7 @@ function helpText(): string {
 type KeyAction = "cont" | "submit" | "quit";
 const ENC = new TextEncoder();
 
-class ReplEditor {
+export class ReplEditor {
     lines: string[] = [""];
     row = 0;
     col = 0;
@@ -364,11 +363,9 @@ class ReplEditor {
     esc = "";
     visRow = 0; // visual rows between the render home and the cursor
     interp: Interpreter;
-    isComplete: (src: string) => boolean;
 
-    constructor(interp: Interpreter, isComplete: (src: string) => boolean, hist: string[]) {
+    constructor(interp: Interpreter, hist: string[]) {
         this.interp = interp;
-        this.isComplete = isComplete;
         this.hist = hist;
     }
 
@@ -520,14 +517,25 @@ class ReplEditor {
         return this.src().replace(/(?:\n[ \t]*)+$/, "");
     }
 
-    enter(): KeyAction {
-        const atEnd = this.row === this.lines.length - 1 &&
-            this.col === this.lines[this.row].length;
-        if (!atEnd) { this.splitLine(); return "cont"; }
-        const line = this.lines[this.row];
-        // whitespace-only single line: like Python, just show a fresh prompt
-        if (this.lines.length === 1 && line.trim() === "") return "submit";
-        if (this.isComplete(this.trimmedSrc())) return "submit";
+    word(direction: -1 | 1): void {
+        const src = this.src();
+        let offset = this.lines.slice(0, this.row).reduce((n, line) => n + line.length + 1, 0) + this.col;
+        const isWord = (ch: string) => /[\p{L}\p{N}_]/u.test(ch);
+        if (direction < 0) {
+            while (offset > 0 && !isWord(src[offset - 1])) offset--;
+            while (offset > 0 && isWord(src[offset - 1])) offset--;
+        } else {
+            while (offset < src.length && !isWord(src[offset])) offset++;
+            while (offset < src.length && isWord(src[offset])) offset++;
+        }
+        const before = src.slice(0, offset).split("\n");
+        this.row = before.length - 1;
+        this.col = before[this.row].length;
+    }
+
+    enter(shift = false): KeyAction {
+        const prefix = [...this.lines.slice(0, this.row), this.lines[this.row].slice(0, this.col)].join("\n");
+        if (insideBrackets(prefix) === shift) return "submit";
         this.splitLine();
         return "cont";
     }
@@ -647,7 +655,9 @@ class ReplEditor {
             this.esc += ch;
             const e = this.esc;
             if (e.length === 2 && e[1] !== "[" && e[1] !== "O") {
-                this.esc = ""; // stray ESC followed by a normal char: ignore both
+                this.esc = "";
+                if (ch === "b") this.word(-1);
+                if (ch === "f") this.word(1);
                 return "cont";
             }
             const last = e[e.length - 1];
@@ -656,6 +666,10 @@ class ReplEditor {
             if (!done) return "cont";
             this.esc = "";
             const rest = e[1] === "O" ? e[2] : e.slice(2);
+            if (rest === "13;2u" || rest === "27;2;13~") return this.enter(true);
+            if (rest === "13u" || rest === "13;1u") return this.enter();
+            if (rest === "1;3D" || rest === "1;9D") { this.word(-1); return "cont"; }
+            if (rest === "1;3C" || rest === "1;9C") { this.word(1); return "cont"; }
             if (rest === "A") return this.up();
             if (rest === "B") return this.down();
             if (rest === "C") { this.right(); return "cont"; }
@@ -693,7 +707,7 @@ class ReplEditor {
         }
     }
 
-    // Read one chunk (Enter on complete input). null = user quit.
+    // Read one chunk until a submit key action. null = user quit.
     // Keys typed ahead (a read batch extending past the Enter that submits)
     // are kept in pendingKeys and replayed into the NEXT chunk.
     // Bracketed paste (the terminal wraps pastes in ESC[200~ ... ESC[201~)
@@ -794,7 +808,7 @@ async function setTtyCooked(saved: string): Promise<void> {
 async function replTTY(): Promise<void> {
     const interp = new Interpreter();
     const hist = loadHistory();
-    const ed = new ReplEditor(interp, chunkComplete, hist);
+    const ed = new ReplEditor(interp, hist);
     const watch = startInterruptWatcher();
     setInterruptFlag(watch.flag);
 
@@ -807,6 +821,7 @@ async function replTTY(): Promise<void> {
 
     const savedCooked = await ttyCookedSettings();
     Deno.stdin.setRaw(true);
+    ed.emit("\x1b[>1u"); // request distinct modified keys (Kitty keyboard protocol)
     ed.emit("\x1b[?2004h"); // ask the terminal to wrap pastes in ESC[200~..ESC[201~
     try {
         while (true) {
@@ -848,6 +863,7 @@ async function replTTY(): Promise<void> {
     } finally {
         setInterruptFlag(null);
         watch.worker.terminate();
+        ed.emit("\x1b[<u");
         ed.emit("\x1b[?2004l");
         console.log = origLog;
         Deno.stdin.setRaw(false);

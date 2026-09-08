@@ -194,3 +194,9 @@ multiline brace block, each statement starts exactly four spaces deeper than
 that opening line, and the closing `}` aligns with the opening line. Inline
 `func = { expr; expr }` is valid. A newline after `=` may introduce an indented
 expression, but never an opening `{`, even for an inline block.
+
+In the interactive REPL, Enter submits outside brackets and inserts a newline
+inside them, based on cursor position. Shift+Enter reverses that choice, even
+for invalid code. Brackets inside strings/comments are ignored. Option-arrow
+keys move by word. Shift+Enter requires distinct terminal key encoding (Kitty
+keyboard protocol or xterm modifyOtherKeys).

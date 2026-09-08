@@ -360,17 +360,13 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   auto-indent dies with it). Typing `}`/`]` on an indent-only line dedents
   one level first, and deleting a lone `}`/`]` at column 0 of a continuation
   line restores that indent (the assist is symmetric).
-- **Chunks, not lines (Python-style prompts)**: `>>> ` opens a chunk, `... `
-  marks continuation lines. Enter submits only when the chunk parses
-  (`chunkComplete`: parse success, or an error that is neither EOF-shaped nor
-  an unbalanced-bracket case → real error, shown in red). Incomplete input
-  continues on the next line; a blank line is just spacing (it never forces
-  a run — the completeness oracle makes Python's blank-line rule
-  unnecessary; Ctrl+C bails). Enter mid-buffer splits the line. Auto-indent
-  copies the current line's indent, +4 after `{`/`[`. Typing `}`/`]` on an
-  indent-only line dedents one level first. Trailing blank lines are trimmed
-  before running. Keys typed past a submit are queued and replayed into the
-  next chunk (type-ahead).
+- **Enter** submits whenever the cursor is outside `()`, `{}`, and `[]`,
+  regardless of syntax validity. Inside brackets it inserts a newline.
+  Shift+Enter reverses this behavior. Strings and comments do not count as
+  brackets. Option+Left/Right navigate words (including across lines).
+  Modified Enter requires a terminal that sends a distinct key sequence;
+  the editor requests Kitty keyboard disambiguation and also accepts xterm
+  modifyOtherKeys Shift+Enter. Auto-indentation still applies to newlines.
 - **Paste**: bracketed paste mode is enabled (`ESC[?2004h`), so pasted
   multi-line text is inserted verbatim, never auto-run; Enter then runs it.
 - **Colors** (Catppuccin Frappé palette, truecolor): input is highlighted as

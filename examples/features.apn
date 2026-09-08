@@ -729,3 +729,7 @@ halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 # with auto-indent. These are interactive-only and cannot run in this
 # file-mode showcase: see :help inside the REPL, or AGENTS.md.
 # ---------------------------------------------------------
+
+# REPL editing: Option+Left/Right moves by word. Enter submits outside
+# (), {}, []; inside it inserts a newline. Shift+Enter does the inverse,
+# including submitting invalid code. Brackets in strings/comments are ignored.
