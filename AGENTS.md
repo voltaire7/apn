@@ -240,7 +240,10 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   still multiplication; the overload triggers on a function right operand.
   Related natives: `pairs rec`, and `format "% %" [a, b]` (`%` = printf-style
   arg, strings unquoted; `%%` = `%`).
-- **Ranges**: `[a..b]` inclusive INT range (Haskell-style; `[5..3]` empty);
+- **Ranges**: `[a..b]` inclusive INT range — the implicit step ADAPTS to the
+  direction (`[0..-100]` descends; `[5..3]` empty needs `[5,4..3]`... no —
+  `[5..3]` descends too; an EXPLICIT step pointing the wrong way is empty
+  (`[0,1..-100]` = `[]`));
   bounds are constant arithmetic (`[0..50+50]`); `[a,b..c]` gives the STEP
   (`b-a`); `[a..]` / `[a,b..]` are INFINITE — a
   lazy `range` value that `print`/`emit`/the REPL echo STREAM as constructed

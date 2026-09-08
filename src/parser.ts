@@ -586,7 +586,10 @@ class Parser {
                                 }
                                 const hi = this.parseAdd();
                                 this.expectSym("]");
-                                return { t: "range", lo: rangeNum(loE), step: 1, hi: rangeNum(hi) };
+                                const lo = rangeNum(loE), hiN = rangeNum(hi);
+                                // implicit step ADAPTS to direction: [0..-100] descends;
+                                // an EXPLICIT step pointing the wrong way stays empty
+                                return { t: "range", lo, step: hiN < lo ? -1 : 1, hi: hiN };
                             }
                             if (this.isSym(",")) {
                                 const save2 = this.i;
