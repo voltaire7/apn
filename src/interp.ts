@@ -97,9 +97,8 @@ export class Interpreter {
             return clo;
         }
         // Otherwise it's a lazy value binding: a THUNK. The body is not run at
-        // definition time — it runs (and is cached) the first time the name is
-        // forced. This is what lets core.txt define `halt = exit 0` without the
-        // process exiting at load time.
+        // definition time. force caches only its initial thunk, so argument
+        // wrappers can cause this binding to be recomputed (SEMANTICS.md).
         const thunk: Value = { kind: "thunk", body: value, env: this.env, value: undefined };
         this.env.setLocal(name, thunk);
         return thunk;
@@ -277,8 +276,7 @@ export class Interpreter {
     // another action, e.g. a block-local `smaller = filter ...` passed to a
     // pattern clause), then force containers so pattern matching sees a list.
     // Demand contexts: operands, record targets, scrutinees, pattern matching.
-    // Natives that SHOW values (debug, toString) force instead — inspecting a
-    // function yields the function.
+    // debug forces instead, without calling a returned zero-argument action.
     demand(v: Value): Value {
         for (;;) {
             checkInterrupt();
@@ -737,9 +735,9 @@ export class Interpreter {
         }
         if (v.kind === "thunk") {
             if (v.value) return v.value;
-            // Follow thunk chains ITERATIVELY, with GHC-style black-hole
-            // detection: `x = x` (or `a = b; b = a`) raises <<loop>> instead of
-            // hanging the REPL forever.
+            // Follow thunk chains iteratively. Cycles do not terminate here;
+            // the interrupt check lets the TTY REPL break them. Only the
+            // initial thunk receives the computed cache below.
             let cur: Value = v;
             while (cur.kind === "thunk") {
                 checkInterrupt();
@@ -788,8 +786,9 @@ export class Interpreter {
     }
 
     callNative(name: string, argsIn: Value[], tag?: string): Value {
-        // SHOWING natives (debug, toString) force: inspecting a 0-arg function
-        // yields the function itself. Everything else demands a real value.
+        // debug forces without demanding a returned action; quote/toAST inspect
+        // syntax and step has its own rules. Ordinary natives (including
+        // print and toString) demand values and run zero-argument actions.
         // expression-level natives: they consume the argument's UNEVALUATED form
         if (name === "quote" || name === "toAST") {
             const t = argsIn[0];

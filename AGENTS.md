@@ -4,11 +4,12 @@
 
 1. **The workflow is mandatory.** For ANY change (add, change, or remove a
    feature), you MUST:
-   1. Edit `main.ts` to implement the change.
+   1. Edit the relevant `src/` module (or `main.ts` for entry-point changes).
    2. Update `features.txt` so it demonstrates the new/updated behavior
       (this file is the living spec AND the smoke test).
    3. Type-check and run the full showcase:
           deno check main.ts
+          deno test semantics_test.ts
           deno run --allow-read main.ts features.txt
    4. Confirm output matches expectations before declaring done.
    Do not end a task without completing all steps. Never leave `features.txt`
@@ -16,7 +17,7 @@
 2. **Keep it green.** If a change breaks any existing feature, fix it before
    finishing. Do not leave the project in a broken state.
 3. **Layout:** `main.ts` + `src/` modules (see Project), plus `features.txt`,
-   `AGENTS.md`, `core.txt`, `apn` in the root — no package.json, no deps.
+   `SEMANTICS.md`, `semantics_test.ts`, `AGENTS.md`, `core.txt`, `apn` in the root — no package.json, no deps.
 
 ## Project
 
@@ -39,10 +40,13 @@ Layout (user-approved src/ split):
 - `apn` — tiny sh launcher (REPL/file runs; no logic)
 - `features.txt` — the living spec + smoke test: a runnable showcase of EVERY
   feature. It must always stay in sync with what `main.ts` actually supports.
-  (There are no real unit tests — this file IS the test.)
+  Observable evaluation rules are asserted separately in `semantics_test.ts`.
 - `core.txt` — the standard library, imported with `load "core.txt"`. Defines
   things like `halt = exit 0` (`sq x = x * x` is there as a demo function).
 - `AGENTS.md` — this file
+
+- `SEMANTICS.md` — authoritative current evaluation rules and limitations
+- `semantics_test.ts` — dependency-free Deno regression assertions
 
 ## Run / verify
 
@@ -58,9 +62,10 @@ Deno required. From `apn/`:
 - Type-check (always run after edits):
     deno check main.ts
 
-There is NO `package.json`, no dependencies, no test framework, no `src/`.
+Run evaluation assertions: `deno test semantics_test.ts`.
+There is no `package.json` and no external dependencies; tests use Deno.test.
 
-## Architecture (all in main.ts, top to bottom)
+## Architecture (implemented in src/ modules)
 
 - `Type` / `Value` — runtime values are tagged objects: int, float, bool,
   string, char, unit, list, lazyList, record, variant, closure, clauseFn,
@@ -78,6 +83,12 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   completion, colors), plus the piped-stdin fallback loop.
 
 ## Core language semantics (don't break these)
+
+`SEMANTICS.md` is authoritative for evaluation and memoization. In particular,
+named definitions are not uniformly cached: fresh argument thunks can cause
+recomputation, and bare statements re-evaluate thunk bodies. Actions run when
+demanded, including by `print` and `toString`. Update the assertions with any
+intentional evaluation change.
 
 - **Lazy lists**: a list literal evaluates to a `lazyList` (unevaluated
   elements + captured env), resolved only when forced. `[x, y, z]` is ALWAYS a
@@ -209,7 +220,7 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
 - **Pattern-lambdas**: a lambda's FIRST param may be a destructuring pattern
   (and only that — no literal `_`/`0 ->` lambdas, to keep guards like
   `x | x < 0 -> ...` unambiguous):
-      for ([f, v] -> print (format "%: %" [f, v])) person   # record → [field, value]
+      person * ([f, v] -> print (format "%: %" [f, v]))   # record → [field, value]
       map ([a, b] -> a + b) [[1, 2], [3, 4]]                # list → positional
       x -> ...                                               # plain name params as before
   `startsLambdaPattern` limits the guess to `[ ... ]` and `(Ctor ...)`; the
@@ -225,9 +236,7 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
     and would be a runtime error under this semantics. Use normal application
     for args and the pipe only for the final feed.
   - Backtick infix: ``a `f` b`` == `f a b` (between ternary and compare, left).
-    **Exception: `\`for\`` inverts** so the sequence sits on the left:
-    ``seq `for` fn`` == `seq $ for fn` == `for fn seq`. This is a parser-level
-    inversion only — the `for` native stays strict fn-first (see below).
+    `for` is an ordinary identifier, with no special inversion or native.
   - Operator sections: `(+ 2)` = `\x -> x + 2`, `(2 +)` = `\x -> 2 + x` for
     `+ - * / % == != < > <= >= ++`. `(-2)` stays unary negation (no whitespace
     info in the lexer); a LONE `(op)` is a 2-arg lambda: `add = (+)`.
@@ -302,8 +311,8 @@ rendered by `formatError(err, color)`:
 
 - `&&` / `||` are NOT wired into the parser (they appear in `evalBinop` but don't
   parse). Use comparisons/ternaries instead.
-- `` ` : ` `` cons is only a pattern operator (`x:rest`), not an expression
-  operator.
+- `:` constructs cons expressions and matches cons patterns (`x:rest`).
+  Parenthesize cons expressions inside list literals to avoid record syntax.
 - `match x [ ... ]` is a self-delimiting bracket form: it consumes its own `[ ]`
   (newlines/indents/dedents inside), independent of the block/semicolon rules
   above, and needs no hard-stop flag for the enclosing application (the `]`
@@ -366,8 +375,8 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   per level in .ts files** (no autoformatters — manual style only). When adding a new kind,
   update `valueToString`, `eval`, and any `force`/pattern/`==` switches — they
   are exhaustive.
-- Keep edits consolidated in `main.ts`; keep the minimal four-file layout (no new deps,
-  no `src/`).
+- Keep edits in the relevant `src/` module; keep `main.ts` a thin entry point.
+  Preserve the dependency-free layout.
 - Reflect new syntax in `features.txt` and in the REPL `:help` block.
 - **Style — whole-function `match`**: when a function's ENTIRE body is a single
   `match`, write the same-line-open form (`f x = match x [ ... ]`), not the
@@ -387,6 +396,6 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
 - **Commit after every task.** The user has asked that commits happen
   automatically. After each completed task (workflow green, see above), stage
   the files and commit with a concise, repo-style message:
-      git add main.ts features.txt core.txt AGENTS.md
+      git add <files changed by this task>
       git commit -m "short summary of the change"
   Don't commit secrets; there are none.
