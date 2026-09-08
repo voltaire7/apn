@@ -144,11 +144,13 @@ intentional evaluation change.
       func =
           match x [...]      # body continues on +4   -> the match expr
       func =
-      { 1 + 1 }               # == `func = ; { ... }`: func == unit (RHS cut
-                              #   off by a same-level newline) and the { } is
-                              #   a separate standalone block statement.
-  A def body that ends at a same-level newline (or an explicit `;` right after
-  `=`) binds UNIT (see `parseDefBody`).
+      { 1 + 1 }               # parse error: same-level line cannot supply the body
+  Both sides of `=` are required. Empty bodies (including before `;` or a
+  closing delimiter) are parse errors. Use `foo = _` for an unfinished value
+  or function body: it is deferred and raises "not implemented" when evaluated.
+  Use `foo = ()` for an explicit unit value. Pattern `_` remains a wildcard.
+  In the REPL, submitting `foo =` alone reports a syntax error immediately;
+  a complete pasted indented definition can still span lines.
 - **Records**: `[name: "Alice", age: 30]`, accessed with `rec.field` (chaining
   works: `a.b.c`). Keys may be quoted strings or numbers (`["my field": 1]`,
   `[123: 2]`), accessed the same way (`obj."my field"`, `obj.123`); a

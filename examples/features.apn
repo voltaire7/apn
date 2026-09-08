@@ -555,15 +555,14 @@ seqOf = {
 print (seqOf)                # prints: one
                              # => 42
 
-# Whitespace is significant: a def cut off by a same-level newline binds UNIT,
-# and the next line is a separate statement. So  func =\n{ ... }
-# is  func = unit  PLUS a standalone block statement, NOT a function body.
-unitAfter =
-{
-    print "the brace block ran as its OWN statement"
-}
-print (toString unitAfter)   # prints: the brace block ran as its OWN statement
-                             # => ()   (unitAfter is unit, not a block)
+# Unfinished definitions use an explicit placeholder; defining it is silent.
+unfinished = _
+print (quote _)              # => _ (inspect without evaluating)
+# Evaluating unfinished raises "not implemented" (asserted in tests).
+explicitUnit = ()
+print explicitUnit           # => ()
+# Missing sides of = are syntax errors: foo =, foo = ;, and = bar.
+# A following same-level statement cannot supply a missing body.
 
 # a function body that continues on a +4-indented line spans lines;
 # `[ ]` also spans lines and elements separate by newline (commas optional),

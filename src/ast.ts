@@ -14,6 +14,7 @@ export type Expr =
     | { t: "string"; v: string }
     | { t: "char"; v: string }
     | { t: "unit" }
+    | { t: "placeholder" }
     | { t: "var"; name: string }
     | { t: "binop"; op: BinOp; l: Expr; r: Expr }
     | { t: "unop"; op: UnOp; e: Expr }

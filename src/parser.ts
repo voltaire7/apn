@@ -492,11 +492,13 @@ class Parser {
             case "char": this.next(); return { t: "char", v: t.v };
             case "ident": {
                 this.next();
+                if (t.v === "_") return { t: "placeholder" };
                 return { t: "var", name: t.v };
             }
             case "kw": return this.parseKeyword();
             case "sym":
                 switch (t.v) {
+                    case "=": throw new Error("Parser: expected a binding before '='");
                     case "(":
                     case "{": {
                         const close = t.v === "(" ? ")" : "}";
@@ -988,21 +990,17 @@ class Parser {
         return { name, clauses: [{ params, body }] };
     }
 
-    // A definition body is an expression. Whitespace is significant: when `=` is
-    // followed by a newline, the body must continue on an INDENTED (+4) line.
-    // A same-level newline (or explicit `;`) is a semicolon — the body is empty
-    // and binds `unit`, so  func =\n{\n ... \n}  is `func = unit` followed by a
-    // separate block statement (NOT the def body).
+    // A body is required; only an indented continuation can cross a newline.
     parseDefBody(): Expr {
         if (this.peek().k === "newline") {
             let j = this.i;
             while (this.toks[j] && this.toks[j].k === "newline") j++;
             if (this.toks[j] && this.toks[j].k === "indent") return this.parseExpr();
-            return { t: "unit" };
+            throw new Error("Parser: expected an expression after '='; use '_' for an unfinished definition");
         }
-        if (this.isSym(";")) {
-            this.next();
-            return { t: "unit" };
+        if (this.peek().k === "eof" || this.peek().k === "dedent" ||
+            this.isSym(";") || this.isSym("}") || this.isSym(")") || this.isSym("]")) {
+            throw new Error("Parser: expected an expression after '='; use '_' for an unfinished definition");
         }
         return this.parseExpr();
     }
@@ -1198,6 +1196,7 @@ export function exprToSource(e: Expr): string {
         case "string": return `"${e.v}"`;
         case "char": return `'${e.v}'`;
         case "unit": return "()";
+        case "placeholder": return "_";
         case "var": return e.name;
         case "binop": return `${exprToSource(e.l)} ${e.op} ${exprToSource(e.r)}`;
         case "unop": return `${e.op === "neg" ? "-" : "!"}${exprToSource(e.e)}`;

@@ -128,6 +128,7 @@ export class Interpreter {
             case "string": return mkStr(e.v);
             case "char": return { kind: "char", v: e.v };
             case "unit": return { kind: "unit" };
+            case "placeholder": return mkStr("_");
             case "var": return mkStr(e.name);
             case "binop": return mkList([mkStr(e.op), this.sexprOf(e.l), this.sexprOf(e.r)]);
             case "unop": return mkList([mkStr(e.op), this.sexprOf(e.e)]);
@@ -292,6 +293,7 @@ export class Interpreter {
                 case "string": r = mkStr(e.v); break;
                 case "char": r = { kind: "char", v: e.v }; break;
                 case "unit": r = { kind: "unit" }; break;
+                case "placeholder": throw new APNError("runtime", "not implemented: '_' placeholder");
                 case "var": {
                     const v = this.env.get(e.name);
                     if (v === undefined) {

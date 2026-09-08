@@ -34,6 +34,11 @@ error; ordinary recursive list spines such as `x = 1:x` still stream.
 ## Definitions and actions
 
 Ordinary named definitions do not execute their bodies when defined.
+`foo = _` declares an unfinished value; `f x = _` an unfinished function body.
+The `_` expression raises "not implemented" only when evaluated. It remains a
+wildcard in patterns. Both sides of `=` are required: `foo =`, `foo = ;`, and
+`= bar` are syntax errors. Use `foo = ()` for unit. An indented body may follow
+`=` on the next line in a complete source chunk; a same-level line may not.
 
 | Definition | What it binds |
 | --- | --- |

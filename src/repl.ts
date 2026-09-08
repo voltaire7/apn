@@ -307,6 +307,8 @@ function helpText(): string {
         `  [1,2,3] * x -> print x      (seq * fn iterates; int * fn counts)`,
         `  recursion, higher-order fns, records, variants`,
         `  integers are arbitrary precision (no suffix); floats remain decimals`,
+        `  foo = _   unfinished definition; using it raises not implemented`,
+        `  both sides of = are required; use () for an explicit unit value`,
         ``,
         `print x    any value (strings raw), returns x;  emit  = no newline`,
         `debug x    shows the SOURCE as written;  step n v  descends v's body`,
