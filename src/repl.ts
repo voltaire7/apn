@@ -356,7 +356,7 @@ function helpText(): string {
         `  recursion, higher-order fns, records, variants`,
         `  exact integers/rationals: 0xFF, 0b1010, 0o17, 1 / 3; floats: .1, 1e3`,
         `  1 + 2.0 => 3.0; exact/inexact convert; quotient truncates division`,
-        `  sqrt (-1) => 0+1i; makeRectangular 3 4; realPart/imagPart`,
+        `  sqrt (-1) => 0+1i; literals 1i, 3+4i; realPart/imagPart`,
         `  isNumber/isInteger/isExact; numerator/denominator; round ties to even`,
         `  foo = _   unfinished definition; using it raises not implemented`,
         `  arr 0 = 10   update an existing list; arr (-1) = 10 updates its last item`,

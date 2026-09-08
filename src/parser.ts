@@ -1,4 +1,4 @@
-import { type Real, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
+import { type Real, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
 function rangeNum(e: Expr): Real {
     if (e.t === "int" || e.t === "float") return { kind: e.t, v: e.v } as Real;
     if (e.t === "unop" && e.op === "neg") return negate(rangeNum(e.e)) as Real;
@@ -492,8 +492,18 @@ class Parser {
             }
         }
         switch (t.k) {
-            case "int": this.next(); return { t: "int", v: t.v };
-            case "float": this.next(); return { t: "float", v: t.v };
+            case "int":
+            case "float": {
+                this.next();
+                const suffix = this.peek();
+                if (suffix.k === "ident" && suffix.v === "i" &&
+                    !/\s/.test(this.source.slice(t.pos, suffix.pos))) {
+                    this.next();
+                    const imaginary = { kind: t.k, v: t.v } as Real;
+                    return { t: "numeric", v: complex(integer(0n), imaginary) };
+                }
+                return t.k === "int" ? { t: "int", v: t.v } : { t: "float", v: t.v };
+            }
             case "bool": this.next(); return { t: "bool", v: t.v };
             case "str": this.next(); return { t: "string", v: t.v };
             case "char": this.next(); return { t: "char", v: t.v };

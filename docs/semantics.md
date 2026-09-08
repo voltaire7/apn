@@ -145,7 +145,8 @@ inexact division can produce IEEE infinities and NaNs.
 Integers use `BigInt` throughout lexing, parsing, arithmetic and formatting.
 APN literals include `0xFF`, `0b11010100`, `0o235461`, `.5`, and `1.2e-3`.
 Scheme `#` prefixes are not used: `#` remains a comment. Fractions use ordinary
-APN division (`1 / 3`); complex values use `makeRectangular 3 4` or
+APN division (`1 / 3`); complex values accept an adjacent imaginary suffix (`1i`, `3+4i`, `.5i`),
+or use `makeRectangular 3 4` or
 `makePolar radius angle`. Complex output is `3+4i`. `parse` reads numeric text,
 including fraction and complex output, without evaluating arbitrary APN code.
 

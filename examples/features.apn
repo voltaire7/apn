@@ -738,6 +738,9 @@ print [isInfinite (1.0 / 0.0), isNaN (0.0 / 0.0)] # => [true, true]
 true ? "yes" : "no" $ print  # => yes
 false ? "yes" : "no" $ print # => no
 
+print (0+1i)  # => 0+1i
+print ((1+2i) * (3+4i))  # => -5+10i
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------
