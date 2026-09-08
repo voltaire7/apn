@@ -706,6 +706,10 @@ layoutExpression
 # Invalid: an opening { on the next line after =, dedented statements,
 # or a closing } indented to the body level.
 
+print ['a'..'e']                           # => abcde
+print (take 6 (iterate (*2) 1))              # => [1, 2, 4, 8, 16, 32]
+print (take 6 (iterate (x -> x * 2 + 1) 0))  # => [0, 1, 3, 7, 15, 31]
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

@@ -200,3 +200,13 @@ inside them, based on cursor position. Shift+Enter reverses that choice, even
 for invalid code. Brackets inside strings/comments are ignored. Option-arrow
 keys move by word. Shift+Enter requires distinct terminal key encoding (Kitty
 keyboard protocol or xterm modifyOtherKeys).
+
+Bounded character ranges such as `['a'..'e']` produce strings. They follow
+Unicode scalar order (skipping surrogate code points); descending bounds reverse
+the direction. These strings are finite and constructed eagerly.
+
+`iterate f seed` produces the lazy infinite sequence `seed`, `f seed`, and so
+on. Taking zero elements does not evaluate either argument; taking one does
+not call `f`. Sequential consumption supports long sequences. As with other
+nested deferred computations, skipping many unevaluated elements then demanding
+a value that depends on all of them can hit the evaluator's stack limit.

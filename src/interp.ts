@@ -13,7 +13,7 @@ const STACK_LIMIT = 200; // below V8's own JS stack, so APN errors first
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
-    ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
+    ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
     ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1],
     ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1],
@@ -951,6 +951,7 @@ export class Interpreter {
         // These natives select their own demand points. In particular take 0
         // never inspects its input, and list producers defer their first cell.
         if (name === "__constr") return { kind: "variant", tag: tag!, v: argsIn };
+        if (name === "iterate") return this.iterateList(argsIn[0], argsIn[1]);
         if (name === "map") return this.mapList(argsIn[0], argsIn[1]);
         if (name === "filter") return this.filterList(argsIn[0], argsIn[1]);
         if (name === "zipWith") return this.zipList(argsIn[0], argsIn[1], argsIn[2]);
@@ -1088,6 +1089,13 @@ export class Interpreter {
             }
         }
         throw new Error(`Runtime: unknown native '${name}'`);
+    }
+
+    iterateList(f: Value, value: Value): Value {
+        return this.defer(() => ({
+            kind: "cons", head: value,
+            tail: this.defer(() => this.iterateList(f, this.defer(() => this.apply(this.demand(f), value)))),
+        }));
     }
 
     mapList(f: Value, xs: Value): Value {

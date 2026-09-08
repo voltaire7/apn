@@ -628,6 +628,16 @@ class Parser {
                                 }
                                 const hi = this.parseAdd();
                                 this.expectSym("]");
+                                if (loE.t === "char" && hi.t === "char") {
+                                    const start = loE.v.codePointAt(0)!, end = hi.v.codePointAt(0)!;
+                                    const step = start <= end ? 1 : -1;
+                                    const chars: string[] = [];
+                                    for (let cp = start; step > 0 ? cp <= end : cp >= end; cp += step) {
+                                        // Surrogates are not Unicode scalar values.
+                                        if (cp < 0xD800 || cp > 0xDFFF) chars.push(String.fromCodePoint(cp));
+                                    }
+                                    return { t: "string", v: chars.join("") };
+                                }
                                 const lo = rangeNum(loE), hiN = rangeNum(hi);
                                 // implicit step ADAPTS to direction: [0..-100] descends;
                                 // an EXPLICIT step pointing the wrong way stays empty
