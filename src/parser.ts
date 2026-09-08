@@ -1088,8 +1088,8 @@ variants.push({ tag: vname, arity });
             }
 
             if (t.k === "kw") {
-                // top-level expression starting with a keyword: fn/match
-                const e = this.parseKeyword();
+                // Keyword-led expressions still include trailing operators and pipes.
+                const e = this.parseExpr();
                 out.push({ t: "expr", value: e });
                 continue;
             }
