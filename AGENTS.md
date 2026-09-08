@@ -241,90 +241,14 @@ There is NO `package.json`, no dependencies, no test framework, no `src/`.
   Related natives: `pairs rec`, and `format "% %" [a, b]` (`%` = printf-style
   arg, strings unquoted; `%%` = `%`).
 - **Ranges**: `[a..b]` inclusive INT range — the implicit step ADAPTS to the
-  direction (`[0..-100]` descends; `[5..3]` empty needs `[5,4..3]`... no —
-  `[5..3]` descends too; an EXPLICIT step pointing the wrong way is empty
-  (`[0,1..-100]` = `[]`));
-  bounds are constant arithmetic (`[0..50+50]`); `[a,b..c]` gives the STEP
-  (`b-a`); `[a..]` / `[a,b..]` are INFINITE — a
-  lazy `range` value that `print`/`emit`/the REPL echo STREAM as constructed
-  (Ctrl+C breaks) and `*` iterates lazily. Range PATTERNS: `[lo..hi]` matches
-  any int in the range, inclusive. `:` also CONSes in expressions
-  (`0:[]` → `[0]`, right-associative; parenthesize inside list literals so
-  it isn't record syntax). `zipWith fn xs ys` zips pairwise.
-- **Termination**: `exit n` (native, n int) ends the whole process with status
-  `n`, callable from ANYWHERE — top level, inside `{ }` blocks, lambdas,
-  `for`/`map` callbacks, etc. implemented via an unconditional `Deno.exit`.
-  `halt` is NOT a builtin — it is defined in core.txt as `halt = exit 0`
-  (see *Lazy 0-arg defs* below), so importing core.txt doesn't exit; `halt`
-  fires only when actually used (bare statement, `core.halt`, last line of a
-  block, …).
-- **`load "file"`** imports a file RELATIVE TO THE CURRENT FILE
-  (`Interpreter.sourceDir`, set per run; REPL defaults to cwd). Two effects:
-  (1) as a STATEMENT it merges the file's own definitions into the current
-  scope (an `include` — inside a `{ }` block that merge stays scoped to the
-  block); (2) as a VALUE it returns them as a `module` record, so
-  `core = load "core.txt"; core.sq 4` is namespaced access. Implemented as a
-  native: reads the file, `run`s it in a fresh child `Env`, then copies the
-  loaded env's OWN entries into the caller env and returns them as a record.
-- **0-arg defs: ACTION RHS = 0-arg function, other RHS = lazy thunk**:
-  - `x = 5`, `r = [a, b]`, `greeting = "hi"`, binops/ternaries/matches —
-    bound lazily: `evalDef` stores a `{ kind: "thunk" }` and the body
-    evaluates (and caches) the FIRST time it is forced. `run()` forces each
-    top-level expr statement's result, and a block forces its last
-    statement's value — so a bare `halt` at top level fires. File mode also
-    forces the FINAL top-level value. `recordAccess` and `pluck` use
-    `unpackThunk` instead (evaluate the body but keep the result lazy —
-    needed so `core.halt` doesn't force the whole module). `force(record)`
-    deliberately leaves thunk FIELD values unforced (a `load` module may
-    contain `halt`).
-  - An ACTION RHS — a block (`f = { ... }` / `f = ( ... )`), an application
-    (`f = print "hello"`), or a pipe (`f = xs $ head`) — declares a
-    **0-arg function** (`closure` with `params: []`), with or without `{}`s:
-    `f = print "hello"` == `f = { print "hello" }`. Nothing runs at the
-    definition; every call RE-RUNS the body (no caching).
-  - **ARGUMENTS ARE LAZY (Haskell)**: `app`/`pipe` wrap their argument in a
-    thunk, unevaluated. Where a real value is needed it is DEMANDED. This
-    makes `if` just a function —
-    `if cond then else = cond ? then : else`, then
-    `if false (print "a") (print "b")` prints only `b` — and it lets
-    block-local `smaller = filter ...` flow into recursive pattern clauses.
-  - **When it runs** (application is left-associative, `debug f` = `(debug f)`):
-    - STATEMENT position (`runStmt`): a bare name as a top-level/block
-      statement runs 0-arg functions AND re-runs thunks uncached, chaining
-      until a concrete value — so `debug (f)` CALLS (the `( )` group's
-      statement is the bare name), and `halt = (load "core.txt").halt` +
-      bare `halt` runs load, then the field's action, then exits.
-      Self-referential values raise GHC-style `<<loop>>` (thunk/closure
-      chains carry a seen-set in `force`/`runStmt`/`demand` — `x = x` and
-      `a = b; b = a` error instead of hanging the REPL).
-    - DEMAND contexts (needing a real value): binop/unop operands, ternary
-      conditions, match scrutinees, record targets (`core.sq 4` after
-      `core = load "..."`), and every consuming native (head, length, map,
-      for, …). APPLYING it to arguments runs it and feeds the RESULT the
-      arguments — so `addTwo = add 2; addTwo 10` still works (partial
-      application).
-    - SHOWING contexts yield the function itself: `debug f` /
-      `toString f` print `<function>`.
-  - A trailing action def at the end of a file does NOT run (its function
-    is the final value).
-- **Output & introspection**:
-  - `print x` — ANY value (strings print raw/unquoted; lists/records via
-    their representation); EVALUATES 0-arg actions it is given; RETURNS the
-    value so pipes can continue (`x $ print $ f $ print`).
-  - `emit x` — print WITHOUT the trailing newline (also returns the value).
-  - `debug x` — SOURCE inspection: shows the argument as written
-    (`debug (1 + 1)` → `1 + 1`); when the argument's value is a 0-arg action
-    (and the argument wasn't a bare name) it shows the action's BODY.
-  - `step n v` — descends n levels into v's unevaluated structure (resolving
-    names, unwrapping blocks' tail statements and action/thunk bodies) and
-    returns a LIVE 0-arg action over the level's expression: debug shows its
-    source, print runs it.
-  - `quote e` — the expression's SOURCE TEXT as a string
-    (`quote (1 + 2)` → `"(1 + 2)"`), never evaluated; `toAST e` — the
-    S-EXPRESSION as a list (`toAST (1 + 2)` → `["+", 1, 2]`), also never
-    evaluated.
-    the inverse for literals.
-  The showcase uses `print` for values and `debug` for source inspection.
+  direction (`[0..-100]` and `[5..3]` descend; an EXPLICIT step pointing the
+  wrong way is empty: `[0,1..-100]` = `[]`); bounds are constant arithmetic
+  (`[0..50+50]`); `[a,b..c]` gives the STEP (`b-a`); `[a..]` / `[a,b..]` are
+  INFINITE — a lazy `range` value that `print`/`emit`/the REPL echo STREAM as
+  constructed (Ctrl+C breaks) and `*` iterates lazily. Range PATTERNS:
+  `[lo..hi]` match any int in the range, inclusive. `:` also CONSes in
+  expressions (`0:[]` → `[0]`, right-associative; parenthesize inside list
+  literals so it isn't record syntax). `zipWith fn xs ys` zips pairwise.
 - **Variants** via `data Maybe a = Just a | Nothing`; constructors and match
   expressions. Nullary constructors are bare values; arity>0 constructors are
   curried natives tagged with the constructor name.

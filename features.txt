@@ -433,6 +433,8 @@ print {
 # give the STEP: [2,4..100] counts by 2 — and [0..] is INFINITE: print
 # streams it AS IT IS CONSTRUCTED (Ctrl+C breaks it).
 print ([0..5])                               # => [0, 1, 2, 3, 4, 5]
+print ([5..3])                               # => [5, 4, 3]   (implicit step adapts)
+print ([0,1..-100])                          # => []          (explicit step, wrong way)
 print ([2, 4..10])                           # => [2, 4, 6, 8, 10]
 print ([1+1..4])                             # => [2, 3, 4]   (bounds are constant arithmetic)
 print ([10..12+3])                           # => [10, 11, 12, 13, 14, 15]
