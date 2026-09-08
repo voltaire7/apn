@@ -133,14 +133,56 @@ prints `a`. Forcing other expressions can still have effects. `step` retains
 its expression-inspection/evaluation rules demonstrated in `examples/features.apn`.
 `toString` demands its argument and collects its full rendering into a string.
 
-Integers and floats remain distinct runtime tags: `1 + 2.0` is an error.
-Integers use `BigInt` throughout lexing, parsing, arithmetic, ranges, patterns,
-and formatting. Decimal literals need no suffix; `9007199254740993` stays exact.
-Integer division truncates toward zero; remainder has the dividend's sign.
-Division and remainder by zero raise runtime errors. All-integer ranges retain exact integer bounds and integer arithmetic.
-A float bound or step promotes the whole range to floats, including mixed
-constant arithmetic such as `[0,1/2.0..2]`. Floats retain
-JavaScript-number precision and fractional arithmetic.
+Numbers follow a Scheme-style tower: exact arbitrary-precision integers and
+reduced rational fractions, inexact binary64 reals, and complex numbers whose
+components are real numbers. Exactness is separate from mathematical type:
+`isInteger 3.0` is true and `isExact 3.0` is false. Arithmetic with an inexact
+operand produces an inexact result. Exact `/` returns reduced fractions;
+`quotient` truncates integer division. `%` and `remainder` follow the dividend's
+sign; `modulo` follows the divisor's sign. Exact zero division raises an error;
+inexact division can produce IEEE infinities and NaNs.
+
+Integers use `BigInt` throughout lexing, parsing, arithmetic and formatting.
+APN literals include `0xFF`, `0b11010100`, `0o235461`, `.5`, and `1.2e-3`.
+Scheme `#` prefixes are not used: `#` remains a comment. Fractions use ordinary
+APN division (`1 / 3`); complex values use `makeRectangular 3 4` or
+`makePolar radius angle`. Complex output is `3+4i`. `parse` reads numeric text,
+including fraction and complex output, without evaluating arbitrary APN code.
+
+`exact` converts the actual binary floating-point value to an exact fraction:
+`exact .5` is `1/2`, while `exact .1` is
+`3602879701896397/36028797018963968`. `inexact` rounds an exact number to binary64.
+The printer distinguishes `3` from `3.0` and preserves `-0.0`; infinity/NaN print
+as `+inf.0`, `-inf.0`, and `+nan.0`. `parse` understands these spellings.
+
+Finite numeric comparisons compare exact represented values, including mixed
+exact/inexact inputs, without rounding a large exact operand first. Thus
+`9007199254740993 > 9007199254740992.0` is true. NaN is unequal to every number
+including itself, and ordered comparisons involving NaN are false. Non-real
+complex numbers support equality but not ordering. Integer literal patterns
+use numeric equality, so a pattern `1` also matches `1.0`.
+
+All-exact ranges use exact arithmetic, including fractional bounds and steps:
+`[0,1/2..2]` yields `[0, 1/2, 1, 3/2, 2]`. A float anywhere in the bounds or
+step promotes the whole range to binary64, including `[0,1/2.0..2]`.
+
+The numeric API uses APN camelCase names and fixed arities. Unary predicates:
+`isNumber`, `isComplex`, `isReal`, `isRational`, `isInteger`, `isExact`,
+`isInexact`, `isZero`, `isPositive`, `isNegative`, `isOdd`, `isEven`,
+`isFinite`, `isInfinite`, `isNaN`. Unary operations: `exact`, `inexact`,
+`numerator`, `denominator`, `floor`, `ceiling`, `truncate`, `round`, `sqrt`,
+`abs`, `realPart`, `imagPart`, `magnitude`, `angle`, `conjugate`, `exp`, `log`,
+`sin`, `cos`, `tan`, `asin`, `acos`, `atan`. Binary operations: `quotient`,
+`remainder`, `modulo`, `gcd`, `lcm`, `min`, `max`, `expt`, `makeRectangular`,
+`makePolar`, `atan2`, `rationalize`. `round` uses ties-to-even. Perfect square
+roots of exact rationals remain exact; other roots and transcendental values
+use floating-point approximations (with complex results when required).
+
+This adopts the general numeric model, not implementation-specific Chez
+fixnum/flonum optimization APIs or MIT machine-format controls. APN's existing
+operators retain their arities and collection overloads.
+References: [MIT Scheme numbers](https://groups.csail.mit.edu/mac/ftpdir/scheme-7.4/doc-html/scheme_5.html)
+and [Chez Scheme numeric operations](https://www.scheme.com/csug8/numeric.html).
 
 Indexes and counts remain arbitrary-precision until a checked conversion is
 needed for a host array index. `exit` accepts a signed 32-bit status, matching

@@ -186,7 +186,7 @@ const paint = (code: string, s: string) => code + s + A.reset;
 export function renderColored(interp: Interpreter, value: Value, emit: (s: string) => void): void {
     interp.render(value, (text, kind) => {
         if (kind === "key") { emit(text); return; }
-        const color = kind === "int" || kind === "float" ? A.yellow
+        const color = kind === "int" || kind === "float" || kind === "rational" || kind === "complex" ? A.yellow
             : kind === "string" || kind === "char" ? A.green
             : kind === "bool" ? A.magenta
             : kind === "variant" ? A.cyan : A.gray;
@@ -199,7 +199,7 @@ export function renderColored(interp: Interpreter, value: Value, emit: (s: strin
 // Variant tags stay cyan (capital constructors are cyan in input too).
 function showValue(v: Value): string {
     switch (v.kind) {
-        case "int": case "float": return paint(A.yellow, String(v.v));
+        case "int": case "float": case "rational": case "complex": return paint(A.yellow, valueToString(v));
         case "string": return paint(A.green, `"${v.v}"`);
         case "char": return paint(A.green, `'${v.v}'`);
         case "bool": return paint(A.magenta, String(v.v));
@@ -239,9 +239,8 @@ export function highlightLine(s: string): string {
             out += paint(A.green, s.slice(i, j)); i = j; continue;
         }
         if (/\d/.test(c) || (c === "." && /\d/.test(s[i + 1] ?? ""))) {
-            let j = i;
-            while (j < s.length && /[\d.]/.test(s[j])) j++;
-            out += paint(A.yellow, s.slice(i, j)); i = j; continue;
+            const literal = s.slice(i).match(/^(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|(?:\d+(?:\.(?!\.)\d*)?|\.\d+)(?:[eE][+-]?\d+)?)/)?.[0] ?? c;
+            out += paint(A.yellow, literal); i += literal.length; continue;
         }
         if (word(c)) {
             let j = i;
@@ -333,7 +332,10 @@ function helpText(): string {
         `  indentation: strict 4-space layout (exactly +4 per level)`,
         `  [1,2,3] * x -> print x      (seq * fn iterates; int * fn counts)`,
         `  recursion, higher-order fns, records, variants`,
-        `  integers are arbitrary precision; floats accept 0.1 or .1`,
+        `  exact integers/rationals: 0xFF, 0b1010, 0o17, 1 / 3; floats: .1, 1e3`,
+        `  1 + 2.0 => 3.0; exact/inexact convert; quotient truncates division`,
+        `  sqrt (-1) => 0+1i; makeRectangular 3 4; realPart/imagPart`,
+        `  isNumber/isInteger/isExact; numerator/denominator; round ties to even`,
         `  foo = _   unfinished definition; using it raises not implemented`,
         `  arr 0 = 10   update an existing list; arr (-1) = 10 updates its last item`,
         `  both sides of = are required; use () for an explicit unit value`,

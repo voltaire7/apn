@@ -1,37 +1,19 @@
-
-// Fold constant range arithmetic; a float anywhere promotes that expression.
-function rangeNum(e: Expr): bigint | number {
-    if (e.t === "int" || e.t === "float") return e.v;
-    if (e.t === "unop" && e.op === "neg") return -rangeNum(e.e);
-    if (e.t === "binop") {
-        const a = rangeNum(e.l), b = rangeNum(e.r);
-        if (typeof a === "bigint" && typeof b === "bigint") {
-            if (e.op === "+") return a + b;
-            if (e.op === "-") return a - b;
-            if (e.op === "*") return a * b;
-            if (e.op === "/" && b !== 0n) return a / b;
-        } else {
-            const x = Number(a), y = Number(b);
-            if (e.op === "+") return x + y;
-            if (e.op === "-") return x - y;
-            if (e.op === "*") return x * y;
-            if (e.op === "/" && y !== 0) return x / y;
-        }
-    }
+import { type Real, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
+function rangeNum(e: Expr): Real {
+    if (e.t === "int" || e.t === "float") return { kind: e.t, v: e.v } as Real;
+    if (e.t === "unop" && e.op === "neg") return negate(rangeNum(e.e)) as Real;
+    if (e.t === "binop" && ["+", "-", "*", "/"].includes(e.op)) return arithmetic(e.op, rangeNum(e.l), rangeNum(e.r)) as Real;
     throw new Error("Parser: range bounds must be numeric constants");
 }
-
-function rangeExpr(lo: bigint | number, second: bigint | number | null, hi: bigint | number | null): Expr {
-    if (typeof lo === "bigint" && (second === null || typeof second === "bigint") &&
-        (hi === null || typeof hi === "bigint")) {
-        return { t: "range", lo, step: second === null ? (hi !== null && hi < lo ? -1n : 1n) : second - lo, hi };
+function rangeExpr(lo: Real, second: Real | null, hi: Real | null): Expr {
+    const step = second === null ? integer(hi !== null && compareNumbers(hi, lo) < 0 ? -1n : 1n) : arithmetic("-", second, lo) as Real;
+    if ([lo, second, hi].some((x) => x?.kind === "float")) {
+        const start = asFloat(lo), delta = asFloat(step), end = hi === null ? null : asFloat(hi);
+        if (!Number.isFinite(start) || !Number.isFinite(delta) || (end !== null && !Number.isFinite(end))) throw new Error("Parser: float range bounds and step must be finite");
+        return { t: "floatRange", lo: start, step: delta, hi: end };
     }
-    const start = Number(lo), end = hi === null ? null : Number(hi);
-    const step = second === null ? (end !== null && end < start ? -1 : 1) : Number(second) - start;
-    if (!Number.isFinite(start) || !Number.isFinite(step) || (end !== null && !Number.isFinite(end))) {
-        throw new Error("Parser: float range bounds and step must be finite");
-    }
-    return { t: "floatRange", lo: start, step, hi: end };
+    if (lo.kind === "int" && step.kind === "int" && (hi === null || hi.kind === "int")) return { t: "range", lo: lo.v, step: step.v, hi: hi?.v ?? null };
+    return { t: "rationalRange", lo, step, hi };
 }
 import { lex } from "./lexer.ts";
 import { APNError, tokLen } from "./errors.ts";
@@ -1245,7 +1227,10 @@ export function groupClauses(program: TopLevel[]): TopLevel[] {
 // Render an expression back to source text (for debug / quote inspection).
 export function exprToSource(e: Expr): string {
     switch (e.t) {
-        case "int": case "float": return String(e.v);
+        case "numeric": return numberText(e.v);
+        case "rationalRange": return `[${numberText(e.lo)}, ${numberText(arithmetic("+", e.lo, e.step))}..${e.hi === null ? "" : numberText(e.hi)}]`;
+        case "int": return String(e.v);
+        case "float": return numberText({ kind: "float", v: e.v });
         case "bool": return e.v ? "true" : "false";
         case "string": return `"${e.v}"`;
         case "char": return `'${e.v}'`;

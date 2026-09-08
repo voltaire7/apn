@@ -1,3 +1,4 @@
+import type { Numeric, Real } from "./numbers.ts";
 import type { DefClause } from "./types.ts";
 
 // ---------------- AST ----------------
@@ -8,6 +9,8 @@ export type BinOp = "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | ">" | "<="
 export type UnOp = "neg" | "not";
 
 export type Expr =
+    | { t: "numeric"; v: Numeric }
+    | { t: "rationalRange"; lo: Real; step: Real; hi: Real | null }
     | { t: "int"; v: bigint }
     | { t: "float"; v: number }
     | { t: "bool"; v: boolean }

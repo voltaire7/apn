@@ -123,8 +123,8 @@ example("head leaves unused nested lists deferred",
     "print (head [1, [missing]])", ["1"]);
 example("a pattern clause does not demand unrelated variable arguments",
     "first 0 y = 7\nprint (first 0 missing)", ["7"]);
-failure("arithmetic does not coerce int to float",
-    "print (1 + 2.0)", "cannot apply '+' to int and float");
+example("mixed arithmetic becomes inexact",
+    "print (1 + 2.0)", ["3.0"]);
 
 example("memoized values retain their result after later rebinding", `
 n = 1

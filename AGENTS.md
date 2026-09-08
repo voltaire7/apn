@@ -32,6 +32,7 @@ Layout:
   dispatch; re-exports `parse`/`lex` for ad-hoc tooling
 - `src/types.ts` — `Value`, `Env`, `mk*`, `valueToString` (the runtime world)
 - `src/ast.ts` — `Expr`/`Pattern`/`TopLevel`/`Alt`/`DefClause` type shapes
+- `src/numbers.ts` — exact rationals, complex arithmetic, conversions and numeric natives
 - `src/errors.ts` — `APNError` (kinds parse/lex/runtime), `didYouMean`,
   `tokLen`, `editDistance`
 - `src/lexer.ts` — `Token`, `KEYWORDS`, `SYMBOLS`, `lex`
@@ -72,7 +73,7 @@ There is no `package.json` and no external dependencies; tests use Deno.test.
 
 ## Architecture (implemented in src/ modules)
 
-- `Type` / `Value` — runtime values are tagged objects: int, float, bool,
+- `Type` / `Value` — runtime values are tagged objects: int, rational, float, complex, bool,
   string, char, unit, list, lazyList, record, variant, closure, clauseFn,
   native, plus `thunk`, internal computed `deferred` thunks, and lazy `cons`
   cells (see below;
@@ -95,13 +96,19 @@ and arguments share their memoized outer result, including through alias chains.
 Actions remain repeatable and run when demanded. Update assertions with any
 intentional evaluation change.
 
-- **Integers**: APN integer tokens, AST values, runtime values, and all-integer range bounds
-  use `bigint`. Float ranges use a separate `floatRange` representation. Never pass user integer text through `Number`/`parseInt`.
-  `mkInt(number)` is only for safe host counters; it rejects unsafe numbers.
-  Arithmetic and counts stay bigint; convert array indexes only after bounds
-  checks. Floats remain numbers and never implicitly mix with integers.
-  Formatting uses decimal strings without an `n` suffix. Integer division
-  truncates toward zero; division/remainder by zero are APN runtime errors.
+- **Numbers**: `src/numbers.ts` owns the Scheme-style numeric tower. Integers
+  and reduced rationals are exact (`bigint`); floats are binary64 and inexact;
+  complex numbers have real numeric components. Mixed arithmetic is inexact.
+  `/` preserves exact fractions; `quotient` truncates; `%` is `remainder`.
+  Exact division by zero errors; inexact division follows IEEE infinity/NaN.
+  Numeric equality/order compare exact finite values without first rounding
+  big integers to floats. Non-real complex values cannot be ordered.
+  Literals use APN notation: decimal, 0x/0b/0o, decimals and e/E exponents.
+  No Scheme # prefixes: # remains a comment. Use `exact`, `inexact`, and
+  `makeRectangular` instead. Float rendering retains .0 where needed.
+  Indexes and counts require exact integers; never silently round them.
+  `mkInt(number)` accepts only safe host counters. Integer ranges remain exact,
+  fractional exact ranges use `rationalRange`, mixed ranges use `floatRange`.
 - **Lazy lists**: literal elements are thunks; cons cells defer their head and
   tail. `force()` reveals only the outer value and memoizes every traversed
   thunk. It must never recursively force a list. Use `cell()` / `elements()` to

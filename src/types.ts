@@ -1,3 +1,4 @@
+import { type Numeric, type Real, numberText } from "./numbers.ts";
 import type { Expr, Pattern } from "./ast.ts";
 
 // ---------------- Types & values ----------------
@@ -9,8 +10,8 @@ export interface DefClause { params: Pattern[]; body: Expr; }
 
 // Runtime values (dynamically typed, like JS)
 export type Value =
-    | { kind: "int"; v: bigint }
-    | { kind: "float"; v: number }
+    | Numeric
+    | { kind: "rationalRange"; lo: Real; step: Real; hi: Real | null }
     | { kind: "bool"; v: boolean }
     | { kind: "string"; v: string }
     | { kind: "char"; v: string }
@@ -47,8 +48,8 @@ export function rawString(v: Value): string {
 
 export function valueToString(v: Value): string {
     switch (v.kind) {
-        case "int": return String(v.v);
-        case "float": return String(v.v);
+        case "int": case "float": case "rational": case "complex": return numberText(v);
+        case "rationalRange": return "<rational range>";
         case "bool": return String(v.v);
         case "string": return `"${v.v}"`;
         case "char": return `'${v.v}'`;

@@ -1,3 +1,4 @@
+import { parseNumberText, isNumeric, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import type { Expr, Pattern, TopLevel, Alt } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
@@ -12,6 +13,7 @@ const STACK_LIMIT = 200; // below V8's own JS stack, so APN errors first
 // Native registry: name -> arity. One source of truth for env registration
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
+    ...NUMBER_NATIVES,
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
@@ -144,6 +146,7 @@ export class Interpreter {
     //   toAST (1 + 2)  =>  [+, 1, 2]
     sexprOf(e: import("./ast.ts").Expr): Value {
         switch (e.t) {
+            case "numeric": return e.v;
             case "int": return mkInt(e.v);
             case "float": return { kind: "float", v: e.v };
             case "bool": return mkBool(e.v);
@@ -182,6 +185,7 @@ export class Interpreter {
         v = this.demand(v);
         if (this.isList(v)) return { t: "list", v: this.items(v).map((x) => this.valueToExpr(x)) };
         switch (v.kind) {
+            case "rational": case "complex": return { t: "numeric", v };
             case "int": return { t: "int", v: v.v };
             case "float": return { t: "float", v: v.v };
             case "bool": return { t: "bool", v: v.v };
@@ -309,6 +313,8 @@ export class Interpreter {
             }
             let r: Value;
             switch (e.t) {
+                case "numeric": r = e.v; break;
+                case "rationalRange": r = { kind: "rationalRange", lo: e.lo, step: e.step, hi: e.hi }; break;
                 case "int": r = mkInt(e.v); break;
                 case "float": r = { kind: "float", v: e.v }; break;
                 case "bool": r = mkBool(e.v); break;
@@ -331,9 +337,8 @@ export class Interpreter {
                 case "unop": {
                     const v = this.demand(this.eval(e.e));
                     if (e.op === "neg") {
-                        r = (v.kind === "int" || v.kind === "float")
-                            ? { kind: v.kind === "int" ? "int" : "float", v: -v.v } as Value
-                            : { kind: "unit" };
+                        if (!isNumeric(v)) throw new APNError("runtime", "negation expects a number");
+                        r = negate(v);
                     } else {
                         r = v.kind === "bool" ? mkBool(!v.v) : { kind: "unit" };
                     }
@@ -518,37 +523,15 @@ export class Interpreter {
         const bad = (): never => {
             throw new APNError("runtime", `cannot apply '${e.op}' to ${l.kind} and ${r.kind}`);
         };
+        if (isNumeric(l) && isNumeric(r) && ["+", "-", "*", "/", "%"].includes(e.op)) return arithmetic(e.op, l, r);
         switch (e.op) {
             case "+":
-                if (l.kind === "int" && r.kind === "int") return mkInt(l.v + r.v);
-                if (l.kind === "float" && r.kind === "float") return { kind: "float", v: l.v + r.v };
                 if (l.kind === "string" && r.kind === "string") return mkStr(l.v + r.v);
                 return bad();
-            case "-":
-                if (l.kind === "int" && r.kind === "int") return mkInt(l.v - r.v);
-                if (l.kind === "float" && r.kind === "float") return { kind: "float", v: l.v - r.v };
-                return bad();
             case "*":
-                // OVERLOADED: with a function on the right, ITERATE —
-                //   [1,2,3] * x -> print x     (elements)
-                //   [x: 1] * [f, v] -> ...     (entries as [field, value])
-                //   100 * x -> print x          (0..99; negatives count down)
-                if (r.kind === "closure" || r.kind === "clauseFn" || r.kind === "native") {
-                    return this.iterate(l, r);
-                }
-                if (l.kind === "int" && r.kind === "int") return mkInt(l.v * r.v);
-                if (l.kind === "float" && r.kind === "float") return { kind: "float", v: l.v * r.v };
+                if (r.kind === "closure" || r.kind === "clauseFn" || r.kind === "native") return this.iterate(l, r);
                 return bad();
-            case "/":
-                if (r.kind === "int" && r.v === 0n) throw new APNError("runtime", "division by zero");
-                if (r.kind === "float" && r.v === 0) throw new APNError("runtime", "division by zero");
-                if (l.kind === "int" && r.kind === "int") return mkInt(l.v / r.v);
-                if (l.kind === "float" && r.kind === "float") return { kind: "float", v: l.v / r.v };
-                return bad();
-            case "%":
-                if (r.kind === "int" && r.v === 0n) throw new APNError("runtime", "remainder by zero");
-                if (l.kind === "int" && r.kind === "int") return mkInt(l.v % r.v);
-                return bad();
+            case "-": case "/": case "%": return bad();
             case "==": return mkBool(this.equals(l, r));
             case "!=": return mkBool(!this.equals(l, r));
             case "<": return this.compare(l, r) < 0 ? mkBool(true) : mkBool(false);
@@ -578,6 +561,7 @@ export class Interpreter {
                 b = y.tail;
             }
         }
+        if (isNumeric(a) && isNumeric(b)) return equalNumbers(a, b);
         if (a.kind !== b.kind) return false;
         switch (a.kind) {
             case "int": return a.v === (b as any).v;
@@ -601,6 +585,7 @@ export class Interpreter {
     }
 
     compare(a: Value, b: Value): number {
+        if (isNumeric(a) && isNumeric(b)) return compareNumbers(a, b);
         if (a.kind === "int" && b.kind === "int") return a.v < b.v ? -1 : a.v > b.v ? 1 : 0;
         if (a.kind === "float" && b.kind === "float") return a.v - b.v;
         if (a.kind === "string" && b.kind === "string") return a.v < b.v ? -1 : a.v > b.v ? 1 : 0;
@@ -664,6 +649,7 @@ export class Interpreter {
             case "list":
             case "lazyList":
             case "cons":
+            case "rationalRange":
             case "floatRange":
             case "range": {
                 const carg = this.demand(arg);
@@ -759,7 +745,7 @@ export class Interpreter {
     unpackThunk(v: Value): Value { return this.force(v); }
 
     isList(v: Value): boolean {
-        return v.kind === "list" || v.kind === "lazyList" || v.kind === "cons" || v.kind === "range" || v.kind === "floatRange";
+        return v.kind === "list" || v.kind === "lazyList" || v.kind === "cons" || v.kind === "range" || v.kind === "floatRange" || v.kind === "rationalRange";
     }
 
     fromArray(values: Value[], i = 0): Value {
@@ -772,6 +758,10 @@ export class Interpreter {
         v = this.demand(v);
         if (v.kind === "cons") return v;
         if (v.kind === "list") return v.v.length ? { head: v.v[0], tail: this.fromArray(v.v, 1) } : null;
+        if (v.kind === "rationalRange") {
+            if (v.hi !== null && (compareNumbers(v.step, integer(0n)) >= 0 ? compareNumbers(v.lo, v.hi) > 0 : compareNumbers(v.lo, v.hi) < 0)) return null;
+            return { head: v.lo, tail: { ...v, lo: arithmetic("+", v.lo, v.step) as Real } };
+        }
         if (v.kind === "floatRange") {
             const index = v.index ?? 0;
             const current = v.lo + index * v.step;
@@ -787,7 +777,7 @@ export class Interpreter {
             return { head: { kind: "float", v: value }, tail: { ...v, index: index + 1 } };
         }
         if (v.kind === "range") {
-            if (v.hi !== null && (v.step > 0 ? v.lo > v.hi : v.lo < v.hi)) return null;
+            if (v.hi !== null && (v.step >= 0 ? v.lo > v.hi : v.lo < v.hi)) return null;
             return { head: mkInt(v.lo), tail: { ...v, lo: v.lo + v.step } };
         }
         throw new APNError("runtime", `expected a list, got ${v.kind}`);
@@ -917,6 +907,10 @@ export class Interpreter {
     }
 
     callNative(name: string, argsIn: Value[], tag?: string): Value {
+        if (NUMBER_NATIVES.some(([n]) => n === name)) {
+            const result = numericNative(name, argsIn.map((x) => this.demand(x)));
+            return typeof result === "boolean" ? mkBool(result) : result;
+        }
         // debug forces without demanding a returned action; quote/toAST inspect
         // syntax and step has its own rules. Ordinary natives (including
         // print and toString) demand values and run zero-argument actions.
@@ -986,9 +980,9 @@ export class Interpreter {
                 const s = a.v.trim();
                 if (s === "true") return mkBool(true);
                 if (s === "false") return mkBool(false);
-                if (/^-?\d+$/.test(s)) return mkInt(BigInt(s));
-                if (/^-?\d+\.\d+$/.test(s)) return { kind: "float", v: parseFloat(s) };
-                throw new Error(`Runtime: parse: can't parse '${s}'`);
+                const numeric = parseNumberText(s);
+                if (numeric !== null) return numeric;
+                throw new APNError("runtime", `parse: can't parse '${s}'`);
             }
             case "head": {
                 const cell = this.cell(a);
@@ -1158,7 +1152,7 @@ export class Interpreter {
         if (p.p === "var") { binds.set(p.name, v); return true; }
         v = this.demand(v);
         switch (p.p) {
-            case "int": return v.kind === "int" && v.v === p.v;
+            case "int": return isNumeric(v) && equalNumbers(v, integer(p.v));
             case "bool": return v.kind === "bool" && v.v === p.v;
             case "string": return v.kind === "string" && v.v === p.v;
             case "list": {
