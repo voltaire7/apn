@@ -3,7 +3,7 @@
 APN uses call-by-need for deferred values, function arguments, list elements,
 cons tails, and variant fields. Forcing reveals the outer value and memoizes it;
 it does not recursively evaluate a whole collection. Explicit actions remain
-repeatable, as described below. `tests/semantics_test.ts` asserts these rules.
+repeatable, as described below. `tests/semantics-test.ts` asserts these rules.
 
 ## Recursive lists
 
@@ -93,8 +93,8 @@ Use `*` iteration for explicitly executing an operation over every element;
 
 Operations requiring a complete result—such as `length`, negative indexing,
 `foldl`, `toString`, and full-list equality—may never finish on infinite inputs.
-Use `take` when a finite result is required. Integer storage still uses JavaScript
-numbers, so large Fibonacci values eventually exceed exact integer precision.
+Use `take` when a finite result is required. Integers have arbitrary precision, so Fibonacci values remain exact instead
+of rounding or overflowing to `Infinity`. Their growing size still uses memory.
 
 ## Patterns, variants, and scope
 
@@ -123,13 +123,22 @@ its expression-inspection/evaluation rules demonstrated in `examples/features.ap
 `toString` demands its argument and collects its full rendering into a string.
 
 Integers and floats remain distinct runtime tags: `1 + 2.0` is an error.
-Integer division truncates toward zero.
+Integers use `BigInt` throughout lexing, parsing, arithmetic, ranges, patterns,
+and formatting. Decimal literals need no suffix; `9007199254740993` stays exact.
+Integer division truncates toward zero; remainder has the dividend's sign.
+Division and remainder by zero raise runtime errors. Ranges require integer
+bounds and use integer arithmetic for constant expressions. Floats retain
+JavaScript-number precision and fractional arithmetic.
+
+Indexes and counts remain arbitrary-precision until a checked conversion is
+needed for a host array index. `exit` accepts a signed 32-bit status, matching
+its host boundary; larger values raise an error instead of being rounded.
 
 ## Verification
 
 ```sh
 deno check main.ts
-deno test tests/semantics_test.ts
+deno test tests/*-test.ts
 deno run --allow-read main.ts examples/features.apn
 ```
 

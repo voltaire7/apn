@@ -1,9 +1,11 @@
 
-// A range bound must be a CONSTANT: fold literal arithmetic to a number.
-function rangeNum(e: Expr): number {
+// A range bound must be a CONSTANT: fold literal integer arithmetic without rounding.
+function rangeNum(e: Expr): bigint {
     switch (e.t) {
         case "int": return e.v;
-        case "float": return e.v;
+        case "float":
+            if (Number.isSafeInteger(e.v)) return BigInt(e.v);
+            break;
         case "unop":
             if (e.op === "neg") return -rangeNum(e.e);
             break;
@@ -12,10 +14,10 @@ function rangeNum(e: Expr): number {
             if (e.op === "+") return a + b;
             if (e.op === "-") return a - b;
             if (e.op === "*") return a * b;
-            if (e.op === "/" && b !== 0) return a / b;
+            if (e.op === "/" && b !== 0n) return a / b;
         }
     }
-    throw new Error("Parser: range bounds must be numeric constants");
+    throw new Error("Parser: range bounds must be integer constants");
 }
 import { lex } from "./lexer.ts";
 import { APNError, tokLen } from "./errors.ts";
@@ -159,11 +161,15 @@ class Parser {
                 if ((n0.k === "int" || n0.k === "float") && dots.k === "sym" &&
                     (dots as { v: string }).v === "..") {
                     if (neg) this.next();
-                    const lo = (this.next() as { v: number }).v;
+                    const loToken = this.next();
+                    if (loToken.k !== "int") throw new Error("Parser: range pattern bounds must be integers");
+                    const lo = loToken.v;
                     this.next(); // ..
                     const neg2 = this.isSym("-");
                     if (neg2) this.next();
-                    const hi = (this.next() as { v: number }).v;
+                    const hiToken = this.next();
+                    if (hiToken.k !== "int") throw new Error("Parser: range pattern bounds must be integers");
+                    const hi = hiToken.v;
                     this.expectSym("]");
                     return { p: "range", lo: neg ? -lo : lo, hi: neg2 ? -hi : hi };
                 }
@@ -582,14 +588,14 @@ class Parser {
                                 this.next();
                                 if (this.isSym("]")) {
                                     this.next();
-                                    return { t: "range", lo: rangeNum(loE), step: 1, hi: null };
+                                    return { t: "range", lo: rangeNum(loE), step: 1n, hi: null };
                                 }
                                 const hi = this.parseAdd();
                                 this.expectSym("]");
                                 const lo = rangeNum(loE), hiN = rangeNum(hi);
                                 // implicit step ADAPTS to direction: [0..-100] descends;
                                 // an EXPLICIT step pointing the wrong way stays empty
-                                return { t: "range", lo, step: hiN < lo ? -1 : 1, hi: hiN };
+                                return { t: "range", lo, step: hiN < lo ? -1n : 1n, hi: hiN };
                             }
                             if (this.isSym(",")) {
                                 const save2 = this.i;
@@ -1201,8 +1207,8 @@ export function exprToSource(e: Expr): string {
         case "record": return `[${e.v.map(([k, x]) => `${k}: ${exprToSource(x)}`).join(", ")}]`;
     case "range":
       return e.hi === null
-        ? `[${e.lo}${e.step !== 1 ? `, ${e.lo + e.step}` : ""}..]`
-        : `[${e.lo}${e.step !== 1 ? `, ${e.lo + e.step}` : ""}..${e.hi}]`;
+        ? `[${e.lo}${e.step !== 1n ? `, ${e.lo + e.step}` : ""}..]`
+        : `[${e.lo}${e.step !== 1n ? `, ${e.lo + e.step}` : ""}..${e.hi}]`;
         case "ternary": return `${exprToSource(e.cond)} ? ${exprToSource(e.then)} : ${exprToSource(e.els)}`;
         case "pipe": return `${exprToSource(e.x)} $ ${exprToSource(e.f)}`;
         case "recordAccess":

@@ -9,7 +9,7 @@ Run these commands from the repository root:
 ./apn examples/features.apn         # runnable language showcase
 ./apn playground/test.apn           # your scratch program
 deno check main.ts
-deno test tests/
+deno test tests/*-test.ts
 ```
 
 | Directory | Contents |
@@ -18,7 +18,7 @@ deno test tests/
 | `lib/` | Standard library (`core.apn`) |
 | `examples/` | Runnable feature showcase |
 | `tests/` | Evaluation regression tests |
-| `docs/` | [Evaluation semantics](docs/SEMANTICS.md) |
+| `docs/` | [Evaluation semantics](docs/semantics.md) |
 | `playground/` | Personal scratch programs |
 
 From a REPL started in the repository root, use `load "lib/core.apn"`.

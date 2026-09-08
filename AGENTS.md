@@ -9,14 +9,14 @@
       (this file is the living spec AND the smoke test).
    3. Type-check and run the full showcase:
           deno check main.ts
-          deno test tests/semantics_test.ts
+          deno test tests/*-test.ts
           deno run --allow-read main.ts examples/features.apn
    4. Confirm output matches expectations before declaring done.
    Do not end a task without completing all steps. Never leave `examples/features.apn`
    out of date.
 2. **Keep it green.** If a change breaks any existing feature, fix it before
    finishing. Do not leave the project in a broken state.
-3. **Layout:** `main.ts`, `apn`, `README.md`, and `AGENTS.md` stay in the root.
+3. **Layout:** `main.ts`, `apn`, `readme.md`, and `AGENTS.md` stay in the root.
    Use `src/` for the interpreter, `lib/` for the standard library, `examples/`
    for runnable examples, `tests/` for regression assertions, `docs/` for
    documentation, and `playground/` for the user's scratch programs. No deps.
@@ -42,15 +42,16 @@ Layout:
 - `apn` — tiny sh launcher (REPL/file runs; no logic)
 - `examples/features.apn` — the living spec + smoke test: a runnable showcase of EVERY
   feature. It must always stay in sync with what `main.ts` actually supports.
-  Observable evaluation rules are asserted separately in `tests/semantics_test.ts`.
+  Observable evaluation rules are asserted separately in `tests/semantics-test.ts`.
 - `lib/core.apn` — the standard library, imported with `load "lib/core.apn"`. Defines
   things like `halt = exit 0` (`sq x = x * x` is there as a demo function).
 - `AGENTS.md` — this file
-- `README.md` — quick start and directory guide
+- `readme.md` — quick start and directory guide
 - `playground/test.apn` — user-owned scratch program; preserve its edits
 
-- `docs/SEMANTICS.md` — authoritative current evaluation rules and limitations
-- `tests/semantics_test.ts` — dependency-free Deno regression assertions
+- `docs/semantics.md` — authoritative current evaluation rules and limitations
+- `tests/semantics-test.ts` — dependency-free Deno evaluation assertions
+- `tests/bigint-test.ts` — exact arithmetic, large Fibonacci values, and host boundaries
 
 ## Run / verify
 
@@ -66,7 +67,7 @@ Deno required. From `apn/`:
 - Type-check (always run after edits):
     deno check main.ts
 
-Run evaluation assertions: `deno test tests/semantics_test.ts`.
+Run evaluation assertions: `deno test tests/*-test.ts`.
 There is no `package.json` and no external dependencies; tests use Deno.test.
 
 ## Architecture (implemented in src/ modules)
@@ -89,11 +90,18 @@ There is no `package.json` and no external dependencies; tests use Deno.test.
 
 ## Core language semantics (don't break these)
 
-`docs/SEMANTICS.md` is authoritative for evaluation and memoization. Deferred values
+`docs/semantics.md` is authoritative for evaluation and memoization. Deferred values
 and arguments share their memoized outer result, including through alias chains.
 Actions remain repeatable and run when demanded. Update assertions with any
 intentional evaluation change.
 
+- **Integers**: APN integer tokens, AST values, runtime values, and range bounds
+  use `bigint`. Never pass user integer text through `Number`/`parseInt`.
+  `mkInt(number)` is only for safe host counters; it rejects unsafe numbers.
+  Arithmetic and counts stay bigint; convert array indexes only after bounds
+  checks. Floats remain numbers and never implicitly mix with integers.
+  Formatting uses decimal strings without an `n` suffix. Integer division
+  truncates toward zero; division/remainder by zero are APN runtime errors.
 - **Lazy lists**: literal elements are thunks; cons cells defer their head and
   tail. `force()` reveals only the outer value and memoizes every traversed
   thunk. It must never recursively force a list. Use `cell()` / `elements()` to

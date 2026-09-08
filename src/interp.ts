@@ -184,7 +184,8 @@ export class Interpreter {
         // the argument's thunk wrapper is NOT a level — level 0 is its body
         let expr: import("./ast.ts").Expr | null = t.kind === "thunk" ? t.body : null;
         let val: Value = { kind: "unit" };
-        for (let i = 0; i < n.v; i++) {
+        for (let i = 0n; i < n.v; i++) {
+            checkInterrupt();
             // free descents: names resolve, blocks expose their last statement
             for (;;) {
                 if (expr !== null && expr.t === "var") {
@@ -232,8 +233,11 @@ export class Interpreter {
             for (const [k, x] of seq.v) out.push(this.apply(f, mkList([mkStr(k), x])));
 
         } else if (seq.kind === "int") {
-            const n = Math.abs(seq.v);
-            for (let i = 0; i < n; i++) out.push(this.apply(f, mkInt(seq.v >= 0 ? i : -i)));
+            const n = seq.v < 0n ? -seq.v : seq.v;
+            for (let i = 0n; i < n; i++) {
+                checkInterrupt();
+                out.push(this.apply(f, mkInt(seq.v >= 0n ? i : -i)));
+            }
         } else {
             throw new APNError("runtime", `cannot iterate a ${seq.kind}`, {
                 hint: "expected a list, a record, or an int count",
@@ -498,12 +502,13 @@ export class Interpreter {
                 if (l.kind === "float" && r.kind === "float") return { kind: "float", v: l.v * r.v };
                 return bad();
             case "/":
-                if (r.kind === "int" && r.v === 0) throw new APNError("runtime", "division by zero");
+                if (r.kind === "int" && r.v === 0n) throw new APNError("runtime", "division by zero");
                 if (r.kind === "float" && r.v === 0) throw new APNError("runtime", "division by zero");
-                if (l.kind === "int" && r.kind === "int") return mkInt(Math.trunc(l.v / r.v));
+                if (l.kind === "int" && r.kind === "int") return mkInt(l.v / r.v);
                 if (l.kind === "float" && r.kind === "float") return { kind: "float", v: l.v / r.v };
                 return bad();
             case "%":
+                if (r.kind === "int" && r.v === 0n) throw new APNError("runtime", "remainder by zero");
                 if (l.kind === "int" && r.kind === "int") return mkInt(l.v % r.v);
                 return bad();
             case "==": return mkBool(this.equals(l, r));
@@ -558,7 +563,7 @@ export class Interpreter {
     }
 
     compare(a: Value, b: Value): number {
-        if (a.kind === "int" && b.kind === "int") return a.v - b.v;
+        if (a.kind === "int" && b.kind === "int") return a.v < b.v ? -1 : a.v > b.v ? 1 : 0;
         if (a.kind === "float" && b.kind === "float") return a.v - b.v;
         if (a.kind === "string" && b.kind === "string") return a.v < b.v ? -1 : a.v > b.v ? 1 : 0;
         if (a.kind === "char" && b.kind === "char") return a.v < b.v ? -1 : a.v > b.v ? 1 : 0;
@@ -656,11 +661,11 @@ export class Interpreter {
                 }
                 if (carg.kind === "int") {
                     let i = carg.v;
-                    if (i < 0) i += f.v.length;
+                    if (i < 0n) i += BigInt(f.v.length);
                     if (i < 0 || i >= f.v.length) {
                         throw new Error(`Runtime: index ${carg.v} out of range (len ${f.v.length})`);
                     }
-                    return mkList([mkStr(f.v[i][0]), f.v[i][1]]);
+                    return mkList([mkStr(f.v[Number(i)][0]), f.v[Number(i)][1]]);
                 }
                 throw new Error("Runtime: applying an object needs a list, a record, or an int index");
             }
@@ -747,15 +752,15 @@ export class Interpreter {
 
     items(v: Value): Value[] { return [...this.elements(v)]; }
 
-    index(v: Value, i: number): Value {
+    index(v: Value, i: bigint): Value {
         const original = i;
         if (i < 0) {
             const values = this.items(v);
-            i += values.length;
-            if (i >= 0 && i < values.length) return values[i];
+            i += BigInt(values.length);
+            if (i >= 0 && i < values.length) return values[Number(i)];
         } else {
             for (const value of this.elements(v)) {
-                if (i-- === 0) return value;
+                if (i-- === 0n) return value;
             }
         }
         throw new APNError("runtime", `index ${original} out of range`);
@@ -870,7 +875,7 @@ export class Interpreter {
             if (count.kind !== "int" || count.v < 0) throw new APNError("runtime", `${name} expects a non-negative int count`);
             if (name === "take") return this.takeList(count.v, argsIn[1]);
             let rest = argsIn[1];
-            for (let i = 0; i < count.v; i++) {
+            for (let i = 0n; i < count.v; i++) {
                 checkInterrupt();
                 const cell = this.cell(rest);
                 if (cell === null) return mkList([]);
@@ -894,7 +899,7 @@ export class Interpreter {
                 const s = a.v.trim();
                 if (s === "true") return mkBool(true);
                 if (s === "false") return mkBool(false);
-                if (/^-?\d+$/.test(s)) return mkInt(parseInt(s, 10));
+                if (/^-?\d+$/.test(s)) return mkInt(BigInt(s));
                 if (/^-?\d+\.\d+$/.test(s)) return { kind: "float", v: parseFloat(s) };
                 throw new Error(`Runtime: parse: can't parse '${s}'`);
             }
@@ -910,7 +915,7 @@ export class Interpreter {
             }
             case "length": {
                 if (a.kind === "string") return mkInt(a.v.length);
-                let n = 0;
+                let n = 0n;
                 for (const _ of this.elements(a)) n++;
                 return mkInt(n);
             }
@@ -949,7 +954,11 @@ export class Interpreter {
             case "exit":
                 // Can be put anywhere in the program: terminates the process instantly.
                 if (a.kind !== "int") throw new Error("Runtime: exit expects an int status code");
-                return Deno.exit(a.v);
+                // Deno takes a signed 32-bit host exit code; never silently round.
+                if (a.v < -2147483648n || a.v > 2147483647n) {
+                    throw new APNError("runtime", "exit status must fit a signed 32-bit integer");
+                }
+                return Deno.exit(Number(a.v));
             case "load": {
                 // Import a file, resolving the path relative to the CURRENT source file.
                 // Two effects: (1) the loaded file's own definitions are merged into the
@@ -1033,12 +1042,12 @@ export class Interpreter {
         });
     }
 
-    takeList(n: number, xs: Value): Value {
+    takeList(n: bigint, xs: Value): Value {
         return this.defer(() => {
-            if (n === 0) return mkList([]);
+            if (n === 0n) return mkList([]);
             const cell = this.cell(xs);
             if (cell === null) return mkList([]);
-            return { kind: "cons", head: cell.head, tail: this.takeList(n - 1, cell.tail) };
+            return { kind: "cons", head: cell.head, tail: this.takeList(n - 1n, cell.tail) };
         });
     }
 

@@ -306,6 +306,7 @@ function helpText(): string {
         `  indentation: strict 4-space layout (exactly +4 per level)`,
         `  [1,2,3] * x -> print x      (seq * fn iterates; int * fn counts)`,
         `  recursion, higher-order fns, records, variants`,
+        `  integers are arbitrary precision (no suffix); floats remain decimals`,
         ``,
         `print x    any value (strings raw), returns x;  emit  = no newline`,
         `debug x    shows the SOURCE as written;  step n v  descends v's body`,

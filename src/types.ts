@@ -9,7 +9,7 @@ export interface DefClause { params: Pattern[]; body: Expr; }
 
 // Runtime values (dynamically typed, like JS)
 export type Value =
-    | { kind: "int"; v: number }
+    | { kind: "int"; v: bigint }
     | { kind: "float"; v: number }
     | { kind: "bool"; v: boolean }
     | { kind: "string"; v: string }
@@ -24,11 +24,17 @@ export type Value =
     | { kind: "closure"; params: string[]; body: Expr; env: Env }
     | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string }
     | { kind: "clauseFn"; name: string; clauses: DefClause[]; arity: number; env: Env; applied: Value[] }
-    | { kind: "range"; lo: number; step: number; hi: number | null }
+    | { kind: "range"; lo: bigint; step: bigint; hi: bigint | null }
     | { kind: "nomatch" }
     | { kind: "thunk"; body: Expr; env: Env; value?: Value; busy?: boolean };
 
-export function mkInt(v: number): Value { return { kind: "int", v }; }
+// Numbers are accepted only for bounded host counters such as array lengths.
+export function mkInt(v: bigint | number): Value {
+    if (typeof v === "number" && !Number.isSafeInteger(v)) {
+        throw new RangeError("cannot convert an unsafe host number to an APN integer");
+    }
+    return { kind: "int", v: BigInt(v) };
+}
 export function mkBool(v: boolean): Value { return { kind: "bool", v }; }
 export function mkStr(v: string): Value { return { kind: "string", v }; }
 export function mkList(v: Value[]): Value { return { kind: "list", v }; }
@@ -51,7 +57,7 @@ export function valueToString(v: Value): string {
         case "cons": return "<lazy list>";
         case "deferred": return "<thunk>";
         case "range": {
-            if (v.hi === null) return `[${v.lo}${v.step !== 1 ? `, ${v.lo + v.step}` : ""}..]`;
+            if (v.hi === null) return `[${v.lo}${v.step !== 1n ? `, ${v.lo + v.step}` : ""}..]`;
             const out: Value[] = [];
             for (let i = v.lo; v.step > 0 ? i <= v.hi : i >= v.hi; i += v.step) out.push(mkInt(i));
             return `[${out.map(valueToString).join(", ")}]`;

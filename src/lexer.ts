@@ -1,7 +1,7 @@
 import { APNError } from "./errors.ts";
 
 export type Token =
-    | { k: "int"; v: number; pos: number }
+    | { k: "int"; v: bigint; pos: number }
     | { k: "float"; v: number; pos: number }
     | { k: "bool"; v: boolean; pos: number }
     | { k: "str"; v: string; pos: number }
@@ -183,7 +183,7 @@ export function lex(src: string): Token[] {
             let num = "";
             while (pos < src.length && (/\d/.test(src[pos]) || (src[pos] === "." && src[pos + 1] !== "."))) num += src[pos++];
             if (num.includes(".")) toks.push({ k: "float", v: parseFloat(num), pos: start });
-            else toks.push({ k: "int", v: parseInt(num, 10), pos: start });
+            else toks.push({ k: "int", v: BigInt(num), pos: start });
             continue;
         }
 

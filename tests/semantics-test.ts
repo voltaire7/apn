@@ -265,7 +265,7 @@ Deno.test("evaluation errors leave the interpreter usable", () => {
         }
     }
     const value = interp.run(parse("1 + 2"));
-    if (value.kind !== "int" || value.v !== 3 || interp.stack !== 0) {
+    if (value.kind !== "int" || value.v !== 3n || interp.stack !== 0) {
         throw new Error("evaluation did not recover after failed thunk evaluation");
     }
 });
@@ -294,7 +294,7 @@ for (const [name, source, prefix] of [
             }
             if (!interrupted || !output.startsWith(prefix)) throw new Error(`Unexpected streaming output: ${output}`);
             resetInterrupt();
-            const prefixAgain = interp.renderString(interp.takeList(4, value));
+            const prefixAgain = interp.renderString(interp.takeList(4n, value));
             if (!output.startsWith(prefixAgain.slice(0, -1))) throw new Error("Interrupted stream cannot be read again");
         } finally {
             setInterruptFlag(null);

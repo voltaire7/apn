@@ -3,7 +3,7 @@
 // =====================================================================
 //  APN — Applicative Polish Notation: a lazy, Haskell-like, untyped
 //  (JS-like) language interpreter with optional TypeScript-style type
-//  annotations (not enforced). Evaluation rules: docs/SEMANTICS.md.
+//  annotations (not enforced), arbitrary-precision integers. Evaluation rules: docs/semantics.md.
 //  Run:  deno run --allow-read main.ts   (REPL)
 //        deno run --allow-read main.ts examples/features.apn
 // =====================================================================
