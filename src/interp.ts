@@ -7,7 +7,7 @@ import { parse, exprToSource } from "./parser.ts";
 
 // ---------------- Evaluator ----------------
 
-const STACK_LIMIT = 1000; // below V8's own JS stack, so APN errors first
+const STACK_LIMIT = 200; // below V8's own JS stack, so APN errors first
 
 // Native registry: name -> arity. One source of truth for env registration
 // and for REPL tab completion.
@@ -318,7 +318,7 @@ export class Interpreter {
     eval(e: Expr): Value {
         if (++this.stack > STACK_LIMIT) {
             throw new APNError("runtime", "call stack overflow", {
-                hint: "unbounded recursion? each call adds a stack level",
+                hint: "unbounded recursion? — or a self-referential cons tail (x = 1:x, fibs = 0:1:fibs ...) which needs LAZY tails, not supported yet",
             });
         }
         let r: Value;
@@ -1110,6 +1110,7 @@ function checkInterruptInner(): void {
         Atomics.load(interruptFlag!, 1) === 888
     ) {
         Atomics.store(interruptFlag!, 0, 0);
+        Atomics.store(interruptFlag!, 1, 0);
         throw new APNError("runtime", "interrupted");
     }
 }
@@ -1119,7 +1120,10 @@ export function setInterruptFlag(f: Int32Array | null): void {
 }
 
 export function resetInterrupt(): void {
-    if (interruptFlag !== null) Atomics.store(interruptFlag, 0, 0);
+    if (interruptFlag !== null) {
+        Atomics.store(interruptFlag, 0, 0);
+        Atomics.store(interruptFlag, 1, 0);
+    }
 }
 
 export function envNames(env: Env): string[] {

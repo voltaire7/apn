@@ -434,6 +434,8 @@ print {
 # streams it AS IT IS CONSTRUCTED (Ctrl+C breaks it).
 print ([0..5])                               # => [0, 1, 2, 3, 4, 5]
 print ([2, 4..10])                           # => [2, 4, 6, 8, 10]
+print ([1+1..4])                             # => [2, 3, 4]   (bounds are constant arithmetic)
+print ([0..50+50])                           # => 0..100 (101 elements)
 [0..3] * x -> print x                        # prints 0, 1, 2, 3
 #   print ([0..])                            # 0, 1, 2, ... forever
 #   [0..] * x -> print x                     # ditto

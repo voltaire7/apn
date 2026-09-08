@@ -1,3 +1,22 @@
+
+// A range bound must be a CONSTANT: fold literal arithmetic to a number.
+function rangeNum(e: Expr): number {
+    switch (e.t) {
+        case "int": return e.v;
+        case "float": return e.v;
+        case "unop":
+            if (e.op === "neg") return -rangeNum(e.e);
+            break;
+        case "binop": {
+            const a = rangeNum(e.l), b = rangeNum(e.r);
+            if (e.op === "+") return a + b;
+            if (e.op === "-") return a - b;
+            if (e.op === "*") return a * b;
+            if (e.op === "/" && b !== 0) return a / b;
+        }
+    }
+    throw new Error("Parser: range bounds must be numeric constants");
+}
 import { lex } from "./lexer.ts";
 import { APNError, tokLen } from "./errors.ts";
 import type { Expr, Pattern, TopLevel, BinOp, Alt } from "./ast.ts";
@@ -553,40 +572,41 @@ class Parser {
                         // Otherwise it's a list literal: [a, b, ...] — elements separate on
                         // `,` OR a newline (commas are optional when each element is on its
                         // own line;  [1 2] on ONE line is still a single element = 1 applied to 2).
-                        // RANGE: [0..100] / [2,4..100] / [0..] / [2,4..] — Haskell-style; the
-                        // first two elements give the STEP; no upper bound = infinite
+                        // RANGE (speculative): [a..b] [a..] [a,b..c] [a,b..] — Haskell-style; the
+                        // first two elements give the STEP; bounds are constant arithmetic;
+                        // no upper bound = INFINITE. Falls back to a normal list literal.
                         {
-                            const a = this.peek();
-                            const neg = a.k === "sym" && (a as { v: string }).v === "-";
-                            const n0 = (neg ? this.peek(1) : a) as Token;
-                            if ((n0.k === "int" || n0.k === "float") &&
-                                ((this.peek(neg ? 2 : 1).k === "sym" &&
-                                    (this.peek(neg ? 2 : 1) as { v: string }).v === "..") ||
-                                    (this.peek(neg ? 2 : 1).k === "sym" &&
-                                        (this.peek(neg ? 2 : 1) as { v: string }).v === "," &&
-                                        this.peek(neg ? 4 : 3).k === "sym" &&
-                                        (this.peek(neg ? 4 : 3) as { v: string }).v === ".."))) {
-                                if (neg) this.next();
-                                const lo = Math.trunc((this.next() as { v: number }).v);
-                                let step = 1;
-                                if (this.isSym(",")) {
-                                    this.next();
-                                    const neg2 = this.isSym("-");
-                                    if (neg2) this.next();
-                                    const second = Math.trunc((this.next() as { v: number }).v);
-                                    step = second - lo;
-                                }
-                                this.next(); // ..
+                            const save = this.i;
+                            const loE = this.parseAdd();
+                            if (this.isSym("..")) {
+                                this.next();
                                 if (this.isSym("]")) {
                                     this.next();
-                                    return { t: "range", lo, step, hi: null };
+                                    return { t: "range", lo: rangeNum(loE), step: 1, hi: null };
                                 }
-                                const neg3 = this.isSym("-");
-                                if (neg3) this.next();
-                                const hi = Math.trunc((this.next() as { v: number }).v);
+                                const hi = this.parseAdd();
                                 this.expectSym("]");
-                                return { t: "range", lo, step, hi: neg3 ? -hi : hi };
+                                return { t: "range", lo: rangeNum(loE), step: 1, hi: rangeNum(hi) };
                             }
+                            if (this.isSym(",")) {
+                                const save2 = this.i;
+                                this.next();
+                                const sE = this.parseAdd();
+                                if (this.isSym("..")) {
+                                    this.next();
+                                    const lo = rangeNum(loE);
+                                    const step = rangeNum(sE) - lo;
+                                    if (this.isSym("]")) {
+                                        this.next();
+                                        return { t: "range", lo, step, hi: null };
+                                    }
+                                    const hi = this.parseAdd();
+                                    this.expectSym("]");
+                                    return { t: "range", lo, step, hi: rangeNum(hi) };
+                                }
+                                this.i = save2; // [1, 2] — a plain list
+                            }
+                            this.i = save; // not a range at all
                         }
                         const es = [] as Expr[];
                         for (;;) {
