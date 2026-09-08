@@ -266,7 +266,11 @@ export function numericNative(name: string, args: Array<{ kind: string }>): Nume
         return exact(x) && exact(y) ? result : toInexact(result);
     }
     if (name === "atan2") return floating(Math.atan2(asFloat(real), asFloat(other)));
-    if (name === "makePolar") return complex(floating(asFloat(real) * Math.cos(asFloat(other))), floating(asFloat(real) * Math.sin(asFloat(other))));
+    if (name === "makePolar") {
+        // An exact zero angle needs no trigonometric approximation.
+        if (exact(other) && zero(other)) return real;
+        return complex(floating(asFloat(real) * Math.cos(asFloat(other))), floating(asFloat(real) * Math.sin(asFloat(other))));
+    }
     if (name === "rationalize") {
         const tolerance = compareNumbers(other, integer(0n)) < 0 ? negate(other) : other;
         const lo = arithmetic("-", toExact(real), toExact(tolerance)), hi = arithmetic("+", toExact(real), toExact(tolerance));

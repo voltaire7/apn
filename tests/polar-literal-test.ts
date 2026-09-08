@@ -25,3 +25,19 @@ for (const source of ["2@", "2@x", "2@-", "2@@3"]) {
 Deno.test("polar marker is peach", () => {
     if (!highlightLine("2@3").includes("\x1b[38;2;239;159;118m@\x1b[0m")) throw new Error("Wrong marker color");
 });
+
+for (const [source, expected] of [
+    ["2@0", "2"], ["isExact 2@0", "true"],
+    ["isExact 2@3", "false"],
+    ["makePolar (1/3) 0", "1/3"],
+    ["2.0@0", "2.0"], ["isExact 2.0@0", "false"],
+    ["isExact 2@0.0", "false"],
+    ["makePolar 9007199254740993 0", "9007199254740993"],
+    ['parse "2@0"', "2"], ["-2@0", "-2"],
+]) {
+    Deno.test(`polar zero angle exactness: ${source}`, () => {
+        const interp = new Interpreter();
+        const actual = interp.renderString(interp.run(parse(source)));
+        if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
+    });
+}

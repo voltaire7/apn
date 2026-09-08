@@ -268,3 +268,7 @@ Polar literals use `radius@angle`, e.g. `2@3`, with angles in radians.
 The angle may have a sign, and decimal/exponent notation is accepted. They
 evaluate like `makePolar radius angle` and display in rectangular form.
 Use `makePolar` for computed radius/angle expressions.
+
+An exact zero polar angle returns the radius unchanged, avoiding floating-point
+conversion: `2@0` is exact `2`, and `makePolar (1/3) 0` is exact `1/3`.
+An inexact radius stays inexact; an inexact angle still uses trigonometry.
