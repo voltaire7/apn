@@ -25,6 +25,12 @@ expressions without echoing them; use `print x` to stream from a file.
 `x = x` cannot produce even an outer value. Demanding it reports a cyclic
 evaluation error. Failed or interrupted evaluations leave the interpreter usable.
 
+The right operand of `:` must be a list. When a cons expression is evaluated,
+a visibly non-list tail such as the literal in `x = x:1` raises an APN error
+without evaluating its head. Computed tails are checked when demanded, preserving
+`head (1:missing)`. Displaying a value nested inside itself also raises a clear
+error; ordinary recursive list spines such as `x = 1:x` still stream.
+
 ## Definitions and actions
 
 Ordinary named definitions do not execute their bodies when defined.

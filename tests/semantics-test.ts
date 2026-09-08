@@ -317,3 +317,15 @@ example("a recursive function can construct an infinite list", `
 numbers n = n : numbers (n + 1)
 print (take 5 (numbers 10))
 `, ["[10, 11, 12, 13, 14]"]);
+
+
+failure("a recursive head cannot hide a literal non-list tail",
+    "x = x:1\nx", "cons tail expected a list, got int");
+failure("computed non-list tails are rejected when consumed",
+    "x = 1:(1 + 1)\ntail x", "cons tail expected a list, got int");
+failure("nested recursive heads report a rendering error",
+    "x = x:(1 + 1)\nprint x", "cannot display a cyclic nested value");
+failure("self-containing list literals report a rendering error",
+    "x = [x]\nprint x", "cannot display a cyclic nested value");
+example("sharing a finite list between siblings is not a rendering cycle",
+    "x = [1, 2]\nprint [x, x]", ["[[1, 2], [1, 2]]"]);

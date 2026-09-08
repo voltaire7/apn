@@ -465,7 +465,20 @@ export class Interpreter {
 
     evalBinop(e: Extract<Expr, { t: "binop" }>): Value {
         if (e.op === ":") {
-            return { kind: "cons", head: this.delay(e.l), tail: this.delay(e.r) };
+            // Reject a definitely non-list tail without evaluating either side.
+            // Unknown tails stay lazy, so head (1:missing) remains productive.
+            if (["int", "float", "bool", "string", "char", "unit", "record", "lambda"].includes(e.r.t)) {
+                throw new APNError("runtime", `cons tail expected a list, got ${e.r.t}`);
+            }
+            const tail = this.delay(e.r);
+            return {
+                kind: "cons", head: this.delay(e.l),
+                tail: this.defer(() => {
+                    const value = this.demand(tail);
+                    if (!this.isList(value)) throw new APNError("runtime", `cons tail expected a list, got ${value.kind}`);
+                    return value;
+                }),
+            };
         }
         if (e.op === "++") {
             const l = this.demand(this.eval(e.l));
@@ -780,34 +793,42 @@ export class Interpreter {
 
     // Rendering is incremental, including nested lists. Consumers decide
     // whether to stream fragments or collect a finite result into a string.
-    render(v: Value, emit: (s: string) => void, raw = false): void {
+    render(v: Value, emit: (s: string) => void, raw = false, ancestors = new Set<Value>()): void {
         checkInterrupt();
         v = this.demand(v);
-        if (this.isList(v)) {
-            emit("[");
-            let first = true;
-            for (const item of this.elements(v)) {
-                if (!first) emit(", ");
-                first = false;
-                this.render(item, emit);
-            }
-            emit("]");
-        } else if (v.kind === "record") {
-            emit("[");
-            v.v.forEach(([key, val], i) => {
-                if (i) emit(", ");
-                emit(key + ": ");
-                // Inspect module actions without running halt; ordinary data
-                // fields still render their memoized values.
-                const field = this.force(val);
-                if (field.kind === "closure" && !field.params.length) emit(valueToString(field));
-                else this.render(field, emit);
-            });
-            emit("]");
-        } else if (v.kind === "variant") {
-            emit(v.tag);
-            for (const arg of v.v) { emit(" "); this.render(arg, emit); }
-        } else emit(raw ? rawString(v) : valueToString(v));
+        // Track nested values, not successive spine cells: 1:xs may stream
+        // forever, but a list containing itself cannot render a first element.
+        if (ancestors.has(v)) throw new APNError("runtime", "cannot display a cyclic nested value");
+        ancestors.add(v);
+        try {
+            if (this.isList(v)) {
+                emit("[");
+                let first = true;
+                for (const item of this.elements(v)) {
+                    if (!first) emit(", ");
+                    first = false;
+                    this.render(item, emit, false, ancestors);
+                }
+                emit("]");
+            } else if (v.kind === "record") {
+                emit("[");
+                v.v.forEach(([key, val], i) => {
+                    if (i) emit(", ");
+                    emit(key + ": ");
+                    // Inspect module actions without running halt; ordinary data
+                    // fields still render their memoized values.
+                    const field = this.force(val);
+                    if (field.kind === "closure" && !field.params.length) emit(valueToString(field));
+                    else this.render(field, emit, false, ancestors);
+                });
+                emit("]");
+            } else if (v.kind === "variant") {
+                emit(v.tag);
+                for (const arg of v.v) { emit(" "); this.render(arg, emit, false, ancestors); }
+            } else emit(raw ? rawString(v) : valueToString(v));
+        } finally {
+            ancestors.delete(v);
+        }
     }
 
     renderString(v: Value, raw = false): string {
