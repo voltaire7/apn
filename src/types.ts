@@ -24,6 +24,7 @@ export type Value =
     | { kind: "closure"; params: string[]; body: Expr; env: Env }
     | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string }
     | { kind: "clauseFn"; name: string; clauses: DefClause[]; arity: number; env: Env; applied: Value[] }
+    | { kind: "floatRange"; lo: number; step: number; hi: number | null; index?: number }
     | { kind: "range"; lo: bigint; step: bigint; hi: bigint | null }
     | { kind: "nomatch" }
     | { kind: "thunk"; body: Expr; env: Env; value?: Value; busy?: boolean };
@@ -56,6 +57,7 @@ export function valueToString(v: Value): string {
         case "lazyList":
         case "cons": return "<lazy list>";
         case "deferred": return "<thunk>";
+        case "floatRange": return `<float range>`;
         case "range": {
             if (v.hi === null) return `[${v.lo}${v.step !== 1n ? `, ${v.lo + v.step}` : ""}..]`;
             const out: Value[] = [];

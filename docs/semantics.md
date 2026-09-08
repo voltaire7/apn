@@ -137,8 +137,9 @@ Integers and floats remain distinct runtime tags: `1 + 2.0` is an error.
 Integers use `BigInt` throughout lexing, parsing, arithmetic, ranges, patterns,
 and formatting. Decimal literals need no suffix; `9007199254740993` stays exact.
 Integer division truncates toward zero; remainder has the dividend's sign.
-Division and remainder by zero raise runtime errors. Ranges require integer
-bounds and use integer arithmetic for constant expressions. Floats retain
+Division and remainder by zero raise runtime errors. All-integer ranges retain exact integer bounds and integer arithmetic.
+A float bound or step promotes the whole range to floats, including mixed
+constant arithmetic such as `[0,1/2.0..2]`. Floats retain
 JavaScript-number precision and fractional arithmetic.
 
 Indexes and counts remain arbitrary-precision until a checked conversion is
@@ -174,3 +175,11 @@ Leading-dot decimals such as `.1`, `.2`, and `-.5` are float literals. Like othe
 floats, `.1 + .2` yields `0.30000000000000004` under binary floating-point
 arithmetic. An attached numeric field access (`rec.1`) stays record access;
 whitespace allows a float argument (`print .1`). Range dots (`[1..3]`) are unchanged.
+
+
+Float ranges support finite and infinite forms, including `[0,0.5..100]` and
+`[0,.5..]`. Each value is calculated from the origin and an index to avoid
+accumulating rounding error. A small endpoint tolerance includes bounds affected
+by floating-point rounding; it is capped at half a step. Integer ranges remain
+exact, while mixed ranges inherit float precision. A floating range that can no
+longer advance reports an error. Range patterns remain integer-only.

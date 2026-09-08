@@ -1,23 +1,37 @@
 
-// A range bound must be a CONSTANT: fold literal integer arithmetic without rounding.
-function rangeNum(e: Expr): bigint {
-    switch (e.t) {
-        case "int": return e.v;
-        case "float":
-            if (Number.isSafeInteger(e.v)) return BigInt(e.v);
-            break;
-        case "unop":
-            if (e.op === "neg") return -rangeNum(e.e);
-            break;
-        case "binop": {
-            const a = rangeNum(e.l), b = rangeNum(e.r);
+// Fold constant range arithmetic; a float anywhere promotes that expression.
+function rangeNum(e: Expr): bigint | number {
+    if (e.t === "int" || e.t === "float") return e.v;
+    if (e.t === "unop" && e.op === "neg") return -rangeNum(e.e);
+    if (e.t === "binop") {
+        const a = rangeNum(e.l), b = rangeNum(e.r);
+        if (typeof a === "bigint" && typeof b === "bigint") {
             if (e.op === "+") return a + b;
             if (e.op === "-") return a - b;
             if (e.op === "*") return a * b;
             if (e.op === "/" && b !== 0n) return a / b;
+        } else {
+            const x = Number(a), y = Number(b);
+            if (e.op === "+") return x + y;
+            if (e.op === "-") return x - y;
+            if (e.op === "*") return x * y;
+            if (e.op === "/" && y !== 0) return x / y;
         }
     }
-    throw new Error("Parser: range bounds must be integer constants");
+    throw new Error("Parser: range bounds must be numeric constants");
+}
+
+function rangeExpr(lo: bigint | number, second: bigint | number | null, hi: bigint | number | null): Expr {
+    if (typeof lo === "bigint" && (second === null || typeof second === "bigint") &&
+        (hi === null || typeof hi === "bigint")) {
+        return { t: "range", lo, step: second === null ? (hi !== null && hi < lo ? -1n : 1n) : second - lo, hi };
+    }
+    const start = Number(lo), end = hi === null ? null : Number(hi);
+    const step = second === null ? (end !== null && end < start ? -1 : 1) : Number(second) - start;
+    if (!Number.isFinite(start) || !Number.isFinite(step) || (end !== null && !Number.isFinite(end))) {
+        throw new Error("Parser: float range bounds and step must be finite");
+    }
+    return { t: "floatRange", lo: start, step, hi: end };
 }
 import { lex } from "./lexer.ts";
 import { APNError, tokLen } from "./errors.ts";
@@ -595,14 +609,14 @@ class Parser {
                                 this.next();
                                 if (this.isSym("]")) {
                                     this.next();
-                                    return { t: "range", lo: rangeNum(loE), step: 1n, hi: null };
+                                    return rangeExpr(rangeNum(loE), null, null);
                                 }
                                 const hi = this.parseAdd();
                                 this.expectSym("]");
                                 const lo = rangeNum(loE), hiN = rangeNum(hi);
                                 // implicit step ADAPTS to direction: [0..-100] descends;
                                 // an EXPLICIT step pointing the wrong way stays empty
-                                return { t: "range", lo, step: hiN < lo ? -1n : 1n, hi: hiN };
+                                return rangeExpr(lo, null, hiN);
                             }
                             if (this.isSym(",")) {
                                 const save2 = this.i;
@@ -611,14 +625,14 @@ class Parser {
                                 if (this.isSym("..")) {
                                     this.next();
                                     const lo = rangeNum(loE);
-                                    const step = rangeNum(sE) - lo;
+                                    const second = rangeNum(sE);
                                     if (this.isSym("]")) {
                                         this.next();
-                                        return { t: "range", lo, step, hi: null };
+                                        return rangeExpr(lo, second, null);
                                     }
                                     const hi = this.parseAdd();
                                     this.expectSym("]");
-                                    return { t: "range", lo, step, hi: rangeNum(hi) };
+                                    return rangeExpr(lo, second, rangeNum(hi));
                                 }
                                 this.i = save2; // [1, 2] — a plain list
                             }
@@ -1209,6 +1223,10 @@ export function exprToSource(e: Expr): string {
         case "lambda": return `${e.params.join(" ")} -> ${exprToSource(e.body)}`;
         case "list": return `[${e.v.map(exprToSource).join(", ")}]`;
         case "record": return `[${e.v.map(([k, x]) => `${k}: ${exprToSource(x)}`).join(", ")}]`;
+    case "floatRange": {
+        const decimal = (v: number) => Number.isInteger(v) ? `${v}.0` : String(v);
+        return `[${decimal(e.lo)}${e.step !== 1 ? `, ${decimal(e.lo + e.step)}` : ""}..${e.hi === null ? "" : decimal(e.hi)}]`;
+    }
     case "range":
       return e.hi === null
         ? `[${e.lo}${e.step !== 1n ? `, ${e.lo + e.step}` : ""}..]`

@@ -585,6 +585,9 @@ print (spanArgs)              # => [1, 2, 3, 4]
 #   - any indentation that skips a level (0 -> 8) or is not a multiple of 4.
 
 # Leading-dot decimal literals are floats; ordinary binary float rounding applies.
+print (take 5 [0,0.5..100])  # => [0, 0.5, 1, 1.5, 2]
+print (length [0,0.5..100])  # => 201
+print ([0,0.5..100] (-1))    # => 100
 print (.1 + .2)              # => 0.30000000000000004
 print (-.5)                 # => -0.5
 

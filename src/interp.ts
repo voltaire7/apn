@@ -352,6 +352,7 @@ export class Interpreter {
                 }
                 case "match": r = this.evalMatch(this.delay(e.scrut), e.alts); break;
                 case "range": r = { kind: "range", lo: e.lo, step: e.step, hi: e.hi }; break;
+                case "floatRange": r = { kind: "floatRange", lo: e.lo, step: e.step, hi: e.hi }; break;
                 case "list": r = { kind: "lazyList", exprs: e.v, env: this.env }; break;
                 case "record": r = { kind: "record", v: e.v.map(([k, x]) => [k, this.eval(x)] as [string, Value]) }; break;
                 case "recordAccess": {
@@ -663,6 +664,7 @@ export class Interpreter {
             case "list":
             case "lazyList":
             case "cons":
+            case "floatRange":
             case "range": {
                 const carg = this.demand(arg);
                 if (carg.kind === "int") return this.index(f, carg.v);
@@ -757,7 +759,7 @@ export class Interpreter {
     unpackThunk(v: Value): Value { return this.force(v); }
 
     isList(v: Value): boolean {
-        return v.kind === "list" || v.kind === "lazyList" || v.kind === "cons" || v.kind === "range";
+        return v.kind === "list" || v.kind === "lazyList" || v.kind === "cons" || v.kind === "range" || v.kind === "floatRange";
     }
 
     fromArray(values: Value[], i = 0): Value {
@@ -770,6 +772,20 @@ export class Interpreter {
         v = this.demand(v);
         if (v.kind === "cons") return v;
         if (v.kind === "list") return v.v.length ? { head: v.v[0], tail: this.fromArray(v.v, 1) } : null;
+        if (v.kind === "floatRange") {
+            const index = v.index ?? 0;
+            const current = v.lo + index * v.step;
+            const tolerance = v.hi === null || v.step === 0 ? 0 : Math.min(
+                Math.abs(v.step) / 2, 4 * Number.EPSILON * Math.max(1, Math.abs(current), Math.abs(v.hi)),
+            );
+            if (v.hi !== null && (v.step >= 0 ? current > v.hi + tolerance : current < v.hi - tolerance)) return null;
+            if (!Number.isFinite(current) || index + 1 === index ||
+                (index > 0 && v.step !== 0 && current === v.lo + (index - 1) * v.step)) {
+                throw new APNError("runtime", "float range cannot advance at this precision");
+            }
+            const value = v.hi !== null && Math.abs(current - v.hi) <= tolerance ? v.hi : current;
+            return { head: { kind: "float", v: value }, tail: { ...v, index: index + 1 } };
+        }
         if (v.kind === "range") {
             if (v.hi !== null && (v.step > 0 ? v.lo > v.hi : v.lo < v.hi)) return null;
             return { head: mkInt(v.lo), tail: { ...v, lo: v.lo + v.step } };

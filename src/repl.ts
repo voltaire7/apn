@@ -295,7 +295,7 @@ function helpText(): string {
         `  cond ? a : b   (ternary)`,
         `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,
         `  data Maybe a = Just a | Nothing`,
-        `  [1,2,3]  [0..5] [2,4..100] [0..]  ranges; 0:[] conses`,
+        `  [1,2,3]  [0..5] [0,0.5..100] [0..]  ranges; 0:[] conses`,
         `  ones = 1:ones; take 5 ones   lazy heads/tails; drop 5 ones`,
         `  map/filter/zipWith/foldr consume lazy lists; Ctrl+C stops output`,
         `  x $ f             pipe: feeds x into f`,

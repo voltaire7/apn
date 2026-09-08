@@ -95,8 +95,8 @@ and arguments share their memoized outer result, including through alias chains.
 Actions remain repeatable and run when demanded. Update assertions with any
 intentional evaluation change.
 
-- **Integers**: APN integer tokens, AST values, runtime values, and range bounds
-  use `bigint`. Never pass user integer text through `Number`/`parseInt`.
+- **Integers**: APN integer tokens, AST values, runtime values, and all-integer range bounds
+  use `bigint`. Float ranges use a separate `floatRange` representation. Never pass user integer text through `Number`/`parseInt`.
   `mkInt(number)` is only for safe host counters; it rejects unsafe numbers.
   Arithmetic and counts stay bigint; convert array indexes only after bounds
   checks. Floats remain numbers and never implicitly mix with integers.
@@ -429,3 +429,9 @@ The RHS is evaluated against the old binding before it is replaced. Consecutive
 index assignments execute in order. Inside a block the update shadows the outer
 binding. On an unbound name or an existing function, the same syntax remains a
 literal-pattern function definition (`f 0 = 10`).
+
+
+Float ranges promote mixed bounds/steps to floats; all-integer ranges stay exact.
+`[0,0.5..100]` has 201 elements. Float-range cells use origin + index * step,
+a bounded endpoint tolerance, and a no-progress guard. Float ranges must work
+through the same lazy list consumers, indexing, and streaming as integer ranges.
