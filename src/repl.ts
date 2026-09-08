@@ -362,6 +362,8 @@ function helpText(): string {
         `  indentation: strict 4-space layout (exactly +4 per level)`,
         `  [1,2,3] * x -> print x      (seq * fn iterates; int * fn counts)`,
         `  recursion, higher-order fns, records, variants`,
+        `  Bool true; String "hi"; Char 'a'; Unit (); List [1,2]; Record [x: 1]`,
+        `  Function (x -> x); Type Int; Variant (YourConstructor value)`,
         `  Int/UInt, Int8..Int128/UInt8..UInt128, Float/Float32, Fraction, Complex`,
         `  Int32 123; cast Int 3.7; value $ cast Float32; typeOf value`,
         `  f (Int x) = ...; f (Number x) = ... (typed overloads)`,

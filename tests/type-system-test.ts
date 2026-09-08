@@ -14,6 +14,15 @@ for (const [source, expected] of [
     ["[x: 1] $ typeOf", "Record"],
     ["sqrt $ typeOf", "Function"],
     ["Int $ typeOf", "Type"],
+    ["Bool true", "true"], ['String "hi"', '"hi"'],
+    ["Char 'a'", "'a'"], ["Unit ()", "()"],
+    ["List [1,2]", "[1, 2]"], ["take 3 (List [1..])", "[1, 2, 3]"],
+    ["Record [x: 1]", "[x: 1]"],
+    ["(Function (x -> x + 1)) 2", "3"], ["Type Int", "Int"],
+    ["data Choice = Chosen x\nVariant (Chosen 1)", "Chosen 1"],
+    ["[isType Bool true, isType String 1, isType List [1..], isType Type Bool]", "[true, false, true, true]"],
+    ['f (Bool x) = "bool"\nf (String x) = "string"\nf (List x) = "list"\n[f true, f "hi", f [1]]', '["bool", "string", "list"]'],
+    ["value = true\nvalue $ cast Bool", "true"],
     ["Int 123", "Int 123"], ["Int32 123", "Int32 123"],
     ["UInt 123", "UInt 123"], ["UInt32 4294967295", "UInt32 4294967295"],
     ["Float 3", "Float 3.0"], ["Float32 .5", "Float32 0.5"],
@@ -49,7 +58,7 @@ for (const [source, expected] of [
         if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
     });
 }
-for (const source of ["Int 3.7", "Int32 2147483648", "UInt (-1)", "UInt32 4294967296", "Float32 .1", "Float 9007199254740993", "Int8 127 + Int8 1", "cast UInt (-1)", "cast Int8 128", "1/3 + .5", "f (Float32 x) = x\nf .1"]) {
+for (const source of ["Bool 1", "String 123", "Char true", "List 1", "Record []", "Function 2", "Type 1", "Unit 1", "Variant 1", "Int 3.7", "Int32 2147483648", "UInt (-1)", "UInt32 4294967296", "Float32 .1", "Float 9007199254740993", "Int8 127 + Int8 1", "cast UInt (-1)", "cast Int8 128", "1/3 + .5", "f (Float32 x) = x\nf .1"]) {
     Deno.test(`checked type conversion: ${source}`, () => {
         try { const interp = new Interpreter(); interp.renderString(interp.run(parse(source))); }
         catch (e) { if (e instanceof APNError) return; throw e; }

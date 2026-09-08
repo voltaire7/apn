@@ -611,9 +611,7 @@ export class Interpreter {
         switch (f.kind) {
             case "type": {
                 const value = this.demand(arg);
-                if (f.name === "HashMap") return this.makeHashMap(value);
-                if (!isNumeric(value)) throw new APNError("runtime", `${f.name} expects a number`);
-                return castNumeric(f.name, value);
+                return this.constructType(f.name, value);
             }
             case "hashmap": return this.mapLookup(f, this.demand(arg));
             case "closure": {
@@ -650,7 +648,7 @@ export class Interpreter {
                     if (["int", "bool", "string"].includes(pattern.p)) return score + 40;
                     if (pattern.p !== "constr" || !TYPE_NAMES.includes(pattern.tag)) return score;
                     const value = this.demand(raw[i]);
-                    if (pattern.tag === "HashMap") return score + (value.kind === "hashmap" ? 30 : -1000);
+                    if (!NUMERIC_TYPES.includes(pattern.tag)) return score + (this.matchesValueType(pattern.tag, value) ? 30 : -1000);
                     if (!isNumeric(value)) return score - 1000;
                     if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(pattern.tag)) return score + (matchesType(pattern.tag, value) ? 10 : -1000);
                     if (matchesType(pattern.tag, value)) return score + 30;
@@ -939,6 +937,27 @@ export class Interpreter {
         else if (buffer) Deno.stdout.writeSync(enc.encode(buffer));
     }
 
+    matchesValueType(name: string, value: Value): boolean {
+        if (isNumeric(value)) return NUMERIC_TYPES.includes(name) && matchesType(name, value);
+        if (name === "List") return this.isList(value);
+        if (name === "Function") return value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native";
+        const names: Partial<Record<Value["kind"], string>> = {
+            bool: "Bool", string: "String", char: "Char", unit: "Unit",
+            record: "Record", hashmap: "HashMap", type: "Type", variant: "Variant",
+        };
+        return names[value.kind] === name;
+    }
+
+    constructType(name: string, value: Value, explicit = false): Value {
+        if (name === "HashMap") return this.makeHashMap(value);
+        if (NUMERIC_TYPES.includes(name)) {
+            if (!isNumeric(value)) throw new APNError("runtime", `${name} expects a number`);
+            return castNumeric(name, value, explicit);
+        }
+        if (!this.matchesValueType(name, value)) throw new APNError("runtime", `${name} constructor expects a ${name} value`);
+        return value;
+    }
+
     hashKey(value: Value): string {
         value = this.demand(value);
         if (isNumeric(value)) return "number:" + numericHash(value);
@@ -977,9 +996,7 @@ export class Interpreter {
         if (name === "cast") {
             const target = this.demand(argsIn[0]), value = this.demand(argsIn[1]);
             if (target.kind !== "type") throw new APNError("runtime", "cast expects a type as its first argument");
-            if (target.name === "HashMap") return this.makeHashMap(value);
-            if (!isNumeric(value)) throw new APNError("runtime", "numeric cast expects a number");
-            return castNumeric(target.name, value, true);
+            return this.constructType(target.name, value, true);
         }
         if (name === "typeOf") {
             const value = this.demand(argsIn[0]);
@@ -995,7 +1012,7 @@ export class Interpreter {
         if (name === "isType") {
             const target = this.demand(argsIn[0]), value = this.demand(argsIn[1]);
             if (target.kind !== "type") throw new APNError("runtime", "isType expects a type");
-            return mkBool(isNumeric(value) ? matchesType(target.name, value) : target.name === "HashMap" && value.kind === "hashmap");
+            return mkBool(this.matchesValueType(target.name, value));
         }
         if (["insert", "lookup", "has", "remove"].includes(name)) {
             const value = this.demand(argsIn[0]), map = this.demand(argsIn[1]);
@@ -1320,7 +1337,7 @@ export class Interpreter {
             case "constr": {
                 if (TYPE_NAMES.includes(p.tag)) {
                     if (p.args.length !== 1) return false;
-                    if (p.tag === "HashMap") return v.kind === "hashmap" && this.matchPattern(p.args[0], v, binds);
+                    if (!NUMERIC_TYPES.includes(p.tag)) return this.matchesValueType(p.tag, v) && this.matchPattern(p.args[0], v, binds);
                     if (!isNumeric(v)) return false;
                     let converted: Value;
                     try { converted = castNumeric(p.tag, v); } catch { return false; }

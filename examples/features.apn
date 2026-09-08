@@ -789,6 +789,15 @@ print (HashMap [["a", 1], ["b", 2]]) # => HashMap [["a", 1], ["b", 2]]
 
 print (true $ typeOf) # => Bool
 
+print (Bool true)        # => true
+print (String "hi")      # => hi
+print (Char 'a')         # => 'a'
+print (Unit ())          # => ()
+print (List [1,2])       # => [1, 2]
+print (Record [x: 1])    # => [x: 1]
+print ((Function (x -> x + 1)) 2) # => 3
+print (Type Bool)        # => Bool
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

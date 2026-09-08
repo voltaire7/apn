@@ -340,3 +340,11 @@ existing record evaluation rules. `(HashMap m)` is a type pattern.
 Type constructors also work directly with function iteration: `100 * Int`
 returns `Int 0` through `Int 99`; `[1..100] * Int` returns `Int 1` through
 `Int 100`. This differs from `100 * Int 0`, which multiplies and returns `Int 0`.
+
+The nonnumeric types returned by `typeOf` are also first-class constructors:
+`Bool`, `String`, `Char`, `Unit`, `List`, `Record`, `Function`, `Type`, and
+`Variant`. They validate and return a value of the corresponding kind, without
+forcing list elements or coercing unrelated values. Their constructor patterns
+work in overloads, e.g. `f (Bool x) = x`. `isType` and identity `cast` support
+these types too. Use existing `data` constructors to create a particular variant;
+`Variant` validates any such value.
