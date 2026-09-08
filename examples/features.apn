@@ -1,7 +1,7 @@
 # =========================================================
 #  APN — Applicative Polish Notation — feature showcase
 #  A lazy, Haskell-like, untyped (JS-like) scripting language.
-#  Run:  deno run --allow-read main.ts features.apn
+#  Run:  deno run --allow-read main.ts examples/features.apn
 #  NOTE: indentation is strict "4-space layout" — every nested
 #  level is exactly +4 spaces (and only +4).
 # =========================================================
@@ -586,7 +586,7 @@ print (spanArgs)              # => [1, 2, 3, 4]
 #   - any indentation that skips a level (0 -> 8) or is not a multiple of 4.
 
 # ---------------------------------------------------------
-# 16b. EVALUATION CONTRACT (see SEMANTICS.md and semantics_test.ts)
+# 16b. EVALUATION CONTRACT (see docs/SEMANTICS.md and tests/semantics_test.ts)
 #    Deferred values share their result across calls;
 #    block/application/pipe definitions are repeatable actions.
 # ---------------------------------------------------------
@@ -610,7 +610,7 @@ print (take 4 (map (+ 1) [0..]))       # => [1, 2, 3, 4]
 print (take 4 (filter (n -> n % 2 == 0) [0..])) # => [0, 2, 4, 6]
 # In the REPL, entering ones or fibs streams until Ctrl+C.
 # Files use explicit print/emit for output; don't run unbounded output here.
-# Expected errors (asserted in semantics_test.ts): x = x; x and 1 + 2.0.
+# Expected errors (asserted in tests/semantics_test.ts): x = x; x and 1 + 2.0.
 
 # ---------------------------------------------------------
 # 17. EXIT, LOAD & HALT
@@ -620,17 +620,17 @@ print (take 4 (filter (n -> n % 2 == 0) [0..])) # => [0, 2, 4, 6]
 #              (1) as a STATEMENT it merges the file's own definitions into
 #                  the current scope (an `include`);
 #              (2) as a VALUE it returns them as a MODULE record, so
-#                  core = load "core.apn"; core.sq 4 ...  is namespaced access.
+#                  core = load "../lib/core.apn"; core.sq 4 ...  is namespaced access.
 #              Inside a { } block the merge stays scoped to that block.
-#    halt      is NOT a builtin. It is defined in core.apn — the standard
+#    halt      is NOT a builtin. It is defined in lib/core.apn — the standard
 #              library — as  `halt = exit 0`. Expression 0-arg defs are LAZY, so
-#              importing core.apn doesn't terminate the program; `halt` only
+#              importing lib/core.apn doesn't terminate the program; `halt` only
 #              fires (exits 0) when it is actually USED.
 # ---------------------------------------------------------
-load "core.apn"             # include: sq and halt join THIS scope
+load "../lib/core.apn"             # include: sq and halt join THIS scope
 print (sq 5)                # => 25
 
-core = load "core.apn"      # namespaced module record
+core = load "../lib/core.apn"      # namespaced module record
 print (core.sq 4)           # => 16
 
 # step into the loaded halt (an action whose body is exit 0):
@@ -640,7 +640,7 @@ step 1 halt $ debug          # => exit 0
 
 # a load inside a { } block stays in the block's scope
 scoped = {
-    load "core.apn"
+    load "../lib/core.apn"
     sq 6
 }
 print (scoped)              # => 36
@@ -659,7 +659,7 @@ lazyNote = {
 print (lazyNote * 2)      # mentioning lazyNote runs the body (side effect)
                           # then uses the block's value:   # => 84
                           # Other expression bodies create deferred thunks;
-                          # see SEMANTICS.md for memoization and lazy list rules.
+                          # see docs/SEMANTICS.md for memoization and lazy list rules.
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

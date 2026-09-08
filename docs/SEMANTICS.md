@@ -3,7 +3,7 @@
 APN uses call-by-need for deferred values, function arguments, list elements,
 cons tails, and variant fields. Forcing reveals the outer value and memoizes it;
 it does not recursively evaluate a whole collection. Explicit actions remain
-repeatable, as described below. `semantics_test.ts` asserts these rules.
+repeatable, as described below. `tests/semantics_test.ts` asserts these rules.
 
 ## Recursive lists
 
@@ -119,7 +119,7 @@ not execute its `halt` action.
 `quote` and `toAST` inspect syntax without evaluating their arguments. `debug`
 forces its argument without running a returned action: `a = print 3; debug a`
 prints `a`. Forcing other expressions can still have effects. `step` retains
-its expression-inspection/evaluation rules demonstrated in `features.apn`.
+its expression-inspection/evaluation rules demonstrated in `examples/features.apn`.
 `toString` demands its argument and collects its full rendering into a string.
 
 Integers and floats remain distinct runtime tags: `1 + 2.0` is an error.
@@ -129,8 +129,8 @@ Integer division truncates toward zero.
 
 ```sh
 deno check main.ts
-deno test semantics_test.ts
-deno run --allow-read main.ts features.apn
+deno test tests/semantics_test.ts
+deno run --allow-read main.ts examples/features.apn
 ```
 
 The assertions cover finite prefixes, shared effects, patterns, errors, and

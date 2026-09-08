@@ -1,5 +1,5 @@
-import { Interpreter, setInterruptFlag, resetInterrupt } from "./src/interp.ts";
-import { parse } from "./main.ts";
+import { Interpreter, setInterruptFlag, resetInterrupt } from "../src/interp.ts";
+import { parse } from "../main.ts";
 
 // Exercise APN source and observable output, without dependencies or runtime mocks.
 function execute(source: string): string[] {

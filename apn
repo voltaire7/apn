@@ -1,6 +1,6 @@
 #!/bin/sh
 # APN launcher:  ./apn          interactive REPL
-#                ./apn FILE     run a file (e.g. ./apn features.apn)
+#                ./apn FILE     run a file (e.g. ./apn examples/features.apn)
 # Grants everything the REPL needs up front: read (load, the showcase),
 # write + env(HOME) for the persistent history in ~/.apn_history.
 DIR="$(cd "$(dirname "$0")" && pwd)"

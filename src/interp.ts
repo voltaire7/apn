@@ -954,7 +954,7 @@ export class Interpreter {
                 // Import a file, resolving the path relative to the CURRENT source file.
                 // Two effects: (1) the loaded file's own definitions are merged into the
                 // current scope ("include"); (2) it returns a module record of them, so
-                //   core = load "core.apn"; core.halt   (or just core.halt) works.
+                //   core = load "lib/core.apn"; core.halt   (or just core.halt) works.
                 // Inside a `{ }` block the merge stays scoped to that block.
                 if (a.kind !== "string") throw new Error("Runtime: load expects a file path string");
                 const p = a.v;

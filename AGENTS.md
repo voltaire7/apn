@@ -5,19 +5,21 @@
 1. **The workflow is mandatory.** For ANY change (add, change, or remove a
    feature), you MUST:
    1. Edit the relevant `src/` module (or `main.ts` for entry-point changes).
-   2. Update `features.apn` so it demonstrates the new/updated behavior
+   2. Update `examples/features.apn` so it demonstrates the new/updated behavior
       (this file is the living spec AND the smoke test).
    3. Type-check and run the full showcase:
           deno check main.ts
-          deno test semantics_test.ts
-          deno run --allow-read main.ts features.apn
+          deno test tests/semantics_test.ts
+          deno run --allow-read main.ts examples/features.apn
    4. Confirm output matches expectations before declaring done.
-   Do not end a task without completing all steps. Never leave `features.apn`
+   Do not end a task without completing all steps. Never leave `examples/features.apn`
    out of date.
 2. **Keep it green.** If a change breaks any existing feature, fix it before
    finishing. Do not leave the project in a broken state.
-3. **Layout:** `main.ts` + `src/` modules (see Project), plus `features.apn`,
-   `SEMANTICS.md`, `semantics_test.ts`, `AGENTS.md`, `core.apn`, `apn` in the root — no package.json, no deps.
+3. **Layout:** `main.ts`, `apn`, `README.md`, and `AGENTS.md` stay in the root.
+   Use `src/` for the interpreter, `lib/` for the standard library, `examples/`
+   for runnable examples, `tests/` for regression assertions, `docs/` for
+   documentation, and `playground/` for the user's scratch programs. No deps.
 
 ## Project
 
@@ -25,7 +27,7 @@ APN — **A**pplicative **P**olish **N**otation — is a lazy, Haskell-like,
 dynamically-typed (JS-like) scripting language implemented as a Deno/
 TypeScript interpreter. It runs from the command line and has a REPL.
 
-Layout (user-approved src/ split):
+Layout:
 - `main.ts` — thin entry point: shebang, imports, the `import.meta.main`
   dispatch; re-exports `parse`/`lex` for ad-hoc tooling
 - `src/types.ts` — `Value`, `Env`, `mk*`, `valueToString` (the runtime world)
@@ -38,31 +40,33 @@ Layout (user-approved src/ split):
   `checkInterrupt` + the interrupt flag, `envNames`, `dirname`
 - `src/repl.ts` — REPL editor, colors, history, errors rendering, drivers
 - `apn` — tiny sh launcher (REPL/file runs; no logic)
-- `features.apn` — the living spec + smoke test: a runnable showcase of EVERY
+- `examples/features.apn` — the living spec + smoke test: a runnable showcase of EVERY
   feature. It must always stay in sync with what `main.ts` actually supports.
-  Observable evaluation rules are asserted separately in `semantics_test.ts`.
-- `core.apn` — the standard library, imported with `load "core.apn"`. Defines
+  Observable evaluation rules are asserted separately in `tests/semantics_test.ts`.
+- `lib/core.apn` — the standard library, imported with `load "lib/core.apn"`. Defines
   things like `halt = exit 0` (`sq x = x * x` is there as a demo function).
 - `AGENTS.md` — this file
+- `README.md` — quick start and directory guide
+- `playground/test.apn` — user-owned scratch program; preserve its edits
 
-- `SEMANTICS.md` — authoritative current evaluation rules and limitations
-- `semantics_test.ts` — dependency-free Deno regression assertions
+- `docs/SEMANTICS.md` — authoritative current evaluation rules and limitations
+- `tests/semantics_test.ts` — dependency-free Deno regression assertions
 
 ## Run / verify
 
 Deno required. From `apn/`:
 - Run the showcase (use this as the smoke test after any change):
-    deno run --allow-read main.ts features.apn
+    deno run --allow-read main.ts examples/features.apn
 - Start the REPL:               ./apn
   (wrapper script that runs
    `deno run --allow-read --allow-write --allow-env=HOME --allow-run=stty main.ts "$@"` —
-   also runs files, e.g. `./apn features.apn`. The extra flags persist
+   also runs files, e.g. `./apn examples/features.apn`. The extra flags persist
    history in ~/.apn_history; the bare deno command with just --allow-read
    works too — history then stays in-session only)
 - Type-check (always run after edits):
     deno check main.ts
 
-Run evaluation assertions: `deno test semantics_test.ts`.
+Run evaluation assertions: `deno test tests/semantics_test.ts`.
 There is no `package.json` and no external dependencies; tests use Deno.test.
 
 ## Architecture (implemented in src/ modules)
@@ -85,7 +89,7 @@ There is no `package.json` and no external dependencies; tests use Deno.test.
 
 ## Core language semantics (don't break these)
 
-`SEMANTICS.md` is authoritative for evaluation and memoization. Deferred values
+`docs/SEMANTICS.md` is authoritative for evaluation and memoization. Deferred values
 and arguments share their memoized outer result, including through alias chains.
 Actions remain repeatable and run when demanded. Update assertions with any
 intentional evaluation change.
@@ -279,7 +283,7 @@ intentional evaluation change.
 
 - In file mode, expressions evaluate for their effects but do NOT auto-print
   (assignments like `r = [...]` are silent, and a bare `pairs rec` statement
-  prints nothing; file execution never renders its unused last value) — every demo line in `features.apn` uses an explicit `print`.
+  prints nothing; file execution never renders its unused last value) — every demo line in `examples/features.apn` uses an explicit `print`.
   In the REPL, unassigned expression results are echoed, and ASSIGNMENTS are
   SILENT (GHCi `let` parity — `lastIsBinding` gates the echo, so `x = x`
   never hangs the REPL; reference the name to see the value).
@@ -378,10 +382,10 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   are exhaustive.
 - Keep edits in the relevant `src/` module; keep `main.ts` a thin entry point.
   Preserve the dependency-free layout.
-- Reflect new syntax in `features.apn` and in the REPL `:help` block.
+- Reflect new syntax in `examples/features.apn` and in the REPL `:help` block.
 - **Style — whole-function `match`**: when a function's ENTIRE body is a single
   `match`, write the same-line-open form (`f x = match x [ ... ]`), not the
-  block form (`f x =\n  match x [ ... ]`). Examples in `features.apn` follow
+  block form (`f x =\n  match x [ ... ]`). Examples in `examples/features.apn` follow
   this. The block and fully single-line layouts still parse; only the
   single-line form is also shown (alongside the preferred one) in the 4b
   layout section.
