@@ -63,6 +63,28 @@ export class Interpreter {
     }
 
     evalDef(name: string, clauses: DefClause[]): Value {
+        // A one-index equation on an existing list is a scoped update.
+        // Unbound/function names retain ordinary pattern-clause definitions.
+        const previous = this.env.get(name);
+        if (previous !== undefined && clauses[0].params.length > 0 &&
+            previous.kind !== "clauseFn" && previous.kind !== "native" &&
+            !(previous.kind === "closure" && previous.params.length > 0) &&
+            !(previous.kind === "thunk" && previous.body.t === "placeholder")) {
+            let list = this.demand(previous);
+            if (this.isList(list)) {
+                for (const clause of clauses) {
+                    if (clause.params.length !== 1 || clause.params[0].p !== "int") {
+                        throw new APNError("runtime", "list assignment needs one integer literal index");
+                    }
+                    const index = clause.params[0].v;
+                    // Resolve the RHS against the old binding, before rebinding.
+                    const value = this.demand(this.eval(clause.body));
+                    list = this.setIndex(list, index, value);
+                    this.env.setLocal(name, list);
+                }
+                return list;
+            }
+        }
         // A def with parameters is a pattern-dispatch function.
         if (clauses[0].params.length >= 1) {
             const arity = clauses[0].params.length;
@@ -779,6 +801,30 @@ export class Interpreter {
             }
         }
         throw new APNError("runtime", `index ${original} out of range`);
+    }
+
+    setIndex(list: Value, index: bigint, value: Value): Value {
+        const original = index;
+        if (index < 0n) {
+            const values = this.items(list);
+            index += BigInt(values.length);
+            if (index < 0n || index >= values.length) throw new APNError("runtime", `index ${original} out of range`);
+            values[Number(index)] = value;
+            return mkList(values);
+        }
+        const prefix: Value[] = [];
+        for (;;) {
+            checkInterrupt();
+            const cell = this.cell(list);
+            if (cell === null) throw new APNError("runtime", `index ${original} out of range`);
+            if (index-- === 0n) {
+                let result: Value = { kind: "cons", head: value, tail: cell.tail };
+                for (let i = prefix.length - 1; i >= 0; i--) result = { kind: "cons", head: prefix[i], tail: result };
+                return result;
+            }
+            prefix.push(cell.head);
+            list = cell.tail;
+        }
     }
 
     append(xs: Value, ys: Value): Value {

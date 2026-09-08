@@ -584,6 +584,14 @@ print (spanArgs)              # => [1, 2, 3, 4]
 #         }
 #   - any indentation that skips a level (0 -> 8) or is not a multiple of 4.
 
+# List assignment rebinds a copy, like record field assignment.
+editable = [1, 2, 3]
+editable 0 = 10
+editable (-1) = 30
+print editable               # => [10, 2, 30]
+editable 1 = editable 0 + 1
+print editable               # => [10, 11, 30]
+
 # ---------------------------------------------------------
 # 16b. EVALUATION CONTRACT (see docs/semantics.md and tests/semantics-test.ts)
 #    Deferred values share their result across calls;

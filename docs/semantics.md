@@ -155,3 +155,16 @@ deno run --allow-read main.ts examples/features.apn
 
 The assertions cover finite prefixes, shared effects, patterns, errors, and
 streaming/interruption recovery. The showcase is the broader syntax reference.
+
+
+## List index assignment
+
+`arr 0 = 10` rebinds an existing list to a modified copy in the current scope,
+like record field assignment. `arr (-1) = 10` updates its final element.
+The index must be one integer literal; negative indexes require a finite list.
+Positive updates traverse only as far as the selected cell, leaving unused
+heads and the remaining tail deferred. Bounds errors leave the binding unchanged.
+The RHS is evaluated against the old binding before it is replaced. Consecutive
+index assignments execute in order. Inside a block the update shadows the outer
+binding. On an unbound name or an existing function, the same syntax remains a
+literal-pattern function definition (`f 0 = 10`).

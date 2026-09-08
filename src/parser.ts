@@ -138,6 +138,11 @@ class Parser {
         const t = this.peek();
         if (t.k === "sym" && t.v === "_") { this.next(); return { p: "wildcard" }; }
         if (t.k === "int") { this.next(); return { p: "int", v: t.v }; }
+        if (this.isSym("-") && this.peek(1).k === "int") {
+            this.next();
+            const value = this.next() as Extract<Token, { k: "int" }>;
+            return { p: "int", v: -value.v };
+        }
         if (t.k === "bool") { this.next(); return { p: "bool", v: t.v }; }
         if (t.k === "str") { this.next(); return { p: "string", v: t.v }; }
         if (t.k === "sym" && t.v === "(") {

@@ -308,6 +308,7 @@ function helpText(): string {
         `  recursion, higher-order fns, records, variants`,
         `  integers are arbitrary precision (no suffix); floats remain decimals`,
         `  foo = _   unfinished definition; using it raises not implemented`,
+        `  arr 0 = 10   update an existing list; arr (-1) = 10 updates its last item`,
         `  both sides of = are required; use () for an explicit unit value`,
         ``,
         `print x    any value (strings raw), returns x;  emit  = no newline`,
