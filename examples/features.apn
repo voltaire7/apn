@@ -779,3 +779,5 @@ halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 # REPL echo: fractions such as 1/3 have yellow digits and a peach slash.
 
 # REPL echo: complex signs in 0+1i and 0-1i are peach too.
+
+# REPL input: ternary : is peach; record : and assignment = are gray.

@@ -27,10 +27,10 @@ Deno.test("colored infinite lists stream without buffering", () => {
 });
 
 Deno.test("operators use peach while structural punctuation stays gray", () => {
-    for (const ch of "+-*/%=!<>$&|?`") {
+    for (const ch of "+-*/%!<>$&|?`") {
         if (highlightLine(ch) !== `\x1b[38;2;239;159;118m${ch}\x1b[0m`) throw new Error(`Operator color: ${ch}`);
     }
-    for (const ch of "(){}[];,:.") {
+    for (const ch of "(){}[];,:.=") {
         if (highlightLine(ch) !== `\x1b[38;2;131;139;167m${ch}\x1b[0m`) throw new Error(`Punctuation color: ${ch}`);
     }
     const adjacent = highlightLine("(-x)+[1]");
@@ -63,4 +63,17 @@ Deno.test("complex signs are peach in scalar and nested echoes", () => {
         renderColored(interp, { kind: "list", v: [value] }, (text) => { nested += text; });
         if (!nested.includes(expected)) throw new Error("Wrong nested complex sign color");
     }
+});
+
+Deno.test("ternary colons are peach, record colons and assignment are gray", () => {
+    const peach = "\x1b[38;2;239;159;118m", gray = "\x1b[38;2;131;139;167m";
+    const text = highlightLine('x = true ? [field: 1] : false ? 2 : 3');
+    if (text.split(peach + ":").length - 1 !== 2) throw new Error("Missing ternary color");
+    if (!text.includes(gray + ":") || !text.includes(gray + "=")) throw new Error("Wrong punctuation color");
+    for (const op of ["==", "!=", "<=", ">="]) {
+        if (!highlightLine(op).includes(peach + "=")) throw new Error("Comparison lost operator color");
+    }
+    const state = [0];
+    highlightLine("true ?", state);
+    if (!highlightLine('    "yes" : "no"', state).includes(peach + ":")) throw new Error("Multiline ternary lost color");
 });

@@ -227,7 +227,7 @@ const REPL_KEYWORDS = new Set(["match", "data"]);
 const NATIVE_NAMES = new Set(NATIVES.map(([n]) => n));
 
 // Syntax-highlight one buffer line (best-effort, purely cosmetic).
-export function highlightLine(s: string): string {
+export function highlightLine(s: string, ternaries: number[] = [0]): string {
     let out = "", i = 0;
     const word = (c: string) => /[A-Za-z0-9_]/.test(c);
     while (i < s.length) {
@@ -235,7 +235,10 @@ export function highlightLine(s: string): string {
         if (c === "#") { out += paint(A.comment, s.slice(i)); break; }
         if (c === '"') {
             let j = i + 1;
-            while (j < s.length && s[j] !== '"') j++;
+            while (j < s.length && s[j] !== '"') {
+                if (s[j] === "\\") j++;
+                j++;
+            }
             j = Math.min(j + 1, s.length);
             out += paint(A.green, s.slice(i, j)); i = j; continue;
         }
@@ -257,9 +260,23 @@ export function highlightLine(s: string): string {
                 : w;
             i = j; continue;
         }
-        // Keep delimiters gray; operators use peach even next to punctuation.
-        if ("+-*/%=!<>$&|?`".includes(c)) out += paint(A.operator, c);
-        else if ("(){}[];,:.".includes(c)) out += paint(A.gray, c);
+        // Track pending ternaries independently inside each bracket scope.
+        if ("([{".includes(c)) ternaries.push(0);
+        if (")]}".includes(c) && ternaries.length > 1) ternaries.pop();
+        if (c === "?") ternaries[ternaries.length - 1]++;
+        if (c === ":" && ternaries[ternaries.length - 1] > 0) {
+            ternaries[ternaries.length - 1]--;
+            out += paint(A.operator, c); i++; continue;
+        }
+        if (c === ";" || c === ",") ternaries[ternaries.length - 1] = 0;
+        const comparison = s.slice(i).match(/^(?:==|!=|<=|>=)/)?.[0];
+        if (comparison) {
+            out += [...comparison].map((ch) => paint(A.operator, ch)).join("");
+            i += comparison.length; continue;
+        }
+        // Keep assignment and delimiters gray; operators use peach.
+        if ("+-*/%!<>$&|?`".includes(c)) out += paint(A.operator, c);
+        else if ("(){}[];,:.=".includes(c)) out += paint(A.gray, c);
         else out += c;
         i++;
 
@@ -434,9 +451,10 @@ export class ReplEditor {
         if (this.visRow > 0) this.emit(`\x1b[${this.visRow}A`);
         this.emit("\r\x1b[J");
         let total = 0;
+        const ternaries = [0];
         for (let i = 0; i < this.lines.length; i++) {
             const p = i === 0 ? paint(A.bold + A.cyan, ">>> ") : paint(A.cyan, "... ");
-            this.emit(p + highlightLine(this.lines[i]) + "\r\n");
+            this.emit(p + highlightLine(this.lines[i], ternaries) + "\r\n");
             total += this.rowsOf(i, w);
         }
         let curRow = 0;
