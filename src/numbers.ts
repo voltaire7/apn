@@ -1,7 +1,7 @@
 import { APNError } from "./errors.ts";
 
-export type Real = { kind: "int"; v: bigint } | { kind: "rational"; n: bigint; d: bigint } | { kind: "float"; v: number };
-export type Numeric = Real | { kind: "complex"; re: Real; im: Real };
+export type Real = ({ kind: "int"; v: bigint } | { kind: "rational"; n: bigint; d: bigint } | { kind: "float"; v: number }) & { typeName?: string };
+export type Numeric = Real | { kind: "complex"; re: Real; im: Real; typeName?: string };
 export const integer = (v: bigint): Real => ({ kind: "int", v });
 export const floating = (v: number): Real => ({ kind: "float", v });
 const fail = (message: string): never => { throw new APNError("runtime", message); };

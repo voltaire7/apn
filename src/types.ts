@@ -10,6 +10,8 @@ export interface DefClause { params: Pattern[]; body: Expr; }
 
 // Runtime values (dynamically typed, like JS)
 export type Value =
+    | { kind: "type"; name: string }
+    | { kind: "hashmap"; entries: Map<string, [Value, Value]> }
     | Numeric
     | { kind: "rationalRange"; lo: Real; step: Real; hi: Real | null }
     | { kind: "bool"; v: boolean }
@@ -48,7 +50,9 @@ export function rawString(v: Value): string {
 
 export function valueToString(v: Value): string {
     switch (v.kind) {
-        case "int": case "float": case "rational": case "complex": return numberText(v);
+        case "int": case "float": case "rational": case "complex": return (v.typeName ? v.typeName + " " : "") + numberText(v);
+        case "type": return v.name;
+        case "hashmap": return `HashMap [${[...v.entries.values()].map(([k, x]) => `[${valueToString(k)}, ${valueToString(x)}]`).join(", ")}]`;
         case "rationalRange": return "<rational range>";
         case "bool": return String(v.v);
         case "string": return `"${v.v}"`;

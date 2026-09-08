@@ -137,7 +137,8 @@ Numbers follow a Scheme-style tower: exact arbitrary-precision integers and
 reduced rational fractions, inexact binary64 reals, and complex numbers whose
 components are real numbers. Exactness is separate from mathematical type:
 `isInteger 3.0` is true and `isExact 3.0` is false. Arithmetic with an inexact
-operand produces an inexact result. Exact `/` returns reduced fractions;
+operand produces an inexact result only when conversion of the exact operand
+is lossless. Otherwise use `cast Float` or `inexact` explicitly. Exact `/` returns reduced fractions;
 `quotient` truncates integer division. `%` and `remainder` follow the dividend's
 sign; `modulo` follows the divisor's sign. Exact zero division raises an error;
 inexact division can produce IEEE infinities and NaNs.
@@ -272,3 +273,70 @@ Use `makePolar` for computed radius/angle expressions.
 An exact zero polar angle returns the radius unchanged, avoiding floating-point
 conversion: `2@0` is exact `2`, and `makePolar (1/3) 0` is exact `1/3`.
 An inexact radius stays inexact; an inexact angle still uses trigonometry.
+
+## First-class types
+
+`Int` and `UInt` are arbitrary-precision signed/unsigned integers. Fixed-width
+constructors are `Int8`, `Int16`, `Int32`, `Int64`, `Int128` and matching `UInt`
+variants. `Float` (`Float64` is an alias) uses binary64; `Float32` uses binary32.
+`Fraction` holds an exact rational, `Complex` any numeric complex value, and
+`ComplexExact` an exact one. Constructors are first-class functions, e.g.
+`map Int [1,2]`. Constructed values print their type: `Int32 123`.
+
+Constructors only accept lossless conversions. `Int 3.0` works; `Int 3.7` errors.
+`Float32 .5` works; `Float32 .1` needs `cast Float32 .1`. The explicit form is
+`cast Type value` or `value $ cast Type`. Casting to integers truncates toward
+zero. Out-of-range integers always error rather than wrap, and nonzero imaginary
+parts cannot be silently discarded. Bare numeric literals still work.
+
+Arithmetic between values of the same concrete type retains that type and
+checks integer overflow. An untyped operand is converted losslessly to the
+other operand's type when possible. Two differing explicit types try the broader
+existing operand type first, using value-based lossless conversion. If neither
+fits, arithmetic uses the numeric tower; exact-to-inexact conversion must still
+be lossless. Integer `/` can produce a typed `Fraction`. Float32 arithmetic
+rounds each result to binary32. Numeric native functions return their natural
+numeric result types; use a constructor to impose a specific width on them.
+
+`typeOf value` returns a type descriptor. `isType Type value` tests membership
+without casting. `Number`, `Real`, `Integer`, `Exact`, and `Inexact` are aggregate
+numeric guards. For example `isType Number (Int32 1)` is true.
+
+Typed overloads use constructor patterns:
+
+```apn
+add (Int x) (Int y) = x + y
+add (Float x) (Float y) = x + y
+add (Number x) (Number y) = x + y
+```
+
+Literal matches outrank exact concrete type matches, which outrank aggregate
+matches, which outrank lossless conversion matches. Ties retain source order.
+This ranking applies to functions with typed clauses; ordinary pattern functions
+keep source order. Arguments bound by concrete type patterns retain the type.
+Repeated variable names assert equality, so `(Number x) (Number x)` is not a
+catch-all for two different numbers.
+
+`100 * _ -> Int 0` repeats the typed value using the existing function iteration
+overload. Two numeric operands always multiply: `100 * Int 0` returns `Int 0`
+and `Int 3 * Int 2` returns `Int 6`.
+
+## HashMap
+
+`HashMap [["x", 123]]` constructs from an association list; `HashMap ["x": 123]`
+constructs from a record. Empty construction is `HashMap []`. Keys may be finite
+numbers, strings, chars, booleans, or unit. Numerically equal keys share an entry
+regardless of exactness or numeric type; distinct strings/chars stay distinct.
+Duplicate keys keep the last value. Insertion order is preserved for traversal.
+
+`HashMap [] $ insert ["x": 123]` returns a map containing x. `insert` accepts a
+record or association list; `remove key map` returns a map without the key.
+Updates preserve the old map. `lookup key map` or `map key` retrieves a value,
+raising an error when absent; use `has key map` when absence is expected.
+`keys`, `values`, `pairs`, `length`, and `null` operate on maps. Association-list
+values stay lazy; keys are evaluated at construction. Record inputs follow the
+existing record evaluation rules. `(HashMap m)` is a type pattern.
+
+Type constructors also work directly with function iteration: `100 * Int`
+returns `Int 0` through `Int 99`; `[1..100] * Int` returns `Int 1` through
+`Int 100`. This differs from `100 * Int 0`, which multiplies and returns `Int 0`.

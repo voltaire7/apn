@@ -1,3 +1,4 @@
+import { TYPE_NAMES, NUMERIC_TYPES, numericType, matchesType, castNumeric, implicitOperands, typedArithmetic, numericHash } from "./type-system.ts";
 import { parseNumberText, isNumeric, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import type { Expr, Pattern, TopLevel, Alt } from "./ast.ts";
@@ -14,6 +15,7 @@ const STACK_LIMIT = 200; // below V8's own JS stack, so APN errors first
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
+    ["cast", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
@@ -29,6 +31,7 @@ export class Interpreter {
     sourceDir: string = ".";
 
     constructor() {
+        for (const name of TYPE_NAMES) this.env.setLocal(name, { kind: "type", name });
         for (const [name, arity] of NATIVES) {
             this.env.setLocal(name, { kind: "native", name, arity, applied: [] });
         }
@@ -338,7 +341,7 @@ export class Interpreter {
                     const v = this.demand(this.eval(e.e));
                     if (e.op === "neg") {
                         if (!isNumeric(v)) throw new APNError("runtime", "negation expects a number");
-                        r = negate(v);
+                        r = v.typeName ? castNumeric(v.typeName, negate(v)) : negate(v);
                     } else {
                         r = v.kind === "bool" ? mkBool(!v.v) : { kind: "unit" };
                     }
@@ -523,16 +526,16 @@ export class Interpreter {
         const bad = (): never => {
             throw new APNError("runtime", `cannot apply '${e.op}' to ${l.kind} and ${r.kind}`);
         };
-        if (isNumeric(l) && isNumeric(r) && ["+", "-", "*", "/", "%"].includes(e.op)) return arithmetic(e.op, l, r);
+        if (isNumeric(l) && isNumeric(r) && ["+", "-", "*", "/", "%"].includes(e.op)) return typedArithmetic(e.op, l, r);
         switch (e.op) {
             case "+":
                 if (l.kind === "string" && r.kind === "string") return mkStr(l.v + r.v);
                 return bad();
             case "*":
-                if (r.kind === "closure" || r.kind === "clauseFn" || r.kind === "native") return this.iterate(l, r);
+                if (r.kind === "closure" || r.kind === "clauseFn" || r.kind === "native" || r.kind === "type") return this.iterate(l, r);
                 return bad();
             case "-":
-                if ((l.kind === "closure" || l.kind === "clauseFn" || l.kind === "native") && isNumeric(r)) {
+                if ((l.kind === "closure" || l.kind === "clauseFn" || l.kind === "native" || l.kind === "type") && isNumeric(r)) {
                     return this.apply(l, negate(r));
                 }
                 return bad();
@@ -567,6 +570,9 @@ export class Interpreter {
             }
         }
         if (isNumeric(a) && isNumeric(b)) return equalNumbers(a, b);
+        if (a.kind === "hashmap" && b.kind === "hashmap") {
+            return a.entries.size === b.entries.size && [...a.entries].every(([key, [, value]]) => b.entries.has(key) && this.equals(value, b.entries.get(key)![1]));
+        }
         if (a.kind !== b.kind) return false;
         switch (a.kind) {
             case "int": return a.v === (b as any).v;
@@ -574,6 +580,7 @@ export class Interpreter {
             case "bool": return a.v === (b as any).v;
             case "string": return a.v === (b as any).v;
             case "char": return a.v === (b as any).v;
+            case "type": return b.kind === "type" && a.name === b.name;
             case "unit": return true;
             case "list": {
                 const bl = b as any;
@@ -602,6 +609,13 @@ export class Interpreter {
         // A lazy 0-param def used as a function (`f = g; f 1`) is a thunk — run it.
         f = this.force(f);
         switch (f.kind) {
+            case "type": {
+                const value = this.demand(arg);
+                if (f.name === "HashMap") return this.makeHashMap(value);
+                if (!isNumeric(value)) throw new APNError("runtime", `${f.name} expects a number`);
+                return castNumeric(f.name, value);
+            }
+            case "hashmap": return this.mapLookup(f, this.demand(arg));
             case "closure": {
                 if (f.params.length === 0) {
                     // a 0-arg action APPLIED to arguments: run it, then hand the
@@ -631,7 +645,18 @@ export class Interpreter {
                 if (raw.length < f.arity) return { ...f, applied: raw };
                 // Patterns demand only the structure they inspect. Shared
                 // argument thunks prevent repeated effects across fallthrough.
-                for (const clause of f.clauses) {
+                const hasTypedClauses = f.clauses.some((clause) => clause.params.some((p) => p.p === "constr" && TYPE_NAMES.includes(p.tag)));
+                const ranked = f.clauses.map((clause, index) => ({ clause, index, score: clause.params.reduce((score, pattern, i) => {
+                    if (["int", "bool", "string"].includes(pattern.p)) return score + 40;
+                    if (pattern.p !== "constr" || !TYPE_NAMES.includes(pattern.tag)) return score;
+                    const value = this.demand(raw[i]);
+                    if (pattern.tag === "HashMap") return score + (value.kind === "hashmap" ? 30 : -1000);
+                    if (!isNumeric(value)) return score - 1000;
+                    if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(pattern.tag)) return score + (matchesType(pattern.tag, value) ? 10 : -1000);
+                    if (matchesType(pattern.tag, value)) return score + 30;
+                    try { castNumeric(pattern.tag, value); return score + 1; } catch { return score - 1000; }
+                }, 0) })).sort((a, b) => b.score - a.score || a.index - b.index);
+                for (const { clause } of ranked) {
                     const binds = new Map<string, Value>();
                     let ok = true;
                     const args = raw;
@@ -860,7 +885,10 @@ export class Interpreter {
         if (ancestors.has(v)) throw new APNError("runtime", "cannot display a cyclic nested value");
         ancestors.add(v);
         try {
-            if (this.isList(v)) {
+            if (v.kind === "hashmap") {
+                emit("HashMap", "type"); emit(" ");
+                this.render(mkList([...v.entries.values()].map(([key, value]) => mkList([key, value]))), emit, false, ancestors);
+            } else if (this.isList(v)) {
                 emit("[");
                 let first = true;
                 for (const item of this.elements(v)) {
@@ -911,9 +939,79 @@ export class Interpreter {
         else if (buffer) Deno.stdout.writeSync(enc.encode(buffer));
     }
 
+    hashKey(value: Value): string {
+        value = this.demand(value);
+        if (isNumeric(value)) return "number:" + numericHash(value);
+        if (value.kind === "string" || value.kind === "char" || value.kind === "bool") return value.kind + ":" + String(value.v);
+        if (value.kind === "unit") return "unit";
+        throw new APNError("runtime", "HashMap keys must be finite numbers, strings, chars, booleans, or unit");
+    }
+
+    associations(value: Value): Array<[Value, Value]> {
+        if (value.kind === "hashmap") return [...value.entries.values()];
+        if (value.kind === "record") return value.v.map(([key, item]) => [mkStr(key), item]);
+        if (!this.isList(value)) throw new APNError("runtime", "HashMap expects a record or association list");
+        const items = this.items(value);
+        return items.map((item) => {
+            const pair = this.demand(item);
+            if (!this.isList(pair)) throw new APNError("runtime", "association entries must be [key, value] pairs");
+            const cells = this.items(pair);
+            if (cells.length !== 2) throw new APNError("runtime", "association entries must have exactly two elements");
+            return [this.demand(cells[0]), cells[1]];
+        });
+    }
+
+    makeHashMap(value: Value): Value {
+        const entries = new Map<string, [Value, Value]>();
+        for (const [key, item] of this.associations(value)) entries.set(this.hashKey(key), [key, item]);
+        return { kind: "hashmap", entries };
+    }
+
+    mapLookup(map: Extract<Value, { kind: "hashmap" }>, key: Value): Value {
+        const entry = map.entries.get(this.hashKey(key));
+        if (!entry) throw new APNError("runtime", "HashMap key not found");
+        return entry[1];
+    }
+
     callNative(name: string, argsIn: Value[], tag?: string): Value {
+        if (name === "cast") {
+            const target = this.demand(argsIn[0]), value = this.demand(argsIn[1]);
+            if (target.kind !== "type") throw new APNError("runtime", "cast expects a type as its first argument");
+            if (target.name === "HashMap") return this.makeHashMap(value);
+            if (!isNumeric(value)) throw new APNError("runtime", "numeric cast expects a number");
+            return castNumeric(target.name, value, true);
+        }
+        if (name === "typeOf") {
+            const value = this.demand(argsIn[0]);
+            return { kind: "type", name: isNumeric(value) ? numericType(value) : value.kind === "hashmap" ? "HashMap" : value.kind };
+        }
+        if (name === "isType") {
+            const target = this.demand(argsIn[0]), value = this.demand(argsIn[1]);
+            if (target.kind !== "type") throw new APNError("runtime", "isType expects a type");
+            return mkBool(isNumeric(value) ? matchesType(target.name, value) : target.name === "HashMap" && value.kind === "hashmap");
+        }
+        if (["insert", "lookup", "has", "remove"].includes(name)) {
+            const value = this.demand(argsIn[0]), map = this.demand(argsIn[1]);
+            if (map.kind !== "hashmap") throw new APNError("runtime", `${name} expects a HashMap`);
+            if (name === "lookup") return this.mapLookup(map, value);
+            if (name === "has") return mkBool(map.entries.has(this.hashKey(value)));
+            const entries = new Map(map.entries);
+            if (name === "remove") entries.delete(this.hashKey(value));
+            else for (const [key, item] of this.associations(value)) entries.set(this.hashKey(key), [key, item]);
+            return { kind: "hashmap", entries };
+        }
+        if (name === "keys" || name === "values") {
+            const map = this.demand(argsIn[0]);
+            if (map.kind !== "hashmap") throw new APNError("runtime", `${name} expects a HashMap`);
+            return mkList([...map.entries.values()].map((entry) => entry[name === "keys" ? 0 : 1]));
+        }
         if (NUMBER_NATIVES.some(([n]) => n === name)) {
-            const result = numericNative(name, argsIn.map((x) => this.demand(x)));
+            let args = argsIn.map((x) => this.demand(x));
+            if (args.length === 2 && isNumeric(args[0]) && isNumeric(args[1]) &&
+                ["min", "max", "gcd", "lcm", "quotient", "remainder", "modulo", "makeRectangular"].includes(name)) {
+                args = implicitOperands(args[0], args[1]);
+            }
+            const result = numericNative(name, args);
             return typeof result === "boolean" ? mkBool(result) : result;
         }
         // debug forces without demanding a returned action; quote/toAST inspect
@@ -999,13 +1097,15 @@ export class Interpreter {
                 if (cell === null) throw new APNError("runtime", "tail of empty list");
                 return cell.tail;
             }
-            case "length": {
+            case "length":
+                if (a.kind === "hashmap") return mkInt(a.entries.size); {
                 if (a.kind === "string") return mkInt(a.v.length);
                 let n = 0n;
                 for (const _ of this.elements(a)) n++;
                 return mkInt(n);
             }
             case "null":
+                if (a.kind === "hashmap") return mkBool(a.entries.size === 0);
                 if (a.kind === "string") return mkBool(a.v.length === 0);
                 return mkBool(this.cell(a) === null);
             case "enumerate":
@@ -1020,6 +1120,7 @@ export class Interpreter {
                 if (a.kind !== "int") throw new Error("Runtime: intToString expects int");
                 return mkStr(String(a.v));
             case "pairs":
+                if (a.kind === "hashmap") return mkList([...a.entries.values()].map(([key, value]) => mkList([key, value])));
                 if (a.kind !== "record") throw new Error("Runtime: pairs expects a record");
                 return mkList(a.v.map(([k, v]) => mkList([mkStr(k), v])));
             case "format": {
@@ -1154,7 +1255,10 @@ export class Interpreter {
 
     matchPattern(p: Pattern, v: Value, binds: Map<string, Value>): boolean {
         if (p.p === "wildcard") return true;
-        if (p.p === "var") { binds.set(p.name, v); return true; }
+        if (p.p === "var") {
+            if (binds.has(p.name)) return this.equals(binds.get(p.name)!, v);
+            binds.set(p.name, v); return true;
+        }
         v = this.demand(v);
         switch (p.p) {
             case "int": return isNumeric(v) && equalNumbers(v, integer(p.v));
@@ -1207,6 +1311,14 @@ export class Interpreter {
                 return this.matchPattern(p.tail, cell.tail, nm) && this.mergeBinds(binds, nm);
             }
             case "constr": {
+                if (TYPE_NAMES.includes(p.tag)) {
+                    if (p.args.length !== 1) return false;
+                    if (p.tag === "HashMap") return v.kind === "hashmap" && this.matchPattern(p.args[0], v, binds);
+                    if (!isNumeric(v)) return false;
+                    let converted: Value;
+                    try { converted = castNumeric(p.tag, v); } catch { return false; }
+                    return this.matchPattern(p.args[0], converted, binds);
+                }
                 if (v.kind !== "variant" || v.tag !== p.tag) return false;
                 if (v.v.length !== p.args.length) return false;
                 for (let i = 0; i < p.args.length; i++) {

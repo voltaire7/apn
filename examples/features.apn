@@ -752,6 +752,41 @@ print (isExact 2@0) # => true
 print (isExact 2@3) # => false
 print (2@3) # => -1.9799849932008908+0.2822400161197344i
 
+# First-class checked numeric types and overloads.
+print (take 3 (100 * Int))           # => [Int 0, Int 1, Int 2]
+print (take 3 ([1..100] * Int))      # => [Int 1, Int 2, Int 3]
+print (100 * Int 0)                  # => Int 0
+print (Int 123)                      # => Int 123
+print (UInt32 4294967295)             # => UInt32 4294967295
+print (Float32 .5)                   # => Float32 0.5
+print (Fraction (1/3))               # => Fraction 1/3
+print (3.7 $ cast Int)               # => Int 3
+print (cast Float32 .1)              # => Float32 0.10000000149011612
+print (typeOf (Int32 1))             # => Int32
+print (isType Number (Int32 1))      # => true
+print (take 3 (100 * _ -> Int 0))         # => [Int 0, Int 0, Int 0]
+typedAdd (Int x) (Int y) = x + y
+typedAdd (Float x) (Float y) = x + y
+typedAdd (Number x) (Number y) = x + y
+print (typedAdd (Int 2) (Int 3))      # => Int 5
+print (typedAdd (Float 2) (Float 3))  # => Float 5.0
+print (typedAdd (1/3) (1/6))          # => 1/2
+# Int32 2147483648, Float32 .1, and UInt (-1) are checked errors.
+
+# Persistent HashMap, accepting records or association lists.
+typedMap = HashMap [] $ insert ["x": 123]
+print typedMap                      # => HashMap [["x", 123]]
+print (typedMap "x")                 # => 123
+typedMapNext = typedMap $ insert ["y": 456]
+print (has "y" typedMap)             # => false
+print (has "y" typedMapNext)         # => true
+print (keys typedMapNext)            # => ["x", "y"]
+print (values typedMapNext)          # => [123, 456]
+print (pairs typedMapNext)           # => [["x", 123], ["y", 456]]
+print (length typedMapNext)          # => 2
+print (typedMapNext $ remove "x")    # => HashMap [["y", 456]]
+print (HashMap [["a", 1], ["b", 2]]) # => HashMap [["a", 1], ["b", 2]]
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

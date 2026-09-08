@@ -98,7 +98,8 @@ intentional evaluation change.
 
 - **Numbers**: `src/numbers.ts` owns the Scheme-style numeric tower. Integers
   and reduced rationals are exact (`bigint`); floats are binary64 and inexact;
-  complex numbers have real numeric components. Mixed arithmetic is inexact.
+  complex numbers have real numeric components. Mixed arithmetic is inexact
+  only when exact operands can convert without loss; otherwise require cast.
   `/` preserves exact fractions; `quotient` truncates; `%` is `remainder`.
   Exact division by zero errors; inexact division follows IEEE infinity/NaN.
   Numeric equality/order compare exact finite values without first rounding
@@ -437,3 +438,25 @@ Float ranges promote mixed bounds/steps to floats; all-integer ranges stay exact
 `[0,0.5..100]` has 201 elements. Float-range cells use origin + index * step,
 a bounded endpoint tolerance, and a no-progress guard. Float ranges must work
 through the same lazy list consumers, indexing, and streaming as integer ranges.
+
+## First-class types and HashMap
+
+`src/type-system.ts` defines numeric constructors, lossless conversions and
+arithmetic promotion. Numeric values may carry `typeName`; preserve it for
+checked arithmetic and print it. Bare literals retain their natural numeric
+kind and unadorned display. `cast Type value` explicitly allows float rounding
+and fractional truncation, but NEVER integer wraparound or imaginary-part loss.
+Same fixed-width arithmetic checks overflow. Mixed typed arithmetic tries an
+existing broader operand type losslessly, then falls back to the numeric tower.
+`Number`, `Real`, `Integer`, `Exact`, `Inexact` are aggregate type guards.
+Typed function clauses prefer literal/exact concrete matches, then aggregates,
+then lossless conversions. Ties retain source order. Untyped clauses retain
+source order. Repeated pattern names require equal values.
+`n * _ -> typedValue` repeats using the existing function iteration overload.
+Numeric operands always multiply: `100 * Int 0` returns `Int 0`.
+`HashMap` stores immutable association snapshots, with mutable JS Map used only
+inside construction of a new snapshot. Keys are scalar immutable values;
+numeric keys use exact normalized equality regardless of representation/type.
+Association-list values remain lazy. Record arguments retain existing record
+construction semantics. `insert`/`remove` return new maps. Iteration order is
+insertion order; replacing a key retains its position. Missing lookup errors.

@@ -184,6 +184,8 @@ const A = {
 const paint = (code: string, s: string) => code + s + A.reset;
 
 function colorNumber(text: string): string {
+    const typed = text.match(/^([A-Z][A-Za-z0-9]*) (.*)$/);
+    if (typed) return paint(A.cyan, typed[1]) + " " + colorNumber(typed[2]);
     const radix = text.match(/^(0)([xXbBoO])(.+)$/);
     if (radix) return paint(A.yellow, radix[1]) + paint(A.operator, radix[2]) + paint(A.yellow, radix[3]);
     return text.split(/([+\-/]|[eE](?=[+-]?\d)|i$)/).filter(Boolean).map((part) =>
@@ -196,7 +198,7 @@ export function renderColored(interp: Interpreter, value: Value, emit: (s: strin
         if (kind === "int" || kind === "float" || kind === "rational" || kind === "complex") { emit(colorNumber(text)); return; }
         const color = kind === "string" || kind === "char" ? A.green
             : kind === "bool" ? A.magenta
-            : kind === "variant" ? A.cyan : A.gray;
+            : kind === "variant" || kind === "type" ? A.cyan : A.gray;
         emit(paint(color, text));
     });
 }
@@ -360,6 +362,12 @@ function helpText(): string {
         `  indentation: strict 4-space layout (exactly +4 per level)`,
         `  [1,2,3] * x -> print x      (seq * fn iterates; int * fn counts)`,
         `  recursion, higher-order fns, records, variants`,
+        `  Int/UInt, Int8..Int128/UInt8..UInt128, Float/Float32, Fraction, Complex`,
+        `  Int32 123; cast Int 3.7; value $ cast Float32; typeOf value`,
+        `  f (Int x) = ...; f (Number x) = ... (typed overloads)`,
+        `  100 * _ -> Int 0 repeats; 100 * Int 0 multiplies`,
+        `  HashMap [] $ insert ["x": 123]; lookup "x" m; m "x"`,
+        `  has/remove key map; keys/values/pairs map; map updates are persistent`,
         `  sqrt -1 => 0+1i (function - number applies it to the negated number)`,
         `  exact integers/rationals: 0xFF, 0b1010, 0o17, 1 / 3; floats: .1, 1e3`,
         `  1 + 2.0 => 3.0; exact/inexact convert; quotient truncates division`,
@@ -920,7 +928,7 @@ async function replTTY(): Promise<void> {
             await setTtyCooked(savedCooked);
             try {
                 const val = runSourceValue(src, interp, lastIsBinding(src) || lastIsPrintCall(src));
-                if (val !== null && (interp.isList(val) || val.kind === "variant" || val.kind === "record")) {
+                if (val !== null && (interp.isList(val) || val.kind === "variant" || val.kind === "record" || val.kind === "hashmap")) {
                     renderColored(interp, val, (x) => ed.emit(x));
                     ed.emit("\n");
                 } else if (val !== null) ed.print(showValue(val));
