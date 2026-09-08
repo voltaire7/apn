@@ -15,7 +15,7 @@ export const NATIVES: Array<[string, number]> = [
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
-    ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1],
+    ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1],
     ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1],
 ];
 
@@ -57,7 +57,7 @@ export class Interpreter {
                 continue;
             }
             // a bare expression statement: 0-arg functions and thunks RUN here
-            last = this.force(this.runStmt(this.eval(tl.value)));
+            last = this.runStmt(this.eval(tl.value));
         }
         return last;
     }
@@ -97,8 +97,8 @@ export class Interpreter {
             return clo;
         }
         // Otherwise it's a lazy value binding: a THUNK. The body is not run at
-        // definition time. force caches only its initial thunk, so argument
-        // wrappers can cause this binding to be recomputed (SEMANTICS.md).
+        // definition time. Forcing memoizes the outer value across aliases and
+        // arguments; lazy container components retain their own thunks.
         const thunk: Value = { kind: "thunk", body: value, env: this.env, value: undefined };
         this.env.setLocal(name, thunk);
         return thunk;
@@ -156,6 +156,8 @@ export class Interpreter {
     // A concrete value back to a literal expression (for step's evaluation
     // levels): lists/records rebuild structurally, so  [1 + 2]  steps to  [3].
     valueToExpr(v: Value): Expr {
+        v = this.demand(v);
+        if (this.isList(v)) return { t: "list", v: this.items(v).map((x) => this.valueToExpr(x)) };
         switch (v.kind) {
             case "int": return { t: "int", v: v.v };
             case "float": return { t: "float", v: v.v };
@@ -219,34 +221,16 @@ export class Interpreter {
 
 
 
-    // STREAM an infinite range: pieces through `emit`, element by element —
-    // the list is printed AS IT IS CONSTRUCTED (Ctrl+C breaks it).
-    streamRange(v: Value, emit: (s: string) => void): void {
-        if (v.kind !== "range") return;
-        emit("[");
-        let first = true;
-        for (let i = v.lo; ; i += v.step) {
-            checkInterrupt();
-            if (!first) emit(", ");
-            first = false;
-            emit(String(i));
-        }
-    }
-
     // `*` iteration: seq * fn — applies fn over the sequence and returns the
     // results. seq is a list (elements), a record (entries as [field, value]
     // lists), or an int n (0..n-1; a negative n counts 0, -1, ... n+1).
     iterate(seq: Value, f: Value): Value {
         const out: Value[] = [];
-        if (seq.kind === "list") {
-            for (const x of seq.v) out.push(this.apply(f, x));
+        if (this.isList(seq)) {
+            for (const x of this.elements(seq)) out.push(this.demand(this.apply(f, x)));
         } else if (seq.kind === "record") {
             for (const [k, x] of seq.v) out.push(this.apply(f, mkList([mkStr(k), x])));
-        } else if (seq.kind === "range") {
-            for (let i = seq.lo; seq.hi === null || (seq.step > 0 ? i <= seq.hi : i >= seq.hi); i += seq.step) {
-                checkInterrupt();
-                out.push(this.apply(f, mkInt(i)));
-            }
+
         } else if (seq.kind === "int") {
             const n = Math.abs(seq.v);
             for (let i = 0; i < n; i++) out.push(this.apply(f, mkInt(seq.v >= 0 ? i : -i)));
@@ -271,231 +255,222 @@ export class Interpreter {
         }
     }
 
-    // DEMAND a real value: run 0-arg functions and force thunks until something
-    // concrete emerges (a lazy argument may unwrap to an action that returns
-    // another action, e.g. a block-local `smaller = filter ...` passed to a
-    // pattern clause), then force containers so pattern matching sees a list.
-    // Demand contexts: operands, record targets, scrutinees, pattern matching.
-    // debug forces instead, without calling a returned zero-argument action.
+    // Demand only the outer value. Actions remain repeatable, while argument
+    // thunks share the result of an action within a call.
     demand(v: Value): Value {
-        for (;;) {
+        const original = v;
+        v = this.force(v);
+        while (v.kind === "closure" && v.params.length === 0) {
             checkInterrupt();
-            if (v.kind === "closure" && v.params.length === 0) {
-                v = this.callBlockFn(v);
-            } else if (v.kind === "thunk") {
-                v = this.force(v);
-            } else {
-                return this.force(v);
-            }
+            v = this.force(this.callBlockFn(v));
         }
+        if (original.kind === "thunk" || original.kind === "deferred") original.value = v;
+        return v;
     }
 
-    // STATEMENT position: a 0-arg function RUNS (the bare name is the call),
-    // and a thunk re-runs UNCACHED (every mention acts). The loop chains:
-    //   halt = (load "core.txt").halt ; halt   runs load, then the field's
-    // action, then exits.  x = x ; x   re-evaluates forever (true divergence).
     runStmt(v: Value): Value {
-        for (;;) {
-            checkInterrupt();
-            if (v.kind === "closure" && v.params.length === 0) {
-                v = this.callBlockFn(v);
-            } else if (v.kind === "thunk") {
-                const old = this.env;
-                this.env = v.env;
-                try {
-                    v = this.eval(v.body);
-                } finally {
-                    this.env = old;
-                }
-            } else {
-                return v;
-            }
-        }
+        return this.demand(v);
     }
 
     eval(e: Expr): Value {
-        if (++this.stack > STACK_LIMIT) {
-            throw new APNError("runtime", "call stack overflow", {
-                hint: "unbounded recursion? — or a self-referential cons tail (x = 1:x, fibs = 0:1:fibs ...) which needs LAZY tails, not supported yet",
-            });
-        }
-        let r: Value;
-        switch (e.t) {
-            case "int": r = mkInt(e.v); break;
-            case "float": r = { kind: "float", v: e.v }; break;
-            case "bool": r = mkBool(e.v); break;
-            case "string": r = mkStr(e.v); break;
-            case "char": r = { kind: "char", v: e.v }; break;
-            case "unit": r = { kind: "unit" }; break;
-            case "var": {
-                const v = this.env.get(e.name);
-                if (v === undefined) {
-                    const near = didYouMean(e.name, envNames(this.env));
-                    throw new APNError("runtime", `unbound variable '${e.name}'`, {
-                        hint: near ? `did you mean '${near}'?` : undefined,
-                    });
-                }
-                r = v;
-                break;
+        this.stack++;
+        try {
+            if (this.stack > STACK_LIMIT) {
+                throw new APNError("runtime", "call stack overflow", {
+                    hint: "unbounded strict recursion? Use a lazy cons tail to produce lists incrementally.",
+                });
             }
-            case "binop": r = this.evalBinop(e); break;
-            case "unop": {
-                const v = this.demand(this.eval(e.e));
-                if (e.op === "neg") {
-                    r = (v.kind === "int" || v.kind === "float")
-                        ? { kind: v.kind === "int" ? "int" : "float", v: -v.v } as Value
-                        : { kind: "unit" };
-                } else {
-                    r = v.kind === "bool" ? mkBool(!v.v) : { kind: "unit" };
-                }
-                break;
-            }
-            case "app":
-                // ARGUMENTS ARE LAZY (Haskell): the argument is wrapped, unevaluated,
-                // and forced/ran only where a real value is needed
-                r = this.apply(this.eval(e.f), { kind: "thunk", body: e.a, env: this.env });
-                break;
-            case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
-            case "ternary": {
-                const c = this.demand(this.eval(e.cond));
-                r = (c.kind === "bool" && c.v) ? this.eval(e.then) : this.eval(e.els);
-                break;
-            }
-            case "match": r = this.evalMatch(this.demand(this.eval(e.scrut)), e.alts); break;
-            case "range": r = { kind: "range", lo: e.lo, step: e.step, hi: e.hi }; break;
-            case "list": r = { kind: "lazyList", exprs: e.v, env: this.env }; break;
-            case "record": r = { kind: "record", v: e.v.map(([k, x]) => [k, this.eval(x)] as [string, Value]) }; break;
-            case "recordAccess": {
-                let rec = this.callBlockFn(this.eval(e.rec));
-                // `core = load "..."` is a thunk; get the module WITHOUT forcing its
-                // fields (a module may contain `halt = exit 0`).
-                if (rec.kind === "thunk") rec = this.unpackThunk(rec);
-                let field: string;
-                if (typeof e.field === "string") {
-                    field = e.field;
-                } else {
-                    const kv = this.force(this.eval(e.field));
-                    if (kv.kind !== "string" && kv.kind !== "int" && kv.kind !== "float") {
-                        throw new Error("Runtime: dynamic field (parenthesized key) must be a string or number");
+            let r: Value;
+            switch (e.t) {
+                case "int": r = mkInt(e.v); break;
+                case "float": r = { kind: "float", v: e.v }; break;
+                case "bool": r = mkBool(e.v); break;
+                case "string": r = mkStr(e.v); break;
+                case "char": r = { kind: "char", v: e.v }; break;
+                case "unit": r = { kind: "unit" }; break;
+                case "var": {
+                    const v = this.env.get(e.name);
+                    if (v === undefined) {
+                        const near = didYouMean(e.name, envNames(this.env));
+                        throw new APNError("runtime", `unbound variable '${e.name}'`, {
+                            hint: near ? `did you mean '${near}'?` : undefined,
+                        });
                     }
-                    field = kv.kind === "string" ? kv.v : String(kv.v);
+                    r = v;
+                    break;
                 }
-                if (rec.kind !== "record") throw new Error("record access on non-record");
-                const f = rec.v.find(([k]) => k === field);
-                if (!f) {
-                    const near = didYouMean(field, rec.v.map(([k]) => k));
-                    throw new APNError("runtime", `record has no field '${field}'`, {
-                        hint: near ? `did you mean '${near}'?` : undefined,
-                    });
-                }
-                r = f[1];
-                break;
-            }
-            case "pluck": {
-                let rec = this.callBlockFn(this.eval(e.rec));
-                if (rec.kind === "thunk") rec = this.unpackThunk(rec);
-                if (rec.kind !== "record") throw new Error("pluck on non-record");
-                const byKey = new Map(rec.v);
-                if (e.entries.every((x) => typeof x === "string")) {
-                    const out: Value[] = [];
-                    for (const n of e.entries as string[]) {
-                        const v = byKey.get(n);
-                        if (v === undefined) {
-                            const near = didYouMean(n, rec.v.map(([k]) => k));
-                            throw new APNError("runtime", `record has no field '${n}'`, {
-                                hint: near ? `did you mean '${near}'?` : undefined,
-                            });
-                        }
-                        out.push(v);
+                case "binop": r = this.evalBinop(e); break;
+                case "unop": {
+                    const v = this.demand(this.eval(e.e));
+                    if (e.op === "neg") {
+                        r = (v.kind === "int" || v.kind === "float")
+                            ? { kind: v.kind === "int" ? "int" : "float", v: -v.v } as Value
+                            : { kind: "unit" };
+                    } else {
+                        r = v.kind === "bool" ? mkBool(!v.v) : { kind: "unit" };
                     }
-                    r = { kind: "list", v: out };
-                } else {
-                    const out: Array<[string, Value]> = [];
-                    for (const [src, dst] of e.entries as Array<[string, string]>) {
-                        const v = byKey.get(src);
-                        if (v === undefined) {
-                            const near = didYouMean(src, rec.v.map(([k]) => k));
-                            throw new APNError("runtime", `record has no field '${src}'`, {
-                                hint: near ? `did you mean '${near}'?` : undefined,
-                            });
+                    break;
+                }
+                case "app":
+                    // ARGUMENTS ARE LAZY (Haskell): the argument is wrapped, unevaluated,
+                    // and forced/ran only where a real value is needed
+                    r = this.apply(this.eval(e.f), { kind: "thunk", body: e.a, env: this.env });
+                    break;
+                case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
+                case "ternary": {
+                    const c = this.demand(this.eval(e.cond));
+                    r = (c.kind === "bool" && c.v) ? this.eval(e.then) : this.eval(e.els);
+                    break;
+                }
+                case "match": r = this.evalMatch(this.delay(e.scrut), e.alts); break;
+                case "range": r = { kind: "range", lo: e.lo, step: e.step, hi: e.hi }; break;
+                case "list": r = { kind: "lazyList", exprs: e.v, env: this.env }; break;
+                case "record": r = { kind: "record", v: e.v.map(([k, x]) => [k, this.eval(x)] as [string, Value]) }; break;
+                case "recordAccess": {
+                    let rec = this.callBlockFn(this.eval(e.rec));
+                    // `core = load "..."` is a thunk; get the module WITHOUT forcing its
+                    // fields (a module may contain `halt = exit 0`).
+                    if (rec.kind === "thunk") rec = this.unpackThunk(rec);
+                    let field: string;
+                    if (typeof e.field === "string") {
+                        field = e.field;
+                    } else {
+                        const kv = this.force(this.eval(e.field));
+                        if (kv.kind !== "string" && kv.kind !== "int" && kv.kind !== "float") {
+                            throw new Error("Runtime: dynamic field (parenthesized key) must be a string or number");
                         }
-                        out.push([dst, v]);
+                        field = kv.kind === "string" ? kv.v : String(kv.v);
+                    }
+                    if (rec.kind !== "record") throw new Error("record access on non-record");
+                    const f = rec.v.find(([k]) => k === field);
+                    if (!f) {
+                        const near = didYouMean(field, rec.v.map(([k]) => k));
+                        throw new APNError("runtime", `record has no field '${field}'`, {
+                            hint: near ? `did you mean '${near}'?` : undefined,
+                        });
+                    }
+                    r = f[1];
+                    break;
+                }
+                case "pluck": {
+                    let rec = this.callBlockFn(this.eval(e.rec));
+                    if (rec.kind === "thunk") rec = this.unpackThunk(rec);
+                    if (rec.kind !== "record") throw new Error("pluck on non-record");
+                    const byKey = new Map(rec.v);
+                    if (e.entries.every((x) => typeof x === "string")) {
+                        const out: Value[] = [];
+                        for (const n of e.entries as string[]) {
+                            const v = byKey.get(n);
+                            if (v === undefined) {
+                                const near = didYouMean(n, rec.v.map(([k]) => k));
+                                throw new APNError("runtime", `record has no field '${n}'`, {
+                                    hint: near ? `did you mean '${near}'?` : undefined,
+                                });
+                            }
+                            out.push(v);
+                        }
+                        r = { kind: "list", v: out };
+                    } else {
+                        const out: Array<[string, Value]> = [];
+                        for (const [src, dst] of e.entries as Array<[string, string]>) {
+                            const v = byKey.get(src);
+                            if (v === undefined) {
+                                const near = didYouMean(src, rec.v.map(([k]) => k));
+                                throw new APNError("runtime", `record has no field '${src}'`, {
+                                    hint: near ? `did you mean '${near}'?` : undefined,
+                                });
+                            }
+                            out.push([dst, v]);
+                        }
+                        r = { kind: "record", v: out };
+                    }
+                    break;
+                }
+                case "setFields": {
+                    // eager: read the OLD record and the RHS fully BEFORE building the
+                    // new one, so  vec.[x, y] = vec.[y, x]  swaps correctly
+                    let rec = this.callBlockFn(this.eval(e.rec));
+                    if (rec.kind === "thunk") rec = this.unpackThunk(rec);
+                    if (this.isList(rec) && this.cell(rec) === null) rec = mkList([]);
+                    let base: Array<[string, Value]> | null = null;
+                    if (rec.kind === "record") base = rec.v;
+                    else if (rec.kind === "list" && rec.v.length === 0) base = []; // [] seeds a record
+                    if (base === null) {
+                        throw new APNError("runtime", `cannot set a field on a ${rec.kind}`, {
+                            hint: "only records accept fields (an empty list promotes to a record)",
+                        });
+                    }
+                    const rhsValue = this.demand(this.eval(e.value));
+                    const rhs = this.isList(rhsValue) ? mkList(this.items(rhsValue).map((x) => this.demand(x))) : rhsValue;
+                    if (rhs.kind !== "list") {
+                        throw new APNError("runtime", "field assignment needs a list of values on the right");
+                    }
+                    if (rhs.v.length !== e.entries.length) {
+                        throw new APNError(
+                            "runtime",
+                            `${e.entries.length} field${e.entries.length === 1 ? "" : "s"} need ${e.entries.length} value${e.entries.length === 1 ? "" : "s"} (got ${rhs.v.length})`,
+                        );
+                    }
+                    const out = base.map(([k, v]) => [k, v] as [string, Value]);
+                    for (let i = 0; i < e.entries.length; i++) {
+                        const idx = out.findIndex(([k]) => k === e.entries[i]);
+                        if (idx === -1) out.push([e.entries[i], rhs.v[i]]);
+                        else out[idx] = [e.entries[i], rhs.v[i]];
                     }
                     r = { kind: "record", v: out };
+                    break;
                 }
-                break;
-            }
-            case "setFields": {
-                // eager: read the OLD record and the RHS fully BEFORE building the
-                // new one, so  vec.[x, y] = vec.[y, x]  swaps correctly
-                let rec = this.callBlockFn(this.eval(e.rec));
-                if (rec.kind === "thunk") rec = this.unpackThunk(rec);
-                if (rec.kind === "lazyList") rec = this.force(rec);
-                let base: Array<[string, Value]> | null = null;
-                if (rec.kind === "record") base = rec.v;
-                else if (rec.kind === "list" && rec.v.length === 0) base = []; // [] seeds a record
-                if (base === null) {
-                    throw new APNError("runtime", `cannot set a field on a ${rec.kind}`, {
-                        hint: "only records accept fields (an empty list promotes to a record)",
-                    });
-                }
-                const rhs = this.force(this.eval(e.value));
-                if (rhs.kind !== "list") {
-                    throw new APNError("runtime", "field assignment needs a list of values on the right");
-                }
-                if (rhs.v.length !== e.entries.length) {
-                    throw new APNError(
-                        "runtime",
-                        `${e.entries.length} field${e.entries.length === 1 ? "" : "s"} need ${e.entries.length} value${e.entries.length === 1 ? "" : "s"} (got ${rhs.v.length})`,
-                    );
-                }
-                const out = base.map(([k, v]) => [k, v] as [string, Value]);
-                for (let i = 0; i < e.entries.length; i++) {
-                    const idx = out.findIndex(([k]) => k === e.entries[i]);
-                    if (idx === -1) out.push([e.entries[i], rhs.v[i]]);
-                    else out[idx] = [e.entries[i], rhs.v[i]];
-                }
-                r = { kind: "record", v: out };
-                break;
-            }
-            case "pipe": r = this.apply(this.eval(e.f), { kind: "thunk", body: e.x, env: this.env }); break;
-            case "block": {
-                const child = new Env(this.env);
-                const old = this.env;
-                this.env = child;
-                try {
-                    r = { kind: "unit" };
-                    for (let si = 0; si < e.stmts.length; si++) {
-                        const s = e.stmts[si];
-                        if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
-                        else if (s.t === "patDef") r = this.evalPatBinding(s);
-                        else if (si === e.stmts.length - 1) {
-                            // LAST statement = TAIL POSITION: the value flows up UNCALLED —
-                            // a returned 0-arg function is trampolined by the CALLER's
-                            // runStmt loop, so  func = { print "hi"; func }  loops forever
-                            // at constant stack (Ctrl+C breaks it).
-                            r = this.eval(s);
-                        } else r = this.runStmt(this.eval(s)); // bare name = call
+                case "pipe": r = this.apply(this.eval(e.f), { kind: "thunk", body: e.x, env: this.env }); break;
+                case "block": {
+                    const child = new Env(this.env);
+                    const old = this.env;
+                    this.env = child;
+                    try {
+                        r = { kind: "unit" };
+                        for (let si = 0; si < e.stmts.length; si++) {
+                            const s = e.stmts[si];
+                            if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
+                            else if (s.t === "patDef") r = this.evalPatBinding(s);
+                            else if (si === e.stmts.length - 1) {
+                                // LAST statement = TAIL POSITION: the value flows up UNCALLED —
+                                // a returned 0-arg function is trampolined by the CALLER's
+                                // runStmt loop, so  func = { print "hi"; func }  loops forever
+                                // at constant stack (Ctrl+C breaks it).
+                                r = this.eval(s);
+                            } else r = this.runStmt(this.eval(s)); // bare name = call
+                        }
+                        // Reveal the last value without traversing a returned list.
+                        // A returned action is run by the caller's demand loop.
+                        r = this.force(r);
+                    } finally {
+                        this.env = old;
                     }
-                    // A block's value is its last statement's value — force it, so a
-                    // trailing `halt`/`exit` (or any thunk) actually runs.
-                    r = this.force(r);
-                } finally {
-                    this.env = old;
+                    break;
                 }
-                break;
+                case "stmDef":
+                    throw new Error("Runtime: internal error — statement definition used as an expression");
+                case "patDef":
+                    r = this.evalPatBinding(e);
+                    break;
             }
-            case "stmDef":
-                throw new Error("Runtime: internal error — statement definition used as an expression");
-            case "patDef":
-                r = this.evalPatBinding(e);
-                break;
+            return r;
+        } finally {
+            this.stack--;
         }
-        this.stack--;
-        return r;
     }
 
     evalBinop(e: Extract<Expr, { t: "binop" }>): Value {
+        if (e.op === ":") {
+            return { kind: "cons", head: this.delay(e.l), tail: this.delay(e.r) };
+        }
+        if (e.op === "++") {
+            const l = this.demand(this.eval(e.l));
+            const r = this.delay(e.r);
+            if (this.isList(l)) return this.append(l, r);
+            const right = this.demand(r);
+            if (l.kind === "string" && right.kind === "string") return mkStr(l.v + right.v);
+            throw new APNError("runtime", `cannot apply '++' to ${l.kind} and ${right.kind}`);
+        }
         const l = this.demand(this.eval(e.l));
         const r = this.demand(this.eval(e.r));
         const bad = (): never => {
@@ -543,17 +518,23 @@ export class Interpreter {
             case "||":
                 if (l.kind === "bool" && r.kind === "bool") return mkBool(l.v || r.v);
                 return bad();
-            case "++":
-                if (l.kind === "string" && r.kind === "string") return mkStr(l.v + r.v);
-                if (l.kind === "list" && r.kind === "list") return mkList([...l.v, ...r.v]);
-                return bad();
-            case ":":
-                if (r.kind === "list") return mkList([l, ...r.v]);
-                return bad();
+
         }
     }
 
     equals(a: Value, b: Value): boolean {
+        a = this.demand(a);
+        b = this.demand(b);
+        if (this.isList(a) && this.isList(b)) {
+            for (;;) {
+                checkInterrupt();
+                const x = this.cell(a), y = this.cell(b);
+                if (x === null || y === null) return x === y;
+                if (!this.equals(x.head, y.head)) return false;
+                a = x.tail;
+                b = y.tail;
+            }
+        }
         if (a.kind !== b.kind) return false;
         switch (a.kind) {
             case "int": return a.v === (b as any).v;
@@ -586,7 +567,7 @@ export class Interpreter {
 
     apply(f: Value, arg: Value): Value {
         // A lazy 0-param def used as a function (`f = g; f 1`) is a thunk — run it.
-        if (f.kind === "thunk") f = this.force(f);
+        f = this.force(f);
         switch (f.kind) {
             case "closure": {
                 if (f.params.length === 0) {
@@ -608,29 +589,19 @@ export class Interpreter {
                 if (f.arity === 0) {
                     return this.callNative(f.name, [], f.tag);
                 }
-                f.applied.push(arg);
-                if (f.applied.length < f.arity) return f;
-                const args = f.applied;
-                f.applied = [];
+                const args = [...f.applied, arg];
+                if (args.length < f.arity) return { ...f, applied: args };
                 return this.callNative(f.name, args, f.tag);
             }
             case "clauseFn": {
-                f.applied.push(arg);
-                if (f.applied.length < f.arity) return f;
-                const raw = f.applied;
-                f.applied = [];
-                // DEMANDED args (run 0-arg functions + force), memoized once per call
-                // so pattern clauses never re-run a side-effecting argument.
-                let dem: Value[] | null = null;
-                const demanded = () => dem ?? (dem = raw.map((a) => this.demand(a)));
-                // Try each clause in order; a clause matches when ALL its params match.
-                // All-var clauses bind the arguments UNEVALUATED (Haskell laziness);
-                // pattern clauses demand real values to match against.
+                const raw = [...f.applied, arg];
+                if (raw.length < f.arity) return { ...f, applied: raw };
+                // Patterns demand only the structure they inspect. Shared
+                // argument thunks prevent repeated effects across fallthrough.
                 for (const clause of f.clauses) {
                     const binds = new Map<string, Value>();
                     let ok = true;
-                    const simple = clause.params.every((p) => p.p === "var");
-                    const args = simple ? raw : demanded();
+                    const args = raw;
                     for (let i = 0; i < clause.params.length; i++) {
                         if (!this.matchPattern(clause.params[i], args[i], binds)) { ok = false; break; }
                     }
@@ -648,37 +619,26 @@ export class Interpreter {
                 );
             }
             case "list":
-            case "lazyList": {
-                // Indexing:  arr 0 -> element,  arr (-1) -> last,  arr [0, 2] -> picks
-                const arr = f.kind === "lazyList" ? this.force(f) : f;
-                if (arr.kind !== "list") throw new Error("Runtime: value is not a list");
+            case "lazyList":
+            case "cons":
+            case "range": {
                 const carg = this.demand(arg);
-                if (carg.kind === "int") {
-                    let i = carg.v;
-                    if (i < 0) i += arr.v.length;
-                    if (i < 0 || i >= arr.v.length) {
-                        throw new Error(`Runtime: index ${carg.v} out of range (len ${arr.v.length})`);
-                    }
-                    return arr.v[i];
-                }
-                if (carg.kind === "list") {
-                    const picks = carg.v.map((ix) => {
-                        if (ix.kind !== "int") throw new Error("Runtime: index must be an int");
-                        let i = ix.v;
-                        if (i < 0) i += arr.v.length;
-                        if (i < 0 || i >= arr.v.length) {
-                            throw new Error(`Runtime: index ${ix.v} out of range (len ${arr.v.length})`);
-                        }
-                        return arr.v[i];
+                if (carg.kind === "int") return this.index(f, carg.v);
+                if (this.isList(carg)) {
+                    const picks = this.items(carg).map((ix) => {
+                        ix = this.demand(ix);
+                        if (ix.kind !== "int") throw new APNError("runtime", "index must be an int");
+                        return this.index(f, ix.v);
                     });
                     return picks.length === 1 ? picks[0] : mkList(picks);
                 }
-                throw new Error("Runtime: indexing a list needs an int or a list of ints");
+                throw new APNError("runtime", "indexing a list needs an int or a list of ints");
             }
             case "record": {
                 // Applying an OBJECT clones it (list = positional, record = named),
                 // or an int argument indexes it positionally -> [field, value].
-                const carg = this.demand(arg);
+                const value = this.demand(arg);
+                const carg = this.isList(value) ? mkList(this.items(value)) : value;
                 if (carg.kind === "list") {
                     if (f.v.length !== carg.v.length) {
                         throw new Error(`Runtime: field count (${f.v.length}) does not match list size (${carg.v.length})`);
@@ -713,76 +673,156 @@ export class Interpreter {
         }
     }
 
-    // Lazily evaluate a deferred list (and everything nested inside it) into a
-    // concrete value. A deferred list, when used as a list, resolves its elements
-    // as ordinary variables; when used as an object/template it is never forced
-    // and its bare identifiers are read as field names.
-    force(v: Value): Value {
-        if (v.kind === "range") {
-            if (v.hi === null) return v; // infinite: stays lazy
-            const out: Value[] = [];
-            for (let i = v.lo; v.step > 0 ? i <= v.hi : i >= v.hi; i += v.step) out.push(mkInt(i));
-            return mkList(out);
-        }
-        if (v.kind === "lazyList") {
-            const old = this.env;
-            this.env = v.env;
-            try {
-                return mkList(v.exprs.map((x) => this.force(this.eval(x))));
-            } finally {
-                this.env = old;
-            }
-        }
-        if (v.kind === "thunk") {
-            if (v.value) return v.value;
-            // Follow thunk chains iteratively. Cycles do not terminate here;
-            // the interrupt check lets the TTY REPL break them. Only the
-            // initial thunk receives the computed cache below.
-            let cur: Value = v;
-            while (cur.kind === "thunk") {
-                checkInterrupt();
-                if (cur.value) return cur.value;
-                const old = this.env;
-                this.env = cur.env;
-                let out: Value;
-                try {
-                    out = this.eval(cur.body);
-                } finally {
-                    this.env = old;
-                }
-                cur = out;
-            }
-            // cur is concrete now; force nested containers and cache the result
-            const forced = this.force(cur);
-            v.value = forced;
-            return forced;
-        }
-        if (v.kind === "list") return mkList(v.v.map((x) => this.force(x)));
-        if (v.kind === "variant") return { kind: "variant", tag: v.tag, v: v.v.map((x) => this.force(x)) };
-        if (v.kind === "record") {
-            // Keep thunk fields lazy: a `load` module record may contain `halt = exit 0`
-            // and forcing it would terminate the process on import.
-            return { kind: "record", v: v.v.map(([k, x]) => [k, x.kind === "thunk" ? x : this.force(x)] as [string, Value]) };
-        }
-        return v;
+    delay(body: Expr): Value {
+        return { kind: "thunk", body, env: this.env };
     }
 
-    // Evaluate a thunk's BODY but keep the result lazy (do NOT recurse/force).
-    // Used where the raw value matters — a `load` module record (whose fields must
-    // NOT be forced, they may contain `halt`) or a template lazyList (whose bare
-    // names must stay unresolved). A non-lazy result is cached like force does.
-    unpackThunk(v: Value): Value {
-        if (v.kind !== "thunk") return v;
-        if (v.value) return v.value;
-        const old = this.env;
-        this.env = v.env;
+    defer(compute: () => Value): Value {
+        return { kind: "deferred", compute };
+    }
+
+    // Weak-head evaluation: cache every thunk in an alias chain, never force
+    // a cons head/tail or a container field just to reveal its outer shape.
+    force(v: Value): Value {
+        const pending: Array<Extract<Value, { kind: "thunk" | "deferred" }>> = [];
         try {
-            const r = this.eval(v.body);
-            if (r.kind !== "lazyList") v.value = r;
-            return r;
+            for (;;) {
+                checkInterrupt();
+                if (v.kind === "lazyList") {
+                    const env = v.env;
+                    v.value ??= mkList(v.exprs.map((body) => ({ kind: "thunk", body, env })));
+                    v = v.value;
+                } else if (v.kind === "thunk" || v.kind === "deferred") {
+                    if (v.value !== undefined) { v = v.value; continue; }
+                    if (v.busy) throw new APNError("runtime", "cyclic evaluation: value depends on itself before producing a value");
+                    v.busy = true;
+                    pending.push(v);
+                    if (v.kind === "deferred") v = v.compute();
+                    else {
+                        const old = this.env;
+                        this.env = v.env;
+                        try { v = this.eval(v.body); } finally { this.env = old; }
+                    }
+                } else break;
+            }
+            for (const thunk of pending) thunk.value = v;
+            return v;
         } finally {
-            this.env = old;
+            for (const thunk of pending) thunk.busy = false;
         }
+    }
+
+    unpackThunk(v: Value): Value { return this.force(v); }
+
+    isList(v: Value): boolean {
+        return v.kind === "list" || v.kind === "lazyList" || v.kind === "cons" || v.kind === "range";
+    }
+
+    fromArray(values: Value[], i = 0): Value {
+        return this.defer(() => i === values.length ? mkList([]) : {
+            kind: "cons", head: values[i], tail: this.fromArray(values, i + 1),
+        });
+    }
+
+    cell(v: Value): { head: Value; tail: Value } | null {
+        v = this.demand(v);
+        if (v.kind === "cons") return v;
+        if (v.kind === "list") return v.v.length ? { head: v.v[0], tail: this.fromArray(v.v, 1) } : null;
+        if (v.kind === "range") {
+            if (v.hi !== null && (v.step > 0 ? v.lo > v.hi : v.lo < v.hi)) return null;
+            return { head: mkInt(v.lo), tail: { ...v, lo: v.lo + v.step } };
+        }
+        throw new APNError("runtime", `expected a list, got ${v.kind}`);
+    }
+
+    *elements(v: Value): Generator<Value> {
+        for (;;) {
+            checkInterrupt();
+            const cell = this.cell(v);
+            if (cell === null) return;
+            yield cell.head;
+            v = cell.tail;
+        }
+    }
+
+    items(v: Value): Value[] { return [...this.elements(v)]; }
+
+    index(v: Value, i: number): Value {
+        const original = i;
+        if (i < 0) {
+            const values = this.items(v);
+            i += values.length;
+            if (i >= 0 && i < values.length) return values[i];
+        } else {
+            for (const value of this.elements(v)) {
+                if (i-- === 0) return value;
+            }
+        }
+        throw new APNError("runtime", `index ${original} out of range`);
+    }
+
+    append(xs: Value, ys: Value): Value {
+        return this.defer(() => {
+            const cell = this.cell(xs);
+            if (cell === null) {
+                const right = this.demand(ys);
+                if (!this.isList(right)) throw new APNError("runtime", "list append expects a list");
+                return right;
+            }
+            return { kind: "cons", head: cell.head, tail: this.append(cell.tail, ys) };
+        });
+    }
+
+    // Rendering is incremental, including nested lists. Consumers decide
+    // whether to stream fragments or collect a finite result into a string.
+    render(v: Value, emit: (s: string) => void, raw = false): void {
+        checkInterrupt();
+        v = this.demand(v);
+        if (this.isList(v)) {
+            emit("[");
+            let first = true;
+            for (const item of this.elements(v)) {
+                if (!first) emit(", ");
+                first = false;
+                this.render(item, emit);
+            }
+            emit("]");
+        } else if (v.kind === "record") {
+            emit("[");
+            v.v.forEach(([key, val], i) => {
+                if (i) emit(", ");
+                emit(key + ": ");
+                // Inspect module actions without running halt; ordinary data
+                // fields still render their memoized values.
+                const field = this.force(val);
+                if (field.kind === "closure" && !field.params.length) emit(valueToString(field));
+                else this.render(field, emit);
+            });
+            emit("]");
+        } else if (v.kind === "variant") {
+            emit(v.tag);
+            for (const arg of v.v) { emit(" "); this.render(arg, emit); }
+        } else emit(raw ? rawString(v) : valueToString(v));
+    }
+
+    renderString(v: Value, raw = false): string {
+        const parts: string[] = [];
+        this.render(v, (s) => parts.push(s), raw);
+        return parts.join("");
+    }
+
+    printValue(v: Value, newline = true, raw = true): void {
+        const enc = new TextEncoder();
+        let buffer = "";
+        this.render(v, (s) => {
+            buffer += s;
+            if (buffer.length >= 256) {
+                Deno.stdout.writeSync(enc.encode(buffer));
+                buffer = "";
+            }
+        }, raw);
+        if (newline) console.log(buffer);
+        else if (buffer) Deno.stdout.writeSync(enc.encode(buffer));
     }
 
     callNative(name: string, argsIn: Value[], tag?: string): Value {
@@ -818,35 +858,37 @@ export class Interpreter {
             console.log(text);
             return { kind: "unit" };
         }
+        // These natives select their own demand points. In particular take 0
+        // never inspects its input, and list producers defer their first cell.
+        if (name === "__constr") return { kind: "variant", tag: tag!, v: argsIn };
+        if (name === "map") return this.mapList(argsIn[0], argsIn[1]);
+        if (name === "filter") return this.filterList(argsIn[0], argsIn[1]);
+        if (name === "zipWith") return this.zipList(argsIn[0], argsIn[1], argsIn[2]);
+        if (name === "foldr") return this.foldRight(argsIn[0], argsIn[1], argsIn[2]);
+        if (name === "take" || name === "drop") {
+            const count = this.demand(argsIn[0]);
+            if (count.kind !== "int" || count.v < 0) throw new APNError("runtime", `${name} expects a non-negative int count`);
+            if (name === "take") return this.takeList(count.v, argsIn[1]);
+            let rest = argsIn[1];
+            for (let i = 0; i < count.v; i++) {
+                checkInterrupt();
+                const cell = this.cell(rest);
+                if (cell === null) return mkList([]);
+                rest = cell.tail;
+            }
+            return rest;
+        }
         const args = argsIn.map((x) => this.demand(x));
         const a = args[0];
         switch (name) {
-            case "print": {
-                // print takes ANY value (strings raw), evaluates 0-arg actions, and
-                // RETURNS the value so pipes can continue. INFINITE ranges STREAM.
-                const v = args[0];
-                if (v.kind === "range" && v.hi === null) {
-                    const enc = new TextEncoder();
-                    this.streamRange(v, (x) => Deno.stdout.writeSync(enc.encode(x)));
-                    Deno.stdout.writeSync(enc.encode("\n"));
-                    return v;
-                }
-                console.log(rawString(v));
-                return v;
-            }
-            case "emit": {
-                // like print, but NO trailing newline
-                const v = args[0];
-                if (v.kind === "range" && v.hi === null) {
-                    const enc = new TextEncoder();
-                    this.streamRange(v, (x) => Deno.stdout.writeSync(enc.encode(x)));
-                    return v;
-                }
-                Deno.stdout.writeSync(new TextEncoder().encode(rawString(v)));
-                return v;
-            }
+            case "print":
+                this.printValue(a);
+                return a;
+            case "emit":
+                this.printValue(a, false);
+                return a;
             case "toString":
-                return mkStr(valueToString(a));
+                return mkStr(this.renderString(a));
             case "parse": {
                 if (a.kind !== "string") throw new Error("Runtime: parse expects a string");
                 const s = a.v.trim();
@@ -856,53 +898,31 @@ export class Interpreter {
                 if (/^-?\d+\.\d+$/.test(s)) return { kind: "float", v: parseFloat(s) };
                 throw new Error(`Runtime: parse: can't parse '${s}'`);
             }
-            case "head":
-                if (a.kind === "range") return mkInt(a.lo);
-                if (a.kind !== "list") throw new Error("Runtime: head expects a list");
-                if (a.v.length === 0) throw new Error("Runtime: head of empty list");
-                return a.v[0];
-            case "tail":
-                if (a.kind !== "list") throw new Error("Runtime: tail expects a list");
-                if (a.v.length === 0) throw new Error("Runtime: tail of empty list");
-                return mkList(a.v.slice(1));
-            case "length":
-                if (a.kind === "list") return mkInt(a.v.length);
+            case "head": {
+                const cell = this.cell(a);
+                if (cell === null) throw new APNError("runtime", "head of empty list");
+                return cell.head;
+            }
+            case "tail": {
+                const cell = this.cell(a);
+                if (cell === null) throw new APNError("runtime", "tail of empty list");
+                return cell.tail;
+            }
+            case "length": {
                 if (a.kind === "string") return mkInt(a.v.length);
-                throw new Error("Runtime: length expects list or string");
+                let n = 0;
+                for (const _ of this.elements(a)) n++;
+                return mkInt(n);
+            }
             case "null":
-                if (a.kind === "list") return mkBool(a.v.length === 0);
                 if (a.kind === "string") return mkBool(a.v.length === 0);
-                throw new Error("Runtime: null expects list or string");
+                return mkBool(this.cell(a) === null);
             case "enumerate":
-                if (a.kind !== "list") throw new Error("Runtime: enumerate expects a list");
-                return { kind: "record", v: a.v.map((x, i) => [String(i), x] as [string, Value]) };
-            case "map": {
-                const f = args[0];
-                if (args[1].kind !== "list") throw new Error("Runtime: map expects a list");
-                return mkList(args[1].v.map((x) => this.apply(f, x)));
-            }
-            case "filter": {
-                const p = args[0];
-                if (args[1].kind !== "list") throw new Error("Runtime: filter expects a list");
-                return mkList(args[1].v.filter((x) => {
-                    const r = this.apply(p, x);
-                    return r.kind === "bool" && r.v;
-                }));
-            }
+                return { kind: "record", v: this.items(a).map((x, i) => [String(i), x] as [string, Value]) };
             case "foldl": {
                 const f = args[0];
                 let acc = args[1];
-                if (args[2].kind !== "list") throw new Error("Runtime: foldl expects a list");
-                for (const x of args[2].v) acc = this.apply(this.apply(f, acc), x);
-                return acc;
-            }
-            case "foldr": {
-                const f = args[0];
-                let acc = args[1];
-                if (args[2].kind !== "list") throw new Error("Runtime: foldr expects a list");
-                for (let i = args[2].v.length - 1; i >= 0; i--) {
-                    acc = this.apply(this.apply(f, args[2].v[i]), acc);
-                }
+                for (const x of this.elements(args[2])) acc = this.demand(this.apply(this.apply(f, acc), x));
                 return acc;
             }
             case "intToString":
@@ -914,31 +934,17 @@ export class Interpreter {
             case "format": {
                 const fmt = args[0];
                 if (fmt.kind !== "string") throw new Error("Runtime: format expects a string");
-                const vals = args[1].kind === "list" ? args[1].v : [args[1]];
+                const vals = this.isList(args[1]) ? this.items(args[1]) : [args[1]];
                 let out = "";
                 let vi = 0;
                 for (let i = 0; i < fmt.v.length; i++) {
                     if (fmt.v[i] === "%") {
                         if (fmt.v[i + 1] === "%") { out += "%"; i++; continue; }
-                        out += rawString(vals[vi] ?? { kind: "unit" });
+                        out += this.renderString(vals[vi] ?? { kind: "unit" }, true);
                         vi++;
                     } else out += fmt.v[i];
                 }
                 return mkStr(out);
-            }
-            case "__constr":
-                return { kind: "variant", tag: tag!, v: args };
-            case "zipWith": {
-                const f = args[0];
-                const xs = this.force(args[1]);
-                const ys = this.force(args[2]);
-                if (xs.kind !== "list" || ys.kind !== "list") {
-                    throw new APNError("runtime", "zipWith expects two lists");
-                }
-                const n = Math.min(xs.v.length, ys.v.length);
-                const out: Value[] = [];
-                for (let i = 0; i < n; i++) out.push(this.apply(this.apply(f, xs.v[i]), ys.v[i]));
-                return mkList(out);
             }
             case "exit":
                 // Can be put anywhere in the program: terminates the process instantly.
@@ -948,7 +954,7 @@ export class Interpreter {
                 // Import a file, resolving the path relative to the CURRENT source file.
                 // Two effects: (1) the loaded file's own definitions are merged into the
                 // current scope ("include"); (2) it returns a module record of them, so
-                //   core = load "core.txt"; core.halt   (or just core.halt) works.
+                //   core = load "core.apn"; core.halt   (or just core.halt) works.
                 // Inside a `{ }` block the merge stays scoped to that block.
                 if (a.kind !== "string") throw new Error("Runtime: load expects a file path string");
                 const p = a.v;
@@ -990,15 +996,65 @@ export class Interpreter {
         throw new Error(`Runtime: unknown native '${name}'`);
     }
 
-    // constructor application needs to remember the tag; we use a closure wrapper
-    // handled separately in evalDef for data. For simplicity we wrap in apply.
+    mapList(f: Value, xs: Value): Value {
+        return this.defer(() => {
+            const cell = this.cell(xs);
+            if (cell === null) return mkList([]);
+            return { kind: "cons", head: this.defer(() => this.apply(this.demand(f), cell.head)), tail: this.mapList(f, cell.tail) };
+        });
+    }
+
+    filterList(f: Value, xs: Value): Value {
+        return this.defer(() => {
+            for (;;) {
+                checkInterrupt();
+                const cell = this.cell(xs);
+                if (cell === null) return mkList([]);
+                const predicate = this.demand(this.apply(this.demand(f), cell.head));
+                if (predicate.kind === "bool" && predicate.v) {
+                    return { kind: "cons", head: cell.head, tail: this.filterList(f, cell.tail) };
+                }
+                xs = cell.tail;
+            }
+        });
+    }
+
+    zipList(f: Value, xs: Value, ys: Value): Value {
+        return this.defer(() => {
+            const x = this.cell(xs);
+            if (x === null) return mkList([]);
+            const y = this.cell(ys);
+            if (y === null) return mkList([]);
+            return {
+                kind: "cons",
+                head: this.defer(() => this.apply(this.apply(this.demand(f), x.head), y.head)),
+                tail: this.zipList(f, x.tail, y.tail),
+            };
+        });
+    }
+
+    takeList(n: number, xs: Value): Value {
+        return this.defer(() => {
+            if (n === 0) return mkList([]);
+            const cell = this.cell(xs);
+            if (cell === null) return mkList([]);
+            return { kind: "cons", head: cell.head, tail: this.takeList(n - 1, cell.tail) };
+        });
+    }
+
+    foldRight(f: Value, initial: Value, xs: Value): Value {
+        return this.defer(() => {
+            const cell = this.cell(xs);
+            if (cell === null) return initial;
+            return this.apply(this.apply(this.demand(f), cell.head), this.foldRight(f, initial, cell.tail));
+        });
+    }
 
     matchPattern(p: Pattern, v: Value, binds: Map<string, Value>): boolean {
+        if (p.p === "wildcard") return true;
+        if (p.p === "var") { binds.set(p.name, v); return true; }
+        v = this.demand(v);
         switch (p.p) {
-            case "wildcard": return true;
-            case "var":
-                binds.set(p.name, v);
-                return true;
             case "int": return v.kind === "int" && v.v === p.v;
             case "bool": return v.kind === "bool" && v.v === p.v;
             case "string": return v.kind === "string" && v.v === p.v;
@@ -1015,12 +1071,16 @@ export class Interpreter {
                     }
                     return true;
                 }
-                if (v.kind !== "list" || v.v.length !== p.v.length) return false;
-                for (let i = 0; i < p.v.length; i++) {
-                    if (!this.matchPattern(p.v[i], v.v[i], binds)) return false;
+                if (!this.isList(v)) return false;
+                let rest: Value = v;
+                for (const pattern of p.v) {
+                    const cell = this.cell(rest);
+                    if (cell === null || !this.matchPattern(pattern, cell.head, binds)) return false;
+                    rest = cell.tail;
                 }
-                return true;
+                return this.cell(rest) === null;
             }
+
             case "range":
                 // [0..10] matches any int in the range, inclusive
                 return v.kind === "int" && v.v >= p.lo && v.v <= p.hi;
@@ -1037,10 +1097,12 @@ export class Interpreter {
                 return true;
             }
             case "cons": {
-                if (v.kind !== "list" || v.v.length === 0) return false;
+                if (!this.isList(v)) return false;
+                const cell = this.cell(v);
+                if (cell === null) return false;
                 const nm = new Map(binds);
-                if (!this.matchPattern(p.head, v.v[0], nm)) return false;
-                return this.matchPattern(p.tail, mkList(v.v.slice(1)), nm) && this.mergeBinds(binds, nm);
+                if (!this.matchPattern(p.head, cell.head, nm)) return false;
+                return this.matchPattern(p.tail, cell.tail, nm) && this.mergeBinds(binds, nm);
             }
             case "constr": {
                 if (v.kind !== "variant" || v.tag !== p.tag) return false;
@@ -1063,7 +1125,7 @@ export class Interpreter {
             const binds = new Map<string, Value>();
             if (!this.matchPattern(alt.pattern, scrut, binds)) continue;
             if (alt.guard) {
-                const g = this.evalWith(binds, alt.guard);
+                const g = this.demand(this.evalWith(binds, alt.guard));
                 if (!(g.kind === "bool" && g.v)) continue;
             }
             return this.evalWith(binds, alt.body);

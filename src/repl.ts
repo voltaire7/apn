@@ -115,7 +115,7 @@ function lastIsBinding(src: string): boolean {
 
 export function runSource(src: string, interp: Interpreter, binding = false): string {
     const val = runSourceValue(src, interp, binding);
-    return val === null ? "" : valueToString(val);
+    return val === null ? "" : interp.renderString(val);
 }
 
 // Does this parse error mean "input is still incomplete, keep reading"?
@@ -296,8 +296,10 @@ function helpText(): string {
         `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,
         `  data Maybe a = Just a | Nothing`,
         `  [1,2,3]  [0..5] [2,4..100] [0..]  ranges; 0:[] conses`,
+        `  ones = 1:ones; take 5 ones   lazy heads/tails; drop 5 ones`,
+        `  map/filter/zipWith/foldr consume lazy lists; Ctrl+C stops output`,
         `  x $ f             pipe: feeds x into f`,
-        `  a \`f\` b            infix call == f a b  (only \`for\` inverts)`,
+        `  a \`f\` b            infix call == f a b`,
         `  (+ 2)  (2 +)  (+)  operator sections   ((-2) stays unary minus)`,
         `  ( ) and { } are groups/blocks: unit when empty, value = last stmt`,
         `  ; or newline       statement separators (blocks & top level)`,
@@ -307,22 +309,22 @@ function helpText(): string {
         ``,
         `print x    any value (strings raw), returns x;  emit  = no newline`,
         `debug x    shows the SOURCE as written;  step n v  descends v's body`,
-        `quote / toAST  the s-expression as a list: toAST (1 + 2) => ["+", 1, 2]`,
-        `Builtins: head tail length null enumerate map filter foldl foldr`,
-        `          pairs format intToString exit load apply step`,
+        `quote x = source text; toAST (1 + 2) => ["+", 1, 2]`,
+        `Builtins: head tail take drop length null enumerate map filter zipWith`,
+        `          foldl foldr pairs format intToString toString parse exit load step`,
         ``,
-        `load "core.txt"  imports the standard library (core.txt): as a`,
+        `load "core.apn"  imports the standard library (core.apn): as a`,
         `               statement it merges into the current scope; as a`,
         `               value it returns a module (core.sq 4). halting is`,
-        `               core.txt's  halt = exit 0  (lazy: fires only when used).`,
-        `0-arg defs: x = <expr> is a LAZY value (runs on first use); an ACTION`,
+        `               core.apn's  halt = exit 0  (lazy: fires only when used).`,
+        `0-arg defs: ordinary value bodies are lazy and memoized; an ACTION`,
         `               body (f = { ... } / f = print "hi" — same thing) declares`,
         `               a 0-arg FUNCTION: the bare name at statement level runs it`,
-        `               (so does debug (f)); debug f shows <function>`,
+        `               print f also runs it; debug f shows its name without running it`,
         ``,
         `Type annotations (TS-style) are accepted & ignored at runtime:`,
         `  x: Int = 5`,
-        `Run: deno run --allow-read main.ts features.txt`,
+        `Run: deno run --allow-read main.ts features.apn`,
         ``,
         `REPL:`,
         `  Up/Down    history (kept in ~/.apn_history)`,
@@ -820,8 +822,8 @@ async function replTTY(): Promise<void> {
             await setTtyCooked(savedCooked);
             try {
                 const val = runSourceValue(src, interp, lastIsBinding(src) || lastIsPrintCall(src));
-                if (val !== null && val.kind === "range" && val.hi === null) {
-                    interp.streamRange(val, (x) => ed.emit(x)); // printed AS CONSTRUCTED
+                if (val !== null && (interp.isList(val) || val.kind === "variant" || val.kind === "record")) {
+                    interp.render(val, (x) => ed.emit(x));
                     ed.emit("\n");
                 } else if (val !== null) ed.print(showValue(val));
             } catch (err) {
@@ -893,8 +895,8 @@ async function replPiped(): Promise<void> {
             // (missing `in`, `->`, or a structural `newline`), keep accumulating so
             // users can enter multi-line constructs. Otherwise report the error.
             try {
-                const out = runSource(pending, interp, lastIsBinding(pending) || lastIsPrintCall(pending));
-                if (out) console.log(out);
+                const val = runSourceValue(pending, interp, lastIsBinding(pending) || lastIsPrintCall(pending));
+                if (val !== null) interp.printValue(val, true, false);
                 pending = "";
                 await Deno.stdout.write(new TextEncoder().encode(prompt));
                 continue;

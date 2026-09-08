@@ -5,7 +5,7 @@
 //  (JS-like) language interpreter with optional TypeScript-style type
 //  annotations (not enforced). Evaluation rules: SEMANTICS.md.
 //  Run:  deno run --allow-read main.ts   (REPL)
-//        deno run --allow-read main.ts features.txt
+//        deno run --allow-read main.ts features.apn
 // =====================================================================
 
 import { Interpreter, dirname } from "./src/interp.ts";
@@ -24,7 +24,7 @@ if (import.meta.main) {
         const interp = new Interpreter();
         interp.sourceDir = dirname(file);
         try {
-            runSource(src, interp);
+            runSource(src, interp, true); // file mode executes effects without rendering the last value
         } catch (err) {
             console.error(formatError(err, Deno.stderr.isTerminal()));
             Deno.exit(1);

@@ -5,19 +5,19 @@
 1. **The workflow is mandatory.** For ANY change (add, change, or remove a
    feature), you MUST:
    1. Edit the relevant `src/` module (or `main.ts` for entry-point changes).
-   2. Update `features.txt` so it demonstrates the new/updated behavior
+   2. Update `features.apn` so it demonstrates the new/updated behavior
       (this file is the living spec AND the smoke test).
    3. Type-check and run the full showcase:
           deno check main.ts
           deno test semantics_test.ts
-          deno run --allow-read main.ts features.txt
+          deno run --allow-read main.ts features.apn
    4. Confirm output matches expectations before declaring done.
-   Do not end a task without completing all steps. Never leave `features.txt`
+   Do not end a task without completing all steps. Never leave `features.apn`
    out of date.
 2. **Keep it green.** If a change breaks any existing feature, fix it before
    finishing. Do not leave the project in a broken state.
-3. **Layout:** `main.ts` + `src/` modules (see Project), plus `features.txt`,
-   `SEMANTICS.md`, `semantics_test.ts`, `AGENTS.md`, `core.txt`, `apn` in the root — no package.json, no deps.
+3. **Layout:** `main.ts` + `src/` modules (see Project), plus `features.apn`,
+   `SEMANTICS.md`, `semantics_test.ts`, `AGENTS.md`, `core.apn`, `apn` in the root — no package.json, no deps.
 
 ## Project
 
@@ -38,10 +38,10 @@ Layout (user-approved src/ split):
   `checkInterrupt` + the interrupt flag, `envNames`, `dirname`
 - `src/repl.ts` — REPL editor, colors, history, errors rendering, drivers
 - `apn` — tiny sh launcher (REPL/file runs; no logic)
-- `features.txt` — the living spec + smoke test: a runnable showcase of EVERY
+- `features.apn` — the living spec + smoke test: a runnable showcase of EVERY
   feature. It must always stay in sync with what `main.ts` actually supports.
   Observable evaluation rules are asserted separately in `semantics_test.ts`.
-- `core.txt` — the standard library, imported with `load "core.txt"`. Defines
+- `core.apn` — the standard library, imported with `load "core.apn"`. Defines
   things like `halt = exit 0` (`sq x = x * x` is there as a demo function).
 - `AGENTS.md` — this file
 
@@ -52,11 +52,11 @@ Layout (user-approved src/ split):
 
 Deno required. From `apn/`:
 - Run the showcase (use this as the smoke test after any change):
-    deno run --allow-read main.ts features.txt
+    deno run --allow-read main.ts features.apn
 - Start the REPL:               ./apn
   (wrapper script that runs
    `deno run --allow-read --allow-write --allow-env=HOME --allow-run=stty main.ts "$@"` —
-   also runs files, e.g. `./apn features.txt`. The extra flags persist
+   also runs files, e.g. `./apn features.apn`. The extra flags persist
    history in ~/.apn_history; the bare deno command with just --allow-read
    works too — history then stays in-session only)
 - Type-check (always run after edits):
@@ -69,7 +69,8 @@ There is no `package.json` and no external dependencies; tests use Deno.test.
 
 - `Type` / `Value` — runtime values are tagged objects: int, float, bool,
   string, char, unit, list, lazyList, record, variant, closure, clauseFn,
-  native, plus `thunk` — the LAZY wrapper for 0-arg value defs (see below;
+  native, plus `thunk`, internal computed `deferred` thunks, and lazy `cons`
+  cells (see below;
   internal `nomatch` sentinel is used by multi-clause fallthrough).
 - `Env` — lexical scope chain (mutable parent-linked maps). Free variables
   resolve at definition site (static/lexical scoping), but bindings are shared
@@ -84,27 +85,26 @@ There is no `package.json` and no external dependencies; tests use Deno.test.
 
 ## Core language semantics (don't break these)
 
-`SEMANTICS.md` is authoritative for evaluation and memoization. In particular,
-named definitions are not uniformly cached: fresh argument thunks can cause
-recomputation, and bare statements re-evaluate thunk bodies. Actions run when
-demanded, including by `print` and `toString`. Update the assertions with any
+`SEMANTICS.md` is authoritative for evaluation and memoization. Deferred values
+and arguments share their memoized outer result, including through alias chains.
+Actions remain repeatable and run when demanded. Update assertions with any
 intentional evaluation change.
 
-- **Lazy lists**: a list literal evaluates to a `lazyList` (unevaluated
-  elements + captured env), resolved only when forced. `[x, y, z]` is ALWAYS a
-  list — bare identifiers resolve to the variables' values when forced. A list
-  is never an object; an OBJECT is a record literal (`[k: v, ...]`).
-  `force()` is the single entry point for turning a `lazyList` into a concrete
-  list value; it recurses into nested lists/records/variants. Only invoke it
-  when a list is actually needed.
+- **Lazy lists**: literal elements are thunks; cons cells defer their head and
+  tail. `force()` reveals only the outer value and memoizes every traversed
+  thunk. It must never recursively force a list. Use `cell()` / `elements()` to
+  consume the spine incrementally, and `demand()` for a needed element.
+  `x = 1:x` and recursive Fibonacci lists are productive. `x = x` reports cyclic
+  evaluation when demanded. Failed/interrupted thunks release their busy flags.
+  Lists are always lists; an object is a record literal (`[k: v, ...]`).
+  `take` and `drop` accept non-negative integer counts; `map`, `filter`,
+  `zipWith`, `foldr`, and list append support infinite inputs incrementally.
+  Full traversals (length, negative indexing, etc.) need finite inputs to finish.
 - **Indexing**: applying a LIST to an int indexes it — `nums 0` is the first
   element, `nums (-1)` the last (negative counts from the end; the parens are
   needed because `nums -1` is a subtraction). Applying a list to a LIST of
   ints picks several elements: `nums [0, 2]` → `[10, 30]`. The callee's kind
   decides: list → index, record → clone (see below), else error.
-  - `force()` is the single entry point for turning a `lazyList` into a concrete
-    value; it recurses into nested lists/records/variants. Only invoke it when a
-    list is actually needed.
 - **No tuples.** `(a, b)` is invalid — parens are only for grouping/calls.
   Mixed values go in lists: `[213, "hello"]`.
 - **Groups / blocks — `( )` and `{ }` are interchangeable.** Both are a
@@ -185,10 +185,9 @@ intentional evaluation change.
   Consecutive same-name defs with params of equal arity are merged by
   `groupClauses` into one `clauseFn` value. See `evalDef` / `apply`:
   `clauseFn` accumulates applied args (supporting partial application) as
-  LAZY thunks; all-var clauses bind them UNEVALUATED (Haskell laziness),
-  pattern clauses DEMAND them (run 0-arg functions + force, memoized once
-  per call so clause fallthrough never re-runs a side-effecting argument),
-  then try each clause's patterns via `matchPattern`; no clause matches
+  LAZY thunks; variable/wildcard patterns bind without demand. Other patterns
+  demand only the structure they inspect via `matchPattern`; shared thunks
+  ensure clause fallthrough does not repeat effects already demanded. No clause matches
   → "no clause of '<name>' matches the given arguments" (the error names the
   function). Guards on def clauses are
   NOT supported (use `match x [ ... | ... ]` inside the body for guards).
@@ -257,7 +256,9 @@ intentional evaluation change.
   constructed (Ctrl+C breaks) and `*` iterates lazily. Range PATTERNS:
   `[lo..hi]` match any int in the range, inclusive. `:` also CONSes in
   expressions (`0:[]` → `[0]`, right-associative; parenthesize inside list
-  literals so it isn't record syntax). `zipWith fn xs ys` zips pairwise.
+  literals so it isn't record syntax). `zipWith fn xs ys` zips pairwise lazily.
+  All lazy lists, not just ranges, stream through print/emit and REPL echo;
+  Ctrl+C interrupts output and the REPL remains usable.
 - **Variants** via `data Maybe a = Just a | Nothing`; constructors and match
   expressions. Nullary constructors are bare values; arity>0 constructors are
   curried natives tagged with the constructor name.
@@ -278,7 +279,7 @@ intentional evaluation change.
 
 - In file mode, expressions evaluate for their effects but do NOT auto-print
   (assignments like `r = [...]` are silent, and a bare `pairs rec` statement
-  prints nothing) — every demo line in `features.txt` uses an explicit `print`.
+  prints nothing; file execution never renders its unused last value) — every demo line in `features.apn` uses an explicit `print`.
   In the REPL, unassigned expression results are echoed, and ASSIGNMENTS are
   SILENT (GHCi `let` parity — `lastIsBinding` gates the echo, so `x = x`
   never hangs the REPL; reference the name to see the value).
@@ -377,10 +378,10 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   are exhaustive.
 - Keep edits in the relevant `src/` module; keep `main.ts` a thin entry point.
   Preserve the dependency-free layout.
-- Reflect new syntax in `features.txt` and in the REPL `:help` block.
+- Reflect new syntax in `features.apn` and in the REPL `:help` block.
 - **Style — whole-function `match`**: when a function's ENTIRE body is a single
   `match`, write the same-line-open form (`f x = match x [ ... ]`), not the
-  block form (`f x =\n  match x [ ... ]`). Examples in `features.txt` follow
+  block form (`f x =\n  match x [ ... ]`). Examples in `features.apn` follow
   this. The block and fully single-line layouts still parse; only the
   single-line form is also shown (alongside the preferred one) in the 4b
   layout section.

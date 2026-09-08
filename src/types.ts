@@ -16,7 +16,9 @@ export type Value =
     | { kind: "char"; v: string }
     | { kind: "unit" }
     | { kind: "list"; v: Value[] }
-    | { kind: "lazyList"; exprs: Expr[]; env: Env }
+    | { kind: "lazyList"; exprs: Expr[]; env: Env; value?: Value }
+    | { kind: "cons"; head: Value; tail: Value }
+    | { kind: "deferred"; compute: () => Value; value?: Value; busy?: boolean }
     | { kind: "record"; v: Array<[string, Value]> }
     | { kind: "variant"; tag: string; v: Value[] }
     | { kind: "closure"; params: string[]; body: Expr; env: Env }
@@ -24,7 +26,7 @@ export type Value =
     | { kind: "clauseFn"; name: string; clauses: DefClause[]; arity: number; env: Env; applied: Value[] }
     | { kind: "range"; lo: number; step: number; hi: number | null }
     | { kind: "nomatch" }
-    | { kind: "thunk"; body: Expr; env: Env; value?: Value };
+    | { kind: "thunk"; body: Expr; env: Env; value?: Value; busy?: boolean };
 
 export function mkInt(v: number): Value { return { kind: "int", v }; }
 export function mkBool(v: boolean): Value { return { kind: "bool", v }; }
@@ -45,7 +47,9 @@ export function valueToString(v: Value): string {
         case "char": return `'${v.v}'`;
         case "unit": return "()";
         case "list": return `[${v.v.map(valueToString).join(", ")}]`;
-        case "lazyList": return "<lazy>";
+        case "lazyList":
+        case "cons": return "<lazy list>";
+        case "deferred": return "<thunk>";
         case "range": {
             if (v.hi === null) return `[${v.lo}${v.step !== 1 ? `, ${v.lo + v.step}` : ""}..]`;
             const out: Value[] = [];

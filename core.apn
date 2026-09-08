@@ -1,0 +1,12 @@
+# core.apn — the standard library, loaded with:  load "core.apn"
+#
+#   load "core.apn"              as a statement merges these into the current scope
+#   core = load "core.apn"       as a value returns them as a module record,
+#                                namespaced:  core.halt ; core.sq 4 ...
+#   core = { load "core.apn"; ... }   the merge stays scoped to that block.
+#
+# Application-body definitions are deferred actions: `halt = exit 0` only
+# terminates the process when `halt` is actually used (bare, core.halt, etc.).
+
+halt = exit 0
+sq x = x * x

@@ -1,7 +1,7 @@
 # =========================================================
 #  APN — Applicative Polish Notation — feature showcase
 #  A lazy, Haskell-like, untyped (JS-like) scripting language.
-#  Run:  deno run --allow-read main.ts features.txt
+#  Run:  deno run --allow-read main.ts features.apn
 #  NOTE: indentation is strict "4-space layout" — every nested
 #  level is exactly +4 spaces (and only +4).
 # =========================================================
@@ -587,21 +587,30 @@ print (spanArgs)              # => [1, 2, 3, 4]
 
 # ---------------------------------------------------------
 # 16b. EVALUATION CONTRACT (see SEMANTICS.md and semantics_test.ts)
-#    Current behavior: native calls can recompute a deferred value;
+#    Deferred values share their result across calls;
 #    block/application/pipe definitions are repeatable actions.
 # ---------------------------------------------------------
 evaluationValue = (print 2) + 1
 print evaluationValue       # => 2, then 3
 actionValue = { print "action"; 4 }
 print actionValue           # => action, then 4
-print evaluationValue       # => 2, then 3 again (not uniformly memoized)
+print evaluationValue       # => 3 (the value is memoized)
 print actionValue           # => action, then 4 again
 keepFirst x y = x
 print (keepFirst 7 missingEvaluationArg) # => 7 (unused argument is deferred)
 print (true ? 8 : missingEvaluationArg)  # => 8 (unselected branch is deferred)
-# Expected failures are asserted in semantics_test.ts:
-#   head [1, missingEvaluationArg]   forces every list element
-#   1 + 2.0                         does not coerce int to float
+# Lazy heads, tails, and recursive lists:
+ones = 1:ones
+fibs = 0 : 1 : zipWith (+) fibs (tail fibs)
+print (take 5 ones)          # => [1, 1, 1, 1, 1]
+print (take 12 fibs)         # => [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89]
+print (take 4 (drop 5 fibs)) # => [5, 8, 13, 21]
+print (head [1, missingEvaluationArg]) # => 1 (unused element stays deferred)
+print (take 4 (map (+ 1) [0..]))       # => [1, 2, 3, 4]
+print (take 4 (filter (n -> n % 2 == 0) [0..])) # => [0, 2, 4, 6]
+# In the REPL, entering ones or fibs streams until Ctrl+C.
+# Files use explicit print/emit for output; don't run unbounded output here.
+# Expected errors (asserted in semantics_test.ts): x = x; x and 1 + 2.0.
 
 # ---------------------------------------------------------
 # 17. EXIT, LOAD & HALT
@@ -611,17 +620,17 @@ print (true ? 8 : missingEvaluationArg)  # => 8 (unselected branch is deferred)
 #              (1) as a STATEMENT it merges the file's own definitions into
 #                  the current scope (an `include`);
 #              (2) as a VALUE it returns them as a MODULE record, so
-#                  core = load "core.txt"; core.sq 4 ...  is namespaced access.
+#                  core = load "core.apn"; core.sq 4 ...  is namespaced access.
 #              Inside a { } block the merge stays scoped to that block.
-#    halt      is NOT a builtin. It is defined in core.txt — the standard
+#    halt      is NOT a builtin. It is defined in core.apn — the standard
 #              library — as  `halt = exit 0`. Expression 0-arg defs are LAZY, so
-#              importing core.txt doesn't terminate the program; `halt` only
+#              importing core.apn doesn't terminate the program; `halt` only
 #              fires (exits 0) when it is actually USED.
 # ---------------------------------------------------------
-load "core.txt"             # include: sq and halt join THIS scope
+load "core.apn"             # include: sq and halt join THIS scope
 print (sq 5)                # => 25
 
-core = load "core.txt"      # namespaced module record
+core = load "core.apn"      # namespaced module record
 print (core.sq 4)           # => 16
 
 # step into the loaded halt (an action whose body is exit 0):
@@ -631,7 +640,7 @@ step 1 halt $ debug          # => exit 0
 
 # a load inside a { } block stays in the block's scope
 scoped = {
-    load "core.txt"
+    load "core.apn"
     sq 6
 }
 print (scoped)              # => 36
@@ -650,7 +659,7 @@ lazyNote = {
 print (lazyNote * 2)      # mentioning lazyNote runs the body (side effect)
                           # then uses the block's value:   # => 84
                           # Other expression bodies create deferred thunks;
-                          # see SEMANTICS.md for memoization limitations.
+                          # see SEMANTICS.md for memoization and lazy list rules.
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------
