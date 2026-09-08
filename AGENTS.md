@@ -360,8 +360,9 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   auto-indent dies with it). Typing `}`/`]` on an indent-only line dedents
   one level first, and deleting a lone `}`/`]` at column 0 of a continuation
   line restores that indent (the assist is symmetric).
-- **Enter** submits whenever the cursor is outside `()`, `{}`, and `[]`,
-  regardless of syntax validity. Inside brackets it inserts a newline.
+- **Enter** submits regardless of syntax validity, except immediately after
+  an opening `(`, `{`, or `[` (allowing whitespace), where it inserts an
+  indented newline. An unfinished `[1,2,3` submits and reports a syntax error.
   Shift+Enter reverses this behavior. Strings and comments do not count as
   brackets. Option+Left/Right navigate words (including across lines).
   Modified Enter requires a terminal that sends a distinct key sequence;

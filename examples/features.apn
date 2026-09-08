@@ -734,8 +734,8 @@ halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 # file-mode showcase: see :help inside the REPL, or AGENTS.md.
 # ---------------------------------------------------------
 
-# REPL editing: Option+Left/Right moves by word. Enter submits outside
-# (), {}, []; inside it inserts a newline. Shift+Enter does the inverse,
+# REPL editing: Option+Left/Right moves by word. Enter submits unless the
+# cursor immediately follows (, { or [; then it indents. Shift+Enter reverses this,
 # including submitting invalid code. Brackets in strings/comments are ignored.
 
 # REPL: Ctrl+W deletes the previous word with legacy or enhanced terminal keys.

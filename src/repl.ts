@@ -146,6 +146,24 @@ export function insideBrackets(src: string): boolean {
     return stack.length > 0;
 }
 
+export function afterOpeningBracket(src: string): boolean {
+    let quote = "", comment = false, escaped = false, last = "";
+    for (const ch of src) {
+        if (comment) { if (ch === "\n") comment = false; continue; }
+        if (quote) {
+            if (escaped) escaped = false;
+            else if (ch === "\\") escaped = true;
+            else if (ch === quote) quote = "";
+            continue;
+        }
+        if (/\s/.test(ch)) continue;
+        last = ch;
+        if (ch === "#") comment = true;
+        else if (ch === '"' || ch === "'") quote = ch;
+    }
+    return last !== "" && "([{".includes(last) && !quote && !comment;
+}
+
 // ---- ANSI colors (TTY REPL only; piped output stays plain) ----
 // Catppuccin Frappé palette, truecolor:
 // https://github.com/catppuccin/nvim/blob/main/lua/catppuccin/palettes/frappe.lua
@@ -338,7 +356,7 @@ function helpText(): string {
         `  Backspace  behind a full indent level deletes all 4 spaces; on a blank`,
         `             continuation line it undoes the line break (cursor at the`,
         `             end of the line above)`,
-        `  Enter      submits outside brackets; inserts a newline inside`,
+        `  Enter      submits; only after an opening (, { or [ it adds a newline`,
         `             on the next line ("... " prompt, auto-indent);`,
         `             cursor position decides, regardless of syntax validity`,
         `  Shift+Enter reverses Enter; Option+Left/Right moves by word`,
@@ -437,7 +455,8 @@ export class ReplEditor {
     splitLine(): void {
         const line = this.lines[this.row];
         const indent = (/^ */.exec(line) ?? [""])[0];
-        const deeper = /[{[]\s*$/.test(line) ? "    " : "";
+        const prefix = [...this.lines.slice(0, this.row), line.slice(0, this.col)].join("\n");
+        const deeper = afterOpeningBracket(prefix) ? "    " : "";
         this.lines[this.row] = line.slice(0, this.col);
         this.lines.splice(this.row + 1, 0, indent + deeper + line.slice(this.col));
         this.row++;
@@ -536,7 +555,7 @@ export class ReplEditor {
 
     enter(shift = false): KeyAction {
         const prefix = [...this.lines.slice(0, this.row), this.lines[this.row].slice(0, this.col)].join("\n");
-        if (insideBrackets(prefix) === shift) return "submit";
+        if (afterOpeningBracket(prefix) === shift) return "submit";
         this.splitLine();
         return "cont";
     }

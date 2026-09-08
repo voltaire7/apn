@@ -14,10 +14,10 @@ function equal(actual: unknown, expected: unknown) {
 }
 for (const [src, offset, inside] of [
     ["foo =", 5, false], ["x ->", 4, false],
-    ["(1)", 2, true], ["(1)", 3, false],
-    ["[1]", 1, true], ["{ 1 }", 3, true],
+    ["(1)", 2, false], ["(1)", 3, false],
+    ["[1]", 1, true], ["{ 1 }", 3, false],
     ['"("', 3, false], ["# [", 3, false],
-    ['{ "[" # }\n', 10, true], ["([)]", 4, true],
+    ['{ "[" # }\n', 10, false], ["([)]", 4, false],
     ["1 + 2", 1, false],
 ] as const) {
     Deno.test(`Enter and Shift+Enter at ${offset} in ${src}`, () => {
@@ -79,4 +79,21 @@ Deno.test("Ctrl+W release does not delete twice", () => {
     const ed = editor("one two");
     for (const ch of "\x1b[119;5u\x1b[119;5:3u") ed.feed(ch);
     equal(ed.src(), "one ");
+});
+
+Deno.test("Enter submits an unfinished list after an element", () => {
+    equal(editor("[1,2,3").enter(), "submit");
+});
+for (const opener of ["(", "{", "["]) {
+    Deno.test(`Enter indents immediately after ${opener} at the cursor`, () => {
+        const ed = editor(opener + "123", 1);
+        equal(ed.enter(), "cont");
+        equal(ed.src(), opener + "\n    123");
+        equal(ed.col, 4);
+        equal(editor(opener + "  ").enter(), "cont");
+        equal(editor(opener + "  ").enter(true), "submit");
+    });
+}
+Deno.test("an opening bracket in an unfinished string does not indent", () => {
+    equal(editor('["[').enter(), "submit");
 });
