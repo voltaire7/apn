@@ -1,4 +1,4 @@
-import { type Real, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
+import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
 function rangeNum(e: Expr): Real {
     if (e.t === "int" || e.t === "float") return { kind: e.t, v: e.v } as Real;
     if (e.t === "unop" && e.op === "neg") return negate(rangeNum(e.e)) as Real;
@@ -495,6 +495,15 @@ class Parser {
             case "int":
             case "float": {
                 this.next();
+                if (this.eatSym("@")) {
+                    const negative = this.eatSym("-");
+                    if (!negative) this.eatSym("+");
+                    const angle = this.next();
+                    if (angle.k !== "int" && angle.k !== "float") throw new Error("Parser: polar angle must be a numeric literal");
+                    const radius = { kind: t.k, v: t.v } as Real;
+                    const value = { kind: angle.k, v: angle.v } as Real;
+                    return { t: "numeric", v: numericNative("makePolar", [radius, negative ? negate(value) : value]) as Numeric };
+                }
                 const suffix = this.peek();
                 if (suffix.k === "ident" && suffix.v === "i" &&
                     !/\s/.test(this.source.slice(t.pos, suffix.pos))) {

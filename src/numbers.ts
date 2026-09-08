@@ -317,6 +317,13 @@ export function parseNumberText(text: string): Numeric | null {
     const ratio = s.match(/^([+-]?\d+)\/([+-]?\d+)$/);
     if (ratio) return rational(BigInt(ratio[1]), BigInt(ratio[2]));
     if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(s)) return floating(Number(s));
+    if (s.includes("@")) {
+        const pieces = s.split("@");
+        if (pieces.length !== 2) return null;
+        const radius = parseNumberText(pieces[0]), angle = parseNumberText(pieces[1]);
+        if (!radius || !angle || radius.kind === "complex" || angle.kind === "complex") return null;
+        return numericNative("makePolar", [radius, angle]) as Numeric;
+    }
     if (s.endsWith("i")) {
         const body = s.slice(0, -1);
         for (let i = 1; i < body.length; i++) {

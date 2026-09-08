@@ -263,3 +263,8 @@ ordinary subtraction. `sqrt -1` and `sqrt - 1` both produce `0+1i`.
 Numeric subtraction is unchanged. Precedence and associativity are unchanged:
 `sqrt -1 * 4` means `sqrt -(1 * 4)`, while `sqrt -1 + 2` means
 `(sqrt -1) + 2`. Use parentheses when a different grouping is intended.
+
+Polar literals use `radius@angle`, e.g. `2@3`, with angles in radians.
+The angle may have a sign, and decimal/exponent notation is accepted. They
+evaluate like `makePolar radius angle` and display in rectangular form.
+Use `makePolar` for computed radius/angle expressions.

@@ -281,7 +281,7 @@ export function highlightLine(s: string, ternaries: number[] = [0]): string {
             i += comparison.length; continue;
         }
         // Keep assignment and delimiters gray; operators use peach.
-        if ("+-*/%!<>$&|?`".includes(c)) out += paint(A.operator, c);
+        if ("+-*/%!<>$&|?`@".includes(c)) out += paint(A.operator, c);
         else if ("(){}[];,:.=".includes(c)) out += paint(A.gray, c);
         else out += c;
         i++;
@@ -363,7 +363,7 @@ function helpText(): string {
         `  sqrt -1 => 0+1i (function - number applies it to the negated number)`,
         `  exact integers/rationals: 0xFF, 0b1010, 0o17, 1 / 3; floats: .1, 1e3`,
         `  1 + 2.0 => 3.0; exact/inexact convert; quotient truncates division`,
-        `  sqrt (-1) => 0+1i; literals 1i, 3+4i; realPart/imagPart`,
+        `  sqrt (-1) => 0+1i; literals 1i, 3+4i, 2@3 (radians); realPart/imagPart`,
         `  isNumber/isInteger/isExact; numerator/denominator; round ties to even`,
         `  foo = _   unfinished definition; using it raises not implemented`,
         `  arr 0 = 10   update an existing list; arr (-1) = 10 updates its last item`,

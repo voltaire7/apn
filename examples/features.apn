@@ -747,6 +747,8 @@ print (sqrt - 1)      # => 0+1i (spacing makes no difference)
 print (10 - 1)        # => 9
 print ((x -> x * 2) -3) # => -6
 
+print (2@3) # => -1.9799849932008908+0.2822400161197344i
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------
