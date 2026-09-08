@@ -184,7 +184,8 @@ const A = {
 const paint = (code: string, s: string) => code + s + A.reset;
 
 function colorNumber(text: string): string {
-    return text.split("/").map((part) => paint(A.yellow, part)).join(paint(A.operator, "/"));
+    return text.split(/([+\-/])/).filter(Boolean).map((part) =>
+        paint(/^[+\-/]$/.test(part) ? A.operator : A.yellow, part)).join("");
 }
 
 export function renderColored(interp: Interpreter, value: Value, emit: (s: string) => void): void {

@@ -51,3 +51,16 @@ Deno.test("fraction slashes are peach in scalar and nested echoes", () => {
         if (!output.includes(expected)) throw new Error("Wrong nested fraction colors");
     }
 });
+
+Deno.test("complex signs are peach in scalar and nested echoes", () => {
+    const interp = new Interpreter();
+    for (const source of ["sqrt (-1)", "makeRectangular 0 (-1)"]) {
+        const value = interp.run(parse(source));
+        const sign = source.startsWith("sqrt") ? "+" : "-";
+        const expected = `\x1b[38;2;239;159;118m${sign}\x1b[0m`;
+        if (!showValue(value).includes(expected)) throw new Error("Wrong complex sign color");
+        let nested = "";
+        renderColored(interp, { kind: "list", v: [value] }, (text) => { nested += text; });
+        if (!nested.includes(expected)) throw new Error("Wrong nested complex sign color");
+    }
+});
