@@ -4,7 +4,7 @@ import { APNError } from "./errors.ts";
 export const STANDARD_NATIVES: Array<[string, number]> = [
     ["seq", 2], ["all", 2], ["any", 2], ["find", 2], ["words", 1], ["fail", 1], ["chars", 1], ["fromChars", 1], ["splitOn", 2], ["joinWith", 2],
     ["trim", 1], ["upper", 1], ["lower", 1], ["replaceAll", 3],
-    ["takeWhile", 2], ["dropWhile", 2], ["scanl", 3], ["_reverse", 1], ["sortBy", 2],
+    ["takeWhile", 2], ["dropWhile", 2], ["scanl", 3], ["sortBy", 2],
 ];
 export function standardNative(i: Interpreter, name: string, args: Value[]): Value {
     const str = (v: Value): string => {
@@ -53,7 +53,6 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
         }));
         return loop(args[1], args[2]);
     }
-    if (name === "_reverse") return mkList(i.items(args[0]).reverse());
     if (name === "sortBy") {
         const items = i.items(args[1]);
         items.sort((a, b) => {

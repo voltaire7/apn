@@ -2,6 +2,9 @@ import { Interpreter } from "../src/interp.ts";
 import { parse } from "../main.ts";
 
 const cases: [string, string][] = [
+    ['head (reverse [1..10000])', '10000'],
+    ['length (reverse [1..10000])', '10000'],
+    ['reverse (reverse [1,2,3])', '[1, 2, 3]'],
     ['reverse [1,2,3]', '[3, 2, 1]'],
     ['reverse []', '[]'],
     ['reverse ""', '""'],

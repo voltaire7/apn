@@ -804,6 +804,8 @@ myTypeOf (Int32 5)  # => Int32
 
 # Standard modules are cached imports, separate from file execution with load.
 import "std"
+# reverse is implemented in APN with a linear-time accumulator fold.
+print (head (reverse [1..10000]))   # 10000
 print (reverse [1,2,3])             # [3, 2, 1]
 print (reverse "a😀b")              # b😀a
 print (take 6 primes)                 # [2, 3, 5, 7, 11, 13]
