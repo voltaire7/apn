@@ -798,6 +798,10 @@ print (Record [x: 1])    # => [x: 1]
 print ((Function (x -> x + 1)) 2) # => 3
 print (Type Bool)        # => Bool
 
+myTypeOf (t x) = print t
+myTypeOf true       # => Bool
+myTypeOf (Int32 5)  # => Int32
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

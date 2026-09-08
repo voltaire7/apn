@@ -23,6 +23,12 @@ for (const [source, expected] of [
     ["[isType Bool true, isType String 1, isType List [1..], isType Type Bool]", "[true, false, true, true]"],
     ['f (Bool x) = "bool"\nf (String x) = "string"\nf (List x) = "list"\n[f true, f "hi", f [1]]', '["bool", "string", "list"]'],
     ["value = true\nvalue $ cast Bool", "true"],
+    ["myTypeOf (t x) = t\nmyTypeOf true", "Bool"],
+    ["myTypeOf (t x) = t\nmyTypeOf (Int32 5)", "Int32"],
+    ["identity (t x) = x\nidentity (Int32 5)", "Int32 5"],
+    ["myTypeOf (t x) = t\nmyTypeOf [missing]", "List"],
+    ["sameType (t x) (t y) = true\nsameType x y = false\n[sameType 1 2, sameType 1 true]", "[true, false]"],
+    ["match true [(t x) -> t]", "Bool"],
     ["Int 123", "Int 123"], ["Int32 123", "Int32 123"],
     ["UInt 123", "UInt 123"], ["UInt32 4294967295", "UInt32 4294967295"],
     ["Float 3", "Float 3.0"], ["Float32 .5", "Float32 0.5"],
@@ -65,3 +71,13 @@ for (const source of ["Bool 1", "String 123", "Char true", "List 1", "Record []"
         throw new Error("Expected conversion error");
     });
 }
+
+Deno.test("type binding prints the captured type", () => {
+    const output: string[] = [];
+    const original = console.log;
+    console.log = (...args: unknown[]) => { output.push(args.join(" ")); };
+    try {
+        new Interpreter().run(parse("myTypeOf (t x) = print t\nmyTypeOf true"));
+        if (output.join("\n") !== "Bool") throw new Error("Expected Bool");
+    } finally { console.log = original; }
+});

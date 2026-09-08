@@ -366,6 +366,7 @@ function helpText(): string {
         `  Function (x -> x); Type Int; Variant (YourConstructor value)`,
         `  Int/UInt, Int8..Int128/UInt8..UInt128, Float/Float32, Fraction, Complex`,
         `  Int32 123; cast Int 3.7; value $ cast Float32; typeOf value`,
+        `  myTypeOf (t x) = print t   (bind the runtime type and value)`,
         `  f (Int x) = ...; f (Number x) = ... (typed overloads)`,
         `  100 * _ -> Int 0 repeats; 100 * Int 0 multiplies`,
         `  HashMap [] $ insert ["x": 123]; lookup "x" m; m "x"`,

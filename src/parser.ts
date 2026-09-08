@@ -150,6 +150,14 @@ class Parser {
         if (t.k === "sym" && t.v === "(") {
             this.next();
             if (this.isSym(")")) { this.next(); return { p: "list", v: [] }; }
+            const typeName = this.peek(), valueName = this.peek(1), closing = this.peek(2);
+            if (typeName.k === "ident" && /^[a-z]/.test(typeName.v) &&
+                valueName.k === "ident" && closing.k === "sym" && closing.v === ")") {
+                this.next();
+                const value = this.parsePattern();
+                this.expectSym(")");
+                return { p: "typeBind", name: typeName.v, value };
+            }
             const p = this.parseConsPattern();
             if (this.eatSym(",")) {
                 throw new Error("Parser: tuple patterns are not supported; use a list pattern [a, b, ...] instead");

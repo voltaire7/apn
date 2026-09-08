@@ -1285,6 +1285,10 @@ export class Interpreter {
         }
         v = this.demand(v);
         switch (p.p) {
+            case "typeBind": {
+                const type = this.callNative("typeOf", [v]);
+                return this.matchPattern({ p: "var", name: p.name }, type, binds) && this.matchPattern(p.value, v, binds);
+            }
             case "int": return isNumeric(v) && equalNumbers(v, integer(p.v));
             case "bool": return v.kind === "bool" && v.v === p.v;
             case "string": return v.kind === "string" && v.v === p.v;

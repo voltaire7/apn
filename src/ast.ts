@@ -51,6 +51,7 @@ export type Pattern =
     | { p: "string"; v: string }
     | { p: "list"; v: Pattern[] }
     | { p: "cons"; head: Pattern; tail: Pattern }
+    | { p: "typeBind"; name: string; value: Pattern }
     | { p: "constr"; tag: string; args: Pattern[] }
     | { p: "recPat"; v: Array<[string, string]> }
     | { p: "range"; lo: bigint; hi: bigint };

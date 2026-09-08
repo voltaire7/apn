@@ -348,3 +348,8 @@ forcing list elements or coercing unrelated values. Their constructor patterns
 work in overloads, e.g. `f (Bool x) = x`. `isType` and identity `cast` support
 these types too. Use existing `data` constructors to create a particular variant;
 `Variant` validates any such value.
+
+A lowercase pair pattern `(t x)` captures the runtime type descriptor in `t`
+and the original value in `x`. For example, `myTypeOf (t x) = print t`.
+It inspects the outer value without forcing list contents. Repeating the type
+variable, as in `(t x) (t y)`, requires both arguments to have the same type.
