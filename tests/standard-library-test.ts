@@ -2,6 +2,10 @@ import { Interpreter } from "../src/interp.ts";
 import { parse } from "../main.ts";
 
 const cases: [string, string][] = [
+    ['reverse [1,2,3]', '[3, 2, 1]'],
+    ['reverse []', '[]'],
+    ['reverse ""', '""'],
+    ['head (reverse [missing,2])', '2'],
     ['lookup 1 (frequencies (replicate 1000 1))', '1000'],
     ['compose (*2) (+1) 4', '10'],
     ['uncurry (+) [2,3]', '5'],
@@ -39,7 +43,7 @@ const cases: [string, string][] = [
     ['mean []', 'None'],
     ['take 10 fibonacci', '[0, 1, 1, 2, 3, 5, 8, 13, 21, 34]'],
     ['take 10 primes', '[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]'],
-    ['textReverse "a😀b"', '"b😀a"'],
+    ['reverse "a😀b"', '"b😀a"'],
     ['textLength "a😀b"', '3'],
     ['textTake 2 "a😀b"', '"a😀"'],
     ['words " a\t b\r\n c "', '["a", "b", "c"]'],
@@ -98,4 +102,15 @@ Deno.test("standard natives require importing their module", () => {
     if (i.env.get("words") !== undefined) throw new Error("stdlib leaked into builtins");
     i.run(parse('import "std/text"'));
     if (i.renderString(i.run(parse('words "a b"'))) !== '["a", "b"]') throw new Error("missing export");
+});
+
+Deno.test("reverse uses APN typed clauses and is available from either module", () => {
+    for (const module of ["std/sequence", "std/text"]) {
+        const i = new Interpreter();
+        i.importStandard(module);
+        const fn = i.demand(i.env.get("reverse")!);
+        if (fn.kind !== "clauseFn") throw new Error("reverse must use typed APN overloads");
+        if (i.renderString(i.run(parse('reverse "a😀b"'))) !== '"b😀a"') throw new Error(module);
+        if (i.env.get("textReverse") !== undefined) throw new Error("obsolete prefixed helper");
+    }
 });

@@ -28,3 +28,7 @@ sort xs = sortBy compare xs
 sortOn project xs = sortBy (on compare project) xs
 minimum xs = null xs ? None : Some (foldl min (head xs) (tail xs))
 maximum xs = null xs ? None : Some (foldl max (head xs) (tail xs))
+
+# One operation, dispatched by the argument type.
+reverse (List xs) = _reverse xs
+reverse (String text) = fromChars (_reverse (chars text))

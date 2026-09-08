@@ -80,7 +80,7 @@ Existing `map`, `filter`, `take`, `drop`, `zipWith`, `iterate`, `foldl`, and
 | `intersperse separator xs` | Insert separators between elements |
 | `partition predicate xs` | `[matching, nonmatching]` |
 | `unique xs` | Preserve the first occurrence of each value |
-| `reverse xs` | Reverse a finite list |
+| `reverse value` | Overloaded for List and String; reverses finite lists or Unicode code points |
 | `compare x y` | Negative, zero, or positive integer |
 | `sort xs`, `sortOn project xs`, `sortBy comparator xs` | Stable ascending sort; comparator returns an integer |
 | `minimum xs`, `maximum xs` | Optional extrema |
@@ -113,7 +113,7 @@ operations retain APN's existing overflow checks and lossless conversion rules.
 | API | Behavior |
 | --- | --- |
 | `chars text`, `fromChars xs` | Convert between strings and lists of Char |
-| `textLength text`, `textReverse text` | Count/reverse Unicode code points |
+| `textLength text`, `reverse text` | Count/reverse Unicode code points |
 | `textTake n text`, `textDrop n text` | Code-point prefixes and suffixes |
 | `splitOn delimiter text`, `joinWith delimiter xs` | Literal splitting/joining; splitting preserves empty fields |
 | `replaceAll search replacement text` | Literal replacement |

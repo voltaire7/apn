@@ -44,7 +44,7 @@ export class Interpreter {
             const scope = new Env(builtins);
             const nativeExports: Record<string, string[]> = {
                 function: ["fail", "seq"],
-                sequence: ["all", "any", "find", "takeWhile", "dropWhile", "scanl", "reverse", "sortBy"],
+                sequence: ["all", "any", "find", "takeWhile", "dropWhile", "scanl", "sortBy"],
                 text: ["words", "chars", "fromChars", "splitOn", "joinWith", "trim", "upper", "lower", "replaceAll"],
             };
             for (const exported of nativeExports[name] ?? []) scope.setLocal(exported, builtins.get(exported)!);

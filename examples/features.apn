@@ -804,6 +804,8 @@ myTypeOf (Int32 5)  # => Int32
 
 # Standard modules are cached imports, separate from file execution with load.
 import "std"
+print (reverse [1,2,3])             # [3, 2, 1]
+print (reverse "a😀b")              # b😀a
 print (take 6 primes)                 # [2, 3, 5, 7, 11, 13]
 print (mean [1,2])                    # Some 3/2
 print ("one two one" $ words $ frequencies)
