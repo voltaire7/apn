@@ -168,3 +168,9 @@ The RHS is evaluated against the old binding before it is replaced. Consecutive
 index assignments execute in order. Inside a block the update shadows the outer
 binding. On an unbound name or an existing function, the same syntax remains a
 literal-pattern function definition (`f 0 = 10`).
+
+
+Leading-dot decimals such as `.1`, `.2`, and `-.5` are float literals. Like other
+floats, `.1 + .2` yields `0.30000000000000004` under binary floating-point
+arithmetic. An attached numeric field access (`rec.1`) stays record access;
+whitespace allows a float argument (`print .1`). Range dots (`[1..3]`) are unchanged.

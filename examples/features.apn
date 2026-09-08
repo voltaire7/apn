@@ -584,6 +584,10 @@ print (spanArgs)              # => [1, 2, 3, 4]
 #         }
 #   - any indentation that skips a level (0 -> 8) or is not a multiple of 4.
 
+# Leading-dot decimal literals are floats; ordinary binary float rounding applies.
+print (.1 + .2)              # => 0.30000000000000004
+print (-.5)                 # => -0.5
+
 # List assignment rebinds a copy, like record field assignment.
 editable = [1, 2, 3]
 editable 0 = 10

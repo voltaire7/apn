@@ -133,6 +133,16 @@ export function lex(src: string): Token[] {
         }
         if (matchedSym) continue;
 
+        // A dot followed by digits starts a float at an expression boundary.
+        // Attached dots remain record access: rec.1; whitespace permits print .1.
+        if (c === "." && /\d/.test(src[pos + 1] ?? "") &&
+            (pos === 0 || /[\s([{,;=+\-*/%<>!?|:$]/.test(src[pos - 1]))) {
+            pos++;
+            while (pos < src.length && /\d/.test(src[pos])) pos++;
+            toks.push({ k: "float", v: Number(src.slice(start, pos)), pos: start });
+            continue;
+        }
+
         // single-char symbols. `(`/`)` suppress layout inside parens (grouping);
         // `[`/`]` DO NOT: newlines and indentation inside a list literal are
         // significant, so elements can be separated just by being on their own

@@ -208,7 +208,7 @@ function highlightLine(s: string): string {
             const j = s[i + 1] === "\\" ? Math.min(i + 4, s.length) : Math.min(i + 3, s.length);
             out += paint(A.green, s.slice(i, j)); i = j; continue;
         }
-        if (/\d/.test(c)) {
+        if (/\d/.test(c) || (c === "." && /\d/.test(s[i + 1] ?? ""))) {
             let j = i;
             while (j < s.length && /[\d.]/.test(s[j])) j++;
             out += paint(A.yellow, s.slice(i, j)); i = j; continue;
@@ -306,7 +306,7 @@ function helpText(): string {
         `  indentation: strict 4-space layout (exactly +4 per level)`,
         `  [1,2,3] * x -> print x      (seq * fn iterates; int * fn counts)`,
         `  recursion, higher-order fns, records, variants`,
-        `  integers are arbitrary precision (no suffix); floats remain decimals`,
+        `  integers are arbitrary precision; floats accept 0.1 or .1`,
         `  foo = _   unfinished definition; using it raises not implemented`,
         `  arr 0 = 10   update an existing list; arr (-1) = 10 updates its last item`,
         `  both sides of = are required; use () for an explicit unit value`,
