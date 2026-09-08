@@ -124,10 +124,12 @@ function isIncompleteError(msg: string): boolean {
 }
 
 // Scan only text before the cursor; tolerate incomplete/invalid source.
-export function insideBrackets(src: string): boolean {
-    const stack: string[] = [];
+export function insideBrackets(src: string, multilineOnly = false): boolean {
+    const stack: { bracket: string; line: number }[] = [];
+    let line = 0;
     let quote = "", comment = false, escaped = false;
     for (const ch of src) {
+        if (ch === "\n") line++;
         if (comment) { if (ch === "\n") comment = false; continue; }
         if (quote) {
             if (escaped) escaped = false;
@@ -137,13 +139,13 @@ export function insideBrackets(src: string): boolean {
         }
         if (ch === "#") { comment = true; continue; }
         if (ch === '"' || ch === "'") { quote = ch; continue; }
-        if ("([{".includes(ch)) stack.push(ch);
+        if ("([{".includes(ch)) stack.push({ bracket: ch, line });
         else if (")]}".includes(ch)) {
             const opening = "([{"[")]}".indexOf(ch)];
-            if (stack[stack.length - 1] === opening) stack.pop();
+            if (stack[stack.length - 1]?.bracket === opening) stack.pop();
         }
     }
-    return stack.length > 0;
+    return multilineOnly ? stack.some((entry) => entry.line < line) : stack.length > 0;
 }
 
 export function afterOpeningBracket(src: string): boolean {
@@ -356,7 +358,7 @@ function helpText(): string {
         `  Backspace  behind a full indent level deletes all 4 spaces; on a blank`,
         `             continuation line it undoes the line break (cursor at the`,
         `             end of the line above)`,
-        `  Enter      submits; only after an opening (, { or [ it adds a newline`,
+        `  Enter      continues after an opener or inside a multiline bracket block`,
         `             on the next line ("... " prompt, auto-indent);`,
         `             cursor position decides, regardless of syntax validity`,
         `  Shift+Enter reverses Enter; Option+Left/Right moves by word`,
@@ -555,7 +557,8 @@ export class ReplEditor {
 
     enter(shift = false): KeyAction {
         const prefix = [...this.lines.slice(0, this.row), this.lines[this.row].slice(0, this.col)].join("\n");
-        if (afterOpeningBracket(prefix) === shift) return "submit";
+        const continueLine = afterOpeningBracket(prefix) || insideBrackets(prefix, true);
+        if (continueLine === shift) return "submit";
         this.splitLine();
         return "cont";
     }

@@ -362,7 +362,9 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   line restores that indent (the assist is symmetric).
 - **Enter** submits regardless of syntax validity, except immediately after
   an opening `(`, `{`, or `[` (allowing whitespace), where it inserts an
-  indented newline. An unfinished `[1,2,3` submits and reports a syntax error.
+  indented newline. Enter also continues inside a bracket opened on an earlier
+  line, preserving indentation. An unfinished single-line `[1,2,3` submits
+  and reports a syntax error.
   Shift+Enter reverses this behavior. Strings and comments do not count as
   brackets. Option+Left/Right navigate words (including across lines).
   Modified Enter requires a terminal that sends a distinct key sequence;

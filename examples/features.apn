@@ -739,3 +739,6 @@ halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 # including submitting invalid code. Brackets in strings/comments are ignored.
 
 # REPL: Ctrl+W deletes the previous word with legacy or enhanced terminal keys.
+
+# REPL: after [ then a newline and an indented 1, Enter adds another indented
+# line. Shift+Enter submits instead. After the closing ], Enter submits.

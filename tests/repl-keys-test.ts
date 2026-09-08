@@ -17,7 +17,7 @@ for (const [src, offset, inside] of [
     ["(1)", 2, false], ["(1)", 3, false],
     ["[1]", 1, true], ["{ 1 }", 3, false],
     ['"("', 3, false], ["# [", 3, false],
-    ['{ "[" # }\n', 10, false], ["([)]", 4, false],
+    ['{ "[" # }\n', 10, true], ["([)]", 4, false],
     ["1 + 2", 1, false],
 ] as const) {
     Deno.test(`Enter and Shift+Enter at ${offset} in ${src}`, () => {
@@ -96,4 +96,26 @@ for (const opener of ["(", "{", "["]) {
 }
 Deno.test("an opening bracket in an unfinished string does not indent", () => {
     equal(editor('["[').enter(), "submit");
+});
+
+for (const [open, close] of [["[", "]"], ["{", "}"], ["(", ")"]]) {
+    Deno.test(`Enter continues a multiline ${open} body`, () => {
+        const src = open + "\n    1";
+        const ed = editor(src);
+        equal(ed.enter(), "cont");
+        equal(ed.src(), src + "\n    ");
+        equal(ed.col, 4);
+        equal(editor(src).enter(true), "submit");
+        equal(editor(src + "\n" + close).enter(), "submit");
+        equal(editor(src + "\n" + close).enter(true), "cont");
+    });
+}
+Deno.test("an earlier unrelated line does not make a bracket multiline", () => {
+    equal(editor("x = 1\n[1,2,3").enter(), "submit");
+});
+Deno.test("Enter inside a pasted multiline list uses cursor position", () => {
+    const src = "[\n    1\n]";
+    const ed = editor(src, src.indexOf("1") + 1);
+    equal(ed.enter(), "cont");
+    equal(ed.src(), "[\n    1\n    \n]");
 });
