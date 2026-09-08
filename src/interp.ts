@@ -531,7 +531,12 @@ export class Interpreter {
             case "*":
                 if (r.kind === "closure" || r.kind === "clauseFn" || r.kind === "native") return this.iterate(l, r);
                 return bad();
-            case "-": case "/": case "%": return bad();
+            case "-":
+                if ((l.kind === "closure" || l.kind === "clauseFn" || l.kind === "native") && isNumeric(r)) {
+                    return this.apply(l, negate(r));
+                }
+                return bad();
+            case "/": case "%": return bad();
             case "==": return mkBool(this.equals(l, r));
             case "!=": return mkBool(!this.equals(l, r));
             case "<": return this.compare(l, r) < 0 ? mkBool(true) : mkBool(false);

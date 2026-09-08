@@ -354,6 +354,7 @@ function helpText(): string {
         `  indentation: strict 4-space layout (exactly +4 per level)`,
         `  [1,2,3] * x -> print x      (seq * fn iterates; int * fn counts)`,
         `  recursion, higher-order fns, records, variants`,
+        `  sqrt -1 => 0+1i (function - number applies it to the negated number)`,
         `  exact integers/rationals: 0xFF, 0b1010, 0o17, 1 / 3; floats: .1, 1e3`,
         `  1 + 2.0 => 3.0; exact/inexact convert; quotient truncates division`,
         `  sqrt (-1) => 0+1i; literals 1i, 3+4i; realPart/imagPart`,

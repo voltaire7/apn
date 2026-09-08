@@ -255,3 +255,11 @@ on. Taking zero elements does not evaluate either argument; taking one does
 not call `f`. Sequential consumption supports long sequences. As with other
 nested deferred computations, skipping many unevaluated elements then demanding
 a value that depends on all of them can hit the evaluator's stack limit.
+
+Experimental function-minus overload: `f - x` applies a function `f` to the
+negated numeric value of `x`. It accepts native functions, lambdas, and named
+functions (including partial applications). Both operands are demanded as for
+ordinary subtraction. `sqrt -1` and `sqrt - 1` both produce `0+1i`.
+Numeric subtraction is unchanged. Precedence and associativity are unchanged:
+`sqrt -1 * 4` means `sqrt -(1 * 4)`, while `sqrt -1 + 2` means
+`(sqrt -1) + 2`. Use parentheses when a different grouping is intended.
