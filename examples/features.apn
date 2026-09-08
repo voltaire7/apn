@@ -733,3 +733,5 @@ halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 # REPL editing: Option+Left/Right moves by word. Enter submits outside
 # (), {}, []; inside it inserts a newline. Shift+Enter does the inverse,
 # including submitting invalid code. Brackets in strings/comments are ignored.
+
+# REPL: Ctrl+W deletes the previous word with legacy or enhanced terminal keys.

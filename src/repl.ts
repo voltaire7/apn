@@ -666,6 +666,19 @@ export class ReplEditor {
             if (!done) return "cont";
             this.esc = "";
             const rest = e[1] === "O" ? e[2] : e.slice(2);
+            // Enhanced keyboard protocols encode Ctrl letters as CSI sequences.
+            // Translate them to the same control bytes used by legacy terminals.
+            const kitty = rest.match(/^(\d+)(?::\d+)*;(\d+)(?::([123]))?u$/);
+            const xterm = rest.match(/^27;(\d+);(\d+)~$/);
+            if (kitty || xterm) {
+                const code = Number(kitty ? kitty[1] : xterm![2]);
+                const modifiers = Number(kitty ? kitty[2] : xterm![1]);
+                if (kitty?.[3] === "3") return "cont"; // key release
+                if (modifiers === 5 && code >= 65 && code <= 122) {
+                    const letter = String.fromCharCode(code).toLowerCase();
+                    if (/^[a-z]$/.test(letter)) return this.feed(String.fromCharCode(letter.charCodeAt(0) - 96));
+                }
+            }
             if (rest === "13;2u" || rest === "27;2;13~") return this.enter(true);
             if (rest === "13u" || rest === "13;1u") return this.enter();
             if (rest === "1;3D" || rest === "1;9D") { this.word(-1); return "cont"; }

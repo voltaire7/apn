@@ -53,3 +53,30 @@ Deno.test("escaped quotes and comments do not create brackets", () => {
     equal(insideBrackets('"escaped \\" ("'), false);
     equal(insideBrackets("# {\n[]"), false);
 });
+
+for (const sequence of ["\x17", "\x1b[119;5u", "\x1b[119;5:2u", "\x1b[27;5;119~"]) {
+    Deno.test(`Ctrl+W deletes a word: ${JSON.stringify(sequence)}`, () => {
+        const ed = editor("one two");
+        for (const ch of sequence) ed.feed(ch);
+        equal(ed.src(), "one ");
+        equal(ed.col, 4);
+        ed.lines = ["one", "two"]; ed.row = 1; ed.col = 0;
+        for (const ch of sequence) ed.feed(ch);
+        equal(ed.src(), "onetwo");
+    });
+}
+Deno.test("encoded Ctrl shortcuts retain legacy behavior", () => {
+    for (const code of [1, 3, 4, 5, 11, 21, 23]) {
+        const legacy = editor("one two", 4), enhanced = editor("one two", 4);
+        const expected = legacy.feed(String.fromCharCode(code));
+        let actual = "";
+        for (const ch of `\x1b[${code + 96};5u`) actual = enhanced.feed(ch);
+        equal(actual, expected); equal(enhanced.src(), legacy.src());
+        equal(enhanced.col, legacy.col);
+    }
+});
+Deno.test("Ctrl+W release does not delete twice", () => {
+    const ed = editor("one two");
+    for (const ch of "\x1b[119;5u\x1b[119;5:3u") ed.feed(ch);
+    equal(ed.src(), "one ");
+});
