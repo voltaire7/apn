@@ -1,0 +1,21 @@
+import "std/function"
+# Explicit absence and recoverable errors. No exceptions hidden in pipelines.
+data Option a = Some a | None
+data Result a e = Ok a | Err e
+isSome (Some x) = true
+isSome None = false
+isNone value = not (isSome value)
+withDefault fallback (Some x) = x
+withDefault fallback None = fallback
+mapOption f (Some x) = Some (f x)
+mapOption f None = None
+andThen f (Some x) = f x
+andThen f None = None
+mapResult f (Ok x) = Ok (f x)
+mapResult f (Err error) = Err error
+mapError f (Ok x) = Ok x
+mapError f (Err error) = Err (f error)
+andThenResult f (Ok x) = f x
+andThenResult f (Err error) = Err error
+resultDefault fallback (Ok x) = x
+resultDefault fallback (Err error) = fallback

@@ -1,0 +1,18 @@
+import "std/sequence"
+# Persistent map transformations. Input maps are never modified.
+getOption key m = has key m ? Some (lookup key m) : None
+getOr fallback key m = has key m ? lookup key m : fallback
+insertWith combine entry m = foldl (acc item -> insert [[fst item, has (fst item) acc ? combine (lookup (fst item) acc) (snd item) : snd item]] acc) m (pairs (HashMap entry))
+update key f m = has key m ? insert [[key, f (lookup key m)]] m : m
+mapValues f m = HashMap (map ([key, value] -> [key, f value]) (pairs m))
+filterMap predicate m = HashMap (filter ([key, value] -> predicate key value) (pairs m))
+merge left right = insert (pairs right) left
+mergeWith combine left right = insertWith combine (pairs right) left
+frequencies xs = {
+    increment m x = {
+        count = getOr 0 x m + 1
+        seq count (insert [[x, count]] m)
+    }
+    foldl increment (HashMap []) xs
+}
+groupBy project xs = mapValues reverse (foldl (m x -> insertWith (old new -> new ++ old) [[project x, [x]]] m) (HashMap []) xs)

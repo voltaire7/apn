@@ -1,0 +1,22 @@
+import "std/sequence"
+# Exact arithmetic remains exact through these functions.
+sq x = x * x
+cube x = x * x * x
+clamp lo hi x = lo > hi ? fail "clamp requires lo <= hi" : max lo (min hi x)
+sign x = x < 0 ? -1 : x > 0 ? 1 : 0
+factorial n = isInteger n ? n < 0 ? fail "factorial expects a non-negative integer" : product (take (cast Int n) [1..]) : fail "factorial expects an integer"
+mean xs = null xs ? None : Some (sum xs / length xs)
+variance xs = null xs ? None : {
+    m = 0 + withDefault 0 (mean xs)
+    Some (sum (map (x -> sq (x - m)) xs) / length xs)
+}
+standardDeviation xs = mapOption sqrt (variance xs)
+median xs = null xs ? None : {
+    ordered = sort xs
+    n = length ordered
+    mid = quotient n 2
+    isOdd n ? Some (ordered mid) : Some ((ordered (mid - 1) + ordered mid) / 2)
+}
+isPrime n = n < 2 ? false : all (d -> n % d != 0) (takeWhile (d -> d * d <= n) [2..])
+primes = filter isPrime [2..]
+fibonacci = 0 : 1 : zipWith (+) fibonacci (tail fibonacci)

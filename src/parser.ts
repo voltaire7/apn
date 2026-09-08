@@ -691,6 +691,12 @@ class Parser {
     parseKeyword(): Expr {
         const t = this.peek() as { v: string };
         switch (t.v) {
+            case "import": {
+                this.next();
+                const module = this.next();
+                if (module.k !== "str") throw new Error("Parser: import expects a module name string");
+                return { t: "import", module: module.v };
+            }
             case "match": return this.parseMatch();
             case "true": this.next(); return { t: "bool", v: true };
             case "false": this.next(); return { t: "bool", v: false };
@@ -1254,6 +1260,7 @@ export function groupClauses(program: TopLevel[]): TopLevel[] {
 // Render an expression back to source text (for debug / quote inspection).
 export function exprToSource(e: Expr): string {
     switch (e.t) {
+        case "import": return `import ${JSON.stringify(e.module)}`;
         case "numeric": return numberText(e.v);
         case "rationalRange": return `[${numberText(e.lo)}, ${numberText(arithmetic("+", e.lo, e.step))}..${e.hi === null ? "" : numberText(e.hi)}]`;
         case "int": return String(e.v);

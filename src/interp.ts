@@ -1,3 +1,4 @@
+import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, matchesType, castNumeric, implicitOperands, typedArithmetic, numericHash } from "./type-system.ts";
 import { parseNumberText, isNumeric, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
@@ -24,6 +25,45 @@ export const NATIVES: Array<[string, number]> = [
 ];
 
 export class Interpreter {
+    private modules = new Map<string, Extract<Value, { kind: "record" }>>();
+    private importing = new Set<string>();
+
+    importStandard(module: string): Value {
+        const names = ["function", "option", "sequence", "number", "text", "map"];
+        const name = module === "std" ? "std" : module.startsWith("std/") && names.includes(module.slice(4)) ? module.slice(4) : null;
+        if (!name) throw new APNError("runtime", `unknown module '${module}'`);
+        let record = this.modules.get(module);
+        if (!record) {
+            if (this.importing.has(module)) throw new APNError("runtime", `cyclic import '${module}'`);
+            this.importing.add(module);
+            const caller = this.env;
+            // Modules resolve against builtins, never arbitrary caller bindings.
+            const builtins = new Env();
+            for (const type of TYPE_NAMES) builtins.setLocal(type, { kind: "type", name: type });
+            for (const [name, arity] of [...NATIVES, ...STANDARD_NATIVES]) builtins.setLocal(name, { kind: "native", name, arity, applied: [] });
+            const scope = new Env(builtins);
+            const nativeExports: Record<string, string[]> = {
+                function: ["fail", "seq"],
+                sequence: ["all", "any", "find", "takeWhile", "dropWhile", "scanl", "reverse", "sortBy"],
+                text: ["words", "chars", "fromChars", "splitOn", "joinWith", "trim", "upper", "lower", "replaceAll"],
+            };
+            for (const exported of nativeExports[name] ?? []) scope.setLocal(exported, builtins.get(exported)!);
+            try {
+                const source = Deno.readTextFileSync(new URL(`../lib/${name}.apn`, import.meta.url));
+                const program = parse(source);
+                this.env = scope;
+                this.run(program);
+                record = { kind: "record", v: [...scope.map.entries()] };
+                this.modules.set(module, record);
+            } finally {
+                this.env = caller;
+                this.importing.delete(module);
+            }
+        }
+        for (const [name, value] of record.v) this.env.setLocal(name, value);
+        return record;
+    }
+
     env = new Env();
     stack = 0;
     // Directory of the source file currently being evaluated — `load` resolves
@@ -62,7 +102,8 @@ export class Interpreter {
                 continue;
             }
             // a bare expression statement: 0-arg functions and thunks RUN here
-            last = this.runStmt(this.eval(tl.value));
+            const value = this.eval(tl.value);
+            last = tl.value.t === "import" ? { kind: "unit" } : this.runStmt(value);
         }
         return last;
     }
@@ -149,6 +190,7 @@ export class Interpreter {
     //   toAST (1 + 2)  =>  [+, 1, 2]
     sexprOf(e: import("./ast.ts").Expr): Value {
         switch (e.t) {
+            case "import": return mkList([mkStr("import"), mkStr(e.module)]);
             case "numeric": return e.v;
             case "int": return mkInt(e.v);
             case "float": return { kind: "float", v: e.v };
@@ -316,6 +358,7 @@ export class Interpreter {
             }
             let r: Value;
             switch (e.t) {
+                case "import": r = this.importStandard(e.module); break;
                 case "numeric": r = e.v; break;
                 case "rationalRange": r = { kind: "rationalRange", lo: e.lo, step: e.step, hi: e.hi }; break;
                 case "int": r = mkInt(e.v); break;
@@ -993,6 +1036,7 @@ export class Interpreter {
     }
 
     callNative(name: string, argsIn: Value[], tag?: string): Value {
+        if (STANDARD_NATIVES.some(([n]) => n === name)) return standardNative(this, name, argsIn);
         if (name === "cast") {
             const target = this.demand(argsIn[0]), value = this.demand(argsIn[1]);
             if (target.kind !== "type") throw new APNError("runtime", "cast expects a type as its first argument");

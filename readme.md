@@ -8,20 +8,30 @@ Run these commands from the repository root:
 ./apn                              # interactive REPL
 ./apn examples/features.apn         # runnable language showcase
 deno check main.ts
-deno test tests/*-test.ts
+deno test --allow-read tests/*-test.ts
 ```
 
 | Directory | Contents |
 | --- | --- |
 | `src/` | Lexer, parser, interpreter, runtime values, and REPL |
-| `lib/` | Standard library (`core.apn`) |
+| `lib/` | Modular standard library |
 | `examples/` | Runnable feature showcase |
 | `tests/` | Evaluation regression tests |
 | `docs/` | [Evaluation semantics](docs/semantics.md) |
 
-From a REPL started in the repository root, use `load "lib/core.apn"`.
-Inside files, imports are relative to that source file; examples use
-`load "../lib/core.apn"`.
+Import the standard library from any directory:
+
+```apn
+import "std"
+take 10 primes
+mean [1,2]                         # Some 3/2
+"one two one" $ words $ frequencies
+```
+
+Load individual modules with `import "std/text"`, `import "std/map"`, etc.
+See the [standard library reference](docs/standard-library.md) or run
+`apn examples/standard-library.apn`. Imports are cached; `load "file.apn"`
+executes a file each time, relative to the current source file.
 
 To make `apn` available on PATH (with Deno installed):
 

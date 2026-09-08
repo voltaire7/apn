@@ -1,0 +1,12 @@
+import "std/sequence"
+# Unicode code-point operations; chars/fromChars preserve astral characters.
+textLength text = length (chars text)
+textReverse text = fromChars (reverse (chars text))
+textTake n text = fromChars (take n (chars text))
+textDrop n text = fromChars (drop n (chars text))
+isBlank text = trim text == ""
+lines text = splitOn "\n" text
+unlines xs = joinWith "\n" xs
+unwords xs = joinWith " " xs
+startsWith prefix text = take (textLength prefix) (chars text) == chars prefix
+endsWith suffix text = startsWith (textReverse suffix) (textReverse text)

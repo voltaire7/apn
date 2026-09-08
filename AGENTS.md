@@ -9,7 +9,7 @@
       (this file is the living spec AND the smoke test).
    3. Type-check and run the full showcase:
           deno check main.ts
-          deno test tests/*-test.ts
+          deno test --allow-read tests/*-test.ts
           deno run --allow-read main.ts examples/features.apn
    4. Confirm output matches expectations before declaring done.
    Do not end a task without completing all steps. Never leave `examples/features.apn`
@@ -44,8 +44,9 @@ Layout:
 - `examples/features.apn` — the living spec + smoke test: a runnable showcase of EVERY
   feature. It must always stay in sync with what `main.ts` actually supports.
   Observable evaluation rules are asserted separately in `tests/semantics-test.ts`.
-- `lib/core.apn` — the standard library, imported with `load "lib/core.apn"`. Defines
-  things like `halt = exit 0` (`sq x = x * x` is there as a demo function).
+- `lib/std.apn` — standard library entry point, imported with `import "std"`.
+  Modules are cached per interpreter; see `docs/standard-library.md`.
+  `lib/core.apn` remains a legacy loadable file defining `halt` and `sq`.
 - `AGENTS.md` — this file
 - `readme.md` — quick start and directory guide
 - `~/Desktop/test.apn` — user-owned scratch program outside the repository; preserve its edits
@@ -68,7 +69,7 @@ Deno required. From `apn/`:
 - Type-check (always run after edits):
     deno check main.ts
 
-Run evaluation assertions: `deno test tests/*-test.ts`.
+Run evaluation assertions: `deno test --allow-read tests/*-test.ts`.
 There is no `package.json` and no external dependencies; tests use Deno.test.
 
 ## Architecture (implemented in src/ modules)

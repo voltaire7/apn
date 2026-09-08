@@ -1,0 +1,30 @@
+import "std/function"
+import "std/option"
+# Producers and prefix consumers work with infinite lists.
+repeat x = x : repeat x
+replicate n x = take n (repeat x)
+cycle xs = null xs ? [] : xs ++ cycle xs
+zip xs ys = zipWith pair xs ys
+zipWithIndex xs = zipWith pair [0..] xs
+concat xss = foldr (++) [] xss
+concatMap f xs = concat (map f xs)
+flatten xss = concat xss
+sum xs = foldl (+) 0 xs
+product xs = foldl (*) 1 xs
+contains x xs = any (y -> x == y) xs
+findIndex predicate xs = mapOption fst (find (entry -> predicate (snd entry)) (zipWithIndex xs))
+headOption xs = null xs ? None : Some (head xs)
+lastOption xs = foldl (ignored x -> Some x) None xs
+atOption n xs = n < 0 ? None : headOption (drop n xs)
+takeUntil predicate xs = takeWhile (x -> not (predicate x)) xs
+splitAt n xs = [take n xs, drop n xs]
+span predicate xs = [takeWhile predicate xs, dropWhile predicate xs]
+chunksOf n xs = n <= 0 ? fail "chunksOf expects a positive size" : null xs ? [] : take n xs : chunksOf n (drop n xs)
+intersperse separator xs = null xs ? [] : head xs : foldr (x rest -> separator : x : rest) [] (tail xs)
+partition predicate xs = [filter predicate xs, filter (x -> not (predicate x)) xs]
+unique xs = null xs ? [] : head xs : unique (filter (x -> x != head xs) (tail xs))
+compare x y = x < y ? -1 : x > y ? 1 : 0
+sort xs = sortBy compare xs
+sortOn project xs = sortBy (on compare project) xs
+minimum xs = null xs ? None : Some (foldl min (head xs) (tail xs))
+maximum xs = null xs ? None : Some (foldl max (head xs) (tail xs))

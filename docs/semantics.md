@@ -353,3 +353,16 @@ A lowercase pair pattern `(t x)` captures the runtime type descriptor in `t`
 and the original value in `x`. For example, `myTypeOf (t x) = print t`.
 It inspects the outer value without forcing list contents. Repeating the type
 variable, as in `(t x) (t y)`, requires both arguments to have the same type.
+
+
+## Standard module imports
+
+`import "std"` (or `std/function`, `std/option`, `std/sequence`, `std/number`,
+`std/text`, `std/map`) evaluates a bundled module once per interpreter and brings
+its exports into the current scope. Module evaluation uses an isolated scope
+with builtins and explicit dependencies; caller bindings do not affect it.
+Reimporting installs the cached exports again. Imports return an export record.
+A definition such as `s = import "std"` defers importing until demanded.
+Names resolve relative to the APN installation, independently of sourceDir.
+`load` remains uncached file execution relative to the current source file.
+See [the standard library reference](standard-library.md) for APIs and limits.
