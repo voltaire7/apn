@@ -686,6 +686,12 @@ print (lazyNote * 2)      # mentioning lazyNote runs the body (side effect)
                           # then uses the block's value:   # => 84
                           # Other expression bodies create deferred thunks;
                           # see docs/semantics.md for memoization and lazy list rules.
+
+# Explicit braces end a lambda body, so maps can chain after the closing brace.
+[x: 1, y: 2, z: 3] * [field, value] -> {
+    format "%: %" [field, value]
+} * x -> print x  # => x: 1, y: 2, z: 3 (one per line)
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

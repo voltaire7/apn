@@ -183,3 +183,8 @@ accumulating rounding error. A small endpoint tolerance includes bounds affected
 by floating-point rounding; it is capped at half a step. Integer ranges remain
 exact, while mixed ranges inherit float precision. A floating range that can no
 longer advance reports an error. Range patterns remain integer-only.
+
+A lambda with an explicit `{ ... }` body ends at the closing brace. Operators
+following that brace belong to the surrounding expression: `[1, 2] * x ->
+{ x + 1 } * x -> x * 2` produces `[4, 6]`. Unbraced lambda bodies continue
+to consume a full expression.

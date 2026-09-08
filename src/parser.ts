@@ -695,7 +695,10 @@ class Parser {
             }
         }
         this.expectSym("->");
-        const body = this.parseExpr();
+        this.skipContinuation();
+        // An explicit brace body ends at its closing brace; following operators
+        // belong to the surrounding expression, allowing chained maps.
+        const body = this.isSym("{") ? this.parsePrimary() : this.parseExpr();
         // A pattern param desugars to:  \$p -> match $p [ { pattern -> \rest -> body } ]
         if (pattern) {
             const fresh = this.freshName();

@@ -292,6 +292,7 @@ function helpText(): string {
         `  vec.x = 10 / vec.[x, y] = [1, 2]  (record update: rebinds a modified`,
         `              copy, scoped like any def — blocks shadow; [] seeds a record)`,
         `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
+        `  xs * x -> { expr } * y -> expr   (braces end the first lambda)`,
         `  cond ? a : b   (ternary)`,
         `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,
         `  data Maybe a = Just a | Nothing`,
