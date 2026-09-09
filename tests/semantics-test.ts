@@ -244,10 +244,6 @@ print (toString [[1 + 1], [3]])
 print (format "% %" [1 + 2, [4 + 5]])
 `, ["[0: 10, 1: 20]", "[x: 1, y: 2]", "[[2], [3]]", "3 [9]"]);
 
-failure("unproductive recursion raises a cyclic evaluation error",
-    "x = x\nprint x", "cyclic evaluation");
-failure("mutual unproductive recursion raises a cyclic evaluation error",
-    "x = y\ny = x\nprint x", "cyclic evaluation");
 failure("a demanded invalid tail reports a list error",
     "print (take 2 (1:2))", "expected a list");
 failure("take rejects negative counts", "print (take (-1) [])", "non-negative int");
@@ -257,11 +253,11 @@ failure("finite indexing still checks bounds", "print ([1, 2] 2)", "out of range
 
 Deno.test("evaluation errors leave the interpreter usable", () => {
     const interp = new Interpreter();
-    interp.run(parse("x = x"));
+    interp.run(parse("x = missing + 1"));
     for (let i = 0; i < 250; i++) {
         try { interp.run(parse("x")); }
         catch (error) {
-            if (!(error instanceof Error) || !error.message.includes("cyclic evaluation")) throw error;
+            if (!(error instanceof Error) || !error.message.includes("unbound variable")) throw error;
         }
     }
     const value = interp.run(parse("1 + 2"));

@@ -861,7 +861,7 @@ export class ReplEditor {
 
 // The SIGINT watcher worker: its event loop is free while the main thread
 // spins in a divergent evaluation, so Ctrl+C always gets through.
-function startInterruptWatcher(): { worker: Worker; flag: Int32Array } {
+async function startInterruptWatcher(): Promise<{ worker: Worker; flag: Int32Array }> {
     const src = `self.onmessage = (e) => {
         const flag = new Int32Array(e.data);
         Deno.addSignalListener("SIGINT", () => {
@@ -876,7 +876,12 @@ function startInterruptWatcher(): { worker: Worker; flag: Int32Array } {
         name: "apn-sigint",
     });
     const sab = new SharedArrayBuffer(8);
+    const ready = new Promise<void>((resolve, reject) => {
+        worker.onmessage = () => resolve();
+        worker.onerror = (event) => reject(new Error(event.message));
+    });
     worker.postMessage(sab);
+    await ready;
     return { worker, flag: new Int32Array(sab) };
 }
 
@@ -894,9 +899,10 @@ async function setTtyCooked(saved: string): Promise<void> {
 
 async function replTTY(): Promise<void> {
     const interp = new Interpreter();
+    interp.extendDefinitions = true;
     const hist = loadHistory();
     const ed = new ReplEditor(interp, hist);
-    const watch = startInterruptWatcher();
+    const watch = await startInterruptWatcher();
     setInterruptFlag(watch.flag);
 
     // Route console.log (used by the print/debug natives) through the editor
@@ -930,6 +936,7 @@ async function replTTY(): Promise<void> {
             // raises a real SIGINT (the watcher worker flips the flag and the
             // hot loops throw). Editing happens back in raw mode where Ctrl+C is
             // the usual 0x03 clear/quit.
+            ed.emit("\x1b[<u"); // cooked evaluation needs ordinary Ctrl+C, not enhanced key bytes
             await setTtyCooked(savedCooked);
             try {
                 const val = runSourceValue(src, interp, lastIsBinding(src) || lastIsPrintCall(src));
@@ -945,6 +952,7 @@ async function replTTY(): Promise<void> {
                 }
             } finally {
                 Deno.stdin.setRaw(true);
+                ed.emit("\x1b[>1u");
             }
         }
     } finally {
@@ -961,6 +969,7 @@ async function replTTY(): Promise<void> {
 
 async function replPiped(): Promise<void> {
     const interp = new Interpreter();
+    interp.extendDefinitions = true;
 
     const decoder = new TextDecoder();
     const buf = new Uint8Array(1024);

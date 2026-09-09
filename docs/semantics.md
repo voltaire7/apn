@@ -22,8 +22,9 @@ Entering `x` or `fibs` in the REPL streams elements until Ctrl+C. `print` and
 `emit` also stream lists, including nested ones. File mode executes bare
 expressions without echoing them; use `print x` to stream from a file.
 
-`x = x` cannot produce even an outer value. Demanding it reports a cyclic
-evaluation error. Failed or interrupted evaluations leave the interpreter usable.
+`x = x` cannot produce even an outer value. Demanding it waits indefinitely
+until interrupted, using bounded memory; Ctrl+C returns control to the REPL.
+Failed or interrupted evaluations leave the interpreter usable.
 
 The right operand of `:` must be a list. When a cons expression is evaluated,
 a visibly non-list tail such as the literal in `x = x:1` raises an APN error
@@ -366,3 +367,16 @@ A definition such as `s = import "std"` defers importing until demanded.
 Names resolve relative to the APN installation, independently of sourceDir.
 `load` remains uncached file execution relative to the current source file.
 See [the standard library reference](standard-library.md) for APIs and limits.
+
+
+## REPL clauses and range syntax
+
+Separate REPL submissions extend existing function clauses of the same arity.
+An equivalent parameter pattern replaces its previous clause in place; fresh
+patterns are appended. Renaming a parameter does not create another overload.
+Numeric literal/type dispatch retains its normal specificity rules. Module
+loading retains its existing definition behavior.
+
+Range expression bounds may now be runtime expressions: `[1..n]`, `[a,b..end]`,
+`[start..]`. They must evaluate to real numbers. Existing automatic descending
+steps are preserved, so `[1..0]` is `[1,0]`; std factorial handles zero separately.

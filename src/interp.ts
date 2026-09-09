@@ -6,7 +6,7 @@ import type { Expr, Pattern, TopLevel, Alt } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
 import { type Value, Env } from "./types.ts";
 import { mkInt, mkBool, mkStr, mkList, valueToString, rawString } from "./types.ts";
-import { parse, exprToSource } from "./parser.ts";
+import { parse, exprToSource, rangeExpr } from "./parser.ts";
 
 // ---------------- Evaluator ----------------
 
@@ -26,6 +26,7 @@ export const NATIVES: Array<[string, number]> = [
 
 export class Interpreter {
     programArgs: string[] = [];
+    extendDefinitions = false;
     private modules = new Map<string, Extract<Value, { kind: "record" }>>();
     private importing = new Set<string>();
 
@@ -39,6 +40,7 @@ export class Interpreter {
             this.importing.add(module);
             const caller = this.env;
             const callerDir = this.sourceDir;
+            const extend = this.extendDefinitions;
             // Modules resolve against builtins, never arbitrary caller bindings.
             const builtins = new Env();
             for (const type of TYPE_NAMES) builtins.setLocal(type, { kind: "type", name: type });
@@ -55,6 +57,7 @@ export class Interpreter {
                 const source = Deno.readTextFileSync(new URL(`../lib/${name}.apn`, import.meta.url));
                 const program = parse(source);
                 this.env = scope;
+                this.extendDefinitions = false;
                 this.sourceDir = new URL("../lib/", import.meta.url).pathname;
                 this.run(program);
                 record = { kind: "record", v: [...scope.map.entries()] };
@@ -62,6 +65,7 @@ export class Interpreter {
             } finally {
                 this.env = caller;
                 this.sourceDir = callerDir;
+                this.extendDefinitions = extend;
                 this.importing.delete(module);
             }
         }
@@ -139,6 +143,21 @@ export class Interpreter {
         // A def with parameters is a pattern-dispatch function.
         if (clauses[0].params.length >= 1) {
             const arity = clauses[0].params.length;
+            if (this.extendDefinitions && previous?.kind === "clauseFn" && previous.arity === arity && this.env.map.get(name) === previous) {
+                const key = (c: DefClause) => {
+                    const names = new Map<string, number>();
+                    return JSON.stringify(c.params, (field, value) => {
+                        if (field === "name") { if (!names.has(value)) names.set(value, names.size); return names.get(value); }
+                        return typeof value === "bigint" ? `${value}n` : value;
+                    });
+                };
+                const additions = new Map(clauses.map((c) => [key(c), c]));
+                clauses = previous.clauses.map((c) => {
+                    const replacement = additions.get(key(c));
+                    additions.delete(key(c));
+                    return replacement ?? c;
+                }).concat([...additions.values()]);
+            }
             // Capture a shared env containing the binding itself, enabling recursion.
             const child = new Env(this.env);
             const fn: Value = {
@@ -363,6 +382,15 @@ export class Interpreter {
             }
             let r: Value;
             switch (e.t) {
+                case "computedRange": {
+                    const real = (expression: Expr): Real => {
+                        const value = this.demand(this.eval(expression));
+                        if (value.kind !== "int" && value.kind !== "float" && value.kind !== "rational") throw new APNError("runtime", "range bounds must be real numbers");
+                        return value;
+                    };
+                    r = this.eval(rangeExpr(real(e.lo), e.second === null ? null : real(e.second), e.hi === null ? null : real(e.hi)));
+                    break;
+                }
                 case "import": r = this.importStandard(e.module); break;
                 case "numeric": r = e.v; break;
                 case "rationalRange": r = { kind: "rationalRange", lo: e.lo, step: e.step, hi: e.hi }; break;
@@ -798,7 +826,11 @@ export class Interpreter {
                     v = v.value;
                 } else if (v.kind === "thunk" || v.kind === "deferred") {
                     if (v.value !== undefined) { v = v.value; continue; }
-                    if (v.busy) throw new APNError("runtime", "cyclic evaluation: value depends on itself before producing a value");
+                    if (v.busy) {
+                        // An unproductive fixed point diverges, but remains interruptible.
+                        const sleep = new Int32Array(new SharedArrayBuffer(4));
+                        for (;;) { checkInterrupt(); Atomics.wait(sleep, 0, 0, 20); }
+                    }
                     v.busy = true;
                     pending.push(v);
                     if (v.kind === "deferred") v = v.compute();

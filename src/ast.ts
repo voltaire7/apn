@@ -9,6 +9,7 @@ export type BinOp = "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | ">" | "<="
 export type UnOp = "neg" | "not";
 
 export type Expr =
+    | { t: "computedRange"; lo: Expr; second: Expr | null; hi: Expr | null }
     | { t: "import"; module: string }
     | { t: "numeric"; v: Numeric }
     | { t: "rationalRange"; lo: Real; step: Real; hi: Real | null }

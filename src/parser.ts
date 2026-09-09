@@ -5,7 +5,7 @@ function rangeNum(e: Expr): Real {
     if (e.t === "binop" && ["+", "-", "*", "/"].includes(e.op)) return arithmetic(e.op, rangeNum(e.l), rangeNum(e.r)) as Real;
     throw new Error("Parser: range bounds must be numeric constants");
 }
-function rangeExpr(lo: Real, second: Real | null, hi: Real | null): Expr {
+export function rangeExpr(lo: Real, second: Real | null, hi: Real | null): Expr {
     const step = second === null ? integer(hi !== null && compareNumbers(hi, lo) < 0 ? -1n : 1n) : arithmetic("-", second, lo) as Real;
     if ([lo, second, hi].some((x) => x?.kind === "float")) {
         const start = asFloat(lo), delta = asFloat(step), end = hi === null ? null : asFloat(hi);
@@ -14,6 +14,10 @@ function rangeExpr(lo: Real, second: Real | null, hi: Real | null): Expr {
     }
     if (lo.kind === "int" && step.kind === "int" && (hi === null || hi.kind === "int")) return { t: "range", lo: lo.v, step: step.v, hi: hi?.v ?? null };
     return { t: "rationalRange", lo, step, hi };
+}
+function rangeSyntax(lo: Expr, second: Expr | null, hi: Expr | null): Expr {
+    try { return rangeExpr(rangeNum(lo), second === null ? null : rangeNum(second), hi === null ? null : rangeNum(hi)); }
+    catch { return { t: "computedRange", lo, second, hi }; }
 }
 import { lex } from "./lexer.ts";
 import { APNError, tokLen } from "./errors.ts";
@@ -624,7 +628,7 @@ class Parser {
                         // `,` OR a newline (commas are optional when each element is on its
                         // own line;  [1 2] on ONE line is still a single element = 1 applied to 2).
                         // RANGE (speculative): [a..b] [a..] [a,b..c] [a,b..] — Haskell-style; the
-                        // first two elements give the STEP; bounds are constant arithmetic;
+                        // first two elements give the STEP; bounds may be runtime expressions;
                         // no upper bound = INFINITE. Falls back to a normal list literal.
                         {
                             const save = this.i;
@@ -633,7 +637,7 @@ class Parser {
                                 this.next();
                                 if (this.isSym("]")) {
                                     this.next();
-                                    return rangeExpr(rangeNum(loE), null, null);
+                                    return rangeSyntax(loE, null, null);
                                 }
                                 const hi = this.parseAdd();
                                 this.expectSym("]");
@@ -647,10 +651,10 @@ class Parser {
                                     }
                                     return { t: "string", v: chars.join("") };
                                 }
-                                const lo = rangeNum(loE), hiN = rangeNum(hi);
+
                                 // implicit step ADAPTS to direction: [0..-100] descends;
                                 // an EXPLICIT step pointing the wrong way stays empty
-                                return rangeExpr(lo, null, hiN);
+                                return rangeSyntax(loE, null, hi);
                             }
                             if (this.isSym(",")) {
                                 const save2 = this.i;
@@ -658,15 +662,14 @@ class Parser {
                                 const sE = this.parseAdd();
                                 if (this.isSym("..")) {
                                     this.next();
-                                    const lo = rangeNum(loE);
-                                    const second = rangeNum(sE);
+
                                     if (this.isSym("]")) {
                                         this.next();
-                                        return rangeExpr(lo, second, null);
+                                        return rangeSyntax(loE, sE, null);
                                     }
                                     const hi = this.parseAdd();
                                     this.expectSym("]");
-                                    return rangeExpr(lo, second, rangeNum(hi));
+                                    return rangeSyntax(loE, sE, hi);
                                 }
                                 this.i = save2; // [1, 2] — a plain list
                             }
@@ -1260,6 +1263,7 @@ export function groupClauses(program: TopLevel[]): TopLevel[] {
 // Render an expression back to source text (for debug / quote inspection).
 export function exprToSource(e: Expr): string {
     switch (e.t) {
+        case "computedRange": return `[${exprToSource(e.lo)}${e.second === null ? "" : ", " + exprToSource(e.second)}..${e.hi === null ? "" : exprToSource(e.hi)}]`;
         case "import": return `import ${JSON.stringify(e.module)}`;
         case "numeric": return numberText(e.v);
         case "rationalRange": return `[${numberText(e.lo)}, ${numberText(arithmetic("+", e.lo, e.step))}..${e.hi === null ? "" : numberText(e.hi)}]`;

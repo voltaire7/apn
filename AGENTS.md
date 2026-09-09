@@ -115,8 +115,7 @@ intentional evaluation change.
   tail. `force()` reveals only the outer value and memoizes every traversed
   thunk. It must never recursively force a list. Use `cell()` / `elements()` to
   consume the spine incrementally, and `demand()` for a needed element.
-  `x = 1:x` and recursive Fibonacci lists are productive. `x = x` reports cyclic
-  evaluation when demanded. Failed/interrupted thunks release their busy flags.
+  `x = 1:x` and recursive Fibonacci lists are productive. `x = x` waits indefinitely when demanded and remains interruptible. Failed/interrupted thunks release their busy flags.
   Lists are always lists; an object is a record literal (`[k: v, ...]`).
   `take` and `drop` accept non-negative integer counts; `map`, `filter`,
   `zipWith`, `foldr`, and list append support infinite inputs incrementally.
