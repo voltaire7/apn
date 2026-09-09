@@ -1,7 +1,7 @@
 import "std/function"
 # Explicit absence and recoverable errors. No exceptions hidden in pipelines.
-type Option a = Some a | None
-type Result a e = Ok a | Err e
+Option a = Some a | None
+Result a e = Ok a | Err e
 isSome (Some x) = true
 isSome None = false
 isNone value = not (isSome value)

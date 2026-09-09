@@ -1078,6 +1078,28 @@ class Parser {
         return this.parseExpr();
     }
 
+    // A new capitalized name declares constructors. An existing constructor on
+    // the left remains a destructuring pattern, unless alternatives make the
+    // declaration explicit. Ordinary expression RHSs are never declarations.
+    isTypeDeclaration(): boolean {
+        const name = this.peek();
+        if (name.k !== "ident" || !/^[A-Z]/.test(name.v)) return false;
+        let j = 1;
+        while (this.peek(j).k === "ident") j++;
+        const equal = this.peek(j++);
+        if (equal.k !== "sym" || equal.v !== "=") return false;
+        while (["newline", "indent"].includes(this.peek(j).k)) j++;
+        const leading = this.peek(j);
+        if (leading.k === "sym" && leading.v === "|") return true;
+        const ctor = this.peek(j);
+        if (ctor.k !== "ident" || !/^[A-Z]/.test(ctor.v)) return false;
+        while (this.peek(j).k === "ident") j++;
+        const end = this.peek(j);
+        if (end.k === "sym" && end.v === "|") return true;
+        const boundary = ["newline", "dedent", "eof"].includes(end.k) || (end.k === "sym" && end.v === ";");
+        return boundary && !declaredCtors.has(name.v);
+    }
+
     parseTopLevel(): TopLevel[] {
         const out: TopLevel[] = [];
         for (;;) {
@@ -1096,30 +1118,36 @@ class Parser {
             const t = this.peek();
             if (t.k === "eof") break;
 
-            if (t.k === "kw" && t.v === "type") {
-                this.next();
+            if (this.isTypeDeclaration()) {
                 const name = (this.next() as { v: string }).v;
-                // optional type params (uppercase following) -> ignore
                 while (this.peek().k === "ident") this.next();
-                if (this.eatSym("=")) {
-                }
+                this.expectSym("=");
+                this.skipNL();
+                this.eatSym("|");
                 const variants: { tag: string; arity: number }[] = [];
                 for (;;) {
                     this.skipNL();
-                    const vt = this.peek();
-                    if (vt.k !== "ident" && vt.k !== "kw") break;
-                    const vname = (this.next() as { v: string }).v;
-                    // count constructor arguments (idents right after, but careful with keywords)
-                    let arity = 0;
-                    while (this.peek().k === "ident") {
-                        // a type like "Int"/"a" bound as arg
-                        arity++;
-                        this.next();
+                    const vt = this.next();
+                    if (vt.k !== "ident" || !/^[A-Z]/.test(vt.v)) {
+                        throw new Error("Parser: expected a capitalized constructor name");
                     }
-variants.push({ tag: vname, arity });
-            declaredCtors.add(vname);
-            if (arity === 0) nullaryCtors.add(vname); else nullaryCtors.delete(vname);
-            if (!this.eatSym("|")) break;
+                    let arity = 0;
+                    while (this.peek().k === "ident") { arity++; this.next(); }
+                    variants.push({ tag: vt.v, arity });
+                    if (this.eatSym("|")) continue;
+                    let ahead = 0;
+                    while (["newline", "indent"].includes(this.peek(ahead).k)) ahead++;
+                    const separator = this.peek(ahead);
+                    if (separator.k === "sym" && separator.v === "|") {
+                        this.i += ahead + 1;
+                        continue;
+                    }
+                    break;
+                }
+                // Register only after the entire declaration has parsed successfully.
+                for (const { tag, arity } of variants) {
+                    declaredCtors.add(tag);
+                    if (arity === 0) nullaryCtors.add(tag); else nullaryCtors.delete(tag);
                 }
                 out.push({ t: "type", def: { name, variants } });
                 continue;
@@ -1155,14 +1183,14 @@ variants.push({ tag: vname, arity });
                     continue;
                 }
                 // Capital names are CONSTRUCTORS, never value/function names: a plain
-                // capital def is an error (declare it in `type`, destructure with it,
+                // capital def is an error (declare its constructors with =, destructure with it,
                 // or use a lowercase name).
                 if (/^[A-Z]/.test(t.v)) {
                     if (this.isDef()) {
                         throw new Error(
                             `Parser: '${t.v}' is capitalized — capital names are constructors, ` +
                             `so a value/function must use a lowercase name (or '${t.v}' must be ` +
-                            `declared in a \`type\` block to destructure on the left of =)`,
+                            `declared as a constructor to destructure on the left of =)`,
                         );
                     }
                     const e = this.parseExpr();
@@ -1202,7 +1230,7 @@ variants.push({ tag: vname, arity });
     }
 }
 
-// Constructors declared via `type`. This is what makes an Uppercase LHS with
+// Constructors declared via capitalized bindings. This is what makes an Uppercase LHS with
 // args ambiguous: `Just v = ...` destructures only when `Just` was DECLARED a
 // constructor; otherwise `Vector3 x y z = [x: x, y: y, z: z]` stays a plain
 // (record-constructor) function def. Module-level so declarations persist

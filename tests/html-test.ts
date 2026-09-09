@@ -29,7 +29,7 @@ Deno.test("input messages carry strings and boolean attributes update", () => {
 Deno.test("event messages are lazy and failed updates leave the old model usable", () => {
     const counter = app(`import "std/html"
 import "std/browser"
-type HtmlTestMsg = GoodEvent | BadEvent
+HtmlTestMsg = GoodEvent | BadEvent
 update msg model = match msg [GoodEvent -> model + 1, BadEvent -> missing]
 view model = div [] [button [onClick GoodEvent] [text (toString model)], button [onClick BadEvent] [text "bad"]]
 main = sandbox [init: 0, update: update, view: view]`);
@@ -65,6 +65,6 @@ Deno.test("bundled modules load without filesystem access", () => {
 });
 Deno.test("nullary constructor function clauses do not consume the next parameter", () => {
     const i = new Interpreter();
-    const source = 'type Choice = FirstChoice | SecondChoice; choose FirstChoice x = x; choose SecondChoice x = x + 1; choose SecondChoice 41';
+    const source = 'Choice = FirstChoice | SecondChoice; choose FirstChoice x = x; choose SecondChoice x = x + 1; choose SecondChoice 41';
     if (i.renderString(i.run(parse(source))) !== '42') throw new Error("nullary constructor pattern failed");
 });

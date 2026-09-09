@@ -194,7 +194,7 @@ print (match [1..] [ [x] -> 0, x:xs -> x ])
 `, ["8", "1", "1", "1"]);
 
 example("variant fields are lazy", `
-type Pair a b = Pair a b
+Pair a b = Pair a b
 getFirst (Pair a b) = a
 print (getFirst (Pair 7 missing))
 `, ["7"]);
@@ -327,8 +327,8 @@ example("sharing a finite list between siblings is not a rendering cycle",
     "x = [1, 2]\nprint [x, x]", ["[[1, 2], [1, 2]]"]);
 
 example("type declarations construct and match variants", `
-type Switch = Enabled | Disabled
-type Wrapped a = Wrapped a
+Switch = Enabled | Disabled
+Wrapped a = Wrapped a
 unwrap (Wrapped x) = x
 choose Enabled = 1
 choose Disabled = 0
@@ -341,3 +341,23 @@ Deno.test("data no longer introduces a type declaration", () => {
     const program = parse("data Legacy = LegacyValue");
     if (program.some(statement => statement.t === "type")) throw new Error("data remained a declaration keyword");
 });
+
+example("type and data are ordinary identifiers", 'type = 20; data = 22; print (type + data)', ["42"]);
+example("single constructor declaration preserves destructuring", `
+Parcel a = Parcel a
+Parcel contents = Parcel 42
+print contents
+`, ["42"]);
+failure("constructor alternatives require a name", 'InvalidAlternatives = OneAlternative |', "expected a capitalized constructor");
+
+example("multiline constructor declarations allow leading bars", `
+MultiChoice a =
+    | MultiSome a
+    | MultiNone
+readMulti (MultiSome x) = x
+readMulti MultiNone = 0
+print (readMulti (MultiSome 42))
+print (readMulti MultiNone)
+SingleBar a = | SingleBar a
+print (SingleBar 7)
+`, ["42", "0", "SingleBar 7"]);

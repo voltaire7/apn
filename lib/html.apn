@@ -1,6 +1,6 @@
 # HTML is ordinary APN data. Browser code only interprets this tree.
-type Html = HtmlText a | HtmlElement a b c
-type HtmlAttribute = HtmlAttr a b | HtmlStyle a b | HtmlClick a | HtmlInput a | HtmlSubmit a
+Html = HtmlText a | HtmlElement a b c
+HtmlAttribute = HtmlAttr a b | HtmlStyle a b | HtmlClick a | HtmlInput a | HtmlSubmit a
 text value = HtmlText value
 node tag attributes children = HtmlElement tag attributes children
 div = node "div"

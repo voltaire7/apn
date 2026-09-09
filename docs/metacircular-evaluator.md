@@ -70,7 +70,7 @@ and recursive lists remain productive.
 - Newline or semicolon separators, `#` comments, common string escapes.
 - Exact fractions produced by division, inherited from APN arithmetic.
 
-The source reader does **not** implement patterns, overload declarations, type
+The source reader does **not** implement patterns, overload declarations, variant
 declarations, record literals/access, ranges, decimal/radix/complex literals,
 assignment, imports, or APN's strict indentation checks. Programs consist of
 zero or more definitions and one final expression; arbitrary sequences of

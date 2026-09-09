@@ -10,7 +10,9 @@
 # 1. DATA TYPES (variants / ADTs)
 #    Unary constructor `Just` wraps a value; bare `Nothing` is a tag.
 # ---------------------------------------------------------
-type Maybe a = Just a | Nothing
+Maybe a =
+    | Just a
+    | Nothing
 
 print (Just 42)        # => Just 42
 print Nothing          # => Nothing
@@ -61,7 +63,7 @@ print (fib 10)         # => 55
 #         f pat1 = body1
 #         f pat2 = body2
 # ---------------------------------------------------------
-type Maybe a = Just a | Nothing
+Maybe a = Just a | Nothing
 
 safeHead xs = match xs [
     [] -> Nothing
@@ -319,10 +321,10 @@ print (greeting)           # => Hello, world!
 
 # Constructor patterns destructure like Haskell — bare (Just v = ...),
 # parenthesized ((Just v) = ...), or nested in a list ([Just v] = [...]).
-# ONLY a DECLARED constructor (via type) can appear capital on the left of =;
+# ONLY a DECLARED constructor (via a constructor declaration) can appear capital on the left of =;
 # a capital name is NEVER a value/function name (Template = ... is an error —
 # use lowercase, and build objects with the prototype clone from section 7):
-type Maybe a = Just a | Nothing
+Maybe a = Just a | Nothing
 Just v = Just 123
 print v                    # => 123
 
