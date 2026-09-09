@@ -26,12 +26,13 @@ export const NATIVES: Array<[string, number]> = [
 
 export class Interpreter {
     programArgs: string[] = [];
+    moduleSources?: Record<string, string>;
     extendDefinitions = false;
     private modules = new Map<string, Extract<Value, { kind: "record" }>>();
     private importing = new Set<string>();
 
     importStandard(module: string): Value {
-        const names = ["function", "option", "sequence", "number", "text", "map", "meta", "combinator", "io", "search"];
+        const names = ["function", "option", "sequence", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser"];
         const name = module === "std" ? "std" : module.startsWith("std/") && names.includes(module.slice(4)) ? module.slice(4) : null;
         if (!name) throw new APNError("runtime", `unknown module '${module}'`);
         let record = this.modules.get(module);
@@ -54,7 +55,9 @@ export class Interpreter {
             };
             for (const exported of nativeExports[name] ?? []) scope.setLocal(exported, builtins.get(exported)!);
             try {
-                const source = Deno.readTextFileSync(new URL(`../lib/${name}.apn`, import.meta.url));
+                const source = this.moduleSources
+                    ? this.moduleSources[name] ?? (() => { throw new APNError("runtime", `module '${module}' is not bundled`); })()
+                    : Deno.readTextFileSync(new URL(`../lib/${name}.apn`, import.meta.url));
                 const program = parse(source);
                 this.env = scope;
                 this.extendDefinitions = false;

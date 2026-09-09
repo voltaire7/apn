@@ -223,6 +223,7 @@ class Parser {
         if (t.k === "ident") {
             this.next();
             const name = t.v;
+            if (nullaryCtors.has(name)) return { p: "constr", tag: name, args: [] };
             // constructor application: Just x
             if (name[0] === name[0].toUpperCase() && this.peek().k !== "sym") {
                 const args = [] as Pattern[];
@@ -1117,6 +1118,7 @@ class Parser {
                     }
 variants.push({ tag: vname, arity });
             declaredCtors.add(vname);
+            if (arity === 0) nullaryCtors.add(vname); else nullaryCtors.delete(vname);
             if (!this.eatSym("|")) break;
                 }
                 out.push({ t: "data", def: { name, variants } });
@@ -1206,6 +1208,7 @@ variants.push({ tag: vname, arity });
 // (record-constructor) function def. Module-level so declarations persist
 // across REPL lines (each line is re-parsed standalone).
 let declaredCtors = new Set<string>();
+const nullaryCtors = new Set<string>();
 
 export function parse(src: string): TopLevel[] {
     let toks: Token[];

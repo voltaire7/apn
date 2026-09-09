@@ -180,3 +180,9 @@ reachable scalar-key nodes. Sequence helpers include `count predicate xs`,
 `repeatApply n f seed`, and finite shallow forcing with `forceList xs`.
 Text helpers include `parseInt text`, `integers text`, and `nonEmptyLines text`.
 See [runnable Advent of Code solutions and limits](advent-of-code.md).
+
+## Browser modules
+
+Explicitly import `std/html` for HTML constructors and `std/browser` for
+`sandbox [init: ..., update: ..., view: ...]`. These are not automatically
+imported by `std`. See [browser HTML](browser-html.md) for the API and build command.

@@ -842,6 +842,16 @@ print (rangeFactorial 5)                       # 120
 # REPL: func 0 = 1, then func 1 = 0, keeps both clauses.
 # Ctrl+C interrupts both [0..] output and unproductive x = x evaluation.
 
+# Browser HTML values are constructed in APN; build the interactive example with:
+# apn --html examples/browser/counter.apn counter.html
+import "std/html"
+browserPreview = div [] [
+    button [] [text "-"]
+    div [] [text "0"]
+    button [] [text "+"]
+]
+print browserPreview
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

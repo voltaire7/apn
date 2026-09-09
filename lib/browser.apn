@@ -1,0 +1,3 @@
+# A sandbox description contains APN values/functions; creating it has no effects.
+data BrowserProgram = BrowserSandbox a
+sandbox specification = BrowserSandbox specification

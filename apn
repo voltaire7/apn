@@ -13,4 +13,4 @@ while [ -L "$SCRIPT" ]; do
     esac
 done
 DIR="$(cd -P "$(dirname "$SCRIPT")" && pwd)"
-exec deno run --allow-read --allow-write --allow-env=HOME --allow-run=stty "$DIR/main.ts" "$@"
+exec deno run --allow-read --allow-write --allow-env=HOME --allow-run=stty,deno "$DIR/main.ts" "$@"

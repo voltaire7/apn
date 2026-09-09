@@ -18,7 +18,16 @@ export { lex } from "./src/lexer.ts";
 if (import.meta.main) {
     const _args = Deno.args;
 
-    if (_args.length >= 1 && !_args[0]?.startsWith(":")) {
+    if (_args[0] === "--html") {
+        const source = _args[1];
+        const output = _args[2] ?? "app.html";
+        if (!source || _args.length > 3) { console.error("usage: apn --html SOURCE.apn [OUTPUT.html]"); Deno.exit(1); }
+        try {
+            const { buildHtml } = await import("./src/build-html.ts");
+            await buildHtml(source, output);
+            console.log(`Built ${output}`);
+        } catch (error) { console.error(String(error)); Deno.exit(1); }
+    } else if (_args.length >= 1 && !_args[0]?.startsWith(":")) {
         const file = _args[0];
         const src = Deno.readTextFileSync(file);
         const interp = new Interpreter();

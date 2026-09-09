@@ -62,7 +62,7 @@ Deno required. From `apn/`:
     deno run --allow-read main.ts examples/features.apn
 - Start the REPL:               ./apn
   (wrapper script that runs
-   `deno run --allow-read --allow-write --allow-env=HOME --allow-run=stty main.ts "$@"` —
+   `deno run --allow-read --allow-write --allow-env=HOME --allow-run=stty,deno main.ts "$@"` —
    also runs files, e.g. `./apn examples/features.apn`. The extra flags persist
    history in ~/.apn_history; the bare deno command with just --allow-read
    works too — history then stays in-session only)
@@ -471,3 +471,12 @@ supported subset. Run `deno test --allow-read tests/metacircular-test.ts` and
 `deno run --allow-read examples/metacircular-self.ts` after changing it.
 The latter reads the live evaluator source as text and evaluates it twice in APN.
 Document subset limitations in `docs/metacircular-evaluator.md`.
+
+## Browser HTML
+
+`lib/html.apn` and `lib/browser.apn` define the public variants and helpers.
+`src/html.ts` decodes views and dispatches APN messages; `src/browser-runtime.ts`
+patches the DOM. `src/build-html.ts` bundles the interpreter and source into a
+standalone document via `apn --html SOURCE.apn [OUTPUT.html]`.
+Check the browser entry with `deno check src/browser-runtime.ts` as well as main.
+See `docs/browser-html.md` and `tests/html-test.ts`.

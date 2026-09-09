@@ -59,3 +59,13 @@ Keep personal scratch programs outside the repository.
 
 `main.ts` is the entry point and `apn` is the shell launcher. Contributor
 instructions are in [AGENTS.md](AGENTS.md).
+
+Build [browser apps](docs/browser-html.md) with APN HTML functions and an
+`init` / `update` / `view` loop:
+
+```sh
+apn --html examples/browser/counter.apn counter.html
+open counter.html
+```
+
+Ordinary file execution only defines the counter; `--html` builds its browser runtime.

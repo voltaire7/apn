@@ -1,0 +1,21 @@
+import "std/html"
+browser = import "std/browser"
+
+data GreetingMsg = NameChanged a | ClearName
+
+update msg model = match msg [
+    (NameChanged name) -> name
+    ClearName -> ""
+]
+
+view model = div [style "font-family" "system-ui", style "padding" "2rem"] [
+    h1 [] [text "Hello from APN"]
+    label [] [
+        text "Your name "
+        input [value model, placeholder "Your name", onInput NameChanged] []
+    ]
+    p [] [text ("Hello, " ++ model ++ "!")]
+    button [onClick ClearName, disabled (model == "")] [text "Clear"]
+]
+
+main = browser.sandbox [init: "", update: update, view: view]
