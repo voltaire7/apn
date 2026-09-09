@@ -25,11 +25,12 @@ export const NATIVES: Array<[string, number]> = [
 ];
 
 export class Interpreter {
+    programArgs: string[] = [];
     private modules = new Map<string, Extract<Value, { kind: "record" }>>();
     private importing = new Set<string>();
 
     importStandard(module: string): Value {
-        const names = ["function", "option", "sequence", "number", "text", "map", "meta", "combinator"];
+        const names = ["function", "option", "sequence", "number", "text", "map", "meta", "combinator", "io", "search"];
         const name = module === "std" ? "std" : module.startsWith("std/") && names.includes(module.slice(4)) ? module.slice(4) : null;
         if (!name) throw new APNError("runtime", `unknown module '${module}'`);
         let record = this.modules.get(module);
@@ -44,6 +45,7 @@ export class Interpreter {
             for (const [name, arity] of [...NATIVES, ...STANDARD_NATIVES]) builtins.setLocal(name, { kind: "native", name, arity, applied: [] });
             const scope = new Env(builtins);
             const nativeExports: Record<string, string[]> = {
+                io: ["readFile", "readStdin", "getArgs"],
                 function: ["fail", "seq"],
                 sequence: [],
                 text: ["chars", "fromChars", "upper", "lower"],

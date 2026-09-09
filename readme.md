@@ -41,6 +41,13 @@ apn examples/metacircular.apn
 deno run --allow-read examples/metacircular-self.ts  # evaluator evaluating itself
 ```
 
+Try the [Advent of Code examples](docs/advent-of-code.md) with a file or stdin:
+
+```sh
+apn examples/advent-of-code/run-sonar.apn examples/advent-of-code/samples/sonar.input
+cat examples/advent-of-code/samples/fish.input | apn examples/advent-of-code/run-fish.apn
+```
+
 To make `apn` available on PATH (with Deno installed):
 
 ```sh

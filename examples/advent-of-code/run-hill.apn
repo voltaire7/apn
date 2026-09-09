@@ -1,0 +1,2 @@
+load "hill-climbing.apn"
+print (solveHill (readInput ()))

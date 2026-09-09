@@ -1,0 +1,2 @@
+load "sonar-sweep.apn"
+print (solveSonar (readInput ()))

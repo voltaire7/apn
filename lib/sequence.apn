@@ -54,3 +54,8 @@ sortBy compare xs = {
     mid = quotient n 2
     n < 2 ? xs : _mergeSorted compare (sortBy compare (take mid xs)) (sortBy compare (drop mid xs))
 }
+
+# Force finite accumulator elements between simulation steps, not whole trees.
+forceList xs = seq (foldl (ignored x -> seq x ()) () xs) xs
+repeatApply n f seed = foldl (value ignored -> f value) seed (take n [0..])
+count predicate xs = foldl (n x -> predicate x ? n + 1 : n) 0 xs

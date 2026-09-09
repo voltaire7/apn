@@ -1,0 +1,7 @@
+import "std"
+
+# AoC 2021 day 1: count increases between adjacent measurements.
+solveSonar text = {
+    [depths] = [integers text]
+    count id (zipWith (<) depths (drop 1 depths))
+}

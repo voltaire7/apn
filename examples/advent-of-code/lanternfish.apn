@@ -1,0 +1,12 @@
+import "std"
+
+# AoC 2021 day 6: keep nine timer counts, never an exponentially growing list.
+fishPopulation days text = {
+    [timers] = [map parseInt (splitOn "," (trim text))]
+    valid = all (n -> n >= 0 ? n <= 8 : false) timers
+    [counts] = [frequencies timers]
+    initial = map (timer -> getOr 0 timer counts) [0..8]
+    tick [a,b,c,d,e,f,g,h,i] = forceList [b,c,d,e,f,g,h + a,i,a]
+    valid ? sum (repeatApply days tick initial) : fail "fish timers must be between 0 and 8"
+}
+solveFish text = fishPopulation 80 text

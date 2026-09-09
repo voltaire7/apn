@@ -1,0 +1,21 @@
+import "std"
+
+# AoC 2022 day 12: scalar cell indexes, a height map, and generic BFS.
+solveHill text = {
+    [rows] = [map chars (nonEmptyLines text)]
+    width = length (head rows)
+    height = length rows
+    [cells] = [HashMap (zipWithIndex (concat rows))]
+    [alphabet] = [HashMap (zip (chars "abcdefghijklmnopqrstuvwxyz") [0..25])]
+    elevation c = c == 'S' ? 0 : c == 'E' ? 25 : lookup c alphabet
+    start = withDefault (fail "missing start S") (findIndex (=='S') (concat rows))
+    goal = withDefault (fail "missing goal E") (findIndex (=='E') (concat rows))
+    neighbors cell = {
+        x = cell % width
+        y = quotient cell width
+        candidates = concat [x > 0 ? [cell - 1] : [], x + 1 < width ? [cell + 1] : [], y > 0 ? [cell - width] : [], y + 1 < height ? [cell + width] : []]
+        filter (next -> elevation (lookup next cells) <= elevation (lookup cell cells) + 1) candidates
+    }
+    rectangular = all (row -> length row == width) rows
+    rectangular ? getOption goal (bfsDistances neighbors [start]) : fail "grid rows must have equal widths"
+}

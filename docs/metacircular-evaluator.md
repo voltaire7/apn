@@ -90,10 +90,11 @@ operations, HashMap construction/access, character conversion, `seq`, and
 `fail`. Those are explicit value-level operations, not evaluation shortcuts.
 `lib/meta/primitives.apn` is the complete list.
 
-The standard-library native layer now contains only six functions: `seq`,
+The non-I/O standard-library native layer contains six functions: `seq`,
 `fail`, `chars`, `fromChars`, `upper`, and `lower`. Prefix consumers, predicates,
 scans, stable merge sort, splitting/joining, replacement, words, and trimming
-are APN definitions. Core interpreter natives (including folds, primitive
+are APN definitions. Three additional script-input natives (`readFile`, `readStdin`, `getArgs`)
+are outside the metacircular primitive environment. Core interpreter natives (including folds, primitive
 arithmetic, and I/O) remain; six is not the total native count of the language.
 
 Self-interpretation consumes more stack and time than direct execution. The

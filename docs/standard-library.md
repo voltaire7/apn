@@ -156,7 +156,7 @@ it evaluates the evaluator's source, then runs the program with that evaluator.
 See [the proof, supported subset and primitive boundary](metacircular-evaluator.md).
 
 The standard-library native boundary is `seq`, `fail`, `chars`, `fromChars`,
-`upper`, and `lower`. Sequence search, scans, merge sort, and text splitting,
+`upper`, `lower`, and the I/O primitives `readFile`, `readStdin`, `getArgs`. Sequence search, scans, merge sort, and text splitting,
 joining, replacement and trimming are implemented in APN.
 
 
@@ -166,3 +166,17 @@ joining, replacement and trimming are implemented in APN.
 M, T, V, B1, Q, U, Y, Z, Theta), descriptive equivalents, and shared `fix`.
 All are implemented in APN. See [equations, self-application factorial, and
 Haskell's type distinction](combinators.md).
+
+
+## Input and puzzle utilities — `std/io`, `std/search`
+
+`readFile path` reads UTF-8 text, `readStdin ()` reads to EOF, and `getArgs ()`
+returns script arguments. `readInput ()` chooses the first file argument or
+stdin (absent argument or `"-"`). These are also available through `std`.
+Input is effectful; use `[input] = [readInput ()]` to share one read.
+
+`bfsDistances neighbors starts` returns shortest unweighted distances for all
+reachable scalar-key nodes. Sequence helpers include `count predicate xs`,
+`repeatApply n f seed`, and finite shallow forcing with `forceList xs`.
+Text helpers include `parseInt text`, `integers text`, and `nonEmptyLines text`.
+See [runnable Advent of Code solutions and limits](advent-of-code.md).

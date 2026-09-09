@@ -28,3 +28,11 @@ replaceAll search replacement text = joinWith replacement (splitOn search text)
 _isSpace c = contains c (chars " \t\n\r\v\f                 　﻿")
 words text = filter (x -> x != "") (splitOn " " (fromChars (map (c -> _isSpace c ? ' ' : c) (chars text))))
 trim text = fromChars (reverse (dropWhile _isSpace (reverse (dropWhile _isSpace (chars text)))))
+
+# Common puzzle-input shapes; CRLF and trailing blank lines are accepted.
+nonEmptyLines text = filter (line -> line != "") (map trim (lines text))
+parseInt text = {
+    [value] = [parse text]
+    isInteger value ? isExact value ? value : fail "parseInt expects an exact integer" : fail "parseInt expects an exact integer"
+}
+integers text = map parseInt (words text)
