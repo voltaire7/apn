@@ -194,7 +194,7 @@ print (match [1..] [ [x] -> 0, x:xs -> x ])
 `, ["8", "1", "1", "1"]);
 
 example("variant fields are lazy", `
-data Pair a b = Pair a b
+type Pair a b = Pair a b
 getFirst (Pair a b) = a
 print (getFirst (Pair 7 missing))
 `, ["7"]);
@@ -325,3 +325,19 @@ failure("self-containing list literals report a rendering error",
     "x = [x]\nprint x", "cannot display a cyclic nested value");
 example("sharing a finite list between siblings is not a rendering cycle",
     "x = [1, 2]\nprint [x, x]", ["[[1, 2], [1, 2]]"]);
+
+example("type declarations construct and match variants", `
+type Switch = Enabled | Disabled
+type Wrapped a = Wrapped a
+unwrap (Wrapped x) = x
+choose Enabled = 1
+choose Disabled = 0
+print (unwrap (Wrapped 42))
+print (choose Disabled)
+print (choose Enabled)
+`, ["42", "0", "1"]);
+example("data is now an ordinary identifier", 'data = 42; print data', ["42"]);
+Deno.test("data no longer introduces a type declaration", () => {
+    const program = parse("data Legacy = LegacyValue");
+    if (program.some(statement => statement.t === "type")) throw new Error("data remained a declaration keyword");
+});

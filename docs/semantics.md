@@ -347,7 +347,7 @@ The nonnumeric types returned by `typeOf` are also first-class constructors:
 `Variant`. They validate and return a value of the corresponding kind, without
 forcing list elements or coercing unrelated values. Their constructor patterns
 work in overloads, e.g. `f (Bool x) = x`. `isType` and identity `cast` support
-these types too. Use existing `data` constructors to create a particular variant;
+these types too. Use existing `type` constructors to create a particular variant;
 `Variant` validates any such value.
 
 A lowercase pair pattern `(t x)` captures the runtime type descriptor in `t`

@@ -92,7 +92,7 @@ export class Interpreter {
     run(program: TopLevel[]): Value {
         let last: Value = { kind: "unit" };
         for (const tl of program) {
-            if (tl.t === "data") {
+            if (tl.t === "type") {
                 for (const v of tl.def.variants) {
                     if (v.arity === 0) {
                         // Nullary constructors are themselves the value.

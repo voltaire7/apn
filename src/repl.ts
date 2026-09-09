@@ -78,7 +78,7 @@ function runSourceValue(src: string, interp: Interpreter, binding = false): Valu
     return val.kind === "unit" ? null : val;
 }
 
-// Does the chunk END in a binding (def / pattern binding / data)? Those are
+// Does the chunk END in a binding (def / pattern binding / type)? Those are
 // SILENT in the REPL — like GHCi's `let`, they bind without echoing a value.
 // Does the chunk END in a bare print/emit call? Those already produced their
 // output — echoing the RETURNED value would print it twice.
@@ -175,7 +175,7 @@ const A = {
     green: "\x1b[38;2;166;209;137m", // #a6d189 strings/chars
     yellow: "\x1b[38;2;229;200;144m", // #e5c890 numbers
     blue: "\x1b[38;2;140;170;238m", // #8caaee  natives
-    magenta: "\x1b[38;2;202;158;230m", // #ca9ee6 mauve: match/data/bools
+    magenta: "\x1b[38;2;202;158;230m", // #ca9ee6 mauve: match/type/bools
     cyan: "\x1b[38;2;153;209;219m", // #99d1db  sky: prompts, capital idents
     gray: "\x1b[38;2;131;139;167m", // #838ba7  overlay1: punctuation, structure
     operator: "\x1b[38;2;239;159;118m", // #ef9f76 peach: operators
@@ -227,7 +227,7 @@ export function showValue(v: Value): string {
     }
 }
 
-const REPL_KEYWORDS = new Set(["match", "data", "import"]);
+const REPL_KEYWORDS = new Set(["match", "type", "import"]);
 const NATIVE_NAMES = new Set(NATIVES.map(([n]) => n));
 
 // Syntax-highlight one buffer line (best-effort, purely cosmetic).
@@ -349,7 +349,7 @@ function helpText(): string {
         `  xs * x -> { expr } * y -> expr   (braces end the first lambda)`,
         `  cond ? a : b   (ternary)`,
         `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,
-        `  data Maybe a = Just a | Nothing`,
+        `  type Maybe a = Just a | Nothing`,
         `  [1,2,3]  [0..5] [0,0.5..100] [0..]  ranges; 0:[] conses`,
         `  ['a'..'e'] => "abcde"; take 6 (iterate (*2) 1) => [1,2,4,8,16,32]`,
         `  ones = 1:ones; take 5 ones   lazy heads/tails; drop 5 ones`,
@@ -654,7 +654,7 @@ export class ReplEditor {
     }
 
     completionCands(): string[] {
-        const s = new Set<string>(["match", "data"]);
+        const s = new Set<string>(["match", "type"]);
         for (const [n] of NATIVES) s.add(n);
         for (const n of envNames(this.interp.env)) s.add(n);
         return [...s].sort();

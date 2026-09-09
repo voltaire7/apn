@@ -16,7 +16,7 @@ is required. Rebuild and refresh after editing the APN source.
 import "std/html"
 browser = import "std/browser"
 
-data Msg = Increment | Decrement
+type Msg = Increment | Decrement
 
 update msg model = match msg [
     Increment -> model + 1

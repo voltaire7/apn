@@ -45,8 +45,8 @@ used literally. `load` parses file contents as APN regardless of their extension
 ## Absence and errors — `std/option`
 
 ```apn
-data Option a = Some a | None
-data Result a e = Ok a | Err e
+type Option a = Some a | None
+type Result a e = Ok a | Err e
 ```
 
 | API | Behavior |

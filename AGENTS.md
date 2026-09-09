@@ -281,7 +281,7 @@ intentional evaluation change.
   literals so it isn't record syntax). `zipWith fn xs ys` zips pairwise lazily.
   All lazy lists, not just ranges, stream through print/emit and REPL echo;
   Ctrl+C interrupts output and the REPL remains usable.
-- **Variants** via `data Maybe a = Just a | Nothing`; constructors and match
+- **Variants** via `type Maybe a = Just a | Nothing`; constructors and match
   expressions. Nullary constructors are bare values; arity>0 constructors are
   curried natives tagged with the constructor name.
 - **Bindings** — `symbol = value` is the ONLY form (no `let`, no mutation).
@@ -359,7 +359,7 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   load; needs `--allow-write` and `--allow-env=HOME`, else in-session only
   with a one-time hint).
 - **Tab**: completes the word before the cursor from bound names (env walk),
-  natives (`NATIVES` — same table that registers them), `match`/`data`, and
+  natives (`NATIVES` — same table that registers them), `match`/`type`, and
   `:commands`. One match completes; several extend the common prefix and a
   second Tab lists them. With no word (or no candidates) Tab inserts
   **4 spaces** — the indent unit; Backspace behind a full indent level
@@ -382,7 +382,7 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   multi-line text is inserted verbatim, never auto-run; Enter then runs it.
 - **Colors** (Catppuccin Frappé palette, truecolor): input is highlighted as
   typed (comments overlay0, strings/chars green, numbers yellow,
-  `match`/`data`/bools mauve, natives blue, capital idents sky,
+  `match`/`type`/bools mauve, natives blue, capital idents sky,
   punctuation overlay1, operators peach); echoed values are colored by kind with
   gray structure (brackets, colons, commas; keys plain, variant tags sky);
   errors red.

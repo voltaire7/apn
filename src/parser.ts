@@ -1096,7 +1096,7 @@ class Parser {
             const t = this.peek();
             if (t.k === "eof") break;
 
-            if (t.k === "kw" && t.v === "data") {
+            if (t.k === "kw" && t.v === "type") {
                 this.next();
                 const name = (this.next() as { v: string }).v;
                 // optional type params (uppercase following) -> ignore
@@ -1121,7 +1121,7 @@ variants.push({ tag: vname, arity });
             if (arity === 0) nullaryCtors.add(vname); else nullaryCtors.delete(vname);
             if (!this.eatSym("|")) break;
                 }
-                out.push({ t: "data", def: { name, variants } });
+                out.push({ t: "type", def: { name, variants } });
                 continue;
             }
 
@@ -1155,14 +1155,14 @@ variants.push({ tag: vname, arity });
                     continue;
                 }
                 // Capital names are CONSTRUCTORS, never value/function names: a plain
-                // capital def is an error (declare it in `data`, destructure with it,
+                // capital def is an error (declare it in `type`, destructure with it,
                 // or use a lowercase name).
                 if (/^[A-Z]/.test(t.v)) {
                     if (this.isDef()) {
                         throw new Error(
                             `Parser: '${t.v}' is capitalized — capital names are constructors, ` +
                             `so a value/function must use a lowercase name (or '${t.v}' must be ` +
-                            `declared in a \`data\` block to destructure on the left of =)`,
+                            `declared in a \`type\` block to destructure on the left of =)`,
                         );
                     }
                     const e = this.parseExpr();
@@ -1202,7 +1202,7 @@ variants.push({ tag: vname, arity });
     }
 }
 
-// Constructors declared via `data`. This is what makes an Uppercase LHS with
+// Constructors declared via `type`. This is what makes an Uppercase LHS with
 // args ambiguous: `Just v = ...` destructures only when `Just` was DECLARED a
 // constructor; otherwise `Vector3 x y z = [x: x, y: y, z: z]` stays a plain
 // (record-constructor) function def. Module-level so declarations persist

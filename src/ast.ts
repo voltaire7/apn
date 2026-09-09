@@ -61,7 +61,7 @@ export type Pattern =
 interface DataDef { name: string; variants: { tag: string; arity: number }[]; }
 
 export type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "expr"; value: Expr }
-    | { t: "data"; def: DataDef }
+    | { t: "type"; def: DataDef }
     | { t: "patDef"; pattern: Pattern; value: Expr };
 
 // ---------------- Lexer ----------------
