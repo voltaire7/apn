@@ -646,27 +646,28 @@ print (foldl (a b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 #              (1) as a STATEMENT it merges the file's own definitions into
 #                  the current scope (an `include`);
 #              (2) as a VALUE it returns them as a MODULE record, so
-#                  core = load "../lib/core.apn"; core.sq 4 ...  is namespaced access.
+#                  numbers = load "../lib/number"; numbers.sq 4 ...  is namespaced access.
 #              Inside a { } block the merge stays scoped to that block.
-#    halt      is NOT a builtin. It is defined in lib/core.apn — the standard
+#    halt      is NOT a builtin. It is defined in std/system — the standard
 #              library — as  `halt = exit 0`. Expression 0-arg defs are LAZY, so
-#              importing lib/core.apn doesn't terminate the program; `halt` only
+#              importing std/system doesn't terminate the program; `halt` only
 #              fires (exits 0) when it is actually USED.
 # ---------------------------------------------------------
-load "../lib/core"                 # .apn is optional; include: sq and halt join THIS scope
+load "../lib/number"               # .apn is optional; sq joins THIS scope
+import "std/system"               # halt is a deferred action
 print (sq 5)                # => 25
 
-core = load "../lib/core.apn"      # namespaced module record
-print (core.sq 4)           # => 16
+numbers = load "../lib/number.apn"      # namespaced module record
+print (numbers.sq 4)           # => 16
 
-# step into the loaded halt (an action whose body is exit 0):
+# step into the imported halt (an action whose body is exit 0):
 step 1 halt $ debug          # => exit 0
 # print RUNS the level, so this terminates the program:
 #   step 1 halt $ print
 
 # a load inside a { } block stays in the block's scope
 scoped = {
-    load "../lib/core.apn"
+    load "../lib/number"
     sq 6
 }
 print (scoped)              # => 36

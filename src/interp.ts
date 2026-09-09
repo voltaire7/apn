@@ -32,7 +32,7 @@ export class Interpreter {
     private importing = new Set<string>();
 
     importStandard(module: string): Value {
-        const names = ["function", "option", "sequence", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser"];
+        const names = ["function", "option", "sequence", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system"];
         const name = module === "std" ? "std" : module.startsWith("std/") && names.includes(module.slice(4)) ? module.slice(4) : null;
         if (!name) throw new APNError("runtime", `unknown module '${module}'`);
         let record = this.modules.get(module);
@@ -1256,7 +1256,7 @@ export class Interpreter {
                 // Import a file, resolving the path relative to the CURRENT source file.
                 // Two effects: (1) the loaded file's own definitions are merged into the
                 // current scope ("include"); (2) it returns a module record of them, so
-                //   core = load "lib/core.apn"; core.halt   (or just core.halt) works.
+                //   numbers = load "lib/number"; numbers.sq 4 works.
                 // Inside a `{ }` block the merge stays scoped to that block.
                 if (a.kind !== "string") throw new Error("Runtime: load expects a file path string");
                 // Extensionless names identify APN source; explicit filenames stay literal.

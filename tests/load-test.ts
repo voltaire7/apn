@@ -1,7 +1,7 @@
 import { Interpreter } from "../src/interp.ts";
 import { parse } from "../src/parser.ts";
 
-for (const name of ["core", "core.apn"]) {
+for (const name of ["number", "number.apn"]) {
     for (const absolute of [false, true]) Deno.test(`load ${name}: ${absolute ? "absolute" : "source-relative"}`, () => {
         const i = new Interpreter();
         const directory = new URL("../lib/", import.meta.url).pathname;
@@ -20,4 +20,12 @@ Deno.test("extensionless load reports the resolved APN path", () => {
         throw error;
     }
     throw new Error("expected missing source error");
+});
+
+Deno.test("std/system exposes halt as a deferred action", () => {
+    const i = new Interpreter();
+    const module = i.run(parse('system = import "std/system"; system'));
+    const halt = i.env.get("halt");
+    if (!halt) throw new Error("halt was not exported");
+    if (!i.renderString(module).includes("halt:")) throw new Error("module inspection lost halt");
 });

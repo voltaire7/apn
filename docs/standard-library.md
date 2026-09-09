@@ -24,7 +24,8 @@ loading executes again each time, and it uses the caller's scope. `import` curre
 recognizes only the bundled modules below; use `load` for other APN files.
 Names without an extension receive `.apn`; explicitly supplied extensions are
 used literally. `load` parses file contents as APN regardless of their extension.
-`lib/core.apn` remains compatible with older programs.
+`sq` lives in `std/number`; `halt` lives in `std/system`. The obsolete
+`lib/core.apn` has been removed; replace its loads with these imports.
 
 ## Functions — `std/function`
 
@@ -188,3 +189,8 @@ See [runnable Advent of Code solutions and limits](advent-of-code.md).
 Explicitly import `std/html` for HTML constructors and `std/browser` for
 `sandbox [init: ..., update: ..., view: ...]`. These are not automatically
 imported by `std`. See [browser HTML](browser-html.md) for the API and build command.
+
+## Process control — `std/system`
+
+`halt` exits successfully when used (`halt = exit 0`); importing `std/system`
+or `std` does not run it. The builtin `exit n` exits with an explicit status.

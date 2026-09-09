@@ -46,7 +46,7 @@ Layout:
   Observable evaluation rules are asserted separately in `tests/semantics-test.ts`.
 - `lib/std.apn` — standard library entry point, imported with `import "std"`.
   Modules are cached per interpreter; see `docs/standard-library.md`.
-  `lib/core.apn` remains a legacy loadable file defining `halt` and `sq`.
+  `sq` is defined in `lib/number.apn`; `halt` in `lib/system.apn`.
 - `AGENTS.md` — this file
 - `readme.md` — quick start and directory guide
 - `~/Desktop/test.apn` — user-owned scratch program outside the repository; preserve its edits
