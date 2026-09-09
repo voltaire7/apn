@@ -29,7 +29,7 @@ export class Interpreter {
     private importing = new Set<string>();
 
     importStandard(module: string): Value {
-        const names = ["function", "option", "sequence", "number", "text", "map", "meta"];
+        const names = ["function", "option", "sequence", "number", "text", "map", "meta", "combinator"];
         const name = module === "std" ? "std" : module.startsWith("std/") && names.includes(module.slice(4)) ? module.slice(4) : null;
         if (!name) throw new APNError("runtime", `unknown module '${module}'`);
         let record = this.modules.get(module);

@@ -158,3 +158,11 @@ See [the proof, supported subset and primitive boundary](metacircular-evaluator.
 The standard-library native boundary is `seq`, `fail`, `chars`, `fromChars`,
 `upper`, and `lower`. Sequence search, scans, merge sort, and text splitting,
 joining, replacement and trimming are implemented in APN.
+
+
+## Combinators — `std/combinator`
+
+`std` also exports the classical `combinators` record (I, K, KI, S, B, C, W,
+M, T, V, B1, Q, U, Y, Z, Theta), descriptive equivalents, and shared `fix`.
+All are implemented in APN. See [equations, self-application factorial, and
+Haskell's type distinction](combinators.md).

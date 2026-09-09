@@ -1,0 +1,24 @@
+import "std/combinator"
+
+# The supplied Scheme expression, translated directly. "self" replaces "!",
+# which APN reserves for logical negation. The definition never names itself.
+selfFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1)))
+print (selfFactorial 5)                       # 120
+
+# The recursion recipe is separate from the mechanism that ties its knot.
+factorialStep recurse n = n == 0 ? 1 : n * recurse (n - 1)
+print (combinators.Y factorialStep 5)         # 120
+print (combinators.Z factorialStep 5)         # 120
+print (combinators.Theta factorialStep 5)     # 120
+print (fix factorialStep 5)                  # 120
+
+# S K K behaves like I. K leaves its second argument unevaluated.
+print (combinators.S combinators.K combinators.K 42) # 42
+print (combinators.K 42 missing)              # 42
+print (combinators.B (*2) (+1) 20)            # 42
+print (combinators.W (+) 21)                  # 42
+print (combinators.M (x -> 42))               # 42
+
+# Fixed points also describe productive infinite data.
+print (take 5 (fix (xs -> 1 : xs)))           # [1, 1, 1, 1, 1]
+# combinators.M combinators.M is Omega: deliberate divergence; do not run it.

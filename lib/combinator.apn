@@ -1,0 +1,47 @@
+import "std/function"
+
+# Classical combinators, written entirely as APN functions.
+identity x = x
+kestrel x ignored = x
+kite ignored y = y
+starling f g x = f x (g x)
+bluebird f g x = f (g x)
+cardinal f x y = f y x
+warbler f x = f x x
+mockingbird f = f f
+thrush x f = f x
+vireo x y f = f x y
+blackbird f g x y = f (g x y)
+queer f g x = g (f x)
+uCombinator f = f (f f)
+
+# Self-application: no named recursive call in Y, Z, or Theta.
+yCombinator f = (x -> f (x x)) (x -> f (x x))
+zCombinator f = (x -> f (v -> x x v)) (x -> f (v -> x x v))
+thetaCombinator f = (x y -> y (x x y)) (x y -> y (x x y)) f
+
+# A shared lazy knot. The list cell makes the result a memoized value binding.
+fix f = {
+    result = [f (head result)]
+    head result
+}
+
+# Conventional capital names are fields, respecting APN constructor naming.
+combinators = [
+    I: identity
+    K: kestrel
+    KI: kite
+    S: starling
+    B: bluebird
+    C: cardinal
+    W: warbler
+    M: mockingbird
+    T: thrush
+    V: vireo
+    B1: blackbird
+    Q: queer
+    U: uCombinator
+    Y: yCombinator
+    Z: zCombinator
+    Theta: thetaCombinator
+]
