@@ -1,0 +1,8 @@
+import "std/meta"
+
+# evaluatorSource is supplied as plain file text by metacircular-self.ts.
+# The APN reader parses it. The APN evaluator runs the parsed evaluator.
+# That interpreted evaluator then runs each of these programs.
+print (metaSelfEval evaluatorSource "20 + 22")
+print (metaSelfEval evaluatorSource "id x = x; id 42")
+print (metaSelfEval evaluatorSource "true ? 42 : missing")

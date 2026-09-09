@@ -816,6 +816,13 @@ print (groupBy isEven [1..4])
 print (Some 3 $ mapOption sq)         # Some 9
 print (Err "oops" $ mapError upper)   # Err "OOPS"
 
+# The language evaluates source through its APN-written reader and evaluator.
+import "std/meta"
+print (metaEval "id x = x; id 42")                 # 42
+print (metaEval "x = 1:x; take 4 x")               # [1, 1, 1, 1]
+print (metaEval "true ? 7 : missing")              # 7
+print (length "\r\v\f")                         # 3: whitespace escapes
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

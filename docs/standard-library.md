@@ -146,3 +146,15 @@ Every operation returns a new map. Input maps remain unchanged, and insertion
 order is preserved. Keys follow the existing HashMap scalar-key rules.
 
 Run `apn examples/standard-library.apn` for a complete example.
+
+
+## Metacircular evaluator — `std/meta`
+
+`metaEval source` runs the supported APN core through an APN-written reader and
+evaluator. `metaSelfEval evaluatorSource source` adds another evaluation layer:
+it evaluates the evaluator's source, then runs the program with that evaluator.
+See [the proof, supported subset and primitive boundary](metacircular-evaluator.md).
+
+The standard-library native boundary is `seq`, `fail`, `chars`, `fromChars`,
+`upper`, and `lower`. Sequence search, scans, merge sort, and text splitting,
+joining, replacement and trimming are implemented in APN.

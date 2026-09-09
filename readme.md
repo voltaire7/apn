@@ -33,6 +33,14 @@ See the [standard library reference](docs/standard-library.md) or run
 `apn examples/standard-library.apn`. Imports are cached; `load "file.apn"`
 executes a file each time, relative to the current source file.
 
+APN can also evaluate its own core. See the
+[metacircular evaluator](docs/metacircular-evaluator.md):
+
+```sh
+apn examples/metacircular.apn
+deno run --allow-read examples/metacircular-self.ts  # evaluator evaluating itself
+```
+
 To make `apn` available on PATH (with Deno installed):
 
 ```sh

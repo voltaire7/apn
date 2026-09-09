@@ -10,7 +10,7 @@ import { parse, exprToSource } from "./parser.ts";
 
 // ---------------- Evaluator ----------------
 
-const STACK_LIMIT = 200; // below V8's own JS stack, so APN errors first
+const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 
 // Native registry: name -> arity. One source of truth for env registration
 // and for REPL tab completion.
@@ -29,7 +29,7 @@ export class Interpreter {
     private importing = new Set<string>();
 
     importStandard(module: string): Value {
-        const names = ["function", "option", "sequence", "number", "text", "map"];
+        const names = ["function", "option", "sequence", "number", "text", "map", "meta"];
         const name = module === "std" ? "std" : module.startsWith("std/") && names.includes(module.slice(4)) ? module.slice(4) : null;
         if (!name) throw new APNError("runtime", `unknown module '${module}'`);
         let record = this.modules.get(module);
@@ -37,6 +37,7 @@ export class Interpreter {
             if (this.importing.has(module)) throw new APNError("runtime", `cyclic import '${module}'`);
             this.importing.add(module);
             const caller = this.env;
+            const callerDir = this.sourceDir;
             // Modules resolve against builtins, never arbitrary caller bindings.
             const builtins = new Env();
             for (const type of TYPE_NAMES) builtins.setLocal(type, { kind: "type", name: type });
@@ -44,19 +45,21 @@ export class Interpreter {
             const scope = new Env(builtins);
             const nativeExports: Record<string, string[]> = {
                 function: ["fail", "seq"],
-                sequence: ["all", "any", "find", "takeWhile", "dropWhile", "scanl", "sortBy"],
-                text: ["words", "chars", "fromChars", "splitOn", "joinWith", "trim", "upper", "lower", "replaceAll"],
+                sequence: [],
+                text: ["chars", "fromChars", "upper", "lower"],
             };
             for (const exported of nativeExports[name] ?? []) scope.setLocal(exported, builtins.get(exported)!);
             try {
                 const source = Deno.readTextFileSync(new URL(`../lib/${name}.apn`, import.meta.url));
                 const program = parse(source);
                 this.env = scope;
+                this.sourceDir = new URL("../lib/", import.meta.url).pathname;
                 this.run(program);
                 record = { kind: "record", v: [...scope.map.entries()] };
                 this.modules.set(module, record);
             } finally {
                 this.env = caller;
+                this.sourceDir = callerDir;
                 this.importing.delete(module);
             }
         }
@@ -407,10 +410,8 @@ export class Interpreter {
                 case "list": r = { kind: "lazyList", exprs: e.v, env: this.env }; break;
                 case "record": r = { kind: "record", v: e.v.map(([k, x]) => [k, this.eval(x)] as [string, Value]) }; break;
                 case "recordAccess": {
-                    let rec = this.callBlockFn(this.eval(e.rec));
-                    // `core = load "..."` is a thunk; get the module WITHOUT forcing its
-                    // fields (a module may contain `halt = exit 0`).
-                    if (rec.kind === "thunk") rec = this.unpackThunk(rec);
+                    // Resolve aliases/actions to the outer record, leaving its fields lazy.
+                    const rec = this.demand(this.eval(e.rec));
                     let field: string;
                     if (typeof e.field === "string") {
                         field = e.field;

@@ -1,0 +1,136 @@
+import "std/text"
+
+# A source reader written in APN. Tokens are [kind, value]; no native parser.
+mpToken kind value = [kind, value]
+mpFlush state = state.buffer == "" ? state : [mode: "code", buffer: "", tokens: _prepend (mpToken state.kind state.buffer) state.tokens, kind: "", depth: state.depth]
+mpState mode buffer tokens kind depth = [mode: mode, buffer: buffer, tokens: tokens, kind: kind, depth: depth]
+mpLexStep state char = {
+    [next] = [mpLexStepRaw state char]
+    seq next.mode (seq next.buffer (seq next.tokens (seq next.kind (seq next.depth next))))
+}
+mpLexStepRaw state char = {
+    [c] = [fromChars [char]]
+    [flushed] = [mpFlush state]
+    [newline] = [c == "\n"]
+    [space] = [contains char (chars " \t\r\n")]
+    [punctuation] = [contains char (chars "()[]{},;")]
+    [word] = [contains char (chars "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789")]
+    [kind] = [word ? "word" : "symbol"]
+    state.mode == "comment" ? (newline ? mpLexStep (mpState "code" "" state.tokens "" state.depth) char : state) : state.mode == "escape" ? mpState "string" (state.buffer ++ (c == "n" ? "\n" : c == "t" ? "\t" : c == "r" ? "\r" : c)) state.tokens "" state.depth : state.mode == "string" ? (c == "\\" ? mpState "escape" state.buffer state.tokens "" state.depth : c == "\"" ? mpState "code" "" (_prepend (mpToken "literal" state.buffer) state.tokens) "" state.depth : mpState "string" (state.buffer ++ c) state.tokens "" state.depth) : c == "#" ? mpState "comment" "" flushed.tokens "" state.depth : c == "\"" ? mpState "string" "" flushed.tokens "" state.depth : space ? (newline ? (state.depth == 0 ? mpState "code" "" (_prepend (mpToken "symbol" ";") flushed.tokens) "" 0 : flushed) : flushed) : punctuation ? mpState "code" "" (_prepend (mpToken "symbol" c) flushed.tokens) "" (state.depth + (c == "(" ? 1 : c == "[" ? 1 : c == ")" ? -1 : c == "]" ? -1 : 0)) : state.kind == kind ? mpState "code" (state.buffer ++ c) state.tokens kind state.depth : mpState "code" c flushed.tokens kind state.depth
+}
+mpLex source = {
+    [state] = [foldl mpLexStep (mpState "code" "" [] "" 0) (chars source)]
+    state.mode == "string" ? fail "meta reader: unterminated string" : state.mode == "escape" ? fail "meta reader: unterminated escape" : reverse ((mpFlush state).tokens)
+}
+mpText tokens = null tokens ? "<end>" : (head tokens) 1
+mpSkip tokens = dropWhile (token -> token 1 == ";") tokens
+mpRequire wanted tokens = mpText tokens == wanted ? tail tokens : fail ("meta reader: expected " ++ wanted ++ ", got " ++ mpText tokens)
+mpDigit c = findIndex (==c) (chars "0123456789") $ withDefault (-1)
+mpNumber text = foldl (n c -> mpDigit c < 0 ? fail "meta reader: invalid integer" : n * 10 + mpDigit c) 0 (chars text)
+mpNames tokens = takeWhile (token -> head token == "word") tokens
+mpLambda names body = null names ? body : ["lambda", head names, mpLambda (tail names) body]
+mpPrec op = op == "$" ? 1 : op == "?" ? 2 : op == ":" ? 3 : contains op ["==", "!=", "<", ">", "<=", ">="] ? 4 : op == "++" ? 5 : contains op ["+", "-"] ? 6 : contains op ["*", "/", "%"] ? 7 : 0
+mpBinary op left right = op == "$" ? ["apply", right, left] : ["apply", ["apply", ["variable", op], left], right]
+mpStarts tokens = null tokens ? false : head (head tokens) == "literal" ? true : head (head tokens) == "word" ? true : contains (mpText tokens) ["(", "[", "{"]
+
+mpExpr minimum stop tokens = {
+    [first] = [mpAtom tokens]
+    next = mpMore minimum stop (fst first) (snd first)
+    next
+}
+mpMore minimum stop left tokens = {
+    [op] = [mpText tokens]
+    [precedence] = [mpPrec op]
+    op == stop ? [left, tokens] : precedence >= minimum ? (precedence > 0 ? mpOperator minimum stop left tokens : mpApplication minimum stop left tokens) : mpApplication minimum stop left tokens
+}
+mpApplication minimum stop left tokens = minimum <= 9 ? mpStarts tokens ? {
+    [argument] = [mpExpr 10 stop tokens]
+    seq (snd argument) ()
+    next = mpMore minimum stop ["apply", left, fst argument] (snd argument)
+    next
+} : [left, tokens] : [left, tokens]
+mpOperator minimum stop left tokens = {
+    [op] = [mpText tokens]
+    [precedence] = [mpPrec op]
+    op == "?" ? {
+        yes = mpExpr 1 ":" (tail tokens)
+        no = mpExpr precedence stop (mpRequire ":" (snd yes))
+        mpMore minimum stop ["if", left, fst yes, fst no] (snd no)
+    } : {
+        right = mpExpr (precedence + (op == ":" ? 0 : 1)) stop (tail tokens)
+        mpMore minimum stop (mpBinary op left (fst right)) (snd right)
+    }
+}
+mpAtom tokens = null tokens ? fail "meta reader: expected expression" : mpAtomText (mpText tokens) tokens
+mpAtomText text tokens = match text [
+    "(" -> mpGroup (tail tokens)
+    "[" -> mpArray (tail tokens)
+    "{" -> mpBlock (mpSkip (tail tokens)) []
+    "-" -> {
+        [operand] = [mpExpr 8 "" (tail tokens)]
+        [mpBinary "-" ["literal", 0] (fst operand), snd operand]
+    }
+    "!" -> {
+        [operand] = [mpExpr 8 "" (tail tokens)]
+        [["apply", ["variable", "not"], fst operand], snd operand]
+    }
+    _ -> mpValue tokens
+]
+mpValue tokens = {
+    [token] = [head tokens]
+    [text] = [snd token]
+    head token == "literal" ? [["literal", text], tail tokens] : text == "true" ? [["literal", true], tail tokens] : text == "false" ? [["literal", false], tail tokens] : head token == "word" ? mpWord text tokens : fail ("meta reader: unexpected " ++ text)
+}
+mpWord text tokens = mpDigit (head (chars text)) >= 0 ? [["literal", mpNumber text], tail tokens] : {
+    [names] = [mpNames tokens]
+    [afterNames] = [drop (length names) tokens]
+    mpText afterNames == "->" ? {
+        [body] = [mpExpr 1 "" (tail afterNames)]
+        [mpLambda (map snd names) (fst body), snd body]
+    } : [["variable", text], tail tokens]
+}
+mpGroup tokens = mpText tokens == ")" ? [["literal", ()], tail tokens] : {
+    [expression] = [mpExpr 1 "" tokens]
+    [fst expression, mpRequire ")" (snd expression)]
+}
+mpArray tokens = mpText tokens == "]" ? [["list", []], tail tokens] : {
+    [item] = [mpExpr 1 "" tokens]
+    [rest] = [snd item]
+    mpText rest == "]" ? [["list", [fst item]], tail rest] : {
+        more = mpArray (mpRequire "," rest)
+        [["list", _prepend (fst item) ((fst more) 1)], snd more]
+    }
+}
+mpDefinition tokens = {
+    [names] = [mpNames tokens]
+    null names ? false : mpText (drop (length names) tokens) == "="
+}
+mpReadDefinition tokens = {
+    [names] = [mpNames tokens]
+    [body] = [mpExpr 1 "" (tail (drop (length names) tokens))]
+    [[snd (head names), mpLambda (map snd (tail names)) (fst body)], snd body]
+}
+mpBlock tokens definitions = mpDefinition tokens ? {
+    [definition] = [mpReadDefinition tokens]
+    seq (snd definition) ()
+    next = mpBlock (mpSkip (snd definition)) (_prepend (fst definition) definitions)
+    next
+} : {
+    [body] = [mpExpr 1 "" tokens]
+    [["scope", reverse definitions, fst body], mpRequire "}" (mpSkip (snd body))]
+}
+mpProgram tokens definitions = mpDefinition tokens ? {
+    [definition] = [mpReadDefinition tokens]
+    seq (snd definition) ()
+    next = mpProgram (mpSkip (snd definition)) (_prepend (fst definition) definitions)
+    next
+} : null tokens ? [reverse definitions, ["literal", ()]] : {
+    [body] = [mpExpr 1 "" tokens]
+    null (mpSkip (snd body)) ? [reverse definitions, fst body] : fail ("meta reader: trailing token " ++ mpText (snd body))
+}
+metaParse source = mpProgram (mpSkip (mpLex source)) []
+
+# Syntax is finite. Finish reading before execution so parser thunks do not
+# accumulate underneath evaluator frames; object-language values stay lazy.
+mpVisit pending = null pending ? [] : typeOf (head pending) == List ? head pending ++ tail pending : tail pending
+mpForce value = seq (head (filter null (iterate mpVisit [value]))) ()

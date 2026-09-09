@@ -9,3 +9,22 @@ unlines xs = joinWith "\n" xs
 unwords xs = joinWith " " xs
 startsWith prefix text = take (textLength prefix) (chars text) == chars prefix
 endsWith suffix text = startsWith (reverse suffix) (reverse text)
+
+# Literal splitting scans once, keeping the current field backwards.
+splitOn delimiter text = delimiter == "" ? map (c -> fromChars [c]) (chars text) : {
+    marker = reverse (chars delimiter)
+    width = 0 + length marker
+    step state c = {
+        current = c : snd state
+        take width current == marker ? [_prepend (fromChars (reverse (drop width current))) (fst state), []] : [fst state, current]
+    }
+    state = foldl step [[], []] (chars text)
+    reverse (fromChars (reverse (snd state)) : fst state)
+}
+joinWith delimiter xs = fromChars (concat (intersperse (chars delimiter) (map chars xs)))
+replaceAll search replacement text = joinWith replacement (splitOn search text)
+
+# Unicode WhiteSpace plus line terminators (the same set as ECMAScript \s).
+_isSpace c = contains c (chars " \t\n\r\v\f                 　﻿")
+words text = filter (x -> x != "") (splitOn " " (fromChars (map (c -> _isSpace c ? ' ' : c) (chars text))))
+trim text = fromChars (reverse (dropWhile _isSpace (reverse (dropWhile _isSpace (chars text)))))

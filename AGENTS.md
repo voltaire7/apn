@@ -461,3 +461,14 @@ numeric keys use exact normalized equality regardless of representation/type.
 Association-list values remain lazy. Record arguments retain existing record
 construction semantics. `insert`/`remove` return new maps. Iteration order is
 insertion order; replacing a key retains its position. Missing lookup errors.
+
+
+## Metacircular evaluator
+
+`lib/meta.apn` exposes `std/meta`; implementation lives in `lib/meta/`.
+The APN parser and evaluator must never delegate object source to host `parse`,
+`toAST`, `load`, or an eval callback. Keep the evaluator core within the reader's
+supported subset. Run `deno test --allow-read tests/metacircular-test.ts` and
+`deno run --allow-read examples/metacircular-self.ts` after changing it.
+The latter reads the live evaluator source as text and evaluates it twice in APN.
+Document subset limitations in `docs/metacircular-evaluator.md`.

@@ -32,3 +32,25 @@ maximum xs = null xs ? None : Some (foldl max (head xs) (tail xs))
 # Prepending into a strict left fold reverses in linear time.
 reverse (List xs) = foldl (acc x -> x : acc) [] xs
 reverse (String text) = fromChars (reverse (chars text))
+
+_prepend x xs = x : xs
+
+# Predicate consumers keep their skipping loop in the primitive lazy filter.
+_predicate (Bool value) = value
+_predicate value = fail "predicate must return Bool"
+dropWhile predicate xs = head (filter (rest -> null rest ? true : not (_predicate (predicate (head rest)))) (iterate tail xs))
+takeWhile predicate xs = null xs ? [] : _predicate (predicate (head xs)) ? _prepend (head xs) (takeWhile predicate (tail xs)) : []
+all predicate xs = null (dropWhile predicate xs)
+any predicate xs = not (all (x -> not (_predicate (predicate x))) xs)
+find predicate xs = headOption (dropWhile (x -> not (_predicate (predicate x))) xs)
+scanl f seed xs = seed : (null xs ? [] : scanl f (f seed (head xs)) (tail xs))
+
+# Stable merge sort; equal keys always take the earlier (left) element.
+_order (Integer value) = value
+_order value = fail "sortBy comparator must return an integer"
+_mergeSorted compare left right = null left ? right : null right ? left : _order (compare (head left) (head right)) <= 0 ? _prepend (head left) (_mergeSorted compare (tail left) right) : _prepend (head right) (_mergeSorted compare left (tail right))
+sortBy compare xs = {
+    n = 0 + length xs
+    mid = quotient n 2
+    n < 2 ? xs : _mergeSorted compare (sortBy compare (take mid xs)) (sortBy compare (drop mid xs))
+}

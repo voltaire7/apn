@@ -1,0 +1,20 @@
+import "std/text"
+load "meta/parser.apn"
+load "meta/evaluator.apn"
+load "meta/primitives.apn"
+
+# Parse once, then evaluate syntax in our own environment and closure machinery.
+metaEval source = {
+    [program] = [metaParse source]
+    seq (mpForce program) (meRun (fst program) (snd program) metaPrimitives)
+}
+
+# Evaluate the evaluator's source, then ask that interpreted evaluator to run
+# the user's parsed program. Neither layer calls the host parser/evaluator.
+metaSelfEval evaluatorSource source = {
+    [core] = [metaParse evaluatorSource]
+    [program] = [metaParse source]
+    [expression] = [["scope", fst program, snd program]]
+    [call] = [["apply", ["apply", ["variable", "meEval"], ["literal", metaPrimitives]], ["literal", expression]]]
+    seq (mpForce core) (seq (mpForce program) (meRun (fst core) call metaPrimitives))
+}
