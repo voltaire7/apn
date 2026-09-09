@@ -388,7 +388,7 @@ function helpText(): string {
         `Builtins: head tail take drop length null enumerate map filter zipWith`,
         `          foldl foldr pairs format intToString toString parse exit load step`,
         ``,
-        `load "lib/core.apn"  imports the standard library (lib/core.apn): as a`,
+        `load "lib/core"  loads lib/core.apn (.apn is optional): as a`,
         `               statement it merges into the current scope; as a`,
         `               value it returns a module (core.sq 4). halting is`,
         `               lib/core.apn's  halt = exit 0  (lazy: fires only when used).`,

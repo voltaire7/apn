@@ -653,7 +653,7 @@ print (foldl (a b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 #              importing lib/core.apn doesn't terminate the program; `halt` only
 #              fires (exits 0) when it is actually USED.
 # ---------------------------------------------------------
-load "../lib/core.apn"             # include: sq and halt join THIS scope
+load "../lib/core"                 # .apn is optional; include: sq and halt join THIS scope
 print (sq 5)                # => 25
 
 core = load "../lib/core.apn"      # namespaced module record

@@ -1259,7 +1259,9 @@ export class Interpreter {
                 //   core = load "lib/core.apn"; core.halt   (or just core.halt) works.
                 // Inside a `{ }` block the merge stays scoped to that block.
                 if (a.kind !== "string") throw new Error("Runtime: load expects a file path string");
-                const p = a.v;
+                // Extensionless names identify APN source; explicit filenames stay literal.
+                const filename = a.v.slice(a.v.lastIndexOf("/") + 1);
+                const p = filename && !filename.includes(".") ? `${a.v}.apn` : a.v;
                 const path =
                     this.sourceDir === "." || p.startsWith("/") ? p : `${this.sourceDir}/${p}`;
                 let src: string;
