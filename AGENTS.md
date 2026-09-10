@@ -413,11 +413,14 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   opening line, and `}` aligns with that line. `func = { expr; expr }` is valid.
   `func =` followed by an indented non-brace expression is valid; an indented
   `{ ... }` after `=` is a syntax error.
-- **Commit after every task.** The user has asked that commits happen
-  automatically. After each completed task (workflow green, see above), stage
+- **Commit and push after every task.** The user has asked that commits and
+  pushes happen automatically. After each completed task (workflow green, see above), stage
   the files and commit with a concise, repo-style message:
       git add <files changed by this task>
       git commit -m "short summary of the change"
+      git push
+  Always push after committing. If the push fails, resolve it without force-pushing
+  or overwriting remote work; report any remaining blocker.
   Don't commit secrets; there are none.
 
 
