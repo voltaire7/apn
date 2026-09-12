@@ -1,3 +1,5 @@
+// Startup loads the bundled interpreter prelude; editor launchers must allow
+// reading lib/match.apn for Deno versions that gate text imports on permissions.
 import { lint, position, type Range } from "./lint.ts";
 import { parseDocument } from "./parser.ts";
 import { lex, KEYWORDS } from "./lexer.ts";
