@@ -380,3 +380,15 @@ loading retains its existing definition behavior.
 Range expression bounds may now be runtime expressions: `[1..n]`, `[a,b..end]`,
 `[start..]`. They must evaluate to real numbers. Existing automatic descending
 steps are preserved, so `[1..0]` is `[1,0]`; std factorial handles zero separately.
+
+## Mutable references
+
+`x = Mutable 0` allocates a shared cell when first used. A zero-argument binding
+returning a cell retains that cell across calls; functions taking arguments can
+create independent cells. `set value cell` (or `cell $ set value`) evaluates the
+new outer value before replacing the old contents and returns unit. A failed
+update leaves the cell unchanged. Aliases and inner scopes share the cell.
+Arithmetic and printing read its contents; `typeOf x` reports `Mutable`.
+Existing lazy calculations still memoize: a previously forced calculation is
+not recomputed after mutation. Compound contents retain ordinary lazy semantics;
+`set` does not deep-copy or deeply force them.

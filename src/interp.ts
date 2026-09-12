@@ -16,7 +16,7 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
-    ["cast", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
+    ["set", 2], ["cast", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
@@ -349,10 +349,13 @@ export class Interpreter {
     // Non-closures pass through unchanged.
     callBlockFn(v: Value): Value {
         if (v.kind !== "closure" || v.params.length !== 0) return v;
+        if (v.mutableValue) return v.mutableValue;
         const old = this.env;
         this.env = v.env;
         try {
-            return this.eval(v.body);
+            const result = this.force(this.eval(v.body));
+            if (result.kind === "mutable") v.mutableValue = result;
+            return result;
         } finally {
             this.env = old;
         }
@@ -360,7 +363,7 @@ export class Interpreter {
 
     // Demand only the outer value. Actions remain repeatable, while argument
     // thunks share the result of an action within a call.
-    demand(v: Value): Value {
+    reference(v: Value): Value {
         const original = v;
         v = this.force(v);
         while (v.kind === "closure" && v.params.length === 0) {
@@ -368,6 +371,12 @@ export class Interpreter {
             v = this.force(this.callBlockFn(v));
         }
         if (original.kind === "thunk" || original.kind === "deferred") original.value = v;
+        return v;
+    }
+
+    demand(v: Value): Value {
+        v = this.reference(v);
+        while (v.kind === "mutable") v = this.reference(v.v);
         return v;
     }
 
@@ -686,6 +695,7 @@ export class Interpreter {
         // A lazy 0-param def used as a function (`f = g; f 1`) is a thunk — run it.
         f = this.force(f);
         switch (f.kind) {
+            case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
                 const value = this.demand(arg);
                 return this.constructType(f.name, value);
@@ -724,7 +734,7 @@ export class Interpreter {
                 const ranked = f.clauses.map((clause, index) => ({ clause, index, score: clause.params.reduce((score, pattern, i) => {
                     if (["int", "bool", "string"].includes(pattern.p)) return score + 40;
                     if (pattern.p !== "constr" || !TYPE_NAMES.includes(pattern.tag)) return score;
-                    const value = this.demand(raw[i]);
+                    const value = pattern.tag === "Mutable" ? this.reference(raw[i]) : this.demand(raw[i]);
                     if (!NUMERIC_TYPES.includes(pattern.tag)) return score + (this.matchesValueType(pattern.tag, value) ? 30 : -1000);
                     if (!isNumeric(value)) return score - 1000;
                     if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(pattern.tag)) return score + (matchesType(pattern.tag, value) ? 10 : -1000);
@@ -1019,6 +1029,7 @@ export class Interpreter {
     }
 
     matchesValueType(name: string, value: Value): boolean {
+        if (name === "Mutable") return value.kind === "mutable";
         if (isNumeric(value)) return NUMERIC_TYPES.includes(name) && matchesType(name, value);
         if (name === "List") return this.isList(value);
         if (name === "Function") return value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native";
@@ -1030,6 +1041,7 @@ export class Interpreter {
     }
 
     constructType(name: string, value: Value, explicit = false): Value {
+        if (name === "Mutable") return { kind: "mutable", v: value };
         if (name === "HashMap") return this.makeHashMap(value);
         if (NUMERIC_TYPES.includes(name)) {
             if (!isNumeric(value)) throw new APNError("runtime", `${name} expects a number`);
@@ -1074,6 +1086,14 @@ export class Interpreter {
     }
 
     callNative(name: string, argsIn: Value[], tag?: string): Value {
+        if (name === "set") {
+            const target = this.reference(argsIn[1]);
+            if (target.kind !== "mutable") throw new APNError("runtime", "set expects a Mutable target");
+            // Evaluate against the old contents before changing the shared cell.
+            const value = this.demand(argsIn[0]);
+            target.v = value;
+            return { kind: "unit" };
+        }
         if (STANDARD_NATIVES.some(([n]) => n === name)) return standardNative(this, name, argsIn);
         if (name === "cast") {
             const target = this.demand(argsIn[0]), value = this.demand(argsIn[1]);
@@ -1081,7 +1101,9 @@ export class Interpreter {
             return this.constructType(target.name, value, true);
         }
         if (name === "typeOf") {
-            const value = this.demand(argsIn[0]);
+            const ref = this.reference(argsIn[0]);
+            if (ref.kind === "mutable") return { kind: "type", name: "Mutable" };
+            const value = this.demand(ref);
             if (isNumeric(value)) return { kind: "type", name: numericType(value) };
             if (this.isList(value)) return { kind: "type", name: "List" };
             const names: Partial<Record<Value["kind"], string>> = {
@@ -1092,8 +1114,10 @@ export class Interpreter {
             return { kind: "type", name: names[value.kind] ?? value.kind };
         }
         if (name === "isType") {
-            const target = this.demand(argsIn[0]), value = this.demand(argsIn[1]);
+            const target = this.demand(argsIn[0]), ref = this.reference(argsIn[1]);
             if (target.kind !== "type") throw new APNError("runtime", "isType expects a type");
+            if (target.name === "Mutable") return mkBool(ref.kind === "mutable");
+            const value = this.demand(ref);
             return mkBool(this.matchesValueType(target.name, value));
         }
         if (["insert", "lookup", "has", "remove"].includes(name)) {
@@ -1366,6 +1390,10 @@ export class Interpreter {
         if (p.p === "var") {
             if (binds.has(p.name)) return this.equals(binds.get(p.name)!, v);
             binds.set(p.name, v); return true;
+        }
+        if (p.p === "constr" && p.tag === "Mutable") {
+            const ref = this.reference(v);
+            return ref.kind === "mutable" && p.args.length === 1 && this.matchPattern(p.args[0], ref, binds);
         }
         v = this.demand(v);
         switch (p.p) {

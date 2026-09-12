@@ -10,6 +10,7 @@ export interface DefClause { params: Pattern[]; body: Expr; }
 
 // Runtime values (dynamically typed, like JS)
 export type Value =
+    | { kind: "mutable"; v: Value }
     | { kind: "type"; name: string }
     | { kind: "hashmap"; entries: Map<string, [Value, Value]> }
     | Numeric
@@ -24,7 +25,7 @@ export type Value =
     | { kind: "deferred"; compute: () => Value; value?: Value; busy?: boolean }
     | { kind: "record"; v: Array<[string, Value]> }
     | { kind: "variant"; tag: string; v: Value[] }
-    | { kind: "closure"; params: string[]; body: Expr; env: Env }
+    | { kind: "closure"; params: string[]; body: Expr; env: Env; mutableValue?: Value }
     | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string }
     | { kind: "clauseFn"; name: string; clauses: DefClause[]; arity: number; env: Env; applied: Value[] }
     | { kind: "floatRange"; lo: number; step: number; hi: number | null; index?: number }
@@ -51,6 +52,7 @@ export function rawString(v: Value): string {
 export function valueToString(v: Value): string {
     switch (v.kind) {
         case "int": case "float": case "rational": case "complex": return (v.typeName ? v.typeName + " " : "") + numberText(v);
+        case "mutable": return valueToString(v.v);
         case "type": return v.name;
         case "hashmap": return `HashMap [${[...v.entries.values()].map(([k, x]) => `[${valueToString(k)}, ${valueToString(x)}]`).join(", ")}]`;
         case "rationalRange": return "<rational range>";

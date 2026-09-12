@@ -855,6 +855,16 @@ browserPreview = div [] [
 ]
 print browserPreview
 
+# Mutable references retain identity across scopes and aliases.
+mutableCounter = Mutable 0
+{
+    mutableCounter $ set (mutableCounter + 1)
+}
+print mutableCounter                         # 1
+counterAlias = mutableCounter
+counterAlias $ set 2
+print mutableCounter                         # 2
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------
