@@ -246,8 +246,8 @@ intentional evaluation change.
     style; Haskell's right-associative `print $ negate 5` is *not* supported
     and would be a runtime error under this semantics. Use normal application
     for args and the pipe only for the final feed.
-  - Backtick infix: ``a `f` b`` == `f a b` (between ternary and compare, left).
-    `for` is an ordinary identifier, with no special inversion or native.
+  - Backtick infix is removed: backticks outside strings/comments are lexical errors.
+    See the precedence table in `docs/semantics.md#operator-precedence-and-associativity`.
   - Operator sections: `(+ 2)` = `\x -> x + 2`, `(2 +)` = `\x -> 2 + x` for
     `+ - * / % == != < > <= >= ++`. `(-2)` stays unary negation (no whitespace
     info in the lexer); a LONE `(op)` is a 2-arg lambda: `add = (+)`.

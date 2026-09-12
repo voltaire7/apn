@@ -361,3 +361,19 @@ print (readMulti MultiNone)
 SingleBar a = | SingleBar a
 print (SingleBar 7)
 `, ["42", "0", "SingleBar 7"]);
+
+
+failure("backtick infix syntax is rejected", "1 `add` 2", "unexpected character");
+failure("unterminated backtick syntax is rejected", "1 `add", "unexpected character");
+example("ordinary named calls replace backtick infix", "add a b = a + b\nprint (add 1 2)", ["3"]);
+example("operator precedence and associativity", `
+print (2 + 3 * 4)
+print ((2 + 3) * 4)
+print (10 - 3 - 2)
+print (24 / 4 * 2)
+print (1 : 2 : [])
+print (1 < 2 == true)
+print (false ? 1 : true ? 2 : 3)
+print (3 $ (+ 1) $ (* 2))
+print (-head [2, 3])
+`, ["14", "20", "5", "12", "[1, 2]", "true", "2", "8", "-2"]);

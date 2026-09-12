@@ -30,7 +30,7 @@ export function tokLen(t: Token): number {
     switch (t.k) {
         case "str": return t.v.length + 2;
         case "char": return "n\t\\'\"".includes(t.v) ? 4 : 3;
-        case "ident": case "kw": case "opw": return t.v.length;
+        case "ident": case "kw": return t.v.length;
         case "int": case "float": return String(t.v).length;
         case "sym": return t.v.length;
         default: return 0; // newline / indent / dedent / eof: just point

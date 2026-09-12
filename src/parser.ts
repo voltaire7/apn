@@ -70,7 +70,6 @@ class Parser {
             case "ident": case "kw": case "str": case "char": return t.v;
             case "int": return String(t.v);
             case "float": return String(t.v);
-            case "opw": return t.v;
             case "sym": return t.v;
             case "newline": return "newline";
             case "indent": return "indent";
@@ -295,25 +294,9 @@ class Parser {
         return e;
     }
 
-    // Backtick infix:  a `f` b  =>  f a b   (Haskell-style operator via name).
-    // Left-associative. Binds tighter than ternary, looser than comparison.
-    // Exception: `for` is inverted so the sequence sits on the left:
-    //   seq `for` fn  =>  for fn seq   (synonymous with the pipe  seq $ for fn)
-    parseBacktick(): Expr {
-        let e = this.parseCompare();
-        while (this.peek().k === "opw") {
-            const op = (this.next() as { v: string }).v;
-            const rhs = this.parseCompare();
-            {
-                e = { t: "app", f: { t: "app", f: { t: "var", name: op }, a: e }, a: rhs };
-            }
-        }
-        return e;
-    }
-
     // Ternary:  cond ? a : b    (right-associative, lower precedence than comparison)
     parseTernary(): Expr {
-        let e = this.parseBacktick();
+        let e = this.parseCompare();
         if (this.isSym("?")) {
             this.next();
             this.skipLayout();
@@ -1139,7 +1122,7 @@ class Parser {
             }
 
             if (t.k === "int" || t.k === "float" || t.k === "bool" ||
-                    t.k === "str" || t.k === "char" || t.k === "opw") {
+                    t.k === "str" || t.k === "char") {
                 const e = this.parseExpr();
                 out.push({ t: "expr", value: e });
                 continue;

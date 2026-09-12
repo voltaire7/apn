@@ -338,9 +338,8 @@ sumXY ([x: xv, y: yv]) = xv + yv
 print (sumXY point)        # => 3
 
 # ---------------------------------------------------------
-# 10. PIPES, BACKTICK INFIX, OPERATOR SECTIONS
+# 10. PIPES, OPERATOR SECTIONS, PRECEDENCE
 #    x $ f            feeds x into f   (\value-left pipe, like F# |>)
-#    a `f` b         == f a b          (backtick infix, like Haskell)
 #    (+ 2) / (2 +)    operator sections  ->  \x -> x + 2 / \x -> 2 + x
 # ---------------------------------------------------------
 negate x = -x
@@ -348,8 +347,13 @@ print (5 $ negate)                        # => -5
 print ([1, 2, 3] $ map (x -> x * 10))     # => [10, 20, 30]
 [1, 2, 3] $ map (x -> x * 10) $ toString $ print  # => [10, 20, 30]
 
+# Named functions use ordinary application; backtick infix is invalid.
+print (2 + 3 * 4)                         # => 14
+print (10 - 3 - 2)                        # => 5
+print (1 : 2 : [])                        # => [1, 2]
+
 myApp xs ys = xs ++ ys
-print ([1, 2] `myApp` [3, 4])             # => [1, 2, 3, 4]
+print (myApp [1, 2] [3, 4])             # => [1, 2, 3, 4]
 
 print (map (+ 2) [1, 2, 3])               # => [3, 4, 5]
 print (map (2 +) [1, 2, 3])               # => [3, 4, 5]

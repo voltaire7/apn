@@ -8,7 +8,6 @@ export type Token =
     | { k: "char"; v: string; pos: number }
     | { k: "ident"; v: string; pos: number }
     | { k: "kw"; v: string; pos: number }             // keywords
-    | { k: "opw"; v: string; pos: number }            // backtick-infix name: `f`
     | { k: "sym"; v: string; pos: number }             // symbols incl. multi-char
     | { k: "newline"; pos: number } | { k: "indent"; pos: number } | { k: "dedent"; pos: number }
     | { k: "eof"; pos: number };
@@ -207,18 +206,6 @@ export function lex(src: string): Token[] {
             while (pos < src.length && /[A-Za-z0-9_']/.test(src[pos])) id += src[pos++];
             if (KEYWORDS.has(id)) toks.push({ k: "kw", v: id, pos: start });
             else toks.push({ k: "ident", v: id, pos: start });
-            continue;
-        }
-
-        if (c === '`') {
-            pos++;
-            let id = "";
-            while (pos < src.length && /[A-Za-z0-9_']/.test(src[pos])) id += src[pos++];
-            if (id === "" || src[pos] !== '`') {
-                throw new APNError("lex", `malformed backtick operator`, { pos: start });
-            }
-            pos++; // closing backtick
-            toks.push({ k: "opw", v: id, pos: start });
             continue;
         }
 

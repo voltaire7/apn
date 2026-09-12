@@ -5,6 +5,38 @@ cons tails, and variant fields. Forcing reveals the outer value and memoizes it;
 it does not recursively evaluate a whole collection. Explicit actions remain
 repeatable, as described below. `tests/semantics-test.ts` asserts these rules.
 
+## Operator precedence and associativity
+
+From tightest to loosest binding; operators in the same row have equal precedence.
+
+| Operation | Associativity | Grouping example |
+| --- | --- | --- |
+| Field access and pluck `.` | Left | `a.b.c` → `(a.b).c` |
+| Function application | Left | `f x y` → `(f x) y` |
+| Unary `-`, `!` | Prefix | `-f x` → `-(f x)` |
+| `*`, `/`, `%` | Left | `a / b * c` → `(a / b) * c` |
+| `+`, `-`, `++` | Left | `a - b - c` → `(a - b) - c` |
+| Cons `:` | Right | `a : b : xs` → `a : (b : xs)` |
+| `==`, `!=`, `<`, `>`, `<=`, `>=` | Left | `a < b == c` → `(a < b) == c` |
+| Ternary `? :` | Right | `a ? b : c ? d : e` → `a ? b : (c ? d : e)` |
+| Pipe `$` | Left | `x $ f $ g` → `(x $ f) $ g` |
+
+Parentheses override precedence: `2 + 3 * 4` is `14`, while `(2 + 3) * 4`
+is `20`. Comparison chains are ordinary left-associated operations, not
+mathematical chained comparisons.
+
+Backtick infix functions are not supported; write `f a b`. `=` introduces a
+binding or assignment and is not an expression operator. Range `..` belongs
+inside range syntax, and `@` belongs to polar numeric literals. Function-type
+arrows associate right: `Int -> Int -> Int` means `Int -> (Int -> Int)`.
+Unbraced lambda bodies consume a full expression; a braced body ends at `}`.
+
+Unary operators take an application as their operand; nest them with parentheses,
+as in `-(-x)`. For negative function arguments use `f (-1)`. The experimental
+function-minus overload also allows `f -1`, but follows binary subtraction's
+precedence: `sqrt -1 * 4` groups as `sqrt - (1 * 4)`.
+
+
 ## Recursive lists
 
 These definitions are productive because each produces a cons cell before its
