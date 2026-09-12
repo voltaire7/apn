@@ -176,7 +176,7 @@ export function lex(src: string): Token[] {
             while (pos < src.length && src[pos] !== '"') {
                 if (src[pos] === '\\') {
                     pos++;
-                    s += ({ n: "\n", t: "\t", r: "\r", v: "\v", f: "\f", '\\': "\\", '"': '"' }[src[pos]] ?? src[pos]);
+                    s += ({ e: "\x1b", n: "\n", t: "\t", r: "\r", v: "\v", f: "\f", '\\': "\\", '"': '"' }[src[pos]] ?? src[pos]);
                 } else s += src[pos];
                 pos++;
             }
@@ -193,7 +193,7 @@ export function lex(src: string): Token[] {
             let ch = String.fromCodePoint(src.codePointAt(pos) ?? 0);
             if (ch === '\\') {
                 pos++;
-                ch = ({ n: "\n", t: "\t", r: "\r", v: "\v", f: "\f", '\\': "\\", "'": "'" }[src[pos]] ?? src[pos]);
+                ch = ({ e: "\x1b", n: "\n", t: "\t", r: "\r", v: "\v", f: "\f", '\\': "\\", "'": "'" }[src[pos]] ?? src[pos]);
                 pos++;
             } else pos += ch.length;
             if (src[pos] !== "'") throw new APNError("lex", "expected one character followed by closing quote", { pos: start });

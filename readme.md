@@ -76,3 +76,9 @@ Create animated canvas sketches with the [p5.js bindings](docs/p5.md):
 apn --html examples/browser/p5-sketch.apn p5-sketch.html
 open p5-sketch.html
 ```
+
+Run the [spinning ASCII donut](docs/spinning-donut.md) in your terminal:
+
+```sh
+apn examples/graphics/run-donut.apn
+```

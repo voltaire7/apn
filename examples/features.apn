@@ -874,6 +874,10 @@ print (typeOf (p5.sketch [draw: (p -> p.background "black")])) # Variant
 printFunction x = print x
 print printFunction                          # x -> print x
 
+# Terminal animation helpers (see examples/graphics/run-donut.apn).
+print (length "\e")                          # 1: ASCII escape
+sleep 0                                      # milliseconds; interruptible
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

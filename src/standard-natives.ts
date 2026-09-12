@@ -1,10 +1,11 @@
+import { checkInterrupt } from "./interp.ts";
 import type { Interpreter } from "./interp.ts";
 import { type Value, mkList, mkStr } from "./types.ts";
 import { APNError } from "./errors.ts";
 
 // Representation, effects and Unicode casing are the stdlib's native boundary.
 export const STANDARD_NATIVES: Array<[string, number]> = [
-    ["readFile", 1], ["readStdin", 1], ["getArgs", 1],
+    ["sleep", 1], ["readFile", 1], ["readStdin", 1], ["getArgs", 1],
     ["seq", 2], ["fail", 1], ["chars", 1], ["fromChars", 1], ["upper", 1], ["lower", 1],
 ];
 export function standardNative(i: Interpreter, name: string, args: Value[]): Value {
@@ -13,6 +14,19 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
         if (v.kind !== "string") throw new APNError("runtime", `${name} expects strings`);
         return v.v;
     };
+    if (name === "sleep") {
+        const duration = i.demand(args[0]);
+        if (duration.kind !== "int" || duration.v < 0n || duration.v > 2147483647n) throw new APNError("runtime", "sleep expects milliseconds as a nonnegative integer up to 2147483647");
+        const until = performance.now() + Number(duration.v);
+        const flag = new Int32Array(new SharedArrayBuffer(4));
+        do {
+            checkInterrupt();
+            const remaining = until - performance.now();
+            if (remaining <= 0) break;
+            Atomics.wait(flag, 0, 0, Math.min(remaining, 20));
+        } while (true);
+        return { kind: "unit" };
+    }
     if (name === "getArgs") return mkList(i.programArgs.map(mkStr));
     if (name === "readFile" || name === "readStdin") {
         try {

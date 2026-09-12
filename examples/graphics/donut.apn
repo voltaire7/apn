@@ -1,0 +1,45 @@
+import "std"
+
+# Samples store position and surface normal before the two rotations.
+# Force them once so trigonometry is shared by every frame.
+makeDonutSamples thetaStep phiStep = {
+    pi = acos (-1.0)
+    thetaCount = cast Int (ceiling (2.0 * pi / thetaStep))
+    phiCount = cast Int (ceiling (2.0 * pi / phiStep))
+    sample ti fi = {
+        theta = ti * thetaStep
+        phi = fi * phiStep
+        [ct, st, cp, sp] = [cos theta, sin theta, cos phi, sin phi]
+        forceList [(2.0 + ct) * cp, st, (2.0 + ct) * sp, ct * cp, st, ct * sp]
+    }
+    samples = concatMap (ti -> map (sample ti) [0..phiCount - 1]) [0..thetaCount - 1]
+    forceList samples
+}
+
+renderDonut samples angleA angleB width height = {
+    [ca, sa, cb, sb] = [cos angleA, sin angleA, cos angleB, sin angleB]
+    k1 = width * 5.0 / 16.0
+    [palette] = [chars ".,-~:;=!*#$@"]
+    depths = (width * height) * _ -> Mutable 0.0
+    pixels = (width * height) * _ -> Mutable ' '
+    plot [px, py, pz, nx, ny, nz] = {
+        x = cb * px + sa * sb * pz - ca * sb * py
+        y = sb * px - sa * cb * pz + ca * cb * py
+        inverseZ = 1.0 / (5.0 + ca * pz + sa * py)
+        sx = cast Int (width / 2.0 + k1 * inverseZ * x)
+        sy = cast Int (height / 2.0 - k1 * inverseZ * y)
+        light = nx * sb - ca * nz - sa * ny + cb * (ca * ny - sa * nz)
+        visible = light > 0.0 ? sx >= 0 ? sx < width ? sy >= 0 ? sy < height : false : false : false : false
+        visible ? {
+            index = sy * width + sx
+            depth = depths index
+            inverseZ > depth ? {
+                depth $ set inverseZ
+                shade = cast Int (light * 8.0)
+                shade >= 0 ? shade < 12 ? set (palette shade) (pixels index) : () : ()
+            } : ()
+        } : ()
+    }
+    foldl (ignored sample -> plot sample) () samples
+    fromChars (concatMap (row -> map (column -> pixels (row * width + column)) [0..width - 1] ++ ['\n']) [0..height - 1])
+}
