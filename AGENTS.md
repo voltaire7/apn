@@ -493,3 +493,13 @@ They wrap callable arguments and enforce input/output constructors on invocation
 never execute a function to predict its signature. `Transform = Int -> Int`
 defines a reusable contract. Legacy colon/:: annotations remain ignored.
 See `docs/pattern-functions.md` and `tests/pattern-functions-test.ts`.
+
+## Editor tooling
+
+`src/lint.ts` provides non-evaluating syntax/layout diagnostics. `src/lsp.ts`
+serves them over stdio with completion, hover and top-level symbols. Tooling must
+use `parseDocument`, which isolates and restores parser declaration registries.
+Never evaluate user code to provide editor features. Reserve stdout for JSON-RPC
+in `--lsp` mode. Keep UTF-16 positions and byte-counted Content-Length framing.
+`editors/neovim/apn.lua` is opt-in/session-only; don't edit user configuration.
+See `docs/editor-tooling.md` and `tests/lsp-test.ts`.

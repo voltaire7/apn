@@ -76,3 +76,11 @@ Create animated canvas sketches with the [p5.js bindings](docs/p5.md):
 apn --html examples/browser/p5-sketch.apn p5-sketch.html
 open p5-sketch.html
 ```
+
+## Editor support
+
+Run `apn --lint file.apn` to check syntax and layout without executing the file.
+Try live diagnostics, completion, hover, and an outline in a temporary Neovim
+session with `./editors/neovim/try-apn examples/editor-playground.apn`.
+Your existing Neovim configuration stays untouched.
+See [editor tooling](docs/editor-tooling.md) for session-only LazyVim setup and limitations.

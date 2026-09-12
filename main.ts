@@ -18,7 +18,14 @@ export { lex } from "./src/lexer.ts";
 if (import.meta.main) {
     const _args = Deno.args;
 
-    if (_args[0] === "--html") {
+    if (_args[0] === "--lint") {
+        const { runLint } = await import("./src/lint.ts");
+        Deno.exit(await runLint(_args.slice(1)));
+    } else if (_args[0] === "--lsp") {
+        const { runLanguageServer } = await import("./src/lsp.ts");
+        try { Deno.exit(await runLanguageServer()); }
+        catch (error) { console.error(String(error)); Deno.exit(1); }
+    } else if (_args[0] === "--html") {
         const source = _args[1];
         const output = _args[2] ?? "app.html";
         if (!source || _args.length > 3) { console.error("usage: apn --html SOURCE.apn [OUTPUT.html]"); Deno.exit(1); }

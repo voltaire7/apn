@@ -1143,6 +1143,20 @@ let declaredCtors = new Set<string>();
 const functionTypeNames = new Set<string>();
 const nullaryCtors = new Set<string>();
 
+// Tooling parses each document independently, without leaking REPL declarations.
+export function parseDocument(src: string): TopLevel[] {
+    const sets = [declaredCtors, functionTypeNames, nullaryCtors];
+    const saved = sets.map((set) => [...set]);
+    sets.forEach((set) => set.clear());
+    try { return parse(src); }
+    finally {
+        sets.forEach((set, i) => {
+            set.clear();
+            saved[i].forEach((name) => set.add(name));
+        });
+    }
+}
+
 export function parse(src: string): TopLevel[] {
     let toks: Token[];
     try {

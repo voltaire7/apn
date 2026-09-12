@@ -1,0 +1,4 @@
+#!/bin/sh
+# A clean, plugin-free Neovim session. Your existing config is never loaded or edited.
+DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+exec nvim -u "$DIR/apn.lua" -i NONE "$@"

@@ -12,7 +12,7 @@ export type Token =
     | { k: "newline"; pos: number } | { k: "indent"; pos: number } | { k: "dedent"; pos: number }
     | { k: "eof"; pos: number };
 
-const KEYWORDS = new Set([
+export const KEYWORDS = new Set([
     "where",
     "do", "import", "true", "false", "rec",
 ]);

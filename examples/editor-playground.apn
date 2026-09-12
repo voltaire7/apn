@@ -1,0 +1,13 @@
+# Open with: ./editors/neovim/try-apn examples/editor-playground.apn
+# Try K over double, or Ctrl-X Ctrl-O after typing part of a name.
+# Delete the 2 below: a diagnostic appears. Restore it: the error clears.
+
+double x = x * 2
+
+Maybe a = Some a | None
+handlers = [
+    Some y -> print y
+    None -> ()
+]
+
+print (double 21)                         # 42

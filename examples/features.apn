@@ -890,6 +890,12 @@ print (tryMatch (Some x -> x) (Some 123))      # Matched 123
 checkedApply ((Int -> Int) f) = Int { f 123 }
 print (checkedApply (*2))                     # Int 246
 
+# Editor tooling checks this file without executing these actions:
+#   apn --lint examples/features.apn
+#   ./editors/neovim/try-apn examples/editor-playground.apn
+editorDouble x = x * 2
+print (editorDouble 21)                     # => 42
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------
