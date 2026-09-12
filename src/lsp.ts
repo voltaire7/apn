@@ -4,6 +4,7 @@ import { lint, position, type Range } from "./lint.ts";
 import { parseDocument } from "./parser.ts";
 import { lex, KEYWORDS } from "./lexer.ts";
 import { NATIVES } from "./interp.ts";
+import { semanticTokens, TOKEN_TYPES } from "./highlight.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 
 type Message = { jsonrpc?: string; id?: number | string | null; method?: string; params?: any };
@@ -62,6 +63,7 @@ export class LanguageServer {
         if (message.method === "initialize" && !this.initialized) {
             this.initialized = true;
             reply({ capabilities: { positionEncoding: "utf-16", textDocumentSync: { openClose: true, change: 1 },
+                semanticTokensProvider: { legend: { tokenTypes: TOKEN_TYPES, tokenModifiers: [] }, full: true },
                 completionProvider: {}, hoverProvider: true, documentSymbolProvider: true },
                 serverInfo: { name: "apn", version: "0.1.0" } });
             return output;
@@ -87,6 +89,8 @@ export class LanguageServer {
                 this.documents.set(uri, d); publish(uri, d); break;
             }
             case "textDocument/didClose": this.documents.delete(p.textDocument.uri); publish(p.textDocument.uri); break;
+            case "textDocument/semanticTokens/full":
+                reply({ data: semanticTokens(this.documents.get(p.textDocument.uri)?.text ?? "", new Set(NATIVES.map(([name]) => name))) }); break;
             case "textDocument/documentSymbol": reply(symbols(this.documents.get(p.textDocument.uri)?.text ?? "")); break;
             case "textDocument/completion": {
                 const text = this.documents.get(p.textDocument.uri)?.text ?? "";

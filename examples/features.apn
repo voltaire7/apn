@@ -895,6 +895,7 @@ print (checkedApply (*2))                     # Int 246
 #   ./editors/neovim/try-apn examples/editor-playground.apn
 # The editor launcher keeps your normal LazyVim config; --clean opts out.
 # It grants Deno read access to the bundled match prelude at startup.
+# APN editor colors match the REPL, including numeric markers and ternary colons.
 editorDouble x = x * 2
 print (editorDouble 21)                     # => 42
 

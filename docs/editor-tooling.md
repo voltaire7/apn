@@ -81,12 +81,17 @@ startup; it does not grant arbitrary file access or network permissions. Standar
 - Hover shows matching top-level declarations or built-in arity/type information.
   It is a declaration reference, not inferred type information; local shadowing
   and imported definitions are not resolved.
+- Syntax colors match the terminal: yellow numbers, green strings/chars, blue
+  built-ins, cyan constructors, mauve booleans/import, peach operators and
+  numeric markers, gray punctuation/assignment, and muted comments. Ternary
+  colons are peach; record/cons colons are gray. Colors remain available on
+  incomplete source, and are scoped to APN so your LazyVim theme is unchanged.
 - A top-level document outline for named definitions and type declarations.
 
 The server negotiates full document synchronization and UTF-16 positions.
 Documents are parsed independently; constructor declarations never leak across
 files or older edits. Import resolution, go-to-definition, rename, formatting,
-semantic highlighting, and static type checking are not implemented yet.
+and static type checking are not implemented yet.
 
 The integration uses Neovim's built-in [`vim.lsp.start`](https://neovim.io/doc/user/lsp#vim.lsp.start()).
 The server implements the relevant parts of the

@@ -3,6 +3,19 @@ local script = debug.getinfo(1, "S").source:sub(2)
 local root = vim.fn.fnamemodify(script, ":p:h:h:h")
 vim.filetype.add({ extension = { apn = "apn" } })
 local group = vim.api.nvim_create_augroup("ApnLocal", { clear = true })
+-- Filetype-scoped groups leave the rest of your theme alone.
+local function colors()
+    local palette = {
+        number = "#e5c890", string = "#a6d189", comment = "#737994",
+        keyword = "#ca9ee6", ["function"] = "#8caaee", type = "#99d1db",
+        operator = "#ef9f76", punctuation = "#838ba7",
+    }
+    for kind, color in pairs(palette) do
+        vim.api.nvim_set_hl(0, "@lsp.type." .. kind .. ".apn", { fg = color })
+    end
+end
+colors()
+vim.api.nvim_create_autocmd("ColorScheme", { group = group, callback = colors })
 local function attach(buf)
     if vim.bo[buf].filetype ~= "apn" then return end
     vim.bo[buf].shiftwidth = 4
