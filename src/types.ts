@@ -1,3 +1,4 @@
+import { functionSource } from "./function-source.ts";
 import { type Numeric, type Real, numberText } from "./numbers.ts";
 import type { Expr, Pattern } from "./ast.ts";
 
@@ -77,10 +78,10 @@ export function valueToString(v: Value): string {
             const args = v.v.length ? " " + v.v.map(valueToString).join(" ") : "";
             return v.tag + args;
         }
-        case "closure": return "<function>";
+        case "closure": return functionSource(v);
         case "thunk": return "<thunk>";
-        case "native": return `<native:${v.name}>`;
-        case "clauseFn": return "<function>";
+        case "native": return functionSource(v);
+        case "clauseFn": return functionSource(v);
         case "nomatch": return "<nomatch>";
     }
 }

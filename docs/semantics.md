@@ -392,3 +392,9 @@ Arithmetic and printing read its contents; `typeOf x` reports `Mutable`.
 Existing lazy calculations still memoize: a previously forced calculation is
 not recomputed after mutation. Compound contents retain ordinary lazy semantics;
 `set` does not deep-copy or deeply force them.
+
+Function values display source: `func x = print x; print func` prints
+`x -> print x` without running the body. Multiple clauses display their
+equations; partially applied functions include their bound arguments without
+forcing them. Captured environments are not expanded. Existing zero-argument
+actions still run when demanded; inspecting one as a record field shows its body.

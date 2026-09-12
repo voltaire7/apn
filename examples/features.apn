@@ -870,6 +870,10 @@ p5 = import "std/p5"
 print (typeOf (p5.sketch [draw: (p -> p.background "black")])) # Variant
 # apn --html examples/browser/p5-sketch.apn p5-sketch.html
 
+# Functions display their source without running their bodies.
+printFunction x = print x
+print printFunction                          # x -> print x
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------
