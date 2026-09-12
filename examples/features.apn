@@ -872,7 +872,7 @@ print mutableCounter                         # 2
 
 # p5 sketches are descriptions until built for the browser.
 p5 = import "std/p5"
-print (typeOf (p5.sketch [draw: (p -> p.background "black")])) # Variant
+print (typeOf (p5.sketch [draw: (p -> p.background "black")])) # P5Program
 # apn --html examples/browser/p5-sketch.apn p5-sketch.html
 
 # Functions display their source without running their bodies.
@@ -899,6 +899,16 @@ print (checkedApply (*2))                     # Int 246
 # APN editor colors match the REPL, including numeric markers and ternary colons.
 editorDouble x = x * 2
 print (editorDouble 21)                     # => 42
+
+# Parent type patterns bind the whole variant; constructor patterns unpack it.
+ExampleMaybe a = ExampleJust a | ExampleNothing
+exampleUnwrap (ExampleMaybe value) = match value [
+    ExampleJust x -> x
+    ExampleNothing -> 0
+]
+print (exampleUnwrap (ExampleJust 123))      # => 123
+print (exampleUnwrap ExampleNothing)        # => 0
+print (typeOf (ExampleJust 123))             # => ExampleMaybe
 
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 

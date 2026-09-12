@@ -104,13 +104,15 @@ export class Interpreter {
         let last: Value = { kind: "unit" };
         for (const tl of program) {
             if (tl.t === "type") {
+                const family = { name: tl.def.name };
+                this.env.setLocal(tl.def.name, { kind: "type", name: tl.def.name, family });
                 for (const v of tl.def.variants) {
                     if (v.arity === 0) {
                         // Nullary constructors are themselves the value.
-                        this.env.setLocal(v.tag, { kind: "variant", tag: v.tag, v: [] });
+                        this.env.setLocal(v.tag, { kind: "variant", tag: v.tag, v: [], family });
                     } else {
                         this.env.setLocal(v.tag, {
-                            kind: "native", name: "__constr", arity: v.arity, applied: [], tag: v.tag,
+                            kind: "native", name: "__constr", arity: v.arity, applied: [], tag: v.tag, family,
                         });
                     }
                 }
@@ -679,7 +681,7 @@ export class Interpreter {
             case "bool": return a.v === (b as any).v;
             case "string": return a.v === (b as any).v;
             case "char": return a.v === (b as any).v;
-            case "type": return b.kind === "type" && a.name === b.name;
+            case "type": return b.kind === "type" && a.name === b.name && a.family === b.family;
             case "unit": return true;
             case "list": {
                 const bl = b as any;
@@ -716,7 +718,7 @@ export class Interpreter {
             case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
                 const value = this.demand(arg);
-                return this.constructType(f.name, value);
+                return this.conform(f, value);
             }
             case "hashmap": return this.mapLookup(f, this.demand(arg));
             case "closure": {
@@ -741,6 +743,7 @@ export class Interpreter {
                 }
                 const args = [...f.applied, arg];
                 if (args.length < f.arity) return { ...f, applied: args };
+                if (f.name === "__constr") return { kind: "variant", tag: f.tag!, v: args, family: f.family };
                 return this.callNative(f.name, args, f.tag);
             }
             case "clauseFn": {
@@ -763,9 +766,13 @@ export class Interpreter {
                     const binds = new Map<string, Value>();
                     let ok = true;
                     const args = raw;
-                    for (let i = 0; i < clause.params.length; i++) {
-                        if (!this.matchPattern(clause.params[i], args[i], binds)) { ok = false; break; }
-                    }
+                    const patternCaller = this.env;
+                    this.env = f.env;
+                    try {
+                        for (let i = 0; i < clause.params.length; i++) {
+                            if (!this.matchPattern(clause.params[i], args[i], binds)) { ok = false; break; }
+                        }
+                    } finally { this.env = patternCaller; }
                     if (!ok) continue;
                     const child = new Env(f.env);
                     for (const [k, v] of binds) child.setLocal(k, v);
@@ -1069,7 +1076,14 @@ export class Interpreter {
     }
 
     conform(type: Value, value: Value): Value {
-        if (type.kind === "type") return this.constructType(type.name, this.demand(value));
+        if (type.kind === "type") {
+            const actual = this.demand(value);
+            if (type.family) {
+                if (actual.kind !== "variant" || actual.family !== type.family) throw new APNError("runtime", `${type.name} expects a ${type.name} variant`);
+                return actual;
+            }
+            return this.constructType(type.name, actual);
+        }
         if (type.kind !== "functionType") throw new APNError("runtime", "expected a type constructor");
         const target = this.force(value);
         if (!this.matchesValueType("Function", target)) throw new APNError("runtime", "function contract expects a function");
@@ -1140,7 +1154,7 @@ export class Interpreter {
             const arity = f.kind === "clauseFn" || f.kind === "native" ? f.arity - f.applied.length : f.kind === "closure" ? f.params.length : f.kind === "contract" ? 1 : -1;
             if (arity !== 1) throw new APNError("runtime", "tryMatch expects a function with one remaining argument");
             const result = f.kind === "clauseFn" ? this.apply(f, argsIn[1], true) : this.defer(() => this.apply(f, argsIn[1]));
-            return result.kind === "nomatch" ? { kind: "variant", tag: "Unmatched", v: [] } : { kind: "variant", tag: "Matched", v: [result] };
+            return result.kind === "nomatch" ? this.matchingBuiltins.get("Unmatched")! : this.apply(this.matchingBuiltins.get("Matched")!, result);
         }
 
         const host = this.hostNatives.get(name);
@@ -1158,6 +1172,7 @@ export class Interpreter {
             const target = this.demand(argsIn[0]), value = this.demand(argsIn[1]);
             if (target.kind === "functionType") return this.conform(target, value);
             if (target.kind !== "type") throw new APNError("runtime", "cast expects a type as its first argument");
+            if (target.family) return this.conform(target, value);
             return this.constructType(target.name, value, true);
         }
         if (name === "typeOf") {
@@ -1166,6 +1181,7 @@ export class Interpreter {
             if (ref.kind === "functionType") return { kind: "type", name: "Type" };
             if (ref.kind === "contract") return { kind: "functionType", from: ref.from, to: ref.to };
             const value = this.demand(ref);
+            if (value.kind === "variant" && value.family) return { kind: "type", name: value.family.name, family: value.family };
             if (isNumeric(value)) return { kind: "type", name: numericType(value) };
             if (this.isList(value)) return { kind: "type", name: "List" };
             const names: Partial<Record<Value["kind"], string>> = {
@@ -1180,6 +1196,7 @@ export class Interpreter {
             if (target.kind !== "type") throw new APNError("runtime", "isType expects a type");
             if (target.name === "Mutable") return mkBool(ref.kind === "mutable");
             const value = this.demand(ref);
+            if (target.family) return mkBool(value.kind === "variant" && value.family === target.family);
             return mkBool(this.matchesValueType(target.name, value));
         }
         if (["insert", "lookup", "has", "remove"].includes(name)) {
@@ -1462,6 +1479,10 @@ export class Interpreter {
             const binding = this.env.get(p.tag);
             if (binding) {
                 const type = this.force(binding);
+                if (type.kind === "type" && type.family) {
+                    const actual = this.demand(v);
+                    return p.args.length === 1 && actual.kind === "variant" && actual.family === type.family && this.matchPattern(p.args[0], actual, binds);
+                }
                 if (type.kind === "functionType") {
                     const f = this.force(v);
                     return p.args.length === 1 && this.matchesValueType("Function", f) && this.matchPattern(p.args[0], this.conform(type, f), binds);

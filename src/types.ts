@@ -4,6 +4,8 @@ import type { Expr, Pattern } from "./ast.ts";
 
 // ---------------- Types & values ----------------
 
+export interface VariantFamily { name: string; }
+
 export type Type = string; // lightweight: we represent types as printable strings
 
 // One equation of a Haskell-style function definition:  f p1 p2 ... = body
@@ -14,7 +16,7 @@ export type Value =
     | { kind: "functionType"; from: Value; to: Value }
     | { kind: "contract"; target: Value; from: Value; to: Value }
     | { kind: "mutable"; v: Value }
-    | { kind: "type"; name: string }
+    | { kind: "type"; name: string; family?: VariantFamily }
     | { kind: "hashmap"; entries: Map<string, [Value, Value]> }
     | Numeric
     | { kind: "rationalRange"; lo: Real; step: Real; hi: Real | null }
@@ -27,9 +29,9 @@ export type Value =
     | { kind: "cons"; head: Value; tail: Value }
     | { kind: "deferred"; compute: () => Value; value?: Value; busy?: boolean }
     | { kind: "record"; v: Array<[string, Value]> }
-    | { kind: "variant"; tag: string; v: Value[] }
+    | { kind: "variant"; tag: string; v: Value[]; family?: VariantFamily }
     | { kind: "closure"; params: string[]; body: Expr; env: Env; mutableValue?: Value }
-    | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string }
+    | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string; family?: VariantFamily }
     | { kind: "clauseFn"; name: string; clauses: DefClause[]; arity: number; env: Env; applied: Value[] }
     | { kind: "floatRange"; lo: number; step: number; hi: number | null; index?: number }
     | { kind: "range"; lo: bigint; step: bigint; hi: bigint | null }

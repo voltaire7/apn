@@ -91,3 +91,28 @@ associate right: `Int -> Int -> Int` describes a curried function. A function ty
 can also be applied directly as a constructor: `(Int -> Int) (*2)`. Named contracts
 currently use capitalized top-level aliases. Legacy `:` and `::` annotations are
 still accepted and ignored; they are separate from these runtime contracts.
+
+
+## Declared variant types in patterns
+
+A declaration retains both the parent type and its constructors:
+
+```apn
+Maybe a = Just a | Nothing
+func (Maybe value) = match value [
+    Just x -> print x
+    Nothing -> ()
+]
+func (Just 123)
+```
+
+`(Maybe value)` accepts either `Just ...` or `Nothing`, binding the entire
+variant to `value` without forcing its fields. `(Just x)` instead binds the
+payload. Unrelated values fail the parent type pattern and may fall through to
+another clause. `Maybe value`, `cast Maybe value`, and `isType Maybe value` also
+check this membership; `typeOf (Just 123)` returns `Maybe`. Type parameters do
+not impose payload types: this remains a dynamic language.
+
+When the parent and constructor share a name (`Box a = Box a`), that name keeps
+its constructor meaning: `(Box x)` unpacks the payload. Parent type patterns
+resolve in the function's definition scope, including functions from modules.
