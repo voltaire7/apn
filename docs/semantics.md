@@ -439,3 +439,11 @@ actions still run when demanded; inspecting one as a record field shows its body
 and runtime function contracts are described in [pattern functions](pattern-functions.md).
 The primitive `tryMatch` distinguishes pattern failure from runtime errors and
 keeps successful bodies deferred. Guards must return Bool.
+
+
+## CLI file errors
+
+If the input file cannot be opened, APN exits with status 1 and prints a concise
+message to stderr, for example `error: cannot read "missing.apn": file not found`.
+Directories and permission failures receive similarly short messages, without
+Deno stack traces. The CLI uses the supplied path literally.

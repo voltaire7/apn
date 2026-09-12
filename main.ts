@@ -8,6 +8,7 @@
 //        deno run --allow-read main.ts examples/features.apn
 // =====================================================================
 
+import { formatFileReadError } from "./src/errors.ts";
 import { Interpreter, dirname } from "./src/interp.ts";
 import { runSource, repl, formatError } from "./src/repl.ts";
 export { parse } from "./src/parser.ts";
@@ -36,7 +37,13 @@ if (import.meta.main) {
         } catch (error) { console.error(String(error)); Deno.exit(1); }
     } else if (_args.length >= 1 && !_args[0]?.startsWith(":")) {
         const file = _args[0];
-        const src = Deno.readTextFileSync(file);
+        let src: string;
+        try {
+            src = Deno.readTextFileSync(file);
+        } catch (error) {
+            console.error(formatFileReadError(file, error));
+            Deno.exit(1);
+        }
         const interp = new Interpreter();
         interp.sourceDir = dirname(file);
         interp.programArgs = _args.slice(1);

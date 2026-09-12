@@ -71,3 +71,12 @@ export function didYouMean(name: string, candidates: string[]): string | null {
     return best;
 }
 
+
+// CLI file-open failures should identify the user's path, not expose host stacks.
+export function formatFileReadError(file: string, error: unknown): string {
+    const reason = error instanceof Deno.errors.NotFound ? "file not found"
+        : error instanceof Deno.errors.PermissionDenied || error instanceof Deno.errors.NotCapable ? "permission denied"
+        : error instanceof Deno.errors.IsADirectory ? "is a directory"
+        : error instanceof Error ? error.message : String(error);
+    return `error: cannot read ${JSON.stringify(file)}: ${reason}`;
+}

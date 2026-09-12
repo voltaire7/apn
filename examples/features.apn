@@ -1,3 +1,4 @@
+# CLI file errors are concise: apn missing.apn reports file not found and exits 1.
 # =========================================================
 #  APN — Applicative Polish Notation — feature showcase
 #  A lazy, Haskell-like, untyped (JS-like) scripting language.
