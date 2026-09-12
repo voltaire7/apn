@@ -1,10 +1,11 @@
 import type { Expr, Pattern } from "./ast.ts";
 import type { Value } from "./types.ts";
-import { exprToSource } from "./parser.ts";
+import { exprToSource, functionSpecSource } from "./parser.ts";
 import { valueToString } from "./types.ts";
 
 function pattern(p: Pattern): string {
     switch (p.p) {
+        case "contract": return `((${functionSpecSource(p.spec)}) ${pattern(p.value)})`;
         case "wildcard": return "_";
         case "var": return p.name;
         case "int": return String(p.v);
@@ -31,12 +32,12 @@ function source(e: Expr, parent = 0): string {
             break;
         }
         case "unop": level = 9; text = `${e.op === "neg" ? "-" : "!"}${source(e.e, 9)}`; break;
+        case "patternLambda": level = 0; text = `${e.params.map(pattern).join(" ")}${e.guard ? " | " + source(e.guard) : ""} -> ${source(e.body)}`; break;
         case "lambda": level = 0; text = `${e.params.join(" ")} -> ${source(e.body)}`; break;
         case "pipe": level = 1; text = `${source(e.x, 1)} $ ${source(e.f, 2)}`; break;
         case "ternary": level = 0; text = `${source(e.cond, 1)} ? ${source(e.then)} : ${source(e.els)}`; break;
         case "list": return `[${e.v.map(x => source(x)).join(", ")}]`;
         case "record": return `[${e.v.map(([k, v]) => `${k}: ${source(v)}`).join(", ")}]`;
-        case "match": level = 0; text = `match ${source(e.scrut)} [${e.alts.map(a => `${pattern(a.pattern)}${a.guard ? " | " + source(a.guard) : ""} -> ${source(a.body)}`).join(", ")}]`; break;
         case "block": {
             if (e.style === "(" && e.stmts.length === 1) return `(${source(e.stmts[0])})`;
             return `{ ${e.stmts.map(x => source(x)).join("; ")} }`;
@@ -61,7 +62,7 @@ export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" 
         return name + v.applied.map(a => ` (${argument(a)})`).join("");
     }
     const text = v.clauses.length === 1
-        ? `${v.clauses[0].params.map(pattern).join(" ")} -> ${source(v.clauses[0].body)}`
+        ? `${v.clauses[0].params.map(pattern).join(" ")}${v.clauses[0].guard ? " | " + source(v.clauses[0].guard) : ""} -> ${source(v.clauses[0].body)}`
         : v.clauses.map(c => `${v.name} ${c.params.map(pattern).join(" ")} = ${source(c.body)}`).join("\n");
     return v.applied.length ? `(${text})${v.applied.map(a => ` (${argument(a)})`).join("")}` : text;
 }

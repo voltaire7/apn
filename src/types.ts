@@ -7,10 +7,12 @@ import type { Expr, Pattern } from "./ast.ts";
 export type Type = string; // lightweight: we represent types as printable strings
 
 // One equation of a Haskell-style function definition:  f p1 p2 ... = body
-export interface DefClause { params: Pattern[]; body: Expr; }
+export interface DefClause { params: Pattern[]; body: Expr; guard?: Expr; }
 
 // Runtime values (dynamically typed, like JS)
 export type Value =
+    | { kind: "functionType"; from: Value; to: Value }
+    | { kind: "contract"; target: Value; from: Value; to: Value }
     | { kind: "mutable"; v: Value }
     | { kind: "type"; name: string }
     | { kind: "hashmap"; entries: Map<string, [Value, Value]> }
@@ -54,6 +56,8 @@ export function valueToString(v: Value): string {
     switch (v.kind) {
         case "int": case "float": case "rational": case "complex": return (v.typeName ? v.typeName + " " : "") + numberText(v);
         case "mutable": return valueToString(v.v);
+        case "functionType": return `${v.from.kind === "functionType" ? "(" + valueToString(v.from) + ")" : valueToString(v.from)} -> ${valueToString(v.to)}`;
+        case "contract": return `((${valueToString({ kind: "functionType", from: v.from, to: v.to })}) (${valueToString(v.target)}))`;
         case "type": return v.name;
         case "hashmap": return `HashMap [${[...v.entries.values()].map(([k, x]) => `[${valueToString(k)}, ${valueToString(x)}]`).join(", ")}]`;
         case "rationalRange": return "<rational range>";

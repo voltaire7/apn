@@ -213,24 +213,16 @@ intentional evaluation change.
   → "no clause of '<name>' matches the given arguments" (the error names the
   function). Guards on def clauses are
   NOT supported (use `match x [ ... | ... ]` inside the body for guards).
-- **`match` expressions**: `match scrutinee [ pattern -> expr, ... ]` is THE
-  pattern-matching form — there is NO `case` (the `case`/`of` keywords were
-  removed and freed up as identifiers). Alternatives share the `{ t: "match" }`
-  AST; each may carry a `|` guard, evaluation is `evalMatch`. The `[` ends the
-  scrutinee, so alternatives separate on `,` or a newline, and ALL layouts
-  work:
-      fact n = match n [0 -> 1, _ -> n * fact (n - 1)]      # single line
-      fact n = match n [                                    # same-line open
-          0 -> 1
-          _ -> n * fact (n - 1)
-      ]
-      fact n =                                               # block layout
-          match n [
-              0 -> 1
-              _ -> n * fact (n - 1)
-          ]
-  A `match` scrutinee may not apply a `[...]` argument directly — parenthesize
-  it (`match (head xs) [0 -> ..., _ -> ...]`).
+- **First-class matching**: `match value alternatives` is an ordinary APN
+  function from `lib/match.apn`, embedded as the default prelude. It accepts a
+  lazy list of unary functions, including pattern lambdas with optional guards.
+  `tryMatch f value` returns `Matched result` (lazy body) or `Unmatched`.
+  Only pattern/false-guard failure falls through; runtime errors propagate.
+  No match keyword, match AST node, or special evaluator remains.
+  Parenthesize computed arguments as with any curried function:
+      match (head xs) [0 -> 1, _ -> 2]
+      handlers = [Some x -> x, None -> 0]
+      match value handlers
 - **`[x, y]` pattern matches both lists and records**: in `matchPattern`, a
   var-only list pattern against a record binds each variable to the field of
   the same name (like record destructuring); against a list it binds
@@ -238,14 +230,12 @@ intentional evaluation change.
   (Rust-style) extracts fields under NEW names from a record only — usable as
   a binding LHS, a function-param or match-alternative pattern; against a list
   it never matches. Bare and keyed entries can't mix in one pattern.
-- **Pattern-lambdas**: a lambda's FIRST param may be a destructuring pattern
-  (and only that — no literal `_`/`0 ->` lambdas, to keep guards like
-  `x | x < 0 -> ...` unambiguous):
-      person * ([f, v] -> print (format "%: %" [f, v]))   # record → [field, value]
-      map ([a, b] -> a + b) [[1, 2], [3, 4]]                # list → positional
-      x -> ...                                               # plain name params as before
-  `startsLambdaPattern` limits the guess to `[ ... ]` and `(Ctor ...)`; the
-  speculative parse falls back to a normal expression when no `->` follows.
+- **Pattern lambdas**: all parameters may be patterns (constructors, literals,
+  lists, types, wildcards), optionally followed by a `|` Bool guard. They are
+  represented by `patternLambda` and evaluate to ordinary `clauseFn` values.
+  Failed direct application raises a no-clause error; `tryMatch` probes without
+  running the body and uses the internal nomatch sentinel only for mismatch.
+
 - **Pipes & operators**:
   - `x $ f` feeds `x` into `f` (value-left pipe, replaces the old `|>`). No
     composition operator. The `.` postfix is record access and the QUOTED
@@ -336,10 +326,8 @@ rendered by `formatError(err, color)`:
   parse). Use comparisons/ternaries instead.
 - `:` constructs cons expressions and matches cons patterns (`x:rest`).
   Parenthesize cons expressions inside list literals to avoid record syntax.
-- `match x [ ... ]` is a self-delimiting bracket form: it consumes its own `[ ]`
-  (newlines/indents/dedents inside), independent of the block/semicolon rules
-  above, and needs no hard-stop flag for the enclosing application (the `]`
-  already ends everything).
+- `match` follows ordinary application parsing; its alternatives are a list.
+
 - Inside `{ }`, block statements are at one flat level (nested constructs like
   `match` may deepen it); an `indent` token directly before a statement, or a
   `,`-tuple in `( )`, are rejected with a clear error.
@@ -382,7 +370,7 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   multi-line text is inserted verbatim, never auto-run; Enter then runs it.
 - **Colors** (Catppuccin Frappé palette, truecolor): input is highlighted as
   typed (comments overlay0, strings/chars green, numbers yellow,
-  `match`/bools mauve, natives blue, capital idents sky,
+  bools mauve, natives blue, capital idents sky,
   punctuation overlay1, operators peach); echoed values are colored by kind with
   gray structure (brackets, colons, commas; keys plain, variant tags sky);
   errors red.
@@ -499,3 +487,9 @@ failed-update, and repeated-read assertions in `tests/mutable-test.ts` green.
 and primitive arguments to a p5 instance. Browser runtime loads pinned p5.js
 only for a P5Sketch. Keep host methods scoped to each interpreter and sketch;
 never expose arbitrary host object access. See `docs/p5.md` and `tests/p5-test.ts`.
+
+Function contracts use `((Int -> Int) f)` patterns and `Int -> Int` type values.
+They wrap callable arguments and enforce input/output constructors on invocation;
+never execute a function to predict its signature. `Transform = Int -> Int`
+defines a reusable contract. Legacy colon/:: annotations remain ignored.
+See `docs/pattern-functions.md` and `tests/pattern-functions-test.ts`.

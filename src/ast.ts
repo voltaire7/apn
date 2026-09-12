@@ -8,7 +8,10 @@ export type BinOp = "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | ">" | "<="
 
 export type UnOp = "neg" | "not";
 
+export type FunctionSpec = { name: string } | { from: FunctionSpec; to: FunctionSpec };
+
 export type Expr =
+    | { t: "functionType"; spec: FunctionSpec }
     | { t: "computedRange"; lo: Expr; second: Expr | null; hi: Expr | null }
     | { t: "import"; module: string }
     | { t: "numeric"; v: Numeric }
@@ -24,9 +27,9 @@ export type Expr =
     | { t: "binop"; op: BinOp; l: Expr; r: Expr }
     | { t: "unop"; op: UnOp; e: Expr }
     | { t: "app"; f: Expr; a: Expr }
+    | { t: "patternLambda"; params: Pattern[]; body: Expr; guard?: Expr }
     | { t: "lambda"; params: string[]; body: Expr }
     | { t: "ternary"; cond: Expr; then: Expr; els: Expr }
-    | { t: "match"; scrut: Expr; alts: Alt[] }
     | { t: "list"; v: Expr[] }
     | { t: "record"; v: Array<[string, Expr]> }
     | { t: "recordAccess"; rec: Expr; field: string | Expr }
@@ -39,13 +42,8 @@ export type Expr =
     | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr }[] }
     | { t: "patDef"; pattern: Pattern; value: Expr };
 
-export interface Alt {
-    pattern: Pattern;
-    guard?: Expr;
-    body: Expr;
-}
-
 export type Pattern =
+    | { p: "contract"; spec: FunctionSpec; value: Pattern }
     | { p: "wildcard" }
     | { p: "var"; name: string }
     | { p: "int"; v: bigint }

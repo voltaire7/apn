@@ -1,3 +1,4 @@
+import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
 function rangeNum(e: Expr): Real {
     if (e.t === "int" || e.t === "float") return { kind: e.t, v: e.v } as Real;
@@ -21,7 +22,7 @@ function rangeSyntax(lo: Expr, second: Expr | null, hi: Expr | null): Expr {
 }
 import { lex } from "./lexer.ts";
 import { APNError, tokLen } from "./errors.ts";
-import type { Expr, Pattern, TopLevel, BinOp, Alt } from "./ast.ts";
+import type { Expr, Pattern, TopLevel, BinOp, FunctionSpec } from "./ast.ts";
 import type { Type, Value, Env } from "./types.ts";
 import type { Token } from "./lexer.ts";
 
@@ -154,6 +155,16 @@ class Parser {
         if (t.k === "sym" && t.v === "(") {
             this.next();
             if (this.isSym(")")) { this.next(); return { p: "list", v: [] }; }
+            const signatureStart = this.i;
+            try {
+                const spec = this.parseFunctionSpec();
+                if (!("name" in spec) && this.peek().k !== "eof" && !this.isSym(")")) {
+                    const value = this.parsePattern();
+                    this.expectSym(")");
+                    return { p: "contract", spec, value };
+                }
+            } catch { /* ordinary grouping or constructor pattern */ }
+            this.i = signatureStart;
             const typeName = this.peek(), valueName = this.peek(1), closing = this.peek(2);
             if (typeName.k === "ident" && /^[a-z]/.test(typeName.v) &&
                 valueName.k === "ident" && closing.k === "sym" && closing.v === ")") {
@@ -225,9 +236,9 @@ class Parser {
             const name = t.v;
             if (nullaryCtors.has(name)) return { p: "constr", tag: name, args: [] };
             // constructor application: Just x
-            if (name[0] === name[0].toUpperCase() && this.peek().k !== "sym") {
+            if (/^[A-Z]/.test(name)) {
                 const args = [] as Pattern[];
-                while (this.peek().k === "ident" && !this.isSym("->")) {
+                while (this.startsParam(this.peek())) {
                     args.push(this.parsePattern());
                 }
                 return { p: "constr", tag: name, args };
@@ -455,53 +466,25 @@ class Parser {
 
     parsePrimary(): Expr {
         const t = this.peek();
-        // Parenthesized annotated lambda params:  (x: Int, y: Bool) -> body
-        if (t.k === "sym" && t.v === "(") {
-            let j = this.i + 1;
-            let ok = this.toks[j].k === "ident";
-            if (ok) {
-                for (;;) {
-                    j++; // param name
-                    if (this.toks[j].k === "sym" && (this.toks[j] as { v: string }).v === ":") {
-                        j = this.skipType(j + 1); // skip the annotation type
-                    }
-                    if (this.toks[j].k === "sym" && (this.toks[j] as { v: string }).v === ",") { j++; continue; }
-                    break;
-                }
-                if (this.toks[j].k === "sym" && (this.toks[j] as { v: string }).v === ")") {
-                    j++;
-                    if (this.toks[j].k === "sym" && (this.toks[j] as { v: string }).v === "->") {
-                        return this.parseLambda();
-                    }
-                }
-            }
-        } else if (t.k === "ident") {
-            let j = this.i;
-            let isArrow = false;
-            while (this.toks[j].k === "ident") {
-                j++;
-                // allow optional param type annotations within the param list
-                if (this.toks[j].k === "sym" && (this.toks[j] as { v: string }).v === ":") {
-                    j++;
-                    j = this.skipType(j);
-                }
-            }
-            if (this.toks[j].k === "sym" && (this.toks[j] as { v: string }).v === "->") {
-                isArrow = true;
-            }
-            if (isArrow) {
-                return this.parseLambda();
-            }
-            // Otherwise fall through to normal ident handling.
-        }
-        // A pattern-lambda:  [a, b] -> ...,  (Just x) -> ...,  0 -> ...,  _ -> ...
-        // Try parsing it; if there's no arrow it falls back to the normal expression.
-        if (this.startsLambdaPattern(t)) {
+        if (t.k === "ident" && (TYPE_NAMES.includes(t.v) || functionTypeNames.has(t.v))) {
             const save = this.i;
             try {
-                return this.parseLambda();
-            } catch {
-                this.i = save;
+                const spec = this.parseFunctionSpec();
+                if (!("name" in spec)) return { t: "functionType", spec };
+            } catch { /* ordinary expression */ }
+            this.i = save;
+        }
+        if (!this.noLambda && this.startsParam(t)) {
+            const save = this.i;
+            let header: { params: Pattern[]; guard?: Expr } | undefined;
+            try { header = this.lambdaHeader(); } catch { this.i = save; }
+            if (header) {
+                this.skipContinuation();
+                const body = this.isSym("{") ? this.parsePrimary() : this.parseExpr();
+                if (!header.guard && header.params.every(p => p.p === "var")) {
+                    return { t: "lambda", params: header.params.map(p => (p as Extract<Pattern, { p: "var" }>).name), body };
+                }
+                return { t: "patternLambda", ...header, body };
             }
         }
         switch (t.k) {
@@ -597,7 +580,7 @@ class Parser {
                                         `are constructors; use a lowercase name here`,
                                     );
                                 }
-                                stmts.push(this.isDef() ? this.parseBlockDef() : this.parseExpr());
+                                stmts.push(this.isDef() ? this.parseBlockDef() : this.parseDelimitedExpr());
                             }
                         }
                     }
@@ -619,7 +602,7 @@ class Parser {
                             for (;;) {
                                 const f = this.next();
                                 this.expectSym(":");
-                                fs.push([this.keyTok(f), this.parseExpr()]);
+                                fs.push([this.keyTok(f), this.parseDelimitedExpr()]);
                                 this.skipListSeparators();
                                 if (this.isSym("]")) { this.next(); return { t: "record", v: fs }; }
                                 if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside record literal");
@@ -678,7 +661,7 @@ class Parser {
                         }
                         const es = [] as Expr[];
                         for (;;) {
-                            es.push(this.parseExpr());
+                            es.push(this.parseDelimitedExpr());
                             this.skipListSeparators();
                             if (this.isSym("]")) { this.next(); return { t: "list", v: es }; }
                             if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside list literal");
@@ -701,7 +684,6 @@ class Parser {
                 if (module.k !== "str") throw new Error("Parser: import expects a module name string");
                 return { t: "import", module: module.v };
             }
-            case "match": return this.parseMatch();
             case "true": this.next(); return { t: "bool", v: true };
             case "false": this.next(); return { t: "bool", v: false };
             default:
@@ -710,66 +692,51 @@ class Parser {
         }
     }
 
-    parseLambda(): Expr {
-        const params: string[] = [];
-        let pattern: Pattern | null = null;
-        // A lambda may take a leading PATTERN param (destructuring forms only):
-        //   [a, b] -> ...,   (Just x) -> ...
-        // A `(` + lowercase/colon form stays the annotation syntax `(x: Int) ->`.
-        const t0 = this.peek();
-        if (this.startsLambdaPattern(t0)) {
-            pattern = this.parseConsPattern();
+    parseFunctionSpec(): FunctionSpec {
+        let left: FunctionSpec;
+        if (this.eatSym("(")) {
+            left = this.parseFunctionSpec();
+            this.expectSym(")");
         } else {
-            // Params may be: `a b ->` (bare) or `(a: Int) (b: Bool) ->` (parenthesized+annotated)
-            while (this.peek().k === "ident" || (this.isSym("(") && this.peek(1).k === "ident")) {
-                if (this.isSym("(")) {
-                    this.next(); // (
-                    while (this.peek().k === "ident") {
-                        params.push((this.next() as { v: string }).v);
-                        if (this.isSym(":")) { this.next(); this.parseType(); }
-                        if (this.eatSym(",")) continue;
-                        break;
-                    }
-                    this.expectSym(")");
-                } else {
-                    params.push((this.next() as { v: string }).v);
-                    // Optional param type annotation:  x: Int -> ...
-                    if (this.isSym(":")) { this.next(); this.parseType(); }
-                }
-            }
+            const token = this.next();
+            if (token.k !== "ident" || !(TYPE_NAMES.includes(token.v) || functionTypeNames.has(token.v))) throw new Error("Parser: expected a type constructor");
+            left = { name: token.v };
         }
-        this.expectSym("->");
-        this.skipContinuation();
-        // An explicit brace body ends at its closing brace; following operators
-        // belong to the surrounding expression, allowing chained maps.
-        const body = this.isSym("{") ? this.parsePrimary() : this.parseExpr();
-        // A pattern param desugars to:  \$p -> match $p [ { pattern -> \rest -> body } ]
-        if (pattern) {
-            const fresh = this.freshName();
-            const nested: Expr = params.length
-                ? { t: "lambda", params, body }
-                : body;
-            return {
-                t: "lambda",
-                params: [fresh],
-                body: { t: "match", scrut: { t: "var", name: fresh }, alts: [{ pattern, body: nested }] },
-            };
-        }
-        return { t: "lambda", params, body };
+        return this.eatSym("->") ? { from: left, to: this.parseFunctionSpec() } : left;
     }
 
-    // A token that unambiguously begins a lambda parameter pattern. Only the
-    // destructuring forms are allowed, so that literal/`_` starts can't be
-    // mistaken for expressions (e.g. the guard  x | x < 0 -> ...  must not read
-    // `0 -> ...` as a lambda):
-    //   [a, b] -> ...,   (Just x) -> ...
-    startsLambdaPattern(t: Token): boolean {
-        if (t.k === "sym" && t.v === "[") return true;
-        if (t.k === "sym" && t.v === "(") {
-            const n1 = this.toks[this.i + 1];
-            return n1.k === "ident" && /^[A-Z]/.test(n1.v);
+    parseDelimitedExpr(): Expr {
+        const saved = this.noLambda;
+        this.noLambda = 0;
+        try { return this.parseExpr(); } finally { this.noLambda = saved; }
+    }
+
+    noLambda = 0;
+    lambdaHeader(): { params: Pattern[]; guard?: Expr } {
+        const params: Pattern[] = [];
+        while (this.startsParam(this.peek())) {
+            // Preserve the legacy parenthesized annotation form.
+            const first = this.peek(1), colon = this.peek(2);
+            if (this.isSym("(") && first.k === "ident" && /^[a-z]/.test(first.v) && colon.k === "sym" && colon.v === ":") {
+                this.next();
+                do {
+                    const name = this.next();
+                    if (name.k !== "ident") throw new Error("Parser: expected parameter");
+                    params.push({ p: "var", name: name.v });
+                    if (this.eatSym(":")) this.parseType();
+                } while (this.eatSym(","));
+                this.expectSym(")");
+            } else params.push(this.parseConsPattern());
+            if (this.eatSym(":")) this.parseType();
         }
-        return false;
+        if (!params.length) throw new Error("Parser: expected lambda parameters");
+        let guard: Expr | undefined;
+        if (this.eatSym("|")) {
+            this.noLambda++;
+            try { guard = this.parsePipe(); } finally { this.noLambda--; }
+        }
+        this.expectSym("->");
+        return { params, guard };
     }
 
     freshCounter = 0;
@@ -937,60 +904,6 @@ class Parser {
     }
 
     //  match scrutinee [ pattern -> expr, ... ]
-    // The alternatives are delimited by [ ] (separators: `,` or a newline), so
-    // all three layouts work:
-    //    fact n = match n [0 -> 1, _ -> ...]            single line, commas
-    //    fact n = match n [\n  0 -> 1\n  _ -> ...\n]    same-line open, newlines
-    //    fact n =\n      match n [\n         0 -> 1\n         _ -> ...\n     ]
-    // Each alternative may carry a `|` guard, exactly like the alternatives
-    // `evalMatch` handles.
-    parseMatch(): Expr {
-        this.next(); // match
-        const scrut = this.parseMatchScrut();
-        const alts: Alt[] = [];
-        this.expectSym("[");
-        this.skipListLeading();
-        for (;;) {
-            this.skipListSeparators();
-            if (this.isSym("]")) { this.next(); break; }
-            if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside match alternatives");
-            alts.push(this.parseMatchAlt());
-        }
-        return { t: "match", scrut, alts };
-    }
-
-    // Application for a `match` scrutinee: identical to parseApp, but the first
-    // `[` after the scrutinee starts the alternative list instead of being an
-    // argument. (Nested groups parse normally, so parenthesize a scrutinee that
-    // really applies a list:  match (head [1,2]) [0 -> ..., _ -> ...]).
-    parseMatchScrut(): Expr {
-        let f = this.parsePostfix(this.parsePrimary());
-        for (;;) {
-            const t = this.peek();
-            if (t.k === "newline" || t.k === "dedent" || t.k === "indent" || t.k === "eof") break;
-            if (t.k === "sym" && t.v === ";") break;
-            if (t.k === "sym" && t.v === "[") break;
-            if (t.k === "ident" || t.k === "int" || t.k === "float" || t.k === "bool" ||
-                    t.k === "str" || t.k === "char" ||
-                    (t.k === "kw" && (t.v === "true" || t.v === "false")) ||
-                    (t.k === "sym" && (t.v === "(" || t.v === "{"))) {
-                const a = this.parsePostfix(this.parsePrimary());
-                f = { t: "app", f, a };
-            } else break;
-        }
-        return f;
-    }
-
-    // One match alternative:  pattern [ | guard ] -> expr
-    parseMatchAlt(): Alt {
-        const pattern = this.parseConsPattern();
-        let guard: Expr | undefined;
-        if (this.isSym("|")) { this.next(); guard = this.parsePipe(); }
-        this.expectSym("->");
-        const body = this.parseExpr();
-        return { pattern, guard, body };
-    }
-
     // ---- top level
 
     // Lookahead: is the statement starting at the current identifier a binding
@@ -1187,6 +1100,14 @@ class Parser {
                 // or use a lowercase name).
                 if (/^[A-Z]/.test(t.v)) {
                     if (this.isDef()) {
+                        const saved = this.i;
+                        const declaration = this.parseDefStatement();
+                        if (!declaration.clauses[0].params.length && declaration.clauses[0].body.t === "functionType") {
+                            functionTypeNames.add(declaration.name);
+                            out.push({ t: "def", ...declaration });
+                            continue;
+                        }
+                        this.i = saved;
                         throw new Error(
                             `Parser: '${t.v}' is capitalized — capital names are constructors, ` +
                             `so a value/function must use a lowercase name (or '${t.v}' must be ` +
@@ -1236,6 +1157,7 @@ class Parser {
 // (record-constructor) function def. Module-level so declarations persist
 // across REPL lines (each line is re-parsed standalone).
 let declaredCtors = new Set<string>();
+const functionTypeNames = new Set<string>();
 const nullaryCtors = new Set<string>();
 
 export function parse(src: string): TopLevel[] {
@@ -1309,6 +1231,8 @@ export function exprToSource(e: Expr): string {
         case "binop": return `${exprToSource(e.l)} ${e.op} ${exprToSource(e.r)}`;
         case "unop": return `${e.op === "neg" ? "-" : "!"}${exprToSource(e.e)}`;
         case "app": return `${exprToSource(e.f)} ${exprToSource(e.a)}`;
+        case "functionType": return functionSpecSource(e.spec);
+        case "patternLambda": return `${e.params.map(patternSource).join(" ")}${e.guard ? " | " + exprToSource(e.guard) : ""} -> ${exprToSource(e.body)}`;
         case "lambda": return `${e.params.join(" ")} -> ${exprToSource(e.body)}`;
         case "list": return `[${e.v.map(exprToSource).join(", ")}]`;
         case "record": return `[${e.v.map(([k, x]) => `${k}: ${exprToSource(x)}`).join(", ")}]`;
@@ -1340,8 +1264,25 @@ export function exprToSource(e: Expr): string {
             }).join("; ");
             return `${e.style === "(" ? "(" : "{"} ${body} ${e.style === "(" ? ")" : "}"}`;
         }
-        case "match":
-            return `match ${exprToSource(e.scrut)} [...]`;
         default: return "<expr>";
+    }
+}
+export function functionSpecSource(spec: FunctionSpec): string {
+    return "name" in spec ? spec.name : `${"name" in spec.from ? functionSpecSource(spec.from) : "(" + functionSpecSource(spec.from) + ")"} -> ${functionSpecSource(spec.to)}`;
+}
+export function patternSource(p: Pattern): string {
+    switch (p.p) {
+        case "contract": return `((${functionSpecSource(p.spec)}) ${patternSource(p.value)})`;
+        case "wildcard": return "_";
+        case "var": return p.name;
+        case "int": return String(p.v);
+        case "bool": return String(p.v);
+        case "string": return JSON.stringify(p.v);
+        case "list": return `[${p.v.map(patternSource).join(", ")}]`;
+        case "cons": return `(${patternSource(p.head)} : ${patternSource(p.tail)})`;
+        case "constr": return p.args.length ? `(${p.tag} ${p.args.map(patternSource).join(" ")})` : p.tag;
+        case "typeBind": return `(${p.name} ${patternSource(p.value)})`;
+        case "recPat": return `[${p.v.map(([k, v]) => `${k}: ${v}`).join(", ")}]`;
+        case "range": return `[${p.lo}..${p.hi}]`;
     }
 }

@@ -874,6 +874,18 @@ print (typeOf (p5.sketch [draw: (p -> p.background "black")])) # Variant
 printFunction x = print x
 print printFunction                          # x -> print x
 
+# Alternatives are first-class functions, and match itself is an APN function.
+handlers = [
+    Some y -> y
+    None -> 0
+]
+print (match (Some 123) handlers)              # 123
+print (match None handlers)                    # 0
+print (tryMatch (Some x -> x) None)            # Unmatched
+print (tryMatch (Some x -> x) (Some 123))      # Matched 123
+checkedApply ((Int -> Int) f) = Int { f 123 }
+print (checkedApply (*2))                     # Int 246
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

@@ -398,3 +398,10 @@ Function values display source: `func x = print x; print func` prints
 equations; partially applied functions include their bound arguments without
 forcing them. Captured environments are not expanded. Existing zero-argument
 actions still run when demanded; inspecting one as a record field shows its body.
+
+## Pattern functions
+
+`match` is an ordinary prelude function over unary functions; pattern lambdas
+and runtime function contracts are described in [pattern functions](pattern-functions.md).
+The primitive `tryMatch` distinguishes pattern failure from runtime errors and
+keeps successful bodies deferred. Guards must return Bool.

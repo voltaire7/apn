@@ -1,0 +1,6 @@
+# Matching is an ordinary APN function over a lazy list of unary functions.
+MatchAttempt = Matched a | Unmatched
+match value [] = fail "non-exhaustive match: no alternative fits this value"
+match value (candidate:rest) = _matchResult (tryMatch candidate value) value rest
+_matchResult (Matched result) value rest = result
+_matchResult Unmatched value rest = match value rest

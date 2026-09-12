@@ -227,7 +227,7 @@ export function showValue(v: Value): string {
     }
 }
 
-const REPL_KEYWORDS = new Set(["match", "import"]);
+const REPL_KEYWORDS = new Set(["import"]);
 const NATIVE_NAMES = new Set(NATIVES.map(([n]) => n));
 
 // Syntax-highlight one buffer line (best-effort, purely cosmetic).
@@ -345,10 +345,12 @@ function helpText(): string {
         `  vec.x = 10 / vec.[x, y] = [1, 2]  (record update: rebinds a modified`,
         `              copy, scoped like any def — blocks shadow; [] seeds a record)`,
         `  f = { ... }  ({ stays on the = line; body +4 spaces; } aligned)`,
-        `  x -> expr        (lambdas; first param may be [a, b] or (Ctor ..))`,
+        `  x -> expr        (lambdas; parameters may be patterns)`,
         `  xs * x -> { expr } * y -> expr   (braces end the first lambda)`,
         `  cond ? a : b   (ternary)`,
-        `  match x [ pat -> expr, ... ]   (all patterns, | guards; , or newline)`,
+        `  match x [ pat -> expr, ... ]   (ordinary function; alternatives are pattern lambdas)`,
+        `  tryMatch (Some x -> x) None  => Unmatched; success => Matched result`,
+        `  func ((Int -> Int) f) = Int { f 123 }   (checked function contract)`,
         `  Maybe a = Just a | Nothing`,
         `  [1,2,3]  [0..5] [0,0.5..100] [0..]  ranges; 0:[] conses`,
         `  ['a'..'e'] => "abcde"; take 6 (iterate (*2) 1) => [1,2,4,8,16,32]`,

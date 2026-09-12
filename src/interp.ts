@@ -1,12 +1,13 @@
+import matchSource from "../lib/match.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, matchesType, castNumeric, implicitOperands, typedArithmetic, numericHash } from "./type-system.ts";
 import { parseNumberText, isNumeric, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
-import type { Expr, Pattern, TopLevel, Alt } from "./ast.ts";
+import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
 import { type Value, Env } from "./types.ts";
 import { mkInt, mkBool, mkStr, mkList, valueToString, rawString } from "./types.ts";
-import { parse, exprToSource, rangeExpr } from "./parser.ts";
+import { parse, exprToSource, patternSource, rangeExpr } from "./parser.ts";
 
 // ---------------- Evaluator ----------------
 
@@ -16,7 +17,7 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
-    ["set", 2], ["cast", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
+    ["tryMatch", 2], ["set", 2], ["cast", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
@@ -25,6 +26,7 @@ export const NATIVES: Array<[string, number]> = [
 ];
 
 export class Interpreter {
+    private matchingBuiltins = new Map<string, Value>();
     hostNatives = new Map<string, (args: Value[]) => Value>();
     programArgs: string[] = [];
     moduleSources?: Record<string, string>;
@@ -47,6 +49,7 @@ export class Interpreter {
             const builtins = new Env();
             for (const type of TYPE_NAMES) builtins.setLocal(type, { kind: "type", name: type });
             for (const [name, arity] of [...NATIVES, ...STANDARD_NATIVES]) builtins.setLocal(name, { kind: "native", name, arity, applied: [] });
+            for (const [name, value] of this.matchingBuiltins) builtins.setLocal(name, value);
             const scope = new Env(builtins);
             const nativeExports: Record<string, string[]> = {
                 io: ["readFile", "readStdin", "getArgs"],
@@ -88,6 +91,13 @@ export class Interpreter {
         for (const [name, arity] of NATIVES) {
             this.env.setLocal(name, { kind: "native", name, arity, applied: [] });
         }
+        const outer = this.env;
+        this.env = new Env(outer);
+        this.env.setLocal("fail", { kind: "native", name: "fail", arity: 1, applied: [] });
+        this.run(parse(matchSource));
+        for (const name of ["match", "Matched", "Unmatched"]) this.matchingBuiltins.set(name, this.env.get(name)!);
+        this.env = outer;
+        for (const [name, value] of this.matchingBuiltins) outer.setLocal(name, value);
     }
 
     run(program: TopLevel[]): Value {
@@ -231,6 +241,8 @@ export class Interpreter {
             case "binop": return mkList([mkStr(e.op), this.sexprOf(e.l), this.sexprOf(e.r)]);
             case "unop": return mkList([mkStr(e.op), this.sexprOf(e.e)]);
             case "app": return mkList([this.sexprOf(e.f), this.sexprOf(e.a)]);
+            case "functionType": return mkStr(exprToSource(e));
+            case "patternLambda": return mkList([mkStr("->"), mkStr(e.params.map(patternSource).join(" ")), this.sexprOf(e.body)]);
             case "lambda": return mkList([mkStr("->"), mkStr(e.params.join(" ")), this.sexprOf(e.body)]);
             case "list": return mkList(e.v.map((x) => this.sexprOf(x)));
             case "record":
@@ -243,7 +255,6 @@ export class Interpreter {
                 if (one) return this.sexprOf(e.stmts[0]);
                 return mkList(e.stmts.map((st) => this.sexprOf(st.t === "stmDef" ? st.clauses[0].body : st.t === "patDef" ? st.value : st)));
             }
-            case "match": return mkList([mkStr("match"), this.sexprOf(e.scrut)]);
             case "pipe": return mkList([mkStr("$"), this.sexprOf(e.x), this.sexprOf(e.f)]);
             case "recordAccess":
                 return mkList([mkStr("."), this.sexprOf(e.rec), typeof e.field === "string" ? mkStr(e.field) : this.sexprOf(e.field)]);
@@ -395,6 +406,7 @@ export class Interpreter {
             }
             let r: Value;
             switch (e.t) {
+                case "functionType": r = this.resolveFunctionSpec(e.spec); break;
                 case "computedRange": {
                     const real = (expression: Expr): Real => {
                         const value = this.demand(this.eval(expression));
@@ -441,13 +453,13 @@ export class Interpreter {
                     // and forced/ran only where a real value is needed
                     r = this.apply(this.eval(e.f), { kind: "thunk", body: e.a, env: this.env });
                     break;
+                case "patternLambda": r = { kind: "clauseFn", name: "<lambda>", clauses: [{ params: e.params, body: e.body, guard: e.guard }], arity: e.params.length, env: this.env, applied: [] }; break;
                 case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
                 case "ternary": {
                     const c = this.demand(this.eval(e.cond));
                     r = (c.kind === "bool" && c.v) ? this.eval(e.then) : this.eval(e.els);
                     break;
                 }
-                case "match": r = this.evalMatch(this.delay(e.scrut), e.alts); break;
                 case "range": r = { kind: "range", lo: e.lo, step: e.step, hi: e.hi }; break;
                 case "floatRange": r = { kind: "floatRange", lo: e.lo, step: e.step, hi: e.hi }; break;
                 case "list": r = { kind: "lazyList", exprs: e.v, env: this.env }; break;
@@ -692,10 +704,15 @@ export class Interpreter {
         throw new Error("Runtime: cannot compare these values");
     }
 
-    apply(f: Value, arg: Value): Value {
+    apply(f: Value, arg: Value, probe = false): Value {
         // A lazy 0-param def used as a function (`f = g; f 1`) is a thunk — run it.
         f = this.force(f);
         switch (f.kind) {
+            case "functionType": return this.conform(f, arg);
+            case "contract": return this.defer(() => {
+                const input = this.conform(f.from, arg);
+                return this.conform(f.to, this.apply(f.target, input));
+            });
             case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
                 const value = this.demand(arg);
@@ -754,8 +771,21 @@ export class Interpreter {
                     for (const [k, v] of binds) child.setLocal(k, v);
                     const old = this.env;
                     this.env = child;
-                    try { return this.eval(clause.body); } finally { this.env = old; }
+                    try {
+                        if (clause.guard) {
+                            const guard = this.demand(this.eval(clause.guard));
+                            if (guard.kind !== "bool") throw new APNError("runtime", "pattern guard must return Bool");
+                            if (!guard.v) continue;
+                        }
+                        if (probe) return this.defer(() => {
+                            const caller = this.env;
+                            this.env = child;
+                            try { return this.eval(clause.body); } finally { this.env = caller; }
+                        });
+                        return this.eval(clause.body);
+                    } finally { this.env = old; }
                 }
+                if (probe) return { kind: "nomatch" };
                 throw new APNError(
                     "runtime",
                     `no clause of '${f.name}' matches the given arguments`,
@@ -1029,11 +1059,29 @@ export class Interpreter {
         else if (buffer) Deno.stdout.writeSync(enc.encode(buffer));
     }
 
+    resolveFunctionSpec(spec: import("./ast.ts").FunctionSpec): Value {
+        if (!("name" in spec)) return { kind: "functionType", from: this.resolveFunctionSpec(spec.from), to: this.resolveFunctionSpec(spec.to) };
+        const value = this.env.get(spec.name);
+        if (!value) throw new APNError("runtime", `unknown type '${spec.name}'`);
+        const type = this.demand(value);
+        if (type.kind !== "type" && type.kind !== "functionType") throw new APNError("runtime", `${spec.name} is not a type`);
+        return type;
+    }
+
+    conform(type: Value, value: Value): Value {
+        if (type.kind === "type") return this.constructType(type.name, this.demand(value));
+        if (type.kind !== "functionType") throw new APNError("runtime", "expected a type constructor");
+        const target = this.force(value);
+        if (!this.matchesValueType("Function", target)) throw new APNError("runtime", "function contract expects a function");
+        return { kind: "contract", target, from: type.from, to: type.to };
+    }
+
     matchesValueType(name: string, value: Value): boolean {
         if (name === "Mutable") return value.kind === "mutable";
         if (isNumeric(value)) return NUMERIC_TYPES.includes(name) && matchesType(name, value);
         if (name === "List") return this.isList(value);
-        if (name === "Function") return value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native";
+        if (name === "Type" && value.kind === "functionType") return true;
+        if (name === "Function") return value.kind === "contract" || value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native";
         const names: Partial<Record<Value["kind"], string>> = {
             bool: "Bool", string: "String", char: "Char", unit: "Unit",
             record: "Record", hashmap: "HashMap", type: "Type", variant: "Variant",
@@ -1087,6 +1135,14 @@ export class Interpreter {
     }
 
     callNative(name: string, argsIn: Value[], tag?: string): Value {
+        if (name === "tryMatch") {
+            const f = this.demand(argsIn[0]);
+            const arity = f.kind === "clauseFn" || f.kind === "native" ? f.arity - f.applied.length : f.kind === "closure" ? f.params.length : f.kind === "contract" ? 1 : -1;
+            if (arity !== 1) throw new APNError("runtime", "tryMatch expects a function with one remaining argument");
+            const result = f.kind === "clauseFn" ? this.apply(f, argsIn[1], true) : this.defer(() => this.apply(f, argsIn[1]));
+            return result.kind === "nomatch" ? { kind: "variant", tag: "Unmatched", v: [] } : { kind: "variant", tag: "Matched", v: [result] };
+        }
+
         const host = this.hostNatives.get(name);
         if (host) return host(argsIn);
         if (name === "set") {
@@ -1100,12 +1156,15 @@ export class Interpreter {
         if (STANDARD_NATIVES.some(([n]) => n === name)) return standardNative(this, name, argsIn);
         if (name === "cast") {
             const target = this.demand(argsIn[0]), value = this.demand(argsIn[1]);
+            if (target.kind === "functionType") return this.conform(target, value);
             if (target.kind !== "type") throw new APNError("runtime", "cast expects a type as its first argument");
             return this.constructType(target.name, value, true);
         }
         if (name === "typeOf") {
             const ref = this.reference(argsIn[0]);
             if (ref.kind === "mutable") return { kind: "type", name: "Mutable" };
+            if (ref.kind === "functionType") return { kind: "type", name: "Type" };
+            if (ref.kind === "contract") return { kind: "functionType", from: ref.from, to: ref.to };
             const value = this.demand(ref);
             if (isNumeric(value)) return { kind: "type", name: numericType(value) };
             if (this.isList(value)) return { kind: "type", name: "List" };
@@ -1394,6 +1453,21 @@ export class Interpreter {
             if (binds.has(p.name)) return this.equals(binds.get(p.name)!, v);
             binds.set(p.name, v); return true;
         }
+        if (p.p === "contract") {
+            const f = this.force(v);
+            if (!this.matchesValueType("Function", f)) return false;
+            return this.matchPattern(p.value, this.conform(this.resolveFunctionSpec(p.spec), f), binds);
+        }
+        if (p.p === "constr" && !TYPE_NAMES.includes(p.tag)) {
+            const binding = this.env.get(p.tag);
+            if (binding) {
+                const type = this.force(binding);
+                if (type.kind === "functionType") {
+                    const f = this.force(v);
+                    return p.args.length === 1 && this.matchesValueType("Function", f) && this.matchPattern(p.args[0], this.conform(type, f), binds);
+                }
+            }
+        }
         if (p.p === "constr" && p.tag === "Mutable") {
             const ref = this.reference(v);
             return ref.kind === "mutable" && p.args.length === 1 && this.matchPattern(p.args[0], ref, binds);
@@ -1477,26 +1551,7 @@ export class Interpreter {
         return true;
     }
 
-    evalMatch(scrut: Value, alts: Alt[]): Value {
-        for (const alt of alts) {
-            const binds = new Map<string, Value>();
-            if (!this.matchPattern(alt.pattern, scrut, binds)) continue;
-            if (alt.guard) {
-                const g = this.demand(this.evalWith(binds, alt.guard));
-                if (!(g.kind === "bool" && g.v)) continue;
-            }
-            return this.evalWith(binds, alt.body);
-        }
-        throw new APNError("runtime", "non-exhaustive match: no alternative fits this value");
-    }
 
-    evalWith(binds: Map<string, Value>, e: Expr): Value {
-        const child = new Env(this.env);
-        for (const [k, v] of binds) child.setLocal(k, v);
-        const old = this.env;
-        this.env = child;
-        try { return this.eval(e); } finally { this.env = old; }
-    }
 }
 
 // Directory part of a path (no external deps).
