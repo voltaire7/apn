@@ -1,4 +1,8 @@
 #!/bin/sh
-# A clean, plugin-free Neovim session. Your existing config is never loaded or edited.
+# Use your normal Neovim configuration with session-only APN support.
 DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-exec nvim -u "$DIR/apn.lua" -i NONE "$@"
+if [ "${1-}" = "--clean" ]; then
+    shift
+    exec nvim -u "$DIR/apn.lua" -i NONE "$@"
+fi
+APN_NVIM_SETUP="$DIR/apn.lua" exec nvim -c 'lua dofile(vim.env.APN_NVIM_SETUP)' "$@"

@@ -13,10 +13,17 @@ From the APN repository:
 ./editors/neovim/try-apn examples/editor-playground.apn
 ```
 
-This starts a clean Neovim session using the repository's small Lua configuration.
-It doesn't load or edit `~/.config/nvim`, install plugins, or write a ShaDa history
-file. Close Neovim to stop the experiment. Neovim may still write its normal LSP
-log and swap files. Requires `deno` and Neovim 0.11 or newer on PATH.
+This loads your normal Neovim configuration, including LazyVim, then adds APN
+support for that session. Your theme, plugins, and keybindings stay available.
+It does not edit your configuration or install an APN plugin. Close Neovim to
+stop the experiment. Normal Neovim/plugin persistence still applies.
+Requires `deno` and Neovim 0.11 or newer on PATH.
+
+For an optional isolated session without your plugins, use:
+
+```sh
+./editors/neovim/try-apn --clean examples/editor-playground.apn
+```
 
 In the playground, delete the right side of a definition to see a diagnostic;
 restore it and the diagnostic disappears without saving. In this session:
@@ -30,7 +37,7 @@ restore it and the diagnostic disappears without saving. In this session:
 | Document outline | `:lua vim.lsp.buf.document_symbol()` |
 | Confirm connection | `:checkhealth vim.lsp` |
 
-To try it with your existing LazyVim setup, open Neovim normally and run:
+To add the same support to an already-running Neovim session, run:
 
 ```vim
 :luafile /Users/voltaire/Code/hobby/apn/editors/neovim/apn.lua

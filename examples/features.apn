@@ -893,6 +893,7 @@ print (checkedApply (*2))                     # Int 246
 # Editor tooling checks this file without executing these actions:
 #   apn --lint examples/features.apn
 #   ./editors/neovim/try-apn examples/editor-playground.apn
+# The editor launcher keeps your normal LazyVim config; --clean opts out.
 editorDouble x = x * 2
 print (editorDouble 21)                     # => 42
 

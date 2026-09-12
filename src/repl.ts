@@ -416,6 +416,7 @@ function helpText(): string {
         `             cursor position decides, regardless of syntax validity`,
         `  Shift+Enter reverses Enter; Option+Left/Right moves by word`,
         `  paste      multi-line text is inserted, not run; Enter then runs it`,
+        `  editor     editors/neovim/try-apn FILE opens your usual Neovim with APN LSP`,
         `  Ctrl+C     clear input (empty: quit)  Ctrl+D quit  Ctrl+L clear screen`,
         `  Ctrl+A/E   line start/end  Ctrl+U/K kill to line start/end  Ctrl+W delete word`,
     ].join("\n");

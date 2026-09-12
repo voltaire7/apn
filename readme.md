@@ -82,5 +82,5 @@ open p5-sketch.html
 Run `apn --lint file.apn` to check syntax and layout without executing the file.
 Try live diagnostics, completion, hover, and an outline in a temporary Neovim
 session with `./editors/neovim/try-apn examples/editor-playground.apn`.
-Your existing Neovim configuration stays untouched.
+The launcher loads your usual Neovim/LazyVim setup; its configuration files stay untouched.
 See [editor tooling](docs/editor-tooling.md) for session-only LazyVim setup and limitations.
