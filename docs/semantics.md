@@ -275,7 +275,9 @@ expression, but never an opening `{`, even for an inline block.
 In the interactive REPL, Enter submits except immediately after an opening
 `(`, `{`, or `[` (allowing whitespace), where it inserts an indented newline.
 Inside a bracket opened on an earlier line, Enter continues at the current
-indentation. An unfinished single-line `[1,2,3` submits and reports a syntax error. Shift+Enter reverses that choice, even
+indentation. An unfinished single-line `[1,2,3` submits and reports a syntax error. Bracketed paste preserves copied indentation and blank lines without applying
+auto-indent or closing-bracket dedent; press Enter afterward to submit.
+Shift+Enter reverses that choice, even
 for invalid code. Brackets inside strings/comments are ignored. Option-arrow
 keys move by word. Shift+Enter requires distinct terminal key encoding (Kitty
 keyboard protocol or xterm modifyOtherKeys).

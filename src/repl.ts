@@ -506,6 +506,20 @@ export class ReplEditor {
         }
     }
 
+    // Paste already contains its layout; never apply typing indentation assists.
+    insertPaste(text: string): void {
+        const parts = text.replace(/\r\n?/g, "\n").split("\n");
+        const before = this.lines[this.row].slice(0, this.col);
+        const after = this.lines[this.row].slice(this.col);
+        const last = parts.length - 1;
+        const endCol = (last === 0 ? before.length : 0) + parts[last].length;
+        parts[0] = before + parts[0];
+        parts[last] += after;
+        this.lines.splice(this.row, 1, ...parts);
+        this.row += last;
+        this.col = endCol;
+    }
+
     // Break the line at the cursor; auto-indent like the 4-space layout (copy
     // the line's indent, +4 when it ends with an opening bracket).
     splitLine(): void {
@@ -828,7 +842,7 @@ export class ReplEditor {
                     queue = "";
                     continue;
                 }
-                this.insertText(queue.slice(6, e));
+                this.insertPaste(queue.slice(6, e));
                 queue = queue.slice(e + 6);
                 this.render();
                 continue;

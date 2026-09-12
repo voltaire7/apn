@@ -135,3 +135,39 @@ Deno.test("blank continuation lines retain indentation without accumulating it",
     nested.enter();
     equal(nested.col, 8);
 });
+
+
+Deno.test("bracketed paste preserves handler indentation and waits for Enter", async () => {
+    const source = "handlers = [\n    Some y -> print y\n    None -> ()\n]";
+    const ed = editor("");
+    ed.emit = () => {};
+    ed.render = () => {};
+    // Enter arrives after the complete paste; it must submit the intact snippet.
+    ed.pendingKeys = "\x1b[200~" + source + "\x1b[201~\r";
+    equal(await ed.readChunk(), source);
+});
+
+Deno.test("paste preserves nested layout, blank lines and trailing newline", () => {
+    const source = "f = {\n    [\n        1\n\n    ]\n}\n";
+    const ed = editor("");
+    ed.insertPaste(source);
+    equal(ed.src(), source);
+    equal(ed.row, 6);
+    equal(ed.col, 0);
+});
+
+Deno.test("paste inserts at the cursor without dedenting closing brackets", () => {
+    const ed = editor("    suffix", 4);
+    ed.insertPaste("]\n    }");
+    equal(ed.src(), "    ]\n    }suffix");
+    equal(ed.row, 1);
+    equal(ed.col, 5);
+});
+
+Deno.test("paste normalizes clipboard line endings without adding indentation", () => {
+    for (const newline of ["\r\n", "\r", "\n"]) {
+        const ed = editor("");
+        ed.insertPaste("[" + newline + "    1" + newline + "]");
+        equal(ed.src(), "[\n    1\n]");
+    }
+});

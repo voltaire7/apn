@@ -939,3 +939,11 @@ halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # REPL numeric markers: i in 2i, x/b/o in radix literals, and e in 1e3
 # are peach; numeric digits (including hexadecimal letters) stay yellow.
+
+# Paste this multiline definition into the REPL: its indentation is preserved.
+# Pasting inserts the complete snippet; press Enter afterward to submit it.
+pasteHandlers = [
+    Some y -> print y
+    None -> ()
+]
+print (length pasteHandlers)               # => 2
