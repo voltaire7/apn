@@ -69,3 +69,10 @@ open counter.html
 ```
 
 Ordinary file execution only defines the counter; `--html` builds its browser runtime.
+
+Create animated canvas sketches with the [p5.js bindings](docs/p5.md):
+
+```sh
+apn --html examples/browser/p5-sketch.apn p5-sketch.html
+open p5-sketch.html
+```

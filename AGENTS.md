@@ -492,3 +492,10 @@ its contents without memoizing that read over the cell. Zero-argument bindings
 returning a cell retain it, while argument-taking factory calls allocate afresh.
 Evaluate an update's outer value before replacing the cell. Keep alias, scope,
 failed-update, and repeated-read assertions in `tests/mutable-test.ts` green.
+
+## p5.js
+
+`lib/p5.apn` defines sketch descriptions. `src/p5.ts` adapts APN callbacks
+and primitive arguments to a p5 instance. Browser runtime loads pinned p5.js
+only for a P5Sketch. Keep host methods scoped to each interpreter and sketch;
+never expose arbitrary host object access. See `docs/p5.md` and `tests/p5-test.ts`.

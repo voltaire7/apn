@@ -1,0 +1,20 @@
+p5 = import "std/p5"
+clicks = Mutable 0
+setup p = {
+    p.createCanvas 640 360
+    p.describe "An animated peach circle. Click to change its size."
+    p.noStroke ()
+}
+draw p = {
+    p.background "#232634"
+    p.fill "#ef9f76"
+    p.circle (320 + 160 * sin (p.frameCount / 40)) 180 (60 + clicks * 10)
+    p.fill "#c6d0f5"
+    p.textSize 18
+    p.text ("Clicks: " ++ toString clicks) 20 30
+}
+mousePressed p = {
+    clicks $ set (clicks + 1)
+    false
+}
+main = p5.sketch [setup: setup, draw: draw, mousePressed: mousePressed]

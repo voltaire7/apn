@@ -70,3 +70,6 @@ inline JavaScript event attributes, and executable URL attributes are rejected.
 
 The design follows Elm's [buttons example](https://guide.elm-lang.org/architecture/buttons.html)
 while retaining APN notation and its existing interpreter.
+
+For animated canvas sketches, use [std/p5](p5.md). p5 builds load a pinned
+external p5.js script; HTML sandbox builds remain self-contained.

@@ -210,3 +210,8 @@ Maybe a =
 
 Use a leading `|` to explicitly declare a single constructor when its name
 is already in scope, e.g. `Box a = | Box a`.
+
+## Creative coding — `std/p5`
+
+`p5 = import "std/p5"` exposes `p5.sketch callbacks`. See the [p5 reference](p5.md)
+for drawing methods, events, the browser build command, and current scope.

@@ -865,6 +865,11 @@ counterAlias = mutableCounter
 counterAlias $ set 2
 print mutableCounter                         # 2
 
+# p5 sketches are descriptions until built for the browser.
+p5 = import "std/p5"
+print (typeOf (p5.sketch [draw: (p -> p.background "black")])) # Variant
+# apn --html examples/browser/p5-sketch.apn p5-sketch.html
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

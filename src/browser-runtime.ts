@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 import { Interpreter } from "./interp.ts";
+import { P5Sketch, P5_EVENTS, type P5Instance } from "./p5.ts";
 import { parse } from "./parser.ts";
 import { BrowserSandbox, type HtmlNode } from "./html.ts";
 
@@ -56,8 +57,32 @@ try {
     interpreter.run(parse(payload.source));
     const program = interpreter.env.get("main");
     if (!program) throw new Error("APN browser app must define main");
-    app = new BrowserSandbox(interpreter, program);
-    current = app.render();
-    patch(root, undefined, undefined, current);
+    const value = interpreter.demand(program);
+    if (value.kind === "variant" && value.tag === "P5Sketch") {
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/p5.min.js";
+        await new Promise<void>((resolve, reject) => {
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error("Could not load p5.js; check your network connection"));
+            document.head.appendChild(script);
+        });
+        const P5 = (globalThis as unknown as { p5: new (setup: (p: P5Instance) => void, root: HTMLElement) => unknown }).p5;
+        new P5(p => {
+            const sketch = new P5Sketch(interpreter, value, p);
+            for (const event of P5_EVENTS) if (sketch.has(event)) p[event] = () => {
+                try {
+                    const result = sketch.dispatch(event);
+                    return result.kind === "bool" ? result.v : undefined;
+                } catch (error) {
+                    (p.noLoop as () => void)();
+                    errors.textContent = String(error); errors.hidden = false;
+                }
+            };
+        }, root);
+    } else {
+        app = new BrowserSandbox(interpreter, value);
+        current = app.render();
+        patch(root, undefined, undefined, current);
+    }
 }
 catch (error) { errors.textContent = String(error); errors.hidden = false; }

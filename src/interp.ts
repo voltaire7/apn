@@ -25,6 +25,7 @@ export const NATIVES: Array<[string, number]> = [
 ];
 
 export class Interpreter {
+    hostNatives = new Map<string, (args: Value[]) => Value>();
     programArgs: string[] = [];
     moduleSources?: Record<string, string>;
     extendDefinitions = false;
@@ -32,7 +33,7 @@ export class Interpreter {
     private importing = new Set<string>();
 
     importStandard(module: string): Value {
-        const names = ["function", "option", "sequence", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system"];
+        const names = ["function", "option", "sequence", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5"];
         const name = module === "std" ? "std" : module.startsWith("std/") && names.includes(module.slice(4)) ? module.slice(4) : null;
         if (!name) throw new APNError("runtime", `unknown module '${module}'`);
         let record = this.modules.get(module);
@@ -1086,6 +1087,8 @@ export class Interpreter {
     }
 
     callNative(name: string, argsIn: Value[], tag?: string): Value {
+        const host = this.hostNatives.get(name);
+        if (host) return host(argsIn);
         if (name === "set") {
             const target = this.reference(argsIn[1]);
             if (target.kind !== "mutable") throw new APNError("runtime", "set expects a Mutable target");
