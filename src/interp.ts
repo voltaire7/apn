@@ -50,7 +50,6 @@ export class Interpreter {
             const scope = new Env(builtins);
             const nativeExports: Record<string, string[]> = {
                 io: ["readFile", "readStdin", "getArgs"],
-                system: ["sleep"],
                 function: ["fail", "seq"],
                 sequence: [],
                 text: ["chars", "fromChars", "upper", "lower"],

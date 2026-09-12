@@ -499,8 +499,3 @@ failed-update, and repeated-read assertions in `tests/mutable-test.ts` green.
 and primitive arguments to a p5 instance. Browser runtime loads pinned p5.js
 only for a P5Sketch. Keep host methods scoped to each interpreter and sketch;
 never expose arbitrary host object access. See `docs/p5.md` and `tests/p5-test.ts`.
-
-Terminal animation uses `std/system` sleep (bounded interruptible waits) and
-`\e` for ASCII ESC in string/character literals. The spinning donut is pure APN
-geometry in `examples/graphics/`; regression frames are compared against the
-supplied C equations in `tests/donut-test.ts`.

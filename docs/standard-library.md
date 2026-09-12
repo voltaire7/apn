@@ -215,7 +215,3 @@ is already in scope, e.g. `Box a = | Box a`.
 
 `p5 = import "std/p5"` exposes `p5.sketch callbacks`. See the [p5 reference](p5.md)
 for drawing methods, events, the browser build command, and current scope.
-
-`sleep milliseconds` in `std/system` pauses the terminal interpreter, checking
-for interruption at most every 20 ms. Its argument must be an exact nonnegative
-integer up to 2147483647. See the [ASCII donut](spinning-donut.md).
