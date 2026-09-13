@@ -511,7 +511,8 @@ Keep ABI signatures fixed-width and conversions lossless; never map unbounded
 Int to C int. `withLibrary` must close in finally and reject escaped functions
 and pointers after closure. Pointer allocations retain memory and bounds across
 aliases, offsets and C pointer round trips. Returned external pointers remain
-unsafe; no forged addresses or implicit dereference. Zero-argument C calls use ().
+unsafe; no forged addresses or implicit dereference. Zero-argument C functions
+are native actions invoked on demand or as bare statements; () remains optional.
 Use `./tests/run-c-interop-tests` in addition to the standard workflow; it compiles
 `examples/c-interop/demo.c` and tests real native code. The user authorized
 unrestricted --allow-ffi for the local demo and tests; normal APN still requires

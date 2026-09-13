@@ -81,12 +81,17 @@ intentional rounding is required. Unbounded `Int`, `UInt`, fractions, complex
 numbers, and aggregate numeric types are not C ABI descriptors. Match platform
 `long` and `size_t` to the appropriate fixed width yourself.
 
-Call a C function with no parameters using `()`:
+A C function with no parameters is a zero-argument APN action:
 
 ```apn
 # greeting: ffi.function [] String
-print (c.greeting ())
+print c.greeting
 ```
+
+A bare `c.donut_finish` statement calls it. In `print c.greeting`, APN calls
+`greeting` when its value is needed. Separate calls repeat their effects; unused
+lazy expressions do not run them. `c.greeting ()` remains valid for compatibility,
+but unit is optional. Functions with parameters keep normal curried application.
 
 Input strings are temporary UTF-8 buffers valid for the duration of that call;
 C must not retain them. Embedded NULs are rejected. Returned String pointers must

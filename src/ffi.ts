@@ -159,9 +159,9 @@ export function ffiNative(i: Interpreter, name: string, args: Value[]): Value {
     catch (error) { return fail(`cannot open ${JSON.stringify(path.v)}: ${error instanceof Error ? error.message : error}`); }
     const owner = { closed: false };
     const bindings: Value = { kind: "record", v: [...signatures].map(([symbol, signature]) => {
-        const fn: Value = { kind: "native", name: symbol, arity: Math.max(1, signature.parameters.length), applied: [], invoke: (values) => {
+        const fn: Value = { kind: "native", name: symbol, arity: signature.parameters.length, applied: [], invoke: (values) => {
             if (owner.closed) return fail(`cannot call ${symbol}: library is closed`);
-            if (!signature.parameters.length && i.demand(values[0]).kind !== "unit") return fail(`${symbol} takes (); its C signature has no parameters`);
+            if (!signature.parameters.length && values.length && i.demand(values[0]).kind !== "unit") return fail(`${symbol} takes no arguments (an explicit () is also accepted)`);
             const evaluated = signature.parameters.map((_, index) => i.demand(values[index]));
             const converted = signature.parameters.map((type, index) => encode(i, type, evaluated[index]));
             const call = library.symbols[symbol] as (...args: unknown[]) => unknown;

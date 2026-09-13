@@ -16,3 +16,6 @@ void *null_pointer(void) { return 0; }
 static int32_t cell;
 int32_t *cell_pointer(void) { return &cell; }
 int32_t cell_value(void) { return cell; }
+
+int32_t tick(void) { return ++cell; }
+void tick_void(void) { ++cell; }

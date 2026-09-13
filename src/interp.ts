@@ -361,8 +361,9 @@ export class Interpreter {
     }
 
     // Run a 0-arg function (an action def: f = { ... } / f = print "hi").
-    // Non-closures pass through unchanged.
+    // Nullary native actions follow the same demand rules as APN action closures.
     callBlockFn(v: Value): Value {
+        if (v.kind === "native" && v.arity === 0 && v.invoke) return v.invoke([]);
         if (v.kind !== "closure" || v.params.length !== 0) return v;
         if (v.mutableValue) return v.mutableValue;
         const old = this.env;
@@ -381,7 +382,7 @@ export class Interpreter {
     reference(v: Value): Value {
         const original = v;
         v = this.force(v);
-        while (v.kind === "closure" && v.params.length === 0) {
+        while ((v.kind === "closure" && v.params.length === 0) || (v.kind === "native" && v.arity === 0 && v.invoke)) {
             checkInterrupt();
             v = this.force(this.callBlockFn(v));
         }
@@ -741,6 +742,7 @@ export class Interpreter {
             }
             case "native": {
                 if (f.arity === 0) {
+                    if (f.invoke) return f.invoke([arg]);
                     return this.callNative(f.name, [], f.tag);
                 }
                 const args = [...f.applied, arg];

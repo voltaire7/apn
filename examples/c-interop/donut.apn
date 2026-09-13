@@ -13,5 +13,5 @@ ffi.withLibrary path [
     renderFrame n = c.donut_frame (inexact n * .04) (inexact n * .02)
     # length drives the lazy frames; C returns false after Ctrl+C.
     length (takeWhile id (map renderFrame frames))
-    c.donut_finish ()
+    c.donut_finish
 }

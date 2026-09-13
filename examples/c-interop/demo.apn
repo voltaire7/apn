@@ -10,7 +10,7 @@ ffi.withLibrary (head args) [
     increment: ffi.function [Pointer] Unit
 ] c -> {
     print (c.add 20 22)                       # Int32 42
-    print (c.greeting ())                     # hello from C
+    print c.greeting                     # hello from C
     print (c.text_length "hé😀")               # Int32 7 (UTF-8 bytes)
     print (c.echo_u64 18446744073709551615)    # UInt64 18446744073709551615
     p = ffi.allocate Int32 1

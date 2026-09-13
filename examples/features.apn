@@ -916,6 +916,7 @@ print (isType Type Pointer)                   # => true
 print (ffiExample.function [Int32, Int32] Int32) # signature record
 # ./examples/c-interop/run-demo demonstrates C calls and mutable Pointer memory.
 # ./examples/c-interop/run-donut animates a C-rendered donut driven by APN.
+# Zero-argument C actions use bare fields: c.donut_finish; print c.greeting.
 
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
