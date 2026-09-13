@@ -232,6 +232,10 @@ print keyKinds               # => [field: 123, "field": 456, 1: 10, "1": 100]
 print [namedValue, stringValue] # => [123, 456]
 keyKinds."field" = 789
 print keyKinds.[field, "field"] # => [123, 789]
+keyKinds "field" = 10
+print keyKinds.[field, "field"] # => [10, 789]
+keyKinds "1" = 20
+print keyKinds.1              # => 20
 # A list's integer index and a string are not interchangeable:
 # nums "0" is an error; nums 0 indexes its first element.
 

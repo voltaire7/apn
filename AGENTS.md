@@ -539,3 +539,8 @@ Never expose the prefix as an APN string or accept one as a named lookup.
 The parser shares this encoding across literals, access, patterns, updates,
 and plucks. Dynamic dot strings select string keys; string application selects
 named fields. Tests: tests/record-keys-test.ts.
+
+On an existing record, `obj "field" = value` is a scoped named-field update,
+implemented alongside list index assignment in evalDef. Require one literal
+string key, preserve quoted string keys, demand RHS before rebinding, and keep
+ordinary string-pattern function definitions for unbound/function names.

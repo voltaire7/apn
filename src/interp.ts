@@ -136,7 +136,7 @@ export class Interpreter {
     }
 
     evalDef(name: string, clauses: DefClause[]): Value {
-        // A one-index equation on an existing list is a scoped update.
+        // A literal-key equation on an existing list/record is a scoped update.
         // Unbound/function names retain ordinary pattern-clause definitions.
         const previous = this.env.get(name);
         if (previous !== undefined && clauses[0].params.length > 0 &&
@@ -144,6 +144,25 @@ export class Interpreter {
             !(previous.kind === "closure" && previous.params.length > 0) &&
             !(previous.kind === "thunk" && previous.body.t === "placeholder")) {
             let list = this.demand(previous);
+            if (list.kind === "record") {
+                let record = list;
+                for (const clause of clauses) {
+                    if (clause.params.length !== 1 || clause.params[0].p !== "string") {
+                        throw new APNError("runtime", "record assignment needs one string literal field name");
+                    }
+                    const key = clause.params[0].v;
+                    if (isStringKey(key)) throw new APNError("runtime", "a named field cannot start with NUL");
+                    // Read the RHS against the old binding; publish only after it succeeds.
+                    const value = this.demand(this.eval(clause.body));
+                    const fields = record.v.slice();
+                    const index = fields.findIndex(([field]) => field === key);
+                    if (index < 0) fields.push([key, value]);
+                    else fields[index] = [key, value];
+                    record = { kind: "record", v: fields };
+                    this.env.setLocal(name, record);
+                }
+                return record;
+            }
             if (this.isList(list)) {
                 for (const clause of clauses) {
                     if (clause.params.length !== 1 || clause.params[0].p !== "int") {

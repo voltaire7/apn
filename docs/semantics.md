@@ -89,7 +89,14 @@ HashMap application likewise keeps numeric `0` and string `"0"` distinct keys.
 
 Printing preserves key quotation. Field updates (`obj.field = value`,
 `obj."field" = value`), record cloning, and plucks (`obj.[field, "field"]`)
-preserve both identities. Destructuring `[field: a, "field": b]` selects each
+preserve both identities. On an existing record, `obj "field" = value` updates
+or adds the named field, just like `obj.field = value`. The key must be one
+string literal; `obj "1" = value` updates numeric-named field `1`. It reads the
+RHS before rebinding, makes a scoped copy, and preserves the old binding on
+failure. On an unbound name or an existing function, `f "x" = value` remains
+a string-pattern function clause.
+
+Destructuring `[field: a, "field": b]` selects each
 kind explicitly; the bare pattern `[field]` selects only the named field.
 Renamed plucks such as `obj.["field": value]` create named destination fields.
 
