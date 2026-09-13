@@ -407,11 +407,28 @@ variants. `Float` (`Float64` is an alias) uses binary64; `Float32` uses binary32
 `ComplexExact` an exact one. Constructors are first-class functions, e.g.
 `map Int [1,2]`. Constructed values print their type: `Int32 123`.
 
-Constructors only accept lossless conversions. `Int 3.0` works; `Int 3.7` errors.
-`Float32 .5` works; `Float32 .1` needs `cast Float32 .1`. The explicit form is
-`cast Type value` or `value $ cast Type`. Casting to integers truncates toward
+A bare number has a numeric representation but no explicit constructor annotation.
+Constructors may truncate or round these untyped values: `Int .2` produces `Int 0`,
+and `Float32 .1` rounds to binary32. The same applies to untyped computed values.
+This does not make a decimal literal exact or defer its parsing until a type is known.
+
+Explicitly typed inputs require lossless conversion: `Int (Float .2)` errors,
+as does `Float32 (Float .1)`. To deliberately discard the original type and convert,
+use `cast Type value` or `value $ cast Type`. Integer conversion truncates toward
 zero. Out-of-range integers always error rather than wrap, and nonzero imaginary
-parts cannot be silently discarded. Bare numeric literals still work.
+parts cannot be silently discarded. Numeric equality still compares numeric values:
+`.2 == Float .2` is true.
+
+`cast` is defined in APN in `lib/type.apn`, available in the default prelude and
+through `import "std/type"`:
+
+```apn
+cast (Type target) (source value) = target value
+```
+
+The generic pattern captures the source type and extracts the untyped numeric
+payload. Applying the target constructor then performs the conversion. Nonnumeric
+payloads retain their usual constructor validation; no native `cast` remains.
 
 Arithmetic between values of the same concrete type retains that type and
 checks integer overflow. An untyped operand is converted losslessly to the
@@ -429,15 +446,19 @@ numeric guards. For example `isType Number (Int32 1)` is true.
 Typed overloads use constructor patterns:
 
 ```apn
-add (Int x) (Int y) = x + y
-add (Float x) (Float y) = x + y
+add (Int x) (Int y) = Int (x + y)
+add (Float x) (Float y) = Float (x + y)
 add (Number x) (Number y) = x + y
 ```
 
 Literal matches outrank exact concrete type matches, which outrank aggregate
-matches, which outrank lossless conversion matches. Ties retain source order.
-This ranking applies to functions with typed clauses; ordinary pattern functions
-keep source order. Arguments bound by concrete type patterns retain the type.
+matches, which outrank conversion matches. Ties retain source order. Converting
+a typed input must be lossless; an untyped input may round or truncate, as with
+constructor application. This ranking applies to functions with typed clauses;
+ordinary pattern functions keep source order. Numeric constructor patterns extract
+untyped payloads: `unwrap (Int32 x) = x` returns `5` for `Int32 5`. Return an explicit
+constructor, as above, when the result should retain a type. Patterns do not mutate
+the original argument or strip types from unrelated values.
 Repeated variable names assert equality, so `(Number x) (Number x)` is not a
 catch-all for two different numbers.
 
@@ -474,7 +495,9 @@ these types too. Use declared constructors to create a particular variant;
 `Variant` validates any such value.
 
 A lowercase pair pattern `(t x)` captures the runtime type descriptor in `t`
-and the original value in `x`. For example, `myTypeOf (t x) = print t`.
+and the numeric payload without its explicit type annotation in `x`. Nonnumeric
+values are returned unchanged. For example, `myTypeOf (t x) = print t` still prints
+`Int32` for `Int32 5`, while `payload (t x) = x` returns `5`.
 It inspects the outer value without forcing list contents. Repeating the type
 variable, as in `(t x) (t y)`, requires both arguments to have the same type.
 

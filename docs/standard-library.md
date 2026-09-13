@@ -27,6 +27,15 @@ used literally. `load` parses file contents as APN regardless of their extension
 `sq` lives in `std/number`; `halt` lives in `std/system`. The obsolete
 `lib/core.apn` has been removed; replace its loads with these imports.
 
+## Types — `std/type`
+
+`cast Type value` extracts the untyped numeric payload and applies the target
+constructor. It is an ordinary APN function in `lib/type.apn`, also loaded by
+the default prelude. `cast Int (Float .2)` returns `Int 0`; direct
+`Int (Float .2)` rejects the lossy typed conversion. `Int .2` works directly
+because `.2` has no explicit type annotation. Overflow and nonzero imaginary
+parts still error. Nonnumeric casts retain constructor validation.
+
 ## Functions — `std/function`
 
 | API | Behavior |

@@ -1,7 +1,8 @@
 import { stringKey, isStringKey, keyText, keySource } from "./record-keys.ts";
 import matchSource from "../lib/match.apn" with { type: "text" };
+import typeSource from "../lib/type.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
-import { TYPE_NAMES, NUMERIC_TYPES, numericType, matchesType, castNumeric, implicitOperands, typedArithmetic, numericHash } from "./type-system.ts";
+import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, numericHash } from "./type-system.ts";
 import { parseNumberText, isNumeric, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
@@ -18,7 +19,7 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
-    ["tryMatch", 2], ["set", 2], ["cast", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
+    ["tryMatch", 2], ["set", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
@@ -27,7 +28,7 @@ export const NATIVES: Array<[string, number]> = [
 ];
 
 export class Interpreter {
-    private matchingBuiltins = new Map<string, Value>();
+    private preludeBindings = new Map<string, Value>();
     hostNatives = new Map<string, (args: Value[]) => Value>();
     programArgs: string[] = [];
     moduleSources?: Record<string, string>;
@@ -36,7 +37,7 @@ export class Interpreter {
     private importing = new Set<string>();
 
     importStandard(module: string): Value {
-        const names = ["function", "option", "sequence", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5", "ffi"];
+        const names = ["type", "function", "option", "sequence", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5", "ffi"];
         const name = module === "std" ? "std" : module.startsWith("std/") && names.includes(module.slice(4)) ? module.slice(4) : null;
         if (!name) throw new APNError("runtime", `unknown module '${module}'`);
         let record = this.modules.get(module);
@@ -50,7 +51,7 @@ export class Interpreter {
             const builtins = new Env();
             for (const type of TYPE_NAMES) builtins.setLocal(type, { kind: "type", name: type });
             for (const [name, arity] of [...NATIVES, ...STANDARD_NATIVES]) builtins.setLocal(name, { kind: "native", name, arity, applied: [] });
-            for (const [name, value] of this.matchingBuiltins) builtins.setLocal(name, value);
+            for (const [name, value] of this.preludeBindings) builtins.setLocal(name, value);
             const scope = new Env(builtins);
             const nativeExports: Record<string, string[]> = {
                 ffi: ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer"],
@@ -97,9 +98,10 @@ export class Interpreter {
         this.env = new Env(outer);
         this.env.setLocal("fail", { kind: "native", name: "fail", arity: 1, applied: [] });
         this.run(parse(matchSource));
-        for (const name of ["match", "Matched", "Unmatched"]) this.matchingBuiltins.set(name, this.env.get(name)!);
+        this.run(parse(typeSource));
+        for (const name of ["match", "Matched", "Unmatched", "cast"]) this.preludeBindings.set(name, this.env.get(name)!);
         this.env = outer;
-        for (const [name, value] of this.matchingBuiltins) outer.setLocal(name, value);
+        for (const [name, value] of this.preludeBindings) outer.setLocal(name, value);
     }
 
     run(program: TopLevel[]): Value {
@@ -785,7 +787,7 @@ export class Interpreter {
                     if (!isNumeric(value)) return score - 1000;
                     if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(pattern.tag)) return score + (matchesType(pattern.tag, value) ? 10 : -1000);
                     if (matchesType(pattern.tag, value)) return score + 30;
-                    try { castNumeric(pattern.tag, value); return score + 1; } catch { return score - 1000; }
+                    try { castNumeric(pattern.tag, value, !value.typeName); return score + 1; } catch { return score - 1000; }
                 }, 0) })).sort((a, b) => b.score - a.score || a.index - b.index);
                 for (const { clause } of ranked) {
                     const binds = new Map<string, Value>();
@@ -1133,12 +1135,12 @@ export class Interpreter {
         return names[value.kind] === name;
     }
 
-    constructType(name: string, value: Value, explicit = false): Value {
+    constructType(name: string, value: Value): Value {
         if (name === "Mutable") return { kind: "mutable", v: value };
         if (name === "HashMap") return this.makeHashMap(value);
         if (NUMERIC_TYPES.includes(name)) {
             if (!isNumeric(value)) throw new APNError("runtime", `${name} expects a number`);
-            return castNumeric(name, value, explicit);
+            return castNumeric(name, value, !value.typeName);
         }
         if (!this.matchesValueType(name, value)) throw new APNError("runtime", `${name} constructor expects a ${name} value`);
         return value;
@@ -1184,7 +1186,7 @@ export class Interpreter {
             const arity = f.kind === "clauseFn" || f.kind === "native" ? f.arity - f.applied.length : f.kind === "closure" ? f.params.length : f.kind === "contract" ? 1 : -1;
             if (arity !== 1) throw new APNError("runtime", "tryMatch expects a function with one remaining argument");
             const result = f.kind === "clauseFn" ? this.apply(f, argsIn[1], true) : this.defer(() => this.apply(f, argsIn[1]));
-            return result.kind === "nomatch" ? this.matchingBuiltins.get("Unmatched")! : this.apply(this.matchingBuiltins.get("Matched")!, result);
+            return result.kind === "nomatch" ? this.preludeBindings.get("Unmatched")! : this.apply(this.preludeBindings.get("Matched")!, result);
         }
 
         const host = this.hostNatives.get(name);
@@ -1202,13 +1204,6 @@ export class Interpreter {
             return { kind: "unit" };
         }
         if (STANDARD_NATIVES.some(([n]) => n === name)) return standardNative(this, name, argsIn);
-        if (name === "cast") {
-            const target = this.demand(argsIn[0]), value = this.demand(argsIn[1]);
-            if (target.kind === "functionType") return this.conform(target, value);
-            if (target.kind !== "type") throw new APNError("runtime", "cast expects a type as its first argument");
-            if (target.family) return this.conform(target, value);
-            return this.constructType(target.name, value, true);
-        }
         if (name === "typeOf") {
             const ref = this.reference(argsIn[0]);
             if (ref.kind === "mutable") return { kind: "type", name: "Mutable" };
@@ -1531,7 +1526,7 @@ export class Interpreter {
         switch (p.p) {
             case "typeBind": {
                 const type = this.callNative("typeOf", [v]);
-                return this.matchPattern({ p: "var", name: p.name }, type, binds) && this.matchPattern(p.value, v, binds);
+                return this.matchPattern({ p: "var", name: p.name }, type, binds) && this.matchPattern(p.value, isNumeric(v) ? numericPayload(v) : v, binds);
             }
             case "int": return isNumeric(v) && equalNumbers(v, integer(p.v));
             case "bool": return v.kind === "bool" && v.v === p.v;
@@ -1588,7 +1583,7 @@ export class Interpreter {
                     if (!NUMERIC_TYPES.includes(p.tag)) return this.matchesValueType(p.tag, v) && this.matchPattern(p.args[0], v, binds);
                     if (!isNumeric(v)) return false;
                     let converted: Value;
-                    try { converted = castNumeric(p.tag, v); } catch { return false; }
+                    try { converted = numericPayload(castNumeric(p.tag, v, !v.typeName)); } catch { return false; }
                     return this.matchPattern(p.args[0], converted, binds);
                 }
                 if (v.kind !== "variant" || v.tag !== p.tag) return false;

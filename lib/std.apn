@@ -1,4 +1,5 @@
 # APN standard library: pure definitions; no startup output or file effects.
+import "std/type"
 import "std/function"
 import "std/option"
 import "std/sequence"

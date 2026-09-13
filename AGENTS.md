@@ -438,13 +438,17 @@ through the same lazy list consumers, indexing, and streaming as integer ranges.
 `src/type-system.ts` defines numeric constructors, lossless conversions and
 arithmetic promotion. Numeric values may carry `typeName`; preserve it for
 checked arithmetic and print it. Bare literals retain their natural numeric
-kind and unadorned display. `cast Type value` explicitly allows float rounding
-and fractional truncation, but NEVER integer wraparound or imaginary-part loss.
+kind and unadorned display. `cast Type value` is defined in lib/type.apn and
+loaded alongside the match prelude. Numeric patterns, including generic (t x), expose untyped payloads;
+constructors may round/truncate untyped inputs but require lossless conversion
+of explicitly typed inputs. Internal arithmetic promotion and C ABI conversions
+still use strict castNumeric by default. NEVER allow integer wraparound or
+imaginary-part loss.
 Same fixed-width arithmetic checks overflow. Mixed typed arithmetic tries an
 existing broader operand type losslessly, then falls back to the numeric tower.
 `Number`, `Real`, `Integer`, `Exact`, `Inexact` are aggregate type guards.
 Typed function clauses prefer literal/exact concrete matches, then aggregates,
-then lossless conversions. Ties retain source order. Untyped clauses retain
+then constructor conversions (lossless for typed inputs). Ties retain source order. Untyped clauses retain
 source order. Repeated pattern names require equal values.
 `n * _ -> typedValue` repeats using the existing function iteration overload.
 Numeric operands always multiply: `100 * Int 0` returns `Int 0`.
@@ -544,3 +548,13 @@ On an existing record, `obj "field" = value` is a scoped named-field update,
 implemented alongside list index assignment in evalDef. Require one literal
 string key, preserve quoted string keys, demand RHS before rebinding, and keep
 ordinary string-pattern function definitions for unbound/function names.
+
+## APN-defined cast
+
+The default prelude embeds lib/match.apn and lib/type.apn. Editor launchers must
+allow Deno to read both text imports. cast is a clauseFn, not a native; its
+source is `cast (Type target) (source value) = target value`. Expose std/type
+through module loading and browser bundles. numericPayload removes numeric
+annotations without changing the original value. Numeric patterns extract
+payloads after conversion; explicit result constructors reapply result types.
+Numeric equality ignores these annotations. See tests/language-cast-test.ts.

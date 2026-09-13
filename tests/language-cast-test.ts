@@ -1,0 +1,67 @@
+import { Interpreter, NATIVES } from "../src/interp.ts";
+import { parseDocument } from "../src/parser.ts";
+
+function result(source: string): string {
+    const i = new Interpreter();
+    return i.renderString(i.run(parseDocument(source)));
+}
+for (const [source, expected] of [
+    ['Int .2', 'Int 0'],
+    ['Int (-.2)', 'Int 0'],
+    ['Int (-1.7)', 'Int -1'],
+    ['Int (1/3)', 'Int 0'],
+    ['Float32 .1', 'Float32 0.10000000149011612'],
+    ['Float 9007199254740993', 'Float 9007199254740992.0'],
+    ['Int (.1 + .1)', 'Int 0'],
+    ['cast Int (Float .2)', 'Int 0'],
+    ['Float .2 $ cast Int', 'Int 0'],
+    ['cast Float32 (Float .1)', 'Float32 0.10000000149011612'],
+    ['cast Int (Fraction (1/3))', 'Int 0'],
+    ['cast Int (Complex .2)', 'Int 0'],
+    ['Int (Float 2)', 'Int 2'],
+    ['payload (t x) = [t, x]\npayload (Int32 5)', '[Int32, 5]'],
+    ['payload (Float x) = x\npayload (Float .2)', '0.2'],
+    ['payload (Number x) = x\npayload (Int32 5)', '5'],
+    ['payload (Int x) = x\npayload .2', '0'],
+    ['payload (Int x) = x\npayload (Float 2)', '2'],
+    ['x = Float .2\ny = cast Int x\n[y, x]', '[Int 0, Float 0.2]'],
+    ['[.2 == Float .2, Int 1 == Float 1, Int32 1 == 1]', '[true, true, true]'],
+    ['mine t x = match x [(source value) -> t value]\nmine Int (Float .2)', 'Int 0'],
+    ['mine t (Int x) = t x\nmine Float32 (Int 9007199254740993)', 'Float32 9007199254740992.0'],
+    ['mine t (source x) = t x\nmine Int (Complex .2)', 'Int 0'],
+    ['cast Bool true', 'true'],
+    ['take 1 (cast List [1, missing])', '[1]'],
+    ['(cast (Int -> Int) (x -> x + 1)) 2', 'Int 3'],
+    ['types = import "std/type"\ntypes.cast Int (Float .2)', 'Int 0'],
+    ['import "std"\ncast Int (Float .2)', 'Int 0'],
+    ['Float .2 + .3', 'Float 0.5'],
+    ['Int 1 + .2', '1.2'],
+] as const) Deno.test(`APN cast: ${source}`, () => {
+    const actual = result(source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const [source, error] of [
+    ['Int (Float .2)', 'lossy conversion'],
+    ['Float32 (Float .1)', 'lossy conversion'],
+    ['Float (Int 9007199254740993)', 'lossy conversion'],
+    ['f (Int x) = x\nf (Float .2)', 'no clause'],
+    ['Int8 128', 'out of range'],
+    ['cast Int8 (Int 128)', 'out of range'],
+    ['cast UInt (Int (-1))', 'negative integer'],
+    ['cast Int (Complex (1+2i))', 'real number'],
+    ['cast Int "hi"', 'expects a number'],
+    ['cast (x -> x) 1', 'no clause'],
+] as const) Deno.test(`APN cast rejects: ${source}`, () => {
+    try { result(source); } catch (e) {
+        if (e instanceof Error && e.message.includes(error)) return;
+        throw e;
+    }
+    throw new Error(`Expected ${error}`);
+});
+Deno.test("cast is the APN prelude definition, not a native", () => {
+    const i = new Interpreter();
+    if (NATIVES.some(([name]) => name === 'cast')) throw new Error('cast is still native');
+    if (i.env.get('cast')?.kind !== 'clauseFn') throw new Error('cast is not a pattern function');
+    const source = i.renderString(i.run(parseDocument('cast')));
+    if (source !== '(Type target) (source value) -> target value') throw new Error(source);
+});

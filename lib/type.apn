@@ -1,0 +1,3 @@
+# Numeric type patterns expose an untyped payload; constructors apply the target.
+# Nonnumeric values retain their existing constructor validation.
+cast (Type target) (source value) = target value

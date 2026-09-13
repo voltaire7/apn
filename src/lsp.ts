@@ -1,5 +1,5 @@
 // Startup loads the bundled interpreter prelude; editor launchers must allow
-// reading lib/match.apn for Deno versions that gate text imports on permissions.
+// reading lib/match.apn and lib/type.apn for Deno versions that gate text imports on permissions.
 import { lint, position, type Range } from "./lint.ts";
 import { parseDocument } from "./parser.ts";
 import { lex, KEYWORDS } from "./lexer.ts";
@@ -40,6 +40,7 @@ export function symbols(text: string): Symbol[] {
 const builtins = new Map<string, string>([
     ...NATIVES.map(([name, arity]): [string, string] => [name, `Built-in function; ${arity} argument${arity === 1 ? "" : "s"}.`]),
     ...TYPE_NAMES.map((name): [string, string] => [name, "Built-in type constructor."]),
+    ["cast", "cast Type value — APN prelude function: extract the untyped payload and apply Type."],
     ["match", "match value alternatives — try unary pattern functions in order."],
     ["Matched", "Matched result — a successful tryMatch, with a deferred result."],
     ["Unmatched", "Unmatched — tryMatch found no matching clause."],
@@ -91,7 +92,7 @@ export class LanguageServer {
             }
             case "textDocument/didClose": this.documents.delete(p.textDocument.uri); publish(p.textDocument.uri); break;
             case "textDocument/semanticTokens/full":
-                reply({ data: semanticTokens(this.documents.get(p.textDocument.uri)?.text ?? "", new Set(NATIVES.map(([name]) => name))) }); break;
+                reply({ data: semanticTokens(this.documents.get(p.textDocument.uri)?.text ?? "", new Set(["cast", ...NATIVES.map(([name]) => name)])) }); break;
             case "textDocument/documentSymbol": reply(symbols(this.documents.get(p.textDocument.uri)?.text ?? "")); break;
             case "textDocument/completion": {
                 const text = this.documents.get(p.textDocument.uri)?.text ?? "";

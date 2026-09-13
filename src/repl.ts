@@ -229,7 +229,7 @@ export function showValue(v: Value): string {
 }
 
 const REPL_KEYWORDS = new Set(["import"]);
-const NATIVE_NAMES = new Set(NATIVES.map(([n]) => n));
+const NATIVE_NAMES = new Set(["cast", ...NATIVES.map(([n]) => n)]);
 
 // Syntax-highlight one buffer line (best-effort, purely cosmetic).
 export function highlightLine(s: string, ternaries: number[] = [0]): string {

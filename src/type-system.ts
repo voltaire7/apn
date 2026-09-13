@@ -7,6 +7,12 @@ const canonical = (name: string) => name === "Float64" ? "Float" : name;
 export function numericType(value: Numeric): string {
     return value.typeName ?? (value.kind === "int" ? "Int" : value.kind === "float" ? "Float" : value.kind === "rational" ? "Fraction" : "Complex");
 }
+// Extract the numeric payload without retaining a constructor's type annotation.
+export function numericPayload(value: Numeric): Numeric {
+    return value.kind === "complex"
+        ? { ...value, typeName: undefined, re: numericPayload(value.re) as Real, im: numericPayload(value.im) as Real }
+        : { ...value, typeName: undefined };
+}
 export function matchesType(name: string, value: Numeric): boolean {
     if (name === "Number") return true;
     if (name === "Real") return value.kind !== "complex" || (value.im.kind === "int" ? value.im.v === 0n : value.im.kind === "float" && value.im.v === 0);

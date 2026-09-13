@@ -25,7 +25,7 @@ for (const [source, expected] of [
     ["value = true\nvalue $ cast Bool", "true"],
     ["myTypeOf (t x) = t\nmyTypeOf true", "Bool"],
     ["myTypeOf (t x) = t\nmyTypeOf (Int32 5)", "Int32"],
-    ["identity (t x) = x\nidentity (Int32 5)", "Int32 5"],
+    ["identity (t x) = x\nidentity (Int32 5)", "5"],
     ["myTypeOf (t x) = t\nmyTypeOf [missing]", "List"],
     ["sameType (t x) (t y) = true\nsameType x y = false\n[sameType 1 2, sameType 1 true]", "[true, false]"],
     ["match true [(t x) -> t]", "Bool"],
@@ -48,10 +48,10 @@ for (const [source, expected] of [
     ["100 * Int 0", "Int 0"],
     ["3 * Int 2", "Int 6"],
     ["Int 3 * Int 2", "Int 6"],
-    ['add (Int x) (Int y) = x + y\nadd (Float x) (Float y) = x + y\nadd (Number x) (Number y) = 99\n[add (Int 2) (Int 3), add (Float 2) (Float 3), add (1/3) (1/4)]', '[Int 5, Float 5.0, 99]'],
+    ['add (Int x) (Int y) = x + y\nadd (Float x) (Float y) = x + y\nadd (Number x) (Number y) = 99\n[add (Int 2) (Int 3), add (Float 2) (Float 3), add (1/3) (1/4)]', '[5, 5.0, 99]'],
     ['pick (Number x) = "number"\npick (Int32 x) = "int32"\npick (Float x) = "float"\n[pick (Int32 1), pick (Float 1), pick (1/3)]', '["int32", "float", "number"]'],
-    ['f (Float x) = x\nf 2', 'Float 2.0'],
-    ['f (Int32 x) = x + 1\nf 2', 'Int32 3'],
+    ['f (Float x) = x\nf 2', '2.0'],
+    ['f (Int32 x) = x + 1\nf 2', '3'],
     ['same (Number x) (Number x) = true\nsame a b = false\n[same 1 1, same 1 2]', '[true, false]'],
     ['map (cast Int) [1.5, 2.5]', '[Int 1, Int 2]'],
     ['f = Int32\nf 5', 'Int32 5'],
@@ -64,7 +64,7 @@ for (const [source, expected] of [
         if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
     });
 }
-for (const source of ["Bool 1", "String 123", "Char true", "List 1", "Record []", "Function 2", "Type 1", "Unit 1", "Variant 1", "Int 3.7", "Int32 2147483648", "UInt (-1)", "UInt32 4294967296", "Float32 .1", "Float 9007199254740993", "Int8 127 + Int8 1", "cast UInt (-1)", "cast Int8 128", "1/3 + .5", "f (Float32 x) = x\nf .1"]) {
+for (const source of ["Bool 1", "String 123", "Char true", "List 1", "Record []", "Function 2", "Type 1", "Unit 1", "Variant 1", "Int (Float 3.7)", "Int32 2147483648", "UInt (-1)", "UInt32 4294967296", "Float32 (Float .1)", "Float (Int 9007199254740993)", "Int8 127 + Int8 1", "cast UInt (-1)", "cast Int8 128", "1/3 + .5", "f (Float32 x) = x\nf (Float .1)"]) {
     Deno.test(`checked type conversion: ${source}`, () => {
         try { const interp = new Interpreter(); interp.renderString(interp.run(parse(source))); }
         catch (e) { if (e instanceof APNError) return; throw e; }

@@ -36,7 +36,7 @@ for (const [code, error] of [
     ['match 1 [x | 1 -> 0, _ -> 42]', 'guard must return Bool'],
     ['match 1 [_ -> _, _ -> 42]', 'not implemented'],
     ['tryMatch 42 1', 'one remaining argument'],
-    ['func ((Int -> Int) f) = f .5; func (*2)', 'lossy conversion'],
+    ['func ((Int -> Int) f) = f (Float .5); func (*2)', 'lossy conversion'],
     ['func ((Int -> Int) f) = f 1; func (x -> "bad")', 'expects a number'],
 ]) Deno.test(`pattern functions reject: ${code}`, () => {
     try { result(code); } catch (e) {
@@ -52,7 +52,7 @@ Deno.test("pattern functions parse independently of prior constructor imports", 
 });
 
 Deno.test("constructor lambdas accept nested patterns", () => {
-    if (result('tryMatch (Some (Int x) -> x) (Some 3)') !== 'Matched Int 3') throw new Error('nested type pattern');
+    if (result('tryMatch (Some (Int x) -> x) (Some 3)') !== 'Matched 3') throw new Error('nested type pattern');
     if (result('tryMatch (Some (Int x) -> x) (Some "no")') !== 'Unmatched') throw new Error('nested mismatch');
     if (result('(Some [a, b] -> a + b) (Some [1, 2])') !== '3') throw new Error('nested list pattern');
 });

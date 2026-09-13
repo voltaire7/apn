@@ -25,7 +25,7 @@ local function attach(buf)
     local client = vim.lsp.start({
         name = "apn",
         -- Deno text imports require explicit read access to the embedded prelude.
-        cmd = { "deno", "run", "--allow-read=" .. root .. "/lib/match.apn", root .. "/main.ts", "--lsp" },
+        cmd = { "deno", "run", "--allow-read=" .. root .. "/lib/match.apn," .. root .. "/lib/type.apn", root .. "/main.ts", "--lsp" },
         root_dir = vim.fs.root(vim.api.nvim_buf_get_name(buf), { ".git" }) or vim.fn.getcwd(),
         on_attach = function(_, b)
             vim.bo[b].omnifunc = "v:lua.vim.lsp.omnifunc"

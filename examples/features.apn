@@ -794,13 +794,25 @@ print (cast Float32 .1)              # => Float32 0.10000000149011612
 print (typeOf (Int32 1))             # => Int32
 print (isType Number (Int32 1))      # => true
 print (take 3 (100 * _ -> Int 0))         # => [Int 0, Int 0, Int 0]
-typedAdd (Int x) (Int y) = x + y
-typedAdd (Float x) (Float y) = x + y
+typedAdd (Int x) (Int y) = Int (x + y)
+typedAdd (Float x) (Float y) = Float (x + y)
 typedAdd (Number x) (Number y) = x + y
 print (typedAdd (Int 2) (Int 3))      # => Int 5
 print (typedAdd (Float 2) (Float 3))  # => Float 5.0
 print (typedAdd (1/3) (1/6))          # => 1/2
-# Int32 2147483648, Float32 .1, and UInt (-1) are checked errors.
+# Int32 2147483648, Float32 (Float .1), and UInt (-1) are checked errors.
+
+# Constructors can round/truncate untyped numbers; typed inputs stay checked.
+print (Int .2)                       # => Int 0
+# Int (Float .2)                     # error: lossy conversion; use cast Int
+print (cast Int (Float .2))          # => Int 0
+print (Float .2 $ cast Int)          # => Int 0
+print (.2 == Float .2)               # => true (numeric equality)
+numericPayload (source value) = value
+print (numericPayload (Int32 123))   # => 123
+retypedAdd (Int x) (Int y) = Int (x + y)
+print (retypedAdd (Int 2) (Int 3))   # => Int 5
+print cast                          # => (Type target) (source value) -> target value
 
 # Persistent HashMap, accepting records or association lists.
 typedMap = HashMap [] $ insert ["x": 123]
