@@ -11,7 +11,9 @@ ffi.withLibrary "./libmath.dylib" [
 }
 ```
 
-The record keys must match exported C symbol names. `ffi.function` is written in
+The record key text must match exported C symbol names. Named and quoted keys
+retain their access form: `add:` is accessed with `c.add` or `c "add"`, while
+`"add":` is accessed with `c."add"`. Do not declare the same C symbol twice. `ffi.function` is written in
 APN; it builds `[parameters: ..., result: ...]`. `withLibrary` loads the library,
 passes a record of curried functions to its callback, and closes the library in
 `finally`, including after an APN error. Relative paths resolve against the APN

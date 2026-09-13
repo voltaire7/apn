@@ -1,3 +1,4 @@
+import { keySource } from "./record-keys.ts";
 import { functionSource } from "./function-source.ts";
 import { type Numeric, type Real, numberText } from "./numbers.ts";
 import type { Expr, Pattern } from "./ast.ts";
@@ -93,7 +94,7 @@ export function valueToString(v: Value): string {
             return `[${out.map(valueToString).join(", ")}]`;
         }
         case "record":
-            return `[${v.v.map(([k, val]) => `${k}: ${valueToString(val)}`).join(", ")}]`;
+            return `[${v.v.map(([k, val]) => `${keySource(k)}: ${valueToString(val)}`).join(", ")}]`;
         case "variant": {
             const args = v.v.length ? " " + v.v.map(valueToString).join(" ") : "";
             return v.tag + args;

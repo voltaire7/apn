@@ -91,3 +91,8 @@ Deno.test({ name: 'escaped lazy nullary C action rejects use after library closu
     catch (e) { if (String(e).includes('library is closed')) return; throw e; }
     throw new Error('Expected closed-library error');
 } });
+
+Deno.test({ name: "C interop: quoted symbol keys retain identity", ignore: !library, fn() {
+    const actual = run(`ffi.withLibrary ${JSON.stringify(library)} ["add": ffi.function [Int32, Int32] Int32] c -> c."add" 20 22`);
+    if (actual !== "Int32 42") throw new Error(actual);
+} });

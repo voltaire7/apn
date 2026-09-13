@@ -64,6 +64,40 @@ without evaluating its head. Computed tails are checked when demanded, preservin
 `head (1:missing)`. Displaying a value nested inside itself also raises a clear
 error; ordinary recursive list spines such as `x = 1:x` still stream.
 
+## Record fields, string keys, and positions
+
+Named fields and quoted string keys have distinct identities. Both may coexist:
+
+```apn
+obj = [field: 123, "field": 456, 1: 10, "1": 100]
+```
+
+| Access | Selects | Result above |
+| --- | --- | --- |
+| `obj.field` or `obj "field"` | Named field `field` | `123` |
+| `obj."field"` or `obj.("field")` | String key `"field"` | `456` |
+| `obj.1`, `obj "1"`, or `obj.(1)` | Numeric-named field `1` | `10` |
+| `obj."1"` | String key `"1"` | `100` |
+| `obj 1` | Entry at position 1 | `["field", 456]` |
+
+Application evaluates its argument: `key = "field"; obj key` selects a named
+field. Dynamic dot access evaluates its key too, but a string selects a string
+key: `obj.(key)`. Neither access falls back to the other key kind. Missing keys
+raise an error. Numeric field names retain their existing normalized spelling.
+List indexing requires integers: `arr 0` indexes a list, while `arr "0"` errors.
+HashMap application likewise keeps numeric `0` and string `"0"` distinct keys.
+
+Printing preserves key quotation. Field updates (`obj.field = value`,
+`obj."field" = value`), record cloning, and plucks (`obj.[field, "field"]`)
+preserve both identities. Destructuring `[field: a, "field": b]` selects each
+kind explicitly; the bare pattern `[field]` selects only the named field.
+Renamed plucks such as `obj.["field": value]` create named destination fields.
+
+`pairs`, positional record access, and record iteration still expose key **text**
+as ordinary strings. These views do not retain the named/string distinction.
+Converting a record to `HashMap` also uses key text; if both kinds have the same
+text, the later entry wins under the existing duplicate-key rule.
+
 ## Definitions and actions
 
 Ordinary named definitions do not execute their bodies when defined.

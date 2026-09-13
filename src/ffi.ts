@@ -1,3 +1,4 @@
+import { keyText } from "./record-keys.ts";
 import type { Interpreter } from "./interp.ts";
 import { type Value, type NativePointer, mkStr, mkBool } from "./types.ts";
 import { APNError } from "./errors.ts";
@@ -142,7 +143,9 @@ export function ffiNative(i: Interpreter, name: string, args: Value[]): Value {
     if (definitions.kind !== "record") return fail("withLibrary expects a record of function signatures");
     const signatures = new Map<string, { parameters: string[]; result: string }>();
     const foreign: Record<string, Deno.ForeignFunction> = Object.create(null);
-    for (const [symbol, raw] of definitions.v) {
+    for (const [key, raw] of definitions.v) {
+        const symbol = keyText(key);
+        if (Object.hasOwn(foreign, symbol)) return fail(`duplicate C symbol ${JSON.stringify(symbol)}`);
         const definition = i.demand(raw);
         if (definition.kind !== "record") return fail(`${symbol}: expected ffi.function parameters result`);
         const fields = new Map(definition.v);
@@ -150,7 +153,7 @@ export function ffiNative(i: Interpreter, name: string, args: Value[]): Value {
         const parameters = i.items(fields.get("parameters")!).map((p) => typeName(i, p));
         if (parameters.includes("Unit")) return fail(`${symbol}: Unit is a result type; use [] for no C parameters`);
         const result = typeName(i, fields.get("result")!);
-        signatures.set(symbol, { parameters, result });
+        signatures.set(key, { parameters, result });
         foreign[symbol] = { parameters: parameters.map((p) => abi[p] as Deno.NativeType), result: result === "String" ? "pointer" : abi[result] as Deno.NativeResultType };
     }
     const resolved = path.v.startsWith("/") || i.sourceDir === "." ? path.v : `${i.sourceDir}/${path.v}`;
@@ -158,7 +161,8 @@ export function ffiNative(i: Interpreter, name: string, args: Value[]): Value {
     try { library = Deno.dlopen(resolved, foreign); }
     catch (error) { return fail(`cannot open ${JSON.stringify(path.v)}: ${error instanceof Error ? error.message : error}`); }
     const owner = { closed: false };
-    const bindings: Value = { kind: "record", v: [...signatures].map(([symbol, signature]) => {
+    const bindings: Value = { kind: "record", v: [...signatures].map(([key, signature]) => {
+        const symbol = keyText(key);
         const fn: Value = { kind: "native", name: symbol, arity: signature.parameters.length, applied: [], invoke: (values) => {
             if (owner.closed) return fail(`cannot call ${symbol}: library is closed`);
             if (!signature.parameters.length && values.length && i.demand(values[0]).kind !== "unit") return fail(`${symbol} takes no arguments (an explicit () is also accepted)`);
@@ -186,7 +190,7 @@ export function ffiNative(i: Interpreter, name: string, args: Value[]): Value {
             }
             return decoded;
         } };
-        return [symbol, fn];
+        return [key, fn];
     }) };
     try {
         // Demand the callback result while the library is open. Lazy fields that

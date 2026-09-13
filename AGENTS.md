@@ -160,7 +160,10 @@ intentional evaluation change.
   In the REPL, submitting `foo =` alone reports a syntax error immediately;
   a complete pasted indented definition can still span lines.
 - **Records**: `[name: "Alice", age: 30]`, accessed with `rec.field` (chaining
-  works: `a.b.c`). Keys may be quoted strings or numbers (`["my field": 1]`,
+  works: `a.b.c`). Named fields and quoted string keys are DISTINCT. `rec "field"` selects
+  the named field, like `rec.field`; `rec."field"` selects a string key.
+  `rec.1` equals `rec "1"`, while `rec 1` is positional.
+  Keys may be quoted strings or numbers (`["my field": 1]`,
   `[123: 2]`), accessed the same way (`obj."my field"`, `obj.123`); a
   parenthesized expression is a DYNAMIC key (`obj.(key)` → the value of `key`).
   `enumerate list` builds a record with int keys (`[0: 10, 1: 20, 2: 30]`).
@@ -526,3 +529,13 @@ actions now but preserve Mutable/Pointer references and lazy container fields.
 Do not change ordinary = action definitions or lazy destructuring semantics.
 getArgs is a nullary native action; the legacy explicit unit call still works.
 Tests live in tests/eager-binding-test.ts; document the eager/lazy boundary.
+
+## Record key identity
+
+`src/record-keys.ts` encodes quoted string keys with a private NUL prefix;
+identifier/numeric field keys retain their raw text. Use keySource for source
+and display, keyText for pairs/iteration/HashMap conversion and host symbols.
+Never expose the prefix as an APN string or accept one as a named lookup.
+The parser shares this encoding across literals, access, patterns, updates,
+and plucks. Dynamic dot strings select string keys; string application selects
+named fields. Tests: tests/record-keys-test.ts.

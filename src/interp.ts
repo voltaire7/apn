@@ -1,3 +1,4 @@
+import { stringKey, isStringKey, keyText, keySource } from "./record-keys.ts";
 import matchSource from "../lib/match.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, matchesType, castNumeric, implicitOperands, typedArithmetic, numericHash } from "./type-system.ts";
@@ -250,7 +251,7 @@ export class Interpreter {
             case "lambda": return mkList([mkStr("->"), mkStr(e.params.join(" ")), this.sexprOf(e.body)]);
             case "list": return mkList(e.v.map((x) => this.sexprOf(x)));
             case "record":
-                return mkList(e.v.map(([k, x]) => mkList([mkStr(k), this.sexprOf(x)])));
+                return mkList(e.v.map(([k, x]) => mkList([mkStr(keySource(k)), this.sexprOf(x)])));
             case "ternary":
                 return mkList([mkStr("?:") as Value, this.sexprOf(e.cond), this.sexprOf(e.then), this.sexprOf(e.els)]);
             case "block": {
@@ -261,7 +262,7 @@ export class Interpreter {
             }
             case "pipe": return mkList([mkStr("$"), this.sexprOf(e.x), this.sexprOf(e.f)]);
             case "recordAccess":
-                return mkList([mkStr("."), this.sexprOf(e.rec), typeof e.field === "string" ? mkStr(e.field) : this.sexprOf(e.field)]);
+                return mkList([mkStr("."), this.sexprOf(e.rec), typeof e.field === "string" ? mkStr(keySource(e.field)) : this.sexprOf(e.field)]);
             default: return mkList([mkStr(e.t)]);
         }
     }
@@ -345,7 +346,7 @@ export class Interpreter {
         if (this.isList(seq)) {
             for (const x of this.elements(seq)) out.push(this.demand(this.apply(f, x)));
         } else if (seq.kind === "record") {
-            for (const [k, x] of seq.v) out.push(this.apply(f, mkList([mkStr(k), x])));
+            for (const [k, x] of seq.v) out.push(this.apply(f, mkList([mkStr(keyText(k)), x])));
 
         } else if (seq.kind === "int") {
             const n = seq.v < 0n ? -seq.v : seq.v;
@@ -476,21 +477,14 @@ export class Interpreter {
                     if (typeof e.field === "string") {
                         field = e.field;
                     } else {
-                        const kv = this.force(this.eval(e.field));
+                        const kv = this.demand(this.eval(e.field));
                         if (kv.kind !== "string" && kv.kind !== "int" && kv.kind !== "float") {
                             throw new Error("Runtime: dynamic field (parenthesized key) must be a string or number");
                         }
-                        field = kv.kind === "string" ? kv.v : String(kv.v);
+                        field = kv.kind === "string" ? stringKey(kv.v) : String(kv.v);
                     }
                     if (rec.kind !== "record") throw new Error("record access on non-record");
-                    const f = rec.v.find(([k]) => k === field);
-                    if (!f) {
-                        const near = didYouMean(field, rec.v.map(([k]) => k));
-                        throw new APNError("runtime", `record has no field '${field}'`, {
-                            hint: near ? `did you mean '${near}'?` : undefined,
-                        });
-                    }
-                    r = f[1];
+                    r = this.recordField(rec, field);
                     break;
                 }
                 case "pluck": {
@@ -503,10 +497,7 @@ export class Interpreter {
                         for (const n of e.entries as string[]) {
                             const v = byKey.get(n);
                             if (v === undefined) {
-                                const near = didYouMean(n, rec.v.map(([k]) => k));
-                                throw new APNError("runtime", `record has no field '${n}'`, {
-                                    hint: near ? `did you mean '${near}'?` : undefined,
-                                });
+                                this.missingField(rec, n);
                             }
                             out.push(v);
                         }
@@ -516,10 +507,7 @@ export class Interpreter {
                         for (const [src, dst] of e.entries as Array<[string, string]>) {
                             const v = byKey.get(src);
                             if (v === undefined) {
-                                const near = didYouMean(src, rec.v.map(([k]) => k));
-                                throw new APNError("runtime", `record has no field '${src}'`, {
-                                    hint: near ? `did you mean '${near}'?` : undefined,
-                                });
+                                this.missingField(rec, src);
                             }
                             out.push([dst, v]);
                         }
@@ -658,6 +646,18 @@ export class Interpreter {
                 return bad();
 
         }
+    }
+
+    private missingField(rec: Extract<Value, { kind: "record" }>, key: string): never {
+        const near = didYouMean(keyText(key), rec.v.filter(([k]) => isStringKey(k) === isStringKey(key)).map(([k]) => keyText(k)));
+        throw new APNError("runtime", `record has no ${isStringKey(key) ? "string key" : "field"} '${keyText(key)}'`, {
+            hint: near ? `did you mean '${near}'?` : undefined,
+        });
+    }
+
+    private recordField(rec: Extract<Value, { kind: "record" }>, key: string): Value {
+        const field = rec.v.find(([k]) => k === key);
+        return field ? field[1] : this.missingField(rec, key);
     }
 
     equals(a: Value, b: Value): boolean {
@@ -824,10 +824,14 @@ export class Interpreter {
                 throw new APNError("runtime", "indexing a list needs an int or a list of ints");
             }
             case "record": {
-                // Applying an OBJECT clones it (list = positional, record = named),
-                // or an int argument indexes it positionally -> [field, value].
+                // Strings select named fields; lists/records clone, ints select entries.
                 const value = this.demand(arg);
                 const carg = this.isList(value) ? mkList(this.items(value)) : value;
+                if (carg.kind === "string") {
+                    // Arbitrary user strings must not impersonate encoded string keys.
+                    if (isStringKey(carg.v)) throw new APNError("runtime", `record has no field ${JSON.stringify(carg.v)}`);
+                    return this.recordField(f, carg.v);
+                }
                 if (carg.kind === "list") {
                     if (f.v.length !== carg.v.length) {
                         throw new Error(`Runtime: field count (${f.v.length}) does not match list size (${carg.v.length})`);
@@ -849,9 +853,9 @@ export class Interpreter {
                     if (i < 0 || i >= f.v.length) {
                         throw new Error(`Runtime: index ${carg.v} out of range (len ${f.v.length})`);
                     }
-                    return mkList([mkStr(f.v[Number(i)][0]), f.v[Number(i)][1]]);
+                    return mkList([mkStr(keyText(f.v[Number(i)][0])), f.v[Number(i)][1]]);
                 }
-                throw new Error("Runtime: applying an object needs a list, a record, or an int index");
+                throw new Error("Runtime: applying an object needs a field-name string, a list, a record, or an int index");
             }
             default:
                 throw new APNError(
@@ -1034,7 +1038,7 @@ export class Interpreter {
                 emit("[");
                 v.v.forEach(([key, val], i) => {
                     if (i) emit(", ");
-                    emit(key, "key");
+                    emit(keySource(key), isStringKey(key) ? "string" : "key");
                     emit(": ");
                     // Inspect module actions without running halt; ordinary data
                     // fields still render their memoized values.
@@ -1131,7 +1135,7 @@ export class Interpreter {
 
     associations(value: Value): Array<[Value, Value]> {
         if (value.kind === "hashmap") return [...value.entries.values()];
-        if (value.kind === "record") return value.v.map(([key, item]) => [mkStr(key), item]);
+        if (value.kind === "record") return value.v.map(([key, item]) => [mkStr(keyText(key)), item]);
         if (!this.isList(value)) throw new APNError("runtime", "HashMap expects a record or association list");
         const items = this.items(value);
         return items.map((item) => {
@@ -1342,7 +1346,7 @@ export class Interpreter {
             case "pairs":
                 if (a.kind === "hashmap") return mkList([...a.entries.values()].map(([key, value]) => mkList([key, value])));
                 if (a.kind !== "record") throw new Error("Runtime: pairs expects a record");
-                return mkList(a.v.map(([k, v]) => mkList([mkStr(k), v])));
+                return mkList(a.v.map(([k, v]) => mkList([mkStr(keyText(k)), v])));
             case "format": {
                 const fmt = args[0];
                 if (fmt.kind !== "string") throw new Error("Runtime: format expects a string");

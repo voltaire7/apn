@@ -1,3 +1,4 @@
+import { stringKey, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
 function rangeNum(e: Expr): Real {
@@ -421,9 +422,10 @@ class Parser {
         return e;
     }
 
-    // Normalize a field/key token (ident, string, or number) to its string form.
+    // Preserve identifier versus string-key identity; numeric fields retain their spelling.
     keyTok(t: Token): string {
-        if (t.k === "ident" || t.k === "str") return t.v;
+        if (t.k === "ident") return t.v;
+        if (t.k === "str") return stringKey(t.v);
         if (t.k === "int" || t.k === "float") return String(t.v);
         throw new Error(`Parser: expected a field name after '.' (got '${this.tokenStr(t)}')`);
     }
@@ -1254,7 +1256,7 @@ export function exprToSource(e: Expr): string {
         case "patternLambda": return `${e.params.map(patternSource).join(" ")}${e.guard ? " | " + exprToSource(e.guard) : ""} -> ${exprToSource(e.body)}`;
         case "lambda": return `${e.params.join(" ")} -> ${exprToSource(e.body)}`;
         case "list": return `[${e.v.map(exprToSource).join(", ")}]`;
-        case "record": return `[${e.v.map(([k, x]) => `${k}: ${exprToSource(x)}`).join(", ")}]`;
+        case "record": return `[${e.v.map(([k, x]) => `${keySource(k)}: ${exprToSource(x)}`).join(", ")}]`;
     case "floatRange": {
         const decimal = (v: number) => Number.isInteger(v) ? `${v}.0` : String(v);
         return `[${decimal(e.lo)}${e.step !== 1 ? `, ${decimal(e.lo + e.step)}` : ""}..${e.hi === null ? "" : decimal(e.hi)}]`;
@@ -1267,12 +1269,12 @@ export function exprToSource(e: Expr): string {
         case "pipe": return `${exprToSource(e.x)} $ ${exprToSource(e.f)}`;
         case "recordAccess":
             return typeof e.field === "string"
-                ? `${exprToSource(e.rec)}.${e.field}`
+                ? `${exprToSource(e.rec)}.${keySource(e.field)}`
                 : `${exprToSource(e.rec)}.(${exprToSource(e.field)})`;
         case "pluck":
-            return `${exprToSource(e.rec)}.[${e.entries.map((x) => typeof x === "string" ? x : `${x[0]}: ${x[1]}`).join(", ")}]`;
+            return `${exprToSource(e.rec)}.[${e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`).join(", ")}]`;
         case "setFields":
-            return `${exprToSource(e.rec)}.${e.entries.length === 1 ? e.entries[0] : `[${e.entries.join(", ")}]`} = ${exprToSource(e.value)}`;
+            return `${exprToSource(e.rec)}.${e.entries.length === 1 ? keySource(e.entries[0]) : `[${e.entries.map(keySource).join(", ")}]`} = ${exprToSource(e.value)}`;
         case "block": {
             const one = e.stmts.length === 1 && e.stmts[0].t !== "stmDef" && e.stmts[0].t !== "patDef";
             if (one && e.style === "(") return exprToSource(e.stmts[0]);
@@ -1301,7 +1303,7 @@ export function patternSource(p: Pattern): string {
         case "cons": return `(${patternSource(p.head)} : ${patternSource(p.tail)})`;
         case "constr": return p.args.length ? `(${p.tag} ${p.args.map(patternSource).join(" ")})` : p.tag;
         case "typeBind": return `(${p.name} ${patternSource(p.value)})`;
-        case "recPat": return `[${p.v.map(([k, v]) => `${k}: ${v}`).join(", ")}]`;
+        case "recPat": return `[${p.v.map(([k, v]) => `${keySource(k)}: ${v}`).join(", ")}]`;
         case "range": return `[${p.lo}..${p.hi}]`;
     }
 }

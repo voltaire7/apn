@@ -1,3 +1,4 @@
+import { keySource } from "./record-keys.ts";
 import type { Expr, Pattern } from "./ast.ts";
 import type { Value } from "./types.ts";
 import { exprToSource, functionSpecSource } from "./parser.ts";
@@ -15,7 +16,7 @@ function pattern(p: Pattern): string {
         case "cons": return `(${pattern(p.head)} : ${pattern(p.tail)})`;
         case "constr": return p.args.length ? `(${p.tag} ${p.args.map(pattern).join(" ")})` : p.tag;
         case "typeBind": return `(${p.name} ${pattern(p.value)})`;
-        case "recPat": return `[${p.v.map(([k, v]) => `${k}: ${v}`).join(", ")}]`;
+        case "recPat": return `[${p.v.map(([k, v]) => `${keySource(k)}: ${v}`).join(", ")}]`;
         case "range": return `[${p.lo}..${p.hi}]`;
     }
 }
@@ -37,14 +38,14 @@ function source(e: Expr, parent = 0): string {
         case "pipe": level = 1; text = `${source(e.x, 1)} $ ${source(e.f, 2)}`; break;
         case "ternary": level = 0; text = `${source(e.cond, 1)} ? ${source(e.then)} : ${source(e.els)}`; break;
         case "list": return `[${e.v.map(x => source(x)).join(", ")}]`;
-        case "record": return `[${e.v.map(([k, v]) => `${k}: ${source(v)}`).join(", ")}]`;
+        case "record": return `[${e.v.map(([k, v]) => `${keySource(k)}: ${source(v)}`).join(", ")}]`;
         case "block": {
             if (e.style === "(" && e.stmts.length === 1) return `(${source(e.stmts[0])})`;
             return `{ ${e.stmts.map(x => source(x)).join("; ")} }`;
         }
         case "stmDef": return e.clauses.map(c => `${e.name}${c.params.length ? " " + c.params.map(pattern).join(" ") : ""} = ${source(c.body)}`).join("; ");
         case "patDef": return `${pattern(e.pattern)} ${e.eager ? "<-" : "="} ${source(e.value)}`;
-        case "recordAccess": return `${source(e.rec, 11)}.${typeof e.field === "string" ? e.field : `(${source(e.field)})`}`;
+        case "recordAccess": return `${source(e.rec, 11)}.${typeof e.field === "string" ? keySource(e.field) : `(${source(e.field)})`}`;
         default: return exprToSource(e);
     }
     return level < parent ? `(${text})` : text;

@@ -218,6 +218,23 @@ print person.name        # => Alice
 print person.age         # => 30
 print person             # => [name: "Alice", age: 30]
 
+# Named fields and quoted string keys are distinct, even with the same text.
+keyKinds = [field: 123, "field": 456, 1: 10, "1": 100]
+print keyKinds.field          # => 123
+print (keyKinds "field")      # => 123
+print keyKinds."field"        # => 456
+print keyKinds.1              # => 10
+print (keyKinds "1")          # => 10
+print keyKinds."1"            # => 100
+print (keyKinds 0)            # => ["field", 123] (positional entry)
+print keyKinds               # => [field: 123, "field": 456, 1: 10, "1": 100]
+[field: namedValue, "field": stringValue] = keyKinds
+print [namedValue, stringValue] # => [123, 456]
+keyKinds."field" = 789
+print keyKinds.[field, "field"] # => [123, 789]
+# A list's integer index and a string are not interchangeable:
+# nums "0" is an error; nums 0 indexes its first element.
+
 # nested records + chained access
 nested = [inner: [z: 99]]
 print nested.inner.z     # => 99

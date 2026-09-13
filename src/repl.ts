@@ -1,3 +1,4 @@
+import { keySource } from "./record-keys.ts";
 import { lex, type Token } from "./lexer.ts";
 import { parse } from "./parser.ts";
 import { APNError } from "./errors.ts";
@@ -219,7 +220,7 @@ export function showValue(v: Value): string {
         case "lazyList": return paint(A.gray, "<lazy>");
         case "record":
             return paint(A.gray, "[") +
-                v.v.map(([k, x]) => `${k}${paint(A.gray, ": ")}${showValue(x)}`).join(paint(A.gray, ", ")) +
+                v.v.map(([k, x]) => `${keySource(k)}${paint(A.gray, ": ")}${showValue(x)}`).join(paint(A.gray, ", ")) +
                 paint(A.gray, "]");
         case "variant":
             return paint(A.cyan, v.tag) + (v.v.length ? " " + v.v.map(showValue).join(" ") : "");
