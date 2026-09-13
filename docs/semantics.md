@@ -25,8 +25,8 @@ Parentheses override precedence: `2 + 3 * 4` is `14`, while `(2 + 3) * 4`
 is `20`. Comparison chains are ordinary left-associated operations, not
 mathematical chained comparisons.
 
-Backtick infix functions are not supported; write `f a b`. `=` introduces a
-binding or assignment and is not an expression operator. Range `..` belongs
+Backtick infix functions are not supported; write `f a b`. `=` and `<-` introduce
+bindings and are not expression operators; they have no expression precedence. Range `..` belongs
 inside range syntax, and `@` belongs to polar numeric literals. Function-type
 arrows associate right: `Int -> Int -> Int` means `Int -> (Int -> Int)`.
 Unbraced lambda bodies consume a full expression; a braced body ends at `}`.
@@ -93,6 +93,54 @@ An action runs when used as a statement or demanded by an operand or native.
 result, so `addTwo = add 2; addTwo 10` still works. To define reusable lazy data
 through a function, write a parameterized producer such as `numbers n = n :
 numbers (n + 1)`; its result is a lazy list.
+
+## Eager result binding with `<-`
+
+`pattern <- expression` evaluates the right-hand side immediately, runs any
+zero-argument action needed to obtain its outer result, then binds that result
+in the current scope. This is an eager binding, not monadic `do` notation.
+
+```apn
+import "std/io"
+args <- getArgs
+
+result <- print "hello"  # prints now, even if result is never used
+print result             # prints the captured string; does not rerun the action
+
+greet = print "hello"    # still a repeatable action
+greet = { print "hello" } # still the same behavior
+```
+
+`getArgs` is now genuinely zero-argument; existing `getArgs ()` calls also work.
+The `<-` binding can occur at top level or inside a block, and supports the
+same value patterns as destructuring. `_ <- action` runs and discards a result.
+The names become bound after the RHS and pattern succeed, so `x <- x + 1`
+reads the previous x. A failed binding leaves previous bindings intact, but
+effects already performed are not rolled back. Bindings are local to their block.
+
+Only the outer value is evaluated. `xs <- [missing, 42]` does not evaluate
+`missing`, and `xs <- [0..]` does not traverse the infinite range. Mutable cells
+and pointers are captured as references. A function that takes arguments remains
+a callable value. `=` destructuring remains unchanged:
+
+```apn
+[args] = [getArgs]        # lazy element: obtain arguments only when needed
+args <- getArgs          # obtain them now
+```
+
+`<-` is a statement binding, not a function-definition form or chainable binary
+operator. `f x <- ...`, `x <- y <- ...`, and missing right-hand sides are invalid.
+An indented continuation is allowed; opening braces follow the same layout rule
+as definitions: put `{` on the line containing `<-`.
+
+### Where laziness ends
+
+APN uses call-by-need for deferred values, arguments, list elements, cons tails,
+and variant fields. Pattern matching forces only what it inspects. That does
+not make every operation lazy: `<-` evaluates now, numeric operations demand
+operands, effects run when demanded, and `*` iteration eagerly collects its
+results. `map` produces results lazily. Consumers such as `length` and sorting
+need finite input; printing an infinite list keeps streaming until interrupted.
 
 ## Memoization and effects
 

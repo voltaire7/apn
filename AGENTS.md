@@ -517,3 +517,12 @@ Use `./tests/run-c-interop-tests` in addition to the standard workflow; it compi
 `examples/c-interop/demo.c` and tests real native code. The user authorized
 unrestricted --allow-ffi for the local demo and tests; normal APN still requires
 an explicit FFI flag. Donut uses lazy map, not eager * iteration, to stop on Ctrl+C.
+
+## Eager result binding
+
+`pattern <- expression` is a statement binding at top level or inside a block.
+AST patDef.eager selects reference() before pattern matching: run zero-argument
+actions now but preserve Mutable/Pointer references and lazy container fields.
+Do not change ordinary = action definitions or lazy destructuring semantics.
+getArgs is a nullary native action; the legacy explicit unit call still works.
+Tests live in tests/eager-binding-test.ts; document the eager/lazy boundary.

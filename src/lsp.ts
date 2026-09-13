@@ -18,13 +18,14 @@ export function symbols(text: string): Symbol[] {
         const names = new Map<string, number>();
         for (const item of program) {
             if (item.t === "def") names.set(item.name, item.clauses[0]?.params.length ? 12 : 13);
+            if (item.t === "patDef" && item.eager && item.pattern.p === "var") names.set(item.pattern.name, 13);
             if (item.t === "type") names.set(item.def.name, 10);
         }
         const result: Symbol[] = [];
         let offset = 0;
         for (const line of text.split("\n")) {
             const name = line.match(/^([A-Za-z_][A-Za-z0-9_']*)/)?.[1];
-            if (name && names.has(name) && lex(line).some((token) => token.k === "sym" && token.v === "=")) {
+            if (name && names.has(name) && lex(line).some((token) => token.k === "sym" && (token.v === "=" || token.v === "<-"))) {
                 const start = position(text, offset);
                 result.push({ name, kind: names.get(name)!, detail: line.trim(),
                     range: { start, end: position(text, offset + line.length) },

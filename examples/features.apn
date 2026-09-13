@@ -918,6 +918,14 @@ print (ffiExample.function [Int32, Int32] Int32) # signature record
 # ./examples/c-interop/run-donut animates a C-rendered donut driven by APN.
 # Zero-argument C actions use bare fields: c.donut_finish; print c.greeting.
 
+# Eager result capture, without changing = actions or lazy destructuring.
+captured <- print "captured now"             # => captured now
+print captured                               # => captured now (stored string)
+eagerArgs <- getArgs
+print eagerArgs                              # => [] without CLI arguments
+lazyCapture <- [missing, 42]
+print (lazyCapture 1)                         # => 42
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

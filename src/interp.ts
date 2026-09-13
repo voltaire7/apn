@@ -216,8 +216,9 @@ export class Interpreter {
     // Destructuring binding:  [name, hello] = value  (or (Just x) = value, ...).
     // Evaluates the RHS, matches the pattern, and binds the destructured names
     // in the CURRENT environment (top level or the enclosing block's env).
-    evalPatBinding(b: { pattern: Pattern; value: Expr }): Value {
-        const v = this.force(this.eval(b.value));
+    evalPatBinding(b: { pattern: Pattern; value: Expr; eager?: boolean }): Value {
+        const evaluated = this.eval(b.value);
+        const v = b.eager ? this.reference(evaluated) : this.force(evaluated);
         const binds = new Map<string, Value>();
         if (!this.matchPattern(b.pattern, v, binds)) {
             throw new Error("Runtime: binding pattern did not match its value");
@@ -363,7 +364,7 @@ export class Interpreter {
     // Run a 0-arg function (an action def: f = { ... } / f = print "hi").
     // Nullary native actions follow the same demand rules as APN action closures.
     callBlockFn(v: Value): Value {
-        if (v.kind === "native" && v.arity === 0 && v.invoke) return v.invoke([]);
+        if (v.kind === "native" && v.arity === 0) return v.invoke ? v.invoke([]) : this.callNative(v.name, [], v.tag);
         if (v.kind !== "closure" || v.params.length !== 0) return v;
         if (v.mutableValue) return v.mutableValue;
         const old = this.env;
@@ -382,7 +383,7 @@ export class Interpreter {
     reference(v: Value): Value {
         const original = v;
         v = this.force(v);
-        while ((v.kind === "closure" && v.params.length === 0) || (v.kind === "native" && v.arity === 0 && v.invoke)) {
+        while ((v.kind === "closure" && v.params.length === 0) || (v.kind === "native" && v.arity === 0)) {
             checkInterrupt();
             v = this.force(this.callBlockFn(v));
         }

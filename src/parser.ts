@@ -551,7 +551,9 @@ class Parser {
                             if (tb.k === "sym" && tb.v === "," && t.v === "(") {
                                 throw new Error("Parser: tuples are not supported; use a list [a, b, ...] instead");
                             }
-                            if (this.isFieldAssignStart()) {
+                            if (this.isEagerBinding()) {
+                                stmts.push(this.parseEagerBinding());
+                            } else if (this.isFieldAssignStart()) {
                                 stmts.push(this.parseFieldAssign());
                             } else if (this.isPatBinding()) {
                                 stmts.push(this.parsePatBinding());
@@ -808,6 +810,21 @@ class Parser {
         };
     }
 
+    isEagerBinding(): boolean {
+        const saved = this.i;
+        try {
+            this.parseConsPattern();
+            return this.isSym("<-");
+        } catch { return false; }
+        finally { this.i = saved; }
+    }
+
+    parseEagerBinding(): Expr {
+        const pattern = this.parseConsPattern();
+        this.expectSym("<-");
+        return { t: "patDef", pattern, value: this.parseDefBody("<-"), eager: true };
+    }
+
     isPatBinding(): boolean {
         if (!this.startsPatBinding()) return false;
         const t = this.peek();
@@ -953,7 +970,7 @@ class Parser {
     }
 
     // A body is required; only an indented continuation can cross a newline.
-    parseDefBody(): Expr {
+    parseDefBody(operator = "="): Expr {
         if (this.peek().k === "newline") {
             let j = this.i;
             while (this.toks[j] && this.toks[j].k === "newline") j++;
@@ -961,15 +978,15 @@ class Parser {
                 const first = this.toks[j + 1];
                 if (first?.k === "sym" && first.v === "{") {
                     this.i = j + 1;
-                    throw new Error("Parser: a definition's opening { must be on the same line as '='");
+                    throw new Error(`Parser: a definition's opening { must be on the same line as '${operator}'`);
                 }
                 return this.parseExpr();
             }
-            throw new Error("Parser: expected an expression after '='; use '_' for an unfinished definition");
+            throw new Error(`Parser: expected an expression after '${operator}'; use '_' for an unfinished definition`);
         }
         if (this.peek().k === "eof" || this.peek().k === "dedent" ||
             this.isSym(";") || this.isSym("}") || this.isSym(")") || this.isSym("]")) {
-            throw new Error("Parser: expected an expression after '='; use '_' for an unfinished definition");
+            throw new Error(`Parser: expected an expression after '${operator}'; use '_' for an unfinished definition`);
         }
         return this.parseExpr();
     }
@@ -1013,6 +1030,11 @@ class Parser {
 
             const t = this.peek();
             if (t.k === "eof") break;
+
+            if (this.isEagerBinding()) {
+                out.push(this.parseEagerBinding() as TopLevel);
+                continue;
+            }
 
             if (this.isTypeDeclaration()) {
                 const name = (this.next() as { v: string }).v;
@@ -1256,7 +1278,7 @@ export function exprToSource(e: Expr): string {
             if (one && e.style === "(") return exprToSource(e.stmts[0]);
             const body = e.stmts.map((st) => {
                 if (st.t === "stmDef") return `${st.name} = ${exprToSource(st.clauses[0].body)}`;
-                if (st.t === "patDef") return `${exprToSource(st.value)}`;
+                if (st.t === "patDef") return `${patternSource(st.pattern)} ${st.eager ? "<-" : "="} ${exprToSource(st.value)}`;
                 return exprToSource(st);
             }).join("; ");
             return `${e.style === "(" ? "(" : "{"} ${body} ${e.style === "(" ? ")" : "}"}`;

@@ -361,6 +361,7 @@ function helpText(): string {
         `  (+ 2)  (2 +)  (+)  operator sections   ((-2) stays unary minus)`,
         `  ( ) and { } are groups/blocks: unit when empty, value = last stmt`,
         `  ; or newline       statement separators (blocks & top level)`,
+        `  x <- action        run now and bind the returned value (outer value only)`,
         `  indentation: strict 4-space layout (exactly +4 per level)`,
         `  [1,2,3] * x -> print x      (seq * fn iterates; int * fn counts)`,
         `  recursion, higher-order fns, records, variants`,
