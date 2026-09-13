@@ -1,0 +1,20 @@
+# Run ./examples/c-interop/run-demo to compile the C library and call it.
+import "std/io"
+ffi = import "std/ffi"
+[args] = [getArgs ()]
+ffi.withLibrary (head args) [
+    add: ffi.function [Int32, Int32] Int32
+    greeting: ffi.function [] String
+    text_length: ffi.function [String] Int32
+    echo_u64: ffi.function [UInt64] UInt64
+    increment: ffi.function [Pointer] Unit
+] c -> {
+    print (c.add 20 22)                       # Int32 42
+    print (c.greeting ())                     # hello from C
+    print (c.text_length "hé😀")               # Int32 7 (UTF-8 bytes)
+    print (c.echo_u64 18446744073709551615)    # UInt64 18446744073709551615
+    p = ffi.allocate Int32 1
+    p $ set 41
+    c.increment p
+    print (ffi.peek Int32 p)                  # Int32 42
+}

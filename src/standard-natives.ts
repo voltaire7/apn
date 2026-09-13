@@ -1,13 +1,16 @@
+import { FFI_NATIVES, ffiNative } from "./ffi.ts";
 import type { Interpreter } from "./interp.ts";
 import { type Value, mkList, mkStr } from "./types.ts";
 import { APNError } from "./errors.ts";
 
 // Representation, effects and Unicode casing are the stdlib's native boundary.
 export const STANDARD_NATIVES: Array<[string, number]> = [
+    ...FFI_NATIVES,
     ["readFile", 1], ["readStdin", 1], ["getArgs", 1],
     ["seq", 2], ["fail", 1], ["chars", 1], ["fromChars", 1], ["upper", 1], ["lower", 1],
 ];
 export function standardNative(i: Interpreter, name: string, args: Value[]): Value {
+    if (FFI_NATIVES.some(([n]) => n === name)) return ffiNative(i, name, args);
     const str = (v: Value): string => {
         v = i.demand(v);
         if (v.kind !== "string") throw new APNError("runtime", `${name} expects strings`);

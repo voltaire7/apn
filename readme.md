@@ -84,3 +84,11 @@ Try live diagnostics, completion, hover, and an outline in a temporary Neovim
 session with `./editors/neovim/try-apn examples/editor-playground.apn`.
 The launcher loads your usual Neovim/LazyVim setup; its configuration files stay untouched.
 See [editor tooling](docs/editor-tooling.md) for session-only LazyVim setup and limitations.
+
+## C interop
+
+`import "std/ffi"` exposes typed native calls and `Pointer` memory access.
+Run `./examples/c-interop/run-demo` for a compiled C example, or
+`./examples/c-interop/run-donut` for a terminal donut driven by APN (Ctrl+C stops).
+The scripts build temporary libraries using `cc`; nothing is installed.
+See [C interop](docs/c-interop.md) for signatures, pointers, permissions, and lifetimes.

@@ -12,7 +12,20 @@ export type Type = string; // lightweight: we represent types as printable strin
 export interface DefClause { params: Pattern[]; body: Expr; guard?: Expr; }
 
 // Runtime values (dynamically typed, like JS)
+export interface NativePointer {
+    kind: "pointer";
+    address: Deno.PointerValue;
+    bits: bigint;
+    owner?: { closed: boolean };
+    buffer?: Uint8Array;
+    offset: number;
+    length?: number;
+    elementType?: string;
+    roots?: unknown[];
+}
+
 export type Value =
+    | NativePointer
     | { kind: "functionType"; from: Value; to: Value }
     | { kind: "contract"; target: Value; from: Value; to: Value }
     | { kind: "mutable"; v: Value }
@@ -31,7 +44,7 @@ export type Value =
     | { kind: "record"; v: Array<[string, Value]> }
     | { kind: "variant"; tag: string; v: Value[]; family?: VariantFamily }
     | { kind: "closure"; params: string[]; body: Expr; env: Env; mutableValue?: Value }
-    | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string; family?: VariantFamily }
+    | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string; family?: VariantFamily; invoke?: (args: Value[]) => Value }
     | { kind: "clauseFn"; name: string; clauses: DefClause[]; arity: number; env: Env; applied: Value[] }
     | { kind: "floatRange"; lo: number; step: number; hi: number | null; index?: number }
     | { kind: "range"; lo: bigint; step: bigint; hi: bigint | null }
@@ -60,6 +73,7 @@ export function valueToString(v: Value): string {
         case "mutable": return valueToString(v.v);
         case "functionType": return `${v.from.kind === "functionType" ? "(" + valueToString(v.from) + ")" : valueToString(v.from)} -> ${valueToString(v.to)}`;
         case "contract": return `((${valueToString({ kind: "functionType", from: v.from, to: v.to })}) (${valueToString(v.target)}))`;
+        case "pointer": return `Pointer 0x${v.bits.toString(16)}`;
         case "type": return v.name;
         case "hashmap": return `HashMap [${[...v.entries.values()].map(([k, x]) => `[${valueToString(k)}, ${valueToString(x)}]`).join(", ")}]`;
         case "rationalRange": return "<rational range>";

@@ -13,4 +13,11 @@ while [ -L "$SCRIPT" ]; do
     esac
 done
 DIR="$(cd -P "$(dirname "$SCRIPT")" && pwd)"
+APN_FFI_FLAG=""
+case "${1-}" in
+    --allow-ffi|--allow-ffi=*) APN_FFI_FLAG="$1"; shift ;;
+esac
+if [ -n "$APN_FFI_FLAG" ]; then
+    exec deno run "$APN_FFI_FLAG" --allow-read --allow-write --allow-env=HOME --allow-run=stty,deno "$DIR/main.ts" "$@"
+fi
 exec deno run --allow-read --allow-write --allow-env=HOME --allow-run=stty,deno "$DIR/main.ts" "$@"

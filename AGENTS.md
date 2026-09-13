@@ -503,3 +503,16 @@ Never evaluate user code to provide editor features. Reserve stdout for JSON-RPC
 in `--lsp` mode. Keep UTF-16 positions and byte-counted Content-Length framing.
 `editors/neovim/apn.lua` is opt-in/session-only; don't edit user configuration.
 See `docs/editor-tooling.md` and `tests/lsp-test.ts`.
+
+## C interop
+
+`src/ffi.ts` implements the opt-in `std/ffi` module and Pointer operations.
+Keep ABI signatures fixed-width and conversions lossless; never map unbounded
+Int to C int. `withLibrary` must close in finally and reject escaped functions
+and pointers after closure. Pointer allocations retain memory and bounds across
+aliases, offsets and C pointer round trips. Returned external pointers remain
+unsafe; no forged addresses or implicit dereference. Zero-argument C calls use ().
+Use `./tests/run-c-interop-tests` in addition to the standard workflow; it compiles
+`examples/c-interop/demo.c` and tests real native code. The user authorized
+unrestricted --allow-ffi for the local demo and tests; normal APN still requires
+an explicit FFI flag. Donut uses lazy map, not eager * iteration, to stop on Ctrl+C.

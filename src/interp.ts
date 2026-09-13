@@ -35,7 +35,7 @@ export class Interpreter {
     private importing = new Set<string>();
 
     importStandard(module: string): Value {
-        const names = ["function", "option", "sequence", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5"];
+        const names = ["function", "option", "sequence", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5", "ffi"];
         const name = module === "std" ? "std" : module.startsWith("std/") && names.includes(module.slice(4)) ? module.slice(4) : null;
         if (!name) throw new APNError("runtime", `unknown module '${module}'`);
         let record = this.modules.get(module);
@@ -52,6 +52,7 @@ export class Interpreter {
             for (const [name, value] of this.matchingBuiltins) builtins.setLocal(name, value);
             const scope = new Env(builtins);
             const nativeExports: Record<string, string[]> = {
+                ffi: ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer"],
                 io: ["readFile", "readStdin", "getArgs"],
                 function: ["fail", "seq"],
                 sequence: [],
@@ -368,7 +369,7 @@ export class Interpreter {
         this.env = v.env;
         try {
             const result = this.force(this.eval(v.body));
-            if (result.kind === "mutable") v.mutableValue = result;
+            if (result.kind === "mutable" || result.kind === "pointer") v.mutableValue = result;
             return result;
         } finally {
             this.env = old;
@@ -681,6 +682,7 @@ export class Interpreter {
             case "bool": return a.v === (b as any).v;
             case "string": return a.v === (b as any).v;
             case "char": return a.v === (b as any).v;
+            case "pointer": return b.kind === "pointer" && a.bits === b.bits;
             case "type": return b.kind === "type" && a.name === b.name && a.family === b.family;
             case "unit": return true;
             case "list": {
@@ -743,6 +745,7 @@ export class Interpreter {
                 }
                 const args = [...f.applied, arg];
                 if (args.length < f.arity) return { ...f, applied: args };
+                if (f.invoke) return f.invoke(args);
                 if (f.name === "__constr") return { kind: "variant", tag: f.tag!, v: args, family: f.family };
                 return this.callNative(f.name, args, f.tag);
             }
@@ -1091,6 +1094,7 @@ export class Interpreter {
     }
 
     matchesValueType(name: string, value: Value): boolean {
+        if (name === "Pointer") return value.kind === "pointer";
         if (name === "Mutable") return value.kind === "mutable";
         if (isNumeric(value)) return NUMERIC_TYPES.includes(name) && matchesType(name, value);
         if (name === "List") return this.isList(value);
@@ -1098,7 +1102,7 @@ export class Interpreter {
         if (name === "Function") return value.kind === "contract" || value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native";
         const names: Partial<Record<Value["kind"], string>> = {
             bool: "Bool", string: "String", char: "Char", unit: "Unit",
-            record: "Record", hashmap: "HashMap", type: "Type", variant: "Variant",
+            record: "Record", hashmap: "HashMap", type: "Type", variant: "Variant", pointer: "Pointer",
         };
         return names[value.kind] === name;
     }
@@ -1161,6 +1165,10 @@ export class Interpreter {
         if (host) return host(argsIn);
         if (name === "set") {
             const target = this.reference(argsIn[1]);
+            if (target.kind === "pointer") {
+                if (!target.elementType) throw new APNError("runtime", "set needs a typed APN allocation; use ffi.poke Type for untyped pointers");
+                return standardNative(this, "poke", [{ kind: "type", name: target.elementType }, argsIn[0], target]);
+            }
             if (target.kind !== "mutable") throw new APNError("runtime", "set expects a Mutable target");
             // Evaluate against the old contents before changing the shared cell.
             const value = this.demand(argsIn[0]);
@@ -1186,7 +1194,7 @@ export class Interpreter {
             if (this.isList(value)) return { kind: "type", name: "List" };
             const names: Partial<Record<Value["kind"], string>> = {
                 bool: "Bool", string: "String", char: "Char", unit: "Unit",
-                hashmap: "HashMap", record: "Record", variant: "Variant", type: "Type",
+                hashmap: "HashMap", record: "Record", variant: "Variant", type: "Type", pointer: "Pointer",
                 closure: "Function", clauseFn: "Function", native: "Function",
             };
             return { kind: "type", name: names[value.kind] ?? value.kind };

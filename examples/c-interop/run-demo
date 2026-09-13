@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+BUILD="$(mktemp -d "${TMPDIR:-/tmp}/apn-c-demo.XXXXXX")"
+trap 'rm -rf "$BUILD"' EXIT
+case "$(uname -s)" in
+    Darwin) LIB="$BUILD/demo.dylib"; cc -O2 -Wall -Wextra -Werror -dynamiclib "$DIR/demo.c" -o "$LIB" ;;
+    Linux) LIB="$BUILD/demo.so"; cc -O2 -Wall -Wextra -Werror -shared -fPIC "$DIR/demo.c" -o "$LIB" ;;
+    *) echo "demo build supports macOS and Linux" >&2; exit 1 ;;
+esac
+"$DIR/../../apn" --allow-ffi "$DIR/demo.apn" "$LIB"

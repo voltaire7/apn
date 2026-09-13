@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+BUILD="$(mktemp -d "${TMPDIR:-/tmp}/apn-donut.XXXXXX")"
+trap 'rm -rf "$BUILD"' EXIT
+case "$(uname -s)" in
+    Darwin) LIB="$BUILD/donut.dylib"; cc -O3 -Wall -Wextra -Werror -dynamiclib "$DIR/donut.c" -o "$LIB" ;;
+    Linux) LIB="$BUILD/donut.so"; cc -O3 -Wall -Wextra -Werror -shared -fPIC "$DIR/donut.c" -lm -o "$LIB" ;;
+    *) echo "donut build supports macOS and Linux" >&2; exit 1 ;;
+esac
+"$DIR/../../apn" "--allow-ffi=$LIB" "$DIR/donut.apn" "$LIB" "$@"
