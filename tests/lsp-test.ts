@@ -28,11 +28,11 @@ Deno.test("diagnostic positions use UTF-16 and stay within the document", () => 
 });
 Deno.test("document parsing isolates declarations and restores REPL state", () => {
     parse("EditorRemembered a = | EditorRemembered a");
-    const source = "EditorFresh a = EditorFresh a";
+    const source = "EditorFresh a = | EditorFresh a";
     equal(parseDocument(source)[0].t, "type");
     equal(parseDocument(source)[0].t, "type");
     try { parseDocument("EditorBroken a = | EditorBroken a\nfoo ="); } catch { /* intentional */ }
-    equal(parseDocument("EditorBroken a = EditorBroken a")[0].t, "type");
+    equal(parseDocument("EditorBroken a = | EditorBroken a")[0].t, "type");
     equal(parse("EditorRemembered x = EditorRemembered 1")[0].t, "patDef");
 });
 Deno.test("LSP diagnostics follow open/change/close and ignore stale versions", () => {

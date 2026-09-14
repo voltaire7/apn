@@ -5,7 +5,7 @@ import type { Expr, Pattern } from "./ast.ts";
 
 // ---------------- Types & values ----------------
 
-export interface VariantFamily { name: string; }
+export interface VariantFamily { name: string; parameters?: string[]; fields?: Map<string, Expr[]>; env?: Env; }
 
 export type Type = string; // lightweight: we represent types as printable strings
 
@@ -30,7 +30,7 @@ export type Value =
     | { kind: "functionType"; from: Value; to: Value }
     | { kind: "contract"; target: Value; from: Value; to: Value }
     | { kind: "mutable"; v: Value }
-    | { kind: "type"; name: string; family?: VariantFamily }
+    | { kind: "type"; name: string; family?: VariantFamily; arguments?: Value[]; alias?: { parameters: string[]; body: Expr; env: Env } }
     | { kind: "hashmap"; entries: Map<string, [Value, Value]> }
     | Numeric
     | { kind: "rationalRange"; lo: Real; step: Real; hi: Real | null }
@@ -43,7 +43,7 @@ export type Value =
     | { kind: "cons"; head: Value; tail: Value }
     | { kind: "deferred"; compute: () => Value; value?: Value; busy?: boolean }
     | { kind: "record"; v: Array<[string, Value]> }
-    | { kind: "variant"; tag: string; v: Value[]; family?: VariantFamily }
+    | { kind: "variant"; tag: string; v: Value[]; family?: VariantFamily; arguments?: Value[] }
     | { kind: "closure"; params: string[]; body: Expr; env: Env; mutableValue?: Value }
     | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string; family?: VariantFamily; invoke?: (args: Value[]) => Value }
     | { kind: "clauseFn"; name: string; clauses: DefClause[]; arity: number; env: Env; applied: Value[] }
@@ -75,7 +75,7 @@ export function valueToString(v: Value): string {
         case "functionType": return `${v.from.kind === "functionType" ? "(" + valueToString(v.from) + ")" : valueToString(v.from)} -> ${valueToString(v.to)}`;
         case "contract": return `((${valueToString({ kind: "functionType", from: v.from, to: v.to })}) (${valueToString(v.target)}))`;
         case "pointer": return `Pointer 0x${v.bits.toString(16)}`;
-        case "type": return v.name;
+        case "type": return v.name + (v.arguments?.length ? " " + v.arguments.map(valueToString).join(" ") : "");
         case "hashmap": return `HashMap [${[...v.entries.values()].map(([k, x]) => `[${valueToString(k)}, ${valueToString(x)}]`).join(", ")}]`;
         case "rationalRange": return "<rational range>";
         case "bool": return String(v.v);

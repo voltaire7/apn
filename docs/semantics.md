@@ -37,6 +37,9 @@ function-minus overload also allows `f -1`, but follows binary subtraction's
 precedence: `sqrt -1 * 4` groups as `sqrt - (1 * 4)`.
 
 
+See [templates and type aliases](templates-and-types.md) for scalar/container
+application, slot updates, aliases, and parameterized variant types.
+
 ## Recursive lists
 
 These definitions are productive because each produces a cons cell before its
@@ -92,8 +95,8 @@ Printing preserves key quotation. Field updates (`obj.field = value`,
 preserve both identities. On an existing record, `obj "field" = value` updates
 or adds the named field, just like `obj.field = value`. The key must be one
 string literal; `obj "1" = value` updates numeric-named field `1`. It reads the
-RHS before rebinding, makes a scoped copy, and preserves the old binding on
-failure. On an unbound name or an existing function, `f "x" = value` remains
+RHS before rebinding, applies the existing slot to it, makes a scoped copy, and
+preserves the old binding on an immediate failure. A new field is inserted unchanged. On an unbound name or an existing function, `f "x" = value` remains
 a string-pattern function clause.
 
 Destructuring `[field: a, "field": b]` selects each
@@ -218,8 +221,8 @@ Use `*` iteration for explicitly executing an operation over every element;
 - `foldr` passes a deferred recursive result to its function, permitting an
   early result on an infinite input. `foldl` traverses the entire input.
 - Positive indexing traverses only through the requested element. Negative
-  indexing needs the end of the list. Multi-index selection retains its existing
-  behavior, including returning a scalar for a single selected index.
+  indexing needs the end of the list. List arguments apply templates instead of
+  selecting indexes; use `map xs indexes` for multiple selections.
 - `null` inspects emptiness; `length` traverses cells without demanding heads.
   Equality compares elements incrementally and stops at the first mismatch.
 - Finite and infinite ranges use the same incremental consumer interface.
@@ -327,10 +330,12 @@ streaming/interruption recovery. The showcase is the broader syntax reference.
 ## List index assignment
 
 `arr 0 = 10` rebinds an existing list to a modified copy in the current scope,
-like record field assignment. `arr (-1) = 10` updates its final element.
+like record field assignment. The old slot is applied to the incoming value:
+`arr = [Int]; arr 0 = .2` produces `[Int 0]`. `arr (-1) = 10` updates its final element.
 The index must be one integer literal; negative indexes require a finite list.
 Positive updates traverse only as far as the selected cell, leaving unused
-heads and the remaining tail deferred. Bounds errors leave the binding unchanged.
+unselected heads and the remaining tail deferred. The selected head is demanded
+because it is the template for this update. Bounds errors leave the binding unchanged.
 The RHS is evaluated against the old binding before it is replaced. Consecutive
 index assignments execute in order. Inside a block the update shadows the outer
 binding. On an unbound name or an existing function, the same syntax remains a

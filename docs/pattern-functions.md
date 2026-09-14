@@ -81,8 +81,8 @@ applyTransform (Transform f) = f 123
 
 The pattern binds `f` through a wrapper. Calling it applies the input constructor,
 then calls the original function, then applies the output constructor to its
-result. Existing lossless numeric conversions apply; wrong types and lossy
-implicit conversions raise errors. No function body is run merely to match a
+result. Untyped numeric inputs may round/truncate; explicitly typed inputs
+require lossless conversion. Wrong types raise errors. No function body is run merely to match a
 function contract. Consequently a callable can match and later fail its contract;
 that failure is an error, not a reason to try another handler.
 
@@ -110,9 +110,10 @@ func (Just 123)
 variant to `value` without forcing its fields. `(Just x)` instead binds the
 payload. Unrelated values fail the parent type pattern and may fall through to
 another clause. `Maybe value`, `cast Maybe value`, and `isType Maybe value` also
-check this membership; `typeOf (Just 123)` returns `Maybe`. Type parameters do
-not impose payload types: this remains a dynamic language.
+check this membership; `typeOf (Just 123)` returns `Maybe`. Specialization such
+as `(Maybe Int) (Just 123)` applies the parameter's payload contract lazily.
+See [templates and type aliases](templates-and-types.md).
 
-When the parent and constructor share a name (`Box a = Box a`), that name keeps
+When the parent and constructor share a name (`Box a = | Box a`), that name keeps
 its constructor meaning: `(Box x)` unpacks the payload. Parent type patterns
 resolve in the function's definition scope, including functions from modules.

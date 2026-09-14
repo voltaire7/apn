@@ -67,6 +67,9 @@ and recursive lists remain productive.
   with identifier parameters.
 - Ternary conditionals and blocks containing definitions followed by a result.
 - Recursive and mutually recursive definitions, lexical closures, lazy lists.
+- Singleton list templates map lazily; longer templates apply positionally.
+  Template elements are evaluated by the metacircular apply function, including
+  object-language closures. Integer application remains indexing.
 - Newline or semicolon separators, `#` comments, common string escapes.
 - Exact fractions produced by division, inherited from APN arithmetic.
 

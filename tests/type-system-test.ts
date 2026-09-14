@@ -19,7 +19,7 @@ for (const [source, expected] of [
     ["List [1,2]", "[1, 2]"], ["take 3 (List [1..])", "[1, 2, 3]"],
     ["Record [x: 1]", "[x: 1]"],
     ["(Function (x -> x + 1)) 2", "3"], ["Type Int", "Int"],
-    ["Choice = Chosen x\nVariant (Chosen 1)", "Chosen 1"],
+    ["Choice = | Chosen x\nVariant (Chosen 1)", "Chosen 1"],
     ["[isType Bool true, isType String 1, isType List [1..], isType Type Bool]", "[true, false, true, true]"],
     ['f (Bool x) = "bool"\nf (String x) = "string"\nf (List x) = "list"\n[f true, f "hi", f [1]]', '["bool", "string", "list"]'],
     ["value = true\nvalue $ cast Bool", "true"],

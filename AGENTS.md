@@ -122,9 +122,8 @@ intentional evaluation change.
   Full traversals (length, negative indexing, etc.) need finite inputs to finish.
 - **Indexing**: applying a LIST to an int indexes it — `nums 0` is the first
   element, `nums (-1)` the last (negative counts from the end; the parens are
-  needed because `nums -1` is a subtraction). Applying a list to a LIST of
-  ints picks several elements: `nums [0, 2]` → `[10, 30]`. The callee's kind
-  decides: list → index, record → clone (see below), else error.
+  needed because `nums -1` is a subtraction). List-to-list application is
+  TEMPLATE application, not multi-indexing: use `map nums [0, 2]` to pick indexes.
 - **No tuples.** `(a, b)` is invalid — parens are only for grouping/calls.
   Mixed values go in lists: `[213, "hello"]`.
 - **Groups / blocks — `( )` and `{ }` are interchangeable.** Both are a
@@ -170,14 +169,13 @@ intentional evaluation change.
   The old `{ a = b }` syntax is REMOVED.
 - **Prototype-based objects**: APPLYING a record (`vector3 [1, 2, 3]`) CLONES
   a record prototype (the prototype is a RECORD — a bare-name list is a list,
-  never an object). A LIST argument replaces values positionally (one value per
-  field; field count must match, else error); a RECORD argument overrides by
-  name in any order — existing fields replaced, new fields appended, so
+  never an object). A LIST argument applies slots positionally (one value per
+  field; field count must match, else error); a RECORD argument applies matching slots by
+  name in any order — supplied fields transformed, omitted fields preserved, new fields appended, so
   `vector3 [z: 3, x: 1]` keeps the prototype's other defaults (→
   `[x: 1, y: 0, z: 3]`) and `vector3 [x: 1, y: 2, z: 3, a: 0]` adds `a`. An INT
   argument indexes positionally → the pair `[field, value]` (`vec 1` →
-  `["y", 0]`). The prototype name must be lowercase (capital names are
-  constructors).
+  `["y", 0]`). Ordinary templates use lowercase names; type-only templates may be capitalized aliases.
 - **Pluck — the QUOTED `.[...]` postfix** (record access -style, so even a
   bare-name list inside it is treated as field names, never values):
   `rec.[x, y]` gathers those fields' values into a LIST; `rec.[x: a, y: b]`
@@ -282,11 +280,10 @@ intentional evaluation change.
   that block. The LHS may be a destructuring PATTERN: `[a, b] = expr` (list
   positionally, record by field name), `(Just x) = expr`, or `Just x = expr`
   (Haskell-style, no parens) — a binding error if the pattern doesn't match.
-  Capital names are CONSTRUCTORS, never value/function names: a capital LHS
-  def is a parse error unless it's a DECLARED constructor applied to args
-  (`Just v = ...` destructures). A bare capital LHS is always an error —
-  `Template = [count, label]` is invalid; use lowercase defs and build records
-  with values (or clone from a record prototype with application — section 7). Optional
+  New capitalized names bind type aliases; existing constructor names on the
+  LHS destructure, including nullary assertions. A pipe marks constructor
+  declarations; one constructor needs a leading |. Type-only list/record
+  templates are valid aliases; ordinary templates keep lowercase names. Optional
   (ignored) `: Type` annotations accepted. A block's value is its last
   statement. `match` with guards `|`.
 
@@ -558,3 +555,24 @@ through module loading and browser bundles. numericPayload removes numeric
 annotations without changing the original value. Numeric patterns extract
 payloads after conversion; explicit result constructors reapply result types.
 Numeric equality ignores these annotations. See tests/language-cast-test.ts.
+
+## Template application and type aliases
+
+See docs/templates-and-types.md and tests/template-application-test.ts. Scalar
+numbers apply by returning the incoming number, with typed numbers reapplying
+their constructor. Other scalar kinds accept same-kind replacements. [f] maps
+lazily; longer/empty lists zip exactly. Integer application remains indexing.
+Record application transforms supplied slots, preserves omitted values, appends
+new fields, and distinguishes named from string keys. Assignments apply old
+slots before publishing a scoped copy; the selected slot is now demanded.
+No element schema is attached to the output: [Int] [] is an ordinary empty list.
+
+Capitalized aliases are stable type-level bindings. Type-only container values
+are accepted as descriptions by Type, cast, isType, and schema patterns. Variant
+declarations retain formal parameters and field expressions. Specialization
+creates a family descriptor with arguments and applies lazy payload contracts;
+unspecialized constructors remain polymorphic. A leading | marks single
+constructor declarations. Keep family identity separate from constructor names.
+
+The metacircular evaluator handles list templates through its own meApply so
+object-language closures work. Run its self-evaluation demo when changing it.

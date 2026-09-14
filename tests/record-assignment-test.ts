@@ -10,7 +10,7 @@ for (const [name, source, expected] of [
     ["block scopes update", 'obj = [x: 1]\ninner = { obj "x" = 10; obj }\n[inner, obj]', '[[x: 10], [x: 1]]'],
     ["captured alias keeps old record", 'obj = [x: 1]\nold <- obj\nobj "x" = 10\n[old, obj]', '[[x: 1], [x: 10]]'],
     ["unused field remains deferred", 'unused = missing + 1\nobj = [x: 1, other: unused]\nobj "x" = 10\nobj.x', '10'],
-    ["list value remains lazy", 'obj = [x: 1]\nobj "x" = [missing, 2]\nobj.x 1', '2'],
+    ["list value remains lazy", 'obj = [x: [0]]\nobj "x" = [missing, 2]\nobj.x 1', '2'],
     ["string pattern functions", 'f "x" = 10\nf "y" = 20\n[f "x", f "y"]', '[10, 20]'],
     ["existing functions", 'f x = x\nf "x" = 10\nf "x"', '10'],
     ["action returning record", 'obj = { [x: 1] }\nobj "x" = 10\nobj', '[x: 10]'],

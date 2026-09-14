@@ -198,14 +198,14 @@ print vals                       # => [100, 200]
 print (map (x -> x * 2) vals)    # => [200, 400]
 
 # indexing by APPLICATION:  a list applied to a number is an element
-# (negative counts from the end); applied to a list of ints picks several.
-# The left side's KIND decides (list -> index, record -> clone — section 7);
+# (negative counts from the end); list arguments instead apply a template.
+# Use map with the indexed list for multi-index selection.
 #  arr -1  would be arithmetic, so use parens:  arr (-1)
 nums = [10, 20, 30]
 print (nums 0)                    # => 10
 print (nums 1)                    # => 20
 print (nums (-1))                 # => 30
-print (nums [0, 2])               # => [10, 30]
+print (map nums [0, 2])               # => [10, 30]
 print ((nums (-1)) + (nums 0))    # => 40
 print ((tail nums) 0)             # => 20   (index a computed list)
 print ([[1, 2], [3, 4]] 1 0)      # => 3    (nested indexing, left-assoc)
@@ -343,9 +343,8 @@ print (greeting)           # => Hello, world!
 
 # Constructor patterns destructure like Haskell — bare (Just v = ...),
 # parenthesized ((Just v) = ...), or nested in a list ([Just v] = [...]).
-# ONLY a DECLARED constructor (via a constructor declaration) can appear capital on the left of =;
-# a capital name is NEVER a value/function name (Template = ... is an error —
-# use lowercase, and build objects with the prototype clone from section 7):
+# Existing constructor names destructure; new capital names bind type aliases.
+# Constructor declarations use | (a leading | for a single constructor).
 Maybe a = Just a | Nothing
 Just v = Just 123
 print v                    # => 123
@@ -813,6 +812,45 @@ print (numericPayload (Int32 123))   # => 123
 retypedAdd (Int x) (Int y) = Int (x + y)
 print (retypedAdd (Int 2) (Int 3))   # => Int 5
 print cast                          # => (Type target) (source value) -> target value
+
+# Container templates apply their existing slots to incoming values.
+print (0 123)                       # => 123
+print ((Int 0) .2)                  # => Int 0
+print ([(* 2)] [1, 2, 3, 4])        # => [2, 4, 6, 8]
+print ([Int] [1, 2, 3, 4])          # => [Int 1, Int 2, Int 3, Int 4]
+print ([Int, String] [123, "hello"]) # => [Int 123, "hello"]
+print (take 3 ([Int] [0..]))         # => [Int 0, Int 1, Int 2]
+print ([x: Int, y: 0] [x: 1, y: 2]) # => [x: Int 1, y: 2]
+print ([x: Int, y: Int] [x: 123])    # => [x: Int 123, y: Int]
+slots = [Int]
+slots 0 = .2
+print slots                         # => [Int 0]
+slots 0 = 123
+print slots                         # => [Int 123]
+recordSlots = [x: Int, y: Int]
+recordSlots.y = 321
+print recordSlots                   # => [x: Int, y: Int 321]
+recordSlots "y" = .2
+print recordSlots.y                 # => Int 0
+# recordSlots.y = Float .2           # error: lossy typed conversion
+# slots 1 = 1                       # error: slot 1 does not exist
+print ([Int] [])                    # => [] (no hidden element schema)
+print ([10] [0])                    # => [0] (template application)
+print ([10] 0)                      # => 10 (integer indexing)
+Count = Int
+Numbers = [Int]
+Point = [x: Float, y: Float]
+print (Count 123)                   # => Int 123
+print (Numbers [1, 2])              # => [Int 1, Int 2]
+print (Point [x: 1, y: 2])          # => [x: Float 1.0, y: Float 2.0]
+firstNumber (Numbers values) = head values
+print (firstNumber [123])           # => Int 123
+print (cast [Int] [1, 2])           # => [Int 1, Int 2]
+NumericMaybe a = Maybe a
+print ((NumericMaybe Int) (Just 123)) # => Just Int 123
+UserId = | MkUserId Int
+print (MkUserId 123)                # => MkUserId Int 123
+
 
 # Persistent HashMap, accepting records or association lists.
 typedMap = HashMap [] $ insert ["x": 123]

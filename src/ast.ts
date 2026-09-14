@@ -43,6 +43,7 @@ export type Expr =
     | { t: "patDef"; pattern: Pattern; value: Expr; eager?: boolean };
 
 export type Pattern =
+    | { p: "schema"; type: Expr; value: Pattern }
     | { p: "contract"; spec: FunctionSpec; value: Pattern }
     | { p: "wildcard" }
     | { p: "var"; name: string }
@@ -56,7 +57,7 @@ export type Pattern =
     | { p: "recPat"; v: Array<[string, string]> }
     | { p: "range"; lo: bigint; hi: bigint };
 
-interface DataDef { name: string; variants: { tag: string; arity: number }[]; }
+interface DataDef { name: string; parameters?: string[]; variants: { tag: string; arity: number; fields?: Expr[] }[]; }
 
 export type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "expr"; value: Expr }
     | { t: "type"; def: DataDef }

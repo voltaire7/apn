@@ -156,6 +156,19 @@ class Parser {
             this.next();
             if (this.isSym(")")) { this.next(); return { p: "list", v: [] }; }
             const signatureStart = this.i;
+            if (this.isSym("[") || this.isSym("(")) {
+                try {
+                    this.noLambda++;
+                    let type: Expr;
+                    try { type = this.parsePrimary(); } finally { this.noLambda--; }
+                    if (this.startsParam(this.peek())) {
+                        const value = this.parsePattern();
+                        this.expectSym(")");
+                        return { p: "schema", type, value };
+                    }
+                } catch { /* ordinary grouped pattern */ }
+                this.i = signatureStart;
+            }
             try {
                 const spec = this.parseFunctionSpec();
                 if (!("name" in spec) && this.peek().k !== "eof" && !this.isSym(")")) {
@@ -993,9 +1006,9 @@ class Parser {
         return this.parseExpr();
     }
 
-    // A new capitalized name declares constructors. An existing constructor on
-    // the left remains a destructuring pattern, unless alternatives make the
-    // declaration explicit. Ordinary expression RHSs are never declarations.
+    // A top-level pipe marks constructor declarations, including a leading pipe
+    // for a single constructor. Without it, fresh capitals are type aliases
+    // and existing constructors on the left remain destructuring patterns.
     isTypeDeclaration(): boolean {
         const name = this.peek();
         if (name.k !== "ident" || !/^[A-Z]/.test(name.v)) return false;
@@ -1008,11 +1021,22 @@ class Parser {
         if (leading.k === "sym" && leading.v === "|") return true;
         const ctor = this.peek(j);
         if (ctor.k !== "ident" || !/^[A-Z]/.test(ctor.v)) return false;
-        while (this.peek(j).k === "ident") j++;
-        const end = this.peek(j);
-        if (end.k === "sym" && end.v === "|") return true;
-        const boundary = ["newline", "dedent", "eof"].includes(end.k) || (end.k === "sym" && end.v === ";");
-        return boundary && !declaredCtors.has(name.v);
+        let depth = 0;
+        for (;;) {
+            const token = this.peek(j++);
+            if (token.k === "eof" || token.k === "dedent") return false;
+            if (token.k === "sym") {
+                if (!depth && token.v === "|") return true;
+                if (!depth && token.v === ";") return false;
+                if (["(", "[", "{"].includes(token.v)) depth++;
+                if ([")", "]", "}"].includes(token.v)) depth--;
+            }
+            if (!depth && token.k === "newline") {
+                while (["newline", "indent"].includes(this.peek(j).k)) j++;
+                const next = this.peek(j);
+                return next.k === "sym" && next.v === "|";
+            }
+        }
     }
 
     parseTopLevel(): TopLevel[] {
@@ -1040,20 +1064,25 @@ class Parser {
 
             if (this.isTypeDeclaration()) {
                 const name = (this.next() as { v: string }).v;
-                while (this.peek().k === "ident") this.next();
+                const parameters: string[] = [];
+                while (this.peek().k === "ident") parameters.push((this.next() as { v: string }).v);
+                if (parameters.some(p => !/^[a-z]/.test(p)) || new Set(parameters).size !== parameters.length) throw new Error("Parser: type parameters must be distinct lowercase names");
                 this.expectSym("=");
                 this.skipNL();
                 this.eatSym("|");
-                const variants: { tag: string; arity: number }[] = [];
+                const variants: { tag: string; arity: number; fields: Expr[] }[] = [];
                 for (;;) {
                     this.skipNL();
                     const vt = this.next();
                     if (vt.k !== "ident" || !/^[A-Z]/.test(vt.v)) {
                         throw new Error("Parser: expected a capitalized constructor name");
                     }
-                    let arity = 0;
-                    while (this.peek().k === "ident") { arity++; this.next(); }
-                    variants.push({ tag: vt.v, arity });
+                    const fields: Expr[] = [];
+                    while (this.peek().k === "ident" || this.isSym("(") || this.isSym("[")) {
+                        this.noLambda++;
+                        try { fields.push(this.parsePrimary()); } finally { this.noLambda--; }
+                    }
+                    variants.push({ tag: vt.v, arity: fields.length, fields });
                     if (this.eatSym("|")) continue;
                     let ahead = 0;
                     while (["newline", "indent"].includes(this.peek(ahead).k)) ahead++;
@@ -1064,12 +1093,15 @@ class Parser {
                     }
                     break;
                 }
+                if (new Set(variants.map(v => v.tag)).size !== variants.length) throw new Error("Parser: duplicate value constructor");
+                if (variants.some(v => TYPE_NAMES.includes(v.tag))) throw new Error("Parser: a value constructor cannot replace a built-in type");
                 // Register only after the entire declaration has parsed successfully.
                 for (const { tag, arity } of variants) {
                     declaredCtors.add(tag);
                     if (arity === 0) nullaryCtors.add(tag); else nullaryCtors.delete(tag);
                 }
-                out.push({ t: "type", def: { name, variants } });
+                functionTypeNames.add(name);
+                out.push({ t: "type", def: { name, parameters, variants } });
                 continue;
             }
 
@@ -1102,24 +1134,15 @@ class Parser {
                     out.push(this.parsePatBinding() as TopLevel);
                     continue;
                 }
-                // Capital names are CONSTRUCTORS, never value/function names: a plain
-                // capital def is an error (declare its constructors with =, destructure with it,
-                // or use a lowercase name).
+                // Fresh capitalized definitions are type aliases. Existing
+                // constructors were handled as destructuring bindings above.
                 if (/^[A-Z]/.test(t.v)) {
                     if (this.isDef()) {
-                        const saved = this.i;
                         const declaration = this.parseDefStatement();
-                        if (!declaration.clauses[0].params.length && declaration.clauses[0].body.t === "functionType") {
-                            functionTypeNames.add(declaration.name);
-                            out.push({ t: "def", ...declaration });
-                            continue;
-                        }
-                        this.i = saved;
-                        throw new Error(
-                            `Parser: '${t.v}' is capitalized — capital names are constructors, ` +
-                            `so a value/function must use a lowercase name (or '${t.v}' must be ` +
-                            `declared as a constructor to destructure on the left of =)`,
-                        );
+                        if (TYPE_NAMES.includes(declaration.name)) throw new Error("Parser: built-in type names cannot be reassigned");
+                        functionTypeNames.add(declaration.name);
+                        out.push({ t: "def", ...declaration });
+                        continue;
                     }
                     const e = this.parseExpr();
                     out.push({ t: "expr", value: e });
@@ -1293,6 +1316,7 @@ export function functionSpecSource(spec: FunctionSpec): string {
 }
 export function patternSource(p: Pattern): string {
     switch (p.p) {
+        case "schema": return `(${exprToSource(p.type)} ${patternSource(p.value)})`;
         case "contract": return `((${functionSpecSource(p.spec)}) ${patternSource(p.value)})`;
         case "wildcard": return "_";
         case "var": return p.name;

@@ -194,7 +194,7 @@ print (match [1..] [ [x] -> 0, x:xs -> x ])
 `, ["8", "1", "1", "1"]);
 
 example("variant fields are lazy", `
-Pair a b = Pair a b
+Pair a b = | Pair a b
 getFirst (Pair a b) = a
 print (getFirst (Pair 7 missing))
 `, ["7"]);
@@ -218,7 +218,7 @@ print ([missing, 7, missing] 1)
 print (length [missing, missing])
 print (null (missing:missing))
 print ([1, 2, 3] (-1))
-print ([1..] [0, 2, 4])
+print (map ([1..]) [0, 2, 4])
 `, ["7", "2", "false", "3", "[1, 3, 5]"]);
 
 example("equality compares list representations and stops at a mismatch", `
@@ -328,7 +328,7 @@ example("sharing a finite list between siblings is not a rendering cycle",
 
 example("type declarations construct and match variants", `
 Switch = Enabled | Disabled
-Wrapped a = Wrapped a
+Wrapped a = | Wrapped a
 unwrap (Wrapped x) = x
 choose Enabled = 1
 choose Disabled = 0
@@ -344,7 +344,7 @@ Deno.test("data no longer introduces a type declaration", () => {
 
 example("type and data are ordinary identifiers", 'type = 20; data = 22; print (type + data)', ["42"]);
 example("single constructor declaration preserves destructuring", `
-Parcel a = Parcel a
+Parcel a = | Parcel a
 Parcel contents = Parcel 42
 print contents
 `, ["42"]);

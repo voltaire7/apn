@@ -108,7 +108,13 @@ export class Interpreter {
         let last: Value = { kind: "unit" };
         for (const tl of program) {
             if (tl.t === "type") {
-                const family = { name: tl.def.name };
+                for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) {
+                    const previous = this.env.map.get(name);
+                    if (previous && ((previous.kind === "native" && previous.tag) || previous.kind === "variant") && previous.family?.name !== tl.def.name) {
+                        throw new APNError("runtime", `cannot redeclare value constructor ${name}; it belongs to ${previous.family?.name}`);
+                    }
+                }
+                const family = { name: tl.def.name, parameters: tl.def.parameters ?? [], fields: new Map(tl.def.variants.map(v => [v.tag, v.fields ?? []])), env: new Env(this.env) };
                 this.env.setLocal(tl.def.name, { kind: "type", name: tl.def.name, family });
                 for (const v of tl.def.variants) {
                     if (v.arity === 0) {
@@ -120,6 +126,7 @@ export class Interpreter {
                         });
                     }
                 }
+                for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) family.env.setLocal(name, this.env.get(name)!);
                 continue;
             }
             if (tl.t === "def") {
@@ -138,6 +145,30 @@ export class Interpreter {
     }
 
     evalDef(name: string, clauses: DefClause[]): Value {
+        if (/^[A-Z]/.test(name)) {
+            const existing = this.env.get(name);
+            if (existing && ((existing.kind === "native" && existing.tag) || existing.kind === "variant")) {
+                return this.evalPatBinding({ pattern: { p: "constr", tag: name, args: clauses[0].params }, value: clauses[0].body });
+            }
+            if (clauses.length !== 1 || clauses[0].params.some(p => p.p !== "var")) throw new APNError("runtime", "type aliases require distinct type-parameter names");
+            const parameters = clauses[0].params.map(p => (p as Extract<Pattern, { p: "var" }>).name);
+            if (new Set(parameters).size !== parameters.length) throw new APNError("runtime", "duplicate type parameter");
+            const scope = new Env(this.env);
+            const alias: Value = parameters.length
+                ? { kind: "type", name, alias: { parameters, body: clauses[0].body, env: scope } }
+                : this.defer(() => {
+                    const caller = this.env;
+                    this.env = scope;
+                    try {
+                        const value = this.reference(this.eval(clauses[0].body));
+                        if (!this.isTypeValue(value)) throw new APNError("runtime", `${name} must alias a type; use | to declare constructors`);
+                        return value;
+                    } finally { this.env = caller; }
+                });
+            scope.setLocal(name, alias);
+            this.env.setLocal(name, alias);
+            return alias;
+        }
         // A literal-key equation on an existing list/record is a scoped update.
         // Unbound/function names retain ordinary pattern-clause definitions.
         const previous = this.env.get(name);
@@ -159,7 +190,7 @@ export class Interpreter {
                     const fields = record.v.slice();
                     const index = fields.findIndex(([field]) => field === key);
                     if (index < 0) fields.push([key, value]);
-                    else fields[index] = [key, value];
+                    else fields[index] = [key, this.demand(this.apply(record.v[index][1], value))];
                     record = { kind: "record", v: fields };
                     this.env.setLocal(name, record);
                 }
@@ -565,7 +596,7 @@ export class Interpreter {
                     for (let i = 0; i < e.entries.length; i++) {
                         const idx = out.findIndex(([k]) => k === e.entries[i]);
                         if (idx === -1) out.push([e.entries[i], rhs.v[i]]);
-                        else out[idx] = [e.entries[i], rhs.v[i]];
+                        else out[idx] = [e.entries[i], this.demand(this.apply(base[idx][1], rhs.v[i]))];
                     }
                     r = { kind: "record", v: out };
                     break;
@@ -706,7 +737,8 @@ export class Interpreter {
             case "string": return a.v === (b as any).v;
             case "char": return a.v === (b as any).v;
             case "pointer": return b.kind === "pointer" && a.bits === b.bits;
-            case "type": return b.kind === "type" && a.name === b.name && a.family === b.family;
+            case "type": return b.kind === "type" && this.sameType(a, b);
+            case "functionType": return b.kind === "functionType" && this.sameType(a, b);
             case "unit": return true;
             case "list": {
                 const bl = b as any;
@@ -734,6 +766,16 @@ export class Interpreter {
     apply(f: Value, arg: Value, probe = false): Value {
         // A lazy 0-param def used as a function (`f = g; f 1`) is a thunk — run it.
         f = this.force(f);
+        if (isNumeric(f)) {
+            const value = this.demand(arg);
+            if (!isNumeric(value)) throw new APNError("runtime", "a numeric template expects a number");
+            return f.typeName ? this.constructType(f.typeName, value) : value;
+        }
+        if (["string", "char", "bool", "unit"].includes(f.kind)) {
+            const value = this.demand(arg);
+            if (value.kind !== f.kind) throw new APNError("runtime", `${f.kind} template expects ${f.kind}, got ${value.kind}`);
+            return value;
+        }
         switch (f.kind) {
             case "functionType": return this.conform(f, arg);
             case "contract": return this.defer(() => {
@@ -743,6 +785,23 @@ export class Interpreter {
             case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
                 const value = this.demand(arg);
+                const parameters = f.alias?.parameters ?? f.family?.parameters ?? [];
+                if ((f.arguments?.length ?? 0) < parameters.length && this.isTypeValue(value)) {
+                    const arguments_ = [...f.arguments ?? [], value];
+                    if (f.alias && arguments_.length === parameters.length) {
+                        const scope = new Env(f.alias.env);
+                        parameters.forEach((name, index) => scope.setLocal(name, arguments_[index]));
+                        const caller = this.env;
+                        this.env = scope;
+                        try {
+                            const result = this.reference(this.eval(f.alias.body));
+                            if (!this.isTypeValue(result)) throw new APNError("runtime", `${f.name} must return a type`);
+                            return result;
+                        } finally { this.env = caller; }
+                    }
+                    return { ...f, arguments: arguments_ };
+                }
+                if (f.alias) throw new APNError("runtime", `${f.name} expects ${parameters.length} type arguments`);
                 return this.conform(f, value);
             }
             case "hashmap": return this.mapLookup(f, this.demand(arg));
@@ -770,7 +829,7 @@ export class Interpreter {
                 const args = [...f.applied, arg];
                 if (args.length < f.arity) return { ...f, applied: args };
                 if (f.invoke) return f.invoke(args);
-                if (f.name === "__constr") return { kind: "variant", tag: f.tag!, v: args, family: f.family };
+                if (f.name === "__constr") return this.variantValue(f.tag!, args, f.family);
                 return this.callNative(f.name, args, f.tag);
             }
             case "clauseFn": {
@@ -835,14 +894,11 @@ export class Interpreter {
                 const carg = this.demand(arg);
                 if (carg.kind === "int") return this.index(f, carg.v);
                 if (this.isList(carg)) {
-                    const picks = this.items(carg).map((ix) => {
-                        ix = this.demand(ix);
-                        if (ix.kind !== "int") throw new APNError("runtime", "index must be an int");
-                        return this.index(f, ix.v);
-                    });
-                    return picks.length === 1 ? picks[0] : mkList(picks);
+                    const first = this.cell(f);
+                    if (first !== null && this.cell(first.tail) === null) return this.mapList(first.head, carg);
+                    return this.applyListTemplate(f, carg);
                 }
-                throw new APNError("runtime", "indexing a list needs an int or a list of ints");
+                throw new APNError("runtime", "indexing a list needs an int; template application needs a list");
             }
             case "record": {
                 // Strings select named fields; lists/records clone, ints select entries.
@@ -857,14 +913,14 @@ export class Interpreter {
                     if (f.v.length !== carg.v.length) {
                         throw new Error(`Runtime: field count (${f.v.length}) does not match list size (${carg.v.length})`);
                     }
-                    return { kind: "record", v: f.v.map(([k], i) => [k, carg.v[i]] as [string, Value]) };
+                    return { kind: "record", v: f.v.map(([k, template], i) => [k, this.defer(() => this.apply(template, carg.v[i]))] as [string, Value]) };
                 }
                 if (carg.kind === "record") {
                     const idx = new Map(f.v.map(([k], i) => [k, i]));
                     const out = f.v.slice();
                     for (const [k, v] of carg.v) {
                         const i = idx.get(k);
-                        if (i !== undefined) out[i] = [k, v]; else out.push([k, v]);
+                        if (i !== undefined) out[i] = [k, this.defer(() => this.apply(f.v[i][1], v))]; else out.push([k, v]);
                     }
                     return { kind: "record", v: out };
                 }
@@ -882,7 +938,7 @@ export class Interpreter {
                 throw new APNError(
                     "runtime",
                     `cannot call a non-function (${f.kind})`,
-                    { hint: "lists index and records clone when applied; ints, strings, bools do nothing" },
+                    { hint: "lists index by integer; container templates apply their slots to supplied values" },
                 );
         }
     }
@@ -1003,7 +1059,7 @@ export class Interpreter {
             const values = this.items(list);
             index += BigInt(values.length);
             if (index < 0n || index >= values.length) throw new APNError("runtime", `index ${original} out of range`);
-            values[Number(index)] = value;
+            values[Number(index)] = this.demand(this.apply(values[Number(index)], value));
             return mkList(values);
         }
         const prefix: Value[] = [];
@@ -1012,7 +1068,7 @@ export class Interpreter {
             const cell = this.cell(list);
             if (cell === null) throw new APNError("runtime", `index ${original} out of range`);
             if (index-- === 0n) {
-                let result: Value = { kind: "cons", head: value, tail: cell.tail };
+                let result: Value = { kind: "cons", head: this.demand(this.apply(cell.head, value)), tail: cell.tail };
                 for (let i = prefix.length - 1; i >= 0; i--) result = { kind: "cons", head: prefix[i], tail: result };
                 return result;
             }
@@ -1108,20 +1164,133 @@ export class Interpreter {
 
     conform(type: Value, value: Value): Value {
         if (type.kind === "type") {
+            if (type.name === "$any") return value;
             const actual = this.demand(value);
             if (type.family) {
                 if (actual.kind !== "variant" || actual.family !== type.family) throw new APNError("runtime", `${type.name} expects a ${type.name} variant`);
-                return actual;
+                return type.arguments?.length ? this.variantValue(actual.tag, actual.v, type.family, type.arguments) : actual;
             }
             return this.constructType(type.name, actual);
         }
+        if (this.isList(type) || type.kind === "record") return this.apply(type, value);
         if (type.kind !== "functionType") throw new APNError("runtime", "expected a type constructor");
         const target = this.force(value);
         if (!this.matchesValueType("Function", target)) throw new APNError("runtime", "function contract expects a function");
         return { kind: "contract", target, from: type.from, to: type.to };
     }
 
+    sameType(a: Value, b: Value): boolean {
+        a = this.reference(a); b = this.reference(b);
+        if (a === b) return true;
+        if (a.kind === "type" && b.kind === "type") {
+            const other = b.arguments ?? [];
+            return a.name === b.name && a.family === b.family && a.alias === b.alias &&
+                (a.arguments?.length ?? 0) === other.length && (a.arguments ?? []).every((v, index) => this.sameType(v, other[index]));
+        }
+        if (a.kind === "functionType" && b.kind === "functionType") return this.sameType(a.from, b.from) && this.sameType(a.to, b.to);
+        if (a.kind === "record" && b.kind === "record") {
+            const fields = new Map(b.v);
+            return a.v.length === b.v.length && a.v.every(([key, value]) => fields.has(key) && this.sameType(value, fields.get(key)!));
+        }
+        if (this.isList(a) && this.isList(b)) {
+            for (;;) {
+                const left = this.cell(a), right = this.cell(b);
+                if (!left || !right) return left === right;
+                if (!this.sameType(left.head, right.head)) return false;
+                a = left.tail; b = right.tail;
+            }
+        }
+        return false;
+    }
+
+    belongsToType(type: Value, value: Value): boolean {
+        type = this.reference(type); value = this.reference(value);
+        if (type.kind === "type") {
+            if (type.name === "$any") return true;
+            if (type.family) {
+                value = this.demand(value);
+                if (value.kind !== "variant" || value.family !== type.family) return false;
+                if (!type.arguments?.length) return true;
+                if (value.arguments?.length) return this.sameType(type, { kind: "type", name: type.family.name, family: type.family, arguments: value.arguments });
+                const scope = new Env(type.family.env);
+                const arguments_ = type.arguments;
+                const payloads = value.v;
+                type.family.parameters?.forEach((name, index) => scope.setLocal(name, arguments_?.[index] ?? { kind: "type", name: "$any" }));
+                const fields = type.family.fields?.get(value.tag) ?? [];
+                const caller = this.env; this.env = scope;
+                try { return fields.every((field, index) => this.belongsToType(this.eval(field), payloads[index])); }
+                finally { this.env = caller; }
+            }
+            return this.matchesValueType(type.name, type.name === "Mutable" ? value : this.demand(value));
+        }
+        if (type.kind === "functionType") return this.matchesValueType("Function", value);
+        value = this.demand(value);
+        if (type.kind === "record") {
+            if (value.kind !== "record") return false;
+            const fields = new Map(value.v);
+            return type.v.every(([key, field]) => fields.has(key) && this.belongsToType(field, fields.get(key)!));
+        }
+        if (this.isList(type)) {
+            if (!this.isList(value)) return false;
+            const first = this.cell(type);
+            if (!first) return this.cell(value) === null;
+            if (!this.cell(first.tail)) {
+                for (const element of this.elements(value)) if (!this.belongsToType(first.head, element)) return false;
+                return true;
+            }
+            for (;;) {
+                const field = this.cell(type), element = this.cell(value);
+                if (!field || !element) return field === element;
+                if (!this.belongsToType(field.head, element.head)) return false;
+                type = field.tail; value = element.tail;
+            }
+        }
+        return false;
+    }
+
+    isTypeValue(value: Value, seen = new Set<Value>()): boolean {
+        value = this.reference(value);
+        if (value.kind === "type" || value.kind === "functionType") return true;
+        if (seen.has(value)) return false;
+        const path = new Set(seen); path.add(value);
+        if (value.kind === "record") return value.v.every(([, field]) => this.isTypeValue(field, path));
+        if (this.isList(value)) {
+            const spine = new Set<Value>();
+            let rest: Value = value;
+            for (;;) {
+                rest = this.demand(rest);
+                if (spine.has(rest)) return false;
+                spine.add(rest);
+                const cell = this.cell(rest);
+                if (!cell) return true;
+                if (!this.isTypeValue(cell.head, path)) return false;
+                rest = cell.tail;
+            }
+        }
+        return false;
+    }
+
+    variantValue(tag: string, fields: Value[], family?: import("./types.ts").VariantFamily, arguments_: Value[] = []): Value {
+        const scope = new Env(family?.env);
+        family?.parameters?.forEach((name, index) => scope.setLocal(name, arguments_[index] ?? { kind: "type", name: "$any" }));
+        return { kind: "variant", tag, family, arguments: arguments_.length ? arguments_ : undefined,
+            v: fields.map((value, index) => {
+                const spec = family?.fields?.get(tag)?.[index];
+                if (!spec || (spec.t === "var" && /^[a-z]/.test(spec.name) && !arguments_[family?.parameters?.indexOf(spec.name) ?? -1])) return value;
+                return this.defer(() => {
+                    const caller = this.env;
+                    this.env = scope;
+                    try {
+                        const type = this.reference(this.eval(spec));
+                        if (!this.isTypeValue(type)) throw new APNError("runtime", `constructor ${tag} field must describe a type`);
+                        return this.conform(type, value);
+                    } finally { this.env = caller; }
+                });
+            }) };
+    }
+
     matchesValueType(name: string, value: Value): boolean {
+        if (name === "Type") return this.isTypeValue(value);
         if (name === "Pointer") return value.kind === "pointer";
         if (name === "Mutable") return value.kind === "mutable";
         if (isNumeric(value)) return NUMERIC_TYPES.includes(name) && matchesType(name, value);
@@ -1210,7 +1379,7 @@ export class Interpreter {
             if (ref.kind === "functionType") return { kind: "type", name: "Type" };
             if (ref.kind === "contract") return { kind: "functionType", from: ref.from, to: ref.to };
             const value = this.demand(ref);
-            if (value.kind === "variant" && value.family) return { kind: "type", name: value.family.name, family: value.family };
+            if (value.kind === "variant" && value.family) return { kind: "type", name: value.family.name, family: value.family, arguments: value.arguments };
             if (isNumeric(value)) return { kind: "type", name: numericType(value) };
             if (this.isList(value)) return { kind: "type", name: "List" };
             const names: Partial<Record<Value["kind"], string>> = {
@@ -1221,12 +1390,9 @@ export class Interpreter {
             return { kind: "type", name: names[value.kind] ?? value.kind };
         }
         if (name === "isType") {
-            const target = this.demand(argsIn[0]), ref = this.reference(argsIn[1]);
-            if (target.kind !== "type") throw new APNError("runtime", "isType expects a type");
-            if (target.name === "Mutable") return mkBool(ref.kind === "mutable");
-            const value = this.demand(ref);
-            if (target.family) return mkBool(value.kind === "variant" && value.family === target.family);
-            return mkBool(this.matchesValueType(target.name, value));
+            const target = this.reference(argsIn[0]);
+            if (!this.isTypeValue(target)) throw new APNError("runtime", "isType expects a type as its first argument");
+            return mkBool(this.belongsToType(target, argsIn[1]));
         }
         if (["insert", "lookup", "has", "remove"].includes(name)) {
             const value = this.demand(argsIn[0]), map = this.demand(argsIn[1]);
@@ -1439,6 +1605,17 @@ export class Interpreter {
         }));
     }
 
+    // Multi-slot templates zip positionally. Shape errors appear when that
+    // spine is demanded, without traversing infinite inputs or forcing heads.
+    applyListTemplate(templates: Value, values: Value): Value {
+        return this.defer(() => {
+            const template = this.cell(templates), value = this.cell(values);
+            if (template === null && value === null) return mkList([]);
+            if (template === null || value === null) throw new APNError("runtime", "list template and input must have the same length");
+            return { kind: "cons", head: this.defer(() => this.apply(template.head, value.head)), tail: this.applyListTemplate(template.tail, value.tail) };
+        });
+    }
+
     mapList(f: Value, xs: Value): Value {
         return this.defer(() => {
             const cell = this.cell(xs);
@@ -1499,6 +1676,19 @@ export class Interpreter {
             if (binds.has(p.name)) return this.equals(binds.get(p.name)!, v);
             binds.set(p.name, v); return true;
         }
+        if (p.p === "schema") {
+            const type = this.reference(this.eval(p.type));
+            if (!this.isTypeValue(type)) throw new APNError("runtime", "pattern expects a type description");
+            const actual = this.reference(v);
+            if (type.kind === "type") {
+                if (type.alias) return false;
+                if (!type.family) return this.matchPattern({ p: "constr", tag: type.name, args: [p.value] }, actual, binds);
+                const variant = this.demand(actual);
+                if (variant.kind !== "variant" || variant.family !== type.family) return false;
+            }
+            if ((this.isList(type) && !this.isList(this.demand(actual))) || (type.kind === "record" && this.demand(actual).kind !== "record") || (type.kind === "functionType" && !this.matchesValueType("Function", actual))) return false;
+            return this.matchPattern(p.value, this.conform(type, actual), binds);
+        }
         if (p.p === "contract") {
             const f = this.force(v);
             if (!this.matchesValueType("Function", f)) return false;
@@ -1507,10 +1697,18 @@ export class Interpreter {
         if (p.p === "constr" && !TYPE_NAMES.includes(p.tag)) {
             const binding = this.env.get(p.tag);
             if (binding) {
-                const type = this.force(binding);
+                const type = this.reference(binding);
+                if (p.args.length === 1 && type.kind === "type" && !type.family && !type.alias) {
+                    return this.matchPattern({ p: "constr", tag: type.name, args: p.args }, v, binds);
+                }
+                if (p.args.length === 1 && (this.isList(type) || type.kind === "record") && this.isTypeValue(type)) {
+                    const actual = this.demand(v);
+                    if (this.isList(type) ? !this.isList(actual) : actual.kind !== "record") return false;
+                    return this.matchPattern(p.args[0], this.conform(type, actual), binds);
+                }
                 if (type.kind === "type" && type.family) {
                     const actual = this.demand(v);
-                    return p.args.length === 1 && actual.kind === "variant" && actual.family === type.family && this.matchPattern(p.args[0], actual, binds);
+                    return p.args.length === 1 && actual.kind === "variant" && actual.family === type.family && this.matchPattern(p.args[0], this.conform(type, actual), binds);
                 }
                 if (type.kind === "functionType") {
                     const f = this.force(v);

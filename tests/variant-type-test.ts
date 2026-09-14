@@ -7,7 +7,7 @@ function result(source: string): string {
 for (const [source, expected] of [
     ['Maybe x = Just x | Nothing\nf (Maybe x) = match x [Just y -> y, Nothing -> 0]\n[f (Just 123), f Nothing]', '[123, 0]'],
     ['Maybe x = Just x | Nothing\nf (Maybe x) = true\nf _ = false\n[f (Just missing), f Nothing, f 123]', '[true, true, false]'],
-    ['Maybe x = Just x | Nothing\nOther x = Else x\nf (Maybe x) = true\nf _ = false\nf (Else 1)', 'false'],
+    ['Maybe x = Just x | Nothing\nOther x = | Else x\nf (Maybe x) = true\nf _ = false\nf (Else 1)', 'false'],
     ['Maybe x = Just x | Nothing\nmatch (Just 3) [Maybe x -> x]', 'Just 3'],
     ['Maybe x = Just x | Nothing\n[tryMatch (Maybe x -> 1) Nothing, tryMatch (Maybe x -> 1) 2]', '[Matched 1, Unmatched]'],
     ['Maybe x = Just x | Nothing\n[Maybe (Just 1), cast Maybe Nothing, isType Maybe (Just missing), isType Maybe 1, typeOf (Just 1)]', '[Just 1, Nothing, true, false, Maybe]'],
@@ -20,13 +20,13 @@ for (const [source, expected] of [
     });
 }
 Deno.test("parent type checks leave fields of partially-applied constructors lazy", () => {
-    const actual = result('Pairish a b = PairishValue a b\npartial = PairishValue missing\nf (Pairish x) = 42\nf (partial missing)');
+    const actual = result('Pairish a b = | PairishValue a b\npartial = PairishValue missing\nf (Pairish x) = 42\nf (partial missing)');
     if (actual !== '42') throw new Error(actual);
 });
 Deno.test("parent type pattern resolves in the function's module scope", () => {
     const interpreter = new Interpreter();
     interpreter.moduleSources = { option: 'Maybe x = Just x | Nothing\nf (Maybe x) = 42' };
-    const actual = interpreter.renderString(interpreter.run(parseDocument('m = import "std/option"\nMaybe x = Other x\nm.f (m.Just missing)')));
+    const actual = interpreter.renderString(interpreter.run(parseDocument('m = import "std/option"\nMaybe x = | Other x\nm.f (m.Just missing)')));
     if (actual !== '42') throw new Error(actual);
 });
 Deno.test("user's original pattern dispatch prints the payload", () => {
