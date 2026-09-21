@@ -561,7 +561,8 @@ Numeric equality ignores these annotations. See tests/language-cast-test.ts.
 See docs/templates-and-types.md and tests/template-application-test.ts. Scalar
 numbers apply by returning the incoming number, with typed numbers reapplying
 their constructor. Other scalar kinds accept same-kind replacements. [f] maps
-lazily; longer/empty lists zip exactly. Integer application remains indexing.
+lazily; longer/empty lists zip exactly. Strings supply Unicode code-point chars
+through the existing chars primitive. Integer application remains indexing.
 Record application transforms supplied slots, preserves omitted values, appends
 new fields, and distinguishes named from string keys. Assignments apply old
 slots before publishing a scoped copy; the selected slot is now demanded.

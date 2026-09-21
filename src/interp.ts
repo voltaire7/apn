@@ -891,14 +891,15 @@ export class Interpreter {
             case "rationalRange":
             case "floatRange":
             case "range": {
-                const carg = this.demand(arg);
-                if (carg.kind === "int") return this.index(f, carg.v);
+                const value = this.demand(arg);
+                if (value.kind === "int") return this.index(f, value.v);
+                const carg = value.kind === "string" ? this.callNative("chars", [value]) : value;
                 if (this.isList(carg)) {
                     const first = this.cell(f);
                     if (first !== null && this.cell(first.tail) === null) return this.mapList(first.head, carg);
                     return this.applyListTemplate(f, carg);
                 }
-                throw new APNError("runtime", "indexing a list needs an int; template application needs a list");
+                throw new APNError("runtime", "indexing a list needs an int; template application needs a list or string");
             }
             case "record": {
                 // Strings select named fields; lists/records clone, ints select entries.

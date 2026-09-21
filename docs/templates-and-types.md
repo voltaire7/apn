@@ -48,6 +48,19 @@ errors surface when the relevant part is consumed. Finite prefixes of infinite
 inputs remain usable. A template is itself a value, so determining whether it
 is a singleton demands its first two spine cells, but not its element bodies.
 
+Strings can supply the input characters using the same rules:
+
+```apn
+[Char] "hello"          # ['h', 'e', 'l', 'l', 'o']
+[Char, Char] "hi"       # ['h', 'i']
+[c -> 42] "hi"          # [42, 42]
+[Char] ""               # []
+```
+
+Characters follow Unicode code points, like `chars`; an emoji is one element.
+The result is a list, and element transformations remain lazy. Positional
+length checks still apply. This also works through aliases and `cast [Char]`.
+
 Integer application still indexes a list: `[10] 0` returns `10`.
 List-to-list application no longer selects indexes: `[10] [0]` returns `[0]`.
 Use `map xs [0, 2]` to select multiple indexes from `xs`; it always returns a list.

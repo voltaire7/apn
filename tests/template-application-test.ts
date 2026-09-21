@@ -6,6 +6,16 @@ function result(source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
+    ['[Char] "hello"', "['h', 'e', 'l', 'l', 'o']"],
+    ['[Char] ""', '[]'],
+    ['[Char] "a😀é"', "['a', '😀', 'é']"],
+    ['[Char, Char] "hi"', "['h', 'i']"],
+    ['[] ""', '[]'],
+    ['[c -> 42] "hi"', '[42, 42]'],
+    ['take 1 ([(c -> c), missing] "hi")', "['h']"],
+    ['Characters = [Char]\nCharacters "hi"', "['h', 'i']"],
+    ['cast [Char] "hi"', "['h', 'i']"],
+    ['typeOf ([Char] "hi")', 'List'],
     ['0 123', '123'], ['(Int 0) .2', 'Int 0'], ['(Int32 0) 123', 'Int32 123'],
     ['"old" "new"', '"new"'], ['false true', 'true'], ["'a' 'b'", "'b'"],
     ['[(* 2)] [1,2,3,4]', '[2, 4, 6, 8]'],
@@ -75,6 +85,10 @@ for (const [source, error] of [
     ['[Int, Int] [1]', 'same length'],
     ['[Int, Int] [1,2,3]', 'same length'],
     ['[] [1]', 'same length'],
+    ['[] "hi"', 'same length'],
+    ['[Char, Char] "h"', 'same length'],
+    ['[Char, Char] "hey"', 'same length'],
+    ['[Int] "hi"', 'expects a number'],
     ['xs = [Int] []\nxs 0 = 1', 'out of range'],
     ['xs = [Int]\nxs 1 = 1', 'out of range'],
     ['Option a = Some a | None\n(Option Int) (Some (Float .2))', 'lossy conversion'],
