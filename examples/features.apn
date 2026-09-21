@@ -824,6 +824,7 @@ print cast                          # => (Type target) (source value) -> target 
 print (0 123)                       # => 123
 print ((Int 0) .2)                  # => Int 0
 print ([(* 2)] [1, 2, 3, 4])        # => [2, 4, 6, 8]
+print ("a😀" $ cast [Char] $ cast String) # => "a😀"
 print ([Char] "hello")              # => ['h', 'e', 'l', 'l', 'o']
 print ([Char] "a😀")                 # => ['a', '😀']
 print ([Int] [1, 2, 3, 4])          # => [Int 1, Int 2, Int 3, Int 4]
@@ -892,6 +893,7 @@ myTypeOf (Int32 5)  # => Int32
 
 # Standard modules are cached imports, separate from file execution with load.
 import "std"
+print (chars "hello" $ cast String) # => "hello"
 # reverse is implemented in APN with a linear-time accumulator fold.
 print (head (reverse [1..10000]))   # 10000
 print (reverse [1,2,3])             # [3, 2, 1]

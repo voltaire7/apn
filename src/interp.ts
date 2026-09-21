@@ -1308,6 +1308,7 @@ export class Interpreter {
     constructType(name: string, value: Value): Value {
         if (name === "Mutable") return { kind: "mutable", v: value };
         if (name === "HashMap") return this.makeHashMap(value);
+        if (name === "String" && this.isList(value)) return this.callNative("fromChars", [value]);
         if (NUMERIC_TYPES.includes(name)) {
             if (!isNumeric(value)) throw new APNError("runtime", `${name} expects a number`);
             return castNumeric(name, value, !value.typeName);

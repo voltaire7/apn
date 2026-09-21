@@ -60,6 +60,18 @@ Strings can supply the input characters using the same rules:
 Characters follow Unicode code points, like `chars`; an emoji is one element.
 The result is a list, and element transformations remain lazy. Positional
 length checks still apply. This also works through aliases and `cast [Char]`.
+`String` converts a finite character list back to text, using `fromChars`:
+
+```apn
+import "std/text"
+chars "hello" $ cast String          # "hello"
+"hello" $ cast [Char] $ cast String  # "hello"
+String ['h', 'i']                    # "hi"
+String []                            # ""
+```
+
+Every element must be a `Char`; lists of strings or numbers are rejected.
+Constructing a string consumes the entire list.
 
 Integer application still indexes a list: `[10] 0` returns `10`.
 List-to-list application no longer selects indexes: `[10] [0]` returns `[0]`.

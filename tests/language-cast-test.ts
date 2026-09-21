@@ -6,6 +6,13 @@ function result(source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
+    ['import "std/text"\nchars "hello" $ cast String', '"hello"'],
+    ['"a😀é" $ cast [Char] $ cast String', '"a😀é"'],
+    ['cast String []', '""'],
+    ["String ['h', 'i']", '"hi"'],
+    ['String "hi"', '"hi"'],
+    ["Text = String\nText ['h', 'i']", '"hi"'],
+    ["xs = 'a':xs\nString (take 3 xs)", '"aaa"'],
     ['Int .2', 'Int 0'],
     ['Int (-.2)', 'Int 0'],
     ['Int (-1.7)', 'Int -1'],
@@ -45,6 +52,9 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const [source, error] of [
+    ['cast String [1]', 'list of Char'],
+    ['cast String ["h"]', 'list of Char'],
+    ["String ['h', missing]", 'unbound variable'],
     ['Int (Float .2)', 'lossy conversion'],
     ['Float32 (Float .1)', 'lossy conversion'],
     ['Float (Int 9007199254740993)', 'lossy conversion'],
