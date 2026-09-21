@@ -445,7 +445,7 @@ Same fixed-width arithmetic checks overflow. Mixed typed arithmetic tries an
 existing broader operand type losslessly, then falls back to the numeric tower.
 `Number`, `Real`, `Integer`, `Exact`, `Inexact` are aggregate type guards.
 Typed function clauses prefer literal/exact concrete matches, then aggregates,
-then constructor conversions (lossless for typed inputs). Ties retain source order. Untyped clauses retain
+then lossless constructor conversions (for both bare and typed inputs). Ties retain source order. Untyped clauses retain
 source order. Repeated pattern names require equal values.
 `n * _ -> typedValue` repeats using the existing function iteration overload.
 Numeric operands always multiply: `100 * Int 0` returns `Int 0`.

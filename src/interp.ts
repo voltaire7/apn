@@ -846,7 +846,7 @@ export class Interpreter {
                     if (!isNumeric(value)) return score - 1000;
                     if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(pattern.tag)) return score + (matchesType(pattern.tag, value) ? 10 : -1000);
                     if (matchesType(pattern.tag, value)) return score + 30;
-                    try { castNumeric(pattern.tag, value, !value.typeName); return score + 1; } catch { return score - 1000; }
+                    try { castNumeric(pattern.tag, value); return score + 1; } catch { return score - 1000; }
                 }, 0) })).sort((a, b) => b.score - a.score || a.index - b.index);
                 for (const { clause } of ranked) {
                     const binds = new Map<string, Value>();
@@ -1781,7 +1781,7 @@ export class Interpreter {
                     if (!NUMERIC_TYPES.includes(p.tag)) return this.matchesValueType(p.tag, v) && this.matchPattern(p.args[0], v, binds);
                     if (!isNumeric(v)) return false;
                     let converted: Value;
-                    try { converted = numericPayload(castNumeric(p.tag, v, !v.typeName)); } catch { return false; }
+                    try { converted = numericPayload(castNumeric(p.tag, v)); } catch { return false; }
                     return this.matchPattern(p.args[0], converted, binds);
                 }
                 if (v.kind !== "variant" || v.tag !== p.tag) return false;

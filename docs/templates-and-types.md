@@ -20,6 +20,11 @@ typed inputs require lossless conversion. Overflow and nonzero imaginary-part
 loss still error. Strings, chars, booleans, and unit accept their own kind only.
 Functions retain ordinary application, including effects.
 
+Numeric parameter patterns always require lossless conversion, including for
+bare literals. `f (Int x) = x` accepts `2.0` but does not match `.2`; another
+clause may handle it, otherwise application reports no matching clause. Direct
+construction `Int .2` still returns `Int 0`.
+
 ## Lists
 
 | Template | Application |
