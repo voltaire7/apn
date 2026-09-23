@@ -671,6 +671,10 @@ export class Interpreter {
             throw new APNError("runtime", `cannot apply '${e.op}' to ${l.kind} and ${r.kind}`);
         };
         if (isNumeric(l) && isNumeric(r) && ["+", "-", "*", "/", "%"].includes(e.op)) return typedArithmetic(e.op, l, r);
+        if (e.op === "^") {
+            if (!isNumeric(l) || !isNumeric(r)) return bad();
+            return numericNative("expt", [l, r]) as Value;
+        }
         switch (e.op) {
             case "+":
                 if (l.kind === "string" && r.kind === "string") return mkStr(l.v + r.v);

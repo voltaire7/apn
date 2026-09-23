@@ -1015,6 +1015,12 @@ match (Just 123) [
     Nothing
 ]
 
+print (2 ^ 3 ^ 2)              # => 512
+print (-2 ^ 2)                 # => -4
+print (2 ^ -3)                 # => 1/8
+print ((^ 2) 5)                # => 25
+print ((2 ^) 5)                # => 32
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

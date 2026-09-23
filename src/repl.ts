@@ -284,7 +284,7 @@ export function highlightLine(s: string, ternaries: number[] = [0]): string {
             i += comparison.length; continue;
         }
         // Keep assignment and delimiters gray; operators use peach.
-        if ("+-*/%!<>$&|?`@".includes(c)) out += paint(A.operator, c);
+        if ("+-*/%^!<>$&|?`@".includes(c)) out += paint(A.operator, c);
         else if ("(){}[];,:.=".includes(c)) out += paint(A.gray, c);
         else out += c;
         i++;

@@ -2,6 +2,7 @@ import { Interpreter } from "../src/interp.ts";
 import { parse } from "../main.ts";
 
 const sourcePrograms = [
+    "2 ^ 3 ^ 2", "-2 ^ 2", "2 ^ -3",
     '[c -> c] "a😀é"', '[c -> 42] "hi"', '[(c -> c), (c -> c)] "hi"',
     '0 123', '[x -> x * 2] [1,2,3]', '[(x -> x + 1), (x -> x * 2)] [3,4]',
     '42', '1 + 2 * 3', '(1 + 2) * 3', '-12 + 5', '1 / 3 + 1 / 6',

@@ -368,9 +368,19 @@ class Parser {
     }
 
     parseUnary(): Expr {
-        if (this.isSym("-")) { this.next(); return { t: "unop", op: "neg", e: this.parseApp() }; }
-        if (this.isSym("!")) { this.next(); return { t: "unop", op: "not", e: this.parseApp() }; }
-        return this.parseApp();
+        if (this.isSym("-")) { this.next(); return { t: "unop", op: "neg", e: this.parsePower() }; }
+        if (this.isSym("!")) { this.next(); return { t: "unop", op: "not", e: this.parsePower() }; }
+        return this.parsePower();
+    }
+
+    parsePower(): Expr {
+        const left = this.parseApp();
+        // Leave a trailing ^ for the operand-front operator section (2 ^).
+        if (this.isSym("^") && !(this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === ")")) {
+            this.next();
+            return { t: "binop", op: "^", l: left, r: this.parseUnary() };
+        }
+        return left;
     }
 
     parseApp(): Expr {
@@ -866,7 +876,7 @@ class Parser {
     // Operator sections:  (+ 2) -> \x -> x + 2    (2 +) -> \x -> 2 + x
     // (- 2) is NOT a section (no whitespace info in the lexer) — it stays unary
     // negation; use a lambda for that. `(+)` alone is unsupported.
-    static sectionOps = ["+", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=", "++"];
+    static sectionOps = ["^", "+", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=", "++"];
 
     tryOperatorSection(): Expr | null {
         const save = this.i;

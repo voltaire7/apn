@@ -1,7 +1,7 @@
 # The object language's explicit host boundary: values and collection operations.
 # No source evaluation or syntax inspection is exposed here.
 metaPrimitives = HashMap [
-    ["+", (+)], ["-", (x y -> x - y)], ["*", (*)], ["/", (/)], ["%", (%)],
+    ["^", (^)], ["+", (+)], ["-", (x y -> x - y)], ["*", (*)], ["/", (/)], ["%", (%)],
     ["==", (==)], ["!=", (!=)], ["<", (<)], [">", (>)], ["<=", (<=)], [">=", (>=)],
     ["++", (++)], [":", (x xs -> x : xs)],
     ["not", not], ["head", head], ["tail", tail], ["null", null],

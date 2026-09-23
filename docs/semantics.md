@@ -13,6 +13,7 @@ From tightest to loosest binding; operators in the same row have equal precedenc
 | --- | --- | --- |
 | Field access and pluck `.` | Left | `a.b.c` → `(a.b).c` |
 | Function application | Left | `f x y` → `(f x) y` |
+| Exponentiation `^` | Right | `a ^ b ^ c` → `a ^ (b ^ c)` |
 | Unary `-`, `!` | Prefix | `-f x` → `-(f x)` |
 | `*`, `/`, `%` | Left | `a / b * c` → `(a / b) * c` |
 | `+`, `-`, `++` | Left | `a - b - c` → `(a - b) - c` |
@@ -31,7 +32,11 @@ inside range syntax, and `@` belongs to polar numeric literals. Function-type
 arrows associate right: `Int -> Int -> Int` means `Int -> (Int -> Int)`.
 Unbraced lambda bodies consume a full expression; a braced body ends at `}`.
 
-Unary operators take an application as their operand; nest them with parentheses,
+Exponentiation uses the same numeric semantics as `expt`: `2 ^ 10` is `1024`,
+and `2 ^ -3` is `1/8`. `-2 ^ 2` is `-(2 ^ 2)`; use `(-2) ^ 2` for `4`.
+Sections work too: `(^ 2)`, `(2 ^)`, and `(^)`.
+
+Unary operators take a power expression as their operand; nest them with parentheses,
 as in `-(-x)`. For negative function arguments use `f (-1)`. The experimental
 function-minus overload also allows `f -1`, but follows binary subtraction's
 precedence: `sqrt -1 * 4` groups as `sqrt - (1 * 4)`.

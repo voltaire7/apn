@@ -52,3 +52,7 @@ Deno.test("LSP advertises and serves semantic tokens for incomplete source", () 
     const result: any = server.handle({ id: 2, method: "textDocument/semanticTokens/full", params: { textDocument: { uri } } })[0];
     equal(result.result.data.length, 10);
 });
+
+Deno.test("editor exponent operator", () => {
+    equal(colors("2^3"), [["2", "number"], ["^", "operator"], ["3", "number"]]);
+});

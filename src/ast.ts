@@ -3,7 +3,7 @@ import type { DefClause } from "./types.ts";
 
 // ---------------- AST ----------------
 
-export type BinOp = "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | ">" | "<=" | ">="
+export type BinOp = "+" | "-" | "*" | "/" | "%" | "^" | "==" | "!=" | "<" | ">" | "<=" | ">="
     | "&&" | "||" | "++" | ":";
 
 export type UnOp = "neg" | "not";
