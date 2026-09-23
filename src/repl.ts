@@ -472,7 +472,7 @@ export class ReplEditor {
 
     // Repaint the whole chunk from its home row; the home is where the cursor
     // sat when the chunk started, so only relative cursor moves are needed.
-    render(): void {
+    render(finish = false): void {
         const w = this.width();
         if (this.visRow > 0) this.emit(`\x1b[${this.visRow}A`);
         this.emit("\r\x1b[J");
@@ -483,6 +483,8 @@ export class ReplEditor {
             this.emit(p + highlightLine(this.lines[i], ternaries) + "\r\n");
             total += this.rowsOf(i, w);
         }
+        // Submission leaves the cursor below the entire chunk, including wraps.
+        if (finish) { this.visRow = total; return; }
         let curRow = 0;
         for (let i = 0; i < this.row; i++) curRow += this.rowsOf(i, w);
         const x = this.promptW(this.row) + this.col;
@@ -865,7 +867,7 @@ export class ReplEditor {
             }
             if (action === "submit" || action === "quit") {
                 this.pendingKeys = queue.slice(i + 1);
-                this.emit("\r\n");
+                this.render(true);
                 return action === "submit" ? this.trimmedSrc() || "" : null;
             }
             if (i < queue.length) { // stopped at a paste marker

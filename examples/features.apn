@@ -1008,6 +1008,13 @@ print eagerArgs                              # => [] without CLI arguments
 lazyCapture <- [missing, 42]
 print (lazyCapture 1)                         # => 42
 
+# REPL regression: paste this expression, move after `match` on its first line,
+# and press Enter. Output must start below the closing ], preserving every line.
+match (Just 123) [
+    Just x -> print x
+    Nothing
+]
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

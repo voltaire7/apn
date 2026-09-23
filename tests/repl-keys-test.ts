@@ -171,3 +171,24 @@ Deno.test("paste normalizes clipboard line endings without adding indentation", 
         equal(ed.src(), "[\n    1\n]");
     }
 });
+
+for (const width of [80, 16]) {
+    for (const [position, movement, submit] of [
+        ["first line", "\x1b[A\x1b[A\x1b[A\x01\x1b[C\x1b[C\x1b[C\x1b[C\x1b[C", "\r"],
+        ["middle line", "\x1b[A\x1b[A", "\x1b[13;2u"],
+        ["last line", "", "\r"],
+    ]) Deno.test(`submission finishes below input from ${position}, width ${width}`, async () => {
+        const source = "match (Some 123) [\n    Some x -> print x\n    None\n]";
+        const ed = editor("");
+        let output = "";
+        ed.width = () => width;
+        ed.emit = text => { output += text; };
+        ed.pendingKeys = "\x1b[200~" + source + "\x1b[201~" + movement + submit;
+        equal(await ed.readChunk(), source);
+        ed.print("123");
+        // After the final repaint there must be no move back into the input.
+        const finalPaint = output.slice(output.lastIndexOf("\r\x1b[J") + 4);
+        const plain = finalPaint.replace(/\x1b\[[0-9;]*m/g, "");
+        equal(plain, source.split("\n").map((line, index) => (index ? "... " : ">>> ") + line + "\r\n").join("") + "123\r\n");
+    });
+}
