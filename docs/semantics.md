@@ -569,3 +569,21 @@ If the input file cannot be opened, APN exits with status 1 and prints a concise
 message to stderr, for example `error: cannot read "missing.apn": file not found`.
 Directories and permission failures receive similarly short messages, without
 Deno stack traces. The CLI uses the supplied path literally.
+
+## Tail calls and recursive loading
+
+Fully applied APN functions reuse an execution loop for calls in tail position,
+including selected ternary branches, the final expression of a block, and pipes.
+Arguments remain lazy: an unused argument is not evaluated by this optimization.
+Calls with work remaining (such as `1 + recurse n`) still consume stack, and a
+large deferred accumulator can still overflow when finally forced. Use `<-` to
+compute an accumulator on each iteration when appropriate.
+
+A loaded file may finish with `load "itself"`, directly or through a tail-called
+function/action. This repeats without growing the host call stack; Ctrl+C stops
+it and restores the REPL's scope and source directory. Each load still reads
+and executes the file, resolves paths relative to that file, and merges its
+exports when it returns. Pending module scopes/merges are retained on the heap,
+so recursive loading is stack-safe but not constant-memory. Ordinary tail calls
+have no pending module merges. `load` before another statement returns normally
+before that statement executes; circular loads are not rejected.

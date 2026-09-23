@@ -1,0 +1,3 @@
+innerValue = 20
+counter $ set (counter - 1)
+counter > 0 ? load "../outer" : ()

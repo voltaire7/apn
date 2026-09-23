@@ -1021,6 +1021,12 @@ print (2 ^ -3)                 # => 1/8
 print ((^ 2) 5)                # => 25
 print ((2 ^) 5)                # => 32
 
+# Tail calls reuse the evaluator loop; arguments remain lazy.
+tailCountdown 0 = 42
+tailCountdown n = tailCountdown (n - 1)
+print (tailCountdown 10000)          # => 42
+# A file ending in load "itself" likewise repeats until Ctrl+C.
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

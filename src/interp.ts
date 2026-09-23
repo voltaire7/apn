@@ -13,6 +13,14 @@ import { parse, exprToSource, patternSource, rangeExpr } from "./parser.ts";
 
 // ---------------- Evaluator ----------------
 
+// Internal control transfers, caught only by their matching execution loop.
+class TailCall {
+    constructor(readonly body: Expr, readonly env: Env) {}
+}
+class TailLoad {
+    constructor(readonly path: Value, readonly env: Env) {}
+}
+
 const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 
 // Native registry: name -> arity. One source of truth for env registration
@@ -104,9 +112,9 @@ export class Interpreter {
         for (const [name, value] of this.preludeBindings) outer.setLocal(name, value);
     }
 
-    run(program: TopLevel[]): Value {
+    run(program: TopLevel[], tailLoad = false): Value {
         let last: Value = { kind: "unit" };
-        for (const tl of program) {
+        for (const [index, tl] of program.entries()) {
             if (tl.t === "type") {
                 for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) {
                     const previous = this.env.map.get(name);
@@ -138,8 +146,9 @@ export class Interpreter {
                 continue;
             }
             // a bare expression statement: 0-arg functions and thunks RUN here
-            const value = this.eval(tl.value);
-            last = tl.value.t === "import" ? { kind: "unit" } : this.runStmt(value);
+            const tail = tailLoad && index === program.length - 1;
+            const value = this.eval(tl.value, tail);
+            last = tl.value.t === "import" ? { kind: "unit" } : this.runStmt(value, tail);
         }
         return last;
     }
@@ -416,14 +425,14 @@ export class Interpreter {
 
     // Run a 0-arg function (an action def: f = { ... } / f = print "hi").
     // Nullary native actions follow the same demand rules as APN action closures.
-    callBlockFn(v: Value): Value {
+    callBlockFn(v: Value, tailLoad = false): Value {
         if (v.kind === "native" && v.arity === 0) return v.invoke ? v.invoke([]) : this.callNative(v.name, [], v.tag);
         if (v.kind !== "closure" || v.params.length !== 0) return v;
         if (v.mutableValue) return v.mutableValue;
         const old = this.env;
         this.env = v.env;
         try {
-            const result = this.force(this.eval(v.body));
+            const result = this.force(this.eval(v.body, tailLoad));
             if (result.kind === "mutable" || result.kind === "pointer") v.mutableValue = result;
             return result;
         } finally {
@@ -433,28 +442,30 @@ export class Interpreter {
 
     // Demand only the outer value. Actions remain repeatable, while argument
     // thunks share the result of an action within a call.
-    reference(v: Value): Value {
+    reference(v: Value, tailLoad = false): Value {
         const original = v;
         v = this.force(v);
         while ((v.kind === "closure" && v.params.length === 0) || (v.kind === "native" && v.arity === 0)) {
             checkInterrupt();
-            v = this.force(this.callBlockFn(v));
+            v = this.force(this.callBlockFn(v, tailLoad));
         }
         if (original.kind === "thunk" || original.kind === "deferred") original.value = v;
         return v;
     }
 
-    demand(v: Value): Value {
-        v = this.reference(v);
-        while (v.kind === "mutable") v = this.reference(v.v);
+    demand(v: Value, tailLoad = false): Value {
+        v = this.reference(v, tailLoad);
+        while (v.kind === "mutable") v = this.reference(v.v, tailLoad);
         return v;
     }
 
-    runStmt(v: Value): Value {
-        return this.demand(v);
+    runStmt(v: Value, tailLoad = false): Value {
+        return this.demand(v, tailLoad);
     }
 
-    eval(e: Expr): Value {
+    eval(e: Expr, tailLoad = false): Value {
+        const caller = this.env;
+        let forceResult = false;
         this.stack++;
         try {
             if (this.stack > STACK_LIMIT) {
@@ -462,180 +473,195 @@ export class Interpreter {
                     hint: "unbounded strict recursion? Use a lazy cons tail to produce lists incrementally.",
                 });
             }
-            let r: Value;
-            switch (e.t) {
-                case "functionType": r = this.resolveFunctionSpec(e.spec); break;
-                case "computedRange": {
-                    const real = (expression: Expr): Real => {
-                        const value = this.demand(this.eval(expression));
-                        if (value.kind !== "int" && value.kind !== "float" && value.kind !== "rational") throw new APNError("runtime", "range bounds must be real numbers");
-                        return value;
-                    };
-                    r = this.eval(rangeExpr(real(e.lo), e.second === null ? null : real(e.second), e.hi === null ? null : real(e.hi)));
-                    break;
-                }
-                case "import": r = this.importStandard(e.module); break;
-                case "numeric": r = e.v; break;
-                case "rationalRange": r = { kind: "rationalRange", lo: e.lo, step: e.step, hi: e.hi }; break;
-                case "int": r = mkInt(e.v); break;
-                case "float": r = { kind: "float", v: e.v }; break;
-                case "bool": r = mkBool(e.v); break;
-                case "string": r = mkStr(e.v); break;
-                case "char": r = { kind: "char", v: e.v }; break;
-                case "unit": r = { kind: "unit" }; break;
-                case "placeholder": throw new APNError("runtime", "not implemented: '_' placeholder");
-                case "var": {
-                    const v = this.env.get(e.name);
-                    if (v === undefined) {
-                        const near = didYouMean(e.name, envNames(this.env));
-                        throw new APNError("runtime", `unbound variable '${e.name}'`, {
-                            hint: near ? `did you mean '${near}'?` : undefined,
-                        });
+            for (;;) {
+                checkInterrupt();
+                let r: Value = { kind: "unit" };
+                let next: TailCall | undefined;
+                switch (e.t) {
+                    case "functionType": r = this.resolveFunctionSpec(e.spec); break;
+                    case "computedRange": {
+                        const real = (expression: Expr): Real => {
+                            const value = this.demand(this.eval(expression));
+                            if (value.kind !== "int" && value.kind !== "float" && value.kind !== "rational") throw new APNError("runtime", "range bounds must be real numbers");
+                            return value;
+                        };
+                        r = this.eval(rangeExpr(real(e.lo), e.second === null ? null : real(e.second), e.hi === null ? null : real(e.hi)));
+                        break;
                     }
-                    r = v;
-                    break;
-                }
-                case "binop": r = this.evalBinop(e); break;
-                case "unop": {
-                    const v = this.demand(this.eval(e.e));
-                    if (e.op === "neg") {
-                        if (!isNumeric(v)) throw new APNError("runtime", "negation expects a number");
-                        r = v.typeName ? castNumeric(v.typeName, negate(v)) : negate(v);
-                    } else {
-                        r = v.kind === "bool" ? mkBool(!v.v) : { kind: "unit" };
-                    }
-                    break;
-                }
-                case "app":
-                    // ARGUMENTS ARE LAZY (Haskell): the argument is wrapped, unevaluated,
-                    // and forced/ran only where a real value is needed
-                    r = this.apply(this.eval(e.f), { kind: "thunk", body: e.a, env: this.env });
-                    break;
-                case "patternLambda": r = { kind: "clauseFn", name: "<lambda>", clauses: [{ params: e.params, body: e.body, guard: e.guard }], arity: e.params.length, env: this.env, applied: [] }; break;
-                case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
-                case "ternary": {
-                    const c = this.demand(this.eval(e.cond));
-                    r = (c.kind === "bool" && c.v) ? this.eval(e.then) : this.eval(e.els);
-                    break;
-                }
-                case "range": r = { kind: "range", lo: e.lo, step: e.step, hi: e.hi }; break;
-                case "floatRange": r = { kind: "floatRange", lo: e.lo, step: e.step, hi: e.hi }; break;
-                case "list": r = { kind: "lazyList", exprs: e.v, env: this.env }; break;
-                case "record": r = { kind: "record", v: e.v.map(([k, x]) => [k, this.eval(x)] as [string, Value]) }; break;
-                case "recordAccess": {
-                    // Resolve aliases/actions to the outer record, leaving its fields lazy.
-                    const rec = this.demand(this.eval(e.rec));
-                    let field: string;
-                    if (typeof e.field === "string") {
-                        field = e.field;
-                    } else {
-                        const kv = this.demand(this.eval(e.field));
-                        if (kv.kind !== "string" && kv.kind !== "int" && kv.kind !== "float") {
-                            throw new Error("Runtime: dynamic field (parenthesized key) must be a string or number");
+                    case "import": r = this.importStandard(e.module); break;
+                    case "numeric": r = e.v; break;
+                    case "rationalRange": r = { kind: "rationalRange", lo: e.lo, step: e.step, hi: e.hi }; break;
+                    case "int": r = mkInt(e.v); break;
+                    case "float": r = { kind: "float", v: e.v }; break;
+                    case "bool": r = mkBool(e.v); break;
+                    case "string": r = mkStr(e.v); break;
+                    case "char": r = { kind: "char", v: e.v }; break;
+                    case "unit": r = { kind: "unit" }; break;
+                    case "placeholder": throw new APNError("runtime", "not implemented: '_' placeholder");
+                    case "var": {
+                        const v = this.env.get(e.name);
+                        if (v === undefined) {
+                            const near = didYouMean(e.name, envNames(this.env));
+                            throw new APNError("runtime", `unbound variable '${e.name}'`, {
+                                hint: near ? `did you mean '${near}'?` : undefined,
+                            });
                         }
-                        field = kv.kind === "string" ? stringKey(kv.v) : String(kv.v);
+                        r = v;
+                        break;
                     }
-                    if (rec.kind !== "record") throw new Error("record access on non-record");
-                    r = this.recordField(rec, field);
-                    break;
-                }
-                case "pluck": {
-                    let rec = this.callBlockFn(this.eval(e.rec));
-                    if (rec.kind === "thunk") rec = this.unpackThunk(rec);
-                    if (rec.kind !== "record") throw new Error("pluck on non-record");
-                    const byKey = new Map(rec.v);
-                    if (e.entries.every((x) => typeof x === "string")) {
-                        const out: Value[] = [];
-                        for (const n of e.entries as string[]) {
-                            const v = byKey.get(n);
-                            if (v === undefined) {
-                                this.missingField(rec, n);
-                            }
-                            out.push(v);
+                    case "binop": r = this.evalBinop(e); break;
+                    case "unop": {
+                        const v = this.demand(this.eval(e.e));
+                        if (e.op === "neg") {
+                            if (!isNumeric(v)) throw new APNError("runtime", "negation expects a number");
+                            r = v.typeName ? castNumeric(v.typeName, negate(v)) : negate(v);
+                        } else {
+                            r = v.kind === "bool" ? mkBool(!v.v) : { kind: "unit" };
                         }
-                        r = { kind: "list", v: out };
-                    } else {
-                        const out: Array<[string, Value]> = [];
-                        for (const [src, dst] of e.entries as Array<[string, string]>) {
-                            const v = byKey.get(src);
-                            if (v === undefined) {
-                                this.missingField(rec, src);
+                        break;
+                    }
+                    case "app": {
+                        // Arguments stay lazy; a completed call can hand its body
+                        // straight back to this loop instead of nesting eval calls.
+                        const result = this.apply(this.eval(e.f), { kind: "thunk", body: e.a, env: this.env }, false, true, tailLoad);
+                        if (result instanceof TailCall) next = result; else r = result;
+                        break;
+                    }
+                    case "patternLambda": r = { kind: "clauseFn", name: "<lambda>", clauses: [{ params: e.params, body: e.body, guard: e.guard }], arity: e.params.length, env: this.env, applied: [] }; break;
+                    case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
+                    case "ternary": {
+                        const c = this.demand(this.eval(e.cond));
+                        next = new TailCall((c.kind === "bool" && c.v) ? e.then : e.els, this.env);
+                        break;
+                    }
+                    case "range": r = { kind: "range", lo: e.lo, step: e.step, hi: e.hi }; break;
+                    case "floatRange": r = { kind: "floatRange", lo: e.lo, step: e.step, hi: e.hi }; break;
+                    case "list": r = { kind: "lazyList", exprs: e.v, env: this.env }; break;
+                    case "record": r = { kind: "record", v: e.v.map(([k, x]) => [k, this.eval(x)] as [string, Value]) }; break;
+                    case "recordAccess": {
+                        // Resolve aliases/actions to the outer record, leaving its fields lazy.
+                        const rec = this.demand(this.eval(e.rec));
+                        let field: string;
+                        if (typeof e.field === "string") {
+                            field = e.field;
+                        } else {
+                            const kv = this.demand(this.eval(e.field));
+                            if (kv.kind !== "string" && kv.kind !== "int" && kv.kind !== "float") {
+                                throw new Error("Runtime: dynamic field (parenthesized key) must be a string or number");
                             }
-                            out.push([dst, v]);
+                            field = kv.kind === "string" ? stringKey(kv.v) : String(kv.v);
+                        }
+                        if (rec.kind !== "record") throw new Error("record access on non-record");
+                        r = this.recordField(rec, field);
+                        break;
+                    }
+                    case "pluck": {
+                        let rec = this.callBlockFn(this.eval(e.rec));
+                        if (rec.kind === "thunk") rec = this.unpackThunk(rec);
+                        if (rec.kind !== "record") throw new Error("pluck on non-record");
+                        const byKey = new Map(rec.v);
+                        if (e.entries.every((x) => typeof x === "string")) {
+                            const out: Value[] = [];
+                            for (const n of e.entries as string[]) {
+                                const v = byKey.get(n);
+                                if (v === undefined) {
+                                    this.missingField(rec, n);
+                                }
+                                out.push(v);
+                            }
+                            r = { kind: "list", v: out };
+                        } else {
+                            const out: Array<[string, Value]> = [];
+                            for (const [src, dst] of e.entries as Array<[string, string]>) {
+                                const v = byKey.get(src);
+                                if (v === undefined) {
+                                    this.missingField(rec, src);
+                                }
+                                out.push([dst, v]);
+                            }
+                            r = { kind: "record", v: out };
+                        }
+                        break;
+                    }
+                    case "setFields": {
+                        // eager: read the OLD record and the RHS fully BEFORE building the
+                        // new one, so  vec.[x, y] = vec.[y, x]  swaps correctly
+                        let rec = this.callBlockFn(this.eval(e.rec));
+                        if (rec.kind === "thunk") rec = this.unpackThunk(rec);
+                        if (this.isList(rec) && this.cell(rec) === null) rec = mkList([]);
+                        let base: Array<[string, Value]> | null = null;
+                        if (rec.kind === "record") base = rec.v;
+                        else if (rec.kind === "list" && rec.v.length === 0) base = []; // [] seeds a record
+                        if (base === null) {
+                            throw new APNError("runtime", `cannot set a field on a ${rec.kind}`, {
+                                hint: "only records accept fields (an empty list promotes to a record)",
+                            });
+                        }
+                        const rhsValue = this.demand(this.eval(e.value));
+                        const rhs = this.isList(rhsValue) ? mkList(this.items(rhsValue).map((x) => this.demand(x))) : rhsValue;
+                        if (rhs.kind !== "list") {
+                            throw new APNError("runtime", "field assignment needs a list of values on the right");
+                        }
+                        if (rhs.v.length !== e.entries.length) {
+                            throw new APNError(
+                                "runtime",
+                                `${e.entries.length} field${e.entries.length === 1 ? "" : "s"} need ${e.entries.length} value${e.entries.length === 1 ? "" : "s"} (got ${rhs.v.length})`,
+                            );
+                        }
+                        const out = base.map(([k, v]) => [k, v] as [string, Value]);
+                        for (let i = 0; i < e.entries.length; i++) {
+                            const key = e.entries[i];
+                            const idx = out.findIndex(([k]) => k === key);
+                            if (idx === -1) out.push([e.entries[i], rhs.v[i]]);
+                            else out[idx] = [e.entries[i], this.demand(this.apply(base[idx][1], rhs.v[i]))];
                         }
                         r = { kind: "record", v: out };
+                        break;
                     }
-                    break;
-                }
-                case "setFields": {
-                    // eager: read the OLD record and the RHS fully BEFORE building the
-                    // new one, so  vec.[x, y] = vec.[y, x]  swaps correctly
-                    let rec = this.callBlockFn(this.eval(e.rec));
-                    if (rec.kind === "thunk") rec = this.unpackThunk(rec);
-                    if (this.isList(rec) && this.cell(rec) === null) rec = mkList([]);
-                    let base: Array<[string, Value]> | null = null;
-                    if (rec.kind === "record") base = rec.v;
-                    else if (rec.kind === "list" && rec.v.length === 0) base = []; // [] seeds a record
-                    if (base === null) {
-                        throw new APNError("runtime", `cannot set a field on a ${rec.kind}`, {
-                            hint: "only records accept fields (an empty list promotes to a record)",
-                        });
+                    case "pipe": {
+                        const result = this.apply(this.eval(e.f), { kind: "thunk", body: e.x, env: this.env }, false, true, tailLoad);
+                        if (result instanceof TailCall) next = result; else r = result;
+                        break;
                     }
-                    const rhsValue = this.demand(this.eval(e.value));
-                    const rhs = this.isList(rhsValue) ? mkList(this.items(rhsValue).map((x) => this.demand(x))) : rhsValue;
-                    if (rhs.kind !== "list") {
-                        throw new APNError("runtime", "field assignment needs a list of values on the right");
-                    }
-                    if (rhs.v.length !== e.entries.length) {
-                        throw new APNError(
-                            "runtime",
-                            `${e.entries.length} field${e.entries.length === 1 ? "" : "s"} need ${e.entries.length} value${e.entries.length === 1 ? "" : "s"} (got ${rhs.v.length})`,
-                        );
-                    }
-                    const out = base.map(([k, v]) => [k, v] as [string, Value]);
-                    for (let i = 0; i < e.entries.length; i++) {
-                        const idx = out.findIndex(([k]) => k === e.entries[i]);
-                        if (idx === -1) out.push([e.entries[i], rhs.v[i]]);
-                        else out[idx] = [e.entries[i], this.demand(this.apply(base[idx][1], rhs.v[i]))];
-                    }
-                    r = { kind: "record", v: out };
-                    break;
-                }
-                case "pipe": r = this.apply(this.eval(e.f), { kind: "thunk", body: e.x, env: this.env }); break;
-                case "block": {
-                    const child = new Env(this.env);
-                    const old = this.env;
-                    this.env = child;
-                    try {
-                        r = { kind: "unit" };
-                        for (let si = 0; si < e.stmts.length; si++) {
-                            const s = e.stmts[si];
-                            if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
-                            else if (s.t === "patDef") r = this.evalPatBinding(s);
-                            else if (si === e.stmts.length - 1) {
-                                // LAST statement = TAIL POSITION: the value flows up UNCALLED —
-                                // a returned 0-arg function is trampolined by the CALLER's
-                                // runStmt loop, so  func = { print "hi"; func }  loops forever
-                                // at constant stack (Ctrl+C breaks it).
-                                r = this.eval(s);
-                            } else r = this.runStmt(this.eval(s)); // bare name = call
+                    case "block": {
+                        const child = new Env(this.env);
+                        const old = this.env;
+                        this.env = child;
+                        try {
+                            r = { kind: "unit" };
+                            for (let si = 0; si < e.stmts.length; si++) {
+                                const s = e.stmts[si];
+                                if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
+                                else if (s.t === "patDef") r = this.evalPatBinding(s);
+                                else if (si === e.stmts.length - 1) {
+                                    forceResult = true;
+                                    next = new TailCall(s, child);
+                                    break;
+                                } else r = this.runStmt(this.eval(s)); // bare name = call
+                            }
+                            // Reveal the last value without traversing a returned list.
+                            // A returned action is run by the caller's demand loop.
+                            if (!next) r = this.force(r);
+                        } finally {
+                            this.env = old;
                         }
-                        // Reveal the last value without traversing a returned list.
-                        // A returned action is run by the caller's demand loop.
-                        r = this.force(r);
-                    } finally {
-                        this.env = old;
+                        break;
                     }
-                    break;
+                    case "stmDef":
+                        throw new Error("Runtime: internal error — statement definition used as an expression");
+                    case "patDef":
+                        r = this.evalPatBinding(e);
+                        break;
                 }
-                case "stmDef":
-                    throw new Error("Runtime: internal error — statement definition used as an expression");
-                case "patDef":
-                    r = this.evalPatBinding(e);
-                    break;
+                if (next) {
+                    e = next.body;
+                    this.env = next.env;
+                    continue;
+                }
+                return forceResult ? this.force(r) : r;
             }
-            return r;
         } finally {
+            this.env = caller;
             this.stack--;
         }
     }
@@ -767,7 +793,9 @@ export class Interpreter {
         throw new Error("Runtime: cannot compare these values");
     }
 
-    apply(f: Value, arg: Value, probe = false): Value {
+    apply(f: Value, arg: Value, probe?: boolean): Value;
+    apply(f: Value, arg: Value, probe: boolean, tail: true, tailLoad: boolean): Value | TailCall;
+    apply(f: Value, arg: Value, probe = false, tail = false, tailLoad = false): Value | TailCall {
         // A lazy 0-param def used as a function (`f = g; f 1`) is a thunk — run it.
         f = this.force(f);
         if (isNumeric(f)) {
@@ -819,6 +847,7 @@ export class Interpreter {
                 const child = new Env(f.env);
                 child.setLocal(f.params[0], arg);
                 if (f.params.length === 1) {
+                    if (tail) return new TailCall(f.body, child);
                     const old = this.env;
                     this.env = child;
                     try { return this.eval(f.body); } finally { this.env = old; }
@@ -834,6 +863,7 @@ export class Interpreter {
                 if (args.length < f.arity) return { ...f, applied: args };
                 if (f.invoke) return f.invoke(args);
                 if (f.name === "__constr") return this.variantValue(f.tag!, args, f.family);
+                if (f.name === "load" && tailLoad) throw new TailLoad(this.demand(args[0]), this.env);
                 return this.callNative(f.name, args, f.tag);
             }
             case "clauseFn": {
@@ -879,6 +909,7 @@ export class Interpreter {
                             this.env = child;
                             try { return this.eval(clause.body); } finally { this.env = caller; }
                         });
+                        if (tail) return new TailCall(clause.body, child);
                         return this.eval(clause.body);
                     } finally { this.env = old; }
                 }
@@ -1556,52 +1587,58 @@ export class Interpreter {
                     throw new APNError("runtime", "exit status must fit a signed 32-bit integer");
                 }
                 return Deno.exit(Number(a.v));
-            case "load": {
-                // Import a file, resolving the path relative to the CURRENT source file.
-                // Two effects: (1) the loaded file's own definitions are merged into the
-                // current scope ("include"); (2) it returns a module record of them, so
-                //   numbers = load "lib/number"; numbers.sq 4 works.
-                // Inside a `{ }` block the merge stays scoped to that block.
-                if (a.kind !== "string") throw new Error("Runtime: load expects a file path string");
-                // Extensionless names identify APN source; explicit filenames stay literal.
-                const filename = a.v.slice(a.v.lastIndexOf("/") + 1);
-                const p = filename && !filename.includes(".") ? `${a.v}.apn` : a.v;
-                const path =
-                    this.sourceDir === "." || p.startsWith("/") ? p : `${this.sourceDir}/${p}`;
-                let src: string;
-                try {
-                    src = Deno.readTextFileSync(path);
-                } catch (err) {
-                    throw new Error(`Runtime: load: can't read '${p}' (looked in '${path}'): ${(err as Error).message}`);
-                }
-                let program: TopLevel[];
-                try {
-                    program = parse(src);
-                } catch (err) {
-                    throw new Error(`Runtime: load: parse error in '${path}': ${(err as Error).message}`);
-                }
-                const caller = this.env;
-                const oldDir = this.sourceDir;
-                this.sourceDir = dirname(path);
-                const loaded = new Env(caller);
-                this.env = loaded;
-                try {
-                    this.run(program);
-                } finally {
-                    this.env = caller;
-                    this.sourceDir = oldDir;
-                }
-                // Merge the loaded file's own definitions into the current scope,
-                // and return them as a module record (namespaced access: core.halt).
-                const fields: Array<[string, Value]> = [];
-                for (const [k, val] of loaded.map) {
-                    caller.setLocal(k, val);
-                    fields.push([k, val]);
-                }
-                return { kind: "record", v: fields };
-            }
+            case "load": return this.loadFile(a);
+
         }
         throw new Error(`Runtime: unknown native '${name}'`);
+    }
+
+    // Files retain include/module semantics. Pending merges live on the heap,
+    // so a tail load never retains a JavaScript evaluator stack frame.
+    loadFile(pathValue: Value): Value {
+        const caller = this.env, callerDir = this.sourceDir;
+        const frames: Array<{ caller: Env; loaded: Env }> = [];
+        try {
+            for (;;) {
+                checkInterrupt();
+                if (pathValue.kind !== "string") throw new APNError("runtime", "load expects a file path string");
+                const filename = pathValue.v.slice(pathValue.v.lastIndexOf("/") + 1);
+                const p = filename && !filename.includes(".") ? `${pathValue.v}.apn` : pathValue.v;
+                const path = this.sourceDir === "." || p.startsWith("/") ? p : `${this.sourceDir}/${p}`;
+                let src: string;
+                try { src = Deno.readTextFileSync(path); }
+                catch (err) { throw new APNError("runtime", `load: can't read '${p}' (looked in '${path}'): ${(err as Error).message}`); }
+                let program: TopLevel[];
+                try { program = parse(src); }
+                catch (err) { throw new APNError("runtime", `load: parse error in '${path}': ${(err as Error).message}`); }
+                const loaded = new Env(this.env);
+                frames.push({ caller: this.env, loaded });
+                this.env = loaded;
+                this.sourceDir = dirname(path);
+                try { this.run(program, true); }
+                catch (step) {
+                    if (!(step instanceof TailLoad)) throw step;
+                    pathValue = step.path;
+                    this.env = step.env;
+                    continue;
+                }
+                let result: Value = { kind: "record", v: [] };
+                while (frames.length) {
+                    checkInterrupt();
+                    const frame = frames.pop()!;
+                    const fields: Array<[string, Value]> = [];
+                    for (const [key, value] of frame.loaded.map) {
+                        frame.caller.setLocal(key, value);
+                        fields.push([key, value]);
+                    }
+                    result = { kind: "record", v: fields };
+                }
+                return result;
+            }
+        } finally {
+            this.env = caller;
+            this.sourceDir = callerDir;
+        }
     }
 
     iterateList(f: Value, value: Value): Value {

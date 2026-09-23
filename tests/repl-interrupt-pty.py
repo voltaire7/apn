@@ -25,10 +25,12 @@ def read_for(seconds):
 
 try:
     assert b">>>" in read_for(1), "REPL failed to start"
-    for source in (b"[0..]", b"x = x", b"x"):
+    for source in (b"[0..]", b"x = x", b"x",
+                   b'load "tests/fixtures/tail-load/forever"',
+                   b"loop n = loop n", b"loop 0"):
         os.write(terminal, source + b"\r")
         read_for(0.25)
-        if source == b"x = x":
+        if source in (b"x = x", b"loop n = loop n"):
             continue
         os.write(terminal, b"\x03")
         output = read_for(0.7)

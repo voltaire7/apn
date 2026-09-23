@@ -577,3 +577,13 @@ constructor declarations. Keep family identity separate from constructor names.
 
 The metacircular evaluator handles list templates through its own meApply so
 object-language closures work. Run its self-evaluation demo when changing it.
+
+## Tail execution
+
+Interpreter.eval consumes internal TailCall transfers for fully applied APN
+functions, ternary branches, and block tails. Keep lazy arguments and action
+semantics intact. TailLoad transfers only propagate from a loaded program's
+final expression, including tail-called functions/actions. loadFile owns the
+iterative loop and pending export merges, restoring caller scope/sourceDir on
+success, error, or interruption. Pending load scopes use heap memory; non-tail
+calls retain the depth guard. Test tests/tail-call-test.ts and the REPL PTY check.

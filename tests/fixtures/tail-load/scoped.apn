@@ -1,0 +1,4 @@
+outside = 1
+{
+    load "repeat"
+}

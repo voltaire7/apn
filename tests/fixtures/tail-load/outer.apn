@@ -1,0 +1,2 @@
+outerValue = 10
+load "nested/inner"
