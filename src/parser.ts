@@ -1066,6 +1066,9 @@ class Parser {
 
             const t = this.peek();
             if (t.k === "eof") break;
+            if (this.lineIndent(t) !== 0) {
+                throw new Error("Parser: top-level statements must not be indented");
+            }
 
             if (this.isEagerBinding()) {
                 out.push(this.parseEagerBinding() as TopLevel);

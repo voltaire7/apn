@@ -1036,6 +1036,10 @@ do [print "hi", print "there"]       # => hi, then there
 print (do [1, 2, 42])                 # => 42
 print (do [])                         # => ()
 
+# A new top-level statement after a closed block must start at column one.
+# f = { print "hi" }
+#     print "outside"               # parse error: unexpected top-level indentation
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------
