@@ -230,3 +230,9 @@ for drawing methods, events, the browser build command, and current scope.
 `match value handlers`, `tryMatch handler value`, `Matched`, and `Unmatched`
 are available without importing std. The dispatcher is written in `lib/match.apn`.
 See [pattern functions and contracts](pattern-functions.md).
+
+A bare `load "file"` in the REPL runs the file without automatically displaying
+its exported record. This avoids forcing unused exports such as infinite lists.
+Explicit output in the file still prints. Use `module <- load "file"` to retain
+the record, then inspect selected fields. Explicit `print (load "file")` still
+requests the full record and can stream indefinitely if it contains infinite lists.

@@ -1,0 +1,4 @@
+v = [x: 1, y: 2, z: 3]
+[halt] = import "std"
+unused = missing
+print "loaded"

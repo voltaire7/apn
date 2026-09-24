@@ -681,6 +681,7 @@ print (foldl (a b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 #              fires (exits 0) when it is actually USED.
 # ---------------------------------------------------------
 load "../lib/number"               # extensionless name; sq joins THIS scope
+# In the REPL, bare load does not echo the returned module or force its exports.
 import "std/system"               # halt is a deferred action
 print (sq 5)                # => 25
 

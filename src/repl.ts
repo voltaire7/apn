@@ -75,8 +75,19 @@ function runSourceValue(src: string, interp: Interpreter, binding = false): Valu
         throw new APNError("runtime", (err as Error).message.replace(/^Runtime: /, ""));
     }
     if (binding) return null; // an assignment binds — never forced, never echoed
+    // A bare load executes a file; displaying all exports could force infinite
+    // lists or failing lazy bindings. Explicit print and module access still work.
+    const last = program[program.length - 1];
+    if (last?.t === "expr" && isLoadCommand(last.value)) return null;
     val = interp.force(val);
     return val.kind === "unit" ? null : val;
+}
+
+function isLoadCommand(e: Expr): boolean {
+    if (e.t === "app") return e.f.t === "var" && e.f.name === "load";
+    if (e.t === "pipe") return e.f.t === "var" && e.f.name === "load";
+    if (e.t === "block" && e.stmts.length === 1) return isLoadCommand(e.stmts[0]);
+    return false;
 }
 
 // Does the chunk END in a binding (def / pattern binding / type)? Those are
