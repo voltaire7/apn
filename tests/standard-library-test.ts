@@ -117,3 +117,30 @@ Deno.test("reverse uses APN typed clauses and is available from either module", 
         if (i.env.get("textReverse") !== undefined) throw new Error("obsolete prefixed helper");
     }
 });
+
+for (const eager of ['=', '<-']) {
+    for (const cached of [false, true]) Deno.test(`selective import ${eager}, cached ${cached}`, () => {
+        const i = new Interpreter();
+        if (cached) i.importStandard('std', false);
+        const before = new Set(i.env.map.keys());
+        i.run(parse(`[halt] ${eager} import "std"`));
+        const added = [...i.env.map.keys()].filter(name => !before.has(name));
+        if (JSON.stringify(added) !== '["halt"]') throw new Error(`leaked exports: ${added}`);
+        if (!i.env.get('halt')) throw new Error('missing selected export');
+        i.run(parse('import "std"'));
+        if (!i.env.get('fibonacci')) throw new Error('bare import must still open exports');
+    });
+}
+Deno.test('selective imports rename fields and preserve unselected bindings', () => {
+    const i = new Interpreter();
+    i.run(parse('fibonacci = 123; [halt: stop] = import "std"'));
+    if (!i.env.get('stop') || i.env.get('halt')) throw new Error('wrong selected names');
+    if (i.renderString(i.run(parse('fibonacci'))) !== '123') throw new Error('overwrote unselected binding');
+});
+Deno.test('failed selective imports leave the caller scope intact', () => {
+    const i = new Interpreter();
+    const before = [...i.env.map.keys()].join(',');
+    let failed = false;
+    try { i.run(parse('[missingExport] = import "std"')); } catch { failed = true; }
+    if (!failed || [...i.env.map.keys()].join(',') !== before) throw new Error('failed import leaked names');
+});

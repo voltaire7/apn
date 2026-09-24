@@ -45,7 +45,7 @@ export class Interpreter {
     private modules = new Map<string, Extract<Value, { kind: "record" }>>();
     private importing = new Set<string>();
 
-    importStandard(module: string): Value {
+    importStandard(module: string, open = true): Value {
         const names = ["type", "function", "option", "sequence", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5", "ffi"];
         const name = module === "std" ? "std" : module.startsWith("std/") && names.includes(module.slice(4)) ? module.slice(4) : null;
         if (!name) throw new APNError("runtime", `unknown module '${module}'`);
@@ -88,7 +88,7 @@ export class Interpreter {
                 this.importing.delete(module);
             }
         }
-        for (const [name, value] of record.v) this.env.setLocal(name, value);
+        if (open) for (const [name, value] of record.v) this.env.setLocal(name, value);
         return record;
     }
 
@@ -281,7 +281,10 @@ export class Interpreter {
     // Evaluates the RHS, matches the pattern, and binds the destructured names
     // in the CURRENT environment (top level or the enclosing block's env).
     evalPatBinding(b: { pattern: Pattern; value: Expr; eager?: boolean }): Value {
-        const evaluated = this.eval(b.value);
+        // Selecting fields must not first open every export into this scope.
+        const evaluated = b.value.t === "import"
+            ? this.importStandard(b.value.module, false)
+            : this.eval(b.value);
         const v = b.eager ? this.reference(evaluated) : this.force(evaluated);
         const binds = new Map<string, Value>();
         if (!this.matchPattern(b.pattern, v, binds)) {

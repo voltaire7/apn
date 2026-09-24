@@ -673,13 +673,16 @@ print (foldl (a b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 #              (1) as a STATEMENT it merges the file's own definitions into
 #                  the current scope (an `include`);
 #              (2) as a VALUE it returns them as a MODULE record, so
-#                  numbers = load "../lib/number"; numbers.sq 4 ...  is namespaced access.
+#                  numbers = load "../lib/number"; numbers.sq 4 ... is namespaced access.
 #              Inside a { } block the merge stays scoped to that block.
 #    halt      is NOT a builtin. It is defined in std/system — the standard
 #              library — as  `halt = exit 0`. Expression 0-arg defs are LAZY, so
 #              importing std/system doesn't terminate the program; `halt` only
 #              fires (exits 0) when it is actually USED.
 # ---------------------------------------------------------
+# Selective imports bind only the requested names.
+[halt: selectedHalt] = import "std/system"
+# selectedHalt is available; other exports are not introduced by this binding.
 load "../lib/number"               # extensionless name; sq joins THIS scope
 # In the REPL, bare load does not echo the returned module or force its exports.
 import "std/system"               # halt is a deferred action

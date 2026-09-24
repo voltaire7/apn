@@ -15,7 +15,7 @@ for (const command of ['load "main"', '"main" $ load', '(load "main")']) {
                 if (i.env.get('v')) throw new Error('block exports leaked');
             } else {
                 if (runSource('v.x', i) !== '1') throw new Error('exports lost');
-                if (runSource('take 5 fibonacci', i) !== '[0, 1, 1, 2, 3]') throw new Error('lazy export lost');
+                if (runSource('take 5 infinite', i) !== '[0, 1, 2, 3, 4]') throw new Error('lazy export lost');
             }
             runSource('module <- load "main"', i, true);
             if (runSource('module.v', i) !== '[x: 1, y: 2, z: 3]') throw new Error('module record lost');
