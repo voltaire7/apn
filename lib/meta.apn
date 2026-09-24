@@ -1,7 +1,7 @@
 import "std/text"
-load "meta/parser.apn"
-load "meta/evaluator.apn"
-load "meta/primitives.apn"
+load "meta/parser"
+load "meta/evaluator"
+load "meta/primitives"
 
 # Parse once, then evaluate syntax in our own environment and closure machinery.
 metaEval source = {

@@ -30,7 +30,7 @@ mean [1,2]                         # Some 3/2
 
 Load individual modules with `import "std/text"`, `import "std/map"`, etc.
 See the [standard library reference](docs/standard-library.md) or run
-`apn examples/standard-library.apn`. Imports are cached; `load "file.apn"`
+`apn examples/standard-library.apn`. Imports are cached; `load "file"`
 executes a file each time, relative to the current source file.
 
 APN can also evaluate its own core. See the

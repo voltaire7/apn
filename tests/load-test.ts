@@ -1,7 +1,7 @@
 import { Interpreter } from "../src/interp.ts";
 import { parse } from "../src/parser.ts";
 
-for (const name of ["number", "number.apn"]) {
+for (const name of ["number"]) {
     for (const absolute of [false, true]) Deno.test(`load ${name}: ${absolute ? "absolute" : "source-relative"}`, () => {
         const i = new Interpreter();
         const directory = new URL("../lib/", import.meta.url).pathname;
@@ -28,4 +28,24 @@ Deno.test("std/system exposes halt as a deferred action", () => {
     const halt = i.env.get("halt");
     if (!halt) throw new Error("halt was not exported");
     if (!i.renderString(module).includes("halt:")) throw new Error("module inspection lost halt");
+});
+
+for (const path of ['number.apn', 'number.APN', 'number.txt', '../lib/number.apn', '/tmp/number.apn', '', 'folder/']) {
+    Deno.test(`load rejects explicit extensions or missing names: ${path}`, () => {
+        const i = new Interpreter();
+        const scope = i.env, directory = i.sourceDir;
+        let rejected = false;
+        try { i.run(parse(`load ${JSON.stringify(path)}`)); }
+        catch (error) {
+            if (error instanceof Error && error.message.includes('extensionless file name')) rejected = true;
+            else throw error;
+        }
+        if (!rejected || i.env !== scope || i.sourceDir !== directory) throw new Error('expected clean rejection');
+    });
+}
+Deno.test('load validates computed paths too', () => {
+    const i = new Interpreter();
+    try { i.run(parse('path = "number" ++ ".apn"; load path')); }
+    catch (error) { if (error instanceof Error && error.message.includes('extensionless file name')) return; throw error; }
+    throw new Error('explicit extension accepted');
 });

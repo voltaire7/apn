@@ -591,3 +591,6 @@ calls retain the depth guard. Test tests/tail-call-test.ts and the REPL PTY chec
 `do` is an ordinary prelude function defined in lib/do.apn and exported by
 std/function. It sequences a lazy list with eager result binding, returning the
 last result (unit for an empty list). Keep effect ordering and sharing tests.
+
+`load` requires an extensionless basename and always appends .apn. Reject explicit
+extensions before file access; directory components may still contain dots.

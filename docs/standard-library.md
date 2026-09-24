@@ -19,7 +19,7 @@ exports without reexecuting the module. Existing local names are replaced by
 imported names. A bare import statement is silent. In an expression, imports return a record: `s = import "std"` allows `s.sum`.
 Like other lazy definitions, this form takes effect when `s` is demanded.
 
-`load "file"` (or `load "file.apn"`) remains file execution: paths are relative to the source file,
+`load "file"` remains file execution (the `.apn` extension must be omitted): paths are relative to the source file,
 loading executes again each time, and it uses the caller's scope. `import` currently
 recognizes only the bundled modules below; use `load` for other APN files.
 Names without an extension receive `.apn`; explicitly supplied extensions are

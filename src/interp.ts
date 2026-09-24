@@ -1605,7 +1605,12 @@ export class Interpreter {
                 checkInterrupt();
                 if (pathValue.kind !== "string") throw new APNError("runtime", "load expects a file path string");
                 const filename = pathValue.v.slice(pathValue.v.lastIndexOf("/") + 1);
-                const p = filename && !filename.includes(".") ? `${pathValue.v}.apn` : pathValue.v;
+                if (!filename || filename.includes(".")) {
+                    throw new APNError("runtime", "load expects an extensionless file name", {
+                        hint: 'use load "file", not load "file.apn"; .apn is added automatically',
+                    });
+                }
+                const p = `${pathValue.v}.apn`;
                 const path = this.sourceDir === "." || p.startsWith("/") ? p : `${this.sourceDir}/${p}`;
                 let src: string;
                 try { src = Deno.readTextFileSync(path); }

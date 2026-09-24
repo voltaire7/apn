@@ -1,2 +1,2 @@
-load "sonar-sweep.apn"
+load "sonar-sweep"
 print (solveSonar (readInput ()))

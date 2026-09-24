@@ -4,7 +4,7 @@ import { parse } from "../main.ts";
 function interpreter(): Interpreter {
     const i = new Interpreter();
     i.sourceDir = new URL("../examples/advent-of-code/", import.meta.url).pathname;
-    i.run(parse('load "sonar-sweep.apn"; load "lanternfish.apn"; load "hill-climbing.apn"'));
+    i.run(parse('load "sonar-sweep"; load "lanternfish"; load "hill-climbing"'));
     return i;
 }
 function result(i: Interpreter, source: string): string { return i.renderString(i.run(parse(source))); }

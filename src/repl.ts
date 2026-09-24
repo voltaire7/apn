@@ -394,7 +394,7 @@ function helpText(): string {
         `Builtins: head tail take drop length null enumerate map filter zipWith`,
         `          foldl foldr pairs format intToString toString parse exit load step`,
         ``,
-        `load "lib/number"  loads lib/number.apn (.apn is optional): as a`,
+        `load "lib/number"  loads lib/number.apn (omit the extension): as a`,
         `               statement it merges into the current scope; as a`,
         `               value it returns a module (numbers.sq 4). halting is`,
         `               std/system's  halt = exit 0  (lazy: fires only when used).`,
