@@ -229,7 +229,7 @@ export function showValue(v: Value): string {
 }
 
 const REPL_KEYWORDS = new Set(["import"]);
-const NATIVE_NAMES = new Set(["cast", ...NATIVES.map(([n]) => n)]);
+const NATIVE_NAMES = new Set(["cast", "do", ...NATIVES.map(([n]) => n)]);
 
 // Syntax-highlight one buffer line (best-effort, purely cosmetic).
 export function highlightLine(s: string, ternaries: number[] = [0]): string {
@@ -371,6 +371,7 @@ function helpText(): string {
         `  Bool true; String "hi"; Char 'a'; Unit (); List [1,2]; Record [x: 1]`,
         `  Function (x -> x); Type Int; Variant (YourConstructor value)`,
         `  Int/UInt, Int8..Int128/UInt8..UInt128, Float/Float32, Fraction, Complex`,
+        `  do [print "hi", 42] — run expressions in order; return the last result`,
         `  Int32 123; cast Int 3.7; value $ cast Float32; typeOf value`,
         `  myTypeOf (t x) = print t   (bind the runtime type and value)`,
         `  f (Int x) = ...; f (Number x) = ... (typed overloads)`,

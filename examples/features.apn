@@ -1027,6 +1027,11 @@ tailCountdown n = tailCountdown (n - 1)
 print (tailCountdown 10000)          # => 42
 # A file ending in load "itself" likewise repeats until Ctrl+C.
 
+# do sequences expressions like a block, returning the last result.
+do [print "hi", print "there"]       # => hi, then there
+print (do [1, 2, 42])                 # => 42
+print (do [])                         # => ()
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

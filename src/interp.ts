@@ -1,6 +1,7 @@
 import { stringKey, isStringKey, keyText, keySource } from "./record-keys.ts";
 import matchSource from "../lib/match.apn" with { type: "text" };
 import typeSource from "../lib/type.apn" with { type: "text" };
+import doSource from "../lib/do.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, numericHash } from "./type-system.ts";
 import { parseNumberText, isNumeric, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
@@ -61,14 +62,14 @@ export class Interpreter {
             for (const [name, arity] of [...NATIVES, ...STANDARD_NATIVES]) builtins.setLocal(name, { kind: "native", name, arity, applied: [] });
             for (const [name, value] of this.preludeBindings) builtins.setLocal(name, value);
             const scope = new Env(builtins);
-            const nativeExports: Record<string, string[]> = {
+            const builtinExports: Record<string, string[]> = {
                 ffi: ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer"],
                 io: ["readFile", "readStdin", "getArgs"],
-                function: ["fail", "seq"],
+                function: ["fail", "seq", "do"],
                 sequence: [],
                 text: ["chars", "fromChars", "upper", "lower"],
             };
-            for (const exported of nativeExports[name] ?? []) scope.setLocal(exported, builtins.get(exported)!);
+            for (const exported of builtinExports[name] ?? []) scope.setLocal(exported, builtins.get(exported)!);
             try {
                 const source = this.moduleSources
                     ? this.moduleSources[name] ?? (() => { throw new APNError("runtime", `module '${module}' is not bundled`); })()
@@ -107,7 +108,8 @@ export class Interpreter {
         this.env.setLocal("fail", { kind: "native", name: "fail", arity: 1, applied: [] });
         this.run(parse(matchSource));
         this.run(parse(typeSource));
-        for (const name of ["match", "Matched", "Unmatched", "cast"]) this.preludeBindings.set(name, this.env.get(name)!);
+        this.run(parse(doSource));
+        for (const name of ["match", "Matched", "Unmatched", "cast", "do"]) this.preludeBindings.set(name, this.env.get(name)!);
         this.env = outer;
         for (const [name, value] of this.preludeBindings) outer.setLocal(name, value);
     }

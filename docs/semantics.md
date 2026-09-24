@@ -587,3 +587,21 @@ exports when it returns. Pending module scopes/merges are retained on the heap,
 so recursive loading is stack-safe but not constant-memory. Ordinary tail calls
 have no pending module merges. `load` before another statement returns normally
 before that statement executes; circular loads are not rejected.
+
+## Sequencing expression lists
+
+`do` is an ordinary APN function available in the prelude and `std/function`:
+
+```apn
+do [print "hi", print "there"]
+answer = do [print "calculating", 42]
+do []  # ()
+```
+
+It evaluates each list element in order and returns the last result, like a
+block of expression statements. Empty input returns unit. An error stops the
+sequence. It accepts computed lists too, and processes the spine incrementally.
+List elements retain normal sharing: reusing an already-evaluated list does not
+rerun its memoized expressions. For a repeatable action, construct the list in
+the action body, as in `greet = do [print "hi"]`. This does not add statement
+syntax inside lists: local definitions still belong in blocks.

@@ -14,7 +14,7 @@ export type Token =
 
 export const KEYWORDS = new Set([
     "where",
-    "do", "import", "true", "false", "rec",
+    "import", "true", "false", "rec",
 ]);
 
 const SYMBOLS = [

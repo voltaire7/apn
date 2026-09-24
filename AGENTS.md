@@ -548,8 +548,8 @@ ordinary string-pattern function definitions for unbound/function names.
 
 ## APN-defined cast
 
-The default prelude embeds lib/match.apn and lib/type.apn. Editor launchers must
-allow Deno to read both text imports. cast is a clauseFn, not a native; its
+The default prelude embeds lib/match.apn, lib/type.apn, and lib/do.apn. Editor launchers must
+allow Deno to read all three text imports. cast is a clauseFn, not a native; its
 source is `cast (Type target) (source value) = target value`. Expose std/type
 through module loading and browser bundles. numericPayload removes numeric
 annotations without changing the original value. Numeric patterns extract
@@ -587,3 +587,7 @@ final expression, including tail-called functions/actions. loadFile owns the
 iterative loop and pending export merges, restoring caller scope/sourceDir on
 success, error, or interruption. Pending load scopes use heap memory; non-tail
 calls retain the depth guard. Test tests/tail-call-test.ts and the REPL PTY check.
+
+`do` is an ordinary prelude function defined in lib/do.apn and exported by
+std/function. It sequences a lazy list with eager result binding, returning the
+last result (unit for an empty list). Keep effect ordering and sharing tests.

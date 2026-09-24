@@ -70,7 +70,7 @@ errors, exhaustiveness, or type errors. `_` placeholders are valid syntax.
 ## Server capabilities
 
 `apn --lsp` runs the stdio language server. The Neovim integration invokes
-`deno run --allow-read=/path/to/apn/lib/match.apn,/path/to/apn/lib/type.apn /path/to/apn/main.ts --lsp`
+`deno run --allow-read=/path/to/apn/lib/match.apn,/path/to/apn/lib/type.apn,/path/to/apn/lib/do.apn /path/to/apn/main.ts --lsp`
 directly. This grants read access only to the bundled text prelude needed during
 startup; it does not grant arbitrary file access or network permissions. Standard output is reserved for LSP messages.
 
