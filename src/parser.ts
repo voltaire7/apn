@@ -299,22 +299,22 @@ class Parser {
     }
 
     parsePipe(): Expr {
-        let e = this.parseReverseApply();
+        let e = this.parseComposition();
         while (this.isSym("$")) {
             this.next();
-            const f = this.parseReverseApply();
+            const f = this.parseComposition();
             e = { t: "pipe", x: e, f };
         }
         return e;
     }
 
-    // Low-precedence application: f \ g \ x is f (g x).
-    parseReverseApply(): Expr {
+    // Right-associative composition: (f \ g) x is f (g x).
+    parseComposition(): Expr {
         const f = this.parseTernary();
         if (!this.isSym("\\")) return f;
         this.next();
         this.skipContinuation();
-        return { t: "app", f, a: this.parseReverseApply() };
+        return { t: "binop", op: "\\", l: f, r: this.parseComposition() };
     }
 
     // Ternary:  cond ? a : b    (right-associative, lower precedence than comparison)
@@ -887,7 +887,7 @@ class Parser {
     // Operator sections:  (+ 2) -> \x -> x + 2    (2 +) -> \x -> 2 + x
     // (- 2) is NOT a section (no whitespace info in the lexer) — it stays unary
     // negation; use a lambda for that. `(+)` alone is unsupported.
-    static sectionOps = ["^", "+", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=", "++"];
+    static sectionOps = ["\\", "^", "+", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=", "++"];
 
     tryOperatorSection(): Expr | null {
         const save = this.i;

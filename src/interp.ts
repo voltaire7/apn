@@ -702,6 +702,20 @@ export class Interpreter {
             throw new APNError("runtime", `cannot apply '${e.op}' to ${l.kind} and ${r.kind}`);
         };
         if (isNumeric(l) && isNumeric(r) && ["+", "-", "*", "/", "%"].includes(e.op)) return typedArithmetic(e.op, l, r);
+        if (e.op === "\\") {
+            const functions = ["closure", "clauseFn", "native", "type", "contract", "functionType"];
+            if (!functions.includes(l.kind) || !functions.includes(r.kind)) {
+                throw new APNError("runtime", "composition expects functions on both sides of '\\'");
+            }
+            const env = new Env(this.env);
+            env.setLocal("f", l);
+            env.setLocal("g", r);
+            return {
+                kind: "closure", params: ["x"], env,
+                body: { t: "app", f: { t: "var", name: "f" },
+                    a: { t: "app", f: { t: "var", name: "g" }, a: { t: "var", name: "x" } } },
+            };
+        }
         if (e.op === "^") {
             if (!isNumeric(l) || !isNumeric(r)) return bad();
             return numericNative("expt", [l, r]) as Value;

@@ -1046,11 +1046,13 @@ map (x -> {
     result * result
 }) [1,2,3,4] $ print              # => [4, 16, 36, 64]
 
-# Reverse application avoids parentheses around a nested call.
+# Composition builds a function from two functions.
 [x: 1, y: 2, z: 3] * [field, value] -> {
-    print \ format "%: %" [field, value]
+    (print \ format "%: %") [field, value]
 }                                       # => x: 1, y: 2, z: 3 (one per line)
-print \ sum \ [1, 2, 3]                 # => 6
+isEvenForComposition n = n % 2 == 0
+calculateEven bottom top = (sum \ filter isEvenForComposition) [bottom..top]
+print (calculateEven 1 10)               # => 30
 
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
