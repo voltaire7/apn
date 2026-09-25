@@ -538,7 +538,7 @@ identifier/numeric field keys retain their raw text. Use keySource for source
 and display, keyText for pairs/iteration/HashMap conversion and host symbols.
 Never expose the prefix as an APN string or accept one as a named lookup.
 The parser shares this encoding across literals, access, patterns, updates,
-and plucks. Dynamic dot strings select string keys; string application selects
+and plucks. Literal quoted dot access selects string keys; string application selects
 named fields. Tests: tests/record-keys-test.ts.
 
 On an existing record, `obj "field" = value` is a scoped named-field update,

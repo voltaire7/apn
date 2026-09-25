@@ -11,8 +11,8 @@ for (const [name, source, expected] of [
     ["named field access", 'obj = [field: 123]\n[obj.field, obj "field"]', '[123, 123]'],
     ["string key access", 'obj = ["field": 123]\nobj."field"', '123'],
     ["coexisting keys", 'obj = [field: 123, "field": 456]\n[obj.field, obj "field", obj."field"]', '[123, 123, 456]'],
-    ["dynamic string keys", 'obj = [field: 123, "field": 456]\nkey = "field"\n[obj key, obj.(key)]', '[123, 456]'],
-    ["numeric fields versus positions", 'obj = [9: 90, 1: 10, "1": 100]\n[obj.1, obj "1", obj 1, obj."1", obj.(1), obj.("1")]', '[10, 10, ["1", 10], 100, 10, 100]'],
+    ["computed named keys", 'obj = [field: 123, "field": 456]\nkey = "field"\n[obj key, obj."field"]', '[123, 456]'],
+    ["numeric fields versus positions", 'obj = [9: 90, 1: 10, "1": 100]\n[obj.1, obj "1", obj 1, obj."1"]', '[10, 10, ["1", 10], 100]'],
     ["zero field versus position", 'arr = [other: 7, 0: 42, "0": 99]\n[arr "0", arr 0, arr."0"]', '[42, ["other", 7], 99]'],
     ["list indexing", 'arr = [10, 20]\narr 0', '10'],
     ["HashMap index types", 'arr = HashMap [[0, 10], ["0", 20]]\n[arr 0, arr "0"]', '[10, 20]'],
@@ -80,3 +80,10 @@ Deno.test("string keys containing NUL do not collide with other keys", () => {
     const actual = result(`obj = [x: 1, "x": 2, ${key}: 3]\n[obj.x, obj."x", obj.${key}]`);
     if (actual !== "[1, 2, 3]") throw new Error(actual);
 });
+
+for (const source of ['v.("x")', 'v.(key)', 'v.(1)', 'v.("x") = 2']) {
+    Deno.test(`reject removed computed dot access: ${source}`, () => {
+        try { parseDocument(source); } catch { return; }
+        throw new Error("accepted removed computed dot access");
+    });
+}

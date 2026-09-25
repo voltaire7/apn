@@ -328,7 +328,7 @@ export class Interpreter {
             }
             case "pipe": return mkList([mkStr("$"), this.sexprOf(e.x), this.sexprOf(e.f)]);
             case "recordAccess":
-                return mkList([mkStr("."), this.sexprOf(e.rec), typeof e.field === "string" ? mkStr(keySource(e.field)) : this.sexprOf(e.field)]);
+                return mkList([mkStr("."), this.sexprOf(e.rec), mkStr(keySource(e.field))]);
             default: return mkList([mkStr(e.t)]);
         }
     }
@@ -546,18 +546,8 @@ export class Interpreter {
                     case "recordAccess": {
                         // Resolve aliases/actions to the outer record, leaving its fields lazy.
                         const rec = this.demand(this.eval(e.rec));
-                        let field: string;
-                        if (typeof e.field === "string") {
-                            field = e.field;
-                        } else {
-                            const kv = this.demand(this.eval(e.field));
-                            if (kv.kind !== "string" && kv.kind !== "int" && kv.kind !== "float") {
-                                throw new Error("Runtime: dynamic field (parenthesized key) must be a string or number");
-                            }
-                            field = kv.kind === "string" ? stringKey(kv.v) : String(kv.v);
-                        }
                         if (rec.kind !== "record") throw new Error("record access on non-record");
-                        r = this.recordField(rec, field);
+                        r = this.recordField(rec, e.field);
                         break;
                     }
                     case "pluck": {

@@ -32,7 +32,7 @@ export type Expr =
     | { t: "ternary"; cond: Expr; then: Expr; els: Expr }
     | { t: "list"; v: Expr[] }
     | { t: "record"; v: Array<[string, Expr]> }
-    | { t: "recordAccess"; rec: Expr; field: string | Expr }
+    | { t: "recordAccess"; rec: Expr; field: string }
     | { t: "pluck"; rec: Expr; entries: Array<string | [string, string]> }
     | { t: "setFields"; rec: Expr; entries: string[]; value: Expr }
     | { t: "floatRange"; lo: number; step: number; hi: number | null }

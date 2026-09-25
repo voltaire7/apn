@@ -243,13 +243,13 @@ print keyKinds.1              # => 20
 nested = [inner: [z: 99]]
 print nested.inner.z     # => 99
 
-# keys may be quoted strings or numbers; access matches, and a
-# parenthesized expression evaluates to a DYNAMIC key
+# Keys may be quoted strings or numbers; dot access uses literal keys.
 weird = ["my field": 1, 123: 2]
 print weird."my field"           # => 1
 print weird.123                  # => 2
-key = "my field"
-print weird.(key)                # => 1
+key = "123"
+print (weird key)                # => 2 (computed named field)
+# weird.(key)                    # parse error: computed dot access removed
 print (enumerate [10, 20, 30])   # => [0: 10, 1: 20, 2: 30]  int keys
 
 # ---------------------------------------------------------

@@ -44,7 +44,7 @@ example("range arithmetic is exact", "[9007199254740993..9007199254740993+2]", "
 example("range integer division agrees with runtime division", "[0..5/2]", "[0, 1, 2]");
 example("range patterns compare exact integer bounds", "match 9007199254740993 [[9007199254740993..9007199254740995] -> true, _ -> false]", "true");
 example("literal patterns match exact large integers", "pick 9007199254740993 = 1\npick n = 0\npick 9007199254740992", "0");
-example("large record keys round-trip exactly", "r = [9007199254740993: 7]\n[r.9007199254740993, r.(9007199254740993)]", "[7, 7]");
+example("large record keys round-trip exactly", "r = [9007199254740993: 7]\n[r.9007199254740993, r \"9007199254740993\"]", "[7, 7]");
 example("large take counts end at a finite list", "take 9007199254740993 [1, 2]", "[1, 2]");
 example("large drop counts end at a finite list", "drop 9007199254740993 [1, 2]", "[]");
 example("negative list and record indexes still work", '[[1, 2] (-1), [a: 1, b: 2] (-1)]', '[2, ["b", 2]]');

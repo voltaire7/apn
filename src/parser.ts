@@ -410,7 +410,7 @@ class Parser {
         return f;
     }
 
-    // Postfix:  quoted OBJECT access  a.b, a."b", a.123, a.(expr)  and the
+    // Postfix:  quoted OBJECT access  a.b, a."b", a.123  and the
     // quoted PLUCK
     //   a.[x, y]            -> list of those fields' values
     //   a.[x: v1, y: v2]    -> smaller object: field x kept under the key v1
@@ -442,10 +442,7 @@ class Parser {
                 if (mixed.size > 1) throw new Error("Parser: pluck cannot mix bare names and 'key: name' pairs");
                 e = { t: "pluck", rec: e, entries };
             } else if (t.k === "sym" && (t as { v: string }).v === "(") {
-                this.next(); // (
-                const dyn = this.parseExpr();
-                this.expectSym(")");
-                e = { t: "recordAccess", rec: e, field: dyn };
+                throw new Error('Parser: computed dot access is not supported; use record key for named fields or record."key" for string keys');
             } else {
                 this.next();
                 e = { t: "recordAccess", rec: e, field: this.keyTok(t) };
@@ -1315,9 +1312,7 @@ export function exprToSource(e: Expr): string {
         case "ternary": return `${exprToSource(e.cond)} ? ${exprToSource(e.then)} : ${exprToSource(e.els)}`;
         case "pipe": return `${exprToSource(e.x)} $ ${exprToSource(e.f)}`;
         case "recordAccess":
-            return typeof e.field === "string"
-                ? `${exprToSource(e.rec)}.${keySource(e.field)}`
-                : `${exprToSource(e.rec)}.(${exprToSource(e.field)})`;
+            return `${exprToSource(e.rec)}.${keySource(e.field)}`;
         case "pluck":
             return `${exprToSource(e.rec)}.[${e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`).join(", ")}]`;
         case "setFields":

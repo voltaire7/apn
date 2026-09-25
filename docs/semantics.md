@@ -97,14 +97,14 @@ obj = [field: 123, "field": 456, 1: 10, "1": 100]
 | Access | Selects | Result above |
 | --- | --- | --- |
 | `obj.field` or `obj "field"` | Named field `field` | `123` |
-| `obj."field"` or `obj.("field")` | String key `"field"` | `456` |
-| `obj.1`, `obj "1"`, or `obj.(1)` | Numeric-named field `1` | `10` |
+| `obj."field"` | String key `"field"` | `456` |
+| `obj.1` or `obj "1"` | Numeric-named field `1` | `10` |
 | `obj."1"` | String key `"1"` | `100` |
 | `obj 1` | Entry at position 1 | `["field", 456]` |
 
 Application evaluates its argument: `key = "field"; obj key` selects a named
-field. Dynamic dot access evaluates its key too, but a string selects a string
-key: `obj.(key)`. Neither access falls back to the other key kind. Missing keys
+field. Computed dot access (`obj.(key)`) is not supported. Literal quoted dot
+access selects string keys; neither form falls back to the other key kind. Missing keys
 raise an error. Numeric field names retain their existing normalized spelling.
 List indexing requires integers: `arr 0` indexes a list, while `arr "0"` errors.
 HashMap application likewise keeps numeric `0` and string `"0"` distinct keys.
