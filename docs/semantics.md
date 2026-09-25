@@ -88,7 +88,8 @@ error; ordinary recursive list spines such as `x = 1:x` still stream.
 
 ## Record fields, string keys, and positions
 
-Named fields and quoted string keys have distinct identities. Both may coexist:
+Every record key is an ordinary string. Bare field names hide the quotes; quoted
+field syntax includes literal quote characters in the key. Both may coexist:
 
 ```apn
 obj = [field: 123, "field": 456, 1: 10, "1": 100]
@@ -97,14 +98,15 @@ obj = [field: 123, "field": 456, 1: 10, "1": 100]
 | Access | Selects | Result above |
 | --- | --- | --- |
 | `obj.field` or `obj "field"` | Named field `field` | `123` |
-| `obj."field"` | String key `"field"` | `456` |
+| `obj."field"` or `obj "\"field\""` | String containing `"field"`, quotes included | `456` |
 | `obj.1` or `obj "1"` | Numeric-named field `1` | `10` |
-| `obj."1"` | String key `"1"` | `100` |
-| `obj 1` | Entry at position 1 | `["field", 456]` |
+| `obj."1"` or `obj "\"1\""` | String containing `"1"`, quotes included | `100` |
+| `obj 1` | Entry at position 1 | `["\"field\"", 456]` |
 
 Application evaluates its argument: `key = "field"; obj key` selects a named
-field. Computed dot access (`obj.(key)`) is not supported. Literal quoted dot
-access selects string keys; neither form falls back to the other key kind. Missing keys
+field. Include quote characters in the argument to select a quoted field.
+`pairs`, iteration, and conversion to HashMap preserve the entire key string.
+Computed dot access (`obj.(key)`) is not supported. Missing keys
 raise an error. Numeric field names retain their existing normalized spelling.
 List indexing requires integers: `arr 0` indexes a list, while `arr "0"` errors.
 HashMap application likewise keeps numeric `0` and string `"0"` distinct keys.
@@ -112,14 +114,15 @@ HashMap application likewise keeps numeric `0` and string `"0"` distinct keys.
 Printing preserves key quotation. Field updates (`obj.field = value`,
 `obj."field" = value`), record cloning, and plucks (`obj.[field, "field"]`)
 preserve both identities. On an existing record, `obj "field" = value` updates
-or adds the named field, just like `obj.field = value`. The key must be one
+or adds the key string `field`, just like `obj.field = value`. Strings containing
+quotes likewise update the corresponding quoted field. The key must be one
 string literal; `obj "1" = value` updates numeric-named field `1`. It reads the
 RHS before rebinding, applies the existing slot to it, makes a scoped copy, and
 preserves the old binding on an immediate failure. A new field is inserted unchanged. On an unbound name or an existing function, `f "x" = value` remains
 a string-pattern function clause.
 
 Destructuring `[field: a, "field": b]` selects each
-kind explicitly; the bare pattern `[field]` selects only the named field.
+key explicitly; the bare pattern `[field]` selects only the named field.
 Renamed plucks such as `obj.["field": value]` create named destination fields.
 
 `pairs`, positional record access, and record iteration still expose key **text**
@@ -497,13 +500,13 @@ and `Int 3 * Int 2` returns `Int 6`.
 
 ## HashMap
 
-`HashMap [["x", 123]]` constructs from an association list; `HashMap ["x": 123]`
+`HashMap [["x", 123]]` constructs from an association list; `HashMap [x: 123]`
 constructs from a record. Empty construction is `HashMap []`. Keys may be finite
 numbers, strings, chars, booleans, or unit. Numerically equal keys share an entry
 regardless of exactness or numeric type; distinct strings/chars stay distinct.
 Duplicate keys keep the last value. Insertion order is preserved for traversal.
 
-`HashMap [] $ insert ["x": 123]` returns a map containing x. `insert` accepts a
+`HashMap [] $ insert [x: 123]` returns a map containing x. `insert` accepts a
 record or association list; `remove key map` returns a map without the key.
 Updates preserve the old map. `lookup key map` or `map key` retrieves a value,
 raising an error when absent; use `has key map` when absence is expected.

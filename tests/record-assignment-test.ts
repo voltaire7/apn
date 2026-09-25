@@ -33,7 +33,6 @@ for (const [assignment, error] of [
     ['obj key = 10', 'one string literal'],
     ['obj "x" "y" = 10', 'one string literal'],
     ['obj 0 = 10', 'one string literal'],
-    ['obj "\u0000x" = 10', 'NUL'],
 ] as const) {
     Deno.test(`failed record assignment preserves binding: ${assignment}`, () => {
         const i = new Interpreter();
@@ -48,3 +47,10 @@ for (const [assignment, error] of [
         }
     });
 }
+
+Deno.test("record application accepts NUL as an ordinary key character", () => {
+    const i = new Interpreter();
+    const source = 'obj = [x: 1]\nobj "\u0000x" = 10\n[obj "\u0000x", obj.x]';
+    const actual = i.renderString(i.run(parseDocument(source)));
+    if (actual !== "[10, 1]") throw new Error(actual);
+});

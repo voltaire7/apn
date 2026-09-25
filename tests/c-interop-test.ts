@@ -92,7 +92,12 @@ Deno.test({ name: 'escaped lazy nullary C action rejects use after library closu
     throw new Error('Expected closed-library error');
 } });
 
-Deno.test({ name: "C interop: quoted symbol keys retain identity", ignore: !library, fn() {
-    const actual = run(`ffi.withLibrary ${JSON.stringify(library)} ["add": ffi.function [Int32, Int32] Int32] c -> c."add" 20 22`);
-    if (actual !== "Int32 42") throw new Error(actual);
+Deno.test({ name: "C interop: quote characters are part of the symbol name", ignore: !library, fn() {
+    try {
+        run(`ffi.withLibrary ${JSON.stringify(library)} ["add": ffi.function [Int32, Int32] Int32] c -> c."add" 20 22`);
+    } catch (error) {
+        if (String(error).includes("cannot open") && String(error).includes("add")) return;
+        throw error;
+    }
+    throw new Error("Quoted key unexpectedly resolved the unquoted C symbol");
 } });

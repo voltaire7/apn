@@ -92,7 +92,7 @@ values: an omitted `Int` remains `Int`, and an omitted function stays callable.
 A list argument supplies record fields positionally and must match the field
 count. Record results defer field transformations until demanded.
 
-Named fields and quoted string keys remain distinct through application.
+Keys retain their full string contents, including any quote characters, through application.
 `[x: Int, "x": Int] ["x": 1]` produces `[x: Int, "x": Int 1]`.
 
 ## Slot assignment

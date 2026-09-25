@@ -31,9 +31,10 @@ for (const [name, source, expected] of [
     ["positional clone", 'obj = [x: 1, "x": 2]\nobj [3, 4]', '[x: 3, "x": 4]'],
     ["nested access", 'obj = [child: ["x": 2], "child": [x: 3]]\n[obj.child."x", obj."child" "x"]', '[2, 3]'],
     ["unused values stay deferred", 'unused = missing + 1\nobj = [x: 1, "x": unused]\nobj "x"', '1'],
-    ["pairs expose plain key text", 'pairs [x: 1, "x": 2]', '[["x", 1], ["x", 2]]'],
-    ["iteration exposes plain key text", '[x: 1, "x": 2] * [k, v] -> k', '["x", "x"]'],
-    ["string key to HashMap", 'm = HashMap ["x": 2]\nm "x"', '2'],
+    ["pairs expose plain key text", 'pairs [x: 1, "x": 2]', '[["x", 1], [""x"", 2]]'],
+    ["iteration exposes plain key text", '[x: 1, "x": 2] * [k, v] -> k', '["x", ""x""]'],
+    ["string key to HashMap", String.raw`m = HashMap ["x": 2]
+m "\"x\""`, '2'],
     ["named key to HashMap", 'm = HashMap [x: 1]\nm "x"', '1'],
     ["function source keys", 'f obj = obj."x"\nf', 'obj -> obj."x"'],
     ["function source patterns", 'f ["x": value] = value\nf', '["x": value] -> value'],
@@ -45,7 +46,7 @@ for (const [name, source, expected] of [
     });
 }
 for (const [source, message] of [
-    ['obj = [x: 1]\nobj."x"', "no string key 'x'"],
+    ['obj = [x: 1]\nobj."x"', "no field"],
     ['obj = ["x": 1]\nobj.x', "no field 'x'"],
     ['obj = ["x": 1]\nobj "x"', "no field 'x'"],
     ['arr = [10, 20]\narr "0"', 'numeric template expects a number'],
@@ -87,3 +88,22 @@ for (const source of ['v.("x")', 'v.(key)', 'v.(1)', 'v.("x") = 2']) {
         throw new Error("accepted removed computed dot access");
     });
 }
+
+for (const [name, source, expected] of [
+    ["quoted dot and string application", String.raw`v = [x: 1]
+v."x" = 123
+[v.x, v."x", v "\"x\""]`, "[1, 123, 123]"],
+    ["application updates the same quoted key", String.raw`v = ["x": 1]
+v "\"x\"" = 123
+[v."x", length (pairs v)]`, "[123, 1]"],
+    ["computed quote characters", String.raw`v = ["x": 123]
+key = "\"" ++ "x" ++ "\""
+v key`, "123"],
+    ["keys from iteration look up the original field", String.raw`v = [x: 1, "x": 2, "\"x\"": 3]
+v * [key, value] -> v key == value`, "[true, true, true]"],
+    ["HashMap preserves both strings", String.raw`m = HashMap [x: 1, "x": 2]
+[m "x", m "\"x\""]`, "[1, 2]"],
+]) Deno.test(`ordinary string keys: ${name}`, () => {
+    const actual = result(source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});

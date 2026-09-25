@@ -1,4 +1,4 @@
-import { stringKey, isStringKey, keyText, keySource } from "./record-keys.ts";
+import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import matchSource from "../lib/match.apn" with { type: "text" };
 import typeSource from "../lib/type.apn" with { type: "text" };
 import doSource from "../lib/do.apn" with { type: "text" };
@@ -195,7 +195,6 @@ export class Interpreter {
                         throw new APNError("runtime", "record assignment needs one string literal field name");
                     }
                     const key = clause.params[0].v;
-                    if (isStringKey(key)) throw new APNError("runtime", "a named field cannot start with NUL");
                     // Read the RHS against the old binding; publish only after it succeeds.
                     const value = this.demand(this.eval(clause.body));
                     const fields = record.v.slice();
@@ -740,8 +739,8 @@ export class Interpreter {
     }
 
     private missingField(rec: Extract<Value, { kind: "record" }>, key: string): never {
-        const near = didYouMean(keyText(key), rec.v.filter(([k]) => isStringKey(k) === isStringKey(key)).map(([k]) => keyText(k)));
-        throw new APNError("runtime", `record has no ${isStringKey(key) ? "string key" : "field"} '${keyText(key)}'`, {
+        const near = didYouMean(keyText(key), rec.v.map(([k]) => keyText(k)));
+        throw new APNError("runtime", `record has no field '${keyText(key)}'`, {
             hint: near ? `did you mean '${near}'?` : undefined,
         });
     }
@@ -950,8 +949,7 @@ export class Interpreter {
                 const value = this.demand(arg);
                 const carg = this.isList(value) ? mkList(this.items(value)) : value;
                 if (carg.kind === "string") {
-                    // Arbitrary user strings must not impersonate encoded string keys.
-                    if (isStringKey(carg.v)) throw new APNError("runtime", `record has no field ${JSON.stringify(carg.v)}`);
+                    // Application uses the exact string, including any quote characters.
                     return this.recordField(f, carg.v);
                 }
                 if (carg.kind === "list") {

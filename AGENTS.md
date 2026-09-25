@@ -159,12 +159,10 @@ intentional evaluation change.
   In the REPL, submitting `foo =` alone reports a syntax error immediately;
   a complete pasted indented definition can still span lines.
 - **Records**: `[name: "Alice", age: 30]`, accessed with `rec.field` (chaining
-  works: `a.b.c`). Named fields and quoted string keys are DISTINCT. `rec "field"` selects
-  the named field, like `rec.field`; `rec."field"` selects a string key.
+  works: `a.b.c`). Every key is a string. `rec "field"` equals `rec.field`;
+  `rec."field"` selects a key containing surrounding quote characters.
   `rec.1` equals `rec "1"`, while `rec 1` is positional.
-  Keys may be quoted strings or numbers (`["my field": 1]`,
-  `[123: 2]`), accessed the same way (`obj."my field"`, `obj.123`); a
-  parenthesized expression is a DYNAMIC key (`obj.(key)` → the value of `key`).
+  Computed dot access is not supported; application accepts computed strings.
   `enumerate list` builds a record with int keys (`[0: 10, 1: 20, 2: 30]`).
   The old `{ a = b }` syntax is REMOVED.
 - **Prototype-based objects**: APPLYING a record (`vector3 [1, 2, 3]`) CLONES
@@ -533,18 +531,15 @@ Tests live in tests/eager-binding-test.ts; document the eager/lazy boundary.
 
 ## Record key identity
 
-`src/record-keys.ts` encodes quoted string keys with a private NUL prefix;
-identifier/numeric field keys retain their raw text. Use keySource for source
-and display, keyText for pairs/iteration/HashMap conversion and host symbols.
-Never expose the prefix as an APN string or accept one as a named lookup.
-The parser shares this encoding across literals, access, patterns, updates,
-and plucks. Literal quoted dot access selects string keys; string application selects
-named fields. Tests: tests/record-keys-test.ts.
-
-On an existing record, `obj "field" = value` is a scoped named-field update,
-implemented alongside list index assignment in evalDef. Require one literal
-string key, preserve quoted string keys, demand RHS before rebinding, and keep
-ordinary string-pattern function definitions for unbound/function names.
+`src/record-keys.ts` stores ordinary strings without hidden prefixes. Quoted
+field syntax includes quote characters in the key. keyText is identity;
+keySource escapes quoted-field contents for source rendering. Pairs, iteration,
+HashMap conversion and FFI symbol names preserve the full key string.
+Literal dot syntax, patterns, plucks and string application share key identity.
+On an existing record, `obj "field" = value` updates that exact string key;
+quoted characters and NUL have no special lookup/update encoding. Require one
+literal string argument, preserve scope and demand RHS before rebinding.
+Tests: tests/record-keys-test.ts and tests/record-assignment-test.ts.
 
 ## APN-defined cast
 
@@ -564,7 +559,7 @@ their constructor. Other scalar kinds accept same-kind replacements. [f] maps
 lazily; longer/empty lists zip exactly. Strings supply Unicode code-point chars
 through the existing chars primitive. Integer application remains indexing.
 Record application transforms supplied slots, preserves omitted values, appends
-new fields, and distinguishes named from string keys. Assignments apply old
+new fields, and preserves every character of string keys. Assignments apply old
 slots before publishing a scoped copy; the selected slot is now demanded.
 No element schema is attached to the output: [Int] [] is an ordinary empty list.
 
