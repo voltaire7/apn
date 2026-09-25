@@ -299,13 +299,22 @@ class Parser {
     }
 
     parsePipe(): Expr {
-        let e = this.parseTernary();
+        let e = this.parseReverseApply();
         while (this.isSym("$")) {
             this.next();
-            const f = this.parseTernary();
+            const f = this.parseReverseApply();
             e = { t: "pipe", x: e, f };
         }
         return e;
+    }
+
+    // Low-precedence application: f \ g \ x is f (g x).
+    parseReverseApply(): Expr {
+        const f = this.parseTernary();
+        if (!this.isSym("\\")) return f;
+        this.next();
+        this.skipContinuation();
+        return { t: "app", f, a: this.parseReverseApply() };
     }
 
     // Ternary:  cond ? a : b    (right-associative, lower precedence than comparison)

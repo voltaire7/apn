@@ -58,7 +58,7 @@ export function highlightTokens(source: string, natives: Set<string>): Highlight
         if (c === ";" || c === ",") ternaries[ternaries.length - 1] = 0;
         const comparison = source.slice(i).match(/^(?:==|!=|<=|>=)/)?.[0];
         if (comparison) { take(2, "operator"); continue; }
-        take(1, "+-*/%^!<>$&|?@".includes(c) ? "operator"
+        take(1, "+-*/%^!<>$&|?\\@".includes(c) ? "operator"
             : "(){}[];,:.=".includes(c) ? "punctuation" : undefined);
     }
     return tokens;

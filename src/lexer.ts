@@ -18,7 +18,7 @@ export const KEYWORDS = new Set([
 ]);
 
 const SYMBOLS = [
-  "..",
+  "..", "\\",
     ">>>", "==>", "$", "<<", "<<=", ">>=", "==", "!=", "<=", ">=", "=>", "->", "<-",
     "&&", "||", "++", "::", ":=",
 ];
@@ -135,7 +135,7 @@ export function lex(src: string): Token[] {
 
         // Decimal, radix and exponent literals; signs remain unary operators.
         if (/\d/.test(c) || (c === "." && /\d/.test(src[pos + 1] ?? "") &&
-            (pos === 0 || /[\s([{,;=+\-*/%^<>!?|:$@]/.test(src[pos - 1])))) {
+            (pos === 0 || /[\s([{,;=+\-*/%^<>!?|:$@\\]/.test(src[pos - 1])))) {
             const rest = src.slice(pos);
             if (/^0[xXbBoO]/.test(rest)) {
                 const literal = rest.match(/^0[xX][0-9a-fA-F]+|^0[bB][01]+|^0[oO][0-7]+/)?.[0];
