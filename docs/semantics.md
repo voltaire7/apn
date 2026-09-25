@@ -20,21 +20,14 @@ From tightest to loosest binding; operators in the same row have equal precedenc
 | Cons `:` | Right | `a : b : xs` → `a : (b : xs)` |
 | `==`, `!=`, `<`, `>`, `<=`, `>=` | Left | `a < b == c` → `(a < b) == c` |
 | Ternary `? :` | Right | `a ? b : c ? d : e` → `a ? b : (c ? d : e)` |
-| Composition `\` | Right | `f \ g \ h` → `f \ (g \ h)` |
+| Reverse application `\` | Right | `f \ g \ x` → `f (g x)` |
 | Pipe `$` | Left | `x $ f $ g` → `(x $ f) $ g` |
 
-`f \ g` builds a function: `(f \ g) x` means `f (g x)`. Both operands
-must be functions (constructors are accepted); composing a function with a list,
-string, or number raises an error. Composition binds more loosely than ordinary
-calls and arithmetic, and more tightly than `$`.
-
-```apn
-import "std"
-even n = n % 2 == 0
-calculate bottom top = (sum \ filter even) [bottom..top]
-calculate 1 10                         # 30
-["x", 1] $ (print \ format "%: %")     # prints x: 1
-```
+`f \ expression` applies `f` to the whole expression on its right. For example,
+`print \ format "%: %" ["x", 1]` prints `x: 1`. This is low-precedence
+application, rather than a function value representing composition. Arguments
+remain lazy, just as with ordinary calls. `$` binds more loosely:
+`f \ x $ g` means `g (f x)`.
 
 Parentheses override precedence: `2 + 3 * 4` is `14`, while `(2 + 3) * 4`
 is `20`. Comparison chains are ordinary left-associated operations, not
