@@ -1055,6 +1055,17 @@ isEvenForComposition n = n % 2 == 0
 calculateEven bottom top = (sum \ filter isEvenForComposition) [bottom..top]
 print (calculateEven 1 10)               # => 30
 
+# Import a list of modules, returning their combined namespace.
+combinedNamespace = import ["std/function", "std/number"]
+print (combinedNamespace.id 42)           # => 42
+
+# Open namespace records (or a list of them) in the current scope.
+standardNamespace = import "std"
+use standardNamespace
+print (identity 123)                     # => 123
+use [[useFirst: 10], [useSecond: 20]]
+print (useFirst + useSecond)              # => 30
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

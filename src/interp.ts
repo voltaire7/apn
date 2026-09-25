@@ -10,6 +10,7 @@ import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
 import { type Value, Env } from "./types.ts";
 import { mkInt, mkBool, mkStr, mkList, valueToString, rawString } from "./types.ts";
+import { KEYWORDS } from "./lexer.ts";
 import { parse, exprToSource, patternSource, rangeExpr } from "./parser.ts";
 
 // ---------------- Evaluator ----------------
@@ -32,7 +33,7 @@ export const NATIVES: Array<[string, number]> = [
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
-    ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1],
+    ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1], ["use", 1],
     ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1],
 ];
 
@@ -45,7 +46,16 @@ export class Interpreter {
     private modules = new Map<string, Extract<Value, { kind: "record" }>>();
     private importing = new Set<string>();
 
-    importStandard(module: string, open = true): Value {
+    importStandard(module: string | string[], open = true): Value {
+        if (Array.isArray(module)) {
+            const fields = new Map<string, Value>();
+            for (const name of module) {
+                const record = this.importStandard(name, false) as Extract<Value, { kind: "record" }>;
+                for (const [key, value] of record.v) fields.set(key, value);
+            }
+            if (open) for (const [key, value] of fields) this.env.setLocal(key, value);
+            return { kind: "record", v: [...fields] };
+        }
         const names = ["type", "function", "option", "sequence", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5", "ffi"];
         const name = module === "std" ? "std" : module.startsWith("std/") && names.includes(module.slice(4)) ? module.slice(4) : null;
         if (!name) throw new APNError("runtime", `unknown module '${module}'`);
@@ -298,7 +308,7 @@ export class Interpreter {
     //   toAST (1 + 2)  =>  [+, 1, 2]
     sexprOf(e: import("./ast.ts").Expr): Value {
         switch (e.t) {
-            case "import": return mkList([mkStr("import"), mkStr(e.module)]);
+            case "import": return mkList([mkStr("import"), Array.isArray(e.module) ? mkList(e.module.map(mkStr)) : mkStr(e.module)]);
             case "numeric": return e.v;
             case "int": return mkInt(e.v);
             case "float": return { kind: "float", v: e.v };
@@ -1404,6 +1414,23 @@ export class Interpreter {
 
         const host = this.hostNatives.get(name);
         if (host) return host(argsIn);
+        if (name === "use") {
+            const value = this.demand(argsIn[0]);
+            const records = this.isList(value) ? this.items(value).map(v => this.demand(v)) : [value];
+            const bindings: Array<[string, Value]> = [];
+            for (const record of records) {
+                if (record.kind !== "record") throw new APNError("runtime", "use expects a record or a list of records");
+                for (const [key, field] of record.v) {
+                    if (!/^[A-Za-z_][A-Za-z0-9_']*$/.test(key) || key === "_" || KEYWORDS.has(key)) {
+                        throw new APNError("runtime", `use cannot bind field ${JSON.stringify(key)}: expected an identifier`);
+                    }
+                    bindings.push([key, field]);
+                }
+            }
+            // Validate the whole input before publishing; keep the field values lazy.
+            for (const [key, field] of bindings) this.env.setLocal(key, field);
+            return { kind: "unit" };
+        }
         if (name === "set") {
             const target = this.reference(argsIn[1]);
             if (target.kind === "pointer") {

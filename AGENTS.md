@@ -589,3 +589,11 @@ last result (unit for an empty list). Keep effect ordering and sharing tests.
 
 `load` requires an extensionless basename and always appends .apn. Reject explicit
 extensions before file access; directory components may still contain dots.
+
+`use` is a native scope operation accepting a record or finite list of records.
+Validate all keys as binding identifiers before publishing; preserve lazy values
+and reference identity. Later fields win; return unit. It opens the active
+evaluation scope, so wrapper functions do not export into their caller's scope.
+`import` accepts a literal string or list of literal strings, combining exports
+in order through the existing module cache. Selective imports stay selective;
+failed list imports must not install earlier modules' names in the caller.

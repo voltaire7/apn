@@ -698,8 +698,23 @@ class Parser {
         switch (t.v) {
             case "import": {
                 this.next();
+                if (this.eatSym("[")) {
+                    const modules: string[] = [];
+                    this.skipListLeading();
+                    while (!this.isSym("]")) {
+                        const module = this.next();
+                        if (module.k !== "str") throw new Error("Parser: import expects module name strings");
+                        modules.push(module.v);
+                        if (!this.isSym("]") && !this.isSym(",") && this.peek().k !== "newline" && this.peek().k !== "dedent") {
+                            throw new Error("Parser: separate import module names with commas or newlines");
+                        }
+                        this.skipListSeparators();
+                    }
+                    this.next();
+                    return { t: "import", module: modules };
+                }
                 const module = this.next();
-                if (module.k !== "str") throw new Error("Parser: import expects a module name string");
+                if (module.k !== "str") throw new Error("Parser: import expects a module name string or a list of strings");
                 return { t: "import", module: module.v };
             }
             case "true": this.next(); return { t: "bool", v: true };

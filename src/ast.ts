@@ -13,7 +13,7 @@ export type FunctionSpec = { name: string } | { from: FunctionSpec; to: Function
 export type Expr =
     | { t: "functionType"; spec: FunctionSpec }
     | { t: "computedRange"; lo: Expr; second: Expr | null; hi: Expr | null }
-    | { t: "import"; module: string }
+    | { t: "import"; module: string | string[] }
     | { t: "numeric"; v: Numeric }
     | { t: "rationalRange"; lo: Real; step: Real; hi: Real | null }
     | { t: "int"; v: bigint }

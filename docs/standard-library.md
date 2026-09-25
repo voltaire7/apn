@@ -7,7 +7,10 @@ mean [1,2]                          # Some 3/2
 "one two one" $ words $ frequencies # HashMap [["one",2],["two",1]]
 ```
 
-`import` accepts a literal module name. `import "std"` brings the library into
+`import` accepts a literal module name or a list of literal module names.
+For example, `import ["std/number", "std/text"]` opens both modules and returns
+a merged export record. Later modules win name collisions, and `import []`
+returns an empty record. Commas or newlines separate module names. `import "std"` brings the library into
 scope; individual modules use `import "std/text"`, etc. Dependencies are imported
 with them. Files resolve relative to APN's installation, so this works from any
 working directory. Imports require Deno read permission (the `apn` launcher
@@ -18,6 +21,26 @@ its dependencies, independent of caller bindings. Reimporting restores the same
 exports without reexecuting the module. Existing local names are replaced by
 imported names. A bare import statement is silent. In an expression, imports return a record: `s = import "std"` allows `s.sum`.
 Like other lazy definitions, this form takes effect when `s` is demanded.
+
+`use record` brings its fields into the current scope without forcing their
+values. `use [recordA, recordB]` opens a finite list of records in order; later
+fields replace earlier bindings. It returns `()`. Fields must be valid binding
+identifiers (not quoted keys, numeric keys, `_`, or keywords). Invalid input is
+rejected before any fields are installed. Bindings inside a block stay local.
+
+```apn
+std = import "std"
+use std
+identity 123
+
+use [[first: 10], [second: 20]]
+first + second                         # 30
+```
+
+`use` is an ordinary builtin function, so aliases and pipelines work too.
+An APN wrapper function opens the record in its own scope, not its caller's.
+
+List imports support the same selection: `[id, sum] = import ["std/function", "std/sequence"]`.
 
 Destructuring imports select only the requested exports: `[halt] = import "std"`
 binds `halt` without introducing `fibonacci`, `primes`, or other library names.
