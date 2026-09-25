@@ -138,7 +138,7 @@ intentional evaluation change.
 - **Layout is strict 4-space (whole language).** Every nested level is exactly
   +4 spaces, and only +4: the lexer rejects +2, +8, or any non-multiple of 4.
   Blank and comment-only lines are ignored for layout. Only `(` suppresses
-  newlines. `{` participates in the layout (brace blocks), and so does `[`:
+  newlines in its own context; nested `{` and `[` restore layout. `{` participates in the layout (brace blocks), and so does `[`:
   a list literal's elements are separated by `,` OR a newline (commas are
   optional when each element is on its own line), and a nested list/multi-line
   record works the same way. `[1 2]` on ONE line is still a single element

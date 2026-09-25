@@ -650,7 +650,9 @@ class Parser {
                                 // an EXPLICIT step pointing the wrong way stays empty
                                 return rangeSyntax(loE, null, hi);
                             }
-                            if (this.isSym(",")) {
+                            if (this.isSym(",") && this.peek(1).k !== "newline" &&
+                                    this.peek(1).k !== "dedent" &&
+                                    !(this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === "]")) {
                                 const save2 = this.i;
                                 this.next();
                                 const sE = this.parseAdd();

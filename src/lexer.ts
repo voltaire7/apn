@@ -30,6 +30,7 @@ export function lex(src: string): Token[] {
     let pos = 0;
     let atLineStart = true;
     let parenDepth = 0;
+    const delimiters: Array<{ close: string; parens: number; indents: number[] }> = [];
 
     const peek = (off = 0) => src[pos + off];
     const skipWs = () => { while (pos < src.length && " \t\r".includes(src[pos])) pos++; };
@@ -155,8 +156,28 @@ export function lex(src: string): Token[] {
         // significant, so elements can be separated just by being on their own
         // lines. `{`/`}` likewise participate in the global 4-space layout.
         if (":()[]{}.,;|".includes(c)) {
-            if (c === '(') parenDepth++;
-            if (c === ')') parenDepth--;
+            if ("([{".includes(c)) {
+                delimiters.push({ close: c === '(' ? ')' : c === '[' ? ']' : '}', parens: parenDepth, indents: [...indentStack] });
+                if (c === '(') parenDepth++;
+                else {
+                    // A nested list/block establishes layout even inside a
+                    // parenthesized expression. Its opening line is the baseline.
+                    if (parenDepth > 0) {
+                        const lineStart = src.lastIndexOf("\n", start - 1) + 1;
+                        const spaces = src.slice(lineStart).match(/^[ \t]*/)![0];
+                        const baseline = [...spaces].reduce((n, ch) => n + (ch === '\t' ? 4 : 1), 0);
+                        if (baseline !== indentStack[indentStack.length - 1]) indentStack.push(baseline);
+                    }
+                    parenDepth = 0;
+                }
+            } else if (")]}".includes(c)) {
+                const frame = delimiters[delimiters.length - 1];
+                if (frame?.close === c) {
+                    delimiters.pop();
+                    parenDepth = frame.parens;
+                    if (c !== ')' && frame.parens > 0) indentStack.splice(0, indentStack.length, ...frame.indents);
+                }
+            }
             // `:` is cons in this language; `::` handled above as symbol
             toks.push({ k: "sym", v: c === ":" ? ":" : c, pos: start });
             pos++;

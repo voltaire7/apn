@@ -371,6 +371,11 @@ that opening line, and the closing `}` aligns with the opening line. Inline
 `func = { expr; expr }` is valid. A newline after `=` may introduce an indented
 expression, but never an opening `{`, even for an inline block.
 
+Parentheses suppress newlines for grouped expressions, but a `{ ... }` block
+or `[ ... ]` list nested inside them restores its own layout. Local definitions
+in a parenthesized lambda's brace body therefore remain separate statements;
+list elements on separate lines remain separate elements.
+
 In the interactive REPL, Enter submits except immediately after an opening
 `(`, `{`, or `[` (allowing whitespace), where it inserts an indented newline.
 Inside a bracket opened on an earlier line, Enter continues at the current
