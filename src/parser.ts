@@ -279,7 +279,7 @@ class Parser {
         // the current expression. Only an INDENTED continuation (newlines followed
         // by an indent token) is consumed here to join the next line in.
         this.skipContinuation();
-        return this.parsePipe();
+        return this.parseReverseApply();
     }
 
     // Consume newlines + ONE indent if the following content is indented deeper
@@ -299,10 +299,10 @@ class Parser {
     }
 
     parsePipe(): Expr {
-        let e = this.parseReverseApply();
+        let e = this.parseTernary();
         while (this.isSym("$")) {
             this.next();
-            const f = this.parseReverseApply();
+            const f = this.parseTernary();
             e = { t: "pipe", x: e, f };
         }
         return e;
@@ -310,7 +310,7 @@ class Parser {
 
     // Low-precedence application: f \ g \ x is f (g x).
     parseReverseApply(): Expr {
-        const f = this.parseTernary();
+        const f = this.parsePipe();
         if (!this.isSym("\\")) return f;
         this.next();
         this.skipContinuation();
@@ -766,7 +766,7 @@ class Parser {
         let guard: Expr | undefined;
         if (this.eatSym("|")) {
             this.noLambda++;
-            try { guard = this.parsePipe(); } finally { this.noLambda--; }
+            try { guard = this.parseReverseApply(); } finally { this.noLambda--; }
         }
         this.expectSym("->");
         return { params, guard };

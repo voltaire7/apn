@@ -20,14 +20,14 @@ From tightest to loosest binding; operators in the same row have equal precedenc
 | Cons `:` | Right | `a : b : xs` → `a : (b : xs)` |
 | `==`, `!=`, `<`, `>`, `<=`, `>=` | Left | `a < b == c` → `(a < b) == c` |
 | Ternary `? :` | Right | `a ? b : c ? d : e` → `a ? b : (c ? d : e)` |
-| Reverse application `\` | Right | `f \ g \ x` → `f (g x)` |
 | Pipe `$` | Left | `x $ f $ g` → `(x $ f) $ g` |
+| Reverse application `\` | Right | `f \ g \ x` → `f (g x)` |
 
 `f \ expression` applies `f` to the whole expression on its right. For example,
 `print \ format "%: %" ["x", 1]` prints `x: 1`. This is low-precedence
 application, rather than a function value representing composition. Arguments
-remain lazy, just as with ordinary calls. `$` binds more loosely:
-`f \ x $ g` means `g (f x)`.
+remain lazy, just as with ordinary calls. `$` binds more tightly:
+`f \ x $ g` means `f (g x)`. Thus `print \ value $ add1` prints the incremented value.
 
 Parentheses override precedence: `2 + 3 * 4` is `14`, while `(2 + 3) * 4`
 is `20`. Comparison chains are ordinary left-associated operations, not

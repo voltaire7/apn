@@ -1052,6 +1052,7 @@ map (x -> {
     print \ format "%: %" [field, value]
 }                                       # => x: 1, y: 2, z: 3 (one per line)
 print \ sum \ [1, 2, 3]                 # => 6
+print \ 123 $ (+ 1)                     # => 124 ($ binds tighter than \)
 
 # Import a list of modules, returning their combined namespace.
 combinedNamespace = import ["std/function", "std/number"]
