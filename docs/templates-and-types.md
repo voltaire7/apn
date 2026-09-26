@@ -214,3 +214,11 @@ name denotes the value constructor; use distinct names for type specialization.
 Nominal wrappers use ordinary single-constructor variants; no automatic unwrap
 or zero-cost representation is implied. Class/instance syntax and static type
 inference are not part of this change.
+
+Record-template patterns also accept positional lists with exactly as many
+items as the template has fields: `f (Vector3 v) = v` accepts `f [1,2,3]`
+when `Vector3 = [x: Float, y: Float, z: Float]`. Conversion is the same lazy
+conversion as `Vector3 [1,2,3]`. Wrong lengths do not match; shape checking
+reads at most one cell beyond the required count, including infinite inputs.
+Field conversion errors remain deferred until those fields are demanded.
+Equally matching record templates retain source-order dispatch.

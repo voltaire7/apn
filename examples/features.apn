@@ -1063,6 +1063,11 @@ print (identity 123)                     # => 123
 use [[useFirst: 10], [useSecond: 20]]
 print (useFirst + useSecond)              # => 30
 
+# Record-template patterns accept positional lists just like template application.
+VectorForPattern = [x: Float, y: Float, z: Float]
+showVector (VectorForPattern v) = print v
+showVector [1, 2, 3]  # => [x: Float 1.0, y: Float 2.0, z: Float 3.0]
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

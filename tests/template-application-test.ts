@@ -6,6 +6,12 @@ function result(source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
+    ['Vector3 = [x: Float, y: Float, z: Float]\nf (Vector3 v) = v\nf [1,2,3]', '[x: Float 1.0, y: Float 2.0, z: Float 3.0]'],
+    ['f ([x: Float] v) = v.x\nf [1]', 'Float 1.0'],
+    ['V = [x: Float, y: Float]\nf (V v) = v.x\nf [1, missing]', 'Float 1.0'],
+    ['V = [x: Float, y: Float]\nf (V v) = 1\nf _ = 2\n[f [], f [1], f [1,2], f [1,2,3], f [0..]]', '[2, 2, 1, 2, 2]'],
+    ['A = [x: Float]\nB = [y: Float]\nf (A v) = 1\nf (B v) = 2\nf [1]', '1'],
+
     ['[Char] "hello"', "['h', 'e', 'l', 'l', 'o']"],
     ['[Char] ""', '[]'],
     ['[Char] "a😀é"', "['a', '😀', 'é']"],

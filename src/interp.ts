@@ -1752,6 +1752,21 @@ export class Interpreter {
         });
     }
 
+    // Check positional shape without forcing elements or traversing an unbounded list.
+    recordPatternInput(type: Extract<Value, { kind: "record" }>, value: Value): Value | null {
+        if (value.kind === "record") return value;
+        if (!this.isList(value)) return null;
+        const values: Value[] = [];
+        let rest: Value = value;
+        for (let index = 0; index < type.v.length; index++) {
+            const cell = this.cell(rest);
+            if (!cell) return null;
+            values.push(cell.head);
+            rest = cell.tail;
+        }
+        return this.cell(rest) === null ? mkList(values) : null;
+    }
+
     matchPattern(p: Pattern, v: Value, binds: Map<string, Value>): boolean {
         if (p.p === "wildcard") return true;
         if (p.p === "var") {
@@ -1768,7 +1783,11 @@ export class Interpreter {
                 const variant = this.demand(actual);
                 if (variant.kind !== "variant" || variant.family !== type.family) return false;
             }
-            if ((this.isList(type) && !this.isList(this.demand(actual))) || (type.kind === "record" && this.demand(actual).kind !== "record") || (type.kind === "functionType" && !this.matchesValueType("Function", actual))) return false;
+            if (type.kind === "record") {
+                const input = this.recordPatternInput(type, this.demand(actual));
+                return input !== null && this.matchPattern(p.value, this.conform(type, input), binds);
+            }
+            if ((this.isList(type) && !this.isList(this.demand(actual))) || (type.kind === "functionType" && !this.matchesValueType("Function", actual))) return false;
             return this.matchPattern(p.value, this.conform(type, actual), binds);
         }
         if (p.p === "contract") {
@@ -1785,8 +1804,8 @@ export class Interpreter {
                 }
                 if (p.args.length === 1 && (this.isList(type) || type.kind === "record") && this.isTypeValue(type)) {
                     const actual = this.demand(v);
-                    if (this.isList(type) ? !this.isList(actual) : actual.kind !== "record") return false;
-                    return this.matchPattern(p.args[0], this.conform(type, actual), binds);
+                    const input = type.kind === "record" ? this.recordPatternInput(type, actual) : this.isList(actual) ? actual : null;
+                    return input !== null && this.matchPattern(p.args[0], this.conform(type, input), binds);
                 }
                 if (type.kind === "type" && type.family) {
                     const actual = this.demand(v);
