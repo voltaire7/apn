@@ -382,6 +382,10 @@ that opening line, and the closing `}` aligns with the opening line. Inline
 `func = { expr; expr }` is valid. A newline after `=` may introduce an indented
 expression, but never an opening `{`, even for an inline block.
 
+A closing `)` starting a separate line must align with the indentation of the
+line containing its opening `(`. A closing parenthesis after an expression on
+the same line remains valid.
+
 Parentheses suppress newlines for grouped expressions, but a `{ ... }` block
 or `[ ... ]` list nested inside them restores its own layout. Local definitions
 in a parenthesized lambda's brace body therefore remain separate statements;

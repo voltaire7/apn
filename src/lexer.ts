@@ -30,7 +30,7 @@ export function lex(src: string): Token[] {
     let pos = 0;
     let atLineStart = true;
     let parenDepth = 0;
-    const delimiters: Array<{ close: string; parens: number; indents: number[] }> = [];
+    const delimiters: Array<{ close: string; parens: number; indents: number[]; pos: number }> = [];
 
     const peek = (off = 0) => src[pos + off];
     const skipWs = () => { while (pos < src.length && " \t\r".includes(src[pos])) pos++; };
@@ -157,7 +157,7 @@ export function lex(src: string): Token[] {
         // lines. `{`/`}` likewise participate in the global 4-space layout.
         if (":()[]{}.,;|".includes(c)) {
             if ("([{".includes(c)) {
-                delimiters.push({ close: c === '(' ? ')' : c === '[' ? ']' : '}', parens: parenDepth, indents: [...indentStack] });
+                delimiters.push({ close: c === '(' ? ')' : c === '[' ? ']' : '}', parens: parenDepth, indents: [...indentStack], pos: start });
                 if (c === '(') parenDepth++;
                 else {
                     // A nested list/block establishes layout even inside a
@@ -173,6 +173,18 @@ export function lex(src: string): Token[] {
             } else if (")]}".includes(c)) {
                 const frame = delimiters[delimiters.length - 1];
                 if (frame?.close === c) {
+                    if (c === ')') {
+                        const lineStart = src.lastIndexOf("\n", start - 1) + 1;
+                        const openingLine = src.lastIndexOf("\n", frame.pos - 1) + 1;
+                        const prefix = src.slice(lineStart, start);
+                        if (lineStart !== openingLine && /^[ \t]*$/.test(prefix)) {
+                            const indent = (text: string) => [...text].reduce((n, ch) => n + (ch === '\t' ? 4 : 1), 0);
+                            const openingSpaces = src.slice(openingLine, frame.pos).match(/^[ \t]*/)![0];
+                            if (indent(prefix) !== indent(openingSpaces)) {
+                                throw new APNError("lex", "closing ) must align with the line containing (", { pos: start });
+                            }
+                        }
+                    }
                     delimiters.pop();
                     parenDepth = frame.parens;
                     if (c !== ')' && frame.parens > 0) indentStack.splice(0, indentStack.length, ...frame.indents);

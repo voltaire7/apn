@@ -1068,6 +1068,14 @@ VectorForPattern = [x: Float, y: Float, z: Float]
 showVector (VectorForPattern v) = print v
 showVector [1, 2, 3]  # => [x: Float 1.0, y: Float 2.0, z: Float 3.0]
 
+# A closing parenthesis on its own line aligns with the opening line.
+print (
+    123
+)                                      # => 123
+# print (
+#     123
+#     )                                # indentation error
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------
