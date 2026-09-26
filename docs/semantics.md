@@ -13,6 +13,7 @@ From tightest to loosest binding; operators in the same row have equal precedenc
 | --- | --- | --- |
 | Field access and pluck `.` | Left | `a.b.c` → `(a.b).c` |
 | Function application | Left | `f x y` → `(f x) y` |
+| Composition `\` | Right | `f \ g \ h` → `f \ (g \ h)` |
 | Exponentiation `^` | Right | `a ^ b ^ c` → `a ^ (b ^ c)` |
 | Unary `-`, `!` | Prefix | `-f x` → `-(f x)` |
 | `*`, `/`, `%` | Left | `a / b * c` → `(a / b) * c` |
@@ -21,13 +22,13 @@ From tightest to loosest binding; operators in the same row have equal precedenc
 | `==`, `!=`, `<`, `>`, `<=`, `>=` | Left | `a < b == c` → `(a < b) == c` |
 | Ternary `? :` | Right | `a ? b : c ? d : e` → `a ? b : (c ? d : e)` |
 | Pipe `$` | Left | `x $ f $ g` → `(x $ f) $ g` |
-| Reverse application `\` | Right | `f \ g \ x` → `f (g x)` |
 
-`f \ expression` applies `f` to the whole expression on its right. For example,
-`print \ format "%: %" ["x", 1]` prints `x: 1`. This is low-precedence
-application, rather than a function value representing composition. Arguments
-remain lazy, just as with ordinary calls. `$` binds more tightly:
-`f \ x $ g` means `f (g x)`. Thus `print \ value $ add1` prints the incremented value.
+`f \ g` creates a function that computes `f (g x)` when called with `x`.
+Both operands must be functions (constructors are accepted). Ordinary calls
+bind more tightly, while exponentiation, arithmetic, iteration, and `$` bind
+more loosely. Thus `vec * print \ format "%: %"` means
+`vec * (print \ format "%: %")`; `3 $ (+ 1) \ (* 2)` returns `7`.
+Use `(sum \ filter even) values` to apply a composition to a list.
 
 Parentheses override precedence: `2 + 3 * 4` is `14`, while `(2 + 3) * 4`
 is `20`. Comparison chains are ordinary left-associated operations, not

@@ -279,7 +279,7 @@ class Parser {
         // the current expression. Only an INDENTED continuation (newlines followed
         // by an indent token) is consumed here to join the next line in.
         this.skipContinuation();
-        return this.parseReverseApply();
+        return this.parsePipe();
     }
 
     // Consume newlines + ONE indent if the following content is indented deeper
@@ -306,15 +306,6 @@ class Parser {
             e = { t: "pipe", x: e, f };
         }
         return e;
-    }
-
-    // Low-precedence application: f \ g \ x is f (g x).
-    parseReverseApply(): Expr {
-        const f = this.parsePipe();
-        if (!this.isSym("\\")) return f;
-        this.next();
-        this.skipContinuation();
-        return { t: "app", f, a: this.parseReverseApply() };
     }
 
     // Ternary:  cond ? a : b    (right-associative, lower precedence than comparison)
@@ -383,11 +374,22 @@ class Parser {
     }
 
     parsePower(): Expr {
-        const left = this.parseApp();
+        const left = this.parseComposition();
         // Leave a trailing ^ for the operand-front operator section (2 ^).
         if (this.isSym("^") && !(this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === ")")) {
             this.next();
             return { t: "binop", op: "^", l: left, r: this.parseUnary() };
+        }
+        return left;
+    }
+
+    // Application binds tighter than composition; composition binds tighter than *.
+    parseComposition(): Expr {
+        const left = this.parseApp();
+        if (this.isSym("\\") && !(this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === ")")) {
+            this.next();
+            this.skipContinuation();
+            return { t: "binop", op: "\\", l: left, r: this.parseComposition() };
         }
         return left;
     }
@@ -766,7 +768,7 @@ class Parser {
         let guard: Expr | undefined;
         if (this.eatSym("|")) {
             this.noLambda++;
-            try { guard = this.parseReverseApply(); } finally { this.noLambda--; }
+            try { guard = this.parsePipe(); } finally { this.noLambda--; }
         }
         this.expectSym("->");
         return { params, guard };
@@ -899,7 +901,7 @@ class Parser {
     // Operator sections:  (+ 2) -> \x -> x + 2    (2 +) -> \x -> 2 + x
     // (- 2) is NOT a section (no whitespace info in the lexer) — it stays unary
     // negation; use a lambda for that. `(+)` alone is unsupported.
-    static sectionOps = ["^", "+", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=", "++"];
+    static sectionOps = ["\\", "^", "+", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=", "++"];
 
     tryOperatorSection(): Expr | null {
         const save = this.i;

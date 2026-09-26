@@ -21,7 +21,7 @@ function pattern(p: Pattern): string {
         case "range": return `[${p.lo}..${p.hi}]`;
     }
 }
-const precedence: Record<string, number> = { "||": 2, "&&": 3, "==": 4, "!=": 4, "<": 4, ">": 4, "<=": 4, ">=": 4, ":": 5, "++": 5, "+": 6, "-": 6, "*": 7, "/": 7, "%": 7, "^": 9 };
+const precedence: Record<string, number> = { "\\": 9.5, "||": 2, "&&": 3, "==": 4, "!=": 4, "<": 4, ">": 4, "<=": 4, ">=": 4, ":": 5, "++": 5, "+": 6, "-": 6, "*": 7, "/": 7, "%": 7, "^": 9 };
 function source(e: Expr, parent = 0): string {
     let text: string, level = 12;
     switch (e.t) {
@@ -29,7 +29,7 @@ function source(e: Expr, parent = 0): string {
         case "app": level = 10; text = `${source(e.f, 10)} ${source(e.a, 11)}`; break;
         case "binop": {
             level = precedence[e.op];
-            const right = e.op === ":" || e.op === "++" || e.op === "^";
+            const right = e.op === ":" || e.op === "++" || e.op === "^" || e.op === "\\";
             text = `${source(e.l, level + (right ? 1 : 0))} ${e.op} ${source(e.r, level + (right ? 0 : 1))}`;
             break;
         }

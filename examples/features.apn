@@ -1047,12 +1047,10 @@ map (x -> {
     result * result
 }) [1,2,3,4] $ print              # => [4, 16, 36, 64]
 
-# Reverse application avoids parentheses around a nested call.
-[x: 1, y: 2, z: 3] * [field, value] -> {
-    print \ format "%: %" [field, value]
-}                                       # => x: 1, y: 2, z: 3 (one per line)
-print \ sum \ [1, 2, 3]                 # => 6
-print \ 123 $ (+ 1)                     # => 124 ($ binds tighter than \)
+# Composition binds tighter than iteration and pipes.
+[x: 1, y: 2, z: 3] * print \ format "%: %"  # x: 1, y: 2, z: 3
+print ([1,2,3] * (+ 1) \ (* 2))           # => [3, 5, 7]
+print (3 $ (+ 1) \ (* 2))                 # => 7
 
 # Import a list of modules, returning their combined namespace.
 combinedNamespace = import ["std/function", "std/number"]
