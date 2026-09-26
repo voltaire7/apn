@@ -513,8 +513,8 @@ export class ReplEditor {
         for (const ch of t) {
             if (ch === "\n") { this.splitLine(); continue; }
             const line = this.lines[this.row];
-            // dedent assist: typing } or ] on an indent-only line drops one level
-            if ((ch === "}" || ch === "]") && this.col === line.length && /^\s+$/.test(line) && line.length >= 4) {
+            // dedent assist: typing ), } or ] on an indent-only line drops one level
+            if ((ch === "}" || ch === "]" || ch === ")") && this.col === line.length && /^\s+$/.test(line) && line.length >= 4) {
                 this.lines[this.row] = line.slice(4);
                 this.col -= 4;
             }
@@ -562,9 +562,9 @@ export class ReplEditor {
         }
         if (this.col > 0) {
             const line = this.lines[this.row];
-            // inverse of the dedent assist: deleting a lone ]/} that the assist
+            // inverse of the dedent assist: deleting a lone )/]/} that the assist
             // moved to column 0 restores the 4-space continuation indent
-            if (this.row > 0 && this.col === 1 && (line === "]" || line === "}")) {
+            if (this.row > 0 && this.col === 1 && (line === "]" || line === "}" || line === ")")) {
                 this.lines[this.row] = "    ";
                 this.col = 4;
                 return;

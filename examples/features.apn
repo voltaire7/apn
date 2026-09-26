@@ -1068,6 +1068,8 @@ VectorForPattern = [x: Float, y: Float, z: Float]
 showVector (VectorForPattern v) = print v
 showVector [1, 2, 3]  # => [x: Float 1.0, y: Float 2.0, z: Float 3.0]
 
+# REPL: typing ) on an indent-only line dedents one level, like ] and }.
+# Backspace after a lone ) restores the continuation indent; paste stays literal.
 # A closing parenthesis on its own line aligns with the opening line.
 print (
     123

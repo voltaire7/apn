@@ -192,3 +192,27 @@ for (const width of [80, 16]) {
         equal(plain, source.split("\n").map((line, index) => (index ? "... " : ">>> ") + line + "\r\n").join("") + "123\r\n");
     });
 }
+
+Deno.test("typing a closing parenthesis dedents a blank continuation", () => {
+    const ed = editor("vec * (\n    print\n    ");
+    ed.insertText(")");
+    equal(ed.src(), "vec * (\n    print\n)");
+    equal(ed.col, 1);
+    ed.backspace();
+    equal(ed.src(), "vec * (\n    print\n    ");
+    equal(ed.col, 4);
+});
+Deno.test("closing parentheses dedent one level inside nested layout", () => {
+    const ed = editor("f = {\n    g (\n        x\n        ");
+    ed.insertText(")");
+    equal(ed.lines.at(-1), "    )");
+    equal(ed.col, 5);
+});
+Deno.test("inline and pasted closing parentheses keep their indentation", () => {
+    const inline = editor("f (\n    x");
+    inline.insertText(")");
+    equal(inline.src(), "f (\n    x)");
+    const pasted = editor("f (\n    ");
+    pasted.insertPaste(")");
+    equal(pasted.src(), "f (\n    )");
+});
