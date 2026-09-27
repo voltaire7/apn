@@ -598,7 +598,7 @@ class Parser {
                                         `are constructors; use a lowercase name here`,
                                     );
                                 }
-                                stmts.push(this.isDef() ? this.parseBlockDef() : this.parseDelimitedExpr());
+                                stmts.push(this.isDef() ? this.parseBlockDef() : this.tryItemAssign() ?? this.parseDelimitedExpr());
                             }
                         }
                     }
@@ -987,6 +987,38 @@ class Parser {
         }
     }
 
+    // Expression-only indices (e.g. arr (i + 1) = value) cannot be function
+    // patterns. Pattern-compatible forms use normal definitions and dispatch
+    // against the existing binding at evaluation time.
+    tryItemAssign(): Expr | null {
+        const first = this.peek();
+        if (first.k !== "ident" || !/^[a-z]/.test(first.v)) return null;
+        // Avoid parsing every ordinary expression twice merely to look for '='.
+        let depth = 0, assignment = false;
+        for (let j = this.i; j < this.toks.length; j++) {
+            const token = this.toks[j];
+            if (!depth && ["newline", "dedent", "eof"].includes(token.k)) break;
+            if (token.k !== "sym") continue;
+            if (!depth && token.v === "=") { assignment = true; break; }
+            if (!depth && [";", ")", "]", "}"].includes(token.v)) break;
+            if (["(", "[", "{"].includes(token.v)) depth++;
+            else if ([")", "]", "}"].includes(token.v)) depth--;
+        }
+        if (!assignment) return null;
+        const saved = this.i;
+        let left: Expr;
+        try {
+            left = this.parseApp();
+            if (!this.isSym("=") || left.t !== "app" || left.f.t !== "var" || !/^[a-z]/.test(left.f.name)) {
+                this.i = saved; return null;
+            }
+        } catch { this.i = saved; return null; }
+        this.expectSym("=");
+        const value = this.parseDefBody();
+        return { t: "patDef", pattern: { p: "var", name: left.f.name },
+            value: { t: "setItem", rec: left.f, index: left.a, value } };
+    }
+
     // A definition inside a `{ }` block (a statement, not a value expression).
     parseBlockDef(): Expr {
         const d = this.parseDefStatement();
@@ -1190,8 +1222,9 @@ class Parser {
                     const d = this.parseDefStatement();
                     out.push({ t: "def", name: d.name, clauses: d.clauses });
                 } else {
-                    const e = this.parseExpr();
-                    out.push({ t: "expr", value: e });
+                    const assignment = this.tryItemAssign();
+                    if (assignment) out.push(assignment as TopLevel);
+                    else out.push({ t: "expr", value: this.parseExpr() });
                 }
                 continue;
             }
@@ -1332,6 +1365,7 @@ export function exprToSource(e: Expr): string {
             return `${exprToSource(e.rec)}.${keySource(e.field)}`;
         case "pluck":
             return `${exprToSource(e.rec)}.[${e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`).join(", ")}]`;
+        case "setItem": return `${exprToSource(e.rec)} (${exprToSource(e.index)}) = ${exprToSource(e.value)}`;
         case "setFields":
             return `${exprToSource(e.rec)}.${e.entries.length === 1 ? keySource(e.entries[0]) : `[${e.entries.map(keySource).join(", ")}]`} = ${exprToSource(e.value)}`;
         case "block": {
@@ -1339,6 +1373,7 @@ export function exprToSource(e: Expr): string {
             if (one && e.style === "(") return exprToSource(e.stmts[0]);
             const body = e.stmts.map((st) => {
                 if (st.t === "stmDef") return `${st.name} = ${exprToSource(st.clauses[0].body)}`;
+                if (st.t === "patDef" && st.value.t === "setItem") return exprToSource(st.value);
                 if (st.t === "patDef") return `${patternSource(st.pattern)} ${st.eager ? "<-" : "="} ${exprToSource(st.value)}`;
                 return exprToSource(st);
             }).join("; ");

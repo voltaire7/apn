@@ -348,7 +348,7 @@ streaming/interruption recovery. The showcase is the broader syntax reference.
 `arr 0 = 10` rebinds an existing list to a modified copy in the current scope,
 like record field assignment. The old slot is applied to the incoming value:
 `arr = [Int]; arr 0 = floor .2` produces `[0]`; assigning `.2` directly errors. `arr (-1) = 10` updates its final element.
-The index must be one integer literal; negative indexes require a finite list.
+The index must evaluate to an integer; negative indexes require a finite list.
 Positive updates traverse only as far as the selected cell, leaving unused
 unselected heads and the remaining tail deferred. The selected head is demanded
 because it is the template for this update. Bounds errors leave the binding unchanged.

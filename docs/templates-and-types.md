@@ -117,6 +117,26 @@ Nested container results retain lazy checks, so errors in an unconsumed nested
 field can still surface later. Pluck updates compute against the original fields
 and publish the record only after all selected outer results succeed.
 
+Indices and record keys can be variables or parenthesized expressions:
+
+```apn
+arr = [0, 0]
+i = 0
+arr i = 1
+arr (i + 1) = 2             # [1, 2]
+obj = [x: 0]
+key = "x"
+obj key = 3                # [x: 3]
+obj (key ++ "y") = 4       # [x: 3, xy: 4]
+```
+
+The key is evaluated once before the RHS, in the current scope against the old
+binding. Lists require an integer (negative indices count from the end); records
+require a string. Numeric strings never become positional indices. Unbound names
+and existing functions retain ordinary pattern definitions: `f i = i + 1` still
+defines a function. Expression-only left sides such as `arr (i + 1) = value`
+require an existing collection. Assignment accepts exactly one index/key.
+
 New record fields are inserted as given. List updates never append: `xs 1 = 4`
 on the one-slot list above is an error. Negative indexes still count from the end.
 

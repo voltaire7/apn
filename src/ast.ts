@@ -34,6 +34,7 @@ export type Expr =
     | { t: "record"; v: Array<[string, Expr]> }
     | { t: "recordAccess"; rec: Expr; field: string }
     | { t: "pluck"; rec: Expr; entries: Array<string | [string, string]> }
+    | { t: "setItem"; rec: Expr; index: Expr; value: Expr }
     | { t: "setFields"; rec: Expr; entries: string[]; value: Expr }
     | { t: "floatRange"; lo: number; step: number; hi: number | null }
     | { t: "range"; lo: bigint; step: bigint; hi: bigint | null }

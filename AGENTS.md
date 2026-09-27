@@ -414,7 +414,7 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
 
 `arr 0 = 10` rebinds an existing list to a modified copy in the current scope,
 like record field assignment. `arr (-1) = 10` updates its final element.
-The index must be one integer literal; negative indexes require a finite list.
+The index may be a variable or a parenthesized expression evaluating to an integer; negative indexes require a finite list.
 Positive updates traverse only as far as the selected cell, leaving unused
 heads and the remaining tail deferred. Bounds errors leave the binding unchanged.
 The RHS is evaluated against the old binding before it is replaced. Consecutive
@@ -538,7 +538,7 @@ HashMap conversion and FFI symbol names preserve the full key string.
 Literal dot syntax, patterns, plucks and string application share key identity.
 On an existing record, `obj "field" = value` updates that exact string key;
 quoted characters and NUL have no special lookup/update encoding. Require one
-literal string argument, preserve scope and demand RHS before rebinding.
+string-valued argument (literal, variable or parenthesized expression), preserve scope and demand RHS before rebinding.
 Tests: tests/record-keys-test.ts and tests/record-assignment-test.ts.
 
 ## APN-defined cast
@@ -618,3 +618,9 @@ with recursive field defaults. Detect recursive default dependencies; never
 silently allocate a Mutable or fabricate a function. Keep [Int] a singleton
 callable template, not an empty list. See docs/zero-initialization.md and
 tests/zero-initialization-test.ts. Numeric construction and cast are lossless.
+
+Computed collection assignment evaluates its key once before its RHS against
+the old scope. Pattern-compatible parameters are interpreted as expressions
+only for existing collections in evalDef. Expression-only keys use setItem,
+parsed by tryItemAssign; it shares assignItem with the definition path. Keep
+function clauses, lazy tails, type checks and atomic binding publication intact.

@@ -30,9 +30,9 @@ Deno.test("REPL record assignment preserves the record", () => {
 });
 for (const [assignment, error] of [
     ['obj "x" = missing', "unbound variable"],
-    ['obj key = 10', 'one string literal'],
-    ['obj "x" "y" = 10', 'one string literal'],
-    ['obj 0 = 10', 'one string literal'],
+    ['obj key = 10', 'unbound variable'],
+    ['obj "x" "y" = 10', 'one index'],
+    ['obj 0 = 10', 'string field name'],
 ] as const) {
     Deno.test(`failed record assignment preserves binding: ${assignment}`, () => {
         const i = new Interpreter();

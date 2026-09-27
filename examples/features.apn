@@ -1121,6 +1121,17 @@ print DefaultUser                   # => MakeDefaultUser 0 ""
 # Int .2, cast Int .2 and [Int] [.2] reject lossy conversion.
 print (Int (floor .2))               # => 0
 
+# Collection assignments evaluate variable and computed indices in the old scope.
+indexedValues = [0, 0]
+selectedIndex = 0
+indexedValues selectedIndex = 1
+indexedValues (selectedIndex + 1) = indexedValues selectedIndex + 1
+print indexedValues                 # => [1, 2]
+indexedObject = [x: Int]
+selectedKey = "x"
+indexedObject selectedKey = 3
+print indexedObject                 # => [x: 3]
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

@@ -191,44 +191,22 @@ export class Interpreter {
             this.env.setLocal(name, alias);
             return alias;
         }
-        // A literal-key equation on an existing list/record is a scoped update.
-        // Unbound/function names retain ordinary pattern-clause definitions.
+        // Existing collections interpret the parameter as a key expression;
+        // unbound/function names retain ordinary pattern-clause definitions.
         const previous = this.env.get(name);
         if (previous !== undefined && clauses[0].params.length > 0 &&
             previous.kind !== "clauseFn" && previous.kind !== "native" &&
             !(previous.kind === "closure" && previous.params.length > 0) &&
             !(previous.kind === "thunk" && previous.body.t === "placeholder")) {
-            let list = this.dataValue(previous);
-            if (list.kind === "record") {
-                let record = list;
+            let collection = this.dataValue(previous);
+            if (collection.kind === "record" || this.isList(collection)) {
                 for (const clause of clauses) {
-                    if (clause.params.length !== 1 || clause.params[0].p !== "string") {
-                        throw new APNError("runtime", "record assignment needs one string literal field name");
-                    }
-                    const key = clause.params[0].v;
-                    // Read the RHS against the old binding; publish only after it succeeds.
-                    const value = this.demand(this.eval(clause.body));
-                    const fields = record.v.slice();
-                    const index = fields.findIndex(([field]) => field === key);
-                    if (index < 0) fields.push([key, value]);
-                    else fields[index] = [key, this.demand(this.apply(record.v[index][1], value))];
-                    record = { kind: "record", v: fields };
-                    this.env.setLocal(name, record);
+                    if (clause.params.length !== 1) throw new APNError("runtime", "collection assignment needs one index or field name");
+                    const key = this.dataValue(this.eval(this.assignmentKey(clause.params[0])));
+                    collection = this.assignItem(collection, key, clause.body);
+                    this.env.setLocal(name, collection);
                 }
-                return record;
-            }
-            if (this.isList(list)) {
-                for (const clause of clauses) {
-                    if (clause.params.length !== 1 || clause.params[0].p !== "int") {
-                        throw new APNError("runtime", "list assignment needs one integer literal index");
-                    }
-                    const index = clause.params[0].v;
-                    // Resolve the RHS against the old binding, before rebinding.
-                    const value = this.demand(this.eval(clause.body));
-                    list = this.setIndex(list, index, value);
-                    this.env.setLocal(name, list);
-                }
-                return list;
+                return collection;
             }
         }
         // A def with parameters is a pattern-dispatch function.
@@ -287,6 +265,38 @@ export class Interpreter {
         return thunk;
     }
 
+    // These forms have both a pattern reading (function definitions) and an
+    // expression reading (an existing collection's index). Never bind names here.
+    private assignmentKey(pattern: Pattern): Expr {
+        switch (pattern.p) {
+            case "var": return { t: "var", name: pattern.name };
+            case "int": return { t: "int", v: pattern.v };
+            case "string": return { t: "string", v: pattern.v };
+            case "bool": return { t: "bool", v: pattern.v };
+            case "typeBind": return { t: "app", f: { t: "var", name: pattern.name }, a: this.assignmentKey(pattern.value) };
+            case "constr": return pattern.args.reduce<Expr>((f, arg) => ({ t: "app", f, a: this.assignmentKey(arg) }), { t: "var", name: pattern.tag });
+            default: throw new APNError("runtime", "collection assignment needs an index expression, not a destructuring pattern");
+        }
+    }
+
+    private assignItem(collection: Value, key: Value, expression: Expr): Value {
+        if (this.isList(collection)) {
+            if (key.kind !== "int") throw new APNError("runtime", "list assignment needs an integer index");
+            const value = this.demand(this.eval(expression));
+            return this.setIndex(collection, key.v, value);
+        }
+        if (collection.kind === "record") {
+            if (key.kind !== "string") throw new APNError("runtime", "record assignment needs a string field name");
+            const value = this.demand(this.eval(expression));
+            const fields = collection.v.slice();
+            const index = fields.findIndex(([field]) => field === key.v);
+            if (index < 0) fields.push([key.v, value]);
+            else fields[index] = [key.v, this.demand(this.apply(collection.v[index][1], value))];
+            return { kind: "record", v: fields };
+        }
+        throw new APNError("runtime", "indexed assignment expects an existing list or record");
+    }
+
     // Destructuring binding:  [name, hello] = value  (or (Just x) = value, ...).
     // Evaluates the RHS, matches the pattern, and binds the destructured names
     // in the CURRENT environment (top level or the enclosing block's env).
@@ -337,6 +347,7 @@ export class Interpreter {
                 return mkList(e.stmts.map((st) => this.sexprOf(st.t === "stmDef" ? st.clauses[0].body : st.t === "patDef" ? st.value : st)));
             }
             case "pipe": return mkList([mkStr("$"), this.sexprOf(e.x), this.sexprOf(e.f)]);
+            case "setItem": return mkList([mkStr("setItem"), this.sexprOf(e.rec), this.sexprOf(e.index), this.sexprOf(e.value)]);
             case "recordAccess":
                 return mkList([mkStr("."), this.sexprOf(e.rec), mkStr(keySource(e.field))]);
             default: return mkList([mkStr(e.t)]);
@@ -637,6 +648,12 @@ export class Interpreter {
                             }
                             r = { kind: "record", v: out };
                         }
+                        break;
+                    }
+                    case "setItem": {
+                        const collection = this.dataValue(this.eval(e.rec));
+                        const key = this.dataValue(this.eval(e.index));
+                        r = this.assignItem(collection, key, e.value);
                         break;
                     }
                     case "setFields": {
