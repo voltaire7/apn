@@ -98,6 +98,12 @@ Result a e = Ok a | Err e
 
 These are ordinary APN variants. `Result` does not catch runtime exceptions.
 
+## Arrays — `std/array`
+
+`dot`, `transpose`, `matmul`, and `shape` are implemented in APN and included
+in `std`. Numeric collection operators work without an import. See
+[arrays](arrays.md) for broadcasting, shape rules, and lazy error behavior.
+
 ## Sequences — `std/sequence`
 
 Existing `map`, `filter`, `take`, `drop`, `zipWith`, `iterate`, `foldl`, and

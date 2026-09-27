@@ -597,3 +597,10 @@ evaluation scope, so wrapper functions do not export into their caller's scope.
 `import` accepts a literal string or list of literal strings, combining exports
 in order through the existing module cache. Selective imports stay selective;
 failed list imports must not install earlier modules' names in the caller.
+
+Numeric collection arithmetic is implemented by arrayArithmetic/arrayNegate.
+Pair lists lazily with strict lengths, records by exact key strings. Broadcast
+only whole numeric scalars; nested paired scalar/container shapes must fail.
+Keep function iteration and scalar overloads unchanged. Reuse typedArithmetic
+and numericNative so numeric checks remain consistent. Array helpers belong in
+lib/array.apn; docs/arrays.md and tests/array-test.ts cover their behavior.

@@ -1,0 +1,20 @@
+# Array algorithms are APN functions; arithmetic lifts numeric operators lazily.
+import "std/sequence"
+dot xs ys = sum (xs * ys)
+transpose rows = null rows ? [] : all null rows ? [] : any null rows ? fail "transpose requires equal row lengths" : map head rows : transpose (map tail rows)
+_arrayWidth rows = null rows ? 0 : {
+    width = length (head rows)
+    all (row -> length row == width) rows ? width : fail "matrix rows must have equal lengths"
+}
+matmul left right = {
+    width <- _arrayWidth left
+    rightWidth <- _arrayWidth right
+    columns = transpose right
+    width == length right ? map (row -> map (dot row) columns) left : fail "matrix dimensions do not match"
+}
+shape (Number x) = []
+shape [] = [0]
+shape (x:xs) = {
+    dimensions = shape x
+    all (item -> shape item == dimensions) xs ? ([1 + length xs] ++ dimensions) : fail "shape requires a rectangular numeric array"
+}

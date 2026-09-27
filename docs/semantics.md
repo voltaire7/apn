@@ -625,3 +625,7 @@ List elements retain normal sharing: reusing an already-evaluated list does not
 rerun its memoized expressions. For a repeatable action, construct the list in
 the action body, as in `greet = do [print "hi"]`. This does not add statement
 syntax inside lists: local definitions still belong in blocks.
+
+Numeric lists and records support elementwise arithmetic and scalar broadcasting;
+`++` remains concatenation, and `*` with a function remains iteration.
+See [numeric arrays](arrays.md) for matching-shape rules and lazy validation.

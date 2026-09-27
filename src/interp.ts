@@ -56,7 +56,7 @@ export class Interpreter {
             if (open) for (const [key, value] of fields) this.env.setLocal(key, value);
             return { kind: "record", v: [...fields] };
         }
-        const names = ["type", "function", "option", "sequence", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5", "ffi"];
+        const names = ["type", "function", "option", "sequence", "array", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5", "ffi"];
         const name = module === "std" ? "std" : module.startsWith("std/") && names.includes(module.slice(4)) ? module.slice(4) : null;
         if (!name) throw new APNError("runtime", `unknown module '${module}'`);
         let record = this.modules.get(module);
@@ -527,8 +527,7 @@ export class Interpreter {
                     case "unop": {
                         const v = this.demand(this.eval(e.e));
                         if (e.op === "neg") {
-                            if (!isNumeric(v)) throw new APNError("runtime", "negation expects a number");
-                            r = v.typeName ? castNumeric(v.typeName, negate(v)) : negate(v);
+                            r = this.arrayNegate(v);
                         } else {
                             r = v.kind === "bool" ? mkBool(!v.v) : { kind: "unit" };
                         }
@@ -697,6 +696,11 @@ export class Interpreter {
         }
         const l = this.demand(this.eval(e.l));
         const r = this.demand(this.eval(e.r));
+        const iterating = e.op === "*" && ["closure", "clauseFn", "native", "type"].includes(r.kind);
+        if (!iterating && ["+", "-", "*", "/", "%", "^"].includes(e.op) &&
+                (this.isList(l) || this.isList(r) || l.kind === "record" || r.kind === "record")) {
+            return this.arrayArithmetic(e.op, l, r);
+        }
         const bad = (): never => {
             throw new APNError("runtime", `cannot apply '${e.op}' to ${l.kind} and ${r.kind}`);
         };
@@ -746,6 +750,51 @@ export class Interpreter {
                 return bad();
 
         }
+    }
+
+    private arrayNegate(value: Value): Value {
+        const v = this.demand(value);
+        if (isNumeric(v)) return v.typeName ? castNumeric(v.typeName, negate(v)) : negate(v);
+        if (this.isList(v)) return this.defer(() => {
+            const cell = this.cell(v);
+            return cell ? { kind: "cons", head: this.defer(() => this.arrayNegate(cell.head)), tail: this.defer(() => this.arrayNegate(cell.tail)) } : mkList([]);
+        });
+        if (v.kind === "record") return { kind: "record", v: v.v.map(([key, field]) => [key, this.defer(() => this.arrayNegate(field))]) };
+        throw new APNError("runtime", "negation expects numbers or numeric collections");
+    }
+
+    private arrayArithmetic(op: string, left: Value, right: Value, broadcast = true): Value {
+        const l = this.demand(left), r = this.demand(right);
+        if (isNumeric(l) && isNumeric(r)) return op === "^" ? numericNative("expt", [l, r]) as Value : typedArithmetic(op, l, r);
+        const ll = this.isList(l), rl = this.isList(r);
+        if (ll && rl) return this.defer(() => {
+            const a = this.cell(l), b = this.cell(r);
+            if (!a || !b) {
+                if (a !== b) throw new APNError("runtime", "array shape mismatch: list lengths differ");
+                return mkList([]);
+            }
+            return { kind: "cons",
+                head: this.defer(() => this.arrayArithmetic(op, a.head, b.head, false)),
+                tail: this.defer(() => this.arrayArithmetic(op, a.tail, b.tail, false)),
+            };
+        });
+        if (l.kind === "record" && r.kind === "record") {
+            const fields = new Map(r.v);
+            if (l.v.length !== r.v.length || l.v.some(([key]) => !fields.has(key))) {
+                throw new APNError("runtime", "array shape mismatch: record keys differ");
+            }
+            return { kind: "record", v: l.v.map(([key, field]) => [key, this.defer(() => this.arrayArithmetic(op, field, fields.get(key)!, false))]) };
+        }
+        if (broadcast && (isNumeric(l) || isNumeric(r))) {
+            const scalarLeft = isNumeric(l), collection = scalarLeft ? r : l;
+            const apply = (value: Value) => scalarLeft ? this.arrayArithmetic(op, l, value) : this.arrayArithmetic(op, value, r);
+            if (this.isList(collection)) return this.defer(() => {
+                const cell = this.cell(collection);
+                return cell ? { kind: "cons", head: this.defer(() => apply(cell.head)), tail: this.defer(() => apply(cell.tail)) } : mkList([]);
+            });
+            if (collection.kind === "record") return { kind: "record", v: collection.v.map(([key, field]) => [key, this.defer(() => apply(field))]) };
+        }
+        throw new APNError("runtime", `array arithmetic '${op}' expects numeric leaves and matching shapes (got ${l.kind} and ${r.kind})`);
     }
 
     private missingField(rec: Extract<Value, { kind: "record" }>, key: string): never {
