@@ -1056,6 +1056,7 @@ print (3 $ (+ 1) \ (* 2))                 # => 7
 combinedNamespace = import ["std/function", "std/number"]
 print (combinedNamespace.id 42)           # => 42
 
+# REPL/Neovim: load and use share import's keyword color.
 # Open namespace records (or a list of them) in the current scope.
 standardNamespace = import "std"
 use standardNamespace

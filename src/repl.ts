@@ -239,7 +239,7 @@ export function showValue(v: Value): string {
     }
 }
 
-const REPL_KEYWORDS = new Set(["import"]);
+const REPL_KEYWORDS = new Set(["import", "load", "use"]);
 const NATIVE_NAMES = new Set(["cast", "do", ...NATIVES.map(([n]) => n)]);
 
 // Syntax-highlight one buffer line (best-effort, purely cosmetic).
