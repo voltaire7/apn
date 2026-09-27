@@ -12,7 +12,7 @@ export const STANDARD_NATIVES: Array<[string, number]> = [
 export function standardNative(i: Interpreter, name: string, args: Value[]): Value {
     if (FFI_NATIVES.some(([n]) => n === name)) return ffiNative(i, name, args);
     const str = (v: Value): string => {
-        v = i.demand(v);
+        v = i.dataValue(v);
         if (v.kind !== "string") throw new APNError("runtime", `${name} expects strings`);
         return v.v;
     };
@@ -38,7 +38,7 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
     if (name === "fail") throw new APNError("runtime", str(args[0]));
     if (name === "chars") return mkList([...str(args[0])].map((v): Value => ({ kind: "char", v })));
     if (name === "fromChars") return mkStr(i.items(args[0]).map((v) => {
-        v = i.demand(v);
+        v = i.dataValue(v);
         if (v.kind !== "char") throw new APNError("runtime", "fromChars expects a list of Char values");
         return v.v;
     }).join(""));

@@ -786,23 +786,23 @@ print (isExact 2@3) # => false
 print (2@3) # => -1.9799849932008908+0.2822400161197344i
 
 # First-class checked numeric types and overloads.
-print (take 3 (100 * Int))           # => [Int 0, Int 1, Int 2]
-print (take 3 ([1..100] * Int))      # => [Int 1, Int 2, Int 3]
-print (100 * Int 0)                  # => Int 0
-print (Int 123)                      # => Int 123
+print (take 3 (100 * Int))           # => [0, 1, 2]
+print (take 3 ([1..100] * Int))      # => [1, 2, 3]
+print (100 * Int 0)                  # => 0
+print (Int 123)                      # => 123
 print (UInt32 4294967295)             # => UInt32 4294967295
 print (Float32 .5)                   # => Float32 0.5
 print (Fraction (1/3))               # => Fraction 1/3
-print (3.7 $ cast Int)               # => Int 3
-print (cast Float32 .1)              # => Float32 0.10000000149011612
+print (3.7 $ truncate $ Int)         # => 3
+print (Float32 1 / 10)              # => Float32 0.10000000149011612
 print (typeOf (Int32 1))             # => Int32
 print (isType Number (Int32 1))      # => true
-print (take 3 (100 * _ -> Int 0))         # => [Int 0, Int 0, Int 0]
+print (take 3 (100 * _ -> Int 0))         # => [0, 0, 0]
 typedAdd (Int x) (Int y) = Int (x + y)
 typedAdd (Float x) (Float y) = Float (x + y)
 typedAdd (Number x) (Number y) = x + y
-print (typedAdd (Int 2) (Int 3))      # => Int 5
-print (typedAdd (Float 2) (Float 3))  # => Float 5.0
+print (typedAdd (Int 2) (Int 3))      # => 5
+print (typedAdd (Float 2) (Float 3))  # => 5.0
 print (typedAdd (1/3) (1/6))          # => 1/2
 # Int32 2147483648, Float32 (Float .1), and UInt (-1) are checked errors.
 
@@ -813,40 +813,40 @@ print (integerClause .2)            # => "fallback"
 print (integerClause 2.0)           # => "integer"
 # A lone (Int x) clause applied to .2 reports no matching clause.
 
-# Constructors can round/truncate untyped numbers; typed inputs stay checked.
-print (Int .2)                       # => Int 0
-# Int (Float .2)                     # error: lossy conversion; use cast Int
-print (cast Int (Float .2))          # => Int 0
-print (Float .2 $ cast Int)          # => Int 0
+# Constructors are lossless for both bare and typed numbers; rounding is explicit.
+print (Int (floor .2))               # => 0
+# Int .2 and Int (Float .2)          # error: round explicitly first
+print (Int (truncate (Float .2)))    # => 0
+print (Float .2 $ floor $ Int)       # => 0
 print (.2 == Float .2)               # => true (numeric equality)
 numericPayload (source value) = value
 print (numericPayload (Int32 123))   # => 123
 retypedAdd (Int x) (Int y) = Int (x + y)
-print (retypedAdd (Int 2) (Int 3))   # => Int 5
-print cast                          # => (Type target) (source value) -> target value
+print (retypedAdd (Int 2) (Int 3))   # => 5
+print cast                          # => (Type target) value -> target value
 
 # Container templates apply their existing slots to incoming values.
 print (0 123)                       # => 123
-print ((Int 0) .2)                  # => Int 0
+print ((Int 0) (floor .2))           # => 0
 print ([(* 2)] [1, 2, 3, 4])        # => [2, 4, 6, 8]
 print ("a😀" $ cast [Char] $ cast String) # => "a😀"
 print ([Char] "hello")              # => ['h', 'e', 'l', 'l', 'o']
 print ([Char] "a😀")                 # => ['a', '😀']
-print ([Int] [1, 2, 3, 4])          # => [Int 1, Int 2, Int 3, Int 4]
-print ([Int, String] [123, "hello"]) # => [Int 123, "hello"]
-print (take 3 ([Int] [0..]))         # => [Int 0, Int 1, Int 2]
-print ([x: Int, y: 0] [x: 1, y: 2]) # => [x: Int 1, y: 2]
-print ([x: Int, y: Int] [x: 123])    # => [x: Int 123, y: Int]
+print ([Int] [1, 2, 3, 4])          # => [1, 2, 3, 4]
+print ([Int, String] [123, "hello"]) # => [123, "hello"]
+print (take 3 ([Int] [0..]))         # => [0, 1, 2]
+print ([x: Int, y: 0] [x: 1, y: 2]) # => [x: 1, y: 2]
+print ([x: Int, y: Int] [x: 123])    # => [x: 123, y: 0]
 slots = [Int]
-slots 0 = .2
-print slots                         # => [Int 0]
+slots 0 = floor .2
+print slots                         # => [0]
 slots 0 = 123
-print slots                         # => [Int 123]
+print slots                         # => [123]
 recordSlots = [x: Int, y: Int]
 recordSlots.y = 321
-print recordSlots                   # => [x: Int, y: Int 321]
-recordSlots "y" = .2
-print recordSlots.y                 # => Int 0
+print recordSlots                   # => [x: 0, y: 321]
+recordSlots "y" = floor .2
+print recordSlots.y                 # => 0
 # recordSlots.y = Float .2           # error: lossy typed conversion
 # slots 1 = 1                       # error: slot 1 does not exist
 print ([Int] [])                    # => [] (no hidden element schema)
@@ -855,16 +855,16 @@ print ([10] 0)                      # => 10 (integer indexing)
 Count = Int
 Numbers = [Int]
 Point = [x: Float, y: Float]
-print (Count 123)                   # => Int 123
-print (Numbers [1, 2])              # => [Int 1, Int 2]
-print (Point [x: 1, y: 2])          # => [x: Float 1.0, y: Float 2.0]
+print (Count 123)                   # => 123
+print (Numbers [1, 2])              # => [1, 2]
+print (Point [x: 1, y: 2])          # => [x: 1.0, y: 2.0]
 firstNumber (Numbers values) = head values
-print (firstNumber [123])           # => Int 123
-print (cast [Int] [1, 2])           # => [Int 1, Int 2]
+print (firstNumber [123])           # => 123
+print (cast [Int] [1, 2])           # => [1, 2]
 NumericMaybe a = Maybe a
-print ((NumericMaybe Int) (Just 123)) # => Just Int 123
+print ((NumericMaybe Int) (Just 123)) # => Just 123
 UserId = | MkUserId Int
-print (MkUserId 123)                # => MkUserId Int 123
+print (MkUserId 123)                # => MkUserId 123
 
 
 # Persistent HashMap, accepting records or association lists.
@@ -976,7 +976,7 @@ print (match None handlers)                    # 0
 print (tryMatch (Some x -> x) None)            # Unmatched
 print (tryMatch (Some x -> x) (Some 123))      # Matched 123
 checkedApply ((Int -> Int) f) = Int { f 123 }
-print (checkedApply (*2))                     # Int 246
+print (checkedApply (*2))                     # 246 (typed Int)
 
 # Editor tooling checks this file without executing these actions:
 #   apn --lint examples/features.apn
@@ -1067,7 +1067,7 @@ print (useFirst + useSecond)              # => 30
 # Record-template patterns accept positional lists just like template application.
 VectorForPattern = [x: Float, y: Float, z: Float]
 showVector (VectorForPattern v) = print v
-showVector [1, 2, 3]  # => [x: Float 1.0, y: Float 2.0, z: Float 3.0]
+showVector [1, 2, 3]  # => [x: 1.0, y: 2.0, z: 3.0]
 
 # REPL: typing ) on an indent-only line dedents one level, like ] and }.
 # Backspace after a lone ) restores the continuation indent; paste stays literal.
@@ -1088,7 +1088,7 @@ print (-[1,2,3])                         # => [-1, -2, -3]
 print (take 3 ([0..] + [10..]))           # => [10, 12, 14]
 print ([x: 1, y: 2] + [y: 20, x: 10])   # => [x: 11, y: 22]
 ArrayVector = [x: Float, y: Float, z: Float]
-print (ArrayVector [1,2,3] * 2)           # => [x: Float 2.0, y: Float 4.0, z: Float 6.0]
+print (ArrayVector [1,2,3] * 2)           # => [x: 2.0, y: 4.0, z: 6.0]
 print ([1,2] ++ [3,4])                   # => [1, 2, 3, 4]
 import "std/array"
 print (shape [[1,2],[3,4]])               # => [2, 2]
@@ -1101,7 +1101,25 @@ print (matmul [[1,2],[3,4]] [[5,6],[7,8]]) # => [[19, 22], [43, 50]]
 # Iteration accepts the function on either side.
 print * [1,2,3,4]                        # prints 1, 2, 3, 4
 print ((+ 1) * [1,2,3])                  # => [2, 3, 4]
-print (Int * 3)                          # => [Int 0, Int 1, Int 2]
+print (Int * 3)                          # => [0, 1, 2]
+
+# Zero is initialization: types retain their constructors and supply defaults.
+print [Int, Float, Int32, Bool, String] # => [0, 0.0, Int32 0, false, ""]
+ZeroVector = [x: Float, y: Float, z: Float]
+zeroVector = ZeroVector
+zeroVector.x = 123
+print zeroVector                     # => [x: 123.0, y: 0.0, z: 0.0]
+print ZeroVector                     # => [x: 0.0, y: 0.0, z: 0.0]
+print ([Int] [1, 2, 3])              # => [1, 2, 3]
+print [Int + 1, sqrt Float]          # => [1, 0.0]
+print (typeOf (Int 1))               # => Int
+print (Type ZeroVector)              # => [x: Float, y: Float, z: Float]
+DefaultChoice a = Present a | Absent
+print (DefaultChoice Int)            # => Absent
+DefaultUser = | MakeDefaultUser Int String
+print DefaultUser                   # => MakeDefaultUser 0 ""
+# Int .2, cast Int .2 and [Int] [.2] reject lossy conversion.
+print (Int (floor .2))               # => 0
 
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 

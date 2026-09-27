@@ -100,7 +100,7 @@ intentional evaluation change.
 - **Numbers**: `src/numbers.ts` owns the Scheme-style numeric tower. Integers
   and reduced rationals are exact (`bigint`); floats are binary64 and inexact;
   complex numbers have real numeric components. Mixed arithmetic is inexact
-  only when exact operands can convert without loss; otherwise require cast.
+  only when exact operands can convert without loss; otherwise require explicit inexact conversion.
   `/` preserves exact fractions; `quotient` truncates; `%` is `remainder`.
   Exact division by zero errors; inexact division follows IEEE infinity/NaN.
   Numeric equality/order compare exact finite values without first rounding
@@ -432,11 +432,11 @@ through the same lazy list consumers, indexing, and streaming as integer ranges.
 
 `src/type-system.ts` defines numeric constructors, lossless conversions and
 arithmetic promotion. Numeric values may carry `typeName`; preserve it for
-checked arithmetic and print it. Bare literals retain their natural numeric
+checked arithmetic and print it except for Int/Float. Bare literals retain their natural numeric
 kind and unadorned display. `cast Type value` is defined in lib/type.apn and
 loaded alongside the match prelude. Numeric patterns, including generic (t x), expose untyped payloads;
-constructors may round/truncate untyped inputs but require lossless conversion
-of explicitly typed inputs. Internal arithmetic promotion and C ABI conversions
+constructors require lossless conversion of both bare and explicitly typed inputs.
+Use floor/truncate/inexact before construction when rounding is intended. Internal arithmetic promotion and C ABI conversions
 still use strict castNumeric by default. NEVER allow integer wraparound or
 imaginary-part loss.
 Same fixed-width arithmetic checks overflow. Mixed typed arithmetic tries an
@@ -446,7 +446,7 @@ Typed function clauses prefer literal/exact concrete matches, then aggregates,
 then lossless constructor conversions (for both bare and typed inputs). Ties retain source order. Untyped clauses retain
 source order. Repeated pattern names require equal values.
 `n * _ -> typedValue` repeats using the existing function iteration overload.
-Numeric operands always multiply: `100 * Int 0` returns `Int 0`.
+Numeric operands always multiply: `100 * Int 0` returns `0` (typed Int).
 `HashMap` stores immutable association snapshots, with mutable JS Map used only
 inside construction of a new snapshot. Keys are scalar immutable values;
 numeric keys use exact normalized equality regardless of representation/type.
@@ -545,7 +545,7 @@ Tests: tests/record-keys-test.ts and tests/record-assignment-test.ts.
 
 The default prelude embeds lib/match.apn, lib/type.apn, and lib/do.apn. Editor launchers must
 allow Deno to read all three text imports. cast is a clauseFn, not a native; its
-source is `cast (Type target) (source value) = target value`. Expose std/type
+source is `cast (Type target) value = target value`. Expose std/type
 through module loading and browser bundles. numericPayload removes numeric
 annotations without changing the original value. Numeric patterns extract
 payloads after conversion; explicit result constructors reapply result types.
@@ -604,3 +604,17 @@ only whole numeric scalars; nested paired scalar/container shapes must fail.
 Keep function iteration and scalar overloads unchanged. Reuse typedArithmetic
 and numericNative so numeric checks remain consistent. Array helpers belong in
 lib/array.apn; docs/arrays.md and tests/array-test.ts cover their behavior.
+
+## Zero initialization
+
+src/zero-values.ts supplies built-in zeros. Interpreter.dataValue projects a type
+into its data default; demand/reference deliberately retain descriptors for
+constructors, schemas, imports and FFI signatures. Never memoize the projection
+into a shared type binding. Int/Float omit display labels; fixed widths retain
+them. Type descriptors returned by typeOf/generic patterns or inspected with
+Type carry an inspection flag for name rendering and type-identity equality.
+Variant defaults choose the first nullary constructor, else the first constructor
+with recursive field defaults. Detect recursive default dependencies; never
+silently allocate a Mutable or fabricate a function. Keep [Int] a singleton
+callable template, not an empty list. See docs/zero-initialization.md and
+tests/zero-initialization-test.ts. Numeric construction and cast are lossless.

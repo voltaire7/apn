@@ -57,12 +57,11 @@ used literally. `load` parses file contents as APN regardless of their extension
 
 ## Types — `std/type`
 
-`cast Type value` extracts the untyped numeric payload and applies the target
-constructor. It is an ordinary APN function in `lib/type.apn`, also loaded by
-the default prelude. `cast Int (Float .2)` returns `Int 0`; direct
-`Int (Float .2)` rejects the lossy typed conversion. `Int .2` works directly
-because `.2` has no explicit type annotation. Overflow and nonzero imaginary
-parts still error. Nonnumeric casts retain constructor validation.
+`cast Type value` is an ordinary APN compatibility wrapper for `Type value`,
+implemented in `lib/type.apn` and loaded by the default prelude. Both require
+lossless conversion. Use `Int (floor value)`, `Int (truncate value)`, or
+`Float (inexact value)` to choose the intended rounding explicitly.
+See [zero initialization](zero-initialization.md) for type defaults and inspection.
 
 ## Functions — `std/function`
 

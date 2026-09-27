@@ -18,11 +18,11 @@ for (const [code, expected] of [
     ['tryMatch (x | x > 0 -> x) 0', 'Unmatched'],
     ['x = Mutable 0; attempted = tryMatch (_ -> set 9 x) 1; Matched body = attempted; x', '0'],
     ['f 0 = 9; f 1 = 8; match 1 [f, _ -> 0]', '8'],
-    ['func ((Int -> Int) f) = Int { f 123 }; func (*2)', 'Int 246'],
-    ['Transform = Int -> Int; func (Transform f) = Int { f 123 }; func (*2)', 'Int 246'],
+    ['func ((Int -> Int) f) = Int { f 123 }; func (*2)', '246'],
+    ['Transform = Int -> Int; func (Transform f) = Int { f 123 }; func (*2)', '246'],
     ['func ((Int -> Int) f) = 42; func (x -> missing)', '42'],
-    ['func ((Int -> Int) f) = f 2.0; func (*2)', 'Int 4'],
-    ['func ((Int -> Int -> Int) f) = f 2 3; func (x y -> x + y)', 'Int 5'],
+    ['func ((Int -> Int) f) = f 2.0; func (*2)', '4'],
+    ['func ((Int -> Int -> Int) f) = f 2 3; func (x y -> x + y)', '5'],
     ['match 1 [((Int -> Int) f) -> f 0, x -> x]', '1'],
 ]) Deno.test(`pattern functions: ${code}`, () => {
     const actual = result(code);

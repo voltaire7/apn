@@ -384,7 +384,7 @@ function helpText(): string {
         `  Function (x -> x); Type Int; Variant (YourConstructor value)`,
         `  Int/UInt, Int8..Int128/UInt8..UInt128, Float/Float32, Fraction, Complex`,
         `  do [print "hi", 42] — run expressions in order; return the last result`,
-        `  Int32 123; cast Int 3.7; value $ cast Float32; typeOf value`,
+        `  Int32 123; Int (truncate 3.7); typeOf value; Type [x: Float]`,
         `  myTypeOf (t x) = print t   (bind the runtime type and value)`,
         `  f (Int x) = ...; f (Number x) = ... (typed overloads)`,
         `  100 * _ -> Int 0 repeats; 100 * Int 0 multiplies`,

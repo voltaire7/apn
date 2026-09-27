@@ -40,7 +40,7 @@ export function symbols(text: string): Symbol[] {
 const builtins = new Map<string, string>([
     ...NATIVES.map(([name, arity]): [string, string] => [name, `Built-in function; ${arity} argument${arity === 1 ? "" : "s"}.`]),
     ...TYPE_NAMES.map((name): [string, string] => [name, "Built-in type constructor."]),
-    ["cast", "cast Type value — APN prelude function: extract the untyped payload and apply Type."],
+    ["cast", "cast Type value — APN prelude compatibility wrapper for lossless Type application."],
     ["use", "use namespace — open a record or list of records in the current scope; later fields win; returns ()."],
     ["do", "do expressions — evaluate a list in order and return the last result; () for an empty list."],
     ["match", "match value alternatives — try unary pattern functions in order."],

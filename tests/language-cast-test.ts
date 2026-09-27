@@ -13,19 +13,7 @@ for (const [source, expected] of [
     ['String "hi"', '"hi"'],
     ["Text = String\nText ['h', 'i']", '"hi"'],
     ["xs = 'a':xs\nString (take 3 xs)", '"aaa"'],
-    ['Int .2', 'Int 0'],
-    ['Int (-.2)', 'Int 0'],
-    ['Int (-1.7)', 'Int -1'],
-    ['Int (1/3)', 'Int 0'],
-    ['Float32 .1', 'Float32 0.10000000149011612'],
-    ['Float 9007199254740993', 'Float 9007199254740992.0'],
-    ['Int (.1 + .1)', 'Int 0'],
-    ['cast Int (Float .2)', 'Int 0'],
-    ['Float .2 $ cast Int', 'Int 0'],
-    ['cast Float32 (Float .1)', 'Float32 0.10000000149011612'],
-    ['cast Int (Fraction (1/3))', 'Int 0'],
-    ['cast Int (Complex .2)', 'Int 0'],
-    ['Int (Float 2)', 'Int 2'],
+    ['Int (Float 2)', '2'],
     ['payload (t x) = [t, x]\npayload (Int32 5)', '[Int32, 5]'],
     ['payload (Float x) = x\npayload (Float .2)', '0.2'],
     ['payload (Number x) = x\npayload (Int32 5)', '5'],
@@ -35,23 +23,35 @@ for (const [source, expected] of [
     ['f (Float x) = 1\nf x = 2\nf 9007199254740993', '2'],
     ['match .2 [(Int x) -> 1, _ -> 2]', '2'],
     ['payload (Int x) = x\npayload (Float 2)', '2'],
-    ['x = Float .2\ny = cast Int x\n[y, x]', '[Int 0, Float 0.2]'],
     ['[.2 == Float .2, Int 1 == Float 1, Int32 1 == 1]', '[true, true, true]'],
-    ['mine t x = match x [(source value) -> t value]\nmine Int (Float .2)', 'Int 0'],
-    ['mine t (Int x) = t x\nmine Float32 (Int 9007199254740993)', 'Float32 9007199254740992.0'],
-    ['mine t (source x) = t x\nmine Int (Complex .2)', 'Int 0'],
     ['cast Bool true', 'true'],
     ['take 1 (cast List [1, missing])', '[1]'],
-    ['(cast (Int -> Int) (x -> x + 1)) 2', 'Int 3'],
-    ['types = import "std/type"\ntypes.cast Int (Float .2)', 'Int 0'],
-    ['import "std"\ncast Int (Float .2)', 'Int 0'],
-    ['Float .2 + .3', 'Float 0.5'],
+    ['(cast (Int -> Int) (x -> x + 1)) 2', '3'],
+    ['Float .2 + .3', '0.5'],
     ['Int 1 + .2', '1.2'],
 ] as const) Deno.test(`APN cast: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const [source, error] of [
+    ['Int .2', 'lossy conversion'],
+    ['Int (-.2)', 'lossy conversion'],
+    ['Int (-1.7)', 'lossy conversion'],
+    ['Int (1/3)', 'lossy conversion'],
+    ['Float32 .1', 'lossy conversion'],
+    ['Float 9007199254740993', 'lossy conversion'],
+    ['Int (.1 + .1)', 'lossy conversion'],
+    ['cast Int (Float .2)', 'lossy conversion'],
+    ['Float .2 $ cast Int', 'lossy conversion'],
+    ['cast Float32 (Float .1)', 'lossy conversion'],
+    ['cast Int (Fraction (1/3))', 'lossy conversion'],
+    ['cast Int (Complex .2)', 'lossy conversion'],
+    ['x = Float .2\ny = cast Int x\n[y, x]', 'lossy conversion'],
+    ['mine t x = match x [(source value) -> t value]\nmine Int (Float .2)', 'lossy conversion'],
+    ['mine t (Int x) = t x\nmine Float32 (Int 9007199254740993)', 'lossy conversion'],
+    ['mine t (source x) = t x\nmine Int (Complex .2)', 'lossy conversion'],
+    ['types = import "std/type"\ntypes.cast Int (Float .2)', 'lossy conversion'],
+    ['import "std"\ncast Int (Float .2)', 'lossy conversion'],
     ['cast String [1]', 'list of Char'],
     ['cast String ["h"]', 'list of Char'],
     ["String ['h', missing]", 'unbound variable'],
@@ -80,5 +80,5 @@ Deno.test("cast is the APN prelude definition, not a native", () => {
     if (NATIVES.some(([name]) => name === 'cast')) throw new Error('cast is still native');
     if (i.env.get('cast')?.kind !== 'clauseFn') throw new Error('cast is not a pattern function');
     const source = i.renderString(i.run(parseDocument('cast')));
-    if (source !== '(Type target) (source value) -> target value') throw new Error(source);
+    if (source !== '(Type target) value -> target value') throw new Error(source);
 });

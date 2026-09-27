@@ -16,7 +16,7 @@ increment x = x + 1
 h = increment \ double
 [h 3, h 4]`, "[7, 9]"],
     [String.raw`((\) (x -> x + 1) (x -> x * 2)) 3`, "7"],
-    [String.raw`(Int \ (x -> x + 1)) 3`, "Int 4"],
+    [String.raw`(Int \ (x -> x + 1)) 3`, "4"],
 ]) Deno.test(`composition: ${source}`, () => {
     const interp = new Interpreter();
     const actual = interp.renderString(interp.run(parseDocument(source)));

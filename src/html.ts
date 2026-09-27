@@ -12,11 +12,11 @@ export type HtmlNode = { text: string } | {
 type Handler = { message: Value } | { input: Value };
 const fail = (message: string): never => { throw new APNError("runtime", `HTML: ${message}`); };
 function string(i: Interpreter, value: Value): string {
-    const v = i.demand(value);
+    const v = i.dataValue(value);
     return v.kind === "string" ? v.v : fail("expected String; use toString for numbers");
 }
 function variant(i: Interpreter, value: Value, tag: string): Value[] {
-    const v = i.demand(value);
+    const v = i.dataValue(value);
     return v.kind === "variant" && v.tag === tag ? v.v : fail(`expected ${tag}`);
 }
 
@@ -71,7 +71,7 @@ export class BrowserSandbox {
             } else if (attr.tag === "HtmlAttr") {
                 const name = string(i, attr.v[0]).toLowerCase();
                 if (!/^[a-z][a-z0-9:_-]*$/.test(name) || name.startsWith("on") || name === "srcdoc") return fail(`unsupported attribute '${name}'`);
-                const raw = i.demand(attr.v[1]);
+                const raw = i.dataValue(attr.v[1]);
                 const content = raw.kind === "bool" ? raw.v : string(i, raw);
                 if (typeof content === "string" && ["href", "src", "action", "formaction"].includes(name) && /^\s*(javascript|vbscript|data)\s*:/i.test(content.replace(/[\u0000-\u0020]/g, ""))) return fail("unsafe URL attribute");
                 node.attributes[name] = content;

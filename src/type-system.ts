@@ -19,9 +19,10 @@ export function matchesType(name: string, value: Numeric): boolean {
     if (name === "Integer") return isInteger(value);
     if (name === "Exact") return exact(value);
     if (name === "Inexact") return !exact(value);
-    return canonical(name) === numericType(value);
+    return canonical(name) === canonical(numericType(value));
 }
 export function castNumeric(name: string, value: Numeric, explicit = false): Numeric {
+    const annotation = name;
     name = canonical(name);
     if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(name)) {
         if (!matchesType(name, value)) throw new APNError("runtime", `value does not belong to ${name}`);
@@ -31,7 +32,7 @@ export function castNumeric(name: string, value: Numeric, explicit = false): Num
     const int = name.match(/^(U?Int)(8|16|32|64|128)?$/);
     if (int) {
         const real = toReal(value);
-        if (!isInteger(real) && !explicit) throw new APNError("runtime", `lossy conversion to ${name}; use cast ${name}`);
+        if (!isInteger(real) && !explicit) throw new APNError("runtime", `lossy conversion to ${name}; round explicitly before applying the type`);
         const converted = toExact(explicit ? rounding("truncate", real) : real);
         if (converted.kind !== "int") throw new APNError("runtime", `${name} requires a finite integer`);
         const n = converted.v, unsigned = int[1] === "UInt";
@@ -45,25 +46,25 @@ export function castNumeric(name: string, value: Numeric, explicit = false): Num
         const real = toReal(value), v = asFloat(real);
         result = floating(name === "Float32" ? Math.fround(v) : v);
         if (!explicit && !equalNumbers(real, result) && !(real.kind === "float" && Number.isNaN(real.v) && Number.isNaN((result as { v: number }).v))) {
-            throw new APNError("runtime", `lossy conversion to ${name}; use cast ${name}`);
+            throw new APNError("runtime", `lossy conversion to ${name}; round explicitly before applying the type`);
         }
     } else if (name === "Fraction") result = toExact(toReal(value));
     else if (name === "Complex" || name === "ComplexExact") result = name === "ComplexExact" ? toExact(value) : value;
     else throw new APNError("runtime", `unknown numeric type ${name}`);
-    return { ...result, typeName: name };
+    return { ...result, typeName: annotation };
 }
 export function implicitOperands(a: Numeric, b: Numeric): [Numeric, Numeric] {
     if (exact(a) === exact(b)) return [a, b];
     const convert = (v: Numeric) => {
         const result = toInexact(v);
-        if (!equalNumbers(v, result)) throw new APNError("runtime", "lossy implicit numeric conversion; use cast Float or inexact explicitly");
+        if (!equalNumbers(v, result)) throw new APNError("runtime", "lossy implicit numeric conversion; use inexact explicitly");
         return result;
     };
     return exact(a) ? [convert(a), b] : [a, convert(b)];
 }
 export function typedArithmetic(op: string, a: Numeric, b: Numeric): Numeric {
     let target: string | undefined;
-    if (a.typeName && b.typeName && canonical(a.typeName) === canonical(b.typeName)) target = canonical(a.typeName);
+    if (a.typeName && b.typeName && canonical(a.typeName) === canonical(b.typeName)) target = a.typeName === b.typeName ? a.typeName : canonical(a.typeName);
     else if (a.typeName && b.typeName) {
         const rank = (name: string) => name.startsWith("Complex") ? 1000 : name === "Float" || name === "Float64" ? 900 : name === "Float32" ? 800 : name === "Fraction" ? 700 : name === "Int" || name === "UInt" ? 600 : Number(name.match(/\d+/)?.[0] ?? 0);
         const candidates = [a.typeName, b.typeName].sort((x, y) => rank(y) - rank(x));
@@ -85,7 +86,7 @@ export function typedArithmetic(op: string, a: Numeric, b: Numeric): Numeric {
     if (!target) return result;
     if (/^(U?Int)/.test(target) && result.kind !== "int") return { ...result, typeName: result.kind === "rational" ? "Fraction" : "Float" };
     // Floating arithmetic rounds as part of the operation, not an implicit cast.
-    return castNumeric(target, result, target === "Float" || target === "Float32");
+    return castNumeric(target, result, target === "Float" || target === "Float64" || target === "Float32");
 }
 export function numericHash(v: Numeric): string {
     const x = toExact(v);

@@ -78,8 +78,8 @@ and signatures you trust. See [Deno FFI](https://docs.deno.com/runtime/fundament
 
 Native numeric results retain their APN type: `add` above returns `Int32 42`.
 Arguments convert only without loss. Out-of-range integers and lossy float
-conversions fail before the C function is called. Use `cast Float32 value` when
-intentional rounding is required. Unbounded `Int`, `UInt`, fractions, complex
+conversions fail before the C function is called. Float32 arithmetic rounds to binary32;
+constructors and `cast` require lossless conversion even for bare literals. Unbounded `Int`, `UInt`, fractions, complex
 numbers, and aggregate numeric types are not C ABI descriptors. Match platform
 `long` and `size_t` to the appropriate fixed width yourself.
 

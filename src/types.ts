@@ -1,3 +1,4 @@
+import { builtinZero } from "./zero-values.ts";
 import { keySource } from "./record-keys.ts";
 import { functionSource } from "./function-source.ts";
 import { type Numeric, type Real, numberText } from "./numbers.ts";
@@ -30,7 +31,7 @@ export type Value =
     | { kind: "functionType"; from: Value; to: Value }
     | { kind: "contract"; target: Value; from: Value; to: Value }
     | { kind: "mutable"; v: Value }
-    | { kind: "type"; name: string; family?: VariantFamily; arguments?: Value[]; alias?: { parameters: string[]; body: Expr; env: Env } }
+    | { kind: "type"; name: string; inspect?: boolean; family?: VariantFamily; arguments?: Value[]; alias?: { parameters: string[]; body: Expr; env: Env } }
     | { kind: "hashmap"; entries: Map<string, [Value, Value]> }
     | Numeric
     | { kind: "rationalRange"; lo: Real; step: Real; hi: Real | null }
@@ -70,17 +71,20 @@ export function rawString(v: Value): string {
 
 export function valueToString(v: Value): string {
     switch (v.kind) {
-        case "int": case "float": case "rational": case "complex": return (v.typeName ? v.typeName + " " : "") + numberText(v);
+        case "int": case "float": case "rational": case "complex": return (v.typeName && v.typeName !== "Int" && v.typeName !== "Float" ? v.typeName + " " : "") + numberText(v);
         case "mutable": return valueToString(v.v);
-        case "functionType": return `${v.from.kind === "functionType" ? "(" + valueToString(v.from) + ")" : valueToString(v.from)} -> ${valueToString(v.to)}`;
+        case "functionType": return `${v.from.kind === "functionType" ? "(" + typeToString(v.from) + ")" : typeToString(v.from)} -> ${typeToString(v.to)}`;
         case "contract": return `((${valueToString({ kind: "functionType", from: v.from, to: v.to })}) (${valueToString(v.target)}))`;
         case "pointer": return `Pointer 0x${v.bits.toString(16)}`;
-        case "type": return v.name + (v.arguments?.length ? " " + v.arguments.map(valueToString).join(" ") : "");
+        case "type": {
+            const zero = !v.inspect && !v.family && !v.alias ? builtinZero(v.name) : undefined;
+            return zero ? valueToString(zero) : v.name + (v.arguments?.length ? " " + v.arguments.map(typeToString).join(" ") : "");
+        }
         case "hashmap": return `HashMap [${[...v.entries.values()].map(([k, x]) => `[${valueToString(k)}, ${valueToString(x)}]`).join(", ")}]`;
         case "rationalRange": return "<rational range>";
         case "bool": return String(v.v);
         case "string": return `"${v.v}"`;
-        case "char": return `'${v.v}'`;
+        case "char": return `'${v.v === "\0" ? "\\0" : v.v}'`;
         case "unit": return "()";
         case "list": return `[${v.v.map(valueToString).join(", ")}]`;
         case "lazyList":
@@ -142,3 +146,11 @@ export class Env {
     }
 }
 
+
+// Type inspection is explicit; ordinary rendering displays zero values.
+export function typeToString(v: Value): string {
+    if (v.kind === "type") return valueToString({ ...v, inspect: true });
+    if (v.kind === "list") return `[${v.v.map(typeToString).join(", ")}]`;
+    if (v.kind === "record") return `[${v.v.map(([k, x]) => `${keySource(k)}: ${typeToString(x)}`).join(", ")}]`;
+    return valueToString(v);
+}

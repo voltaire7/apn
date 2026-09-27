@@ -1,3 +1,2 @@
-# Numeric type patterns expose an untyped payload; constructors apply the target.
-# Nonnumeric values retain their existing constructor validation.
-cast (Type target) (source value) = target value
+# Compatibility spelling for lossless type application. Rounding is explicit.
+cast (Type target) value = target value

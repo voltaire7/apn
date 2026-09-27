@@ -28,11 +28,11 @@ function fromJS(value: unknown): Value {
     return { kind: "unit" }; // Renderer objects and void results are deliberately opaque.
 }
 function toJS(i: Interpreter, value: Value): unknown {
-    const v = i.demand(value);
+    const v = i.dataValue(value);
     if (v.kind === "string" || v.kind === "char" || v.kind === "bool") return v.v;
     if (v.kind === "int") {
         const n = Number(v.v);
-        if (!Number.isSafeInteger(n)) return fail("integer exceeds JavaScript's safe range; cast Float explicitly");
+        if (!Number.isSafeInteger(n)) return fail("integer exceeds JavaScript's safe range; use inexact explicitly");
         return n;
     }
     if (v.kind === "float" || v.kind === "rational") return asFloat(v);

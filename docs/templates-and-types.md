@@ -7,23 +7,22 @@ Container application applies each existing slot to its supplied input.
 
 ```apn
 0 123                 # 123
-(Int 0) 123           # Int 123
-(Int 0) .2            # Int 0
+(Int 0) 123           # 123
+(Int 0) (floor .2)    # 0
 (Int 0) (Float .2)    # error: lossy conversion
 "old" "new"           # "new"
 false true            # true
 ```
 
 An untyped number accepts any number unchanged. A typed number applies its
-constructor to the input: untyped numbers may round/truncate, but explicitly
-typed inputs require lossless conversion. Overflow and nonzero imaginary-part
+constructor to the input: all inputs require lossless conversion. Overflow and nonzero imaginary-part
 loss still error. Strings, chars, booleans, and unit accept their own kind only.
 Functions retain ordinary application, including effects.
 
 Numeric parameter patterns always require lossless conversion, including for
 bare literals. `f (Int x) = x` accepts `2.0` but does not match `.2`; another
 clause may handle it, otherwise application reports no matching clause. Direct
-construction `Int .2` still returns `Int 0`.
+construction `Int .2` also errors; use `Int (floor .2)` to round down explicitly.
 
 ## Lists
 
@@ -36,10 +35,10 @@ construction `Int .2` still returns `Int 0`.
 
 ```apn
 [(* 2)] [1, 2, 3, 4]     # [2, 4, 6, 8]
-[Int] [1, 2, 3]           # [Int 1, Int 2, Int 3]
-[Int, String] [1, "hi"]   # [Int 1, "hi"]
+[Int] [1, 2, 3]           # [1, 2, 3]
+[Int, String] [1, "hi"]   # [1, "hi"]
 [[(* 2)]] [[1, 2], [3]]  # [[2, 4], [6]]
-take 3 ([Int] [0..])      # [Int 0, Int 1, Int 2]
+take 3 ([Int] [0..])      # [0, 1, 2]
 ```
 
 A singleton template maps over any input length. Every other length uses exact
@@ -80,20 +79,21 @@ Use `map xs [0, 2]` to select multiple indexes from `xs`; it always returns a li
 ## Records
 
 ```apn
-[x: Int, y: 0] [x: 1, y: 2]    # [x: Int 1, y: 2]
-[x: Int, y: Int] [x: 123]        # [x: Int 123, y: Int]
-[x: Int] [x: 123, z: "extra"]    # [x: Int 123, z: "extra"]
-[x: Int, y: (* 2)] [1, 2]       # [x: Int 1, y: 4]
+[x: Int, y: 0] [x: 1, y: 2]    # [x: 1, y: 2]
+[x: Int, y: Int] [x: 123]        # [x: 123, y: 0]
+[x: Int] [x: 123, z: "extra"]    # [x: 123, z: "extra"]
+[x: Int, y: (* 2)] [1, 2]       # [x: 1, y: 4]
 ```
 
 Supplied existing fields are applied, omitted fields are preserved unchanged,
 and extra fields are appended unchanged. Types and functions are ordinary
-values: an omitted `Int` remains `Int`, and an omitted function stays callable.
+values: an omitted `Int` supplies zero while retaining its constructor, and an
+omitted function stays callable. See [zero initialization](zero-initialization.md).
 A list argument supplies record fields positionally and must match the field
 count. Record results defer field transformations until demanded.
 
 Keys retain their full string contents, including any quote characters, through application.
-`[x: Int, "x": Int] ["x": 1]` produces `[x: Int, "x": Int 1]`.
+`[x: Int, "x": Int] ["x": 1]` produces `[x: 0, "x": 1]`.
 
 ## Slot assignment
 
@@ -102,12 +102,12 @@ then rebind a copy in the current scope:
 
 ```apn
 xs = [Int]
-xs 0 = .2                 # [Int 0]
-xs 0 = 123                # [Int 123]
+xs 0 = floor .2                 # [0]
+xs 0 = 123                # [123]
 
 v = [x: Int, y: Int]
-v.y = 321                 # [x: Int, y: Int 321]
-v "y" = .2                # [x: Int, y: Int 0]
+v.y = 321                 # [x: 0, y: 321]
+v "y" = floor .2                # [x: 0, y: 0]
 ```
 
 The selected slot is demanded because it participates in application. Unrelated
@@ -145,10 +145,10 @@ Numbers = [Int]
 Point = [x: Float, y: Float]
 Points = [Point]
 
-Count 123                  # Int 123
-Numbers [1, 2]             # [Int 1, Int 2]
-Point [x: 1, y: 2]         # [x: Float 1.0, y: Float 2.0]
-cast [Int] [1, 2]          # [Int 1, Int 2]
+Count 123                  # 123
+Numbers [1, 2]             # [1, 2]
+Point [x: 1, y: 2]         # [x: 1.0, y: 2.0]
+cast [Int] [1, 2]          # [1, 2]
 Type [Int]                # [Int]
 isType Type [(* 2)]        # false
 ```
@@ -162,7 +162,7 @@ Patterns accept aliases and inline descriptions:
 
 ```apn
 firstNumber (Numbers xs) = head xs
-firstNumber [123]             # Int 123
+firstNumber [123]             # 123
 firstInline ([Int] xs) = head xs
 getX ([x: Int] p) = p.x
 ```
@@ -183,9 +183,9 @@ Option a = Some a | None
 Maybe a = Option a
 UserId = | MkUserId Int
 
-(Maybe Int) (Some 123)     # Some Int 123
+(Maybe Int) (Some 123)     # Some 123
 (Option Int) None          # None
-MkUserId 123               # MkUserId Int 123
+MkUserId 123               # MkUserId 123
 Some value = Some 123      # destructures; value is 123
 None = None                # pattern assertion
 ```

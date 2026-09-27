@@ -73,7 +73,7 @@ Types are constructors, including function types:
 func ((Int -> Int) f) = Int {
     f 123
 }
-func (*2)                       # Int 246
+func (*2)                       # 246 (typed Int)
 
 Transform = Int -> Int
 applyTransform (Transform f) = f 123

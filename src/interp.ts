@@ -1,3 +1,4 @@
+import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import matchSource from "../lib/match.apn" with { type: "text" };
 import typeSource from "../lib/type.apn" with { type: "text" };
@@ -197,7 +198,7 @@ export class Interpreter {
             previous.kind !== "clauseFn" && previous.kind !== "native" &&
             !(previous.kind === "closure" && previous.params.length > 0) &&
             !(previous.kind === "thunk" && previous.body.t === "placeholder")) {
-            let list = this.demand(previous);
+            let list = this.dataValue(previous);
             if (list.kind === "record") {
                 let record = list;
                 for (const clause of clauses) {
@@ -367,7 +368,7 @@ export class Interpreter {
     // names, unwrapping blocks/thunks/0-arg bodies) and return a LIVE 0-arg
     // action over the level's expression: debug shows its source, print RUNS it.
     stepNative(argsIn: Value[]): Value {
-        const n = this.demand(argsIn[0]);
+        const n = this.dataValue(argsIn[0]);
         if (n.kind !== "int" || n.v < 0) {
             throw new APNError("runtime", "step needs a non-negative int count");
         }
@@ -417,6 +418,7 @@ export class Interpreter {
     // results. seq is a list (elements), a record (entries as [field, value]
     // lists), or an int n (0..n-1; a negative n counts 0, -1, ... n+1).
     iterate(seq: Value, f: Value): Value {
+        seq = this.dataValue(seq);
         const out: Value[] = [];
         if (this.isList(seq)) {
             for (const x of this.elements(seq)) out.push(this.demand(this.apply(f, x)));
@@ -473,6 +475,58 @@ export class Interpreter {
         return v;
     }
 
+    // Value contexts project descriptors to their default without destroying
+    // their callable/schema identity. Do not memoize this projection in thunks.
+    dataValue(v: Value, path: readonly Value[] = []): Value {
+        v = this.demand(v);
+        if (v.kind !== "type") return v;
+        if (v.alias) throw new APNError("runtime", `${v.name} needs type arguments before it has a default`);
+        if (!v.family) return builtinZero(v.name) ?? v;
+        const family = v.family;
+        if (path.some(type => this.sameType(type, v))) throw new APNError("runtime", `${v.name} has no finite default; supply a value explicitly`);
+        if (path.length >= 128) throw new APNError("runtime", "default initialization is too deeply recursive; supply a value explicitly");
+        const choices = [...family.fields ?? []];
+        const choice = choices.find(([, fields]) => !fields.length) ?? choices[0];
+        if (!choice) throw new APNError("runtime", `${v.name} has no default constructor`);
+        const [tag, fields] = choice;
+        const scope = new Env(family.env);
+        family.parameters?.forEach((name, index) => {
+            const argument = v.kind === "type" ? v.arguments?.[index] : undefined;
+            scope.setLocal(name, argument ?? { kind: "type", name: "$any" });
+        });
+        const nextPath = [...path, v];
+        return { kind: "variant", tag, family, arguments: v.arguments, v: fields.map(spec => this.defer(() => {
+            const caller = this.env; this.env = scope;
+            try {
+                const type = this.reference(this.eval(spec));
+                if (!this.isTypeValue(type)) throw new APNError("runtime", `${tag} needs an explicit field value`);
+                return this.defaultField(type, nextPath);
+            } finally { this.env = caller; }
+        })) };
+    }
+
+    private inspectType(v: Value): Value {
+        v = this.reference(v);
+        if (v.kind === "type") return { ...v, inspect: true };
+        if (v.kind === "record") return { kind: "record", v: v.v.map(([k, x]) => [k, this.defer(() => this.inspectType(x))]) };
+        if (this.isList(v)) {
+            const cell = this.cell(v);
+            return cell ? { kind: "cons", head: this.defer(() => this.inspectType(cell.head)), tail: this.defer(() => this.inspectType(cell.tail)) } : mkList([]);
+        }
+        return v;
+    }
+
+    private defaultField(v: Value, path: readonly Value[]): Value {
+        v = this.dataValue(v, path);
+        if (v.kind === "type" || v.kind === "functionType") throw new APNError("runtime", "this type needs an explicit default value");
+        if (v.kind === "record") return { kind: "record", v: v.v.map(([k, x]) => [k, this.defer(() => this.defaultField(x, path))]) };
+        if (this.isList(v)) {
+            const cell = this.cell(v);
+            return cell ? { kind: "cons", head: this.defer(() => this.defaultField(cell.head, path)), tail: this.defer(() => this.defaultField(cell.tail, path)) } : mkList([]);
+        }
+        return v;
+    }
+
     runStmt(v: Value, tailLoad = false): Value {
         return this.demand(v, tailLoad);
     }
@@ -495,7 +549,7 @@ export class Interpreter {
                     case "functionType": r = this.resolveFunctionSpec(e.spec); break;
                     case "computedRange": {
                         const real = (expression: Expr): Real => {
-                            const value = this.demand(this.eval(expression));
+                            const value = this.dataValue(this.eval(expression));
                             if (value.kind !== "int" && value.kind !== "float" && value.kind !== "rational") throw new APNError("runtime", "range bounds must be real numbers");
                             return value;
                         };
@@ -525,7 +579,7 @@ export class Interpreter {
                     }
                     case "binop": r = this.evalBinop(e); break;
                     case "unop": {
-                        const v = this.demand(this.eval(e.e));
+                        const v = this.dataValue(this.eval(e.e));
                         if (e.op === "neg") {
                             r = this.arrayNegate(v);
                         } else {
@@ -543,7 +597,7 @@ export class Interpreter {
                     case "patternLambda": r = { kind: "clauseFn", name: "<lambda>", clauses: [{ params: e.params, body: e.body, guard: e.guard }], arity: e.params.length, env: this.env, applied: [] }; break;
                     case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
                     case "ternary": {
-                        const c = this.demand(this.eval(e.cond));
+                        const c = this.dataValue(this.eval(e.cond));
                         next = new TailCall((c.kind === "bool" && c.v) ? e.then : e.els, this.env);
                         break;
                     }
@@ -553,14 +607,13 @@ export class Interpreter {
                     case "record": r = { kind: "record", v: e.v.map(([k, x]) => [k, this.eval(x)] as [string, Value]) }; break;
                     case "recordAccess": {
                         // Resolve aliases/actions to the outer record, leaving its fields lazy.
-                        const rec = this.demand(this.eval(e.rec));
+                        const rec = this.dataValue(this.eval(e.rec));
                         if (rec.kind !== "record") throw new Error("record access on non-record");
                         r = this.recordField(rec, e.field);
                         break;
                     }
                     case "pluck": {
-                        let rec = this.callBlockFn(this.eval(e.rec));
-                        if (rec.kind === "thunk") rec = this.unpackThunk(rec);
+                        let rec = this.dataValue(this.eval(e.rec));
                         if (rec.kind !== "record") throw new Error("pluck on non-record");
                         const byKey = new Map(rec.v);
                         if (e.entries.every((x) => typeof x === "string")) {
@@ -589,8 +642,7 @@ export class Interpreter {
                     case "setFields": {
                         // eager: read the OLD record and the RHS fully BEFORE building the
                         // new one, so  vec.[x, y] = vec.[y, x]  swaps correctly
-                        let rec = this.callBlockFn(this.eval(e.rec));
-                        if (rec.kind === "thunk") rec = this.unpackThunk(rec);
+                        let rec = this.dataValue(this.eval(e.rec));
                         if (this.isList(rec) && this.cell(rec) === null) rec = mkList([]);
                         let base: Array<[string, Value]> | null = null;
                         if (rec.kind === "record") base = rec.v;
@@ -680,27 +732,29 @@ export class Interpreter {
             return {
                 kind: "cons", head: this.delay(e.l),
                 tail: this.defer(() => {
-                    const value = this.demand(tail);
+                    const value = this.dataValue(tail);
                     if (!this.isList(value)) throw new APNError("runtime", `cons tail expected a list, got ${value.kind}`);
                     return value;
                 }),
             };
         }
         if (e.op === "++") {
-            const l = this.demand(this.eval(e.l));
+            const l = this.dataValue(this.eval(e.l));
             const r = this.delay(e.r);
             if (this.isList(l)) return this.append(l, r);
-            const right = this.demand(r);
+            const right = this.dataValue(r);
             if (l.kind === "string" && right.kind === "string") return mkStr(l.v + right.v);
             throw new APNError("runtime", `cannot apply '++' to ${l.kind} and ${right.kind}`);
         }
-        const l = this.demand(this.eval(e.l));
-        const r = this.demand(this.eval(e.r));
+        let l = this.demand(this.eval(e.l));
+        let r = this.demand(this.eval(e.r));
         if (e.op === "*") {
             const callable = (v: Value) => ["closure", "clauseFn", "native", "type", "contract", "functionType"].includes(v.kind);
             if (callable(r)) return this.iterate(l, r);
             if (callable(l)) return this.iterate(r, l);
         }
+        if (e.op === "==" || e.op === "!=") return mkBool(this.equals(l, r) === (e.op === "=="));
+        if (e.op !== "\\") { l = this.dataValue(l); r = this.dataValue(r); }
         if (["+", "-", "*", "/", "%", "^"].includes(e.op) &&
                 (this.isList(l) || this.isList(r) || l.kind === "record" || r.kind === "record")) {
             return this.arrayArithmetic(e.op, l, r);
@@ -738,8 +792,6 @@ export class Interpreter {
                 }
                 return bad();
             case "/": case "%": return bad();
-            case "==": return mkBool(this.equals(l, r));
-            case "!=": return mkBool(!this.equals(l, r));
             case "<": return this.compare(l, r) < 0 ? mkBool(true) : mkBool(false);
             case ">": return this.compare(l, r) > 0 ? mkBool(true) : mkBool(false);
             case "<=": return this.compare(l, r) <= 0 ? mkBool(true) : mkBool(false);
@@ -755,7 +807,7 @@ export class Interpreter {
     }
 
     private arrayNegate(value: Value): Value {
-        const v = this.demand(value);
+        const v = this.dataValue(value);
         if (isNumeric(v)) return v.typeName ? castNumeric(v.typeName, negate(v)) : negate(v);
         if (this.isList(v)) return this.defer(() => {
             const cell = this.cell(v);
@@ -766,7 +818,7 @@ export class Interpreter {
     }
 
     private arrayArithmetic(op: string, left: Value, right: Value, broadcast = true): Value {
-        const l = this.demand(left), r = this.demand(right);
+        const l = this.dataValue(left), r = this.dataValue(right);
         if (isNumeric(l) && isNumeric(r)) return op === "^" ? numericNative("expt", [l, r]) as Value : typedArithmetic(op, l, r);
         const ll = this.isList(l), rl = this.isList(r);
         if (ll && rl) return this.defer(() => {
@@ -812,8 +864,10 @@ export class Interpreter {
     }
 
     equals(a: Value, b: Value): boolean {
-        a = this.demand(a);
-        b = this.demand(b);
+        a = this.demand(a); b = this.demand(b);
+        // Reflected types compare as types, not as their coincident zero values.
+        if (a.kind === "type" && b.kind === "type" && (a.inspect || b.inspect)) return this.sameType(a, b);
+        a = this.dataValue(a); b = this.dataValue(b);
         if (this.isList(a) && this.isList(b)) {
             for (;;) {
                 checkInterrupt();
@@ -827,6 +881,10 @@ export class Interpreter {
         if (isNumeric(a) && isNumeric(b)) return equalNumbers(a, b);
         if (a.kind === "hashmap" && b.kind === "hashmap") {
             return a.entries.size === b.entries.size && [...a.entries].every(([key, [, value]]) => b.entries.has(key) && this.equals(value, b.entries.get(key)![1]));
+        }
+        if (a.kind === "record" && b.kind === "record") {
+            const fields = new Map(b.v);
+            return a.v.length === b.v.length && a.v.every(([key, value]) => fields.has(key) && this.equals(value, fields.get(key)!));
         }
         if (a.kind !== b.kind) return false;
         switch (a.kind) {
@@ -854,6 +912,7 @@ export class Interpreter {
     }
 
     compare(a: Value, b: Value): number {
+        a = this.dataValue(a); b = this.dataValue(b);
         if (isNumeric(a) && isNumeric(b)) return compareNumbers(a, b);
         if (a.kind === "int" && b.kind === "int") return a.v < b.v ? -1 : a.v > b.v ? 1 : 0;
         if (a.kind === "float" && b.kind === "float") return a.v - b.v;
@@ -868,12 +927,12 @@ export class Interpreter {
         // A lazy 0-param def used as a function (`f = g; f 1`) is a thunk — run it.
         f = this.force(f);
         if (isNumeric(f)) {
-            const value = this.demand(arg);
+            const value = this.dataValue(arg);
             if (!isNumeric(value)) throw new APNError("runtime", "a numeric template expects a number");
             return f.typeName ? this.constructType(f.typeName, value) : value;
         }
         if (["string", "char", "bool", "unit"].includes(f.kind)) {
-            const value = this.demand(arg);
+            const value = this.dataValue(arg);
             if (value.kind !== f.kind) throw new APNError("runtime", `${f.kind} template expects ${f.kind}, got ${value.kind}`);
             return value;
         }
@@ -944,7 +1003,7 @@ export class Interpreter {
                 const ranked = f.clauses.map((clause, index) => ({ clause, index, score: clause.params.reduce((score, pattern, i) => {
                     if (["int", "bool", "string"].includes(pattern.p)) return score + 40;
                     if (pattern.p !== "constr" || !TYPE_NAMES.includes(pattern.tag)) return score;
-                    const value = pattern.tag === "Mutable" ? this.reference(raw[i]) : this.demand(raw[i]);
+                    const value = pattern.tag === "Mutable" ? this.reference(raw[i]) : pattern.tag === "Type" ? this.demand(raw[i]) : this.dataValue(raw[i]);
                     if (!NUMERIC_TYPES.includes(pattern.tag)) return score + (this.matchesValueType(pattern.tag, value) ? 30 : -1000);
                     if (!isNumeric(value)) return score - 1000;
                     if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(pattern.tag)) return score + (matchesType(pattern.tag, value) ? 10 : -1000);
@@ -969,7 +1028,7 @@ export class Interpreter {
                     this.env = child;
                     try {
                         if (clause.guard) {
-                            const guard = this.demand(this.eval(clause.guard));
+                            const guard = this.dataValue(this.eval(clause.guard));
                             if (guard.kind !== "bool") throw new APNError("runtime", "pattern guard must return Bool");
                             if (!guard.v) continue;
                         }
@@ -995,7 +1054,7 @@ export class Interpreter {
             case "rationalRange":
             case "floatRange":
             case "range": {
-                const value = this.demand(arg);
+                const value = this.dataValue(arg);
                 if (value.kind === "int") return this.index(f, value.v);
                 const carg = value.kind === "string" ? this.callNative("chars", [value]) : value;
                 if (this.isList(carg)) {
@@ -1007,7 +1066,7 @@ export class Interpreter {
             }
             case "record": {
                 // Strings select named fields; lists/records clone, ints select entries.
-                const value = this.demand(arg);
+                const value = this.dataValue(arg);
                 const carg = this.isList(value) ? mkList(this.items(value)) : value;
                 if (carg.kind === "string") {
                     // Application uses the exact string, including any quote characters.
@@ -1103,7 +1162,7 @@ export class Interpreter {
     }
 
     cell(v: Value): { head: Value; tail: Value } | null {
-        v = this.demand(v);
+        v = this.dataValue(v);
         if (v.kind === "cons") return v;
         if (v.kind === "list") return v.v.length ? { head: v.v[0], tail: this.fromArray(v.v, 1) } : null;
         if (v.kind === "rationalRange") {
@@ -1185,7 +1244,7 @@ export class Interpreter {
         return this.defer(() => {
             const cell = this.cell(xs);
             if (cell === null) {
-                const right = this.demand(ys);
+                const right = this.dataValue(ys);
                 if (!this.isList(right)) throw new APNError("runtime", "list append expects a list");
                 return right;
             }
@@ -1198,6 +1257,7 @@ export class Interpreter {
     render(v: Value, emit: (s: string, kind?: Value["kind"] | "key") => void, raw = false, ancestors = new Set<Value>()): void {
         checkInterrupt();
         v = this.demand(v);
+        if (!(v.kind === "type" && v.inspect)) v = this.dataValue(v);
         // Track nested values, not successive spine cells: 1:xs may stream
         // forever, but a list containing itself cannot render a first element.
         if (ancestors.has(v)) throw new APNError("runtime", "cannot display a cyclic nested value");
@@ -1228,6 +1288,11 @@ export class Interpreter {
                     else this.render(field, emit, false, ancestors);
                 });
                 emit("]");
+            } else if (v.kind === "type" && v.inspect) {
+                emit(v.name, "type");
+                for (const argument of v.arguments ?? []) {
+                    emit(" "); this.render(this.inspectType(argument), emit, false, ancestors);
+                }
             } else if (v.kind === "variant") {
                 emit(v.tag, "variant");
                 for (const arg of v.v) { emit(" "); this.render(arg, emit, false, ancestors); }
@@ -1269,7 +1334,7 @@ export class Interpreter {
     conform(type: Value, value: Value): Value {
         if (type.kind === "type") {
             if (type.name === "$any") return value;
-            const actual = this.demand(value);
+            const actual = type.name === "Type" ? this.demand(value) : this.dataValue(value);
             if (type.family) {
                 if (actual.kind !== "variant" || actual.family !== type.family) throw new APNError("runtime", `${type.name} expects a ${type.name} variant`);
                 return type.arguments?.length ? this.variantValue(actual.tag, actual.v, type.family, type.arguments) : actual;
@@ -1312,7 +1377,7 @@ export class Interpreter {
         if (type.kind === "type") {
             if (type.name === "$any") return true;
             if (type.family) {
-                value = this.demand(value);
+                value = this.dataValue(value);
                 if (value.kind !== "variant" || value.family !== type.family) return false;
                 if (!type.arguments?.length) return true;
                 if (value.arguments?.length) return this.sameType(type, { kind: "type", name: type.family.name, family: type.family, arguments: value.arguments });
@@ -1328,7 +1393,7 @@ export class Interpreter {
             return this.matchesValueType(type.name, type.name === "Mutable" ? value : this.demand(value));
         }
         if (type.kind === "functionType") return this.matchesValueType("Function", value);
-        value = this.demand(value);
+        value = this.dataValue(value);
         if (type.kind === "record") {
             if (value.kind !== "record") return false;
             const fields = new Map(value.v);
@@ -1395,6 +1460,7 @@ export class Interpreter {
 
     matchesValueType(name: string, value: Value): boolean {
         if (name === "Type") return this.isTypeValue(value);
+        if (name !== "Function" && name !== "Mutable") value = this.dataValue(value);
         if (name === "Pointer") return value.kind === "pointer";
         if (name === "Mutable") return value.kind === "mutable";
         if (isNumeric(value)) return NUMERIC_TYPES.includes(name) && matchesType(name, value);
@@ -1409,19 +1475,24 @@ export class Interpreter {
     }
 
     constructType(name: string, value: Value): Value {
+        if (name === "Type") {
+            if (!this.isTypeValue(value)) throw new APNError("runtime", "Type constructor expects a Type value");
+            return this.inspectType(value);
+        }
+        value = this.dataValue(value);
         if (name === "Mutable") return { kind: "mutable", v: value };
         if (name === "HashMap") return this.makeHashMap(value);
         if (name === "String" && this.isList(value)) return this.callNative("fromChars", [value]);
         if (NUMERIC_TYPES.includes(name)) {
             if (!isNumeric(value)) throw new APNError("runtime", `${name} expects a number`);
-            return castNumeric(name, value, !value.typeName);
+            return castNumeric(name, value);
         }
         if (!this.matchesValueType(name, value)) throw new APNError("runtime", `${name} constructor expects a ${name} value`);
         return value;
     }
 
     hashKey(value: Value): string {
-        value = this.demand(value);
+        value = this.dataValue(value);
         if (isNumeric(value)) return "number:" + numericHash(value);
         if (value.kind === "string" || value.kind === "char" || value.kind === "bool") return value.kind + ":" + String(value.v);
         if (value.kind === "unit") return "unit";
@@ -1466,8 +1537,8 @@ export class Interpreter {
         const host = this.hostNatives.get(name);
         if (host) return host(argsIn);
         if (name === "use") {
-            const value = this.demand(argsIn[0]);
-            const records = this.isList(value) ? this.items(value).map(v => this.demand(v)) : [value];
+            const value = this.dataValue(argsIn[0]);
+            const records = this.isList(value) ? this.items(value).map(v => this.dataValue(v)) : [value];
             const bindings: Array<[string, Value]> = [];
             for (const record of records) {
                 if (record.kind !== "record") throw new APNError("runtime", "use expects a record or a list of records");
@@ -1497,19 +1568,19 @@ export class Interpreter {
         if (STANDARD_NATIVES.some(([n]) => n === name)) return standardNative(this, name, argsIn);
         if (name === "typeOf") {
             const ref = this.reference(argsIn[0]);
-            if (ref.kind === "mutable") return { kind: "type", name: "Mutable" };
-            if (ref.kind === "functionType") return { kind: "type", name: "Type" };
+            if (ref.kind === "mutable") return { kind: "type", inspect: true, name: "Mutable" };
+            if (ref.kind === "functionType") return { kind: "type", inspect: true, name: "Type" };
             if (ref.kind === "contract") return { kind: "functionType", from: ref.from, to: ref.to };
             const value = this.demand(ref);
-            if (value.kind === "variant" && value.family) return { kind: "type", name: value.family.name, family: value.family, arguments: value.arguments };
-            if (isNumeric(value)) return { kind: "type", name: numericType(value) };
-            if (this.isList(value)) return { kind: "type", name: "List" };
+            if (value.kind === "variant" && value.family) return { kind: "type", inspect: true, name: value.family.name, family: value.family, arguments: value.arguments };
+            if (isNumeric(value)) return { kind: "type", inspect: true, name: numericType(value) };
+            if (this.isList(value)) return { kind: "type", inspect: true, name: "List" };
             const names: Partial<Record<Value["kind"], string>> = {
                 bool: "Bool", string: "String", char: "Char", unit: "Unit",
                 hashmap: "HashMap", record: "Record", variant: "Variant", type: "Type", pointer: "Pointer",
                 closure: "Function", clauseFn: "Function", native: "Function",
             };
-            return { kind: "type", name: names[value.kind] ?? value.kind };
+            return { kind: "type", inspect: true, name: names[value.kind] ?? value.kind };
         }
         if (name === "isType") {
             const target = this.reference(argsIn[0]);
@@ -1517,7 +1588,7 @@ export class Interpreter {
             return mkBool(this.belongsToType(target, argsIn[1]));
         }
         if (["insert", "lookup", "has", "remove"].includes(name)) {
-            const value = this.demand(argsIn[0]), map = this.demand(argsIn[1]);
+            const value = this.dataValue(argsIn[0]), map = this.dataValue(argsIn[1]);
             if (map.kind !== "hashmap") throw new APNError("runtime", `${name} expects a HashMap`);
             if (name === "lookup") return this.mapLookup(map, value);
             if (name === "has") return mkBool(map.entries.has(this.hashKey(value)));
@@ -1527,12 +1598,12 @@ export class Interpreter {
             return { kind: "hashmap", entries };
         }
         if (name === "keys" || name === "values") {
-            const map = this.demand(argsIn[0]);
+            const map = this.dataValue(argsIn[0]);
             if (map.kind !== "hashmap") throw new APNError("runtime", `${name} expects a HashMap`);
             return mkList([...map.entries.values()].map((entry) => entry[name === "keys" ? 0 : 1]));
         }
         if (NUMBER_NATIVES.some(([n]) => n === name)) {
-            let args = argsIn.map((x) => this.demand(x));
+            let args = argsIn.map((x) => this.dataValue(x));
             if (args.length === 2 && isNumeric(args[0]) && isNumeric(args[1]) &&
                 ["min", "max", "gcd", "lcm", "quotient", "remainder", "modulo", "makeRectangular"].includes(name)) {
                 args = implicitOperands(args[0], args[1]);
@@ -1581,7 +1652,7 @@ export class Interpreter {
         if (name === "zipWith") return this.zipList(argsIn[0], argsIn[1], argsIn[2]);
         if (name === "foldr") return this.foldRight(argsIn[0], argsIn[1], argsIn[2]);
         if (name === "take" || name === "drop") {
-            const count = this.demand(argsIn[0]);
+            const count = this.dataValue(argsIn[0]);
             if (count.kind !== "int" || count.v < 0) throw new APNError("runtime", `${name} expects a non-negative int count`);
             if (name === "take") return this.takeList(count.v, argsIn[1]);
             let rest = argsIn[1];
@@ -1593,7 +1664,7 @@ export class Interpreter {
             }
             return rest;
         }
-        const args = argsIn.map((x) => this.demand(x));
+        const args = argsIn.map((x, index) => ["print", "emit", "toString", "format"].includes(name) || (name === "foldl" && index === 0) ? this.demand(x) : this.dataValue(x));
         const a = args[0];
         switch (name) {
             case "print":
@@ -1650,7 +1721,7 @@ export class Interpreter {
                 if (a.kind !== "record") throw new Error("Runtime: pairs expects a record");
                 return mkList(a.v.map(([k, v]) => mkList([mkStr(keyText(k)), v])));
             case "format": {
-                const fmt = args[0];
+                const fmt = this.dataValue(args[0]);
                 if (fmt.kind !== "string") throw new Error("Runtime: format expects a string");
                 const vals = this.isList(args[1]) ? this.items(args[1]) : [args[1]];
                 let out = "";
@@ -1763,7 +1834,7 @@ export class Interpreter {
                 checkInterrupt();
                 const cell = this.cell(xs);
                 if (cell === null) return mkList([]);
-                const predicate = this.demand(this.apply(this.demand(f), cell.head));
+                const predicate = this.dataValue(this.apply(this.demand(f), cell.head));
                 if (predicate.kind === "bool" && predicate.v) {
                     return { kind: "cons", head: cell.head, tail: this.filterList(f, cell.tail) };
                 }
@@ -1831,7 +1902,7 @@ export class Interpreter {
             if (type.kind === "type") {
                 if (type.alias) return false;
                 if (!type.family) return this.matchPattern({ p: "constr", tag: type.name, args: [p.value] }, actual, binds);
-                const variant = this.demand(actual);
+                const variant = this.dataValue(actual);
                 if (variant.kind !== "variant" || variant.family !== type.family) return false;
             }
             if (type.kind === "record") {
@@ -1854,12 +1925,12 @@ export class Interpreter {
                     return this.matchPattern({ p: "constr", tag: type.name, args: p.args }, v, binds);
                 }
                 if (p.args.length === 1 && (this.isList(type) || type.kind === "record") && this.isTypeValue(type)) {
-                    const actual = this.demand(v);
+                    const actual = this.dataValue(v);
                     const input = type.kind === "record" ? this.recordPatternInput(type, actual) : this.isList(actual) ? actual : null;
                     return input !== null && this.matchPattern(p.args[0], this.conform(type, input), binds);
                 }
                 if (type.kind === "type" && type.family) {
-                    const actual = this.demand(v);
+                    const actual = this.dataValue(v);
                     return p.args.length === 1 && actual.kind === "variant" && actual.family === type.family && this.matchPattern(p.args[0], this.conform(type, actual), binds);
                 }
                 if (type.kind === "functionType") {
@@ -1872,7 +1943,7 @@ export class Interpreter {
             const ref = this.reference(v);
             return ref.kind === "mutable" && p.args.length === 1 && this.matchPattern(p.args[0], ref, binds);
         }
-        v = this.demand(v);
+        v = p.p === "typeBind" || (p.p === "constr" && p.tag === "Type") ? this.demand(v) : this.dataValue(v);
         switch (p.p) {
             case "typeBind": {
                 const type = this.callNative("typeOf", [v]);

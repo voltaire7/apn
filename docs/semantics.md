@@ -279,7 +279,7 @@ reduced rational fractions, inexact binary64 reals, and complex numbers whose
 components are real numbers. Exactness is separate from mathematical type:
 `isInteger 3.0` is true and `isExact 3.0` is false. Arithmetic with an inexact
 operand produces an inexact result only when conversion of the exact operand
-is lossless. Otherwise use `cast Float` or `inexact` explicitly. Exact `/` returns reduced fractions;
+is lossless. Otherwise use `inexact` explicitly. Exact `/` returns reduced fractions;
 `quotient` truncates integer division. `%` and `remainder` follow the dividend's
 sign; `modulo` follows the divisor's sign. Exact zero division raises an error;
 inexact division can produce IEEE infinities and NaNs.
@@ -347,7 +347,7 @@ streaming/interruption recovery. The showcase is the broader syntax reference.
 
 `arr 0 = 10` rebinds an existing list to a modified copy in the current scope,
 like record field assignment. The old slot is applied to the incoming value:
-`arr = [Int]; arr 0 = .2` produces `[Int 0]`. `arr (-1) = 10` updates its final element.
+`arr = [Int]; arr 0 = floor .2` produces `[0]`; assigning `.2` directly errors. `arr (-1) = 10` updates its final element.
 The index must be one integer literal; negative indexes require a finite list.
 Positive updates traverse only as far as the selected cell, leaving unused
 unselected heads and the remaining tail deferred. The selected head is demanded
@@ -432,33 +432,28 @@ An inexact radius stays inexact; an inexact angle still uses trigonometry.
 
 `Int` and `UInt` are arbitrary-precision signed/unsigned integers. Fixed-width
 constructors are `Int8`, `Int16`, `Int32`, `Int64`, `Int128` and matching `UInt`
-variants. `Float` (`Float64` is an alias) uses binary64; `Float32` uses binary32.
+variants. `Float` (`Float64` keeps an explicit display label) uses binary64; `Float32` uses binary32.
 `Fraction` holds an exact rational, `Complex` any numeric complex value, and
 `ComplexExact` an exact one. Constructors are first-class functions, e.g.
 `map Int [1,2]`. Constructed values print their type: `Int32 123`.
 
-A bare number has a numeric representation but no explicit constructor annotation.
-Constructors may truncate or round these untyped values: `Int .2` produces `Int 0`,
-and `Float32 .1` rounds to binary32. The same applies to untyped computed values.
-This does not make a decimal literal exact or defer its parsing until a type is known.
+All numeric constructors require lossless conversion, whether or not the input
+has an explicit type annotation. `Int .2` and `Int (Float .2)` both error.
+Choose the rounding operation explicitly: `Int (floor .2)` is `0`, while
+`Int (truncate (-1.7))` is `-1`. `inexact` explicitly rounds to binary64 when
+needed, so `Float (inexact 9007199254740993)` is permitted. Fixed-width integer
+overflow and nonzero imaginary-part loss remain errors. Numeric equality ignores
+annotations: `.2 == Float .2` remains true. Int and Float values display without
+a prefix; specialized types such as Int32, Float32 and Float64 retain theirs.
 
-Explicitly typed inputs require lossless conversion: `Int (Float .2)` errors,
-as does `Float32 (Float .1)`. To deliberately discard the original type and convert,
-use `cast Type value` or `value $ cast Type`. Integer conversion truncates toward
-zero. Out-of-range integers always error rather than wrap, and nonzero imaginary
-parts cannot be silently discarded. Numeric equality still compares numeric values:
-`.2 == Float .2` is true.
-
-`cast` is defined in APN in `lib/type.apn`, available in the default prelude and
-through `import "std/type"`:
+`cast` remains a compatibility helper in the APN prelude and `std/type`:
 
 ```apn
-cast (Type target) (source value) = target value
+cast (Type target) value = target value
 ```
 
-The generic pattern captures the source type and extracts the untyped numeric
-payload. Applying the target constructor then performs the conversion. Nonnumeric
-payloads retain their usual constructor validation; no native `cast` remains.
+It has exactly the same lossless behavior as applying the type directly. It
+provides no rounding privilege, even after a pattern extracts a numeric payload.
 
 Arithmetic between values of the same concrete type retains that type and
 checks integer overflow. An untyped operand is converted losslessly to the
@@ -493,8 +488,8 @@ Repeated variable names assert equality, so `(Number x) (Number x)` is not a
 catch-all for two different numbers.
 
 `100 * _ -> Int 0` repeats the typed value using the existing function iteration
-overload. Two numeric operands always multiply: `100 * Int 0` returns `Int 0`
-and `Int 3 * Int 2` returns `Int 6`.
+overload. Two numeric operands always multiply: `100 * Int 0` returns `0`
+and `Int 3 * Int 2` returns `6`, both still typed Int.
 
 ## HashMap
 
@@ -513,8 +508,8 @@ values stay lazy; keys are evaluated at construction. Record inputs follow the
 existing record evaluation rules. `(HashMap m)` is a type pattern.
 
 Type constructors also work directly with function iteration: `100 * Int`
-returns `Int 0` through `Int 99`; `[1..100] * Int` returns `Int 1` through
-`Int 100`. This differs from `100 * Int 0`, which multiplies and returns `Int 0`.
+returns typed integers `0` through `99`; `[1..100] * Int` returns `1` through
+`100`. This differs from `100 * Int 0`, which multiplies and returns typed zero.
 
 The nonnumeric types returned by `typeOf` are also first-class constructors:
 `Bool`, `String`, `Char`, `Unit`, `List`, `Record`, `Function`, `Type`, and
@@ -634,3 +629,9 @@ Function iteration accepts either operand order: `print * [1,2,3]` is equivalent
 to `[1,2,3] * print`. Records pass `[key, value]` pairs and integer counts pass
 indexes. Numeric operands still multiply (including numeric arrays); two
 functions are not composed by `*`—use `\` for composition.
+
+## Zero is initialization
+
+Type descriptors supply useful default values in data contexts while remaining
+callable constructors and usable patterns. See [zero initialization](zero-initialization.md)
+for the default table, type inspection, variant rules and limitations.

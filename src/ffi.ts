@@ -22,7 +22,7 @@ function typeName(i: Interpreter, value: Value): string {
     return type.name;
 }
 function pointer(i: Interpreter, value: Value): NativePointer {
-    const p = i.demand(value);
+    const p = i.dataValue(value);
     if (p.kind !== "pointer") return fail("expected Pointer");
     const pending: NativePointer[] = [p];
     const seen = new Set<NativePointer>();
@@ -47,13 +47,13 @@ function makePointer(address: Deno.PointerValue, owner?: { closed: boolean }): N
     return { kind: "pointer", address, bits: address === null ? 0n : Deno.UnsafePointer.value(address), owner, offset: 0 };
 }
 function count(i: Interpreter, value: Value): number {
-    const v = i.demand(value);
+    const v = i.dataValue(value);
     if (v.kind !== "int" || v.v < 0n || v.v > BigInt(Number.MAX_SAFE_INTEGER)) return fail("expected a nonnegative safe integer");
     return Number(v.v);
 }
 function encode(i: Interpreter, name: string, raw: Value): number | bigint | boolean | Uint8Array | Deno.PointerValue {
     if (name === "Pointer") return pointer(i, raw).address;
-    const v = i.demand(raw);
+    const v = i.dataValue(raw);
     if (name === "Bool") { if (v.kind !== "bool") return fail("Bool argument expected"); return v.v; }
     if (name === "String") {
         if (v.kind !== "string") return fail("String argument expected");

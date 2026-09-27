@@ -17,7 +17,7 @@ deno test --allow-read tests/*-test.ts
 | `lib/` | Modular standard library |
 | `examples/` | Runnable feature showcase |
 | `tests/` | Evaluation regression tests |
-| `docs/` | [Evaluation semantics](docs/semantics.md), [templates and types](docs/templates-and-types.md), [operator precedence](docs/semantics.md#operator-precedence-and-associativity) |
+| `docs/` | [Evaluation semantics](docs/semantics.md), [templates and types](docs/templates-and-types.md), [zero initialization](docs/zero-initialization.md), [operator precedence](docs/semantics.md#operator-precedence-and-associativity) |
 
 Import the standard library from any directory:
 
