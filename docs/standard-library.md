@@ -258,10 +258,10 @@ is already in scope, e.g. `Box a = | Box a`.
 `p5 = import "std/p5"` exposes `p5.sketch callbacks`. See the [p5 reference](p5.md)
 for drawing methods, events, the browser build command, and current scope.
 
-## Matching prelude
+## Matching
 
-`match value handlers`, `tryMatch handler value`, `Matched`, and `Unmatched`
-are available without importing std. The dispatcher is written in `lib/match.apn`.
+`match value handlers` is an intrinsic function available without importing std.
+It selects the first matching unary function from a lazy list of alternatives.
 See [pattern functions and contracts](pattern-functions.md).
 
 A bare `load "file"` in the REPL runs the file without automatically displaying

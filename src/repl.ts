@@ -361,7 +361,6 @@ function helpText(): string {
         `  xs * x -> { expr } * y -> expr   (braces end the first lambda)`,
         `  cond ? a : b   (ternary)`,
         `  match x [ pat -> expr, ... ]   (ordinary function; alternatives are pattern lambdas)`,
-        `  tryMatch (Some x -> x) None  => Unmatched; success => Matched result`,
         `  func ((Int -> Int) f) = Int { f 123 }   (checked function contract)`,
         `  Maybe a = Just a | Nothing`,
         `  [1,2,3]  [0..5] [0,0.5..100] [0..]  ranges; 0:[] conses`,

@@ -212,12 +212,10 @@ intentional evaluation change.
   → "no clause of '<name>' matches the given arguments" (the error names the
   function). Guards on def clauses are
   NOT supported (use `match x [ ... | ... ]` inside the body for guards).
-- **First-class matching**: `match value alternatives` is an ordinary APN
-  function from `lib/match.apn`, embedded as the default prelude. It accepts a
+- **First-class matching**: `match value alternatives` is an intrinsic function. It accepts a
   lazy list of unary functions, including pattern lambdas with optional guards.
-  `tryMatch f value` returns `Matched result` (lazy body) or `Unmatched`.
   Only pattern/false-guard failure falls through; runtime errors propagate.
-  No match keyword, match AST node, or special evaluator remains.
+  No match keyword or match AST node is needed; native dispatch iterates lazily.
   Parenthesize computed arguments as with any curried function:
       match (head xs) [0 -> 1, _ -> 2]
       handlers = [Some x -> x, None -> 0]
@@ -232,7 +230,7 @@ intentional evaluation change.
 - **Pattern lambdas**: all parameters may be patterns (constructors, literals,
   lists, types, wildcards), optionally followed by a `|` Bool guard. They are
   represented by `patternLambda` and evaluate to ordinary `clauseFn` values.
-  Failed direct application raises a no-clause error; `tryMatch` probes without
+  Failed direct application raises a no-clause error; intrinsic `match` probes without
   running the body and uses the internal nomatch sentinel only for mismatch.
 
 - **Pipes & operators**:
@@ -543,8 +541,8 @@ Tests: tests/record-keys-test.ts and tests/record-assignment-test.ts.
 
 ## APN-defined cast
 
-The default prelude embeds lib/match.apn, lib/type.apn, and lib/do.apn. Editor launchers must
-allow Deno to read all three text imports. cast is a clauseFn, not a native; its
+The default prelude embeds lib/type.apn and lib/do.apn. Editor launchers must
+allow Deno to read both text imports. cast is a clauseFn, not a native; its
 source is `cast (Type target) value = target value`. Expose std/type
 through module loading and browser bundles. numericPayload removes numeric
 annotations without changing the original value. Numeric patterns extract

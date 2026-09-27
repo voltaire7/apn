@@ -572,10 +572,10 @@ actions still run when demanded; inspecting one as a record field shows its body
 
 ## Pattern functions
 
-`match` is an ordinary prelude function over unary functions; pattern lambdas
+`match` is an intrinsic function over a lazy list of unary functions; pattern lambdas
 and runtime function contracts are described in [pattern functions](pattern-functions.md).
-The primitive `tryMatch` distinguishes pattern failure from runtime errors and
-keeps successful bodies deferred. Guards must return Bool.
+Only pattern mismatch or a false guard selects the next alternative; runtime
+errors propagate and unused alternatives remain unevaluated. Guards must return Bool.
 
 
 ## CLI file errors

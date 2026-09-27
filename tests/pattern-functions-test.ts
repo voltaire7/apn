@@ -13,10 +13,12 @@ for (const [code, expected] of [
     ['match x handlers = 42; match 123 []', '42'],
     ['match missing [_ -> 42, x -> missing]', '42'],
     ['match 2 [0 -> missing, 2 -> 42, x -> missing]', '42'],
-    ['tryMatch (Some x -> missing) None', 'Unmatched'],
-    ['tryMatch (Some x -> x) (Some 3)', 'Matched 3'],
-    ['tryMatch (x | x > 0 -> x) 0', 'Unmatched'],
-    ['x = Mutable 0; attempted = tryMatch (_ -> set 9 x) 1; Matched body = attempted; x', '0'],
+    ['match None [Some x -> missing, _ -> 42]', '42'],
+    ['match (Some 3) [Some x -> x]', '3'],
+    ['match 0 [x | x > 0 -> x, _ -> 42]', '42'],
+    ['match 3 ((_ -> 42):missing)', '42'],
+    ['dispatch = match 3; dispatch [(+ 1)]', '4'],
+    ['match [3] [head]', '3'],
     ['f 0 = 9; f 1 = 8; match 1 [f, _ -> 0]', '8'],
     ['func ((Int -> Int) f) = Int { f 123 }; func (*2)', '246'],
     ['Transform = Int -> Int; func (Transform f) = Int { f 123 }; func (*2)', '246'],
@@ -35,7 +37,10 @@ for (const [code, error] of [
     ['match 1 [x | missing -> 0, _ -> 42]', 'unbound variable'],
     ['match 1 [x | 1 -> 0, _ -> 42]', 'guard must return Bool'],
     ['match 1 [_ -> _, _ -> 42]', 'not implemented'],
-    ['tryMatch 42 1', 'one remaining argument'],
+    ['match 1 [42]', 'one remaining argument'],
+    ['match 1 [x y -> x]', 'one remaining argument'],
+    ['match missing []', 'non-exhaustive match'],
+    ['match 1 42', 'expected a list'],
     ['func ((Int -> Int) f) = f (Float .5); func (*2)', 'lossy conversion'],
     ['func ((Int -> Int) f) = f 1; func (x -> "bad")', 'expects a number'],
 ]) Deno.test(`pattern functions reject: ${code}`, () => {
@@ -52,11 +57,23 @@ Deno.test("pattern functions parse independently of prior constructor imports", 
 });
 
 Deno.test("constructor lambdas accept nested patterns", () => {
-    if (result('tryMatch (Some (Int x) -> x) (Some 3)') !== 'Matched 3') throw new Error('nested type pattern');
-    if (result('tryMatch (Some (Int x) -> x) (Some "no")') !== 'Unmatched') throw new Error('nested mismatch');
+    if (result('match (Some 3) [Some (Int x) -> x]') !== '3') throw new Error('nested type pattern');
+    if (result('match (Some "no") [Some (Int x) -> x, _ -> 42]') !== '42') throw new Error('nested mismatch');
     if (result('(Some [a, b] -> a + b) (Some [1, 2])') !== '3') throw new Error('nested list pattern');
 });
 
 Deno.test("guards can use nested lambda arguments", () => {
     if (result('match [1,2] [xs | all (n -> n > 0) xs -> 42, _ -> 0]') !== '42') throw new Error('nested lambda in guard');
+});
+
+Deno.test("match is intrinsic and has no public attempt protocol", () => {
+    const i = new Interpreter();
+    if (i.env.get("match")?.kind !== "native") throw new Error("match must be intrinsic");
+    for (const name of ["tryMatch", "MatchAttempt", "Matched", "Unmatched"]) {
+        if (i.env.get(name)) throw new Error(`unexpected builtin ${name}`);
+    }
+});
+
+Deno.test("match traverses many rejected alternatives without recursive dispatch", () => {
+    if (result('match 1 ((map (n -> (0 -> 0)) [1..10000]) ++ [_ -> 42])') !== '42') throw new Error('dispatch failed');
 });

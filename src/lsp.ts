@@ -1,5 +1,5 @@
 // Startup loads the bundled interpreter prelude; editor launchers must allow
-// reading lib/match.apn, lib/type.apn, and lib/do.apn for Deno versions that gate text imports on permissions.
+// reading lib/type.apn and lib/do.apn for Deno versions that gate text imports on permissions.
 import { lint, position, type Range } from "./lint.ts";
 import { parseDocument } from "./parser.ts";
 import { lex, KEYWORDS } from "./lexer.ts";
@@ -44,8 +44,6 @@ const builtins = new Map<string, string>([
     ["use", "use namespace — open a record or list of records in the current scope; later fields win; returns ()."],
     ["do", "do expressions — evaluate a list in order and return the last result; () for an empty list."],
     ["match", "match value alternatives — try unary pattern functions in order."],
-    ["Matched", "Matched result — a successful tryMatch, with a deferred result."],
-    ["Unmatched", "Unmatched — tryMatch found no matching clause."],
 ]);
 
 export class LanguageServer {

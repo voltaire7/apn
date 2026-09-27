@@ -1,6 +1,5 @@
 import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
-import matchSource from "../lib/match.apn" with { type: "text" };
 import typeSource from "../lib/type.apn" with { type: "text" };
 import doSource from "../lib/do.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
@@ -30,7 +29,7 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
-    ["tryMatch", 2], ["set", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
+    ["match", 2], ["set", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
@@ -117,10 +116,9 @@ export class Interpreter {
         const outer = this.env;
         this.env = new Env(outer);
         this.env.setLocal("fail", { kind: "native", name: "fail", arity: 1, applied: [] });
-        this.run(parse(matchSource));
         this.run(parse(typeSource));
         this.run(parse(doSource));
-        for (const name of ["match", "Matched", "Unmatched", "cast", "do"]) this.preludeBindings.set(name, this.env.get(name)!);
+        for (const name of ["cast", "do"]) this.preludeBindings.set(name, this.env.get(name)!);
         this.env = outer;
         for (const [name, value] of this.preludeBindings) outer.setLocal(name, value);
     }
@@ -1543,12 +1541,17 @@ export class Interpreter {
     }
 
     callNative(name: string, argsIn: Value[], tag?: string): Value {
-        if (name === "tryMatch") {
-            const f = this.demand(argsIn[0]);
-            const arity = f.kind === "clauseFn" || f.kind === "native" ? f.arity - f.applied.length : f.kind === "closure" ? f.params.length : f.kind === "contract" ? 1 : -1;
-            if (arity !== 1) throw new APNError("runtime", "tryMatch expects a function with one remaining argument");
-            const result = f.kind === "clauseFn" ? this.apply(f, argsIn[1], true) : this.defer(() => this.apply(f, argsIn[1]));
-            return result.kind === "nomatch" ? this.preludeBindings.get("Unmatched")! : this.apply(this.preludeBindings.get("Matched")!, result);
+        if (name === "match") {
+            // Traverse only as far as the first match. Share the original lazy
+            // argument across probes; errors are never treated as mismatches.
+            for (const candidate of this.elements(argsIn[1])) {
+                const f = this.demand(candidate);
+                const arity = f.kind === "clauseFn" || f.kind === "native" ? f.arity - f.applied.length : f.kind === "closure" ? f.params.length : f.kind === "contract" ? 1 : -1;
+                if (arity !== 1) throw new APNError("runtime", "match expects alternatives with one remaining argument");
+                const result = f.kind === "clauseFn" ? this.apply(f, argsIn[0], true) : this.defer(() => this.apply(f, argsIn[0]));
+                if (result.kind !== "nomatch") return result;
+            }
+            throw new APNError("runtime", "non-exhaustive match: no alternative fits this value");
         }
 
         const host = this.hostNatives.get(name);

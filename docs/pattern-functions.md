@@ -13,8 +13,7 @@ Applying `(None -> print x)` to `Some 123` fails with a no-clause error. Its bod
 is not run, so `x` is never looked up. `_` in a body still means unfinished code;
 use `()` when a matched branch should do nothing.
 
-`match` is an ordinary APN function defined in `lib/match.apn`, available by
-default. It tries a lazy list of unary functions in order:
+`match` is an intrinsic function, available by default. It tries a lazy list of unary functions in order:
 
 ```apn
 handlers = [
@@ -34,36 +33,22 @@ parameters. A guard follows the parameters, e.g. `n | n > 0 -> n`. A false guard
 is a mismatch; guards must return Bool. Multiple parameter lambdas are curried,
 but match alternatives must have exactly one remaining argument.
 
-## Explicit attempts
+## Dispatch behavior
 
-The primitive `tryMatch` makes mismatch observable without an exception:
+Patterns and guards demand only what they inspect. A mismatch never evaluates
+its body. Once a candidate matches, its result is returned without inspecting
+later alternatives. `_ -> ...` and `x -> ...` remain ordinary unary functions
+and can serve as catch-all alternatives.
 
-```apn
-tryMatch (Some x -> x) (Some 123) # Matched 123
-tryMatch (Some x -> x) None       # Unmatched
-```
-
-`Matched` contains a deferred body result; constructing the attempt does not
-execute it. Printing or otherwise demanding that result does. Patterns and
-guards demand only what they inspect. A mismatch never evaluates the body.
 An error while inspecting a pattern, evaluating a guard, or executing a selected
 body propagates; it does not select another branch. Empty/exhausted alternatives
-raise a non-exhaustive-match error.
+raise a non-exhaustive-match error. The dispatcher traverses alternatives
+iteratively, including lazily generated lists.
 
-The prelude implementation is APN:
-
-```apn
-MatchAttempt = Matched a | Unmatched
-match value [] = fail "non-exhaustive match: no alternative fits this value"
-match value (candidate:rest) = _matchResult (tryMatch candidate value) value rest
-_matchResult (Matched result) value rest = result
-_matchResult Unmatched value rest = match value rest
-```
-
-There is no special trailing `[]` fallback argument. Applying a successful result
-to another argument retains ordinary application semantics. Use `match` for a
-chain of alternatives, or inspect `tryMatch` explicitly. This matches values,
-not the source syntax of an unevaluated application such as `1 2`.
+There is no trailing fallback argument or public attempt-result wrapper.
+Applying a successful result to another argument retains ordinary application
+semantics. This matches values, not the source syntax of an unevaluated
+application such as `1 2`.
 
 ## Function contracts
 

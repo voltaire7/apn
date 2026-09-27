@@ -966,15 +966,16 @@ print (typeOf (p5.sketch [draw: (p -> p.background "black")])) # P5Program
 printFunction x = print x
 print printFunction                          # x -> print x
 
-# Alternatives are first-class functions, and match itself is an APN function.
+# Alternatives are first-class functions, and match is an intrinsic callable function.
 handlers = [
     Some y -> y
     None -> 0
 ]
 print (match (Some 123) handlers)              # 123
 print (match None handlers)                    # 0
-print (tryMatch (Some x -> x) None)            # Unmatched
-print (tryMatch (Some x -> x) (Some 123))      # Matched 123
+dispatch = match (Some 123)
+print (dispatch handlers)                     # 123
+print (match missing [_ -> 42])               # 42; unused value stays lazy
 checkedApply ((Int -> Int) f) = Int { f 123 }
 print (checkedApply (*2))                     # 246 (typed Int)
 
