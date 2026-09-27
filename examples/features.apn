@@ -1098,6 +1098,11 @@ print (matmul [[1,2],[3,4]] [[5,6],[7,8]]) # => [[19, 22], [43, 50]]
 # [1,2] + [3]                            # length mismatch when traversed
 # [[1,2],[3,4]] + [10,20]                 # rank mismatch; scalar broadcast only
 
+# Iteration accepts the function on either side.
+print * [1,2,3,4]                        # prints 1, 2, 3, 4
+print ((+ 1) * [1,2,3])                  # => [2, 3, 4]
+print (Int * 3)                          # => [Int 0, Int 1, Int 2]
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

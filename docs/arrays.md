@@ -33,8 +33,10 @@ consumed. `head ([1] + [2,3])` returns `3`, but consuming the whole result error
 Infinite lists work with finite consumers, e.g. `take 3 ([0..] + [10..])`.
 Elements are shared after evaluation, just like other lazy list elements.
 
-`xs * function` retains its existing iteration behavior; `xs * ys` multiplies
-numeric collections elementwise. Equality remains structural, and comparisons
+`xs * function` and `function * xs` iterate with the same behavior; `xs * ys` multiplies
+numeric collections elementwise. Iteration is eager for lists, so use `map`
+for lazy or infinite inputs. Records supply `[key, value]` entries, and integer
+counts supply indexes starting at zero. Equality remains structural, and comparisons
 do not automatically produce masks. Use `map` for predicates and `filter` for
 selection. Matrix multiplication is explicit via `matmul`.
 

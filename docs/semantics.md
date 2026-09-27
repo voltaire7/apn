@@ -629,3 +629,8 @@ syntax inside lists: local definitions still belong in blocks.
 Numeric lists and records support elementwise arithmetic and scalar broadcasting;
 `++` remains concatenation, and `*` with a function remains iteration.
 See [numeric arrays](arrays.md) for matching-shape rules and lazy validation.
+
+Function iteration accepts either operand order: `print * [1,2,3]` is equivalent
+to `[1,2,3] * print`. Records pass `[key, value]` pairs and integer counts pass
+indexes. Numeric operands still multiply (including numeric arrays); two
+functions are not composed by `*`—use `\` for composition.

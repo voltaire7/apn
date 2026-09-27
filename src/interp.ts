@@ -413,7 +413,7 @@ export class Interpreter {
 
 
 
-    // `*` iteration: seq * fn — applies fn over the sequence and returns the
+    // `*` iteration: seq * fn or fn * seq — applies fn over the sequence and returns the
     // results. seq is a list (elements), a record (entries as [field, value]
     // lists), or an int n (0..n-1; a negative n counts 0, -1, ... n+1).
     iterate(seq: Value, f: Value): Value {
@@ -696,8 +696,12 @@ export class Interpreter {
         }
         const l = this.demand(this.eval(e.l));
         const r = this.demand(this.eval(e.r));
-        const iterating = e.op === "*" && ["closure", "clauseFn", "native", "type"].includes(r.kind);
-        if (!iterating && ["+", "-", "*", "/", "%", "^"].includes(e.op) &&
+        if (e.op === "*") {
+            const callable = (v: Value) => ["closure", "clauseFn", "native", "type", "contract", "functionType"].includes(v.kind);
+            if (callable(r)) return this.iterate(l, r);
+            if (callable(l)) return this.iterate(r, l);
+        }
+        if (["+", "-", "*", "/", "%", "^"].includes(e.op) &&
                 (this.isList(l) || this.isList(r) || l.kind === "record" || r.kind === "record")) {
             return this.arrayArithmetic(e.op, l, r);
         }
@@ -727,9 +731,7 @@ export class Interpreter {
             case "+":
                 if (l.kind === "string" && r.kind === "string") return mkStr(l.v + r.v);
                 return bad();
-            case "*":
-                if (r.kind === "closure" || r.kind === "clauseFn" || r.kind === "native" || r.kind === "type") return this.iterate(l, r);
-                return bad();
+            case "*": return bad();
             case "-":
                 if ((l.kind === "closure" || l.kind === "clauseFn" || l.kind === "native" || l.kind === "type") && isNumeric(r)) {
                     return this.apply(l, negate(r));
