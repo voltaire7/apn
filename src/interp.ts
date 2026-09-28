@@ -297,6 +297,12 @@ export class Interpreter {
         return index < 0 ? undefined : BigInt(index);
     }
 
+    private arithmeticValue(value: Value): Value {
+        const v = this.dataValue(value);
+        const ordinal = v.kind === "variant" ? this.listIndex(v) : undefined;
+        return ordinal === undefined ? v : mkInt(ordinal);
+    }
+
     private assignItem(collection: Value, key: Value, expression: Expr): Value {
         if (this.isList(collection)) {
             const index = this.listIndex(key);
@@ -812,7 +818,9 @@ export class Interpreter {
             }
             throw new APNError("runtime", `operator '${e.op}' requires unwrapping this distinct value`);
         }
-        if (e.op !== "\\") { l = this.dataValue(l); r = this.dataValue(r); }
+        if (["+", "-", "*", "/", "%", "^"].includes(e.op)) {
+            l = this.arithmeticValue(l); r = this.arithmeticValue(r);
+        } else if (e.op !== "\\") { l = this.dataValue(l); r = this.dataValue(r); }
         if (["+", "-", "*", "/", "%", "^"].includes(e.op) &&
                 (this.isList(l) || this.isList(r) || l.kind === "record" || r.kind === "record")) {
             return this.arrayArithmetic(e.op, l, r);
@@ -865,7 +873,7 @@ export class Interpreter {
     }
 
     private arrayNegate(value: Value): Value {
-        const v = this.dataValue(value);
+        const v = this.arithmeticValue(value);
         if (v.kind === "variant" && v.family?.base) return this.conform({ kind: "type", name: v.family.name, family: v.family }, this.arrayNegate(v.v[0]));
         if (isNumeric(v)) return v.typeName ? castNumeric(v.typeName, negate(v)) : negate(v);
         if (this.isList(v)) return this.defer(() => {
@@ -877,7 +885,7 @@ export class Interpreter {
     }
 
     private arrayArithmetic(op: string, left: Value, right: Value, broadcast = true): Value {
-        const l = this.dataValue(left), r = this.dataValue(right);
+        const l = this.arithmeticValue(left), r = this.arithmeticValue(right);
         if (isNumeric(l) && isNumeric(r)) return op === "^" ? numericNative("expt", [l, r]) as Value : typedArithmetic(op, l, r);
         const ll = this.isList(l), rl = this.isList(r);
         if (ll && rl) return this.defer(() => {

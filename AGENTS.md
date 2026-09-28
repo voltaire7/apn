@@ -632,7 +632,9 @@ alias names and memoizes it; distinct patterns unpack its payload. Numeric opera
 require the same family on both sides and preserve its checked base type. Ordinary
 records remain structural. Nullary-only variant families index lists by zero-based declaration order,
 including assignment; listIndex shares this rule between reads and updates.
-Lists carry no key-family annotation, and variants remain nonnumeric.
+Lists carry no key-family annotation. Arithmetic operators use nullary-family
+ordinals and return ordinary numbers via arithmeticValue, including numeric
+collections; equality, pattern matching, and display retain variant identity.
 
 AST sourceLocations is a WeakMap, outside serialized AST shapes. Parser expression
 spans retain source/file for assertions and match-diagnostics. Lint never evaluates

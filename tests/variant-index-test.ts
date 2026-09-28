@@ -27,7 +27,6 @@ for (const [source, error] of [
     ['Maybe a = Some a | None\n[10] None', 'indexing a list needs'],
     ['Maybe a = Some a | None\n[10] (Some 0)', 'indexing a list needs'],
     ['xs = [10]\nxs "0" = 20', 'list assignment needs'],
-    ['North + 1', "cannot apply '+'"],
 ] as const) Deno.test(`variant index rejection: ${source}`, () => {
     try { result(direction + source); } catch (e) {
         if (String(e).includes(error)) return;

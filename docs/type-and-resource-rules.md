@@ -50,7 +50,13 @@ This uses ordinary list indexing and assignment, including bounds checks and
 scoped copy updates. Computed variant values work too. Lists have no key-family
 annotation: any eligible family's second constructor selects index 1. Families
 with payload constructors are not eligible, even for their nullary cases.
-Variants retain their identity; they do not become numbers in arithmetic.
+Arithmetic operators `+`, `-`, `*`, `/`, `%`, `^`, and unary negation use these
+same integer ordinals and return ordinary numbers. For example, `East + 1` is
+`2`, `West / South` is `3/2`, and `-East` is `-1`. Numeric collection arithmetic
+uses the same rule for elements. APN's existing numeric rules still apply.
+Variants retain their identity when printed, pattern-matched, or compared for
+equality; `North == 0` remains false. Constructors such as `Direction` and
+families with payloads do not participate in ordinal arithmetic.
 
 ## Exhaustiveness diagnostics
 
