@@ -9,7 +9,7 @@ for (const [source, expected] of [
     ['use [[x: 1], [y: 2, x: 3]]\n[x, y]', '[3, 2]'],
     ['use []', '()'],
     ['open = use\nopen [x: 123]\nx', '123'],
-    ['[x: 123] $ use\nx', '123'],
+    ['use $ [x: 123]\nx', '123'],
     ['x = 1\n{ use [x: 2]; x }\nx', '1'],
     ['cell = Mutable 1\nuse [alias: cell]\nset 2 alias\ncell', '2'],
     ['outer = 10\nf x = outer + x\nuse [outer: 20, add: f]\nadd 1', '21'],

@@ -55,7 +55,7 @@ Deno.test('REPL variable indices stay assignments across submissions', () => {
 
 Deno.test('computed key runs once and before RHS', () => {
     const i = new Interpreter();
-    const source = 'count = Mutable 0\narr = [0]\nkey x = { count $ set (count + 1); x }\narr (key (0 + 0)) = count + 1\n[arr, count]';
+    const source = 'count = Mutable 0\narr = [0]\nkey x = { set (count + 1) $ count; x }\narr (key (0 + 0)) = count + 1\n[arr, count]';
     const actual = i.renderString(i.run(parseDocument(source)));
     if (actual !== '[[2], 1]') throw new Error(actual);
 });

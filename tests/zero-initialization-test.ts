@@ -30,7 +30,7 @@ for (const [source, expected] of [
     ['[x: Int, y: Int] [extra: 3]', '[x: 0, y: 0, extra: 3]'],
     ['[nested: [x: Float], xs: [Int]] []', '[nested: [x: 0.0], xs: [0]]'],
     ['v = [x: Int, bad: Function] []\nv.x', '0'],
-    ['cell = Mutable 1\nv = [cell: cell] []\nv.cell $ set 2\ncell', '2'],
+    ['cell = Mutable 1\nv = [cell: cell] []\nset 2 $ v.cell\ncell', '2'],
     ['Option a = Some a | None\n[Option, Option Int]', '[Option, Option Int]'],
     ['Option a = Some a | None\n[choice: Option Int] []', '[choice: None]'],
     ['User = | MkUser Int String\n[user: User] []', '[user: MkUser 0 ""]'],
@@ -38,7 +38,7 @@ for (const [source, expected] of [
     ['Node = Next Node | End\n[node: Node] []', '[node: End]'],
     ['Node = | Next Node\nNode', 'Node'],
     ['[fn: Function] [x -> x]', '[fn: x -> x]'],
-    ['[fn: (+ 1)] [] $ (v -> v.fn 2)', '3'],
+    ['(v -> v.fn 2) $ [fn: (+ 1)] []', '3'],
     ['[Int (floor .2), Int (truncate (-1.7)), Float (inexact 9007199254740993)]', '[0, -1, 9007199254740992.0]'],
 ] as const) Deno.test(`construction defaults: ${source}`, () => {
     const actual = result(source);
@@ -86,7 +86,7 @@ Deno.test("failed type-slot conversion preserves the template", () => {
 
 Deno.test("omitted concrete actions stay callable without running during inspection", () => {
     const i = new Interpreter();
-    i.run(parseDocument('count = Mutable 0; action = { count $ set (count + 1) }; v <- [action: action] []'));
+    i.run(parseDocument('count = Mutable 0; action = { set (count + 1) $ count }; v <- [action: action] []'));
     i.renderString(i.env.get('v')!);
     if (i.renderString(i.run(parseDocument('count'))) !== '0') throw new Error('inspection executed action');
     i.run(parseDocument('v.action'));

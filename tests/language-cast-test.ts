@@ -6,8 +6,8 @@ function result(source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['import "std/text"\nchars "hello" $ cast String', '"hello"'],
-    ['"a😀é" $ cast [Char] $ cast String', '"a😀é"'],
+    ['import "std/text"\ncast String $ chars "hello"', '"hello"'],
+    ['cast String $ cast [Char] $ "a😀é"', '"a😀é"'],
     ['cast String []', '""'],
     ["String ['h', 'i']", '"hi"'],
     ['String "hi"', '"hi"'],
@@ -42,7 +42,7 @@ for (const [source, error] of [
     ['Float 9007199254740993', 'lossy conversion'],
     ['Int (.1 + .1)', 'lossy conversion'],
     ['cast Int (Float .2)', 'lossy conversion'],
-    ['Float .2 $ cast Int', 'lossy conversion'],
+    ['cast Int $ Float .2', 'lossy conversion'],
     ['cast Float32 (Float .1)', 'lossy conversion'],
     ['cast Int (Fraction (1/3))', 'lossy conversion'],
     ['cast Int (Complex .2)', 'lossy conversion'],

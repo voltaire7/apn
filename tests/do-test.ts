@@ -27,7 +27,7 @@ for (const [source, expected, effects] of [
 Deno.test('do stops at the first error', () => {
     const i = new Interpreter();
     let failed = false;
-    try { i.run(parseDocument('cell = Mutable 0; do [cell $ set 1, missing, cell $ set 2]')); }
+    try { i.run(parseDocument('cell = Mutable 0; do [set 1 $ cell, missing, set 2 $ cell]')); }
     catch (e) { if (e instanceof Error && e.message.includes('missing')) failed = true; else throw e; }
     if (!failed || i.renderString(i.run(parseDocument('cell'))) !== '1') throw new Error('wrong effect order');
 });

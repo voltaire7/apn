@@ -6,10 +6,10 @@ function check(source: string, expected: string) {
     const actual = i.renderString(i.run(parse(source)));
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
 }
-Deno.test("mutable update crosses block scope", () => check('x = Mutable 0; { x $ set (x + 1) }; x', '1'));
-Deno.test("mutable reads do not replace cell with cached contents", () => check('x = Mutable 0; x; x $ set (x + 1); x; x $ set (x + 1); x', '2'));
-Deno.test("aliases and function parameters share mutable identity", () => check('x = Mutable 0; y = x; increment ref = ref $ set (ref + 1); increment y; increment x; y', '2'));
-Deno.test("argument-taking factories allocate distinct cells", () => check('make n = Mutable n; x = make 0; y = make 0; x $ set 9; y', '0'));
+Deno.test("mutable update crosses block scope", () => check('x = Mutable 0; { set (x + 1) $ x }; x', '1'));
+Deno.test("mutable reads do not replace cell with cached contents", () => check('x = Mutable 0; x; set (x + 1) $ x; x; set (x + 1) $ x; x', '2'));
+Deno.test("aliases and function parameters share mutable identity", () => check('x = Mutable 0; y = x; increment ref = set (ref + 1) $ ref; increment y; increment x; y', '2'));
+Deno.test("argument-taking factories allocate distinct cells", () => check('make n = Mutable n; x = make 0; y = make 0; set 9 $ x; y', '0'));
 Deno.test("mutable supports nonnumeric contents", () => check('x = Mutable "old"; set "new" x; x', '"new"'));
 Deno.test("mutable identity can be inspected", () => check('x = Mutable 0; [typeOf x, isType Mutable x]', '[Mutable, true]'));
 Deno.test("failed set preserves old contents", () => {

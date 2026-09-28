@@ -16,7 +16,8 @@ const sourcePrograms = [
     'outer x = { inner y = x + y; inner }; outer 40 2',
     'x = 7; f ignored = x; { x = 99; f 0 }',
     'even n = n == 0 ? true : odd (n - 1); odd n = n == 0 ? false : even (n - 1); even 4',
-    '2 $ (x -> x + 40)',
+    '(x -> x + 40) $ 2',
+    '(x -> x + 1) $ (x -> x * 2) $ 3',
     '# comment\nx = 41\nx + 1',
 ];
 for (const source of sourcePrograms) Deno.test(`metacircular agrees with host: ${source}`, () => {

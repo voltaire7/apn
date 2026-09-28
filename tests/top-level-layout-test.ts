@@ -2,7 +2,7 @@ import { parseDocument } from "../src/parser.ts";
 import { lint } from "../src/lint.ts";
 
 for (const source of [
-    'func = {\n    print "hi"\n}\n    [1,2,3] $ print',
+    'func = {\n    print "hi"\n}\n    print $ [1,2,3]',
     'func = { print "hi" }\n    print "outside"',
     'x = 1\n    y = 2',
     '    x = 1',

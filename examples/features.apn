@@ -183,7 +183,7 @@ nested = [
 ]
 print nested                  # => [1, [2, 3], 4]
 
-[1, 2, 3] $ head $ print   # => 1
+print $ head $ [1, 2, 3]   # => 1
 print (tail [1, 2, 3])        # => [2, 3]
 print (length "hello")        # => 5
 print (length [1, 2, 3])      # => 3
@@ -361,13 +361,13 @@ print (sumXY point)        # => 3
 
 # ---------------------------------------------------------
 # 10. PIPES, OPERATOR SECTIONS, PRECEDENCE
-#    x $ f            feeds x into f   (\value-left pipe, like F# |>)
+#    f $ x            applies f to x; right associative
 #    (+ 2) / (2 +)    operator sections  ->  \x -> x + 2 / \x -> 2 + x
 # ---------------------------------------------------------
 negate x = -x
-print (5 $ negate)                        # => -5
-print ([1, 2, 3] $ map (x -> x * 10))     # => [10, 20, 30]
-[1, 2, 3] $ map (x -> x * 10) $ toString $ print  # => [10, 20, 30]
+print (negate $ 5)                        # => -5
+print (map (x -> x * 10) $ [1, 2, 3])     # => [10, 20, 30]
+print $ toString $ map (x -> x * 10) $ [1, 2, 3]  # => [10, 20, 30]
 
 # Named functions use ordinary application; backtick infix is invalid.
 print (2 + 3 * 4)                         # => 14
@@ -445,10 +445,10 @@ print {
 
 # records iterate as [field, value] pairs — destructure with a pattern-lambda;
 # `format` builds a string, so `print` emits it as raw text
-[name: "Alice", age: 30] * [f, v] -> format "%: %" [f, v] $ print
+[name: "Alice", age: 30] * [f, v] -> print $ format "%: %" [f, v]
                                              # prints name: Alice, age: 30
 
-[x: 1, y: 2, z: 3] * [field, value] -> format "%: %" [field, value] $ print
+[x: 1, y: 2, z: 3] * [field, value] -> print $ format "%: %" [field, value]
                                              # prints x: 1, y: 2, z: 3
 
 # `*` is OVERLOADED: numbers multiply, but seq * fn ITERATES (and returns
@@ -486,7 +486,11 @@ size n = match n [
 print (size 7)                               # => big
 print (size 3)                               # => small
 
-pairs [a: 1, b: 2] $ print                   # => [["a", 1], ["b", 2]]
+print $ format "vec = % (100%%)" [[x: 1, y: 2]]
+# format "% %" [1]                  # error: missing argument
+# format "%" [1, 2]                 # error: extra argument
+# format "%" [x: 1]                 # error: arguments must be a list
+print $ pairs [a: 1, b: 2]                   # => [["a", 1], ["b", 2]]
 
 print (format "% / %" [1, 2])                # => 1 / 2
 print (format "last: %" [9])                 # => last: 9
@@ -516,14 +520,14 @@ inner = {
     print "inner"
     42
 }
-step 1 inner $ print          # => inner          (prints, returns 42)
-step 1 inner $ debug         # => { print "inner"; 42 }
-step 2 inner $ debug         # => 42     (the block's tail statement)
+print $ step 1 inner          # => inner          (prints, returns 42)
+debug $ step 1 inner         # => { print "inner"; 42 }
+debug $ step 2 inner         # => 42     (the block's tail statement)
 
 # quote — the expression's SOURCE TEXT as a string (parens kept), never
 # evaluated:
 print (quote (1 + 1))         # => (1 + 1)
-1 + 1 $ quote $ print         # => 1 + 1
+print $ quote $ 1 + 1         # => 1 + 1
 
 # toAST — the S-EXPRESSION of an expression, as a list (quotes automatically):
 print (toAST (1 + 2))         # => ["+", 1, 2]
@@ -693,9 +697,9 @@ numbers = load "../lib/number"      # namespaced module record
 print (numbers.sq 4)           # => 16
 
 # step into the imported halt (an action whose body is exit 0):
-step 1 halt $ debug          # => exit 0
+debug $ step 1 halt          # => exit 0
 # print RUNS the level, so this terminates the program:
-#   step 1 halt $ print
+#   print $ step 1 halt
 
 # a load inside a { } block stays in the block's scope
 scoped = {
@@ -768,8 +772,8 @@ print [isInfinite (1.0 / 0.0), isNaN (0.0 / 0.0)] # => [true, true]
 
 # Keyword-led expressions parse their trailing operators in the REPL too:
 # true ? "yes" : "no" => "yes"
-true ? "yes" : "no" $ print  # => yes
-false ? "yes" : "no" $ print # => no
+print $ true ? "yes" : "no"  # => yes
+print $ false ? "yes" : "no" # => no
 
 print (0+1i)  # => 0+1i
 print ((1+2i) * (3+4i))  # => -5+10i
@@ -793,7 +797,7 @@ print (Int 123)                      # => 123
 print (UInt32 4294967295)             # => UInt32 4294967295
 print (Float32 .5)                   # => Float32 0.5
 print (Fraction (1/3))               # => Fraction 1/3
-print (3.7 $ truncate $ Int)         # => 3
+print (Int $ truncate $ 3.7)         # => 3
 print (Float32 1 / 10)              # => Float32 0.10000000149011612
 print (typeOf (Int32 1))             # => Int32
 print (isType Number (Int32 1))      # => true
@@ -817,7 +821,7 @@ print (integerClause 2.0)           # => "integer"
 print (Int (floor .2))               # => 0
 # Int .2 and Int (Float .2)          # error: round explicitly first
 print (Int (truncate (Float .2)))    # => 0
-print (Float .2 $ floor $ Int)       # => 0
+print (Int $ floor $ Float .2)       # => 0
 print (.2 == Float .2)               # => true (numeric equality)
 numericPayload (source value) = value
 print (numericPayload (Int32 123))   # => 123
@@ -829,7 +833,7 @@ print cast                          # => (Type target) value -> target value
 print (0 123)                       # => 123
 print ((Int 0) (floor .2))           # => 0
 print ([(* 2)] [1, 2, 3, 4])        # => [2, 4, 6, 8]
-print ("a😀" $ cast [Char] $ cast String) # => "a😀"
+print (cast String $ cast [Char] $ "a😀") # => "a😀"
 print ([Char] "hello")              # => ['h', 'e', 'l', 'l', 'o']
 print ([Char] "a😀")                 # => ['a', '😀']
 print ([Int] [1, 2, 3, 4])          # => [1, 2, 3, 4]
@@ -868,20 +872,20 @@ print (MkUserId 123)                # => MkUserId 123
 
 
 # Persistent HashMap, accepting records or association lists.
-typedMap = HashMap [] $ insert [x: 123]
+typedMap = insert [x: 123] $ HashMap []
 print typedMap                      # => HashMap [["x", 123]]
 print (typedMap "x")                 # => 123
-typedMapNext = typedMap $ insert [y: 456]
+typedMapNext = insert [y: 456] $ typedMap
 print (has "y" typedMap)             # => false
 print (has "y" typedMapNext)         # => true
 print (keys typedMapNext)            # => ["x", "y"]
 print (values typedMapNext)          # => [123, 456]
 print (pairs typedMapNext)           # => [["x", 123], ["y", 456]]
 print (length typedMapNext)          # => 2
-print (typedMapNext $ remove "x")    # => HashMap [["y", 456]]
+print (remove "x" $ typedMapNext)    # => HashMap [["y", 456]]
 print (HashMap [["a", 1], ["b", 2]]) # => HashMap [["a", 1], ["b", 2]]
 
-print (true $ typeOf) # => Bool
+print (typeOf $ true) # => Bool
 
 print (Bool true)        # => true
 print (String "hi")      # => hi
@@ -898,18 +902,18 @@ myTypeOf (Int32 5)  # => Int32
 
 # Standard modules are cached imports, separate from file execution with load.
 import "std"
-print (chars "hello" $ cast String) # => "hello"
+print (cast String $ chars "hello") # => "hello"
 # reverse is implemented in APN with a linear-time accumulator fold.
 print (head (reverse [1..10000]))   # 10000
 print (reverse [1,2,3])             # [3, 2, 1]
 print (reverse "a😀b")              # b😀a
 print (take 6 primes)                 # [2, 3, 5, 7, 11, 13]
 print (mean [1,2])                    # Some 3/2
-print ("one two one" $ words $ frequencies)
+print (frequencies $ words $ "one two one")
 print (take 5 (scanl (+) 0 [1..]))     # [0, 1, 3, 6, 10]
 print (groupBy isEven [1..4])
-print (Some 3 $ mapOption sq)         # Some 9
-print (Err "oops" $ mapError upper)   # Err "OOPS"
+print (mapOption sq $ Some 3)         # Some 9
+print (mapError upper $ Err "oops")   # Err "OOPS"
 
 # The language evaluates source through its APN-written reader and evaluator.
 import "std/meta"
@@ -950,11 +954,11 @@ print browserPreview
 # Mutable references retain identity across scopes and aliases.
 mutableCounter = Mutable 0
 {
-    mutableCounter $ set (mutableCounter + 1)
+    set (mutableCounter + 1) $ mutableCounter
 }
 print mutableCounter                         # 1
 counterAlias = mutableCounter
-counterAlias $ set 2
+set 2 $ counterAlias
 print mutableCounter                         # 2
 
 # p5 sketches are descriptions until built for the browser.
@@ -1043,15 +1047,15 @@ print (do [])                         # => ()
 #     print "outside"               # parse error: unexpected top-level indentation
 
 # Blocks inside parentheses retain newline-separated local statements.
-map (x -> {
+print $ map (x -> {
     result = x + x
     result * result
-}) [1,2,3,4] $ print              # => [4, 16, 36, 64]
+}) [1,2,3,4]              # => [4, 16, 36, 64]
 
 # Composition binds tighter than iteration and pipes.
 [x: 1, y: 2, z: 3] * print \ format "%: %"  # x: 1, y: 2, z: 3
 print ([1,2,3] * (+ 1) \ (* 2))           # => [3, 5, 7]
-print (3 $ (+ 1) \ (* 2))                 # => 7
+print ((+ 1) \ (* 2) $ 3)                 # => 7
 
 # Import a list of modules, returning their combined namespace.
 combinedNamespace = import ["std/function", "std/number"]

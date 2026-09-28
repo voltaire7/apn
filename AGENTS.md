@@ -197,7 +197,7 @@ intentional evaluation change.
   - Haskell-style: `func x = x + x`, `add a b = a + b` — params go on the left
     of `=` and desugar to nested lambdas. Detected via lookahead (`isDef`),
     which scans params + optional `: Type` then requires `=`. Safe alongside
-    top-level application expressions (`[1, 2, 3] $ head $ print`) because
+    top-level application expressions (`print $ head $ [1, 2, 3]`) because
     those lack `=`.
 - **Pattern definitions**: params may be full patterns, and a function may be
   given as multiple equations (clauses) like Haskell, dispatched in order:
@@ -234,15 +234,9 @@ intentional evaluation change.
   running the body and uses the internal nomatch sentinel only for mismatch.
 
 - **Pipes & operators**:
-  - `x $ f` feeds `x` into `f` (value-left pipe, replaces the old `|>`). No
-    composition operator. The `.` postfix is record access and the QUOTED
-    pluck only (`rec.field`, `rec.(dynKey)`, `rec.[x, y]` pluck); indexing and
-    cloning happen by APPLICATION (`nums 0`, `vector3 [1, 2, 3]`).
-  - **Idiom (DELIBERATE, DO NOT FLIP TO HASKELL `$`)**: the pipe is value-left
-    on purpose. `negate 5 $ print` reads left-to-right and is the intended
-    style; Haskell's right-associative `print $ negate 5` is *not* supported
-    and would be a runtime error under this semantics. Use normal application
-    for args and the pipe only for the final feed.
+  - `f $ x` applies `f` to `x`, with the lowest precedence and right associativity.
+    `f $ g $ x` means `f (g x)`. This replaces the old value-left pipe.
+    Composition uses `\`; dot syntax selects record fields or plucks.
   - Backtick infix is removed: backticks outside strings/comments are lexical errors.
     See the precedence table in `docs/semantics.md#operator-precedence-and-associativity`.
   - Operator sections: `(+ 2)` = `\x -> x + 2`, `(2 +)` = `\x -> 2 + x` for
@@ -646,3 +640,6 @@ resource-scope.ts implements bracket and read-only withFile. Finish returned fin
 data before release; reject escaping callables/references, detect nested cycles,
 and enforce withFile handle lifetime even if stashed externally. Cleanup runs in
 finally. See docs/type-and-resource-rules.md and tests/odin-rules-test.ts.
+
+`format template arguments` requires a list and exactly one value per unescaped `%`.
+`%%` renders a literal percent; check arity before rendering any values.

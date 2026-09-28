@@ -62,7 +62,7 @@ and recursive lists remain productive.
 ## Supported source
 
 - Decimal integers, strings, booleans, unit and finite list literals.
-- Arithmetic, comparisons, `++`, cons `:`, unary `-`/`!`, and pipe `$`.
+- Arithmetic, comparisons, `++`, cons `:`, unary `-`/`!`, and right-associative function application `$`.
 - Grouping, curried application, list indexing, lambdas, and named functions
   with identifier parameters.
 - Ternary conditionals and blocks containing definitions followed by a result.

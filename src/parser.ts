@@ -304,14 +304,14 @@ class Parser {
 
     parsePipe(): Expr {
         const start = this.peek().pos;
-        let e = this.parseTernary();
-        while (this.isSym("$")) {
-            sourceLocations.set(e, { source: this.source, file: this.file, start, end: this.peek().pos });
-            this.next();
-            const f = this.parseTernary();
-            e = { t: "pipe", x: e, f };
-        }
-        return e;
+        const f = this.parseTernary();
+        sourceLocations.set(f, { source: this.source, file: this.file, start, end: this.peek().pos });
+        if (!this.isSym("$")) return f;
+        this.next();
+        const argumentStart = this.peek().pos;
+        const x = this.parsePipe();
+        sourceLocations.set(x, { source: this.source, file: this.file, start: argumentStart, end: this.peek().pos });
+        return { t: "pipe", f, x };
     }
 
     // Ternary:  cond ? a : b    (right-associative, lower precedence than comparison)
@@ -1369,7 +1369,7 @@ export function exprToSource(e: Expr): string {
         ? `[${e.lo}${e.step !== 1n ? `, ${e.lo + e.step}` : ""}..]`
         : `[${e.lo}${e.step !== 1n ? `, ${e.lo + e.step}` : ""}..${e.hi}]`;
         case "ternary": return `${exprToSource(e.cond)} ? ${exprToSource(e.then)} : ${exprToSource(e.els)}`;
-        case "pipe": return `${exprToSource(e.x)} $ ${exprToSource(e.f)}`;
+        case "pipe": return `${exprToSource(e.f)} $ ${exprToSource(e.x)}`;
         case "recordAccess":
             return `${exprToSource(e.rec)}.${keySource(e.field)}`;
         case "pluck":

@@ -14,7 +14,7 @@ print (mean [])                         # None
 
 # A word-frequency leaderboard, with stable tie ordering.
 poem = "Time flies like an arrow fruit flies like a banana"
-leaderboard = poem $ lower $ words $ frequencies $ pairs $ sortOn (entry -> -(snd entry))
+leaderboard = sortOn (entry -> -(snd entry)) $ pairs $ frequencies $ words $ lower $ poem
 leaderboard * [word, count] -> {
     print (format "%: %" [word, count])
 }
@@ -24,9 +24,9 @@ print (groupBy (x -> x % 3) [1..9])
 print (mergeWith (+) (HashMap [apples: 3]) (HashMap [apples: 4, pears: 2]))
 
 # Absence and failure are values you can transform.
-print ([1..] $ find (>100) $ mapOption sq)  # Some 10201
-print (Err "invalid input" $ mapError upper)
+print (mapOption sq $ find (>100) $ [1..])  # Some 10201
+print (mapError upper $ Err "invalid input")
 print (reverse "APN 😀")
 
 # Typed values still use checked arithmetic.
-print ([1..4] * Int32 $ sum)
+print (sum $ [1..4] * Int32)

@@ -106,7 +106,7 @@ or memory with an explicit native ownership protocol.
 ```apn
 ffi = import "std/ffi"
 p = ffi.allocate Int32 2
-p $ set 41
+set 41 $ p
 ffi.peek Int32 p                # Int32 41
 ffi.poke Int32 99 (ffi.offset 4 p)
 ffi.peek Int32 (ffi.offset 4 p) # Int32 99
@@ -121,7 +121,7 @@ Pointers do not implicitly dereference during arithmetic; use `peek` explicitly.
 | `ffi.allocate Type count` | Zeroed, GC-managed memory for numeric/Bool scalars; maximum 64 MiB per allocation |
 | `ffi.peek Type pointer` | Read one scalar using native byte order |
 | `ffi.poke Type value pointer` | Write one scalar; returns unit |
-| `pointer $ set value` | Write using an APN allocation's element type |
+| `set value $ pointer` | Write using an APN allocation's element type |
 | `ffi.offset bytes pointer` | Nonnegative byte offset, retaining backing memory and remaining bounds |
 | `ffi.nullPointer ()` | Null Pointer value |
 | `typeOf pointer`, `isType Pointer pointer` | Normal type inspection |

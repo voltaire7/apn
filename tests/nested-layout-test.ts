@@ -2,10 +2,10 @@ import { lex } from "../src/lexer.ts";
 import { parseDocument } from "../src/parser.ts";
 import { Interpreter } from "../src/interp.ts";
 
-const example = `map (x -> {
+const example = `print $ map (x -> {
     result = x + x
     result * result
-}) [1,2,3,4] $ print`;
+}) [1,2,3,4]`;
 
 Deno.test("parenthesized lambda block preserves statement boundaries and prints results", () => {
     const tokens = lex(example);

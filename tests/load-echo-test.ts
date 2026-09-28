@@ -1,7 +1,7 @@
 import { Interpreter } from "../src/interp.ts";
 import { runSource } from "../src/repl.ts";
 
-for (const command of ['load "main"', '"main" $ load', '(load "main")']) {
+for (const command of ['load "main"', 'load $ "main"', '(load "main")']) {
     Deno.test(`REPL load does not render infinite or invalid exports: ${command}`, () => {
         const i = new Interpreter();
         i.sourceDir = new URL('./fixtures/load-echo/', import.meta.url).pathname;

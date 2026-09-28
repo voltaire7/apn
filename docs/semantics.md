@@ -21,13 +21,13 @@ From tightest to loosest binding; operators in the same row have equal precedenc
 | Cons `:` | Right | `a : b : xs` → `a : (b : xs)` |
 | `==`, `!=`, `<`, `>`, `<=`, `>=` | Left | `a < b == c` → `(a < b) == c` |
 | Ternary `? :` | Right | `a ? b : c ? d : e` → `a ? b : (c ? d : e)` |
-| Pipe `$` | Left | `x $ f $ g` → `(x $ f) $ g` |
+| Application `$` | Right | `f $ g $ x` → `f (g x)` |
 
 `f \ g` creates a function that computes `f (g x)` when called with `x`.
 Both operands must be functions (constructors are accepted). Ordinary calls
 bind more tightly, while exponentiation, arithmetic, iteration, and `$` bind
 more loosely. Thus `vec * print \ format "%: %"` means
-`vec * (print \ format "%: %")`; `3 $ (+ 1) \ (* 2)` returns `7`.
+`vec * (print \ format "%: %")`; `(+ 1) \ (* 2) $ 3` returns `7`.
 Use `(sum \ filter even) values` to apply a composition to a list.
 
 Parentheses override precedence: `2 + 3 * 4` is `14`, while `(2 + 3) * 4`
@@ -140,7 +140,7 @@ wildcard in patterns. Both sides of `=` are required: `foo =`, `foo = ;`, and
 | `f = x -> x + 1` | A lambda closure |
 | `a = { print 3; 4 }` | A repeatable zero-argument action |
 | `a = print 3` | A repeatable action (application body) |
-| `a = 3 $ print` | A repeatable action (pipe body) |
+| `a = print $ 3` | A repeatable action (pipe body) |
 | `v = 1 + 2` | A memoized deferred value |
 | `xs = 1:xs` | A memoized cons cell with deferred head and tail |
 
@@ -501,7 +501,7 @@ numbers, strings, chars, booleans, or unit. Numerically equal keys share an entr
 regardless of exactness or numeric type; distinct strings/chars stay distinct.
 Duplicate keys keep the last value. Insertion order is preserved for traversal.
 
-`HashMap [] $ insert [x: 123]` returns a map containing x. `insert` accepts a
+`insert [x: 123] $ HashMap []` returns a map containing x. `insert` accepts a
 record or association list; `remove key map` returns a map without the key.
 Updates preserve the old map. `lookup key map` or `map key` retrieves a value,
 raising an error when absent; use `has key map` when absence is expected.
@@ -558,7 +558,7 @@ steps are preserved, so `[1..0]` is `[1,0]`; std factorial handles zero separate
 
 `x = Mutable 0` allocates a shared cell when first used. A zero-argument binding
 returning a cell retains that cell across calls; functions taking arguments can
-create independent cells. `set value cell` (or `cell $ set value`) evaluates the
+create independent cells. `set value cell` (or `set value $ cell`) evaluates the
 new outer value before replacing the old contents and returns unit. A failed
 update leaves the cell unchanged. Aliases and inner scopes share the cell.
 Arithmetic and printing read its contents; `typeOf x` reports `Mutable`.
@@ -636,5 +636,13 @@ functions are not composed by `*`—use `\` for composition.
 
 Type descriptors remain constructors in every ordinary value context. Applying a
 record template initializes omitted type slots; `Vector3 []` constructs defaults.
-Assignment to an uninitialized type slot errors. See [zero initialization](zero-initialization.md)
+Assignment to a type slot applies its constructor to the new value. See [zero initialization](zero-initialization.md)
 for the default table, type inspection, variant rules and limitations.
+
+## String formatting
+
+`format template arguments` requires an argument list. Each `%` consumes one
+argument; `%%` prints a literal percent without consuming one. Missing or extra
+arguments raise an error before any argument is rendered. For example,
+`print $ format "vec = %" [vec]` prints one formatted record. Passing `vec`
+directly instead of `[vec]` is invalid when `vec` is a record.

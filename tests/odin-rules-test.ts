@@ -110,7 +110,7 @@ Deno.test('bracket does not release a resource that failed to acquire', () => {
 Deno.test('assert reports piped source and evaluates the condition once', () => {
     const i = new Interpreter();
     i.run(parseDocument('counter = Mutable 0'));
-    try { i.run(parse('{ counter $ set (counter + 1); false } $ assert', 'pipe.apn')); }
+    try { i.run(parse('assert $ { set (counter + 1) $ counter; false }', 'pipe.apn')); }
     catch (e) { if (!String(e).includes('pipe.apn:1')) throw e; }
     if (i.renderString(i.run(parseDocument('counter'))) !== '1') throw new Error('repeated condition');
 });

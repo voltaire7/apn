@@ -63,8 +63,8 @@ length checks still apply. This also works through aliases and `cast [Char]`.
 
 ```apn
 import "std/text"
-chars "hello" $ cast String          # "hello"
-"hello" $ cast [Char] $ cast String  # "hello"
+cast String $ chars "hello"          # "hello"
+cast String $ cast [Char] $ "hello"  # "hello"
 String ['h', 'i']                    # "hi"
 String []                            # ""
 ```

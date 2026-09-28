@@ -5,7 +5,7 @@ import { highlightTokens } from "../src/highlight.ts";
 for (const [source, expected] of [
     [String.raw`((x -> x + 1) \ (x -> x * 2)) 3`, "7"],
     [String.raw`((x -> x + 1) \ (x -> x * 2) \ (x -> x - 3)) 5`, "5"],
-    [String.raw`3 $ (x -> x + 1) \ (x -> x * 2)`, "7"],
+    [String.raw`(x -> x + 1) \ (x -> x * 2) $ 3`, "7"],
     [String.raw`((x -> 42) \ (x -> missing)) missing`, "42"],
     [String.raw`import "std"
 even n = n % 2 == 0

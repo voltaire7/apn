@@ -1,3 +1,3 @@
-counter $ set (counter - 1)
+set (counter - 1) $ counter
 again n = n > 0 ? load "function" : ()
 again counter

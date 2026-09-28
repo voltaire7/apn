@@ -10,7 +10,7 @@ for (const [source, expected] of [
     ['loop 0 = 42; loop n = loop (n - 1); loop 10000', '42'],
     ['loop = n -> n == 0 ? 42 : loop (n - 1); loop 10000', '42'],
     ['even n = n == 0 ? true : odd (n - 1); odd n = n == 0 ? false : even (n - 1); even 10001', 'false'],
-    ['loop n = n == 0 ? 42 : { next <- n - 1; next $ loop }; loop 10000', '42'],
+    ['loop n = n == 0 ? 42 : { next <- n - 1; loop $ next }; loop 10000', '42'],
     ['loop n ignored = n == 0 ? 42 : loop (n - 1) missing; loop 10000 missing', '42'],
     ['loop n = n == 0 ? [42, missing] : loop (n - 1); head (loop 10000)', '42'],
     ['sum n total = n == 0 ? total : { next <- total + n; sum (n - 1) next }; sum 10000 0', '50005000'],
@@ -65,7 +65,7 @@ Deno.test('tail load keeps block exports scoped and resumes non-tail loads', () 
     i.run(parseDocument('counter = Mutable 3; module <- load "scoped"'));
     if (i.env.get('exported')) throw new Error('block-local export escaped');
     if (i.renderString(i.run(parseDocument('module.outside'))) !== '1') throw new Error('outer export lost');
-    const value = i.run(parseDocument('counter $ set 3; load "non-tail"; after'));
+    const value = i.run(parseDocument('set 3 $ counter; load "non-tail"; after'));
     if (i.renderString(value) !== '7') throw new Error('non-tail continuation lost');
 });
 Deno.test('tail load failure restores context without publishing unfinished exports', () => {

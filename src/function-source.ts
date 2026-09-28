@@ -36,7 +36,7 @@ function source(e: Expr, parent = 0): string {
         case "unop": level = 8; text = `${e.op === "neg" ? "-" : "!"}${source(e.e, 9)}`; break;
         case "patternLambda": level = 0; text = `${e.params.map(pattern).join(" ")}${e.guard ? " | " + source(e.guard) : ""} -> ${source(e.body)}`; break;
         case "lambda": level = 0; text = `${e.params.join(" ")} -> ${source(e.body)}`; break;
-        case "pipe": level = 1; text = `${source(e.x, 1)} $ ${source(e.f, 2)}`; break;
+        case "pipe": level = 1; text = `${source(e.f, 2)} $ ${source(e.x, 1)}`; break;
         case "ternary": level = 0; text = `${source(e.cond, 1)} ? ${source(e.then)} : ${source(e.els)}`; break;
         case "list": return `[${e.v.map(x => source(x)).join(", ")}]`;
         case "record": return `[${e.v.map(([k, v]) => `${keySource(k)}: ${source(v)}`).join(", ")}]`;

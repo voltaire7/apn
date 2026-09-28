@@ -55,7 +55,7 @@ print action
 
 example("application and pipe bodies are repeatable actions", `
 action = print 3
-piped = 4 $ print
+piped = print $ 4
 action
 action
 piped
@@ -374,6 +374,6 @@ print (24 / 4 * 2)
 print (1 : 2 : [])
 print (1 < 2 == true)
 print (false ? 1 : true ? 2 : 3)
-print (3 $ (+ 1) $ (* 2))
+print ((* 2) $ (+ 1) $ 3)
 print (-head [2, 3])
 `, ["14", "20", "5", "12", "[1, 2]", "true", "2", "8", "-2"]);

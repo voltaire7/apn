@@ -371,7 +371,7 @@ export class Interpreter {
                 if (one) return this.sexprOf(e.stmts[0]);
                 return mkList(e.stmts.map((st) => this.sexprOf(st.t === "stmDef" ? st.clauses[0].body : st.t === "patDef" ? st.value : st)));
             }
-            case "pipe": return mkList([mkStr("$"), this.sexprOf(e.x), this.sexprOf(e.f)]);
+            case "pipe": return mkList([mkStr("$"), this.sexprOf(e.f), this.sexprOf(e.x)]);
             case "setItem": return mkList([mkStr("setItem"), this.sexprOf(e.rec), this.sexprOf(e.index), this.sexprOf(e.value)]);
             case "recordAccess":
                 return mkList([mkStr("."), this.sexprOf(e.rec), mkStr(keySource(e.field))]);
@@ -1823,13 +1823,25 @@ export class Interpreter {
             case "format": {
                 const fmt = this.dataValue(args[0]);
                 if (fmt.kind !== "string") throw new Error("Runtime: format expects a string");
-                const vals = this.isList(args[1]) ? this.items(args[1]) : [args[1]];
+                if (!this.isList(args[1])) throw new APNError("runtime", "format expects a list of arguments");
+                let expected = 0;
+                for (let i = 0; i < fmt.v.length; i++) {
+                    if (fmt.v[i] !== "%") continue;
+                    if (fmt.v[i + 1] === "%") i++;
+                    else expected++;
+                }
+                const vals: Value[] = [];
+                for (const value of this.elements(args[1])) {
+                    vals.push(value);
+                    if (vals.length > expected) throw new APNError("runtime", `format expected ${expected} arguments, got at least ${vals.length}`);
+                }
+                if (vals.length !== expected) throw new APNError("runtime", `format expected ${expected} arguments, got ${vals.length}`);
                 let out = "";
                 let vi = 0;
                 for (let i = 0; i < fmt.v.length; i++) {
                     if (fmt.v[i] === "%") {
                         if (fmt.v[i + 1] === "%") { out += "%"; i++; continue; }
-                        out += this.renderString(vals[vi] ?? { kind: "unit" }, true);
+                        out += this.renderString(vals[vi], true);
                         vi++;
                     } else out += fmt.v[i];
                 }

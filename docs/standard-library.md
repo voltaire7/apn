@@ -4,7 +4,7 @@
 import "std"
 take 10 primes
 mean [1,2]                          # Some 3/2
-"one two one" $ words $ frequencies # HashMap [["one",2],["two",1]]
+frequencies $ words $ "one two one" # HashMap [["one",2],["two",1]]
 ```
 
 `import` accepts a literal module name or a list of literal module names.
