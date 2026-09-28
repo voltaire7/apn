@@ -96,7 +96,7 @@ other process-level effects, forced process termination cannot run APN cleanup.
 ```apn
 import "std/function"
 released = Mutable false
-answer <- bracket 42 (_ -> set true released) (n -> [n, n + 1])
+answer <- bracket 42 (_ -> set released true) (n -> [n, n + 1])
 # answer is [42, 43]; released is true
 ```
 

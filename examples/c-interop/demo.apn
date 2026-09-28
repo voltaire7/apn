@@ -14,7 +14,7 @@ ffi.withLibrary (head args) [
     print (c.text_length "hé😀")               # Int32 7 (UTF-8 bytes)
     print (c.echo_u64 18446744073709551615)    # UInt64 18446744073709551615
     p = ffi.allocate Int32 1
-    set 41 $ p
+    set p $ 41
     c.increment p
     print (ffi.peek Int32 p)                  # Int32 42
 }

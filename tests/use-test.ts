@@ -11,7 +11,7 @@ for (const [source, expected] of [
     ['open = use\nopen [x: 123]\nx', '123'],
     ['use $ [x: 123]\nx', '123'],
     ['x = 1\n{ use [x: 2]; x }\nx', '1'],
-    ['cell = Mutable 1\nuse [alias: cell]\nset 2 alias\ncell', '2'],
+    ['cell = Mutable 1\nuse [alias: cell]\nset alias 2\ncell', '2'],
     ['outer = 10\nf x = outer + x\nuse [outer: 20, add: f]\nadd 1', '21'],
 ]) Deno.test(`use: ${source}`, () => {
     const actual = result(new Interpreter(), source);

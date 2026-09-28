@@ -14,7 +14,7 @@ draw p = {
     p.text ("Clicks: " ++ toString clicks) 20 30
 }
 mousePressed p = {
-    set (clicks + 1) $ clicks
+    set clicks $ (clicks + 1)
     false
 }
 main = p5.sketch [setup: setup, draw: draw, mousePressed: mousePressed]

@@ -954,11 +954,11 @@ print browserPreview
 # Mutable references retain identity across scopes and aliases.
 mutableCounter = Mutable 0
 {
-    set (mutableCounter + 1) $ mutableCounter
+    set mutableCounter $ (mutableCounter + 1)
 }
 print mutableCounter                         # 1
 counterAlias = mutableCounter
-set 2 $ counterAlias
+set counterAlias $ 2
 print mutableCounter                         # 2
 
 # p5 sketches are descriptions until built for the browser.
@@ -1176,7 +1176,7 @@ assert (compassName Up == "up")
 # Scoped cleanup runs after returned lazy data has been evaluated.
 import "std/function"
 released = Mutable false
-print (bracket 42 (_ -> set true released) (n -> [n, n + 1])) # => [42, 43]
+print (bracket 42 (_ -> set released true) (n -> [n, n + 1])) # => [42, 43]
 print released                     # => true
 import "std/io"
 # A read-only OS device keeps the showcase independent of its working directory.

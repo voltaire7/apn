@@ -24,7 +24,7 @@ for (const [name, source, expected] of [
     ['destructured eager result retains lazy fields', '[x,y] <- [missing, 42]\nprint y', ['42']],
     ['wildcard runs action', '_ <- print "run"', ['run']],
     ['scoped binding reads old value', 'x = 1\n{ x <- x + 1; print x }\nprint x', ['2', '1']],
-    ['mutable capture preserves cell identity', 'm <- Mutable 0\nset 42 $ m\nprint m', ['42']],
+    ['mutable capture preserves cell identity', 'm <- Mutable 0\nset m $ 42\nprint m', ['42']],
     ['capture argument-taking function', 'f <- x -> x + 1\nprint (f 2)', ['3']],
     ['function source preserves eager bindings', 'f x = { y <- print x; y }\nprint f', ['x -> { y <- print x; y }']],
     ['multiline eager body', 'x <-\n    1 + 2\nprint x', ['3']],

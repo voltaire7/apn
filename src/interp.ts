@@ -1654,14 +1654,14 @@ export class Interpreter {
             return { kind: "unit" };
         }
         if (name === "set") {
-            const target = this.reference(argsIn[1]);
+            const target = this.reference(argsIn[0]);
             if (target.kind === "pointer") {
                 if (!target.elementType) throw new APNError("runtime", "set needs a typed APN allocation; use ffi.poke Type for untyped pointers");
-                return standardNative(this, "poke", [{ kind: "type", name: target.elementType }, argsIn[0], target]);
+                return standardNative(this, "poke", [{ kind: "type", name: target.elementType }, argsIn[1], target]);
             }
             if (target.kind !== "mutable") throw new APNError("runtime", "set expects a Mutable target");
             // Evaluate against the old contents before changing the shared cell.
-            const value = this.demand(argsIn[0]);
+            const value = this.demand(argsIn[1]);
             target.v = value;
             return { kind: "unit" };
         }

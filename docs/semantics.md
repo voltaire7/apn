@@ -558,7 +558,7 @@ steps are preserved, so `[1..0]` is `[1,0]`; std factorial handles zero separate
 
 `x = Mutable 0` allocates a shared cell when first used. A zero-argument binding
 returning a cell retains that cell across calls; functions taking arguments can
-create independent cells. `set value cell` (or `set value $ cell`) evaluates the
+create independent cells. `set cell value` (or `set cell $ value`) evaluates the
 new outer value before replacing the old contents and returns unit. A failed
 update leaves the cell unchanged. Aliases and inner scopes share the cell.
 Arithmetic and printing read its contents; `typeOf x` reports `Mutable`.

@@ -469,7 +469,7 @@ See `docs/browser-html.md` and `tests/html-test.ts`.
 
 ## Mutable references
 
-`Mutable value` allocates a shared cell; `set value cell` returns unit after
+`Mutable value` allocates a shared cell; `set cell value` returns unit after
 replacing its contents. `reference()` preserves cell identity; `demand()` reads
 its contents without memoizing that read over the cell. Zero-argument bindings
 returning a cell retain it, while argument-taking factory calls allocate afresh.

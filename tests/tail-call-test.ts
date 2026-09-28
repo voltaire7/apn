@@ -65,7 +65,7 @@ Deno.test('tail load keeps block exports scoped and resumes non-tail loads', () 
     i.run(parseDocument('counter = Mutable 3; module <- load "scoped"'));
     if (i.env.get('exported')) throw new Error('block-local export escaped');
     if (i.renderString(i.run(parseDocument('module.outside'))) !== '1') throw new Error('outer export lost');
-    const value = i.run(parseDocument('set 3 $ counter; load "non-tail"; after'));
+    const value = i.run(parseDocument('set counter $ 3; load "non-tail"; after'));
     if (i.renderString(value) !== '7') throw new Error('non-tail continuation lost');
 });
 Deno.test('tail load failure restores context without publishing unfinished exports', () => {

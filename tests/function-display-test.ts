@@ -17,7 +17,7 @@ for (const [code, expected] of [
 });
 Deno.test("displaying function body and captured argument has no effects", () => {
     const i = new Interpreter();
-    i.run(parse('x = Mutable 0; f a b = set 9 x; partial = f (set 4 x)'));
+    i.run(parse('x = Mutable 0; f a b = set x 9; partial = f (set x 4)'));
     i.renderString(i.run(parse('partial')));
     if (i.renderString(i.run(parse('x'))) !== '0') throw new Error('display ran effects');
 });
