@@ -63,7 +63,7 @@ export function formatError(err: unknown, color: boolean): string {
 function runSourceValue(src: string, interp: Interpreter, binding = false): Value | null {
     let program: TopLevel[];
     try {
-        program = parse(src);
+        program = parse(src, interp.sourceFile);
     } catch (err) {
         throw err instanceof APNError ? err : new APNError("parse", (err as Error).message);
     }
@@ -363,6 +363,9 @@ function helpText(): string {
         `  match x [ pat -> expr, ... ]   (ordinary function; alternatives are pattern lambdas)`,
         `  func ((Int -> Int) f) = Int { f 123 }   (checked function contract)`,
         `  Maybe a = Just a | Nothing`,
+        `  UserId = distinct Int   (nominal identity; UserId x patterns unwrap)`,
+        `  table Direction [[North, value], ...]   (all nullary variants required)`,
+        `  assert (condition)   (reports expression and source location)`,
         `  [1,2,3]  [0..5] [0,0.5..100] [0..]  ranges; 0:[] conses`,
         `  ['a'..'e'] => "abcde"; take 6 (iterate (*2) 1) => [1,2,4,8,16,32]`,
         `  ones = 1:ones; take 5 ones   lazy heads/tails; drop 5 ones`,

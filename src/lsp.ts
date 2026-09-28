@@ -44,6 +44,11 @@ const builtins = new Map<string, string>([
     ["use", "use namespace — open a record or list of records in the current scope; later fields win; returns ()."],
     ["do", "do expressions — evaluate a list in order and return the last result; () for an empty list."],
     ["match", "match value alternatives — try unary pattern functions in order."],
+    ["distinct", "distinct Type — create a fresh nominal type; bind it once to a capitalized name."],
+    ["table", "table Enum entries — construct a complete, immutable mapping for a nullary variant family."],
+    ["assert", "assert condition — require Bool; failures include the expression and source location."],
+    ["bracket", "bracket acquire release use — finish returned data before cleanup, even on failure (std/function)."],
+    ["withFile", "withFile path use — scoped UTF-8 file reader; callback receives file.read (std/io)."],
 ]);
 
 export class LanguageServer {

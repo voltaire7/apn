@@ -1,3 +1,4 @@
+import { sourceLocations } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
@@ -29,7 +30,7 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
-    ["match", 2], ["set", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
+    ["distinct", 1], ["table", 2], ["assert", 1], ["match", 2], ["set", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
@@ -74,8 +75,8 @@ export class Interpreter {
             const scope = new Env(builtins);
             const builtinExports: Record<string, string[]> = {
                 ffi: ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer"],
-                io: ["readFile", "readStdin", "getArgs"],
-                function: ["fail", "seq", "do"],
+                io: ["withFile", "readFile", "readStdin", "getArgs"],
+                function: ["bracket", "fail", "seq", "do"],
                 sequence: [],
                 text: ["chars", "fromChars", "upper", "lower"],
             };
@@ -84,7 +85,7 @@ export class Interpreter {
                 const source = this.moduleSources
                     ? this.moduleSources[name] ?? (() => { throw new APNError("runtime", `module '${module}' is not bundled`); })()
                     : Deno.readTextFileSync(new URL(`../lib/${name}.apn`, import.meta.url));
-                const program = parse(source);
+                const program = parse(source, module);
                 this.env = scope;
                 this.extendDefinitions = false;
                 this.sourceDir = new URL("../lib/", import.meta.url).pathname;
@@ -107,6 +108,7 @@ export class Interpreter {
     // Directory of the source file currently being evaluated — `load` resolves
     // relative paths against it ("relative to your current file").
     sourceDir: string = ".";
+    sourceFile = "<repl>";
 
     constructor() {
         for (const name of TYPE_NAMES) this.env.setLocal(name, { kind: "type", name });
@@ -182,6 +184,10 @@ export class Interpreter {
                     try {
                         const value = this.reference(this.eval(clauses[0].body));
                         if (!this.isTypeValue(value)) throw new APNError("runtime", `${name} must alias a type; use | to declare constructors`);
+                        if (value.kind === "type" && value.family?.base && value.family.name === "<distinct>") {
+                            value.family.name = name;
+                            return { ...value, name };
+                        }
                         return value;
                     } finally { this.env = caller; }
                 });
@@ -506,6 +512,8 @@ export class Interpreter {
         const family = v.family;
         if (path.some(type => this.sameType(type, v))) throw new APNError("runtime", `${v.name} has no finite default; supply a value explicitly`);
         if (path.length >= 128) throw new APNError("runtime", "default initialization is too deeply recursive; supply a value explicitly");
+        if (family.base) return { kind: "variant", tag: family.name, family,
+            v: [this.defer(() => this.defaultField(family.base!, [...path, v]))] };
         const choices = [...family.fields ?? []];
         const choice = choices.find(([, fields]) => !fields.length) ?? choices[0];
         if (!choice) throw new APNError("runtime", `${v.name} has no default constructor`);
@@ -782,6 +790,21 @@ export class Interpreter {
             if (callable(l)) return this.iterate(r, l);
         }
         if (e.op === "==" || e.op === "!=") return mkBool(this.equals(l, r) === (e.op === "=="));
+        if ((l.kind === "variant" && l.family?.base) || (r.kind === "variant" && r.family?.base)) {
+            if (l.kind !== "variant" || r.kind !== "variant" || l.family !== r.family) {
+                throw new APNError("runtime", "distinct arithmetic requires the same distinct type on both sides");
+            }
+            const a = this.demand(l.v[0]), b = this.demand(r.v[0]);
+            if (isNumeric(a) && isNumeric(b) && ["+", "-", "*", "/", "%", "^"].includes(e.op)) {
+                const result = e.op === "^" ? numericNative("expt", [a, b]) as Value : typedArithmetic(e.op, a, b);
+                return this.conform({ kind: "type", name: l.family!.name, family: l.family }, result);
+            }
+            if (["<", ">", "<=", ">="].includes(e.op)) {
+                const order = this.compare(a, b);
+                return mkBool(e.op === "<" ? order < 0 : e.op === ">" ? order > 0 : e.op === "<=" ? order <= 0 : order >= 0);
+            }
+            throw new APNError("runtime", `operator '${e.op}' requires unwrapping this distinct value`);
+        }
         if (e.op !== "\\") { l = this.dataValue(l); r = this.dataValue(r); }
         if (["+", "-", "*", "/", "%", "^"].includes(e.op) &&
                 (this.isList(l) || this.isList(r) || l.kind === "record" || r.kind === "record")) {
@@ -836,6 +859,7 @@ export class Interpreter {
 
     private arrayNegate(value: Value): Value {
         const v = this.dataValue(value);
+        if (v.kind === "variant" && v.family?.base) return this.conform({ kind: "type", name: v.family.name, family: v.family }, this.arrayNegate(v.v[0]));
         if (isNumeric(v)) return v.typeName ? castNumeric(v.typeName, negate(v)) : negate(v);
         if (this.isList(v)) return this.defer(() => {
             const cell = this.cell(v);
@@ -930,7 +954,7 @@ export class Interpreter {
             }
             case "variant": {
                 const bv = b as any;
-                return a.tag === bv.tag && this.equals({ kind: "list", v: a.v }, { kind: "list", v: bv.v });
+                return a.tag === bv.tag && (!(a.family?.base || bv.family?.base) || a.family === bv.family) && this.equals({ kind: "list", v: a.v }, { kind: "list", v: bv.v });
             }
             case "nomatch": return true;
             default: return false;
@@ -1360,6 +1384,14 @@ export class Interpreter {
         if (type.kind === "type") {
             if (type.name === "$any") return value;
             const actual = type.name === "Type" ? this.demand(value) : this.dataValue(value);
+            if (type.family?.base) {
+                if (actual.kind === "variant" && actual.family?.base) {
+                    if (actual.family !== type.family) throw new APNError("runtime", `${type.name} requires explicit unwrapping of ${actual.family.name}`);
+                    return actual;
+                }
+                return { kind: "variant", tag: type.family.name, family: type.family,
+                    v: [this.conform(type.family.base, actual)] };
+            }
             if (type.family) {
                 if (actual.kind !== "variant" || actual.family !== type.family) throw new APNError("runtime", `${type.name} expects a ${type.name} variant`);
                 return type.arguments?.length ? this.variantValue(actual.tag, actual.v, type.family, type.arguments) : actual;
@@ -1551,6 +1583,52 @@ export class Interpreter {
     }
 
     callNative(name: string, argsIn: Value[], tag?: string): Value {
+        if (name === "assert") {
+            const argument = argsIn[0];
+            const condition = this.demand(argument);
+            if (condition.kind !== "bool") throw new APNError("runtime", "assert expects Bool");
+            if (!condition.v) {
+                const body = argument.kind === "thunk" ? argument.body : undefined;
+                const location = body && sourceLocations.get(body);
+                const expression = location ? location.source.slice(location.start, location.end).trim() : body ? exprToSource(body) : "false";
+                const line = location ? location.source.slice(0, location.start).split("\n").length : undefined;
+                const error = new APNError("runtime", `assertion failed: ${expression}${location ? ` (${location.file}:${line})` : ""}`,
+                    location ? { pos: location.start, len: Math.max(1, location.end - location.start) } : {});
+                if (location) error.src = location.source;
+                throw error;
+            }
+            return { kind: "unit" };
+        }
+        if (name === "distinct") {
+            const base = this.reference(argsIn[0]);
+            if (!this.isTypeValue(base)) throw new APNError("runtime", "distinct expects a type");
+            const family = { name: "<distinct>", base };
+            return { kind: "type", name: family.name, family };
+        }
+        if (name === "table") {
+            const keyType = this.reference(argsIn[0]);
+            if (keyType.kind !== "type" || !keyType.family?.fields?.size ||
+                [...keyType.family.fields.values()].some(fields => fields.length)) {
+                throw new APNError("runtime", "table keys require a variant family with only nullary constructors");
+            }
+            const family = keyType.family;
+            const entries = new Map<string, Value>();
+            const keyOf = (raw: Value): string => {
+                const key = this.demand(raw);
+                if (key.kind !== "variant" || key.family !== family || key.v.length) throw new APNError("runtime", `table expects a ${family.name} key`);
+                return key.tag;
+            };
+            for (const pair of this.elements(argsIn[1])) {
+                const values = this.items(pair);
+                if (values.length !== 2) throw new APNError("runtime", "table entries must be [key, value] pairs");
+                const key = keyOf(values[0]);
+                if (entries.has(key)) throw new APNError("runtime", `duplicate table key '${key}'`);
+                entries.set(key, values[1]);
+            }
+            const missing = [...family.fields!.keys()].filter(key => !entries.has(key));
+            if (missing.length) throw new APNError("runtime", `missing table keys: ${missing.join(", ")}`);
+            return { kind: "native", name: `table ${family.name}`, arity: 1, applied: [], invoke: ([key]) => entries.get(keyOf(key))! };
+        }
         if (name === "match") {
             // Traverse only as far as the first match. Share the original lazy
             // argument across probes; errors are never treated as mismatches.
@@ -1800,7 +1878,7 @@ export class Interpreter {
                 try { src = Deno.readTextFileSync(path); }
                 catch (err) { throw new APNError("runtime", `load: can't read '${p}' (looked in '${path}'): ${(err as Error).message}`); }
                 let program: TopLevel[];
-                try { program = parse(src); }
+                try { program = parse(src, path); }
                 catch (err) { throw new APNError("runtime", `load: parse error in '${path}': ${(err as Error).message}`); }
                 const loaded = new Env(this.env);
                 frames.push({ caller: this.env, loaded });
@@ -1961,7 +2039,8 @@ export class Interpreter {
                 }
                 if (type.kind === "type" && type.family) {
                     const actual = this.dataValue(v);
-                    return p.args.length === 1 && actual.kind === "variant" && actual.family === type.family && this.matchPattern(p.args[0], this.conform(type, actual), binds);
+                    return p.args.length === 1 && actual.kind === "variant" && actual.family === type.family &&
+                        this.matchPattern(p.args[0], type.family.base ? actual.v[0] : this.conform(type, actual), binds);
                 }
                 if (type.kind === "functionType") {
                     const f = this.force(v);
@@ -1977,7 +2056,7 @@ export class Interpreter {
         switch (p.p) {
             case "typeBind": {
                 const type = this.callNative("typeOf", [v]);
-                return this.matchPattern({ p: "var", name: p.name }, type, binds) && this.matchPattern(p.value, isNumeric(v) ? numericPayload(v) : v, binds);
+                return this.matchPattern({ p: "var", name: p.name }, type, binds) && this.matchPattern(p.value, isNumeric(v) ? numericPayload(v) : v.kind === "variant" && v.family?.base ? v.v[0] : v, binds);
             }
             case "int": return isNumeric(v) && equalNumbers(v, integer(p.v));
             case "bool": return v.kind === "bool" && v.v === p.v;

@@ -623,3 +623,22 @@ the old scope. Pattern-compatible parameters are interpreted as expressions
 only for existing collections in evalDef. Expression-only keys use setItem,
 parsed by tryItemAssign; it shares assignItem with the definition path. Keep
 function clauses, lazy tails, type checks and atomic binding publication intact.
+
+## Nominal types, tables, diagnostics, and resources
+
+`distinct Type` creates a generative VariantFamily with base metadata. A capitalized
+alias names and memoizes it; distinct patterns unpack its payload. Numeric operators
+require the same family on both sides and preserve its checked base type. Ordinary
+records remain structural. `table Family entries` validates complete unique nullary
+variant keys and returns an immutable native callable with lazy values.
+
+AST sourceLocations is a WeakMap, outside serialized AST shapes. Parser expression
+spans retain source/file for assertions and match-diagnostics. Lint never evaluates
+source: warn only for recognizable families/literal alternatives, handle scope
+shadowing conservatively, and do not treat guarded patterns as total coverage.
+Warnings are severity 2 and do not fail CLI lint.
+
+resource-scope.ts implements bracket and read-only withFile. Finish returned finite
+data before release; reject escaping callables/references, detect nested cycles,
+and enforce withFile handle lifetime even if stashed externally. Cleanup runs in
+finally. See docs/type-and-resource-rules.md and tests/odin-rules-test.ts.

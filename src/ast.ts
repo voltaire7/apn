@@ -66,3 +66,7 @@ export type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "
 
 // ---------------- Lexer ----------------
 
+
+// Source metadata is kept out of AST serialization and source round-trips.
+export interface SourceLocation { source: string; file: string; start: number; end: number; }
+export const sourceLocations = new WeakMap<Expr, SourceLocation>();

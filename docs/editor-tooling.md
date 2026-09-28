@@ -60,12 +60,13 @@ Clean files produce no text output. Errors use `file:line:column` (one-based),
 with the lexer/parser's message. JSON output has one entry per file containing
 `file` and `diagnostics`, or `file` and `error` for a file-read failure. JSON
 ranges use zero-based UTF-16 positions, matching LSP. Exit status is 0 for clean
-files, 1 for errors, and 2 for missing file arguments.
+files (including warning-only results), 1 for errors, and 2 for missing file arguments.
 
-The initial linter checks syntax and APN's strict layout rules. It reports the
+The linter checks syntax and APN's strict layout rules. It reports the
 first parse/lex error in each file, because the parser does not yet recover after
 an error. It does not claim to detect undefined variables, unused names, runtime
-errors, exhaustiveness, or type errors. `_` placeholders are valid syntax.
+errors or general type errors. It also issues conservative variant-exhaustiveness
+warnings for statically recognizable matches; see [type and resource rules](type-and-resource-rules.md). `_` placeholders are valid syntax.
 
 ## Server capabilities
 

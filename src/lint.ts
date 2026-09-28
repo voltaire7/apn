@@ -1,3 +1,4 @@
+import { matchDiagnostics } from "./match-diagnostics.ts";
 import { parseDocument } from "./parser.ts";
 import { APNError } from "./errors.ts";
 
@@ -18,7 +19,7 @@ export function position(source: string, offset: number): Position {
 }
 
 export function lint(source: string): Diagnostic[] {
-    try { parseDocument(source); return []; }
+    try { return matchDiagnostics(parseDocument(source), source); }
     catch (error) {
         if (!(error instanceof APNError)) throw error;
         const start = Math.max(0, Math.min(source.length, error.pos ?? 0));
@@ -40,9 +41,9 @@ export async function runLint(args: string[]): Promise<number> {
         try {
             const diagnostics = lint(await Deno.readTextFile(file));
             results.push({ file, diagnostics });
-            if (diagnostics.length) failed = true;
+            if (diagnostics.some(d => d.severity === 1)) failed = true;
             if (!json) for (const d of diagnostics) {
-                console.log(`${file}:${d.range.start.line + 1}:${d.range.start.character + 1}: error[${d.code}]: ${d.message}`);
+                console.log(`${file}:${d.range.start.line + 1}:${d.range.start.character + 1}: ${d.severity === 1 ? "error" : "warning"}[${d.code}]: ${d.message}`);
             }
         } catch (error) {
             failed = true;

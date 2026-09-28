@@ -1,3 +1,4 @@
+import { sourceLocations } from "./ast.ts";
 import { stringKey, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -34,7 +35,7 @@ class Parser {
     i = 0;
     seen: Token | null = null; // last token peeked/consumed — where a failure points
 
-    constructor(toks: Token[], private source: string) { this.toks = toks; }
+    constructor(toks: Token[], private source: string, private file = "<repl>") { this.toks = toks; }
 
     lineIndent(token: Token): number {
         const start = this.source.lastIndexOf("\n", token.pos - 1) + 1;
@@ -279,7 +280,10 @@ class Parser {
         // the current expression. Only an INDENTED continuation (newlines followed
         // by an indent token) is consumed here to join the next line in.
         this.skipContinuation();
-        return this.parsePipe();
+        const start = this.peek().pos;
+        const expression = this.parsePipe();
+        sourceLocations.set(expression, { source: this.source, file: this.file, start, end: this.peek().pos });
+        return expression;
     }
 
     // Consume newlines + ONE indent if the following content is indented deeper
@@ -299,8 +303,10 @@ class Parser {
     }
 
     parsePipe(): Expr {
+        const start = this.peek().pos;
         let e = this.parseTernary();
         while (this.isSym("$")) {
+            sourceLocations.set(e, { source: this.source, file: this.file, start, end: this.peek().pos });
             this.next();
             const f = this.parseTernary();
             e = { t: "pipe", x: e, f };
@@ -395,6 +401,7 @@ class Parser {
     }
 
     parseApp(): Expr {
+        const start = this.peek().pos;
         let f = this.parsePostfix(this.parsePrimary());
         // application: f x y  (does NOT cross newline at layout level, nor a `;`)
         for (;;) {
@@ -406,7 +413,9 @@ class Parser {
                     t.k === "str" || t.k === "char" ||
                     (t.k === "sym" && (t.v === "(" || t.v === "[" || t.v === "{"))) {
                 const a = this.parsePostfix(this.parsePrimary());
+                sourceLocations.set(a, { source: this.source, file: this.file, start: t.pos, end: this.peek().pos });
                 f = { t: "app", f, a };
+                sourceLocations.set(f, { source: this.source, file: this.file, start, end: this.peek().pos });
             } else break;
         }
         return f;
@@ -1275,7 +1284,7 @@ export function parseDocument(src: string): TopLevel[] {
     }
 }
 
-export function parse(src: string): TopLevel[] {
+export function parse(src: string, file = "<repl>"): TopLevel[] {
     let toks: Token[];
     try {
         toks = lex(src);
@@ -1283,7 +1292,7 @@ export function parse(src: string): TopLevel[] {
         if (err instanceof APNError) err.src = src;
         throw err;
     }
-    const p = new Parser(toks, src);
+    const p = new Parser(toks, src, file);
     try {
         const out = p.parseTopLevel();
         return groupClauses(out);

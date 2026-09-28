@@ -269,3 +269,10 @@ its exported record. This avoids forcing unused exports such as infinite lists.
 Explicit output in the file still prints. Use `module <- load "file"` to retain
 the record, then inspect selected fields. Explicit `print (load "file")` still
 requests the full record and can stream indefinitely if it contains infinite lists.
+
+## Resource scopes and type utilities
+
+`std/function` exports `bracket acquire release use`; `std/io` exports
+`withFile path use`. Returned data is completed before cleanup.
+`distinct`, `table`, and `assert` are available without imports.
+See [type and resource rules](type-and-resource-rules.md) for examples and limits.

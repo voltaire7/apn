@@ -1136,6 +1136,46 @@ selectedKey = "x"
 indexedObject selectedKey = 3
 print indexedObject                 # => [x: 3]
 
+# Distinct types keep identities separate; aliases keep the same identity.
+AccountId = distinct Int
+getAccountId (AccountId n) = n
+print (AccountId 7)                  # => AccountId 7
+print (getAccountId (AccountId 7))   # => 7
+print (AccountId 2 + AccountId 3)    # => AccountId 5
+print (AccountId == Int)            # => false
+# AccountId 1 + 1                   # error: explicit unwrapping required
+
+# Finite tables require every constructor exactly once, in any order.
+Compass = Up | Down | Left | Right
+deltas = table Compass [
+    [Up, [0, -1]]
+    [Down, [0, 1]]
+    [Left, [-1, 0]]
+    [Right, [1, 0]]
+]
+print (deltas Left)                 # => [-1, 0]
+# table Compass [[Up, [0, -1]]]     # error: missing keys
+
+# The linter warns if a known family's literal alternatives omit a case.
+# Guards do not count as unconditional coverage; dynamic lists stay runtime-checked.
+compassName (Compass direction) = match direction [
+    Up -> "up"
+    Down -> "down"
+    Left -> "left"
+    Right -> "right"
+]
+assert (compassName Up == "up")
+# assert (1 == 2)                   # error includes expression, source file and line
+
+# Scoped cleanup runs after returned lazy data has been evaluated.
+import "std/function"
+released = Mutable false
+print (bracket 42 (_ -> set true released) (n -> [n, n + 1])) # => [42, 43]
+print released                     # => true
+import "std/io"
+# A read-only OS device keeps the showcase independent of its working directory.
+print (withFile "/dev/null" (file -> file.read)) # => empty line
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

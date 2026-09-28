@@ -46,6 +46,7 @@ if (import.meta.main) {
         }
         const interp = new Interpreter();
         interp.sourceDir = dirname(file);
+        interp.sourceFile = file;
         interp.programArgs = _args.slice(1);
         try {
             runSource(src, interp, true); // file mode executes effects without rendering the last value

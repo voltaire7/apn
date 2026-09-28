@@ -232,8 +232,9 @@ A constructor pattern `(Some value)` extracts its field. Explicitly declared
 same-name legacy wrappers remain supported (`Box a = | Box a`), but the shared
 name denotes the value constructor; use distinct names for type specialization.
 
-Nominal wrappers use ordinary single-constructor variants; no automatic unwrap
-or zero-cost representation is implied. Class/instance syntax and static type
+Nominal wrappers can use single-constructor variants or `distinct Type`;
+see [distinct types](type-and-resource-rules.md#distinct-types). No automatic
+cross-type conversion or zero-cost representation is implied. Class/instance syntax and static type
 inference are not part of this change.
 
 Record-template patterns also accept positional lists with exactly as many
