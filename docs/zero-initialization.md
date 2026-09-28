@@ -24,15 +24,14 @@ Assignments rebind a scoped copy and preserve numeric annotations. The displayed
 `0.0` above is internally `Float 0.0`, so later assignments remain checked Float
 conversions. The original template remains unchanged.
 
-An uninitialized type slot cannot be assigned to. Construct it first:
+Assignment to a type slot applies its constructor to the supplied value.
+Untouched slots remain type descriptors; the shared template is unchanged:
 
 ```apn
 vec = Vector3
-# vec.x = 1             # error: uninitialized type slot
+vec.x = 1              # [x: 1.0, y: Float, z: Float]
 xs = [Int]
-# xs 0 = 1              # same error
-xs = [Int] [0]
-xs 0 = 1                # [1]
+xs 0 = 1               # [1]
 ```
 
 This applies to dot, string-key, pluck, and list-index assignment. New record

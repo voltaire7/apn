@@ -56,11 +56,6 @@ for (const [type, expected] of [
     if (actual !== `[value: ${expected}]`) throw new Error(actual);
 });
 for (const source of [
-    'V = [x: Float]\nv = V\nv.x = 1',
-    'v = [x: Int]\nv "x" = 1',
-    'v = [x: Int]\nv.[x] = [1]',
-    'xs = [Int]\nxs 0 = 1',
-    'xs = [Int]\nxs (-1) = 1',
     'Int + 1', 'sqrt Float', '-Int', 'Int ^ 2', 'Int < 1',
  'String ++ "hi"', 'length List', '[Int, Float] + [1,2]',
     'f (Int x) = x + 1\nf Int', 'f (Bool x) = x\nf Bool',
@@ -76,16 +71,16 @@ for (const source of [
     throw new Error('Expected error');
 });
 
-Deno.test("failed uninitialized-slot assignment preserves the template", () => {
-    for (const assignment of ['v.x = 1', 'v "x" = 1', 'v.[x] = [1]']) {
+Deno.test("failed type-slot conversion preserves the template", () => {
+    for (const assignment of ['v.x = .2', 'v "x" = .2', 'v.[x,y] = [.2, 2]']) {
         const i = new Interpreter();
-        i.run(parseDocument('v = [x: Float]'));
+        i.run(parseDocument('v = [x: Int, y: Int]'));
         let rejected = false;
         try { i.run(parseDocument(assignment)); } catch (e) {
-            if (!String(e).includes('uninitialized type slot')) throw e;
+            if (!String(e).includes('lossy conversion')) throw e;
             rejected = true;
         }
-        if (!rejected || i.renderString(i.env.get('v')!) !== '[x: Float]') throw new Error(assignment);
+        if (!rejected || i.renderString(i.env.get('v')!) !== '[x: Int, y: Int]') throw new Error(assignment);
     }
 });
 
@@ -108,3 +103,17 @@ for (const values of ['[1]', '[1,2]', '[1,2,3,4]']) {
         throw new Error('expected field count error');
     });
 }
+
+for (const [source, expected] of [
+    ['Vector3 = [x: Float, y: Float, z: Float]\nvec = Vector3\nvec.x = 123\n[vec, Vector3]', '[[x: 123.0, y: Float, z: Float], [x: Float, y: Float, z: Float]]'],
+    ['v = [x: Int]\nv "x" = 1\nv', '[x: 1]'],
+    ['v = [x: Int, y: Float]\nv.[x,y] = [1,2]\nv', '[x: 1, y: 2.0]'],
+    ['xs = [Int]\nxs 0 = 1\nxs', '[1]'],
+    ['xs = [Int, Float]\nxs (-1) = 2\nxs', '[Int, 2.0]'],
+    ['xs = [Int]\ni = 0\nxs (i + 0) = 1\nxs', '[1]'],
+    ['UserId = distinct Int\nv = [id: UserId]\nv.id = 3\nv', '[id: UserId 3]'],
+    ['v = [f: Int -> Int]\nv.f = (+ 1)\nv.f 2', '3'],
+] as const) Deno.test(`assignment applies type slots: ${source}`, () => {
+    const actual = result(source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});

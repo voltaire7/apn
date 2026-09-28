@@ -610,7 +610,8 @@ Interpreter.dataValue demands ordinary values without projecting types to zero.
 Bare types print as descriptors and never act as numbers. Template construction
 accepts complete positional lists, [] for all defaults, or named records and initializes omitted slots
 lazily; concrete defaults persist, nested templates initialize recursively.
-Assignment to a bare type/function-type slot errors; users must construct first.
+Assignment applies a type/function-type slot to the incoming value; untouched
+slots remain descriptors and the original template is unchanged.
 All assignment paths share assignSlot. Initialized numeric fields retain type
 annotations; Int/Float display without labels. Function iteration stays unchanged.
 Variant defaults choose a nullary constructor first, otherwise recursively default

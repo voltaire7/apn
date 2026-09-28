@@ -1111,7 +1111,9 @@ zeroVector = ZeroVector []
 zeroVector.x = 123
 print zeroVector                     # => [x: 123.0, y: 0.0, z: 0.0]
 print ZeroVector                     # => [x: Float, y: Float, z: Float]
-# template = ZeroVector; template.x = 1  # error: construct a value first
+template = ZeroVector
+template.x = 123
+print template                       # => [x: 123.0, y: Float, z: Float]
 print ([Int] [1, 2, 3])              # => [1, 2, 3]
 print (ZeroVector [1, 2, 3])          # => [x: 1.0, y: 2.0, z: 3.0]
 # ZeroVector [1, 2]                  # error: positional fields must be complete

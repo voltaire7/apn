@@ -285,9 +285,6 @@ export class Interpreter {
 
     private assignSlot(slot: Value, value: Value): Value {
         slot = this.demand(slot);
-        if (slot.kind === "type" || slot.kind === "functionType") {
-            throw new APNError("runtime", "cannot assign to an uninitialized type slot; construct a value first");
-        }
         return this.demand(this.apply(slot, value));
     }
 

@@ -109,8 +109,9 @@ v.y = 321                 # [x: 0, y: 321]
 v "y" = floor .2                # [x: 0, y: 0]
 ```
 
-Uninitialized type slots reject assignment: `v = [x: Int]; v.x = 1` and
-`xs = [Int]; xs 0 = 1` both error. Construct values first, as above.
+Type slots also accept assignment: `v = [x: Int]; v.x = 1` and
+`xs = [Int]; xs 0 = 1` apply Int to the new value. Untouched slots remain
+constructors rather than becoming defaults.
 The selected slot is demanded because it participates in application. Unrelated
 slots remain deferred. The RHS sees the old binding. An immediate application
 or bounds error preserves the binding; already-performed effects are not undone.
