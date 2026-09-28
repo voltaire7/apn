@@ -1,4 +1,3 @@
-import { builtinZero } from "./zero-values.ts";
 import { keySource } from "./record-keys.ts";
 import { functionSource } from "./function-source.ts";
 import { type Numeric, type Real, numberText } from "./numbers.ts";
@@ -77,8 +76,7 @@ export function valueToString(v: Value): string {
         case "contract": return `((${valueToString({ kind: "functionType", from: v.from, to: v.to })}) (${valueToString(v.target)}))`;
         case "pointer": return `Pointer 0x${v.bits.toString(16)}`;
         case "type": {
-            const zero = !v.inspect && !v.family && !v.alias ? builtinZero(v.name) : undefined;
-            return zero ? valueToString(zero) : v.name + (v.arguments?.length ? " " + v.arguments.map(typeToString).join(" ") : "");
+            return v.name + (v.arguments?.length ? " " + v.arguments.map(typeToString).join(" ") : "");
         }
         case "hashmap": return `HashMap [${[...v.entries.values()].map(([k, x]) => `[${valueToString(k)}, ${valueToString(x)}]`).join(", ")}]`;
         case "rationalRange": return "<rational range>";
@@ -147,7 +145,7 @@ export class Env {
 }
 
 
-// Type inspection is explicit; ordinary rendering displays zero values.
+// Render nested type descriptions without constructing data defaults.
 export function typeToString(v: Value): string {
     if (v.kind === "type") return valueToString({ ...v, inspect: true });
     if (v.kind === "list") return `[${v.v.map(typeToString).join(", ")}]`;

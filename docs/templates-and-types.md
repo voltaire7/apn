@@ -85,12 +85,11 @@ Use `map xs [0, 2]` to select multiple indexes from `xs`; it always returns a li
 [x: Int, y: (* 2)] [1, 2]       # [x: 1, y: 4]
 ```
 
-Supplied existing fields are applied, omitted fields are preserved unchanged,
-and extra fields are appended unchanged. Types and functions are ordinary
-values: an omitted `Int` supplies zero while retaining its constructor, and an
-omitted function stays callable. See [zero initialization](zero-initialization.md).
-A list argument supplies record fields positionally and must match the field
-count. Record results defer field transformations until demanded.
+Supplied existing fields are applied, omitted type slots are initialized,
+and extra fields are appended unchanged. An omitted `Int` becomes typed zero;
+omitted concrete values and functions retain their defaults. See [zero initialization](zero-initialization.md).
+A list argument supplies record fields positionally; missing trailing fields
+initialize from the template, and excess values error. Record results defer field transformations until demanded.
 
 Keys retain their full string contents, including any quote characters, through application.
 `[x: Int, "x": Int] ["x": 1]` produces `[x: 0, "x": 1]`.
@@ -101,15 +100,17 @@ Index, field, and pluck assignment apply the old slot to the incoming value,
 then rebind a copy in the current scope:
 
 ```apn
-xs = [Int]
+xs = [Int] [0]
 xs 0 = floor .2                 # [0]
 xs 0 = 123                # [123]
 
-v = [x: Int, y: Int]
+v = [x: Int, y: Int] []
 v.y = 321                 # [x: 0, y: 321]
 v "y" = floor .2                # [x: 0, y: 0]
 ```
 
+Uninitialized type slots reject assignment: `v = [x: Int]; v.x = 1` and
+`xs = [Int]; xs 0 = 1` both error. Construct values first, as above.
 The selected slot is demanded because it participates in application. Unrelated
 slots remain deferred. The RHS sees the old binding. An immediate application
 or bounds error preserves the binding; already-performed effects are not undone.
@@ -188,8 +189,8 @@ getX ([x: Int] p) = p.x
 ```
 
 These are lazy runtime conversion contracts, not a static type checker.
-Record conversion preserves omitted fields even in a type description; it does
-not invent an input for them. `isType description value` checks membership
+Record construction initializes omitted type fields from their defaults and
+retains concrete defaults. `isType description value` checks membership
 without conversion and requires described record fields to be present with
 matching values. A complete list membership check consumes the list.
 

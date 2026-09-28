@@ -632,6 +632,7 @@ functions are not composed by `*`—use `\` for composition.
 
 ## Zero is initialization
 
-Type descriptors supply useful default values in data contexts while remaining
-callable constructors and usable patterns. See [zero initialization](zero-initialization.md)
+Type descriptors remain constructors in every ordinary value context. Applying a
+record template initializes omitted type slots; `Vector3 []` constructs defaults.
+Assignment to an uninitialized type slot errors. See [zero initialization](zero-initialization.md)
 for the default table, type inspection, variant rules and limitations.

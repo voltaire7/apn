@@ -167,9 +167,9 @@ intentional evaluation change.
   The old `{ a = b }` syntax is REMOVED.
 - **Prototype-based objects**: APPLYING a record (`vector3 [1, 2, 3]`) CLONES
   a record prototype (the prototype is a RECORD — a bare-name list is a list,
-  never an object). A LIST argument applies slots positionally (one value per
-  field; field count must match, else error); a RECORD argument applies matching slots by
-  name in any order — supplied fields transformed, omitted fields preserved, new fields appended, so
+  never an object). A LIST argument applies slots positionally (trailing omitted fields
+  initialize from defaults; excess values error); a RECORD argument applies matching slots by
+  name in any order — supplied fields transformed, omitted type slots initialized, new fields appended, so
   `vector3 [z: 3, x: 1]` keeps the prototype's other defaults (→
   `[x: 1, y: 0, z: 3]`) and `vector3 [x: 1, y: 2, z: 3, a: 0]` adds `a`. An INT
   argument indexes positionally → the pair `[field, value]` (`vec 1` →
@@ -556,7 +556,7 @@ numbers apply by returning the incoming number, with typed numbers reapplying
 their constructor. Other scalar kinds accept same-kind replacements. [f] maps
 lazily; longer/empty lists zip exactly. Strings supply Unicode code-point chars
 through the existing chars primitive. Integer application remains indexing.
-Record application transforms supplied slots, preserves omitted values, appends
+Record application transforms supplied slots, initializes omitted type slots, appends
 new fields, and preserves every character of string keys. Assignments apply old
 slots before publishing a scoped copy; the selected slot is now demanded.
 No element schema is attached to the output: [Int] [] is an ordinary empty list.
@@ -605,17 +605,18 @@ lib/array.apn; docs/arrays.md and tests/array-test.ts cover their behavior.
 
 ## Zero initialization
 
-src/zero-values.ts supplies built-in zeros. Interpreter.dataValue projects a type
-into its data default; demand/reference deliberately retain descriptors for
-constructors, schemas, imports and FFI signatures. Never memoize the projection
-into a shared type binding. Int/Float omit display labels; fixed widths retain
-them. Type descriptors returned by typeOf/generic patterns or inspected with
-Type carry an inspection flag for name rendering and type-identity equality.
-Variant defaults choose the first nullary constructor, else the first constructor
-with recursive field defaults. Detect recursive default dependencies; never
-silently allocate a Mutable or fabricate a function. Keep [Int] a singleton
-callable template, not an empty list. See docs/zero-initialization.md and
-tests/zero-initialization-test.ts. Numeric construction and cast are lossless.
+src/zero-values.ts supplies defaults only for omitted record-template slots.
+Interpreter.dataValue demands ordinary values without projecting types to zero.
+Bare types print as descriptors and never act as numbers. Template construction
+accepts partial positional lists or named records and initializes omitted slots
+lazily; concrete defaults persist, nested templates initialize recursively.
+Assignment to a bare type/function-type slot errors; users must construct first.
+All assignment paths share assignSlot. Initialized numeric fields retain type
+annotations; Int/Float display without labels. Function iteration stays unchanged.
+Variant defaults choose a nullary constructor first, otherwise recursively default
+the first constructor's payload. Detect recursive defaults and require explicit
+values for Function/Mutable/Type. See docs/zero-initialization.md and its tests.
+Numeric construction and cast remain lossless.
 
 Computed collection assignment evaluates its key once before its RHS against
 the old scope. Pattern-compatible parameters are interpreted as expressions

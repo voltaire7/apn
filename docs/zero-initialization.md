@@ -1,23 +1,43 @@
 # Zero is initialization
 
-A type supplies a useful zero value when consumed as data. Its constructor and
-pattern behavior are preserved. This is a semantic default, not just a printing
-shortcut: `Int + 1` is `1`, `sqrt Float` is `0.0`, and `Int == 0` is true.
+Types are constructors, not their zero values. `Int` prints `Int`, `Int + 1`
+is an error, and `Int == 0` is false. Initialization happens when applying a
+record template to a list or record of supplied fields:
 
 ```apn
 Vector3 = [x: Float, y: Float, z: Float]
-v = Vector3
-print v                 # [x: 0.0, y: 0.0, z: 0.0]
-v.x = 123
-print v                 # [x: 123.0, y: 0.0, z: 0.0]
-print Vector3           # [x: 0.0, y: 0.0, z: 0.0]
+vec = Vector3 []        # [x: 0.0, y: 0.0, z: 0.0]
+vec.x = 1              # [x: 1.0, y: 0.0, z: 0.0]
+Vector3 [1, 2]         # [x: 1.0, y: 2.0, z: 0.0]
+Vector3 [z: 3]         # [x: 0.0, y: 0.0, z: 3.0]
+Vector3                # [x: Float, y: Float, z: Float]
 ```
 
-Updates still rebind a scoped copy; they do not modify the shared template.
-Reading or printing a default does not erase a slot's constructor. Every later
-assignment to the Float slots above must still convert losslessly to Float.
+Supplied fields apply their template slots. Omitted type slots initialize to
+the defaults below; omitted concrete values retain their defaults. Nested
+record/list slots initialize recursively. Extra named fields are appended;
+excess positional values are errors. Default fields remain lazy.
 
-## Default values
+Assignments rebind a scoped copy and preserve numeric annotations. The displayed
+`0.0` above is internally `Float 0.0`, so later assignments remain checked Float
+conversions. The original template remains unchanged.
+
+An uninitialized type slot cannot be assigned to. Construct it first:
+
+```apn
+vec = Vector3
+# vec.x = 1             # error: uninitialized type slot
+xs = [Int]
+# xs 0 = 1              # same error
+xs = [Int] [0]
+xs 0 = 1                # [1]
+```
+
+This applies to dot, string-key, pluck, and list-index assignment. New record
+fields can still be inserted. Ordinary function slots keep their existing
+transform-on-assignment behavior.
+
+## Default values for omitted slots
 
 | Type | Default display |
 | --- | --- |
@@ -38,81 +58,54 @@ assignment to the Float slots above must still convert losslessly to Float.
 | `HashMap` | `HashMap []` |
 | `Pointer` | `Pointer 0x0` (null; dereferencing still errors) |
 
-Records retain their field structure and use each field's default. Lists retain
-all their elements: **`[Int]` displays `[0]`, not `[]`**. It is still a singleton
-list template, so `[Int] [1,2,3]` produces `[1, 2, 3]`. `List` is the empty-list
-default; `[Int] []` also yields an ordinary empty list. There is no hidden element
-schema attached to that result.
+These are construction defaults, not alternate meanings of bare type names.
+`[Int]` remains `[Int]`; `[Int] [1,2,3]` maps the constructor, and `[Int] []`
+returns an empty list without a hidden element schema.
 
-Int and Float values omit their type label in output, including explicitly
-constructed values. `Int32`, `Float32`, `Float64`, and other specialized numeric
-types retain labels. All annotations still participate in checked arithmetic.
+Int and Float values omit their type labels in output. Specialized numeric types
+retain their labels. All annotations participate in checked arithmetic.
 
 ## Constructors and type inspection
 
 ```apn
-Int 123                     # 123, typed Int
-[1,2,3] * Int               # [1, 2, 3]
-f (Int x) = x + 1
-f Int                       # 1
-
-typeOf (Int 123)             # Int
-typeOf Int                   # Type
-Type Int                     # Int
-Type Vector3                 # [x: Float, y: Float, z: Float]
+Int 123                # 123, typed Int
+typeOf (Int 123)        # Int
+typeOf Int              # Type
+isType Int Int         # false
+isType Type Int        # true
+Int == Float           # false
+Type Vector3           # [x: Float, y: Float, z: Float]
+3 * Int                # [0, 1, 2]
+Int * 3                # [0, 1, 2]
+3 * Int 0              # 0
 ```
 
-Descriptors remain first-class types internally. `typeOf`, generic `(t x)`
-patterns, and explicit `Type value` inspection return descriptors that display
-type names. They remain callable: `(typeOf 123) 456` produces `456`.
-A bare descriptor and its default coexist: `isType Type Int` and `isType Int Int`
-are both true. Type inspection does not affect conversion or arithmetic.
+Types remain first-class callable values. Reflection and generic `(t x)` patterns
+return the same callable type descriptions. Function iteration and composition
+are unchanged. Passing `Int` to an `(Int x)` pattern fails: the descriptor is
+not an integer.
 
-Equality between inspected type descriptors compares type identity:
-`Type Int == Type Float` is false. Ordinary default-value comparison uses numeric
-or structural equality: `Int == Float` is true because both default to zero.
-Use `Type` when comparing type descriptions, especially specialized variants.
+## Variant defaults
 
-Existing callable overloads take priority over default projection. In particular,
-`3 * Int` and `Int * 3` still iterate, producing `[0, 1, 2]`; `3 * Int 0` is
-numeric multiplication and produces `0`. Composition with `Int` still composes
-its constructor. This preserves the existing map-like use of types.
-
-## Variants
-
-A family defaults to its first declared nullary constructor, if there is one.
-Otherwise it uses its first constructor, recursively defaulting its fields.
+Inside an omitted record slot, a family defaults to its first declared nullary
+constructor if it has one. Otherwise it uses its first constructor, recursively
+initializing the payload fields:
 
 ```apn
 Option a = Some a | None
-Option Int                   # None
-
-Color = Red | Green | Blue
-Color                        # Red
-
+[choice: Option Int] []     # [choice: None]
 User = | MkUser Int String
-User                         # MkUser 0 ""
-
-BoxType a = | MkBox a
-BoxType Int                  # MkBox 0
+[user: User] []             # [user: MkUser 0 ""]
+User                       # User, the type descriptor
 ```
 
-The family name supplies the default; a value constructor such as `MkBox`
-remains a function requiring its arguments. When family and constructor share
-a name, the existing constructor binding wins. Use distinct names to access
-both roles directly.
-
-Defaults are lazy. Unused fields remain unforced. A recursive family with no
-finite default reports an error when its recursive field is demanded, rather
-than recursing forever. Expanding defaults are also bounded to 128 nested family
-initializations. A missing type parameter needed by a field also errors.
-A nullary default does not need to inspect unused type parameters.
+Recursive families with no finite default and missing required type parameters
+report an error when the affected field is demanded. Recursive family expansion
+is bounded to 128 levels. Supplied fields bypass default initialization.
 
 `Type`, `Function`, function contracts, `Mutable`, and the abstract `Variant`
-guard remain descriptors without implicit data defaults. APN does not invent
-a function body, silently allocate a shared mutable cell, or choose an unrelated
-variant. Write `Mutable Int` to allocate a cell initialized to integer zero.
-Such unsupported defaults inside a variant field report an explicit-default error.
+guard require explicit values; initialization does not invent functions or
+allocate mutable cells. Use `Mutable (Int 0)` for an explicit cell.
 
 ## Lossless construction
 

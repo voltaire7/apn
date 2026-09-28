@@ -277,6 +277,14 @@ export class Interpreter {
         }
     }
 
+    private assignSlot(slot: Value, value: Value): Value {
+        slot = this.demand(slot);
+        if (slot.kind === "type" || slot.kind === "functionType") {
+            throw new APNError("runtime", "cannot assign to an uninitialized type slot; construct a value first");
+        }
+        return this.demand(this.apply(slot, value));
+    }
+
     private assignItem(collection: Value, key: Value, expression: Expr): Value {
         if (this.isList(collection)) {
             if (key.kind !== "int") throw new APNError("runtime", "list assignment needs an integer index");
@@ -289,7 +297,7 @@ export class Interpreter {
             const fields = collection.v.slice();
             const index = fields.findIndex(([field]) => field === key.v);
             if (index < 0) fields.push([key.v, value]);
-            else fields[index] = [key.v, this.demand(this.apply(collection.v[index][1], value))];
+            else fields[index] = [key.v, this.assignSlot(collection.v[index][1], value)];
             return { kind: "record", v: fields };
         }
         throw new APNError("runtime", "indexed assignment expects an existing list or record");
@@ -484,9 +492,13 @@ export class Interpreter {
         return v;
     }
 
-    // Value contexts project descriptors to their default without destroying
-    // their callable/schema identity. Do not memoize this projection in thunks.
-    dataValue(v: Value, path: readonly Value[] = []): Value {
+    // Ordinary value demand never initializes a type descriptor.
+    dataValue(v: Value): Value {
+        return this.demand(v);
+    }
+
+    // Defaults are created only for omitted slots during record construction.
+    private zeroValue(v: Value, path: readonly Value[]): Value {
         v = this.demand(v);
         if (v.kind !== "type") return v;
         if (v.alias) throw new APNError("runtime", `${v.name} needs type arguments before it has a default`);
@@ -526,7 +538,8 @@ export class Interpreter {
     }
 
     private defaultField(v: Value, path: readonly Value[]): Value {
-        v = this.dataValue(v, path);
+        v = this.force(v);
+        if (v.kind === "type") v = this.zeroValue(v, path);
         if (v.kind === "type" || v.kind === "functionType") throw new APNError("runtime", "this type needs an explicit default value");
         if (v.kind === "record") return { kind: "record", v: v.v.map(([k, x]) => [k, this.defer(() => this.defaultField(x, path))]) };
         if (this.isList(v)) {
@@ -683,7 +696,7 @@ export class Interpreter {
                             const key = e.entries[i];
                             const idx = out.findIndex(([k]) => k === key);
                             if (idx === -1) out.push([e.entries[i], rhs.v[i]]);
-                            else out[idx] = [e.entries[i], this.demand(this.apply(base[idx][1], rhs.v[i]))];
+                            else out[idx] = [e.entries[i], this.assignSlot(base[idx][1], rhs.v[i])];
                         }
                         r = { kind: "record", v: out };
                         break;
@@ -880,8 +893,6 @@ export class Interpreter {
 
     equals(a: Value, b: Value): boolean {
         a = this.demand(a); b = this.demand(b);
-        // Reflected types compare as types, not as their coincident zero values.
-        if (a.kind === "type" && b.kind === "type" && (a.inspect || b.inspect)) return this.sameType(a, b);
         a = this.dataValue(a); b = this.dataValue(b);
         if (this.isList(a) && this.isList(b)) {
             for (;;) {
@@ -1088,14 +1099,14 @@ export class Interpreter {
                     return this.recordField(f, carg.v);
                 }
                 if (carg.kind === "list") {
-                    if (f.v.length !== carg.v.length) {
+                    if (carg.v.length > f.v.length) {
                         throw new Error(`Runtime: field count (${f.v.length}) does not match list size (${carg.v.length})`);
                     }
-                    return { kind: "record", v: f.v.map(([k, template], i) => [k, this.defer(() => this.apply(template, carg.v[i]))] as [string, Value]) };
+                    return { kind: "record", v: f.v.map(([k, template], i) => [k, this.defer(() => i < carg.v.length ? this.apply(template, carg.v[i]) : this.defaultField(template, []))] as [string, Value]) };
                 }
                 if (carg.kind === "record") {
                     const idx = new Map(f.v.map(([k], i) => [k, i]));
-                    const out = f.v.slice();
+                    const out: [string, Value][] = f.v.map(([k, template]) => [k, this.defer(() => this.defaultField(template, []))]);
                     for (const [k, v] of carg.v) {
                         const i = idx.get(k);
                         if (i !== undefined) out[i] = [k, this.defer(() => this.apply(f.v[i][1], v))]; else out.push([k, v]);
@@ -1237,7 +1248,7 @@ export class Interpreter {
             const values = this.items(list);
             index += BigInt(values.length);
             if (index < 0n || index >= values.length) throw new APNError("runtime", `index ${original} out of range`);
-            values[Number(index)] = this.demand(this.apply(values[Number(index)], value));
+            values[Number(index)] = this.assignSlot(values[Number(index)], value);
             return mkList(values);
         }
         const prefix: Value[] = [];
@@ -1246,7 +1257,7 @@ export class Interpreter {
             const cell = this.cell(list);
             if (cell === null) throw new APNError("runtime", `index ${original} out of range`);
             if (index-- === 0n) {
-                let result: Value = { kind: "cons", head: this.demand(this.apply(cell.head, value)), tail: cell.tail };
+                let result: Value = { kind: "cons", head: this.assignSlot(cell.head, value), tail: cell.tail };
                 for (let i = prefix.length - 1; i >= 0; i--) result = { kind: "cons", head: prefix[i], tail: result };
                 return result;
             }
@@ -1272,7 +1283,6 @@ export class Interpreter {
     render(v: Value, emit: (s: string, kind?: Value["kind"] | "key") => void, raw = false, ancestors = new Set<Value>()): void {
         checkInterrupt();
         v = this.demand(v);
-        if (!(v.kind === "type" && v.inspect)) v = this.dataValue(v);
         // Track nested values, not successive spine cells: 1:xs may stream
         // forever, but a list containing itself cannot render a first element.
         if (ancestors.has(v)) throw new APNError("runtime", "cannot display a cyclic nested value");
