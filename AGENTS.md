@@ -625,13 +625,14 @@ only for existing collections in evalDef. Expression-only keys use setItem,
 parsed by tryItemAssign; it shares assignItem with the definition path. Keep
 function clauses, lazy tails, type checks and atomic binding publication intact.
 
-## Nominal types, tables, diagnostics, and resources
+## Nominal types, diagnostics, and resources
 
 `distinct Type` creates a generative VariantFamily with base metadata. A capitalized
 alias names and memoizes it; distinct patterns unpack its payload. Numeric operators
 require the same family on both sides and preserve its checked base type. Ordinary
-records remain structural. `table Family entries` validates complete unique nullary
-variant keys and returns an immutable native callable with lazy values.
+records remain structural. Nullary-only variant families index lists by zero-based declaration order,
+including assignment; listIndex shares this rule between reads and updates.
+Lists carry no key-family annotation, and variants remain nonnumeric.
 
 AST sourceLocations is a WeakMap, outside serialized AST shapes. Parser expression
 spans retain source/file for assertions and match-diagnostics. Lint never evaluates

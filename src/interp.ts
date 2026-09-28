@@ -30,7 +30,7 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
-    ["distinct", 1], ["table", 2], ["assert", 1], ["match", 2], ["set", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
+    ["distinct", 1], ["assert", 1], ["match", 2], ["set", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
@@ -288,11 +288,21 @@ export class Interpreter {
         return this.demand(this.apply(slot, value));
     }
 
+    private listIndex(value: Value): bigint | undefined {
+        if (value.kind === "int") return value.v;
+        if (value.kind !== "variant" || value.v.length || !value.family?.fields?.size) return undefined;
+        const fields = value.family.fields;
+        if ([...fields.values()].some(args => args.length)) return undefined;
+        const index = [...fields.keys()].indexOf(value.tag);
+        return index < 0 ? undefined : BigInt(index);
+    }
+
     private assignItem(collection: Value, key: Value, expression: Expr): Value {
         if (this.isList(collection)) {
-            if (key.kind !== "int") throw new APNError("runtime", "list assignment needs an integer index");
+            const index = this.listIndex(key);
+            if (index === undefined) throw new APNError("runtime", "list assignment needs an integer index or a nullary variant from an enumeration");
             const value = this.demand(this.eval(expression));
-            return this.setIndex(collection, key.v, value);
+            return this.setIndex(collection, index, value);
         }
         if (collection.kind === "record") {
             if (key.kind !== "string") throw new APNError("runtime", "record assignment needs a string field name");
@@ -1102,14 +1112,15 @@ export class Interpreter {
             case "floatRange":
             case "range": {
                 const value = this.dataValue(arg);
-                if (value.kind === "int") return this.index(f, value.v);
+                const index = this.listIndex(value);
+                if (index !== undefined) return this.index(f, index);
                 const carg = value.kind === "string" ? this.callNative("chars", [value]) : value;
                 if (this.isList(carg)) {
                     const first = this.cell(f);
                     if (first !== null && this.cell(first.tail) === null) return this.mapList(first.head, carg);
                     return this.applyListTemplate(f, carg);
                 }
-                throw new APNError("runtime", "indexing a list needs an int; template application needs a list or string");
+                throw new APNError("runtime", "indexing a list needs an int or a nullary variant from an enumeration; template application needs a list or string");
             }
             case "record": {
                 // Strings select named fields; lists/records clone, ints select entries.
@@ -1601,30 +1612,6 @@ export class Interpreter {
             if (!this.isTypeValue(base)) throw new APNError("runtime", "distinct expects a type");
             const family = { name: "<distinct>", base };
             return { kind: "type", name: family.name, family };
-        }
-        if (name === "table") {
-            const keyType = this.reference(argsIn[0]);
-            if (keyType.kind !== "type" || !keyType.family?.fields?.size ||
-                [...keyType.family.fields.values()].some(fields => fields.length)) {
-                throw new APNError("runtime", "table keys require a variant family with only nullary constructors");
-            }
-            const family = keyType.family;
-            const entries = new Map<string, Value>();
-            const keyOf = (raw: Value): string => {
-                const key = this.demand(raw);
-                if (key.kind !== "variant" || key.family !== family || key.v.length) throw new APNError("runtime", `table expects a ${family.name} key`);
-                return key.tag;
-            };
-            for (const pair of this.elements(argsIn[1])) {
-                const values = this.items(pair);
-                if (values.length !== 2) throw new APNError("runtime", "table entries must be [key, value] pairs");
-                const key = keyOf(values[0]);
-                if (entries.has(key)) throw new APNError("runtime", `duplicate table key '${key}'`);
-                entries.set(key, values[1]);
-            }
-            const missing = [...family.fields!.keys()].filter(key => !entries.has(key));
-            if (missing.length) throw new APNError("runtime", `missing table keys: ${missing.join(", ")}`);
-            return { kind: "native", name: `table ${family.name}`, arity: 1, applied: [], invoke: ([key]) => entries.get(keyOf(key))! };
         }
         if (name === "match") {
             // Traverse only as far as the first match. Share the original lazy

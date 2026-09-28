@@ -274,5 +274,5 @@ requests the full record and can stream indefinitely if it contains infinite lis
 
 `std/function` exports `bracket acquire release use`; `std/io` exports
 `withFile path use`. Returned data is completed before cleanup.
-`distinct`, `table`, and `assert` are available without imports.
+`distinct` and `assert` are available without imports.
 See [type and resource rules](type-and-resource-rules.md) for examples and limits.

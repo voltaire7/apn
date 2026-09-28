@@ -1147,16 +1147,12 @@ print (AccountId 2 + AccountId 3)    # => AccountId 5
 print (AccountId == Int)            # => false
 # AccountId 1 + 1                   # error: explicit unwrapping required
 
-# Finite tables require every constructor exactly once, in any order.
+# Nullary variants index lists in declaration order.
 Compass = Up | Down | Left | Right
-deltas = table Compass [
-    [Up, [0, -1]]
-    [Down, [0, 1]]
-    [Left, [-1, 0]]
-    [Right, [1, 0]]
-]
+deltas = [[0, -1], [0, 1], [-1, 0], [1, 0]]
 print (deltas Left)                 # => [-1, 0]
-# table Compass [[Up, [0, -1]]]     # error: missing keys
+deltas Up = [0, 0]
+print (deltas Up)                   # => [0, 0]
 
 # The linter warns if a known family's literal alternatives omit a case.
 # Guards do not count as unconditional coverage; dynamic lists stay runtime-checked.

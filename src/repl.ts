@@ -364,7 +364,6 @@ function helpText(): string {
         `  func ((Int -> Int) f) = Int { f 123 }   (checked function contract)`,
         `  Maybe a = Just a | Nothing`,
         `  UserId = distinct Int   (nominal identity; UserId x patterns unwrap)`,
-        `  table Direction [[North, value], ...]   (all nullary variants required)`,
         `  assert (condition)   (reports expression and source location)`,
         `  [1,2,3]  [0..5] [0,0.5..100] [0..]  ranges; 0:[] conses`,
         `  ['a'..'e'] => "abcde"; take 6 (iterate (*2) 1) => [1,2,4,8,16,32]`,

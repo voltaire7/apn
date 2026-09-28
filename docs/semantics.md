@@ -102,7 +102,8 @@ field. Include quote characters in the argument to select a quoted field.
 `pairs`, iteration, and conversion to HashMap preserve the entire key string.
 Computed dot access (`obj.(key)`) is not supported. Missing keys
 raise an error. Numeric field names retain their existing normalized spelling.
-List indexing requires integers: `arr 0` indexes a list, while `arr "0"` errors.
+List indexing accepts integers or variants from families with only nullary constructors.
+Variants select by zero-based declaration order; `arr "0"` remains invalid.
 HashMap application likewise keeps numeric `0` and string `"0"` distinct keys.
 
 Printing preserves key quotation. Field updates (`obj.field = value`,
@@ -348,7 +349,8 @@ streaming/interruption recovery. The showcase is the broader syntax reference.
 `arr 0 = 10` rebinds an existing list to a modified copy in the current scope,
 like record field assignment. The old slot is applied to the incoming value:
 `arr = [Int]; arr 0 = floor .2` produces `[0]`; assigning `.2` directly errors. `arr (-1) = 10` updates its final element.
-The index must evaluate to an integer; negative indexes require a finite list.
+The index must evaluate to an integer or a variant from a nullary-only family
+(using zero-based declaration order); negative integer indexes require a finite list.
 Positive updates traverse only as far as the selected cell, leaving unused
 unselected heads and the remaining tail deferred. The selected head is demanded
 because it is the template for this update. Bounds errors leave the binding unchanged.

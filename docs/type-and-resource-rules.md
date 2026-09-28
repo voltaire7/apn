@@ -1,4 +1,4 @@
-# Distinct types, finite tables, and scoped resources
+# Distinct types, variant indexing, and scoped resources
 
 These features use ordinary functions. There are no new keywords.
 
@@ -33,26 +33,24 @@ nominal identities. Other operations, native numeric functions, and FFI calls
 use explicit payload extraction. An omitted record slot initialized from a
 distinct type wraps its underlying default.
 
-## Variant-indexed tables
+## Variant list indexes
+
+Families whose constructors all have no payload can index lists, starting at
+zero in declaration order:
 
 ```apn
 Direction = North | East | South | West
-offsets = table Direction [
-    [North, [0, -1]]
-    [East,  [1, 0]]
-    [South, [0, 1]]
-    [West,  [-1, 0]]
-]
+offsets = [[0, -1], [1, 0], [0, 1], [-1, 0]]
 offsets North               # [0, -1]
+offsets North = [0, 0]
+offsets North               # [0, 0]
 ```
 
-`table` accepts a family whose constructors all have no payload. Every constructor
-must appear exactly once. Entries may appear in any order. Missing, duplicate,
-or foreign-family keys error during construction. The result is an immutable
-unary function accepting only that family's values; strings are not variant keys.
-Values remain lazy and may have different types. Use explicit constructors on
-values when a uniform element type is wanted. Unlike `HashMap`, there is no
-insertion/removal: reconstruct the complete table to change it.
+This uses ordinary list indexing and assignment, including bounds checks and
+scoped copy updates. Computed variant values work too. Lists have no key-family
+annotation: any eligible family's second constructor selects index 1. Families
+with payload constructors are not eligible, even for their nullary cases.
+Variants retain their identity; they do not become numbers in arithmetic.
 
 ## Exhaustiveness diagnostics
 
