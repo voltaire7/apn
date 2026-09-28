@@ -88,8 +88,8 @@ Use `map xs [0, 2]` to select multiple indexes from `xs`; it always returns a li
 Supplied existing fields are applied, omitted type slots are initialized,
 and extra fields are appended unchanged. An omitted `Int` becomes typed zero;
 omitted concrete values and functions retain their defaults. See [zero initialization](zero-initialization.md).
-A list argument supplies record fields positionally; missing trailing fields
-initialize from the template, and excess values error. Record results defer field transformations until demanded.
+A nonempty list argument must supply exactly one value per record field.
+The empty list `[]` explicitly initializes all fields from their defaults. Record results defer field transformations until demanded.
 
 Keys retain their full string contents, including any quote characters, through application.
 `[x: Int, "x": Int] ["x": 1]` produces `[x: 0, "x": 1]`.

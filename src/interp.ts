@@ -1099,7 +1099,7 @@ export class Interpreter {
                     return this.recordField(f, carg.v);
                 }
                 if (carg.kind === "list") {
-                    if (carg.v.length > f.v.length) {
+                    if (carg.v.length !== 0 && carg.v.length !== f.v.length) {
                         throw new Error(`Runtime: field count (${f.v.length}) does not match list size (${carg.v.length})`);
                     }
                     return { kind: "record", v: f.v.map(([k, template], i) => [k, this.defer(() => i < carg.v.length ? this.apply(template, carg.v[i]) : this.defaultField(template, []))] as [string, Value]) };

@@ -167,8 +167,8 @@ intentional evaluation change.
   The old `{ a = b }` syntax is REMOVED.
 - **Prototype-based objects**: APPLYING a record (`vector3 [1, 2, 3]`) CLONES
   a record prototype (the prototype is a RECORD — a bare-name list is a list,
-  never an object). A LIST argument applies slots positionally (trailing omitted fields
-  initialize from defaults; excess values error); a RECORD argument applies matching slots by
+  never an object). A LIST argument applies slots positionally (nonempty lists require the exact
+  field count; [] initializes all defaults); a RECORD argument applies matching slots by
   name in any order — supplied fields transformed, omitted type slots initialized, new fields appended, so
   `vector3 [z: 3, x: 1]` keeps the prototype's other defaults (→
   `[x: 1, y: 0, z: 3]`) and `vector3 [x: 1, y: 2, z: 3, a: 0]` adds `a`. An INT
@@ -608,7 +608,7 @@ lib/array.apn; docs/arrays.md and tests/array-test.ts cover their behavior.
 src/zero-values.ts supplies defaults only for omitted record-template slots.
 Interpreter.dataValue demands ordinary values without projecting types to zero.
 Bare types print as descriptors and never act as numbers. Template construction
-accepts partial positional lists or named records and initializes omitted slots
+accepts complete positional lists, [] for all defaults, or named records and initializes omitted slots
 lazily; concrete defaults persist, nested templates initialize recursively.
 Assignment to a bare type/function-type slot errors; users must construct first.
 All assignment paths share assignSlot. Initialized numeric fields retain type

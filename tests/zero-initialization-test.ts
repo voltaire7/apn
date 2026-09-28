@@ -23,7 +23,6 @@ for (const [source, expected] of [
     ['[Int * 3, 3 * Int, 3 * Int 0]', '[[0, 1, 2], [0, 1, 2], 0]'],
     ['V = [x: Float, y: Float, z: Float]\nv = V []\nv.x = 1\n[v, V]', '[[x: 1.0, y: 0.0, z: 0.0], [x: Float, y: Float, z: Float]]'],
     ['V = [x: Float, y: Float]\nV [x: 1]', '[x: 1.0, y: 0.0]'],
-    ['V = [x: Float, y: Float]\nV [1]', '[x: 1.0, y: 0.0]'],
     ['V = [x: Float, y: Float]\nV [1,2]', '[x: 1.0, y: 2.0]'],
     ['v = [x: Float] []\nv.x = 2\ntypeOf v.x', 'Float'],
     ['v = [x: Int8] []\nv.x = 12\nv', '[x: Int8 12]'],
@@ -98,3 +97,14 @@ Deno.test("omitted concrete actions stay callable without running during inspect
     i.run(parseDocument('v.action'));
     if (i.renderString(i.run(parseDocument('count'))) !== '1') throw new Error('action lost');
 });
+
+for (const values of ['[1]', '[1,2]', '[1,2,3,4]']) {
+    Deno.test(`positional construction requires all fields: ${values}`, () => {
+        try { result(`Vector3 = [x: Float, y: Float, z: Float]\nVector3 ${values}`); }
+        catch (e) {
+            if (String(e).includes('field count')) return;
+            throw e;
+        }
+        throw new Error('expected field count error');
+    });
+}

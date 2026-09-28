@@ -1113,7 +1113,8 @@ print zeroVector                     # => [x: 123.0, y: 0.0, z: 0.0]
 print ZeroVector                     # => [x: Float, y: Float, z: Float]
 # template = ZeroVector; template.x = 1  # error: construct a value first
 print ([Int] [1, 2, 3])              # => [1, 2, 3]
-print (ZeroVector [1, 2])             # => [x: 1.0, y: 2.0, z: 0.0]
+print (ZeroVector [1, 2, 3])          # => [x: 1.0, y: 2.0, z: 3.0]
+# ZeroVector [1, 2]                  # error: positional fields must be complete
 # Int + 1 and sqrt Float are errors; constructors are not numbers.
 print (typeOf (Int 1))               # => Int
 print (Type ZeroVector)              # => [x: Float, y: Float, z: Float]
