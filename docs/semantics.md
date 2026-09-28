@@ -100,7 +100,7 @@ obj = [field: 123, "field": 456, 1: 10, "1": 100]
 Application evaluates its argument: `key = "field"; obj key` selects a named
 field. Include quote characters in the argument to select a quoted field.
 `pairs`, iteration, and conversion to HashMap preserve the entire key string.
-Computed dot access (`obj.(key)`) is not supported. Missing keys
+`obj.(key)` selects the literal key "(key)"; use `obj key` to evaluate a key. Missing keys
 raise an error. Numeric field names retain their existing normalized spelling.
 List indexing accepts integers or variants from families with only nullary constructors.
 Variants select by zero-based declaration order; `arr "0"` remains invalid.
@@ -646,3 +646,9 @@ argument; `%%` prints a literal percent without consuming one. Missing or extra
 arguments raise an error before any argument is rendered. For example,
 `print $ format "vec = %" [vec]` prints one formatted record. Passing `vec`
 directly instead of `[vec]` is invalid when `vec` is a record.
+
+Dot keys may also be negative numbers or parenthesized text: `obj.-1` means
+`obj "-1"`, and `obj.(x)` means `obj "(x)"`. Parentheses and their contents,
+including whitespace, belong to the key; the contents are never evaluated.
+The same spellings work in record literals, plucks, field assignments, and
+record destructuring: `[-1: 1, (x): 2]`.

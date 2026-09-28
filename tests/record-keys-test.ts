@@ -82,13 +82,6 @@ Deno.test("string keys containing NUL do not collide with other keys", () => {
     if (actual !== "[1, 2, 3]") throw new Error(actual);
 });
 
-for (const source of ['v.("x")', 'v.(key)', 'v.(1)', 'v.("x") = 2']) {
-    Deno.test(`reject removed computed dot access: ${source}`, () => {
-        try { parseDocument(source); } catch { return; }
-        throw new Error("accepted removed computed dot access");
-    });
-}
-
 for (const [name, source, expected] of [
     ["quoted dot and string application", String.raw`v = [x: 1]
 v."x" = 123
@@ -106,4 +99,30 @@ v * [key, value] -> v key == value`, "[true, true, true]"],
 ]) Deno.test(`ordinary string keys: ${name}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+
+for (const [source, expected] of [
+    ['obj = []\nobj.-1 = 1\n[obj.-1, obj "-1"]', '[1, 1]'],
+    ['obj = []\nobj.(x) = 2\n[obj.(x), obj "(x)"]', '[2, 2]'],
+    ['x = "other"\nobj = [(x): 3, other: 4]\nobj.(x)', '3'],
+    ['obj = [-1: 10, (x): 20]\nobj.[-1, (x)]', '[10, 20]'],
+    ['obj = [-1: 10, (x): 20]\nobj.[-1, (x)] = [30,40]\n[obj.-1,obj.(x)]', '[30, 40]'],
+    ['obj = [-1: 10, (x): 20]\n[-1: a, (x): b] = obj\n[a,b]', '[10, 20]'],
+    ['obj = [(x): [y: 42]]\nobj.(x).y', '42'],
+    ['obj = [((x)): 4, (): 5]\n[obj.((x)), obj.()]', '[4, 5]'],
+    ['obj = [(x + 1): 6]\nobj "(x + 1)"', '6'],
+    ['obj = [-1: 1]\n[obj.-1 - 1, obj (-1)]', '[0, ["-1", 1]]'],
+] as const) Deno.test(`literal extended field names: ${source}`, () => {
+    const actual = result(source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of ['obj.(', 'obj.(x]', 'obj.-x', 'obj.- = 1']) {
+    Deno.test(`malformed field name: ${source}`, () => {
+        try { parseDocument(source); } catch { return; }
+        throw new Error('accepted malformed key');
+    });
+}
+Deno.test('extended record key rendering reparses', () => {
+    const printed = result('[-1: 1, (x): 2]');
+    if (result(printed) !== printed) throw new Error(printed);
 });

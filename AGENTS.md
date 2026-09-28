@@ -162,7 +162,8 @@ intentional evaluation change.
   works: `a.b.c`). Every key is a string. `rec "field"` equals `rec.field`;
   `rec."field"` selects a key containing surrounding quote characters.
   `rec.1` equals `rec "1"`, while `rec 1` is positional.
-  Computed dot access is not supported; application accepts computed strings.
+  Dot access quotes field spellings: `rec.-1` selects "-1" and `rec.(x)`
+  selects "(x)" without evaluating x. Application accepts computed strings.
   `enumerate list` builds a record with int keys (`[0: 10, 1: 20, 2: 30]`).
   The old `{ a = b }` syntax is REMOVED.
 - **Prototype-based objects**: APPLYING a record (`vector3 [1, 2, 3]`) CLONES
@@ -643,3 +644,9 @@ finally. See docs/type-and-resource-rules.md and tests/odin-rules-test.ts.
 
 `format template arguments` requires a list and exactly one value per unescaped `%`.
 `%%` renders a literal percent; check arity before rendering any values.
+
+Dot keys may also be negative numbers or parenthesized text: `obj.-1` means
+`obj "-1"`, and `obj.(x)` means `obj "(x)"`. Parentheses and their contents,
+including whitespace, belong to the key; the contents are never evaluated.
+The same spellings work in record literals, plucks, field assignments, and
+record destructuring: `[-1: 1, (x): 2]`.

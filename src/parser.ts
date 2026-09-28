@@ -222,14 +222,10 @@ class Parser {
             const keyed = [] as Array<[string, string]>;
             let mode: "bare" | "keyed" | undefined;
             while (!this.isSym("]")) {
-                const k = this.peek();
-                const keyStart = k.k === "ident" || k.k === "str" || k.k === "int" || k.k === "float";
-                const nextSym = this.toks[this.i + 1];
-                if (keyStart && nextSym && nextSym.k === "sym" && (nextSym as { v: string }).v === ":") {
+                if (this.isKeyedEntry()) {
                     if (mode === "bare") throw new Error("Parser: pattern cannot mix bare names and 'key: name' entries");
                     mode = "keyed";
-                    this.next();
-                    const key = this.keyTok(k);
+                    const key = this.parseKey();
                     this.next(); // :
                     const nm = this.next();
                     if (nm.k !== "ident") throw new Error("Parser: expected a binding name after ':' in record pattern");
@@ -434,8 +430,7 @@ class Parser {
                 this.skipListLeading();
                 const entries: Array<string | [string, string]> = [];
                 while (!this.isSym("]")) {
-                    const k = this.next();
-                    const key = this.keyTok(k);
+                    const key = this.parseKey();
                     if (this.isSym(":")) {
                         this.next();
                         const dst = this.next();
@@ -452,14 +447,43 @@ class Parser {
                 const mixed = new Set(entries.map((x) => typeof x));
                 if (mixed.size > 1) throw new Error("Parser: pluck cannot mix bare names and 'key: name' pairs");
                 e = { t: "pluck", rec: e, entries };
-            } else if (t.k === "sym" && (t as { v: string }).v === "(") {
-                throw new Error('Parser: computed dot access is not supported; use record key for named fields or record."key" for string keys');
             } else {
-                this.next();
-                e = { t: "recordAccess", rec: e, field: this.keyTok(t) };
+                e = { t: "recordAccess", rec: e, field: this.parseKey() };
             }
         }
         return e;
+    }
+
+    // Parentheses quote their complete spelling, rather than evaluating an expression.
+    parseKey(): string {
+        const t = this.next();
+        if (t.k === "sym" && t.v === "-") {
+            const number = this.next();
+            if (number.k !== "int" && number.k !== "float") throw new Error("Parser: expected a numeric field name after '-'");
+            return "-" + this.keyTok(number);
+        }
+        if (t.k === "sym" && t.v === "(") {
+            const closes = [")"];
+            const pairs: Record<string, string> = { "(": ")", "[": "]", "{": "}" };
+            while (closes.length) {
+                const token = this.next();
+                if (token.k === "eof") throw new Error("Parser: unclosed parenthesized field name");
+                if (token.k !== "sym") continue;
+                if (pairs[token.v]) closes.push(pairs[token.v]);
+                else if ([")", "]", "}"].includes(token.v)) {
+                    if (token.v !== closes.pop()) throw new Error("Parser: mismatched delimiter in field name");
+                    if (!closes.length) return this.source.slice(t.pos, token.pos + 1);
+                }
+            }
+        }
+        return this.keyTok(t);
+    }
+
+    isKeyedEntry(): boolean {
+        const saved = this.i;
+        try { this.parseKey(); return this.isSym(":"); }
+        catch { return false; }
+        finally { this.i = saved; }
     }
 
     // Preserve identifier versus string-key identity; numeric fields retain their spelling.
@@ -621,15 +645,12 @@ class Parser {
                         // A record literal looks like:  [key: value, ...]
                         // Detect it: the first element is a key token (ident/string/number)
                         // followed by `:`.
-                        const k0 = this.peek();
-                        const kv = k0.k === "ident" || k0.k === "str" || k0.k === "int" || k0.k === "float";
-                        if (kv && this.peek(1).k === "sym" &&
-                                (this.peek(1) as { v: string }).v === ":") {
+                        if (this.isKeyedEntry()) {
                             const fs: Array<[string, Expr]> = [];
                             for (;;) {
-                                const f = this.next();
+                                const key = this.parseKey();
                                 this.expectSym(":");
-                                fs.push([this.keyTok(f), this.parseDelimitedExpr()]);
+                                fs.push([key, this.parseDelimitedExpr()]);
                                 this.skipListSeparators();
                                 if (this.isSym("]")) { this.next(); return { t: "record", v: fs }; }
                                 if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside record literal");
@@ -814,24 +835,22 @@ class Parser {
     // Desugars to an EAGER pattern binding  name = setFields(name, ...)  so the
     // rebinding is scoped like any def (block statements shadow the outer name).
     isFieldAssignStart(): boolean {
-        const t0 = this.peek();
-        if (t0.k !== "ident") return false;
-        const t1 = this.peek(1);
-        if (!(t1.k === "sym" && t1.v === ".")) return false;
-        const t2 = this.peek(2);
-        if (t2.k === "ident" || t2.k === "str" || t2.k === "int" || t2.k === "float") {
-            const t3 = this.peek(3);
-            return t3.k === "sym" && t3.v === "=";
-        }
-        if (t2.k === "sym" && t2.v === "[") {
-            let j = this.i + 3;
-            while (this.toks[j] && !(this.toks[j].k === "sym" && (this.toks[j] as { v: string }).v === "]")) {
-                j++;
-            }
-            const after = this.toks[j + 1];
-            return after !== undefined && after.k === "sym" && (after as { v: string }).v === "=";
-        }
-        return false;
+        if (this.peek().k !== "ident") return false;
+        const saved = this.i;
+        try {
+            this.next();
+            if (!this.eatSym(".")) return false;
+            if (this.eatSym("[")) {
+                this.skipListLeading();
+                while (!this.isSym("]")) {
+                    this.parseKey();
+                    this.skipListSeparators();
+                }
+                this.next();
+            } else this.parseKey();
+            return this.isSym("=");
+        } catch { return false; }
+        finally { this.i = saved; }
     }
 
     parseFieldAssign(): Expr {
@@ -844,8 +863,7 @@ class Parser {
             this.next();
             this.skipListLeading();
             while (!this.isSym("]")) {
-                const k = this.next();
-                entries.push(this.keyTok(k));
+                entries.push(this.parseKey());
                 this.skipListSeparators();
                 if (this.isSym("]")) break;
                 if (this.peek().k === "eof") {
@@ -854,8 +872,7 @@ class Parser {
             }
             this.next(); // ]
         } else {
-            const t = this.next();
-            entries.push(this.keyTok(t));
+            entries.push(this.parseKey());
         }
         this.expectSym("=");
         const rhs = this.parseExpr();

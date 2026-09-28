@@ -1182,6 +1182,13 @@ import "std/io"
 # A read-only OS device keeps the showcase independent of its working directory.
 print (withFile "/dev/null" (file -> file.read)) # => empty line
 
+# Dot field spellings are literal string keys, including punctuation.
+oddKeys = []
+oddKeys.-1 = 1
+oddKeys.(x) = 2
+print [oddKeys.-1, oddKeys "-1"]        # => [1, 1]
+print [oddKeys.(x), oddKeys "(x)"]      # => [2, 2]
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------
