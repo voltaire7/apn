@@ -1204,6 +1204,15 @@ implicitNumber.x = 1.0
 print implicitNumber                  # => [x: 1]
 # implicitNumber.x = 1.5               # error: lossy conversion to Int
 
+# A first-class live view of the lexical environment.
+environmentExample = 1
+scope <- env
+scope.environmentExample = 2
+print environmentExample              # => 2
+environmentExample = 3
+print scope.environmentExample        # => 3
+print env.[environmentExample]        # => [3]
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

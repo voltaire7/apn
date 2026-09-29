@@ -653,3 +653,11 @@ Dot keys may also be negative numbers or parenthesized text: `obj.-1` means
 including whitespace, belong to the key; the contents are never evaluated.
 The same spellings work in record literals, plucks, field assignments, and
 record destructuring: `[-1: 1, (x): 2]`.
+
+`env` exposes a live record view backed by Env (`record.scope`). Capture the
+lexical scope when the builtin is referenced; never enumerate by forcing values.
+Reads include nearest visible bindings; writes use Env.set to update the nearest
+owner or create locally. Environment assignments mutate through the view and
+must not rebind the view name (especially the env builtin). Validate pluck writes
+before publication. Render bindings without invoking actions, abbreviating scope
+cycles as env; compare scope identity and reject resource-scope escapes.

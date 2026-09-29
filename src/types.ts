@@ -42,7 +42,7 @@ export type Value =
     | { kind: "lazyList"; exprs: Expr[]; env: Env; value?: Value }
     | { kind: "cons"; head: Value; tail: Value }
     | { kind: "deferred"; compute: () => Value; value?: Value; busy?: boolean }
-    | { kind: "record"; v: Array<[string, Value]> }
+    | { kind: "record"; v: Array<[string, Value]>; scope?: Env }
     | { kind: "variant"; tag: string; v: Value[]; family?: VariantFamily; arguments?: Value[] }
     | { kind: "closure"; params: string[]; body: Expr; env: Env; mutableValue?: Value }
     | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string; family?: VariantFamily; invoke?: (args: Value[]) => Value }
@@ -96,6 +96,7 @@ export function valueToString(v: Value): string {
             return `[${out.map(valueToString).join(", ")}]`;
         }
         case "record":
+            if (v.scope) return "env";
             return `[${v.v.map(([k, val]) => `${keySource(k)}: ${valueToString(val)}`).join(", ")}]`;
         case "variant": {
             const args = v.v.length ? " " + v.v.map(valueToString).join(" ") : "";

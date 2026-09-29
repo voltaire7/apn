@@ -657,3 +657,24 @@ record destructuring: `[-1: 1, (x): 2]`.
 `enumerate xs` returns a lazy list of `[index, value]` pairs. Indices are exact
 integers starting at zero, so `enumerate [10,20]` is `[[0,10],[1,20]]`. It supports
 infinite lists, and enumerating an element does not force its value.
+
+## Live environment
+
+`env` is a live record view of the current lexical scope and visible parent
+bindings, including builtins. It captures binding references without forcing
+values. `scope <- env` retains that scope; later definitions and rebindings
+are visible through it. `env.x` and `env "x"` read bindings.
+
+`env.x = value` and `scope "x" = value` update the nearest visible binding,
+using the same type conversion checks as field assignment. New names are
+created in the captured scope. This explicitly writes through the view even
+from an inner block; ordinary `x = value` still follows normal scope rules.
+Pluck assignments validate all conversions before publishing updates.
+
+The view can escape a function and keep its local scope alive. `pairs env`
+exposes its visible entries; plucks produce ordinary lists or records.
+`typeOf env` is Record. Environment views compare by scope identity.
+Printing displays bindings as a record; actions are shown without invoking
+them, and recursive references to the same environment print as `env`.
+Ordinary lazy data is rendered normally, so an infinite list can keep printing.
+Resource scopes reject environment views as escaping references.

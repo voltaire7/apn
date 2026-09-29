@@ -8,7 +8,7 @@ export function scopedData(i: Interpreter, value: Value, ancestors = new Set<Val
     checkInterrupt();
     const v = i.reference(value);
     if (ancestors.has(v)) throw new APNError("runtime", "resource scope cannot return cyclic data");
-    if (["closure", "clauseFn", "native", "contract", "mutable", "pointer", "type", "functionType"].includes(v.kind)) {
+    if ((v.kind === "record" && v.scope) || ["closure", "clauseFn", "native", "contract", "mutable", "pointer", "type", "functionType"].includes(v.kind)) {
         throw new APNError("runtime", "resource scope must return data, not a callable or reference");
     }
     const path = new Set(ancestors); path.add(v);

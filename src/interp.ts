@@ -30,7 +30,7 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
-    ["distinct", 1], ["assert", 1], ["match", 2], ["set", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
+    ["env", 0], ["distinct", 1], ["assert", 1], ["match", 2], ["set", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
@@ -199,7 +199,7 @@ export class Interpreter {
         // unbound/function names retain ordinary pattern-clause definitions.
         const previous = this.env.get(name);
         if (previous !== undefined && clauses[0].params.length > 0 &&
-            previous.kind !== "clauseFn" && previous.kind !== "native" &&
+            previous.kind !== "clauseFn" && (previous.kind !== "native" || previous.name === "env") &&
             !(previous.kind === "closure" && previous.params.length > 0) &&
             !(previous.kind === "thunk" && previous.body.t === "placeholder")) {
             let collection = this.dataValue(previous);
@@ -208,7 +208,7 @@ export class Interpreter {
                     if (clause.params.length !== 1) throw new APNError("runtime", "collection assignment needs one index or field name");
                     const key = this.dataValue(this.eval(this.assignmentKey(clause.params[0])));
                     collection = this.assignItem(collection, key, clause.body);
-                    this.env.setLocal(name, collection);
+                    if (!(collection.kind === "record" && collection.scope)) this.env.setLocal(name, collection);
                 }
                 return collection;
             }
@@ -316,6 +316,32 @@ export class Interpreter {
         return ordinal === undefined ? v : mkInt(ordinal);
     }
 
+    private environmentValue(scope = this.env): Extract<Value, { kind: "record" }> {
+        return {
+            kind: "record", scope,
+            get v() {
+                const names = new Map<string, Value>();
+                for (let current: Env | null = scope; current; current = current.parent) {
+                    for (const [name, value] of current.map) if (!names.has(name)) names.set(name, value);
+                }
+                return [...names.entries()];
+            },
+        };
+    }
+
+    private updateEnvironment(record: Extract<Value, { kind: "record" }>, entries: Array<[string, Value]>): Value {
+        const scope = record.scope!;
+        const updates = entries.map(([name, value]): [string, Value] => {
+            if (!/^[A-Za-z_][A-Za-z0-9_']*$/.test(name) || name === "_" || KEYWORDS.has(name)) throw new APNError("runtime", `invalid binding name '${name}'`);
+            const old = scope.get(name);
+            return [name, old === undefined ? value : this.assignSlot(old, value)];
+        });
+        // Publish only after every conversion succeeds. Update the nearest visible
+        // binding; absent names are added to the captured scope.
+        for (const [name, value] of updates) scope.set(name, value);
+        return record;
+    }
+
     private assignItem(collection: Value, key: Value, expression: Expr): Value {
         if (this.isList(collection)) {
             const index = this.listIndex(key);
@@ -326,6 +352,7 @@ export class Interpreter {
         if (collection.kind === "record") {
             if (key.kind !== "string") throw new APNError("runtime", "record assignment needs a string field name");
             const value = this.demand(this.eval(expression));
+            if (collection.scope) return this.updateEnvironment(collection, [[key.v, value]]);
             const fields = collection.v.slice();
             const index = fields.findIndex(([field]) => field === key.v);
             if (index < 0) fields.push([key.v, value]);
@@ -344,6 +371,7 @@ export class Interpreter {
             ? this.importStandard(b.value.module, false)
             : this.eval(b.value);
         const v = b.eager ? this.reference(evaluated) : this.force(evaluated);
+        if ((b.value.t === "setFields" || b.value.t === "setItem") && v.kind === "record" && v.scope) return v;
         const binds = new Map<string, Value>();
         if (!this.matchPattern(b.pattern, v, binds)) {
             throw new Error("Runtime: binding pattern did not match its value");
@@ -630,7 +658,7 @@ export class Interpreter {
                                 hint: near ? `did you mean '${near}'?` : undefined,
                             });
                         }
-                        r = v;
+                        r = v.kind === "native" && v.name === "env" ? this.environmentValue() : v;
                         break;
                     }
                     case "binop": r = this.evalBinop(e); break;
@@ -724,6 +752,10 @@ export class Interpreter {
                                 "runtime",
                                 `${e.entries.length} field${e.entries.length === 1 ? "" : "s"} need ${e.entries.length} value${e.entries.length === 1 ? "" : "s"} (got ${rhs.v.length})`,
                             );
+                        }
+                        if (rec.kind === "record" && rec.scope) {
+                            r = this.updateEnvironment(rec, e.entries.map((key, index) => [key, rhs.v[index]]));
+                            break;
                         }
                         const out = base.map(([k, v]) => [k, v] as [string, Value]);
                         for (let i = 0; i < e.entries.length; i++) {
@@ -946,6 +978,9 @@ export class Interpreter {
     equals(a: Value, b: Value): boolean {
         a = this.demand(a); b = this.demand(b);
         a = this.dataValue(a); b = this.dataValue(b);
+        if ((a.kind === "record" && a.scope) || (b.kind === "record" && b.scope)) {
+            return a.kind === "record" && b.kind === "record" && a.scope === b.scope;
+        }
         if (this.isList(a) && this.isList(b)) {
             for (;;) {
                 checkInterrupt();
@@ -1338,6 +1373,10 @@ export class Interpreter {
         v = this.demand(v);
         // Track nested values, not successive spine cells: 1:xs may stream
         // forever, but a list containing itself cannot render a first element.
+        if (v.kind === "record" && v.scope && [...ancestors].some(parent => parent.kind === "record" && parent.scope === v.scope)) {
+            emit("env", "record");
+            return;
+        }
         if (ancestors.has(v)) throw new APNError("runtime", "cannot display a cyclic nested value");
         ancestors.add(v);
         try {
@@ -1362,7 +1401,7 @@ export class Interpreter {
                     // Inspect module actions without running halt; ordinary data
                     // fields still render their memoized values.
                     const field = this.force(val);
-                    if (field.kind === "closure" && !field.params.length) emit(valueToString(field), field.kind);
+                    if ((field.kind === "closure" && !field.params.length) || (v.scope && field.kind === "native" && field.arity === 0)) emit(valueToString(field), field.kind);
                     else this.render(field, emit, false, ancestors);
                 });
                 emit("]");
@@ -1612,6 +1651,7 @@ export class Interpreter {
     }
 
     callNative(name: string, argsIn: Value[], tag?: string): Value {
+        if (name === "env") return this.environmentValue();
         if (name === "assert") {
             const argument = argsIn[0];
             const condition = this.demand(argument);
