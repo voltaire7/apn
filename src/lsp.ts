@@ -52,6 +52,7 @@ const builtins = new Map<string, string>([
 ]);
 
 export class LanguageServer {
+    typeChecking = false;
     documents = new Map<string, Document>();
     initialized = false;
     shutdown = false;
@@ -64,11 +65,12 @@ export class LanguageServer {
             error: { code, message: messageText } });
         const publish = (uri: string, document?: Document) => output.push({ jsonrpc: "2.0",
             method: "textDocument/publishDiagnostics", params: { uri,
-                ...(document ? { version: document.version } : {}), diagnostics: document ? lint(document.text) : [] } });
+                ...(document ? { version: document.version } : {}), diagnostics: document ? lint(document.text, this.typeChecking) : [] } });
         const p = message.params ?? {};
         if (message.method === "exit") { this.exitCode = this.shutdown ? 0 : 1; return output; }
         if (message.method === "initialize" && !this.initialized) {
             this.initialized = true;
+            this.typeChecking = p.initializationOptions?.typeChecking === true;
             reply({ capabilities: { positionEncoding: "utf-16", textDocumentSync: { openClose: true, change: 1 },
                 semanticTokensProvider: { legend: { tokenTypes: TOKEN_TYPES, tokenModifiers: [] }, full: true },
                 completionProvider: {}, hoverProvider: true, documentSymbolProvider: true },

@@ -92,3 +92,13 @@ Run `./examples/c-interop/run-demo` for a compiled C example, or
 `./examples/c-interop/run-donut` for a terminal donut driven by APN (Ctrl+C stops).
 The scripts build temporary libraries using `cc`; nothing is installed.
 See [C interop](docs/c-interop.md) for signatures, pointers, permissions, and lifetimes.
+
+Optional static checks and value-dependent types:
+
+```sh
+apn --check examples/types/dependent-vectors.apn
+apn --checked examples/types/dependent-vectors.apn
+```
+
+See [Gradual and dependent types](docs/gradual-and-dependent-types.md) for
+`Vector n t`, value-parameterized aliases, dynamic boundaries, and editor setup.

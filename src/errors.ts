@@ -6,7 +6,7 @@ import type { Token } from "./lexer.ts";
 // offending token) so the reporter can draw a caret; runtime errors carry an
 // optional hint ("did you mean ...?").
 export class APNError extends Error {
-    kind: "parse" | "lex" | "runtime";
+    kind: "parse" | "lex" | "runtime" | "type";
     pos?: number;
     len?: number;
     src?: string;

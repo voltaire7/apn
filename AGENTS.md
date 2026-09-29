@@ -674,3 +674,16 @@ Unit constructor. Keep () and {} as executable block syntax. truthy() is the
 single predicate conversion used by Bool, !, conditions, guards, assert, filter;
 logical operators short-circuit and return Bool. Empty-list truth checks inspect
 only the first cell. FFI result descriptor [] means C void, never a parameter.
+
+Gradual checking is opt-in via --check / --checked and --lint --types;
+LSP initializationOptions.typeChecking enables matching diagnostics. The pure
+src/type-checker.ts never executes APN or follows imports. Preserve polymorphic
+instantiation, captured monomorphic variables, open record matching, overloads,
+and bounded affine index substitution. Unknown operations are reported dynamic
+boundaries, not verified proofs. Existing execution/REPL behavior stays dynamic.
+Vector n t uses a type descriptor with [integer length, element type] arguments.
+Conformance checks n+1 spine cells and delays element conversions; list.schema
+preserves its contract through index updates/typeOf. Schema patterns resolve
+prior argument bindings in a temporary scope. Aliases accept ordinary values;
+variant specialization keeps its existing type-only parameter behavior.
+See docs/gradual-and-dependent-types.md and tests/gradual-types-test.ts.

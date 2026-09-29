@@ -1234,6 +1234,17 @@ print (typeOf (x y -> x))                # => a -> b -> a
 print (typeOf (f x -> f x))              # => (a -> b) -> a -> b
 print (typeOf (x -> [x,x]))              # => a -> [a]
 
+# Value-dependent types; the same constraints run at dynamic boundaries.
+SizedInts n = Vector n Int
+copySized n ((SizedInts n) xs) = xs
+print (copySized 3 [1,2,3])              # => [1, 2, 3]
+print (typeOf (SizedInts 3 [1,2,3]))     # => Vector 3 Int
+SelectedType flag = flag ? Int : String
+print (SelectedType true 123)           # => 123
+print (SelectedType false "hello")      # => hello
+# apn --check examples/types/dependent-vectors.apn checks without executing.
+# apn --checked examples/types/dependent-vectors.apn checks, then runs.
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

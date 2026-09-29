@@ -1,3 +1,4 @@
+import { checkTypes } from "./type-checker.ts";
 import { matchDiagnostics } from "./match-diagnostics.ts";
 import { parseDocument } from "./parser.ts";
 import { APNError } from "./errors.ts";
@@ -18,8 +19,15 @@ export function position(source: string, offset: number): Position {
     return { line: lines.length - 1, character: lines.at(-1)!.length };
 }
 
-export function lint(source: string): Diagnostic[] {
-    try { return matchDiagnostics(parseDocument(source), source); }
+export function lint(source: string, types = false): Diagnostic[] {
+    try {
+        const program = parseDocument(source), diagnostics = matchDiagnostics(program, source);
+        if (types) for (const issue of checkTypes(program).issues) diagnostics.push({
+            range: { start: position(source, issue.pos), end: position(source, issue.pos + issue.len) },
+            severity: 1, source: "apn", code: "type", message: issue.message,
+        });
+        return diagnostics;
+    }
     catch (error) {
         if (!(error instanceof APNError)) throw error;
         const start = Math.max(0, Math.min(source.length, error.pos ?? 0));
@@ -33,13 +41,14 @@ export function lint(source: string): Diagnostic[] {
 
 export async function runLint(args: string[]): Promise<number> {
     const json = args.includes("--json");
-    const files = args.filter((arg) => arg !== "--json");
-    if (!files.length) { console.error("usage: apn --lint [--json] FILE.apn [...]"); return 2; }
+    const types = args.includes("--types");
+    const files = args.filter((arg) => arg !== "--json" && arg !== "--types");
+    if (!files.length) { console.error("usage: apn --lint [--json] [--types] FILE.apn [...]"); return 2; }
     const results = [];
     let failed = false;
     for (const file of files) {
         try {
-            const diagnostics = lint(await Deno.readTextFile(file));
+            const diagnostics = lint(await Deno.readTextFile(file), types);
             results.push({ file, diagnostics });
             if (diagnostics.some(d => d.severity === 1)) failed = true;
             if (!json) for (const d of diagnostics) {

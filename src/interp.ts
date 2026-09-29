@@ -1055,8 +1055,14 @@ export class Interpreter {
             case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
                 const value = this.demand(arg);
+                if (f.name === "Vector" && !f.family && !f.alias && (f.arguments?.length ?? 0) < 2) {
+                    const args = [...f.arguments ?? []];
+                    if (!args.length && (value.kind !== "int" || value.v < 0n)) throw new APNError("runtime", "Vector length must be a nonnegative Int");
+                    if (args.length === 1 && !this.isTypeValue(value)) throw new APNError("runtime", "Vector element must be a type");
+                    return { ...f, arguments: [...args, value] };
+                }
                 const parameters = f.alias?.parameters ?? f.family?.parameters ?? [];
-                if ((f.arguments?.length ?? 0) < parameters.length && this.isTypeValue(value)) {
+                if ((f.arguments?.length ?? 0) < parameters.length && (f.alias || this.isTypeValue(value))) {
                     const arguments_ = [...f.arguments ?? [], value];
                     if (f.alias && arguments_.length === parameters.length) {
                         const scope = new Env(f.alias.env);
@@ -1071,7 +1077,7 @@ export class Interpreter {
                     }
                     return { ...f, arguments: arguments_ };
                 }
-                if (f.alias) throw new APNError("runtime", `${f.name} expects ${parameters.length} type arguments`);
+                if (f.alias) throw new APNError("runtime", `${f.name} expects ${parameters.length} arguments`);
                 return this.conform(f, value);
             }
             case "hashmap": return this.mapLookup(f, this.demand(arg));
@@ -1327,6 +1333,16 @@ export class Interpreter {
     }
 
     setIndex(list: Value, index: bigint, value: Value): Value {
+        const actual = this.force(list);
+        if (actual.kind === "list" && actual.schema) {
+            const values = [...actual.v];
+            const offset = index < 0n ? BigInt(values.length) + index : index;
+            if (offset < 0n || offset >= values.length) throw new APNError("runtime", `index ${index} out of range`);
+            const schema = actual.schema as Extract<Value, { kind: "type" }>;
+            const [, element] = this.vectorParts(schema);
+            values[Number(offset)] = this.conform(element, value);
+            return { ...actual, v: values };
+        }
         const original = index;
         if (index < 0n) {
             const values = this.items(list);
@@ -1444,7 +1460,32 @@ export class Interpreter {
         return type;
     }
 
+    private vectorParts(type: Extract<Value, { kind: "type" }>): [bigint, Value] {
+        const [size, element] = type.arguments ?? [];
+        if (type.arguments?.length !== 2 || size.kind !== "int" || size.v < 0n) throw new APNError("runtime", "Vector needs a nonnegative length and an element type");
+        return [size.v, element];
+    }
+
+    private vectorElements(value: Value, size: bigint): Value[] {
+        if (!this.isList(value)) throw new APNError("runtime", "Vector expects a list");
+        const out: Value[] = [];
+        let rest = value;
+        for (let n = 0n; n < size; n++) {
+            checkInterrupt();
+            const cell = this.cell(rest);
+            if (!cell) throw new APNError("runtime", `Vector length mismatch: expected ${size}, got ${n}`);
+            out.push(cell.head); rest = cell.tail;
+        }
+        if (this.cell(rest)) throw new APNError("runtime", `Vector length mismatch: expected ${size}, got at least ${size + 1n}`);
+        return out;
+    }
+
     conform(type: Value, value: Value): Value {
+        if (type.kind === "type" && type.name === "Vector" && !type.family && !type.alias) {
+            const [size, element] = this.vectorParts(type);
+            const values = this.vectorElements(this.dataValue(value), size);
+            return { kind: "list", schema: type, v: values.map(x => this.defer(() => this.conform(element, x))) };
+        }
         if (type.kind === "type") {
             if (type.name === "$any") return value;
             const actual = type.name === "Type" ? this.demand(value) : this.dataValue(value);
@@ -1477,6 +1518,9 @@ export class Interpreter {
             return a.name === b.name && a.family === b.family && a.alias === b.alias &&
                 (a.arguments?.length ?? 0) === other.length && (a.arguments ?? []).every((v, index) => this.sameType(v, other[index]));
         }
+        if (isNumeric(a) && isNumeric(b)) return equalNumbers(a, b);
+        if (a.kind === "bool" && b.kind === "bool") return a.v === b.v;
+        if (a.kind === "string" && b.kind === "string") return a.v === b.v;
         if (a.kind === "functionType" && b.kind === "functionType") return this.sameType(a.from, b.from) && this.sameType(a.to, b.to);
         if (a.kind === "record" && b.kind === "record") {
             const fields = new Map(b.v);
@@ -1495,6 +1539,18 @@ export class Interpreter {
 
     belongsToType(type: Value, value: Value): boolean {
         type = this.reference(type); value = this.reference(value);
+        if (type.kind === "type" && type.name === "Vector" && !type.family && !type.alias) {
+            const [size, element] = this.vectorParts(type);
+            if (!this.isList(value)) return false;
+            let rest = value;
+            for (let n = 0n; n < size; n++) {
+                checkInterrupt();
+                const cell = this.cell(rest);
+                if (!cell || !this.belongsToType(element, cell.head)) return false;
+                rest = cell.tail;
+            }
+            return this.cell(rest) === null;
+        }
         if (type.kind === "type") {
             if (type.name === "$any") return true;
             if (type.family) {
@@ -1580,6 +1636,7 @@ export class Interpreter {
     }
 
     matchesValueType(name: string, value: Value): boolean {
+        if (name === "Dynamic") return true;
         if (name === "Type") return this.isTypeValue(value);
         if (name !== "Function" && name !== "Mutable") value = this.dataValue(value);
         if (name === "Pointer") return value.kind === "pointer";
@@ -1613,6 +1670,7 @@ export class Interpreter {
     }
 
     constructType(name: string, value: Value): Value {
+        if (name === "Dynamic") return value;
         if (name === "Bool") return mkBool(this.truthy(value));
         if (name === "Type") {
             if (!this.isTypeValue(value)) throw new APNError("runtime", "Type constructor expects a Type value");
@@ -1742,6 +1800,7 @@ export class Interpreter {
             const value = this.demand(ref);
             if (value.kind === "variant" && value.family) return { kind: "type", inspect: true, name: value.family.name, family: value.family, arguments: value.arguments };
             if (isNumeric(value)) return { kind: "type", inspect: true, name: numericType(value) };
+            if (value.kind === "list" && value.schema) return this.inspectType(value.schema);
             if (this.isList(value)) return { kind: "type", inspect: true, name: "List", description: describeType(value) };
             const names: Partial<Record<Value["kind"], string>> = {
                 bool: "Bool", string: "String", char: "Char",
@@ -2085,7 +2144,15 @@ export class Interpreter {
             binds.set(p.name, v); return true;
         }
         if (p.p === "schema") {
-            const type = this.reference(this.eval(p.type));
+            const scope = new Env(this.env);
+            for (const [name, value] of binds) scope.setLocal(name, value);
+            const caller = this.env;
+            let type: Value;
+            this.env = scope;
+            try { type = this.reference(this.eval(p.type)); } finally { this.env = caller; }
+            if (type.kind === "type" && type.name === "Vector" && !type.family && !type.alias) {
+                return this.matchPattern(p.value, this.conform(type, v), binds);
+            }
             if (!this.isTypeValue(type)) throw new APNError("runtime", "pattern expects a type description");
             const actual = this.reference(v);
             if (type.kind === "type") {
@@ -2110,6 +2177,7 @@ export class Interpreter {
             const binding = this.env.get(p.tag);
             if (binding) {
                 const type = this.reference(binding);
+                if (p.args.length === 1 && type.kind === "type" && type.name === "Vector" && !type.family && !type.alias) return this.matchPattern(p.args[0], this.conform(type, v), binds);
                 if (p.args.length === 1 && type.kind === "type" && !type.family && !type.alias) {
                     return this.matchPattern({ p: "constr", tag: type.name, args: p.args }, v, binds);
                 }

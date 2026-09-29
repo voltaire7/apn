@@ -82,3 +82,12 @@ Deno.test("outline omits nested bindings", () => {
 Deno.test("outline supports apostrophes and excludes comparison expressions", () => {
     equal(symbols("double' x = x * 2\ndouble' 1 == 2\ndouble' \"=\"\n").map((s) => s.name), ["double'"]);
 });
+Deno.test("optional type diagnostics share the checker", () => {
+    const source = 'f (Int x) = x\nf "bad"';
+    equal(lint(source).filter(d => d.code === 'type').length, 0);
+    equal(lint(source, true).filter(d => d.code === 'type').length, 1);
+    const server = new LanguageServer();
+    server.handle({id: 1, method: 'initialize', params: {initializationOptions: {typeChecking: true}}});
+    const result: any = server.handle({method: 'textDocument/didOpen', params: {textDocument: {uri: 'file:///types.apn', version: 1, text: source}}})[0];
+    equal(result.params.diagnostics.filter((d: any) => d.code === 'type').length, 1);
+});

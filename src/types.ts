@@ -37,7 +37,7 @@ export type Value =
     | { kind: "bool"; v: boolean }
     | { kind: "string"; v: string }
     | { kind: "char"; v: string }
-    | { kind: "list"; v: Value[] }
+    | { kind: "list"; v: Value[]; schema?: Value }
     | { kind: "lazyList"; exprs: Expr[]; env: Env; value?: Value }
     | { kind: "cons"; head: Value; tail: Value }
     | { kind: "deferred"; compute: () => Value; value?: Value; busy?: boolean }

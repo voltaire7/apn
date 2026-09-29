@@ -1,9 +1,9 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env=HOME
 
 // =====================================================================
-//  APN — Applicative Polish Notation: a lazy, Haskell-like, untyped
-//  (JS-like) language interpreter with optional TypeScript-style type
-//  annotations (not enforced), arbitrary-precision integers. Evaluation rules: docs/semantics.md.
+//  APN — Applicative Polish Notation: lazy dynamic execution, optional gradual
+//  checking, value-dependent constructors, and exact numbers.
+//  Evaluation rules: docs/semantics.md.
 //  Run:  deno run --allow-read main.ts   (REPL)
 //        deno run --allow-read main.ts examples/features.apn
 // =====================================================================
@@ -19,7 +19,21 @@ export { lex } from "./src/lexer.ts";
 if (import.meta.main) {
     const _args = Deno.args;
 
-    if (_args[0] === "--lint") {
+    if (_args[0] === "--check") {
+        const { runTypeCheck } = await import("./src/type-checker.ts");
+        Deno.exit(await runTypeCheck(_args.slice(1)));
+    } else if (_args[0] === "--checked") {
+        const file = _args[1];
+        if (!file) { console.error("usage: apn --checked FILE.apn [ARG ...]"); Deno.exit(2); }
+        try {
+            const source = Deno.readTextFileSync(file);
+            const { requireChecked } = await import("./src/type-checker.ts");
+            requireChecked(source, file);
+            const interp = new Interpreter();
+            interp.sourceDir = dirname(file); interp.sourceFile = file; interp.programArgs = _args.slice(2);
+            runSource(source, interp, true);
+        } catch (error) { console.error(formatError(error, Deno.stderr.isTerminal())); Deno.exit(1); }
+    } else if (_args[0] === "--lint") {
         const { runLint } = await import("./src/lint.ts");
         Deno.exit(await runLint(_args.slice(1)));
     } else if (_args[0] === "--lsp") {

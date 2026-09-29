@@ -36,7 +36,7 @@ export function formatError(err: unknown, color: boolean): string {
         ? err
         : new APNError("runtime", (err as Error)?.message ?? String(err));
     const p = (code: string, s: string) => color ? code + s + A.reset : s;
-    const head = e.kind === "runtime" ? "runtime error" : "parse error";
+    const head = e.kind === "runtime" ? "runtime error" : e.kind === "type" ? "type error" : "parse error";
     const out: string[] = [p(A.bold + A.red, head + ": ") + e.message];
     if (e.hint) out.push(p(A.dim, "  hint: ") + p(A.yellow, e.hint));
     if (e.pos !== undefined && e.src) {

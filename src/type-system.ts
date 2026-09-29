@@ -2,7 +2,7 @@ import { type Numeric, type Real, isNumeric, integer, floating, toReal, toExact,
 import { APNError } from "./errors.ts";
 
 export const NUMERIC_TYPES = ["Int", "UInt", ...[8, 16, 32, 64, 128].flatMap((n) => [`Int${n}`, `UInt${n}`]), "Float", "Float32", "Float64", "Fraction", "Complex", "ComplexExact", "Number", "Real", "Integer", "Exact", "Inexact"];
-export const TYPE_NAMES = [...NUMERIC_TYPES, "Mutable", "Pointer", "HashMap", "Bool", "String", "Char", "List", "Record", "Function", "Type", "Variant"];
+export const TYPE_NAMES = [...NUMERIC_TYPES, "Dynamic", "Vector", "Mutable", "Pointer", "HashMap", "Bool", "String", "Char", "List", "Record", "Function", "Type", "Variant"];
 const canonical = (name: string) => name === "Float64" ? "Float" : name;
 export function numericType(value: Numeric): string {
     return value.typeName ?? (value.kind === "int" ? "Int" : value.kind === "float" ? "Float" : value.kind === "rational" ? "Fraction" : "Complex");

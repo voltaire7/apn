@@ -97,3 +97,8 @@ and static type checking are not implemented yet.
 The integration uses Neovim's built-in [`vim.lsp.start`](https://neovim.io/doc/user/lsp#vim.lsp.start()).
 The server implements the relevant parts of the
 [Language Server Protocol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/).
+
+For optional type diagnostics, pass `init_options = { typeChecking = true }`
+to the APN LSP configuration, or use `apn --lint --types FILE.apn` independently.
+See [Gradual and dependent types](gradual-and-dependent-types.md) for supported
+checks and dynamic boundaries.
