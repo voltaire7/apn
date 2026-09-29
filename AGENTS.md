@@ -164,7 +164,8 @@ intentional evaluation change.
   `rec.1` equals `rec "1"`, while `rec 1` is positional.
   Dot access quotes field spellings: `rec.-1` selects "-1" and `rec.(x)`
   selects "(x)" without evaluating x. Application accepts computed strings.
-  `enumerate list` builds a record with int keys (`[0: 10, 1: 20, 2: 30]`).
+  `enumerate list` lazily produces `[index, value]` pairs with exact integer
+  indices starting at zero (`[[0, 10], [1, 20], [2, 30]]`).
   The old `{ a = b }` syntax is REMOVED.
 - **Prototype-based objects**: APPLYING a record (`vector3 [1, 2, 3]`) CLONES
   a record prototype (the prototype is a RECORD — a bare-name list is a list,

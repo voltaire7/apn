@@ -1805,8 +1805,16 @@ export class Interpreter {
                 if (a.kind === "hashmap") return mkBool(a.entries.size === 0);
                 if (a.kind === "string") return mkBool(a.v.length === 0);
                 return mkBool(this.cell(a) === null);
-            case "enumerate":
-                return { kind: "record", v: this.items(a).map((x, i) => [String(i), x] as [string, Value]) };
+            case "enumerate": {
+                const walk = (xs: Value, index: bigint): Value => this.defer(() => {
+                    const cell = this.cell(xs);
+                    return cell ? {
+                        kind: "cons", head: mkList([mkInt(index), cell.head]),
+                        tail: walk(cell.tail, index + 1n),
+                    } : mkList([]);
+                });
+                return walk(a, 0n);
+            }
             case "foldl": {
                 const f = args[0];
                 let acc = args[1];

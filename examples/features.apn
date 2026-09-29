@@ -250,8 +250,10 @@ print weird."my field"           # => 1
 print weird.123                  # => 2
 key = "123"
 print (weird key)                # => 2 (computed named field)
-# weird.(key)                    # parse error: computed dot access removed
-print (enumerate [10, 20, 30])   # => [0: 10, 1: 20, 2: 30]  int keys
+# weird.(key)                    # literal key "(key)", not the variable key
+print (enumerate [10, 20, 30])   # => [[0, 10], [1, 20], [2, 30]]
+print (enumerate [10, 20, 30] * [index, value] -> index + value) # => [10, 21, 32]
+print (take 3 (enumerate [10..])) # => [[0, 10], [1, 11], [2, 12]]
 
 # ---------------------------------------------------------
 # 7. PROTOTYPE-BASED OBJECTS —  APPLYING a record clones it:  vec [1, 2, 3]

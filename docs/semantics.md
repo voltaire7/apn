@@ -652,3 +652,7 @@ Dot keys may also be negative numbers or parenthesized text: `obj.-1` means
 including whitespace, belong to the key; the contents are never evaluated.
 The same spellings work in record literals, plucks, field assignments, and
 record destructuring: `[-1: 1, (x): 2]`.
+
+`enumerate xs` returns a lazy list of `[index, value]` pairs. Indices are exact
+integers starting at zero, so `enumerate [10,20]` is `[[0,10],[1,20]]`. It supports
+infinite lists, and enumerating an element does not force its value.

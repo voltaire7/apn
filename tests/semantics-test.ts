@@ -242,7 +242,7 @@ proto = [x: 0, y: 0]
 print (proto [1, 2])
 print (toString [[1 + 1], [3]])
 print (format "% %" [1 + 2, [4 + 5]])
-`, ["[0: 10, 1: 20]", "[x: 1, y: 2]", "[[2], [3]]", "3 [9]"]);
+`, ["[[0, 10], [1, 20]]", "[x: 1, y: 2]", "[[2], [3]]", "3 [9]"]);
 
 failure("a demanded invalid tail reports a list error",
     "print (take 2 (1:2))", "expected a list");
