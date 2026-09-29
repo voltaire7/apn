@@ -661,3 +661,8 @@ owner or create locally. Environment assignments mutate through the view and
 must not rebind the view name (especially the env builtin). Validate pluck writes
 before publication. Render bindings without invoking actions, abbreviating scope
 cycles as env; compare scope identity and reject resource-scope escapes.
+
+`src/type-description.ts` provides bounded, non-evaluating descriptions for
+list/function typeOf results. These are display metadata on broad List/Function
+types, not contracts; explicit contracts retain their actual functionType.
+Never force lazy elements or invoke callbacks to infer types. Unknowns use ?.

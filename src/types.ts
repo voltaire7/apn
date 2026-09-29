@@ -30,7 +30,7 @@ export type Value =
     | { kind: "functionType"; from: Value; to: Value }
     | { kind: "contract"; target: Value; from: Value; to: Value }
     | { kind: "mutable"; v: Value }
-    | { kind: "type"; name: string; inspect?: boolean; family?: VariantFamily; arguments?: Value[]; alias?: { parameters: string[]; body: Expr; env: Env } }
+    | { kind: "type"; name: string; inspect?: boolean; description?: string; family?: VariantFamily; arguments?: Value[]; alias?: { parameters: string[]; body: Expr; env: Env } }
     | { kind: "hashmap"; entries: Map<string, [Value, Value]> }
     | Numeric
     | { kind: "rationalRange"; lo: Real; step: Real; hi: Real | null }
@@ -76,7 +76,7 @@ export function valueToString(v: Value): string {
         case "contract": return `((${valueToString({ kind: "functionType", from: v.from, to: v.to })}) (${valueToString(v.target)}))`;
         case "pointer": return `Pointer 0x${v.bits.toString(16)}`;
         case "type": {
-            return v.name + (v.arguments?.length ? " " + v.arguments.map(typeToString).join(" ") : "");
+            return (v.description ?? v.name) + (v.arguments?.length ? " " + v.arguments.map(typeToString).join(" ") : "");
         }
         case "hashmap": return `HashMap [${[...v.entries.values()].map(([k, x]) => `[${valueToString(k)}, ${valueToString(x)}]`).join(", ")}]`;
         case "rationalRange": return "<rational range>";

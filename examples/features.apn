@@ -1213,6 +1213,14 @@ environmentExample = 3
 print scope.environmentExample        # => 3
 print env.[environmentExample]        # => [3]
 
+# Rich type descriptions inspect lazy elements and function bodies without running them.
+print (typeOf [1, 2, 3, 4])              # => [Int]
+print (typeOf [1..])                     # => [Int] (no infinite traversal)
+describeIdentity (Int x) = x
+print (typeOf describeIdentity)          # => Int -> Int
+print (typeOf (x -> print x))            # => ? -> Unit
+print (typeOf [1, "hello"])              # => [Int | String]
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

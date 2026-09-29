@@ -678,3 +678,26 @@ Printing displays bindings as a record; actions are shown without invoking
 them, and recursive references to the same environment print as `env`.
 Ordinary lazy data is rendered normally, so an infinite list can keep printing.
 Resource scopes reject environment views as escaping references.
+
+### Type descriptions
+
+`typeOf [1,2,3]` displays `[Int]`; heterogeneous literal lists display their
+known alternatives, for example `[Int | String]`. Empty lists and unresolved
+lazy computations display `[?]`. Integer ranges display `[Int]`, including
+infinite ranges, without traversing them.
+
+Functions display argument/result descriptions: `f (Int x) = x` gives
+`Int -> Int`; `x -> print x` gives `? -> Unit`. Clauses contribute to one
+combined description, with alternatives where their known types differ.
+Explicit function contracts still return their declared arrow type.
+Uncontracted descriptions are conservative diagnostics, not static inference
+or enforced contracts. `?` means unknown; overloaded arithmetic, recursion,
+and computed lazy elements can leave unknown parts. Describing a callable never probes its body with sample arguments or forces
+list elements. Inspecting an argument expression
+still evaluates it enough to obtain its outer value. Existing nullary action semantics remain: demanding a nullary action runs it,
+so `typeOf` describes its result.
+
+For compatibility, enriched list/function descriptions retain their broad
+`List`/`Function` type identity and constructor behavior: `typeOf [1] == List`
+is true. A displayed `[Int]` is descriptive metadata, not a new enforced
+list schema; use an explicit schema/contract when you need validation.

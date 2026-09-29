@@ -1,3 +1,4 @@
+import { describeType } from "./type-description.ts";
 import { sourceLocations } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
@@ -1406,7 +1407,7 @@ export class Interpreter {
                 });
                 emit("]");
             } else if (v.kind === "type" && v.inspect) {
-                emit(v.name, "type");
+                emit(v.description ?? v.name, "type");
                 for (const argument of v.arguments ?? []) {
                     emit(" "); this.render(this.inspectType(argument), emit, false, ancestors);
                 }
@@ -1721,19 +1722,23 @@ export class Interpreter {
         if (STANDARD_NATIVES.some(([n]) => n === name)) return standardNative(this, name, argsIn);
         if (name === "typeOf") {
             const ref = this.reference(argsIn[0]);
+            if (ref.kind === "closure" || ref.kind === "clauseFn" || ref.kind === "native") {
+                return { kind: "type", inspect: true, name: "Function", description: describeType(ref) };
+            }
             if (ref.kind === "mutable") return { kind: "type", inspect: true, name: "Mutable" };
             if (ref.kind === "functionType") return { kind: "type", inspect: true, name: "Type" };
             if (ref.kind === "contract") return { kind: "functionType", from: ref.from, to: ref.to };
             const value = this.demand(ref);
             if (value.kind === "variant" && value.family) return { kind: "type", inspect: true, name: value.family.name, family: value.family, arguments: value.arguments };
             if (isNumeric(value)) return { kind: "type", inspect: true, name: numericType(value) };
-            if (this.isList(value)) return { kind: "type", inspect: true, name: "List" };
+            if (this.isList(value)) return { kind: "type", inspect: true, name: "List", description: describeType(value) };
             const names: Partial<Record<Value["kind"], string>> = {
                 bool: "Bool", string: "String", char: "Char", unit: "Unit",
                 hashmap: "HashMap", record: "Record", variant: "Variant", type: "Type", pointer: "Pointer",
                 closure: "Function", clauseFn: "Function", native: "Function",
             };
-            return { kind: "type", inspect: true, name: names[value.kind] ?? value.kind };
+            return { kind: "type", inspect: true, name: names[value.kind] ?? value.kind,
+                description: ["closure", "clauseFn", "native"].includes(value.kind) ? describeType(value) : undefined };
         }
         if (name === "isType") {
             const target = this.reference(argsIn[0]);
