@@ -18,7 +18,7 @@ use `()` when a matched branch should do nothing.
 ```apn
 handlers = [
     Some y -> print y
-    None -> ()
+    None -> []
 ]
 func x = match x handlers
 func (Some 123)
@@ -29,8 +29,8 @@ Inline lists work identically. Lists can be constructed, passed, and reused;
 parenthesize computed arguments: `match (head xs) handlers`.
 
 Literals, lists, constructors, type patterns, and wildcards can be lambda
-parameters. A guard follows the parameters, e.g. `n | n > 0 -> n`. A false guard
-is a mismatch; guards must return Bool. Multiple parameter lambdas are curried,
+parameters. A guard follows the parameters, e.g. `n | n > 0 -> n`. A falsy guard
+is a mismatch; guards use the same truthiness rules as conditions. Multiple parameter lambdas are curried,
 but match alternatives must have exactly one remaining argument.
 
 ## Dispatch behavior
@@ -86,7 +86,7 @@ A declaration retains both the parent type and its constructors:
 Maybe a = Just a | Nothing
 func (Maybe value) = match value [
     Just x -> print x
-    Nothing -> ()
+    Nothing -> []
 ]
 func (Just 123)
 ```

@@ -1,2 +1,2 @@
 load "hill-climbing"
-print (solveHill (readInput ()))
+print (solveHill (readInput []))

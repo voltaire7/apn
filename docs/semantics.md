@@ -20,6 +20,8 @@ From tightest to loosest binding; operators in the same row have equal precedenc
 | `+`, `-`, `++` | Left | `a - b - c` → `(a - b) - c` |
 | Cons `:` | Right | `a : b : xs` → `a : (b : xs)` |
 | `==`, `!=`, `<`, `>`, `<=`, `>=` | Left | `a < b == c` → `(a < b) == c` |
+| Logical `&&` | Left | `a && b && c` → `(a && b) && c` |
+| Logical `\|\|` | Left | `a \|\| b \|\| c` → `(a \|\| b) \|\| c` |
 | Ternary `? :` | Right | `a ? b : c ? d : e` → `a ? b : (c ? d : e)` |
 | Application `$` | Right | `f $ g $ x` → `f (g x)` |
 
@@ -131,7 +133,7 @@ Ordinary named definitions do not execute their bodies when defined.
 `foo = _` declares an unfinished value; `f x = _` an unfinished function body.
 The `_` expression raises "not implemented" only when evaluated. It remains a
 wildcard in patterns. Both sides of `=` are required: `foo =`, `foo = ;`, and
-`= bar` are syntax errors. Use `foo = ()` for unit. An indented body may follow
+`= bar` are syntax errors. Use `foo = []` for an empty result. An indented body may follow
 `=` on the next line in a complete source chunk; a same-level line may not.
 
 | Definition | What it binds |
@@ -172,7 +174,7 @@ greet = print "hello"    # still a repeatable action
 greet = { print "hello" } # still the same behavior
 ```
 
-`getArgs` is now genuinely zero-argument; existing `getArgs ()` calls also work.
+`getArgs` is now genuinely zero-argument; existing `getArgs` calls also work.
 The `<-` binding can occur at top level or inside a block, and supports the
 same value patterns as destructuring. `_ <- action` runs and discards a result.
 The names become bound after the RHS and pattern succeed, so `x <- x + 1`
@@ -498,7 +500,7 @@ and `Int 3 * Int 2` returns `6`, both still typed Int.
 
 `HashMap [["x", 123]]` constructs from an association list; `HashMap [x: 123]`
 constructs from a record. Empty construction is `HashMap []`. Keys may be finite
-numbers, strings, chars, booleans, or unit. Numerically equal keys share an entry
+numbers, strings, chars, or booleans. Numerically equal keys share an entry
 regardless of exactness or numeric type; distinct strings/chars stay distinct.
 Duplicate keys keep the last value. Insertion order is preserved for traversal.
 
@@ -515,9 +517,10 @@ returns typed integers `0` through `99`; `[1..100] * Int` returns `1` through
 `100`. This differs from `100 * Int 0`, which multiplies and returns typed zero.
 
 The nonnumeric types returned by `typeOf` are also first-class constructors:
-`Bool`, `String`, `Char`, `Unit`, `List`, `Record`, `Function`, `Type`, and
-`Variant`. They validate and return a value of the corresponding kind, without
-forcing list elements or coercing unrelated values. Their constructor patterns
+`Bool`, `String`, `Char`, `List`, `Record`, `Function`, `Type`, and
+`Variant`. Except for `Bool`, they validate and return a value of the corresponding
+kind without forcing list elements or coercing unrelated values. `Bool` converts
+using truthiness. Their constructor patterns
 work in overloads, e.g. `f (Bool x) = x`. `isType` and identity `cast` support
 these types too. Use declared constructors to create a particular variant;
 `Variant` validates any such value.
@@ -560,7 +563,7 @@ steps are preserved, so `[1..0]` is `[1,0]`; std factorial handles zero separate
 `x = Mutable 0` allocates a shared cell when first used. A zero-argument binding
 returning a cell retains that cell across calls; functions taking arguments can
 create independent cells. `set cell value` (or `set cell $ value`) evaluates the
-new outer value before replacing the old contents and returns unit. A failed
+new outer value before replacing the old contents and returns []. A failed
 update leaves the cell unchanged. Aliases and inner scopes share the cell.
 Arithmetic and printing read its contents; `typeOf x` reports `Mutable`.
 Existing lazy calculations still memoize: a previously forced calculation is
@@ -578,7 +581,7 @@ actions still run when demanded; inspecting one as a record field shows its body
 `match` is an intrinsic function over a lazy list of unary functions; pattern lambdas
 and runtime function contracts are described in [pattern functions](pattern-functions.md).
 Only pattern mismatch or a false guard selects the next alternative; runtime
-errors propagate and unused alternatives remain unevaluated. Guards must return Bool.
+errors propagate and unused alternatives remain unevaluated. Guards use truthiness.
 
 
 ## CLI file errors
@@ -617,7 +620,7 @@ do []  # ()
 ```
 
 It evaluates each list element in order and returns the last result, like a
-block of expression statements. Empty input returns unit. An error stops the
+block of expression statements. Empty input returns []. An error stops the
 sequence. It accepts computed lists too, and processes the spine incrementally.
 List elements retain normal sharing: reusing an already-evaluated list does not
 rerun its memoized expressions. For a repeatable action, construct the list in
@@ -687,7 +690,7 @@ lazy computations display `[?]`. Integer ranges display `[Int]`, including
 infinite ranges, without traversing them.
 
 Functions display argument/result descriptions: `f (Int x) = x` gives
-`Int -> Int`; `x -> print x` gives `? -> Unit`. Clauses contribute to one
+`Int -> Int`; `x -> print x` gives `? -> []`. Clauses contribute to one
 combined description, with alternatives where their known types differ.
 Explicit function contracts still return their declared arrow type.
 Uncontracted descriptions are conservative diagnostics, not static inference
@@ -701,3 +704,25 @@ For compatibility, enriched list/function descriptions retain their broad
 `List`/`Function` type identity and constructor behavior: `typeOf [1] == List`
 is true. A displayed `[Int]` is descriptive metadata, not a new enforced
 list schema; use an explicit schema/contract when you need validation.
+
+### Empty results and truthiness
+
+There is no `Unit` type or separate unit value. `[]` is the ordinary empty list
+and the result of empty `()` / `{}` blocks, printing, mutation, and other
+operations with no useful result. Blocks remain executable expressions.
+The REPL displays an empty-list result as `[]`. Use `[]` for an explicitly
+ignored argument. C interop uses `ffi.function parameters []` for `void`.
+
+Falsy values are `false`, numeric zero (including complex zero), floating NaN,
+empty strings, empty lists, empty records, empty HashMaps, and null pointers.
+Everything else is truthy, including type constructors, non-nullary functions,
+and every variant constructor (`None` and zero-ordinal enum cases included).
+Mutable cells use their current contents. Nullary actions run under the usual
+demand rules. A list check inspects only its first cell, not its elements or
+remaining tail; infinite nonempty lists are truthy.
+
+`Bool x`, `!x`, ternary conditions, pattern guards, `assert`, `filter`, and
+standard-library predicate consumers share these rules. `&&` and `||` return
+Bool and short-circuit: `0 && missing` is false, `1 || missing` is true.
+Truthiness does not change equality or Bool pattern matching: `0 != false`,
+and `(Bool x)` still matches booleans rather than every convertible value.

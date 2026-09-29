@@ -54,7 +54,6 @@ assigning `Int` to it fails with `cannot convert Type to Float`.
 | `Bool` | `false` |
 | `String` | `""` |
 | `Char` | `'\0'` (the NUL code point) |
-| `Unit` | `()` |
 | `List` | `[]` |
 | `Record` | Empty record, displayed `[]` |
 | `HashMap` | `HashMap []` |

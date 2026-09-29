@@ -7,7 +7,7 @@ for (const [source, expected] of [
     ['std = import "std"\nuse std\nidentity 123', '123'],
     ['unused = missing + 1\nuse [x: 1, unused: unused]\nx', '1'],
     ['use [[x: 1], [y: 2, x: 3]]\n[x, y]', '[3, 2]'],
-    ['use []', '()'],
+    ['use []', '[]'],
     ['open = use\nopen [x: 123]\nx', '123'],
     ['use $ [x: 123]\nx', '123'],
     ['x = 1\n{ use [x: 2]; x }\nx', '1'],

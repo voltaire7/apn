@@ -58,7 +58,7 @@ export function formatError(err: unknown, color: boolean): string {
     return out.join("\n");
 }
 
-// Run a source chunk; returns the forced value, or null for unit/void.
+// Run a source chunk; returns the forced value, or null for suppressed statements.
 // REPL echo uses this (it needs the Value for colored printing).
 function runSourceValue(src: string, interp: Interpreter, binding = false): Value | null {
     let program: TopLevel[];
@@ -80,7 +80,7 @@ function runSourceValue(src: string, interp: Interpreter, binding = false): Valu
     const last = program[program.length - 1];
     if (last?.t === "expr" && isLoadCommand(last.value)) return null;
     val = interp.force(val);
-    return val.kind === "unit" ? null : val;
+    return val;
 }
 
 function isLoadCommand(e: Expr): boolean {
@@ -216,7 +216,7 @@ export function renderColored(interp: Interpreter, value: Value, emit: (s: strin
 }
 
 // node-style typed echo: numbers yellow, strings/chars green, bools magenta,
-// values' structure (brackets, colons, commas) gray, unit/functions gray.
+// values' structure (brackets, colons, commas) gray, functions gray.
 // Variant tags stay cyan (capital constructors are cyan in input too).
 export function showValue(v: Value): string {
     switch (v.kind) {
@@ -224,7 +224,6 @@ export function showValue(v: Value): string {
         case "string": return paint(A.green, `"${v.v}"`);
         case "char": return paint(A.green, `'${v.v}'`);
         case "bool": return paint(A.magenta, String(v.v));
-        case "unit": return paint(A.gray, "()");
         case "list":
             return paint(A.gray, "[") + v.v.map(showValue).join(paint(A.gray, ", ")) +
                 paint(A.gray, "]");
@@ -372,7 +371,7 @@ function helpText(): string {
         `  f $ x             application: f (x); f $ g $ x = f (g x)`,
         `  a \`f\` b            infix call == f a b`,
         `  (+ 2)  (2 +)  (+)  operator sections   ((-2) stays unary minus)`,
-        `  ( ) and { } are groups/blocks: unit when empty, value = last stmt`,
+        `  ( ) and { } are groups/blocks: [] when empty, value = last stmt`,
         `  ; or newline       statement separators (blocks & top level)`,
         `  x <- action        run now and bind the returned value (outer value only)`,
         `  indentation: strict 4-space layout (exactly +4 per level)`,
@@ -381,7 +380,7 @@ function helpText(): string {
         `  import "std"; import ["std/function", "std/number"] (multiple modules)`,
         `  use namespace (or a list of namespace records) opens fields in this scope`,
         `  readFile "input.input"; readInput (); getArgs () (script I/O)`,
-        `  Bool true; String "hi"; Char 'a'; Unit (); List [1,2]; Record [x: 1]`,
+        `  Bool true; String "hi"; Char 'a'; List [1,2]; Record [x: 1]`,
         `  Function (x -> x); Type Int; Variant (YourConstructor value)`,
         `  Int/UInt, Int8..Int128/UInt8..UInt128, Float/Float32, Fraction, Complex`,
         `  do [print "hi", 42] — run expressions in order; return the last result`,
@@ -398,7 +397,7 @@ function helpText(): string {
         `  isNumber/isInteger/isExact; numerator/denominator; round ties to even`,
         `  foo = _   unfinished definition; using it raises not implemented`,
         `  arr 0 = 10   update an existing list; arr (-1) = 10 updates its last item`,
-        `  both sides of = are required; use () for an explicit unit value`,
+        `  both sides of = are required; use [] for an empty result`,
         ``,
         `print x    any value (strings raw), returns x;  emit  = no newline`,
         `debug x    shows the SOURCE as written;  step n v  descends v's body`,

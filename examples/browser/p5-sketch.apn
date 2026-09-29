@@ -3,7 +3,7 @@ clicks = Mutable 0
 setup p = {
     p.createCanvas 640 360
     p.describe "An animated peach circle. Click to change its size."
-    p.noStroke ()
+    p.noStroke []
 }
 draw p = {
     p.background "#232634"

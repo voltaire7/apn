@@ -6,7 +6,7 @@ const sourcePrograms = [
     '[c -> c] "a😀é"', '[c -> 42] "hi"', '[(c -> c), (c -> c)] "hi"',
     '0 123', '[x -> x * 2] [1,2,3]', '[(x -> x + 1), (x -> x * 2)] [3,4]',
     '42', '1 + 2 * 3', '(1 + 2) * 3', '-12 + 5', '1 / 3 + 1 / 6',
-    'true ? 42 : missing', 'false ? missing : 7', '!false', '()',
+    'true ? 42 : missing', 'false ? missing : 7', '!false', '[]',
     '"hello" ++ " world"', '[1,2 + 3,7]', 'head [42,missing]',
     'id x = x; id 42', 'constant x y = x; constant 42 missing',
     '(x -> x + 1) 41', 'compose f g x = f (g x); compose (x -> x * 2) (x -> x + 1) 20',

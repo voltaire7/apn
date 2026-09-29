@@ -25,7 +25,7 @@ function fromJS(value: unknown): Value {
     if (typeof value === "number") return Number.isSafeInteger(value) ? mkInt(value) : { kind: "float", v: value };
     if (typeof value === "string") return mkStr(value);
     if (typeof value === "boolean") return { kind: "bool", v: value };
-    return { kind: "unit" }; // Renderer objects and void results are deliberately opaque.
+    return { kind: "list", v: [] }; // Renderer objects and void results are deliberately opaque.
 }
 function toJS(i: Interpreter, value: Value): unknown {
     const v = i.dataValue(value);
@@ -67,11 +67,11 @@ export class P5Sketch {
     has(name: string): boolean { return this.callbacks.has(name); }
     dispatch(name: string): Value {
         const callback = this.callbacks.get(name);
-        if (!callback) return { kind: "unit" };
+        if (!callback) return { kind: "list", v: [] };
         const fields: Array<[string, Value]> = Object.entries(P5_METHODS).map(([method, arity]) => [method, {
             kind: "native", name: this.id + method, arity: Math.max(1, arity), applied: [],
         }]);
-        // Zero-argument p5 methods use an explicit APN unit argument.
+        // Zero-argument p5 methods use an explicit APN [] argument.
         for (const [method, arity] of Object.entries(P5_METHODS)) if (arity === 0) this.i.hostNatives.set(this.id + method, () => this.invoke(method, []));
         fields.push(["call", { kind: "native", name: this.id + "call", arity: 2, applied: [] }]);
         for (const property of properties) fields.push([property, fromJS(this.p[property])]);

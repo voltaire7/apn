@@ -11,10 +11,10 @@ const signatures = `[
     answer: ffi.function [] Int32,
     text_length: ffi.function [String] Int32,
     greeting: ffi.function [] String,
-    increment: ffi.function [Pointer] Unit,
+    increment: ffi.function [Pointer] [],
     echo_pointer: ffi.function [Pointer] Pointer,
     tick: ffi.function [] Int32,
-    tick_void: ffi.function [] Unit,
+    tick_void: ffi.function [] [],
     cell_pointer: ffi.function [] Pointer,
     cell_value: ffi.function [] Int32,
     null_pointer: ffi.function [] Pointer
@@ -38,18 +38,18 @@ for (const [name, body, expected] of [
     ['float32', 'c.half_f32 .5', 'Float32 0.25'],
     ['booleans', 'c.invert true', 'false'],
     ['no C arguments', 'c.answer', 'Int32 42'],
-    ['optional explicit unit', 'c.answer ()', 'Int32 42'],
+    ['optional explicit unit', 'c.answer []', 'Int32 42'],
     ['bare C action repeats', 'c.tick_void\nc.tick_void\nc.cell_value', 'Int32 2'],
     ['bare C calls in arithmetic', 'c.tick + c.tick', 'Int32 3'],
     ['bare C call shares an argument thunk', 'twice x = x + x\ntwice c.tick', 'Int32 2'],
     ['unused bare C calls remain lazy', 'unused = [c.tick]\nc.cell_value', 'Int32 0'],
     ['UTF8 input', 'c.text_length "hé😀"', 'Int32 7'],
     ['UTF8 result', 'c.greeting', '"hello from C"'],
-    ['null pointer', 'isType Pointer (c.null_pointer ())', 'true'],
+    ['null pointer', 'isType Pointer (c.null_pointer [])', 'true'],
     ['managed pointer mutation', 'p = ffi.allocate Int32 1\nset p $ 41\nc.increment p\nffi.peek Int32 p', 'Int32 42'],
     ['byte offset', 'p = ffi.allocate Int32 2\nffi.poke Int32 9 (ffi.offset 4 p)\nffi.peek Int32 (ffi.offset 4 p)', 'Int32 9'],
     ['pointer identity through C', 'p = ffi.allocate Int32 1\nc.echo_pointer p == p', 'true'],
-    ['external C memory writes', 'p = c.cell_pointer ()\nffi.poke Int32 42 p\nc.cell_value ()', 'Int32 42'],
+    ['external C memory writes', 'p = c.cell_pointer []\nffi.poke Int32 42 p\nc.cell_value []', 'Int32 42'],
     ['pointer keeps argument alive', 'p = c.echo_pointer (ffi.allocate Int32 1)\nc.increment p\nffi.peek Int32 p', 'Int32 1'],
 ] as const) {
     Deno.test({ name: `C interop: ${name}`, ignore: !library, fn() {
@@ -64,7 +64,7 @@ for (const [body, error] of [
     ['c.invert 1', 'Bool argument expected'],
     ['c.text_length "a\u0000b"', 'embedded NUL'],
     ['c.answer 1', 'takes no arguments'],
-    ['ffi.peek Int32 (c.null_pointer ())', 'null pointer'],
+    ['ffi.peek Int32 (c.null_pointer [])', 'null pointer'],
     ['p = ffi.allocate Int32 1\nffi.peek Int64 p', 'exceeds allocated memory'],
     ['p = c.echo_pointer (ffi.allocate Int32 1)\nffi.peek Int64 p', 'exceeds allocated memory'],
     ['p = ffi.allocate Int32 1\nffi.offset 5 p', 'exceeds allocated memory'],
@@ -80,12 +80,12 @@ Deno.test({ name: 'escaped C functions cannot call unloaded code', ignore: !libr
     throw new Error('Expected closed-library error');
 } });
 Deno.test({ name: 'escaped C pointers cannot access unloaded storage', ignore: !library, fn() {
-    try { run(`escaped = ${call('c.null_pointer ()')}\nffi.peek Int32 escaped`); }
+    try { run(`escaped = ${call('c.null_pointer []')}\nffi.peek Int32 escaped`); }
     catch (e) { if (String(e).includes('closed library')) return; throw e; }
     throw new Error('Expected closed-library error');
 } });
 Deno.test('C interop rejects ambiguous Int ABI before loading a library', () => {
-    try { run('ffi.withLibrary "missing" [f: ffi.function [Int] Unit] (c -> ())'); }
+    try { run('ffi.withLibrary "missing" [f: ffi.function [Int] []] (c -> [])'); }
     catch (e) { if (String(e).includes('fixed-width')) return; throw e; }
     throw new Error('Expected a fixed-width ABI error');
 });

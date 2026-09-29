@@ -21,7 +21,6 @@ export type Expr =
     | { t: "bool"; v: boolean }
     | { t: "string"; v: string }
     | { t: "char"; v: string }
-    | { t: "unit" }
     | { t: "placeholder" }
     | { t: "var"; name: string }
     | { t: "binop"; op: BinOp; l: Expr; r: Expr }

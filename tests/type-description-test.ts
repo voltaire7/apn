@@ -12,7 +12,7 @@ for (const [source, expected] of [
     ['f (Int x) = x; typeOf f', 'Int -> Int'],
     ['f (Int x) (String y) = y; typeOf f', 'Int -> String -> String'],
     ['f (Int x) (String y) = y; typeOf (f 1)', 'String -> String'],
-    ['typeOf (x -> print x)', '? -> Unit'],
+    ['typeOf (x -> print x)', '? -> []'],
     ['f 0 = 1; f 1 = 2; typeOf f', 'Int -> Int'],
     ['f 0 = 1; f 1 = "no"; typeOf f', 'Int -> Int | String'],
     ['Option a = Some a | None; f (Some x) = x; f None = 0; typeOf f', 'Option -> ?'],

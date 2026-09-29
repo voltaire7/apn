@@ -127,7 +127,7 @@ export class Interpreter {
     }
 
     run(program: TopLevel[], tailLoad = false): Value {
-        let last: Value = { kind: "unit" };
+        let last: Value = { kind: "list", v: [] };
         for (const [index, tl] of program.entries()) {
             if (tl.t === "type") {
                 for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) {
@@ -162,7 +162,7 @@ export class Interpreter {
             // a bare expression statement: 0-arg functions and thunks RUN here
             const tail = tailLoad && index === program.length - 1;
             const value = this.eval(tl.value, tail);
-            last = tl.value.t === "import" ? { kind: "unit" } : this.runStmt(value, tail);
+            last = tl.value.t === "import" ? { kind: "list", v: [] } : this.runStmt(value, tail);
         }
         return last;
     }
@@ -393,7 +393,6 @@ export class Interpreter {
             case "bool": return mkBool(e.v);
             case "string": return mkStr(e.v);
             case "char": return { kind: "char", v: e.v };
-            case "unit": return { kind: "unit" };
             case "placeholder": return mkStr("_");
             case "var": return mkStr(e.name);
             case "binop": return mkList([mkStr(e.op), this.sexprOf(e.l), this.sexprOf(e.r)]);
@@ -434,7 +433,6 @@ export class Interpreter {
             case "bool": return { t: "bool", v: v.v };
             case "string": return { t: "string", v: v.v };
             case "char": return { t: "char", v: v.v };
-            case "unit": return { t: "unit" };
             case "list": return { t: "list", v: v.v.map((x) => this.valueToExpr(x)) };
             case "record":
                 return { t: "record", v: v.v.map(([k, x]) => [k, this.valueToExpr(x)] as [string, Expr]) };
@@ -453,17 +451,17 @@ export class Interpreter {
         const t = argsIn[1];
         // the argument's thunk wrapper is NOT a level — level 0 is its body
         let expr: import("./ast.ts").Expr | null = t.kind === "thunk" ? t.body : null;
-        let val: Value = { kind: "unit" };
+        let val: Value = { kind: "list", v: [] };
         for (let i = 0n; i < n.v; i++) {
             checkInterrupt();
             // free descents: names resolve, blocks expose their last statement
             for (;;) {
                 if (expr !== null && expr.t === "var") {
-                    val = this.env.get(expr.name) ?? { kind: "unit" };
+                    val = this.env.get(expr.name) ?? { kind: "list", v: [] };
                     expr = null;
                 } else if (expr !== null && expr.t === "block") {
                     const last = expr.stmts[expr.stmts.length - 1];
-                    if (last.t === "stmDef" || last.t === "patDef") break;
+                    if (!last || last.t === "stmDef" || last.t === "patDef") break;
                     expr = last;
                 } else break;
             }
@@ -476,15 +474,15 @@ export class Interpreter {
                 : null;
             if (act !== null) {
                 expr = act.body;
-                val = { kind: "unit" };
+                val = { kind: "list", v: [] };
                 continue;
             }
             if (
                 expr === null ||
-                ["int", "float", "bool", "string", "char", "unit"].includes(expr.t)
+                ["int", "float", "bool", "string", "char"].includes(expr.t)
             ) break;
             expr = this.valueToExpr(this.demand(this.eval(expr)));
-            val = { kind: "unit" };
+            val = { kind: "list", v: [] };
         }
         if (expr === null) return val;
         return { kind: "closure", params: [], body: expr, env: this.env };
@@ -628,7 +626,7 @@ export class Interpreter {
             }
             for (;;) {
                 checkInterrupt();
-                let r: Value = { kind: "unit" };
+                let r: Value = { kind: "list", v: [] };
                 let next: TailCall | undefined;
                 switch (e.t) {
                     case "functionType": r = this.resolveFunctionSpec(e.spec); break;
@@ -649,7 +647,6 @@ export class Interpreter {
                     case "bool": r = mkBool(e.v); break;
                     case "string": r = mkStr(e.v); break;
                     case "char": r = { kind: "char", v: e.v }; break;
-                    case "unit": r = { kind: "unit" }; break;
                     case "placeholder": throw new APNError("runtime", "not implemented: '_' placeholder");
                     case "var": {
                         const v = this.env.get(e.name);
@@ -668,7 +665,7 @@ export class Interpreter {
                         if (e.op === "neg") {
                             r = this.arrayNegate(v);
                         } else {
-                            r = v.kind === "bool" ? mkBool(!v.v) : { kind: "unit" };
+                            r = mkBool(!this.truthy(v));
                         }
                         break;
                     }
@@ -683,7 +680,7 @@ export class Interpreter {
                     case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
                     case "ternary": {
                         const c = this.dataValue(this.eval(e.cond));
-                        next = new TailCall((c.kind === "bool" && c.v) ? e.then : e.els, this.env);
+                        next = new TailCall(this.truthy(c) ? e.then : e.els, this.env);
                         break;
                     }
                     case "range": r = { kind: "range", lo: e.lo, step: e.step, hi: e.hi }; break;
@@ -778,7 +775,7 @@ export class Interpreter {
                         const old = this.env;
                         this.env = child;
                         try {
-                            r = { kind: "unit" };
+                            r = { kind: "list", v: [] };
                             for (let si = 0; si < e.stmts.length; si++) {
                                 const s = e.stmts[si];
                                 if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
@@ -820,7 +817,7 @@ export class Interpreter {
         if (e.op === ":") {
             // Reject a definitely non-list tail without evaluating either side.
             // Unknown tails stay lazy, so head (1:missing) remains productive.
-            if (["int", "float", "bool", "string", "char", "unit", "record", "lambda"].includes(e.r.t)) {
+            if (["int", "float", "bool", "string", "char", "record", "lambda"].includes(e.r.t)) {
                 throw new APNError("runtime", `cons tail expected a list, got ${e.r.t}`);
             }
             const tail = this.delay(e.r);
@@ -840,6 +837,12 @@ export class Interpreter {
             const right = this.dataValue(r);
             if (l.kind === "string" && right.kind === "string") return mkStr(l.v + right.v);
             throw new APNError("runtime", `cannot apply '++' to ${l.kind} and ${right.kind}`);
+        }
+        if (e.op === "&&" || e.op === "||") {
+            const left = this.truthy(this.eval(e.l));
+            return mkBool(e.op === "&&"
+                ? left && this.truthy(this.eval(e.r))
+                : left || this.truthy(this.eval(e.r)));
         }
         let l = this.demand(this.eval(e.l));
         let r = this.demand(this.eval(e.r));
@@ -908,12 +911,6 @@ export class Interpreter {
             case ">": return this.compare(l, r) > 0 ? mkBool(true) : mkBool(false);
             case "<=": return this.compare(l, r) <= 0 ? mkBool(true) : mkBool(false);
             case ">=": return this.compare(l, r) >= 0 ? mkBool(true) : mkBool(false);
-            case "&&":
-                if (l.kind === "bool" && r.kind === "bool") return mkBool(l.v && r.v);
-                return bad();
-            case "||":
-                if (l.kind === "bool" && r.kind === "bool") return mkBool(l.v || r.v);
-                return bad();
 
         }
     }
@@ -1010,7 +1007,6 @@ export class Interpreter {
             case "pointer": return b.kind === "pointer" && a.bits === b.bits;
             case "type": return b.kind === "type" && this.sameType(a, b);
             case "functionType": return b.kind === "functionType" && this.sameType(a, b);
-            case "unit": return true;
             case "list": {
                 const bl = b as any;
                 if (a.v.length !== bl.v.length) return false;
@@ -1045,7 +1041,7 @@ export class Interpreter {
             if (!isNumeric(value)) throw new APNError("runtime", "a numeric template expects a number");
             return f.typeName ? this.constructType(f.typeName, value) : value;
         }
-        if (["string", "char", "bool", "unit"].includes(f.kind)) {
+        if (["string", "char", "bool"].includes(f.kind)) {
             const value = this.dataValue(arg);
             if (value.kind !== f.kind) throw new APNError("runtime", `${f.kind} template expects ${f.kind}, got ${value.kind}`);
             return value;
@@ -1143,8 +1139,7 @@ export class Interpreter {
                     try {
                         if (clause.guard) {
                             const guard = this.dataValue(this.eval(clause.guard));
-                            if (guard.kind !== "bool") throw new APNError("runtime", "pattern guard must return Bool");
-                            if (!guard.v) continue;
+                            if (!this.truthy(guard)) continue;
                         }
                         if (probe) return this.defer(() => {
                             const caller = this.env;
@@ -1594,13 +1589,31 @@ export class Interpreter {
         if (name === "Type" && value.kind === "functionType") return true;
         if (name === "Function") return value.kind === "contract" || value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native";
         const names: Partial<Record<Value["kind"], string>> = {
-            bool: "Bool", string: "String", char: "Char", unit: "Unit",
+            bool: "Bool", string: "String", char: "Char",
             record: "Record", hashmap: "HashMap", type: "Type", variant: "Variant", pointer: "Pointer",
         };
         return names[value.kind] === name;
     }
 
+    // Empty-container checks inspect only the outer shape/first cell, never heads.
+    truthy(value: Value): boolean {
+        const v = this.dataValue(value);
+        if (v.kind === "bool") return v.v;
+        if (isNumeric(v)) {
+            if (v.kind === "complex") return this.truthy(v.re) || this.truthy(v.im);
+            if (v.kind === "float") return v.v !== 0 && !Number.isNaN(v.v);
+            return !equalNumbers(v, integer(0n));
+        }
+        if (v.kind === "string") return v.v.length > 0;
+        if (this.isList(v)) return this.cell(v) !== null;
+        if (v.kind === "record") return v.v.length > 0;
+        if (v.kind === "hashmap") return v.entries.size > 0;
+        if (v.kind === "pointer") return v.bits !== 0n;
+        return true;
+    }
+
     constructType(name: string, value: Value): Value {
+        if (name === "Bool") return mkBool(this.truthy(value));
         if (name === "Type") {
             if (!this.isTypeValue(value)) throw new APNError("runtime", "Type constructor expects a Type value");
             return this.inspectType(value);
@@ -1621,8 +1634,7 @@ export class Interpreter {
         value = this.dataValue(value);
         if (isNumeric(value)) return "number:" + numericHash(value);
         if (value.kind === "string" || value.kind === "char" || value.kind === "bool") return value.kind + ":" + String(value.v);
-        if (value.kind === "unit") return "unit";
-        throw new APNError("runtime", "HashMap keys must be finite numbers, strings, chars, booleans, or unit");
+        throw new APNError("runtime", "HashMap keys must be finite numbers, strings, chars, or booleans");
     }
 
     associations(value: Value): Array<[Value, Value]> {
@@ -1656,8 +1668,7 @@ export class Interpreter {
         if (name === "assert") {
             const argument = argsIn[0];
             const condition = this.demand(argument);
-            if (condition.kind !== "bool") throw new APNError("runtime", "assert expects Bool");
-            if (!condition.v) {
+            if (!this.truthy(condition)) {
                 const body = argument.kind === "thunk" ? argument.body : undefined;
                 const location = body && sourceLocations.get(body);
                 const expression = location ? location.source.slice(location.start, location.end).trim() : body ? exprToSource(body) : "false";
@@ -1667,7 +1678,7 @@ export class Interpreter {
                 if (location) error.src = location.source;
                 throw error;
             }
-            return { kind: "unit" };
+            return { kind: "list", v: [] };
         }
         if (name === "distinct") {
             const base = this.reference(argsIn[0]);
@@ -1705,7 +1716,7 @@ export class Interpreter {
             }
             // Validate the whole input before publishing; keep the field values lazy.
             for (const [key, field] of bindings) this.env.setLocal(key, field);
-            return { kind: "unit" };
+            return { kind: "list", v: [] };
         }
         if (name === "set") {
             const target = this.reference(argsIn[0]);
@@ -1717,7 +1728,7 @@ export class Interpreter {
             // Evaluate against the old contents before changing the shared cell.
             const value = this.demand(argsIn[1]);
             target.v = value;
-            return { kind: "unit" };
+            return { kind: "list", v: [] };
         }
         if (STANDARD_NATIVES.some(([n]) => n === name)) return standardNative(this, name, argsIn);
         if (name === "typeOf") {
@@ -1733,7 +1744,7 @@ export class Interpreter {
             if (isNumeric(value)) return { kind: "type", inspect: true, name: numericType(value) };
             if (this.isList(value)) return { kind: "type", inspect: true, name: "List", description: describeType(value) };
             const names: Partial<Record<Value["kind"], string>> = {
-                bool: "Bool", string: "String", char: "Char", unit: "Unit",
+                bool: "Bool", string: "String", char: "Char",
                 hashmap: "HashMap", record: "Record", variant: "Variant", type: "Type", pointer: "Pointer",
                 closure: "Function", clauseFn: "Function", native: "Function",
             };
@@ -1799,7 +1810,7 @@ export class Interpreter {
                 text = !isVar && act ? exprToSource(act.body) : exprToSource(t.body);
             } else text = valueToString(t);
             console.log(text);
-            return { kind: "unit" };
+            return { kind: "list", v: [] };
         }
         // These natives select their own demand points. In particular take 0
         // never inspects its input, and list producers defer their first cell.
@@ -2013,7 +2024,7 @@ export class Interpreter {
                 const cell = this.cell(xs);
                 if (cell === null) return mkList([]);
                 const predicate = this.dataValue(this.apply(this.demand(f), cell.head));
-                if (predicate.kind === "bool" && predicate.v) {
+                if (this.truthy(predicate)) {
                     return { kind: "cons", head: cell.head, tail: this.filterList(f, cell.tail) };
                 }
                 xs = cell.tail;

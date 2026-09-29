@@ -18,7 +18,7 @@ for (const [source, expected] of [
     ['x = 1; inner = { x = 3; env.x = 4; x }; [inner,x]', '[4, 1]'],
     ['make x = env; scope <- make 42; scope.x', '42'],
     ['make x = env; scope <- make 42; scope.x = 7; scope.x', '7'],
-    ['make x = { get ignored = x; env }; scope <- make 42; scope.x = 7; scope.get ()', '7'],
+    ['make x = { get ignored = x; env }; scope <- make 42; scope.x = 7; scope.get []', '7'],
     ['scope <- { local = 42; env }; scope.local', '42'],
     ['a = 1; b = 2; env.[a,b] = env.[b,a]; [a,b]', '[2, 1]'],
     ['x = 1; env.[x]', '[1]'],
@@ -47,7 +47,7 @@ Deno.test('environment validates new binding names', () => {
     throw new Error('expected failure');
 });
 Deno.test('resource scopes reject escaping environment references', () => {
-    try { result('import "std/function"; bracket 1 (_ -> ()) (_ -> env)'); } catch (e) {
+    try { result('import "std/function"; bracket 1 (_ -> []) (_ -> env)'); } catch (e) {
         if (String(e).includes('must return data')) return;
         throw e;
     }

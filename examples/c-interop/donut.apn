@@ -7,9 +7,9 @@ frames = null (tail args) ? [0..] : take (parseInt (head (tail args))) [0..]
 ffi.withLibrary path [
     donut_start: ffi.function [Int32, Int32] Bool
     donut_frame: ffi.function [Float, Float] Bool
-    donut_finish: ffi.function [] Unit
+    donut_finish: ffi.function [] []
 ] c -> {
-    c.donut_start 80 40 ? () : fail "could not initialize terminal donut"
+    c.donut_start 80 40 ? [] : fail "could not initialize terminal donut"
     renderFrame n = c.donut_frame (inexact n * .04) (inexact n * .02)
     # length drives the lazy frames; C returns false after Ctrl+C.
     length (takeWhile id (map renderFrame frames))

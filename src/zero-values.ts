@@ -12,7 +12,6 @@ export function builtinZero(name: string): Value | undefined {
         case "Bool": return { kind: "bool", v: false };
         case "String": return { kind: "string", v: "" };
         case "Char": return { kind: "char", v: "\0" };
-        case "Unit": return { kind: "unit" };
         case "List": return { kind: "list", v: [] };
         case "Record": return { kind: "record", v: [] };
         case "HashMap": return { kind: "hashmap", entries: new Map() };

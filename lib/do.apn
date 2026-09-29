@@ -1,5 +1,5 @@
 # Run a sequence in order, sharing each evaluated result exactly once.
-do [] = ()
+do [] = []
 do (expression:rest) = {
     result <- expression
     null rest ? result : do rest

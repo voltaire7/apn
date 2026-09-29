@@ -37,7 +37,6 @@ export type Value =
     | { kind: "bool"; v: boolean }
     | { kind: "string"; v: string }
     | { kind: "char"; v: string }
-    | { kind: "unit" }
     | { kind: "list"; v: Value[] }
     | { kind: "lazyList"; exprs: Expr[]; env: Env; value?: Value }
     | { kind: "cons"; head: Value; tail: Value }
@@ -83,7 +82,6 @@ export function valueToString(v: Value): string {
         case "bool": return String(v.v);
         case "string": return `"${v.v}"`;
         case "char": return `'${v.v === "\0" ? "\\0" : v.v}'`;
-        case "unit": return "()";
         case "list": return `[${v.v.map(valueToString).join(", ")}]`;
         case "lazyList":
         case "cons": return "<lazy list>";

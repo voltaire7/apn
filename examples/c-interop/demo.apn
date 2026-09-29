@@ -7,7 +7,7 @@ ffi.withLibrary (head args) [
     greeting: ffi.function [] String
     text_length: ffi.function [String] Int32
     echo_u64: ffi.function [UInt64] UInt64
-    increment: ffi.function [Pointer] Unit
+    increment: ffi.function [Pointer] []
 ] c -> {
     print (c.add 20 22)                       # Int32 42
     print c.greeting                     # hello from C

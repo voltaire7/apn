@@ -45,7 +45,7 @@ mpMore minimum stop left tokens = {
 }
 mpApplication minimum stop left tokens = minimum <= 9 ? mpStarts tokens ? {
     [argument] = [mpExpr 10 stop tokens]
-    seq (snd argument) ()
+    seq (snd argument) []
     next = mpMore minimum stop ["apply", left, fst argument] (snd argument)
     next
 } : [left, tokens] : [left, tokens]
@@ -89,7 +89,7 @@ mpWord text tokens = mpDigit (head (chars text)) >= 0 ? [["literal", mpNumber te
         [mpLambda (map snd names) (fst body), snd body]
     } : [["variable", text], tail tokens]
 }
-mpGroup tokens = mpText tokens == ")" ? [["literal", ()], tail tokens] : {
+mpGroup tokens = mpText tokens == ")" ? [["literal", []], tail tokens] : {
     [expression] = [mpExpr 1 "" tokens]
     [fst expression, mpRequire ")" (snd expression)]
 }
@@ -112,7 +112,7 @@ mpReadDefinition tokens = {
 }
 mpBlock tokens definitions = mpDefinition tokens ? {
     [definition] = [mpReadDefinition tokens]
-    seq (snd definition) ()
+    seq (snd definition) []
     next = mpBlock (mpSkip (snd definition)) (_prepend (fst definition) definitions)
     next
 } : {
@@ -121,10 +121,10 @@ mpBlock tokens definitions = mpDefinition tokens ? {
 }
 mpProgram tokens definitions = mpDefinition tokens ? {
     [definition] = [mpReadDefinition tokens]
-    seq (snd definition) ()
+    seq (snd definition) []
     next = mpProgram (mpSkip (snd definition)) (_prepend (fst definition) definitions)
     next
-} : null tokens ? [reverse definitions, ["literal", ()]] : {
+} : null tokens ? [reverse definitions, ["literal", []]] : {
     [body] = [mpExpr 1 "" tokens]
     null (mpSkip (snd body)) ? [reverse definitions, fst body] : fail ("meta reader: trailing token " ++ mpText (snd body))
 }
@@ -133,4 +133,4 @@ metaParse source = mpProgram (mpSkip (mpLex source)) []
 # Syntax is finite. Finish reading before execution so parser thunks do not
 # accumulate underneath evaluator frames; object-language values stay lazy.
 mpVisit pending = null pending ? [] : typeOf (head pending) == List ? head pending ++ tail pending : tail pending
-mpForce value = seq (head (filter null (iterate mpVisit [value]))) ()
+mpForce value = seq (head (filter null (iterate mpVisit [value]))) []

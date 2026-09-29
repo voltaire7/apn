@@ -74,7 +74,7 @@ and signatures you trust. See [Deno FFI](https://docs.deno.com/runtime/fundament
 | `Bool` | `_Bool` / `bool` | C boolean, not an arbitrary int |
 | `Pointer` | pointer | Opaque address, including null |
 | `String` | `const char *` | NUL-terminated UTF-8 |
-| `Unit` | `void` return | Result only; use `[]` for no parameters |
+| `[]` | `void` return | Result only; use `[]` for no parameters |
 
 Native numeric results retain their APN type: `add` above returns `Int32 42`.
 Arguments convert only without loss. Out-of-range integers and lossy float
@@ -92,8 +92,8 @@ print c.greeting
 
 A bare `c.donut_finish` statement calls it. In `print c.greeting`, APN calls
 `greeting` when its value is needed. Separate calls repeat their effects; unused
-lazy expressions do not run them. `c.greeting ()` remains valid for compatibility,
-but unit is optional. Functions with parameters keep normal curried application.
+lazy expressions do not run them. `c.greeting []` remains valid for compatibility,
+but [] is optional. Functions with parameters keep normal curried application.
 
 Input strings are temporary UTF-8 buffers valid for the duration of that call;
 C must not retain them. Embedded NULs are rejected. Returned String pointers must
@@ -120,10 +120,10 @@ Pointers do not implicitly dereference during arithmetic; use `peek` explicitly.
 | --- | --- |
 | `ffi.allocate Type count` | Zeroed, GC-managed memory for numeric/Bool scalars; maximum 64 MiB per allocation |
 | `ffi.peek Type pointer` | Read one scalar using native byte order |
-| `ffi.poke Type value pointer` | Write one scalar; returns unit |
+| `ffi.poke Type value pointer` | Write one scalar; returns [] |
 | `set pointer $ value` | Write using an APN allocation's element type |
 | `ffi.offset bytes pointer` | Nonnegative byte offset, retaining backing memory and remaining bounds |
-| `ffi.nullPointer ()` | Null Pointer value |
+| `ffi.nullPointer []` | Null Pointer value |
 | `typeOf pointer`, `isType Pointer pointer` | Normal type inspection |
 | `(Pointer p)` | Pattern binding the pointer itself |
 

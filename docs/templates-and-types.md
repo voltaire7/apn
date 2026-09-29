@@ -16,7 +16,7 @@ false true            # true
 
 An untyped number accepts any number unchanged. A typed number applies its
 constructor to the input: all inputs require lossless conversion. Overflow and nonzero imaginary-part
-loss still error. Strings, chars, booleans, and unit accept their own kind only.
+loss still error. Strings, chars, and booleans accept their own kind only.
 Functions retain ordinary application, including effects.
 
 Numeric parameter patterns always require lossless conversion, including for

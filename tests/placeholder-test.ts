@@ -28,7 +28,7 @@ Deno.test("placeholder definitions are silent until demanded", () => {
 });
 
 for (const [source, expected] of [
-    ["foo = ()\nfoo", "()"],
+    ["foo = []\nfoo", "[]"],
     ["foo =\n    42\nfoo", "42"],
     ["quote _", '"_"'],
     ["toAST _", '"_"'],

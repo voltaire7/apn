@@ -138,7 +138,7 @@ Deno.test("blank continuation lines retain indentation without accumulating it",
 
 
 Deno.test("bracketed paste preserves handler indentation and waits for Enter", async () => {
-    const source = "handlers = [\n    Some y -> print y\n    None -> ()\n]";
+    const source = "handlers = [\n    Some y -> print y\n    None -> []\n]";
     const ed = editor("");
     ed.emit = () => {};
     ed.render = () => {};

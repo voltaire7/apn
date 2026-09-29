@@ -19,9 +19,9 @@ for (const [source, expected] of [
     ['UserId = distinct Int\nOrderId = distinct Int\nf (UserId n) = n\nf _ = 0\nf (OrderId 3)', '0'],
     ['UserId = distinct Int\n[v: UserId] []', '[v: UserId 0]'],
     ['v = [x: Int] [y: 2]\nv', '[x: 0, y: 2]'],
-    ['assert true', '()'],
+    ['assert true', '[]'],
     ['import "std/function"\ncount = Mutable 0\nbracket 42 (_ -> set count 1) (x -> x + 1)\ncount', '1'],
-    ['import "std/function"\nbracket 42 (_ -> ()) (x -> [x, x+1])', '[42, 43]'],
+    ['import "std/function"\nbracket 42 (_ -> []) (x -> [x, x+1])', '[42, 43]'],
     ['import "std/function"\ncount = Mutable 0\nv <- bracket 1 (_ -> set count 9) (_ -> [count + 1])\n[v, count]', '[[1], 9]'],
 ]) Deno.test(`Odin-inspired rule: ${source}`, () => {
     const actual = result(source);
@@ -33,11 +33,10 @@ for (const [source, error] of [
     ['Distance = distinct Int\nDistance 2 + 3', 'same distinct type'],
     ['Distance = distinct Int8\nDistance 127 + Distance 1', 'out of range'],
     ['distinct 1', 'expects a type'],
-    ['assert 1', 'expects Bool'],
     ['assert (1 == 2)', 'assertion failed: (1 == 2)'],
     ['check = assert\ncheck false', 'assertion failed: false'],
-    ['import "std/function"\nbracket 1 (_ -> ()) (x -> (y -> x))', 'must return data'],
-    ['import "std/function"\nbracket 1 (x y -> ()) (x -> x)', 'release must take one remaining argument'],
+    ['import "std/function"\nbracket 1 (_ -> []) (x -> (y -> x))', 'must return data'],
+    ['import "std/function"\nbracket 1 (x y -> []) (x -> x)', 'release must take one remaining argument'],
     ['import "std/io"\nwithFile "lib/io.apn" 123', 'callback must take one remaining argument'],
 ]) Deno.test(`Odin-inspired rejection: ${source}`, () => {
     try { result(source); } catch (e) { if (String(e).includes(error)) return; throw e; }
@@ -92,7 +91,7 @@ Deno.test('bracket releases in reverse order on interruption', () => {
     i.env.setLocal('interruptNow', { kind: 'native', name: 'interruptNow', arity: 1, applied: [], invoke: () => {
         Atomics.store(signal, 0, 1);
         checkInterrupt();
-        return { kind: 'unit' };
+        return { kind: 'list', v: [] };
     } });
     try {
         i.run(parseDocument('bracket 1 (_ -> set order (order ++ "outer")) (_ -> bracket 2 (_ -> set order (order ++ "inner")) interruptNow)'));
@@ -113,4 +112,8 @@ Deno.test('assert reports piped source and evaluates the condition once', () => 
     try { i.run(parse('assert $ { set counter $ (counter + 1); false }', 'pipe.apn')); }
     catch (e) { if (!String(e).includes('pipe.apn:1')) throw e; }
     if (i.renderString(i.run(parseDocument('counter'))) !== '1') throw new Error('repeated condition');
+});
+
+Deno.test("assert accepts a truthy number", () => {
+    if (result("assert 1") !== "[]") throw new Error("expected empty result");
 });

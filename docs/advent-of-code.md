@@ -34,13 +34,13 @@ files supply the input and print the answer. Unreachable hill paths return None.
 ```apn
 import "std/io"
 text = readFile "input.input"
-args = getArgs ()
+args = getArgs
 input = readInput ()
 ```
 
-`apn program.apn first second` makes `getArgs ()` return `["first", "second"]`.
-`readInput ()` reads the first argument as a file, or all stdin when there is no
-argument or the first argument is `"-"`. `readStdin ()` explicitly reads stdin
+`apn program.apn first second` makes `getArgs` return `["first", "second"]`.
+`readInput []` reads the first argument as a file, or all stdin when there is no
+argument or the first argument is `"-"`. `readStdin` explicitly reads stdin
 to EOF. File paths resolve against the process working directory. Text input is
 UTF-8; stdin decoding handles multibyte characters spanning read buffers.
 

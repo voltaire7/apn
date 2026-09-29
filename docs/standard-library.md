@@ -215,8 +215,8 @@ Haskell's type distinction](combinators.md).
 
 ## Input and puzzle utilities — `std/io`, `std/search`
 
-`readFile path` reads UTF-8 text, `readStdin ()` reads to EOF, and `getArgs`
-returns script arguments. `readInput ()` chooses the first file argument or
+`readFile path` reads UTF-8 text, `readStdin` reads to EOF, and `getArgs`
+returns script arguments. `readInput []` chooses the first file argument or
 stdin (absent argument or `"-"`). These are also available through `std`.
 Input is effectful; use `[input] = [readInput ()]` to share one read.
 

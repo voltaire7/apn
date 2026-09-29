@@ -75,7 +75,7 @@ There is no `package.json` and no external dependencies; tests use Deno.test.
 ## Architecture (implemented in src/ modules)
 
 - `Type` / `Value` — runtime values are tagged objects: int, rational, float, complex, bool,
-  string, char, unit, list, lazyList, record, variant, closure, clauseFn,
+  string, char, list, lazyList, record, variant, closure, clauseFn,
   native, plus `thunk`, internal computed `deferred` thunks, and lazy `cons`
   cells (see below;
   internal `nomatch` sentinel is used by multi-clause fallthrough).
@@ -128,7 +128,7 @@ intentional evaluation change.
   Mixed values go in lists: `[213, "hello"]`.
 - **Groups / blocks — `( )` and `{ }` are interchangeable.** Both are a
   statement sequence whose VALUE is the last statement's value; empty (`()`,
-  `{}`) is unit. So `(4 * 3)` and `{4 * 3}` both equal 12, and a multi-line
+  `{}`) returns []. So `(4 * 3)` and `{4 * 3}` both equal 12, and a multi-line
   `{ }` can be used as a function body. A `{` at end of line REQUIRES its body
   on a following line indented exactly +4 (else parse error).
   Statements inside a block separate on `;` or same-level newlines; local
@@ -155,7 +155,7 @@ intentional evaluation change.
   Both sides of `=` are required. Empty bodies (including before `;` or a
   closing delimiter) are parse errors. Use `foo = _` for an unfinished value
   or function body: it is deferred and raises "not implemented" when evaluated.
-  Use `foo = ()` for an explicit unit value. Pattern `_` remains a wildcard.
+  Use `foo = []` for an explicit empty-list result. Pattern `_` remains a wildcard.
   In the REPL, submitting `foo =` alone reports a syntax error immediately;
   a complete pasted indented definition can still span lines.
 - **Records**: `[name: "Alice", age: 30]`, accessed with `rec.field` (chaining
@@ -470,7 +470,7 @@ See `docs/browser-html.md` and `tests/html-test.ts`.
 
 ## Mutable references
 
-`Mutable value` allocates a shared cell; `set cell value` returns unit after
+`Mutable value` allocates a shared cell; `set cell value` returns [] after
 replacing its contents. `reference()` preserves cell identity; `demand()` reads
 its contents without memoizing that read over the cell. Zero-argument bindings
 returning a cell retain it, while argument-taking factory calls allocate afresh.
@@ -520,7 +520,7 @@ an explicit FFI flag. Donut uses lazy map, not eager * iteration, to stop on Ctr
 AST patDef.eager selects reference() before pattern matching: run zero-argument
 actions now but preserve Mutable/Pointer references and lazy container fields.
 Do not change ordinary = action definitions or lazy destructuring semantics.
-getArgs is a nullary native action; the legacy explicit unit call still works.
+getArgs is a nullary native action; the legacy explicit [] call still works.
 Tests live in tests/eager-binding-test.ts; document the eager/lazy boundary.
 
 ## Record key identity
@@ -581,14 +581,14 @@ calls retain the depth guard. Test tests/tail-call-test.ts and the REPL PTY chec
 
 `do` is an ordinary prelude function defined in lib/do.apn and exported by
 std/function. It sequences a lazy list with eager result binding, returning the
-last result (unit for an empty list). Keep effect ordering and sharing tests.
+last result ([] for an empty list). Keep effect ordering and sharing tests.
 
 `load` requires an extensionless basename and always appends .apn. Reject explicit
 extensions before file access; directory components may still contain dots.
 
 `use` is a native scope operation accepting a record or finite list of records.
 Validate all keys as binding identifiers before publishing; preserve lazy values
-and reference identity. Later fields win; return unit. It opens the active
+and reference identity. Later fields win; return []. It opens the active
 evaluation scope, so wrapper functions do not export into their caller's scope.
 `import` accepts a literal string or list of literal strings, combining exports
 in order through the existing module cache. Selective imports stay selective;
@@ -666,3 +666,9 @@ cycles as env; compare scope identity and reject resource-scope escapes.
 list/function typeOf results. These are display metadata on broad List/Function
 types, not contracts; explicit contracts retain their actual functionType.
 Never force lazy elements or invoke callbacks to infer types. Unknowns use ?.
+
+Empty blocks/actions return ordinary empty lists; there is no unit AST/value or
+Unit constructor. Keep () and {} as executable block syntax. truthy() is the
+single predicate conversion used by Bool, !, conditions, guards, assert, filter;
+logical operators short-circuit and return Bool. Empty-list truth checks inspect
+only the first cell. FFI result descriptor [] means C void, never a parameter.

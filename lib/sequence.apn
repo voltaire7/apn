@@ -36,8 +36,7 @@ reverse (String text) = fromChars (reverse (chars text))
 _prepend x xs = x : xs
 
 # Predicate consumers keep their skipping loop in the primitive lazy filter.
-_predicate (Bool value) = value
-_predicate value = fail "predicate must return Bool"
+_predicate value = Bool value
 dropWhile predicate xs = head (filter (rest -> null rest ? true : not (_predicate (predicate (head rest)))) (iterate tail xs))
 takeWhile predicate xs = null xs ? [] : _predicate (predicate (head xs)) ? _prepend (head xs) (takeWhile predicate (tail xs)) : []
 all predicate xs = null (dropWhile predicate xs)
@@ -56,6 +55,6 @@ sortBy compare xs = {
 }
 
 # Force finite accumulator elements between simulation steps, not whole trees.
-forceList xs = seq (foldl (ignored x -> seq x ()) () xs) xs
+forceList xs = seq (foldl (ignored x -> seq x []) [] xs) xs
 repeatApply n f seed = foldl (value ignored -> f value) seed (take n [0..])
 count predicate xs = foldl (n x -> predicate x ? n + 1 : n) 0 xs

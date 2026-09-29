@@ -35,7 +35,6 @@ for (const [code, error] of [
     ['match 2 [1 -> 0]', 'non-exhaustive match'],
     ['match 1 [_ -> missing, _ -> 42]', 'unbound variable'],
     ['match 1 [x | missing -> 0, _ -> 42]', 'unbound variable'],
-    ['match 1 [x | 1 -> 0, _ -> 42]', 'guard must return Bool'],
     ['match 1 [_ -> _, _ -> 42]', 'not implemented'],
     ['match 1 [42]', 'one remaining argument'],
     ['match 1 [x y -> x]', 'one remaining argument'],
@@ -76,4 +75,8 @@ Deno.test("match is intrinsic and has no public attempt protocol", () => {
 
 Deno.test("match traverses many rejected alternatives without recursive dispatch", () => {
     if (result('match 1 ((map (n -> (0 -> 0)) [1..10000]) ++ [_ -> 42])') !== '42') throw new Error('dispatch failed');
+});
+
+Deno.test("guards accept truthy numbers", () => {
+    if (result("match 1 [x | 1 -> 0, _ -> 42]") !== "0") throw new Error("guard did not match");
 });

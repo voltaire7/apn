@@ -57,14 +57,14 @@ export function describeType(value: Value): string {
         const inputs = params.map((p, i) => pattern(p, env, locals, i < applied.length ? inspect(applied[i]) : "?"));
         let result = expr(body, env, locals);
         for (let i = inputs.length - 1; i >= applied.length; i--) result = arrow(inputs[i], result);
-        return params.length ? result : arrow("Unit", result);
+        return params.length ? result : arrow("[]", result);
     }
     function expr(e: Expr, env: Env, locals = new Map<string, Shape>()): Shape {
         if (--budget < 0) return "?";
         switch (e.t) {
             case "numeric": return numericType(e.v);
-            case "int": case "float": case "bool": case "string": case "char": case "unit":
-                return { int: "Int", float: "Float", bool: "Bool", string: "String", char: "Char", unit: "Unit" }[e.t];
+            case "int": case "float": case "bool": case "string": case "char":
+                return { int: "Int", float: "Float", bool: "Bool", string: "String", char: "Char" }[e.t];
             case "var": return locals.get(e.name) ?? (env.get(e.name) ? inspect(env.get(e.name)!) : "?");
             case "range": return "[Int]";
             case "floatRange": return "[Float]";
@@ -93,7 +93,7 @@ export function describeType(value: Value): string {
             }
             case "block": {
                 const scope = new Map(locals);
-                let result: Shape = "Unit";
+                let result: Shape = "[]";
                 for (const s of e.stmts) {
                     if (s.t === "patDef" && s.pattern.p === "var") scope.set(s.pattern.name, expr(s.value, env, scope));
                     result = expr(s, env, scope);
@@ -126,12 +126,12 @@ export function describeType(value: Value): string {
                     return join(clauses);
                 }
                 case "native": {
-                    let result: Shape = v.family?.name ?? (v.name === "print" ? "Unit" : "?");
+                    let result: Shape = v.family?.name ?? (v.name === "print" ? "[]" : "?");
                     for (let i = v.applied.length; i < v.arity; i++) result = arrow("?", result);
-                    return v.arity ? result : arrow("Unit", result);
+                    return v.arity ? result : arrow("[]", result);
                 }
                 case "variant": return v.family?.name ?? "Variant";
-                default: return { bool: "Bool", string: "String", char: "Char", unit: "Unit", record: "Record", mutable: "Mutable", pointer: "Pointer", hashmap: "HashMap", nomatch: "?" }[v.kind];
+                default: return { bool: "Bool", string: "String", char: "Char", record: "Record", mutable: "Mutable", pointer: "Pointer", hashmap: "HashMap", nomatch: "?" }[v.kind];
             }
         } finally { active.delete(v); }
     }

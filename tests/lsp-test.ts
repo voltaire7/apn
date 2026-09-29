@@ -17,7 +17,7 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     equal(lint("foo =")[0].code, "parse");
     equal(lint("f = {\n  1\n}")[0].code, "lex");
     equal(lint("1 `add` 2")[0].range.start, { line: 0, character: 2 });
-    equal(lint("handlers = [\n    Some y -> print y\n    None -> ()\n]"), []);
+    equal(lint("handlers = [\n    Some y -> print y\n    None -> []\n]"), []);
 });
 Deno.test("diagnostic positions use UTF-16 and stay within the document", () => {
     equal(position('"😀"\nfoo', 7), { line: 1, character: 2 });

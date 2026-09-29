@@ -2,7 +2,7 @@ import { Interpreter, NATIVES, setInterruptFlag } from "../src/interp.ts";
 import { parseDocument } from "../src/parser.ts";
 
 for (const [source, expected, effects] of [
-    ['do []', '()', []],
+    ['do []', '[]', []],
     ['do [print "hi"]', '"hi"', ['hi']],
     ['do [print "hi", print "there", 42]', '42', ['hi', 'there']],
     ['greet = do [print "hi"]; greet; greet', '"hi"', ['hi', 'hi']],

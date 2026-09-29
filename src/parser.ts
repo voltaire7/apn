@@ -312,7 +312,7 @@ class Parser {
 
     // Ternary:  cond ? a : b    (right-associative, lower precedence than comparison)
     parseTernary(): Expr {
-        let e = this.parseCompare();
+        let e = this.parseLogicalOr();
         if (this.isSym("?")) {
             this.next();
             this.skipLayout();
@@ -323,6 +323,24 @@ class Parser {
             this.expectSym(":");
             const els = this.parseTernary();
             e = { t: "ternary", cond: e, then, els };
+        }
+        return e;
+    }
+
+    parseLogicalOr(): Expr {
+        let e = this.parseLogicalAnd();
+        while (this.isSym("||")) {
+            this.next();
+            e = { t: "binop", op: "||", l: e, r: this.parseLogicalAnd() };
+        }
+        return e;
+    }
+
+    parseLogicalAnd(): Expr {
+        let e = this.parseCompare();
+        while (this.isSym("&&")) {
+            this.next();
+            e = { t: "binop", op: "&&", l: e, r: this.parseCompare() };
         }
         return e;
     }
@@ -574,8 +592,8 @@ class Parser {
                     case "{": {
                         const close = t.v === "(" ? ")" : "}";
                         this.next();
-                        // () and {} are the same: a group/block. Empty = unit.
-                        if (this.isSym(close)) { this.next(); return { t: "unit" }; }
+                        // () and {} are the same: a group/block. Empty blocks return an empty list.
+                        if (this.isSym(close)) { this.next(); return { t: "block", stmts: [], style: t.v }; }
                         if (t.v === "(") {
                             const sec = this.tryOperatorSection();
                             if (sec) return sec;
@@ -927,7 +945,7 @@ class Parser {
     // Operator sections:  (+ 2) -> \x -> x + 2    (2 +) -> \x -> 2 + x
     // (- 2) is NOT a section (no whitespace info in the lexer) — it stays unary
     // negation; use a lambda for that. `(+)` alone is unsupported.
-    static sectionOps = ["\\", "^", "+", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=", "++"];
+    static sectionOps = ["&&", "||", "\\", "^", "+", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=", "++"];
 
     tryOperatorSection(): Expr | null {
         const save = this.i;
@@ -1366,7 +1384,6 @@ export function exprToSource(e: Expr): string {
         case "bool": return e.v ? "true" : "false";
         case "string": return `"${e.v}"`;
         case "char": return `'${e.v}'`;
-        case "unit": return "()";
         case "placeholder": return "_";
         case "var": return e.name;
         case "binop": return `${exprToSource(e.l)} ${e.op} ${exprToSource(e.r)}`;

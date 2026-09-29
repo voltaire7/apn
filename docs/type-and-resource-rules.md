@@ -77,7 +77,7 @@ of exhaustiveness for arbitrary programs. Runtime `match` semantics are unchange
 assert (length [1,2] == 3)
 ```
 
-`assert` requires Bool and returns unit on success. On failure it reports the
+`assert` requires a truthy value and returns [] on success. On failure it reports the
 original argument expression, file name and line, with a source caret. Aliases
 such as `check = assert` work too. `<repl>` identifies interactive source. Wrapped
 calls report the expression passed to the intrinsic, not a reconstructed call

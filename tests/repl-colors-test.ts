@@ -30,7 +30,7 @@ Deno.test("operators use peach while structural punctuation stays gray", () => {
     for (const ch of "+-*/%!<>$&|?`") {
         if (highlightLine(ch) !== `\x1b[38;2;239;159;118m${ch}\x1b[0m`) throw new Error(`Operator color: ${ch}`);
     }
-    for (const ch of "(){}[];,:.=") {
+    for (const ch of "[]{}[];,:.=") {
         if (highlightLine(ch) !== `\x1b[38;2;131;139;167m${ch}\x1b[0m`) throw new Error(`Punctuation color: ${ch}`);
     }
     const adjacent = highlightLine("(-x)+[1]");

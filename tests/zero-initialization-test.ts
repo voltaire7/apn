@@ -7,7 +7,7 @@ function result(source: string): string {
 }
 for (const [source, expected] of [
     ['[Int, Float, Int8, UInt, Float32, Float64]', '[Int, Float, Int8, UInt, Float32, Float64]'],
-    ['[Bool, String, Char, Unit, List, Record, HashMap, Pointer]', '[Bool, String, Char, Unit, List, Record, HashMap, Pointer]'],
+    ['[Bool, String, Char, [], List, Record, HashMap, Pointer]', '[Bool, String, Char, [], List, Record, HashMap, Pointer]'],
     ['[Int == 0, Float == 0, Int == Float, Int == Int]', '[false, false, false, true]'],
     ['[isType Int Int, isType Bool Bool, isType Type Int]', '[false, false, true]'],
     ['[typeOf Int, typeOf (Int 1), typeOf (Float 1), typeOf (Int32 1)]', '[Type, Int, Float, Int32]'],
@@ -49,7 +49,7 @@ for (const [type, expected] of [
     ['Float32', 'Float32 0.0'], ['Float64', 'Float64 0.0'],
     ['Fraction', 'Fraction 0'], ['Complex', 'Complex 0'], ['ComplexExact', 'ComplexExact 0'],
     ['Number', '0'], ['Real', '0'], ['Integer', '0'], ['Exact', '0'], ['Inexact', '0.0'],
-    ['Bool', 'false'], ['String', '""'], ['Char', "'\\0'"], ['Unit', '()'],
+    ['Bool', 'false'], ['String', '""'], ['Char', "'\\0'"], ['[]', '[]'],
     ['List', '[]'], ['Record', '[]'], ['HashMap', 'HashMap []'], ['Pointer', 'Pointer 0x0'],
 ]) Deno.test(`omitted ${type} slot initializes`, () => {
     const actual = result(`[value: ${type}] []`);

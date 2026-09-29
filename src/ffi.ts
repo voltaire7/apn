@@ -11,14 +11,15 @@ export const FFI_NATIVES: Array<[string, number]> = [
 const abi: Record<string, Deno.NativeType | "void"> = {
     Int8: "i8", UInt8: "u8", Int16: "i16", UInt16: "u16", Int32: "i32", UInt32: "u32",
     Int64: "i64", UInt64: "u64", Float32: "f32", Float: "f64", Float64: "f64",
-    Bool: "bool", Pointer: "pointer", String: "buffer", Unit: "void",
+    Bool: "bool", Pointer: "pointer", String: "buffer", "[]": "void",
 };
 const widths: Record<string, number> = { Int8: 1, UInt8: 1, Int16: 2, UInt16: 2,
     Int32: 4, UInt32: 4, Int64: 8, UInt64: 8, Float32: 4, Float: 8, Float64: 8, Bool: 1 };
 const fail = (message: string): never => { throw new APNError("runtime", `C interop: ${message}`); };
 function typeName(i: Interpreter, value: Value): string {
     const type = i.demand(value);
-    if (type.kind !== "type" || type.family || !Object.hasOwn(abi, type.name)) return fail("expected a C-compatible type (use fixed-width integers, Float, Bool, String, Pointer or Unit)");
+    if (i.isList(type) && i.cell(type) === null) return "[]";
+    if (type.kind !== "type" || type.family || !Object.hasOwn(abi, type.name)) return fail("expected a C-compatible type (use fixed-width integers, Float, Bool, String, Pointer or [])");
     return type.name;
 }
 function pointer(i: Interpreter, value: Value): NativePointer {
@@ -67,7 +68,7 @@ function encode(i: Interpreter, name: string, raw: Value): number | bigint | boo
     return converted.v;
 }
 function decode(name: string, value: unknown, owner?: { closed: boolean }): Value {
-    if (name === "Unit") return { kind: "unit" };
+    if (name === "[]") return { kind: "list", v: [] };
     if (name === "Pointer") return makePointer(value as Deno.PointerValue, owner);
     if (name === "String") {
         if (value === null) return fail("C function returned a null String pointer");
@@ -135,7 +136,7 @@ export function ffiNative(i: Interpreter, name: string, args: Value[]): Value {
         const p = pointer(i, args[name === "peek" ? 1 : 2]);
         if (name === "peek") return decode(type, read(memory(p, size), type));
         write(memory(p, size), type, encode(i, type, args[1]));
-        return { kind: "unit" };
+        return { kind: "list", v: [] };
     }
     const path = i.demand(args[0]);
     if (path.kind !== "string") return fail("withLibrary expects a library path string");
@@ -151,7 +152,7 @@ export function ffiNative(i: Interpreter, name: string, args: Value[]): Value {
         const fields = new Map(definition.v);
         if (!fields.has("parameters") || !fields.has("result")) return fail(`${symbol}: missing parameters or result`);
         const parameters = i.items(fields.get("parameters")!).map((p) => typeName(i, p));
-        if (parameters.includes("Unit")) return fail(`${symbol}: Unit is a result type; use [] for no C parameters`);
+        if (parameters.includes("[]")) return fail(`${symbol}: [] is a result descriptor; use [] for no C parameters`);
         const result = typeName(i, fields.get("result")!);
         signatures.set(key, { parameters, result });
         foreign[symbol] = { parameters: parameters.map((p) => abi[p] as Deno.NativeType), result: result === "String" ? "pointer" : abi[result] as Deno.NativeResultType };
@@ -165,7 +166,7 @@ export function ffiNative(i: Interpreter, name: string, args: Value[]): Value {
         const symbol = keyText(key);
         const fn: Value = { kind: "native", name: symbol, arity: signature.parameters.length, applied: [], invoke: (values) => {
             if (owner.closed) return fail(`cannot call ${symbol}: library is closed`);
-            if (!signature.parameters.length && values.length && i.demand(values[0]).kind !== "unit") return fail(`${symbol} takes no arguments (an explicit () is also accepted)`);
+            if (!signature.parameters.length && values.length && (!i.isList(i.demand(values[0])) || i.cell(i.demand(values[0])) !== null)) return fail(`${symbol} takes no arguments (an explicit [] is also accepted)`);
             const evaluated = signature.parameters.map((_, index) => i.demand(values[index]));
             const converted = signature.parameters.map((type, index) => encode(i, type, evaluated[index]));
             const call = library.symbols[symbol] as (...args: unknown[]) => unknown;

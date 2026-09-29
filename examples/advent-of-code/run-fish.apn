@@ -1,2 +1,2 @@
 load "lanternfish"
-print (solveFish (readInput ()))
+print (solveFish (readInput []))

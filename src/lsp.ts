@@ -46,7 +46,7 @@ const builtins = new Map<string, string>([
     ["do", "do expressions — evaluate a list in order and return the last result; () for an empty list."],
     ["match", "match value alternatives — try unary pattern functions in order."],
     ["distinct", "distinct Type — create a fresh nominal type; bind it once to a capitalized name."],
-    ["assert", "assert condition — require Bool; failures include the expression and source location."],
+    ["assert", "assert condition — require a truthy value; failures include the expression and source location."],
     ["bracket", "bracket acquire release use — finish returned data before cleanup, even on failure (std/function)."],
     ["withFile", "withFile path use — scoped UTF-8 file reader; callback receives file.read (std/io)."],
 ]);
