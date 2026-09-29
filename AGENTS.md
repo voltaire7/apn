@@ -665,7 +665,9 @@ cycles as env; compare scope identity and reject resource-scope escapes.
 `src/type-description.ts` provides bounded, non-evaluating descriptions for
 list/function typeOf results. These are display metadata on broad List/Function
 types, not contracts; explicit contracts retain their actual functionType.
-Never force lazy elements or invoke callbacks to infer types. Unknowns use ?.
+Never force lazy elements or invoke callbacks to infer types. Unresolved types use stable variables a, b, ...; shared references preserve
+argument/result relationships. Keep inference bounded and occurs-check links
+for APN self-application. Known incompatible alternatives remain unions.
 
 Empty blocks/actions return ordinary empty lists; there is no unit AST/value or
 Unit constructor. Keep () and {} as executable block syntax. truthy() is the

@@ -1218,7 +1218,7 @@ print (typeOf [1, 2, 3, 4])              # => [Int]
 print (typeOf [1..])                     # => [Int] (no infinite traversal)
 describeIdentity (Int x) = x
 print (typeOf describeIdentity)          # => Int -> Int
-print (typeOf (x -> print x))            # => ? -> []
+print (typeOf (x -> print x))            # => a -> []
 print (typeOf [1, "hello"])              # => [Int | String]
 
 # Empty results are lists; conditions use truthiness.
@@ -1228,6 +1228,11 @@ print (0 && missingTruthinessName)        # => false; right side is skipped
 print (1 || missingTruthinessName)        # => true
 print (filter (x -> x) [0, 1, 2])        # => [1, 2]
 print (match 42 [x | [] -> 0, x | 1 -> x]) # => 42
+
+# Type variables preserve relationships between inputs and outputs.
+print (typeOf (x y -> x))                # => a -> b -> a
+print (typeOf (f x -> f x))              # => (a -> b) -> a -> b
+print (typeOf (x -> [x,x]))              # => a -> [a]
 
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 

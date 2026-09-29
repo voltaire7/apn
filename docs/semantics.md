@@ -686,15 +686,15 @@ Resource scopes reject environment views as escaping references.
 
 `typeOf [1,2,3]` displays `[Int]`; heterogeneous literal lists display their
 known alternatives, for example `[Int | String]`. Empty lists and unresolved
-lazy computations display `[?]`. Integer ranges display `[Int]`, including
+lazy computations display `[a]`. Integer ranges display `[Int]`, including
 infinite ranges, without traversing them.
 
 Functions display argument/result descriptions: `f (Int x) = x` gives
-`Int -> Int`; `x -> print x` gives `? -> []`. Clauses contribute to one
+`Int -> Int`; `x -> print x` gives `a -> []`. Clauses contribute to one
 combined description, with alternatives where their known types differ.
 Explicit function contracts still return their declared arrow type.
 Uncontracted descriptions are conservative diagnostics, not static inference
-or enforced contracts. `?` means unknown; overloaded arithmetic, recursion,
+or enforced contracts. `a`, `b`, and so on name unresolved type variables; overloaded arithmetic, recursion,
 and computed lazy elements can leave unknown parts. Describing a callable never probes its body with sample arguments or forces
 list elements. Inspecting an argument expression
 still evaluates it enough to obtain its outer value. Existing nullary action semantics remain: demanding a nullary action runs it,
@@ -726,3 +726,16 @@ standard-library predicate consumers share these rules. `&&` and `||` return
 Bool and short-circuit: `0 && missing` is false, `1 || missing` is true.
 Truthiness does not change equality or Bool pattern matching: `0 != false`,
 and `(Bool x)` still matches booleans rather than every convertible value.
+
+Type variables preserve relationships: `typeOf (x y -> x)` displays
+`a -> b -> a`, `typeOf (f x -> f x)` displays `(a -> b) -> a -> b`, and
+`typeOf (x -> [x,x])` displays `a -> [a]`. Names are assigned afresh in
+left-to-right order for each description. Function applications, lexical
+captures, list patterns and generic constructor patterns propagate constraints;
+clauses contribute to one signature. For example, `f (Some x) = x` with
+`f None = 0` describes `Option Int -> Int`.
+
+This remains bounded diagnostic inference, not Haskell's static type checker.
+Unresolved native behavior, overloaded operators and recursive self-application
+can leave unconstrained variables; these are not guarantees of parametric
+polymorphism. No new runtime restrictions or type-based dispatch are introduced.
