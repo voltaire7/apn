@@ -1119,7 +1119,13 @@ print zeroVector                     # => [x: 123.0, y: 0.0, z: 0.0]
 print ZeroVector                     # => [x: Float, y: Float, z: Float]
 template = ZeroVector
 template.x = 123
-print template                       # => [x: 123.0, y: Float, z: Float]
+print template                       # => [x: 123, y: Float, z: Float]
+print (template [])                  # => [x: 123, y: 0.0, z: 0.0]
+template.x = Int
+print template                       # => [x: Int, y: Float, z: Float]
+replacement = [nested: [x: 1]]
+replacement.nested = [y: 2]
+print replacement                    # => [nested: [y: 2]]
 print ([Int] [1, 2, 3])              # => [1, 2, 3]
 print (ZeroVector [1, 2, 3])          # => [x: 1.0, y: 2.0, z: 3.0]
 # ZeroVector [1, 2]                  # error: positional fields must be complete

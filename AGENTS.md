@@ -553,8 +553,10 @@ their constructor. Other scalar kinds accept same-kind replacements. [f] maps
 lazily; longer/empty lists zip exactly. Strings supply Unicode code-point chars
 through the existing chars primitive. Integer application remains indexing.
 Record application transforms supplied slots, initializes omitted type slots, appends
-new fields, and preserves every character of string keys. Assignments apply old
-slots before publishing a scoped copy; the selected slot is now demanded.
+new fields, and preserves every character of string keys. Assignments replace ordinary and bare-constructor
+slots before publishing a scoped copy; explicitly typed numbers, variants,
+and function contracts retain their conversion checks. Never invoke a stored action
+or merge a record merely to replace its slot.
 No element schema is attached to the output: [Int] [] is an ordinary empty list.
 
 Capitalized aliases are stable type-level bindings. Type-only container values
@@ -606,7 +608,7 @@ Interpreter.dataValue demands ordinary values without projecting types to zero.
 Bare types print as descriptors and never act as numbers. Template construction
 accepts complete positional lists, [] for all defaults, or named records and initializes omitted slots
 lazily; concrete defaults persist, nested templates initialize recursively.
-Assignment applies a type/function-type slot to the incoming value; untouched
+Assignment replaces a bare type/function-type slot without conversion; untouched
 slots remain descriptors and the original template is unchanged.
 All assignment paths share assignSlot. Initialized numeric fields retain type
 annotations; Int/Float display without labels. Function iteration stays unchanged.

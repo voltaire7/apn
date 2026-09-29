@@ -347,13 +347,14 @@ streaming/interruption recovery. The showcase is the broader syntax reference.
 ## List index assignment
 
 `arr 0 = 10` rebinds an existing list to a modified copy in the current scope,
-like record field assignment. The old slot is applied to the incoming value:
-`arr = [Int]; arr 0 = floor .2` produces `[0]`; assigning `.2` directly errors. `arr (-1) = 10` updates its final element.
+like record field assignment. Bare constructors are replaced:
+`arr = [Int]; arr 0 = .2` produces `[0.2]`. Existing typed values retain their
+conversion checks: `arr = [Int 0]; arr 0 = .2` errors. `arr (-1) = 10` updates its final element.
 The index must evaluate to an integer or a variant from a nullary-only family
 (using zero-based declaration order); negative integer indexes require a finite list.
 Positive updates traverse only as far as the selected cell, leaving unused
-unselected heads and the remaining tail deferred. The selected head is demanded
-because it is the template for this update. Bounds errors leave the binding unchanged.
+unselected heads and the remaining tail deferred. The selected head is inspected for an existing type annotation without invoking
+a stored action. Bounds errors leave the binding unchanged.
 The RHS is evaluated against the old binding before it is replaced. Consecutive
 index assignments execute in order. Inside a block the update shadows the outer
 binding. On an unbound name or an existing function, the same syntax remains a
@@ -636,7 +637,7 @@ functions are not composed by `*`—use `\` for composition.
 
 Type descriptors remain constructors in every ordinary value context. Applying a
 record template initializes omitted type slots; `Vector3 []` constructs defaults.
-Assignment to a type slot applies its constructor to the new value. See [zero initialization](zero-initialization.md)
+Assignment replaces bare type slots; constructed typed numeric values retain conversion checks. See [zero initialization](zero-initialization.md)
 for the default table, type inspection, variant rules and limitations.
 
 ## String formatting

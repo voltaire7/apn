@@ -284,8 +284,20 @@ export class Interpreter {
     }
 
     private assignSlot(slot: Value, value: Value): Value {
-        slot = this.demand(slot);
-        return this.demand(this.apply(slot, value));
+        // Inspect the old slot without invoking an action stored there.
+        slot = this.force(slot);
+        if (isNumeric(slot) && slot.typeName) {
+            if (!isNumeric(value)) {
+                const source = this.renderString(this.callNative("typeOf", [value]));
+                throw new APNError("runtime", `cannot convert ${source} to ${slot.typeName}`);
+            }
+            return this.constructType(slot.typeName, value);
+        }
+        if (slot.kind === "variant" && slot.family) {
+            return this.conform({ kind: "type", name: slot.family.name, family: slot.family, arguments: slot.arguments }, value);
+        }
+        if (slot.kind === "contract") return this.conform({ kind: "functionType", from: slot.from, to: slot.to }, value);
+        return value;
     }
 
     private listIndex(value: Value): bigint | undefined {

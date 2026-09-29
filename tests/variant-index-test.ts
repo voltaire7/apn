@@ -14,7 +14,7 @@ for (const [source, expected] of [
     ['xs = [missing, 20]\nxs East', '20'],
     ['xs = [10,20]\nold <- xs\nxs East = 30\n[xs,old]', '[[10, 30], [10, 20]]'],
     ['xs = [[0,-1],[1,0]]\nxs North = [0,0]\nxs North', '[0, 0]'],
-    ['xs = [Int,Float]\nd = East\nxs (d) = 2\nxs', '[Int, 2.0]'],
+    ['xs = [Int,Float]\nd = East\nxs (d) = 2\nxs', '[Int, 2]'],
     ['Other = First | Second\n[10,20] Second', '20'],
     ['[North == 0, typeOf North]', '[false, Direction]'],
 ] as const) Deno.test(`variant index: ${source}`, () => {

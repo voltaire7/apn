@@ -96,8 +96,10 @@ Keys retain their full string contents, including any quote characters, through 
 
 ## Slot assignment
 
-Index, field, and pluck assignment apply the old slot to the incoming value,
-then rebind a copy in the current scope:
+Index, field, and pluck assignment replace the selected slot, then rebind a
+copy in the current scope. Existing explicitly typed numeric values retain
+their conversion checks; variants retain their family and wrapped functions
+retain their contracts:
 
 ```apn
 xs = [Int] [0]
@@ -109,12 +111,14 @@ v.y = 321                 # [x: 0, y: 321]
 v "y" = floor .2                # [x: 0, y: 0]
 ```
 
-Type slots also accept assignment: `v = [x: Int]; v.x = 1` and
-`xs = [Int]; xs 0 = 1` apply Int to the new value. Untouched slots remain
-constructors rather than becoming defaults.
-The selected slot is demanded because it participates in application. Unrelated
-slots remain deferred. The RHS sees the old binding. An immediate application
-or bounds error preserves the binding; already-performed effects are not undone.
+Bare constructors are replaced without conversion: `v = [x: Float]; v.x = 1`
+produces `[x: 1]`, and `v.x = Int` stores Int. To keep a numeric constraint,
+construct the field first (`v = [x: Float] []`) or assign `Float 1` explicitly.
+Ordinary records and functions are replaced, never merged or called by assignment.
+Explicit record application still merges fields.
+The old slot is inspected without invoking a stored action. Unrelated slots
+remain deferred. The RHS sees the old binding. A conversion or bounds error
+preserves the binding; already-performed effects are not undone.
 Nested container results retain lazy checks, so errors in an unconsumed nested
 field can still surface later. Pluck updates compute against the original fields
 and publish the record only after all selected outer results succeed.

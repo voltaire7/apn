@@ -24,19 +24,20 @@ Assignments rebind a scoped copy and preserve numeric annotations. The displayed
 `0.0` above is internally `Float 0.0`, so later assignments remain checked Float
 conversions. The original template remains unchanged.
 
-Assignment to a type slot applies its constructor to the supplied value.
+Assignment to a bare type slot replaces the constructor without conversion.
 Untouched slots remain type descriptors; the shared template is unchanged:
 
 ```apn
 vec = Vector3
-vec.x = 1              # [x: 1.0, y: Float, z: Float]
+vec.x = 1              # [x: 1, y: Float, z: Float]
 xs = [Int]
 xs 0 = 1               # [1]
 ```
 
 This applies to dot, string-key, pluck, and list-index assignment. New record
-fields can still be inserted. Ordinary function slots keep their existing
-transform-on-assignment behavior.
+fields can still be inserted. Ordinary function and record slots are replaced;
+they are not called or merged. A constructed Float field keeps its annotation:
+assigning `Int` to it fails with `cannot convert Type to Float`.
 
 ## Default values for omitted slots
 
