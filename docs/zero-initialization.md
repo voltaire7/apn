@@ -135,3 +135,8 @@ It is now equivalent to direct application, including rejection of lossy inputs.
 Prefer the constructor directly; choose `floor`, `ceiling`, `round`, `truncate`,
 or `inexact` explicitly when the value needs rounding first. Float32 arithmetic
 continues to round its results to binary32, but `Float32 .1` now errors.
+
+Numeric assignment uses the same type as `typeOf`, including for literals:
+`v = [x: 1]; v.x = 1.0` keeps Int 1, while `v.x = 1.5` fails. Bare
+constructors are still replaced, but a numeric replacement then establishes
+its own type for subsequent assignments.

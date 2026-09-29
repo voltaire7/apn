@@ -286,12 +286,13 @@ export class Interpreter {
     private assignSlot(slot: Value, value: Value): Value {
         // Inspect the old slot without invoking an action stored there.
         slot = this.force(slot);
-        if (isNumeric(slot) && slot.typeName) {
+        if (isNumeric(slot)) {
+            const target = numericType(slot);
             if (!isNumeric(value)) {
                 const source = this.renderString(this.callNative("typeOf", [value]));
-                throw new APNError("runtime", `cannot convert ${source} to ${slot.typeName}`);
+                throw new APNError("runtime", `cannot convert ${source} to ${target}`);
             }
-            return this.constructType(slot.typeName, value);
+            return this.constructType(target, value);
         }
         if (slot.kind === "variant" && slot.family) {
             return this.conform({ kind: "type", name: slot.family.name, family: slot.family, arguments: slot.arguments }, value);

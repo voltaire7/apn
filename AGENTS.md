@@ -554,7 +554,7 @@ lazily; longer/empty lists zip exactly. Strings supply Unicode code-point chars
 through the existing chars primitive. Integer application remains indexing.
 Record application transforms supplied slots, initializes omitted type slots, appends
 new fields, and preserves every character of string keys. Assignments replace ordinary and bare-constructor
-slots before publishing a scoped copy; explicitly typed numbers, variants,
+slots before publishing a scoped copy; implicitly or explicitly typed numbers, variants,
 and function contracts retain their conversion checks. Never invoke a stored action
 or merge a record merely to replace its slot.
 No element schema is attached to the output: [Int] [] is an ordinary empty list.

@@ -97,7 +97,7 @@ Keys retain their full string contents, including any quote characters, through 
 ## Slot assignment
 
 Index, field, and pluck assignment replace the selected slot, then rebind a
-copy in the current scope. Existing explicitly typed numeric values retain
+copy in the current scope. Existing numeric values, implicitly or explicitly typed, retain
 their conversion checks; variants retain their family and wrapped functions
 retain their contracts:
 

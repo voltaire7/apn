@@ -1121,6 +1121,7 @@ template = ZeroVector
 template.x = 123
 print template                       # => [x: 123, y: Float, z: Float]
 print (template [])                  # => [x: 123, y: 0.0, z: 0.0]
+template = ZeroVector
 template.x = Int
 print template                       # => [x: Int, y: Float, z: Float]
 replacement = [nested: [x: 1]]
@@ -1196,6 +1197,12 @@ oddKeys.-1 = 1
 oddKeys.(x) = 2
 print [oddKeys.-1, oddKeys "-1"]        # => [1, 1]
 print [oddKeys.(x), oddKeys "(x)"]      # => [2, 2]
+
+# Implicit numeric types constrain assignment too.
+implicitNumber = [x: 1]
+implicitNumber.x = 1.0
+print implicitNumber                  # => [x: 1]
+# implicitNumber.x = 1.5               # error: lossy conversion to Int
 
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
