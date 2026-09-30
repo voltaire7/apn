@@ -694,33 +694,6 @@ export class Interpreter {
                         r = this.recordField(rec, e.field);
                         break;
                     }
-                    case "pluck": {
-                        let rec = this.dataValue(this.eval(e.rec));
-                        if (rec.kind !== "record") throw new Error("pluck on non-record");
-                        const byKey = new Map(rec.v);
-                        if (e.entries.every((x) => typeof x === "string")) {
-                            const out: Value[] = [];
-                            for (const n of e.entries as string[]) {
-                                const v = byKey.get(n);
-                                if (v === undefined) {
-                                    this.missingField(rec, n);
-                                }
-                                out.push(v);
-                            }
-                            r = { kind: "list", v: out };
-                        } else {
-                            const out: Array<[string, Value]> = [];
-                            for (const [src, dst] of e.entries as Array<[string, string]>) {
-                                const v = byKey.get(src);
-                                if (v === undefined) {
-                                    this.missingField(rec, src);
-                                }
-                                out.push([dst, v]);
-                            }
-                            r = { kind: "record", v: out };
-                        }
-                        break;
-                    }
                     case "setItem": {
                         const collection = this.dataValue(this.eval(e.rec));
                         const key = this.dataValue(this.eval(e.index));
@@ -729,7 +702,7 @@ export class Interpreter {
                     }
                     case "setFields": {
                         // eager: read the OLD record and the RHS fully BEFORE building the
-                        // new one, so  vec.[x, y] = vec.[y, x]  swaps correctly
+                        // new one; failed conversions leave the old binding intact
                         let rec = this.dataValue(this.eval(e.rec));
                         if (this.isList(rec) && this.cell(rec) === null) rec = mkList([]);
                         let base: Array<[string, Value]> | null = null;

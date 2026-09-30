@@ -34,7 +34,7 @@ xs = [Int]
 xs 0 = 1               # [1]
 ```
 
-This applies to dot, string-key, pluck, and list-index assignment. New record
+This applies to dot, string-key, and list-index assignment. New record
 fields can still be inserted. Ordinary function and record slots are replaced;
 they are not called or merged. A constructed Float field keeps its annotation:
 assigning `Int` to it fails with `cannot convert Type to Float`.

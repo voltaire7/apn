@@ -11,7 +11,7 @@ From tightest to loosest binding; operators in the same row have equal precedenc
 
 | Operation | Associativity | Grouping example |
 | --- | --- | --- |
-| Field access and pluck `.` | Left | `a.b.c` → `(a.b).c` |
+| Field access `.` | Left | `a.b.c` → `(a.b).c` |
 | Function application | Left | `f x y` → `(f x) y` |
 | Composition `\` | Right | `f \ g \ h` → `f \ (g \ h)` |
 | Exponentiation `^` | Right | `a ^ b ^ c` → `a ^ (b ^ c)` |
@@ -108,24 +108,30 @@ List indexing accepts integers or variants from families with only nullary const
 Variants select by zero-based declaration order; `arr "0"` remains invalid.
 HashMap application likewise keeps numeric `0` and string `"0"` distinct keys.
 
-Printing preserves key quotation. Field updates (`obj.field = value`,
-`obj."field" = value`), record cloning, and plucks (`obj.[field, "field"]`)
-preserve both identities. On an existing record, `obj "field" = value` updates
-or adds the key string `field`, just like `obj.field = value`. Strings containing
-quotes likewise update the corresponding quoted field. The key must be one
-string literal; `obj "1" = value` updates numeric-named field `1`. It reads the
-RHS before rebinding, applies the existing slot to it, makes a scoped copy, and
-preserves the old binding on an immediate failure. A new field is inserted unchanged. On an unbound name or an existing function, `f "x" = value` remains
-a string-pattern function clause.
+Printing preserves key quotation. Dot and string-key assignments update the same
+literal key and publish a scoped copy after conversion succeeds. Computed string
+keys are evaluated once. Existing numeric slots retain lossless conversion checks;
+new fields are inserted unchanged. On an unbound name or an existing function,
+`f "x" = value` remains a string-pattern function clause.
 
-Destructuring `[field: a, "field": b]` selects each
-key explicitly; the bare pattern `[field]` selects only the named field.
-Renamed plucks such as `obj.["field": value]` create named destination fields.
+Bracketed dot access quotes the entire spelling, including whitespace:
 
-`pairs`, positional record access, and record iteration still expose key **text**
-as ordinary strings. These views do not retain the named/string distinction.
-Converting a record to `HashMap` also uses key text; if both kinds have the same
-text, the later entry wins under the existing duplicate-key rule.
+```apn
+obj = []
+obj.[x,y] = 123
+obj "[x,y]"              # 123
+map [x: 1, y: 2] ["x", "y"]  # [1, 2]
+```
+
+`obj.[x, y]` names a different key from `obj.[x,y]`. Bracket contents are never
+evaluated. There is no special pluck syntax or multi-field assignment. Use `map`
+for selection and `[first: obj.x, second: obj.y]` for renamed fields. Record
+application to a list still constructs positionally, even when the list contains
+strings. Capture old values eagerly with `<-` before sequential field swaps.
+
+Record destructuring remains available: `[x: a, y: b] = obj`.
+Pairs, iteration, and HashMap conversion preserve the full key string.
+
 
 ## Definitions and actions
 
@@ -654,7 +660,7 @@ directly instead of `[vec]` is invalid when `vec` is a record.
 Dot keys may also be negative numbers or parenthesized text: `obj.-1` means
 `obj "-1"`, and `obj.(x)` means `obj "(x)"`. Parentheses and their contents,
 including whitespace, belong to the key; the contents are never evaluated.
-The same spellings work in record literals, plucks, field assignments, and
+The same spellings work in record literals, field assignments, and
 record destructuring: `[-1: 1, (x): 2]`.
 
 `enumerate xs` returns a lazy list of `[index, value]` pairs. Indices are exact
@@ -672,10 +678,10 @@ are visible through it. `env.x` and `env "x"` read bindings.
 using the same type conversion checks as field assignment. New names are
 created in the captured scope. This explicitly writes through the view even
 from an inner block; ordinary `x = value` still follows normal scope rules.
-Pluck assignments validate all conversions before publishing updates.
+Each assignment validates its conversion before publishing the update.
 
 The view can escape a function and keep its local scope alive. `pairs env`
-exposes its visible entries; plucks produce ordinary lists or records.
+exposes its visible entries; `map env ["x", "y"]` selects bindings into a list.
 `typeOf env` is Record. Environment views compare by scope identity.
 Printing displays bindings as a record; actions are shown without invoking
 them, and recursive references to the same environment print as `env`.

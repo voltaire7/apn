@@ -72,7 +72,7 @@ for (const source of [
 });
 
 Deno.test("failed typed-value conversion preserves the record", () => {
-    for (const assignment of ['v.x = .2', 'v "x" = .2', 'v.[x,y] = [.2, 2]']) {
+    for (const assignment of ['v.x = .2', 'v "x" = .2', 'v ("x") = .2']) {
         const i = new Interpreter();
         i.run(parseDocument('v = [x: Int, y: Int] []'));
         let rejected = false;
@@ -107,7 +107,7 @@ for (const values of ['[1]', '[1,2]', '[1,2,3,4]']) {
 for (const [source, expected] of [
     ['Vector3 = [x: Float, y: Float, z: Float]\nvec = Vector3\nvec.x = 123\n[vec, Vector3]', '[[x: 123, y: Float, z: Float], [x: Float, y: Float, z: Float]]'],
     ['v = [x: Int]\nv "x" = 1\nv', '[x: 1]'],
-    ['v = [x: Int, y: Float]\nv.[x,y] = [1,2]\nv', '[x: 1, y: 2]'],
+    ['v = [x: Int, y: Float]\nv.x = 1; v.y = 2\nv', '[x: 1, y: 2]'],
     ['xs = [Int]\nxs 0 = 1\nxs', '[1]'],
     ['xs = [Int, Float]\nxs (-1) = 2\nxs', '[Int, 2]'],
     ['xs = [Int]\ni = 0\nxs (i + 0) = 1\nxs', '[1]'],

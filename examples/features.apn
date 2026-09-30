@@ -232,9 +232,9 @@ print keyKinds               # => [field: 123, "field": 456, 1: 10, "1": 100]
 [field: namedValue, "field": stringValue] = keyKinds
 print [namedValue, stringValue] # => [123, 456]
 keyKinds."field" = 789
-print keyKinds.[field, "field"] # => [123, 789]
+print (map keyKinds ["field", "\"field\""]) # => [123, 789]
 keyKinds "field" = 10
-print keyKinds.[field, "field"] # => [10, 789]
+print (map keyKinds ["field", "\"field\""]) # => [10, 789]
 keyKinds "1" = 20
 print keyKinds.1              # => 20
 # A list's integer index and a string are not interchangeable:
@@ -272,18 +272,19 @@ print vector3                       # => [x: 0, y: 0, z: 0]   prototype untouche
 print ((vector3 [1, 2, 3]).z)       # => 3     (.z chains over the clone)
 print (vector3 1)                   # => ["y", 0]   int index -> [field, value]
 
-# .[...] still exists, but as the QUOTED PLUCK:  a.[x, y]  gathers values
-# into a LIST;  a.[x: v1, y: v2]  keeps the fields under NEW keys.
-print (vector3.[x, y])              # => [0, 0]
-print (vector3.[z, x, y])           # => [0, 0, 0]     reorder
-print (vector3.[x: first, y: second])   # => [first: 0, second: 0]  renamed
+# Dot brackets are a single literal key; map selects several fields.
+print (map vector3 ["x", "y"])       # => [0, 0]
+print (map vector3 ["z", "x", "y"])  # => [0, 0, 0]
+print [first: vector3.x, second: vector3.y]
+bracketKeys = []
+bracketKeys.[x,y] = 42
+print [bracketKeys.[x,y], bracketKeys "[x,y]"] # => [42, 42]
 
 # ---------------------------------------------------------
 # 7b. RECORD UPDATE —  vec.x = 10  rebinds vec to a MODIFIED COPY
 #     (records are never mutated in place). The rebinding is scoped
 #     like any def, so assignments inside a { } block SHADOW the
-#     outer name. Pluck assignment sets several fields from a list —
-#     the right side is evaluated FIRST, so the classic swap works.
+#     outer name. Capture a value eagerly before swapping fields.
 # ---------------------------------------------------------
 vec = [x: 1, y: 2, z: 3]
 vec.x = 10
@@ -291,9 +292,12 @@ print vec                        # => [x: 10, y: 2, z: 3]
 vec.w = 99
 print vec                        # => [x: 10, y: 2, z: 3, w: 99]   new field
 
-vec.[x, y] = vec.[y, x]
+oldVecX <- vec.x
+vec.x = vec.y
+vec.y = oldVecX
 print vec                        # => [x: 2, y: 10, z: 3, w: 99]  swap!
-vec.[x, y] = [7, 8]
+vec.x = 7
+vec.y = 8
 print vec                        # => [x: 7, y: 8, z: 3, w: 99]
 
 # block scope: the update shadows obj only INSIDE the { }  (a bare block
@@ -1211,7 +1215,7 @@ scope.environmentExample = 2
 print environmentExample              # => 2
 environmentExample = 3
 print scope.environmentExample        # => 3
-print env.[environmentExample]        # => [3]
+print (map env ["environmentExample"])        # => [3]
 
 # Rich type descriptions inspect lazy elements and function bodies without running them.
 print (typeOf [1, 2, 3, 4])              # => [Int]

@@ -176,22 +176,16 @@ intentional evaluation change.
   `[x: 1, y: 0, z: 3]`) and `vector3 [x: 1, y: 2, z: 3, a: 0]` adds `a`. An INT
   argument indexes positionally → the pair `[field, value]` (`vec 1` →
   `["y", 0]`). Ordinary templates use lowercase names; type-only templates may be capitalized aliases.
-- **Pluck — the QUOTED `.[...]` postfix** (record access -style, so even a
-  bare-name list inside it is treated as field names, never values):
-  `rec.[x, y]` gathers those fields' values into a LIST; `rec.[x: a, y: b]`
-  keeps the fields under NEW keys (a smaller record). Mixing bare entries and
-  `key: name` pairs in one pluck is a parse error. The same `[key: name]`
-  shape is also a DESTRUCTURING PATTERN (see Bindings).
-- **Record update (field/pluck assignment)**: `vec.x = 10` and
-  `vec.[x, y] = [1, 2]` rebind the NAME to a modified COPY — records are
-  never mutated in place. The parser desugars the statement to an EAGER
-  pattern binding `vec = setFields(vec, entries, rhs)` (`{ t: "setFields" }`:
-  reads the old record and the RHS fully first, so
-  `vec.[x, y] = vec.[y, x]` swaps). Existing fields keep their position,
-  new fields append. Because it is a binding, it is SCOPED like any def —
-  inside a `{ }` block it shadows the outer name (the outer record is
-  unchanged). An empty list `[]` promotes to a record on first assignment.
-  Errors: non-record targets and value-count mismatches.
+- **Literal bracket keys**: `rec.[x,y]` equals `rec "[x,y]"`. Delimiters and
+  interior whitespace are part of the key, just like `rec.(x)`. There is no
+  pluck syntax. Use `map rec ["x", "y"]` to gather values and an explicit
+  record `[first: rec.x, second: rec.y]` to rename fields. Record/list
+  application still constructs positionally; string lists are not selectors.
+- **Record update**: `vec.x = 10` or `vec "x" = 10` rebinds the name to a
+  modified copy, scoped like any definition. `vec.[x,y] = value` updates one
+  literal key. Existing fields retain position; new fields append. Empty []
+  promotes to a record. Conversion failure preserves the old binding.
+  To swap, capture eagerly: `oldX <- vec.x; vec.x = vec.y; vec.y = oldX`.
 - **Ternary, not if/then/else**: `cond ? a : b` (right-associative). Keywords
   `if`, `then`, `else` are removed.
 - **Functions**: two styles, partial application, recursion. `fn` is removed.
@@ -238,7 +232,7 @@ intentional evaluation change.
 - **Pipes & operators**:
   - `f $ x` applies `f` to `x`, with the lowest precedence and right associativity.
     `f $ g $ x` means `f (g x)`. This replaces the old value-left pipe.
-    Composition uses `\`; dot syntax selects record fields or plucks.
+    Composition uses `\`; dot syntax selects literal record fields.
   - Backtick infix is removed: backticks outside strings/comments are lexical errors.
     See the precedence table in `docs/semantics.md#operator-precedence-and-associativity`.
   - Operator sections: `(+ 2)` = `\x -> x + 2`, `(2 +)` = `\x -> 2 + x` for
@@ -529,7 +523,7 @@ Tests live in tests/eager-binding-test.ts; document the eager/lazy boundary.
 field syntax includes quote characters in the key. keyText is identity;
 keySource escapes quoted-field contents for source rendering. Pairs, iteration,
 HashMap conversion and FFI symbol names preserve the full key string.
-Literal dot syntax, patterns, plucks and string application share key identity.
+Literal dot syntax, patterns and string application share key identity.
 On an existing record, `obj "field" = value` updates that exact string key;
 quoted characters and NUL have no special lookup/update encoding. Require one
 string-valued argument (literal, variable or parenthesized expression), preserve scope and demand RHS before rebinding.
@@ -651,14 +645,14 @@ finally. See docs/type-and-resource-rules.md and tests/odin-rules-test.ts.
 Dot keys may also be negative numbers or parenthesized text: `obj.-1` means
 `obj "-1"`, and `obj.(x)` means `obj "(x)"`. Parentheses and their contents,
 including whitespace, belong to the key; the contents are never evaluated.
-The same spellings work in record literals, plucks, field assignments, and
+The same spellings work in record literals, field assignments, and
 record destructuring: `[-1: 1, (x): 2]`.
 
 `env` exposes a live record view backed by Env (`record.scope`). Capture the
 lexical scope when the builtin is referenced; never enumerate by forcing values.
 Reads include nearest visible bindings; writes use Env.set to update the nearest
 owner or create locally. Environment assignments mutate through the view and
-must not rebind the view name (especially the env builtin). Validate pluck writes
+must not rebind the view name (especially the env builtin). Validate environment writes
 before publication. Render bindings without invoking actions, abbreviating scope
 cycles as env; compare scope identity and reject resource-scope escapes.
 

@@ -40,7 +40,7 @@ for (const [source, expected] of [
     ['v = [x: Int, y: Int] [x: 123]\nv.y = 321\nv.y = floor .2\nv', '[x: 123, y: 0]'],
     ['v = [x: Int, y: Int] []\nv "y" = 321\nv', '[x: 0, y: 321]'],
     ['v = ["x": Int] []\nv."x" = 123\nv', '["x": 123]'],
-    ['v = [x: Int, y: Float] []\nv.[x,y] = [floor .2, 3]\nv', '[x: 0, y: 3.0]'],
+    ['v = [x: Int, y: Float] []\nv.x = floor .2; v.y = 3\nv', '[x: 0, y: 3.0]'],
     ['v = [x: (*2)]\nv.x = 3\nv.x = 4\nv.x', '4'],
     ['take 4 ([Int] [0..])', '[0, 1, 2, 3]'],
     ['take 2 ([Int, Int, Int] [1,2,missing])', '[1, 2]'],
@@ -114,7 +114,7 @@ for (const [source, error] of [
     }
     throw new Error(`Expected ${error}`);
 });
-for (const assignment of ['v.x = Float .2', 'v "x" = Float .2', 'v.[x,y] = [2, Float .2]']) {
+for (const assignment of ['v.x = Float .2', 'v "x" = Float .2', 'v ("x") = Float .2']) {
     Deno.test(`failed template update preserves binding: ${assignment}`, () => {
         const i = new Interpreter();
         i.run(parseDocument('v = [x: Int 1, y: Int 2]'));

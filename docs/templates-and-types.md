@@ -96,7 +96,7 @@ Keys retain their full string contents, including any quote characters, through 
 
 ## Slot assignment
 
-Index, field, and pluck assignment replace the selected slot, then rebind a
+Index and field assignment replace the selected slot, then rebind a
 copy in the current scope. Existing numeric values, implicitly or explicitly typed, retain
 their conversion checks; variants retain their family and wrapped functions
 retain their contracts:
@@ -120,8 +120,7 @@ The old slot is inspected without invoking a stored action. Unrelated slots
 remain deferred. The RHS sees the old binding. A conversion or bounds error
 preserves the binding; already-performed effects are not undone.
 Nested container results retain lazy checks, so errors in an unconsumed nested
-field can still surface later. Pluck updates compute against the original fields
-and publish the record only after all selected outer results succeed.
+field can still surface later. Separate field assignments publish separately.
 
 Indices and record keys can be variables or parenthesized expressions:
 
