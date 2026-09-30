@@ -295,7 +295,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
         if (t.k === "list") {
             return list(
                 resolve(t.element).k === "type" ? (resolve(t.element) as Extract<Ty, { k: "type" }>).value : dynamic,
-                t.items?.length === 1 ? undefined : t.length,
+                t.length,
             );
         }
         if (t.k === "record") {
@@ -516,7 +516,8 @@ export function checkTypes(program: TopLevel[]): CheckResult {
         if (f.k === "list") {
             const a = resolve(argument.type);
             if (a.k === "atom" && a.name === "Int") return f.element;
-            // APN list templates, character conversion and enumeration indexing are dynamic.
+            if (a.k === "list") return list(f.element, a.length);
+            // Enumeration indexing remains dynamic.
             return unknown();
         }
         if (f.k === "record") {
@@ -636,6 +637,21 @@ export function checkTypes(program: TopLevel[]): CheckResult {
             case "setItem": {
                 const rec = resolve(infer(e.rec, scope)), value = infer(e.value, scope), key = index(e.index, scope);
                 if (rec.k === "list") {
+                    const keys = resolve(infer(e.index, scope));
+                    if (keys.k === "list") {
+                        const incoming = resolve(value);
+                        if (incoming.k !== "list") { dynamicBoundaries++; return rec; }
+                        if (keys.items && incoming.items && keys.items.length !== incoming.items.length) problem("index count does not match value count", e);
+                        const slots = e.index.t === "list" ? e.index.v : [];
+                        slots.forEach((slot, n) => {
+                            const k = index(slot, scope);
+                            if (k && !k.terms.size && rec.length && !rec.length.terms.size &&
+                                (k.constant >= rec.length.constant || k.constant < -rec.length.constant)) problem("list index out of range", slot);
+                            convert(rec.element, incoming.items?.[n] ?? incoming.element, e.value.t === "list" ? e.value.v[n] ?? e.value : e.value);
+                        });
+                        if (!slots.length) dynamicBoundaries++;
+                        return rec;
+                    }
                     if (
                         key && !key.terms.size && rec.length && !rec.length.terms.size &&
                         (key.constant >= rec.length.constant || key.constant < -rec.length.constant)
@@ -650,8 +666,23 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                 }
                 return unknown();
             }
+            case "pluck": {
+                const rec = resolve(infer(e.rec, scope));
+                if (rec.k === "record" && e.quoted !== false) {
+                    const selected = e.entries.map(entry => {
+                        const key = typeof entry === "string" ? entry : entry[0];
+                        return rec.fields.get(key) ?? problem(`missing field '${key}'`, e);
+                    });
+                    return e.entries.every(x => typeof x === "string")
+                        ? { k: "list", element: dynamic, length: constant(BigInt(selected.length)), items: selected }
+                        : { k: "record", fields: new Map(e.entries.map((x, n) => [(x as [string, string])[1], selected[n]])) };
+                }
+                if (e.values) infer(e.values, scope);
+                return unknown();
+            }
             case "recordAccess": {
                 const rec = resolve(infer(e.rec, scope));
+                if (rec.k === "list" && e.argument) { infer(e.argument, scope); return unknown(); }
                 if (rec.k === "var") {
                     const t = variable();
                     unify(rec, { k: "record", fields: new Map([[e.field, t]]) }, e);
@@ -780,13 +811,18 @@ export function checkTypes(program: TopLevel[]): CheckResult {
         const collection = previous && resolve(previous.type), c = clauses[0];
         if (collection && (collection.k === "list" || collection.k === "record") && c.params.length === 1) {
             const p = c.params[0];
-            const key: Expr | undefined = p.p === "var"
-                ? { t: "var", name: p.name }
-                : p.p === "int"
-                ? { t: "int", v: p.v }
-                : p.p === "string"
-                ? { t: "string", v: p.v }
-                : undefined;
+            const asKey = (p: Pattern): Expr | undefined => {
+                if (p.p === "var") return { t: "var", name: p.name };
+                if (p.p === "int") return { t: "int", v: p.v };
+                if (p.p === "string") return { t: "string", v: p.v };
+                if (p.p === "constr" && !p.args.length) return { t: "var", name: p.tag };
+                if (p.p === "list") {
+                    const values = p.v.map(asKey);
+                    if (values.every((v): v is Expr => v !== undefined)) return { t: "list", v: values };
+                }
+                return undefined;
+            };
+            const key = asKey(p);
             if (key) {
                 const t = infer({ t: "setItem", rec: { t: "var", name }, index: key, value: c.body }, scope);
                 scope.set(name, { type: t });

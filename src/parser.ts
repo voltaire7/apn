@@ -436,7 +436,7 @@ class Parser {
     }
 
     // Postfix:  quoted OBJECT access  a.b, a."b", a.123  and the
-    // quoted PLUCK
+    // quoted record PLUCK, or evaluated list-template inputs
     //   a.[x, y]            -> list of those fields' values
     //   a.[x: v1, y: v2]    -> smaller object: field x kept under the key v1
     parsePostfix(e: Expr): Expr {
@@ -444,29 +444,46 @@ class Parser {
             this.next();
             const t = this.peek();
             if (t.k === "sym" && (t as { v: string }).v === "[") {
+                const bracketStart = this.i;
+                const values = this.parsePrimary();
+                const bracketEnd = this.i;
+                this.i = bracketStart;
+                let quoted = true;
                 this.next(); // [
                 this.skipListLeading();
                 const entries: Array<string | [string, string]> = [];
-                while (!this.isSym("]")) {
-                    const key = this.parseKey();
-                    if (this.isSym(":")) {
-                        this.next();
-                        const dst = this.next();
-                        if (dst.k !== "ident") throw new Error("Parser: expected a name after ':' in pluck");
-                        entries.push([key, dst.v]);
-                    } else {
-                        entries.push(key);
+                try {
+                    while (!this.isSym("]")) {
+                        const key = this.parseKey();
+                        if (this.isSym(":")) {
+                            this.next();
+                            const dst = this.next();
+                            if (dst.k !== "ident") throw new Error("Parser: expected a name after ':' in pluck");
+                            entries.push([key, dst.v]);
+                        } else {
+                            entries.push(key);
+                        }
+                        this.skipListSeparators();
+                        if (this.isSym("]")) break;
+                        if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside pluck");
                     }
-                    this.skipListSeparators();
-                    if (this.isSym("]")) break;
-                    if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside pluck");
-                }
-                this.next(); // ]
-                const mixed = new Set(entries.map((x) => typeof x));
-                if (mixed.size > 1) throw new Error("Parser: pluck cannot mix bare names and 'key: name' pairs");
-                e = { t: "pluck", rec: e, entries };
+                    this.next(); // ]
+                    const mixed = new Set(entries.map((x) => typeof x));
+                    if (mixed.size > 1) throw new Error("Parser: pluck cannot mix bare names and 'key: name' pairs");
+                } catch { quoted = false; entries.length = 0; }
+                this.i = bracketEnd;
+                e = { t: "pluck", rec: e, entries, values, quoted };
             } else {
-                e = { t: "recordAccess", rec: e, field: this.parseKey() };
+                const keyStart = this.i;
+                const field = this.parseKey();
+                const keyEnd = this.i;
+                let argument: Expr | undefined;
+                if (t.k === "str" || (t.k === "sym" && t.v === "(")) {
+                    this.i = keyStart;
+                    try { argument = this.parsePrimary(); } catch { /* record keys need not be expressions */ }
+                    this.i = keyEnd;
+                }
+                e = { t: "recordAccess", rec: e, field, ...(argument ? { argument } : {}) };
             }
         }
         return e;
@@ -1407,6 +1424,7 @@ export function exprToSource(e: Expr): string {
         case "recordAccess":
             return `${exprToSource(e.rec)}.${keySource(e.field)}`;
         case "pluck":
+            if (e.values) return `${exprToSource(e.rec)}.${exprToSource(e.values)}`;
             return `${exprToSource(e.rec)}.[${e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`).join(", ")}]`;
         case "setItem": return `${exprToSource(e.rec)} (${exprToSource(e.index)}) = ${exprToSource(e.value)}`;
         case "setFields":

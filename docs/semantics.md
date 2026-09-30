@@ -240,8 +240,9 @@ Use `*` iteration for explicitly executing an operation over every element;
 - `foldr` passes a deferred recursive result to its function, permitting an
   early result on an infinite input. `foldl` traverses the entire input.
 - Positive indexing traverses only through the requested element. Negative
-  indexing needs the end of the list. List arguments apply templates instead of
-  selecting indexes; use `map xs indexes` for multiple selections.
+  indexing needs the end of the list. `xs indices` selects a list of indices lazily.
+  `xs indices = values` checks the finite update before rebinding; both sides see
+  the old list. Dotted `templates.[values]` applies list templates instead.
 - `null` inspects emptiness; `length` traverses cells without demanding heads.
   Equality compares elements incrementally and stops at the first mismatch.
 - Finite and infinite ranges use the same incremental consumer interface.

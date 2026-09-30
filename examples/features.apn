@@ -198,16 +198,23 @@ print vals                       # => [100, 200]
 print (map (x -> x * 2) vals)    # => [200, 400]
 
 # indexing by APPLICATION:  a list applied to a number is an element
-# (negative counts from the end); list arguments instead apply a template.
-# Use map with the indexed list for multi-index selection.
+# (negative counts from the end); a list of indices selects several elements.
 #  arr -1  would be arithmetic, so use parens:  arr (-1)
 nums = [10, 20, 30]
 print (nums 0)                    # => 10
 print (nums 1)                    # => 20
 print (nums (-1))                 # => 30
-print (map nums [0, 2])               # => [10, 30]
+print (nums [0, 2])               # => [10, 30]
 print ((nums (-1)) + (nums 0))    # => 40
 print ((tail nums) 0)             # => 20   (index a computed list)
+nums [1, 2] = nums [2, 1]
+print nums                       # => [10, 30, 20]
+print ([String, Int].["x", 1])    # => ["x", 1]
+print ([(+ 1), (* 2)].[10, 20])   # => [11, 40]
+listTemplate = [Int, Float]
+listInput = [1, 2]
+print (listTemplate.(listInput))  # => [1, 2.0]
+
 print ([[1, 2], [3, 4]] 1 0)      # => 3    (nested indexing, left-assoc)
 
 # ---------------------------------------------------------
@@ -829,21 +836,23 @@ numericPayload (source value) = value
 print (numericPayload (Int32 123))   # => 123
 retypedAdd (Int x) (Int y) = Int (x + y)
 print (retypedAdd (Int 2) (Int 3))   # => 5
-print cast                          # => (Type target) value -> target value
+print cast                          # => APN clauses for list schemas and other types
 
 # Container templates apply their existing slots to incoming values.
 print (0 123)                       # => 123
 print ((Int 0) (floor .2))           # => 0
-print ([(* 2)] [1, 2, 3, 4])        # => [2, 4, 6, 8]
-print (cast String $ cast [Char] $ "a😀") # => "a😀"
-print ([Char] "hello")              # => ['h', 'e', 'l', 'l', 'o']
-print ([Char] "a😀")                 # => ['a', '😀']
-print ([Int] [1, 2, 3, 4])          # => [1, 2, 3, 4]
-print ([Int, String] [123, "hello"]) # => [123, "hello"]
-print (take 3 ([Int] [0..]))         # => [0, 1, 2]
+print ((* 2) * [1, 2, 3, 4])        # => [2, 4, 6, 8]
+print (cast String $ cast [Char, Char] $ "a😀") # => "a😀"
+print ([Char, Char, Char, Char, Char]."hello")              # => ['h', 'e', 'l', 'l', 'o']
+print ([Char, Char]."a😀")                 # => ['a', '😀']
+print (Int * [1, 2, 3, 4])          # => [1, 2, 3, 4]
+print ([Int, String].[123, "hello"]) # => [123, "hello"]
+print (take 3 (map Int [0..]))         # => [0, 1, 2]
 print ([x: Int, y: 0] [x: 1, y: 2]) # => [x: 1, y: 2]
 print ([x: Int, y: Int] [x: 123])    # => [x: 123, y: 0]
-slots = [Int] [0]
+# [Int].[1,2] and [Int].[] error: one template slot requires one value.
+print [isType [Int] [1], isType [Int] [1,2]] # => [true, false]
+slots = [Int].[0]
 slots 0 = floor .2
 print slots                         # => [0]
 slots 0 = 123
@@ -855,18 +864,18 @@ recordSlots "y" = floor .2
 print recordSlots.y                 # => 0
 # recordSlots.y = Float .2           # error: lossy typed conversion
 # slots 1 = 1                       # error: slot 1 does not exist
-print ([Int] [])                    # => [] (no hidden element schema)
-print ([10] [0])                    # => [0] (template application)
+print ([].[])                    # => [] (no hidden element schema)
+print ([10].[0])                    # => [0] (template application)
 print ([10] 0)                      # => 10 (integer indexing)
 Count = Int
 Numbers = [Int]
 Point = [x: Float, y: Float]
 print (Count 123)                   # => 123
-print (Numbers [1, 2])              # => [1, 2]
+print (Numbers.[1])                # => [1]
 print (Point [x: 1, y: 2])          # => [x: 1.0, y: 2.0]
 firstNumber (Numbers values) = head values
 print (firstNumber [123])           # => 123
-print (cast [Int] [1, 2])           # => [1, 2]
+print (cast [Int, Int] [1, 2])           # => [1, 2]
 NumericMaybe a = Maybe a
 print ((NumericMaybe Int) (Just 123)) # => Just 123
 UserId = | MkUserId Int
@@ -1127,7 +1136,7 @@ print template                       # => [x: Int, y: Float, z: Float]
 replacement = [nested: [x: 1]]
 replacement.nested = [y: 2]
 print replacement                    # => [nested: [y: 2]]
-print ([Int] [1, 2, 3])              # => [1, 2, 3]
+print (Int * [1, 2, 3])              # => [1, 2, 3]
 print (ZeroVector [1, 2, 3])          # => [x: 1.0, y: 2.0, z: 3.0]
 # ZeroVector [1, 2]                  # error: positional fields must be complete
 # Int + 1 and sqrt Float are errors; constructors are not numbers.
@@ -1137,7 +1146,7 @@ DefaultChoice a = Present a | Absent
 print ([choice: DefaultChoice Int] []) # => [choice: Absent]
 DefaultUser = | MakeDefaultUser Int String
 print ([user: DefaultUser] [])        # => [user: MakeDefaultUser 0 ""]
-# Int .2, cast Int .2 and [Int] [.2] reject lossy conversion.
+# Int .2, cast Int .2 and [Int].[.2] reject lossy conversion.
 print (Int (floor .2))               # => 0
 
 # Collection assignments evaluate variable and computed indices in the old scope.

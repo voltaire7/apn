@@ -2,9 +2,10 @@ import { Interpreter } from "../src/interp.ts";
 import { parse } from "../main.ts";
 
 const sourcePrograms = [
+    '[10,20,30] [2,1]', '[[(x -> x + 1)], [(x -> x * 2)]].[[3],[4]]',
     "2 ^ 3 ^ 2", "-2 ^ 2", "2 ^ -3",
-    '[c -> c] "a😀é"', '[c -> 42] "hi"', '[(c -> c), (c -> c)] "hi"',
-    '0 123', '[x -> x * 2] [1,2,3]', '[(x -> x + 1), (x -> x * 2)] [3,4]',
+    '[c -> c, c -> c, c -> c]."a😀é"', '[c -> 42, c -> 42]."hi"', '[(c -> c), (c -> c)]."hi"',
+    '0 123', '[x -> x * 2, x -> x * 2, x -> x * 2].[1,2,3]', '[(x -> x + 1), (x -> x * 2)].[3,4]',
     '42', '1 + 2 * 3', '(1 + 2) * 3', '-12 + 5', '1 / 3 + 1 / 6',
     'true ? 42 : missing', 'false ? missing : 7', '!false', '[]',
     '"hello" ++ " world"', '[1,2 + 3,7]', 'head [42,missing]',
@@ -38,7 +39,7 @@ for (const source of ['foo =', '1 +', '[1,2', '"unterminated', '1.2', '1; 2', 'm
         throw new Error("Expected a syntax/runtime error");
     });
 }
-for (const source of ['20 + 22', 'id x = x; id 42', 'true ? 42 : missing', 'head ([x -> x * 2] [21])', 'head ([c -> 42] "hi")']) {
+for (const source of ['20 + 22', 'id x = x; id 42', 'true ? 42 : missing', 'head ([x -> x * 2].[21])', 'head ([c -> 42, c -> 42]."hi")']) {
     Deno.test(`evaluator evaluates its own source, then: ${source}`, () => {
         const i = new Interpreter(); i.run(parse('import "std/meta"'));
         i.env.setLocal("evaluatorSource", { kind: "string", v: Deno.readTextFileSync(new URL("../lib/meta/evaluator.apn", import.meta.url)) });

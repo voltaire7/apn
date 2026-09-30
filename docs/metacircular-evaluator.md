@@ -105,3 +105,8 @@ host's bounded evaluation-depth limit is 512, raised from 200 to accommodate
 these nested interpreters; it is not unlimited recursion. Deep programs can
 still hit that limit. Sequence operations that require the end of an infinite
 input still do not terminate.
+
+List application selects indices, including a list of indices. Dotted list templates
+use a separate `template` AST tag and `meTemplate`; they still apply object-language
+closures through `meApply`. The reader supports bracket, string, and parenthesized
+template inputs. Record plucks remain outside this core subset.

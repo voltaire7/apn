@@ -180,3 +180,12 @@ Deno.test("rebound indices keep lazy aliases dynamic", () => {
     const i = new Interpreter();
     if (i.renderString(i.run(parseDocument(source))) !== "[1, 2, 3]") throw new Error("lazy alias changed");
 });
+
+Deno.test('gradual checking accepts list selection and atomic swaps', () => {
+    const checked = checkSource('arr = [1,2,3]; arr [1,2] = arr [2,1]; arr [2,0]');
+    if (checked.issues.length) throw new Error(JSON.stringify(checked.issues));
+});
+Deno.test('gradual checking rejects a known multi-index bounds error', () => {
+    const checked = checkSource('arr = [1,2]; arr [0,2] = [3,4]');
+    if (!checked.issues.some(x => x.message.includes('out of range'))) throw new Error(JSON.stringify(checked));
+});

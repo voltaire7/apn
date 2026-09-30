@@ -8,14 +8,16 @@ meScope definitions parent = {
 }
 meList scope expressions = null expressions ? [] : meCons (meEval scope (head expressions)) (meList scope (tail expressions))
 meClosure parameter body scope = HashMap [["__closure", true], ["parameter", parameter], ["body", body], ["scope", scope]]
-meMapTemplate function values = null values ? [] : meCons (meApply function (head values)) (meMapTemplate function (tail values))
-meZipTemplate functions values = null functions ? (null values ? [] : fail "list template and input must have the same length") : null values ? fail "list template and input must have the same length" : meCons (meApply (head functions) (head values)) (meZipTemplate (tail functions) (tail values))
-meTemplate functions values = null functions ? meZipTemplate functions values : null (tail functions) ? meMapTemplate (head functions) values : meZipTemplate functions values
-meApply function argument = typeOf function == HashMap ? has "__closure" function ? meEval (insert [[lookup "parameter" function, argument]] (lookup "scope" function)) (lookup "body" function) : function argument : typeOf function == typeOf [] ? (typeOf argument == typeOf [] ? meTemplate function argument : typeOf argument == typeOf "text" ? meTemplate function (chars argument) : function argument) : function argument
+meZipTemplate functions values = null functions ? (null values ? [] : fail "list template and input must have the same length") : null values ? fail "list template and input must have the same length" : meCons (meTemplateSlot (head functions) (head values)) (meZipTemplate (tail functions) (tail values))
+meTemplateInput value = typeOf value == typeOf "text" ? chars value : value
+meTemplate functions values = meZipTemplate functions values
+meTemplateSlot function argument = typeOf function == typeOf [] ? meTemplate function (meTemplateInput argument) : meApply function argument
+meApply function argument = typeOf function == HashMap ? has "__closure" function ? meEval (insert [[lookup "parameter" function, argument]] (lookup "scope" function)) (lookup "body" function) : function argument : function argument
 meEval scope expression = lookup (head expression) (HashMap [
     ["literal", expression 1],
     ["variable", lookup (expression 1) scope],
     ["lambda", meClosure (expression 1) (expression 2) scope],
+    ["template", meTemplate (meEval scope (expression 1)) (meTemplateInput (meEval scope (expression 2)))],
     ["apply", meApply (meEval scope (expression 1)) (meEval scope (expression 2))],
     ["if", meEval scope (expression 1) ? meEval scope (expression 2) : meEval scope (expression 3)],
     ["list", meList scope (expression 1)],

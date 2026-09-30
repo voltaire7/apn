@@ -49,7 +49,7 @@ for (const [source, message] of [
     ['obj = [x: 1]\nobj."x"', "no field"],
     ['obj = ["x": 1]\nobj.x', "no field 'x'"],
     ['obj = ["x": 1]\nobj "x"', "no field 'x'"],
-    ['arr = [10, 20]\narr "0"', 'numeric template expects a number'],
+    ['arr = [10, 20]\narr "0"', 'indexing a list needs an integer'],
     ['[x] = ["x": 1]', 'pattern'],
     ['f [x: v] = v\nf ["x": 1]', 'no clause'],
     ['f ["x": v] = v\nf [x: 1]', 'no clause'],

@@ -278,6 +278,7 @@ export class Interpreter {
             case "int": return { t: "int", v: pattern.v };
             case "string": return { t: "string", v: pattern.v };
             case "bool": return { t: "bool", v: pattern.v };
+            case "list": return { t: "list", v: pattern.v.map(p => this.assignmentKey(p)) };
             case "typeBind": return { t: "app", f: { t: "var", name: pattern.name }, a: this.assignmentKey(pattern.value) };
             case "constr": return pattern.args.reduce<Expr>((f, arg) => ({ t: "app", f, a: this.assignmentKey(arg) }), { t: "var", name: pattern.tag });
             default: throw new APNError("runtime", "collection assignment needs an index expression, not a destructuring pattern");
@@ -345,6 +346,30 @@ export class Interpreter {
 
     private assignItem(collection: Value, key: Value, expression: Expr): Value {
         if (this.isList(collection)) {
+            if (this.isList(key)) {
+                // Resolve indices and RHS against the old binding, then publish one copy.
+                const indices = this.items(key).map(value => {
+                    const index = this.listIndex(this.dataValue(value));
+                    if (index === undefined) throw new APNError("runtime", "list assignment needs integer indices or enumeration values");
+                    this.index(collection, index); // bounds without demanding the element
+                    return index;
+                });
+                let rest = this.dataValue(this.eval(expression));
+                if (!this.isList(rest)) throw new APNError("runtime", "multi-index assignment needs a list of values");
+                const values: Value[] = [];
+                for (const _index of indices) {
+                    const cell = this.cell(rest);
+                    if (!cell) throw new APNError("runtime", "index count does not match value count");
+                    values.push(this.demand(cell.head));
+                    rest = cell.tail;
+                }
+                if (this.cell(rest)) throw new APNError("runtime", "index count does not match value count");
+                // Check each conversion against its original slot, even for duplicate indices.
+                const checked = indices.map((index, n) => this.setIndex(collection, index, values[n]));
+                let result = collection;
+                for (let n = 0; n < indices.length; n++) result = this.setIndex(result, indices[n], this.index(checked[n], indices[n]));
+                return result;
+            }
             const index = this.listIndex(key);
             if (index === undefined) throw new APNError("runtime", "list assignment needs an integer index or a nullary variant from an enumeration");
             const value = this.demand(this.eval(expression));
@@ -690,13 +715,22 @@ export class Interpreter {
                     case "recordAccess": {
                         // Resolve aliases/actions to the outer record, leaving its fields lazy.
                         const rec = this.dataValue(this.eval(e.rec));
+                        if (this.isList(rec) && e.argument) {
+                            r = this.templateList(rec, this.eval(e.argument));
+                            break;
+                        }
                         if (rec.kind !== "record") throw new Error("record access on non-record");
                         r = this.recordField(rec, e.field);
                         break;
                     }
                     case "pluck": {
                         let rec = this.dataValue(this.eval(e.rec));
-                        if (rec.kind !== "record") throw new Error("pluck on non-record");
+                        if (this.isList(rec) && e.values) {
+                            r = this.templateList(rec, this.eval(e.values));
+                            break;
+                        }
+                        if (rec.kind !== "record") throw new Error("dotted application expects a list or record");
+                        if (e.quoted === false) throw new Error("record selection expects literal field names");
                         const byKey = new Map(rec.v);
                         if (e.entries.every((x) => typeof x === "string")) {
                             const out: Value[] = [];
@@ -1172,13 +1206,8 @@ export class Interpreter {
                 const value = this.dataValue(arg);
                 const index = this.listIndex(value);
                 if (index !== undefined) return this.index(f, index);
-                const carg = value.kind === "string" ? this.callNative("chars", [value]) : value;
-                if (this.isList(carg)) {
-                    const first = this.cell(f);
-                    if (first !== null && this.cell(first.tail) === null) return this.mapList(first.head, carg);
-                    return this.applyListTemplate(f, carg);
-                }
-                throw new APNError("runtime", "indexing a list needs an int or a nullary variant from an enumeration; template application needs a list or string");
+                if (this.isList(value)) return this.selectList(f, value);
+                throw new APNError("runtime", "indexing a list needs an integer, enumeration value, or list of indices; use .[...] for list templates");
             }
             case "record": {
                 // Strings select named fields; lists/records clone, ints select entries.
@@ -1192,14 +1221,14 @@ export class Interpreter {
                     if (carg.v.length !== 0 && carg.v.length !== f.v.length) {
                         throw new Error(`Runtime: field count (${f.v.length}) does not match list size (${carg.v.length})`);
                     }
-                    return { kind: "record", v: f.v.map(([k, template], i) => [k, this.defer(() => i < carg.v.length ? this.apply(template, carg.v[i]) : this.defaultField(template, []))] as [string, Value]) };
+                    return { kind: "record", v: f.v.map(([k, template], i) => [k, this.defer(() => i < carg.v.length ? this.applyTemplateSlot(template, carg.v[i]) : this.defaultField(template, []))] as [string, Value]) };
                 }
                 if (carg.kind === "record") {
                     const idx = new Map(f.v.map(([k], i) => [k, i]));
                     const out: [string, Value][] = f.v.map(([k, template]) => [k, this.defer(() => this.defaultField(template, []))]);
                     for (const [k, v] of carg.v) {
                         const i = idx.get(k);
-                        if (i !== undefined) out[i] = [k, this.defer(() => this.apply(f.v[i][1], v))]; else out.push([k, v]);
+                        if (i !== undefined) out[i] = [k, this.defer(() => this.applyTemplateSlot(f.v[i][1], v))]; else out.push([k, v]);
                     }
                     return { kind: "record", v: out };
                 }
@@ -1503,7 +1532,8 @@ export class Interpreter {
             }
             return this.constructType(type.name, actual);
         }
-        if (this.isList(type) || type.kind === "record") return this.apply(type, value);
+        if (this.isList(type)) return this.templateList(type, value);
+        if (type.kind === "record") return this.apply(type, value);
         if (type.kind !== "functionType") throw new APNError("runtime", "expected a type constructor");
         const target = this.force(value);
         if (!this.matchesValueType("Function", target)) throw new APNError("runtime", "function contract expects a function");
@@ -1578,12 +1608,6 @@ export class Interpreter {
         }
         if (this.isList(type)) {
             if (!this.isList(value)) return false;
-            const first = this.cell(type);
-            if (!first) return this.cell(value) === null;
-            if (!this.cell(first.tail)) {
-                for (const element of this.elements(value)) if (!this.belongsToType(first.head, element)) return false;
-                return true;
-            }
             for (;;) {
                 const field = this.cell(type), element = this.cell(value);
                 if (!field || !element) return field === element;
@@ -2057,6 +2081,34 @@ export class Interpreter {
         }));
     }
 
+    selectList(values: Value, indices: Value): Value {
+        return this.defer(() => {
+            const cell = this.cell(indices);
+            if (cell === null) return mkList([]);
+            return {
+                kind: "cons",
+                head: this.defer(() => {
+                    const index = this.listIndex(this.dataValue(cell.head));
+                    if (index === undefined) throw new APNError("runtime", "list selection needs integer indices or enumeration values");
+                    return this.index(values, index);
+                }),
+                tail: this.selectList(values, cell.tail),
+            };
+        });
+    }
+
+    applyTemplateSlot(template: Value, value: Value): Value {
+        const target = this.force(template);
+        return this.isList(target) ? this.templateList(target, value) : this.apply(target, value);
+    }
+
+    templateList(templates: Value, values: Value): Value {
+        const input = this.dataValue(values);
+        const list = input.kind === "string" ? this.callNative("chars", [input]) : input;
+        if (!this.isList(list)) throw new APNError("runtime", "list template expects a list or string");
+        return this.applyListTemplate(templates, list);
+    }
+
     // Multi-slot templates zip positionally. Shape errors appear when that
     // spine is demanded, without traversing infinite inputs or forcing heads.
     applyListTemplate(templates: Value, values: Value): Value {
@@ -2064,7 +2116,7 @@ export class Interpreter {
             const template = this.cell(templates), value = this.cell(values);
             if (template === null && value === null) return mkList([]);
             if (template === null || value === null) throw new APNError("runtime", "list template and input must have the same length");
-            return { kind: "cons", head: this.defer(() => this.apply(template.head, value.head)), tail: this.applyListTemplate(template.tail, value.tail) };
+            return { kind: "cons", head: this.defer(() => this.applyTemplateSlot(template.head, value.head)), tail: this.applyListTemplate(template.tail, value.tail) };
         });
     }
 

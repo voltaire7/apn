@@ -122,8 +122,9 @@ intentional evaluation change.
   Full traversals (length, negative indexing, etc.) need finite inputs to finish.
 - **Indexing**: applying a LIST to an int indexes it — `nums 0` is the first
   element, `nums (-1)` the last (negative counts from the end; the parens are
-  needed because `nums -1` is a subtraction). List-to-list application is
-  TEMPLATE application, not multi-indexing: use `map nums [0, 2]` to pick indexes.
+  needed because `nums -1` is a subtraction). List-to-list application selects indices: `nums [0, 2]`.
+  Multi-index assignment reads RHS against the old binding and publishes atomically;
+  duplicates use the last value. Dotted list application is the explicit template form.
 - **No tuples.** `(a, b)` is invalid — parens are only for grouping/calls.
   Mixed values go in lists: `[213, "hello"]`.
 - **Groups / blocks — `( )` and `{ }` are interchangeable.** Both are a
@@ -539,7 +540,7 @@ Tests: tests/record-keys-test.ts and tests/record-assignment-test.ts.
 
 The default prelude embeds lib/type.apn and lib/do.apn. Editor launchers must
 allow Deno to read both text imports. cast is a clauseFn, not a native; its
-source is `cast (Type target) value = target value`. Expose std/type
+clauses validate list templates with Type and dispatch to `(Type target).(value)` and other types to `target value`. Expose std/type
 through module loading and browser bundles. numericPayload removes numeric
 annotations without changing the original value. Numeric patterns extract
 payloads after conversion; explicit result constructors reapply result types.
@@ -549,15 +550,16 @@ Numeric equality ignores these annotations. See tests/language-cast-test.ts.
 
 See docs/templates-and-types.md and tests/template-application-test.ts. Scalar
 numbers apply by returning the incoming number, with typed numbers reapplying
-their constructor. Other scalar kinds accept same-kind replacements. [f] maps
-lazily; longer/empty lists zip exactly. Strings supply Unicode code-point chars
+their constructor. Other scalar kinds accept same-kind replacements. Dotted templates zip exactly at every length, including one; [f].[x,y] is
+a length error. Use f * xs or map f xs for mapping. Ordinary list application indexes. Strings supply Unicode code-point chars
 through the existing chars primitive. Integer application remains indexing.
 Record application transforms supplied slots, initializes omitted type slots, appends
 new fields, and preserves every character of string keys. Assignments replace ordinary and bare-constructor
 slots before publishing a scoped copy; implicitly or explicitly typed numbers, variants,
 and function contracts retain their conversion checks. Never invoke a stored action
 or merge a record merely to replace its slot.
-No element schema is attached to the output: [Int] [] is an ordinary empty list.
+No element schema is attached to dotted-template output. [Int] has exactly one
+slot, including in type membership and conformance. [Int].[] is a length error.
 
 Capitalized aliases are stable type-level bindings. Type-only container values
 are accepted as descriptions by Type, cast, isType, and schema patterns. Variant
@@ -566,7 +568,7 @@ creates a family descriptor with arguments and applies lazy payload contracts;
 unspecialized constructors remain polymorphic. A leading | marks single
 constructor declarations. Keep family identity separate from constructor names.
 
-The metacircular evaluator handles list templates through its own meApply so
+The metacircular evaluator handles list templates through its template AST and meTemplate so
 object-language closures work. Run its self-evaluation demo when changing it.
 
 ## Tail execution
@@ -687,3 +689,9 @@ preserves its contract through index updates/typeOf. Schema patterns resolve
 prior argument bindings in a temporary scope. Aliases accept ordinary values;
 variant specialization keeps its existing type-only parameter behavior.
 See docs/gradual-and-dependent-types.md and tests/gradual-types-test.ts.
+
+Dotted bracket nodes carry both expression inputs (for lists) and quoted selection
+entries (for records). Evaluate only the branch selected by the left operand;
+record plucks must never evaluate field identifiers. Parenthesized/string dot inputs
+also apply list templates while retaining literal record-key meaning. Keep source
+printing, gradual checking, and the APN metacircular template AST in sync.

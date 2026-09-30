@@ -13,7 +13,7 @@ mpLexStepRaw state char = {
     [flushed] = [mpFlush state]
     [newline] = [c == "\n"]
     [space] = [contains char (chars " \t\r\n")]
-    [punctuation] = [contains char (chars "()[]{},;")]
+    [punctuation] = [contains char (chars "()[]{},;.")]
     [word] = [contains char (chars "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789")]
     [kind] = [word ? "word" : "symbol"]
     state.mode == "comment" ? (newline ? mpLexStep (mpState "code" "" state.tokens "" state.depth) char : state) : state.mode == "escape" ? mpState "string" (state.buffer ++ (c == "n" ? "\n" : c == "t" ? "\t" : c == "r" ? "\r" : c)) state.tokens "" state.depth : state.mode == "string" ? (c == "\\" ? mpState "escape" state.buffer state.tokens "" state.depth : c == "\"" ? mpState "code" "" (_prepend (mpToken "literal" state.buffer) state.tokens) "" state.depth : mpState "string" (state.buffer ++ c) state.tokens "" state.depth) : c == "#" ? mpState "comment" "" flushed.tokens "" state.depth : c == "\"" ? mpState "string" "" flushed.tokens "" state.depth : space ? (newline ? (state.depth == 0 ? mpState "code" "" (_prepend (mpToken "symbol" ";") flushed.tokens) "" 0 : flushed) : flushed) : punctuation ? mpState "code" "" (_prepend (mpToken "symbol" c) flushed.tokens) "" (state.depth + (c == "(" ? 1 : c == "[" ? 1 : c == ")" ? -1 : c == "]" ? -1 : 0)) : state.kind == kind ? mpState "code" (state.buffer ++ c) state.tokens kind state.depth : mpState "code" c flushed.tokens kind state.depth
@@ -41,7 +41,10 @@ mpExpr minimum stop tokens = {
 mpMore minimum stop left tokens = {
     [op] = [mpText tokens]
     [precedence] = [mpPrec op]
-    op == stop ? [left, tokens] : precedence >= minimum ? (precedence > 0 ? mpOperator minimum stop left tokens : mpApplication minimum stop left tokens) : mpApplication minimum stop left tokens
+    op == stop ? [left, tokens] : op == "." ? {
+        argument = mpAtom (tail tokens)
+        mpMore minimum stop ["template", left, fst argument] (snd argument)
+    } : precedence >= minimum ? (precedence > 0 ? mpOperator minimum stop left tokens : mpApplication minimum stop left tokens) : mpApplication minimum stop left tokens
 }
 mpApplication minimum stop left tokens = minimum <= 9 ? mpStarts tokens ? {
     [argument] = [mpExpr 10 stop tokens]

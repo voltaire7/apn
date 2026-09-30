@@ -60,8 +60,8 @@ assigning `Int` to it fails with `cannot convert Type to Float`.
 | `Pointer` | `Pointer 0x0` (null; dereferencing still errors) |
 
 These are construction defaults, not alternate meanings of bare type names.
-`[Int]` remains `[Int]`; `[Int] [1,2,3]` maps the constructor, and `[Int] []`
-returns an empty list without a hidden element schema.
+`[Int]` remains a one-element list. `[Int].[1]` constructs one value;
+`[Int].[1,2,3]` and `[Int].[]` are length errors. Use `Int * [1,2,3]` to map.
 
 Int and Float values omit their type labels in output. Specialized numeric types
 retain their labels. All annotations participate in checked arithmetic.

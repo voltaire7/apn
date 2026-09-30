@@ -31,8 +31,8 @@ export type Expr =
     | { t: "ternary"; cond: Expr; then: Expr; els: Expr }
     | { t: "list"; v: Expr[] }
     | { t: "record"; v: Array<[string, Expr]> }
-    | { t: "recordAccess"; rec: Expr; field: string }
-    | { t: "pluck"; rec: Expr; entries: Array<string | [string, string]> }
+    | { t: "recordAccess"; rec: Expr; field: string; argument?: Expr }
+    | { t: "pluck"; rec: Expr; entries: Array<string | [string, string]>; values?: Expr; quoted?: boolean }
     | { t: "setItem"; rec: Expr; index: Expr; value: Expr }
     | { t: "setFields"; rec: Expr; entries: string[]; value: Expr }
     | { t: "floatRange"; lo: number; step: number; hi: number | null }

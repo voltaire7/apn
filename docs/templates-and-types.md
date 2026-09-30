@@ -28,43 +28,41 @@ construction `Int .2` also errors; use `Int (floor .2)` to round down explicitly
 
 | Template | Application |
 | --- | --- |
-| `[f] xs` | Apply `f` to every element, lazily |
-| `[f, g] [x, y]` | Apply positionally: `[f x, g y]` |
-| `[] []` | Empty list |
-| `[] [x]` | Length mismatch |
+| `[f].[x]` | One slot: `[f x]` |
+| `[f, g].[x, y]` | Two slots: `[f x, g y]` |
+| `[].[]` | Empty list |
+| `[f].[]` or `[f].[x,y]` | Length mismatch |
 
 ```apn
-[(* 2)] [1, 2, 3, 4]     # [2, 4, 6, 8]
-[Int] [1, 2, 3]           # [1, 2, 3]
-[Int, String] [1, "hi"]   # [1, "hi"]
-[[(* 2)]] [[1, 2], [3]]  # [[2, 4], [6]]
-take 3 ([Int] [0..])      # [0, 1, 2]
+[(* 2), (* 3)].[1, 2]   # [2, 6]
+[Int, String].[1, "hi"] # [1, "hi"]
+Int * [1, 2, 3]         # mapping, separate from template application
+map Int [0..]           # lazy mapping over an infinite list
 ```
 
-A singleton template maps over any input length. Every other length uses exact
-positional matching. Output heads and tails are deferred; mismatch or conversion
-errors surface when the relevant part is consumed. Finite prefixes of infinite
-inputs remain usable. A template is itself a value, so determining whether it
-is a singleton demands its first two spine cells, but not its element bodies.
+Every template length, including one, uses exact positional matching. Output
+heads and tails are deferred; mismatch or conversion errors surface when the
+relevant part is consumed. A singleton never broadcasts. `[Int]` describes
+exactly one position when used as a schema, including through `cast` and `isType`.
+Nested list templates use the same exact-length rule.
 
-Strings can supply the input characters using the same rules:
+Strings supply Unicode code-point characters using the same positional rules:
 
 ```apn
-[Char] "hello"          # ['h', 'e', 'l', 'l', 'o']
-[Char, Char] "hi"       # ['h', 'i']
-[c -> 42] "hi"          # [42, 42]
-[Char] ""               # []
+[Char, Char]."hi"       # ['h', 'i']
+[Char]."h"              # ['h']
+[].""                  # []
+chars "hello"           # arbitrary-length character conversion
 ```
 
-Characters follow Unicode code points, like `chars`; an emoji is one element.
-The result is a list, and element transformations remain lazy. Positional
-length checks still apply. This also works through aliases and `cast [Char]`.
+A template is an ordinary list value. Use `template.(values)` for a computed
+input. On records, parenthesized dot keys retain their literal spelling.
 `String` converts a finite character list back to text, using `fromChars`:
 
 ```apn
 import "std/text"
 cast String $ chars "hello"          # "hello"
-cast String $ cast [Char] $ "hello"  # "hello"
+cast String $ cast [Char, Char] $ "hi"  # "hi"
 String ['h', 'i']                    # "hi"
 String []                            # ""
 ```
@@ -73,8 +71,25 @@ Every element must be a `Char`; lists of strings or numbers are rejected.
 Constructing a string consumes the entire list.
 
 Integer application still indexes a list: `[10] 0` returns `10`.
-List-to-list application no longer selects indexes: `[10] [0]` returns `[0]`.
-Use `map xs [0, 2]` to select multiple indexes from `xs`; it always returns a list.
+A list argument selects multiple indices: `[10,20,30] [2,0]` returns `[30,10]`.
+Selection is lazy and preserves index order and duplicates. Integer and enumeration
+indices use the same rules as single indexing; negative indices require a finite input.
+Dotted application explicitly selects template behavior: `[10].[0]` returns `[0]`.
+For computed template inputs use `template.(values)`. This overload is only for
+lists; `record.(key)` remains a literal parenthesized field name.
+
+Multi-index assignment reads indices and replacement values against the old binding:
+
+```apn
+arr = [10,20,30]
+arr [1,2] = arr [2,1]   # arr becomes [10,30,20]
+```
+
+Assignment requires a finite index list and exactly as many replacement values.
+Bounds and outer conversion failures leave the binding unchanged. Duplicate indices
+are written in order, so the last value wins. Positive indices can update a finite
+prefix of an infinite list without demanding the remaining tail. Separate side effects
+performed while evaluating arguments are not rolled back.
 
 ## Records
 
@@ -102,7 +117,7 @@ their conversion checks; variants retain their family and wrapped functions
 retain their contracts:
 
 ```apn
-xs = [Int] [0]
+xs = [Int].[0]
 xs 0 = floor .2                 # [0]
 xs 0 = 123                # [123]
 
@@ -146,8 +161,8 @@ require an existing collection. Assignment accepts exactly one index/key.
 New record fields are inserted as given. List updates never append: `xs 1 = 4`
 on the one-slot list above is an error. Negative indexes still count from the end.
 
-There is no persistent container schema. `[Int] []` returns an ordinary empty
-list, and an update at index zero fails. After transformation, a function slot is
+Dotted templates return ordinary lists without a persistent container schema.
+`[].[]` is empty, and an update at index zero fails; `[Int].[]` is a length error. After transformation, a function slot is
 replaced by its result:
 
 ```apn
@@ -172,9 +187,9 @@ Point = [x: Float, y: Float]
 Points = [Point]
 
 Count 123                  # 123
-Numbers [1, 2]             # [1, 2]
+Numbers.[1, 2]             # [1, 2]
 Point [x: 1, y: 2]         # [x: 1.0, y: 2.0]
-cast [Int] [1, 2]          # [1, 2]
+cast [Int, Int] [1, 2]          # [1, 2]
 Type [Int]                # [Int]
 isType Type [(* 2)]        # false
 ```
