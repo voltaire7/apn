@@ -20,8 +20,8 @@ for (const [source, expected] of [
     ['make x = env; scope <- make 42; scope.x = 7; scope.x', '7'],
     ['make x = { get ignored = x; env }; scope <- make 42; scope.x = 7; scope.get []', '7'],
     ['scope <- { local = 42; env }; scope.local', '42'],
-    ['a = 1; b = 2; oldA <- a; env.a = b; env.b = oldA; [a,b]', '[2, 1]'],
-    ['x = 1; map env ["x"]', '[1]'],
+    ['a = 1; b = 2; env.[a,b] = env.[b,a]; [a,b]', '[2, 1]'],
+    ['x = 1; env.[x]', '[1]'],
     ['scope <- env; [scope == env, typeOf scope]', '[true, Record]'],
     ['env.head [42]', '42'],
     ['scope <- env; { local = 42; env.local }; scope == env', 'true'],
@@ -32,7 +32,7 @@ for (const [source, expected] of [
 Deno.test('environment conversions fail atomically', () => {
     const i = new Interpreter();
     i.run(parseDocument('a = 1; b = 2'));
-    try { i.run(parseDocument('env.b = 1.5')); } catch (e) {
+    try { i.run(parseDocument('env.[a,b] = [3, 1.5]')); } catch (e) {
         if (!String(e).includes('lossy conversion')) throw e;
         if (i.renderString(i.run(parseDocument('[a,b]'))) !== '[1, 2]') throw new Error('partial write');
         return;

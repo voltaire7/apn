@@ -435,15 +435,44 @@ class Parser {
         return f;
     }
 
-    // Dot access quotes the complete field spelling, including delimiters.
+    // Postfix:  quoted OBJECT access  a.b, a."b", a.123  and the
+    // quoted PLUCK
+    //   a.[x, y]            -> list of those fields' values
+    //   a.[x: v1, y: v2]    -> smaller object: field x kept under the key v1
     parsePostfix(e: Expr): Expr {
-        while (this.eatSym(".")) {
-            e = { t: "recordAccess", rec: e, field: this.parseKey() };
+        while (this.isSym(".")) {
+            this.next();
+            const t = this.peek();
+            if (t.k === "sym" && (t as { v: string }).v === "[") {
+                this.next(); // [
+                this.skipListLeading();
+                const entries: Array<string | [string, string]> = [];
+                while (!this.isSym("]")) {
+                    const key = this.parseKey();
+                    if (this.isSym(":")) {
+                        this.next();
+                        const dst = this.next();
+                        if (dst.k !== "ident") throw new Error("Parser: expected a name after ':' in pluck");
+                        entries.push([key, dst.v]);
+                    } else {
+                        entries.push(key);
+                    }
+                    this.skipListSeparators();
+                    if (this.isSym("]")) break;
+                    if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside pluck");
+                }
+                this.next(); // ]
+                const mixed = new Set(entries.map((x) => typeof x));
+                if (mixed.size > 1) throw new Error("Parser: pluck cannot mix bare names and 'key: name' pairs");
+                e = { t: "pluck", rec: e, entries };
+            } else {
+                e = { t: "recordAccess", rec: e, field: this.parseKey() };
+            }
         }
         return e;
     }
 
-    // Parentheses and brackets quote their complete spelling, without evaluation.
+    // Parentheses quote their complete spelling, rather than evaluating an expression.
     parseKey(): string {
         const t = this.next();
         if (t.k === "sym" && t.v === "-") {
@@ -451,12 +480,12 @@ class Parser {
             if (number.k !== "int" && number.k !== "float") throw new Error("Parser: expected a numeric field name after '-'");
             return "-" + this.keyTok(number);
         }
-        if (t.k === "sym" && (t.v === "(" || t.v === "[")) {
-            const closes = [t.v === "(" ? ")" : "]"];
+        if (t.k === "sym" && t.v === "(") {
+            const closes = [")"];
             const pairs: Record<string, string> = { "(": ")", "[": "]", "{": "}" };
             while (closes.length) {
                 const token = this.next();
-                if (token.k === "eof") throw new Error("Parser: unclosed delimited field name");
+                if (token.k === "eof") throw new Error("Parser: unclosed parenthesized field name");
                 if (token.k !== "sym") continue;
                 if (pairs[token.v]) closes.push(pairs[token.v]);
                 else if ([")", "]", "}"].includes(token.v)) {
@@ -820,7 +849,7 @@ class Parser {
     // parenthesized/constructed pattern, or a DECLARED constructor applied to
     // args) is. An undeclared Uppercase LHS like `Vector3 x y z = ...` is a
     // record-constructor function def, not a pattern.
-    // Field ASSIGNMENT statement:  name.field = expr   name.[fs] = expr
+    // Field/pluck ASSIGNMENT statement:  name.field = expr   name.[fs] = expr
     // Desugars to an EAGER pattern binding  name = setFields(name, ...)  so the
     // rebinding is scoped like any def (block statements shadow the outer name).
     isFieldAssignStart(): boolean {
@@ -829,7 +858,14 @@ class Parser {
         try {
             this.next();
             if (!this.eatSym(".")) return false;
-            this.parseKey();
+            if (this.eatSym("[")) {
+                this.skipListLeading();
+                while (!this.isSym("]")) {
+                    this.parseKey();
+                    this.skipListSeparators();
+                }
+                this.next();
+            } else this.parseKey();
             return this.isSym("=");
         } catch { return false; }
         finally { this.i = saved; }
@@ -840,11 +876,27 @@ class Parser {
         if (nt.k !== "ident") throw new Error("Parser: expected a name before '.'");
         const name = nt.v;
         this.next(); // "."
-        const entries = [this.parseKey()];
+        const entries: string[] = [];
+        if (this.isSym("[")) {
+            this.next();
+            this.skipListLeading();
+            while (!this.isSym("]")) {
+                entries.push(this.parseKey());
+                this.skipListSeparators();
+                if (this.isSym("]")) break;
+                if (this.peek().k === "eof") {
+                    throw new Error("Parser: unexpected end of file inside field-assignment entries");
+                }
+            }
+            this.next(); // ]
+        } else {
+            entries.push(this.parseKey());
+        }
         this.expectSym("=");
         const rhs = this.parseExpr();
-        // The internal updater takes a list, even for a single literal key.
-        const value: Expr = { t: "list", v: [rhs] };
+        // one field takes its value directly; several fields take a LIST of
+        // values — normalize the single form into the list form
+        const value = entries.length === 1 ? { t: "list", v: [rhs] } as Expr : rhs;
         return {
             t: "patDef",
             pattern: { p: "var", name },
@@ -1182,7 +1234,7 @@ class Parser {
                     this.parseFullType();
                     continue;
                 }
-                // Field assignment:  vec.x = 10   vec.[x, y] = ...
+                // Field/pluck assignment:  vec.x = 10   vec.[x, y] = ...
                 if (this.isFieldAssignStart()) {
                     out.push(this.parseFieldAssign() as TopLevel);
                     continue;
@@ -1354,6 +1406,8 @@ export function exprToSource(e: Expr): string {
         case "pipe": return `${exprToSource(e.f)} $ ${exprToSource(e.x)}`;
         case "recordAccess":
             return `${exprToSource(e.rec)}.${keySource(e.field)}`;
+        case "pluck":
+            return `${exprToSource(e.rec)}.[${e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`).join(", ")}]`;
         case "setItem": return `${exprToSource(e.rec)} (${exprToSource(e.index)}) = ${exprToSource(e.value)}`;
         case "setFields":
             return `${exprToSource(e.rec)}.${e.entries.length === 1 ? keySource(e.entries[0]) : `[${e.entries.map(keySource).join(", ")}]`} = ${exprToSource(e.value)}`;
