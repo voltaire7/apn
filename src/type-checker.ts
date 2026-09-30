@@ -539,8 +539,9 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                 return { k: "record", fields };
             }
         }
-        // Scalar template application is an existing APN operation.
-        if (f.k === "atom" && (NUMERIC_TYPES.includes(f.name) || ["String", "Char", "Bool"].includes(f.name))) {
+        // Numeric defaults are only replaceable inside container templates.
+        if (f.k === "atom" && NUMERIC_TYPES.includes(f.name)) return problem("cannot apply a number", e);
+        if (f.k === "atom" && ["String", "Char", "Bool"].includes(f.name)) {
             unify(f, argument.type, e);
             return argument.type;
         }

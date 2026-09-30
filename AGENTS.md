@@ -548,8 +548,8 @@ Numeric equality ignores these annotations. See tests/language-cast-test.ts.
 
 ## Template application and type aliases
 
-See docs/templates-and-types.md and tests/template-application-test.ts. Scalar
-numbers apply by returning the incoming number, with typed numbers reapplying
+See docs/templates-and-types.md and tests/template-application-test.ts. Numeric values reject ordinary application. Inside applyTemplateSlot, numeric
+defaults accept an incoming number, with explicitly typed defaults reapplying
 their constructor. Other scalar kinds accept same-kind replacements. Dotted templates zip exactly at every length, including one; [f].[x,y] is
 a length error. Use f * xs or map f xs for mapping. Ordinary list application indexes. Strings supply Unicode code-point chars
 through the existing chars primitive. Integer application remains indexing.

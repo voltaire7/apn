@@ -22,7 +22,7 @@ for (const [source, expected] of [
     ['Characters = [Char, Char]\nCharacters."hi"', "['h', 'i']"],
     ['cast [Char, Char] "hi"', "['h', 'i']"],
     ['typeOf ([Char, Char]."hi")', '[a]'],
-    ['0 123', '123'], ['(Int 0) (floor .2)', '0'], ['(Int32 0) 123', 'Int32 123'],
+    ['[0].[123]', '[123]'], ['[Int 0].[floor .2]', '[0]'], ['[Int32 0].[123]', '[Int32 123]'],
     ['"old" "new"', '"new"'], ['false true', 'true'], ["'a' 'b'", "'b'"],
     ['(* 2) * [1,2,3,4]', '[2, 4, 6, 8]'],
     ['Int * [1,2,3,4]', '[1, 2, 3, 4]'],
@@ -84,9 +84,9 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const [source, error] of [
-    ['(Int 0) (Float .2)', 'lossy conversion'],
-    ['(Int8 0) 128', 'out of range'],
-    ['0 "hi"', 'expects a number'],
+    ['[Int 0].[Float .2]', 'lossy conversion'],
+    ['[Int8 0].[128]', 'out of range'],
+    ['[0].["hi"]', 'expects a number'],
     ['false 1', 'bool template'],
     ['[Int, Int].[1]', 'same length'],
     ['[Int, Int].[1,2,3]', 'same length'],

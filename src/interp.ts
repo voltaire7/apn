@@ -1070,11 +1070,9 @@ export class Interpreter {
     apply(f: Value, arg: Value, probe = false, tail = false, tailLoad = false): Value | TailCall {
         // A lazy 0-param def used as a function (`f = g; f 1`) is a thunk — run it.
         f = this.force(f);
-        if (isNumeric(f)) {
-            const value = this.dataValue(arg);
-            if (!isNumeric(value)) throw new APNError("runtime", "a numeric template expects a number");
-            return f.typeName ? this.constructType(f.typeName, value) : value;
-        }
+        if (isNumeric(f)) throw new APNError("runtime", "cannot apply a number", {
+            hint: "use a type constructor such as Int, or replace a default inside a template",
+        });
         if (["string", "char", "bool"].includes(f.kind)) {
             const value = this.dataValue(arg);
             if (value.kind !== f.kind) throw new APNError("runtime", `${f.kind} template expects ${f.kind}, got ${value.kind}`);
@@ -2099,6 +2097,11 @@ export class Interpreter {
 
     applyTemplateSlot(template: Value, value: Value): Value {
         const target = this.force(template);
+        if (isNumeric(target)) {
+            const incoming = this.dataValue(value);
+            if (!isNumeric(incoming)) throw new APNError("runtime", "a numeric template expects a number");
+            return target.typeName ? this.constructType(target.typeName, incoming) : incoming;
+        }
         return this.isList(target) ? this.templateList(target, value) : this.apply(target, value);
     }
 

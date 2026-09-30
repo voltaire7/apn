@@ -1,21 +1,22 @@
 # Templates and type aliases
 
-Application works on scalar values and containers as well as functions.
-Container application applies each existing slot to its supplied input.
+Container construction applies callable slots and replaces concrete defaults.
+Numeric values themselves are not callable.
 
-## Scalar application
+## Concrete defaults
 
 ```apn
-0 123                 # 123
-(Int 0) 123           # 123
-(Int 0) (floor .2)    # 0
-(Int 0) (Float .2)    # error: lossy conversion
+0 123                       # error: cannot apply a number
+[0].[123]                   # [123]
+[Int 0].[floor .2]          # [0]
+[Int 0].[Float .2]          # error: lossy conversion
+[x: 0] [x: 123]             # [x: 123]
 "old" "new"           # "new"
 false true            # true
 ```
 
-An untyped number accepts any number unchanged. A typed number applies its
-constructor to the input: all inputs require lossless conversion. Overflow and nonzero imaginary-part
+Inside a template, an untyped numeric default accepts any number unchanged.
+An explicitly typed numeric default converts through its constructor: all inputs require lossless conversion. Overflow and nonzero imaginary-part
 loss still error. Strings, chars, and booleans accept their own kind only.
 Functions retain ordinary application, including effects.
 
