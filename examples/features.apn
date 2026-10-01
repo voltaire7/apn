@@ -1274,6 +1274,12 @@ print nestedUpdate                  # => [child: [x: 10.0, y: 2]]
 nestedUpdate.child.[x, y] = [20, 30]
 print nestedUpdate.child            # => [x: 20.0, y: 30]
 
+# String arguments look up association lists; integer arguments index them.
+associations = [["x", 1], ["y", 2]]
+print (associations "x")             # => 1
+print (associations 0)               # => ["x", 1]
+print ([["x", 1], ["x", 2]] "x")      # => 1 (first matching key)
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

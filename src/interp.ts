@@ -1215,7 +1215,8 @@ export class Interpreter {
                 const index = this.listIndex(value);
                 if (index !== undefined) return this.index(f, index);
                 if (this.isList(value)) return this.selectList(f, value);
-                throw new APNError("runtime", "indexing a list needs an integer, enumeration value, or list of indices; use .[...] for list templates");
+                if (value.kind === "string") return this.associationValue(f, value.v);
+                throw new APNError("runtime", "indexing a list needs an integer, enumeration value, list of indices, or association string key; use .[...] for list templates");
             }
             case "record": {
                 // Strings select named fields; lists/records clone, ints select entries.
@@ -2087,6 +2088,26 @@ export class Interpreter {
             kind: "cons", head: value,
             tail: this.defer(() => this.iterateList(f, this.defer(() => this.apply(this.demand(f), value)))),
         }));
+    }
+
+    private associationValue(entries: Value, key: string): Value {
+        let rest = entries;
+        for (;;) {
+            checkInterrupt();
+            const entry = this.cell(rest);
+            if (entry === null) throw new APNError("runtime", `association list has no key ${JSON.stringify(key)}`);
+            const pair = this.dataValue(entry.head);
+            if (!this.isList(pair)) throw new APNError("runtime", "association lookup expects [string, value] pairs");
+            const first = this.cell(pair);
+            const second = first && this.cell(first.tail);
+            if (!first || !second || this.cell(second.tail) !== null) {
+                throw new APNError("runtime", "association lookup expects [string, value] pairs");
+            }
+            const candidate = this.dataValue(first.head);
+            if (candidate.kind !== "string") throw new APNError("runtime", "association lookup expects string keys");
+            if (candidate.v === key) return second.head;
+            rest = entry.tail;
+        }
     }
 
     selectList(values: Value, indices: Value): Value {

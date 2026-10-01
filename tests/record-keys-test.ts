@@ -49,7 +49,7 @@ for (const [source, message] of [
     ['obj = [x: 1]\nobj."x"', "no field"],
     ['obj = ["x": 1]\nobj.x', "no field 'x'"],
     ['obj = ["x": 1]\nobj "x"', "no field 'x'"],
-    ['arr = [10, 20]\narr "0"', 'indexing a list needs an integer'],
+    ['arr = [10, 20]\narr "0"', 'association lookup expects'],
     ['[x] = ["x": 1]', 'pattern'],
     ['f [x: v] = v\nf ["x": 1]', 'no clause'],
     ['f ["x": v] = v\nf [x: 1]', 'no clause'],

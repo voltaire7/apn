@@ -350,6 +350,7 @@ function helpText(): string {
         `  [a, b] = value (destructuring binding; records match by field name)`,
         `  Just v = value (declared constructors destructure; capital defs are errors)`,
         `  [x: a, y: b] = value  (rename destructure: pull fields out of a record)`,
+        `  [["x", 1]] "x"  (association lookup; first matching string key)`,
         `  nums 0 / nums (-1) / nums [0, 2]   (single or multiple indices)`,
         `  [String, Int].["x", 1] / templates.values / templates.(expr)  (list templates)`,
         `  vec [1,2,3] / vec [z: 3, x: 1]   (apply a record = clone)`,

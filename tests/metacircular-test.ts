@@ -2,6 +2,7 @@ import { Interpreter } from "../src/interp.ts";
 import { parse } from "../main.ts";
 
 const sourcePrograms = [
+    '[["x", 1]] "x"',
     "templates = [x -> x * 2]; values = [3]; templates.values",
      '[10,20,30] [2,1]', '[[(x -> x + 1)], [(x -> x * 2)]].[[3],[4]]',
     "2 ^ 3 ^ 2", "-2 ^ 2", "2 ^ -3",

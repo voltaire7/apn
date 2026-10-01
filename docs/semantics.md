@@ -105,7 +105,10 @@ field. Include quote characters in the argument to select a quoted field.
 `obj.(key)` selects the literal key "(key)"; use `obj key` to evaluate a key. Missing keys
 raise an error. Numeric field names retain their existing normalized spelling.
 List indexing accepts integers or variants from families with only nullary constructors.
-Variants select by zero-based declaration order; `arr "0"` remains invalid.
+Variants select by zero-based declaration order. A string argument performs
+[association-list lookup](templates-and-types.md#association-list-lookup):
+`[["0", 42]] "0"` returns `42`; it never coerces `"0"` to positional index zero.
+Ordinary scalar lists such as `[10, 20]` are not association lists and reject string lookup.
 HashMap application likewise keeps numeric `0` and string `"0"` distinct keys.
 
 Printing preserves key quotation. Field updates (`obj.field = value`,

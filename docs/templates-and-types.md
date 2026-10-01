@@ -86,6 +86,31 @@ lists; `record.(key)` remains a literal parenthesized field name.
 
 For updates and swaps, see [computed keys and multiple indices](#computed-keys-and-multiple-indices).
 
+### Association-list lookup
+
+Applying a list to a string looks up the first matching `[string, value]` pair:
+
+```apn
+entries = [["x", 1], ["y", 2]]
+entries "x"                 # 1
+key = "y"
+entries key                 # 2
+entries 0                   # ["x", 1] (positional indexing)
+entries [1, 0]              # [["y", 2], ["x", 1]] (index selection)
+[["x", 1], ["x", 2]] "x"    # 1 (first match wins)
+```
+
+Lookup scans incrementally. It does not evaluate skipped values or entries after
+its first match, so it can find a key in an infinite list. A missing key errors
+once the list ends; searching an infinite list for an absent key may not finish.
+Every visited entry must be a two-element list with a string key. Malformed
+entries error when reached. Keys compare by their exact string contents.
+
+This is lookup only: string-key list assignment is not supported. Integer and
+enumeration arguments still index by position, list arguments still select
+indices, and dot syntax still applies list templates. An association list remains
+a list; it does not acquire record fields or record construction behavior.
+
 ## Records
 
 ```apn
@@ -111,6 +136,7 @@ named arguments, see [lists and records as arguments](pattern-functions.md#lists
 
 | Container | Read | Assign |
 | --- | --- | --- |
+| Association list, string key | `entries "x"` or `entries key` | String-key assignment is not supported |
 | List, one index | `arr i` or `arr (i + 1)` | `arr i = value` or `arr (i + 1) = value` |
 | List, several indices | `arr [2, 0]` or `arr indices` | `arr [2, 0] = [a, b]` or `arr indices = values` |
 | Record, literal field | `obj.x` | `obj.x = value` |
