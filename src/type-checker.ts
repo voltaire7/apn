@@ -701,6 +701,13 @@ export function checkTypes(program: TopLevel[]): CheckResult {
             case "recordAccess": {
                 const rec = resolve(infer(e.rec, scope));
                 if (rec.k === "list" && e.argument) { infer(e.argument, scope); return unknown(); }
+                if (e.scoped && e.argument) {
+                    if (rec.k === "dynamic" || rec.k === "var") return unknown();
+                    if (rec.k !== "record") return problem("scoped evaluation requires a record", e);
+                    const local = new Map(scope);
+                    for (const [name, type] of rec.fields) local.set(name, { type, mono: true });
+                    return infer(e.argument, local);
+                }
                 if (rec.k === "var") {
                     const t = variable();
                     unify(rec, { k: "record", fields: new Map([[e.field, t]]) }, e);

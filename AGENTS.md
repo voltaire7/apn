@@ -164,7 +164,7 @@ intentional evaluation change.
   `rec."field"` selects a key containing surrounding quote characters.
   `rec.1` equals `rec "1"`, while `rec 1` is positional.
   Dot access quotes field spellings: `rec.-1` selects "-1" and `rec.(x)`
-  selects "(x)" without evaluating x. Application accepts computed strings.
+  evaluates x with record fields in scope. Application accepts computed strings.
   `enumerate list` lazily produces `[index, value]` pairs with exact integer
   indices starting at zero (`[[0, 10], [1, 20], [2, 30]]`).
   The old `{ a = b }` syntax is REMOVED.
@@ -650,11 +650,11 @@ finally. See docs/type-and-resource-rules.md and tests/odin-rules-test.ts.
 `format template arguments` requires a list and exactly one value per unescaped `%`.
 `%%` renders a literal percent; check arity before rendering any values.
 
-Dot keys may also be negative numbers or parenthesized text: `obj.-1` means
-`obj "-1"`, and `obj.(x)` means `obj "(x)"`. Parentheses and their contents,
-including whitespace, belong to the key; the contents are never evaluated.
-The same spellings work in record literals, plucks, field assignments, and
-record destructuring: `[-1: 1, (x): 2]`.
+Negative dot keys remain literal: `obj.-1` means `obj "-1"`.
+Parenthesized keys remain literal inside record literals, plucks, and record
+patterns: `[(x): 2]`, `obj.[(x)]`, and `obj.[(x)] = [3]`. Use `obj "(x)"`
+for direct lookup. Parentheses immediately after a record dot now evaluate an
+expression in the record's scope; they no longer quote a field name.
 
 `env` exposes a live record view backed by Env (`record.scope`). Capture the
 lexical scope when the builtin is referenced; never enumerate by forcing values.
@@ -693,7 +693,7 @@ See docs/gradual-and-dependent-types.md and tests/gradual-types-test.ts.
 Dotted bracket nodes carry both expression inputs (for lists) and quoted selection
 entries (for records). Evaluate only the branch selected by the left operand;
 record plucks must never evaluate field identifiers. Parenthesized/string dot inputs
-also apply list templates while retaining literal record-key meaning. Keep source
+also apply list templates. Parenthesized record access evaluates in a child Env populated with identifier fields, retaining outer scope fallback. Keep source
 printing, gradual checking, and the APN metacircular template AST in sync.
 
 Dotted list templates reject scalar slots rather than replacing them. Types/functions

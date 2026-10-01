@@ -257,7 +257,7 @@ print weird."my field"           # => 1
 print weird.123                  # => 2
 key = "123"
 print (weird key)                # => 2 (computed named field)
-# weird.(key)                    # literal key "(key)", not the variable key
+# weird.(expression)             # evaluates expression with fields in scope
 print (enumerate [10, 20, 30])   # => [[0, 10], [1, 20], [2, 30]]
 print (enumerate [10, 20, 30] * [index, value] -> index + value) # => [10, 21, 32]
 print (take 3 (enumerate [10..])) # => [[0, 10], [1, 11], [2, 12]]
@@ -1211,9 +1211,9 @@ print (withFile "/dev/null" (file -> file.read)) # => empty line
 # Dot field spellings are literal string keys, including punctuation.
 oddKeys = []
 oddKeys.-1 = 1
-oddKeys.(x) = 2
+oddKeys "(x)" = 2
 print [oddKeys.-1, oddKeys "-1"]        # => [1, 1]
-print [oddKeys.(x), oddKeys "(x)"]      # => [2, 2]
+print [oddKeys "(x)", oddKeys "(x)"]      # => [2, 2]
 
 # Implicit numeric types constrain assignment too.
 implicitNumber = [x: 1]
@@ -1279,6 +1279,13 @@ associations = [["x", 1], ["y", 2]]
 print (associations "x")             # => 1
 print (associations 0)               # => ["x", 1]
 print ([["x", 1], ["x", 2]] "x")      # => 1 (first matching key)
+
+# Evaluate expressions with record fields in a local scope.
+scopedPoint = [x: 3, y: 4]
+print scopedPoint.(x + y)            # => 7
+print scopedPoint.([x, y])           # => [3, 4]
+print scopedPoint.(x = 10; x + y)    # => 14
+print scopedPoint.x                 # => 3
 
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 

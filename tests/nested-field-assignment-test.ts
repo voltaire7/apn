@@ -12,7 +12,7 @@ for (const [source, expected] of [
     ['obj = [child: []]; obj.child.x = 10; obj.child.x', '10'],
     ['obj = [child: [x: 1,y: 2]]; obj.child.[x,y] = obj.child.[y,x]; obj.child', '[x: 2, y: 1]'],
     ['obj = [child: [x: 1]]; obj.child.[x] = [10]; obj.child.x', '10'],
-    ['obj = ["child": [(x): 1]]; obj."child".(x) = 10; obj."child".(x)', '10'],
+    ['obj = ["child": [(x): 1]]; obj."child".[(x)] = [10]; obj."child" "(x)"', '10'],
     ['obj = [child: [x: 1]]; scope <- env; scope.obj.child.x = 10; obj.child.x', '10'],
     ['calls = Mutable 0; obj = { set calls (calls + 1); [child: [x: 1]] }; obj.child.x = 10; [obj.child.x,calls]', '[10, 1]'],
 ] as const) Deno.test(`nested field update: ${source}`, () => {

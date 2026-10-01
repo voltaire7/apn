@@ -480,10 +480,10 @@ class Parser {
                 let argument: Expr | undefined;
                 if (t.k === "ident" || t.k === "str" || (t.k === "sym" && t.v === "(")) {
                     this.i = keyStart;
-                    try { argument = this.parsePrimary(); } catch { /* record keys need not be expressions */ }
+                    argument = this.parsePrimary();
                     this.i = keyEnd;
                 }
-                e = { t: "recordAccess", rec: e, field, ...(argument ? { argument } : {}) };
+                e = { t: "recordAccess", rec: e, field, ...(argument ? { argument } : {}), ...(t.k === "sym" && t.v === "(" ? { scoped: true } : {}) };
             }
         }
         return e;
@@ -907,6 +907,7 @@ class Parser {
         const entries: string[] = [];
         const path: string[] = [];
         while (!this.isSym("[")) {
+            if (this.isSym("(")) throw new Error("Parser: scoped record expressions are not assignment targets; use a string key");
             const saved = this.i;
             const key = this.parseKey();
             if (!this.eatSym(".")) { this.i = saved; break; }

@@ -102,7 +102,7 @@ obj = [field: 123, "field": 456, 1: 10, "1": 100]
 Application evaluates its argument: `key = "field"; obj key` selects a named
 field. Include quote characters in the argument to select a quoted field.
 `pairs`, iteration, and conversion to HashMap preserve the entire key string.
-`obj.(key)` selects the literal key "(key)"; use `obj key` to evaluate a key. Missing keys
+`obj.(expression)` evaluates with the record fields in scope; use `obj key` for computed lookup. Missing keys
 raise an error. Numeric field names retain their existing normalized spelling.
 List indexing accepts integers or variants from families with only nullary constructors.
 Variants select by zero-based declaration order. A string argument performs
@@ -668,15 +668,46 @@ arguments raise an error before any argument is rendered. For example,
 `print $ format "vec = %" [vec]` prints one formatted record. Passing `vec`
 directly instead of `[vec]` is invalid when `vec` is a record.
 
-Dot keys may also be negative numbers or parenthesized text: `obj.-1` means
-`obj "-1"`, and `obj.(x)` means `obj "(x)"`. Parentheses and their contents,
-including whitespace, belong to the key; the contents are never evaluated.
-The same spellings work in record literals, plucks, field assignments, and
-record destructuring: `[-1: 1, (x): 2]`.
+Negative dot keys remain literal: `obj.-1` means `obj "-1"`.
+Parenthesized keys remain literal inside record literals, plucks, and record
+patterns: `[(x): 2]`, `obj.[(x)]`, and `obj.[(x)] = [3]`. Use `obj "(x)"`
+for direct lookup. Parentheses immediately after a record dot now evaluate an
+expression in the record's scope; they no longer quote a field name.
 
 `enumerate xs` returns a lazy list of `[index, value]` pairs. Indices are exact
 integers starting at zero, so `enumerate [10,20]` is `[[0,10],[1,20]]`. It supports
 infinite lists, and enumerating an element does not force its value.
+
+## Record-scoped expressions
+
+`record.(expression)` evaluates the expression in a local scope populated by the
+record's fields. Fields shadow outer names; other names resolve in the surrounding
+lexical scope, including functions such as `sqrt`.
+
+```apn
+point = [x: 3, y: 4]
+point.(x + y)                # 7
+point.([x, y])               # [3, 4]
+point.(x = 10; x + y)        # 14
+point.x                     # 3
+f = point.(n -> x + n)
+f 2                         # 5
+```
+
+Definitions and ordinary field/index updates inside the expression are local;
+they do not implicitly update the original record. Returned functions and deferred
+values retain this local scope. Explicit side effects, including `Mutable` updates
+or writes through an environment view, keep their normal behavior.
+
+Only keys that are valid binding identifiers are exposed as local names. Quoted,
+numeric, and parenthesized key spellings are not converted to identifiers. Fields
+are installed without demanding their values or invoking stored actions. Existing
+record-construction evaluation rules still apply.
+
+`record.(expression) = value` is not an assignment target. To update a literal
+field named `(x)`, use `record "(x)" = value` or `record.[(x)] = [value]`.
+List operands retain dotted template application: `[Int, Float].([1] ++ [2])`
+returns `[1, 2.0]`, evaluating the input expression in the surrounding scope.
 
 ## Live environment
 

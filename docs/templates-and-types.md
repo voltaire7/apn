@@ -61,8 +61,8 @@ chars "hello"           # arbitrary-length character conversion
 
 A template is an ordinary list value. Use `template.values` for a variable input,
 or `template.(expression)` for a computed input. On records, `record.values`
-still looks up the literal field `values`, and parenthesized dot keys retain
-their literal spelling.
+still looks up the literal field `values`, while `record.(expression)` evaluates
+with the record fields in scope.
 `String` converts a finite character list back to text, using `fromChars`:
 
 ```apn
@@ -82,7 +82,7 @@ Selection is lazy and preserves index order and duplicates. Integer and enumerat
 indices use the same rules as single indexing; negative indices require a finite input.
 Dotted application explicitly selects template behavior: `[Int].[0]` returns `[0]`; `[10].[0]` errors.
 For variable inputs use `template.values`; for other expressions use `template.(expression)`. This overload is only for
-lists; `record.(key)` remains a literal parenthesized field name.
+lists; `record.(expression)` instead performs scoped evaluation.
 
 For updates and swaps, see [computed keys and multiple indices](#computed-keys-and-multiple-indices).
 
@@ -148,8 +148,9 @@ named arguments, see [lists and records as arguments](pattern-functions.md#lists
 | Record, positional entry | `obj 0` returns `[key, value]` | Not supported; assign by field name |
 | Record, renamed selection | `obj.[x: a, y: b]` | Renaming is a read operation |
 
-Dot field names are literal strings. `obj.(key)` selects the literal field
-`"(key)"`; use `obj key` for a computed name. Quoted field syntax includes the
+Bare dot field names are literal strings. Use `obj key` for a computed name
+and `obj "(key)"` for a key containing parentheses. `obj.(expression)` performs
+[scoped evaluation](semantics.md#record-scoped-expressions). Quoted field syntax includes the
 quote characters: `obj."x"` is equivalent to `obj "\"x\""`.
 See [record key identity](semantics.md#record-fields-string-keys-and-positions) for the full rules.
 

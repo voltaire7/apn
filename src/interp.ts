@@ -720,7 +720,15 @@ export class Interpreter {
                             break;
                         }
                         if (rec.kind !== "record") throw new Error("record access on non-record");
-                        r = this.recordField(rec, e.field);
+                        if (e.scoped && e.argument) {
+                            const outer = this.env;
+                            const local = new Env(outer);
+                            for (const [key, value] of rec.v) {
+                                if (/^[A-Za-z_][A-Za-z0-9_']*$/.test(key) && key !== "_" && !KEYWORDS.has(key)) local.setLocal(key, value);
+                            }
+                            this.env = local;
+                            try { r = this.eval(e.argument); } finally { this.env = outer; }
+                        } else r = this.recordField(rec, e.field);
                         break;
                     }
                     case "pluck": {

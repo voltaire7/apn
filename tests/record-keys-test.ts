@@ -103,13 +103,13 @@ v * [key, value] -> v key == value`, "[true, true, true]"],
 
 for (const [source, expected] of [
     ['obj = []\nobj.-1 = 1\n[obj.-1, obj "-1"]', '[1, 1]'],
-    ['obj = []\nobj.(x) = 2\n[obj.(x), obj "(x)"]', '[2, 2]'],
-    ['x = "other"\nobj = [(x): 3, other: 4]\nobj.(x)', '3'],
+    ['obj = [(x): 0]\nobj "(x)" = 2\n[obj "(x)", obj "(x)"]', '[2, 2]'],
+    ['x = "other"\nobj = [(x): 3, other: 4]\nobj "(x)"', '3'],
     ['obj = [-1: 10, (x): 20]\nobj.[-1, (x)]', '[10, 20]'],
-    ['obj = [-1: 10, (x): 20]\nobj.[-1, (x)] = [30,40]\n[obj.-1,obj.(x)]', '[30, 40]'],
+    ['obj = [-1: 10, (x): 20]\nobj.[-1, (x)] = [30,40]\n[obj.-1,obj "(x)"]', '[30, 40]'],
     ['obj = [-1: 10, (x): 20]\n[-1: a, (x): b] = obj\n[a,b]', '[10, 20]'],
-    ['obj = [(x): [y: 42]]\nobj.(x).y', '42'],
-    ['obj = [((x)): 4, (): 5]\n[obj.((x)), obj.()]', '[4, 5]'],
+    ['obj = [(x): [y: 42]]\n(obj "(x)").y', '42'],
+    ['obj = [((x)): 4, (): 5]\n[obj "((x))", obj "()"]', '[4, 5]'],
     ['obj = [(x + 1): 6]\nobj "(x + 1)"', '6'],
     ['obj = [-1: 1]\n[obj.-1 - 1, obj (-1)]', '[0, ["-1", 1]]'],
 ] as const) Deno.test(`literal extended field names: ${source}`, () => {
