@@ -275,3 +275,9 @@ Bracketed record assignment always takes a list with one value per field, even
 for a single field: `obj.[x] = [10]`. `obj.[x] = 10` errors. Direct assignment
 still takes its value directly: `obj.x = 10`. To store a list through a
 single-field selection, use `obj.[x] = [[10]]`.
+
+Field assignments can follow nested records: `obj.child.x = 10` and
+`obj.child.[x, y] = [10, 20]`. They rebuild the parent records and rebind
+`obj` in the current scope, preserving sibling fields and numeric conversions.
+Intermediate fields must exist and contain records; an empty list at the final
+parent can seed a record. Errors leave the root binding unchanged.

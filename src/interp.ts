@@ -765,6 +765,12 @@ export class Interpreter {
                         // eager: read the OLD record and the RHS fully BEFORE building the
                         // new one, so  vec.[x, y] = vec.[y, x]  swaps correctly
                         let rec = this.dataValue(this.eval(e.rec));
+                        const parents: Array<[Extract<Value, { kind: "record" }>, string]> = [];
+                        for (const key of e.path ?? []) {
+                            if (rec.kind !== "record") throw new APNError("runtime", "nested field assignment requires a record");
+                            parents.push([rec, key]);
+                            rec = this.dataValue(this.recordField(rec, key));
+                        }
                         if (this.isList(rec) && this.cell(rec) === null) rec = mkList([]);
                         let base: Array<[string, Value]> | null = null;
                         if (rec.kind === "record") base = rec.v;
@@ -787,16 +793,22 @@ export class Interpreter {
                         }
                         if (rec.kind === "record" && rec.scope) {
                             r = this.updateEnvironment(rec, e.entries.map((key, index) => [key, rhs.v[index]]));
-                            break;
+                        } else {
+                            const out = base.map(([k, v]) => [k, v] as [string, Value]);
+                            for (let i = 0; i < e.entries.length; i++) {
+                                const key = e.entries[i];
+                                const idx = out.findIndex(([k]) => k === key);
+                                if (idx === -1) out.push([e.entries[i], rhs.v[i]]);
+                                else out[idx] = [e.entries[i], this.assignSlot(base[idx][1], rhs.v[i])];
+                            }
+                            r = { kind: "record", v: out };
                         }
-                        const out = base.map(([k, v]) => [k, v] as [string, Value]);
-                        for (let i = 0; i < e.entries.length; i++) {
-                            const key = e.entries[i];
-                            const idx = out.findIndex(([k]) => k === key);
-                            if (idx === -1) out.push([e.entries[i], rhs.v[i]]);
-                            else out[idx] = [e.entries[i], this.assignSlot(base[idx][1], rhs.v[i])];
+                        for (let i = parents.length - 1; i >= 0; i--) {
+                            const [parent, key] = parents[i];
+                            r = parent.scope
+                                ? this.updateEnvironment(parent, [[key, r]])
+                                : { kind: "record", v: parent.v.map(([name, value]) => [name, name === key ? r : value]) };
                         }
-                        r = { kind: "record", v: out };
                         break;
                     }
                     case "pipe": {

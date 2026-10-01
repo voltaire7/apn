@@ -45,7 +45,7 @@ function source(e: Expr, parent = 0): string {
             return `{ ${e.stmts.map(x => source(x)).join("; ")} }`;
         }
         case "stmDef": return e.clauses.map(c => `${e.name}${c.params.length ? " " + c.params.map(pattern).join(" ") : ""} = ${source(c.body)}`).join("; ");
-        case "patDef": return e.value.t === "setItem" ? source(e.value) : `${pattern(e.pattern)} ${e.eager ? "<-" : "="} ${source(e.value)}`;
+        case "patDef": return (e.value.t === "setItem" || e.value.t === "setFields") ? source(e.value) : `${pattern(e.pattern)} ${e.eager ? "<-" : "="} ${source(e.value)}`;
         case "recordAccess": return `${source(e.rec, 11)}.${keySource(e.field)}`;
         default: return exprToSource(e);
     }

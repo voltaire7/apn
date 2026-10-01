@@ -615,7 +615,17 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                 }, a);
             }
             case "setFields": {
-                const rec = resolve(infer(e.rec, scope)), value = infer(e.value, scope), v = resolve(value);
+                let rec = resolve(infer(e.rec, scope));
+                const value = infer(e.value, scope), v = resolve(value);
+                const parents: Array<[Map<string, Ty>, string]> = [];
+                for (const key of e.path ?? []) {
+                    if (rec.k === "dynamic") return unknown();
+                    if (rec.k !== "record") return problem("nested field assignment requires a record", e);
+                    const child = rec.fields.get(key);
+                    if (!child) return problem(`missing field '${key}'`, e);
+                    parents.push([rec.fields, key]);
+                    rec = resolve(child);
+                }
                 if (rec.k === "dynamic") return unknown();
                 if (rec.k !== "record") return problem("field assignment requires a record", e);
                 const fields = new Map(rec.fields);
@@ -635,7 +645,12 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                             : incoming,
                     );
                 });
-                return { k: "record", fields };
+                let result: Ty = { k: "record", fields };
+                for (let i = parents.length - 1; i >= 0; i--) {
+                    const [parent, key] = parents[i];
+                    result = { k: "record", fields: new Map([...parent, [key, result]]) };
+                }
+                return result;
             }
             case "setItem": {
                 const rec = resolve(infer(e.rec, scope)), value = infer(e.value, scope), key = index(e.index, scope);

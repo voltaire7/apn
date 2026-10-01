@@ -1268,6 +1268,12 @@ singlePluck.[x] = [10]
 print singlePluck                    # => [x: 10]
 # singlePluck.[x] = 10 errors: the RHS must be a list.
 
+nestedUpdate = [child: [x: Float 1, y: 2]]
+nestedUpdate.child.x = 10
+print nestedUpdate                  # => [child: [x: 10.0, y: 2]]
+nestedUpdate.child.[x, y] = [20, 30]
+print nestedUpdate.child            # => [x: 20.0, y: 30]
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

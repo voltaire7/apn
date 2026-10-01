@@ -882,7 +882,18 @@ class Parser {
                     this.skipListSeparators();
                 }
                 this.next();
-            } else this.parseKey();
+            } else {
+                this.parseKey();
+                while (this.eatSym(".")) {
+                    if (this.eatSym("[")) {
+                        this.skipListLeading();
+                        while (!this.isSym("]")) { this.parseKey(); this.skipListSeparators(); }
+                        this.next();
+                        break;
+                    }
+                    this.parseKey();
+                }
+            }
             return this.isSym("=");
         } catch { return false; }
         finally { this.i = saved; }
@@ -894,6 +905,13 @@ class Parser {
         const name = nt.v;
         this.next(); // "."
         const entries: string[] = [];
+        const path: string[] = [];
+        while (!this.isSym("[")) {
+            const saved = this.i;
+            const key = this.parseKey();
+            if (!this.eatSym(".")) { this.i = saved; break; }
+            path.push(key);
+        }
         const bracketed = this.isSym("[");
         if (bracketed) {
             this.next();
@@ -918,7 +936,7 @@ class Parser {
         return {
             t: "patDef",
             pattern: { p: "var", name },
-            value: { t: "setFields", rec: { t: "var", name }, entries, value },
+            value: { t: "setFields", rec: { t: "var", name }, entries, value, ...(path.length ? { path } : {}) },
         };
     }
 
@@ -1429,13 +1447,13 @@ export function exprToSource(e: Expr): string {
             return `${exprToSource(e.rec)}.[${e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`).join(", ")}]`;
         case "setItem": return `${exprToSource(e.rec)} (${exprToSource(e.index)}) = ${exprToSource(e.value)}`;
         case "setFields":
-            return `${exprToSource(e.rec)}.${e.entries.length === 1 ? keySource(e.entries[0]) : `[${e.entries.map(keySource).join(", ")}]`} = ${exprToSource(e.value)}`;
+            return `${exprToSource(e.rec)}.${(e.path ?? []).map(keySource).map(key => key + ".").join("")}[${e.entries.map(keySource).join(", ")}] = ${exprToSource(e.value)}`;
         case "block": {
             const one = e.stmts.length === 1 && e.stmts[0].t !== "stmDef" && e.stmts[0].t !== "patDef";
             if (one && e.style === "(") return exprToSource(e.stmts[0]);
             const body = e.stmts.map((st) => {
                 if (st.t === "stmDef") return `${st.name} = ${exprToSource(st.clauses[0].body)}`;
-                if (st.t === "patDef" && st.value.t === "setItem") return exprToSource(st.value);
+                if (st.t === "patDef" && (st.value.t === "setItem" || st.value.t === "setFields")) return exprToSource(st.value);
                 if (st.t === "patDef") return `${patternSource(st.pattern)} ${st.eager ? "<-" : "="} ${exprToSource(st.value)}`;
                 return exprToSource(st);
             }).join("; ");
