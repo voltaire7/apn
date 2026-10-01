@@ -104,6 +104,9 @@ The empty list `[]` explicitly initializes all fields from their defaults. Recor
 Keys retain their full string contents, including any quote characters, through application.
 `[x: Int, "x": Int] ["x": 1]` produces `[x: 0, "x": 1]`.
 
+For passing collections to functions, destructuring parameters, and records as
+named arguments, see [lists and records as arguments](pattern-functions.md#lists-and-records-as-arguments).
+
 ## Access and assignment reference
 
 | Container | Read | Assign |

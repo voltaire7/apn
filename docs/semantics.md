@@ -261,6 +261,9 @@ of rounding or overflowing to `Infinity`. Their growing size still uses memory.
 
 ## Patterns, variants, and scope
 
+See [lists and records as arguments](pattern-functions.md#lists-and-records-as-arguments)
+for parameter patterns, named inputs, and local collection updates.
+
 Variable and wildcard patterns leave their arguments deferred. Other patterns
 force only the structure they inspect. A cons pattern binds a lazy head and
 lazy tail; an exact-length list pattern checks the spine length. Pattern-clause

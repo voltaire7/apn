@@ -11,7 +11,7 @@ import "std"
 
 Applying `(None -> print x)` to `Some 123` fails with a no-clause error. Its body
 is not run, so `x` is never looked up. `_` in a body still means unfinished code;
-use `()` when a matched branch should do nothing.
+use `[]` when a matched branch should do nothing.
 
 `match` is an intrinsic function, available by default. It tries a lazy list of unary functions in order:
 
@@ -32,6 +32,115 @@ Literals, lists, constructors, type patterns, and wildcards can be lambda
 parameters. A guard follows the parameters, e.g. `n | n > 0 -> n`. A falsy guard
 is a mismatch; guards use the same truthiness rules as conditions. Multiple parameter lambdas are curried,
 but match alternatives must have exactly one remaining argument.
+
+## Lists and records as arguments
+
+A list or record supplies **one argument**, regardless of its size. Collections
+are not automatically spread across parameters. Functions with multiple
+parameters are curried:
+
+```apn
+identity value = value
+add x y = x + y
+first x y = x
+[identity [1, 2], identity [x: 1, y: 2], add 1 2, first [1, 2] 99]
+# [[1, 2], [x: 1, y: 2], 3, [1, 2]]
+```
+
+`add [1, 2]` supplies only `x` and returns a function awaiting `y`. It does not
+mean `add 1 2`. A collection variable works the same way as a literal.
+
+### Destructuring one argument
+
+| Parameter pattern | List argument | Record argument |
+| --- | --- | --- |
+| `value` | Binds the entire list | Binds the entire record |
+| `[x, y]` | Binds exactly two elements by position | Binds fields named `x` and `y` |
+| `[x: a, y: b]` | Does not match | Binds fields `x` and `y` as `a` and `b` |
+| `(x:xs)` | Binds the head and tail of a nonempty list | Does not match |
+
+```apn
+sumPair [x, y] = x + y
+[sumPair [1, 2], sumPair [y: 2, x: 1, extra: 99]]
+# [3, 3]
+```
+
+List patterns require the exact length. For records, the bare-name pattern
+`[x, y]` requires those fields, ignores field order, and permits extra fields.
+This record interpretation only applies when every element of the pattern is a
+variable name. Renaming those variables also changes which fields it selects.
+Use a keyed pattern when local variable names should differ from field names:
+
+```apn
+sumFields [x: a, y: b] = a + b
+sumFields [y: 2, x: 1]       # 3
+```
+
+Missing fields or a wrong list length cause pattern mismatch; another clause
+may handle the input. If no clause matches, the call errors. These patterns
+also work in lambdas, such as `([x, y] -> x + y) [1, 2]`.
+
+### Records as named arguments
+
+A record argument supplies named inputs without separate named-call syntax:
+
+```apn
+area [width, height] = width * height
+area [height: 20, width: 10] # 200
+```
+
+This function also accepts `area [10, 20]`. To require a record, write
+`area [width: w, height: h] = w * h`. Required fields must be present;
+destructuring does not itself supply defaults for omitted names.
+
+### Record-template parameters
+
+A template pattern converts an argument before binding its local name:
+
+```apn
+Vector3 = [x: Float, y: Float, z: Float]
+lengthSquared (Vector3 v) = v.x ^ 2 + v.y ^ 2 + v.z ^ 2
+lengthSquared [1, 2, 3]      # 14.0
+```
+
+The positional list must have exactly as many elements as the record template.
+The pattern binds the converted record to `v`; its fields use the template's
+conversion rules. See [templates and type aliases](templates-and-types.md#type-descriptions-and-aliases).
+
+### Returning local updates
+
+Updating a collection parameter rebinds a local copy. Return that copy to keep
+the result; the caller's ordinary record is unchanged:
+
+```apn
+change obj = {
+    obj.child.x = 10
+    obj
+}
+original = [child: [x: 1]]
+changed = change original
+[original.child.x, changed.child.x] # [1, 10]
+```
+
+List index updates work the same way. Shared references such as `Mutable` and
+live environment views are exceptions to ordinary copy-and-rebind behavior.
+See [slot assignment](templates-and-types.md#slot-assignment).
+
+### Evaluation
+
+Arguments are deferred until needed. A plain variable or wildcard parameter
+does not inspect the collection; a destructuring pattern demands the shape it
+needs. List elements remain deferred when bound to variables:
+
+```apn
+firstPair [x, y] = x
+firstPair [42, missing]      # 42; the unused second element is not evaluated
+```
+
+An exact-length list pattern checks the spine length; a cons pattern only needs
+a nonempty list and can accept an infinite one. Record literals retain their
+existing field-expression evaluation rules: passing a record does not make all
+its fields uniformly lazy. See [evaluation semantics](semantics.md#patterns-variants-and-scope).
 
 ## Dispatch behavior
 
@@ -66,8 +175,7 @@ applyTransform (Transform f) = f 123
 
 The pattern binds `f` through a wrapper. Calling it applies the input constructor,
 then calls the original function, then applies the output constructor to its
-result. Untyped numeric inputs may round/truncate; explicitly typed inputs
-require lossless conversion. Wrong types raise errors. No function body is run merely to match a
+result. Numeric inputs require lossless conversion, whether bare or explicitly typed. Wrong types raise errors. No function body is run merely to match a
 function contract. Consequently a callable can match and later fail its contract;
 that failure is an error, not a reason to try another handler.
 
