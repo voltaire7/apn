@@ -542,8 +542,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
         // Numeric defaults are only replaceable inside container templates.
         if (f.k === "atom" && NUMERIC_TYPES.includes(f.name)) return problem("cannot apply a number", e);
         if (f.k === "atom" && ["String", "Char", "Bool"].includes(f.name)) {
-            unify(f, argument.type, e);
-            return argument.type;
+            return problem(`cannot apply ${text(f)}`, e);
         }
         return problem(`cannot apply ${text(f)}`, e);
     }

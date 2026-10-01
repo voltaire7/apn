@@ -1073,11 +1073,9 @@ export class Interpreter {
         if (isNumeric(f)) throw new APNError("runtime", "cannot apply a number", {
             hint: "use a type constructor such as Int, or replace a default inside a template",
         });
-        if (["string", "char", "bool"].includes(f.kind)) {
-            const value = this.dataValue(arg);
-            if (value.kind !== f.kind) throw new APNError("runtime", `${f.kind} template expects ${f.kind}, got ${value.kind}`);
-            return value;
-        }
+        if (["string", "char", "bool"].includes(f.kind)) throw new APNError("runtime", `cannot apply a ${f.kind}`, {
+            hint: "use a type constructor or replace a default inside a template",
+        });
         switch (f.kind) {
             case "functionType": return this.conform(f, arg);
             case "contract": return this.defer(() => {
@@ -2101,6 +2099,11 @@ export class Interpreter {
             const incoming = this.dataValue(value);
             if (!isNumeric(incoming)) throw new APNError("runtime", "a numeric template expects a number");
             return target.typeName ? this.constructType(target.typeName, incoming) : incoming;
+        }
+        if (["string", "char", "bool"].includes(target.kind)) {
+            const incoming = this.dataValue(value);
+            if (incoming.kind !== target.kind) throw new APNError("runtime", `${target.kind} template expects ${target.kind}, got ${incoming.kind}`);
+            return incoming;
         }
         return this.isList(target) ? this.templateList(target, value) : this.apply(target, value);
     }

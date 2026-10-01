@@ -1,7 +1,7 @@
 # Templates and type aliases
 
 Container construction applies callable slots and replaces concrete defaults.
-Numeric values themselves are not callable.
+Concrete scalars (numbers, strings, characters, and booleans) are not callable.
 
 ## Concrete defaults
 
@@ -11,13 +11,15 @@ Numeric values themselves are not callable.
 [Int 0].[floor .2]          # [0]
 [Int 0].[Float .2]          # error: lossy conversion
 [x: 0] [x: 123]             # [x: 123]
-"old" "new"           # "new"
-false true            # true
+["old"].["new"]             # ["new"]
+[false].[true]               # [true]
+['a'].['b']                 # ['b']
 ```
 
 Inside a template, an untyped numeric default accepts any number unchanged.
 An explicitly typed numeric default converts through its constructor: all inputs require lossless conversion. Overflow and nonzero imaginary-part
-loss still error. Strings, chars, and booleans accept their own kind only.
+loss still error. String, character, and boolean defaults accept their own kind only inside templates.
+Standalone `"old" "new"`, `'a' 'b'`, and `false true` are application errors.
 Functions retain ordinary application, including effects.
 
 Numeric parameter patterns always require lossless conversion, including for

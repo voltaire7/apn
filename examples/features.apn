@@ -840,7 +840,9 @@ print cast                          # => APN clauses for list schemas and other 
 
 # Container templates apply their existing slots to incoming values.
 print ([0].[123])                   # => [123] (replace a template default)
-# 0 123 errors: numeric values are not callable.
+# Scalars are not callable: 0 123, "old" "new", and false true all error.
+print (["old", false, 'a'].["new", true, 'b']) # => ["new", true, 'b']
+print ([name: "old", enabled: false] [name: "new", enabled: true])
 print ([Int 0].[floor .2])           # => [0]
 print ((* 2) * [1, 2, 3, 4])        # => [2, 4, 6, 8]
 print (cast String $ cast [Char, Char] $ "a😀") # => "a😀"
