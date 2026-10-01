@@ -430,7 +430,7 @@ arithmetic promotion. Numeric values may carry `typeName`; preserve it for
 checked arithmetic and print it except for Int/Float. Bare literals retain their natural numeric
 kind and unadorned display. `cast Type value` is defined in lib/type.apn and
 loaded alongside the match prelude. Numeric patterns, including generic (t x), expose untyped payloads;
-constructors require lossless conversion of both bare and explicitly typed inputs.
+integer constructors require lossless conversion of both bare and explicitly typed inputs. Explicit Float/Float32/Float64 application rounds to the target precision; implicit conformance, assignment and patterns remain lossless.
 Use floor/truncate/inexact before construction when rounding is intended. Internal arithmetic promotion and C ABI conversions
 still use strict castNumeric by default. NEVER allow integer wraparound or
 imaginary-part loss.
@@ -617,7 +617,7 @@ annotations; Int/Float display without labels. Function iteration stays unchange
 Variant defaults choose a nullary constructor first, otherwise recursively default
 the first constructor's payload. Detect recursive defaults and require explicit
 values for Function/Mutable/Type. See docs/zero-initialization.md and its tests.
-Numeric construction and cast remain lossless.
+Integer construction remains lossless; explicit floating constructors (including via cast) round. Implicit conversions remain lossless.
 
 Computed collection assignment evaluates its key once before its RHS against
 the old scope. Pattern-compatible parameters are interpreted as expressions

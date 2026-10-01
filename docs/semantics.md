@@ -459,12 +459,17 @@ variants. `Float` (`Float64` keeps an explicit display label) uses binary64; `Fl
 `ComplexExact` an exact one. Constructors are first-class functions, e.g.
 `map Int [1,2]`. Constructed values print their type: `Int32 123`.
 
-All numeric constructors require lossless conversion, whether or not the input
-has an explicit type annotation. `Int .2` and `Int (Float .2)` both error.
-Choose the rounding operation explicitly: `Int (floor .2)` is `0`, while
-`Int (truncate (-1.7))` is `-1`. `inexact` explicitly rounds to binary64 when
-needed, so `Float (inexact 9007199254740993)` is permitted. Fixed-width integer
-overflow and nonzero imaginary-part loss remain errors. Numeric equality ignores
+Explicit `Float`, `Float32`, and `Float64` construction rounds to the target
+floating-point precision, for bare or annotated inputs. `Float32 .1` produces
+`Float32 0.10000000149011612`; `Float (Int 9007199254740993)` rounds to
+`9007199254740992.0`. This also applies through aliases and `cast`.
+
+Integer constructors remain lossless: `Int .2` and `Int (Float .2)` both error.
+Choose integer rounding explicitly: `Int (floor .2)` is `0`, while
+`Int (truncate (-1.7))` is `-1`. Fixed-width integer overflow and nonzero
+imaginary-part loss remain errors. Implicit conversions, typed parameter matching,
+function contracts, and assignment to existing numeric slots remain lossless.
+Numeric equality ignores
 annotations: `.2 == Float .2` remains true. Int and Float values display without
 a prefix; specialized types such as Int32, Float32 and Float64 retain theirs.
 
@@ -474,8 +479,8 @@ a prefix; specialized types such as Int32, Float32 and Float64 retain theirs.
 cast (Type target) value = target value
 ```
 
-It has exactly the same lossless behavior as applying the type directly. It
-provides no rounding privilege, even after a pattern extracts a numeric payload.
+It has the same behavior as applying the type directly: floating constructors
+round to their precision, while integer construction still rejects truncation.
 
 Arithmetic between values of the same concrete type retains that type and
 checks integer overflow. An untyped operand is converted losslessly to the
@@ -500,8 +505,8 @@ add (Number x) (Number y) = x + y
 
 Literal matches outrank exact concrete type matches, which outrank aggregate
 matches, which outrank conversion matches. Ties retain source order. Converting
-a typed input must be lossless; an untyped input may round or truncate, as with
-constructor application. This ranking applies to functions with typed clauses;
+either a typed or an untyped input must be lossless; explicit floating-point
+construction is a separate operation and does not relax pattern matching. This ranking applies to functions with typed clauses;
 ordinary pattern functions keep source order. Numeric constructor patterns extract
 untyped payloads: `unwrap (Int32 x) = x` returns `5` for `Int32 5`. Return an explicit
 constructor, as above, when the result should retain a type. Patterns do not mutate

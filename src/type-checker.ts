@@ -395,7 +395,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
             }
         }
     }
-    function convert(target: Ty, actual: Ty, e: Expr): Ty {
+    function convert(target: Ty, actual: Ty, e: Expr, explicitFloat = false): Ty {
         const t = resolve(target), a = resolve(actual);
         if (t.k === "atom" && t.name === "Bool") return t;
         if (t.k === "atom" && a.k === "atom" && NUMERIC_TYPES.includes(t.name) && NUMERIC_TYPES.includes(a.name)) {
@@ -410,7 +410,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                 : undefined;
             if (literal) {
                 try {
-                    castNumeric(t.name, literal);
+                    castNumeric(t.name, literal, explicitFloat && ["Float", "Float32", "Float64"].includes(t.name));
                 } catch (error) {
                     problem((error as Error).message, e);
                 }
@@ -500,7 +500,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                     return f;
                 }
             }
-            return convert(f.value, argument.type, e);
+            return convert(f.value, argument.type, e, true);
         }
         if (f.k === "var") {
             const result = variable();

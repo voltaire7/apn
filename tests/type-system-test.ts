@@ -64,7 +64,7 @@ for (const [source, expected] of [
         if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
     });
 }
-for (const source of ["String 123", "Char true", "List 1", "Record []", "Function 2", "Type 1", "[] 1", "Variant 1", "Int (Float 3.7)", "Int32 2147483648", "UInt (-1)", "UInt32 4294967296", "Float32 (Float .1)", "Float (Int 9007199254740993)", "Int8 127 + Int8 1", "cast UInt (-1)", "cast Int8 128", "1/3 + .5", "f (Float32 x) = x\nf (Float .1)"]) {
+for (const source of ["String 123", "Char true", "List 1", "Record []", "Function 2", "Type 1", "[] 1", "Variant 1", "Int (Float 3.7)", "Int32 2147483648", "UInt (-1)", "UInt32 4294967296", "Int8 127 + Int8 1", "cast UInt (-1)", "cast Int8 128", "1/3 + .5", "f (Float32 x) = x\nf (Float .1)"]) {
     Deno.test(`checked type conversion: ${source}`, () => {
         try { const interp = new Interpreter(); interp.renderString(interp.run(parse(source))); }
         catch (e) { if (e instanceof APNError) return; throw e; }

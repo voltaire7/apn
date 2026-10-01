@@ -1130,6 +1130,10 @@ export class Interpreter {
                     return { ...f, arguments: arguments_ };
                 }
                 if (f.alias) throw new APNError("runtime", `${f.name} expects ${parameters.length} arguments`);
+                if (!f.family && ["Float", "Float32", "Float64"].includes(f.name)) {
+                    if (!isNumeric(value)) throw new APNError("runtime", `${f.name} expects a number`);
+                    return castNumeric(f.name, value, true);
+                }
                 return this.conform(f, value);
             }
             case "hashmap": return this.mapLookup(f, this.demand(arg));
