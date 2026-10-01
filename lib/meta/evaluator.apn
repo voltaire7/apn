@@ -11,8 +11,7 @@ meClosure parameter body scope = HashMap [["__closure", true], ["parameter", par
 meZipTemplate functions values = null functions ? (null values ? [] : fail "list template and input must have the same length") : null values ? fail "list template and input must have the same length" : meCons (meTemplateSlot (head functions) (head values)) (meZipTemplate (tail functions) (tail values))
 meTemplateInput value = typeOf value == typeOf "text" ? chars value : value
 meTemplate functions values = meZipTemplate functions values
-meScalar value = isNumber value ? true : typeOf value == typeOf "text" ? true : typeOf value == typeOf true ? true : typeOf value == typeOf (head (chars "x"))
-meTemplateSlot function argument = meScalar function ? head ([function].[argument]) : typeOf function == typeOf [] ? meTemplate function (meTemplateInput argument) : meApply function argument
+meTemplateSlot function argument = typeOf function == typeOf [] ? meTemplate function (meTemplateInput argument) : meApply function argument
 meApply function argument = typeOf function == HashMap ? has "__closure" function ? meEval (insert [[lookup "parameter" function, argument]] (lookup "scope" function)) (lookup "body" function) : function argument : function argument
 meEval scope expression = lookup (head expression) (HashMap [
     ["literal", expression 1],

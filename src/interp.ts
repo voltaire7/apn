@@ -2105,24 +2105,32 @@ export class Interpreter {
             if (incoming.kind !== target.kind) throw new APNError("runtime", `${target.kind} template expects ${target.kind}, got ${incoming.kind}`);
             return incoming;
         }
-        return this.isList(target) ? this.templateList(target, value) : this.apply(target, value);
+        return this.isList(target) ? this.templateList(target, value, true) : this.apply(target, value);
     }
 
-    templateList(templates: Value, values: Value): Value {
+    templateList(templates: Value, values: Value, replaceDefaults = false): Value {
         const input = this.dataValue(values);
         const list = input.kind === "string" ? this.callNative("chars", [input]) : input;
         if (!this.isList(list)) throw new APNError("runtime", "list template expects a list or string");
-        return this.applyListTemplate(templates, list);
+        return this.applyListTemplate(templates, list, replaceDefaults);
     }
 
     // Multi-slot templates zip positionally. Shape errors appear when that
     // spine is demanded, without traversing infinite inputs or forcing heads.
-    applyListTemplate(templates: Value, values: Value): Value {
+    applyListTemplate(templates: Value, values: Value, replaceDefaults = false): Value {
         return this.defer(() => {
             const template = this.cell(templates), value = this.cell(values);
             if (template === null && value === null) return mkList([]);
             if (template === null || value === null) throw new APNError("runtime", "list template and input must have the same length");
-            return { kind: "cons", head: this.defer(() => this.applyTemplateSlot(template.head, value.head)), tail: this.applyListTemplate(template.tail, value.tail) };
+            return {
+                kind: "cons",
+                head: this.defer(() => {
+                    if (replaceDefaults) return this.applyTemplateSlot(template.head, value.head);
+                    const target = this.force(template.head);
+                    return this.isList(target) ? this.templateList(target, value.head) : this.apply(target, value.head);
+                }),
+                tail: this.applyListTemplate(template.tail, value.tail, replaceDefaults),
+            };
         });
     }
 

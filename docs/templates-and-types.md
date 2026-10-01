@@ -1,24 +1,25 @@
 # Templates and type aliases
 
-Container construction applies callable slots and replaces concrete defaults.
+Record construction applies callable slots and overrides concrete defaults.
+Dotted list application applies its slots and rejects scalar slots.
 Concrete scalars (numbers, strings, characters, and booleans) are not callable.
 
 ## Concrete defaults
 
 ```apn
 0 123                       # error: cannot apply a number
-[0].[123]                   # [123]
-[Int 0].[floor .2]          # [0]
-[Int 0].[Float .2]          # error: lossy conversion
+[0].[123]                   # error: cannot apply a number
+[x: Int 0] [floor .2]       # [x: 0]
+[x: Int 0] [Float .2]          # error: lossy conversion
 [x: 0] [x: 123]             # [x: 123]
-["old"].["new"]             # ["new"]
-[false].[true]               # [true]
-['a'].['b']                 # ['b']
+["old"].["new"]             # error: cannot apply a string
+[Bool].[true]               # [true]
+[Char].['b']                 # ['b']
 ```
 
-Inside a template, an untyped numeric default accepts any number unchanged.
+Inside a record template, an untyped numeric default accepts any number unchanged.
 An explicitly typed numeric default converts through its constructor: all inputs require lossless conversion. Overflow and nonzero imaginary-part
-loss still error. String, character, and boolean defaults accept their own kind only inside templates.
+loss still error. String, character, and boolean defaults accept their own kind only inside record templates.
 Standalone `"old" "new"`, `'a' 'b'`, and `false true` are application errors.
 Functions retain ordinary application, including effects.
 
@@ -77,7 +78,7 @@ Integer application still indexes a list: `[10] 0` returns `10`.
 A list argument selects multiple indices: `[10,20,30] [2,0]` returns `[30,10]`.
 Selection is lazy and preserves index order and duplicates. Integer and enumeration
 indices use the same rules as single indexing; negative indices require a finite input.
-Dotted application explicitly selects template behavior: `[10].[0]` returns `[0]`.
+Dotted application explicitly selects template behavior: `[Int].[0]` returns `[0]`; `[10].[0]` errors.
 For computed template inputs use `template.(values)`. This overload is only for
 lists; `record.(key)` remains a literal parenthesized field name.
 

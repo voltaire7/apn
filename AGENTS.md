@@ -548,9 +548,9 @@ Numeric equality ignores these annotations. See tests/language-cast-test.ts.
 
 ## Template application and type aliases
 
-See docs/templates-and-types.md and tests/template-application-test.ts. Concrete scalars (numbers, strings, characters, booleans) reject ordinary application. Inside applyTemplateSlot, numeric
+See docs/templates-and-types.md and tests/template-application-test.ts. Concrete scalars (numbers, strings, characters, booleans) reject ordinary application. Inside record construction via applyTemplateSlot, numeric
 defaults accept an incoming number, with explicitly typed defaults reapplying
-their constructor. Other scalar defaults accept same-kind replacements only inside templates. Dotted templates zip exactly at every length, including one; [f].[x,y] is
+their constructor. Other scalar defaults accept same-kind replacements only inside record construction. Dotted templates zip exactly at every length, including one; [f].[x,y] is
 a length error. Use f * xs or map f xs for mapping. Ordinary list application indexes. Strings supply Unicode code-point chars
 through the existing chars primitive. Integer application remains indexing.
 Record application transforms supplied slots, initializes omitted type slots, appends
@@ -695,3 +695,7 @@ entries (for records). Evaluate only the branch selected by the left operand;
 record plucks must never evaluate field identifiers. Parenthesized/string dot inputs
 also apply list templates while retaining literal record-key meaning. Keep source
 printing, gradual checking, and the APN metacircular template AST in sync.
+
+Dotted list templates reject scalar slots rather than replacing them. Types/functions
+apply positionally; nested list templates recurse with the same rule. Record defaults,
+including nested list defaults, retain their replacement behavior via replaceDefaults.

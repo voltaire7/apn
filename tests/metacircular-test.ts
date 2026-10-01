@@ -2,10 +2,10 @@ import { Interpreter } from "../src/interp.ts";
 import { parse } from "../main.ts";
 
 const sourcePrograms = [
-    '["old", false].["new", true]', '[10,20,30] [2,1]', '[[(x -> x + 1)], [(x -> x * 2)]].[[3],[4]]',
+     '[10,20,30] [2,1]', '[[(x -> x + 1)], [(x -> x * 2)]].[[3],[4]]',
     "2 ^ 3 ^ 2", "-2 ^ 2", "2 ^ -3",
     '[c -> c, c -> c, c -> c]."a😀é"', '[c -> 42, c -> 42]."hi"', '[(c -> c), (c -> c)]."hi"',
-    '[0].[123]', '[x -> x * 2, x -> x * 2, x -> x * 2].[1,2,3]', '[(x -> x + 1), (x -> x * 2)].[3,4]',
+     '[x -> x * 2, x -> x * 2, x -> x * 2].[1,2,3]', '[(x -> x + 1), (x -> x * 2)].[3,4]',
     '42', '1 + 2 * 3', '(1 + 2) * 3', '-12 + 5', '1 / 3 + 1 / 6',
     'true ? 42 : missing', 'false ? missing : 7', '!false', '[]',
     '"hello" ++ " world"', '[1,2 + 3,7]', 'head [42,missing]',
@@ -30,7 +30,7 @@ for (const source of sourcePrograms) Deno.test(`metacircular agrees with host: $
     const actual = meta.renderString(meta.run(parse('metaEval source')));
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
 });
-for (const source of ['"old" "new"', 'false true', '0 123', 'foo =', '1 +', '[1,2', '"unterminated', '1.2', '1; 2', 'missing', 'head []']) {
+for (const source of ['["old"].["new"]', '[0].[123]', '[false].[true]', '"old" "new"', 'false true', '0 123', 'foo =', '1 +', '[1,2', '"unterminated', '1.2', '1; 2', 'missing', 'head []']) {
     Deno.test(`metacircular rejects: ${source}`, () => {
         const i = new Interpreter(); i.run(parse('import "std/meta"'));
         i.env.setLocal("source", { kind: "string", v: source });

@@ -12,7 +12,7 @@ for (const source of ['"old" "new"', "'a' 'b'", 'false true', 'true 1', '"old" m
     });
 }
 for (const [source, expected] of [
-    ['["old", false, \'a\'].["new", true, \'b\']', '["new", true, \'b\']'],
+    ['[x: ["old", false]] [["new", true]]', '[x: ["new", true]]'],
     ['[name: "old", enabled: false] [name: "new", enabled: true]', '[name: "new", enabled: true]'],
     ['[name: "old", enabled: false] ["new", true]', '[name: "new", enabled: true]'],
     ['[name: "old", enabled: false] []', '[name: "old", enabled: false]'],
@@ -22,7 +22,7 @@ for (const [source, expected] of [
     const actual = i.renderString(i.run(parseDocument(source)));
     if (actual !== expected) throw new Error(actual);
 });
-for (const source of ['[false].[1]', '["old"].[1]', "['a'].[1]"]) {
+for (const source of ['[x: false] [1]', '[x: "old"] [1]', "[x: 'a'] [1]"]) {
     Deno.test(`scalar default retains kind: ${source}`, () => {
         const i = new Interpreter();
         try { i.renderString(i.run(parseDocument(source))); } catch (e) {
