@@ -619,7 +619,10 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                 if (rec.k === "dynamic") return unknown();
                 if (rec.k !== "record") return problem("field assignment requires a record", e);
                 const fields = new Map(rec.fields);
-                if (e.entries.length > 1 && v.k === "list" && v.items && v.items.length !== e.entries.length) {
+                if (v.k !== "list" && v.k !== "dynamic" && v.k !== "var") {
+                    problem("field assignment needs a list of values on the right", e);
+                }
+                if (v.k === "list" && v.items && v.items.length !== e.entries.length) {
                     problem("field assignment length mismatch", e);
                 }
                 e.entries.forEach((key, n) => {

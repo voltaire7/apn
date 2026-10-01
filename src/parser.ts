@@ -894,7 +894,8 @@ class Parser {
         const name = nt.v;
         this.next(); // "."
         const entries: string[] = [];
-        if (this.isSym("[")) {
+        const bracketed = this.isSym("[");
+        if (bracketed) {
             this.next();
             this.skipListLeading();
             while (!this.isSym("]")) {
@@ -911,9 +912,9 @@ class Parser {
         }
         this.expectSym("=");
         const rhs = this.parseExpr();
-        // one field takes its value directly; several fields take a LIST of
-        // values — normalize the single form into the list form
-        const value = entries.length === 1 ? { t: "list", v: [rhs] } as Expr : rhs;
+        // Bracketed selection always takes a list, including one or zero fields.
+        // Only direct field assignment wraps its scalar RHS.
+        const value = bracketed ? rhs : { t: "list", v: [rhs] } as Expr;
         return {
             t: "patDef",
             pattern: { p: "var", name },

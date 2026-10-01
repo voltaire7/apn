@@ -14,7 +14,7 @@ for (const [source, expected] of [
     const actual = i.renderString(i.run(parseDocument(source)));
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
-for (const assignment of ['v.x = 1.5', 'v "x" = 1.5', 'v.[x] = 1.5']) {
+for (const assignment of ['v.x = 1.5', 'v "x" = 1.5', 'v.[x] = [1.5]']) {
     Deno.test(`implicit Int rejects lossy update: ${assignment}`, () => {
         const i = new Interpreter();
         i.run(parseDocument('v = [x: 1]'));

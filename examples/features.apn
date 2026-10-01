@@ -1262,6 +1262,12 @@ print (SelectedType false "hello")      # => hello
 # apn --check examples/types/dependent-vectors.apn checks without executing.
 # apn --checked examples/types/dependent-vectors.apn checks, then runs.
 
+# Bracketed field assignment always takes a matching list of values.
+singlePluck = [x: 1]
+singlePluck.[x] = [10]
+print singlePluck                    # => [x: 10]
+# singlePluck.[x] = 10 errors: the RHS must be a list.
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

@@ -270,3 +270,8 @@ conversion as `Vector3 [1,2,3]`. Wrong lengths do not match; shape checking
 reads at most one cell beyond the required count, including infinite inputs.
 Field conversion errors remain deferred until those fields are demanded.
 Equally matching record templates retain source-order dispatch.
+
+Bracketed record assignment always takes a list with one value per field, even
+for a single field: `obj.[x] = [10]`. `obj.[x] = 10` errors. Direct assignment
+still takes its value directly: `obj.x = 10`. To store a list through a
+single-field selection, use `obj.[x] = [[10]]`.
