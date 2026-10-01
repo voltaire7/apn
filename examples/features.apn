@@ -1287,6 +1287,10 @@ print scopedPoint.([x, y])           # => [3, 4]
 print scopedPoint.(x = 10; x + y)    # => 14
 print scopedPoint.x                 # => 3
 
+# Numeric powers retain exact arithmetic; Ctrl+C interrupts large REPL powers.
+print ([x: 1, y: 2, z: 3].[x, y] ^ 10) # => [1, 1024]
+# In the REPL: vec.[x, y] ^ 100000000 can be stopped with Ctrl+C.
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

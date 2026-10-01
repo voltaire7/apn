@@ -792,3 +792,9 @@ Optional pre-execution checking and value-dependent types are documented in
 [Gradual and dependent types](gradual-and-dependent-types.md). `Vector n t`
 checks list length and element conversions; type aliases can accept ordinary
 values. `--check` and `--checked` do not change ordinary dynamic execution.
+
+Exact exponentiation, integer square-root and GCD loops check the REPL interrupt
+flag. Large integer/rational decimal formatting is split into checked steps.
+Ctrl+C can cancel large powers such as `[1, 2] ^ 100000000` and return to the
+prompt. Cancellation is cooperative: a single host BigInt operation must finish
+before its next check; it is not a hard real-time latency guarantee.

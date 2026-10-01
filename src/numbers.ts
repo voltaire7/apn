@@ -1,3 +1,4 @@
+import { checkInterrupt } from "./interrupt.ts";
 import { APNError } from "./errors.ts";
 
 export type Real = ({ kind: "int"; v: bigint } | { kind: "rational"; n: bigint; d: bigint } | { kind: "float"; v: number }) & { typeName?: string };
@@ -10,7 +11,7 @@ export function isNumeric(v: { kind: string }): v is Numeric {
 }
 export function gcd(a: bigint, b: bigint): bigint {
     a = a < 0n ? -a : a; b = b < 0n ? -b : b;
-    while (b) [a, b] = [b, a % b];
+    while (b) { checkInterrupt(); [a, b] = [b, a % b]; }
     return a;
 }
 export function rational(n: bigint, d: bigint): Real {
@@ -150,7 +151,7 @@ export function rounding(name: string, value: Numeric): Real {
 function integerSqrt(n: bigint): bigint {
     if (n < 2n) return n;
     let x = 1n << BigInt(Math.ceil(n.toString(2).length / 2));
-    for (;;) { const y = (x + n / x) / 2n; if (y >= x) return x; x = y; }
+    for (;;) { checkInterrupt(); const y = (x + n / x) / 2n; if (y >= x) return x; x = y; }
 }
 export function sqrt(v: Numeric): Numeric {
     if (v.kind === "complex") {
@@ -183,13 +184,44 @@ export function sqrt(v: Numeric): Numeric {
     }
     return floating(Math.sqrt(asFloat(v)));
 }
+// Keep decimal conversion cooperative instead of handing millions of digits to
+// one uninterruptible BigInt.toString call. Leaf conversions stay small.
+const decimalChunkBase = 10n ** 1024n;
+function integerText(value: bigint): string {
+    checkInterrupt();
+    const negative = value < 0n;
+    const n = negative ? -value : value;
+    if (n < decimalChunkBase) return String(value);
+    const powers = [decimalChunkBase];
+    while (n >= powers[powers.length - 1]) {
+        checkInterrupt();
+        const last = powers[powers.length - 1];
+        powers.push(last * last);
+    }
+    function digits(v: bigint, level: number): string {
+        checkInterrupt();
+        if (level < 0) return String(v);
+        const divisor = powers[level];
+        const high = v / divisor;
+        const low = v % divisor;
+        if (!high) return digits(low, level - 1);
+        const prefix = digits(high, level - 1);
+        const suffix = digits(low, level - 1);
+        checkInterrupt();
+        return prefix + suffix.padStart(1024 * 2 ** level, "0");
+    }
+    const text = digits(n, powers.length - 2);
+    checkInterrupt();
+    return negative ? "-" + text : text;
+}
+
 export function numberText(v: Numeric): string {
-    if (v.kind === "rational") return `${v.n}/${v.d}`;
+    if (v.kind === "rational") return `${integerText(v.n)}/${integerText(v.d)}`;
     if (v.kind === "complex") {
         const im = numberText(v.im);
         return `${numberText(v.re)}${im.startsWith("-") || im.startsWith("+") ? "" : "+"}${im}i`;
     }
-    if (v.kind === "int") return String(v.v);
+    if (v.kind === "int") return integerText(v.v);
     if (Number.isNaN(v.v)) return "+nan.0";
     if (!Number.isFinite(v.v)) return v.v < 0 ? "-inf.0" : "+inf.0";
     if (Object.is(v.v, -0)) return "-0.0";
@@ -226,7 +258,14 @@ export function numericNative(name: string, args: Array<{ kind: string }>): Nume
     if (name === "expt") {
         if (y.kind === "int") {
             let count = y.v < 0n ? -y.v : y.v, base = x, result: Numeric = integer(1n);
-            while (count) { if (count & 1n) result = arithmetic("*", result, base); count >>= 1n; if (count) base = arithmetic("*", base, base); }
+            while (count) {
+                checkInterrupt();
+                if (count & 1n) result = arithmetic("*", result, base);
+                checkInterrupt();
+                count >>= 1n;
+                if (count) base = arithmetic("*", base, base);
+            }
+            checkInterrupt();
             return y.v < 0n ? arithmetic("/", integer(1n), result) : result;
         }
         if (y.kind === "rational" && y.d === 2n) return numericNative("expt", [sqrt(x), integer(y.n)]) as Numeric;
