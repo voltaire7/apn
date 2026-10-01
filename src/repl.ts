@@ -351,7 +351,7 @@ function helpText(): string {
         `  Just v = value (declared constructors destructure; capital defs are errors)`,
         `  [x: a, y: b] = value  (rename destructure: pull fields out of a record)`,
         `  nums 0 / nums (-1) / nums [0, 2]   (single or multiple indices)`,
-        `  [String, Int].["x", 1] / templates.(values)  (list templates)`,
+        `  [String, Int].["x", 1] / templates.values / templates.(expr)  (list templates)`,
         `  vec [1,2,3] / vec [z: 3, x: 1]   (apply a record = clone)`,
         `  rec.field / rec."key" / rec.(dyn) / rec.[x, y]  (quoted access + pluck)`,
         `  vec.x = 10 / vec.[x, y] = [1, 2]  (record update: rebinds a modified`,

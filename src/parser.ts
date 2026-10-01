@@ -478,7 +478,7 @@ class Parser {
                 const field = this.parseKey();
                 const keyEnd = this.i;
                 let argument: Expr | undefined;
-                if (t.k === "str" || (t.k === "sym" && t.v === "(")) {
+                if (t.k === "ident" || t.k === "str" || (t.k === "sym" && t.v === "(")) {
                     this.i = keyStart;
                     try { argument = this.parsePrimary(); } catch { /* record keys need not be expressions */ }
                     this.i = keyEnd;

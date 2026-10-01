@@ -839,6 +839,10 @@ print (retypedAdd (Int 2) (Int 3))   # => 5
 print cast                          # => APN clauses for list schemas and other types
 
 # Container templates apply their existing slots to incoming values.
+namedTemplates = [Int, Float]
+namedValues = [1, 2]
+print namedTemplates.namedValues    # => [1, 2.0]
+print ([namedValues: 42].namedValues) # => 42 (literal record field)
 print ([x: 0] [123])                 # => [x: 123] (record default override)
 # Scalars are not callable: 0 123, "old" "new", and false true all error.
 print ([String, Bool, Char].["new", true, 'b']) # => ["new", true, 'b']

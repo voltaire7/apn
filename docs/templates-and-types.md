@@ -59,8 +59,10 @@ Strings supply Unicode code-point characters using the same positional rules:
 chars "hello"           # arbitrary-length character conversion
 ```
 
-A template is an ordinary list value. Use `template.(values)` for a computed
-input. On records, parenthesized dot keys retain their literal spelling.
+A template is an ordinary list value. Use `template.values` for a variable input,
+or `template.(expression)` for a computed input. On records, `record.values`
+still looks up the literal field `values`, and parenthesized dot keys retain
+their literal spelling.
 `String` converts a finite character list back to text, using `fromChars`:
 
 ```apn
@@ -79,7 +81,7 @@ A list argument selects multiple indices: `[10,20,30] [2,0]` returns `[30,10]`.
 Selection is lazy and preserves index order and duplicates. Integer and enumeration
 indices use the same rules as single indexing; negative indices require a finite input.
 Dotted application explicitly selects template behavior: `[Int].[0]` returns `[0]`; `[10].[0]` errors.
-For computed template inputs use `template.(values)`. This overload is only for
+For variable inputs use `template.values`; for other expressions use `template.(expression)`. This overload is only for
 lists; `record.(key)` remains a literal parenthesized field name.
 
 Multi-index assignment reads indices and replacement values against the old binding:
