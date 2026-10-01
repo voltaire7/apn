@@ -84,18 +84,7 @@ Dotted application explicitly selects template behavior: `[Int].[0]` returns `[0
 For variable inputs use `template.values`; for other expressions use `template.(expression)`. This overload is only for
 lists; `record.(key)` remains a literal parenthesized field name.
 
-Multi-index assignment reads indices and replacement values against the old binding:
-
-```apn
-arr = [10,20,30]
-arr [1,2] = arr [2,1]   # arr becomes [10,30,20]
-```
-
-Assignment requires a finite index list and exactly as many replacement values.
-Bounds and outer conversion failures leave the binding unchanged. Duplicate indices
-are written in order, so the last value wins. Positive indices can update a finite
-prefix of an infinite list without demanding the remaining tail. Separate side effects
-performed while evaluating arguments are not rolled back.
+For updates and swaps, see [computed keys and multiple indices](#computed-keys-and-multiple-indices).
 
 ## Records
 
@@ -115,71 +104,163 @@ The empty list `[]` explicitly initializes all fields from their defaults. Recor
 Keys retain their full string contents, including any quote characters, through application.
 `[x: Int, "x": Int] ["x": 1]` produces `[x: 0, "x": 1]`.
 
+## Access and assignment reference
+
+| Container | Read | Assign |
+| --- | --- | --- |
+| List, one index | `arr i` or `arr (i + 1)` | `arr i = value` or `arr (i + 1) = value` |
+| List, several indices | `arr [2, 0]` or `arr indices` | `arr [2, 0] = [a, b]` or `arr indices = values` |
+| Record, literal field | `obj.x` | `obj.x = value` |
+| Record, computed string key | `obj key` or `obj (prefix ++ key)` | `obj key = value` or `obj (prefix ++ key) = value` |
+| Record, several literal fields | `obj.[x, y]` | `obj.[x, y] = [a, b]` |
+| Record, one-field selection | `obj.[x]` returns a one-element list | `obj.[x] = [value]` |
+| Nested record | `obj.child.x` | `obj.child.x = value` |
+| Nested field selection | `obj.child.[x, y]` | `obj.child.[x, y] = [a, b]` |
+| Record, positional entry | `obj 0` returns `[key, value]` | Not supported; assign by field name |
+| Record, renamed selection | `obj.[x: a, y: b]` | Renaming is a read operation |
+
+Dot field names are literal strings. `obj.(key)` selects the literal field
+`"(key)"`; use `obj key` for a computed name. Quoted field syntax includes the
+quote characters: `obj."x"` is equivalent to `obj "\"x\""`.
+See [record key identity](semantics.md#record-fields-string-keys-and-positions) for the full rules.
+
+List dot syntax performs template application, not indexing or assignment:
+`templates.values`, `templates.(expression)`, and `[Int, Float].[1, 2]`.
+Use `arr indices = values` for a list update, not `arr.[indices] = values`.
+
 ## Slot assignment
 
-Index, field, and pluck assignment replace the selected slot, then rebind a
-copy in the current scope. Existing numeric values, implicitly or explicitly typed, retain
-their conversion checks; variants retain their family and wrapped functions
-retain their contracts:
+Index, field, and pluck assignment replace selected slots and rebind a modified
+copy in the current scope. Numeric values retain their lossless conversion
+checks, variants retain their family, and wrapped functions retain their contracts.
 
 ```apn
-xs = [Int].[0]
-xs 0 = floor .2                 # [0]
-xs 0 = 123                # [123]
+arr = [1, 2]
+arr 0 = 3.0                # stores integer 3
+# arr 0 = 3.5              # error: lossy conversion
 
-v = [x: Int, y: Int] []
-v.y = 321                 # [x: 0, y: 321]
-v "y" = floor .2                # [x: 0, y: 0]
+v = [x: Float, y: Int] []
+v.x = 123                  # stores 123.0
+v "y" = 321                # stores integer 321
 ```
 
-Bare constructors are replaced without conversion: `v = [x: Float]; v.x = 1`
-produces `[x: 1]`, and `v.x = Int` stores Int. To keep a numeric constraint,
-construct the field first (`v = [x: Float] []`) or assign `Float 1` explicitly.
-Ordinary records and functions are replaced, never merged or called by assignment.
-Explicit record application still merges fields.
-The old slot is inspected without invoking a stored action. Unrelated slots
-remain deferred. The RHS sees the old binding. A conversion or bounds error
-preserves the binding; already-performed effects are not undone.
-Nested container results retain lazy checks, so errors in an unconsumed nested
-field can still surface later. Pluck updates compute against the original fields
-and publish the record only after all selected outer results succeed.
-
-Indices and record keys can be variables or parenthesized expressions:
+Bare constructors are replaced without conversion:
 
 ```apn
-arr = [0, 0]
+v = [x: Float]
+v.x = 123                  # changes the default to integer 123
+v = [x: Float]
+v.x = Int                  # replaces the constructor
+```
+
+Construct the record first (`v = [x: Float] []`) or store an explicit numeric
+value (`Float 1`) to retain that numeric constraint on subsequent assignments.
+Ordinary records and functions are replaced, never merged or called:
+
+```apn
+v = [f: (* 2), child: [x: 1]]
+v.f = 3                    # stores 3; does not call (* 2)
+v.child = [y: 2]           # replaces the whole child
+```
+
+Record application remains a separate operation: `[f: (* 2)] [f: 3]` produces
+`[f: 6]`, and `[x: 1] [y: 2]` produces `[x: 1, y: 2]`.
+
+### Computed keys and multiple indices
+
+```apn
+arr = [10, 20, 30]
 i = 0
-arr i = 1
-arr (i + 1) = 2             # [1, 2]
+arr i = 11
+arr (i + 1) = 22
+arr [1, 2] = arr [2, 1]     # swaps the old values
+
 obj = [x: 0]
 key = "x"
-obj key = 3                # [x: 3]
+obj key = 3
 obj (key ++ "y") = 4       # [x: 3, xy: 4]
 ```
 
-The key is evaluated once before the RHS, in the current scope against the old
-binding. Lists require an integer (negative indices count from the end); records
-require a string. Numeric strings never become positional indices. Unbound names
-and existing functions retain ordinary pattern definitions: `f i = i + 1` still
-defines a function. Expression-only left sides such as `arr (i + 1) = value`
-require an existing collection. Assignment accepts exactly one index/key.
+The index or key is evaluated once before the RHS, against the old binding.
+List indices are exact integers or nullary enumeration values; a list of indices
+selects multiple slots. Negative indices count from the end and require a finite
+list. Numeric strings never become indices. Record assignment keys must be strings;
+integer record access is read-only positional entry access.
 
-New record fields are inserted as given. List updates never append: `xs 1 = 4`
-on the one-slot list above is an error. Negative indexes still count from the end.
+Multi-index assignment requires a finite index list and the same number of
+replacement values. Duplicate indices use the last replacement. `arr [] = []`
+is a no-op. List assignment never appends: out-of-bounds indices error. Positive
+indices can update a finite prefix of an infinite list without consuming its tail.
+New record fields are allowed; `obj = []; obj.x = 1` seeds a record.
 
-Dotted templates return ordinary lists without a persistent container schema.
-`[].[]` is empty, and an update at index zero fails; `[Int].[]` is a length error. After transformation, a function slot is
-replaced by its result:
+### Bracketed field assignment
+
+Brackets always require a list with one value per selected field, even for one field:
 
 ```apn
-v = [x: (* 2)]
-v.x = 3                   # x becomes 6
-v.x = 4                   # x becomes 4, not 8
+obj = [x: 1, y: 2]
+obj.[x] = [10]             # assigns 10 to x
+# obj.[x] = 10             # error: RHS must be a list
+obj.[x, y] = obj.[y, x]    # swaps the old values
+obj.[] = []                # no change
+
+obj.items = []
+obj.[items] = [[1, 2]]     # stores the list [1, 2]
+obj.items = [3, 4]         # direct assignment takes the value itself
 ```
 
-Rebind a whole variable to replace a template instead of applying it. Ordinary
-numeric/string-pattern function definitions on function or unbound names remain
-function definitions, not slot assignments.
+### Nested records
+
+```apn
+obj = [child: [x: Float 1, y: 2], label: "kept"]
+obj.child.x = 10
+# [child: [x: 10.0, y: 2], label: "kept"]
+obj.child.[x, y] = [20, 30]
+```
+
+The update rebuilds the parent records and rebinds `obj`, preserving sibling
+fields and the selected slot's conversion checks. Paths may contain any number
+of literal record fields, including quoted keys. Intermediate fields must exist
+and contain records; an empty list at the final parent can seed a record:
+
+```apn
+obj = [child: []]
+obj.child.x = 10            # [child: [x: 10]]
+# obj.missing.x = 10       # error: missing intermediate field
+# obj.child.x.y = 10       # error: x is a number
+```
+
+This syntax follows record fields; it does not introduce assignment through a
+list index or a computed string at an intermediate path segment.
+
+### Scope, sharing, and failures
+
+```apn
+obj = [child: [x: 1]]
+snapshot <- obj
+obj.child.x = 10
+print snapshot.child.x     # 1
+{
+    obj.child.x = 20
+}
+print obj.child.x          # 10
+```
+
+Ordinary updates create scoped copies; they do not mutate captured snapshots.
+Use eager binding (`<-`) when taking a snapshot: ordinary lazy aliases can
+observe later rebinding. Live [environment views](semantics.md#live-environment)
+are an exception: writes through them update their backing bindings.
+
+The RHS sees the old binding. Bounds, shape, and immediate conversion failures
+leave that binding unchanged. Selected outer values are checked before publishing;
+unrelated values remain deferred. Nested lazy checks may still fail when later
+consumed. Side effects performed during evaluation are not rolled back.
+
+Dotted templates return ordinary lists without a persistent container schema;
+`Vector n t` retains its explicit schema through list updates. Unbound names and
+existing functions keep ordinary pattern-definition behavior: `f i = i + 1`
+defines a function, while an expression-only target such as `arr (i + 1) = value`
+requires an existing collection.
 
 ## Type descriptions and aliases
 
@@ -193,7 +274,7 @@ Point = [x: Float, y: Float]
 Points = [Point]
 
 Count 123                  # 123
-Numbers.[1, 2]             # [1, 2]
+Numbers.[1]                # [1]; Numbers.[1, 2] errors
 Point [x: 1, y: 2]         # [x: 1.0, y: 2.0]
 cast [Int, Int] [1, 2]          # [1, 2]
 Type [Int]                # [Int]
@@ -202,7 +283,7 @@ isType Type [(* 2)]        # false
 
 Aliases are shared type-level bindings, not repeatable zero-argument actions.
 They introduce no new nominal identity. `Type` accepts descriptions while their
-ordinary container representation remains inspectable; `typeOf [Int]` is `List`.
+ordinary container representation remains inspectable.
 Mixed defaults such as `[x: Int, y: 0]` are templates, not type descriptions.
 
 Patterns accept aliases and inline descriptions:
@@ -270,14 +351,3 @@ conversion as `Vector3 [1,2,3]`. Wrong lengths do not match; shape checking
 reads at most one cell beyond the required count, including infinite inputs.
 Field conversion errors remain deferred until those fields are demanded.
 Equally matching record templates retain source-order dispatch.
-
-Bracketed record assignment always takes a list with one value per field, even
-for a single field: `obj.[x] = [10]`. `obj.[x] = 10` errors. Direct assignment
-still takes its value directly: `obj.x = 10`. To store a list through a
-single-field selection, use `obj.[x] = [[10]]`.
-
-Field assignments can follow nested records: `obj.child.x = 10` and
-`obj.child.[x, y] = [10, 20]`. They rebuild the parent records and rebind
-`obj` in the current scope, preserving sibling fields and numeric conversions.
-Intermediate fields must exist and contain records; an empty list at the final
-parent can seed a record. Errors leave the root binding unchanged.

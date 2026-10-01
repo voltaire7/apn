@@ -112,20 +112,27 @@ Printing preserves key quotation. Field updates (`obj.field = value`,
 `obj."field" = value`), record cloning, and plucks (`obj.[field, "field"]`)
 preserve both identities. On an existing record, `obj "field" = value` updates
 or adds the key string `field`, just like `obj.field = value`. Strings containing
-quotes likewise update the corresponding quoted field. The key must be one
-string literal; `obj "1" = value` updates numeric-named field `1`. It reads the
-RHS before rebinding, applies the existing slot to it, makes a scoped copy, and
-preserves the old binding on an immediate failure. A new field is inserted unchanged. On an unbound name or an existing function, `f "x" = value` remains
-a string-pattern function clause.
+quotes likewise update the corresponding quoted field. The key may be a string
+literal, variable, or expression: `obj key = value` and `obj (prefix ++ key) = value`.
+`obj "1" = value` updates numeric-named field `1`. Assignment evaluates the key
+once before the RHS, replaces the selected slot with conversion checks for existing
+numeric values, variants, and function contracts, and rebinds a scoped copy.
+It does not invoke an ordinary function stored in the old slot. A new field is
+inserted unchanged. On an unbound name or an existing function, `f "x" = value`
+remains a string-pattern function clause.
+
+`obj.[x] = [10]` requires a one-element RHS list; `obj.[x] = 10` errors.
+`obj.child.x = 10` and `obj.child.[x, y] = [10, 20]` rebuild nested parent records.
+See the [access and assignment reference](templates-and-types.md#access-and-assignment-reference)
+for forms, conversion rules, scoping, and failure behavior.
 
 Destructuring `[field: a, "field": b]` selects each
 key explicitly; the bare pattern `[field]` selects only the named field.
 Renamed plucks such as `obj.["field": value]` create named destination fields.
 
-`pairs`, positional record access, and record iteration still expose key **text**
-as ordinary strings. These views do not retain the named/string distinction.
-Converting a record to `HashMap` also uses key text; if both kinds have the same
-text, the later entry wins under the existing duplicate-key rule.
+`pairs`, positional record access, record iteration, and conversion to `HashMap`
+preserve the full key string, including quote characters. The keys `x` and `"x"`
+therefore remain distinct in those views and conversions.
 
 ## Definitions and actions
 
@@ -353,8 +360,11 @@ streaming/interruption recovery. The showcase is the broader syntax reference.
 like record field assignment. Bare constructors are replaced:
 `arr = [Int]; arr 0 = .2` produces `[0.2]`. Existing typed values retain their
 conversion checks: `arr = [Int 0]; arr 0 = .2` errors. `arr (-1) = 10` updates its final element.
-The index must evaluate to an integer or a variant from a nullary-only family
-(using zero-based declaration order); negative integer indexes require a finite list.
+A single index must evaluate to an integer or a variant from a nullary-only family
+(using zero-based declaration order); a finite list of these indices selects multiple
+slots. `arr [1, 2] = arr [2, 1]` swaps the old values. Multi-index assignment requires
+one replacement per index; duplicate indices use the last value. Negative indices
+require a finite source list. See [slot assignment](templates-and-types.md#slot-assignment).
 Positive updates traverse only as far as the selected cell, leaving unused
 unselected heads and the remaining tail deferred. The selected head is inspected for an existing type annotation without invoking
 a stored action. Bounds errors leave the binding unchanged.
