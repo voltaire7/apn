@@ -713,7 +713,7 @@ infinite lists, and enumerating an element does not force its value.
 
 ## Record-scoped expressions
 
-`record.(expression)` evaluates the expression in a local scope populated by the
+`record.(expression)` and `record.{ statements }` evaluate in a local scope populated by the
 record's fields. Fields shadow outer names; other names resolve in the surrounding
 lexical scope, including functions such as `sqrt`.
 
@@ -723,10 +723,18 @@ point.(x + y)                # 7
 point.([x, y])               # [3, 4]
 point.(x = 10; x + y)        # 14
 point.x                     # 3
+point.{
+    result = x + y
+    result * result
+}                           # 49
 f = point.(n -> x + n)
 f 2                         # 5
 ```
 
+Brace blocks use the usual four-space indentation and aligned closing brace.
+Both forms return the last expression; empty blocks return `[]`. Grouping also
+accepts either delimiter for operator sections (`{+ 2}` or `(+ 2)`), parameter
+patterns (`f {Int x}` or `f (Int x)`), and grouped function contracts.
 Definitions and ordinary field/index updates inside the expression are local;
 they do not implicitly update the original record. Returned functions and deferred
 values retain this local scope. Explicit side effects, including `Mutable` updates

@@ -355,7 +355,7 @@ function helpText(): string {
         `  [String, Int].["x", 1] / templates.values / templates.(expr)  (list templates)`,
         `  vec [1,2,3] / vec [z: 3, x: 1]   (apply a record = clone)`,
         `  rec.field / rec."key" / rec.[x, y]  (quoted access + pluck)`,
-        `  rec.(expression)  (evaluate with record fields in a local scope)`,
+        `  rec.(expression) / rec.{ statements }  (evaluate with record fields in a local scope)`,
         `  vec.x = 10 / obj.child.x = 10 / vec.[x, y] = [1, 2]  (record update: rebinds a modified`,
         `              copy, scoped like any def — blocks shadow; [] seeds a record)`,
         `  f = { ... }  ({ stays on the = line; body +4 spaces; } aligned)`,

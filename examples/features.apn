@@ -1304,6 +1304,15 @@ print (Float .2 + Float32 .1)        # => Float32 0.3
 # Float32 .1 + Float64 .2 errors: choose a precision with a cast.
 print (Float32 .1 + cast Float32 (Float64 .2)) # => Float32 0.3
 
+print scopedPoint.{
+    result = x + y
+    result * result
+}                                   # => 49
+
+print ({+ 2} 3)                     # => 5, like (+ 2) 3
+bracePattern {Int x} = x + 1
+print (bracePattern 2)              # => 3
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

@@ -92,7 +92,7 @@ class Parser {
     skipType(j: number): number {
         const tk = this.toks[j];
         if (tk.k === "ident" || tk.k === "kw") return j + 1;
-        if (tk.k === "sym" && tk.v === "(") {
+        if (tk.k === "sym" && (tk.v === "(" || tk.v === "{")) {
             j++;
             j = this.skipType(j);
             while (this.toks[j].k === "sym" && (this.toks[j] as any).v === ",") {
@@ -109,11 +109,12 @@ class Parser {
     parseType(): string {
         const t = this.peek();
         if (t.k === "ident" || t.k === "kw") { this.next(); return t.v; }
-        if (t.k === "sym" && t.v === "(") {
+        if (t.k === "sym" && (t.v === "(" || t.v === "{")) {
+            const close = t.v === "(" ? ")" : "}";
             this.next();
             const parts = [this.parseType()];
             while (this.eatSym(",")) parts.push(this.parseType());
-            this.expectSym(")");
+            this.expectSym(close);
             return "(" + parts.join(", ") + ")";
         }
         if (t.k === "sym" && t.v === "[") {
@@ -153,18 +154,19 @@ class Parser {
         }
         if (t.k === "bool") { this.next(); return { p: "bool", v: t.v }; }
         if (t.k === "str") { this.next(); return { p: "string", v: t.v }; }
-        if (t.k === "sym" && t.v === "(") {
+        if (t.k === "sym" && (t.v === "(" || t.v === "{")) {
+            const close = t.v === "(" ? ")" : "}";
             this.next();
-            if (this.isSym(")")) { this.next(); return { p: "list", v: [] }; }
+            if (this.isSym(close)) { this.next(); return { p: "list", v: [] }; }
             const signatureStart = this.i;
-            if (this.isSym("[") || this.isSym("(")) {
+            if (this.isSym("[") || this.isSym("(") || this.isSym("{")) {
                 try {
                     this.noLambda++;
                     let type: Expr;
                     try { type = this.parsePrimary(); } finally { this.noLambda--; }
                     if (this.startsParam(this.peek())) {
                         const value = this.parsePattern();
-                        this.expectSym(")");
+                        this.expectSym(close);
                         return { p: "schema", type, value };
                     }
                 } catch { /* ordinary grouped pattern */ }
@@ -172,26 +174,26 @@ class Parser {
             }
             try {
                 const spec = this.parseFunctionSpec();
-                if (!("name" in spec) && this.peek().k !== "eof" && !this.isSym(")")) {
+                if (!("name" in spec) && this.peek().k !== "eof" && !this.isSym(close)) {
                     const value = this.parsePattern();
-                    this.expectSym(")");
+                    this.expectSym(close);
                     return { p: "contract", spec, value };
                 }
             } catch { /* ordinary grouping or constructor pattern */ }
             this.i = signatureStart;
             const typeName = this.peek(), valueName = this.peek(1), closing = this.peek(2);
             if (typeName.k === "ident" && /^[a-z]/.test(typeName.v) &&
-                valueName.k === "ident" && closing.k === "sym" && closing.v === ")") {
+                valueName.k === "ident" && closing.k === "sym" && closing.v === close) {
                 this.next();
                 const value = this.parsePattern();
-                this.expectSym(")");
+                this.expectSym(close);
                 return { p: "typeBind", name: typeName.v, value };
             }
             const p = this.parseConsPattern();
             if (this.eatSym(",")) {
                 throw new Error("Parser: tuple patterns are not supported; use a list pattern [a, b, ...] instead");
             }
-            this.expectSym(")");
+            this.expectSym(close);
             return p;
         }
         if (t.k === "sym" && t.v === "[") {
@@ -443,7 +445,10 @@ class Parser {
         while (this.isSym(".")) {
             this.next();
             const t = this.peek();
-            if (t.k === "sym" && (t as { v: string }).v === "[") {
+            if (t.k === "sym" && (t.v === "{" || t.v === "(")) {
+                const argument = this.parsePrimary();
+                e = { t: "recordAccess", rec: e, field: this.source.slice(t.pos, this.peek().pos).trimEnd(), argument, scoped: true };
+            } else if (t.k === "sym" && (t as { v: string }).v === "[") {
                 const bracketStart = this.i;
                 const values = this.parsePrimary();
                 const bracketEnd = this.i;
@@ -611,8 +616,8 @@ class Parser {
                         this.next();
                         // () and {} are the same: a group/block. Empty blocks return an empty list.
                         if (this.isSym(close)) { this.next(); return { t: "block", stmts: [], style: t.v }; }
-                        if (t.v === "(") {
-                            const sec = this.tryOperatorSection();
+                        {
+                            const sec = this.tryOperatorSection(close);
                             if (sec) return sec;
                             if (this.isSym(",")) {
                                 throw new Error("Parser: tuples are not supported; use a list [a, b, ...] instead");
@@ -794,9 +799,10 @@ class Parser {
 
     parseFunctionSpec(): FunctionSpec {
         let left: FunctionSpec;
-        if (this.eatSym("(")) {
+        if (this.isSym("(") || this.isSym("{")) {
+            const close = (this.next() as { v: string }).v === "(" ? ")" : "}";
             left = this.parseFunctionSpec();
-            this.expectSym(")");
+            this.expectSym(close);
         } else {
             const token = this.next();
             if (token.k !== "ident" || !(TYPE_NAMES.includes(token.v) || functionTypeNames.has(token.v))) throw new Error("Parser: expected a type constructor");
@@ -853,7 +859,7 @@ class Parser {
     startsPatBinding(): boolean {
         const t = this.peek();
         if (t.k === "sym" && t.v === "[") return true;
-        if (t.k === "sym" && t.v === "(") {
+        if (t.k === "sym" && (t.v === "(" || t.v === "{")) {
             const n1 = this.peek(1);
             return n1.k === "ident" && /^[A-Z]/.test(n1.v);
         }
@@ -984,14 +990,14 @@ class Parser {
     // negation; use a lambda for that. `(+)` alone is unsupported.
     static sectionOps = ["&&", "||", "\\", "^", "+", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=", "++"];
 
-    tryOperatorSection(): Expr | null {
+    tryOperatorSection(close: string): Expr | null {
         const save = this.i;
         const t = this.peek();
         // op-front:  (+ 2)   (op followed by an operand, then ')')
         if (t.k === "sym" && t.v !== "-" && Parser.sectionOps.includes((t as { v: string }).v)) {
             try {
                 // lone (op): a 2-arg lambda —  add = (+)
-                if (this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === ")") {
+                if (this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === close) {
                     const op = t.v as BinOp;
                     this.next(); // op
                     this.next(); // )
@@ -1003,7 +1009,7 @@ class Parser {
                 }
                 this.next(); // op
                 const operand = this.parseUnary();
-                this.expectSym(")");
+                this.expectSym(close);
                 const op = t.v as BinOp;
                 return { t: "lambda", params: ["$S"], body: { t: "binop", op, l: { t: "var", name: "$S" }, r: operand } };
             } catch {
@@ -1016,7 +1022,7 @@ class Parser {
             const op = this.peek();
             if (op.k === "sym" && (op as { v: string }).v !== "-" &&
                     Parser.sectionOps.includes((op as { v: string }).v) &&
-                    this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === ")") {
+                    this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === close) {
                 this.next(); // op
                 this.next(); // )
                 return { t: "lambda", params: ["$S"], body: { t: "binop", op: (op as { v: string }).v as BinOp, l: operand, r: { t: "var", name: "$S" } } };
@@ -1110,7 +1116,7 @@ class Parser {
     startsParam(t: Token): boolean {
         if (t.k === "ident") return t.v !== "_" ? true : true;
         if (t.k === "int" || t.k === "bool" || t.k === "str") return true;
-        if (t.k === "sym" && (t.v === "(" || t.v === "[")) return true;
+        if (t.k === "sym" && (t.v === "(" || t.v === "{" || t.v === "[")) return true;
         if (t.k === "sym" && t.v === "_") return true;
         return false;
     }
@@ -1229,7 +1235,7 @@ class Parser {
                         throw new Error("Parser: expected a capitalized constructor name");
                     }
                     const fields: Expr[] = [];
-                    while (this.peek().k === "ident" || this.isSym("(") || this.isSym("[")) {
+                    while (this.peek().k === "ident" || this.isSym("(") || this.isSym("{") || this.isSym("[")) {
                         this.noLambda++;
                         try { fields.push(this.parsePrimary()); } finally { this.noLambda--; }
                     }
@@ -1442,7 +1448,7 @@ export function exprToSource(e: Expr): string {
         case "ternary": return `${exprToSource(e.cond)} ? ${exprToSource(e.then)} : ${exprToSource(e.els)}`;
         case "pipe": return `${exprToSource(e.f)} $ ${exprToSource(e.x)}`;
         case "recordAccess":
-            return `${exprToSource(e.rec)}.${keySource(e.field)}`;
+            return `${exprToSource(e.rec)}.${e.scoped && e.argument ? exprToSource(e.argument) : keySource(e.field)}`;
         case "pluck":
             if (e.values) return `${exprToSource(e.rec)}.${exprToSource(e.values)}`;
             return `${exprToSource(e.rec)}.[${e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`).join(", ")}]`;

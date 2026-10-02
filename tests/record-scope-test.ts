@@ -34,3 +34,51 @@ Deno.test('static checker resolves record scope fields', () => {
     const result = checkSource('obj = [x: 3,y: 4]; obj.(x + y)');
     if (result.issues.length) throw new Error(JSON.stringify(result.issues));
 });
+
+Deno.test('multiline record scope uses normal brace layout', () => {
+    const i = new Interpreter();
+    const source = `vec = [x: 1, y: 2, z: 3]
+vec.{
+    result = x + y
+    result * result
+}`;
+    if (i.renderString(i.run(parseDocument(source))) !== '9') throw new Error('wrong result');
+    if (i.renderString(i.run(parseDocument('vec'))) !== '[x: 1, y: 2, z: 3]') throw new Error('record changed');
+    if (checkSource(source).issues.length) throw new Error('checker rejected scope');
+});
+for (const [source, expected] of [
+    ['vec = [x: 1]; vec.{ x = 10; x }; vec.x', '1'],
+    ['vec = [x: 1]; vec.{}', '[]'],
+    ['vec = [x: 1]; f = vec.{ y -> x + y }; f 2', '3'],
+    ['[Int, Float].{ [1, 2] }', '[1, 2.0]'],
+    ['vec = [x: 1]; vec.{ [y: x + 1] }.y', '2'],
+] as const) Deno.test(`braced scope: ${source}`, () => {
+    const i = new Interpreter();
+    if (i.renderString(i.run(parseDocument(source))) !== expected) throw new Error(source);
+});
+Deno.test('braced scope function source round-trips', () => {
+    const i = new Interpreter();
+    const fn = i.renderString(i.run(parseDocument('f vec = vec.{ result = x + y; result * result }; f')));
+    if (i.renderString(i.run(parseDocument(`(${fn}) [x: 1, y: 2]`))) !== '9') throw new Error(fn);
+});
+Deno.test('braced scope enforces indentation', () => {
+    for (const source of ['vec.{\n    x\nx\n}', 'vec.{\n    x\n    }']) {
+        try { parseDocument(source); } catch { continue; }
+        throw new Error('invalid layout accepted');
+    }
+});
+
+Deno.test('braces and parentheses share grouped expression and pattern behavior', () => {
+    for (const [source, expected] of [
+        ['{+ 2} 3', '5'], ['{2 +} 3', '5'], ['{+} 2 3', '5'],
+        ['f {Int x} = x + 1; f 2', '3'],
+        ['f {x:xs} = x; f [1,2]', '1'],
+        ['{{Int x} -> x + 1} 2', '3'],
+        ['f {{Int -> Int} g} = g 2; f {+ 1}', '3'],
+        ['obj = [x: 1]; obj.({ x + 1 })', '2'],
+    ]) {
+        const i = new Interpreter();
+        const actual = i.renderString(i.run(parseDocument(source)));
+        if (actual !== expected) throw new Error(`${source}: ${actual}`);
+    }
+});
