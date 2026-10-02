@@ -434,7 +434,10 @@ integer constructors require lossless conversion of both bare and explicitly typ
 Use floor/truncate/inexact before construction when rounding is intended. Internal arithmetic promotion and C ABI conversions
 still use strict castNumeric by default. NEVER allow integer wraparound or
 imaginary-part loss.
-Same fixed-width arithmetic checks overflow. Mixed typed arithmetic tries an
+Same fixed-width arithmetic checks overflow. Float and bare floating values are flexible (binary64 storage); floating arithmetic
+adopts a Float32/Float64 partner symmetrically, rounding the flexible operand.
+Different fixed floating precisions require an explicit cast. Powers/expt and
+array arithmetic share this rule. Other mixed typed arithmetic tries an
 existing broader operand type losslessly, then falls back to the numeric tower.
 `Number`, `Real`, `Integer`, `Exact`, `Inexact` are aggregate type guards.
 Typed function clauses prefer literal/exact concrete matches, then aggregates,

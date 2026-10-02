@@ -454,7 +454,8 @@ An inexact radius stays inexact; an inexact angle still uses trigonometry.
 
 `Int` and `UInt` are arbitrary-precision signed/unsigned integers. Fixed-width
 constructors are `Int8`, `Int16`, `Int32`, `Int64`, `Int128` and matching `UInt`
-variants. `Float` (`Float64` keeps an explicit display label) uses binary64; `Float32` uses binary32.
+variants. `Float` is flexible floating precision, using binary64 by default.
+`Float32` and `Float64` commit to binary32 and binary64 respectively.
 `Fraction` holds an exact rational, `Complex` any numeric complex value, and
 `ComplexExact` an exact one. Constructors are first-class functions, e.g.
 `map Int [1,2]`. Constructed values print their type: `Int32 123`.
@@ -468,8 +469,9 @@ round-tripping decimal); `Float (Int 9007199254740993)` rounds to
 Integer constructors remain lossless: `Int .2` and `Int (Float .2)` both error.
 Choose integer rounding explicitly: `Int (floor .2)` is `0`, while
 `Int (truncate (-1.7))` is `-1`. Fixed-width integer overflow and nonzero
-imaginary-part loss remain errors. Implicit conversions, typed parameter matching,
-function contracts, and assignment to existing numeric slots remain lossless.
+imaginary-part loss remain errors. Typed parameter matching, function contracts,
+and assignment to existing numeric slots remain lossless. Floating arithmetic
+adapts flexible Float operands as described below.
 Numeric equality ignores
 annotations: `.2 == Float .2` remains true. Int and Float values display without
 a prefix; specialized types such as Int32, Float32 and Float64 retain theirs.
@@ -483,14 +485,39 @@ cast (Type target) value = target value
 It has the same behavior as applying the type directly: floating constructors
 round to their precision, while integer construction still rejects truncation.
 
-Arithmetic between values of the same concrete type retains that type and
-checks integer overflow. An untyped operand is converted losslessly to the
-other operand's type when possible. Two differing explicit types try the broader
-existing operand type first, using value-based lossless conversion. If neither
-fits, arithmetic uses the numeric tower; exact-to-inexact conversion must still
-be lossless. Integer `/` can produce a typed `Fraction`. Float32 arithmetic
-rounds each result to binary32. Numeric native functions return their natural
-numeric result types; use a constructor to impose a specific width on them.
+### Flexible and fixed floating precision
+
+A decimal literal such as `.2` behaves like `Float .2`. Both are flexible values,
+including after binding to a variable, passing through a function, or storing in a
+collection. Two flexible operands use binary64. A flexible operand paired with
+Float32 or Float64 rounds to that fixed precision before arithmetic; the result
+keeps the fixed type. Operand order does not matter and the original values are
+not mutated. This is runtime precision selection, not backwards type inference.
+
+```apn
+.1 + .2                       # 0.30000000000000004
+Float32 .1 + .2               # Float32 0.3
+Float .2 + Float32 .1         # Float32 0.3
+x = .2
+Float32 .1 + x                # Float32 0.3
+# Float32 .1 + Float64 .2     # error: explicit cast required
+Float32 .1 + cast Float32 (Float64 .2) # Float32 0.3
+```
+
+Different fixed precisions require a cast even if a particular conversion would
+be lossless. The rule covers `+`, `-`, `*`, `/`, `%`, `^`, `expt`, and elementwise
+array arithmetic. Comparisons still compare numeric values without adopting an
+operand's precision. Flexible values are stored in binary64; this does not give
+exact decimal arithmetic or recover precision lost in an earlier computation.
+`Float` construction explicitly returns a value to flexible precision.
+
+Other numeric combinations retain their existing lossless promotion rules:
+same-type operations preserve the type and check integer overflow; otherwise
+arithmetic tries an existing suitable operand type before using the numeric tower.
+Exact-to-inexact conversion must still be lossless. Integer `/` can produce a
+typed `Fraction`. Float32 arithmetic rounds its result to binary32. Other numeric
+native functions return their natural numeric result types; use a constructor to
+impose a specific width on them.
 
 `typeOf value` returns a type descriptor. `isType Type value` tests membership
 without casting. `Number`, `Real`, `Integer`, `Exact`, and `Inexact` are aggregate

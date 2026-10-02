@@ -1,4 +1,4 @@
-import { type Numeric, type Real, isNumeric, integer, floating, toReal, toExact, toInexact, isInteger, exact, equalNumbers, asFloat, rounding, arithmetic, numberText } from "./numbers.ts";
+import { type Numeric, type Real, isNumeric, integer, floating, toReal, toExact, toInexact, isInteger, exact, equalNumbers, asFloat, rounding, arithmetic, numberText, numericNative } from "./numbers.ts";
 import { APNError } from "./errors.ts";
 
 export const NUMERIC_TYPES = ["Int", "UInt", ...[8, 16, 32, 64, 128].flatMap((n) => [`Int${n}`, `UInt${n}`]), "Float", "Float32", "Float64", "Fraction", "Complex", "ComplexExact", "Number", "Real", "Integer", "Exact", "Inexact"];
@@ -62,14 +62,36 @@ export function implicitOperands(a: Numeric, b: Numeric): [Numeric, Numeric] {
     };
     return exact(a) ? [convert(a), b] : [a, convert(b)];
 }
+// Float (including unannotated floating values) leaves precision flexible.
+// A fixed floating operand supplies the precision; two different fixed types
+// require an explicit constructor/cast before arithmetic.
+function floatingOperands(a: Numeric, b: Numeric): [Numeric, Numeric, string] | undefined {
+    if (a.kind !== "float" || b.kind !== "float") return undefined;
+    const fixed = (v: Numeric) => v.typeName === "Float32" || v.typeName === "Float64" ? v.typeName : undefined;
+    const left = fixed(a), right = fixed(b);
+    if (left && right && left !== right) throw new APNError("runtime", "mixed Float32 and Float64 arithmetic requires an explicit cast");
+    const target = left ?? right ?? "Float";
+    return [castNumeric(target, a, true), castNumeric(target, b, true), target];
+}
+
+export function typedPower(a: Numeric, b: Numeric): Numeric {
+    const floats = floatingOperands(a, b);
+    const left = floats?.[0] ?? a, right = floats?.[1] ?? b;
+    const result = numericNative("expt", [left, right]) as Numeric;
+    const target = floats?.[2] ?? (a.kind === "float" ? a.typeName : undefined);
+    return target && result.kind === "float" ? castNumeric(target, result, true) : result;
+}
+
 export function typedArithmetic(op: string, a: Numeric, b: Numeric): Numeric {
+    const floats = floatingOperands(a, b);
+    if (floats) return castNumeric(floats[2], arithmetic(op, floats[0], floats[1]), true);
     let target: string | undefined;
     if (a.typeName && b.typeName && canonical(a.typeName) === canonical(b.typeName)) target = a.typeName === b.typeName ? a.typeName : canonical(a.typeName);
     else if (a.typeName && b.typeName) {
         const rank = (name: string) => name.startsWith("Complex") ? 1000 : name === "Float" || name === "Float64" ? 900 : name === "Float32" ? 800 : name === "Fraction" ? 700 : name === "Int" || name === "UInt" ? 600 : Number(name.match(/\d+/)?.[0] ?? 0);
         const candidates = [a.typeName, b.typeName].sort((x, y) => rank(y) - rank(x));
         for (const name of candidates) {
-            try { castNumeric(name, a); castNumeric(name, b); target = canonical(name); break; } catch { /* try the other operand type */ }
+            try { castNumeric(name, a); castNumeric(name, b); target = name; break; } catch { /* try the other operand type */ }
         }
     }
     else if (a.typeName && !b.typeName) target = a.typeName;

@@ -7,7 +7,7 @@ import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
 import doSource from "../lib/do.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
-import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, numericHash } from "./type-system.ts";
+import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { parseNumberText, isNumeric, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
@@ -914,7 +914,7 @@ export class Interpreter {
             }
             const a = this.demand(l.v[0]), b = this.demand(r.v[0]);
             if (isNumeric(a) && isNumeric(b) && ["+", "-", "*", "/", "%", "^"].includes(e.op)) {
-                const result = e.op === "^" ? numericNative("expt", [a, b]) as Value : typedArithmetic(e.op, a, b);
+                const result = e.op === "^" ? typedPower(a, b) : typedArithmetic(e.op, a, b);
                 return this.conform({ kind: "type", name: l.family!.name, family: l.family }, result);
             }
             if (["<", ">", "<=", ">="].includes(e.op)) {
@@ -950,7 +950,7 @@ export class Interpreter {
         }
         if (e.op === "^") {
             if (!isNumeric(l) || !isNumeric(r)) return bad();
-            return numericNative("expt", [l, r]) as Value;
+            return typedPower(l, r);
         }
         switch (e.op) {
             case "+":
@@ -985,7 +985,7 @@ export class Interpreter {
 
     private arrayArithmetic(op: string, left: Value, right: Value, broadcast = true): Value {
         const l = this.arithmeticValue(left), r = this.arithmeticValue(right);
-        if (isNumeric(l) && isNumeric(r)) return op === "^" ? numericNative("expt", [l, r]) as Value : typedArithmetic(op, l, r);
+        if (isNumeric(l) && isNumeric(r)) return op === "^" ? typedPower(l, r) : typedArithmetic(op, l, r);
         const ll = this.isList(l), rl = this.isList(r);
         if (ll && rl) return this.defer(() => {
             const a = this.cell(l), b = this.cell(r);
@@ -1879,6 +1879,7 @@ export class Interpreter {
         }
         if (NUMBER_NATIVES.some(([n]) => n === name)) {
             let args = argsIn.map((x) => this.dataValue(x));
+            if (name === "expt" && isNumeric(args[0]) && isNumeric(args[1])) return typedPower(args[0], args[1]);
             if (args.length === 2 && isNumeric(args[0]) && isNumeric(args[1]) &&
                 ["min", "max", "gcd", "lcm", "quotient", "remainder", "modulo", "makeRectangular"].includes(name)) {
                 args = implicitOperands(args[0], args[1]);

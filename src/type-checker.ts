@@ -751,6 +751,10 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                 const x = resolve(a), y = resolve(b);
                 if (x.k === "atom" && y.k === "atom") {
                     if (NUMERIC_TYPES.includes(x.name) && NUMERIC_TYPES.includes(y.name)) {
+                        if (["Float", "Float32", "Float64"].includes(x.name) && ["Float", "Float32", "Float64"].includes(y.name)) {
+                            if (x.name !== "Float" && y.name !== "Float" && x.name !== y.name) return problem("mixed Float32 and Float64 arithmetic requires an explicit cast", e);
+                            return x.name === "Float" ? y : x;
+                        }
                         return e.op === "/" ? unknown() : x.name === y.name ? x : atom("Number");
                     }
                     if (e.op === "+" && x.name === "String" && y.name === "String") return atom("String");
