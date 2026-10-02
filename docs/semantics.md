@@ -461,7 +461,8 @@ variants. `Float` (`Float64` keeps an explicit display label) uses binary64; `Fl
 
 Explicit `Float`, `Float32`, and `Float64` construction rounds to the target
 floating-point precision, for bare or annotated inputs. `Float32 .1` produces
-`Float32 0.10000000149011612`; `Float (Int 9007199254740993)` rounds to
+`Float32 0.1` (the nearest binary32 value, displayed with the shortest
+round-tripping decimal); `Float (Int 9007199254740993)` rounds to
 `9007199254740992.0`. This also applies through aliases and `cast`.
 
 Integer constructors remain lossless: `Int .2` and `Int (Float .2)` both error.

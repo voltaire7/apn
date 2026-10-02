@@ -225,7 +225,18 @@ export function numberText(v: Numeric): string {
     if (Number.isNaN(v.v)) return "+nan.0";
     if (!Number.isFinite(v.v)) return v.v < 0 ? "-inf.0" : "+inf.0";
     if (Object.is(v.v, -0)) return "-0.0";
-    const text = String(v.v);
+    let text = String(v.v);
+    if (v.typeName === "Float32") {
+        // Binary32 needs at most nine significant decimal digits to round-trip.
+        // Find the shortest precision that recovers this exact binary32 value.
+        for (let precision = 1; precision <= 9; precision++) {
+            const candidate = Number(v.v.toPrecision(precision));
+            if (Object.is(Math.fround(candidate), v.v)) {
+                text = String(candidate);
+                break;
+            }
+        }
+    }
     return /[.e]/i.test(text) ? text : text + ".0";
 }
 export const NUMBER_NATIVES: Array<[string, number]> = [

@@ -34,7 +34,7 @@ for (const [source, expected] of [
     ["Float 3", "3.0"], ["Float32 .5", "Float32 0.5"],
     ["Fraction (1/3)", "Fraction 1/3"], ["Complex (1+2i)", "Complex 1+2i"],
     ["Int (truncate 3.7)", "3"], ["Int $ truncate $ 3.7", "3"],
-    ["Float32 1 / 10", "Float32 0.10000000149011612"],
+    ["Float32 1 / 10", "Float32 0.1"],
     ["Int 3.0", "3"],
     ["typeOf (Int32 123)", "Int32"], ["isType Number (Int32 1)", "true"],
     ["[Int32 1 + Int32 2, Int32 1 + 2]", "[Int32 3, Int32 3]"],
