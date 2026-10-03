@@ -37,7 +37,6 @@ for (
         ["f n ((Vector (n + 1) Int) xs) = xs; f 2 [1,2]", "length mismatch"],
         ["f n ((Vector n Int) xs) ((Vector n Int) ys) = xs; f 2 [1,2] [3]", "length mismatch"],
         ["Int .2", "lossy"],
-        ["f x = x x", "Dynamic boundary"],
     ]
 ) {
     Deno.test(`gradual check rejects: ${source}`, () => {

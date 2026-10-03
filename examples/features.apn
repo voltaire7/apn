@@ -1313,6 +1313,14 @@ print ({+ 2} 3)                     # => 5, like (+ 2) 3
 bracePattern {Int x} = x + 1
 print (bracePattern 2)              # => 3
 
+# Recursive inference accepts self-application without Dynamic or new wrappers.
+# Run --check to inspect remaining gradual boundaries elsewhere in this file.
+inferredSelf f = f f
+print (inferredSelf (ignored -> 123))       # => 123
+inferredFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1)))
+print (inferredFactorial 5)                 # => 120
+# loop x = loop x and x = x remain legal; checking never executes them.
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

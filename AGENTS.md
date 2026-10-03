@@ -684,7 +684,11 @@ Gradual checking is opt-in via --check / --checked and --lint --types;
 LSP initializationOptions.typeChecking enables matching diagnostics. The pure
 src/type-checker.ts never executes APN or follows imports. Preserve polymorphic
 instantiation, captured monomorphic variables, open record matching, overloads,
-and bounded affine index substitution. Unknown operations are reported dynamic
+and bounded affine index substitution. Recursive structural types in the checker use finite graphs: preserve cycles
+when copying/generalizing and compare visited pairs during unification. Do not
+reintroduce an occurs-check rejection for self-application. Budget/depth exhaustion
+is a diagnostic, not a Dynamic fallback. This differs from the diagnostic-only
+type-description printer above. Unknown operations are reported dynamic
 boundaries, not verified proofs. Existing execution/REPL behavior stays dynamic.
 Vector n t uses a type descriptor with [integer length, element type] arguments.
 Conformance checks n+1 spine cells and delays element conversions; list.schema

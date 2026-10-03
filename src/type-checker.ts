@@ -59,30 +59,45 @@ function indexText(n: Index): string {
         String(n.constant),
     ].join("+");
 }
-function text(t: Ty): string {
+function text(
+    t: Ty,
+    active = new Map<Ty, string>(),
+    recursive = new Set<Ty>(),
+): string {
     t = resolve(t);
-    switch (t.k) {
-        case "overload":
-            return t.choices.map(text).join(" | ");
-        case "dynamic":
-            return "Dynamic";
-        case "var":
-            return "an unresolved type";
-        case "atom":
-            return t.name;
-        case "fn":
-            return `(${text(t.input)} -> ${text(t.output)})`;
-        case "list":
-            return t.length ? `Vector ${indexText(t.length)} ${text(t.element)}` : `[${text(t.element)}]`;
-        case "record":
-            return `[${[...t.fields].map(([k, v]) => `${k}: ${text(v)}`).join(", ")}]`;
-        case "type":
-            return `Type (${text(t.value)})`;
-        case "variant":
-            return t.name + t.args.map((x) => " " + text(x)).join("");
-        default:
-            return "a type constructor";
+    if (active.has(t)) {
+        recursive.add(t);
+        return active.get(t)!;
     }
+    const nested = new Map(active);
+    nested.set(t, `rec${active.size}`);
+    const show = (x: Ty) => text(x, nested, recursive);
+    const render = (): string => {
+        switch (t.k) {
+            case "overload":
+                return t.choices.map(show).join(" | ");
+            case "dynamic":
+                return "Dynamic";
+            case "var":
+                return "an unresolved type";
+            case "atom":
+                return t.name;
+            case "fn":
+                return `(${show(t.input)} -> ${show(t.output)})`;
+            case "list":
+                return t.length ? `Vector ${indexText(t.length)} ${show(t.element)}` : `[${show(t.element)}]`;
+            case "record":
+                return `[${[...t.fields].map(([k, v]) => `${k}: ${show(v)}`).join(", ")}]`;
+            case "type":
+                return `Type (${show(t.value)})`;
+            case "variant":
+                return t.name + t.args.map((x) => " " + show(x)).join("");
+            default:
+                return "a type constructor";
+        }
+    };
+    const result = render();
+    return recursive.has(t) ? `mu ${nested.get(t)}. ${result}` : result;
 }
 function children(t: Ty): Ty[] {
     switch (t.k) {
@@ -102,14 +117,18 @@ function children(t: Ty): Ty[] {
             return [];
     }
 }
-function occurs(v: Ty, t: Ty): boolean {
+// Types are finite graphs: self-application can introduce a back edge through
+// a function node. Traversals must preserve sharing and visit each node once.
+function variables(
+    t: Ty,
+    found = new Set<Ty>(),
+    seen = new Set<Ty>(),
+): Set<Ty> {
     t = resolve(t);
-    return v === t || children(t).some((x) => occurs(v, x));
-}
-function variables(t: Ty, found = new Set<Ty>()): Set<Ty> {
-    t = resolve(t);
+    if (seen.has(t)) return found;
+    seen.add(t);
     if (t.k === "var") found.add(t);
-    else children(t).forEach((x) => variables(x, found));
+    else children(t).forEach((x) => variables(x, found, seen));
     return found;
 }
 function captured(scope: Scope): Set<Ty> {
@@ -125,36 +144,63 @@ function instantiate(entry: Entry): Ty {
         ? entry.type
         : copy(entry.type, new Map([...(entry.nonGeneric ?? [])].map((t) => [resolve(t), resolve(t)])));
 }
-function copy(t: Ty, vars = new Map<Ty, Ty>(), subst?: [string, Index]): Ty {
+function copy(
+    t: Ty,
+    vars = new Map<Ty, Ty>(),
+    subst?: [string, Index],
+    nodes = new Map<Ty, Ty>(),
+): Ty {
     t = resolve(t);
+    if (vars.has(t)) return vars.get(t)!;
     if (t.k === "var") {
-        if (!vars.has(t)) vars.set(t, variable());
-        return vars.get(t)!;
+        const fresh = variable();
+        vars.set(t, fresh);
+        return fresh;
     }
-    const go = (x: Ty) => copy(x, vars, subst);
+    if (nodes.has(t)) return nodes.get(t)!;
+    // Register the shell before traversing children, so recursive edges point
+    // into the new graph rather than the original polymorphic instance.
+    const result = { ...t } as Ty;
+    nodes.set(t, result);
+    const go = (x: Ty) => copy(x, vars, subst, nodes);
     switch (t.k) {
         case "overload":
-            return { ...t, choices: t.choices.map(go) };
+            Object.assign(result, { choices: t.choices.map(go) });
+            break;
         case "fn":
-            return { ...t, input: go(t.input), output: go(t.output) };
+            Object.assign(result, { input: go(t.input), output: go(t.output) });
+            break;
         case "list": {
             let length = t.length;
             if (length && subst && length.terms.has(subst[0])) {
                 const terms = new Map(length.terms), coefficient = terms.get(subst[0])!;
                 terms.delete(subst[0]);
-                length = indexAdd({ constant: length.constant, terms }, subst[1], coefficient);
+                length = indexAdd(
+                    { constant: length.constant, terms },
+                    subst[1],
+                    coefficient,
+                );
             }
-            return { ...t, element: go(t.element), items: t.items?.map(go), length };
+            Object.assign(result, {
+                element: go(t.element),
+                items: t.items?.map(go),
+                length,
+            });
+            break;
         }
         case "record":
-            return { k: "record", fields: new Map([...t.fields].map(([k, v]) => [k, go(v)])) };
+            Object.assign(result, {
+                fields: new Map([...t.fields].map(([k, v]) => [k, go(v)])),
+            });
+            break;
         case "type":
-            return { k: "type", value: go(t.value) };
+            Object.assign(result, { value: go(t.value) });
+            break;
         case "variant":
-            return { ...t, args: t.args.map(go) };
-        default:
-            return t;
+            Object.assign(result, { args: t.args.map(go) });
+            break;
     }
+    return result;
 }
 
 // This checker never evaluates APN expressions or follows imports/load. Unknown
@@ -187,32 +233,51 @@ export function checkTypes(program: TopLevel[]): CheckResult {
             len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)),
         } satisfies TypeIssue;
     };
-    function unify(expected: Ty, actual: Ty, e?: Expr): void {
+    function spend(e?: Expr): void {
+        if (--budget < 0) {
+            problem("type checking limit exceeded; cannot establish the type", e);
+        }
+    }
+    function unify(
+        expected: Ty,
+        actual: Ty,
+        e?: Expr,
+        seen = new Map<Ty, Set<Ty>>(),
+    ): void {
+        spend(e);
         expected = resolve(expected);
         actual = resolve(actual);
         if (expected === actual) return;
+        if (seen.get(expected)?.has(actual)) return;
+        if (!seen.has(expected)) seen.set(expected, new Set());
+        seen.get(expected)!.add(actual);
         if (expected.k === "dynamic" || actual.k === "dynamic") {
             dynamicBoundaries++;
             return;
         }
         if (expected.k === "var") {
-            if (occurs(expected, actual)) problem("recursive type requires a Dynamic boundary", e);
+            // resolve() has removed variable aliases. Any back edge introduced
+            // here crosses a structural node (a contractive recursive type).
             expected.link = actual;
             return;
         }
-        if (actual.k === "var") return unify(actual, expected, e);
-        if (expected.k === "atom" && expected.name === "Type" && actual.k === "type") return;
+        if (actual.k === "var") return unify(actual, expected, e, seen);
+        if (
+            expected.k === "atom" && expected.name === "Type" && actual.k === "type"
+        ) return;
         if (expected.k === "atom" && actual.k === "atom") {
             if (expected.name === actual.name) return;
-            if (expected.name === "Number" && NUMERIC_TYPES.includes(actual.name)) return;
+            if (expected.name === "Number" && NUMERIC_TYPES.includes(actual.name)) {
+                return;
+            }
         }
         if (expected.k === "fn" && actual.k === "fn") {
-            unify(expected.input, actual.input, e);
-            unify(expected.output, actual.output, e);
+            unify(expected.input, actual.input, e, seen);
+            unify(expected.output, actual.output, e, seen);
             return;
         }
         if (expected.k === "list" && actual.k === "list") {
-            unify(expected.element, actual.element, e);
+            unify(expected.element, actual.element, e, seen);
             if (expected.length && actual.length) {
                 const delta = indexAdd(expected.length, actual.length, -1n);
                 if (!delta.terms.size && delta.constant !== 0n) {
@@ -228,19 +293,25 @@ export function checkTypes(program: TopLevel[]): CheckResult {
         if (expected.k === "record" && actual.k === "record") {
             for (const [key, type] of expected.fields) {
                 if (!actual.fields.has(key)) problem(`missing field '${key}'`, e);
-                unify(type, actual.fields.get(key)!, e);
+                unify(type, actual.fields.get(key)!, e, seen);
             }
             return;
         }
-        if (expected.k === "type" && actual.k === "type") return unify(expected.value, actual.value, e);
+        if (expected.k === "type" && actual.k === "type") {
+            return unify(expected.value, actual.value, e, seen);
+        }
         if (
-            expected.k === "variant" && actual.k === "variant" && expected.name === actual.name &&
+            expected.k === "variant" && actual.k === "variant" &&
+            expected.name === actual.name &&
             expected.args.length === actual.args.length
         ) {
-            expected.args.forEach((t, i) => unify(t, actual.args[i], e));
+            expected.args.forEach((t, i) => unify(t, actual.args[i], e, seen));
             return;
         }
-        problem(`cannot use ${text(actual)} where ${text(expected)} is required`, e);
+        problem(
+            `cannot use ${text(actual)} where ${text(expected)} is required`,
+            e,
+        );
     }
     function boolean(e: Expr, scope: Scope): boolean | undefined {
         if (e.t === "bool") return e.v;
@@ -395,10 +466,20 @@ export function checkTypes(program: TopLevel[]): CheckResult {
             }
         }
     }
-    function convert(target: Ty, actual: Ty, e: Expr, explicitFloat = false): Ty {
+    function convert(
+        target: Ty,
+        actual: Ty,
+        e: Expr,
+        explicitFloat = false,
+        seen = new Map<Ty, Set<Ty>>(),
+    ): Ty {
+        spend(e);
         const t = resolve(target), a = resolve(actual);
         if (t.k === "atom" && t.name === "Bool") return t;
-        if (t.k === "atom" && a.k === "atom" && NUMERIC_TYPES.includes(t.name) && NUMERIC_TYPES.includes(a.name)) {
+        if (
+            t.k === "atom" && a.k === "atom" && NUMERIC_TYPES.includes(t.name) &&
+            NUMERIC_TYPES.includes(a.name)
+        ) {
             if (t.name === a.name) return target;
             // Literal conversion is decidable; unknown magnitudes retain runtime losslessness checks.
             const literal = e.t === "numeric"
@@ -410,23 +491,45 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                 : undefined;
             if (literal) {
                 try {
-                    castNumeric(t.name, literal, explicitFloat && ["Float", "Float32", "Float64"].includes(t.name));
+                    castNumeric(
+                        t.name,
+                        literal,
+                        explicitFloat && ["Float", "Float32", "Float64"].includes(t.name),
+                    );
                 } catch (error) {
                     problem((error as Error).message, e);
                 }
             } else dynamicBoundaries++;
             return target;
         }
+        if (seen.get(t)?.has(a)) return target;
+        if (!seen.has(t)) seen.set(t, new Set());
+        seen.get(t)!.add(a);
         if (t.k === "list" && a.k === "list") {
             unify(list(dynamic, t.length), list(dynamic, a.length), e);
-            if (a.items) a.items.forEach((item, n) => convert(t.element, item, e.t === "list" ? e.v[n] ?? e : e));
-            else convert(t.element, a.element, e);
+            if (a.items) {
+                a.items.forEach((item, n) =>
+                    convert(
+                        t.element,
+                        item,
+                        e.t === "list" ? e.v[n] ?? e : e,
+                        false,
+                        seen,
+                    )
+                );
+            } else convert(t.element, a.element, e, false, seen);
             return target;
         }
         if (t.k === "record" && a.k === "record") {
             for (const [key, type] of t.fields) {
                 if (!a.fields.has(key)) problem(`missing field '${key}'`, e);
-                convert(type, a.fields.get(key)!, e.t === "record" ? e.v.find(([k]) => key === k)?.[1] ?? e : e);
+                convert(
+                    type,
+                    a.fields.get(key)!,
+                    e.t === "record" ? e.v.find(([k]) => key === k)?.[1] ?? e : e,
+                    false,
+                    seen,
+                );
             }
             return target;
         }
@@ -434,6 +537,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
         return target;
     }
     function application(f: Ty, argument: Entry, e: Expr): Ty {
+        spend(e);
         f = resolve(f);
         if (f.k === "dynamic") return unknown();
         if (f.k === "overload") {
@@ -546,8 +650,23 @@ export function checkTypes(program: TopLevel[]): CheckResult {
         }
         return problem(`cannot apply ${text(f)}`, e);
     }
+    let inferenceDepth = 0;
     function infer(e: Expr, scope: Scope): Ty {
-        if (--budget < 0) return unknown();
+        spend(e);
+        if (++inferenceDepth > 256) {
+            inferenceDepth--;
+            return problem(
+                "type checking depth limit exceeded; cannot establish the type",
+                e,
+            );
+        }
+        try {
+            return inferExpression(e, scope);
+        } finally {
+            inferenceDepth--;
+        }
+    }
+    function inferExpression(e: Expr, scope: Scope): Ty {
         switch (e.t) {
             case "int":
                 return atom("Int");
@@ -859,13 +978,18 @@ export function checkTypes(program: TopLevel[]): CheckResult {
             }
         }
         if (!clauses[0].params.length) {
+            // A fresh lazy definition can refer to itself. Reassignments still
+            // inspect their previous binding under APN's existing rules.
+            const pending = previous ? undefined : variable();
+            if (pending) scope.set(name, { type: pending, mono: true });
             const t = infer(clauses[0].body, scope);
+            if (pending) unify(pending, t, location);
             if (previous && !previous.inherited) unify(previous.type, t, location);
             scope.set(name, {
                 type: t,
                 index: (writes.get(name) ?? 0) > 1 ? undefined : index(clauses[0].body, scope),
                 boolean: (writes.get(name) ?? 0) > 1 ? undefined : boolean(clauses[0].body, scope),
-                nonGeneric: captured(scope),
+                nonGeneric: captured(new Map([...scope].filter(([key]) => key !== name))),
             });
             return;
         }
@@ -873,12 +997,14 @@ export function checkTypes(program: TopLevel[]): CheckResult {
         const pending = variable();
         scope.set(name, { type: pending, mono: true });
         const groups = new Map<string, Ty>();
-        const domain = (t: Ty): string => {
+        const domain = (t: Ty, seen = new Set<Ty>()): string => {
             t = resolve(t);
+            if (seen.has(t)) return "recursive";
+            seen.add(t);
             if (t.k !== "fn") return "";
             const input = resolve(t.input);
             return (input.k === "variant" ? input.name : input.k === "var" ? "*" : text(input)) + ";" +
-                domain(t.output);
+                domain(t.output, seen);
         };
         for (const c of clauses) {
             const t = functionType(c.params, c.body, scope), key = domain(t), existing = groups.get(key);

@@ -97,9 +97,40 @@ values also remain runtime checks.
 
 Heterogeneous lists remain legal. Unsupported operations produce Dynamic in
 the checker rather than acquiring invented constraints. The checker is bounded;
-exhausting its analysis budget also produces a reported dynamic boundary.
-Unrestricted self-application requires a Dynamic boundary in checked code;
-unrestricted execution remains available in ordinary mode.
+exhausting its analysis budget or depth limit reports that it cannot establish
+the type. Exhaustion is not successful checking and
+does not silently become Dynamic.
+
+## Recursion and self-application
+
+The checker infers recursive structural types, so self-application does not
+require a `Dynamic` annotation or explicit wrapping:
+
+```apn
+self f = f f
+self (ignored -> 123)              # 123
+# self 123                        # static type error: expected a function
+
+factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1)))
+factorial 5                       # 120
+```
+
+For `self`, its argument type satisfies `r = r -> a`. The checker represents
+that equation as a finite graph. Unification compares recursive graphs without
+unfolding forever, and polymorphic instantiation preserves their cycles and
+shared variables. Recursive diagnostics use `mu rec0. ...` to bind a recursive
+reference. This is inferred metadata, not new APN declaration syntax.
+
+Ordinary recursion, `x = x`, and self-application such as
+`(x -> x x) (x -> x x)` can be checked without executing them. Acceptance does
+not guarantee termination. Recursive lazy values such as `xs = 1 : xs` keep
+their existing runtime behavior.
+
+This is recursive-type support in the existing gradual checker, not completion
+of a fully static type system. Self-application itself no longer introduces a
+dynamic boundary; unresolved arithmetic in the factorial example still does.
+The proposed implicit vector index/type binders and repeated-name equality
+patterns are not introduced by this change.
 
 This is gradual, value-dependent typing, **not a proof-safe implementation of
 Calculus of Constructions**. APN still permits nontermination, effects, dynamic
