@@ -1,5 +1,5 @@
 import { requireChecked, checkSource } from "../src/type-checker.ts";
-for (const source of ['import "std"', 'env', 'missing', 'load "file"', 'f x = x + 1', 'f (Dynamic x) = x x']) {
+for (const source of ['import "std"', 'env', 'missing', 'load "file"', 'f x = x + 1']) {
     Deno.test(`checked execution rejects unknowns: ${source}`, () => {
         try { requireChecked(source); } catch (e) {
             if (String(e).includes('cannot establish static types')) return;

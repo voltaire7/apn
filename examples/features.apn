@@ -1332,6 +1332,17 @@ print (sameArguments 3 3)                  # => 3
 print ((x x -> x) 4 4)                    # => 4
 print ((_ _ -> 1) 2 3)                    # => 1
 
+# Explicit Dynamic boundaries are accepted by --check / --checked.
+dynamicNumber = Dynamic 41
+print (Int dynamicNumber + 1)              # => 42
+checkedIncrement <- (Int -> Int) (Dynamic (x -> x + 1))
+print (checkedIncrement 41)                # => 42
+reflectedNumber = 1
+reflectedScope <- Dynamic env
+reflectedScope.reflectedNumber = 2
+print reflectedNumber                     # => 2
+# Int (Dynamic "bad") fails at runtime; unknowns outside Dynamic still fail checking.
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

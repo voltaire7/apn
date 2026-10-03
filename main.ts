@@ -30,6 +30,7 @@ if (import.meta.main) {
             const { requireChecked } = await import("./src/type-checker.ts");
             requireChecked(source, file);
             const interp = new Interpreter();
+            interp.checkedExecution = true;
             interp.sourceDir = dirname(file); interp.sourceFile = file; interp.programArgs = _args.slice(2);
             runSource(source, interp, true);
         } catch (error) { console.error(formatError(error, Deno.stderr.isTerminal())); Deno.exit(1); }

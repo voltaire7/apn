@@ -718,3 +718,15 @@ checks homogeneous element types; typed vectors retain lazy elements. Repeated
 pattern names compare consistently in lambdas, definitions, and records; `_`
 always remains a wildcard. Tests: vect-pattern-test.ts, repeated-pattern-test.ts,
 strict-checking-test.ts. Keep the dependent-vectors demo passing --checked.
+
+Explicit Dynamic boundaries are accepted by strict checking. Keep implicit unknowns
+separate from explicit Dynamic in inference: a concrete type requires a runtime
+constructor/contract or an actually converting pattern, never a silent inferred
+conversion. Dynamic expressions bypass inference only for their own argument.
+The --checked entry point sets Interpreter.checkedExecution; reflected environment
+writes and imported/loaded/use bindings must preserve existing types. Never invoke
+an old action to guess its type: replacing functions requires an existing captured
+contract. Lazy record/list guards check payloads on demand and preserve Vect schema.
+Dynamic env views guard writes even outside checked execution. Preserve Mutable
+identity at Dynamic construction/pattern boundaries. Tests and runnable example:
+tests/dynamic-boundary-test.ts, examples/types/dynamic-boundaries.apn.

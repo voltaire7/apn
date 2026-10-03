@@ -41,7 +41,7 @@ export type Value =
     | { kind: "lazyList"; exprs: Expr[]; env: Env; value?: Value }
     | { kind: "cons"; head: Value; tail: Value }
     | { kind: "deferred"; compute: () => Value; value?: Value; busy?: boolean }
-    | { kind: "record"; v: Array<[string, Value]>; scope?: Env }
+    | { kind: "record"; v: Array<[string, Value]>; scope?: Env; guarded?: boolean }
     | { kind: "variant"; tag: string; v: Value[]; family?: VariantFamily; arguments?: Value[] }
     | { kind: "closure"; params: string[]; body: Expr; env: Env; mutableValue?: Value }
     | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string; family?: VariantFamily; invoke?: (args: Value[]) => Value }

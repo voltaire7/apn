@@ -42,6 +42,9 @@ export const NATIVES: Array<[string, number]> = [
 ];
 
 export class Interpreter {
+    // Enabled by the checked execution entry point. Foreign name installation
+    // and reflected writes must preserve the visible bindings it has checked.
+    checkedExecution = false;
     private preludeBindings = new Map<string, Value>();
     hostNatives = new Map<string, (args: Value[]) => Value>();
     programArgs: string[] = [];
@@ -57,7 +60,7 @@ export class Interpreter {
                 const record = this.importStandard(name, false) as Extract<Value, { kind: "record" }>;
                 for (const [key, value] of record.v) fields.set(key, value);
             }
-            if (open) for (const [key, value] of fields) this.env.setLocal(key, value);
+            if (open) this.publishForeignBindings(this.env, [...fields]);
             return { kind: "record", v: [...fields] };
         }
         const names = ["type", "function", "option", "sequence", "array", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5", "ffi"];
@@ -93,6 +96,9 @@ export class Interpreter {
                 this.extendDefinitions = false;
                 this.sourceDir = new URL("../lib/", import.meta.url).pathname;
                 this.run(program);
+                // The bundled cast is already installed from this exact source.
+                // Reuse its identity when std/type reexports it.
+                if (name === "type" && source === typeSource) scope.setLocal("cast", this.preludeBindings.get("cast")!);
                 record = { kind: "record", v: [...scope.map.entries()] };
                 this.modules.set(module, record);
             } finally {
@@ -102,7 +108,7 @@ export class Interpreter {
                 this.importing.delete(module);
             }
         }
-        if (open) for (const [name, value] of record.v) this.env.setLocal(name, value);
+        if (open) this.publishForeignBindings(this.env, record.v);
         return record;
     }
 
@@ -305,6 +311,71 @@ export class Interpreter {
         return value;
     }
 
+    private protectDynamicWrite(previous: Value, incoming: Value, name: string): Value {
+        const old = this.force(previous), value = this.force(incoming);
+        if (old === value) return value;
+        const reject = (detail: string): never => {
+            throw new APNError("runtime", `Dynamic write to '${name}': ${detail}`);
+        };
+        if (isNumeric(old)) return this.assignSlot(old, this.dataValue(value));
+        if (old.kind === "contract") return this.conform({ kind: "functionType", from: old.from, to: old.to }, value);
+        if (old.kind === "type" || old.kind === "functionType") {
+            if (!this.sameType(old, value)) reject("cannot change an established type descriptor");
+            return value;
+        }
+        if (old.kind === "native" && value.kind === "native" && old.name === value.name &&
+            old.arity === value.arity && old.invoke === value.invoke && old.family === value.family &&
+            old.tag === value.tag && !old.applied.length && !value.applied.length) return value;
+        if (["closure", "clauseFn", "native"].includes(old.kind)) {
+            return reject("replacing a function requires an existing explicit function contract");
+        }
+        if (old.kind === "record") {
+            if (value.kind !== "record") return reject("expected a Record");
+            if (old.scope || value.scope) return reject("cannot replace an environment reference");
+            const fields = new Map(value.v);
+            for (const [key, item] of old.v) {
+                if (!fields.has(key)) reject(`missing field '${key}'`);
+                const replacement = fields.get(key)!;
+                fields.set(key, this.defer(() => this.protectDynamicWrite(item, replacement, `${name}.${key}`)));
+            }
+            return { kind: "record", v: [...fields] };
+        }
+        if (this.isList(old)) {
+            if (!this.isList(value)) return reject("expected a List");
+            // Preserve both positional types and length, checking lazily so
+            // finite observations of infinite values remain possible.
+            const guard = (before: Value, after: Value): Value => this.defer(() => {
+                const a = this.cell(before), b = this.cell(after);
+                if (!a || !b) {
+                    if (a !== b) reject("list length changed");
+                    return mkList([]);
+                }
+                return { kind: "cons", head: this.defer(() => this.protectDynamicWrite(a.head, b.head, `${name}[]`)), tail: guard(a.tail, b.tail) };
+            });
+            const guarded = guard(old, value);
+            return old.kind === "list" && old.schema ? this.conform(old.schema, guarded) : guarded;
+        }
+        if (old.kind === "variant" && old.family) {
+            if (value.kind !== "variant" || value.family !== old.family) return reject(`expected ${old.family.name}`);
+            if (old.arguments?.length) return this.conform({ kind: "type", name: old.family.name, family: old.family, arguments: old.arguments }, value);
+            if (!value.v.length) return value;
+            if (old.tag !== value.tag || old.v.length !== value.v.length) return reject("variant replacement needs an explicit specialized family contract");
+            return { ...value, v: value.v.map((item, index) => this.defer(() => this.protectDynamicWrite(old.v[index], item, name))) };
+        }
+        if (["mutable", "pointer", "hashmap"].includes(old.kind)) return reject("cannot replace an opaque reference without a contract");
+        if (old.kind !== value.kind) return reject(`cannot replace ${old.kind} with ${value.kind}`);
+        return value;
+    }
+
+    private publishForeignBindings(scope: Env, bindings: Array<[string, Value]>): void {
+        const pending = new Map<string, Value>();
+        for (const [key, value] of bindings) {
+            const old = pending.get(key) ?? scope.get(key);
+            pending.set(key, this.checkedExecution && old ? this.protectDynamicWrite(old, value, key) : value);
+        }
+        for (const [key, value] of pending) scope.setLocal(key, value);
+    }
+
     private listIndex(value: Value): bigint | undefined {
         if (value.kind === "int") return value.v;
         if (value.kind !== "variant" || value.v.length || !value.family?.fields?.size) return undefined;
@@ -320,9 +391,9 @@ export class Interpreter {
         return ordinal === undefined ? v : mkInt(ordinal);
     }
 
-    private environmentValue(scope = this.env): Extract<Value, { kind: "record" }> {
+    private environmentValue(scope = this.env, guarded = false): Extract<Value, { kind: "record" }> {
         return {
-            kind: "record", scope,
+            kind: "record", scope, guarded,
             get v() {
                 const names = new Map<string, Value>();
                 for (let current: Env | null = scope; current; current = current.parent) {
@@ -338,7 +409,8 @@ export class Interpreter {
         const updates = entries.map(([name, value]): [string, Value] => {
             if (!/^[A-Za-z_][A-Za-z0-9_']*$/.test(name) || name === "_" || KEYWORDS.has(name)) throw new APNError("runtime", `invalid binding name '${name}'`);
             const old = scope.get(name);
-            return [name, old === undefined ? value : this.assignSlot(old, value)];
+            return [name, old === undefined ? value : record.guarded || this.checkedExecution
+                ? this.protectDynamicWrite(old, value, name) : this.assignSlot(old, value)];
         });
         // Publish only after every conversion succeeds. Update the nearest visible
         // binding; absent names are added to the captured scope.
@@ -1106,7 +1178,7 @@ export class Interpreter {
             });
             case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
-                const value = this.demand(arg);
+                const value = f.name === "Dynamic" && !f.family ? this.reference(arg) : this.demand(arg);
                 if (f.name === "Vect" && !f.family && !f.alias && (f.arguments?.length ?? 0) < 2) {
                     const args = [...f.arguments ?? []];
                     if (!args.length && (value.kind !== "int" || value.v < 0n)) throw new APNError("runtime", "Vect length must be a nonnegative Int");
@@ -1540,6 +1612,7 @@ export class Interpreter {
             return { kind: "list", schema: type, v: values.map(x => this.defer(() => this.conform(element, x))) };
         }
         if (type.kind === "type") {
+            if (type.name === "Dynamic" && !type.family) return this.constructType("Dynamic", value);
             if (type.name === "$any") return value;
             const actual = type.name === "Type" ? this.demand(value) : this.dataValue(value);
             if (type.family?.base) {
@@ -1718,7 +1791,10 @@ export class Interpreter {
     }
 
     constructType(name: string, value: Value): Value {
-        if (name === "Dynamic") return value;
+        if (name === "Dynamic") {
+            const actual = this.reference(value);
+            return actual.kind === "record" && actual.scope ? this.environmentValue(actual.scope, true) : actual;
+        }
         if (name === "Bool") return mkBool(this.truthy(value));
         if (name === "Type") {
             if (!this.isTypeValue(value)) throw new APNError("runtime", "Type constructor expects a Type value");
@@ -1821,7 +1897,7 @@ export class Interpreter {
                 }
             }
             // Validate the whole input before publishing; keep the field values lazy.
-            for (const [key, field] of bindings) this.env.setLocal(key, field);
+            this.publishForeignBindings(this.env, bindings);
             return { kind: "list", v: [] };
         }
         if (name === "set") {
@@ -2085,10 +2161,8 @@ export class Interpreter {
                     checkInterrupt();
                     const frame = frames.pop()!;
                     const fields: Array<[string, Value]> = [];
-                    for (const [key, value] of frame.loaded.map) {
-                        frame.caller.setLocal(key, value);
-                        fields.push([key, value]);
-                    }
+                    this.publishForeignBindings(frame.caller, [...frame.loaded.map]);
+                    for (const [key] of frame.loaded.map) fields.push([key, frame.caller.get(key)!]);
                     result = { kind: "record", v: fields };
                 }
                 return result;
@@ -2313,6 +2387,12 @@ export class Interpreter {
         if (p.p === "var") {
             if (binds.has(p.name)) return this.equals(binds.get(p.name)!, v);
             binds.set(p.name, v); return true;
+        }
+        if (p.p === "constr" && p.tag === "Dynamic" && p.args.length === 1) {
+            const type = this.reference(this.env.get(p.tag)!);
+            if (type.kind === "type" && type.name === "Dynamic" && !type.family && !type.alias) {
+                return this.matchPattern(p.args[0], this.constructType("Dynamic", v), binds);
+            }
         }
         if (p.p === "schema") {
             const scope = new Env(this.env);

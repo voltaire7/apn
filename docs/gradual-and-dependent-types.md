@@ -9,7 +9,7 @@ apn --lint --types --json examples/types/dependent-vectors.apn
 ```
 
 `--check` reads and checks source without running it. `--checked` checks the
-entire entry file before any of that file's expressions run. Both reject unresolved
+entire entry file before any of that file's expressions run. Both reject implicit, unresolved
 dynamic boundaries as well as known type errors, with a nonzero exit status.
 `--lint --types` and the editor retain gradual analysis, reporting known errors
 without requiring every operation to be established. Ordinary `apn file.apn` and
@@ -32,16 +32,100 @@ unwrap None = 0
 
 A known call such as `unwrap (Some "hello")` conflicts with the numeric fallback.
 The function's clauses are checked together, rather than treated as unrelated
-functions. Ordinary execution and gradual editor analysis still allow explicit
-dynamic boundaries:
+functions.
+
+## Explicit runtime boundaries
+
+`Dynamic expression` explicitly opts that expression out of static checking.
+Parsing still applies; unknown names and invalid operations inside it fail if
+execution reaches them. Its result has static type `Dynamic`. Unmarked unknowns
+elsewhere still fail `--check` and `--checked`; a boundary does not disable
+checking for the rest of the file.
 
 ```apn
-selfApply (Dynamic f) = f f
+value = Dynamic 41
+Int value + 1                         # 42; Int validates at runtime
+Int (Dynamic "hello")                 # runtime error
+
+increment <- (Int -> Int) (Dynamic (x -> x + 1))
+increment 41                          # 42
+bad <- (Int -> Int) (Dynamic (x -> "hello"))
+bad 1                                 # runtime error: result is not an Int
+
+accept (Dynamic x) = x                 # explicit dynamic parameter
+accept "hello"
 ```
 
-`Dynamic` is a first-class identity constructor and a permissive pattern. It
-keeps runtime behavior; it does not pretend a dynamic value has a static proof.
-Using that boundary is rejected by strict `--check` / `--checked` mode.
+Operations on a Dynamic value remain dynamic. To return to a concrete type,
+apply its constructor or a function contract. Existing converting patterns,
+such as `(Int x)`, also perform this runtime check. A variant pattern such as
+`Some x` does not validate an inferred payload type merely by matching its tag.
+An ordinary parameter whose type was inferred does not gain a hidden conversion:
+
+```apn
+square x = x == 0 ? 0 : x * x
+# square (Dynamic 2)                  # static error
+square (Int (Dynamic 2))              # 4
+```
+
+A `(Dynamic x)` parameter changes how `x` is checked, but does not hide unrelated
+errors in the function body. Self-application does not need Dynamic; recursive
+inference already supports it.
+
+Runtime projections use APN's existing constructor rules, including lossless
+integer conversion and explicit floating-point rounding. Function contracts
+check arguments and results when called. `Vect` checks length and checks element
+conversions when demanded. Dynamic keeps existing evaluation rules: `=` actions
+remain repeatable, `<-` captures their result, and unused list elements stay lazy.
+It preserves Mutable identity rather than copying its current contents.
+
+### Reflection and writes
+
+```apn
+count = 1
+scope <- Dynamic env
+scope.count = 2                       # updates count
+# scope.count = "hello"               # runtime error
+key = "count"
+Int (scope key)                        # 2
+```
+
+`--checked` protects reflected writes and names installed by `use`, `import`, or
+`load` from changing existing binding types. `Dynamic env` also guards writes
+through that view in ordinary execution. New names may be added, but using a
+runtime-created name in checked code still requires a Dynamic boundary or an
+explicitly checked projection.
+
+These guards are conservative: existing record fields and positional list types
+must be preserved, including list length. Additional record fields are allowed.
+Lazy record/list payloads are checked when demanded, so a nested error can occur
+on a later read. Scalar batch writes are validated before publication. Type
+descriptors cannot be replaced by different descriptors through reflection.
+Opaque references cannot be replaced by different references through reflection.
+
+To replace a function through reflection, first capture a function with an
+explicit contract:
+
+```apn
+f <- (Int -> Int) (x -> x)
+scope <- Dynamic env
+scope.f = Dynamic (x -> x + 1)
+f 1                                  # 2; replacement retains the contract
+```
+
+Replacing an uncontracted function is rejected. A deferred action declared with
+`=` is also a function: the guard does not run it to discover its result type.
+Use `<-` when the binding should hold the evaluated value or contract. These
+restrictions protect checked assumptions without evaluating arbitrary functions
+to guess their types.
+
+`--check` reports explicit runtime boundary/operation counts separately from
+unresolved boundaries. For programmatic execution, call `requireChecked(source)`
+and set `interpreter.checkedExecution = true` before running that source; the
+`--checked` CLI does both. A successful check involving Dynamic is not a promise
+that its runtime checks will succeed.
+
+See [the runnable boundary example](../examples/types/dynamic-boundaries.apn).
 
 ## Values as type arguments
 
@@ -68,7 +152,7 @@ function application substitutes the supplied index into subsequent parameter
 and result types. The checker normalizes integer constants and affine index
 expressions (addition, subtraction, multiplication by a known constant).
 Known contradictory lengths are rejected. Unknown lengths and unsupported
-index computations are dynamic boundaries: strict mode rejects them, while
+index computations are dynamic boundaries: strict mode requires an explicit `Dynamic` boundary, while
 ordinary execution retains runtime validation. No user code runs to decide them.
 
 Length validation checks the list spine through the expected size plus one
@@ -205,4 +289,5 @@ configuration this is `init_options = { typeChecking = true }`. It is disabled
 by default to preserve existing sessions. No editor configuration is modified
 by installing these language changes. Type diagnostics use the same inference
 engine in gradual mode; `--check` and `--checked` additionally reject remaining
-dynamic boundaries.
+implicit dynamic boundaries. Explicit `Dynamic` boundaries are accepted and
+retain runtime validation.

@@ -6,7 +6,7 @@ import { parseDocument } from "./parser.ts";
 type Index = { constant: bigint; terms: Map<string, bigint> };
 type Ty =
     | { k: "overload"; choices: Ty[] }
-    | { k: "dynamic" }
+    | { k: "dynamic"; explicit?: boolean }
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
     | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean }
@@ -33,10 +33,13 @@ export interface TypeIssue {
 export interface CheckResult {
     issues: TypeIssue[];
     dynamicBoundaries: number;
+    runtimeChecks: number;
 }
 const dynamic: Ty = { k: "dynamic" };
+const explicitDynamic: Ty = { k: "dynamic", explicit: true };
+const isExplicit = (t: Ty): boolean => { const value = resolve(t); return value.k === "dynamic" && !!value.explicit; };
 const variable = (): Ty => ({ k: "var" });
-const atom = (name: string): Ty => name === "Dynamic" ? dynamic : { k: "atom", name };
+const atom = (name: string): Ty => name === "Dynamic" ? explicitDynamic : { k: "atom", name };
 const fn = (input: Ty, output: Ty, binder?: string, coerce = false): Ty => ({ k: "fn", input, output, binder, coerce });
 const list = (element: Ty, length?: Index): Ty => ({ k: "list", element, length });
 const constant = (n: bigint): Index => ({ constant: n, terms: new Map() });
@@ -220,7 +223,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
         for (const child of Object.values(value)) scan(child);
     };
     scan(program);
-    let dynamicBoundaries = 0, serial = 0, budget = 50000;
+    let dynamicBoundaries = 0, runtimeChecks = 0, serial = 0, budget = 50000;
     const unknown = (): Ty => {
         dynamicBoundaries++;
         return dynamic;
@@ -259,6 +262,15 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
         if (seen.get(expected)?.has(actual)) return;
         if (!seen.has(expected)) seen.set(expected, new Set());
         seen.get(expected)!.add(actual);
+        if (isExplicit(expected)) {
+            if (actual.k === "var") actual.link = explicitDynamic;
+            runtimeChecks++;
+            return;
+        }
+        if (isExplicit(actual)) {
+            if (expected.k === "var") { expected.link = explicitDynamic; return; }
+            return problem(`Dynamic requires an explicit conversion to ${text(expected)}`, e);
+        }
         if (expected.k === "dynamic" || actual.k === "dynamic") {
             dynamicBoundaries++;
             return;
@@ -420,7 +432,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                 return;
             }
             case "contract": {
-                const spec = (s: typeof p.spec): Ty => "name" in s ? atom(s.name) : fn(spec(s.from), spec(s.to));
+                const spec = (s: typeof p.spec): Ty => "name" in s ? atom(s.name) : fn(spec(s.from), spec(s.to), undefined, true);
                 const t = spec(p.spec);
                 unify(t, expected, e);
                 bind(p.value, t, scope, e, bound);
@@ -514,9 +526,11 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
         e: Expr,
         explicitFloat = false,
         seen = new Map<Ty, Set<Ty>>(),
+        runtimeProjection = false,
     ): Ty {
         spend(e);
         const t = resolve(target), a = resolve(actual);
+        if (isExplicit(a) && (runtimeProjection || explicitFloat)) { runtimeChecks++; return target; }
         if (t.k === "atom" && t.name === "Bool" && explicitFloat) return t;
         if (
             t.k === "atom" && a.k === "atom" && NUMERIC_TYPES.includes(t.name) &&
@@ -557,9 +571,10 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                         e.t === "list" ? e.v[n] ?? e : e,
                         false,
                         seen,
+                        runtimeProjection || explicitFloat,
                     )
                 );
-            } else convert(t.element, a.element, e, false, seen);
+            } else convert(t.element, a.element, e, false, seen, runtimeProjection || explicitFloat);
             return target;
         }
         if (t.k === "record" && a.k === "record") {
@@ -571,6 +586,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                     e.t === "record" ? e.v.find(([k]) => key === k)?.[1] ?? e : e,
                     false,
                     seen,
+                    runtimeProjection || explicitFloat,
                 );
             }
             return target;
@@ -581,7 +597,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
     function application(f: Ty, argument: Entry, e: Expr): Ty {
         spend(e);
         f = resolve(f);
-        if (f.k === "dynamic") return unknown();
+        if (f.k === "dynamic") return f.explicit ? explicitDynamic : unknown();
         if (f.k === "overload") {
             const outputs: Ty[] = [];
             for (const choice of f.choices) {
@@ -662,12 +678,12 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                     const retained = new Map([...variables(f)].map(t => [t, t]));
                     const instantiated = copy(f, retained, [name, value]) as Extract<Ty, { k: "fn" }>;
                     if (options.strict && !f.coerce) unify(instantiated.input, argument.type, e);
-                    else convert(instantiated.input, argument.type, e);
+                    else convert(instantiated.input, argument.type, e, false, new Map(), !!f.coerce);
                     return instantiated.output;
                 }
             }
             if (options.strict && !f.coerce) unify(f.input, argument.type, e);
-            else convert(f.input, argument.type, e);
+            else convert(f.input, argument.type, e, false, new Map(), !!f.coerce);
             return f.binder && argument.index
                 ? copy(f.output, new Map([...variables(f.output)].map((t) => [t, t])), [f.binder, argument.index])
                 : f.output;
@@ -744,7 +760,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             case "import":
                 return unknown();
             case "functionType": {
-                const spec = (s: typeof e.spec): Ty => "name" in s ? atom(s.name) : fn(spec(s.from), spec(s.to));
+                const spec = (s: typeof e.spec): Ty => "name" in s ? atom(s.name) : fn(spec(s.from), spec(s.to), undefined, true);
                 return { k: "type", value: spec(e.spec) };
             }
             case "list": {
@@ -782,7 +798,14 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             case "app":
             case "pipe": {
                 const a = e.t === "app" ? e.a : e.x;
-                return application(infer(e.f, scope), {
+                const callee = infer(e.f, scope), resolved = resolve(callee);
+                if (resolved.k === "type" && isExplicit(resolved.value)) {
+                    // The argument is an explicit runtime-checked island. Its
+                    // effects may not invalidate protected checked bindings.
+                    runtimeChecks++;
+                    return explicitDynamic;
+                }
+                return application(callee, {
                     type: infer(a, scope),
                     index: index(a, scope),
                     boolean: boolean(a, scope),
@@ -791,6 +814,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             case "setFields": {
                 let rec = resolve(infer(e.rec, scope));
                 const value = infer(e.value, scope), v = resolve(value);
+                if (isExplicit(rec)) { runtimeChecks++; return explicitDynamic; }
                 const parents: Array<[Map<string, Ty>, string]> = [];
                 for (const key of e.path ?? []) {
                     if (rec.k === "dynamic") return unknown();
@@ -828,6 +852,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             }
             case "setItem": {
                 const rec = resolve(infer(e.rec, scope)), value = infer(e.value, scope), key = index(e.index, scope);
+                if (isExplicit(rec)) { infer(e.index, scope); runtimeChecks++; return explicitDynamic; }
                 if (rec.k === "list") {
                     const keys = resolve(infer(e.index, scope));
                     if (keys.k === "list") {
@@ -860,6 +885,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             }
             case "pluck": {
                 const rec = resolve(infer(e.rec, scope));
+                if (isExplicit(rec)) { runtimeChecks++; return explicitDynamic; }
                 if (rec.k === "record" && e.quoted !== false) {
                     const selected = e.entries.map(entry => {
                         const key = typeof entry === "string" ? entry : entry[0];
@@ -874,6 +900,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             }
             case "recordAccess": {
                 const rec = resolve(infer(e.rec, scope));
+                if (isExplicit(rec)) { runtimeChecks++; return explicitDynamic; }
                 if (rec.k === "list" && e.argument) { infer(e.argument, scope); return unknown(); }
                 if (e.scoped && e.argument) {
                     if (rec.k === "dynamic" || rec.k === "var") return unknown();
@@ -916,6 +943,10 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                     return value;
                 };
                 const a = constrain(infer(e.l, scope)), b = constrain(infer(e.r, scope));
+                if (isExplicit(a) || isExplicit(b)) {
+                    runtimeChecks++;
+                    return ["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(e.op) ? atom("Bool") : explicitDynamic;
+                }
                 if (["==", "!=", "&&", "||"].includes(e.op)) return atom("Bool");
                 if (["<", ">", "<=", ">="].includes(e.op)) {
                     const x = resolve(a), y = resolve(b);
@@ -964,6 +995,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             case "unop": {
                 const operand = infer(e.e, scope);
                 if (e.op === "not") return atom("Bool");
+                if (isExplicit(operand)) { runtimeChecks++; return explicitDynamic; }
                 const active = new Set<Ty>();
                 const numeric = (type: Ty): void => {
                     const t = resolve(type);
@@ -1036,7 +1068,11 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                     index: { constant: 0n, terms: new Map([[binder!, 1n]]) },
                 });
             }
-            inputs.push({ type: t, binder, coerce: p.p === "schema" || p.p === "contract" || p.p === "int" || (p.p === "constr" && p.tag !== "Vect") });
+            const constructor = p.p === "constr" ? resolve(scope.get(p.tag)?.type ?? dynamic) : undefined;
+            // A variant pattern checks its tag, not the inferred types of its
+            // payloads. Only real type patterns can project Dynamic arguments.
+            const converts = constructor?.k === "type" && !variables(constructor.value).size;
+            inputs.push({ type: t, binder, coerce: p.p === "schema" || p.p === "contract" || p.p === "int" || converts });
         }
         // An explicit result constructor supplies the recursive signature before
         // checking the body. Only inspect its descriptor; never run user code.
@@ -1074,7 +1110,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
         }
         const previous = scope.get(name);
         const collection = previous && resolve(previous.type), c = clauses[0];
-        if (collection && (collection.k === "list" || collection.k === "record") && c.params.length === 1) {
+        if (collection && (collection.k === "list" || collection.k === "record" || isExplicit(collection)) && c.params.length === 1) {
             const p = c.params[0];
             const asKey = (p: Pattern): Expr | undefined => {
                 if (p.p === "var") return { t: "var", name: p.name };
@@ -1146,6 +1182,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             filter: fn(fn(a, b), fn(list(a), list(a))),
             length: fn(dynamic, atom("Int")),
             typeOf: fn(a, atom("Type")),
+            cast: fn({ k: "type", value: a }, fn(explicitDynamic, a)),
             fail: fn(atom("String"), variable()),
         })
     ) scope.set(name, { type });
@@ -1176,7 +1213,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
     if (options.strict && dynamicBoundaries && !issues.length) {
         issues.push({ message: `cannot establish static types: ${dynamicBoundaries} unresolved dynamic boundaries`, pos: 0, len: 1 });
     }
-    return { issues, dynamicBoundaries };
+    return { issues, dynamicBoundaries, runtimeChecks };
 }
 export function checkSource(source: string, file = "<input>", options: { strict?: boolean } = {}): CheckResult {
     return checkTypes(parseDocument(source), options);
@@ -1207,8 +1244,8 @@ export async function runTypeCheck(files: string[]): Promise<number> {
             if (!result.issues.length) {
                 console.log(
                     `${file}: checked${
-                        result.dynamicBoundaries
-                            ? ` (${result.dynamicBoundaries} dynamic boundaries retain runtime checks)`
+                        result.runtimeChecks
+                            ? ` (${result.runtimeChecks} explicit boundaries/operations require runtime checks)`
                             : ""
                     }`,
                 );
