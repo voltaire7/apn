@@ -1107,10 +1107,10 @@ export class Interpreter {
             case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
                 const value = this.demand(arg);
-                if (f.name === "Vector" && !f.family && !f.alias && (f.arguments?.length ?? 0) < 2) {
+                if (f.name === "Vect" && !f.family && !f.alias && (f.arguments?.length ?? 0) < 2) {
                     const args = [...f.arguments ?? []];
-                    if (!args.length && (value.kind !== "int" || value.v < 0n)) throw new APNError("runtime", "Vector length must be a nonnegative Int");
-                    if (args.length === 1 && !this.isTypeValue(value)) throw new APNError("runtime", "Vector element must be a type");
+                    if (!args.length && (value.kind !== "int" || value.v < 0n)) throw new APNError("runtime", "Vect length must be a nonnegative Int");
+                    if (args.length === 1 && !this.isTypeValue(value)) throw new APNError("runtime", "Vect element must be a type");
                     return { ...f, arguments: [...args, value] };
                 }
                 const parameters = f.alias?.parameters ?? f.family?.parameters ?? [];
@@ -1175,6 +1175,7 @@ export class Interpreter {
                 const ranked = f.clauses.map((clause, index) => ({ clause, index, score: clause.params.reduce((score, pattern, i) => {
                     if (["int", "bool", "string"].includes(pattern.p)) return score + 40;
                     if (pattern.p !== "constr" || !TYPE_NAMES.includes(pattern.tag)) return score;
+                    if (pattern.tag === "Vect") return score + (this.isList(this.dataValue(raw[i])) ? 30 : -1000);
                     const value = pattern.tag === "Mutable" ? this.reference(raw[i]) : pattern.tag === "Type" ? this.demand(raw[i]) : this.dataValue(raw[i]);
                     if (!NUMERIC_TYPES.includes(pattern.tag)) return score + (this.matchesValueType(pattern.tag, value) ? 30 : -1000);
                     if (!isNumeric(value)) return score - 1000;
@@ -1514,26 +1515,26 @@ export class Interpreter {
 
     private vectorParts(type: Extract<Value, { kind: "type" }>): [bigint, Value] {
         const [size, element] = type.arguments ?? [];
-        if (type.arguments?.length !== 2 || size.kind !== "int" || size.v < 0n) throw new APNError("runtime", "Vector needs a nonnegative length and an element type");
+        if (type.arguments?.length !== 2 || size.kind !== "int" || size.v < 0n) throw new APNError("runtime", "Vect needs a nonnegative length and an element type");
         return [size.v, element];
     }
 
     private vectorElements(value: Value, size: bigint): Value[] {
-        if (!this.isList(value)) throw new APNError("runtime", "Vector expects a list");
+        if (!this.isList(value)) throw new APNError("runtime", "Vect expects a list");
         const out: Value[] = [];
         let rest = value;
         for (let n = 0n; n < size; n++) {
             checkInterrupt();
             const cell = this.cell(rest);
-            if (!cell) throw new APNError("runtime", `Vector length mismatch: expected ${size}, got ${n}`);
+            if (!cell) throw new APNError("runtime", `Vect length mismatch: expected ${size}, got ${n}`);
             out.push(cell.head); rest = cell.tail;
         }
-        if (this.cell(rest)) throw new APNError("runtime", `Vector length mismatch: expected ${size}, got at least ${size + 1n}`);
+        if (this.cell(rest)) throw new APNError("runtime", `Vect length mismatch: expected ${size}, got at least ${size + 1n}`);
         return out;
     }
 
     conform(type: Value, value: Value): Value {
-        if (type.kind === "type" && type.name === "Vector" && !type.family && !type.alias) {
+        if (type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) {
             const [size, element] = this.vectorParts(type);
             const values = this.vectorElements(this.dataValue(value), size);
             return { kind: "list", schema: type, v: values.map(x => this.defer(() => this.conform(element, x))) };
@@ -1592,7 +1593,7 @@ export class Interpreter {
 
     belongsToType(type: Value, value: Value): boolean {
         type = this.reference(type); value = this.reference(value);
-        if (type.kind === "type" && type.name === "Vector" && !type.family && !type.alias) {
+        if (type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) {
             const [size, element] = this.vectorParts(type);
             if (!this.isList(value)) return false;
             let rest = value;
@@ -2251,6 +2252,62 @@ export class Interpreter {
         return this.cell(rest) === null ? mkList(values) : null;
     }
 
+    // Empty unannotated vectors carry no evidence for their element type.
+    // Keep that binder open until another parameter supplies the evidence.
+    private vectorTypeHoles = new WeakMap<Map<string, Value>, Set<string>>();
+
+    private matchVectorPattern(args: Pattern[], input: Value, binds: Map<string, Value>): boolean {
+        const value = this.dataValue(input);
+        if (!this.isList(value)) return false;
+        let size: bigint, element: Value | undefined;
+        const sizePattern = args[0];
+        const fixed = sizePattern.p === "int" ? mkInt(sizePattern.v)
+            : sizePattern.p === "var" && binds.has(sizePattern.name) ? this.dataValue(binds.get(sizePattern.name)!) : undefined;
+        if (fixed && (fixed.kind !== "int" || fixed.v < 0n)) return false;
+        const limit = fixed?.kind === "int" ? fixed.v : undefined;
+        if (value.kind === "list" && value.schema?.kind === "type" && value.schema.name === "Vect") {
+            [size, element] = this.vectorParts(value.schema);
+        } else {
+            size = 0n;
+            let rest = value;
+            for (;;) {
+                checkInterrupt();
+                const cell = this.cell(rest);
+                if (!cell) break;
+                if (limit !== undefined && size >= limit) return false;
+                const current = this.callNative("typeOf", [cell.head]);
+                if (element && !this.sameType(element, current)) return false;
+                element = current;
+                size++;
+                rest = cell.tail;
+            }
+        }
+        if (!this.matchPattern(args[0], mkInt(size), binds)) return false;
+        const typePattern = args[1];
+        if (typePattern.p === "var") {
+            const holes = this.vectorTypeHoles.get(binds) ?? new Set<string>();
+            this.vectorTypeHoles.set(binds, holes);
+            if (element) {
+                if (holes.delete(typePattern.name)) binds.set(typePattern.name, element);
+                else if (!this.matchPattern(typePattern, element, binds)) return false;
+            } else if (!binds.has(typePattern.name)) {
+                holes.add(typePattern.name);
+                binds.set(typePattern.name, { kind: "type", name: "$any", description: typePattern.name });
+            }
+            element = binds.get(typePattern.name)!;
+        } else if (typePattern.p === "constr" && typePattern.args.length === 0) {
+            const binding = this.env.get(typePattern.tag);
+            if (!binding) return false;
+            const requested = this.reference(binding);
+            if (!this.isTypeValue(requested) || (element && !this.sameType(requested, element))) return false;
+            element = requested;
+        } else if (typePattern.p !== "wildcard") {
+            if (!element || !this.matchPattern(typePattern, element, binds)) return false;
+        }
+        const type: Value = { kind: "type", name: "Vect", arguments: [mkInt(size), element ?? { kind: "type", name: "$any" }] };
+        return this.matchPattern(args[2], this.conform(type, value), binds);
+    }
+
     matchPattern(p: Pattern, v: Value, binds: Map<string, Value>): boolean {
         if (p.p === "wildcard") return true;
         if (p.p === "var") {
@@ -2264,7 +2321,7 @@ export class Interpreter {
             let type: Value;
             this.env = scope;
             try { type = this.reference(this.eval(p.type)); } finally { this.env = caller; }
-            if (type.kind === "type" && type.name === "Vector" && !type.family && !type.alias) {
+            if (type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) {
                 return this.matchPattern(p.value, this.conform(type, v), binds);
             }
             if (!this.isTypeValue(type)) throw new APNError("runtime", "pattern expects a type description");
@@ -2287,11 +2344,12 @@ export class Interpreter {
             if (!this.matchesValueType("Function", f)) return false;
             return this.matchPattern(p.value, this.conform(this.resolveFunctionSpec(p.spec), f), binds);
         }
-        if (p.p === "constr" && !TYPE_NAMES.includes(p.tag)) {
+        if (p.p === "constr" && (!TYPE_NAMES.includes(p.tag) || p.tag === "Vect")) {
             const binding = this.env.get(p.tag);
             if (binding) {
                 const type = this.reference(binding);
-                if (p.args.length === 1 && type.kind === "type" && type.name === "Vector" && !type.family && !type.alias) return this.matchPattern(p.args[0], this.conform(type, v), binds);
+                if (p.args.length === 3 && type.kind === "type" && type.name === "Vect" && !type.arguments?.length && !type.family && !type.alias) return this.matchVectorPattern(p.args, v, binds);
+                if (p.args.length === 1 && type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) return this.matchPattern(p.args[0], this.conform(type, v), binds);
                 if (p.args.length === 1 && type.kind === "type" && !type.family && !type.alias) {
                     return this.matchPattern({ p: "constr", tag: type.name, args: p.args }, v, binds);
                 }
@@ -2333,7 +2391,7 @@ export class Interpreter {
                     for (const el of p.v) {
                         if (el.p !== "var") return false;
                         if (!fields.has(el.name)) return false;
-                        binds.set(el.name, fields.get(el.name)!);
+                        if (!this.matchPattern(el, fields.get(el.name)!, binds)) return false;
                     }
                     return true;
                 }
@@ -2358,7 +2416,7 @@ export class Interpreter {
                 for (const [k, val] of v.v) fields.set(k, val);
                 for (const [key, name] of p.v) {
                     if (!fields.has(key)) return false;
-                    binds.set(name, fields.get(key)!);
+                    if (!this.matchPattern({ p: "var", name }, fields.get(key)!, binds)) return false;
                 }
                 return true;
             }

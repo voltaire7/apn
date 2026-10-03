@@ -1,4 +1,4 @@
-# Gradual checking and value-dependent types
+# Static checking and value-dependent patterns
 
 APN keeps its dynamic execution model. Checking is opt-in:
 
@@ -9,8 +9,10 @@ apn --lint --types --json examples/types/dependent-vectors.apn
 ```
 
 `--check` reads and checks source without running it. `--checked` checks the
-entire entry file before any of that file's expressions run. A type error
-stops execution and gives a nonzero exit status. Ordinary `apn file.apn` and
+entire entry file before any of that file's expressions run. Both reject unresolved
+dynamic boundaries as well as known type errors, with a nonzero exit status.
+`--lint --types` and the editor retain gradual analysis, reporting known errors
+without requiring every operation to be established. Ordinary `apn file.apn` and
 the REPL retain their existing runtime behavior.
 
 The checker infers polymorphic functions, propagates application constraints,
@@ -30,7 +32,8 @@ unwrap None = 0
 
 A known call such as `unwrap (Some "hello")` conflicts with the numeric fallback.
 The function's clauses are checked together, rather than treated as unrelated
-functions. A caller can explicitly select a dynamic boundary:
+functions. Ordinary execution and gradual editor analysis still allow explicit
+dynamic boundaries:
 
 ```apn
 selfApply (Dynamic f) = f f
@@ -38,18 +41,19 @@ selfApply (Dynamic f) = f f
 
 `Dynamic` is a first-class identity constructor and a permissive pattern. It
 keeps runtime behavior; it does not pretend a dynamic value has a static proof.
+Using that boundary is rejected by strict `--check` / `--checked` mode.
 
 ## Values as type arguments
 
-`Vector n elementType` describes a list of exactly `n` elements. `n` is an
+`Vect n elementType` describes a list of exactly `n` elements. `n` is an
 ordinary nonnegative exact integer value. The constructor validates length
 and applies the element type lazily, following APN's existing lossless
 conversion rules.
 
 ```apn
-Ints n = Vector n Int
+Ints n = Vect n Int
 xs = Ints 3 [10, 20, 30]
-print (typeOf xs)                 # Vector 3 Int
+print (typeOf xs)                 # Vect 3 Int
 xs 0 = 40                        # still Int, still length 3
 
 copy n ((Ints n) values) = values
@@ -64,12 +68,13 @@ function application substitutes the supplied index into subsequent parameter
 and result types. The checker normalizes integer constants and affine index
 expressions (addition, subtraction, multiplication by a known constant).
 Known contradictory lengths are rejected. Unknown lengths and unsupported
-index computations retain runtime validation; no user code runs to decide them.
+index computations are dynamic boundaries: strict mode rejects them, while
+ordinary execution retains runtime validation. No user code runs to decide them.
 
 Length validation checks the list spine through the expected size plus one
 cell. It rejects an infinite list promptly when the requested size is finite,
 without evaluating its elements. Element conversion errors surface when those
-elements are demanded. `isType (Vector n t) value` checks length and membership;
+elements are demanded. `isType (Vect n t) value` checks length and membership;
 index updates retain the vector descriptor and element conversion.
 
 Type aliases can receive values as well as types:
@@ -82,24 +87,82 @@ Choice false "hello"
 
 Known Boolean selections are reduced statically. Unknown selections and other
 arbitrary type computations remain dynamic. Generic variant declarations still
-use their existing type-parameter behavior; value-dependent aliases and Vector
+use their existing type-parameter behavior; value-dependent aliases and Vect
 provide the value-indexed layer.
 
-## Dynamic boundaries and limits
+## Inferring arguments from a vector pattern
 
-Successful checking is not a claim that all runtime checks disappeared. The
-CLI reports remaining dynamic boundaries. Imported names, `use`, `load`, live
-environment reflection, unknown native operations, and unresolved overloads
-remain dynamic. The checker does not execute or recursively inspect imported
-files; check those files separately if desired. A dynamic boundary can still
-fail at runtime. Losslessness or numeric range checks that depend on unknown
-values also remain runtime checks.
+```apn
+append (Vect n a []) (Vect m a ys) = Vect (n + m) a ys
+append (Vect n a (x:xs)) (Vect m a ys) =
+    Vect (n + m) a (x : append xs ys)
 
-Heterogeneous lists remain legal. Unsupported operations produce Dynamic in
-the checker rather than acquiring invented constraints. The checker is bounded;
-exhausting its analysis budget or depth limit reports that it cannot establish
-the type. Exhaustion is not successful checking and
-does not silently become Dynamic.
+append [1,2] [3,4]                # [1, 2, 3, 4]
+```
+
+The first pattern introduces length `n`, element type `a`, and the contents.
+The second introduces `m` and requires the same `a`. These are ordinary local
+values available in the body. `Vect` is the built-in name; `Vector` was renamed.
+`(Vect n Int xs)` constrains the element type explicitly, and `(Vect 3 a xs)`
+constrains the length. For computed type expressions, the existing form
+`((Vect (n + 1) Int) xs)` remains available.
+
+The checker refines `n` to zero in the empty branch. In the cons branch the
+tail has length `n - 1`. An explicit result constructor supplies a recursive
+signature before the body is checked; affine arithmetic establishes the sum.
+The example passes strict checking without executing either branch.
+Returning `Vect (n + m + 1) a ys` in the empty branch is a static error.
+
+At runtime an annotated vector supplies its descriptor without forcing its
+elements. An ordinary finite list must be traversed to infer its length and
+homogeneous element type; this can force elements. Mixed element types fail
+the pattern. A fixed length inspects at most that length plus one cell, so an
+infinite list is rejected promptly. Inferring an unknown length from an infinite
+list cannot finish, but remains interruptible.
+
+An empty unannotated list provides no element-type evidence. Its type binder
+stays open for another vector argument to determine. If every argument is
+empty, it remains a polymorphic empty-vector element type, displayed with the
+binder name. `Vect 0 Int []` supplies explicit evidence instead.
+
+## Repeated names
+
+```apn
+same x x = x
+same 3 3                         # 3
+# same 3 4                       # no matching clause
+
+(x x -> x) 3 3                  # 3
+```
+
+Within one parameter list, the first occurrence binds and subsequent occurrences
+compare using APN equality. This also applies inside list and record patterns.
+The names shadow outer bindings; separate nested lambdas introduce separate
+scopes. `_` is always an independent wildcard, so `(_ _ -> 1) 2 3` returns 1.
+The checker requires compatible types; equal values are still checked at runtime.
+Comparing infinite lists may not terminate. Function equality retains APN's
+existing behavior; repeated patterns do not prove function equivalence.
+
+## Static boundaries and limits
+
+Strict checking covers a conservative subset of APN, not every existing dynamic
+program. Imports, `use`, `load`, live environment reflection, unsupported natives,
+and unresolved overloads are rejected as dynamic boundaries. The checker does
+not execute or recursively inspect imported files. Checking an imported file
+separately does not establish the importer's interface automatically.
+
+Ambiguous arithmetic without enough input or result information is rejected.
+For example `f x = x + 1` currently needs more information, such as `(Int x)`.
+A known numeric result can constrain arithmetic, which is sufficient to check
+the self-application factorial below unchanged. Inferred parameters do not
+silently convert arguments: runtime conversion is available only where the
+program supplies an actual constructor or converting pattern.
+
+Successful checking does not prove termination, exhaustive matching, index bounds,
+or freedom from all runtime errors. Heterogeneous lists remain legal, but using
+an unknown element in a constrained operation may require additional information.
+Analysis budget/depth exhaustion is a diagnostic, never successful checking or
+a silent Dynamic fallback. Gradual editor diagnostics remain available separately.
 
 ## Recursion and self-application
 
@@ -126,14 +189,10 @@ Ordinary recursion, `x = x`, and self-application such as
 not guarantee termination. Recursive lazy values such as `xs = 1 : xs` keep
 their existing runtime behavior.
 
-This is recursive-type support in the existing gradual checker, not completion
-of a fully static type system. Self-application itself no longer introduces a
-dynamic boundary; unresolved arithmetic in the factorial example still does.
-The proposed implicit vector index/type binders and repeated-name equality
-patterns are not introduced by this change.
+The factorial example passes strict checking with no dynamic boundary.
+Runtime recursion is unrestricted, including deliberately divergent programs.
 
-This is gradual, value-dependent typing, **not a proof-safe implementation of
-Calculus of Constructions**. APN still permits nontermination, effects, dynamic
+This is **not a proof-safe implementation of Calculus of Constructions**. APN still permits nontermination, effects, dynamic
 environments, and effectful type computations at runtime. There are no universe
 levels, totality proofs, arbitrary theorem solving, or general definitional
 equality. The `typeOf` printer remains diagnostic inference, separate from the
@@ -144,5 +203,6 @@ checker and its stricter acceptance rules.
 The LSP accepts `initializationOptions.typeChecking = true`. In Neovim's LSP
 configuration this is `init_options = { typeChecking = true }`. It is disabled
 by default to preserve existing sessions. No editor configuration is modified
-by installing these language changes. Type diagnostics use the same checker
-as `--check` and `--lint --types`.
+by installing these language changes. Type diagnostics use the same inference
+engine in gradual mode; `--check` and `--checked` additionally reject remaining
+dynamic boundaries.

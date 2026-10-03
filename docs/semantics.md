@@ -830,7 +830,7 @@ can leave unconstrained variables; these are not guarantees of parametric
 polymorphism. No new runtime restrictions or type-based dispatch are introduced.
 
 Optional pre-execution checking and value-dependent types are documented in
-[Gradual and dependent types](gradual-and-dependent-types.md). `Vector n t`
+[Gradual and dependent types](gradual-and-dependent-types.md). `Vect n t`
 checks list length and element conversions; type aliases can accept ordinary
 values. `--check` and `--checked` do not change ordinary dynamic execution.
 

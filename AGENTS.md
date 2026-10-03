@@ -680,7 +680,7 @@ single predicate conversion used by Bool, !, conditions, guards, assert, filter;
 logical operators short-circuit and return Bool. Empty-list truth checks inspect
 only the first cell. FFI result descriptor [] means C void, never a parameter.
 
-Gradual checking is opt-in via --check / --checked and --lint --types;
+Strict checking is opt-in via --check / --checked; --lint --types is gradual;
 LSP initializationOptions.typeChecking enables matching diagnostics. The pure
 src/type-checker.ts never executes APN or follows imports. Preserve polymorphic
 instantiation, captured monomorphic variables, open record matching, overloads,
@@ -690,7 +690,7 @@ reintroduce an occurs-check rejection for self-application. Budget/depth exhaust
 is a diagnostic, not a Dynamic fallback. This differs from the diagnostic-only
 type-description printer above. Unknown operations are reported dynamic
 boundaries, not verified proofs. Existing execution/REPL behavior stays dynamic.
-Vector n t uses a type descriptor with [integer length, element type] arguments.
+Vect n t uses a type descriptor with [integer length, element type] arguments.
 Conformance checks n+1 spine cells and delays element conversions; list.schema
 preserves its contract through index updates/typeOf. Schema patterns resolve
 prior argument bindings in a temporary scope. Aliases accept ordinary values;
@@ -706,3 +706,15 @@ printing, gradual checking, and the APN metacircular template AST in sync.
 Dotted list templates reject scalar slots rather than replacing them. Types/functions
 apply positionally; nested list templates recurse with the same rule. Record defaults,
 including nested list defaults, retain their replacement behavior via replaceDefaults.
+
+`--check` / `--checked` now reject remaining dynamic boundaries; checkTypes and
+checkSource retain optional gradual analysis for editor clients. Strict calls
+must not insert conversions for ordinary inferred parameters: only actual
+converting patterns perform those conversions at runtime. Vect patterns bind
+length, element type, and payload; empty-list patterns refine lengths, cons
+patterns retain tail lengths, explicit Vect result constructors seed recursive
+signatures. Runtime inference from unannotated lists consumes their spine and
+checks homogeneous element types; typed vectors retain lazy elements. Repeated
+pattern names compare consistently in lambdas, definitions, and records; `_`
+always remains a wildcard. Tests: vect-pattern-test.ts, repeated-pattern-test.ts,
+strict-checking-test.ts. Keep the dependent-vectors demo passing --checked.

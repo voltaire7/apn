@@ -100,5 +100,7 @@ apn --check examples/types/dependent-vectors.apn
 apn --checked examples/types/dependent-vectors.apn
 ```
 
-See [Gradual and dependent types](docs/gradual-and-dependent-types.md) for
-`Vector n t`, value-parameterized aliases, dynamic boundaries, and editor setup.
+See [Static checking and dependent patterns](docs/gradual-and-dependent-types.md) for
+`Vect n t`, inferred pattern binders, strict checking boundaries, and editor setup.
+`--check` and `--checked` reject unresolved dynamic boundaries; ordinary execution
+and gradual editor diagnostics remain available.

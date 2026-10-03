@@ -9,7 +9,7 @@ type Ty =
     | { k: "dynamic" }
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
-    | { k: "fn"; input: Ty; output: Ty; binder?: string }
+    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean }
     | { k: "list"; element: Ty; length?: Index; items?: Ty[] }
     | { k: "record"; fields: Map<string, Ty> }
     | { k: "type"; value: Ty }
@@ -37,7 +37,7 @@ export interface CheckResult {
 const dynamic: Ty = { k: "dynamic" };
 const variable = (): Ty => ({ k: "var" });
 const atom = (name: string): Ty => name === "Dynamic" ? dynamic : { k: "atom", name };
-const fn = (input: Ty, output: Ty, binder?: string): Ty => ({ k: "fn", input, output, binder });
+const fn = (input: Ty, output: Ty, binder?: string, coerce = false): Ty => ({ k: "fn", input, output, binder, coerce });
 const list = (element: Ty, length?: Index): Ty => ({ k: "list", element, length });
 const constant = (n: bigint): Index => ({ constant: n, terms: new Map() });
 const resolve = (t: Ty): Ty => t.k === "var" && t.link ? resolve(t.link) : t;
@@ -85,7 +85,7 @@ function text(
             case "fn":
                 return `(${show(t.input)} -> ${show(t.output)})`;
             case "list":
-                return t.length ? `Vector ${indexText(t.length)} ${show(t.element)}` : `[${show(t.element)}]`;
+                return t.length ? `Vect ${indexText(t.length)} ${show(t.element)}` : `[${show(t.element)}]`;
             case "record":
                 return `[${[...t.fields].map(([k, v]) => `${k}: ${show(v)}`).join(", ")}]`;
             case "type":
@@ -205,7 +205,7 @@ function copy(
 
 // This checker never evaluates APN expressions or follows imports/load. Unknown
 // operations are explicit gradual boundaries; concrete contradictions are errors.
-export function checkTypes(program: TopLevel[]): CheckResult {
+export function checkTypes(program: TopLevel[], options: { strict?: boolean } = {}): CheckResult {
     const issues: TypeIssue[] = [];
     // Rebound value indices are dynamic: a lazy type alias can observe a later
     // binding, so freezing its first literal value would reject valid APN.
@@ -237,6 +237,14 @@ export function checkTypes(program: TopLevel[]): CheckResult {
         if (--budget < 0) {
             problem("type checking limit exceeded; cannot establish the type", e);
         }
+    }
+    let lengthFacts = new Map<string, Index>();
+    function refinedIndex(value: Index): Index {
+        let result = constant(value.constant);
+        for (const [name, scale] of value.terms) {
+            result = indexAdd(result, lengthFacts.get(name) ?? { constant: 0n, terms: new Map([[name, 1n]]) }, scale);
+        }
+        return result;
     }
     function unify(
         expected: Ty,
@@ -279,7 +287,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
         if (expected.k === "list" && actual.k === "list") {
             unify(expected.element, actual.element, e, seen);
             if (expected.length && actual.length) {
-                const delta = indexAdd(expected.length, actual.length, -1n);
+                const delta = indexAdd(refinedIndex(expected.length), refinedIndex(actual.length), -1n);
                 if (!delta.terms.size && delta.constant !== 0n) {
                     problem(
                         `length mismatch: expected ${indexText(expected.length)}, got ${indexText(actual.length)}`,
@@ -384,12 +392,13 @@ export function checkTypes(program: TopLevel[]): CheckResult {
         }
         return problem("expected a type description", e);
     }
-    function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr): void {
+    function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr, bound = new Set<string>()): void {
         switch (p.p) {
             case "wildcard":
                 return;
             case "var":
-                scope.set(p.name, { type: expected, mono: true });
+                if (bound.has(p.name)) unify(scope.get(p.name)!.type, expected, e);
+                else { bound.add(p.name); scope.set(p.name, { type: expected, mono: true }); }
                 return;
             case "int":
             case "range":
@@ -401,31 +410,41 @@ export function checkTypes(program: TopLevel[]): CheckResult {
             case "schema": {
                 const t = typeExpr(p.type, scope);
                 unify(t, expected, e);
-                bind(p.value, t, scope, e);
+                bind(p.value, t, scope, e, bound);
                 return;
             }
-            case "typeBind":
-                scope.set(p.name, { type: atom("Type"), mono: true });
-                bind(p.value, expected, scope, e);
+            case "typeBind": {
+                const type: Ty = { k: "type", value: expected };
+                bind({ p: "var", name: p.name }, type, scope, e, bound);
+                bind(p.value, expected, scope, e, bound);
                 return;
+            }
             case "contract": {
                 const spec = (s: typeof p.spec): Ty => "name" in s ? atom(s.name) : fn(spec(s.from), spec(s.to));
                 const t = spec(p.spec);
                 unify(t, expected, e);
-                bind(p.value, t, scope, e);
+                bind(p.value, t, scope, e, bound);
                 return;
             }
             case "list": {
                 const a = variable();
                 unify(list(a), expected, e);
-                p.v.forEach((x) => bind(x, a, scope, e));
+                const vector = resolve(expected);
+                if (vector.k === "list" && vector.length?.terms.size === 1) {
+                    const [name, coefficient] = [...vector.length.terms][0];
+                    const difference = BigInt(p.v.length) - vector.length.constant;
+                    if (coefficient !== 0n && difference % coefficient === 0n) lengthFacts.set(name, constant(difference / coefficient));
+                }
+                p.v.forEach((x) => bind(x, a, scope, e, bound));
                 return;
             }
             case "cons": {
                 const a = variable(), t = list(a);
                 unify(t, expected, e);
-                bind(p.head, a, scope, e);
-                bind(p.tail, t, scope, e);
+                const vector = resolve(expected);
+                const tail = vector.k === "list" && vector.length ? list(a, indexAdd(vector.length, constant(-1n))) : t;
+                bind(p.head, a, scope, e, bound);
+                bind(p.tail, tail, scope, e, bound);
                 return;
             }
             case "recPat": {
@@ -433,32 +452,55 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                 for (const [key, name] of p.v) {
                     const t = variable();
                     fields.set(key, t);
-                    scope.set(name, { type: t, mono: true });
+                    bind({ p: "var", name }, t, scope, e, bound);
                 }
                 unify({ k: "record", fields }, expected, e);
                 return;
             }
             case "constr": {
                 const entry = scope.get(p.tag), t = entry ? copy(entry.type) : dynamic;
+                if (t.k === "factory" && p.args.length === 3) {
+                    const [size, element, value] = p.args;
+                    let length: Index | undefined;
+                    if (size.p === "var") {
+                        const previous = bound.has(size.name) ? scope.get(size.name) : undefined;
+                        bind(size, atom("Int"), scope, e, bound);
+                        length = previous?.index ?? { constant: 0n, terms: new Map([[`n${serial++}`, 1n]]) };
+                        scope.set(size.name, { ...scope.get(size.name)!, index: length });
+                    } else if (size.p === "int") length = constant(size.v);
+                    else if (size.p !== "wildcard") problem("Vect length pattern needs a name, integer, or _", e);
+                    let item: Ty = variable();
+                    if (element.p === "var") {
+                        bind(element, { k: "type", value: item }, scope, e, bound);
+                        const saved = resolve(scope.get(element.name)!.type);
+                        if (saved.k === "type") item = saved.value;
+                    } else if (element.p === "constr" && !element.args.length) {
+                        item = typeExpr({ t: "var", name: element.tag }, scope);
+                    } else if (element.p !== "wildcard") problem("Vect element pattern needs a type, name, or _", e);
+                    const vector = list(item, length);
+                    unify(vector, expected, e);
+                    bind(value, vector, scope, e, bound);
+                    return;
+                }
                 if (p.tag === "Type") {
                     const payload: Ty = { k: "type", value: variable() };
                     unify(payload, expected, e);
-                    p.args.forEach((x) => bind(x, payload, scope, e));
+                    p.args.forEach((x) => bind(x, payload, scope, e, bound));
                     return;
                 }
                 if (t.k === "type") {
                     unify(t.value, expected, e);
-                    p.args.forEach((x) => bind(x, t.value, scope, e));
+                    p.args.forEach((x) => bind(x, t.value, scope, e, bound));
                     return;
                 }
                 let rest: Ty = t;
                 for (const arg of p.args) {
                     const f = resolve(rest);
                     if (f.k !== "fn") {
-                        bind(arg, unknown(), scope, e);
+                        bind(arg, unknown(), scope, e, bound);
                         continue;
                     }
-                    bind(arg, f.input, scope, e);
+                    bind(arg, f.input, scope, e, bound);
                     rest = f.output;
                 }
                 unify(rest, expected, e);
@@ -475,7 +517,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
     ): Ty {
         spend(e);
         const t = resolve(target), a = resolve(actual);
-        if (t.k === "atom" && t.name === "Bool") return t;
+        if (t.k === "atom" && t.name === "Bool" && explicitFloat) return t;
         if (
             t.k === "atom" && a.k === "atom" && NUMERIC_TYPES.includes(t.name) &&
             NUMERIC_TYPES.includes(a.name)
@@ -559,7 +601,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
             if (args.length === 1) {
                 convert(atom("Int"), argument.type, e);
                 if (argument.index && !argument.index.terms.size && argument.index.constant < 0n) {
-                    problem("Vector length must be nonnegative", e);
+                    problem("Vect length must be nonnegative", e);
                 }
                 return { k: "factory", args };
             }
@@ -569,7 +611,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                 unify(element, payload, e);
                 element = payload;
             }
-            if (element.k !== "type" && element.k !== "dynamic") problem("Vector element must be a type", e);
+            if (element.k !== "type" && element.k !== "dynamic") problem("Vect element must be a type", e);
             if (!args[0].index) dynamicBoundaries++;
             return { k: "type", value: list(element.k === "type" ? element.value : dynamic, args[0].index) };
         }
@@ -577,7 +619,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
             const args = [...f.args, argument];
             if (args.length < f.params.length) return { ...f, args };
             const scope = new Map(f.scope);
-            f.params.forEach((name, i) => scope.set(name, args[i]));
+            f.params.forEach((name, i) => scope.set(name, { ...args[i], mono: true }));
             return infer(f.body, scope);
         }
         if (f.k === "type") {
@@ -612,7 +654,20 @@ export function checkTypes(program: TopLevel[]): CheckResult {
             return result;
         }
         if (f.k === "fn") {
-            convert(f.input, argument.type, e);
+            const expected = resolve(f.input), actual = resolve(argument.type);
+            if (expected.k === "list" && actual.k === "list" && expected.length?.terms.size === 1 && actual.length) {
+                const [name, coefficient] = [...expected.length.terms][0];
+                if (coefficient === 1n) {
+                    const value = indexAdd(actual.length, constant(-expected.length.constant));
+                    const retained = new Map([...variables(f)].map(t => [t, t]));
+                    const instantiated = copy(f, retained, [name, value]) as Extract<Ty, { k: "fn" }>;
+                    if (options.strict && !f.coerce) unify(instantiated.input, argument.type, e);
+                    else convert(instantiated.input, argument.type, e);
+                    return instantiated.output;
+                }
+            }
+            if (options.strict && !f.coerce) unify(f.input, argument.type, e);
+            else convert(f.input, argument.type, e);
             return f.binder && argument.index
                 ? copy(f.output, new Map([...variables(f.output)].map((t) => [t, t])), [f.binder, argument.index])
                 : f.output;
@@ -651,7 +706,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
         return problem(`cannot apply ${text(f)}`, e);
     }
     let inferenceDepth = 0;
-    function infer(e: Expr, scope: Scope): Ty {
+    function infer(e: Expr, scope: Scope, expected?: Ty): Ty {
         spend(e);
         if (++inferenceDepth > 256) {
             inferenceDepth--;
@@ -661,12 +716,12 @@ export function checkTypes(program: TopLevel[]): CheckResult {
             );
         }
         try {
-            return inferExpression(e, scope);
+            return inferExpression(e, scope, expected);
         } finally {
             inferenceDepth--;
         }
     }
-    function inferExpression(e: Expr, scope: Scope): Ty {
+    function inferExpression(e: Expr, scope: Scope, expected?: Ty): Ty {
         switch (e.t) {
             case "int":
                 return atom("Int");
@@ -841,7 +896,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                 infer(e.cond, scope);
                 const known = boolean(e.cond, scope);
                 if (known !== undefined) return infer(known ? e.then : e.els, scope);
-                const a = infer(e.then, scope), b = infer(e.els, scope);
+                const a = infer(e.then, scope), b = infer(e.els, scope, a);
                 if (resolve(a).k === "type" && resolve(b).k === "type" && text(a) !== text(b)) {
                     dynamicBoundaries++;
                     return { k: "type", value: dynamic };
@@ -850,11 +905,33 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                 return a;
             }
             case "binop": {
-                const a = infer(e.l, scope), b = infer(e.r, scope);
-                if (["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(e.op)) return atom("Bool");
+                // A numeric result constraint disambiguates arithmetic from
+                // callable iteration. Do not guess numeric inputs otherwise.
+                const resultConstraint = expected && resolve(expected);
+                const constrain = (value: Ty): Ty => {
+                    if (["+", "-", "*"].includes(e.op) && resultConstraint?.k === "atom" &&
+                        NUMERIC_TYPES.includes(resultConstraint.name) && resolve(value).k === "var") {
+                        unify(value, resultConstraint, e);
+                    }
+                    return value;
+                };
+                const a = constrain(infer(e.l, scope)), b = constrain(infer(e.r, scope));
+                if (["==", "!=", "&&", "||"].includes(e.op)) return atom("Bool");
+                if (["<", ">", "<=", ">="].includes(e.op)) {
+                    const x = resolve(a), y = resolve(b);
+                    if (x.k === "var" || y.k === "var" || x.k === "dynamic" || y.k === "dynamic") {
+                        unknown();
+                    } else if (!(x.k === "atom" && y.k === "atom" &&
+                        ((NUMERIC_TYPES.includes(x.name) && NUMERIC_TYPES.includes(y.name)) ||
+                            (x.name === y.name && ["String", "Char"].includes(x.name))))) {
+                        problem(`cannot compare ${text(x)} and ${text(y)}`, e);
+                    }
+                    return atom("Bool");
+                }
                 if (e.op === ":") {
                     unify(list(a), b, e);
-                    return list(a);
+                    const tail = resolve(b);
+                    return list(a, tail.k === "list" && tail.length ? indexAdd(tail.length, constant(1n)) : undefined);
                 }
                 if (e.op === "++") {
                     const x = resolve(a), y = resolve(b);
@@ -884,8 +961,25 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                 }
                 return unknown();
             }
-            case "unop":
-                return e.op === "not" ? atom("Bool") : infer(e.e, scope);
+            case "unop": {
+                const operand = infer(e.e, scope);
+                if (e.op === "not") return atom("Bool");
+                const active = new Set<Ty>();
+                const numeric = (type: Ty): void => {
+                    const t = resolve(type);
+                    if (active.has(t)) { unknown(); return; }
+                    active.add(t);
+                    try {
+                        if (t.k === "atom" && NUMERIC_TYPES.includes(t.name)) return;
+                        if (t.k === "var" || t.k === "dynamic") { unknown(); return; }
+                        if (t.k === "list") { numeric(t.element); return; }
+                        if (t.k === "record") { for (const value of t.fields.values()) numeric(value); return; }
+                        problem(`cannot negate ${text(t)}`, e);
+                    } finally { active.delete(t); }
+                };
+                numeric(operand);
+                return operand;
+            }
             case "block": {
                 const child: Scope = new Map([...scope].map(([name, entry]) => [name, { ...entry, inherited: true }]));
                 let result: Ty = list(dynamic, constant(0n));
@@ -915,17 +1009,26 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                 return unknown();
         }
     }
-    function functionType(params: Pattern[], body: Expr, parent: Scope): Ty {
-        const scope = new Map(parent), inputs: { type: Ty; binder?: string }[] = [];
+    function functionType(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string): Ty {
+        const outerFacts = lengthFacts;
+        lengthFacts = new Map(outerFacts);
+        try { return inferFunction(params, body, parent, recursiveName); }
+        finally { lengthFacts = outerFacts; }
+    }
+    function inferFunction(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string): Ty {
+        const scope = new Map(parent), inputs: { type: Ty; binder?: string; coerce: boolean }[] = [];
+        const bound = new Set<string>();
         for (const p of params) {
             const t = variable();
-            bind(p, t, scope, body);
+            bind(p, t, scope, body, bound);
             const name = p.p === "var"
                 ? p.name
                 : p.p === "constr" && p.args.length === 1 && p.args[0].p === "var"
                 ? p.args[0].name
                 : undefined;
-            const binder = name ? `n${serial++}` : undefined;
+            const previousIndex = name ? scope.get(name)?.index : undefined;
+            const binder = previousIndex && previousIndex.constant === 0n && previousIndex.terms.size === 1
+                ? [...previousIndex.terms.keys()][0] : name ? `n${serial++}` : undefined;
             if (name) {
                 scope.set(name, {
                     ...scope.get(name)!,
@@ -933,10 +1036,24 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                     index: { constant: 0n, terms: new Map([[binder!, 1n]]) },
                 });
             }
-            inputs.push({ type: t, binder });
+            inputs.push({ type: t, binder, coerce: p.p === "schema" || p.p === "contract" || p.p === "int" || (p.p === "constr" && p.tag !== "Vect") });
+        }
+        // An explicit result constructor supplies the recursive signature before
+        // checking the body. Only inspect its descriptor; never run user code.
+        let declared: Ty | undefined;
+        if (body.t === "app" && body.f.t === "app" && body.f.f.t === "app" && body.f.f.f.t === "var" &&
+            resolve(scope.get(body.f.f.f.name)?.type ?? dynamic).k === "factory") {
+            const descriptor = resolve(infer(body.f, scope));
+            if (descriptor.k === "type") declared = descriptor.value;
+        }
+        if (declared && recursiveName) {
+            let signature = declared;
+            for (let n = inputs.length - 1; n >= 0; n--) signature = fn(inputs[n].type, signature, inputs[n].binder, inputs[n].coerce);
+            scope.set(recursiveName, { type: signature, nonGeneric: captured(parent) });
         }
         let result = infer(body, scope);
-        for (let n = inputs.length - 1; n >= 0; n--) result = fn(inputs[n].type, result, inputs[n].binder);
+        if (declared) { unify(declared, result, body); result = declared; }
+        for (let n = inputs.length - 1; n >= 0; n--) result = fn(inputs[n].type, result, inputs[n].binder, inputs[n].coerce);
         return result;
     }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
@@ -1007,7 +1124,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
                 domain(t.output, seen);
         };
         for (const c of clauses) {
-            const t = functionType(c.params, c.body, scope), key = domain(t), existing = groups.get(key);
+            const t = functionType(c.params, c.body, scope, name), key = domain(t), existing = groups.get(key);
             if (existing) unify(existing, t, c.body);
             else groups.set(key, t);
         }
@@ -1018,7 +1135,7 @@ export function checkTypes(program: TopLevel[]): CheckResult {
         } else scope.set(name, { type: { k: "overload", choices: alternatives }, nonGeneric });
     }
     const scope: Scope = new Map(TYPE_NAMES.map((name) => [name, { type: { k: "type", value: atom(name) } }]));
-    scope.set("Vector", { type: { k: "factory", args: [] } });
+    scope.set("Vect", { type: { k: "factory", args: [] } });
     const a = variable(), b = variable();
     for (
         const [name, type] of Object.entries({
@@ -1056,13 +1173,16 @@ export function checkTypes(program: TopLevel[]): CheckResult {
             } else throw error;
         }
     }
+    if (options.strict && dynamicBoundaries && !issues.length) {
+        issues.push({ message: `cannot establish static types: ${dynamicBoundaries} unresolved dynamic boundaries`, pos: 0, len: 1 });
+    }
     return { issues, dynamicBoundaries };
 }
-export function checkSource(source: string, file = "<input>"): CheckResult {
-    return checkTypes(parseDocument(source));
+export function checkSource(source: string, file = "<input>", options: { strict?: boolean } = {}): CheckResult {
+    return checkTypes(parseDocument(source), options);
 }
 export function requireChecked(source: string, file = "<input>"): CheckResult {
-    const result = checkSource(source, file);
+    const result = checkSource(source, file, { strict: true });
     if (result.issues.length) {
         const first = result.issues[0];
         const error = new APNError("type", first.message, first);
@@ -1079,7 +1199,7 @@ export async function runTypeCheck(files: string[]): Promise<number> {
     let failed = false;
     for (const file of files) {
         try {
-            const source = await Deno.readTextFile(file), result = checkSource(source, file);
+            const source = await Deno.readTextFile(file), result = checkSource(source, file, { strict: true });
             for (const issue of result.issues) {
                 failed = true;
                 console.error(`${file}:${source.slice(0, issue.pos).split("\n").length}: type error: ${issue.message}`);

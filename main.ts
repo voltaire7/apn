@@ -1,8 +1,8 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env=HOME
 
 // =====================================================================
-//  APN — Applicative Polish Notation: lazy dynamic execution, optional gradual
-//  checking, value-dependent constructors, and exact numbers.
+//  APN — Applicative Polish Notation: lazy execution, opt-in strict checking,
+//  value-dependent constructors and patterns, and exact numbers.
 //  Evaluation rules: docs/semantics.md.
 //  Run:  deno run --allow-read main.ts   (REPL)
 //        deno run --allow-read main.ts examples/features.apn

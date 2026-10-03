@@ -91,8 +91,8 @@ startup; it does not grant arbitrary file access or network permissions. Standar
 
 The server negotiates full document synchronization and UTF-16 positions.
 Documents are parsed independently; constructor declarations never leak across
-files or older edits. Import resolution, go-to-definition, rename, formatting,
-and static type checking are not implemented yet.
+files or older edits. Import resolution, go-to-definition, rename, and formatting
+are not implemented yet. Optional type diagnostics are described below.
 
 The integration uses Neovim's built-in [`vim.lsp.start`](https://neovim.io/doc/user/lsp#vim.lsp.start()).
 The server implements the relevant parts of the
@@ -100,5 +100,5 @@ The server implements the relevant parts of the
 
 For optional type diagnostics, pass `init_options = { typeChecking = true }`
 to the APN LSP configuration, or use `apn --lint --types FILE.apn` independently.
-See [Gradual and dependent types](gradual-and-dependent-types.md) for supported
+See [Static checking and dependent patterns](gradual-and-dependent-types.md) for supported
 checks and dynamic boundaries.

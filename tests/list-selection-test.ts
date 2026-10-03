@@ -59,8 +59,8 @@ arr keys = values
 });
 Deno.test('vector updates preserve their schema', () => {
     const i = new Interpreter();
-    const actual = i.renderString(i.run(parseDocument('arr = Vector 2 Int [1,2]; arr [0,1] = [3,4]; [arr,typeOf arr]')));
-    if (actual !== '[[3, 4], Vector 2 Int]') throw new Error(actual);
+    const actual = i.renderString(i.run(parseDocument('arr = Vect 2 Int [1,2]; arr [0,1] = [3,4]; [arr,typeOf arr]')));
+    if (actual !== '[[3, 4], Vect 2 Int]') throw new Error(actual);
 });
 Deno.test('selection rejects nested indices when consumed', () => {
     const i = new Interpreter();

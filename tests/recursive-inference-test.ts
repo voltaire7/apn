@@ -47,10 +47,8 @@ for (
 Deno.test("the original self-application factorial still checks and runs", () => {
     const source =
         "factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1))); factorial 5";
-    const checked = checkSource(source);
-    if (checked.issues.length) throw new Error(JSON.stringify(checked));
-    // Arithmetic remains a reported gradual boundary; recursive application
-    // itself is covered by the zero-boundary tests above.
+    const checked = checkSource(source, "<test>", { strict: true });
+    if (checked.issues.length || checked.dynamicBoundaries) throw new Error(JSON.stringify(checked));
     const interpreter = new Interpreter();
     const actual = interpreter.renderString(
         interpreter.run(parseDocument(source)),

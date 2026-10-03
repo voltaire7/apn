@@ -17,7 +17,7 @@ for (const [source, expected] of [
     const actual = i.renderString(i.run(parseDocument(source)));
     if (actual !== expected) throw new Error(actual);
 });
-for (const source of ['Int .2', 'Int32 .2', 'Float32 (1+2i)', 'v = [x: Float32 .5]; v.x = .1', 'f (Float32 x) = x; f .1', 'Vector 1 Float32 [.1]']) {
+for (const source of ['Int .2', 'Int32 .2', 'Float32 (1+2i)', 'v = [x: Float32 .5]; v.x = .1', 'f (Float32 x) = x; f .1', 'Vect 1 Float32 [.1]']) {
     Deno.test(`float construction preserves strict conversions: ${source}`, () => {
         const i = new Interpreter();
         try { i.renderString(i.run(parseDocument(source))); } catch { return; }

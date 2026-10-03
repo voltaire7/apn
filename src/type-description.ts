@@ -83,7 +83,13 @@ export function describeType(value: Value): string {
             case "constr": {
                 const ctor = env.get(p.tag);
                 const family = ctor && (ctor.kind === "native" || ctor.kind === "variant" || ctor.kind === "type") ? ctor.family : undefined;
-                if (family) {
+                if (p.tag === "Vect" && p.args.length === 3) {
+                    const element = fresh();
+                    result = list(element);
+                    pattern(p.args[0], env, locals, named("Int"));
+                    pattern(p.args[1], env, locals, named("Type"));
+                    pattern(p.args[2], env, locals, result);
+                } else if (family) {
                     const c = constructor(family, p.tag);
                     result = c.result;
                     p.args.forEach((a, i) => pattern(a, env, locals, c.fields[i] ?? fresh()));

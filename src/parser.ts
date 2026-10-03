@@ -246,7 +246,19 @@ class Parser {
         if (t.k === "ident") {
             this.next();
             const name = t.v;
+            if (name === "_") return { p: "wildcard" };
             if (nullaryCtors.has(name)) return { p: "constr", tag: name, args: [] };
+            // Vect exposes length, element type, and payload in one pattern.
+            if (name === "Vect" && this.startsParam(this.peek())) {
+                const size = this.parsePattern();
+                const token = this.peek();
+                let element: Pattern;
+                if (token.k === "ident" && /^[A-Z]/.test(token.v)) {
+                    this.next(); element = { p: "constr", tag: token.v, args: [] };
+                } else element = this.parsePattern();
+                const value = this.parsePattern();
+                return { p: "constr", tag: name, args: [size, element, value] };
+            }
             // constructor application: Just x
             if (/^[A-Z]/.test(name)) {
                 const args = [] as Pattern[];
@@ -570,7 +582,7 @@ class Parser {
             if (header) {
                 this.skipContinuation();
                 const body = this.isSym("{") ? this.parsePrimary() : this.parseExpr();
-                if (!header.guard && header.params.every(p => p.p === "var")) {
+                if (!header.guard && header.params.every(p => p.p === "var") && new Set(header.params.map(p => (p as Extract<Pattern, { p: "var" }>).name)).size === header.params.length) {
                     return { t: "lambda", params: header.params.map(p => (p as Extract<Pattern, { p: "var" }>).name), body };
                 }
                 return { t: "patternLambda", ...header, body };
