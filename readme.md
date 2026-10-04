@@ -5,6 +5,7 @@ A lazy functional scripting language implemented in dependency-free Deno/TypeScr
 Run these commands from the repository root:
 
 ```sh
+./apn --help                       # command-line options
 ./apn                              # interactive REPL
 ./apn examples/features.apn         # runnable language showcase
 deno check main.ts
