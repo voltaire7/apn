@@ -159,6 +159,31 @@ Applying a successful result to another argument retains ordinary application
 semantics. This matches values, not the source syntax of an unevaluated
 application such as `1 2`.
 
+## Typing a function through its definition
+
+Constrain inputs with patterns and results with ordinary constructor application:
+
+```apn
+func = (Int x) -> Int { x + x }
+twice (Int x) = Int { x + x }
+
+func 21                       # 42
+twice 21                      # 42
+typeOf func                   # Int -> Int
+typeOf twice                  # Int -> Int
+```
+
+Both definitions describe the same input and result types. `(Int x)` checks or
+losslessly converts the argument and binds its payload to `x`. `Int { x + x }`
+applies `Int` to the body's result. The checker infers the function's type from
+these existing patterns and expressions; no separate signature is needed.
+The function itself remains a callable value, not a type descriptor.
+
+`(Int x) -> Int x + x` is also valid, but application binds more tightly than
+addition: its body is `(Int x) + x`. Use `Int { x + x }` or `Int (x + x)` to
+explicitly constrain the whole result. Without a result constructor, the checker
+still infers a result type from the body.
+
 ## Function contracts
 
 Function contracts are written in patterns:

@@ -40,6 +40,19 @@ A known call such as `unwrap (Some "hello")` conflicts with the numeric fallback
 The function's clauses are checked together, rather than treated as unrelated
 functions.
 
+Input patterns and result constructors can make a function's inferred type
+explicit in its definition:
+
+```apn
+twice (Int x) = Int { x + x }
+# Equivalent lambda: twice = (Int x) -> Int { x + x }
+print (typeOf twice)                   # Int -> Int
+```
+
+Here `Int { ... }` is ordinary constructor application. The displayed
+`Int -> Int` describes the function's type; writing that arrow in an expression
+creates a lambda. See [typed definitions and function contracts](pattern-functions.md#typing-a-function-through-its-definition).
+
 ## Explicit runtime boundaries
 
 `Dynamic expression` explicitly opts that expression out of static checking.

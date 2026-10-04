@@ -1363,6 +1363,12 @@ print (inferredIncrement 41)               # => 42
 # Expression arrows always create lambdas; contracts belong in patterns.
 print ((Int value -> value) 123)           # => 123
 # (Int -> Int) checkedIncrement applies a lambda, not a function-type constructor.
+typedLambda = (Int value) -> Int { value + value }
+typedNamed (Int value) = Int { value + value }
+print (typedLambda 21)                    # => 42
+print (typedNamed 21)                     # => 42
+print (typeOf typedLambda)                # => Int -> Int
+print (typeOf typedNamed)                 # => Int -> Int
 
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
