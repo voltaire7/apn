@@ -707,7 +707,7 @@ Dotted list templates reject scalar slots rather than replacing them. Types/func
 apply positionally; nested list templates recurse with the same rule. Record defaults,
 including nested list defaults, retain their replacement behavior via replaceDefaults.
 
-`--check` / `--checked` now reject remaining dynamic boundaries; checkTypes and
+Ordinary execution and `--check` reject remaining dynamic boundaries; checkTypes and
 checkSource retain optional gradual analysis for editor clients. Strict calls
 must not insert conversions for ordinary inferred parameters: only actual
 converting patterns perform those conversions at runtime. Vect patterns bind
@@ -717,7 +717,7 @@ signatures. Runtime inference from unannotated lists consumes their spine and
 checks homogeneous element types; typed vectors retain lazy elements. Repeated
 pattern names compare consistently in lambdas, definitions, and records; `_`
 always remains a wildcard. Tests: vect-pattern-test.ts, repeated-pattern-test.ts,
-strict-checking-test.ts. Keep the dependent-vectors demo passing --checked.
+strict-checking-test.ts. Keep the dependent-vectors demo passing ordinary execution and --check.
 
 Explicit Dynamic boundaries are accepted by strict checking. Keep implicit unknowns
 separate from explicit Dynamic in inference: a concrete type requires a runtime

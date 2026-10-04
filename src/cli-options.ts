@@ -10,14 +10,13 @@ export const CLI_HELP = `Usage:
   apn --help, -h                   Show this help
 
 Files and REPL submissions are statically checked by default.
---checked is accepted for compatibility; it is no longer needed.
 Use -- before a filename beginning with '-'. Options after FILE.apn are
 script arguments, not APN options. Type :help inside the REPL for language help.
 The apn launcher also accepts --allow-ffi[=PATH,...] as its first argument.`;
 
 /** Validate APN options without interpreting arguments belonging to a script. */
 export function readCliOptions(input: string[]): { args: string[]; literalFile: boolean; error?: string } {
-    const args = input[0] === "--checked" ? input.slice(1) : [...input];
+    const args = [...input];
     if (args[0] === "--") {
         return { args: args.slice(1), literalFile: true, error: args.length === 1 ? "expected a filename after '--'" : undefined };
     }

@@ -3,6 +3,7 @@
 #  APN — Applicative Polish Notation — feature showcase
 #  A lazy functional language with static inference and Dynamic boundaries.
 #  CLI: apn --help (or -h) lists commands; unknown options report an argument error.
+#  Run files directly: static checking is automatic; --check validates without execution.
 #  apn file.apn --flag passes --flag to the script; apn -- -file.apn runs a dash-named file.
 
 #  Run:  deno run --allow-read main.ts examples/features.apn

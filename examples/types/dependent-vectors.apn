@@ -1,5 +1,5 @@
 # Check without running: apn --check examples/types/dependent-vectors.apn
-# Check, then execute:   apn --checked examples/types/dependent-vectors.apn
+# Check, then execute:   apn examples/types/dependent-vectors.apn
 
 Ints n = Vect n Int
 copy n ((Ints n) values) = values

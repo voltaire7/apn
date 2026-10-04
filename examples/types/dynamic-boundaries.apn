@@ -1,4 +1,4 @@
-# Run with: apn --checked examples/types/dynamic-boundaries.apn
+# Run with: apn examples/types/dynamic-boundaries.apn
 # Dynamic explicitly moves these operations to runtime.
 value = Dynamic 41
 print (Int value + 1)                     # 42

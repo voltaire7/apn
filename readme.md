@@ -104,7 +104,7 @@ apn examples/types/dependent-vectors.apn
 See [Static checking and dependent patterns](docs/gradual-and-dependent-types.md) for
 `Vect n t`, inferred pattern binders, strict checking boundaries, and editor setup.
 `apn file.apn`, the REPL, and `--check` reject implicit, unresolved dynamic boundaries.
-`--check` checks dependencies without executing code; `--checked` remains a compatibility alias.
+`--check` checks dependencies without executing code.
 Explicit `Dynamic` boundaries retain runtime checks; see
 [the runnable example](examples/types/dynamic-boundaries.apn).
 Gradual editor diagnostics remain available.

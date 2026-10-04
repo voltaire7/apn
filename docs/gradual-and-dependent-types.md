@@ -11,7 +11,7 @@ apn --lint --types --json examples/types/dependent-vectors.apn
 ```
 
 `--check` checks source and its statically named dependencies without running
-expressions. `--checked` remains an alias for ordinary execution. Unknown names,
+expressions. Unknown names,
 incompatible calls, and implicit unresolved boundaries are errors before any
 expression in that submission runs. The REPL preserves inferred bindings and
 merges function clauses between submissions. Failed static checks install no
