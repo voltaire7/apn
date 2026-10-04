@@ -1,3 +1,4 @@
+import { CheckingSession } from "./checking-session.ts";
 import { parse } from "./parser.ts";
 
 export async function buildHtml(sourceFile: string, outputFile: string): Promise<void> {
@@ -7,6 +8,9 @@ export async function buildHtml(sourceFile: string, outputFile: string): Promise
     for (const entry of Deno.readDirSync(new URL("../lib/", import.meta.url))) {
         if (entry.isFile && entry.name.endsWith(".apn")) modules[entry.name.slice(0, -4)] = Deno.readTextFileSync(new URL(`../lib/${entry.name}`, import.meta.url));
     }
+    const checking = new CheckingSession();
+    checking.moduleSources = modules;
+    checking.prepare(parse(source), new URL(".", new URL(sourceFile, `file://${Deno.cwd()}/`)).pathname);
     const temporary = Deno.makeTempDirSync({ prefix: "apn-html-" });
     try {
         const output = `${temporary}/runtime.js`;

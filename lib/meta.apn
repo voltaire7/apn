@@ -1,17 +1,17 @@
 import "std/text"
-load "meta/parser"
-load "meta/evaluator"
-load "meta/primitives"
+Dynamic $ load "meta/parser"
+Dynamic $ load "meta/evaluator"
+Dynamic $ load "meta/primitives"
 
 # Parse once, then evaluate syntax in our own environment and closure machinery.
-metaEval source = {
+metaEval source = Dynamic {
     [program] = [metaParse source]
     seq (mpForce program) (meRun (fst program) (snd program) metaPrimitives)
 }
 
 # Evaluate the evaluator's source, then ask that interpreted evaluator to run
 # the user's parsed program. Neither layer calls the host parser/evaluator.
-metaSelfEval evaluatorSource source = {
+metaSelfEval evaluatorSource source = Dynamic {
     [core] = [metaParse evaluatorSource]
     [program] = [metaParse source]
     [expression] = [["scope", fst program, snd program]]

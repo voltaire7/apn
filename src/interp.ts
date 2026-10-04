@@ -1,3 +1,4 @@
+import { CheckingSession } from "./checking-session.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeType } from "./type-description.ts";
@@ -42,9 +43,19 @@ export const NATIVES: Array<[string, number]> = [
 ];
 
 export class Interpreter {
-    // Enabled by the checked execution entry point. Foreign name installation
+    // Enabled by normal CLI/REPL execution. Foreign name installation
     // and reflected writes must preserve the visible bindings it has checked.
     checkedExecution = false;
+    private checking?: CheckingSession;
+    private runDepth = 0;
+    private dynamicDepth = 0;
+
+    enableChecking(): void {
+        this.checkedExecution = true;
+        this.checking = new CheckingSession();
+        this.checking.moduleSources = this.moduleSources;
+        this.checking.extendDefinitions = this.extendDefinitions;
+    }
     private preludeBindings = new Map<string, Value>();
     hostNatives = new Map<string, (args: Value[]) => Value>();
     programArgs: string[] = [];
@@ -54,6 +65,7 @@ export class Interpreter {
     private importing = new Set<string>();
 
     importStandard(module: string | string[], open = true): Value {
+        if (this.checking && !this.dynamicDepth) this.checking.module(module);
         if (Array.isArray(module)) {
             const fields = new Map<string, Value>();
             for (const name of module) {
@@ -95,7 +107,8 @@ export class Interpreter {
                 this.env = scope;
                 this.extendDefinitions = false;
                 this.sourceDir = new URL("../lib/", import.meta.url).pathname;
-                this.run(program);
+                this.runDepth++;
+                try { this.run(program); } finally { this.runDepth--; }
                 // The bundled cast is already installed from this exact source.
                 // Reuse its identity when std/type reexports it.
                 if (name === "type" && source === typeSource) scope.setLocal("cast", this.preludeBindings.get("cast")!);
@@ -135,44 +148,63 @@ export class Interpreter {
     }
 
     run(program: TopLevel[], tailLoad = false): Value {
-        let last: Value = { kind: "list", v: [] };
-        for (const [index, tl] of program.entries()) {
-            if (tl.t === "type") {
-                for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) {
-                    const previous = this.env.map.get(name);
-                    if (previous && ((previous.kind === "native" && previous.tag) || previous.kind === "variant") && previous.family?.name !== tl.def.name) {
-                        throw new APNError("runtime", `cannot redeclare value constructor ${name}; it belongs to ${previous.family?.name}`);
+        const candidate = this.checking && !this.runDepth && !this.dynamicDepth
+            ? this.checking.prepare(program, this.sourceDir) : undefined;
+        const saved = candidate ? new Map(this.env.map) : undefined;
+        let succeeded = false;
+        this.runDepth++;
+        try {
+            let last: Value = { kind: "list", v: [] };
+            for (const [index, tl] of program.entries()) {
+                if (tl.t === "type") {
+                    for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) {
+                        const previous = this.env.map.get(name);
+                        if (previous && ((previous.kind === "native" && previous.tag) || previous.kind === "variant") && previous.family?.name !== tl.def.name) {
+                            throw new APNError("runtime", `cannot redeclare value constructor ${name}; it belongs to ${previous.family?.name}`);
+                        }
                     }
-                }
-                const family = { name: tl.def.name, parameters: tl.def.parameters ?? [], fields: new Map(tl.def.variants.map(v => [v.tag, v.fields ?? []])), env: new Env(this.env) };
-                this.env.setLocal(tl.def.name, { kind: "type", name: tl.def.name, family });
-                for (const v of tl.def.variants) {
-                    if (v.arity === 0) {
-                        // Nullary constructors are themselves the value.
-                        this.env.setLocal(v.tag, { kind: "variant", tag: v.tag, v: [], family });
-                    } else {
-                        this.env.setLocal(v.tag, {
-                            kind: "native", name: "__constr", arity: v.arity, applied: [], tag: v.tag, family,
-                        });
+                    const family = { name: tl.def.name, parameters: tl.def.parameters ?? [], fields: new Map(tl.def.variants.map(v => [v.tag, v.fields ?? []])), env: new Env(this.env) };
+                    this.env.setLocal(tl.def.name, { kind: "type", name: tl.def.name, family });
+                    for (const v of tl.def.variants) {
+                        if (v.arity === 0) {
+                            // Nullary constructors are themselves the value.
+                            this.env.setLocal(v.tag, { kind: "variant", tag: v.tag, v: [], family });
+                        } else {
+                            this.env.setLocal(v.tag, {
+                                kind: "native", name: "__constr", arity: v.arity, applied: [], tag: v.tag, family,
+                            });
+                        }
                     }
+                    for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) family.env.setLocal(name, this.env.get(name)!);
+                    continue;
                 }
-                for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) family.env.setLocal(name, this.env.get(name)!);
-                continue;
+                if (tl.t === "def") {
+                    last = this.evalDef(tl.name, tl.clauses);
+                    continue;
+                }
+                if (tl.t === "patDef") {
+                    last = this.evalPatBinding(tl);
+                    continue;
+                }
+                // a bare expression statement: 0-arg functions and thunks RUN here
+                const tail = tailLoad && index === program.length - 1;
+                const value = this.eval(tl.value, tail);
+                last = tl.value.t === "import" ? { kind: "list", v: [] } : this.runStmt(value, tail);
             }
-            if (tl.t === "def") {
-                last = this.evalDef(tl.name, tl.clauses);
-                continue;
+            succeeded = true;
+            return last;
+        } finally {
+            this.runDepth--;
+            if (!succeeded && saved) {
+                this.env.map.clear();
+                for (const [name, value] of saved) this.env.map.set(name, value);
             }
-            if (tl.t === "patDef") {
-                last = this.evalPatBinding(tl);
-                continue;
+            if (candidate && succeeded) {
+                const visible = new Set<string>();
+                for (let scope: Env | null = this.env; scope; scope = scope.parent) for (const name of scope.map.keys()) visible.add(name);
+                this.checking!.commit(candidate, visible);
             }
-            // a bare expression statement: 0-arg functions and thunks RUN here
-            const tail = tailLoad && index === program.length - 1;
-            const value = this.eval(tl.value, tail);
-            last = tl.value.t === "import" ? { kind: "list", v: [] } : this.runStmt(value, tail);
         }
-        return last;
     }
 
     evalDef(name: string, clauses: DefClause[]): Value {
@@ -251,6 +283,11 @@ export class Interpreter {
         }
         // Value-style def: single clause, no params.
         const value = clauses[0].body;
+        if (value.t === "import") {
+            const imported = this.defer(() => this.importStandard(value.module, false));
+            this.env.setLocal(name, imported);
+            return imported;
+        }
         // Lambda bodies become closures (with recursion via shared env), like before.
         if (value.t === "lambda") {
             const child = new Env(this.env);
@@ -370,7 +407,7 @@ export class Interpreter {
     private publishForeignBindings(scope: Env, bindings: Array<[string, Value]>): void {
         const pending = new Map<string, Value>();
         for (const [key, value] of bindings) {
-            const old = pending.get(key) ?? scope.get(key);
+            const old = pending.get(key) ?? (this.checking && !this.dynamicDepth ? scope.map.get(key) : scope.get(key));
             pending.set(key, this.checkedExecution && old ? this.protectDynamicWrite(old, value, key) : value);
         }
         for (const [key, value] of pending) scope.setLocal(key, value);
@@ -1178,7 +1215,12 @@ export class Interpreter {
             });
             case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
-                const value = f.name === "Dynamic" && !f.family ? this.reference(arg) : this.demand(arg);
+                if (f.name === "Dynamic" && !f.family && !f.alias) {
+                    this.dynamicDepth++;
+                    try { return this.constructType("Dynamic", this.reference(arg)); }
+                    finally { this.dynamicDepth--; }
+                }
+                const value = this.demand(arg);
                 if (f.name === "Vect" && !f.family && !f.alias && (f.arguments?.length ?? 0) < 2) {
                     const args = [...f.arguments ?? []];
                     if (!args.length && (value.kind !== "int" || value.v < 0n)) throw new APNError("runtime", "Vect length must be a nonnegative Int");
@@ -1909,7 +1951,7 @@ export class Interpreter {
             if (target.kind !== "mutable") throw new APNError("runtime", "set expects a Mutable target");
             // Evaluate against the old contents before changing the shared cell.
             const value = this.demand(argsIn[1]);
-            target.v = value;
+            target.v = this.checkedExecution ? this.protectDynamicWrite(target.v, value, "Mutable") : value;
             return { kind: "list", v: [] };
         }
         if (STANDARD_NATIVES.some(([n]) => n === name)) return standardNative(this, name, argsIn);
@@ -2145,11 +2187,15 @@ export class Interpreter {
                 let program: TopLevel[];
                 try { program = parse(src, path); }
                 catch (err) { throw new APNError("runtime", `load: parse error in '${path}': ${(err as Error).message}`); }
+                if (this.checking && !this.dynamicDepth) this.checking.verifyLoad(pathValue.v, this.sourceDir, src);
                 const loaded = new Env(this.env);
                 frames.push({ caller: this.env, loaded });
                 this.env = loaded;
                 this.sourceDir = dirname(path);
-                try { this.run(program, true); }
+                try {
+                    this.runDepth++;
+                    try { this.run(program, true); } finally { this.runDepth--; }
+                }
                 catch (step) {
                     if (!(step instanceof TailLoad)) throw step;
                     pathValue = step.path;

@@ -1,0 +1,109 @@
+import { Interpreter } from "../src/interp.ts";
+import { parse } from "../src/parser.ts";
+import { CheckingSession } from "../src/checking-session.ts";
+
+function session(): Interpreter {
+    const i = new Interpreter();
+    i.extendDefinitions = true;
+    i.enableChecking();
+    return i;
+}
+function run(i: Interpreter, source: string): string {
+    return i.renderString(i.run(parse(source)));
+}
+function rejected(i: Interpreter, source: string): void {
+    try { run(i, source); } catch (error) {
+        if ((error as { kind?: string }).kind === "type") return;
+        throw error;
+    }
+    throw new Error(`accepted: ${source}`);
+}
+for (const [source, expected] of [
+    ['import "std"; sum [1,2,3]', '6'],
+    ['std = import "std"; std.sum (Int * [1,2,3])', '6'],
+    ['import ["std/function", "std/number"]; id (sq 3)', '9'],
+    ['ns = [double: (x -> x * 2)]; use ns; double 3', '6'],
+    ['use [[one: 1], [two: 2]]; one + two', '3'],
+    ['x = Mutable 1; set x 2; x + 1', '3'],
+    ['Direction = North | South; [10,20] South', '20'],
+    ['templates = [String, Int]; values = ["x",1]; templates.values', '["x", 1]'],
+    ['xs = [1]; xs = [2,3]; xs', '[2, 3]'],
+    ['f x = x + 1; [f 1, f 2.0]', '[2, 3.0]'],
+    ['factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1)); factorial 5', '120'],
+    ['import "std/type"; cast Float32 (Float64 .2)', 'Float32 0.2'],
+] as const) Deno.test(`default checking session: ${source}`, () => {
+    const actual = run(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'import "std"; sum ["bad"]',
+    'f x = x + 1; f "bad"',
+    'apply f x = f x; apply (x -> x + 1) "bad"',
+    'x | missingGuard -> x',
+    'f x = x == 0 ? 1 : x * x; f (Dynamic 2)',
+    'Vect 2 Int [1]',
+    'xs <- Vect 2 Int [1,2]; xs = [3]',
+    'env',
+]) Deno.test(`default checking rejects before evaluation: ${source}`, () => rejected(session(), source));
+
+Deno.test("a static error prevents earlier effects and bindings", () => {
+    const i = session(), lines: unknown[] = [], oldLog = console.log;
+    console.log = (...values: unknown[]) => { lines.push(values); };
+    try { rejected(i, 'print "must not print"; newName = 1; 1 + "bad"'); }
+    finally { console.log = oldLog; }
+    if (lines.length || i.env.get("newName")) throw new Error("rejected source had effects");
+});
+Deno.test("REPL clauses and polymorphism survive separate submissions", () => {
+    const i = session();
+    run(i, 'func 0 = 1'); run(i, 'func 1 = 0');
+    if (run(i, '[func 0, func 1]') !== '[1, 0]') throw new Error('lost clause');
+    run(i, 'func 0 = 2');
+    if (run(i, '[func 0, func 1]') !== '[2, 0]') throw new Error('replacement lost clause');
+    rejected(i, 'func 2 = "bad"');
+    run(i, 'id x = x');
+    if (run(i, 'id 1') !== '1' || run(i, 'id true') !== 'true') throw new Error('lost polymorphism');
+});
+Deno.test("runtime failure restores bindings and their checking state", () => {
+    const i = session(); run(i, 'existing = 1');
+    try { run(i, 'existing = 2; transient = 3; fail "stop"'); } catch { /* intended */ }
+    if (run(i, 'existing') !== '1' || i.env.get('transient')) throw new Error('partial bindings survived');
+    rejected(i, 'transient');
+    rejected(i, 'existing = "bad"');
+});
+Deno.test("namespaced import does not open conflicting exports", () => {
+    const i = session(); run(i, 'span = 123; html = import "std/html"');
+    run(i, 'html.text "hello"');
+    if (run(i, 'span') !== '123' || i.env.get('button')) throw new Error('namespace leaked');
+});
+Deno.test("load checks dependencies with the lexical caller scope", () => {
+    const i = session();
+    const file = new URL('fixtures/static-checking/local', import.meta.url).pathname;
+    const actual = run(i, `f localValue = { module = load "${file}"; module.answer }; f 41`);
+    if (actual !== '42') throw new Error(actual);
+});
+Deno.test("invalid loaded source is rejected before any output", () => {
+    const file = new URL('fixtures/static-checking/invalid', import.meta.url).pathname;
+    rejected(session(), `load "${file}"`);
+});
+Deno.test("all standard modules check without evaluation", () => {
+    const checker = new CheckingSession();
+    for (const name of ['std', 'std/meta', 'std/html', 'std/browser', 'std/p5', 'std/ffi']) checker.module(name);
+});
+
+Deno.test("Dynamic writes cannot invalidate a checked Mutable payload", () => {
+    const i = session(); run(i, 'cell = Mutable 1');
+    try { run(i, 'Dynamic (set cell "bad")'); } catch (error) {
+        if (!String(error).includes('cannot convert String to Int')) throw error;
+        if (run(i, 'cell + 1') !== '2') throw new Error('cell was corrupted');
+        return;
+    }
+    throw new Error('unchecked Mutable write');
+});
+for (const source of ['cast (x -> x) 1', 'intToString "bad"', 'isExact "bad"', 'keys [x: 1]', 'values [x: 1]']) {
+    Deno.test(`native signatures reject incompatible values: ${source}`, () => rejected(session(), source));
+}
+
+Deno.test("unary collection constraints distribute over heterogeneous list shapes", () => {
+    const actual = run(session(), 'map length [[1], [2,3]]');
+    if (actual !== '[1, 2]') throw new Error(actual);
+});

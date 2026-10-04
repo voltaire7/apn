@@ -31,8 +31,8 @@ trim text = fromChars (reverse (dropWhile _isSpace (reverse (dropWhile _isSpace 
 
 # Common puzzle-input shapes; CRLF and trailing blank lines are accepted.
 nonEmptyLines text = filter (line -> line != "") (map trim (lines text))
-parseInt text = {
-    [value] = [parse text]
-    isInteger value ? isExact value ? value : fail "parseInt expects an exact integer" : fail "parseInt expects an exact integer"
+parseInt (String text) = {
+    [value] = [Dynamic (parse text)]
+    isInteger value ? isExact (Number value) ? Int value : fail "parseInt expects an exact integer" : fail "parseInt expects an exact integer"
 }
 integers text = map parseInt (words text)

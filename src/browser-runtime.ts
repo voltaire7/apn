@@ -54,6 +54,7 @@ try {
     const payload = JSON.parse(document.getElementById("apn-program")!.textContent!);
     const interpreter = new Interpreter();
     interpreter.moduleSources = payload.modules;
+    interpreter.enableChecking();
     interpreter.run(parse(payload.source));
     const program = interpreter.env.get("main");
     if (!program) throw new Error("APN browser app must define main");

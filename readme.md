@@ -93,16 +93,17 @@ Run `./examples/c-interop/run-demo` for a compiled C example, or
 The scripts build temporary libraries using `cc`; nothing is installed.
 See [C interop](docs/c-interop.md) for signatures, pointers, permissions, and lifetimes.
 
-Optional static checks and value-dependent types:
+Static checking and inference run by default, including in the REPL:
 
 ```sh
 apn --check examples/types/dependent-vectors.apn
-apn --checked examples/types/dependent-vectors.apn
+apn examples/types/dependent-vectors.apn
 ```
 
 See [Static checking and dependent patterns](docs/gradual-and-dependent-types.md) for
 `Vect n t`, inferred pattern binders, strict checking boundaries, and editor setup.
-`--check` and `--checked` reject implicit, unresolved dynamic boundaries.
+`apn file.apn`, the REPL, and `--check` reject implicit, unresolved dynamic boundaries.
+`--check` checks dependencies without executing code; `--checked` remains a compatibility alias.
 Explicit `Dynamic` boundaries retain runtime checks; see
 [the runnable example](examples/types/dynamic-boundaries.apn).
-Ordinary execution and gradual editor diagnostics remain available.
+Gradual editor diagnostics remain available.

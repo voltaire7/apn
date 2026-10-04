@@ -1,0 +1,2 @@
+print "must not execute"
+broken = 1 + "bad"

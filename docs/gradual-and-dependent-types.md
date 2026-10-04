@@ -1,19 +1,25 @@
 # Static checking and value-dependent patterns
 
-APN keeps its dynamic execution model. Checking is opt-in:
+APN checks source before execution by default, with inferred types and explicit
+`Dynamic` boundaries. Files, REPL submissions, and browser builds use the same
+checker. No execution flag is required:
 
 ```sh
+apn examples/types/dependent-vectors.apn
 apn --check examples/types/dependent-vectors.apn
-apn --checked examples/types/dependent-vectors.apn
 apn --lint --types --json examples/types/dependent-vectors.apn
 ```
 
-`--check` reads and checks source without running it. `--checked` checks the
-entire entry file before any of that file's expressions run. Both reject implicit, unresolved
-dynamic boundaries as well as known type errors, with a nonzero exit status.
-`--lint --types` and the editor retain gradual analysis, reporting known errors
-without requiring every operation to be established. Ordinary `apn file.apn` and
-the REPL retain their existing runtime behavior.
+`--check` checks source and its statically named dependencies without running
+expressions. `--checked` remains an alias for ordinary execution. Unknown names,
+incompatible calls, and implicit unresolved boundaries are errors before any
+expression in that submission runs. The REPL preserves inferred bindings and
+merges function clauses between submissions. Failed static checks install no
+bindings. If execution fails, the submission's binding map is restored; already
+performed I/O and mutations of reference contents are not undone.
+
+`--lint --types` and optional editor diagnostics retain gradual analysis, reporting
+known contradictions without requiring every operation to be established.
 
 The checker infers polymorphic functions, propagates application constraints,
 checks structural record fields, constructor patterns, same-scope assignments,
@@ -39,7 +45,7 @@ functions.
 `Dynamic expression` explicitly opts that expression out of static checking.
 Parsing still applies; unknown names and invalid operations inside it fail if
 execution reaches them. Its result has static type `Dynamic`. Unmarked unknowns
-elsewhere still fail `--check` and `--checked`; a boundary does not disable
+elsewhere still fail ordinary execution and `--check`; a boundary does not disable
 checking for the rest of the file.
 
 ```apn
@@ -90,7 +96,7 @@ key = "count"
 Int (scope key)                        # 2
 ```
 
-`--checked` protects reflected writes and names installed by `use`, `import`, or
+Checked execution protects reflected writes and names installed by `use`, `import`, or
 `load` from changing existing binding types. `Dynamic env` also guards writes
 through that view in ordinary execution. New names may be added, but using a
 runtime-created name in checked code still requires a Dynamic boundary or an
@@ -102,6 +108,8 @@ Lazy record/list payloads are checked when demanded, so a nested error can occur
 on a later read. Scalar batch writes are validated before publication. Type
 descriptors cannot be replaced by different descriptors through reflection.
 Opaque references cannot be replaced by different references through reflection.
+`set` also guards existing `Mutable` payload types in checked execution, including
+writes inside Dynamic expressions.
 
 To replace a function through reflection, first capture a function with an
 explicit contract:
@@ -119,11 +127,12 @@ Use `<-` when the binding should hold the evaluated value or contract. These
 restrictions protect checked assumptions without evaluating arbitrary functions
 to guess their types.
 
-`--check` reports explicit runtime boundary/operation counts separately from
-unresolved boundaries. For programmatic execution, call `requireChecked(source)`
-and set `interpreter.checkedExecution = true` before running that source; the
-`--checked` CLI does both. A successful check involving Dynamic is not a promise
-that its runtime checks will succeed.
+For embedding, call `interpreter.enableChecking()` before the first `run`.
+This installs the stateful checker and runtime guards used by the CLI. The raw
+`Interpreter` API remains available for internal runtime tests and hosts that
+supply their own validation. `checkedExecution = true` alone enables runtime
+guards; it does not run the checker. A successful check involving Dynamic is not
+a promise that its runtime checks will succeed.
 
 See [the runnable boundary example](../examples/types/dynamic-boundaries.apn).
 
@@ -229,18 +238,27 @@ existing behavior; repeated patterns do not prove function equivalence.
 
 ## Static boundaries and limits
 
-Strict checking covers a conservative subset of APN, not every existing dynamic
-program. Imports, `use`, `load`, live environment reflection, unsupported natives,
-and unresolved overloads are rejected as dynamic boundaries. The checker does
-not execute or recursively inspect imported files. Checking an imported file
-separately does not establish the importer's interface automatically.
+Static checking follows literal `import` and `load` dependencies and infers their
+exports. Namespaced imports stay namespaced. `use` opens statically known records
+or lists of records. Loaded files are checked with their lexical caller scope;
+a source change between checking and execution is rejected. Resubmit the loading
+definition to check the new source. Cyclic or computed loads need an explicit
+`Dynamic` boundary. The checker never executes APN to discover types.
 
-Ambiguous arithmetic without enough input or result information is rejected.
-For example `f x = x + 1` currently needs more information, such as `(Int x)`.
-A known numeric result can constrain arithmetic, which is sufficient to check
-the self-application factorial below unchanged. Inferred parameters do not
-silently convert arguments: runtime conversion is available only where the
-program supplies an actual constructor or converting pattern.
+Overloaded arithmetic retains constraints in inferred functions: `f x = x + 1`
+can be called with compatible numeric inputs, and `f "bad"` is rejected. List
+literals retain positional types; homogeneous operations check every possible
+element type. Record-template patterns convert positional lists at runtime and
+are checked against their named field types. Inferred parameters do not silently
+convert arguments; actual constructors and converting patterns provide conversions.
+
+Runtime reflection uses `Dynamic env`. The result of `parse`, syntax inspection
+with `toAST`, debugger `step`, and native FFI/resource interfaces carries Dynamic
+where its shape cannot be known statically. The metacircular evaluator declares
+its runtime parser/evaluator execution as Dynamic. HTML, browser configuration,
+and p5 payloads declare Dynamic fields for host-interpreted data and callbacks.
+These explicit library boundaries are checked again when projected into concrete
+types. They do not make arbitrary user code silently unchecked.
 
 Successful checking does not prove termination, exhaustive matching, index bounds,
 or freedom from all runtime errors. Heterogeneous lists remain legal, but using
@@ -288,6 +306,6 @@ The LSP accepts `initializationOptions.typeChecking = true`. In Neovim's LSP
 configuration this is `init_options = { typeChecking = true }`. It is disabled
 by default to preserve existing sessions. No editor configuration is modified
 by installing these language changes. Type diagnostics use the same inference
-engine in gradual mode; `--check` and `--checked` additionally reject remaining
+engine in gradual mode; ordinary execution and `--check` additionally reject remaining
 implicit dynamic boundaries. Explicit `Dynamic` boundaries are accepted and
 retain runtime validation.

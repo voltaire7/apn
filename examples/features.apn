@@ -1,7 +1,7 @@
 # CLI file errors are concise: apn missing.apn reports file not found and exits 1.
 # =========================================================
 #  APN — Applicative Polish Notation — feature showcase
-#  A lazy, Haskell-like, untyped (JS-like) scripting language.
+#  A lazy functional language with static inference and Dynamic boundaries.
 #  Run:  deno run --allow-read main.ts examples/features.apn
 #  NOTE: indentation is strict "4-space layout" — every nested
 #  level is exactly +4 spaces (and only +4).
@@ -40,11 +40,11 @@ print (addTwo 10)             # => 12
 # ---------------------------------------------------------
 # 3. RECURSION
 # ---------------------------------------------------------
-factorial n = match n [
+recursiveFactorial n = match n [
     0 -> 1
-    _ -> n * factorial (n - 1)
+    _ -> n * recursiveFactorial (n - 1)
 ]
-print (factorial 10)   # => 3628800
+print (recursiveFactorial 10)   # => 3628800
 
 fib n = match n [
     0 -> 0
@@ -248,8 +248,8 @@ print keyKinds.1              # => 20
 # nums "0" is an error; nums 0 indexes its first element.
 
 # nested records + chained access
-nested = [inner: [z: 99]]
-print nested.inner.z     # => 99
+nestedRecord = [inner: [z: 99]]
+print nestedRecord.inner.z     # => 99
 
 # Keys may be quoted strings or numbers; dot access uses literal keys.
 weird = ["my field": 1, 123: 2]
@@ -321,8 +321,8 @@ print fresh                      # => [field: 1]
 # ---------------------------------------------------------
 # 8. TERNARY — cond ? a : b  (replaces if/then/else)
 # ---------------------------------------------------------
-max a b = a > b ? a : b
-print (max 4 9)            # => 9
+larger a b = a > b ? a : b
+print (larger 4 9)            # => 9
 
 smallest a b c = (a < b ? a : b) < c ? (a < b ? a : b) : c
 print (smallest 7 2 9)     # => 2
@@ -652,15 +652,15 @@ print actionValue           # => action, then 4
 print evaluationValue       # => 3 (the value is memoized)
 print actionValue           # => action, then 4 again
 keepFirst x y = x
-print (keepFirst 7 missingEvaluationArg) # => 7 (unused argument is deferred)
-print (true ? 8 : missingEvaluationArg)  # => 8 (unselected branch is deferred)
+print (keepFirst 7 (Dynamic missingEvaluationArg)) # => 7 (unused argument is deferred)
+print (true ? 8 : (Dynamic missingEvaluationArg))  # => 8 (unselected branch is deferred)
 # Lazy heads, tails, and recursive lists:
 ones = 1:ones
 fibs = 0 : 1 : zipWith (+) fibs (tail fibs)
 print (take 5 ones)          # => [1, 1, 1, 1, 1]
 print (take 12 fibs)         # => [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89]
 print (take 4 (drop 5 fibs)) # => [5, 8, 13, 21]
-print (head [1, missingEvaluationArg]) # => 1 (unused element stays deferred)
+print (head [1, (Dynamic missingEvaluationArg)]) # => 1 (unused element stays deferred)
 print (take 4 (map (+ 1) [0..]))       # => [1, 2, 3, 4]
 print (take 4 (filter (n -> n % 2 == 0) [0..])) # => [0, 2, 4, 6]
 # In the REPL, entering ones or fibs streams until Ctrl+C.
@@ -697,10 +697,12 @@ print (foldl (a b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 # Selective imports bind only the requested names.
 [halt: selectedHalt] = import "std/system"
 # selectedHalt is available; other exports are not introduced by this binding.
-load "../lib/number"               # extensionless name; sq joins THIS scope
+{
+    load "../lib/number"           # extensionless name; sq joins this block
+    print (sq 5)                   # => 25
+}
 # In the REPL, bare load does not echo the returned module or force its exports.
 import "std/system"               # halt is a deferred action
-print (sq 5)                # => 25
 
 numbers = load "../lib/number"      # namespaced module record
 print (numbers.sq 4)           # => 16
@@ -962,11 +964,11 @@ print (rangeFactorial 5)                       # 120
 
 # Browser HTML values are constructed in APN; build the interactive example with:
 # apn --html examples/browser/counter.apn counter.html
-import "std/html"
-browserPreview = div [] [
-    button [] [text "-"]
-    div [] [text "0"]
-    button [] [text "+"]
+html = import "std/html"
+browserPreview = html.div [] [
+    html.button [] [html.text "-"]
+    html.div [] [html.text "0"]
+    html.button [] [html.text "+"]
 ]
 print browserPreview
 
@@ -998,7 +1000,7 @@ print (match (Some 123) handlers)              # 123
 print (match None handlers)                    # 0
 dispatch = match (Some 123)
 print (dispatch handlers)                     # 123
-print (match missing [_ -> 42])               # 42; unused value stays lazy
+print (match (Dynamic missing) [_ -> 42])               # 42; unused value stays lazy
 checkedApply ((Int -> Int) f) = Int { f 123 }
 print (checkedApply (*2))                     # 246 (typed Int)
 
@@ -1034,14 +1036,14 @@ captured <- print "captured now"             # => captured now
 print captured                               # => captured now (stored string)
 eagerArgs <- getArgs
 print eagerArgs                              # => [] without CLI arguments
-lazyCapture <- [missing, 42]
+lazyCapture <- [Dynamic missing, 42]
 print (lazyCapture 1)                         # => 42
 
 # REPL regression: paste this expression, move after `match` on its first line,
 # and press Enter. Output must start below the closing ], preserving every line.
 match (Just 123) [
     Just x -> print x
-    Nothing
+    Nothing -> _
 ]
 
 print (2 ^ 3 ^ 2)              # => 512
@@ -1092,6 +1094,8 @@ print (useFirst + useSecond)              # => 30
 VectorForPattern = [x: Float, y: Float, z: Float]
 showVector (VectorForPattern v) = print v
 showVector [1, 2, 3]  # => [x: 1.0, y: 2.0, z: 3.0]
+vectorPatternX (VectorForPattern v) = v.x
+print (vectorPatternX [1, 2, 3])          # => 1.0 (also checked before execution)
 
 # REPL: typing ) on an indent-only line dedents one level, like ] and }.
 # Backspace after a lone ) restores the continuation indent; paste stays literal.
@@ -1138,9 +1142,9 @@ template = ZeroVector
 template.x = 123
 print template                       # => [x: 123, y: Float, z: Float]
 print (template [])                  # => [x: 123, y: 0.0, z: 0.0]
-template = ZeroVector
-template.x = Int
-print template                       # => [x: Int, y: Float, z: Float]
+typeTemplate = ZeroVector
+typeTemplate.x = Int
+print typeTemplate                       # => [x: Int, y: Float, z: Float]
 replacement = [nested: [x: 1]]
 replacement.nested = [y: 2]
 print replacement                    # => [nested: [y: 2]]
@@ -1223,12 +1227,12 @@ print implicitNumber                  # => [x: 1]
 
 # A first-class live view of the lexical environment.
 environmentExample = 1
-scope <- env
+scope <- Dynamic env
 scope.environmentExample = 2
 print environmentExample              # => 2
 environmentExample = 3
 print scope.environmentExample        # => 3
-print env.[environmentExample]        # => [3]
+print (Dynamic env).[environmentExample]        # => [3]
 
 # Rich type descriptions inspect lazy elements and function bodies without running them.
 print (typeOf [1, 2, 3, 4])              # => [Int]
@@ -1241,8 +1245,8 @@ print (typeOf [1, "hello"])              # => [Int | String]
 # Empty results are lists; conditions use truthiness.
 print ({} == [])                        # => true
 print (Bool * [0, 1, "", "hello", [], [0]])  # => [false, true, false, true, false, true]
-print (0 && missingTruthinessName)        # => false; right side is skipped
-print (1 || missingTruthinessName)        # => true
+print (0 && (Dynamic missingTruthinessName))        # => false; right side is skipped
+print (1 || (Dynamic missingTruthinessName))        # => true
 print (filter (x -> x) [0, 1, 2])        # => [1, 2]
 print (match 42 [x | [] -> 0, x | 1 -> x]) # => 42
 
@@ -1260,7 +1264,7 @@ SelectedType flag = flag ? Int : String
 print (SelectedType true 123)           # => 123
 print (SelectedType false "hello")      # => hello
 # apn --check examples/types/dependent-vectors.apn checks without executing.
-# apn --checked examples/types/dependent-vectors.apn checks, then runs.
+# apn examples/types/dependent-vectors.apn checks, then runs by default.
 
 # Bracketed field assignment always takes a matching list of values.
 singlePluck = [x: 1]
@@ -1332,7 +1336,7 @@ print (sameArguments 3 3)                  # => 3
 print ((x x -> x) 4 4)                    # => 4
 print ((_ _ -> 1) 2 3)                    # => 1
 
-# Explicit Dynamic boundaries are accepted by --check / --checked.
+# Files and REPL submissions check by default; Dynamic marks runtime boundaries.
 dynamicNumber = Dynamic 41
 print (Int dynamicNumber + 1)              # => 42
 checkedIncrement <- (Int -> Int) (Dynamic (x -> x + 1))
@@ -1342,6 +1346,13 @@ reflectedScope <- Dynamic env
 reflectedScope.reflectedNumber = 2
 print reflectedNumber                     # => 2
 # Int (Dynamic "bad") fails at runtime; unknowns outside Dynamic still fail checking.
+
+# Inference retains operator constraints across calls and REPL submissions.
+inferredIncrement x = x + 1
+print (inferredIncrement 41)               # => 42
+# inferredIncrement "bad"                  # type error before any effects
+# print "not printed"; missingName         # type error: whole submission rejected
+# --check follows literal imports/loads without running their effects.
 
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 

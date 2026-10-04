@@ -939,6 +939,7 @@ async function setTtyCooked(saved: string): Promise<void> {
 async function replTTY(): Promise<void> {
     const interp = new Interpreter();
     interp.extendDefinitions = true;
+    interp.enableChecking();
     const hist = loadHistory();
     const ed = new ReplEditor(interp, hist);
     const watch = await startInterruptWatcher();
@@ -1009,6 +1010,7 @@ async function replTTY(): Promise<void> {
 async function replPiped(): Promise<void> {
     const interp = new Interpreter();
     interp.extendDefinitions = true;
+    interp.enableChecking();
 
     const decoder = new TextDecoder();
     const buf = new Uint8Array(1024);
@@ -1082,7 +1084,7 @@ async function replPiped(): Promise<void> {
 
 export async function repl(): Promise<void> {
     console.log("APN interpreter v1.1.0");
-    console.log("Applicative Polish Notation — lazy, Haskell-like, untyped like JS, annotated like TS.");
+    console.log("Applicative Polish Notation — lazy, statically checked with inference and Dynamic boundaries.");
     if (Deno.stdin.isTerminal()) {
         console.log(":help :quit  |  Up/Down history  |  Tab complete/indent  |  Ctrl+C/D quit");
         await replTTY();

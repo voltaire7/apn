@@ -1,7 +1,7 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env=HOME
 
 // =====================================================================
-//  APN — Applicative Polish Notation: lazy execution, opt-in strict checking,
+//  APN — Applicative Polish Notation: lazy execution, static checking with Dynamic boundaries,
 //  value-dependent constructors and patterns, and exact numbers.
 //  Evaluation rules: docs/semantics.md.
 //  Run:  deno run --allow-read main.ts   (REPL)
@@ -17,23 +17,11 @@ export { lex } from "./src/lexer.ts";
 // ---------------- main ----------------
 
 if (import.meta.main) {
-    const _args = Deno.args;
+    const _args = Deno.args[0] === "--checked" ? Deno.args.slice(1) : Deno.args;
 
     if (_args[0] === "--check") {
         const { runTypeCheck } = await import("./src/type-checker.ts");
         Deno.exit(await runTypeCheck(_args.slice(1)));
-    } else if (_args[0] === "--checked") {
-        const file = _args[1];
-        if (!file) { console.error("usage: apn --checked FILE.apn [ARG ...]"); Deno.exit(2); }
-        try {
-            const source = Deno.readTextFileSync(file);
-            const { requireChecked } = await import("./src/type-checker.ts");
-            requireChecked(source, file);
-            const interp = new Interpreter();
-            interp.checkedExecution = true;
-            interp.sourceDir = dirname(file); interp.sourceFile = file; interp.programArgs = _args.slice(2);
-            runSource(source, interp, true);
-        } catch (error) { console.error(formatError(error, Deno.stderr.isTerminal())); Deno.exit(1); }
     } else if (_args[0] === "--lint") {
         const { runLint } = await import("./src/lint.ts");
         Deno.exit(await runLint(_args.slice(1)));
@@ -60,6 +48,7 @@ if (import.meta.main) {
             Deno.exit(1);
         }
         const interp = new Interpreter();
+        interp.enableChecking();
         interp.sourceDir = dirname(file);
         interp.sourceFile = file;
         interp.programArgs = _args.slice(1);

@@ -24,7 +24,7 @@
 ## Project
 
 APN — **A**pplicative **P**olish **N**otation — is a lazy, Haskell-like,
-dynamically-typed (JS-like) scripting language implemented as a Deno/
+gradually typed scripting language with default static checking implemented as a Deno/
 TypeScript interpreter. It runs from the command line and has a REPL.
 
 Layout:
@@ -680,16 +680,16 @@ single predicate conversion used by Bool, !, conditions, guards, assert, filter;
 logical operators short-circuit and return Bool. Empty-list truth checks inspect
 only the first cell. FFI result descriptor [] means C void, never a parameter.
 
-Strict checking is opt-in via --check / --checked; --lint --types is gradual;
+Strict checking is default in CLI/REPL/browser execution; --check checks without execution; --lint --types is gradual;
 LSP initializationOptions.typeChecking enables matching diagnostics. The pure
-src/type-checker.ts never executes APN or follows imports. Preserve polymorphic
+src/type-checker.ts never executes APN; src/checking-session.ts supplies import/load interfaces. Preserve polymorphic
 instantiation, captured monomorphic variables, open record matching, overloads,
 and bounded affine index substitution. Recursive structural types in the checker use finite graphs: preserve cycles
 when copying/generalizing and compare visited pairs during unification. Do not
 reintroduce an occurs-check rejection for self-application. Budget/depth exhaustion
 is a diagnostic, not a Dynamic fallback. This differs from the diagnostic-only
 type-description printer above. Unknown operations are reported dynamic
-boundaries, not verified proofs. Existing execution/REPL behavior stays dynamic.
+boundaries, not verified proofs. Explicit Dynamic boundaries retain runtime evaluation.
 Vect n t uses a type descriptor with [integer length, element type] arguments.
 Conformance checks n+1 spine cells and delays element conversions; list.schema
 preserves its contract through index updates/typeOf. Schema patterns resolve
@@ -723,10 +723,18 @@ Explicit Dynamic boundaries are accepted by strict checking. Keep implicit unkno
 separate from explicit Dynamic in inference: a concrete type requires a runtime
 constructor/contract or an actually converting pattern, never a silent inferred
 conversion. Dynamic expressions bypass inference only for their own argument.
-The --checked entry point sets Interpreter.checkedExecution; reflected environment
+Normal execution calls Interpreter.enableChecking(); reflected environment
 writes and imported/loaded/use bindings must preserve existing types. Never invoke
 an old action to guess its type: replacing functions requires an existing captured
 contract. Lazy record/list guards check payloads on demand and preserve Vect schema.
 Dynamic env views guard writes even outside checked execution. Preserve Mutable
 identity at Dynamic construction/pattern boundaries. Tests and runnable example:
 tests/dynamic-boundary-test.ts, examples/types/dynamic-boundaries.apn.
+
+Default checking uses CheckingSession for persistent REPL types, standard-module
+interfaces, and literal load dependencies. Check the whole submission before
+effects. Commit type state only after successful execution; restore binding maps
+on runtime failure (external I/O/reference mutations cannot be rolled back).
+Internal module/load runs must not check against the caller's root session again.
+Namespace imports do not publish exports. Keep tests/default-checking-test.ts and
+tests/record-pattern-checking-test.ts passing, along with the full showcase.

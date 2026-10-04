@@ -9,8 +9,8 @@ zipWithIndex xs = zipWith pair [0..] xs
 concat xss = foldr (++) [] xss
 concatMap f xs = concat (map f xs)
 flatten xss = concat xss
-sum xs = foldl (+) 0 xs
-product xs = foldl (*) 1 xs
+sum xs = foldl (+) (Number 0) xs
+product xs = foldl (*) (Number 1) xs
 contains x xs = any (y -> x == y) xs
 findIndex predicate xs = mapOption fst (find (entry -> predicate (snd entry)) (zipWithIndex xs))
 headOption xs = null xs ? None : Some (head xs)

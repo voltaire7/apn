@@ -1,34 +1,60 @@
 import { type Expr, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
 import { castNumeric, NUMERIC_TYPES, numericType, TYPE_NAMES } from "./type-system.ts";
 import { APNError } from "./errors.ts";
-import { parseDocument } from "./parser.ts";
+import { parse, parseDocument } from "./parser.ts";
 
 type Index = { constant: bigint; terms: Map<string, bigint> };
 type Ty =
     | { k: "overload"; choices: Ty[] }
+    | { k: "union"; choices: Ty[] }
+    | { k: "mutable"; value: Ty }
+    | { k: "map"; key: Ty; value: Ty }
+    | { k: "intrinsic"; name: string; arity?: number; args?: Ty[] }
+    | { k: "operation"; op: string; args: Ty[]; solution?: Ty }
     | { k: "dynamic"; explicit?: boolean }
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
-    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean }
-    | { k: "list"; element: Ty; length?: Index; items?: Ty[] }
-    | { k: "record"; fields: Map<string, Ty> }
+    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern }
+    | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean }
+    | { k: "record"; fields: Map<string, Ty>; open?: boolean }
     | { k: "type"; value: Ty }
     | { k: "factory"; args: Entry[] }
     | { k: "alias"; params: string[]; body: Expr; scope: Scope; args: Entry[] }
-    | { k: "variant"; name: string; args: Ty[] };
+    | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty };
 interface Entry {
     type: Ty;
     index?: Index;
     boolean?: boolean;
+    string?: string;
+    clauses?: { params: Pattern[]; body: Expr }[];
     mono?: boolean;
     inherited?: boolean;
     nonGeneric?: Set<Ty>;
 }
-type Scope = Map<string, Entry>;
+export type TypeScope = Map<string, Entry>;
+type Scope = TypeScope;
+export interface CheckOptions {
+    strict?: boolean;
+    library?: boolean;
+    extendDefinitions?: boolean;
+    loads?: (path: string, scope: TypeScope) => TypeScope;
+    initial?: TypeScope;
+    imports?: (module: string | string[]) => TypeScope;
+    result?: (scope: TypeScope, exports: TypeScope) => void;
+}
+export function copyTypeScope(scope: TypeScope): TypeScope {
+    const nodes = new Map<Ty, Ty>(), vars = new Map<Ty, Ty>();
+    return new Map([...scope].map(([name, entry]) => [name, {
+        ...entry, type: copy(entry.type, vars, undefined, nodes),
+        nonGeneric: entry.nonGeneric && new Set([...entry.nonGeneric].map(t => copy(t, vars, undefined, nodes))),
+    }]));
+}
 export interface TypeIssue {
     message: string;
     pos: number;
     len: number;
+    source?: string;
+    file?: string;
 }
 export interface CheckResult {
     issues: TypeIssue[];
@@ -67,6 +93,7 @@ function text(
     active = new Map<Ty, string>(),
     recursive = new Set<Ty>(),
 ): string {
+    if (active.size > 96) return "a deeply nested type";
     t = resolve(t);
     if (active.has(t)) {
         recursive.add(t);
@@ -78,7 +105,12 @@ function text(
     const render = (): string => {
         switch (t.k) {
             case "overload":
+            case "union":
                 return t.choices.map(show).join(" | ");
+            case "map": return `HashMap ${show(t.key)} ${show(t.value)}`;
+            case "intrinsic": return t.name;
+            case "operation":
+                return `${t.op}(${t.args.map(show).join(", ")})`;
             case "dynamic":
                 return "Dynamic";
             case "var":
@@ -105,9 +137,15 @@ function text(
 function children(t: Ty): Ty[] {
     switch (t.k) {
         case "overload":
+        case "union":
             return t.choices;
+        case "intrinsic": return t.args ?? [];
+        case "mutable": return [t.value];
+        case "map": return [t.key, t.value];
+        case "operation":
+            return [...t.args, ...t.solution ? [t.solution] : []];
         case "fn":
-            return [t.input, t.output];
+            return [t.input, t.output, ...t.checks ?? []];
         case "list":
             return [t.element];
         case "type":
@@ -115,7 +153,7 @@ function children(t: Ty): Ty[] {
         case "record":
             return [...t.fields.values()];
         case "variant":
-            return t.args;
+            return [...t.args, ...t.base ? [t.base] : []];
         default:
             return [];
     }
@@ -168,10 +206,17 @@ function copy(
     const go = (x: Ty) => copy(x, vars, subst, nodes);
     switch (t.k) {
         case "overload":
+        case "union":
             Object.assign(result, { choices: t.choices.map(go) });
             break;
+        case "intrinsic": Object.assign(result, { args: t.args?.map(go) }); break;
+        case "mutable": Object.assign(result, { value: go(t.value) }); break;
+        case "map": Object.assign(result, { key: go(t.key), value: go(t.value) }); break;
+        case "operation":
+            Object.assign(result, { args: t.args.map(go), solution: t.solution && go(t.solution) });
+            break;
         case "fn":
-            Object.assign(result, { input: go(t.input), output: go(t.output) });
+            Object.assign(result, { input: go(t.input), output: go(t.output), checks: t.checks?.map(go) });
             break;
         case "list": {
             let length = t.length;
@@ -199,16 +244,22 @@ function copy(
         case "type":
             Object.assign(result, { value: go(t.value) });
             break;
+        case "factory":
+            Object.assign(result, { args: t.args.map(a => ({ ...a, type: go(a.type) })) });
+            break;
+        case "alias":
+            Object.assign(result, { args: t.args.map(a => ({ ...a, type: go(a.type) })), scope: new Map([...t.scope].map(([name, entry]) => [name, { ...entry, type: go(entry.type) }])) });
+            break;
         case "variant":
-            Object.assign(result, { args: t.args.map(go) });
+            Object.assign(result, { args: t.args.map(go), base: t.base && go(t.base) });
             break;
     }
     return result;
 }
 
-// This checker never evaluates APN expressions or follows imports/load. Unknown
-// operations are explicit gradual boundaries; concrete contradictions are errors.
-export function checkTypes(program: TopLevel[], options: { strict?: boolean } = {}): CheckResult {
+// Inference never evaluates APN. Dependency callbacks provide static module
+// interfaces; unsupported operations require an explicit Dynamic boundary.
+export function checkTypes(program: TopLevel[], options: CheckOptions = {}): CheckResult {
     const issues: TypeIssue[] = [];
     // Rebound value indices are dynamic: a lazy type alias can observe a later
     // binding, so freezing its first literal value would reject valid APN.
@@ -224,22 +275,191 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
     };
     scan(program);
     let dynamicBoundaries = 0, runtimeChecks = 0, serial = 0, budget = 50000;
+    let activeExpression: Expr | undefined, checkingExpression: Expr | undefined;
+    let firstUnknown: Expr | undefined;
     const unknown = (): Ty => {
+        firstUnknown ??= activeExpression ?? checkingExpression;
         dynamicBoundaries++;
         return dynamic;
     };
     const problem = (message: string, e?: Expr): never => {
-        const loc = e && sourceLocations.get(e);
+        const expression = e ?? activeExpression ?? checkingExpression;
+        const loc = expression && sourceLocations.get(expression);
         throw {
             message,
             pos: loc?.start ?? 0,
             len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)),
+            source: loc?.source, file: loc?.file,
         } satisfies TypeIssue;
     };
     function spend(e?: Expr): void {
         if (--budget < 0) {
             problem("type checking limit exceeded; cannot establish the type", e);
         }
+    }
+    let requirements: Ty[] = [];
+    const resolving = new Set<Ty>();
+    function resolve(t: Ty): Ty {
+        if (t.k === "var" && t.link) return resolve(t.link);
+        if (t.k !== "operation") return t;
+        if (resolving.has(t)) return t.solution ?? t;
+        spend();
+        if (resolving.size > 96) return problem("type checking limit exceeded; recursive operator constraints need an explicit type pattern");
+        resolving.add(t);
+        try { const result = evaluateOperation(t); return result === t ? t.solution ?? t : result; }
+        finally { resolving.delete(t); }
+    }
+    function pair(key: Ty, value: Ty): Ty { return { k: "list", element: union([key, value]), items: [key, value], length: constant(2n) }; }
+    function union(types: Ty[]): Ty {
+        const choices = types.flatMap(t => { const r = resolve(t); return r.k === "union" ? r.choices : [t]; });
+        const unique: Ty[] = [];
+        for (const choice of choices) {
+            const value = resolve(choice);
+            if (!unique.some(old => old === choice || value.k === "atom" && resolve(old).k === "atom" && text(old) === text(value))) unique.push(choice);
+        }
+        return unique.length === 1 ? unique[0] : { k: "union", choices: unique };
+    }
+    function operation(op: string, args: Ty[]): Ty {
+        const result: Ty = { k: "operation", op, args };
+        requirements.push(result);
+        return resolve(result);
+    }
+    function evaluateOperation(t: Extract<Ty, { k: "operation" }>): Ty {
+        const operands = t.args.map(resolve);
+        if (["+", "-", "*", "/", "%", "^", "compare", "negate"].includes(t.op)) {
+            for (let n = 0; n < operands.length; n++) {
+                while (operands[n].k === "mutable") operands[n] = resolve((operands[n] as Extract<Ty, { k: "mutable" }>).value);
+                if (operands[n].k === "variant" && (operands[n] as Extract<Ty, { k: "variant" }>).ordinal) operands[n] = atom("Int");
+            }
+        }
+        const [a, b] = operands;
+        if (t.args.some(x => { const v = resolve(x); return v.k === "var" || v.k === "operation"; })) return t;
+        if (t.op === "load") return unknown();
+        if (t.op === "distinct") {
+            if (a.k !== "type") return problem("distinct expects a type");
+            return { k: "type", value: { k: "variant", name: `distinct${serial++}`, args: [], base: a.value } };
+        }
+        if (t.op === "set") {
+            if (a.k !== "mutable") return problem("set expects a Mutable reference");
+            convert(a.value, b, { t: "placeholder" });
+            return list(variable(), constant(0n));
+        }
+        if (t.op === "insert") {
+            if (b.k !== "map") return problem("insert expects a HashMap");
+            if (a.k === "record") { unify(b.key, atom("String")); for (const value of a.fields.values()) unify(b.value, value); }
+            else unify(list(pair(b.key, b.value)), a);
+            return b;
+        }
+        if (t.op === "negate") {
+            if (a.k === "list") return list(operation("negate", [a.element]), a.length);
+            if (a.k === "record") return { k: "record", fields: new Map([...a.fields].map(([k, v]) => [k, operation("negate", [v])])) };
+            if (a.k === "atom" && NUMERIC_TYPES.includes(a.name)) return a;
+            if (isExplicit(a)) return a;
+            return problem(`cannot negate ${text(a)}`);
+        }
+        if (t.op === "cast") {
+            if (a.k === "list") return template(a, b, { t: "placeholder" });
+            if (a.k !== "type") return problem("cast expects a type description");
+            return application(a, { type: b }, { t: "placeholder" });
+        }
+        if (t.op === "construct") {
+            if (a.k !== "type") return problem("expected a type constructor");
+            if (resolve(a.value).k === "var") return t;
+            return application(a, { type: b }, { t: "placeholder" });
+        }
+        if (t.op === "template") return template(a, b, { t: "placeholder" });
+        if (t.op === "do") {
+            if (a.k !== "list") return problem("do expects a list of expressions");
+            return a.items ? a.items[a.items.length - 1] ?? list(variable(), constant(0n)) : a.element;
+        }
+        if (t.op === "match") {
+            if (b.k !== "list") return problem("match expects a list of alternatives");
+            const outputs: Ty[] = [];
+            for (const candidate of b.items ?? [b.element]) {
+                const f = resolve(candidate);
+                if (f.k !== "fn") return problem("match alternatives must be functions");
+                try { unify(copy(f.input), copy(a)); } catch { continue; }
+                unify(f.input, a);
+                if (!t.solution && f.output.k !== "operation" && f.output.k !== "var") t.solution = f.output;
+                for (const check of f.checks ?? []) resolve(check);
+                const output = resolve(f.output);
+                if (outputs.length) unify(outputs[0], output);
+                else outputs.push(output.k === "list" ? list(output.element) : output);
+            }
+            return outputs[0] ?? variable();
+        }
+        if (t.op === "require") { unify(a, b); return a; }
+        if (isExplicit(a) || b && isExplicit(b)) return explicitDynamic;
+        if (a.k === "dynamic" || b?.k === "dynamic") return unknown();
+        if (a.k === "union") return union(a.choices.map(x => operation(t.op, t.args.length === 1 ? [x] : [x, b])));
+        if (b?.k === "union") return union(b.choices.map(x => operation(t.op, [a, x])));
+        if (["pairs", "keys", "values", "enumerate", "length"].includes(t.op)) {
+            if (t.op === "length") {
+                if (a.k === "list" || a.k === "record" || a.k === "map" || a.k === "atom" && a.name === "String") return atom("Int");
+                return problem(`length requires a collection; got ${text(a)}`);
+            }
+            let key: Ty, value: Ty;
+            if (a.k === "map") { key = a.key; value = a.value; }
+            else if (a.k === "record" && t.op === "pairs") { key = atom("String"); value = union([...a.fields.values()]); }
+            else if (a.k === "list" && t.op === "enumerate") { key = atom("Int"); value = a.element; }
+            else return problem(`${t.op} requires a collection; got ${text(a)}`);
+            return list(t.op === "keys" ? key : t.op === "values" ? value : pair(key, value));
+        }
+        if (a.k === "variant" && a.base || b?.k === "variant" && b.base) {
+            if (a.k !== "variant" || b?.k !== "variant" || a.name !== b.name || !a.base || !b.base) return problem("distinct arithmetic requires the same type on both sides");
+            operation(t.op, [a.base, b.base]);
+            return a;
+        }
+        const numeric = (x: Ty) => x.k === "atom" && NUMERIC_TYPES.includes(x.name);
+        const callable = (x: Ty) => ["fn", "type", "overload"].includes(x.k);
+        if (t.op === "call") return application(a, { type: b }, { t: "placeholder" });
+        if (t.op === "compare") {
+            if (numeric(a) && numeric(b) || a.k === "atom" && b.k === "atom" && a.name === b.name && ["String", "Char"].includes(a.name)) return atom("Bool");
+            return problem(`cannot compare ${text(a)} and ${text(b)}`);
+        }
+        if (t.op === "++") {
+            if (a.k === "list" && b.k === "list") return list(union([a.element, b.element]));
+            if (a.k === "atom" && b.k === "atom" && a.name === "String" && b.name === "String") return a;
+            return problem(`cannot append ${text(a)} and ${text(b)}`);
+        }
+        if (t.op === "*" && (callable(a) || callable(b))) {
+            const f = callable(b) ? b : a, input = callable(b) ? a : b;
+            let element: Ty;
+            if (input.k === "list") element = input.element;
+            else if (input.k === "record") element = { k: "list", element: union([atom("String"), ...input.fields.values()]), items: [atom("String"), union([...input.fields.values()])], length: constant(2n) };
+            else if (input.k === "atom" && input.name === "Int") element = input;
+            else return problem(`iteration needs a list, record, or Int; got ${text(input)}`);
+            return list(application(f, { type: element }, { t: "placeholder" }));
+        }
+        if (t.op === "\\" && callable(a) && callable(b)) {
+            const input = variable();
+            const output = application(a, { type: application(b, { type: input }, { t: "placeholder" }) }, { t: "placeholder" });
+            return fn(input, output);
+        }
+        if (t.op === "-" && callable(a) && numeric(b)) return application(a, { type: b }, { t: "placeholder" });
+        if (a.k === "list" || b.k === "list") {
+            if (a.k === "list" && b.k === "list") return list(operation(t.op, [a.element, b.element]));
+            const xs = a.k === "list" ? a : b as Extract<Ty, { k: "list" }>;
+            const scalar = a.k === "list" ? b : a;
+            if (!numeric(scalar)) return problem("array broadcast requires a number");
+            return list(operation(t.op, a.k === "list" ? [xs.element, scalar] : [scalar, xs.element]));
+        }
+        if (a.k === "record" || b.k === "record") {
+            if (a.k === "record" && b.k === "record") {
+                if (a.fields.size !== b.fields.size || [...a.fields.keys()].some(k => !b.fields.has(k))) return problem("array records require the same fields");
+                return { k: "record", fields: new Map([...a.fields].map(([k, v]) => [k, operation(t.op, [v, b.fields.get(k)!])])) };
+            }
+            const rec = a.k === "record" ? a : b as Extract<Ty, { k: "record" }>;
+            const scalar = a.k === "record" ? b : a;
+            if (!numeric(scalar)) return problem("array broadcast requires a number");
+            return { k: "record", fields: new Map([...rec.fields].map(([k, v]) => [k, operation(t.op, a.k === "record" ? [v, scalar] : [scalar, v])])) };
+        }
+        if (numeric(a) && numeric(b)) {
+            if (a.k === "atom" && b.k === "atom" && ["Float32", "Float64"].includes(a.name) && ["Float32", "Float64"].includes(b.name) && a.name !== b.name) return problem("mixed Float32 and Float64 arithmetic requires an explicit cast");
+            return t.op === "/" ? atom("Number") : text(a) === text(b) ? a : atom("Number");
+        }
+        if (t.op === "+" && a.k === "atom" && b.k === "atom" && a.name === "String" && b.name === "String") return a;
+        return problem(`operator '${t.op}' cannot combine ${text(a)} and ${text(b)}`);
     }
     let lengthFacts = new Map<string, Index>();
     function refinedIndex(value: Index): Index {
@@ -282,6 +502,22 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             return;
         }
         if (actual.k === "var") return unify(actual, expected, e, seen);
+        if (expected.k === "operation" || actual.k === "operation") {
+            if (expected.k === "operation" && actual.k !== "operation") expected.solution = actual.k === "list" ? list(actual.element) : actual;
+            if (actual.k === "operation" && expected.k !== "operation") actual.solution = expected.k === "list" ? list(expected.element) : expected;
+            requirements.push({ k: "operation", op: "require", args: [expected, actual] });
+            return;
+        }
+        if (expected.k === "union") {
+            if (actual.k === "union") { for (const choice of actual.choices) unify(expected, choice, e, seen); return; }
+            for (const choice of expected.choices) {
+                try { unify(copy(choice), copy(actual), e); } catch { continue; }
+                unify(choice, actual, e, seen); return;
+            }
+            return problem(`cannot use ${text(actual)} where ${text(expected)} is required`, e);
+        }
+        if (actual.k === "union") { for (const choice of actual.choices) unify(expected, choice, e, seen); return; }
+
         if (
             expected.k === "atom" && expected.name === "Type" && actual.k === "type"
         ) return;
@@ -291,13 +527,20 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                 return;
             }
         }
+        if (actual.k === "mutable" && expected.k !== "mutable") return unify(expected, actual.value, e, seen);
+        if (expected.k === "mutable" && actual.k === "mutable") return unify(expected.value, actual.value, e, seen);
+        if (expected.k === "fn" && (actual.k === "overload" || actual.k === "type" || actual.k === "intrinsic")) {
+            unify(expected.output, operation("call", [actual, expected.input]), e, seen);
+            return;
+        }
         if (expected.k === "fn" && actual.k === "fn") {
-            unify(expected.input, actual.input, e, seen);
+            unify(actual.input, expected.input, e, seen);
             unify(expected.output, actual.output, e, seen);
             return;
         }
         if (expected.k === "list" && actual.k === "list") {
-            unify(expected.element, actual.element, e, seen);
+            if (expected.items && actual.items && expected.items.length === actual.items.length) expected.items.forEach((t, n) => unify(t, actual.items![n], e, seen));
+            else unify(expected.element, actual.element, e, seen);
             if (expected.length && actual.length) {
                 const delta = indexAdd(refinedIndex(expected.length), refinedIndex(actual.length), -1n);
                 if (!delta.terms.size && delta.constant !== 0n) {
@@ -310,6 +553,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             } else if (expected.length) dynamicBoundaries++;
             return;
         }
+        if (expected.k === "map" && actual.k === "map") { unify(expected.key, actual.key, e, seen); unify(expected.value, actual.value, e, seen); return; }
         if (expected.k === "record" && actual.k === "record") {
             for (const [key, type] of expected.fields) {
                 if (!actual.fields.has(key)) problem(`missing field '${key}'`, e);
@@ -379,30 +623,29 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             if (e.op === "*" && !b.terms.size) return indexScale(a, b.constant);
         }
     }
-    function typeExpr(e: Expr, scope: Scope): Ty {
-        const t = resolve(infer(e, scope));
+    function schemaValue(type: Ty, e: Expr, seen = new Map<Ty, Ty>()): Ty {
+        const t = resolve(type);
         if (t.k === "type") return t.value;
         if (t.k === "dynamic") return unknown();
+        if (seen.has(t)) return seen.get(t)!;
         if (t.k === "list") {
-            return list(
-                resolve(t.element).k === "type" ? (resolve(t.element) as Extract<Ty, { k: "type" }>).value : dynamic,
-                t.length,
-            );
+            const result: Extract<Ty, { k: "list" }> = { k: "list", element: variable(), length: t.length };
+            seen.set(t, result);
+            const items = t.items?.map(item => schemaValue(item, e, seen));
+            result.element = items ? items.length ? union(items) : variable() : schemaValue(t.element, e, seen);
+            result.items = items;
+            return result;
         }
         if (t.k === "record") {
-            return {
-                k: "record",
-                fields: new Map(
-                    [...t.fields].map((
-                        [key, value],
-                    ) => [
-                        key,
-                        resolve(value).k === "type" ? (resolve(value) as Extract<Ty, { k: "type" }>).value : value,
-                    ]),
-                ),
-            };
+            const result: Ty = { k: "record", fields: new Map() };
+            seen.set(t, result);
+            for (const [key, value] of t.fields) result.fields.set(key, schemaValue(value, e, seen));
+            return result;
         }
         return problem("expected a type description", e);
+    }
+    function typeExpr(e: Expr, scope: Scope): Ty {
+        return schemaValue(infer(e, scope), e);
     }
     function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr, bound = new Set<string>()): void {
         switch (p.p) {
@@ -439,15 +682,16 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                 return;
             }
             case "list": {
-                const a = variable();
-                unify(list(a), expected, e);
+                const items = p.v.map(() => variable());
+                const pattern: Ty = { k: "list", element: items.length ? union(items) : variable(), items, length: items.length ? constant(BigInt(items.length)) : undefined };
+                unify(pattern, expected, e);
                 const vector = resolve(expected);
                 if (vector.k === "list" && vector.length?.terms.size === 1) {
                     const [name, coefficient] = [...vector.length.terms][0];
                     const difference = BigInt(p.v.length) - vector.length.constant;
                     if (coefficient !== 0n && difference % coefficient === 0n) lengthFacts.set(name, constant(difference / coefficient));
                 }
-                p.v.forEach((x) => bind(x, a, scope, e, bound));
+                p.v.forEach((x, n) => bind(x, items[n], scope, e, bound));
                 return;
             }
             case "cons": {
@@ -501,8 +745,15 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                     return;
                 }
                 if (t.k === "type") {
-                    unify(t.value, expected, e);
-                    p.args.forEach((x) => bind(x, t.value, scope, e, bound));
+                    const value = t.value.k === "atom" && t.value.name === "List" ? list(variable()) : t.value;
+                    unify(value, expected, e);
+                    p.args.forEach((x) => bind(x, value.k === "variant" && value.base ? value.base : value, scope, e, bound));
+                    return;
+                }
+                if ((t.k === "record" || t.k === "list") && p.args.length === 1) {
+                    const schema = typeExpr({ t: "var", name: p.tag }, scope);
+                    unify(schema, expected, e);
+                    bind(p.args[0], schema, scope, e, bound);
                     return;
                 }
                 let rest: Ty = t;
@@ -555,7 +806,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                 } catch (error) {
                     problem((error as Error).message, e);
                 }
-            } else dynamicBoundaries++;
+            } else runtimeChecks++;
             return target;
         }
         if (seen.get(t)?.has(a)) return target;
@@ -566,7 +817,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             if (a.items) {
                 a.items.forEach((item, n) =>
                     convert(
-                        t.element,
+                        t.items?.[n] ?? t.element,
                         item,
                         e.t === "list" ? e.v[n] ?? e : e,
                         false,
@@ -594,11 +845,35 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
         unify(target, actual, e);
         return target;
     }
+    function template(target: Ty, input: Ty, e: Expr): Ty {
+        const t = resolve(target), a = resolve(input);
+        if (t.k === "var" || a.k === "var" || t.k === "operation" || a.k === "operation") return operation("template", [t, a]);
+        if (isExplicit(t) || isExplicit(a)) return explicitDynamic;
+        if (t.k !== "list") return problem("list template requires a list", e);
+        if (a.k === "atom" && a.name === "String") return template(t, list(atom("Char")), e);
+        if (a.k !== "list") return problem("list template expects a list or String", e);
+        if (t.length && a.length) unify(list(variable(), t.length), list(variable(), a.length), e);
+        else runtimeChecks++;
+        const apply = (slot: Ty, value: Ty, expression: Expr): Ty => resolve(slot).k === "list"
+            ? template(slot, value, expression) : application(slot, { type: value }, expression);
+        if (t.items) {
+            const items = t.items.map((slot, n) => apply(slot, a.items?.[n] ?? a.element, e.t === "list" ? e.v[n] ?? e : e));
+            return { k: "list", element: items.length ? union(items) : variable(), items, length: t.length };
+        }
+        return list(apply(t.element, a.element, e), t.length);
+    }
     function application(f: Ty, argument: Entry, e: Expr): Ty {
         spend(e);
         f = resolve(f);
+        if (f.k === "intrinsic") {
+            const args = [...f.args ?? [], argument.type];
+            return args.length < (f.arity ?? 1) ? { ...f, args } : operation(f.name, args);
+        }
+        if (f.k === "operation") return operation("call", [f, argument.type]);
         if (f.k === "dynamic") return f.explicit ? explicitDynamic : unknown();
         if (f.k === "overload") {
+            const input = resolve(argument.type);
+            if (input.k === "var" || input.k === "operation") return operation("call", [f, argument.type]);
             const outputs: Ty[] = [];
             for (const choice of f.choices) {
                 try {
@@ -610,7 +885,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             if (!outputs.length) return problem(`no overload accepts ${text(argument.type)}`, e);
             if (outputs.length === 1 || outputs.every((x) => text(x) === text(outputs[0]))) return outputs[0];
             if (outputs.every((x) => resolve(x).k === "fn")) return { k: "overload", choices: outputs };
-            return unknown();
+            return union(outputs);
         }
         if (f.k === "factory") {
             const args = [...f.args, argument];
@@ -629,7 +904,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             }
             if (element.k !== "type" && element.k !== "dynamic") problem("Vect element must be a type", e);
             if (!args[0].index) dynamicBoundaries++;
-            return { k: "type", value: list(element.k === "type" ? element.value : dynamic, args[0].index) };
+            return { k: "type", value: { k: "list", element: element.k === "type" ? element.value : dynamic, length: args[0].index, contracted: true } };
         }
         if (f.k === "alias") {
             const args = [...f.args, argument];
@@ -640,15 +915,23 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
         }
         if (f.k === "type") {
             const t = resolve(f.value), a = resolve(argument.type);
+            if (t.k === "variant" && t.base) { convert(t.base, argument.type, e); return t; }
+            if (t.k === "var") {
+                requirements.push({ k: "operation", op: "construct", args: [f, argument.type] });
+                return t;
+            }
             if (t.k === "atom") {
-                if (t.name === "Type" && ["type", "factory", "alias"].includes(a.k)) return argument.type;
+                if (t.name === "Type" && ["type", "factory", "alias", "list", "record"].includes(a.k)) return argument.type;
                 if (t.name === "List" && a.k === "list") return a;
                 if (t.name === "Record" && a.k === "record") return a;
                 if (t.name === "Function" && (a.k === "fn" || a.k === "overload")) return a;
-                if (t.name === "Mutable") return t;
-                if (t.name === "HashMap" && (a.k === "list" || a.k === "record")) {
-                    dynamicBoundaries++;
-                    return t;
+                if (t.name === "Mutable") return { k: "mutable", value: argument.type };
+                if (t.name === "HashMap") {
+                    if (a.k === "map") return a;
+                    if (a.k === "record") return { k: "map", key: atom("String"), value: union([...a.fields.values()]) };
+                    const key = variable(), value = variable();
+                    unify(list(pair(key, value)), a, e);
+                    return { k: "map", key, value };
                 }
                 if (t.name === "String" && a.k === "list") {
                     unify(atom("Char"), a.element, e);
@@ -670,7 +953,31 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             return result;
         }
         if (f.k === "fn") {
+            const input = resolve(argument.type);
+            if (input.k === "record" && f.pattern?.p === "list" && f.pattern.v.every(p => p.p === "var")) {
+                const items = f.pattern.v.map(p => {
+                    const name = (p as Extract<Pattern, { p: "var" }>).name;
+                    const field = input.fields.get(name);
+                    if (!field) return problem(`missing field '${name}'`, e);
+                    return field;
+                });
+                return application({ ...f, pattern: undefined }, { ...argument, type: { k: "list", element: union(items), items, length: constant(BigInt(items.length)) } }, e);
+            }
             const expected = resolve(f.input), actual = resolve(argument.type);
+            if (f.coerce && expected.k === "record" && actual.k === "list") {
+                const fields = [...expected.fields];
+                if (actual.length && !actual.length.terms.size && actual.length.constant !== BigInt(fields.length)) {
+                    return problem(`record pattern needs ${fields.length} positional values, got ${actual.length.constant}`, e);
+                }
+                if (!actual.length || actual.length.terms.size) runtimeChecks++;
+                const projected = new Map<string, Ty>();
+                for (const [n, [key, target]] of fields.entries()) {
+                    const value = actual.items?.[n] ?? actual.element;
+                    convert(target, value, e.t === "list" ? e.v[n] ?? e : e, false, new Map(), true);
+                    projected.set(key, target);
+                }
+                return application(f, { ...argument, type: { k: "record", fields: projected } }, e);
+            }
             if (expected.k === "list" && actual.k === "list" && expected.length?.terms.size === 1 && actual.length) {
                 const [name, coefficient] = [...expected.length.terms][0];
                 if (coefficient === 1n) {
@@ -684,24 +991,68 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             }
             if (options.strict && !f.coerce) unify(f.input, argument.type, e);
             else convert(f.input, argument.type, e, false, new Map(), !!f.coerce);
+            const checks: Ty[] = [...f.checks ?? []];
+            const collect = (type: Ty, seen = new Set<Ty>()): void => {
+                const t = resolve(type);
+                if (seen.has(t)) return;
+                seen.add(t);
+                if (t.k === "fn") checks.push(...t.checks ?? []);
+                for (const child of children(t)) collect(child, seen);
+            };
+            collect(argument.type);
+            const output = resolve(f.output);
+            if (output.k === "fn") output.checks = [...output.checks ?? [], ...checks];
+            else for (const requirement of checks) resolve(requirement);
             return f.binder && argument.index
                 ? copy(f.output, new Map([...variables(f.output)].map((t) => [t, t])), [f.binder, argument.index])
                 : f.output;
         }
         if (f.k === "list") {
             const a = resolve(argument.type);
-            if (a.k === "atom" && a.name === "Int") return f.element;
+            if (a.k === "atom" && a.name === "Int" || a.k === "variant" && a.ordinal) {
+                if (f.items && argument.index && !argument.index.terms.size) {
+                    const n = Number(argument.index.constant), at = n < 0 ? f.items.length + n : n;
+                    if (at < 0 || at >= f.items.length) return problem("list index out of bounds", e);
+                    return f.items[at];
+                }
+                return f.element;
+            }
             if (a.k === "list") return list(f.element, a.length);
-            // Enumeration indexing remains dynamic.
-            return unknown();
+            if (a.k === "atom" && a.name === "String") {
+                const values = f.items ?? [f.element];
+                return union(values.map(value => {
+                    const item = resolve(value);
+                    if (item.k !== "list") return problem("association lookup requires a list of pairs", e);
+                    if (item.items) { unify(atom("String"), item.items[0], e); return item.items[1]; }
+                    return item.element;
+                }));
+            }
+            return problem("list index must be Int, an enum, a list of indices, or an association key", e);
         }
+        if (f.k === "map") { unify(f.key, argument.type, e); return f.value; }
         if (f.k === "record") {
             const a = resolve(argument.type);
-            if (a.k === "atom") return unknown();
+            if (a.k === "atom" && a.name === "Int") {
+                const entries = [...f.fields.values()];
+                if (argument.index && !argument.index.terms.size) {
+                    const raw = Number(argument.index.constant), n = raw < 0 ? entries.length + raw : raw;
+                    if (n < 0 || n >= entries.length) return problem("record index out of bounds", e);
+                    return pair(atom("String"), entries[n]);
+                }
+                return pair(atom("String"), union(entries));
+            }
+            if (a.k === "atom" && a.name === "String") {
+                if (argument.string !== undefined) {
+                    const field = f.fields.get(argument.string);
+                    if (!field) return problem(`missing field '${argument.string}'`, e);
+                    return field;
+                }
+                return union([...f.fields.values()]);
+            }
             if (a.k === "record" || a.k === "list") {
                 const supplied = a.k === "record"
                     ? a.fields
-                    : new Map([...f.fields.keys()].map((k, i) => [k, a.items?.[i] ?? dynamic]));
+                    : new Map(a.items?.length === 0 ? [] : [...f.fields.keys()].map((k, i) => [k, a.items?.[i] ?? a.element]));
                 if (a.k === "list" && a.items && a.items.length && a.items.length !== f.fields.size) {
                     problem(`record needs ${f.fields.size} positional values, got ${a.items.length}`, e);
                 }
@@ -731,9 +1082,12 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                 e,
             );
         }
+        const previousExpression = activeExpression;
+        activeExpression = e;
         try {
             return inferExpression(e, scope, expected);
         } finally {
+            activeExpression = previousExpression;
             inferenceDepth--;
         }
     }
@@ -752,26 +1106,31 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             case "string":
                 return atom("String");
             case "var": {
-                const entry = scope.get(e.name);
+                let entry = scope.get(e.name);
+                const declaration = forwardDefinitions.get(e.name);
+                if (declaration && entry?.type === forward.get(e.name)) {
+                    define(declaration.name, declaration.clauses, rootScope, declaration.clauses[0].body);
+                    analyzed.add(declaration);
+                    entry = rootScope.get(e.name);
+                    if (entry) scope.set(e.name, entry);
+                }
                 return entry ? instantiate(entry) : unknown();
             }
             case "placeholder":
-                return unknown();
-            case "import":
-                return unknown();
+                return variable();
+            case "import": {
+                if (!options.imports) return unknown();
+                const imported = copyTypeScope(options.imports(e.module));
+                for (const [name, entry] of imported) scope.set(name, entry);
+                return { k: "record", fields: new Map([...imported].map(([name, entry]) => [name, entry.type])) };
+            }
             case "functionType": {
                 const spec = (s: typeof e.spec): Ty => "name" in s ? atom(s.name) : fn(spec(s.from), spec(s.to), undefined, true);
                 return { k: "type", value: spec(e.spec) };
             }
             case "list": {
                 const items = e.v.map((x) => infer(x, scope));
-                let element: Ty = items[0] ?? variable();
-                for (const item of items.slice(1)) {
-                    if (text(resolve(item)) !== text(resolve(element))) {
-                        element = dynamic;
-                        break;
-                    }
-                }
+                const element: Ty = items.length ? union(items) : variable();
                 return { k: "list", element, length: constant(BigInt(items.length)), items };
             }
             case "record":
@@ -787,6 +1146,15 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                         )
                         : undefined,
                 );
+            case "computedRange": {
+                const start = infer(e.lo, scope);
+                if (e.second) unify(start, infer(e.second, scope), e.second);
+                if (e.hi) unify(start, infer(e.hi, scope), e.hi);
+                const value = resolve(start);
+                if (value.k === "atom" && value.name === "Char") return atom("String");
+                unify(atom("Number"), start, e);
+                return list(start);
+            }
             case "floatRange":
                 return list(atom("Float"));
             case "rationalRange":
@@ -794,11 +1162,30 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             case "lambda":
                 return functionType(e.params.map((name) => ({ p: "var", name })), e.body, scope);
             case "patternLambda":
-                return functionType(e.params, e.body, scope);
+                return functionType(e.params, e.body, scope, undefined, e.guard);
             case "app":
             case "pipe": {
                 const a = e.t === "app" ? e.a : e.x;
                 const callee = infer(e.f, scope), resolved = resolve(callee);
+                if (resolved.k === "intrinsic" && resolved.name === "load" && a.t === "string" && options.loads) {
+                    const loaded = options.loads(a.v, scope);
+                    for (const [name, entry] of loaded) scope.set(name, entry);
+                    return { k: "record", fields: new Map([...loaded].map(([name, entry]) => [name, entry.type])) };
+                }
+                if (resolved.k === "intrinsic" && ["quote", "debug", "toAST"].includes(resolved.name)) {
+                    return resolved.name === "quote" ? atom("String") : resolved.name === "debug" ? list(variable(), constant(0n)) : explicitDynamic;
+                }
+                if (resolved.k === "intrinsic" && resolved.name === "use") {
+                    const open = (type: Ty): void => {
+                        const t = resolve(type);
+                        if (t.k === "record") for (const [name, type] of t.fields) scope.set(name, { type });
+                        else if (t.k === "list" && t.items) t.items.forEach(open);
+                        else if (isExplicit(t)) runtimeChecks++;
+                        else problem("use needs a statically known record or list of records; use Dynamic for runtime exports", a);
+                    };
+                    open(infer(a, scope));
+                    return list(variable(), constant(0n));
+                }
                 if (resolved.k === "type" && isExplicit(resolved.value)) {
                     // The argument is an explicit runtime-checked island. Its
                     // effects may not invalidate protected checked bindings.
@@ -809,6 +1196,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                     type: infer(a, scope),
                     index: index(a, scope),
                     boolean: boolean(a, scope),
+                    string: a.t === "string" ? a.v : a.t === "var" ? scope.get(a.name)?.string : undefined,
                 }, a);
             }
             case "setFields": {
@@ -825,6 +1213,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                     rec = resolve(child);
                 }
                 if (rec.k === "dynamic") return unknown();
+                if (rec.k === "list" && rec.items?.length === 0) rec = { k: "record", fields: new Map() };
                 if (rec.k !== "record") return problem("field assignment requires a record", e);
                 const fields = new Map(rec.fields);
                 if (v.k !== "list" && v.k !== "dynamic" && v.k !== "var") {
@@ -838,7 +1227,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                     const previous = fields.get(key), old = previous && resolve(previous);
                     fields.set(
                         key,
-                        old && old.k !== "type"
+                        old && ["atom", "variant", "fn"].includes(old.k)
                             ? convert(old, incoming, e.value.t === "list" ? e.value.v[n] ?? e.value : e.value)
                             : incoming,
                     );
@@ -857,7 +1246,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                     const keys = resolve(infer(e.index, scope));
                     if (keys.k === "list") {
                         const incoming = resolve(value);
-                        if (incoming.k !== "list") { dynamicBoundaries++; return rec; }
+                        if (incoming.k !== "list") { dynamicBoundaries++;  return rec; }
                         if (keys.items && incoming.items && keys.items.length !== incoming.items.length) problem("index count does not match value count", e);
                         const slots = e.index.t === "list" ? e.index.v : [];
                         slots.forEach((slot, n) => {
@@ -876,9 +1265,10 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                     convert(rec.element, value, e.value);
                     return rec;
                 }
-                if (rec.k === "record" && e.index.t === "string") {
-                    const fields = new Map(rec.fields), old = fields.get(e.index.v);
-                    fields.set(e.index.v, old && resolve(old).k !== "type" ? convert(old, value, e.value) : value);
+                const field = e.index.t === "string" ? e.index.v : e.index.t === "var" ? scope.get(e.index.name)?.string : undefined;
+                if (rec.k === "record" && field !== undefined) {
+                    const fields = new Map(rec.fields), old = fields.get(field);
+                    fields.set(field, old && resolve(old).k !== "type" ? convert(old, value, e.value) : value);
                     return { k: "record", fields };
                 }
                 return unknown();
@@ -892,16 +1282,17 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                         return rec.fields.get(key) ?? problem(`missing field '${key}'`, e);
                     });
                     return e.entries.every(x => typeof x === "string")
-                        ? { k: "list", element: dynamic, length: constant(BigInt(selected.length)), items: selected }
+                        ? { k: "list", element: union(selected), length: constant(BigInt(selected.length)), items: selected }
                         : { k: "record", fields: new Map(e.entries.map((x, n) => [(x as [string, string])[1], selected[n]])) };
                 }
+                if (rec.k === "list" && e.values) return template(rec, infer(e.values, scope), e.values);
                 if (e.values) infer(e.values, scope);
                 return unknown();
             }
             case "recordAccess": {
                 const rec = resolve(infer(e.rec, scope));
                 if (isExplicit(rec)) { runtimeChecks++; return explicitDynamic; }
-                if (rec.k === "list" && e.argument) { infer(e.argument, scope); return unknown(); }
+                if (rec.k === "list") return template(rec, infer(e.argument ?? { t: "var", name: e.field }, scope), e.argument ?? e);
                 if (e.scoped && e.argument) {
                     if (rec.k === "dynamic" || rec.k === "var") return unknown();
                     if (rec.k !== "record") return problem("scoped evaluation requires a record", e);
@@ -911,12 +1302,15 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                 }
                 if (rec.k === "var") {
                     const t = variable();
-                    unify(rec, { k: "record", fields: new Map([[e.field, t]]) }, e);
+                    unify(rec, { k: "record", fields: new Map([[e.field, t]]), open: true }, e);
                     return t;
                 }
                 if (rec.k === "dynamic") return unknown();
                 if (rec.k !== "record") return problem("field access requires a record", e);
-                if (!rec.fields.has(e.field)) return problem(`missing field '${e.field}'`, e);
+                if (!rec.fields.has(e.field)) {
+                    if (rec.open) rec.fields.set(e.field, variable());
+                    else return problem(`missing field '${e.field}'`, e);
+                }
                 return rec.fields.get(e.field)!;
             }
             case "ternary": {
@@ -927,6 +1321,26 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                 if (resolve(a).k === "type" && resolve(b).k === "type" && text(a) !== text(b)) {
                     dynamicBoundaries++;
                     return { k: "type", value: dynamic };
+                }
+                const left = resolve(a), right = resolve(b);
+                if (left.k === "list" && right.k === "var") { unify(list(left.element), right, e); return list(left.element); }
+                if (right.k === "list" && left.k === "var") { unify(list(right.element), left, e); return list(right.element); }
+                if (left.k === "list" && right.k === "list") {
+                    const join = (a: Ty, b: Ty): Ty => {
+                        const x = resolve(a), y = resolve(b);
+                        if (x.k === "var" || y.k === "var") { unify(a, b, e); return a; }
+                        if (x.k === "list" && y.k === "list") {
+                            if (!x.items?.length || !y.items?.length) { unify(x.element, y.element, e); return list(x.element); }
+                            return list(union([x.element, y.element]));
+                        }
+                        return union([a, b]);
+                    };
+                    if (left.items && right.items && left.items.length === right.items.length) {
+                        const items = left.items.map((item, n) => join(item, right.items![n]));
+                        return { k: "list", element: items.length ? union(items) : variable(), items, length: constant(BigInt(items.length)) };
+                    }
+                    if (!left.items?.length || !right.items?.length) { unify(left.element, right.element, e); return list(left.element); }
+                    return list(union([left.element, right.element]));
                 }
                 unify(a, b, e);
                 return a;
@@ -949,14 +1363,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                 }
                 if (["==", "!=", "&&", "||"].includes(e.op)) return atom("Bool");
                 if (["<", ">", "<=", ">="].includes(e.op)) {
-                    const x = resolve(a), y = resolve(b);
-                    if (x.k === "var" || y.k === "var" || x.k === "dynamic" || y.k === "dynamic") {
-                        unknown();
-                    } else if (!(x.k === "atom" && y.k === "atom" &&
-                        ((NUMERIC_TYPES.includes(x.name) && NUMERIC_TYPES.includes(y.name)) ||
-                            (x.name === y.name && ["String", "Char"].includes(x.name))))) {
-                        problem(`cannot compare ${text(x)} and ${text(y)}`, e);
-                    }
+                    operation("compare", [a, b]);
                     return atom("Bool");
                 }
                 if (e.op === ":") {
@@ -967,12 +1374,9 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                 if (e.op === "++") {
                     const x = resolve(a), y = resolve(b);
                     if (x.k === "list" && y.k === "list") {
-                        unify(x.element, y.element, e);
-                        return list(x.element, x.length && y.length ? indexAdd(x.length, y.length) : undefined);
+                        return list(union([x.element, y.element]), x.length && y.length ? indexAdd(x.length, y.length) : undefined);
                     }
-                    unify(atom("String"), a, e);
-                    unify(a, b, e);
-                    return a;
+                    return operation("++", [a, b]);
                 }
                 // Numeric/array arithmetic and callable * retain runtime overload selection.
                 const x = resolve(a), y = resolve(b);
@@ -982,7 +1386,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                             if (x.name !== "Float" && y.name !== "Float" && x.name !== y.name) return problem("mixed Float32 and Float64 arithmetic requires an explicit cast", e);
                             return x.name === "Float" ? y : x;
                         }
-                        return e.op === "/" ? unknown() : x.name === y.name ? x : atom("Number");
+                        return e.op === "/" ? atom("Number") : x.name === y.name ? x : atom("Number");
                     }
                     if (e.op === "+" && x.name === "String" && y.name === "String") return atom("String");
                     return problem(`operator '${e.op}' cannot combine ${text(x)} and ${text(y)}`, e);
@@ -990,27 +1394,13 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                 if (e.op !== "*" && e.op !== "-" && e.op !== "\\" && (x.k === "type" || y.k === "type")) {
                     return problem(`operator '${e.op}' requires values, not a type constructor`, e);
                 }
-                return unknown();
+                return operation(e.op, [a, b]);
             }
             case "unop": {
                 const operand = infer(e.e, scope);
                 if (e.op === "not") return atom("Bool");
                 if (isExplicit(operand)) { runtimeChecks++; return explicitDynamic; }
-                const active = new Set<Ty>();
-                const numeric = (type: Ty): void => {
-                    const t = resolve(type);
-                    if (active.has(t)) { unknown(); return; }
-                    active.add(t);
-                    try {
-                        if (t.k === "atom" && NUMERIC_TYPES.includes(t.name)) return;
-                        if (t.k === "var" || t.k === "dynamic") { unknown(); return; }
-                        if (t.k === "list") { numeric(t.element); return; }
-                        if (t.k === "record") { for (const value of t.fields.values()) numeric(value); return; }
-                        problem(`cannot negate ${text(t)}`, e);
-                    } finally { active.delete(t); }
-                };
-                numeric(operand);
-                return operand;
+                return operation("negate", [operand]);
             }
             case "block": {
                 const child: Scope = new Map([...scope].map(([name, entry]) => [name, { ...entry, inherited: true }]));
@@ -1022,7 +1412,7 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                 define(e.name, e.clauses, scope, e);
                 return list(dynamic, constant(0n));
             case "patDef": {
-                const t = infer(e.value, scope);
+                const t = infer(e.value, e.value.t === "import" ? new Map(scope) : scope);
                 if (e.pattern.p === "var") {
                     const old = scope.get(e.pattern.name);
                     if (old && !old.inherited && e.value.t !== "setFields" && e.value.t !== "setItem") {
@@ -1041,13 +1431,13 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                 return unknown();
         }
     }
-    function functionType(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string): Ty {
+    function functionType(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr): Ty {
         const outerFacts = lengthFacts;
         lengthFacts = new Map(outerFacts);
-        try { return inferFunction(params, body, parent, recursiveName); }
+        try { return inferFunction(params, body, parent, recursiveName, guard); }
         finally { lengthFacts = outerFacts; }
     }
-    function inferFunction(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string): Ty {
+    function inferFunction(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr): Ty {
         const scope = new Map(parent), inputs: { type: Ty; binder?: string; coerce: boolean }[] = [];
         const bound = new Set<string>();
         for (const p of params) {
@@ -1071,7 +1461,8 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             const constructor = p.p === "constr" ? resolve(scope.get(p.tag)?.type ?? dynamic) : undefined;
             // A variant pattern checks its tag, not the inferred types of its
             // payloads. Only real type patterns can project Dynamic arguments.
-            const converts = constructor?.k === "type" && !variables(constructor.value).size;
+            const converts = constructor?.k === "type" && !variables(constructor.value).size ||
+                constructor?.k === "record" || constructor?.k === "list";
             inputs.push({ type: t, binder, coerce: p.p === "schema" || p.p === "contract" || p.p === "int" || converts });
         }
         // An explicit result constructor supplies the recursive signature before
@@ -1087,9 +1478,16 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             for (let n = inputs.length - 1; n >= 0; n--) signature = fn(inputs[n].type, signature, inputs[n].binder, inputs[n].coerce);
             scope.set(recursiveName, { type: signature, nonGeneric: captured(parent) });
         }
-        let result = infer(body, scope);
+        const outerRequirements = requirements;
+        requirements = [];
+        let result: Ty;
+        let checks: Ty[];
+        try { if (guard) infer(guard, scope); result = infer(body, scope); checks = requirements; }
+        finally { requirements = outerRequirements; }
         if (declared) { unify(declared, result, body); result = declared; }
-        for (let n = inputs.length - 1; n >= 0; n--) result = fn(inputs[n].type, result, inputs[n].binder, inputs[n].coerce);
+        for (let n = inputs.length - 1; n >= 0; n--) {
+            result = { k: "fn", input: inputs[n].type, output: result, binder: inputs[n].binder, coerce: inputs[n].coerce, checks: n === inputs.length - 1 ? checks : undefined, pattern: params[n] };
+        }
         return result;
     }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
@@ -1109,6 +1507,21 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             return;
         }
         const previous = scope.get(name);
+        if (options.extendDefinitions && previous?.clauses && !previous.inherited && clauses[0].params.length === previous.clauses[0].params.length) {
+            const key = (clause: { params: Pattern[] }): string => {
+                const names = new Map<string, number>();
+                return JSON.stringify(clause.params, (field, value) => {
+                    if (field === "name") { if (!names.has(value)) names.set(value, names.size); return names.get(value); }
+                    return typeof value === "bigint" ? `${value}n` : value;
+                });
+            };
+            const additions = new Map(clauses.map(c => [key(c), c]));
+            clauses = previous.clauses.map(c => {
+                const replacement = additions.get(key(c));
+                additions.delete(key(c));
+                return replacement ?? c;
+            }).concat([...additions.values()]);
+        }
         const collection = previous && resolve(previous.type), c = clauses[0];
         if (collection && (collection.k === "list" || collection.k === "record" || isExplicit(collection)) && c.params.length === 1) {
             const p = c.params[0];
@@ -1135,19 +1548,27 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             // inspect their previous binding under APN's existing rules.
             const pending = previous ? undefined : variable();
             if (pending) scope.set(name, { type: pending, mono: true });
-            const t = infer(clauses[0].body, scope);
+            const body = clauses[0].body;
+            const t = infer(body, ["import", "app", "pipe"].includes(body.t) ? new Map(scope) : scope);
             if (pending) unify(pending, t, location);
-            if (previous && !previous.inherited) unify(previous.type, t, location);
+            if (previous && !previous.inherited) {
+                const old = resolve(previous.type), next = resolve(t);
+                if (old.k === "list" && next.k === "list" && !old.contracted) unify(old.element, next.element, location);
+                else unify(previous.type, t, location);
+            }
             scope.set(name, {
                 type: t,
+                string: body.t === "string" ? body.v : undefined,
                 index: (writes.get(name) ?? 0) > 1 ? undefined : index(clauses[0].body, scope),
                 boolean: (writes.get(name) ?? 0) > 1 ? undefined : boolean(clauses[0].body, scope),
                 nonGeneric: captured(new Map([...scope].filter(([key]) => key !== name))),
             });
             return;
         }
+        forwardDefinitions.delete(name);
         const nonGeneric = captured(scope);
-        const pending = variable();
+        const pending = forward.get(name) ?? variable();
+        forward.delete(name);
         scope.set(name, { type: pending, mono: true });
         const groups = new Map<string, Ty>();
         const domain = (t: Ty, seen = new Set<Ty>()): string => {
@@ -1167,8 +1588,12 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
         const alternatives = [...groups.values()];
         if (alternatives.length === 1) {
             unify(pending, alternatives[0], location);
-            scope.set(name, { type: pending, nonGeneric });
-        } else scope.set(name, { type: { k: "overload", choices: alternatives }, nonGeneric });
+            scope.set(name, { type: pending, nonGeneric, clauses });
+        } else {
+            const overload: Ty = { k: "overload", choices: alternatives };
+            if (pending.k === "var" && !pending.link) pending.link = overload;
+            scope.set(name, { type: overload, nonGeneric, clauses });
+        }
     }
     const scope: Scope = new Map(TYPE_NAMES.map((name) => [name, { type: { k: "type", value: atom(name) } }]));
     scope.set("Vect", { type: { k: "factory", args: [] } });
@@ -1186,12 +1611,84 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
             fail: fn(atom("String"), variable()),
         })
     ) scope.set(name, { type });
+    const standardOnly = new Set(["seq", "chars", "fromChars", "upper", "lower", "readFile", "readStdin"]);
+    const native = (name: string, inputs: Ty[], output: Ty) => {
+        if (!standardOnly.has(name) || options.library) scope.set(name, { type: inputs.reduceRight((result, input) => fn(input, result), output) });
+    };
+    const int = atom("Int"), str = atom("String"), bool = atom("Bool"), num = atom("Number");
+    const empty = list(variable(), constant(0n));
+    for (const name of ["print", "emit"]) { const t = variable(); native(name, [t], t); }
+    native("assert", [variable()], empty);
+    native("isType", [variable(), variable()], bool);
+    native("parse", [str], explicitDynamic);
+    native("step", [int, variable()], explicitDynamic);
+    for (const name of ["quote", "debug", "toAST", "use", "distinct", "load"]) scope.set(name, { type: { k: "intrinsic", name } });
+    native("exit", [int], empty);
+    native("null", [variable()], bool);
+    native("length", [list(variable())], int);
+    for (const name of ["take", "drop"]) { const t = variable(); native(name, [int, list(t)], list(t)); }
+    { const t = variable(); native("iterate", [fn(t, t), t], list(t)); }
+    for (const name of ["foldl", "foldr"]) {
+        const a = variable(), b = variable();
+        native(name, [fn(name === "foldl" ? b : a, fn(name === "foldl" ? a : b, b)), b, list(a)], b);
+    }
+    { const a = variable(), b = variable(), c = variable(); native("zipWith", [fn(a, fn(b, c)), list(a), list(b)], list(c)); }
+    { const a = variable(), b = variable(); native("seq", [a, b], b); }
+    native("toString", [variable()], str);
+    native("intToString", [int], str);
+    native("format", [str, list(variable())], str);
+    native("chars", [str], list(atom("Char")));
+    native("fromChars", [list(atom("Char"))], str);
+    for (const name of ["upper", "lower", "readFile"]) native(name, [str], str);
+    native("readStdin", [empty], str);
+    if (options.library) scope.set("getArgs", { type: list(str) });
+    for (const name of ["isInteger", "isExact", "isInexact", "isReal", "isComplex", "isRational", "isNumber", "isFinite", "isNaN", "isEven", "isOdd", "isInfinite", "isZero", "isPositive", "isNegative"]) native(name, [["isNumber", "isComplex", "isReal", "isRational", "isInteger"].includes(name) ? variable() : num], bool);
+    for (const name of ["sqrt", "sin", "cos", "tan", "asin", "acos", "atan", "exp", "log", "abs", "exact", "inexact", "realPart", "imagPart", "magnitude", "angle", "conjugate"]) native(name, [num], num);
+    for (const name of ["floor", "ceiling", "truncate", "round", "numerator", "denominator"]) native(name, [num], num);
+    for (const name of ["min", "max", "atan2", "makeRectangular", "makePolar", "expt", "rationalize"]) native(name, [num, num], num);
+    for (const name of ["quotient", "remainder", "modulo", "gcd", "lcm"]) native(name, [int, int], int);
+    for (const name of ["pairs", "keys", "values", "enumerate", "length"]) scope.set(name, { type: { k: "intrinsic", name } });
+    for (const name of ["lookup", "has", "remove", "insert"]) {
+        const key = variable(), value = variable(), map: Ty = { k: "map", key, value };
+        native(name, [name === "insert" ? list(pair(key, value)) : key, map], name === "lookup" ? value : name === "has" ? bool : map);
+    }
+    scope.set("set", { type: { k: "intrinsic", name: "set", arity: 2 } });
+    scope.set("insert", { type: { k: "intrinsic", name: "insert", arity: 2 } });
+    scope.set("cast", { type: { k: "intrinsic", name: "cast", arity: 2 } });
+    scope.set("do", { type: { k: "intrinsic", name: "do" } });
+    scope.set("match", { type: { k: "intrinsic", name: "match", arity: 2 } });
+    if (options.library) {
+        const a = variable(), b = variable(), c = variable();
+        native("bracket", [a, fn(a, b), fn(a, c)], c);
+        for (const name of ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer", "withFile"]) scope.set(name, { type: explicitDynamic });
+    }
+    for (const entry of scope.values()) entry.inherited = true;
+    if (options.initial) for (const [name, entry] of copyTypeScope(options.initial)) scope.set(name, entry);
+    const originalScope = new Map(scope);
+    const forward = new Map<string, Ty>();
+    const forwardDefinitions = new Map<string, Extract<TopLevel, { t: "def" }>>();
+    const analyzed = new Set<TopLevel>();
+    const rootScope = scope;
+    for (const statement of program) if (statement.t === "def" && statement.clauses[0].params.length && !scope.has(statement.name)) {
+        const t = variable(); forward.set(statement.name, t);
+        forwardDefinitions.set(statement.name, statement);
+        scope.set(statement.name, { type: t });
+    }
+    function validate(t: Ty, seen = new Set<Ty>()): void {
+        const value = resolve(t);
+        if (seen.has(value)) return;
+        seen.add(value);
+        for (const child of children(value)) validate(child, seen);
+    }
     for (const statement of program) {
+        checkingExpression = statement.t === "expr" || statement.t === "patDef" ? statement.value : statement.t === "def" ? statement.clauses[0].body : undefined;
         try {
-            if (statement.t === "def") define(statement.name, statement.clauses, scope, statement.clauses[0].body);
+            if (statement.t === "def") {
+                if (!analyzed.has(statement)) define(statement.name, statement.clauses, scope, statement.clauses[0].body);
+            }
             else if (statement.t === "type") {
                 const d = statement.def, parameters = new Map((d.parameters ?? []).map((p) => [p, variable()]));
-                const result: Ty = { k: "variant", name: d.name, args: [...parameters.values()] };
+                const result: Ty = { k: "variant", name: d.name, args: [...parameters.values()], ordinal: d.variants.every(v => !v.fields?.length) };
                 scope.set(d.name, { type: { k: "type", value: result } });
                 const fieldsScope = new Map(scope);
                 for (const [name, t] of parameters) {
@@ -1202,8 +1699,8 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
                     for (const field of [...v.fields ?? []].reverse()) t = fn(typeExpr(field, fieldsScope), t);
                     scope.set(v.tag, { type: t });
                 }
-            } else if (statement.t === "expr") infer(statement.value, scope);
-            else infer(statement, scope);
+            } else if (statement.t === "expr") validate(infer(statement.value, scope));
+            else validate(infer(statement, scope));
         } catch (error) {
             if (error && typeof error === "object" && "pos" in error && "message" in error) {
                 issues.push(error as TypeIssue);
@@ -1211,11 +1708,13 @@ export function checkTypes(program: TopLevel[], options: { strict?: boolean } = 
         }
     }
     if (options.strict && dynamicBoundaries && !issues.length) {
-        issues.push({ message: `cannot establish static types: ${dynamicBoundaries} unresolved dynamic boundaries`, pos: 0, len: 1 });
+        const loc = firstUnknown && sourceLocations.get(firstUnknown);
+        issues.push({ message: `cannot establish static types: ${dynamicBoundaries} unresolved dynamic boundaries; mark runtime code with Dynamic`, pos: loc?.start ?? 0, len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)), source: loc?.source, file: loc?.file });
     }
+    options.result?.(scope, new Map([...scope].filter(([name, entry]) => originalScope.get(name) !== entry)));
     return { issues, dynamicBoundaries, runtimeChecks };
 }
-export function checkSource(source: string, file = "<input>", options: { strict?: boolean } = {}): CheckResult {
+export function checkSource(source: string, file = "<input>", options: CheckOptions = {}): CheckResult {
     return checkTypes(parseDocument(source), options);
 }
 export function requireChecked(source: string, file = "<input>"): CheckResult {
@@ -1236,20 +1735,11 @@ export async function runTypeCheck(files: string[]): Promise<number> {
     let failed = false;
     for (const file of files) {
         try {
-            const source = await Deno.readTextFile(file), result = checkSource(source, file, { strict: true });
-            for (const issue of result.issues) {
-                failed = true;
-                console.error(`${file}:${source.slice(0, issue.pos).split("\n").length}: type error: ${issue.message}`);
-            }
-            if (!result.issues.length) {
-                console.log(
-                    `${file}: checked${
-                        result.runtimeChecks
-                            ? ` (${result.runtimeChecks} explicit boundaries/operations require runtime checks)`
-                            : ""
-                    }`,
-                );
-            }
+            const source = await Deno.readTextFile(file);
+            const { CheckingSession } = await import("./checking-session.ts");
+            const slash = file.lastIndexOf("/");
+            new CheckingSession().prepare(parse(source, file), slash < 0 ? "." : file.slice(0, slash));
+            console.log(`${file}: checked`);
         } catch (error) {
             failed = true;
             console.error(String(error));
