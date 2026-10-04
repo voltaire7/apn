@@ -20,7 +20,8 @@ export { lex } from "./src/lexer.ts";
 if (import.meta.main) {
     const { args: _args, literalFile, error } = readCliOptions(Deno.args);
     if (error) {
-        console.error(`apn: error: ${error}\nTry 'apn --help' for usage.`);
+        const label = Deno.stderr.isTerminal() ? "\x1b[1;31merror:\x1b[0m" : "error:";
+        console.error(`${label} ${error}`);
         Deno.exit(2);
     }
 
