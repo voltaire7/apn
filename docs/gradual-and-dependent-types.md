@@ -53,9 +53,9 @@ value = Dynamic 41
 Int value + 1                         # 42; Int validates at runtime
 Int (Dynamic "hello")                 # runtime error
 
-increment <- (Int -> Int) (Dynamic (x -> x + 1))
+((Int -> Int) increment) <- (Dynamic (x -> x + 1))
 increment 41                          # 42
-bad <- (Int -> Int) (Dynamic (x -> "hello"))
+((Int -> Int) bad) <- (Dynamic (x -> "hello"))
 bad 1                                 # runtime error: result is not an Int
 
 accept (Dynamic x) = x                 # explicit dynamic parameter
@@ -115,7 +115,7 @@ To replace a function through reflection, first capture a function with an
 explicit contract:
 
 ```apn
-f <- (Int -> Int) (x -> x)
+((Int -> Int) f) <- (x -> x)
 scope <- Dynamic env
 scope.f = Dynamic (x -> x + 1)
 f 1                                  # 2; replacement retains the contract

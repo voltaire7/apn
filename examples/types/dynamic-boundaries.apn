@@ -3,7 +3,7 @@
 value = Dynamic 41
 print (Int value + 1)                     # 42
 
-increment <- (Int -> Int) (Dynamic (x -> x + 1))
+((Int -> Int) increment) <- (Dynamic (x -> x + 1))
 print (increment 41)                     # 42
 
 count = 1
@@ -16,7 +16,7 @@ print (Int (scope key))                  # 2
 # These pass checking, but fail when evaluated:
 # Int (Dynamic "hello")
 # scope.count = "hello"
-# bad <- (Int -> Int) (Dynamic (x -> "hello"))
+# ((Int -> Int) bad) <- (Dynamic (x -> "hello"))
 # bad 1
 
 # This fails checking: the inferred parameter has no runtime conversion.

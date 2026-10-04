@@ -38,8 +38,9 @@ mathematical chained comparisons.
 
 Backtick infix functions are not supported; write `f a b`. `=` and `<-` introduce
 bindings and are not expression operators; they have no expression precedence. Range `..` belongs
-inside range syntax, and `@` belongs to polar numeric literals. Function-type
+inside range syntax, and `@` belongs to polar numeric literals. Inside function-contract patterns,
 arrows associate right: `Int -> Int -> Int` means `Int -> (Int -> Int)`.
+In expressions, arrows always form lambdas, including `Int -> Int`.
 Unbraced lambda bodies consume a full expression; a braced body ends at `}`.
 
 Exponentiation uses the same numeric semantics as `expt`: `2 ^ 10` is `1024`,

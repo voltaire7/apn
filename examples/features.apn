@@ -1345,7 +1345,7 @@ print ((_ _ -> 1) 2 3)                    # => 1
 # Files and REPL submissions check by default; Dynamic marks runtime boundaries.
 dynamicNumber = Dynamic 41
 print (Int dynamicNumber + 1)              # => 42
-checkedIncrement <- (Int -> Int) (Dynamic (x -> x + 1))
+((Int -> Int) checkedIncrement) <- (Dynamic (x -> x + 1))
 print (checkedIncrement 41)                # => 42
 reflectedNumber = 1
 reflectedScope <- Dynamic env
@@ -1359,6 +1359,10 @@ print (inferredIncrement 41)               # => 42
 # inferredIncrement "bad"                  # type error before any effects
 # print "not printed"; missingName         # type error: whole submission rejected
 # --check follows literal imports/loads without running their effects.
+
+# Expression arrows always create lambdas; contracts belong in patterns.
+print ((Int value -> value) 123)           # => 123
+# (Int -> Int) checkedIncrement applies a lambda, not a function-type constructor.
 
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 

@@ -8,7 +8,7 @@ for (const [source, expected] of [
     ['Int * []', '[]'],
     ['(entry -> entry 1) * [x: 1, y: 2]', '[1, 2]'],
     ['((+ 1) \\ (* 2)) * [1,2,3]', '[3, 5, 7]'],
-    ['((Int -> Int) (+ 1)) * [1,2]', '[2, 3]'],
+    ['((Int -> Int) increment) <- (+ 1); increment * [1,2]', '[2, 3]'],
     ['[1,2,3] * 2', '[2, 4, 6]'],
     ['2 * [1,2,3]', '[2, 4, 6]'],
 ]) Deno.test(`function-left iteration: ${source}`, () => {

@@ -159,6 +159,15 @@ class Parser {
             this.next();
             if (this.isSym(close)) { this.next(); return { p: "list", v: [] }; }
             const signatureStart = this.i;
+            try {
+                const spec = this.parseFunctionSpec();
+                if (!("name" in spec) && this.peek().k !== "eof" && !this.isSym(close)) {
+                    const value = this.parsePattern();
+                    this.expectSym(close);
+                    return { p: "contract", spec, value };
+                }
+            } catch { /* ordinary grouping or constructor pattern */ }
+            this.i = signatureStart;
             if (this.isSym("[") || this.isSym("(") || this.isSym("{")) {
                 try {
                     this.noLambda++;
@@ -172,15 +181,6 @@ class Parser {
                 } catch { /* ordinary grouped pattern */ }
                 this.i = signatureStart;
             }
-            try {
-                const spec = this.parseFunctionSpec();
-                if (!("name" in spec) && this.peek().k !== "eof" && !this.isSym(close)) {
-                    const value = this.parsePattern();
-                    this.expectSym(close);
-                    return { p: "contract", spec, value };
-                }
-            } catch { /* ordinary grouping or constructor pattern */ }
-            this.i = signatureStart;
             const typeName = this.peek(), valueName = this.peek(1), closing = this.peek(2);
             if (typeName.k === "ident" && /^[a-z]/.test(typeName.v) &&
                 valueName.k === "ident" && closing.k === "sym" && closing.v === close) {
@@ -567,14 +567,6 @@ class Parser {
 
     parsePrimary(): Expr {
         const t = this.peek();
-        if (t.k === "ident" && (TYPE_NAMES.includes(t.v) || functionTypeNames.has(t.v))) {
-            const save = this.i;
-            try {
-                const spec = this.parseFunctionSpec();
-                if (!("name" in spec)) return { t: "functionType", spec };
-            } catch { /* ordinary expression */ }
-            this.i = save;
-        }
         if (!this.noLambda && this.startsParam(t)) {
             const save = this.i;
             let header: { params: Pattern[]; guard?: Expr } | undefined;

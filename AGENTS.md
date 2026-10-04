@@ -488,10 +488,10 @@ and primitive arguments to a p5 instance. Browser runtime loads pinned p5.js
 only for a P5Sketch. Keep host methods scoped to each interpreter and sketch;
 never expose arbitrary host object access. See `docs/p5.md` and `tests/p5-test.ts`.
 
-Function contracts use `((Int -> Int) f)` patterns and `Int -> Int` type values.
+Function contracts use `((Int -> Int) f)` patterns. Expression arrows always form lambdas.
 They wrap callable arguments and enforce input/output constructors on invocation;
-never execute a function to predict its signature. `Transform = Int -> Int`
-defines a reusable contract. Legacy colon/:: annotations remain ignored.
+never execute a function to predict its signature. Capture a contract with
+`((Int -> Int) f) <- expression`; `typeOf f` exposes its type value. Legacy colon/:: annotations remain ignored.
 See `docs/pattern-functions.md` and `tests/pattern-functions-test.ts`.
 
 ## Editor tooling

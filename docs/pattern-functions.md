@@ -161,7 +161,7 @@ application such as `1 2`.
 
 ## Function contracts
 
-Types are constructors, including function types:
+Function contracts are written in patterns:
 
 ```apn
 func ((Int -> Int) f) = Int {
@@ -169,8 +169,8 @@ func ((Int -> Int) f) = Int {
 }
 func (*2)                       # 246 (typed Int)
 
-Transform = Int -> Int
-applyTransform (Transform f) = f 123
+((Int -> Int) increment) <- (x -> x + 1)
+increment 123                  # 124
 ```
 
 The pattern binds `f` through a wrapper. Calling it applies the input constructor,
@@ -179,11 +179,19 @@ result. Numeric inputs require lossless conversion, whether bare or explicitly t
 function contract. Consequently a callable can match and later fail its contract;
 that failure is an error, not a reason to try another handler.
 
-`Int { ... }` independently constrains the enclosing function's result. Arrows
-associate right: `Int -> Int -> Int` describes a curried function. A function type
-can also be applied directly as a constructor: `(Int -> Int) (*2)`. Named contracts
-currently use capitalized top-level aliases. Legacy `:` and `::` annotations are
-still accepted and ignored; they are separate from these runtime contracts.
+`Int { ... }` independently constrains the enclosing function's result. Inside
+contract patterns, arrows associate right: `Int -> Int -> Int` describes a
+curried function.
+
+In expressions, `->` always creates a lambda, regardless of whether its names
+refer to types. `(Int -> Int) function` therefore applies a pattern-matching
+lambda; it does not construct a function contract. `a -> a` is the identity
+lambda. Write `((Int -> Int) f)` in a parameter or binding pattern to constrain
+`f`. A captured contract's `typeOf` remains a first-class type value, but its
+printed arrow description is not a standalone type expression.
+
+Legacy `:` and `::` annotations are still accepted and ignored; they are
+separate from these runtime contracts.
 
 
 ## Declared variant types in patterns

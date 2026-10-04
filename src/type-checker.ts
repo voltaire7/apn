@@ -677,7 +677,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "contract": {
                 const spec = (s: typeof p.spec): Ty => "name" in s ? atom(s.name) : fn(spec(s.from), spec(s.to), undefined, true);
                 const t = spec(p.spec);
-                unify(t, expected, e);
+                // A contract pattern explicitly installs a runtime wrapper.
+                if (isExplicit(expected)) runtimeChecks++;
+                else unify(t, expected, e);
                 bind(p.value, t, scope, e, bound);
                 return;
             }

@@ -21,7 +21,7 @@ for (const [code, expected] of [
     ['match [3] [head]', '3'],
     ['f 0 = 9; f 1 = 8; match 1 [f, _ -> 0]', '8'],
     ['func ((Int -> Int) f) = Int { f 123 }; func (*2)', '246'],
-    ['Transform = Int -> Int; func (Transform f) = Int { f 123 }; func (*2)', '246'],
+    ['((Int -> Int) identity) <- (x -> x); Transform = typeOf identity; func (Transform f) = Int { f 123 }; func (*2)', '246'],
     ['func ((Int -> Int) f) = 42; func (x -> missing)', '42'],
     ['func ((Int -> Int) f) = f 2.0; func (*2)', '4'],
     ['func ((Int -> Int -> Int) f) = f 2 3; func (x y -> x + y)', '5'],
