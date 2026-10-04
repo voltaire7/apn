@@ -1441,7 +1441,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     function inferFunction(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr): Ty {
         const scope = new Map(parent), inputs: { type: Ty; binder?: string; coerce: boolean }[] = [];
-        const bound = new Set<string>();
+        const bound = new Set<string>(recursiveName ? [recursiveName] : []);
         for (const p of params) {
             const t = variable();
             bind(p, t, scope, body, bound);
@@ -1511,7 +1511,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const previous = scope.get(name);
         if (options.extendDefinitions && previous?.clauses && !previous.inherited && clauses[0].params.length === previous.clauses[0].params.length) {
             const key = (clause: { params: Pattern[] }): string => {
-                const names = new Map<string, number>();
+                const names = new Map<string, number>([[name, -1]]);
                 return JSON.stringify(clause.params, (field, value) => {
                     if (field === "name") { if (!names.has(value)) names.set(value, names.size); return names.get(value); }
                     return typeof value === "bigint" ? `${value}n` : value;
@@ -1582,8 +1582,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return (input.k === "variant" ? input.name : input.k === "var" ? "*" : text(input)) + ";" +
                 domain(t.output, seen);
         };
+        const bindsSelf = (p: Pattern): boolean => {
+            switch (p.p) {
+                case "var": return p.name === name;
+                case "typeBind": return p.name === name || bindsSelf(p.value);
+                case "schema": case "contract": return bindsSelf(p.value);
+                case "list": return p.v.some(bindsSelf);
+                case "cons": return bindsSelf(p.head) || bindsSelf(p.tail);
+                case "constr": return p.args.some(bindsSelf);
+                case "recPat": return p.v.some(([, binding]) => binding === name);
+                default: return false;
+            }
+        };
         for (const c of clauses) {
-            const t = functionType(c.params, c.body, scope, name), key = domain(t), existing = groups.get(key);
+            const t = functionType(c.params, c.body, scope, name);
+            const key = `${c.params.some(bindsSelf) ? "self:" : ""}${domain(t)}`, existing = groups.get(key);
             if (existing) unify(existing, t, c.body);
             else groups.set(key, t);
         }

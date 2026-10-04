@@ -30,3 +30,48 @@ for (const source of [
     }
     throw new Error('expected mismatch');
 });
+
+for (const checked of [false, true]) {
+    for (const [source, expected] of [
+        ['x x = x; x x == x', 'true'],
+        ['x x = x; alias = x; x alias == x', 'true'],
+        ['x x = x; (x x) x == x', 'true'],
+        ['x n x = 42; partial = x 1; partial x', '42'],
+        ['x [x] = 42; x [x]', '42'],
+        ['x [self: x] = 42; x [self: x]', '42'],
+        ['x (x:xs) = 42; x [x]', '42'],
+        ['x x = 1; x other = 2; x x', '1'],
+        ['x x = 1; x other = 2; x 0', '2'],
+        ['x = 10; f x = x; f 1', '1'],
+        ['x = x -> x; x 1', '1'],
+        ['fact n = n == 0 ? 1 : n * fact (n - 1); fact 5', '120'],
+    ]) Deno.test(`definition-name equality (checked=${checked}): ${source}`, () => {
+        const i = new Interpreter();
+        if (checked) i.enableChecking();
+        const actual = i.renderString(i.run(parseDocument(source)));
+        if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+    });
+    for (const source of [
+        'x x = x; x 1',
+        'x x = x; y y = y; x y',
+        'x n x = 42; partial = x 1; partial partial',
+        'x [x] = 42; x [1]',
+    ]) Deno.test(`definition-name mismatch (checked=${checked}): ${source}`, () => {
+        const i = new Interpreter();
+        if (checked) i.enableChecking();
+        try { i.run(parseDocument(source)); } catch (error) {
+            if (/no clause|cannot use/.test(String(error))) return;
+            throw error;
+        }
+        throw new Error('Expected equality mismatch');
+    });
+}
+Deno.test('REPL extension keeps self-equality and ordinary clauses distinct', () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    i.extendDefinitions = true;
+    i.run(parseDocument('x x = 1'));
+    i.run(parseDocument('x other = 2'));
+    const actual = i.renderString(i.run(parseDocument('[x x, x 0]')));
+    if (actual !== '[1, 2]') throw new Error(actual);
+});

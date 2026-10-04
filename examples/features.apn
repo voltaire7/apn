@@ -1377,6 +1377,11 @@ print [.shortX, .shortY]                  # => [shortX: 1, shortY: 2]
 print [.shortX, y: shortY]                # => [shortX: 1, y: 2]
 print [shortY, shortX]                    # => [2, 1]
 
+# A named definition also binds its name for repeated-name equality.
+selfOnly selfOnly = selfOnly
+print (selfOnly selfOnly == selfOnly)     # => true
+# selfOnly 1                              # type error; runtime matching also rejects it
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

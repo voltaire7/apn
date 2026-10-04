@@ -259,7 +259,7 @@ export class Interpreter {
             const arity = clauses[0].params.length;
             if (this.extendDefinitions && previous?.kind === "clauseFn" && previous.arity === arity && this.env.map.get(name) === previous) {
                 const key = (c: DefClause) => {
-                    const names = new Map<string, number>();
+                    const names = new Map<string, number>([[name, -1]]);
                     return JSON.stringify(c.params, (field, value) => {
                         if (field === "name") { if (!names.has(value)) names.set(value, names.size); return names.get(value); }
                         return typeof value === "bigint" ? `${value}n` : value;
@@ -1181,6 +1181,8 @@ export class Interpreter {
                 const bv = b as any;
                 return a.tag === bv.tag && (!(a.family?.base || bv.family?.base) || a.family === bv.family) && this.equals({ kind: "list", v: a.v }, { kind: "list", v: bv.v });
             }
+            case "closure": case "clauseFn": case "native": case "contract":
+                return a === b;
             case "nomatch": return true;
             default: return false;
         }
@@ -1299,6 +1301,12 @@ export class Interpreter {
                 }, 0) })).sort((a, b) => b.score - a.score || a.index - b.index);
                 for (const { clause } of ranked) {
                     const binds = new Map<string, Value>();
+                    // The definition name is the first binding in a named clause.
+                    // Use the original function, even when applying a partial call.
+                    if (f.name !== "<lambda>") {
+                        const self = f.env.map.get(f.name);
+                        if (self) binds.set(f.name, self);
+                    }
                     let ok = true;
                     const args = raw;
                     const patternCaller = this.env;

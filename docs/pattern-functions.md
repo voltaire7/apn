@@ -243,3 +243,24 @@ See [templates and type aliases](templates-and-types.md).
 When the parent and constructor share a name (`Box a = | Box a`), that name keeps
 its constructor meaning: `(Box x)` unpacks the payload. Parent type patterns
 resolve in the function's definition scope, including functions from modules.
+
+## Repeating the definition name
+
+The name of a parameter-taking definition participates in repeated-name matching:
+
+```apn
+x x = x
+x x                       # returns x itself
+x 1                       # error
+```
+
+The parameter named `x` must equal the function bound by the definition.
+Functions compare by identity here: an alias of `x` matches, but a separately
+created function does not, even if its body is identical. Partial application
+retains the original definition's identity. The rule also applies to names
+inside nested parameter patterns.
+
+Other captured variables can still be shadowed by parameters. A lambda starts
+its own parameter scope: `x = x -> x` remains an ordinary identity function.
+Static checking rejects known incompatible argument types; matching checks
+function identity at runtime, because sharing a type does not imply equality.
