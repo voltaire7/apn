@@ -251,7 +251,7 @@ The name of a parameter-taking definition participates in repeated-name matching
 ```apn
 x x = x
 x x                       # returns x itself
-x 1                       # error
+x 1                       # error: argument 'x' must equal the function 'x'; got Int
 ```
 
 The parameter named `x` must equal the function bound by the definition.

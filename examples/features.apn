@@ -1380,7 +1380,7 @@ print [shortY, shortX]                    # => [2, 1]
 # A named definition also binds its name for repeated-name equality.
 selfOnly selfOnly = selfOnly
 print (selfOnly selfOnly == selfOnly)     # => true
-# selfOnly 1                              # type error; runtime matching also rejects it
+# selfOnly 1                              # argument 'selfOnly' must equal the function 'selfOnly'; got Int
 
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 

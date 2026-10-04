@@ -60,7 +60,7 @@ for (const checked of [false, true]) {
         const i = new Interpreter();
         if (checked) i.enableChecking();
         try { i.run(parseDocument(source)); } catch (error) {
-            if (/no clause|cannot use/.test(String(error))) return;
+            if (/no clause|cannot use|must equal the function/.test(String(error))) return;
             throw error;
         }
         throw new Error('Expected equality mismatch');
@@ -74,4 +74,22 @@ Deno.test('REPL extension keeps self-equality and ordinary clauses distinct', ()
     i.run(parseDocument('x other = 2'));
     const actual = i.renderString(i.run(parseDocument('[x x, x 0]')));
     if (actual !== '[1, 2]') throw new Error(actual);
+});
+
+for (const [definition, call, name] of [
+    ['x x = x', 'x 1', 'x'],
+    ['x x = x; alias = x', 'alias 1', 'x'],
+    ['f first f = f; partial = f 0', 'partial 1', 'f'],
+]) Deno.test(`self-name diagnostic: ${call}`, () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    i.run(parseDocument(definition));
+    try { i.run(parseDocument(call)); } catch (error) {
+        const message = String(error);
+        if (!message.includes(`argument '${name}' must equal the function '${name}'; got Int`) || message.includes('mu rec')) {
+            throw new Error(message);
+        }
+        return;
+    }
+    throw new Error('Expected a type error');
 });

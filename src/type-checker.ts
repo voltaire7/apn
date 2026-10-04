@@ -14,7 +14,7 @@ type Ty =
     | { k: "dynamic"; explicit?: boolean }
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
-    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern }
+    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string }
     | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean }
     | { k: "record"; fields: Map<string, Ty>; open?: boolean }
     | { k: "type"; value: Ty }
@@ -991,8 +991,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return instantiated.output;
                 }
             }
-            if (options.strict && !f.coerce) unify(f.input, argument.type, e);
-            else convert(f.input, argument.type, e, false, new Map(), !!f.coerce);
+            try {
+                if (options.strict && !f.coerce) unify(f.input, argument.type, e);
+                else convert(f.input, argument.type, e, false, new Map(), !!f.coerce);
+            } catch (error) {
+                if (f.selfName && error && typeof error === "object" && "message" in error &&
+                    /^(cannot use |Dynamic requires an explicit conversion)/.test(String(error.message))) {
+                    const got = actual.k === "fn" || actual.k === "overload" ? "Function" : text(actual);
+                    return problem(`argument '${f.selfName}' must equal the function '${f.selfName}'; got ${got}`, e);
+                }
+                throw error;
+            }
             const checks: Ty[] = [...f.checks ?? []];
             const collect = (type: Ty, seen = new Set<Ty>()): void => {
                 const t = resolve(type);
@@ -1488,7 +1497,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         finally { requirements = outerRequirements; }
         if (declared) { unify(declared, result, body); result = declared; }
         for (let n = inputs.length - 1; n >= 0; n--) {
-            result = { k: "fn", input: inputs[n].type, output: result, binder: inputs[n].binder, coerce: inputs[n].coerce, checks: n === inputs.length - 1 ? checks : undefined, pattern: params[n] };
+            const parameter = params[n];
+            const selfName = parameter.p === "var" && parameter.name === recursiveName ? recursiveName : undefined;
+            result = { k: "fn", input: inputs[n].type, output: result, binder: inputs[n].binder, coerce: inputs[n].coerce, checks: n === inputs.length - 1 ? checks : undefined, pattern: parameter, selfName };
         }
         return result;
     }
