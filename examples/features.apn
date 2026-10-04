@@ -1370,6 +1370,13 @@ print (typedNamed 21)                     # => 42
 print (typeOf typedLambda)                # => Int -> Int
 print (typeOf typedNamed)                 # => Int -> Int
 
+# Record shorthand keeps names explicit; ordinary lists remain positional.
+shortX = 1
+shortY = 2
+print [.shortX, .shortY]                  # => [shortX: 1, shortY: 2]
+print [.shortX, y: shortY]                # => [shortX: 1, y: 2]
+print [shortY, shortX]                    # => [2, 1]
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

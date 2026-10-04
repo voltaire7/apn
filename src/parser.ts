@@ -686,15 +686,27 @@ class Parser {
                         this.skipListLeading();
                         // Empty list: []
                         if (this.isSym("]")) { this.next(); return { t: "list", v: [] }; }
-                        // A record literal looks like:  [key: value, ...]
-                        // Detect it: the first element is a key token (ident/string/number)
-                        // followed by `:`.
-                        if (this.isKeyedEntry()) {
+                        // Record entries are explicit key/value pairs or .name shorthand.
+                        if (this.isKeyedEntry() || this.isSym(".")) {
                             const fs: Array<[string, Expr]> = [];
                             for (;;) {
-                                const key = this.parseKey();
-                                this.expectSym(":");
-                                fs.push([key, this.parseDelimitedExpr()]);
+                                if (this.eatSym(".")) {
+                                    const name = this.next();
+                                    if (name.k !== "ident" || name.v === "_") {
+                                        throw new Error("Parser: record shorthand requires a variable name after '.'");
+                                    }
+                                    const value: Expr = { t: "var", name: name.v };
+                                    sourceLocations.set(value, { source: this.source, file: this.file, start: name.pos, end: name.pos + name.v.length });
+                                    fs.push([name.v, value]);
+                                    const next = this.peek();
+                                    if (!this.isSym(",") && !this.isSym("]") && next.k !== "newline" && next.k !== "dedent") {
+                                        throw new Error("Parser: expected ',' or newline after record shorthand");
+                                    }
+                                } else {
+                                    const key = this.parseKey();
+                                    this.expectSym(":");
+                                    fs.push([key, this.parseDelimitedExpr()]);
+                                }
                                 this.skipListSeparators();
                                 if (this.isSym("]")) { this.next(); return { t: "record", v: fs }; }
                                 if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside record literal");
