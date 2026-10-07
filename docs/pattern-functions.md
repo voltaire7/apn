@@ -350,3 +350,25 @@ Like `(t x)`, a captured numeric type exposes its numeric payload separately:
 `inspect [Int32 1]` prints `[Int32, 1]`. `_` accepts a value without capturing
 its type or stripping its annotation. These patterns still participate in static
 inference; they are not `Dynamic` boundaries.
+
+List schema patterns also accept records when the value pattern is a list of
+names. Those names select fields; the corresponding type slots check or capture
+the selected fields' types. Record order does not matter, and extra fields are
+allowed, just as for ordinary `[x,y]` record destructuring.
+
+```apn
+inspect ([t] [x]) = print [t,x]
+inspect [1]                       # [Int, 1]
+inspect [x: 1]                    # [Int, 1]
+inspect [answer: 1]               # no match: missing x
+
+integer ([Int] [x]) = print x
+integer [x: 1]                    # 1
+integer [x: .2]                   # rejected: lossy Int conversion
+
+pairTypes ([a,b] [x,y]) = [a,b,x,y]
+pairTypes [y: "hi", x: 1]         # [Int, String, 1, "hi"]
+```
+
+Unlike dotted template application, this selects by the value pattern's names,
+not record order. Use `whole.([t] [x])` to retain the complete original record.

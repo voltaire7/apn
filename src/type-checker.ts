@@ -380,10 +380,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const f = resolve(candidate);
                 if (f.k !== "fn") return problem("match alternatives must be functions");
                 try {
-                    if (f.pattern?.p === "as") application(copy(f), { type: copy(a) }, activeExpression ?? { t: "placeholder" });
+                    if (f.pattern?.p === "as" || f.pattern?.p === "schema") application(copy(f), { type: copy(a) }, activeExpression ?? { t: "placeholder" });
                     else unify(copy(f.input), copy(a));
                 } catch { continue; }
-                unify(f.input, a);
+                if (f.pattern?.p === "schema") application(f, { type: a }, activeExpression ?? { t: "placeholder" });
+                else unify(f.input, a);
                 if (!t.solution && f.output.k !== "operation" && f.output.k !== "var") t.solution = f.output;
                 for (const check of f.checks ?? []) resolve(check);
                 const output = resolve(f.output);
@@ -715,7 +716,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return unify(expected, atom("String"), e);
             case "schema": {
                 const t = typeExpr(p.type, scope, bound);
-                application(fn(t, t, undefined, true), { type: expected }, e);
+                application({ k: "fn", input: t, output: t, coerce: true, pattern: p }, { type: expected }, e);
                 bind(p.value, t, scope, e, bound);
                 return;
             }
@@ -909,7 +910,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (isExplicit(t) || isExplicit(a)) return explicitDynamic;
         if (t.k !== "list") return problem("list template requires a list", e);
         if (a.k === "atom" && a.name === "String") return template(t, list(atom("Char")), e);
-        if (a.k !== "list") return problem("list template expects a list or String", e);
+        if (a.k === "record") {
+            const items = [...a.fields.values()];
+            return template(t, { k: "list", items, element: items.length ? union(items) : variable(), length: constant(BigInt(items.length)) }, e);
+        }
+        if (a.k !== "list") return problem("list template expects a list, record, or String", e);
         if (t.length && a.length) unify(list(variable(), t.length), list(variable(), a.length), e);
         else runtimeChecks++;
         const apply = (slot: Ty, value: Ty, expression: Expr): Ty => resolve(slot).k === "list"
@@ -1012,8 +1017,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (f.k === "fn") {
             const input = resolve(argument.type);
-            if (input.k === "record" && f.pattern?.p === "list" && f.pattern.v.every(p => p.p === "var")) {
-                const items = f.pattern.v.map(p => {
+            const selection = f.pattern?.p === "schema" && resolve(f.input).k === "list" ? f.pattern.value : f.pattern;
+            if (input.k === "record" && selection?.p === "list" && selection.v.every(p => p.p === "var")) {
+                const items = selection.v.map(p => {
                     const name = (p as Extract<Pattern, { p: "var" }>).name;
                     const field = input.fields.get(name);
                     if (!field) return problem(`missing field '${name}'`, e);
@@ -1086,6 +1092,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return f.element;
             }
             if (a.k === "list") return list(f.element, a.length);
+            if (a.k === "record") return { k: "record", fields: new Map([...a.fields].map(([key, index]) => {
+                const type = resolve(index);
+                if (type.k === "var") unify(type, atom("Int"), e);
+                else if (isExplicit(type)) { runtimeChecks++; return [key, explicitDynamic]; }
+                else if (!(type.k === "atom" && type.name === "Int" || type.k === "variant" && type.ordinal)) {
+                    return problem("named list indices must be integers or enumeration values", e);
+                }
+                const expression = e.t === "record" ? e.v.find(([name]) => name === key)?.[1] : undefined;
+                return [key, application(f, { type: index, ...(expression?.t === "int" ? { index: constant(expression.v) } : {}) }, expression ?? e)];
+            })) };
             if (a.k === "atom" && a.name === "String") {
                 const values = f.items ?? [f.element];
                 return union(values.map(value => {
@@ -1095,7 +1111,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return item.element;
                 }));
             }
-            return problem("list index must be Int, an enum, a list of indices, or an association key", e);
+            return problem("list index must be Int, an enum, a list or record of indices, or an association key", e);
         }
         if (f.k === "map") { unify(f.key, argument.type, e); return f.value; }
         if (f.k === "record") {

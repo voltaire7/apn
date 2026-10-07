@@ -1379,8 +1379,13 @@ export class Interpreter {
                 const index = this.listIndex(value);
                 if (index !== undefined) return this.index(f, index);
                 if (this.isList(value)) return this.selectList(f, value);
+                if (value.kind === "record") return { kind: "record", v: value.v.map(([key, selected]) => [key, this.defer(() => {
+                    const index = this.listIndex(this.dataValue(selected));
+                    if (index === undefined) throw new APNError("runtime", "named list indices must be integers or enumeration values");
+                    return this.index(f, index);
+                })]) };
                 if (value.kind === "string") return this.associationValue(f, value.v);
-                throw new APNError("runtime", "indexing a list needs an integer, enumeration value, list of indices, or association string key; use .[...] for list templates");
+                throw new APNError("runtime", "indexing a list needs an integer, enumeration value, list or record of indices, or association string key; use .[...] for list templates");
             }
             case "record": {
                 // Strings select named fields; lists/records clone, ints select entries.
@@ -2320,8 +2325,8 @@ export class Interpreter {
 
     templateList(templates: Value, values: Value, replaceDefaults = false): Value {
         const input = this.dataValue(values);
-        const list = input.kind === "string" ? this.callNative("chars", [input]) : input;
-        if (!this.isList(list)) throw new APNError("runtime", "list template expects a list or string");
+        const list = input.kind === "string" ? this.callNative("chars", [input]) : input.kind === "record" ? mkList(input.v.map(([, value]) => value)) : input;
+        if (!this.isList(list)) throw new APNError("runtime", "list template expects a list, record, or string");
         return this.applyListTemplate(templates, list, replaceDefaults);
     }
 
@@ -2561,7 +2566,15 @@ export class Interpreter {
                 return this.matchPattern(p.value, this.conform(type, v), binds);
             }
             if (!this.isTypeValue(type)) throw new APNError("runtime", "pattern expects a type description");
-            const actual = this.reference(v);
+            let actual = this.reference(v);
+            if (this.isList(type) && actual.kind === "record" && p.value.p === "list") {
+                const fields = new Map(actual.v), selected: Value[] = [];
+                for (const field of p.value.v) {
+                    if (field.p !== "var" || !fields.has(field.name)) return false;
+                    selected.push(fields.get(field.name)!);
+                }
+                actual = mkList(selected);
+            }
             if (type.kind === "type") {
                 if (type.alias) return false;
                 if (!type.family) return this.matchPattern({ p: "constr", tag: type.name, args: [p.value] }, actual, binds);

@@ -50,6 +50,15 @@ relevant part is consumed. A singleton never broadcasts. `[Int]` describes
 exactly one position when used as a schema, including through `cast` and `isType`.
 Nested list templates use the same exact-length rule.
 
+Record inputs supply their values in field order. The output remains a list,
+and the template must have exactly as many slots as the record has fields:
+
+```apn
+[Float].[x: 1]                        # [1.0]
+[String, Int].[name: "a", age: 2]      # ["a", 2]
+[(+ 1), (* 2)].[b: 3, a: 4]           # [4, 8]
+```
+
 Strings supply Unicode code-point characters using the same positional rules:
 
 ```apn
@@ -78,6 +87,19 @@ Constructing a string consumes the entire list.
 
 Integer application still indexes a list: `[10] 0` returns `10`.
 A list argument selects multiple indices: `[10,20,30] [2,0]` returns `[30,10]`.
+A record argument names the selected indices and returns a record:
+
+```apn
+[10,20,30] [first: 0, last: 2]       # [first: 10, last: 30]
+[Int] [x: 0]                       # [x: Int]
+[Int] [x: 1]                       # error: index out of bounds
+```
+
+Each record value must be an integer or enumeration index. Selection preserves
+its field names and order. This is indexing, not template conversion;
+`[Int].[x: 1]` instead converts the record's value and returns `[1]`.
+Named selection is a read operation; record-shaped index assignment is not added.
+
 Selection is lazy and preserves index order and duplicates. Integer and enumeration
 indices use the same rules as single indexing; negative indices require a finite input.
 Dotted application explicitly selects template behavior: `[Int].[0]` returns `[0]`; `[10].[0]` errors.

@@ -751,3 +751,11 @@ Unbound lowercase names in schema patterns capture types (`([t] [x])`);
 existing type bindings stay constraints, repeated captures require equal types.
 Keep tests/dotted-pattern-test.ts, record-flattening-test.ts, and
 type-shape-pattern-test.ts passing alongside existing assignment and schema tests.
+
+List application to a record selects one integer/enum index per field, preserving
+record names/order and delaying reads. Dotted list templates accept record values
+in field order, require equal lengths, and always return lists. List-schema
+patterns with var-only list value patterns select record fields by those names
+instead; extra fields are allowed and missing names fail. Keep runtime and checker
+projection aligned (including match alternatives and standalone bindings).
+Tests: collection-shapes-test.ts.
