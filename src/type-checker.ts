@@ -15,8 +15,8 @@ type Ty =
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
     | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string }
-    | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean }
-    | { k: "record"; fields: Map<string, Ty>; open?: boolean }
+    | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number> }
+    | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string> }
     | { k: "type"; value: Ty }
     | { k: "factory"; args: Entry[] }
     | { k: "alias"; params: string[]; body: Expr; scope: Scope; args: Entry[] }
@@ -645,7 +645,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return problem("expected a type description", e);
     }
     function typeExpr(e: Expr, scope: Scope): Ty {
+        if (e.t === "placeholder") return variable();
+        if (e.t === "block" && e.stmts.length === 1) return typeExpr(e.stmts[0], scope);
+        if (e.t === "record") return {
+            k: "record", fields: new Map(e.v.map(([key, value]) => [key, typeExpr(value, scope)])),
+            preserve: new Set(e.v.filter(([, value]) => schemaWildcard(value)).map(([key]) => key)),
+        };
+        if (e.t === "list") {
+            const items = e.v.map(value => typeExpr(value, scope));
+            return { k: "list", items, element: items.length ? union(items) : variable(), length: constant(BigInt(items.length)),
+                preserve: new Set(e.v.flatMap((value, n) => schemaWildcard(value) ? [n] : [])) };
+        }
         return schemaValue(infer(e, scope), e);
+    }
+    function schemaWildcard(e: Expr): boolean {
+        return e.t === "placeholder" || e.t === "block" && e.stmts.length === 1 && schemaWildcard(e.stmts[0]);
     }
     function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr, bound = new Set<string>()): void {
         switch (p.p) {
@@ -664,7 +678,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return unify(expected, atom("String"), e);
             case "schema": {
                 const t = typeExpr(p.type, scope);
-                unify(t, expected, e);
+                application(fn(t, t, undefined, true), { type: expected }, e);
                 bind(p.value, t, scope, e, bound);
                 return;
             }
@@ -818,7 +832,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             unify(list(dynamic, t.length), list(dynamic, a.length), e);
             if (a.items) {
                 a.items.forEach((item, n) =>
-                    convert(
+                    t.preserve?.has(n) ? unify(t.items?.[n] ?? t.element, item, e) : convert(
                         t.items?.[n] ?? t.element,
                         item,
                         e.t === "list" ? e.v[n] ?? e : e,
@@ -827,12 +841,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         runtimeProjection || explicitFloat,
                     )
                 );
-            } else convert(t.element, a.element, e, false, seen, runtimeProjection || explicitFloat);
+            } else if (t.preserve?.size) unify(t.element, a.element, e);
+            else convert(t.element, a.element, e, false, seen, runtimeProjection || explicitFloat);
             return target;
         }
         if (t.k === "record" && a.k === "record") {
             for (const [key, type] of t.fields) {
                 if (!a.fields.has(key)) problem(`missing field '${key}'`, e);
+                if (t.preserve?.has(key)) {
+                    unify(type, a.fields.get(key)!, e);
+                    continue;
+                }
                 convert(
                     type,
                     a.fields.get(key)!,
@@ -975,7 +994,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const projected = new Map<string, Ty>();
                 for (const [n, [key, target]] of fields.entries()) {
                     const value = actual.items?.[n] ?? actual.element;
-                    convert(target, value, e.t === "list" ? e.v[n] ?? e : e, false, new Map(), true);
+                    if (expected.preserve?.has(key)) unify(target, value, e.t === "list" ? e.v[n] ?? e : e);
+                    else convert(target, value, e.t === "list" ? e.v[n] ?? e : e, false, new Map(), true);
                     projected.set(key, target);
                 }
                 return application(f, { ...argument, type: { k: "record", fields: projected } }, e);

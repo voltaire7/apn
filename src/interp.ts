@@ -1217,6 +1217,7 @@ export class Interpreter {
             });
             case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
+                if (f.name === "$any" && !f.family && !f.alias) return arg;
                 if (f.name === "Dynamic" && !f.family && !f.alias) {
                     this.dynamicDepth++;
                     try { return this.constructType("Dynamic", this.reference(arg)); }
@@ -1370,6 +1371,12 @@ export class Interpreter {
                     return { kind: "record", v: f.v.map(([k, template], i) => [k, this.defer(() => i < carg.v.length ? this.applyTemplateSlot(template, carg.v[i]) : this.defaultField(template, []))] as [string, Value]) };
                 }
                 if (carg.kind === "record") {
+                    const supplied = new Set(carg.v.map(([key]) => key));
+                    for (const [key, slot] of f.v) {
+                        if (slot.kind === "type" && slot.name === "$any" && !supplied.has(key)) {
+                            throw new APNError("runtime", `missing field '${key}'`);
+                        }
+                    }
                     const idx = new Map(f.v.map(([k], i) => [k, i]));
                     const out: [string, Value][] = f.v.map(([k, template]) => [k, this.defer(() => this.defaultField(template, []))]);
                     for (const [k, v] of carg.v) {
@@ -2436,6 +2443,14 @@ export class Interpreter {
         return this.matchPattern(args[2], this.conform(type, value), binds);
     }
 
+    private schemaPatternType(expression: Expr): Value {
+        if (expression.t === "placeholder") return { kind: "type", name: "$any" };
+        if (expression.t === "record") return { kind: "record", v: expression.v.map(([key, value]) => [key, this.schemaPatternType(value)]) };
+        if (expression.t === "list") return mkList(expression.v.map(value => this.schemaPatternType(value)));
+        if (expression.t === "block" && expression.stmts.length === 1) return this.schemaPatternType(expression.stmts[0]);
+        return this.reference(this.eval(expression));
+    }
+
     matchPattern(p: Pattern, v: Value, binds: Map<string, Value>): boolean {
         if (p.p === "wildcard") return true;
         if (p.p === "var") {
@@ -2454,7 +2469,7 @@ export class Interpreter {
             const caller = this.env;
             let type: Value;
             this.env = scope;
-            try { type = this.reference(this.eval(p.type)); } finally { this.env = caller; }
+            try { type = this.schemaPatternType(p.type); } finally { this.env = caller; }
             if (type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) {
                 return this.matchPattern(p.value, this.conform(type, v), binds);
             }

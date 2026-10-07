@@ -264,3 +264,27 @@ Other captured variables can still be shadowed by parameters. A lambda starts
 its own parameter scope: `x = x -> x` remains an ordinary identity function.
 Static checking rejects known incompatible argument types; matching checks
 function identity at runtime, because sharing a type does not imply equality.
+
+## Wildcard fields in schema patterns
+
+Use `_` for a field that accepts any type and preserves its value:
+
+```apn
+func ([x: _] v) = print v.x
+func [1]                    # 1
+func ["hello"]              # hello
+func [x: true]              # true
+```
+
+The schema supplies field names and positional order; `v` receives a record.
+Named records may include extra fields. Positional lists must supply exactly the
+schema's field count. A wildcard field has no default and must be supplied.
+
+Wildcards can be mixed with explicit types or nested in record/list schemas:
+`([x: _, y: Float] v)` preserves `x` and converts `y` as usual. Each `_` is
+independent. Inference can constrain how the body uses a field, but `_` adds no
+conversion and does not opt out of static checking like `Dynamic`.
+
+This meaning applies in schema patterns. Ordinary expressions such as
+`value = _` and `[x: _]` still contain unfinished code; `_` remains a wildcard
+in ordinary matching patterns.

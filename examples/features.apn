@@ -1382,6 +1382,14 @@ selfOnly selfOnly = selfOnly
 print (selfOnly selfOnly == selfOnly)     # => true
 # selfOnly 1                              # argument 'selfOnly' must equal the function 'selfOnly'; got Int
 
+# Wildcard schema fields accept any value without conversion.
+showField ([x: _] v) = print v.x
+showField [123]                          # => 123
+showField ["hello"]                      # => hello
+showField [x: true]                      # => true
+mixedFields ([x: _, y: Float] v) = [v.x, v.y]
+print (mixedFields ["hello", 2])          # => ["hello", 2.0]
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------
