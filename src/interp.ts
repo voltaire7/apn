@@ -2327,7 +2327,18 @@ export class Interpreter {
         const input = this.dataValue(values);
         const list = input.kind === "string" ? this.callNative("chars", [input]) : input.kind === "record" ? mkList(input.v.map(([, value]) => value)) : input;
         if (!this.isList(list)) throw new APNError("runtime", "list template expects a list, record, or string");
-        return this.applyListTemplate(templates, list, replaceDefaults);
+        let converted = this.applyListTemplate(templates, list, replaceDefaults);
+        if (input.kind !== "record") return converted;
+        // Reuse positional conversion, but retain record keys and lazy fields.
+        const fields: [string, Value][] = [];
+        for (const [key] of input.v) {
+            const cell = this.cell(converted);
+            if (cell === null) throw new APNError("runtime", "list template and input must have the same length");
+            fields.push([key, cell.head]);
+            converted = cell.tail;
+        }
+        if (this.cell(converted) !== null) throw new APNError("runtime", "list template and input must have the same length");
+        return { kind: "record", v: fields };
     }
 
     // Multi-slot templates zip positionally. Shape errors appear when that

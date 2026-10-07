@@ -912,7 +912,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (a.k === "atom" && a.name === "String") return template(t, list(atom("Char")), e);
         if (a.k === "record") {
             const items = [...a.fields.values()];
-            return template(t, { k: "list", items, element: items.length ? union(items) : variable(), length: constant(BigInt(items.length)) }, e);
+            const converted = resolve(template(t, { k: "list", items, element: items.length ? union(items) : variable(), length: constant(BigInt(items.length)) }, e));
+            if (converted.k !== "list") return converted;
+            return { k: "record", fields: new Map([...a.fields.keys()].map((key, n) => [key, converted.items?.[n] ?? converted.element])) };
         }
         if (a.k !== "list") return problem("list template expects a list, record, or String", e);
         if (t.length && a.length) unify(list(variable(), t.length), list(variable(), a.length), e);

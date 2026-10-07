@@ -50,13 +50,14 @@ relevant part is consumed. A singleton never broadcasts. `[Int]` describes
 exactly one position when used as a schema, including through `cast` and `isType`.
 Nested list templates use the same exact-length rule.
 
-Record inputs supply their values in field order. The output remains a list,
-and the template must have exactly as many slots as the record has fields:
+Record inputs supply their values in field order. The result preserves the
+record's keys and order, and the template must have exactly as many slots as
+the record has fields. Converted fields remain lazy:
 
 ```apn
-[Float].[x: 1]                        # [1.0]
-[String, Int].[name: "a", age: 2]      # ["a", 2]
-[(+ 1), (* 2)].[b: 3, a: 4]           # [4, 8]
+[Float].[x: 1]                        # [x: 1.0]
+[String, Int].[name: "a", age: 2]      # [name: "a", age: 2]
+[(+ 1), (* 2)].[b: 3, a: 4]           # [b: 4, a: 8]
 ```
 
 Strings supply Unicode code-point characters using the same positional rules:
@@ -97,7 +98,7 @@ A record argument names the selected indices and returns a record:
 
 Each record value must be an integer or enumeration index. Selection preserves
 its field names and order. This is indexing, not template conversion;
-`[Int].[x: 1]` instead converts the record's value and returns `[1]`.
+`[Int].[x: 1]` instead converts the record's value and returns `[x: 1]`.
 Named selection is a read operation; record-shaped index assignment is not added.
 
 Selection is lazy and preserves index order and duplicates. Integer and enumeration
