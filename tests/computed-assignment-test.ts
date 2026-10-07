@@ -33,7 +33,7 @@ for (const [source, expected] of [
 });
 
 for (const [index, error] of [
-    ['"0"', 'integer index'], ['.2', 'integer index'], ['true', 'integer index'],
+    ['"0"', 'association assignment expects'], ['.2', 'integer index'], ['true', 'integer index'],
     ['1', 'out of range'], ['-2', 'out of range'], ['missing', 'unbound variable'],
 ] as const) Deno.test(`invalid computed index preserves binding: ${index}`, () => {
     const i = new Interpreter();

@@ -99,7 +99,17 @@ A record argument names the selected indices and returns a record:
 Each record value must be an integer or enumeration index. Selection preserves
 its field names and order. This is indexing, not template conversion;
 `[Int].[x: 1]` instead converts the record's value and returns `[x: 1]`.
-Named selection is a read operation; record-shaped index assignment is not added.
+Named selections support assignment with exactly the same field names on the
+right; replacement order does not matter:
+
+```apn
+arr = [10,20,30]
+arr [first: 0, last: 2] = [last: 300, first: 100]
+# arr = [100,20,300]
+```
+
+Indices are resolved once against the old binding. Duplicate indices use the
+last selection entry's replacement, after all conversions succeed.
 
 Selection is lazy and preserves index order and duplicates. Integer and enumeration
 indices use the same rules as single indexing; negative indices require a finite input.
@@ -129,9 +139,17 @@ once the list ends; searching an infinite list for an absent key may not finish.
 Every visited entry must be a two-element list with a string key. Malformed
 entries error when reached. Keys compare by their exact string contents.
 
-This is lookup only: string-key list assignment is not supported. Integer and
-enumeration arguments still index by position, list arguments still select
-indices, and dot syntax still applies list templates. An association list remains
+String-key assignment updates the first matching pair, preserving its key and
+the remaining list. It errors for missing keys, rather than appending. The old
+payload's usual slot-conversion rules apply; unrelated payloads are not forced.
+
+```apn
+entries "x" = 10
+# [["x", 10], ["y", 2]]
+```
+
+Integer and enumeration arguments still index by position, list arguments still
+select indices, and dot syntax still applies list templates. An association list remains
 a list; it does not acquire record fields or record construction behavior.
 
 ## Records
@@ -159,7 +177,7 @@ named arguments, see [lists and records as arguments](pattern-functions.md#lists
 
 | Container | Read | Assign |
 | --- | --- | --- |
-| Association list, string key | `entries "x"` or `entries key` | String-key assignment is not supported |
+| Association list, string key | `entries "x"` or `entries key` | `entries "x" = value` or `entries key = value` |
 | List, one index | `arr i` or `arr (i + 1)` | `arr i = value` or `arr (i + 1) = value` |
 | List, several indices | `arr [2, 0]` or `arr indices` | `arr [2, 0] = [a, b]` or `arr indices = values` |
 | Record, literal field | `obj.x` | `obj.x = value` |
@@ -169,7 +187,7 @@ named arguments, see [lists and records as arguments](pattern-functions.md#lists
 | Nested record | `obj.child.x` | `obj.child.x = value` |
 | Nested field selection | `obj.child.[x, y]` | `obj.child.[x, y] = [a, b]` |
 | Record, positional entry | `obj 0` returns `[key, value]` | Not supported; assign by field name |
-| Record, renamed selection | `obj.[x: a, y: b]` | Renaming is a read operation |
+| Record, renamed selection | `obj.[x: a, y: b]` | `obj.[x: a, y: b] = [a: 10, b: 20]` |
 
 Bare dot field names are literal strings. Use `obj key` for a computed name
 and `obj "(key)"` for a key containing parentheses. `obj.(expression)` performs
@@ -248,7 +266,7 @@ New record fields are allowed; `obj = []; obj.x = 1` seeds a record.
 
 ### Bracketed field assignment
 
-Brackets always require a list with one value per selected field, even for one field:
+Unnamed bracketed selections require a list with one value per selected field, even for one field:
 
 ```apn
 obj = [x: 1, y: 2]
@@ -261,6 +279,20 @@ obj.items = []
 obj.[items] = [[1, 2]]     # stores the list [1, 2]
 obj.items = [3, 4]         # direct assignment takes the value itself
 ```
+
+### Renamed field assignment
+
+```apn
+obj = [x: 1, y: 2]
+obj.[x: a, y: b] = [b: 20, a: 10]  # [x: 10, y: 20]
+obj.[x: a, y: b] = obj.[y: a, x: b] # swap
+```
+
+Every entry must be renamed; the RHS must be a record with exactly the selected
+output names. Targets must already exist. Updates use the original slots'
+conversion rules and publish only after all replacements pass. Nested targets
+such as `obj.child.[x: a]` follow the same rule. Ordinary `obj.[x,y]` assignment
+continues to require a list.
 
 ### Nested records
 

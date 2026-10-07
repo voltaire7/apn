@@ -372,3 +372,22 @@ pairTypes [y: "hi", x: 1]         # [Int, String, 1, "hi"]
 
 Unlike dotted template application, this selects by the value pattern's names,
 not record order. Use `whole.([t] [x])` to retain the complete original record.
+
+## Record remainder patterns
+
+`_: rest` in a keyed record pattern captures the fields not explicitly selected:
+
+```apn
+[x: first, _: rest] = [x: 1, y: 2, z: 3]
+# first = 1; rest = [y: 2, z: 3]
+
+withoutX [x: first, _: rest] = rest
+withoutX [x: 1, y: 2]              # [y: 2]
+[_: rest, x: first]                # rebuild: [y: 2, z: 3, x: 1]
+```
+
+There may be one remainder entry, anywhere in the pattern. Explicit fields must
+exist. The remainder is a record (including when empty), preserves source order,
+and shares untouched lazy fields and references. This works in bindings,
+function parameters, and pattern lambdas used by `match`. Its meaning is the
+counterpart of `_:` flattening in record expressions.

@@ -1425,6 +1425,19 @@ print (inspectNamedSlot [other: 2, x: 1]) # [Int, 1]
 convertNamedSlot ([Float] [x]) = x
 print (convertNamedSlot [x: 1])        # 1.0
 
+# Selection read/write symmetry and record remainders.
+symmetryArray = [10,20,30]
+symmetryArray [first:0,last:2] = [last:300,first:100]
+print symmetryArray                  # [100,20,300]
+symmetryRecord = [x:1,y:2]
+symmetryRecord.[x:a,y:b] = [b:20,a:10]
+print symmetryRecord                 # [x:10,y:20]
+symmetryPairs = [["x",1],["y",2]]
+symmetryPairs "x" = 10
+print symmetryPairs                  # [["x",10],["y",2]]
+[x:symmetryFirst,_:symmetryRest] = [x:1,y:2,z:3]
+print [symmetryFirst,symmetryRest]    # [1,[y:2,z:3]]
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

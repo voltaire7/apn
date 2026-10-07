@@ -324,6 +324,7 @@ export class Interpreter {
             case "string": return { t: "string", v: pattern.v };
             case "bool": return { t: "bool", v: pattern.v };
             case "list": return { t: "list", v: pattern.v.map(p => this.assignmentKey(p)) };
+            case "recPat": return { t: "record", v: pattern.v.map(([key, name]) => [key, { t: "var", name }]) };
             case "typeBind": return { t: "app", f: { t: "var", name: pattern.name }, a: this.assignmentKey(pattern.value) };
             case "constr": return pattern.args.reduce<Expr>((f, arg) => ({ t: "app", f, a: this.assignmentKey(arg) }), { t: "var", name: pattern.tag });
             default: throw new APNError("runtime", "collection assignment needs an index expression, not a destructuring pattern");
@@ -457,6 +458,40 @@ export class Interpreter {
 
     private assignItem(collection: Value, key: Value, expression: Expr): Value {
         if (this.isList(collection)) {
+            if (key.kind === "string") {
+                let rest = collection, position = 0n;
+                for (;;) {
+                    const entry = this.cell(rest);
+                    if (!entry) throw new APNError("runtime", `association key '${key.v}' not found`);
+                    const pair = this.dataValue(entry.head);
+                    if (!this.isList(pair)) throw new APNError("runtime", "association assignment expects [string, value] pairs");
+                    const first = this.cell(pair), second = first && this.cell(first.tail);
+                    if (!first || !second || this.cell(second.tail)) throw new APNError("runtime", "association lookup expects [string, value] pairs");
+                    const name = this.dataValue(first.head);
+                    if (name.kind !== "string") throw new APNError("runtime", "association lookup expects string keys");
+                    if (name.v === key.v) {
+                        const replacement = this.assignSlot(second.head, this.demand(this.eval(expression)));
+                        return this.setIndex(collection, position, mkList([first.head, replacement]));
+                    }
+                    position++; rest = entry.tail;
+                }
+            }
+            if (key.kind === "record") {
+                const indices = key.v.map(([name, value]): [string, bigint] => {
+                    const index = this.listIndex(this.dataValue(value));
+                    if (index === undefined) throw new APNError("runtime", "named list indices must be integers or enumeration values");
+                    this.index(collection, index);
+                    return [name, index];
+                });
+                const incoming = this.dataValue(this.eval(expression));
+                if (incoming.kind !== "record") throw new APNError("runtime", "named selection assignment requires a record");
+                const fields = new Map(incoming.v);
+                if (fields.size !== indices.length || indices.some(([name]) => !fields.has(name))) throw new APNError("runtime", "replacement fields must match selection names");
+                const checked = indices.map(([name, index]) => this.setIndex(collection, index, this.demand(fields.get(name)!)));
+                let result = collection;
+                indices.forEach(([, index], n) => { result = this.setIndex(result, index, this.index(checked[n], index)); });
+                return result;
+            }
             if (this.isList(key)) {
                 // Resolve indices and RHS against the old binding, then publish one copy.
                 const indices = this.items(key).map(value => {
@@ -926,7 +961,14 @@ export class Interpreter {
                             break;
                         }
                         const rhsValue = this.demand(this.eval(e.value));
-                        const rhs = this.isList(rhsValue) ? mkList(this.items(rhsValue).map((x) => this.demand(x))) : rhsValue;
+                        let rhs = this.isList(rhsValue) ? mkList(this.items(rhsValue).map((x) => this.demand(x))) : rhsValue;
+                        if (e.aliases) {
+                            if (rhsValue.kind !== "record") throw new APNError("runtime", "renamed selection assignment requires a record");
+                            const fields = new Map(rhsValue.v);
+                            if (fields.size !== new Set(e.aliases).size || e.aliases.some(name => !fields.has(name))) throw new APNError("runtime", "replacement fields must match selection names");
+                            if (e.entries.some(name => !base!.some(([key]) => key === name))) throw new APNError("runtime", "renamed selection requires existing fields");
+                            rhs = mkList(e.aliases.map(name => this.demand(fields.get(name)!)));
+                        }
                         if (rhs.kind !== "list") {
                             throw new APNError("runtime", "field assignment needs a list of values on the right");
                         }
@@ -2679,7 +2721,12 @@ export class Interpreter {
                 if (v.kind !== "record") return false;
                 const fields = new Map<string, Value>();
                 for (const [k, val] of v.v) fields.set(k, val);
+                const selected = new Set(p.v.filter(([key]) => key !== "_").map(([key]) => key));
                 for (const [key, name] of p.v) {
+                    if (key === "_") {
+                        if (!this.matchPattern({ p: "var", name }, { kind: "record", v: v.v.filter(([field]) => !selected.has(field)) }, binds)) return false;
+                        continue;
+                    }
                     if (!fields.has(key)) return false;
                     if (!this.matchPattern({ p: "var", name }, fields.get(key)!, binds)) return false;
                 }

@@ -334,6 +334,22 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         const [a, b] = operands;
         if (t.args.some(x => { const v = resolve(x); return v.k === "var" || v.k === "operation"; })) return t;
+        if (t.op === "merge-record") {
+            if (isExplicit(a) || isExplicit(b)) return explicitDynamic;
+            if (a.k !== "record" || b.k !== "record") return problem("record flattening expects a record");
+            return { k: "record", fields: new Map([...a.fields, ...b.fields]) };
+        }
+        if (t.op === "remainder") {
+            if (isExplicit(a)) { runtimeChecks++; return explicitDynamic; }
+            if (a.k !== "record" || b.k !== "record") return problem("record remainder requires a record");
+            unify(b, a);
+            return { k: "record", fields: new Map([...a.fields].filter(([key]) => !b.fields.has(key))) };
+        }
+        if (t.op.startsWith("field:")) {
+            const name = t.op.slice(6);
+            if (a.k !== "record") return problem("field access requires a record");
+            return a.fields.get(name) ?? problem(`missing field '${name}'`);
+        }
         if (t.op === "pattern") return application(a, { type: b }, activeExpression ?? { t: "placeholder" });
         if (t.op === "load") return unknown();
         if (t.op === "distinct") {
@@ -380,10 +396,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const f = resolve(candidate);
                 if (f.k !== "fn") return problem("match alternatives must be functions");
                 try {
-                    if (f.pattern?.p === "as" || f.pattern?.p === "schema") application(copy(f), { type: copy(a) }, activeExpression ?? { t: "placeholder" });
+                    if (f.pattern?.p === "as" || f.pattern?.p === "schema" || f.pattern?.p === "recPat") application(copy(f), { type: copy(a) }, activeExpression ?? { t: "placeholder" });
                     else unify(copy(f.input), copy(a));
                 } catch { continue; }
-                if (f.pattern?.p === "schema") application(f, { type: a }, activeExpression ?? { t: "placeholder" });
+                if (f.pattern?.p === "schema" || f.pattern?.p === "recPat") application(f, { type: a }, activeExpression ?? { t: "placeholder" });
                 else unify(f.input, a);
                 if (!t.solution && f.output.k !== "operation" && f.output.k !== "var") t.solution = f.output;
                 for (const check of f.checks ?? []) resolve(check);
@@ -760,11 +776,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "recPat": {
                 const fields = new Map<string, Ty>();
                 for (const [key, name] of p.v) {
+                    if (key === "_") continue;
                     const t = variable();
                     fields.set(key, t);
                     bind({ p: "var", name }, t, scope, e, bound);
                 }
-                unify({ k: "record", fields }, expected, e);
+                const rest = p.v.find(([key]) => key === "_");
+                if (rest) {
+                    const remainder = operation("remainder", [expected, { k: "record", fields }]);
+                    bind({ p: "var", name: rest[1] }, remainder, scope, e, bound);
+                } else unify({ k: "record", fields }, expected, e);
                 return;
             }
             case "constr": {
@@ -1220,16 +1241,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return { k: "list", element, length: constant(BigInt(items.length)), items };
             }
             case "record": {
-                const fields = new Map<string, Ty>();
+                let result: Ty = { k: "record", fields: new Map() };
                 for (const [key, value] of e.v) {
                     const type = infer(value, scope);
-                    if (key !== "_") { fields.set(key, type); continue; }
-                    const spread = resolve(type);
-                    if (isExplicit(spread)) { runtimeChecks++; return explicitDynamic; }
-                    if (spread.k !== "record") return problem("record flattening expects a record", value);
-                    for (const [name, field] of spread.fields) fields.set(name, field);
+                    result = operation("merge-record", [result, key === "_" ? type : { k: "record", fields: new Map([[key, type]]) }]);
                 }
-                return { k: "record", fields };
+                return result;
             }
             case "range":
                 return list(
@@ -1297,7 +1314,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "setFields": {
                 let rec = resolve(infer(e.rec, scope));
-                const value = infer(e.value, scope), v = resolve(value);
+                const value = infer(e.value, scope);
+                let v = resolve(value);
                 if (isExplicit(rec)) { runtimeChecks++; return explicitDynamic; }
                 const parents: Array<[Map<string, Ty>, string]> = [];
                 for (const key of e.path ?? []) {
@@ -1321,6 +1339,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         merged = { k: "record", fields: new Map([...parent, [key, merged]]) };
                     }
                     return merged;
+                }
+                if (e.aliases) {
+                    if (v.k !== "record") return problem("renamed selection assignment requires a record", e);
+                    const incoming = v.fields;
+                    if (incoming.size !== new Set(e.aliases).size || e.aliases.some(name => !incoming.has(name))) return problem("replacement fields must match selection names", e);
+                    if (e.entries.some(name => !fields.has(name))) return problem("renamed selection requires existing fields", e);
+                    const items = e.aliases.map(name => incoming.get(name)!);
+                    v = { k: "list", items, element: union(items), length: constant(BigInt(items.length)) };
                 }
                 if (v.k !== "list" && v.k !== "dynamic" && v.k !== "var") {
                     problem("field assignment needs a list of values on the right", e);
@@ -1350,6 +1376,32 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (isExplicit(rec)) { infer(e.index, scope); runtimeChecks++; return explicitDynamic; }
                 if (rec.k === "list") {
                     const keys = resolve(infer(e.index, scope));
+                    if (keys.k === "atom" && keys.name === "String") {
+                        const pairs = rec.items ?? [rec.element];
+                        for (let n = 0; n < pairs.length; n++) {
+                            const pairType = resolve(pairs[n]);
+                            if (pairType.k !== "list") return problem("association assignment requires a list of pairs", e);
+                            if (pairType.items && pairType.items.length !== 2) return problem("association assignment requires two-element pairs", e);
+                            unify(atom("String"), pairType.items?.[0] ?? pairType.element, e);
+                            // The string key is resolved at runtime; assignSlot checks the
+                            // selected payload, rather than coercing unrelated pairs.
+                        }
+                        return rec;
+                    }
+                    if (keys.k === "record") {
+                        const incoming = resolve(value);
+                        if (incoming.k !== "record") return problem("named selection assignment requires a record", e);
+                        if (keys.fields.size !== incoming.fields.size || [...keys.fields.keys()].some(name => !incoming.fields.has(name))) return problem("replacement fields must match selection names", e);
+                        for (const [name, indexType] of keys.fields) {
+                            const type = resolve(indexType);
+                            if (type.k === "var") unify(type, atom("Int"), e);
+                            else if (!(type.k === "atom" && type.name === "Int" || type.k === "variant" && type.ordinal)) return problem("named list indices must be integers or enumeration values", e);
+                            const expression = e.index.t === "record" ? e.index.v.find(([key]) => key === name)?.[1] : undefined;
+                            const selected = application(rec, { type: indexType, index: expression && index(expression, scope) }, expression ?? e);
+                            convert(selected, incoming.fields.get(name)!, e.value);
+                        }
+                        return rec;
+                    }
                     if (keys.k === "list") {
                         const incoming = resolve(value);
                         if (incoming.k !== "list") { dynamicBoundaries++;  return rec; }
@@ -1412,6 +1464,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return t;
                 }
                 if (rec.k === "dynamic") return unknown();
+                if (rec.k === "operation") return operation(`field:${e.field}`, [rec]);
                 if (rec.k !== "record") return problem("field access requires a record", e);
                 if (!rec.fields.has(e.field)) {
                     if (rec.open) rec.fields.set(e.field, variable());
@@ -1643,6 +1696,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (p.p === "var") return { t: "var", name: p.name };
                 if (p.p === "int") return { t: "int", v: p.v };
                 if (p.p === "string") return { t: "string", v: p.v };
+                if (p.p === "recPat") return { t: "record", v: p.v.map(([key, name]) => [key, { t: "var", name }]) };
                 if (p.p === "constr" && !p.args.length) return { t: "var", name: p.tag };
                 if (p.p === "list") {
                     const values = p.v.map(asKey);
@@ -1692,6 +1746,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (t.k !== "fn") return "";
             const input = resolve(t.input);
             const patterns = (t.checks ?? []).flatMap(check => {
+                if (check.k === "operation" && check.op === "remainder") return [text(check.args[1])];
                 if (check.k !== "operation" || check.op !== "pattern") return [];
                 const matcher = resolve(check.args[0]);
                 if (matcher.k !== "fn" || matcher.pattern?.p === "var" || matcher.pattern?.p === "wildcard") return [];

@@ -236,6 +236,7 @@ class Parser {
                     this.next(); // :
                     const nm = this.next();
                     if (nm.k !== "ident") throw new Error("Parser: expected a binding name after ':' in record pattern");
+                    if (key === "_" && keyed.some(([k]) => k === "_")) throw new Error("Parser: record pattern permits only one remainder");
                     keyed.push([key, nm.v]);
                 } else {
                     if (mode === "keyed") throw new Error("Parser: pattern cannot mix bare names and 'key: name' entries");
@@ -907,6 +908,7 @@ class Parser {
                 this.skipListLeading();
                 while (!this.isSym("]")) {
                     this.parseKey();
+                    if (this.eatSym(":")) this.parseKey();
                     this.skipListSeparators();
                 }
                 this.next();
@@ -915,7 +917,7 @@ class Parser {
                 while (this.eatSym(".")) {
                     if (this.eatSym("[")) {
                         this.skipListLeading();
-                        while (!this.isSym("]")) { this.parseKey(); this.skipListSeparators(); }
+                        while (!this.isSym("]")) { this.parseKey(); if (this.eatSym(":")) this.parseKey(); this.skipListSeparators(); }
                         this.next();
                         break;
                     }
@@ -938,6 +940,7 @@ class Parser {
         const name = nt.v;
         this.next(); // "."
         const entries: string[] = [];
+        const aliases: string[] = [];
         const path: string[] = [];
         while (!this.isSym("[")) {
             if (this.isSym("(") || this.isSym("{")) {
@@ -961,6 +964,7 @@ class Parser {
             this.skipListLeading();
             while (!this.isSym("]")) {
                 entries.push(this.parseKey());
+                if (this.eatSym(":")) aliases.push(this.parseKey());
                 this.skipListSeparators();
                 if (this.isSym("]")) break;
                 if (this.peek().k === "eof") {
@@ -973,10 +977,11 @@ class Parser {
         }
         this.expectSym("=");
         const rhs = this.parseExpr();
-        // Bracketed selection always takes a list, including one or zero fields.
+        // Unnamed bracketed selection takes a list; renamed selection takes a record.
         // Only direct field assignment wraps its scalar RHS.
+        if (aliases.length && aliases.length !== entries.length) throw new Error("Parser: cannot mix renamed and unnamed assignment entries");
         const value = bracketed ? rhs : { t: "list", v: [rhs] } as Expr;
-        const update: Expr = { t: "setFields", rec: { t: "var", name }, entries, value, ...(path.length ? { path } : {}) };
+        const update: Expr = { t: "setFields", rec: { t: "var", name }, entries, value, ...(aliases.length ? { aliases } : {}), ...(path.length ? { path } : {}) };
         return pattern?.p === "as"
             ? { t: "patDef", pattern, value: rhs, update: { name, value: update } }
             : { t: "patDef", pattern: { p: "var", name }, value: update };
@@ -1491,7 +1496,7 @@ export function exprToSource(e: Expr): string {
             return `${exprToSource(e.rec)}.[${e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`).join(", ")}]`;
         case "setItem": return `${exprToSource(e.rec)} (${exprToSource(e.index)}) = ${exprToSource(e.value)}`;
         case "setFields":
-            return `${exprToSource(e.rec)}.${(e.path ?? []).map(keySource).map(key => key + ".").join("")}[${e.entries.map(keySource).join(", ")}] = ${exprToSource(e.value)}`;
+            return `${exprToSource(e.rec)}.${(e.path ?? []).map(keySource).map(key => key + ".").join("")}[${e.entries.map((key, n) => keySource(key) + (e.aliases ? ": " + keySource(e.aliases[n]) : "")).join(", ")}] = ${exprToSource(e.value)}`;
         case "block": {
             const one = e.stmts.length === 1 && e.stmts[0].t !== "stmDef" && e.stmts[0].t !== "patDef";
             if (one && e.style === "(") return exprToSource(e.stmts[0]);

@@ -760,3 +760,12 @@ patterns with var-only list value patterns select record fields by those names
 instead; extra fields are allowed and missing names fail. Keep runtime and checker
 projection aligned (including match alternatives and standalone bindings).
 Tests: collection-shapes-test.ts.
+
+Named list selections and renamed record plucks support record-shaped RHS
+assignment, matching names independently of RHS order. Validate all replacements
+against old slots before publishing; duplicate targets use the last selection.
+String-key association assignment replaces the first matching pair's payload,
+never appends, and must leave skipped payloads/tails lazy. Keyed record patterns
+allow one `_:` remainder binding, excluding all explicit keys regardless of order.
+Checker remainder operations defer until call-site input shapes are known.
+Keep tests/selection-symmetry-test.ts and docs assignment reference synchronized.
