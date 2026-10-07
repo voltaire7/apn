@@ -738,3 +738,16 @@ on runtime failure (external I/O/reference mutations cannot be rolled back).
 Internal module/load runs must not check against the caller's root session again.
 Namespace imports do not publish exports. Keep tests/default-checking-test.ts and
 tests/record-pattern-checking-test.ts passing, along with the full showcase.
+
+## Dotted patterns, flattening, and type captures
+
+Pattern `left.right` matches one value twice, retaining lazy/reference identity.
+Ordinary dotted assignment uses patDef.update only when its root is already
+visible; otherwise it binds the as-pattern. Function parameters always match.
+Keep original inputs separate from converted subpattern payloads in inference.
+`_:` merges record fields in source order, last value wins without conversion,
+first key position is retained. Existing `v._ = record` uses the same merge.
+Unbound lowercase names in schema patterns capture types (`([t] [x])`);
+existing type bindings stay constraints, repeated captures require equal types.
+Keep tests/dotted-pattern-test.ts, record-flattening-test.ts, and
+type-shape-pattern-test.ts passing alongside existing assignment and schema tests.

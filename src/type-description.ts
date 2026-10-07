@@ -71,6 +71,10 @@ export function describeType(value: Value): string {
     function pattern(p: Pattern, env: Env, locals: Map<string, Shape>, expected = fresh()): Shape {
         let result: Shape;
         switch (p.p) {
+            case "as":
+                pattern(p.left, env, locals, expected);
+                pattern(p.right, env, locals, expected);
+                return expected;
             case "var":
                 if (locals.has(p.name)) unify(expected, locals.get(p.name)!);
                 locals.set(p.name, expected); return expected;

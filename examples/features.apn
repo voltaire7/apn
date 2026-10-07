@@ -1390,6 +1390,30 @@ showField [x: true]                      # => true
 mixedFields ([x: _, y: Float] v) = [v.x, v.y]
 print (mixedFields ["hello", 2])          # => ["hello", 2.0]
 
+# Dotted patterns retain the same argument while destructuring it.
+retainRecord whole.[x,y] = [whole, x, y]
+print (retainRecord [x:1,y:2,z:3])        # => [[x: 1, y: 2, z: 3], 1, 2]
+sharedValue.aliasValue = 123
+print [sharedValue, aliasValue]           # => [123, 123]
+wholePair.[firstItem,secondItem] = [1,2]
+print [wholePair, firstItem, secondItem]  # => [[1, 2], 1, 2]
+# Existing roots still update fields, without creating local field-name bindings.
+updateRecord = [x: 0]
+updateRecord.x = 1
+print updateRecord                       # => [x: 1]
+
+# Anonymous record entries merge fields; later entries replace earlier values.
+baseRecord = [x: 1]
+print [_: baseRecord, y: 2, z: 3]        # => [x: 1, y: 2, z: 3]
+print [_: baseRecord, x: "new"]          # => [x: "new"]
+updateRecord._ = [y: 2]
+print updateRecord                       # => [x: 1, y: 2]
+
+# Type and value shapes can be captured together.
+inspectSingle ([elementType] [item]) = [elementType, item]
+print (inspectSingle [123])              # => [Int, 123]
+print (inspectSingle ["hello"])          # => [String, "hello"]
+
 halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 
 # ---------------------------------------------------------

@@ -6,6 +6,7 @@ import { valueToString } from "./types.ts";
 
 function pattern(p: Pattern): string {
     switch (p.p) {
+        case "as": return `${pattern(p.left)}.${pattern(p.right)}`;
         case "schema": return `(${source(p.type)} ${pattern(p.value)})`;
         case "contract": return `((${functionSpecSource(p.spec)}) ${pattern(p.value)})`;
         case "wildcard": return "_";

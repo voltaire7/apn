@@ -26,7 +26,9 @@ Deno.test('record scope restores the caller after failure', () => {
 });
 Deno.test('scoped expressions are not field assignment targets', () => {
     for (const source of ['obj.(x) = 1', 'obj.(x).y = 1', 'obj.child.(x) = 1']) {
-        try { parseDocument(source); } catch { continue; }
+        const i = new Interpreter();
+        i.run(parseDocument('obj = [x: 0, child: [x: 0]]'));
+        try { i.run(parseDocument(source)); } catch { continue; }
         throw new Error(source);
     }
 });

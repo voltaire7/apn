@@ -502,12 +502,16 @@ export class Interpreter {
     // Destructuring binding:  [name, hello] = value  (or (Just x) = value, ...).
     // Evaluates the RHS, matches the pattern, and binds the destructured names
     // in the CURRENT environment (top level or the enclosing block's env).
-    evalPatBinding(b: { pattern: Pattern; value: Expr; eager?: boolean }): Value {
+    evalPatBinding(b: { pattern: Pattern; value: Expr; eager?: boolean; update?: { name: string; value: Expr; error?: string } }): Value {
+        if (b.update && this.env.get(b.update.name)) {
+            if (b.update.error) throw new APNError("runtime", b.update.error);
+            return this.evalPatBinding({ pattern: { p: "var", name: b.update.name }, value: b.update.value });
+        }
         // Selecting fields must not first open every export into this scope.
-        const evaluated = b.value.t === "import"
+        const evaluated = b.pattern.p === "as" && !b.eager ? this.delay(b.value) : b.value.t === "import"
             ? this.importStandard(b.value.module, false)
             : this.eval(b.value);
-        const v = b.eager ? this.reference(evaluated) : this.force(evaluated);
+        const v = b.eager ? this.reference(evaluated) : b.pattern.p === "as" ? evaluated : this.force(evaluated);
         if ((b.value.t === "setFields" || b.value.t === "setItem") && v.kind === "record" && v.scope) return v;
         const binds = new Map<string, Value>();
         if (!this.matchPattern(b.pattern, v, binds)) {
@@ -822,7 +826,17 @@ export class Interpreter {
                     case "range": r = { kind: "range", lo: e.lo, step: e.step, hi: e.hi }; break;
                     case "floatRange": r = { kind: "floatRange", lo: e.lo, step: e.step, hi: e.hi }; break;
                     case "list": r = { kind: "lazyList", exprs: e.v, env: this.env }; break;
-                    case "record": r = { kind: "record", v: e.v.map(([k, x]) => [k, this.eval(x)] as [string, Value]) }; break;
+                    case "record": {
+                        const fields = new Map<string, Value>();
+                        for (const [key, expression] of e.v) {
+                            if (key !== "_") { fields.set(key, this.eval(expression)); continue; }
+                            const spread = this.dataValue(this.eval(expression));
+                            if (spread.kind !== "record") throw new APNError("runtime", "record flattening expects a record");
+                            for (const [name, value] of spread.v) fields.set(name, value);
+                        }
+                        r = { kind: "record", v: [...fields] };
+                        break;
+                    }
                     case "recordAccess": {
                         // Resolve aliases/actions to the outer record, leaving its fields lazy.
                         const rec = this.dataValue(this.eval(e.rec));
@@ -898,6 +912,18 @@ export class Interpreter {
                             throw new APNError("runtime", `cannot set a field on a ${rec.kind}`, {
                                 hint: "only records accept fields (an empty list promotes to a record)",
                             });
+                        }
+                        if (e.entries.length === 1 && e.entries[0] === "_") {
+                            const expression = e.value.t === "list" ? e.value.v[0] : e.value;
+                            const spread = this.dataValue(this.eval(expression));
+                            if (spread.kind !== "record") throw new APNError("runtime", "record flattening expects a record");
+                            let merged: Value = { kind: "record", v: [...new Map([...base!, ...spread.v])] };
+                            for (let n = parents.length - 1; n >= 0; n--) {
+                                const [parent, key] = parents[n];
+                                merged = { kind: "record", v: parent.v.map(([k, v]) => [k, k === key ? merged : v]) };
+                            }
+                            r = merged;
+                            break;
                         }
                         const rhsValue = this.demand(this.eval(e.value));
                         const rhs = this.isList(rhsValue) ? mkList(this.items(rhsValue).map((x) => this.demand(x))) : rhsValue;
@@ -2443,15 +2469,76 @@ export class Interpreter {
         return this.matchPattern(args[2], this.conform(type, value), binds);
     }
 
-    private schemaPatternType(expression: Expr): Value {
+    private readonly schemaTypeCaptures = new WeakMap<Value, string>();
+
+    private schemaPatternType(expression: Expr, capture = false): Value {
         if (expression.t === "placeholder") return { kind: "type", name: "$any" };
-        if (expression.t === "record") return { kind: "record", v: expression.v.map(([key, value]) => [key, this.schemaPatternType(value)]) };
-        if (expression.t === "list") return mkList(expression.v.map(value => this.schemaPatternType(value)));
-        if (expression.t === "block" && expression.stmts.length === 1) return this.schemaPatternType(expression.stmts[0]);
+        if (expression.t === "record") {
+            const fields = new Map<string, Value>();
+            for (const [key, expression_] of expression.v) {
+                const value = this.schemaPatternType(expression_, capture);
+                if (key !== "_") { fields.set(key, value); continue; }
+                if (value.kind !== "record") throw new APNError("runtime", "record flattening expects a record");
+                for (const [name, type] of value.v) fields.set(name, type);
+            }
+            return { kind: "record", v: [...fields] };
+        }
+        if (expression.t === "list") return mkList(expression.v.map(value => this.schemaPatternType(value, capture)));
+        if (expression.t === "block" && expression.stmts.length === 1) return this.schemaPatternType(expression.stmts[0], capture);
+        if (capture && expression.t === "var" && /^[a-z]/.test(expression.name) && !this.env.get(expression.name)) {
+            const type: Value = { kind: "type", name: "$any" };
+            this.schemaTypeCaptures.set(type, expression.name);
+            return type;
+        }
         return this.reference(this.eval(expression));
     }
 
+    private captureSchema(type: Value, value: Value, binds: Map<string, Value>): Value | null {
+        const name = this.schemaTypeCaptures.get(type);
+        if (name) {
+            const ref = this.reference(value);
+            if (!this.matchPattern({ p: "var", name }, this.callNative("typeOf", [ref]), binds)) return null;
+            return isNumeric(ref) ? numericPayload(ref) : ref;
+        }
+        if (type.kind === "record") {
+            const actual = this.reference(value);
+            if (actual.kind !== "record") return null;
+            const fields = new Map(actual.v);
+            for (const [key, slot] of type.v) {
+                if (!fields.has(key)) return null;
+                const captured = this.captureSchema(slot, fields.get(key)!, binds);
+                if (captured === null) return null;
+                fields.set(key, captured);
+            }
+            return { kind: "record", v: [...fields] };
+        }
+        if (type.kind === "list") {
+            const fields: Value[] = [];
+            let rest = value;
+            for (const slot of type.v) {
+                const cell = this.cell(rest);
+                if (!cell) return null;
+                const captured = this.captureSchema(slot, cell.head, binds);
+                if (captured === null) return null;
+                fields.push(captured); rest = cell.tail;
+            }
+            return this.cell(rest) === null ? mkList(fields) : null;
+        }
+        return value;
+    }
+
+    private hasSchemaCapture(type: Value): boolean {
+        if (this.schemaTypeCaptures.has(type)) return true;
+        if (type.kind === "record") return type.v.some(([, value]) => this.hasSchemaCapture(value));
+        return type.kind === "list" && type.v.some(value => this.hasSchemaCapture(value));
+    }
+
     matchPattern(p: Pattern, v: Value, binds: Map<string, Value>): boolean {
+        if (p.p === "as") {
+            const local = new Map(binds);
+            if (!this.matchPattern(p.left, v, local) || !this.matchPattern(p.right, v, local)) return false;
+            return this.mergeBinds(binds, local);
+        }
         if (p.p === "wildcard") return true;
         if (p.p === "var") {
             if (binds.has(p.name)) return this.equals(binds.get(p.name)!, v);
@@ -2469,7 +2556,7 @@ export class Interpreter {
             const caller = this.env;
             let type: Value;
             this.env = scope;
-            try { type = this.schemaPatternType(p.type); } finally { this.env = caller; }
+            try { type = this.schemaPatternType(p.type, true); } finally { this.env = caller; }
             if (type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) {
                 return this.matchPattern(p.value, this.conform(type, v), binds);
             }
@@ -2483,10 +2570,15 @@ export class Interpreter {
             }
             if (type.kind === "record") {
                 const input = this.recordPatternInput(type, this.demand(actual));
-                return input !== null && this.matchPattern(p.value, this.conform(type, input), binds);
+                if (input === null) return false;
+                const converted = this.conform(type, input);
+                const captured = this.hasSchemaCapture(type) ? this.captureSchema(type, converted, binds) : converted;
+                return captured !== null && this.matchPattern(p.value, captured, binds);
             }
             if ((this.isList(type) && !this.isList(this.demand(actual))) || (type.kind === "functionType" && !this.matchesValueType("Function", actual))) return false;
-            return this.matchPattern(p.value, this.conform(type, actual), binds);
+            const converted = this.conform(type, actual);
+            const captured = this.hasSchemaCapture(type) ? this.captureSchema(type, converted, binds) : converted;
+            return captured !== null && this.matchPattern(p.value, captured, binds);
         }
         if (p.p === "contract") {
             const f = this.force(v);

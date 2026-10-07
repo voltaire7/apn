@@ -409,3 +409,28 @@ For example, when these callbacks are in scope:
 ```apn
 main = p5.sketch [.setup, .draw, .mousePressed]
 ```
+
+## Flattening record fields
+
+An anonymous `_: record` entry merges that record's fields into the literal:
+
+```apn
+base = [x: 1]
+v = [_: base, y: 2, z: 3]         # [x: 1, y: 2, z: 3]
+[_: base, x: "new"]              # [x: "new"]
+[x: "new", _: base]              # [x: 1]
+```
+
+Entries are processed in source order. New names are appended at that point;
+later entries replace duplicate values without moving the existing key's
+position. This is a shallow merge, without type conversion. Named nested records
+stay nested. Field values and reference cells are shared normally; the outer
+record has no parent link to the source. The spread expression must produce a
+record; lists and scalars are errors. Multiple `_:` entries are supported.
+
+For an existing record, `v._ = other` merges `other` into a new scoped copy of
+`v` using the same replacement rules. No field names are introduced into the
+surrounding scope; `use v` remains the explicit way to do that.
+
+An unbound root in `v.x = value` instead starts a dotted pattern binding; see
+[dotted patterns](pattern-functions.md#dotted-patterns-keep-the-whole-value).

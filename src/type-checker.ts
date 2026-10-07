@@ -334,6 +334,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         const [a, b] = operands;
         if (t.args.some(x => { const v = resolve(x); return v.k === "var" || v.k === "operation"; })) return t;
+        if (t.op === "pattern") return application(a, { type: b }, activeExpression ?? { t: "placeholder" });
         if (t.op === "load") return unknown();
         if (t.op === "distinct") {
             if (a.k !== "type") return problem("distinct expects a type");
@@ -378,7 +379,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             for (const candidate of b.items ?? [b.element]) {
                 const f = resolve(candidate);
                 if (f.k !== "fn") return problem("match alternatives must be functions");
-                try { unify(copy(f.input), copy(a)); } catch { continue; }
+                try {
+                    if (f.pattern?.p === "as") application(copy(f), { type: copy(a) }, activeExpression ?? { t: "placeholder" });
+                    else unify(copy(f.input), copy(a));
+                } catch { continue; }
                 unify(f.input, a);
                 if (!t.solution && f.output.k !== "operation" && f.output.k !== "var") t.solution = f.output;
                 for (const check of f.checks ?? []) resolve(check);
@@ -644,17 +648,38 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         return problem("expected a type description", e);
     }
-    function typeExpr(e: Expr, scope: Scope): Ty {
+    function typeExpr(e: Expr, scope: Scope, captures?: Set<string>): Ty {
         if (e.t === "placeholder") return variable();
-        if (e.t === "block" && e.stmts.length === 1) return typeExpr(e.stmts[0], scope);
-        if (e.t === "record") return {
-            k: "record", fields: new Map(e.v.map(([key, value]) => [key, typeExpr(value, scope)])),
-            preserve: new Set(e.v.filter(([, value]) => schemaWildcard(value)).map(([key]) => key)),
-        };
+        if (captures && e.t === "var" && /^[a-z]/.test(e.name) && !scope.has(e.name)) {
+            const value = variable();
+            scope.set(e.name, { type: { k: "type", value }, mono: true });
+            captures.add(e.name);
+            return value;
+        }
+        if (e.t === "block" && e.stmts.length === 1) return typeExpr(e.stmts[0], scope, captures);
+        if (e.t === "record") {
+            const fields = new Map<string, Ty>(), preserve = new Set<string>();
+            for (const [key, value] of e.v) {
+                const type = typeExpr(value, scope, captures);
+                if (key !== "_") {
+                    fields.set(key, type);
+                    if (schemaWildcard(value) || captures && value.t === "var" && captures.has(value.name)) preserve.add(key);
+                    else preserve.delete(key);
+                    continue;
+                }
+                const spread = resolve(type);
+                if (spread.k !== "record") return problem("record flattening expects a record", value);
+                for (const [name, field] of spread.fields) {
+                    fields.set(name, field);
+                    if (spread.preserve?.has(name)) preserve.add(name); else preserve.delete(name);
+                }
+            }
+            return { k: "record", fields, preserve };
+        }
         if (e.t === "list") {
-            const items = e.v.map(value => typeExpr(value, scope));
+            const items = e.v.map(value => typeExpr(value, scope, captures));
             return { k: "list", items, element: items.length ? union(items) : variable(), length: constant(BigInt(items.length)),
-                preserve: new Set(e.v.flatMap((value, n) => schemaWildcard(value) ? [n] : [])) };
+                preserve: new Set(e.v.flatMap((value, n) => (schemaWildcard(value) || captures && value.t === "var" && captures.has(value.name)) ? [n] : [])) };
         }
         return schemaValue(infer(e, scope), e);
     }
@@ -663,6 +688,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr, bound = new Set<string>()): void {
         switch (p.p) {
+            case "as": {
+                bind(p.left, expected, scope, e, bound);
+                const right = variable();
+                const nestedStart = requirements.length;
+                bind(p.right, right, scope, e, bound);
+                const checks = requirements.splice(nestedStart);
+                const constructor = p.right.p === "constr" ? resolve(scope.get(p.right.tag)?.type ?? dynamic) : undefined;
+                const coerce = p.right.p === "schema" || p.right.p === "contract" || constructor?.k === "type";
+                const matcher: Ty = { k: "fn", input: right, output: right, pattern: p.right, coerce, checks };
+                operation("pattern", [matcher, expected]);
+                return;
+            }
             case "wildcard":
                 return;
             case "var":
@@ -677,7 +714,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "string":
                 return unify(expected, atom("String"), e);
             case "schema": {
-                const t = typeExpr(p.type, scope);
+                const t = typeExpr(p.type, scope, bound);
                 application(fn(t, t, undefined, true), { type: expected }, e);
                 bind(p.value, t, scope, e, bound);
                 return;
@@ -1164,8 +1201,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const element: Ty = items.length ? union(items) : variable();
                 return { k: "list", element, length: constant(BigInt(items.length)), items };
             }
-            case "record":
-                return { k: "record", fields: new Map(e.v.map(([key, value]) => [key, infer(value, scope)])) };
+            case "record": {
+                const fields = new Map<string, Ty>();
+                for (const [key, value] of e.v) {
+                    const type = infer(value, scope);
+                    if (key !== "_") { fields.set(key, type); continue; }
+                    const spread = resolve(type);
+                    if (isExplicit(spread)) { runtimeChecks++; return explicitDynamic; }
+                    if (spread.k !== "record") return problem("record flattening expects a record", value);
+                    for (const [name, field] of spread.fields) fields.set(name, field);
+                }
+                return { k: "record", fields };
+            }
             case "range":
                 return list(
                     atom("Int"),
@@ -1247,6 +1294,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (rec.k === "list" && rec.items?.length === 0) rec = { k: "record", fields: new Map() };
                 if (rec.k !== "record") return problem("field assignment requires a record", e);
                 const fields = new Map(rec.fields);
+                if (e.entries.length === 1 && e.entries[0] === "_") {
+                    const spread = resolve(v.k === "list" ? v.items?.[0] ?? v.element : value);
+                    if (spread.k !== "record") return problem("record flattening expects a record", e);
+                    let merged: Ty = { k: "record", fields: new Map([...fields, ...spread.fields]) };
+                    for (let n = parents.length - 1; n >= 0; n--) {
+                        const [parent, key] = parents[n];
+                        merged = { k: "record", fields: new Map([...parent, [key, merged]]) };
+                    }
+                    return merged;
+                }
                 if (v.k !== "list" && v.k !== "dynamic" && v.k !== "var") {
                     problem("field assignment needs a list of values on the right", e);
                 }
@@ -1443,6 +1500,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 define(e.name, e.clauses, scope, e);
                 return list(dynamic, constant(0n));
             case "patDef": {
+                if (e.update && scope.has(e.update.name)) {
+                    if (e.update.error) return problem(e.update.error, e);
+                    return infer({ t: "patDef", pattern: { p: "var", name: e.update.name }, value: e.update.value }, scope);
+                }
                 const t = infer(e.value, e.value.t === "import" ? new Map(scope) : scope);
                 if (e.pattern.p === "var") {
                     const old = scope.get(e.pattern.name);
@@ -1471,6 +1532,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function inferFunction(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr): Ty {
         const scope = new Map(parent), inputs: { type: Ty; binder?: string; coerce: boolean }[] = [];
         const bound = new Set<string>(recursiveName ? [recursiveName] : []);
+        const patternStart = requirements.length;
         for (const p of params) {
             const t = variable();
             bind(p, t, scope, body, bound);
@@ -1509,11 +1571,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             for (let n = inputs.length - 1; n >= 0; n--) signature = fn(inputs[n].type, signature, inputs[n].binder, inputs[n].coerce);
             scope.set(recursiveName, { type: signature, nonGeneric: captured(parent) });
         }
+        const patternRequirements = requirements.splice(patternStart);
         const outerRequirements = requirements;
         requirements = [];
         let result: Ty;
         let checks: Ty[];
-        try { if (guard) infer(guard, scope); result = infer(body, scope); checks = requirements; }
+        try { if (guard) infer(guard, scope); result = infer(body, scope); checks = [...patternRequirements, ...requirements]; }
         finally { requirements = outerRequirements; }
         if (declared) { unify(declared, result, body); result = declared; }
         for (let n = inputs.length - 1; n >= 0; n--) {
@@ -1610,11 +1673,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             seen.add(t);
             if (t.k !== "fn") return "";
             const input = resolve(t.input);
-            return (input.k === "variant" ? input.name : input.k === "var" ? "*" : text(input)) + ";" +
+            const patterns = (t.checks ?? []).flatMap(check => {
+                if (check.k !== "operation" || check.op !== "pattern") return [];
+                const matcher = resolve(check.args[0]);
+                if (matcher.k !== "fn" || matcher.pattern?.p === "var" || matcher.pattern?.p === "wildcard") return [];
+                return [text(matcher.input)];
+            }).join("&");
+            return (input.k === "variant" ? input.name : input.k === "var" ? "*" : text(input)) + patterns + ";" +
                 domain(t.output, seen);
         };
         const bindsSelf = (p: Pattern): boolean => {
             switch (p.p) {
+                case "as": return bindsSelf(p.left) || bindsSelf(p.right);
                 case "var": return p.name === name;
                 case "typeBind": return p.name === name || bindsSelf(p.value);
                 case "schema": case "contract": return bindsSelf(p.value);

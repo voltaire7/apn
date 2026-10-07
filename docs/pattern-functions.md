@@ -288,3 +288,65 @@ conversion and does not opt out of static checking like `Dynamic`.
 This meaning applies in schema patterns. Ordinary expressions such as
 `value = _` and `[x: _]` still contain unfinished code; `_` remains a wildcard
 in ordinary matching patterns.
+
+## Dotted patterns: keep the whole value
+
+`left.right` matches the same argument against both patterns. No values-list
+conversion happens: the left and right patterns see the original value.
+
+```apn
+func v.x = print [v, x]
+func 1                            # [1, 1]
+
+show whole.[x,y] = print [whole, x, y]
+show [x: 1, y: 2, z: 3]           # [[x: 1, y: 2, z: 3], 1, 2]
+show [1,2]                        # [[1, 2], 1, 2]
+
+first whole.(x:xs) = x
+unwrap whole.(Some x) = x
+```
+
+`[x,y]` keeps its existing meaning: named fields on records, positions on lists.
+`_.[x,y]` discards the whole-value binding. Repeated names impose equality;
+both patterns must match before the function body runs. Both views share the
+same lazy argument and references. A converting subpattern only converts its
+own view: `original.(Float x)` keeps the original input as `original`.
+
+The same patterns work in bindings:
+
+```apn
+v.x = 1                           # v = 1, x = 1 (v previously unbound)
+whole.[a,b] = [1,2]                # whole = [1,2], a = 1, b = 2
+```
+
+For an ordinary dotted `=` assignment, an already-bound root keeps the existing
+field-update meaning. An existing scalar root errors; it does not fall back to
+binding two names. Roots visible from an outer scope count as already bound,
+and ordinary field updates retain their existing scoped-copy behavior.
+Function parameters always introduce patterns, even if an outer name exists.
+`<-` explicitly captures an eager pattern binding.
+
+## Capturing type shapes and value shapes
+
+A lowercase name not already bound in a schema pattern captures the supplied
+value's type. Concrete type names retain their existing checking/conversion role.
+
+```apn
+inspect ([t] [x]) = print [t, x]
+inspect [1]                       # [Int, 1]
+inspect ["hello"]                 # [String, "hello"]
+
+inspectPair ([a,b] [x,y]) = print [a,b,x,y]
+inspectPair [1,"hi"]              # [Int, String, 1, "hi"]
+```
+
+The first shape describes/captures types, the second destructures values.
+Each list shape has its written length; `[t]` is one slot, not an arbitrary-length
+list. Nested lists and record schemas also work. Repeating `t` requires the same
+type in each position. Existing lowercase type bindings are used as schemas;
+capitalized constructors such as `Int` are never new capture names.
+
+Like `(t x)`, a captured numeric type exposes its numeric payload separately:
+`inspect [Int32 1]` prints `[Int32, 1]`. `_` accepts a value without capturing
+its type or stripping its annotation. These patterns still participate in static
+inference; they are not `Dynamic` boundaries.

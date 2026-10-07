@@ -144,6 +144,11 @@ class Parser {
     // ---- patterns
 
     parsePattern(): Pattern {
+        const left = this.parsePatternAtom();
+        return this.eatSym(".") ? { p: "as", left, right: this.parsePattern() } : left;
+    }
+
+    parsePatternAtom(): Pattern {
         const t = this.peek();
         if (t.k === "sym" && t.v === "_") { this.next(); return { p: "wildcard" }; }
         if (t.k === "int") { this.next(); return { p: "int", v: t.v }; }
@@ -869,7 +874,7 @@ class Parser {
     // Destructuring binding:  pattern = value
     //   [name, hello] = [...],  (Just x) = ...,  Just v = ...
     // Only unambiguous pattern starts are tried - `[`, `(` + Uppercase
-    // constructor, or a bare Uppercase constructor - so plain statements like
+    // constructor, a bare Uppercase constructor, or a dotted name - so statements like
     // `[1, 2, 3] $ head`, `name = 5`, or `Just (f x)` never reach the pattern
     // path.
     startsPatBinding(): boolean {
@@ -879,7 +884,8 @@ class Parser {
             const n1 = this.peek(1);
             return n1.k === "ident" && /^[A-Z]/.test(n1.v);
         }
-        return t.k === "ident" && /^[A-Z]/.test(t.v);
+        const next = this.peek(1);
+        return t.k === "ident" && (/^[A-Z]/.test(t.v) || (next.k === "sym" && next.v === "."));
     }
 
     // Lookahead: is the statement  pattern = expr ? Restores the token index.
@@ -922,6 +928,11 @@ class Parser {
     }
 
     parseFieldAssign(): Expr {
+        const start = this.i;
+        let pattern: Pattern | undefined;
+        let patternEnd: number | undefined;
+        try { pattern = this.parsePattern(); if (this.isSym("=")) patternEnd = this.i; } catch { /* literal field names need not be patterns */ }
+        this.i = start;
         const nt = this.next();
         if (nt.k !== "ident") throw new Error("Parser: expected a name before '.'");
         const name = nt.v;
@@ -929,7 +940,16 @@ class Parser {
         const entries: string[] = [];
         const path: string[] = [];
         while (!this.isSym("[")) {
-            if (this.isSym("(")) throw new Error("Parser: scoped record expressions are not assignment targets; use a string key");
+            if (this.isSym("(") || this.isSym("{")) {
+                const error = "scoped record expressions are not assignment targets; use a string key";
+                if (pattern?.p === "as" && patternEnd !== undefined) {
+                    this.i = patternEnd;
+                    this.expectSym("=");
+                    const value = this.parseExpr();
+                    return { t: "patDef", pattern, value, update: { name, value, error } };
+                }
+                throw new Error(`Parser: ${error}`);
+            }
             const saved = this.i;
             const key = this.parseKey();
             if (!this.eatSym(".")) { this.i = saved; break; }
@@ -956,11 +976,10 @@ class Parser {
         // Bracketed selection always takes a list, including one or zero fields.
         // Only direct field assignment wraps its scalar RHS.
         const value = bracketed ? rhs : { t: "list", v: [rhs] } as Expr;
-        return {
-            t: "patDef",
-            pattern: { p: "var", name },
-            value: { t: "setFields", rec: { t: "var", name }, entries, value, ...(path.length ? { path } : {}) },
-        };
+        const update: Expr = { t: "setFields", rec: { t: "var", name }, entries, value, ...(path.length ? { path } : {}) };
+        return pattern?.p === "as"
+            ? { t: "patDef", pattern, value: rhs, update: { name, value: update } }
+            : { t: "patDef", pattern: { p: "var", name }, value: update };
     }
 
     isEagerBinding(): boolean {
@@ -981,7 +1000,7 @@ class Parser {
     isPatBinding(): boolean {
         if (!this.startsPatBinding()) return false;
         const t = this.peek();
-        if (t.k === "ident" && !declaredCtors.has(t.v)) return false;
+        if (t.k === "ident" && !declaredCtors.has(t.v) && !(this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === ".")) return false;
         const save = this.i;
         try {
             const p = this.parseConsPattern();
@@ -998,7 +1017,9 @@ class Parser {
         const pattern = this.parseConsPattern();
         this.expectSym("=");
         const value = this.parseExpr();
-        return { t: "patDef", pattern, value };
+        const update = pattern.p === "as" && pattern.left.p === "var"
+            ? { name: pattern.left.name, value, error: "this dotted pattern is not a field-update target" } : undefined;
+        return { t: "patDef", pattern, value, ...(update ? { update } : {}) };
     }
 
     // Operator sections:  (+ 2) -> \x -> x + 2    (2 +) -> \x -> 2 + x
@@ -1490,6 +1511,7 @@ export function functionSpecSource(spec: FunctionSpec): string {
 }
 export function patternSource(p: Pattern): string {
     switch (p.p) {
+        case "as": return `${patternSource(p.left)}.${patternSource(p.right)}`;
         case "schema": return `(${exprToSource(p.type)} ${patternSource(p.value)})`;
         case "contract": return `((${functionSpecSource(p.spec)}) ${patternSource(p.value)})`;
         case "wildcard": return "_";

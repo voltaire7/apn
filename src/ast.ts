@@ -40,9 +40,10 @@ export type Expr =
     | { t: "pipe"; x: Expr; f: Expr }
     | { t: "block"; stmts: Expr[]; style?: "(" | "{" }
     | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr }[] }
-    | { t: "patDef"; pattern: Pattern; value: Expr; eager?: boolean };
+    | { t: "patDef"; pattern: Pattern; value: Expr; eager?: boolean; update?: { name: string; value: Expr; error?: string } };
 
 export type Pattern =
+    | { p: "as"; left: Pattern; right: Pattern }
     | { p: "schema"; type: Expr; value: Pattern }
     | { p: "contract"; spec: FunctionSpec; value: Pattern }
     | { p: "wildcard" }
@@ -61,7 +62,7 @@ interface DataDef { name: string; parameters?: string[]; variants: { tag: string
 
 export type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "expr"; value: Expr }
     | { t: "type"; def: DataDef }
-    | { t: "patDef"; pattern: Pattern; value: Expr; eager?: boolean };
+    | { t: "patDef"; pattern: Pattern; value: Expr; eager?: boolean; update?: { name: string; value: Expr; error?: string } };
 
 // ---------------- Lexer ----------------
 
