@@ -277,8 +277,8 @@ for (const source of [
     'f xs = [1, 2]; f (Int n) = [0]; g [a, b] = a; g (f 3)',
     'f (Int n) = [0]; f xs = [1, 2]; g [a] = a; g (f "s")',
     'f (Int n) = [0]; f xs = [1, 2]; h x = g (f x); g [a] = a; h "s"',
-    // Whether 2.0 converts to Int8 depends on the value: both clauses count.
-    'f (Int8 n) = [0]; f xs = [1, 2]; g [a] = a; g (f 2.0)',
+    // Whether a Float converts to Int8 depends on its value: 2.5 does not.
+    'f (Int8 n) = [0]; f xs = [1, 2]; g [a] = a; h x = g (f (x * 1.0)); h 2.5',
 ]) Deno.test(`typed clauses keep possible clauses: ${source}`, () => rejected(session(), source));
 // Clauses of the same input type whose results differ only in list lengths
 // become separate overload choices instead of a definition error; any other
@@ -493,3 +493,25 @@ for (const source of [
     'g [a] = a; b x = Int8 x > Int8 0 ? None : Some x; g (f (b 2.5))',
     'h v = Int8 v; h "x"',
 ]) Deno.test(`fixed-width conditions stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${source}`));
+// A known value decides a typed clause as at runtime: its own type (30), a
+// lossless conversion (1), or no match.
+const intClauses = 'g [a] = a; k (Int x) = None; k x = Some x';
+for (const [source, expected] of [
+    ['g (f (k (UInt 3)))', '0'],
+    ['g (f (k (Int8 3)))', '0'],
+    ['g (f (k (Float32 2)))', '0'],
+    ['k8 (Int8 x) = None; k8 x = Some x; g (f (k8 2.0))', '0'],
+    ['z = UInt 2; g (f (k z))', '0'],
+    ['h v = g (f (k (UInt v))); h 4', '0'],
+    ['k8 (Int8 x) = None; k8 x = Some x; g (f (k8 4))', '0'],
+    ['m (Int8 x) = x + Int8 1; m x = Int8 0; g (f (m 4 > Int8 4 ? None : Some 1))', '0'],
+] as const) Deno.test(`lossless typed clauses: ${source}`, () => {
+    const actual = run(session(), `${optionClauses}; ${intClauses}; ${source}`);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'g (f (k 2.5))',
+    'g (f (k (1 / 2)))',
+    'g (f (k "s"))',
+    'k8 (Int8 x) = None; k8 x = Some x; g (f (k8 300))',
+]) Deno.test(`lossless typed clauses stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${intClauses}; ${source}`));

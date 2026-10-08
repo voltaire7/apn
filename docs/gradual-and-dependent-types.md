@@ -286,12 +286,13 @@ The runtime ranks clauses by a score, then source order: literal patterns 40,
 a typed pattern 30 for the argument's exact type, 10 for a matching numeric
 aggregate (`Number`, `Real`, `Integer`, `Exact`, `Inexact`), 1 for a lossless
 conversion, and other patterns 0. The checker computes the same ranking from
-argument types; where only the value decides (whether `2.0` fits `Int8`), it
-keeps both possibilities. A clause definitely matches when every argument fits
+argument types and, where the value is known, from the value: `UInt 3`
+converts losslessly to `Int`, `300` does not fit `Int8`, and `2.5` is not an
+integer. Where only an unknown value decides, it keeps both possibilities. A clause definitely matches when every argument fits
 its pattern for certain: a variable or `_` (not a repeated name), a list
 pattern of variables with a list of that known length, `[]` or `(x:xs)` with a
 known empty or non-empty list, a literal pattern with that same literal, or a
-typed pattern with its exact type. So with `f [] = [0]` before `f xs = [1, 2]`,
+typed pattern with its exact type (or a known value that converts losslessly). So with `f [] = [0]` before `f xs = [1, 2]`,
 `f []` is a one-element list, and with `f xs = [1, 2]` before `f (Int n) = [0]`,
 `f 3` is too. A clause whose literal, length, or type definitely differs from
 the argument is skipped. Clauses for the same kind of input must agree on their

@@ -1,5 +1,5 @@
 import { type Expr, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
-import { castNumeric, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
+import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numericNative, type Numeric } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import { parse, parseDocument } from "./parser.ts";
@@ -1873,6 +1873,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const result = known[tag];
             return result === undefined ? [-1000, 10] : result ? [10, 10] : [-1000, -1000];
         }
+        // A known value decides it exactly, as at runtime: its own type, a
+        // lossless conversion, or no match.
+        const value = numericOf(argument);
+        if (value) {
+            if (matchesType(tag, value)) return [30, 30];
+            try { castNumeric(tag, value); return [1, 1]; } catch { return [-1000, -1000]; }
+        }
         if (!name) return [-1000, 30];
         return (tag === "Float64" ? "Float" : tag) === name ? [30, 30] : [-1000, 1];
     }
@@ -1991,6 +1998,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             clause.params.forEach((p, i) => {
                 for (const name of patternNames(p)) env.set(name, {});
                 if (p.p === "var" && !clause.refutable.has(p.name)) env.set(p.name, args[i]);
+                // A typed pattern binds the converted value.
+                const n = numericOf(args[i]);
+                if (p.p === "constr" && NUMERIC_TYPES.includes(p.tag) && p.args[0]?.p === "var" && !clause.refutable.has(p.args[0].name) && n) {
+                    const tag = p.tag, inner = p.args[0].name;
+                    try { env.set(inner, knownNumber(castNumeric(tag, n)) ?? {}); } catch { /* no match */ }
+                }
             });
             const value = evaluateKnown(clause.body, env, summary.scope, depth + 1);
             result = n === 0 ? value : meetValues(result, value);
@@ -2182,7 +2195,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (p.p === "constr" && !TYPE_NAMES.includes(p.tag)) return argument.tag === p.tag && p.args.every(irrefutable);
         // A certain exact-type (30) or aggregate (10) match, binding the value whole.
         if (p.p === "constr" && TYPE_NAMES.includes(p.tag) && p.tag !== "Vect" && p.args.length === 1) {
-            return (score === 30 || score === 10) && irrefutable(p.args[0]);
+            // A lossless conversion (1) is certain only for a known value.
+            return (score === 30 || score === 10 || score === 1) && irrefutable(p.args[0]);
         }
         const t = resolve(argument.type);
         if (t.k !== "list") return false;

@@ -256,7 +256,8 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   builtins only); `Known.number` holds rationals, complex values and typed
   numbers other than plain `Int`/`Float` (`knownNumber`), and `knownType`
   gives `evaluateCall` the runtime type of a known value so typed clauses
-  rank. A numeric constructor applied to a type variable defers its
+  rank; `patternScore` scores a typed pattern exactly from a known value
+  (`numericOf`), and `evaluateCall` binds its converted payload. A numeric constructor applied to a type variable defers its
   conversion as a `construct` requirement instead of unifying. Compound arguments over
   enclosing parameters become a pending `expr`, re-evaluated after
   substitution. `substituteKnown` substitutes parameters inside pending calls
