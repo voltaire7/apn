@@ -297,7 +297,9 @@ typed pattern with its exact type. So with `f [] = [0]` before `f xs = [1, 2]`,
 the argument is skipped. Clauses for the same kind of input must agree on their
 result type, but may return lists of different lengths: with
 `f (Int n) = [1, 2]` and `f 0 = [0]`, `f 0` is a one-element list and `f 3` a
-two-element one. A step function used with `repeatApply` may feed its own
+two-element one. This also works through function parameters, at any depth:
+with `h x = g (f x)`, the checker decides `f x` at each call of `h`, so `h 0`
+uses the literal clause (as does `h 1` for `f (x - 1)`). A step function used with `repeatApply` may feed its own
 results back through arithmetic (`g [a, b] = forceList [b, a + b]`).
 Record-template patterns convert positional lists at runtime and
 are checked against their named field types. Inferred parameters do not silently

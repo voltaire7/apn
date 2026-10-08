@@ -1000,6 +1000,9 @@ print (onlyOne (pairOrZero 3))                # 0
 zeroOrPairOf (Int n) = [n, n]
 zeroOrPairOf 0 = [0]
 print (onlyOne (zeroOrPairOf 0))              # 0
+# The literal can also arrive through another function's parameter.
+onlyOneOf n = onlyOne (zeroOrPairOf n)
+print (onlyOneOf 0)                           # 0
 sortedAndReversed xs = [sort xs, reverse xs]
 firstOfBoth [[a, b], [c, d]] = [a, c]
 print (firstOfBoth (sortedAndReversed [3, 1]))  # [1, 1]

@@ -10,7 +10,9 @@ type Ty =
     | { k: "mutable"; value: Ty }
     | { k: "map"; key: Ty; value: Ty }
     | { k: "intrinsic"; name: string; arity?: number; args?: Ty[] }
-    | { k: "operation"; op: string; args: Ty[]; solution?: Ty }
+    // known: what a deferred call knows about its argument's value (a literal,
+    // possibly symbolic in a parameter), so clause ranking can use it later.
+    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known }
     | { k: "dynamic"; explicit?: boolean }
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
@@ -34,6 +36,7 @@ interface Shape { arg?: number; length?: LengthRef; items?: (Shape | undefined)[
 // callArgs collects a call's arguments so the complete call can be ranked as
 // the runtime ranks clauses (see clauseFn dispatch in interp.ts).
 interface ClauseOrder { index: number; params: Pattern[]; refutable: Set<string> }
+interface Known { index?: Index; boolean?: boolean; string?: string }
 interface Entry {
     type: Ty;
     index?: Index;
@@ -206,6 +209,12 @@ function instantiate(entry: Entry): Ty {
         ? entry.type
         : copy(entry.type, new Map([...(entry.nonGeneric ?? [])].map((t) => [resolve(t), resolve(t)])));
 }
+// Replace one symbolic term of an index with a value.
+function substituteIndex(index: Index, [name, value]: [string, Index]): Index {
+    const terms = new Map(index.terms), coefficient = terms.get(name)!;
+    terms.delete(name);
+    return indexAdd({ constant: index.constant, terms }, value, coefficient);
+}
 function copy(
     t: Ty,
     vars = new Map<Ty, Ty>(),
@@ -233,23 +242,18 @@ function copy(
         case "intrinsic": Object.assign(result, { args: t.args?.map(go) }); break;
         case "mutable": Object.assign(result, { value: go(t.value) }); break;
         case "map": Object.assign(result, { key: go(t.key), value: go(t.value) }); break;
-        case "operation":
-            Object.assign(result, { args: t.args.map(go), solution: t.solution && go(t.solution) });
+        case "operation": {
+            let known = t.known;
+            if (known?.index && subst && known.index.terms.has(subst[0])) known = { ...known, index: substituteIndex(known.index, subst) };
+            Object.assign(result, { args: t.args.map(go), solution: t.solution && go(t.solution), known });
             break;
+        }
         case "fn":
             Object.assign(result, { input: go(t.input), output: go(t.output), checks: t.checks?.map(go) });
             break;
         case "list": {
             let length = t.length;
-            if (length && subst && length.terms.has(subst[0])) {
-                const terms = new Map(length.terms), coefficient = terms.get(subst[0])!;
-                terms.delete(subst[0]);
-                length = indexAdd(
-                    { constant: length.constant, terms },
-                    subst[1],
-                    coefficient,
-                );
-            }
+            if (length && subst && length.terms.has(subst[0])) length = substituteIndex(length, subst);
             Object.assign(result, {
                 element: go(t.element),
                 items: t.items?.map(go),
@@ -347,6 +351,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         return unique.length === 1 ? unique[0] : { k: "union", choices: unique };
     }
+    // Is this (an operation that is) still waiting for an unknown type?
+    function waiting(type: Ty, seen = new Set<Ty>()): boolean {
+        let t = type;
+        while (t.k === "var" && t.link) t = t.link;
+        if (t.k === "var") return true;
+        if (t.k !== "operation" || seen.has(t)) return false;
+        seen.add(t);
+        return t.args.some(x => waiting(x, seen));
+    }
+    function deferredCall(f: Ty, argument: Entry): Ty {
+        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, boolean: argument.boolean, string: argument.string } };
+        requirements.push(result);
+        return resolve(result);
+    }
     function operation(op: string, args: Ty[]): Ty {
         const result: Ty = { k: "operation", op, args };
         requirements.push(result);
@@ -439,7 +457,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             return outputs[0] ?? variable();
         }
-        if (t.op === "require") { unify(a, b); return a; }
+        // A requirement on a call that still waits for an unknown argument waits
+        // too, rather than settling for the call's provisional solution.
+        if (t.op === "require") { if (t.args.some(x => waiting(x))) return t; unify(a, b); return a; }
         if (isExplicit(a) || b && isExplicit(b)) return explicitDynamic;
         if (a.k === "dynamic" || b?.k === "dynamic") return unknown();
         if (a.k === "union") return union(a.choices.map(x => operation(t.op, t.args.length === 1 ? [x] : [x, b])));
@@ -467,7 +487,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         const numeric = (x: Ty) => x.k === "atom" && NUMERIC_TYPES.includes(x.name);
         const callable = (x: Ty) => ["fn", "type", "overload"].includes(x.k);
-        if (t.op === "call") return application(a, { type: b }, { t: "placeholder" });
+        if (t.op === "call") return application(a, { type: b, ...t.known }, { t: "placeholder" });
         if (t.op === "compare") {
             if (numeric(a) && numeric(b) || a.k === "atom" && b.k === "atom" && a.name === b.name && ["String", "Char"].includes(a.name)) return atom("Bool");
             return problem(`cannot compare ${text(a)} and ${text(b)}`);
@@ -1036,11 +1056,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const args = [...f.args ?? [], argument.type];
             return args.length < (f.arity ?? 1) ? { ...f, args } : operation(f.name, args);
         }
-        if (f.k === "operation") return operation("call", [f, argument.type]);
+        if (f.k === "operation") return deferredCall(f, argument);
         if (f.k === "dynamic") return f.explicit ? explicitDynamic : unknown();
         if (f.k === "overload") {
             const input = resolve(argument.type);
-            if (input.k === "var" || input.k === "operation") return operation("call", [f, argument.type]);
+            if (input.k === "var" || input.k === "operation") return deferredCall(f, argument);
             let outputs: Ty[] = [];
             const accepted: { clauses?: ClauseOrder[]; call?: Entry[] }[] = [];
             for (const choice of f.choices) {
@@ -1190,9 +1210,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 for (const child of children(t)) collect(child, seen);
             };
             collect(argument.type);
+            // With this argument's value known, the function's deferred checks
+            // (calls on the parameter) see that value instead of its symbol.
+            const pending = f.binder && argument.index
+                ? checks.map(check => copy(check, new Map([...variables(check)].map(t => [t, t])), [f.binder!, argument.index!]))
+                : checks;
             const output = resolve(f.output);
-            if (output.k === "fn") output.checks = [...output.checks ?? [], ...checks];
-            else for (const requirement of checks) resolve(requirement);
+            if (output.k === "fn") output.checks = [...output.checks ?? [], ...pending];
+            else for (const requirement of pending) {
+                // Still waiting on an unknown argument (inside another function's
+                // body): it becomes that function's check, decided at its calls.
+                if (resolve(requirement) === requirement) requirements.push(requirement);
+            }
             if (f.binder && argument.index) {
                 const next = copy(f.output, new Map([...variables(f.output)].map((t) => [t, t])), [f.binder, argument.index]);
                 const out = resolve(next);

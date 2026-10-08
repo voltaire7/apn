@@ -297,3 +297,28 @@ for (const source of [
     'f (Int n) = "a"; f 0 = 1',
     'f (Int n) = ["a", "b"]; f 0 = [1]',
 ]) Deno.test(`clauses with different results stay checked: ${source}`, () => rejected(session(), source));
+// A literal passed through function parameters still selects clauses: a
+// deferred call keeps its argument's (symbolic) value, and each call
+// substitutes the actual one, through any number of levels.
+for (const [source, expected] of [
+    ['f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); g [a] = a; h 0', '0'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); g [a, b] = a; h 3', '1'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); g [a] = a; [h 0, h 0]', '[0, 0]'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; h x = g (f (x - 1)); g [a] = a; h 1', '0'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; h s x = g (f x); g [a] = a; h "s" 0', '0'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); k y = h y; g [a] = a; k 0', '0'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); k y = h y; m z = k z; g [a] = a; m 0', '0'],
+    ['f (Int n) = [0]; f (String s) = [1]; h x = g (f x); k y = h y; g [a] = a; k 0', '0'],
+] as const) Deno.test(`literals through parameters: ${source}`, () => {
+    const actual = run(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); g [a] = a; h 3',
+    'f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); g [a, b] = a; h 0',
+    'f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); g [a] = a; [h 0, h 5]',
+    'f (Int n) = [1, 2]; f 0 = [0]; h x = g (f (x - 1)); g [a] = a; h 2',
+    'f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); k y = h y; g [a] = a; k 4',
+    'f (Int n) = [0]; f (String s) = [1, 2]; h x = g (f x); k y = h y; g [a] = a; k "s"',
+    'f (Int n) = 1; h x = (f x) + 1; k y = h y; k "s"',
+]) Deno.test(`literals through parameters stay checked: ${source}`, () => rejected(session(), source));
