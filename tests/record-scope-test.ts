@@ -72,15 +72,25 @@ Deno.test('braced scope enforces indentation', () => {
 
 Deno.test('braces and parentheses share grouped expression and pattern behavior', () => {
     for (const [source, expected] of [
-        ['{+ 2} 3', '5'], ['{2 +} 3', '5'], ['{+} 2 3', '5'],
-        ['f {Int x} = x + 1; f 2', '3'],
-        ['f {x:xs} = x; f [1,2]', '1'],
-        ['{{Int x} -> x + 1} 2', '3'],
-        ['f {{Int -> Int} g} = g 2; f {+ 1}', '3'],
+        ['{ + 2 } 3', '5'], ['{ 2 + } 3', '5'], ['{ + } 2 3', '5'],
+        ['f { Int x } = x + 1; f 2', '3'],
+        ['f { x:xs } = x; f [1,2]', '1'],
+        ['{ { Int x } -> x + 1 } 2', '3'],
+        ['f { { Int -> Int } g } = g 2; f { + 1 }', '3'],
         ['obj = [x: 1]; obj.({ x + 1 })', '2'],
     ]) {
         const i = new Interpreter();
         const actual = i.renderString(i.run(parseDocument(source)));
         if (actual !== expected) throw new Error(`${source}: ${actual}`);
     }
+});
+Deno.test('a one-line brace block keeps a space inside each brace', () => {
+    for (const source of ['{123}', '{ 123}', '{123 }', 'print {4 * 3}', '{+ 2} 3', 'f {Int x} = x + 1']) {
+        try { parseDocument(source); } catch (error) {
+            if ((error as { kind?: string }).kind === 'parse') continue;
+            throw error;
+        }
+        throw new Error(`accepted: ${source}`);
+    }
+    for (const source of ['{ 123 }', '{}', '{ }', 'f x = {\n    x\n}', 's = "{x}"', 'obj = [x: 1]; obj.{ x + 1 }']) parseDocument(source);
 });

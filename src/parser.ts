@@ -37,6 +37,19 @@ class Parser {
 
     constructor(toks: Token[], private source: string, private file = "<repl>") { this.toks = toks; }
 
+    // A { } block written on one line keeps a space inside each brace:
+    // { 123 }, not {123}. An empty {} and a { ending its line are fine.
+    checkBraceSpacing(): void {
+        for (const [index, t] of this.toks.entries()) {
+            if (t.k !== "sym" || (t.v !== "{" && t.v !== "}")) continue;
+            const open = t.v === "{", neighbour = this.toks[index + (open ? 1 : -1)];
+            if (neighbour?.k === "sym" && neighbour.v === (open ? "}" : "{")) continue;
+            if (/\s/.test(this.source[t.pos + (open ? 1 : -1)] ?? " ")) continue;
+            this.seen = t;
+            throw new Error(open ? "Parser: put a space after '{' (write { x }, not {x})" : "Parser: put a space before '}' (write { x }, not {x})");
+        }
+    }
+
     lineIndent(token: Token): number {
         const start = this.source.lastIndexOf("\n", token.pos - 1) + 1;
         const whitespace = this.source.slice(start).match(/^[ \t]*/)![0];
@@ -1407,6 +1420,7 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
     }
     const p = new Parser(toks, src, file);
     try {
+        p.checkBraceSpacing();
         const out = p.parseTopLevel();
         return groupClauses(out);
     } catch (err) {

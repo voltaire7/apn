@@ -37,8 +37,10 @@ one-element list. Write a cons expression inside a list literal in parentheses,
 `[(0:[])]`, because `[0:[]]` is record syntax.
 
 `( )` and `{ }` are interchangeable statement groups. Their value is the last
-statement's value (`(4 * 3)` and `{4 * 3}` are both `12`), and an empty group is
-`[]`. Definitions inside a group are local to it:
+statement's value (`(4 * 3)` and `{ 4 * 3 }` are both `12`), and an empty group is
+`[]`. A `{ }` group written on one line keeps a space inside each brace:
+`{ 123 }` is valid and `{123}` is a parse error (`{}` stays empty, and a `{`
+ending its line opens an indented block). Definitions inside a group are local to it:
 `x = 1; y = { x = 40; x + 2 }` leaves `x` as `1` and `y` as `42`.
 There are no tuples: `(1, 2)` is a syntax error; use a list such as
 `[213, "hello"]` for mixed values.
@@ -804,8 +806,8 @@ f 2                         # 5
 
 Brace blocks use the usual four-space indentation and aligned closing brace.
 Both forms return the last expression; empty blocks return `[]`. Grouping also
-accepts either delimiter for operator sections (`{+ 2}` or `(+ 2)`), parameter
-patterns (`f {Int x}` or `f (Int x)`), and grouped function contracts.
+accepts either delimiter for operator sections (`{ + 2 }` or `(+ 2)`), parameter
+patterns (`f { Int x }` or `f (Int x)`), and grouped function contracts.
 Definitions and ordinary field/index updates inside the expression are local;
 they do not implicitly update the original record. Returned functions and deferred
 values retain this local scope. Explicit side effects, including `Mutable` updates

@@ -376,6 +376,7 @@ function helpText(): string {
         `  a \`f\` b            infix call == f a b`,
         `  (+ 2)  (2 +)  (+)  (10 -)  (-)  operator sections   ((- 2) stays unary minus)`,
         `  ( ) and { } are groups/blocks: [] when empty, value = last stmt`,
+        `  a one-line { } block keeps a space inside each brace: { 123 }, not {123}`,
         `  ; or newline       statement separators (blocks & top level)`,
         `  x <- action        run now and bind the returned value (outer value only)`,
         `  indentation: strict 4-space layout (exactly +4 per level)`,
