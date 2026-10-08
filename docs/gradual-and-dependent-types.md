@@ -261,7 +261,13 @@ definition to check the new source. Cyclic or computed loads need an explicit
 Overloaded arithmetic retains constraints in inferred functions: `f x = x + 1`
 can be called with compatible numeric inputs, and `f "bad"` is rejected. List
 literals retain positional types; homogeneous operations check every possible
-element type. Record-template patterns convert positional lists at runtime and
+element type. A function that returns its list parameter unchanged in length
+(such as `forceList`, `map`, or your own wrapper) gives each call's result the
+argument's length, so `g [a, b] = ...; g (map f [1, 2])` checks, while a list of
+unknown length (`tail`, `filter`) still needs a `Dynamic` boundary to meet a
+fixed-length pattern. A step function used with `repeatApply` may feed its own
+results back through arithmetic (`g [a, b] = forceList [b, a + b]`).
+Record-template patterns convert positional lists at runtime and
 are checked against their named field types. Inferred parameters do not silently
 convert arguments; actual constructors and converting patterns provide conversions.
 

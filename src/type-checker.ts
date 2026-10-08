@@ -15,7 +15,10 @@ type Ty =
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
     | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string }
-    | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number> }
+    // size names an inferred, unchecked length: a function that returns its list
+    // parameter gives each call's result the argument's length. Unlike length,
+    // it never constrains anything; only application substitutes it.
+    | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number>; size?: string }
     | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string> }
     | { k: "type"; value: Ty }
     | { k: "factory"; args: Entry[] }
@@ -222,7 +225,8 @@ function copy(
             Object.assign(result, { input: go(t.input), output: go(t.output), checks: t.checks?.map(go) });
             break;
         case "list": {
-            let length = t.length;
+            let length = t.length, size = t.size;
+            if (!length && subst && size === subst[0]) { length = subst[1]; size = undefined; }
             if (length && subst && length.terms.has(subst[0])) {
                 const terms = new Map(length.terms), coefficient = terms.get(subst[0])!;
                 terms.delete(subst[0]);
@@ -236,6 +240,7 @@ function copy(
                 element: go(t.element),
                 items: t.items?.map(go),
                 length,
+                size,
             });
             break;
         }
@@ -523,6 +528,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return;
         }
         if (expected.k === "var") {
+            // A union is not a structural node, so `v = v | t` would expand
+            // forever. Its least solution is `v = t`: drop v's own occurrences.
+            // Expand nested unions first: variables can also cycle through them.
+            if (actual.k === "union") {
+                const flat: Ty[] = [], visited = new Set<Ty>();
+                const expand = (t: Ty): void => {
+                    const r = resolve(t);
+                    if (r === expected) return;
+                    if (r.k !== "union") { flat.push(t); return; }
+                    if (visited.has(r)) return;
+                    visited.add(r);
+                    r.choices.forEach(expand);
+                };
+                expand(actual);
+                if (!flat.length) return;
+                actual = union(flat);
+            }
             // resolve() has removed variable aliases. Any back edge introduced
             // here crosses a structural node (a contractive recursive type).
             expected.link = actual;
@@ -1111,9 +1133,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const output = resolve(f.output);
             if (output.k === "fn") output.checks = [...output.checks ?? [], ...checks];
             else for (const requirement of checks) resolve(requirement);
-            return f.binder && argument.index
-                ? copy(f.output, new Map([...variables(f.output)].map((t) => [t, t])), [f.binder, argument.index])
-                : f.output;
+            if (f.binder && argument.index) {
+                return copy(f.output, new Map([...variables(f.output)].map((t) => [t, t])), [f.binder, argument.index]);
+            }
+            // An inferred parameter size becomes the argument's known length in the result.
+            if (expected.k === "list" && expected.size && !expected.length && actual.k === "list" && actual.length) {
+                return copy(f.output, new Map([...variables(f.output)].map((t) => [t, t])), [expected.size, actual.length]);
+            }
+            return f.output;
         }
         if (f.k === "list") {
             const a = resolve(argument.type);
@@ -1665,6 +1692,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try { if (guard) infer(guard, scope); result = infer(body, scope); checks = [...patternRequirements, ...requirements]; }
         finally { requirements = outerRequirements; }
         if (declared) { unify(declared, result, body); result = declared; }
+        for (const input of inputs) {
+            const t = resolve(input.type);
+            if (t.k === "list" && !t.length && !t.items && !t.size) t.size = `size${serial++}`;
+        }
         for (let n = inputs.length - 1; n >= 0; n--) {
             const parameter = params[n];
             const selfName = parameter.p === "var" && parameter.name === recursiveName ? recursiveName : undefined;
@@ -1807,7 +1838,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             print: fn(a, list(variable(), constant(0n))),
             head: fn(list(a), a),
             tail: fn(list(a), list(a)),
-            map: fn(fn(a, b), fn(list(a), list(b))),
+            map: fn(fn(a, b), fn({ k: "list", element: a, size: "mapSize" }, { k: "list", element: b, size: "mapSize" })),
             filter: fn(fn(a, b), fn(list(a), list(a))),
             length: fn(dynamic, atom("Int")),
             typeOf: fn(a, atom("Type")),

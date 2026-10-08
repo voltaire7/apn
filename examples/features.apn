@@ -973,6 +973,10 @@ print (take 4 (fix (xs -> 1 : xs)))              # [1, 1, 1, 1]
 # Advent of Code helpers: parsing, strict simulation and graph traversal.
 print (integers "1 -2 3")                      # [1, -2, 3]
 print (repeatApply 5 (*2) 1)                   # 32
+# A forced step over a fixed-size state checks statically: forceList and map
+# keep their argument's length, so the [a, b] pattern always fits.
+fibStep [a, b] = forceList [b, a + b]
+print (repeatApply 10 fibStep [0, 1])          # [55, 89]
 print (lookup 3 (bfsDistances (n -> n < 3 ? [n + 1] : []) [0])) # 3
 # I/O in scripts: readFile "input.input", readStdin [], getArgs [], readInput [].
 

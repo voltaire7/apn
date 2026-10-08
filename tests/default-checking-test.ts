@@ -115,3 +115,25 @@ Deno.test("default checking reports an unbound name with a suggestion", () => {
     }
     throw new Error("accepted an unbound name");
 });
+// A variable bound to a union containing itself (v = v | t) resolves to t,
+// and functions that return their list parameter preserve its length.
+for (const [source, expected] of [
+    ['import "std"; g [a, b] = forceList [b, a + b]; repeatApply 3 g [1, 2]', '[5, 8]'],
+    ['import "std"; tick [a,b,c,d,e,f,g,h,i] = forceList [b,c,d,e,f,g,h + a,i,a]; sum (repeatApply 80 tick [0,1,1,2,1,0,0,0,0])', '5934'],
+    ['f (List xs) = xs; g [a, b] = f [b, a + b]; g (g [1, 2])', '[3, 5]'],
+    ['import "std"; g [a, b] = a + b; g (forceList [1, 2])', '3'],
+    ['g [a, b] = a + b; g (map (x -> x * 2) [1, 2])', '6'],
+    ['xs = map (x -> x + 1) [1, 2]; ys = map (x -> x * 2) [1, 2, 3]; g [a, b] = a + b; [g xs, length ys]', '[5, 3]'],
+    ['x (x:xs) = 42; x [x]', '42'],
+] as const) Deno.test(`checker infers recursive steps and list sizes: ${source}`, () => {
+    const actual = run(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'import "std"; g [a, b] = forceList [b, a ++ "x"]; repeatApply 3 g [1, 2]',
+    'import "std"; g [a, b] = a + b; g (forceList [1, 2, 3])',
+    'g [a, b] = a + b; g (map (x -> x) [1, 2, 3])',
+    'g [a, b] = a + b; g (map (x -> x) (tail [1, 2, 3]))',
+    'g [a, b] = a + b; g (tail [0, 1, 2])',
+    'g [a, b] = tail [0, b, a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1, 2]',
+]) Deno.test(`checker still rejects: ${source}`, () => rejected(session(), source));
