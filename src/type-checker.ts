@@ -707,6 +707,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function schemaWildcard(e: Expr): boolean {
         return e.t === "placeholder" || e.t === "block" && e.stmts.length === 1 && schemaWildcard(e.stmts[0]);
     }
+    // A var-only list pattern such as [x, y] selects those fields from a record,
+    // so it sees the record as the list of the named field types.
+    function recordSelection(p: Pattern, value: Ty, e: Expr): Ty {
+        const input = resolve(value);
+        if (input.k !== "record" || p.p !== "list" || !p.v.every(x => x.p === "var")) return value;
+        const items = p.v.map(x => {
+            const name = (x as Extract<Pattern, { p: "var" }>).name;
+            const field = input.fields.get(name);
+            if (!field) return problem(`missing field '${name}'`, e);
+            return field;
+        });
+        return { k: "list", element: union(items), items, length: constant(BigInt(items.length)) };
+    }
     function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr, bound = new Set<string>()): void {
         switch (p.p) {
             case "as": {
@@ -1043,17 +1056,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return result;
         }
         if (f.k === "fn") {
-            const input = resolve(argument.type);
             const selection = f.pattern?.p === "schema" && resolve(f.input).k === "list" ? f.pattern.value : f.pattern;
-            if (input.k === "record" && selection?.p === "list" && selection.v.every(p => p.p === "var")) {
-                const items = selection.v.map(p => {
-                    const name = (p as Extract<Pattern, { p: "var" }>).name;
-                    const field = input.fields.get(name);
-                    if (!field) return problem(`missing field '${name}'`, e);
-                    return field;
-                });
-                return application({ ...f, pattern: undefined }, { ...argument, type: { k: "list", element: union(items), items, length: constant(BigInt(items.length)) } }, e);
-            }
+            const selected = selection ? recordSelection(selection, argument.type, e) : argument.type;
+            if (selected !== argument.type) return application({ ...f, pattern: undefined }, { ...argument, type: selected }, e);
             const expected = resolve(f.input), actual = resolve(argument.type);
             if (f.coerce && expected.k === "record" && actual.k === "list") {
                 const fields = [...expected.fields];
@@ -1595,7 +1600,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         boolean: (writes.get(e.pattern.name) ?? 0) > 1 ? undefined : boolean(e.value, scope),
                         nonGeneric: captured(scope),
                     });
-                } else bind(e.pattern, t, scope, e);
+                } else bind(e.pattern, recordSelection(e.pattern, t, e.value), scope, e);
                 return list(dynamic, constant(0n));
             }
             default:

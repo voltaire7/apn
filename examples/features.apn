@@ -357,6 +357,12 @@ greeting = {
 }
 print (greeting)           # => Hello, world!
 
+greeting = {
+    [name, hello] = [hello: "Hello", name: "record"]   # fields by name
+    hello ++ ", " ++ name ++ "!"
+}
+print (greeting)           # => Hello, record!
+
 # Constructor patterns destructure like Haskell — bare (Just v = ...),
 # parenthesized ((Just v) = ...), or nested in a list ([Just v] = [...]).
 # Existing constructor names destructure; new capital names bind type aliases.
