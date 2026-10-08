@@ -547,6 +547,34 @@ for (const source of [
     'hh ys = g (f (q (ys ++ ys))); hh [2]',
     'hh ys = g (f (q (map (+ 1) ys))); hh [1, 2]',
     'g (f (sm (len [1, 2])))',
-    // Lengths that depend on element values stay unknown: both clauses count.
-    'g (f (q (filter (> 1) [1])))',
+    // A predicate passed as a parameter is not evaluated: both clauses count.
+    'hh p = g (f (q (filter p [1, 2]))); hh (> 5)',
 ]) Deno.test(`length calls stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${source}`));
+// filter, map, take and drop over lists whose elements are known run as at
+// runtime, as do integer ranges.
+for (const [source, expected] of [
+    ['g (f (q (filter (> 1) [1, 2])))', '0'],
+    ['g (f (q (filter (> 2) (map (* 2) [1, 2]))))', '0'],
+    ['big x = x > 1; g (f (q (filter big [1, 2])))', '0'],
+    ['g (f (q (filter (x -> x % 2 == 0) [1..3])))', '0'],
+    ['hh ys = g (f (q (filter (> 1) ys))); hh [1, 5]', '0'],
+    ['hh n = g (f (q (filter (> n) [1, 2, 3]))); hh 2', '0'],
+    ['g (f (q (take 1 [1, 2, 3])))', '0'],
+    ['hh n = g (f (q (take n [5, 6]))); hh 1', '0'],
+    ['hh n = g (f (q (drop n [5, 6]))); hh 1', '0'],
+    ['hh n = g (f (q [1..n])); hh 1', '0'],
+    ['g (f (q [3..3]))', '0'],
+] as const) Deno.test(`list builtin lengths: ${source}`, () => {
+    const actual = run(session(), `${optionClauses}; ${sizeClauses}; ${source}`);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'g (f (q (filter (> 1) [1, 2, 3])))',
+    'g (f (q (filter (x -> x % 2 == 0) [1..5])))',
+    'hh ys = g (f (q (filter (> 1) ys))); hh [3, 5]',
+    'hh n = g (f (q (filter (> n) [1, 2, 3]))); hh 1',
+    'g (f (q (take 2 [1, 2, 3])))',
+    'hh n = g (f (q (drop n [5, 6]))); hh 0',
+    'hh n = g (f (q [1..n])); hh 0',
+    'g (f (q (take (-1) [1])))',
+]) Deno.test(`list builtin lengths stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${source}`));

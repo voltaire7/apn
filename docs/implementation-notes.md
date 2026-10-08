@@ -262,7 +262,12 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   type just inferred for the expression (the `inferred` map; read it only
   right after inference, never from another context), `evaluateKnown`
   derives it from list literals, `:`, `++`, callee shapes (`shapeAt`) and
-  summaries, and `evaluateCall` gives a `(x:xs)` tail one less. A numeric constructor applied to a type variable defers its
+  summaries, and `evaluateCall` gives a `(x:xs)` tail one less.
+  `Known.items` holds per-element facts when every element is known (list
+  literals, finite integer ranges, `:`, `++`); `evaluateKnown` runs the
+  `LIST_NATIVES` (`filter`, `map`, `take`, `drop`) over them by applying the
+  function expression to a synthetic `$item`, and applies lambdas (including
+  sections) directly. Ranges stop at 10000 elements. A numeric constructor applied to a type variable defers its
   conversion as a `construct` requirement instead of unifying. Compound arguments over
   enclosing parameters become a pending `expr`, re-evaluated after
   substitution. `substituteKnown` substitutes parameters inside pending calls

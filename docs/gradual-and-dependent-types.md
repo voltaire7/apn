@@ -320,8 +320,12 @@ conversion of a parameter (`h v = Float32 v`) is checked at each call, so
 `h 0.25` is accepted while `h "x"` is not. The builtin `length` of a list or String is
 evaluated when its size is known: from a literal, an argument at the call,
 `x : xs`, `xs ++ ys`, builtins that keep a list's length (`map`, `sort`), and
-recursion over `[]` and `(x:xs)` clauses. A length that depends on element
-values (`filter`) stays unknown. So with
+recursion over `[]` and `(x:xs)` clauses. Where a list's elements are known
+too (literals, integer ranges such as `[1..n]` with `n` known, and lists built
+from them), `filter`, `map`, `take` and `drop` run on them as at runtime, with
+a lambda, an operator section, or a named function: `filter (> 1) [1, 2]` has
+one element. A predicate passed in as a parameter is not evaluated, so its
+result length stays unknown. So with
 `safe n = n > 0 ? Some n : None`, `f (safe 4)` uses the `Some` clause and
 `f (safe (-3))` the `None` one. Inside another function (`h v = g (f (safe v))`)
 the decision waits for `h`'s calls, where `v` is known. Where a value stays

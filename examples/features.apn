@@ -1039,6 +1039,9 @@ print (onlyOne (vowelOrPair (vowelIfInt (UInt 3))))  # 1
 vowelIfShort xs = length xs < 2 ? 'a' : 'z'
 shortVowel ys = onlyOne (vowelOrPair (vowelIfShort (map (+ 1) ys)))
 print (shortVowel [7])                                # 1
+# filter and take run on known elements: only 3 is above the limit.
+aboveVowel limit = onlyOne (vowelOrPair (vowelIfShort (filter (> limit) [1, 2, 3])))
+print (aboveVowel 2)                                  # 1
 sortedAndReversed xs = [sort xs, reverse xs]
 firstOfBoth [[a, b], [c, d]] = [a, c]
 print (firstOfBoth (sortedAndReversed [3, 1]))  # [1, 1]
