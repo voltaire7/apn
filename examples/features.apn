@@ -1134,6 +1134,10 @@ uncertainKeys = HashMap [["a", 1]]
 counterKey = "bumpCounter"
 has "a" uncertainKeys ? (counterView counterKey) 0 : 0
 print (onlyOne (vowelOrPair (vowelIfShort (take (otherCounter - 3) [7, 8, 9]))))  # 1
+# Also through a view stored in a record, with a key bound locally.
+viewHolder <- [view: counterView]
+has "a" uncertainKeys ? { localKey = "bumpCounter"; (viewHolder.view localKey) 0 } : 0
+print (onlyOne (vowelOrPair (vowelIfShort (take (otherCounter - 3) [7, 8, 9]))))  # 1
 
 # p5 sketches are descriptions until built for the browser.
 p5 = import "std/p5"

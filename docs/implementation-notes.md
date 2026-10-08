@@ -329,17 +329,23 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   values `reachable` from the statement's names (through definition bodies,
   the facts of those names, the `Known.origin` of lazy values, and
   `CheckOptions.loadedNames` for literal loads, `Entry.opened` for names
-  `use` opened, and `viewFields` for `env` views) become `invalid`.
-  `envSites` finds a view's sites (literal fields, or keys `knownKey`
-  evaluates where reached, refusing names bound in the walked code or its
-  clause parameters, `paramsOf`, and keys that touch a cell); `envAccess`
-  reports whether every view stays at its sites. The session shares
-  aliases (`envAliases`), top-level views once their program ran
-  (`envTopViews`; the evaluator reads a top-level view's field at the root),
-  and the names an escaping program bound or used (`envNames`, growing
-  through programs mentioning one). An escape, a tainted name, an opaque
-  `use` here or elsewhere (`CheckOptions.openedElsewhere`), or a lazy value
-  without an origin clears `programValid`. Lazy list
+  `use` opened, `Entry.bound` for pattern bindings, and `viewReach` for
+  `env` views) become `invalid`. `viewFlow` runs over every program in the
+  session (`CheckOptions.viewPrograms`, libraries included, once any uses
+  `env`) to a fixpoint: each name per scope frame (function parameters,
+  lambda parameters, block locals), each function's result, and each
+  expression (`viewValue`, which tracks functions by arity, natives via
+  `CheckOptions.nativeArities`) gets a kind: may be a view, hold views as
+  elements or deeper, or be a local scope's view. `viewReach` then reads
+  each use in walked code: a view applied to a key or field names those
+  bindings (`keyStrings` evaluates keys where reached, taking each value of
+  a simple local binding and refusing parameters and cells); a value that
+  may be a view or hold one, given to code that may read it, fails. The
+  session also shares top-level views once their program ran
+  (`envTopViews`; the evaluator reads a top-level view's field at the root).
+  A failing use, an opaque `use` here or elsewhere
+  (`CheckOptions.openedElsewhere`), or a lazy value without an origin
+  clears `programValid`. Lazy list
   cells and deferred values keep their result only when computed touching
   no cell or during an execution (`keeps`); `map`/`zipWith` heads and
   `iterate`'s next value are deferred and `filter` applies its predicate in

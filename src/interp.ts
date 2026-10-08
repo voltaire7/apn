@@ -54,6 +54,7 @@ export class Interpreter {
         this.checkedExecution = true;
         this.checking = new CheckingSession();
         this.checking.moduleSources = this.moduleSources;
+        this.checking.nativeArities = new Map([...NATIVES, ...STANDARD_NATIVES]);
         this.checking.extendDefinitions = this.extendDefinitions;
         this.checking.runtimeNames = () => envNames(this.env);
         // Checking right before running may read the program's input; the run

@@ -99,6 +99,8 @@ interface Entry {
     builtin?: boolean;
     // opened: the record expression a use opened this name from.
     opened?: Expr;
+    // bound: the expression a pattern binding (x <- e, [a, b] = e) took its value from.
+    bound?: Expr;
     // lazyTop: a top-level value that touches top-level cells (see forceLazyTop).
     lazyTop?: LazyTop;
     // recursive: the definition being inferred, referred to from its own body;
@@ -128,12 +130,12 @@ export interface CheckOptions {
     /** Whether code checked in this session outside this program used use on
      * a record of unknown fields (the names it opened cannot be traced here). */
     openedElsewhere?: () => boolean;
-    /** Names bound to env views anywhere in the session (see envAccess). */
-    envAliases?: () => ReadonlySet<string>;
+    /** The session's programs (with their libraries) when any uses env, to follow views through (see viewFlow). */
+    viewPrograms?: () => TopLevel[][];
+    /** The runtime's natives by arity; otherwise read from their types. */
+    nativeArities?: Map<string, number>;
     /** Top-level names whose latest binding in the session is an env view. */
     envTopViews?: () => ReadonlySet<string>;
-    /** Names that may hold an env view a program let escape (any write, any reach). */
-    envNames?: () => ReadonlySet<string>;
     /** Whether any code in this session may write a Mutable cell (see mayMutate),
      * asked when a cell is read; computed from the program when unset. */
     mutation?: () => boolean;
@@ -150,59 +152,325 @@ export function isEnvView(n: unknown, aliases: ReadonlySet<string>): boolean {
     if (x.t === "block" && x.style === "(" && x.stmts?.length === 1) return isEnvView(x.stmts[0], aliases);
     return x.t === "app" && x.f?.t === "var" && x.f.name === "Dynamic" && isEnvView(x.a, aliases);
 }
-// The places code uses env views: a literal field (env.x, e "x", e.[x, y],
-// e.x = v) or a computed key (e k, e.[k] = v). Returns false when a view is
-// used any other way (passed on, stored, returned), so it can reach anything.
-export function envSites(node: unknown, aliases: ReadonlySet<string>, site: (field: string | undefined, key?: Expr) => void): boolean {
-    let contained = true;
-    const isEnv = (n: unknown) => isEnvView(n, aliases);
-    const walk = (node: unknown): void => {
-        if (!node || typeof node !== "object") return;
-        if (Array.isArray(node)) { node.forEach(walk); return; }
-        const n = node as Record<string, any>;
-        if (n.t === "var" && aliases.has(n.name)) contained = false;
-        // (A plain field access also carries its name as a variable, argument.)
-        const plain = !n.scoped && (!n.argument || n.argument.t === "var" && n.argument.name === n.field);
-        if (n.t === "recordAccess" && isEnv(n.rec) && plain) { site(n.field); return; }
-        if (n.t === "app" && isEnv(n.f)) {
-            if (n.a?.t === "string") site(n.a.v); else { site(undefined, n.a); walk(n.a); }
-            return;
-        }
-        if (n.t === "pluck" && isEnv(n.rec) && n.quoted !== false) {
-            n.entries.forEach((k: string | [string, string]) => site(typeof k === "string" ? k : k[0]));
-            return;
-        }
-        if (n.t === "setFields" && isEnv(n.rec) && !n.path) { n.entries.forEach((k: string) => site(k)); walk(n.value); return; }
-        if (n.t === "setItem" && isEnv(n.rec)) {
-            if (n.index?.t === "string") site(n.index.v); else { site(undefined, n.index); walk(n.index); }
-            walk(n.value); return;
-        }
-        if (n.t === "patDef" && n.pattern?.p === "var" && isEnv(n.value)) return;
-        if ((n.t === "def" || n.t === "stmDef") && n.clauses?.length === 1 && !n.clauses[0].params.length && isEnv(n.clauses[0].body)) return;
-        Object.values(n).forEach(walk);
-    };
-    walk(node);
-    return contained;
+// How env views flow through a session's code. A value's kind says it may be
+// a view (VIEW), hold views as its elements or fields (ELEM) or deeper or in a
+// closure (DEEP), and that a view may be of a local scope (LOCAL), whose
+// bindings no top-level name reaches.
+const VIEW = 1, ELEM = 2, DEEP = 4, LOCAL = 8;
+const ANY = VIEW | ELEM | DEEP;
+const holding = (k: number) => k ? (k & VIEW ? ELEM : 0) | (k & (ELEM | DEEP) ? DEEP : 0) | (k & LOCAL) : 0;
+const projected = (k: number) => k ? (k & ELEM ? VIEW : 0) | (k & DEEP ? ANY : 0) | (k & LOCAL) : 0;
+const anything = (k: number) => k ? ANY | (k & LOCAL) : 0;
+// A function: named definitions' clauses, or a lambda.
+interface ViewFunction { key: object; arity: number; clauses: { params: Pattern[]; body: Expr }[] }
+// The names a scope binds (parameters, a block's locals) and their kinds.
+interface ViewFrame { names: Set<string>; kinds: Map<string, number> }
+interface ViewFlow {
+    // Names bound outside any function or block scope.
+    kinds: Map<string, number>;
+    returns: Map<object, number>;
+    functions: Map<string, ViewFunction[]>;
+    frames: WeakMap<object, ViewFrame>;
+    // The function each clause body belongs to.
+    bodies: WeakMap<Expr, object>;
+    // Names bound at the top level of some program.
+    topNames: Set<string>;
+    nativeArity: (name: string) => number | undefined;
+    // Clause bodies whose parameters take a view apart with a record pattern.
+    unsafeBodies: WeakSet<Expr>;
+    // A view looked up by a key the analysis cannot read and applied further.
+    open: boolean;
 }
-// How a program uses env: its aliases (names bound directly to a view, from
-// those already known), and whether every view stays at its use sites.
-export function envAccess(program: unknown, known: Iterable<string> = []): { literal: boolean; aliases: Set<string> } {
-    const aliases = new Set<string>(["env", ...known]);
-    // Names bound directly to env, until no new one appears.
-    for (let grown = true; grown;) {
-        grown = false;
-        const find = (node: unknown): void => {
-            if (!node || typeof node !== "object") return;
-            if (Array.isArray(node)) { node.forEach(find); return; }
-            const n = node as Record<string, any>;
-            const bound = n.t === "patDef" && n.pattern?.p === "var" && isEnvView(n.value, aliases) ? n.pattern.name
-                : (n.t === "def" || n.t === "stmDef") && n.clauses?.length === 1 && !n.clauses[0].params.length && isEnvView(n.clauses[0].body, aliases) ? n.name : undefined;
-            if (bound && !aliases.has(bound)) { aliases.add(bound); grown = true; }
-            Object.values(n).forEach(find);
-        };
-        find(program);
+// What a value may be: its kind, or a function (with the arguments given so far).
+interface ViewValue { kind: number; fns?: ViewFunction[]; native?: string; got?: number; given?: number; args?: Expr[] }
+interface ViewContext { frames: ViewFrame[]; local: boolean }
+// What the checker knows where it classifies code: a name no scope here binds
+// (unresolved), the strings a key may be, and views whose scope is known.
+interface ViewHooks { unresolved?: (name: string) => number; key?: (key: Expr) => string[] | undefined; direct?: (e: Expr) => boolean }
+// Natives that may take a view without reading its bindings, returning it at most.
+const VIEW_SAFE_NATIVES = new Set(["print", "emit", "debug", "assert", "typeOf", "isType", "toString", "set", "Dynamic", "Mutable",
+    "Int", "UInt", "Int8", "UInt8", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64", "Int128", "UInt128",
+    "Float", "Float32", "Float64", "Fraction", "Complex", "ComplexExact", "Number", "Real", "Integer", "Exact", "Inexact", "Bool", "String", "Char"]);
+const VIEW_IDENTITY_NATIVES = new Set(["print", "emit", "debug", "Dynamic", "Mutable"]);
+// Natives that fail on a record and only rearrange (or pick from) lists.
+const VIEW_LIST_NATIVES = new Set(["head", "tail", "take", "drop", "length", "null"]);
+const VIEW_PICKING_NATIVES = new Set(["head"]);
+// Natives that may take values holding views (not views themselves) without
+// reading a view's bindings; the higher-order ones call their function
+// arguments with what they are given.
+const VIEW_HOLDING_NATIVES = new Set(["map", "filter", "foldl", "foldr", "zipWith", "iterate", "enumerate", "match", "distinct", "has", "lookup", "remove", "insert", "HashMap"]);
+// Natives calling a function argument, by its position.
+const HIGHER_ORDER_NATIVES = new Map([["map", 0], ["filter", 0], ["foldl", 0], ["foldr", 0], ["zipWith", 0], ["iterate", 1], ["match", 1]]);
+// Code that runs in the top-level scope: statements and top-level values.
+const topLevelCode = new WeakSet<Expr>();
+const isFunctionExpr = (e: Expr): e is Extract<Expr, { t: "lambda" | "patternLambda" }> => e.t === "lambda" || e.t === "patternLambda";
+// A lambda, grouped or not.
+const functionExpr = (e: Expr): Extract<Expr, { t: "lambda" | "patternLambda" }> | undefined =>
+    isFunctionExpr(e) ? e : e.t === "block" && e.style === "(" && e.stmts.length === 1 ? functionExpr(e.stmts[0]) : undefined;
+const lambdaFunction = (e: Extract<Expr, { t: "lambda" | "patternLambda" }>): ViewFunction => ({
+    key: e, arity: e.params.length,
+    clauses: [{ params: e.t === "lambda" ? e.params.map(name => ({ p: "var", name }) as Pattern) : e.params, body: e.body }],
+});
+function patternHasRecord(p: unknown): boolean {
+    if (!p || typeof p !== "object") return false;
+    if (Array.isArray(p)) return p.some(patternHasRecord);
+    const n = p as Record<string, unknown>;
+    return n.p === "recPat" || Object.values(n).some(patternHasRecord);
+}
+// The names a block binds to values directly in it (not functions).
+function blockNames(stmts: Expr[]): Set<string> {
+    const names = new Set<string>();
+    for (const st of stmts) {
+        if (st.t === "patDef" && !(st.pattern.p === "var" && functionExpr(st.value))) patternNames(st.pattern).forEach(n => names.add(n));
+        if (st.t === "patDef" && st.update) names.add(st.update.name);
+        if (st.t === "stmDef" && st.clauses.every(c => !c.params.length) && !functionExpr(st.clauses[0].body)) names.add(st.name);
     }
-    return { literal: envSites(program, aliases, () => {}), aliases };
+    return names;
+}
+// The frame a scope node opens, made on first use.
+function viewFrame(flow: ViewFlow, key: object, names: () => Set<string>): ViewFrame {
+    let frame = flow.frames.get(key);
+    if (!frame) flow.frames.set(key, frame = { names: names(), kinds: new Map() });
+    return frame;
+}
+function functionFrame(flow: ViewFlow, f: ViewFunction): ViewFrame {
+    return viewFrame(flow, f.key, () => new Set(f.clauses.flatMap(c => c.params.flatMap(patternNames))));
+}
+// Enter a scope node: a lambda's parameters or a block's locals.
+function enterScope(flow: ViewFlow, node: Expr, ctx: ViewContext): ViewContext {
+    if (isFunctionExpr(node)) return { frames: [...ctx.frames, functionFrame(flow, lambdaFunction(node))], local: true };
+    if (node.t === "block" && !(node.style === "(" && node.stmts.length === 1)) {
+        return { frames: [...ctx.frames, viewFrame(flow, node, () => blockNames(node.stmts))], local: true };
+    }
+    return ctx;
+}
+// A definition's clause body, in its function's frame.
+function bodyContext(flow: ViewFlow, body: Expr, outer: ViewContext): ViewContext {
+    const key = flow.bodies.get(body);
+    const frame = key && flow.frames.get(key);
+    return frame ? { frames: [...outer.frames, frame], local: true } : outer;
+}
+function lookupName(flow: ViewFlow, name: string, ctx: ViewContext, hooks: ViewHooks): ViewValue {
+    for (let i = ctx.frames.length - 1; i >= 0; i--) if (ctx.frames[i].names.has(name)) return { kind: ctx.frames[i].kinds.get(name) ?? 0 };
+    const fns = flow.functions.get(name);
+    if (fns) return { kind: flow.kinds.get(name) ?? 0, fns, got: 0 };
+    if (flow.kinds.has(name) || flow.topNames.has(name)) return { kind: flow.kinds.get(name) ?? 0 };
+    const arity = flow.nativeArity(name);
+    if (arity !== undefined) return { kind: 0, native: name, got: 0, given: 0, args: [] };
+    return { kind: hooks.unresolved?.(name) ?? 0 };
+}
+function arityOf(flow: ViewFlow, f: ViewValue): number {
+    if (f.native) return flow.nativeArity(f.native) ?? 1;
+    return Math.min(...f.fns!.map(x => x.arity));
+}
+// What e may be under flow (see ViewValue). A name no scope here binds (in
+// code seen out of its enclosing scopes) may be anything when unresolved is.
+function viewValue(e: Expr, flow: ViewFlow, ctx: ViewContext, hooks: ViewHooks = {}): ViewValue {
+    const value = (x: Expr, inner = ctx) => viewValue(x, flow, inner, hooks);
+    if (hooks.direct?.(e)) return { kind: VIEW };
+    const kind = (x: Expr, inner = ctx) => value(x, inner).kind;
+    switch (e.t) {
+        case "var":
+            if (e.name === "env") return { kind: VIEW | (ctx.local ? LOCAL : 0) };
+            return lookupName(flow, e.name, ctx, hooks);
+        case "lambda": case "patternLambda": {
+            const body = kind(e.body, enterScope(flow, e, ctx));
+            return { kind: body ? DEEP | (body & LOCAL) : 0, fns: [lambdaFunction(e)], got: 0 };
+        }
+        case "block": {
+            if (e.style === "(" && e.stmts.length === 1) return value(e.stmts[0]);
+            const inner = enterScope(flow, e, ctx);
+            return e.stmts.length ? value(e.stmts[e.stmts.length - 1], inner) : { kind: 0 };
+        }
+        case "ternary": return { kind: kind(e.then) | kind(e.els) };
+        case "list": return { kind: holding(e.v.reduce((k, x) => k | kind(x), 0)) };
+        case "record": return { kind: holding(e.v.reduce((k, [, x]) => k | kind(x), 0)) };
+        case "recordAccess": {
+            const rec = kind(e.rec);
+            if (!rec) return { kind: 0 };
+            const plain = !e.scoped && (!e.argument || e.argument.t === "var" && e.argument.name === e.field);
+            if (rec & LOCAL || !plain) return { kind: anything(rec) };
+            const field = rec & VIEW ? fieldValue(flow, e.field) : { kind: 0 };
+            return rec & (ELEM | DEEP) ? { kind: field.kind | projected(rec) | (field.fns ? DEEP : 0) } : field;
+        }
+        case "pluck": { const rec = kind(e.rec); return { kind: rec ? ELEM | DEEP | (rec & LOCAL) : 0 }; }
+        case "setFields": case "setItem": return { kind: kind(e.rec) | holding(kind(e.value)) };
+        case "binop":
+            if (e.op === "==" || e.op === "!=") return { kind: 0 };
+            if (e.op === "++") return { kind: kind(e.l) | kind(e.r) };
+            if (e.op === ":") return { kind: holding(kind(e.l)) | kind(e.r) };
+            return { kind: anything(kind(e.l) | kind(e.r)) };
+        case "app": return viewApply(value(e.f), e.a, flow, ctx, hooks);
+        case "pipe": return viewApply(value(e.f), e.x, flow, ctx, hooks);
+        default: return { kind: 0 };
+    }
+}
+// A top-level binding looked up through a view.
+function fieldValue(flow: ViewFlow, name: string): ViewValue {
+    const fns = flow.functions.get(name);
+    return fns ? { kind: flow.kinds.get(name) ?? 0, fns, got: 0 } : { kind: flow.kinds.get(name) ?? 0 };
+}
+// What applying f to a may give.
+function viewApply(f: ViewValue, a: Expr, flow: ViewFlow, ctx: ViewContext, hooks: ViewHooks = {}): ViewValue {
+    const arg = viewValue(a, flow, ctx, hooks), given = arg.kind;
+    if (f.fns || f.native) {
+        const got = (f.got ?? 0) + 1, arity = arityOf(flow, f);
+        if (f.native && VIEW_IDENTITY_NATIVES.has(f.native) && arity === 1) return arg;
+        if (got < arity) return { ...f, got, given: (f.given ?? 0) | given, args: [...f.args ?? [], a], kind: f.kind | holding(given) };
+        const all = (f.given ?? 0) | given;
+        if (f.native) {
+            if (VIEW_PICKING_NATIVES.has(f.native)) return { kind: projected(all) };
+            if (VIEW_LIST_NATIVES.has(f.native)) return { kind: all };
+            const returned = [...f.args ?? [], a].reduce((k, x) => {
+                const v = viewValue(x, flow, ctx, hooks);
+                return k | (v.fns ? v.fns.reduce((r, fn) => r | (flow.returns.get(fn.key) ?? 0), 0) : 0);
+            }, 0);
+            return { kind: anything(all | returned) };
+        }
+        return { kind: f.fns!.reduce((k, fn) => k | (flow.returns.get(fn.key) ?? 0), 0) };
+    }
+    if (f.kind & VIEW) {
+        const names = f.kind & LOCAL ? undefined : a.t === "string" ? [a.v] : hooks.key?.(a);
+        if (!names) return { kind: anything(f.kind) };
+        const fields = names.map(name => fieldValue(flow, name));
+        const field: ViewValue = fields.length && fields.every(x => x.fns)
+            ? { kind: fields.reduce((k, x) => k | x.kind, 0), fns: fields.flatMap(x => x.fns!), got: 0 }
+            : { kind: fields.reduce((k, x) => k | x.kind | (x.fns ? DEEP : 0), 0) };
+        return f.kind & (ELEM | DEEP) ? { kind: field.kind | projected(f.kind) | (field.fns ? DEEP : 0) } : field;
+    }
+    if (f.kind) return { kind: given ? anything(f.kind | given) : projected(f.kind) };
+    return { kind: anything(given) };
+}
+// The flow of env views through the given programs (see ViewFlow).
+function viewFlow(programs: TopLevel[][], nativeArity: (name: string) => number | undefined): ViewFlow {
+    const flow: ViewFlow = {
+        kinds: new Map(), returns: new Map(), functions: new Map(), frames: new WeakMap(), bodies: new WeakMap(),
+        topNames: new Set(programs.flatMap(topNames)), nativeArity, unsafeBodies: new WeakSet(), open: false,
+    };
+    const define = (name: string, f: ViewFunction) => {
+        flow.functions.set(name, [...flow.functions.get(name) ?? [], f]);
+        for (const c of f.clauses) flow.bodies.set(c.body, f.key);
+    };
+    const collect = (node: unknown): void => {
+        if (!node || typeof node !== "object") return;
+        if (Array.isArray(node)) { node.forEach(collect); return; }
+        const n = node as Record<string, any>;
+        if ((n.t === "def" || n.t === "stmDef") && n.clauses.some((c: { params: Pattern[] }) => c.params.length)) {
+            define(n.name, { key: n.clauses, arity: Math.min(...n.clauses.map((c: { params: Pattern[] }) => c.params.length)), clauses: n.clauses });
+        } else if ((n.t === "def" || n.t === "stmDef") && functionExpr(n.clauses[0].body)) define(n.name, lambdaFunction(functionExpr(n.clauses[0].body)!));
+        else if (n.t === "patDef" && n.pattern?.p === "var" && functionExpr(n.value)) define(n.pattern.name, lambdaFunction(functionExpr(n.value)!));
+        Object.values(n).forEach(collect);
+    };
+    collect(programs);
+    let changed = true;
+    const merge = (map: Map<string, number>, name: string, k: number) => {
+        const old = map.get(name) ?? 0;
+        if ((old | k) !== old) { map.set(name, old | k); changed = true; }
+    };
+    const setName = (name: string, k: number, ctx: ViewContext) => {
+        if (!k) return;
+        for (let i = ctx.frames.length - 1; i >= 0; i--) if (ctx.frames[i].names.has(name)) { merge(ctx.frames[i].kinds, name, k); return; }
+        merge(flow.kinds, name, k);
+    };
+    const bind = (p: Pattern, k: number, ctx: ViewContext) => {
+        if (!k) return;
+        if (p.p === "var") setName(p.name, k, ctx);
+        else for (const name of patternNames(p)) setName(name, anything(k), ctx);
+    };
+    // A function given an argument at a position: its parameters there take its kind.
+    const pass = (f: ViewFunction, position: number, k: number) => {
+        if (!k) return;
+        const frame = functionFrame(flow, f);
+        for (const c of f.clauses) {
+            const p = c.params[position];
+            if (!p) continue;
+            if (p.p === "var") merge(frame.kinds, p.name, k);
+            else for (const name of patternNames(p)) merge(frame.kinds, name, anything(k));
+            if (k & VIEW && patternHasRecord(p)) flow.unsafeBodies.add(c.body);
+        }
+    };
+    const returned = (key: object, k: number) => {
+        const old = flow.returns.get(key) ?? 0;
+        if ((old | k) !== old) { flow.returns.set(key, old | k); changed = true; }
+    };
+    const visit = (node: unknown, ctx: ViewContext): void => {
+        if (!node || typeof node !== "object") return;
+        if (Array.isArray(node)) { node.forEach(x => visit(x, ctx)); return; }
+        const n = node as Expr & Record<string, any>;
+        const value = (x: Expr, inner = ctx) => viewValue(x, flow, inner);
+        if (n.t === "patDef") {
+            if (!(n.pattern.p === "var" && functionExpr(n.value))) bind(n.pattern, value(n.value).kind, ctx);
+            if (n.update) {
+                const update = n.update.value;
+                setName(n.update.name, value(update).kind, ctx);
+                // Through a view, a field assignment rebinds that binding.
+                if (update.t === "setFields") for (const field of update.entries) merge(flow.kinds, field, value(update.value).kind);
+                if (update.t === "setItem" && update.index.t === "string") merge(flow.kinds, update.index.v, value(update.value).kind);
+            }
+            visit(n.value, ctx); visit(n.update, ctx);
+            return;
+        }
+        if (n.t === "stmDef" || (n as { t: string }).t === "def") {
+            const def = n as unknown as { name: string; clauses: { params: Pattern[]; body: Expr }[] };
+            const fns = flow.functions.get(def.name)?.filter(f => f.key === def.clauses || f.key === functionExpr(def.clauses[0].body));
+            const own = fns?.[0];
+            if (own && own.key === def.clauses) {
+                const frame = functionFrame(flow, own);
+                for (const c of def.clauses) {
+                    const inner = { frames: [...ctx.frames, frame], local: true };
+                    returned(own.key, value(c.body, inner).kind);
+                    visit(c.body, inner);
+                }
+            } else if (own) visit(def.clauses[0].body, ctx);
+            else for (const c of def.clauses) {
+                setName(def.name, value(c.body, { ...ctx, local: ctx.local || n.t === "stmDef" }).kind, ctx);
+                visit(c.body, { ...ctx, local: ctx.local || n.t === "stmDef" });
+            }
+            return;
+        }
+        if (isFunctionExpr(n)) {
+            const inner = enterScope(flow, n, ctx);
+            returned(n, value(n.body, inner).kind);
+            visit(n.body, inner);
+            return;
+        }
+        if (n.t === "block" && !(n.style === "(" && n.stmts.length === 1)) { visit(n.stmts, enterScope(flow, n, ctx)); return; }
+        if (n.t === "app" || n.t === "pipe") {
+            const fExpr = n.t === "app" ? n.f : n.f, aExpr = n.t === "app" ? n.a : n.x;
+            const f = value(fExpr), k = value(aExpr).kind;
+            if (f.fns && !f.native) for (const fn of f.fns) pass(fn, f.got ?? 0, k);
+            if (f.native) {
+                const args = [...f.args ?? [], aExpr], all = (f.given ?? 0) | k;
+                if (args.length >= arityOf(flow, f)) {
+                    if (f.native === "set" && args[0].t === "var" && args[1]) setName(args[0].name, value(args[1]).kind, ctx);
+                    // Data given to a native reaches the functions it is given.
+                    if (all) for (const x of args) {
+                        const v = value(x);
+                        for (const fn of v.fns ?? []) for (let i = 0; i < fn.arity; i++) pass(fn, i, anything(all));
+                        if (x.t === "list") for (const c of x.v) if (isFunctionExpr(c)) for (let i = 0; i < c.params.length; i++) pass(lambdaFunction(c), i, anything(all));
+                    }
+                }
+            }
+            // A binding called with view data through a key the analysis cannot read.
+            if (k && fExpr.t === "app" && fExpr.a.t !== "string") {
+                const g = value(fExpr.f);
+                if (g.kind & VIEW && !g.fns && !g.native) flow.open = true;
+            }
+            visit(fExpr, ctx); visit(aExpr, ctx);
+            return;
+        }
+        Object.values(n).forEach(x => visit(x, ctx));
+    };
+    for (let rounds = 0; changed && rounds < 50; rounds++) {
+        changed = false;
+        for (const program of programs) for (const statement of program) {
+            const top: ViewContext = { frames: [], local: false };
+            if (statement.t === "expr") visit(statement.value, top);
+            else if (statement.t === "patDef" || statement.t === "def") visit(statement, top);
+        }
+    }
+    if (changed) flow.open = true;
+    return flow;
 }
 // The names code binds anywhere inside it (parameters, patterns, local
 // definitions): a key naming one cannot be read from the top level.
@@ -215,15 +483,6 @@ export function bindersIn(node: unknown, names = new Set<string>()): Set<string>
     if (n.p === "recPat") n.v.forEach(([, x]: [string, string]) => names.add(x));
     if (Array.isArray(n.aliases)) n.aliases.forEach((x: unknown) => typeof x === "string" && names.add(x));
     Object.values(n).forEach(x => bindersIn(x, names));
-    return names;
-}
-// The names a program mentions.
-export function namesIn(node: unknown, names = new Set<string>()): Set<string> {
-    if (!node || typeof node !== "object") return names;
-    if (Array.isArray(node)) { node.forEach(x => namesIn(x, names)); return names; }
-    const n = node as Record<string, any>;
-    if (n.t === "var" && typeof n.name === "string") names.add(n.name);
-    Object.values(n).forEach(x => namesIn(x, names));
     return names;
 }
 // The names a program binds at its top level.
@@ -2023,8 +2282,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         mutable: e.eager && (writes.get(e.pattern.name) ?? 0) <= 1 && e.value.t !== "setFields" && e.value.t !== "setItem"
                             ? valueEntry(e.value, scope).mutable : undefined,
                         nonGeneric: captured(scope),
+                        bound: e.value,
                     });
-                } else bind(e.pattern, recordSelection(e.pattern, t, e.value), scope, e);
+                } else {
+                    bind(e.pattern, recordSelection(e.pattern, t, e.value), scope, e);
+                    for (const name of patternNames(e.pattern)) { const entry = scope.get(name); if (entry) entry.bound = e.value; }
+                }
                 return list(dynamic, constant(0n));
             }
             default:
@@ -2154,14 +2417,34 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const executedParts = new Map<Expr, Known | undefined>();
     const unforced = new Set<Known>();
     let touchedTopLevel = false, opaqueUse = false;
-    // env views reach the bindings their sites name, literally or by a key the
-    // checker knows. A view that escapes its sites (or a name that may hold one
-    // that escaped elsewhere) can reach anything.
-    const envUse = envAccess(program, options.envAliases?.() ?? []);
     const ownNames = new Set(topNames(program));
-    const tainted = options.envNames?.() ?? new Set<string>();
-    const foreignView = (name: string) => !ownNames.has(name) && tainted.has(name);
-    const escaped = !envUse.literal || [...namesIn(program)].some(foreignView);
+    for (const statement of program) {
+        if (statement.t === "expr" || statement.t === "patDef") topLevelCode.add(statement.value);
+        if (statement.t === "def" && !statement.clauses[0].params.length) topLevelCode.add(statement.clauses[0].body);
+    }
+    // How env views flow through the session's code (see viewFlow), found
+    // when first needed.
+    let flowFound: ViewFlow | null | undefined;
+    function views(): ViewFlow | null {
+        if (flowFound === undefined) {
+            const programs = options.viewPrograms?.() ?? [];
+            const all = programs.includes(program) ? programs : [...programs, program];
+            flowFound = programs.length || mentionsAny(program, new Set(["env"])) ? viewFlow(all, nativeArity) : null;
+        }
+        return flowFound;
+    }
+    // A builtin's arity, from its type.
+    function nativeArity(name: string): number | undefined {
+        const entry = rootScope.get(name);
+        if (!entry?.builtin) return undefined;
+        const runtime = options.nativeArities?.get(name);
+        if (runtime) return runtime;
+        // Conversions (Dynamic x, Int x, Mutable x) take one value.
+        if (VIEW_SAFE_NATIVES.has(name)) return 1;
+        let t = resolve(entry.type), n = 0;
+        while (t.k === "fn") { n++; t = resolve(t.output); }
+        return n || (t.k === "overload" || t.k === "intrinsic" ? 1 : undefined);
+    }
     // Aliases viewing the top-level scope: bound once here (to a view where
     // the session had any earlier binding), or by an earlier program.
     const viewsEnv = (x: Expr): boolean => isEnvView(x, new Set(["env"]));
@@ -2174,7 +2457,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     ]);
     // Which scope a view expression shows: env itself (here), or a top-level alias.
     function envView(x: Expr, env: Map<string, Known>): "here" | "top" | undefined {
-        if (escaped) return undefined;
         if (x.t === "block" && x.style === "(" && x.stmts.length === 1) return envView(x.stmts[0], env);
         if (x.t === "app" && x.f.t === "var" && x.f.name === "Dynamic") return envView(x.a, env);
         if (x.t !== "var" || env.has(x.name)) return undefined;
@@ -2189,37 +2471,189 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return c.body;
         });
     }
-    const localNames = new WeakMap<Expr, Set<string>>();
-    // The bindings env views in x can reach, or undefined when a site's key is
-    // unknown: a key is known when the checker knows its string and it names
-    // no local binding of x (beyond the known values in env) and reads no cell.
-    function viewFields(x: Expr, env: Map<string, Known> | undefined, scope: Scope): string[] | undefined {
-        if (escaped) return undefined;
-        // Binding a view (scope <- Dynamic env) reaches nothing.
-        if (isEnvView(x, envUse.aliases)) return [];
-        let locals = localNames.get(x);
-        if (!locals) localNames.set(x, locals = bindersIn(x, new Set(paramsOf.get(x))));
+    // The names x binds: simple local values (k = e, k <- e) by name, and any
+    // other binder (parameters, patterns, functions) as opaque.
+    const localBindings = new WeakMap<Expr, { values: Map<string, Expr[]>; opaque: Set<string> }>();
+    function bindingsIn(x: Expr): { values: Map<string, Expr[]>; opaque: Set<string> } {
+        let found = localBindings.get(x);
+        if (found) return found;
+        const values = new Map<string, Expr[]>(), opaque = new Set(paramsOf.get(x));
+        const walk = (node: unknown): void => {
+            if (!node || typeof node !== "object") return;
+            if (Array.isArray(node)) { node.forEach(walk); return; }
+            const n = node as Record<string, any>;
+            const simple = n.t === "patDef" && n.pattern?.p === "var" && !n.update ? [n.pattern.name, n.value]
+                : n.t === "stmDef" && n.clauses?.length === 1 && !n.clauses[0].params.length ? [n.name, n.clauses[0].body] : undefined;
+            if (simple) {
+                values.set(simple[0], [...values.get(simple[0]) ?? [], simple[1]]);
+                walk(simple[1]);
+                return;
+            }
+            if (n.t !== "var" && typeof n.name === "string") opaque.add(n.name);
+            if (n.t === "lambda") n.params.forEach((name: string) => opaque.add(name));
+            if (n.p === "recPat") n.v.forEach(([, name]: [string, string]) => opaque.add(name));
+            if (Array.isArray(n.aliases)) n.aliases.forEach((name: unknown) => typeof name === "string" && opaque.add(name));
+            Object.values(n).forEach(walk);
+        };
+        walk(x);
+        localBindings.set(x, found = { values, opaque });
+        return found;
+    }
+    // The bindings x can reach through env views: what each use of a value
+    // that may be a view names (a literal field, or a key keyStrings reads).
+    // Undefined when a use could reach any binding: an unknown key, a view of
+    // a local scope used away from it, or a value that may be a view (or hold
+    // one) taken apart, computed with, or given to code that may read it.
+    function viewReach(x: Expr, env: Map<string, Known> | undefined, scope: Scope): string[] | undefined {
+        const flow = views();
+        if (!flow) return [];
+        if (flow.open || flow.unsafeBodies.has(x)) return undefined;
+        // Binding a view (scope <- Dynamic env) uses it nowhere.
+        if (isEnvView(x, new Set(["env"]))) return [];
+        const { values, opaque } = bindingsIn(x);
+        // Names no scope here binds are locals of code around x: anything.
+        const unresolved = (name: string) => rootScope.has(name) ? 0 : ANY;
+        let base: ViewContext = topLevelCode.has(x) ? { frames: [], local: false } : bodyContext(flow, x, { frames: [], local: true });
+        if (env?.size) base = { frames: [...base.frames, { names: new Set(env.keys()), kinds: new Map([...env.keys()].map(k => [k, ANY])) }], local: true };
+        const hooks: ViewHooks = { unresolved, key: k => keyStrings(k, x, env, scope), direct: e => direct(e) };
+        const value = (e: Expr, ctx: ViewContext) => viewValue(e, flow, ctx, hooks);
         const fields: string[] = [];
-        let known = true;
-        const contained = envSites(x, envUse.aliases, (field, key) => {
-            if (!known) return;
-            const name = field ?? (key && knownKey(key, env, locals!, scope));
-            if (name === undefined) known = false; else fields.push(name);
-        });
-        // A field that is itself a view, set or load could do anything.
-        if (!contained || !known || fields.some(f => envUse.aliases.has(f) || MUTATING_NAMES.has(f) || f === "use")) return undefined;
+        let ok = true;
+        const key = (k: Expr) => { const strings = keyStrings(k, x, env, scope); if (strings) fields.push(...strings); else ok = false; };
+        // A view whose scope is known here: env, an alias bound to it here, or a top-level alias.
+        const direct = (o: Expr): boolean => {
+            if (o.t === "block" && o.style === "(" && o.stmts.length === 1) return direct(o.stmts[0]);
+            if (o.t === "app" && o.f.t === "var" && o.f.name === "Dynamic") return direct(o.a);
+            if (o.t !== "var" || env?.has(o.name)) return false;
+            if (o.name === "env") return true;
+            if (opaque.has(o.name)) return false;
+            const local = values.get(o.name);
+            return local ? local.every(direct) : topAliases.has(o.name);
+        };
+        // Through a value that may be a view: the bindings a use names.
+        const use = (rec: Expr, ctx: ViewContext): "view" | "other" | undefined => {
+            if (direct(rec)) return "view";
+            const k = value(rec, ctx).kind;
+            if (k & VIEW && k & LOCAL) { ok = false; return undefined; }
+            return k & VIEW ? "view" : "other";
+        };
+        const visit = (node: unknown, ctx: ViewContext): void => {
+            if (!ok || !node || typeof node !== "object") return;
+            if (Array.isArray(node)) { node.forEach(n => visit(n, ctx)); return; }
+            const n = node as Expr & Record<string, any>;
+            switch (n.t) {
+                case "app": case "pipe": {
+                    const fExpr = n.f, aExpr = n.t === "app" ? n.a : n.x;
+                    if (direct(fExpr)) key(aExpr);
+                    else {
+                        const f = value(fExpr, ctx), k = value(aExpr, ctx).kind;
+                        if (f.native) {
+                            const all = (f.given ?? 0) | k, args = [...f.args ?? [], aExpr];
+                            if (k && !VIEW_SAFE_NATIVES.has(f.native) && !VIEW_LIST_NATIVES.has(f.native) && (all & VIEW || !VIEW_HOLDING_NATIVES.has(f.native))) ok = false;
+                            // A function it calls with view data must be one the flow follows.
+                            const at = HIGHER_ORDER_NATIVES.get(f.native);
+                            if (all && at !== undefined && args.length > at) {
+                                const fn = args[at];
+                                const known = fn.t === "list" ? fn.v.every(isFunctionExpr) : !!value(fn, ctx).fns;
+                                if (!known) ok = false;
+                            }
+                        } else if (f.fns) { /* its parameters take the argument's kind */ }
+                        else if (f.kind & VIEW) { if (f.kind & LOCAL) ok = false; else key(aExpr); }
+                        else if (k) ok = false;
+                    }
+                    visit(fExpr, ctx); visit(aExpr, ctx);
+                    return;
+                }
+                case "recordAccess": case "pluck": case "setFields": case "setItem": {
+                    if (use(n.rec, ctx) === "view") {
+                        if (n.t === "recordAccess") {
+                            const plain = !n.scoped && (!n.argument || n.argument.t === "var" && n.argument.name === n.field);
+                            if (plain) fields.push(n.field); else if (n.argument && !n.scoped) key(n.argument); else ok = false;
+                        }
+                        if (n.t === "pluck") { if (n.quoted === false) ok = false; else n.entries.forEach(k => fields.push(typeof k === "string" ? k : k[0])); }
+                        if (n.t === "setFields") { if (n.path) ok = false; else fields.push(...n.entries); }
+                        if (n.t === "setItem") key(n.index);
+                    }
+                    visit(n.rec, ctx);
+                    if (n.t === "recordAccess" && n.argument && !(n.argument.t === "var" && n.argument.name === n.field)) visit(n.argument, ctx);
+                    if (n.t === "pluck") visit(n.values, ctx);
+                    if (n.t === "setFields" || n.t === "setItem") visit(n.value, ctx);
+                    if (n.t === "setItem") visit(n.index, ctx);
+                    return;
+                }
+                case "binop":
+                    if (!["==", "!=", "++", ":"].includes(n.op) && (value(n.l, ctx).kind | value(n.r, ctx).kind)) { ok = false; return; }
+                    break;
+                case "unop":
+                    if (value(n.e, ctx).kind) { ok = false; return; }
+                    break;
+                case "record":
+                    if (n.v.some(([k, v]) => k === "_" && value(v, ctx).kind)) { ok = false; return; }
+                    break;
+                case "patDef":
+                    if (n.pattern.p !== "var" && patternHasRecord(n.pattern) && value(n.value, ctx).kind & VIEW) { ok = false; return; }
+                    break;
+                case "lambda": case "patternLambda":
+                    if (flow.unsafeBodies.has(n.body)) { ok = false; return; }
+                    visit(n.body, enterScope(flow, n, ctx));
+                    return;
+                case "stmDef":
+                    for (const c of n.clauses) {
+                        if (flow.unsafeBodies.has(c.body)) { ok = false; return; }
+                        visit(c.body, bodyContext(flow, c.body, { ...ctx, local: true }));
+                    }
+                    return;
+                case "block":
+                    if (!(n.style === "(" && n.stmts.length === 1)) { visit(n.stmts, enterScope(flow, n, ctx)); return; }
+                    break;
+            }
+            Object.values(n).forEach(v => visit(v, ctx));
+        };
+        visit(x, base);
+        // A view of the binding env, use or load does what the checker cannot follow.
+        if (!ok || fields.some(f => f === "env" || f === "use" || f === "load")) return undefined;
         return fields;
     }
-    function knownKey(key: Expr, env: Map<string, Known> | undefined, locals: ReadonlySet<string>, scope: Scope): string | undefined {
-        if (key.t === "string") return key.v;
-        if (mentionedNames(key).some(name => locals.has(name) && !env?.has(name))) return undefined;
-        const flags = [cellRead, reordered, unknownWrite, incomplete, touchedTopLevel] as const, events = cellEvents;
-        let result: string | undefined;
-        try { result = peek(() => demand(evaluateKnown(key, env ?? new Map(), scope, 0))?.string, undefined); }
-        catch (error) { if (!(error instanceof RangeError)) throw error; }
-        const touched = cellEvents !== events;
-        [cellRead, reordered, unknownWrite, incomplete, touchedTopLevel] = flags;
-        return touched ? undefined : result;
+    // The strings a key in x may be: what the checker knows it to be, where a
+    // name x binds to a simple local value may be each such value (or its
+    // top-level value, where the key is outside it). Unknown when it names a
+    // parameter or other binder, reads a cell, or has too many combinations.
+    function keyStrings(key: Expr, x: Expr, env: Map<string, Known> | undefined, scope: Scope, depth = 0): string[] | undefined {
+        if (key.t === "string") return [key.v];
+        if (depth > 8) return undefined;
+        const { values, opaque } = bindingsIn(x);
+        let combinations: Map<string, Known>[] = [new Map(env ?? [])];
+        for (const name of mentionedNames(key)) {
+            if (env?.has(name)) continue;
+            if (opaque.has(name)) return undefined;
+            const local = values.get(name);
+            if (!local) continue;
+            const options = new Set<string>();
+            for (const value of local) {
+                const strings = keyStrings(value, x, env, scope, depth + 1);
+                if (!strings) return undefined;
+                strings.forEach(v => options.add(v));
+            }
+            if (scope.has(name)) {
+                const outer = keyStrings({ t: "var", name }, { t: "list", v: [] }, undefined, scope, depth + 1);
+                if (!outer) return undefined;
+                outer.forEach(v => options.add(v));
+            }
+            combinations = combinations.flatMap(c => [...options].map(v => new Map([...c, [name, { string: v }]])));
+            if (combinations.length > 64) return undefined;
+        }
+        const strings = new Set<string>();
+        for (const bindings of combinations) {
+            const flags = [cellRead, reordered, unknownWrite, incomplete, touchedTopLevel] as const, events = cellEvents;
+            let result: string | undefined;
+            try { result = peek(() => demand(evaluateKnown(key, bindings, scope, 0))?.string, undefined); }
+            catch (error) { if (!(error instanceof RangeError)) throw error; }
+            const touched = cellEvents !== events;
+            [cellRead, reordered, unknownWrite, incomplete, touchedTopLevel] = flags;
+            if (touched || result === undefined) return undefined;
+            strings.add(result);
+        }
+        return [...strings];
     }
     let topLevelDefinition = false, creatingTopLevel = false, executing = false, statementWrote = false, programWrote = false, programValid = true;
     // The program's definitions by name, to tell which code can reach set.
@@ -2237,26 +2671,25 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (seen.has(x)) return;
             seen.add(x);
             const visit = (name: string): void => {
+                if (name === "env" || topAliases.has(name)) return;
                 if (MUTATING_NAMES.has(name)) {
                     result.write = true;
                     if (through && !scope.get(through)?.lazyTop) result.lazy = true;
                     return;
                 }
-                // An escaped view, or a name that may hold one, can do anything.
-                if (foreignView(name) || escaped && (envUse.aliases.has(name) || ownNames.has(name))) { result.write = true; result.lazy = true; return; }
-                if (envUse.aliases.has(name)) {
-                    // Through env: the bindings its sites name, or anything.
-                    const fields = viewFields(x, undefined, scope);
-                    if (!fields) { result.write = true; if (through) result.lazy = true; return; }
-                    fields.forEach(visit);
-                    return;
-                }
                 const opened = scope.get(name)?.opened;
                 if (opened) walk(opened, through);
+                // A value bound by a pattern holds what its expression gave (a function's body runs when called).
+                const bound = scope.get(name)?.bound;
+                if (bound) walk(bound, through);
                 if (scope.get(name)?.lazyTop) result.forces = true;
                 const bodies = programDefinitions.get(name) ?? bodiesOf(scope.get(name)?.clauses);
                 for (const body of bodies) walk(body, through ?? (lazyDefinitions.has(name) ? name : undefined));
             };
+            // Through env views: the bindings they name, or anything.
+            const fields = viewReach(x, undefined, scope);
+            if (!fields) { result.write = true; if (through) result.lazy = true; }
+            else fields.forEach(visit);
             mentionedNames(x).forEach(visit);
         };
         walk(e);
@@ -2349,6 +2782,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (entry?.lazyTop) { lazies.add(entry.lazyTop); walkExpr(entry.lazyTop.body); walkKnown(entry.lazyTop.memo); }
             if (entry) walkKnown(entry);
             if (entry?.opened) walkExpr(entry.opened);
+            if (entry?.bound) walkExpr(entry.bound);
             for (const body of programDefinitions.get(name) ?? bodiesOf(entry?.clauses)) walkExpr(body);
         };
         const walkExpr = (x: Expr, env?: Map<string, Known>): void => {
@@ -2357,6 +2791,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (envs.has(env)) return;
             envs.add(env);
             seenExpr.set(x, envs);
+            // Through env views: the bindings they name, or anything.
+            const fields = viewReach(x, env, scope);
+            if (!fields) { all = true; return; }
+            fields.forEach(walkName);
             for (const name of mentionedNames(x)) {
                 if (env?.has(name)) { walkKnown(env.get(name)); continue; }
                 if (name === "load") {
@@ -2367,13 +2805,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     continue;
                 }
                 if (MUTATING_NAMES.has(name)) continue;
-                if (foreignView(name) || escaped && (envUse.aliases.has(name) || ownNames.has(name))) { all = true; return; }
-                if (envUse.aliases.has(name)) {
-                    const fields = viewFields(x, env, scope);
-                    if (!fields) { all = true; return; }
-                    fields.forEach(walkName);
-                    continue;
-                }
+                // A view reaches what its uses name (above), not through itself.
+                if (name === "env" || topAliases.has(name)) continue;
                 // A name a Dynamic use may have opened has no visible origin.
                 if ((opaqueUse || options.openedElsewhere?.()) && !scope.has(name)) { all = true; return; }
                 walkName(name);
