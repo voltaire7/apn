@@ -406,8 +406,10 @@ addOp = (+)                                 # a lone (op) is a 2-arg lambda
 print (addOp 1 2)                           # => 3
 print (addOp 1)                             # => <function>   (partial, as usual)
 
+print (map (10 -) [1, 2, 3])              # => [9, 8, 7]
+print (foldl (-) 100 [1, 2, 3])           # => 94   (a lone (-) subtracts)
 print (-2)                                # => -2  ((- 2) is NOT a section:
-                                          #     unary minus wins; use a lambda)
+                                          #     unary minus wins; use x -> x - 2)
 
 # ---------------------------------------------------------
 # 11. HIGHER-ORDER FUNCTIONS — map / filter / foldl / foldr

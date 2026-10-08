@@ -1029,17 +1029,19 @@ class Parser {
 
     // Operator sections:  (+ 2) -> \x -> x + 2    (2 +) -> \x -> 2 + x
     // (- 2) is NOT a section (no whitespace info in the lexer) — it stays unary
-    // negation; use a lambda for that. `(+)` alone is unsupported.
+    // negation; use a lambda for that. (10 -) and a lone (-) are unambiguous,
+    // so they are sections.
     static sectionOps = ["&&", "||", "\\", "^", "+", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=", "++"];
 
     tryOperatorSection(close: string): Expr | null {
         const save = this.i;
         const t = this.peek();
+        const lone = this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === close;
         // op-front:  (+ 2)   (op followed by an operand, then ')')
-        if (t.k === "sym" && t.v !== "-" && Parser.sectionOps.includes((t as { v: string }).v)) {
+        if (t.k === "sym" && (t.v === "-" ? lone : Parser.sectionOps.includes((t as { v: string }).v))) {
             try {
                 // lone (op): a 2-arg lambda —  add = (+)
-                if (this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === close) {
+                if (lone) {
                     const op = t.v as BinOp;
                     this.next(); // op
                     this.next(); // )
@@ -1062,8 +1064,8 @@ class Parser {
         try {
             const operand = this.parseUnary();
             const op = this.peek();
-            if (op.k === "sym" && (op as { v: string }).v !== "-" &&
-                    Parser.sectionOps.includes((op as { v: string }).v) &&
+            if (op.k === "sym" && ((op as { v: string }).v === "-" ||
+                    Parser.sectionOps.includes((op as { v: string }).v)) &&
                     this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === close) {
                 this.next(); // op
                 this.next(); // )

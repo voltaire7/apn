@@ -377,3 +377,11 @@ print (false ? 1 : true ? 2 : 3)
 print ((* 2) $ (+ 1) $ 3)
 print (-head [2, 3])
 `, ["14", "20", "5", "12", "[1, 2]", "true", "2", "8", "-2"]);
+example("minus sections: (10 -) and (-) are sections, (- 2) stays negation", `
+print ((10 -) 3)
+print ((-) 10 3)
+print (foldl (-) 100 [1, 2, 3])
+print (map (100 -) [1, 2])
+print (- 2)
+print (-2)
+print (10 - 2)`, ["7", "7", "94", "[99, 98]", "-2", "-2", "8"]);

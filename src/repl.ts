@@ -373,7 +373,7 @@ function helpText(): string {
         `  map/filter/zipWith/foldr consume lazy lists; Ctrl+C stops output`,
         `  f $ x             application: f (x); f $ g $ x = f (g x)`,
         `  a \`f\` b            infix call == f a b`,
-        `  (+ 2)  (2 +)  (+)  operator sections   ((-2) stays unary minus)`,
+        `  (+ 2)  (2 +)  (+)  (10 -)  (-)  operator sections   ((- 2) stays unary minus)`,
         `  ( ) and { } are groups/blocks: [] when empty, value = last stmt`,
         `  ; or newline       statement separators (blocks & top level)`,
         `  x <- action        run now and bind the returned value (outer value only)`,

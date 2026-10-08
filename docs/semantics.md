@@ -63,9 +63,9 @@ There is no `if`/`then`/`else`; use the ternary `cond ? a : b`. Only the
 selected branch runs.
 
 Operator sections: `(+ 2)` is `x -> x + 2`, `(2 +)` is `x -> 2 + x`, and a lone
-operator `(+)` is a two-argument function. `(-2)` and `(- 2)` are negative
-numbers rather than sections, and a left section of `-` such as `(10 -)` does
-not parse; write `x -> 10 - x`.
+operator `(+)` is a two-argument function. `-` works in the same positions,
+`(10 -)` is `x -> 10 - x` and `(-)` subtracts, except that `(-2)` and `(- 2)`
+are negative numbers rather than sections; write `x -> x - 2` for that.
 
 ### Iteration and ranges
 
