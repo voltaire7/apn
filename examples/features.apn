@@ -1008,6 +1008,15 @@ flagged true = [1]
 flagged b = [0, 0]
 onlyFlag b = onlyOne (flagged b)
 print (onlyFlag true)                         # 1
+# Characters and floats are literal patterns too, compared as at runtime.
+classify 'a' = "letter a"
+classify 1.5 = "one and a half"
+classify other = "other"
+print [classify 'a', classify 1.5, classify 'b']  # ["letter a", "one and a half", "other"]
+vowelOrPair 'a' = [1]
+vowelOrPair c = [0, 0]
+onlyVowel c = onlyOne (vowelOrPair c)
+print (onlyVowel 'a')                         # 1
 sortedAndReversed xs = [sort xs, reverse xs]
 firstOfBoth [[a, b], [c, d]] = [a, c]
 print (firstOfBoth (sortedAndReversed [3, 1]))  # [1, 1]

@@ -14,6 +14,8 @@ function pattern(p: Pattern): string {
         case "int": return String(p.v);
         case "bool": return String(p.v);
         case "string": return JSON.stringify(p.v);
+        case "char": return exprToSource({ t: "char", v: p.v });
+        case "float": return exprToSource({ t: "float", v: p.v });
         case "list": return `[${p.v.map(pattern).join(", ")}]`;
         case "cons": return `(${pattern(p.head)} : ${pattern(p.tail)})`;
         case "constr": return p.args.length ? `(${p.tag} ${p.args.map(pattern).join(" ")})` : p.tag;

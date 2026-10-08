@@ -363,6 +363,7 @@ function helpText(): string {
         `  xs * x -> { expr } * y -> expr   (braces end the first lambda)`,
         `  cond ? a : b   (ternary)`,
         `  match x [ pat -> expr, ... ]   (ordinary function; alternatives are pattern lambdas)`,
+        `  literal patterns: 0  1.5  "s"  'c'  true  [1..9]   (tried before other clauses)`,
         `  func ((Int -> Int) f) = Int { f 123 }   (checked function contract)`,
         `  Maybe a = Just a | Nothing`,
         `  UserId = distinct Int   (nominal identity; UserId x patterns unwrap)`,

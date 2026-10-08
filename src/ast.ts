@@ -51,6 +51,8 @@ export type Pattern =
     | { p: "int"; v: bigint }
     | { p: "bool"; v: boolean }
     | { p: "string"; v: string }
+    | { p: "char"; v: string }
+    | { p: "float"; v: number }
     | { p: "list"; v: Pattern[] }
     | { p: "cons"; head: Pattern; tail: Pattern }
     | { p: "typeBind"; name: string; value: Pattern }

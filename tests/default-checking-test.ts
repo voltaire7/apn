@@ -344,3 +344,31 @@ for (const source of [
     'f true = [0]; f b = [1, 2]; h x = g (f x); g [a] = a; [h true, h false]',
     'f "x" = [0]; f s = [1, 2]; h x = { x = "y"; g (f x) }; g [a] = a; h "x"',
 ]) Deno.test(`boolean and string literals through parameters stay checked: ${source}`, () => rejected(session(), source));
+// Characters, floats, integer ranges and constructors select clauses too,
+// directly and through parameters.
+for (const [source, expected] of [
+    ["f 'a' = [0]; f c = [1, 2]; h x = g (f x); g [a] = a; h 'a'", '0'],
+    ["f 'a' = [0]; f c = [1, 2]; h x = g (f x); g [a, b] = a; h 'b'", '1'],
+    ["f 'a' = [0]; f c = [1, 2]; h x = g (f x); k y = h y; g [a] = a; k 'a'", '0'],
+    ["c = 'a'; f 'a' = [0]; f x = [1, 2]; g [a] = a; g (f c)", '0'],
+    ['f 1.5 = [0]; f x = [1, 2]; h x = g (f x); g [a] = a; h 1.5', '0'],
+    ['f 1.5 = [0]; f x = [1, 2]; h x = g (f x); g [a, b] = a; h 2.5', '1'],
+    ['f 2 = [0]; f x = [1, 2]; g [a] = a; g (f 2.0)', '0'],
+    ['f 2.0 = [0]; f x = [1, 2]; g [a] = a; g (f 2)', '0'],
+    ['f [1..3] = [0]; f x = [1, 2]; h x = g (f x); g [a] = a; h 2', '0'],
+    ['f [1..3] = [0]; f x = [1, 2]; h x = g (f x); g [a, b] = a; h 7', '1'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; h x = g (f x); g [a] = a; h None', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; h x = g (f x); g [a, b] = a; h (Some 1)', '1'],
+    ['import "std/option"; f (Some x) = [x]; f other = [1, 2]; h v = g (f v); g [a] = a; h (Some 7)', '7'],
+    ['Light = | Off | On; f On = [1]; f x = [0, 0]; h l = g (f l); g [a] = a; h On', '1'],
+] as const) Deno.test(`more literal kinds select clauses: ${source}`, () => {
+    const actual = run(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    "f 'a' = [0]; f c = [1, 2]; h x = g (f x); g [a] = a; h 'b'",
+    'f 1.5 = [0]; f x = [1, 2]; h x = g (f x); g [a] = a; h 2.5',
+    'f [1..3] = [0]; f x = [1, 2]; h x = g (f x); g [a] = a; h 7',
+    'import "std/option"; f None = [0]; f x = [1, 2]; h x = g (f x); g [a] = a; h (Some 1)',
+    'Light = | Off | On; f On = [1]; f x = [0, 0]; h l = g (f l); g [a] = a; h Off',
+]) Deno.test(`more literal kinds stay checked: ${source}`, () => rejected(session(), source));

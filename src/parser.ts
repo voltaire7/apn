@@ -101,6 +101,13 @@ class Parser {
             const value = this.next() as Extract<Token, { k: "int" }>;
             return { p: "int", v: -value.v };
         }
+        if (t.k === "float") { this.next(); return { p: "float", v: t.v }; }
+        if (this.isSym("-") && this.peek(1).k === "float") {
+            this.next();
+            const value = this.next() as Extract<Token, { k: "float" }>;
+            return { p: "float", v: -value.v };
+        }
+        if (t.k === "char") { this.next(); return { p: "char", v: t.v }; }
         if (t.k === "bool") { this.next(); return { p: "bool", v: t.v }; }
         // The lexer reads true and false as keywords.
         if (t.k === "kw" && (t.v === "true" || t.v === "false")) { this.next(); return { p: "bool", v: t.v === "true" }; }
@@ -1147,7 +1154,7 @@ class Parser {
     // A token that can begin a definition parameter pattern.
     startsParam(t: Token): boolean {
         if (t.k === "ident") return t.v !== "_" ? true : true;
-        if (t.k === "int" || t.k === "bool" || t.k === "str") return true;
+        if (t.k === "int" || t.k === "float" || t.k === "char" || t.k === "bool" || t.k === "str") return true;
         if (t.k === "kw" && (t.v === "true" || t.v === "false")) return true;
         if (t.k === "sym" && (t.v === "(" || t.v === "{" || t.v === "[")) return true;
         if (t.k === "sym" && t.v === "_") return true;
@@ -1508,6 +1515,8 @@ export function patternSource(p: Pattern): string {
         case "int": return String(p.v);
         case "bool": return String(p.v);
         case "string": return JSON.stringify(p.v);
+        case "char": return `'${p.v}'`;
+        case "float": return numberText({ kind: "float", v: p.v });
         case "list": return `[${p.v.map(patternSource).join(", ")}]`;
         case "cons": return `(${patternSource(p.head)} : ${patternSource(p.tail)})`;
         case "constr": return p.args.length ? `(${p.tag} ${p.args.map(patternSource).join(" ")})` : p.tag;

@@ -38,12 +38,16 @@ interface Shape { arg?: number; length?: LengthRef; items?: (Shape | undefined)[
 interface ClauseOrder { index: number; params: Pattern[]; refutable: Set<string> }
 // ref names the parameter (by binder) whose value this is, when the value
 // itself is only known at that function's calls.
-interface Known { index?: Index; boolean?: boolean; string?: string; ref?: string }
+// tag is the constructor that visibly built the value (None, Some 5).
+interface Known { index?: Index; boolean?: boolean; string?: string; char?: string; float?: number; tag?: string; ref?: string }
 interface Entry {
     type: Ty;
     index?: Index;
     boolean?: boolean;
     string?: string;
+    char?: string;
+    float?: number;
+    tag?: string;
     ref?: string;
     clauses?: { params: Pattern[]; body: Expr }[];
     mono?: boolean;
@@ -252,7 +256,7 @@ function copy(
             // The parameter's value is now the argument's: a literal, or another parameter.
             if (known?.ref && value && known.ref === value[0]) {
                 const v = value[1];
-                known = { index: known.index, boolean: v.boolean, string: v.string, ref: v.ref };
+                known = { index: known.index, boolean: v.boolean, string: v.string, char: v.char, float: v.float, tag: v.tag, ref: v.ref };
             }
             Object.assign(result, { args: t.args.map(go), solution: t.solution && go(t.solution), known });
             break;
@@ -370,7 +374,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return t.args.some(x => waiting(x, seen));
     }
     function deferredCall(f: Ty, argument: Entry): Ty {
-        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, boolean: argument.boolean, string: argument.string, ref: argument.ref } };
+        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, tag: argument.tag, ref: argument.ref } };
         requirements.push(result);
         return resolve(result);
     }
@@ -840,6 +844,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return unify(expected, atom("Bool"), e);
             case "string":
                 return unify(expected, atom("String"), e);
+            case "char":
+                return unify(expected, atom("Char"), e);
+            case "float":
+                // Compared numerically: 2.0 also matches the integer 2.
+                return unify(expected, atom("Number"), e);
             case "schema": {
                 const t = typeExpr(p.type, scope, bound);
                 application({ k: "fn", input: t, output: t, coerce: true, pattern: p }, { type: expected }, e);
@@ -1221,8 +1230,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             collect(argument.type);
             // With this argument's value known, the function's deferred checks
             // (calls on the parameter) see that value instead of its symbol.
-            const value: Known = { index: argument.index, boolean: argument.boolean, string: argument.string, ref: argument.ref };
-            const known = argument.index || argument.boolean !== undefined || argument.string !== undefined || argument.ref;
+            const value: Known = { index: argument.index, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, tag: argument.tag, ref: argument.ref };
+            const known = argument.index || argument.ref || [argument.boolean, argument.string, argument.char, argument.float, argument.tag].some(x => x !== undefined);
             const pending = f.binder && known
                 ? checks.map(check => copy(check, new Map([...variables(check)].map(t => [t, t])),
                     argument.index ? [f.binder!, argument.index] : undefined, undefined, [f.binder!, value]))
@@ -1460,6 +1469,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     boolean: boolean(a, scope),
                     string: a.t === "string" ? a.v : a.t === "var" ? scope.get(a.name)?.string : undefined,
                     ref: a.t === "var" ? scope.get(a.name)?.ref : undefined,
+                    ...literalOf(a, scope),
                 }, a);
                 // A partial application that leaves its call chain is an ordinary function value.
                 return callees.has(e) ? result : withoutShapes(result);
@@ -1781,7 +1791,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // for a matching numeric aggregate, 1 for a lossless conversion, -1000 when
     // it cannot match; other patterns 0.
     function patternScore(p: Pattern, argument: Entry): [number, number] {
-        if (["int", "bool", "string"].includes(p.p)) return [40, 40];
+        if (["int", "float", "bool", "string", "char"].includes(p.p)) return [40, 40];
         if (p.p !== "constr" || !TYPE_NAMES.includes(p.tag)) return [0, 0];
         const c = category(argument.type), tag = p.tag;
         if (tag === "Dynamic") return [30, 30];
@@ -1818,14 +1828,50 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         });
         return { low, high, matches, fails };
     }
+    // Character, float and constructor values an expression visibly has.
+    function literalOf(e: Expr, scope: Scope): { char?: string; float?: number; tag?: string } {
+        if (e.t === "char") return { char: e.v };
+        if (e.t === "float") return { float: e.v };
+        if (e.t === "unop" && e.op === "neg" && e.e.t === "float") return { float: -e.e.v };
+        if (e.t === "block" && e.stmts.length === 1) return literalOf(e.stmts[0], scope);
+        if (e.t === "var") {
+            const entry = scope.get(e.name);
+            if (!entry) return {};
+            if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
+            return { char: entry.char, float: entry.float, tag: entry.tag };
+        }
+        if (e.t === "app") {
+            // A constructor applied to all its fields.
+            let head: Expr = e, count = 0;
+            while (head.t === "app") { head = head.f; count++; }
+            if (head.t !== "var" || !/^[A-Z]/.test(head.name)) return {};
+            let t = resolve(scope.get(head.name)?.type ?? dynamic);
+            for (let n = 0; n < count && t.k === "fn"; n++) t = resolve(t.output);
+            return t.k === "variant" ? { tag: head.name } : {};
+        }
+        return {};
+    }
+    // Is the argument's value known to equal (true) or differ from (false) this
+    // number, compared exactly as the runtime compares numbers?
+    function equalsNumber(argument: Entry, value: bigint | number): boolean | undefined {
+        const int = argument.index && !argument.index.terms.size ? argument.index.constant : undefined;
+        const float = argument.float;
+        if (int !== undefined) return typeof value === "bigint" ? int === value : Number.isInteger(value) && BigInt(value) === int;
+        if (float !== undefined) return typeof value === "number" ? float === value : Number.isInteger(float) && BigInt(float) === value;
+        return undefined;
+    }
     // Does this argument always match p? Only what the checker knows exactly
     // qualifies (list lengths, literal values, exact types); repeated names never do.
     function definitelyMatches(p: Pattern, argument: Entry, refutable: Set<string>, score: number): boolean {
         const irrefutable = (q: Pattern) => q.p === "wildcard" || q.p === "var" && !refutable.has(q.name);
         if (irrefutable(p)) return true;
-        if (p.p === "int") return !!argument.index && !argument.index.terms.size && argument.index.constant === p.v;
+        if (p.p === "int" || p.p === "float") return equalsNumber(argument, p.v) === true;
         if (p.p === "bool") return argument.boolean === p.v;
         if (p.p === "string") return argument.string === p.v;
+        if (p.p === "char") return argument.char === p.v;
+        if (p.p === "range") return !!argument.index && !argument.index.terms.size && argument.index.constant >= p.lo && argument.index.constant <= p.hi;
+        // A constructor the argument was visibly built with, its fields bound plainly.
+        if (p.p === "constr" && !TYPE_NAMES.includes(p.tag)) return argument.tag === p.tag && p.args.every(irrefutable);
         // A certain exact-type (30) or aggregate (10) match, binding the value whole.
         if (p.p === "constr" && TYPE_NAMES.includes(p.tag) && p.tag !== "Vect" && p.args.length === 1) {
             return (score === 30 || score === 10) && irrefutable(p.args[0]);
@@ -1841,10 +1887,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Can this argument never match p? Literal mismatches, known lengths, and
     // typed patterns that the argument's type cannot satisfy.
     function definitelyFails(p: Pattern, argument: Entry, low: number, high: number): boolean {
-        if (p.p === "int") return !!argument.index && !argument.index.terms.size && argument.index.constant !== p.v;
+        if (p.p === "int" || p.p === "float") return equalsNumber(argument, p.v) === false;
         if (p.p === "bool") return argument.boolean !== undefined && argument.boolean !== p.v;
         if (p.p === "string") return argument.string !== undefined && argument.string !== p.v;
+        if (p.p === "char") return argument.char !== undefined && argument.char !== p.v;
+        if (p.p === "range") return !!argument.index && !argument.index.terms.size && (argument.index.constant < p.lo || argument.index.constant > p.hi);
         if (p.p === "constr" && TYPE_NAMES.includes(p.tag)) return low === -1000 && high === -1000;
+        if (p.p === "constr") return argument.tag !== undefined && argument.tag !== p.tag;
         const t = resolve(argument.type);
         if (t.k !== "list") return false;
         const n = t.items ? BigInt(t.items.length) : t.length && !t.length.terms.size ? t.length.constant : undefined;
@@ -2088,6 +2137,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (p.p === "int") return { t: "int", v: p.v };
                 if (p.p === "string") return { t: "string", v: p.v };
                 if (p.p === "bool") return { t: "bool", v: p.v };
+                if (p.p === "char") return { t: "char", v: p.v };
+                if (p.p === "float") return { t: "float", v: p.v };
                 if (p.p === "recPat") return { t: "record", v: p.v.map(([key, name]) => [key, { t: "var", name }]) };
                 if (p.p === "constr" && !p.args.length) return { t: "var", name: p.tag };
                 if (p.p === "list") {
@@ -2119,6 +2170,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             scope.set(name, {
                 type: t,
                 string: body.t === "string" ? body.v : undefined,
+                ...literalOf(body, scope),
                 index: (writes.get(name) ?? 0) > 1 ? undefined : index(clauses[0].body, scope),
                 boolean: (writes.get(name) ?? 0) > 1 ? undefined : boolean(clauses[0].body, scope),
                 nonGeneric: captured(new Map([...scope].filter(([key]) => key !== name))),

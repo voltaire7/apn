@@ -406,3 +406,10 @@ h x = match x [false -> "f", true -> "t"]
 f true = 1
 f b = 2
 print [h false, h true, f true, f false]`, ['["f", "t", 1, 2]']);
+example("character and float literal patterns", `
+f 'a' = "letter a"
+f 1.5 = "one and a half"
+f 2.0 = "two"
+f x = "other"
+print [f 'a', f 'b', f 1.5, f 2, f 2.0, f 7]
+print (match 'z' ['a' -> 1, 'z' -> 2, _ -> 3])`, ['["letter a", "other", "one and a half", "two", "two", "other"]', "2"]);

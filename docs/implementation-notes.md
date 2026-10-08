@@ -237,7 +237,8 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   certainly after a definitely matching clause, are dropped. Keep
   `patternScore` in step with the runtime's scoring.
 - A deferred call (`deferredCall`) keeps what is known about its argument's
-  value (`known`: a literal, a parameter's symbolic index, or `ref`, the binder
+  value (`known`: a literal (`literalOf` covers characters, floats and
+  constructor tags), a parameter's symbolic index, or `ref`, the binder
   of the parameter whose value it is). Applying a function whose parameter has
   a binder substitutes the argument's index and value (`copy`'s `value`) into
   copies of its pending checks; checks still waiting on an unknown argument are

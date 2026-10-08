@@ -299,9 +299,11 @@ result type, but may return lists of different lengths: with
 `f (Int n) = [1, 2]` and `f 0 = [0]`, `f 0` is a one-element list and `f 3` a
 two-element one. This also works through function parameters, at any depth:
 with `h x = g (f x)`, the checker decides `f x` at each call of `h`, so `h 0`
-uses the literal clause (as does `h 1` for `f (x - 1)`). Boolean and string
-literals work the same way (`f true = ...`, `f "x" = ...` with `h true`,
-`h "x"`). A step function used with `repeatApply` may feed its own
+uses the literal clause (as does `h 1` for `f (x - 1)`). Every literal kind
+works the same way: booleans, strings, characters, floats (compared
+numerically), integer ranges (`f [1..3] = ...` with `h 2`), and constructors
+the argument is visibly built with (`f None = ...` with `h None`, or
+`f (Some x) = ...` with `h (Some 7)`). A step function used with `repeatApply` may feed its own
 results back through arithmetic (`g [a, b] = forceList [b, a + b]`).
 Record-template patterns convert positional lists at runtime and
 are checked against their named field types. Inferred parameters do not silently

@@ -324,6 +324,8 @@ export class Interpreter {
             case "int": return { t: "int", v: pattern.v };
             case "string": return { t: "string", v: pattern.v };
             case "bool": return { t: "bool", v: pattern.v };
+            case "char": return { t: "char", v: pattern.v };
+            case "float": return { t: "float", v: pattern.v };
             case "list": return { t: "list", v: pattern.v.map(p => this.assignmentKey(p)) };
             case "recPat": return { t: "record", v: pattern.v.map(([key, name]) => [key, { t: "var", name }]) };
             case "typeBind": return { t: "app", f: { t: "var", name: pattern.name }, a: this.assignmentKey(pattern.value) };
@@ -1359,7 +1361,7 @@ export class Interpreter {
                 // argument thunks prevent repeated effects across fallthrough.
                 const hasTypedClauses = f.clauses.some((clause) => clause.params.some((p) => p.p === "constr" && TYPE_NAMES.includes(p.tag)));
                 const ranked = f.clauses.map((clause, index) => ({ clause, index, score: clause.params.reduce((score, pattern, i) => {
-                    if (["int", "bool", "string"].includes(pattern.p)) return score + 40;
+                    if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return score + 40;
                     if (pattern.p !== "constr" || !TYPE_NAMES.includes(pattern.tag)) return score;
                     if (pattern.tag === "Vect") return score + (this.isList(this.dataValue(raw[i])) ? 30 : -1000);
                     const value = pattern.tag === "Mutable" ? this.reference(raw[i]) : pattern.tag === "Type" ? this.demand(raw[i]) : this.dataValue(raw[i]);
@@ -2690,6 +2692,9 @@ export class Interpreter {
             case "int": return isNumeric(v) && equalNumbers(v, integer(p.v));
             case "bool": return v.kind === "bool" && v.v === p.v;
             case "string": return v.kind === "string" && v.v === p.v;
+            case "char": return v.kind === "char" && v.v === p.v;
+            // Like integer patterns, float patterns compare numerically.
+            case "float": return isNumeric(v) && equalNumbers(v, { kind: "float", v: p.v });
             case "list": {
                 if (v.kind === "record") {
                     // A var-only list pattern destructures a record by field name:

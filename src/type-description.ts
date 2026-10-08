@@ -82,6 +82,8 @@ export function describeType(value: Value): string {
             case "int": case "range": result = named("Int"); break;
             case "bool": result = named("Bool"); break;
             case "string": result = named("String"); break;
+            case "char": result = named("Char"); break;
+            case "float": result = named("Float"); break;
             case "schema": result = declared(p.type, new Map()); pattern(p.value, env, locals, result); break;
             case "contract": result = spec(p.spec); pattern(p.value, env, locals, result); break;
             case "constr": {
