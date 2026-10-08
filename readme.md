@@ -2,6 +2,9 @@
 
 A lazy functional scripting language implemented in dependency-free Deno/TypeScript.
 
+Requires Deno 2.8.0 or newer (`deno upgrade` updates an older install); the
+`apn` launcher checks this before starting.
+
 Run these commands from the repository root:
 
 ```sh

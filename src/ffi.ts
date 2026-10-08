@@ -176,7 +176,7 @@ export function ffiNative(i: Interpreter, name: string, args: Value[]): Value {
                 decoded.roots = [...evaluated, ...converted];
                 const origins = evaluated.filter((v): v is NativePointer => v.kind === "pointer");
                 for (const value of converted) if (value instanceof Uint8Array) {
-                    origins.push({ ...makePointer(Deno.UnsafePointer.of(value)), buffer: value, length: value.length });
+                    origins.push({ ...makePointer(Deno.UnsafePointer.of(value as Uint8Array<ArrayBuffer>)), buffer: value, length: value.length });
                 }
                 for (const origin of origins) {
                     if (origin.buffer && origin.length !== undefined && decoded.bits >= origin.bits && decoded.bits <= origin.bits + BigInt(origin.length)) {

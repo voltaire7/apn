@@ -13,6 +13,17 @@ while [ -L "$SCRIPT" ]; do
     esac
 done
 DIR="$(cd -P "$(dirname "$SCRIPT")" && pwd)"
+# Deno 2.8.0 is the first release that loads the interpreter's text imports.
+APN_DENO_MIN="2.8.0"
+if ! command -v deno >/dev/null 2>&1; then
+    echo "error: APN needs Deno $APN_DENO_MIN or newer (https://deno.com)" >&2
+    exit 1
+fi
+APN_DENO_VERSION="$(deno --version 2>/dev/null | sed -n '1s/^deno \([0-9][0-9.]*\).*/\1/p')"
+if [ -n "$APN_DENO_VERSION" ] && [ "$(printf '%s\n%s\n' "$APN_DENO_MIN" "$APN_DENO_VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | head -n 1)" != "$APN_DENO_MIN" ]; then
+    echo "error: APN needs Deno $APN_DENO_MIN or newer; found $APN_DENO_VERSION (run: deno upgrade)" >&2
+    exit 1
+fi
 APN_FFI_FLAG=""
 case "${1-}" in
     --allow-ffi|--allow-ffi=*) APN_FFI_FLAG="$1"; shift ;;

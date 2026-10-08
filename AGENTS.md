@@ -57,7 +57,8 @@ Layout:
 
 ## Run / verify
 
-Deno required. From `apn/`:
+Deno 2.8.0 or newer required (the first release that loads the
+interpreter's `with { type: "text" }` imports; `apn` enforces it). From `apn/`:
 - Run the showcase (use this as the smoke test after any change):
     deno run --allow-read main.ts examples/features.apn
 - Start the REPL:               ./apn
