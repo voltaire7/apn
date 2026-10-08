@@ -280,3 +280,20 @@ for (const source of [
     // Whether 2.0 converts to Int8 depends on the value: both clauses count.
     'f (Int8 n) = [0]; f xs = [1, 2]; g [a] = a; g (f 2.0)',
 ]) Deno.test(`typed clauses keep possible clauses: ${source}`, () => rejected(session(), source));
+// Clauses of the same input type whose results differ only in list lengths
+// become separate overload choices instead of a definition error; any other
+// result conflict is still rejected.
+for (const [source, expected] of [
+    ['f (Int n) = [1, 2]; f 0 = [0]; g [a] = a; g (f 0)', '0'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; g [a, b] = a; g (f 3)', '1'],
+    ['f (Int n) = [[1], [2, 3]]; f 0 = [[0]]; g [[a]] = a; g (f 0)', '0'],
+] as const) Deno.test(`clauses with different result lengths: ${source}`, () => {
+    const actual = run(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'f (Int n) = [1, 2]; f 0 = [0]; g [a, b] = a; g (f 0)',
+    'f (Int n) = [1, 2]; f 0 = [0]; g [a] = a; g (f 3)',
+    'f (Int n) = "a"; f 0 = 1',
+    'f (Int n) = ["a", "b"]; f 0 = [1]',
+]) Deno.test(`clauses with different results stay checked: ${source}`, () => rejected(session(), source));

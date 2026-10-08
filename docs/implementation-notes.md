@@ -236,6 +236,10 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   definitely matches or fails. Choices whose clauses all fail, or all come
   certainly after a definitely matching clause, are dropped. Keep
   `patternScore` in step with the runtime's scoring.
+- `defineClauses` merges clauses of one input domain into a group. A clause
+  whose type merges with its group's only after `withoutLengths` forgets list
+  lengths becomes its own group (key `#index`), so overload ranking separates
+  them; other conflicts still fail in the merge.
 - List lengths through functions are a property of a function's code, never
   of a type node: unification shares one node between values of different
   lengths (a fold's seed and result) and between different function values (a

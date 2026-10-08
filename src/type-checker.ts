@@ -1811,6 +1811,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (p.p === "cons") return n === 0n;
         return false;
     }
+    // Forget every list length in a (freshly copied) type graph.
+    function withoutLengths(type: Ty, seen = new Set<Ty>()): Ty {
+        const t = resolve(type);
+        if (seen.has(t)) return type;
+        seen.add(t);
+        if (t.k === "list") { t.length = undefined; t.items = undefined; }
+        children(t).forEach(child => withoutLengths(child, seen));
+        return type;
+    }
     function lengthOf(shape: Shape | undefined): LengthRef | undefined {
         return shape?.length ?? (shape?.arg !== undefined ? { param: shape.arg } : undefined);
     }
@@ -2127,7 +2136,24 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         };
         for (const [index, c] of clauses.entries()) {
             const t = functionType(c.params, c.body, scope, name);
-            const key = `${c.params.some(bindsSelf) ? "self:" : ""}${domain(t)}`, existing = groups.get(key);
+            let key = `${c.params.some(bindsSelf) ? "self:" : ""}${domain(t)}`, existing = groups.get(key);
+            // A clause whose type differs from its group's only in list lengths
+            // (f (Int n) = [1, 2]; f 0 = [0]) becomes its own overload choice;
+            // clause ranking then decides between them at each call. Any other
+            // conflict stays an error when the group is merged below.
+            if (existing) {
+                const merges = (a: Ty, b: Ty) => {
+                    try { unify(a, b, c.body); return true; }
+                    catch (error) {
+                        if (!error || typeof error !== "object" || !("message" in error)) throw error;
+                        return false;
+                    }
+                };
+                if (!merges(copy(existing), copy(t)) && merges(withoutLengths(copy(existing)), withoutLengths(copy(t)))) {
+                    key = `${key}#${index}`;
+                    existing = undefined;
+                }
+            }
             const all = c.params.flatMap(names);
             const refutable = new Set([name, ...all.filter((x, n) => all.indexOf(x) !== n)]);
             if (!orders.has(key)) orders.set(key, []);

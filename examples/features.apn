@@ -996,6 +996,10 @@ print (onlyOne (zeroOrPair []))               # 0
 pairOrZero xs = [1, 2]
 pairOrZero (Int n) = [0]
 print (onlyOne (pairOrZero 3))                # 0
+# Clauses may return lists of different lengths; each call gets its clause's.
+zeroOrPairOf (Int n) = [n, n]
+zeroOrPairOf 0 = [0]
+print (onlyOne (zeroOrPairOf 0))              # 0
 sortedAndReversed xs = [sort xs, reverse xs]
 firstOfBoth [[a, b], [c, d]] = [a, c]
 print (firstOfBoth (sortedAndReversed [3, 1]))  # [1, 1]
