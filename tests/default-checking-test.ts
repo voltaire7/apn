@@ -743,8 +743,14 @@ for (const [source, expected] of [
     ['counter = Mutable 0; bump x = set counter (counter + 1); bump []; bump []; g (f (r (counter + 0 == 2)))', '0'],
     ['counter = Mutable 0; set counter 4; print (counter + 0); set counter 9; g (f (r (counter + 0 == 9)))', '0'],
     ['counter <- Mutable 2; set counter (counter * 5); g (f (r (counter + 0 == 10)))', '0'],
-    // Elements that are never forced never write; a writer passed by value runs where called.
-    ['counter = Mutable 0; [set counter 9, 1]; g (f (r (counter + 0 == 0)))', '0'],
+    // A statement that writes and reads top-level cells: each part has the
+    // value the statement's static run gave it, in the run's order.
+    ['counter = Mutable 0; k y = { set counter 4; counter + 0 }; g (f (r (k 0 == 4)))', '0'],
+    ['counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; g (f (r ((counter + 0) + bump 0 == 1)))', '0'],
+    ['counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; g (f (r (bump 0 + (counter + 0) == 2)))', '0'],
+    ['counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; print [bump 0, counter + 0]; g (f (r (counter + 0 == 1)))', '0'],
+    ['counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; seq (bump 0) []; g (f (r (counter + 0 == 1)))', '0'],
+    // A writer passed by value runs where it is called.
     ['counter = Mutable 0; twice h = { h []; h [] }; twice (_ -> set counter (counter + 3)); g (f (r (counter + 0 == 6)))', '0'],
 ] as const) Deno.test(`cells written after reads: ${source}`, () => {
     const actual = run(session(), `${effectPrelude}; ${source}`);
@@ -757,11 +763,15 @@ for (const source of [
     'sw c = { set c 9; c + 0 }; k y = { c = Mutable 1; a = c + 0; sw c + a }; g (f (r (k 0 == 10)))',
     'counter = Mutable 0; set counter 4; g (f (r (counter + 0 == 0)))',
     'counter = Mutable 0; bump x = set counter (counter + 1); bump []; bump []; g (f (r (counter + 0 == 1)))',
+    'counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; g (f (r ((counter + 0) + bump 0 == 2)))',
+    'counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; print [bump 0, counter + 0]; g (f (r (counter + 0 == 0)))',
     // Writes in elements forced while printing: their order is not followed.
     'counter = Mutable 0; print (map (x -> set counter x) [1, 2]); g (f (r (counter + 0 == 2)))',
     'k y = { c = Mutable 1; xs = [c + 0]; set c 7; head xs }; g (f (r (k 0 == 1)))',
-    // A statement that writes a top-level cell does not also read it statically.
-    'counter = Mutable 0; k y = { set counter 4; counter + 0 }; g (f (r (k 0 == 4)))',
+    'counter = Mutable 0; k y = { set counter 4; counter + 0 }; g (f (r (k 0 == 0)))',
+    // A value the static run never forced might be forced by the program
+    // later: top-level cells are no longer followed.
+    'counter = Mutable 0; [set counter 9, 1]; g (f (r (counter + 0 == 0)))',
     // A top-level value runs when first used: it does not read top-level cells statically.
     'counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 4)))',
 ]) Deno.test(`cells written after reads stay checked: ${source}`, () => rejected(session(), `${effectPrelude}; ${source}`));

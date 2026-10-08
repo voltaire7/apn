@@ -312,9 +312,13 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   `creatingTopLevel`) are written only by `executeTopLevel`, which statically
   runs each top-level statement that `mayWrite` (reaches `set`, `load`, `use`
   or `env` through named definitions) before it is checked; reads in that
-  statement (`statementWrote`) and in lazy top-level values
-  (`topLevelDefinition`) are unknown, and an uncertain execution clears
-  `programValid`.
+  statement come from `executedParts`, the values that run gave each
+  argument-free part (unknown if it never evaluated them), reads in lazy
+  top-level values (`topLevelDefinition`) are unknown, and an uncertain
+  execution, or one leaving a deferred value `unforced`, clears
+  `programValid`. Model every place the runtime forces a value (`print`
+  renders deeply, `seq`, `assert`, `debug`, inspecting patterns in
+  `evaluateCall`), or the `unforced` check gives up.
   `CheckOptions.inputs` is set only by `Interpreter.enableChecking`:
   `readFile` and `getArgs` read through `Interpreter.inputFile`, a snapshot
   cleared at each top-level checked run and shared with the runtime

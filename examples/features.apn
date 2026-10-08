@@ -1107,6 +1107,12 @@ set counterAlias $ 2
 print mutableCounter                         # 2
 # The checker follows top-level cells through the statements that write them.
 print (onlyOne (vowelOrPair (vowelIfShort (take (mutableCounter - 1) [7, 8, 9]))))  # 1
+# A statement may write and read them: each part sees the run's order.
+bumpCounter x = {
+    set mutableCounter $ (mutableCounter + 1)
+    mutableCounter + 0
+}
+print (onlyOne (vowelOrPair (vowelIfShort (take (bumpCounter 0 - 2) [7, 8, 9]))))  # 1
 
 # p5 sketches are descriptions until built for the browser.
 p5 = import "std/p5"

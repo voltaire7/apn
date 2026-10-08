@@ -2021,6 +2021,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Top-level cells: created by a top-level definition, followed through the
     // statements that may write them, executed statically in program order.
     const programCells = new Set<KnownCell>();
+    // The values a statement's static run gave its parts (see executeTopLevel).
+    const executedParts = new Map<Expr, Known | undefined>();
+    const unforced = new Set<Known>();
     let topLevelDefinition = false, creatingTopLevel = false, executing = false, statementWrote = false, programWrote = false, programValid = true;
     // The program's definitions by name, to tell which code can reach set.
     const programDefinitions = new Map<string, Expr[]>();
@@ -2058,9 +2061,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (!reach.write) return;
         if (reach.lazy) { programValid = false; return; }
         programWrote = false;
+        executedParts.clear();
+        unforced.clear();
         executing = true;
         try { budgeted(() => evaluateKnown(e, new Map(), scope, 0)); } finally { executing = false; }
-        if (incomplete || unknownWrite || reordered) programValid = false;
+        if (incomplete || unknownWrite || reordered || unforced.size) programValid = false;
         statementWrote = programWrote;
     }
     function lazily<T>(f: () => T): T {
@@ -2129,7 +2134,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (error !== CELL_TOUCHED) throw error;
             [cellRead, reordered, unknownWrite, incomplete] = flags;
         } finally { trial--; }
-        return { deferred: once(compute) };
+        // While a statement runs statically, a deferred value the run never
+        // forced may still be forced by the program in a way not modeled here.
+        const force = once(compute);
+        if (!executing) return { deferred: force };
+        const pending = { deferred: () => { unforced.delete(pending); return force(); } };
+        unforced.add(pending);
+        return pending;
     }
     // A value where the program needs it: arithmetic, conditions, printing,
     // demanding builtins and application force a deferred value.
@@ -2395,6 +2406,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let evaluations = 0;
     function evaluateCall(summary: Summary, args: Known[], depth: number, base = new Map<string, Known>()): Known | undefined {
         if (!spendEvaluation(depth)) return undefined;
+        // Matching a pattern that inspects an argument forces it, as at runtime.
+        const inspects = (p: Pattern) => p.p !== "var" && p.p !== "wildcard";
+        args = args.map((k, i) => summary.clauses.some(c => c.params[i] && inspects(c.params[i])) ? demand(k) ?? {} : k);
         const entries: Entry[] = args.map(k => ({ type: knownType(k), ...k }));
         const ranked = summary.clauses.map(c => ({ clause: c, ...rankClause(c, entries) }));
         const sure = ranked.filter(r => r.matches);
@@ -2506,6 +2520,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (k.tag !== undefined || k.char !== undefined || k.fn) return true;
         return undefined;
     }
+    function cachedEvaluation(e: Expr, scope: Scope, depth: number): Known | undefined {
+        const names = mentionedNames(e), entries = names.map(name => scope.get(name));
+        const cached = evaluated.get(e) ?? [];
+        const hit = cached.find(c => c.entries.every((entry, n) => sameBinding(entry, entries[n])));
+        if (hit) return hit.result;
+        const events = cellEvents;
+        const result = evaluateKnown(e, new Map(), scope, depth, true);
+        // A value that read or wrote a cell depends on this run's order.
+        if (events !== cellEvents) return result;
+        cached.push({ entries, result });
+        evaluated.set(e, cached);
+        return result;
+    }
     const evaluated = new WeakMap<Expr, { entries: (Entry | undefined)[]; result: Known | undefined }[]>();
     // Copies of a binding (blocks copy outer entries) evaluate alike: the same
     // type and the same facts.
@@ -2539,16 +2566,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // same bindings of the names it mentions: nested arguments (f (g (h x)))
         // are each checked as call arguments, in copies of one scope.
         if (!fresh && env.size === 0 && (e.t === "app" || e.t === "binop" || e.t === "block")) {
-            const names = mentionedNames(e), entries = names.map(name => scope.get(name));
-            const cached = evaluated.get(e) ?? [];
-            const hit = cached.find(c => c.entries.every((entry, n) => sameBinding(entry, entries[n])));
-            if (hit) return hit.result;
-            const events = cellEvents;
-            const result = evaluateKnown(e, env, scope, depth, true);
-            // A value that read or wrote a cell depends on this run's order.
-            if (events !== cellEvents) return result;
-            cached.push({ entries, result });
-            evaluated.set(e, cached);
+            // A part of a statement that writes top-level cells has the value the
+            // statement's static run computed for it, in the run's order.
+            if (!executing && statementWrote && executedParts.has(e)) { cellEvents++; return executedParts.get(e); }
+            const result = cachedEvaluation(e, scope, depth);
+            if (executing && !trial && !executedParts.has(e)) executedParts.set(e, result);
             return result;
         }
         const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
@@ -2840,11 +2862,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const n = k?.string !== undefined ? BigInt(k.string.length) : knownLength(k);
                 return n === undefined ? undefined : { index: constant(n) };
             }
-            case "seq": return args[1]();
+            case "seq": args[0](); return args[1]();
             // Effects are not performed; their results are known. print and
             // emit return their argument; debug, assert and set return [].
-            case "print": case "emit": return args[0]();
-            case "debug": case "assert": return known([]);
+            // Printing renders, forcing every element in order.
+            case "print": case "emit": {
+                const shown = args[0]();
+                if (renderKnown(shown) === undefined) incomplete = true;
+                return shown;
+            }
+            case "debug": case "assert": args[0](); return known([]);
             case "set": writeMutable(args[0](), args[1]); return known([]);
             // Input read at check time, from the same snapshot the run uses.
             case "readStdin": {

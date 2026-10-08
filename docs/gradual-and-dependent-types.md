@@ -350,12 +350,15 @@ that reads a cell is computed where it is first needed, so
 `{ c = Mutable 1; xs = [c + 0]; set c 7; head xs }` is 7. A cell defined at the
 top level is followed through the top-level statements that can write it,
 which the checker runs in program order before checking each one: after
-`counter = Mutable 0; set counter 4`, `counter + 0` is 4. A read stays unknown
-when evaluation skips code or an uncertain branch, when accesses could happen
-in another order, in a top-level statement that itself writes the cell, and in
-a top-level value (`snap = counter + 0`), which runs when first used; once a
-top-level statement that can write cells is uncertain, top-level cells stay
-unknown for the rest of the program. When the interpreter checks a
+`counter = Mutable 0; set counter 4`, `counter + 0` is 4. Within a statement
+that writes top-level cells, each part has the value that run gave it, so with
+`bump x = { set counter (counter + 1); counter + 0 }`, `(counter + 0) + bump 0`
+is 1 and `bump 0 + (counter + 0)` is 2; printing forces every element, in order.
+A read stays unknown when evaluation skips code or an uncertain branch, when
+accesses could happen in another order, and in a top-level value
+(`snap = counter + 0`), which runs when first used. Once a top-level statement
+that can write cells is uncertain, or leaves a value unforced that the program
+might force later, top-level cells stay unknown for the rest of the program. When the interpreter checks a
 program right before running it (the CLI and the REPL), `readFile`, `getArgs`
 (and so `readInput`) and `readStdin` see the program's actual input, and the run
 reads the same text the checker saw. Stdin is read ahead only when it is not a
