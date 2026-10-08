@@ -37,7 +37,11 @@ intentional evaluation change.
 - Blocks are `{ t: "block" }` nodes that evaluate in a child `Env`;
   `{ t: "stmDef" }` binds into it.
 - The parser detects `f x = ...` definitions by lookahead (`isDef`): it scans
-  parameters and an optional `: Type`, then requires `=`. Application
+  parameter patterns, then requires `=`.
+- There are no type annotations. `rejectDefinitionAnnotation` (before a
+  statement's `=`/`<-`) and `rejectLambdaAnnotation` (`( ... ) ->`) report a
+  `:` followed by a capitalized type by token shape, before any lookahead runs;
+  a ternary `c ? Int : String` never matches either shape. Application
   statements such as `print $ head $ [1, 2, 3]` lack `=`, so they stay
   expressions. `skipContinuation` handles indented definition bodies.
 - `groupClauses` merges consecutive same-name, same-arity definitions into one

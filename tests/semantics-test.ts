@@ -385,16 +385,17 @@ print (map (100 -) [1, 2])
 print (- 2)
 print (-2)
 print (10 - 2)`, ["7", "7", "94", "[99, 98]", "-2", "-2", "8"]);
-example("legacy parameter annotations are ignored", `
-f x: Int = x + 1
-g (x: Maybe Int) = x
-h (k: Int -> Int) = k 2
-add x: Int y: Int = x + y
-total x y : Int = x + y
-lam = (x: Int) -> x + 1
-pair = (a: Int, b: Int) -> a + b
-print [f 1, g 2, h (+ 1), add 1 2, total 3 4, lam 5, pair 6 7]`, ["[2, 2, 3, 3, 7, 6, 13]"]);
-example("cons parameters are not annotations", `
+example("types come from constructor patterns, not annotations", `
+f (Int x) = x + 1
+h ((Int -> Int) k) = k 2
+lam = (Int x) -> x + 1
+v = Int 5
+print [f 1, h (+ 1), lam 5, v]`, ["[2, 3, 6, 5]"]);
+for (const source of ["x: Int = 5", "f x: Int = x", "f (x: Int) = x", "g = (x: Int) -> x", "f x y : Int = x + y", "print { x: Int = 20; x }"]) {
+    failure(`':' is not a type annotation: ${source}`, source, "not a type annotation");
+}
+failure("type signatures are not supported", "f :: Int -> Int\nf x = x", "type signatures are not supported");
+example("cons parameters still parse", `
 f x:rest = rest
 g (x:rest) = rest
 one (x:[]) = x

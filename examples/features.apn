@@ -447,24 +447,21 @@ print (1 < 2)             # => true
 print ("a" != "b")        # => true
 
 # ---------------------------------------------------------
-# 13. TYPE ANNOTATIONS — accepted and ignored at runtime
+# 13. TYPES COME FROM CONSTRUCTORS — there are no annotations
+#    ':' only builds lists (x:rest) and record entries ([x: 1]);
+#    `x: Int = 5` and `f :: Int -> Int` are syntax errors.
 # ---------------------------------------------------------
 print {
-    x: Int = 20
+    x = Int 20                      # construct a typed value
     x * 2
 }                                   # => 40
-print {
-    x: Int = 5
-    x
-}                                   # => 5
-
-# Parameters accept them too, bare or parenthesized. A ':' followed by a
-# capitalized type is an annotation; otherwise it is a cons pattern.
-annotated x: Int = x + 1
-print (annotated 1)                 # => 2
-annotatedFn (k: Int -> Int) = k 2
-print (annotatedFn (+ 1))           # => 3
-tailOf (x:rest) = rest              # still a cons pattern
+typedInc (Int x) = x + 1            # a constructor pattern requires an Int
+print (typedInc 1)                  # => 2
+typedFn ((Int -> Int) k) = k 2      # a function contract
+print (typedFn (+ 1))               # => 3
+typedLam = (Int x) -> x + 1         # lambdas take constructor patterns too
+print (typedLam 5)                  # => 6
+tailOf (x:rest) = rest              # ':' in a pattern is always cons
 print (tailOf [1, 2, 3])            # => [2, 3]
 
 # ---------------------------------------------------------

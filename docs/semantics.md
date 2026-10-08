@@ -98,6 +98,10 @@ fields are ignored), in bindings, function parameters, and `match` alternatives.
 left binds a type alias; see [templates and type aliases](templates-and-types.md)
 for aliases and variant declarations.
 
+There are no type annotations or signatures: `:` only builds lists and record
+entries. State types with constructors, `x = Int 5` or `f (Int x) = ...`; see
+[pattern functions](pattern-functions.md).
+
 In file mode, bare expressions run for their effects but are not printed; use
 `print`. The REPL echoes expression results but not assignments, so `x = x`
 never hangs the prompt.

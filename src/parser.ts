@@ -85,62 +85,6 @@ class Parser {
         while (this.peek().k === "newline" || this.peek().k === "indent") this.next();
     }
 
-    // ---- types (parsed but only used for optional annotations; ignored at runtime)
-
-    // Scan-only version of parseType: advances a token index (not the parser)
-    // past a single type, for lookahead. Returns the new index.
-    skipType(j: number): number {
-        const tk = this.toks[j];
-        if (tk.k === "ident" || tk.k === "kw") return j + 1;
-        if (tk.k === "sym" && (tk.v === "(" || tk.v === "{")) {
-            j++;
-            j = this.skipType(j);
-            while (this.toks[j].k === "sym" && (this.toks[j] as any).v === ",") {
-                j = this.skipType(j + 1);
-            }
-            return j + 1; // past ')'
-        }
-        if (tk.k === "sym" && tk.v === "[") {
-            return this.skipType(j + 1) + 1;
-        }
-        return j + 1;
-    }
-
-    parseType(): string {
-        const t = this.peek();
-        if (t.k === "ident" || t.k === "kw") { this.next(); return t.v; }
-        if (t.k === "sym" && (t.v === "(" || t.v === "{")) {
-            const close = t.v === "(" ? ")" : "}";
-            this.next();
-            const parts = [this.parseType()];
-            while (this.eatSym(",")) parts.push(this.parseType());
-            this.expectSym(close);
-            return "(" + parts.join(", ") + ")";
-        }
-        if (t.k === "sym" && t.v === "[") {
-            this.next();
-            const inner = this.parseType();
-            this.expectSym("]");
-            return `[${inner}]`;
-        }
-        this.next();
-        return "_";
-    }
-
-    // Parse a full function/expression type, including arrow types:
-    //   Int -> [Bool] -> (Int, String)
-    parseFullType(): string {
-        this.skipAll();
-        const parts: string[] = [];
-        for (;;) {
-            parts.push(this.parseType());
-            this.skipAll();
-            if (this.isSym("->")) { this.next(); continue; }
-            break;
-        }
-        return parts.length === 1 ? parts[0] : parts.join(" -> ");
-    }
-
     // ---- patterns
 
     parsePattern(): Pattern {
@@ -195,7 +139,6 @@ class Parser {
                 return { p: "typeBind", name: typeName.v, value };
             }
             const p = this.parseConsPattern();
-            if (this.annotationAhead()) this.skipAnnotation(close);
             if (this.eatSym(",")) {
                 throw new Error("Parser: tuple patterns are not supported; use a list pattern [a, b, ...] instead");
             }
@@ -279,31 +222,73 @@ class Parser {
         throw new Error(`Parser: bad pattern '${this.tokenStr(t)}'`);
     }
 
-    // A legacy annotation: ':' followed by a capitalized type name. A cons tail
-    // is a list, so `x:Int` is never a useful cons pattern.
-    annotationAhead(): boolean {
-        const type = this.peek(1);
-        return this.isSym(":") && type.k === "ident" && /^[A-Z]/.test(type.v);
+    // ':' only builds lists and record entries; there are no type annotations.
+    // A list tail can never be a type, so `: Int` written where an annotation
+    // would go is reported as one instead of parsing as a meaningless cons.
+    annotationError(type: number): never {
+        this.i = type;
+        const name = (this.peek() as { v: string }).v;
+        throw new Error(`Parser: ':' builds a list (x:rest), not a type annotation; type with the constructor instead: (${name} x) in a pattern, ${name} value in an expression`);
     }
 
-    // Skip an ignored annotation inside a parenthesized parameter, up to its close.
-    skipAnnotation(close: string): void {
-        this.next(); // :
+    // Index of the type after a ':' annotation, scanning tokens [from, to).
+    // Colons directly inside [ ] are record entries and never count.
+    annotationIn(from: number, to: number): number | undefined {
+        const open: string[] = [];
+        for (let j = from; j < to; j++) {
+            const t = this.toks[j];
+            if (t.k !== "sym") continue;
+            if (["(", "{", "["].includes(t.v)) open.push(t.v);
+            else if ([")", "}", "]"].includes(t.v)) open.pop();
+            else if (t.v === ":" && open[open.length - 1] !== "[") {
+                const type = this.toks[j + 1];
+                if (type?.k === "ident" && /^[A-Z]/.test(type.v)) return j + 1;
+            }
+        }
+        return undefined;
+    }
+
+    // Statement level:  x: Int = 5,  f x: Int = x,  f (x: Int) = x
+    rejectDefinitionAnnotation(): void {
         let depth = 0;
-        for (;;) {
-            const t = this.peek();
-            if (t.k === "eof") throw new Error(`Parser: expected '${close}'`);
-            if (t.k === "sym" && depth === 0 && (t.v === close || t.v === ",")) return;
-            if (t.k === "sym" && ["(", "{", "["].includes(t.v)) depth++;
-            if (t.k === "sym" && [")", "}", "]"].includes(t.v)) depth--;
-            this.next();
+        for (let j = this.i; j < this.toks.length; j++) {
+            const t = this.toks[j];
+            if (t.k === "eof" || (depth === 0 && ["newline", "indent", "dedent"].includes(t.k))) return;
+            if (t.k !== "sym") continue;
+            if (["(", "{", "["].includes(t.v)) depth++;
+            else if ([")", "}", "]"].includes(t.v)) { if (--depth < 0) return; }
+            else if (depth === 0 && (t.v === ";" || t.v === "?" || t.v === "->")) return;
+            else if (depth === 0 && (t.v === "=" || t.v === "<-")) {
+                const type = this.annotationIn(this.i, j);
+                if (type !== undefined) this.annotationError(type);
+                return;
+            }
+        }
+    }
+
+    // Lambda level:  (x: Int) -> x
+    rejectLambdaAnnotation(): void {
+        if (!this.isSym("(")) return;
+        let depth = 0;
+        for (let j = this.i; j < this.toks.length; j++) {
+            const t = this.toks[j];
+            if (t.k === "eof") return;
+            if (t.k !== "sym") continue;
+            if (["(", "{", "["].includes(t.v)) depth++;
+            else if ([")", "}", "]"].includes(t.v) && --depth === 0) {
+                const after = this.toks[j + 1];
+                if (after?.k !== "sym" || (after.v !== "->" && after.v !== "|")) return;
+                const type = this.annotationIn(this.i + 1, j);
+                if (type !== undefined) this.annotationError(type);
+                return;
+            }
         }
     }
 
     // cons pattern: x:xs
     parseConsPattern(): Pattern {
         let p = this.parsePattern();
-        if (this.isSym(":") && !this.annotationAhead()) {
+        if (this.isSym(":")) {
             this.next();
             const tail = this.parseConsPattern();
             return { p: "cons", head: p, tail };
@@ -596,6 +581,7 @@ class Parser {
     parsePrimary(): Expr {
         const t = this.peek();
         if (!this.noLambda && this.startsParam(t)) {
+            this.rejectLambdaAnnotation();
             const save = this.i;
             let header: { params: Pattern[]; guard?: Expr } | undefined;
             try { header = this.lambdaHeader(); } catch { this.i = save; }
@@ -689,6 +675,7 @@ class Parser {
                             if (tb.k === "sym" && tb.v === "," && t.v === "(") {
                                 throw new Error("Parser: tuples are not supported; use a list [a, b, ...] instead");
                             }
+                            this.rejectDefinitionAnnotation();
                             if (this.isEagerBinding()) {
                                 stmts.push(this.parseEagerBinding());
                             } else if (this.isFieldAssignStart()) {
@@ -864,22 +851,7 @@ class Parser {
     noLambda = 0;
     lambdaHeader(): { params: Pattern[]; guard?: Expr } {
         const params: Pattern[] = [];
-        while (this.startsParam(this.peek())) {
-            // Preserve the legacy parenthesized annotation form.
-            const first = this.peek(1), colon = this.peek(2), type = this.peek(3);
-            if (this.isSym("(") && first.k === "ident" && /^[a-z]/.test(first.v) && colon.k === "sym" && colon.v === ":" &&
-                    type.k === "ident" && /^[A-Z]/.test(type.v)) {
-                this.next();
-                do {
-                    const name = this.next();
-                    if (name.k !== "ident") throw new Error("Parser: expected parameter");
-                    params.push({ p: "var", name: name.v });
-                    if (this.annotationAhead()) this.skipAnnotation(")");
-                } while (this.eatSym(","));
-                this.expectSym(")");
-            } else params.push(this.parseConsPattern());
-            if (this.eatSym(":")) this.parseType();
-        }
+        while (this.startsParam(this.peek())) params.push(this.parseConsPattern());
         if (!params.length) throw new Error("Parser: expected lambda parameters");
         let guard: Expr | undefined;
         if (this.eatSym("|")) {
@@ -1111,10 +1083,9 @@ class Parser {
     // ---- top level
 
     // Lookahead: is the statement starting at the current identifier a binding
-    // definition? Recognizes  name = expr,  name : Type = expr,  and the
-    // Haskell-style  name p1 p2 p3 = expr  where each pi is a PATTERN
-    // (in `[x, y]`, `(x:rest)`, `[]`, `(Just x)`, a literal, a bare var, ...),
-    // optionally followed by a `: Type` annotation.
+    // definition? Recognizes  name = expr  and the Haskell-style
+    // name p1 p2 p3 = expr  where each pi is a PATTERN
+    // (in `[x, y]`, `(x:rest)`, `[]`, `(Just x)`, a literal, a bare var, ...).
     isDef(): boolean {
         const save = this.i;
         try {
@@ -1124,16 +1095,8 @@ class Parser {
             for (;;) {
                 if (!this.startsParam(this.peek())) break;
                 this.parseConsPattern();
-                // optional param type annotation:  p : Type
-                if (this.isSym(":")) { this.next(); this.parseType(); }
             }
-            if (this.isSym("=")) return true;
-            if (this.isSym(":")) {
-                this.next();
-                this.parseFullType();
-                return this.isSym("=");
-            }
-            return false;
+            return this.isSym("=");
         } catch {
             return false;
         } finally {
@@ -1195,11 +1158,7 @@ class Parser {
         // Haskell-style params are PATTERNS:  f [x, y] = ..., f (x:rest) = ...
         while (this.startsParam(this.peek())) {
             params.push(this.parseConsPattern());
-            // optional param type annotation:  p : Type
-            if (this.isSym(":")) { this.next(); this.parseType(); }
         }
-        // optional single return-type annotation:  name : Type = expr
-        if (this.isSym(":")) { this.next(); this.parseType(); }
         this.next(); // =
         const body = this.parseDefBody();
         return { name, clauses: [{ params, body }] };
@@ -1281,6 +1240,7 @@ class Parser {
                 throw new Error("Parser: top-level statements must not be indented");
             }
 
+            if (t.k === "ident") this.rejectDefinitionAnnotation();
             if (this.isEagerBinding()) {
                 out.push(this.parseEagerBinding() as TopLevel);
                 continue;
@@ -1337,12 +1297,9 @@ class Parser {
             }
 
             if (t.k === "ident") {
-                // Haskell-style type signature:  f :: Int -> Int   (annotation, discarded)
                 if (this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === "::") {
                     this.next(); // name
-                    this.next(); // ::
-                    this.parseFullType();
-                    continue;
+                    throw new Error("Parser: type signatures are not supported; require types with constructor patterns, e.g. f (Int x) = ...");
                 }
                 // Field/pluck assignment:  vec.x = 10   vec.[x, y] = ...
                 if (this.isFieldAssignStart()) {
@@ -1351,7 +1308,6 @@ class Parser {
                 }
                 // A binding definition. Supports the Haskell-style param form too:
                 //   name = expr            name a b c = expr
-                //   name : Type = expr
                 // An Uppercase constructor on the LHS is a destructuring BINDING
                 // (Just v = ...), not a function definition.
                 if (this.isPatBinding()) {

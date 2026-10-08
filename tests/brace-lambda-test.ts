@@ -4,7 +4,7 @@ import { Interpreter } from "../src/interp.ts";
 for (const [source, expected] of [
     ['[x: 1, y: 2, z: 3] * [field, value] -> {\n    format "%: %" [field, value]\n} * x -> x', '["x: 1", "y: 2", "z: 3"]'],
     ["[1, 2] * x -> { x + 1 } * x -> { x * 2 }", "[4, 6]"],
-    ["[1, 2] * (x: Int) -> { x + 1 } * x -> x * 2", "[4, 6]"],
+    ["[1, 2] * (Int x) -> { x + 1 } * x -> x * 2", "[4, 6]"],
     ["[1, 2] * x -> x * 2 + 1", "[3, 5]"],
     ["f = x -> { y = x + 1; y * 2 }\nf 3", "8"],
 ]) {

@@ -215,10 +215,11 @@ lambda. Write `((Int -> Int) f)` in a parameter or binding pattern to constrain
 `f`. A captured contract's `typeOf` remains a first-class type value, but its
 printed arrow description is not a standalone type expression.
 
-Legacy `:` and `::` annotations are still accepted and ignored; they are
-separate from these runtime contracts. On a parameter, `:` followed by a
-capitalized type starts an annotation (`f x: Int = ...`, `f (k: Int -> Int) = ...`,
-`(x: Int) -> ...`); anything else after `:` is a cons pattern (`f (x:rest) = ...`).
+Constructor patterns and contracts are the only way to state a type. There are
+no `:` annotations or `::` signatures: `:` always builds a list (`x:rest`) or a
+record entry (`[x: 1]`). Because a list tail can never be a type, `f x: Int = x`,
+`(x: Int) -> x`, and `x: Int = 5` are syntax errors that point to the
+constructor form (`f (Int x) = x`, `x = Int 5`).
 
 
 ## Declared variant types in patterns
