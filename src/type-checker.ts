@@ -1398,6 +1398,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const a = variable(), t = list(a);
                 unify(t, expected, e);
                 const vector = resolve(expected);
+                // A list known to be empty has no head to take.
+                if (vector.k === "list" && vector.length && !vector.length.terms.size && vector.length.constant < 1n) {
+                    problem(`length mismatch: expected at least 1, got ${vector.length.constant}`, e);
+                }
                 const tail = vector.k === "list" && vector.length ? list(a, indexAdd(vector.length, constant(-1n))) : t;
                 bind(p.head, a, scope, e, bound);
                 bind(p.tail, tail, scope, e, bound);

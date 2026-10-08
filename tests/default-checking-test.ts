@@ -901,6 +901,7 @@ Deno.test("a view an earlier REPL input stored reaches what its uses name", () =
     rejected(i, later('((head box) "bumpO") 0'));
     if (run(i, later('((head box) "bumpC") 0').replace("bumpO x", "bumpC x = set counter 1; bumpO x")) !== "0") throw new Error("stored view");
 });
+for (const source of ['x:xs = []', 'x:y:z = [1]', 'f n = { x:xs = []; x }']) Deno.test(`a cons binding of a list known too short is rejected: ${source}`, () => rejected(session(), source));
 Deno.test("a set from an earlier REPL input keeps later cell reads unknown", () => {
     const i = session();
     run(i, `${effectPrelude}; bump c = set c 9`);

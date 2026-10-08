@@ -246,6 +246,14 @@ print (format "% %" [1 + 2,[4 + 5]])
 
 failure("a demanded invalid tail reports a list error",
     "print (take 2 (1:2))", "expected a list");
+example("cons patterns bind at statement level", `
+x:xs = [1,2,3,4]
+print [x,xs]
+(a:b:rest) = [5,6,7]
+print [a,b,rest]
+h:t <- [8,9]
+print t
+`, ["[1,[2,3,4]]", "[5,6,[7]]", "[9]"]);
 failure("take rejects negative counts", "print (take (-1) [])", "non-negative int");
 failure("drop rejects non-integer counts", "print (drop 1.0 [])", "non-negative int");
 failure("head still rejects empty lists", "print (head [])", "head of empty list");

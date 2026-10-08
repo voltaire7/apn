@@ -971,12 +971,14 @@ class Parser {
     startsPatBinding(): boolean {
         const t = this.peek();
         if (t.k === "sym" && t.v === "[") return true;
+        // A cons pattern: x:xs = ..., (x:xs) = ...
+        const consAfter = (n: number) => { const c = this.peek(n); return c.k === "sym" && c.v === ":"; };
         if (t.k === "sym" && (t.v === "(" || t.v === "{")) {
             const n1 = this.peek(1);
-            return n1.k === "ident" && /^[A-Z]/.test(n1.v);
+            return n1.k === "ident" && (/^[A-Z]/.test(n1.v) || consAfter(2));
         }
         const next = this.peek(1);
-        return t.k === "ident" && (/^[A-Z]/.test(t.v) || (next.k === "sym" && next.v === "."));
+        return t.k === "ident" && (/^[A-Z]/.test(t.v) || (next.k === "sym" && (next.v === "." || next.v === ":")));
     }
 
     // Lookahead: is the statement  pattern = expr ? Restores the token index.
@@ -1096,7 +1098,7 @@ class Parser {
     isPatBinding(): boolean {
         if (!this.startsPatBinding()) return false;
         const t = this.peek();
-        if (t.k === "ident" && !declaredCtors.has(t.v) && !(this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === ".")) return false;
+        if (t.k === "ident" && !declaredCtors.has(t.v) && !(this.peek(1).k === "sym" && [".", ":"].includes((this.peek(1) as { v: string }).v))) return false;
         const save = this.i;
         try {
             const p = this.parseConsPattern();
