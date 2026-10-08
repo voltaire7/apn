@@ -401,3 +401,8 @@ g (x:rest) = rest
 one (x:[]) = x
 lam = (x:rest) -> rest
 print [f [1, 2], g [3, 4], one [5], lam [6, 7]]`, ["[[2], [4], 5, [7]]"]);
+example("boolean literal patterns", `
+h x = match x [false -> "f", true -> "t"]
+f true = 1
+f b = 2
+print [h false, h true, f true, f false]`, ['["f", "t", 1, 2]']);

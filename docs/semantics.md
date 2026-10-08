@@ -54,7 +54,9 @@ len [] = 0
 len (x:rest) = 1 + len rest
 ```
 
-When no equation matches, the error names the function: `no clause of 'len'
+Literal patterns (numbers, strings, `true`, `false`) are tried before other
+clauses; otherwise clauses run in source order. When no equation matches, the
+error names the function: `no clause of 'len'
 matches the given arguments`. Guards are not allowed on definition clauses;
 use `match` with guarded pattern lambdas instead (see
 [pattern functions](pattern-functions.md)).

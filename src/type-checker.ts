@@ -17,7 +17,7 @@ type Ty =
     // shape describes the full result in terms of the arguments (see Shape); args
     // collects argument types across curried application. Both describe the
     // function's code, so they are trusted only at a direct call by name.
-    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[] }
+    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; position?: number; matched?: number[]; ruledOut?: number[] }
     | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number> }
     | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string> }
     | { k: "type"; value: Ty }
@@ -29,6 +29,12 @@ type Ty =
 // length or a constant, with an optional shape for each item.
 type LengthRef = { param: number } | { constant: bigint };
 interface Shape { arg?: number; length?: LengthRef; items?: (Shape | undefined)[] }
+// A clause's place in the runtime's dispatch order (score, then source index)
+// and its patterns: overload choices carry them to drop choices that a
+// definitely matching earlier clause makes unreachable. matched lists the
+// clauses that definitely matched every argument applied so far; ruledOut
+// those that definitely failed one.
+interface ClauseOrder { index: number; score: number; params: Pattern[]; refutable: Set<string> }
 interface Entry {
     type: Ty;
     index?: Index;
@@ -1036,13 +1042,38 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (f.k === "overload") {
             const input = resolve(argument.type);
             if (input.k === "var" || input.k === "operation") return operation("call", [f, argument.type]);
-            const outputs: Ty[] = [];
+            let outputs: Ty[] = [];
+            const accepted: { clauses?: ClauseOrder[]; sure?: number[] }[] = [];
             for (const choice of f.choices) {
+                const instance = copy(choice), node = resolve(instance);
                 try {
-                    outputs.push(application(copy(choice), { ...argument, type: copy(argument.type) }, e));
+                    const out = application(instance, { ...argument, type: copy(argument.type) }, e);
+                    outputs.push(out);
+                    let sure: number[] | undefined;
+                    if (node.k === "fn" && node.clauses) {
+                        const prior = node.matched ?? node.clauses.map(c => c.index);
+                        const matched = node.clauses.filter(c => prior.includes(c.index) &&
+                            definitelyMatches(c.params[node.position!], argument, c.refutable)).map(c => c.index);
+                        const ruledOut = [...node.ruledOut ?? [], ...node.clauses
+                            .filter(c => definitelyFails(c.params[node.position!], argument)).map(c => c.index)];
+                        // No clause of this choice can run: it contributes nothing.
+                        if (node.clauses.every(c => ruledOut.includes(c.index))) { outputs.pop(); continue; }
+                        const next = resolve(out);
+                        if (next.k === "fn" && next.clauses === node.clauses) { next.matched = matched; next.ruledOut = ruledOut; }
+                        else sure = matched;
+                    }
+                    accepted.push({ clauses: node.k === "fn" ? node.clauses : undefined, sure });
                 } catch (error) {
                     if (!error || typeof error !== "object" || !("message" in error)) throw error;
                 }
+            }
+            // The runtime tries clauses by score, then source order: once one
+            // definitely matches, choices made only of later clauses cannot run.
+            if (accepted.every(a => a.clauses)) {
+                const before = (a: ClauseOrder, b: ClauseOrder) => a.score > b.score || a.score === b.score && a.index <= b.index;
+                const first = accepted.flatMap(a => a.clauses!.filter(c => a.sure?.includes(c.index)))
+                    .reduce<ClauseOrder | undefined>((best, c) => !best || before(c, best) ? c : best, undefined);
+                if (first) outputs = outputs.filter((_, n) => accepted[n].clauses!.some(c => before(c, first)));
             }
             if (!outputs.length) return problem(`no overload accepts ${text(argument.type)}`, e);
             if (outputs.length === 1 || outputs.every((x) => text(x) === text(outputs[0]))) return outputs[0];
@@ -1694,6 +1725,35 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         result.output = withoutShapes(t.output, seen);
         return result;
     }
+    // Does this argument always match p? Only what the checker knows exactly
+    // qualifies (list lengths, literal values); repeated names never do.
+    function definitelyMatches(p: Pattern, argument: Entry, refutable: Set<string>): boolean {
+        const irrefutable = (q: Pattern) => q.p === "wildcard" || q.p === "var" && !refutable.has(q.name);
+        if (irrefutable(p)) return true;
+        if (p.p === "int") return !!argument.index && !argument.index.terms.size && argument.index.constant === p.v;
+        if (p.p === "bool") return argument.boolean === p.v;
+        if (p.p === "string") return argument.string === p.v;
+        const t = resolve(argument.type);
+        if (t.k !== "list") return false;
+        const n = t.items ? BigInt(t.items.length) : t.length && !t.length.terms.size ? t.length.constant : undefined;
+        if (n === undefined) return false;
+        if (p.p === "list") return p.v.every(irrefutable) && n === BigInt(p.v.length);
+        if (p.p === "cons") return irrefutable(p.head) && irrefutable(p.tail) && n >= 1n;
+        return false;
+    }
+    // Can this argument never match p? Literal mismatches and known lengths.
+    function definitelyFails(p: Pattern, argument: Entry): boolean {
+        if (p.p === "int") return !!argument.index && !argument.index.terms.size && argument.index.constant !== p.v;
+        if (p.p === "bool") return argument.boolean !== undefined && argument.boolean !== p.v;
+        if (p.p === "string") return argument.string !== undefined && argument.string !== p.v;
+        const t = resolve(argument.type);
+        if (t.k !== "list") return false;
+        const n = t.items ? BigInt(t.items.length) : t.length && !t.length.terms.size ? t.length.constant : undefined;
+        if (n === undefined) return false;
+        if (p.p === "list") return n !== BigInt(p.v.length);
+        if (p.p === "cons") return n === 0n;
+        return false;
+    }
     function lengthOf(shape: Shape | undefined): LengthRef | undefined {
         return shape?.length ?? (shape?.arg !== undefined ? { param: shape.arg } : undefined);
     }
@@ -1918,6 +1978,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (p.p === "var") return { t: "var", name: p.name };
                 if (p.p === "int") return { t: "int", v: p.v };
                 if (p.p === "string") return { t: "string", v: p.v };
+                if (p.p === "bool") return { t: "bool", v: p.v };
                 if (p.p === "recPat") return { t: "record", v: p.v.map(([key, name]) => [key, { t: "var", name }]) };
                 if (p.p === "constr" && !p.args.length) return { t: "var", name: p.tag };
                 if (p.p === "list") {
@@ -1993,9 +2054,31 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 default: return false;
             }
         };
-        for (const c of clauses) {
+        // Typed constructor patterns are ranked by the argument's runtime type,
+        // so only functions without them have a statically known clause order.
+        const ordered = !clauses.some(c => c.params.some(p => p.p === "constr" && TYPE_NAMES.includes(p.tag)));
+        const orders = new Map<string, ClauseOrder[]>();
+        const names = (p: Pattern): string[] => {
+            switch (p.p) {
+                case "var": return [p.name];
+                case "as": return [...names(p.left), ...names(p.right)];
+                case "typeBind": return [p.name, ...names(p.value)];
+                case "schema": case "contract": return names(p.value);
+                case "list": return p.v.flatMap(names);
+                case "cons": return [...names(p.head), ...names(p.tail)];
+                case "constr": return p.args.flatMap(names);
+                case "recPat": return p.v.map(([, binding]) => binding);
+                default: return [];
+            }
+        };
+        for (const [index, c] of clauses.entries()) {
             const t = functionType(c.params, c.body, scope, name);
             const key = `${c.params.some(bindsSelf) ? "self:" : ""}${domain(t)}`, existing = groups.get(key);
+            const all = c.params.flatMap(names);
+            const refutable = new Set([name, ...all.filter((x, n) => all.indexOf(x) !== n)]);
+            const score = c.params.filter(p => ["int", "bool", "string"].includes(p.p)).length * 40;
+            if (!orders.has(key)) orders.set(key, []);
+            orders.get(key)!.push({ index, score, params: c.params, refutable });
             if (existing) {
                 // The group's type is the first clause's: keep only the shape every clause has.
                 const first = resolve(existing), next = resolve(t);
@@ -2004,6 +2087,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 setShape(existing, shape);
             }
             else groups.set(key, t);
+        }
+        if (ordered) {
+            for (const [key, group] of groups) {
+                const seen = new Set<Ty>();
+                let position = 0;
+                for (let t = resolve(group); t.k === "fn" && !seen.has(t); t = resolve(t.output)) {
+                    seen.add(t);
+                    t.clauses = orders.get(key);
+                    t.position = position++;
+                }
+            }
         }
         const alternatives = [...groups.values()];
         if (alternatives.length === 1) {

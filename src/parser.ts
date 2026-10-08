@@ -102,6 +102,8 @@ class Parser {
             return { p: "int", v: -value.v };
         }
         if (t.k === "bool") { this.next(); return { p: "bool", v: t.v }; }
+        // The lexer reads true and false as keywords.
+        if (t.k === "kw" && (t.v === "true" || t.v === "false")) { this.next(); return { p: "bool", v: t.v === "true" }; }
         if (t.k === "str") { this.next(); return { p: "string", v: t.v }; }
         if (t.k === "sym" && (t.v === "(" || t.v === "{")) {
             const close = t.v === "(" ? ")" : "}";
@@ -1146,6 +1148,7 @@ class Parser {
     startsParam(t: Token): boolean {
         if (t.k === "ident") return t.v !== "_" ? true : true;
         if (t.k === "int" || t.k === "bool" || t.k === "str") return true;
+        if (t.k === "kw" && (t.v === "true" || t.v === "false")) return true;
         if (t.k === "sym" && (t.v === "(" || t.v === "{" || t.v === "[")) return true;
         if (t.k === "sym" && t.v === "_") return true;
         return false;

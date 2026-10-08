@@ -226,3 +226,34 @@ for (const source of [
     'g [] = 0; g (map (x -> x) [1])',
     'f [] = [0]; f xs = [1, 2]; g [] = 0; g (f [])',
 ]) Deno.test(`empty-list pattern rejects a non-empty list: ${source}`, () => rejected(session(), source));
+// The runtime tries clauses by literal score, then source order. When a clause
+// definitely matches, overload choices made only of later clauses are dropped;
+// choices whose clauses all definitely fail are dropped too.
+for (const [source, expected] of [
+    ['f [] = [0]; f xs = [1, 2]; g [a] = a; g (f [])', '0'],
+    ['f [] = [0]; f xs = [1, 2]; g [a, b] = a; g (f [3])', '1'],
+    ['f xs = [1, 2]; f [] = [0]; g [a, b] = a; g (f [])', '1'],
+    ['f (x:xs) = [x]; f other = [1, 2]; g [a] = a; g (f [7, 8])', '7'],
+    ['f [a, b] = [a]; f other = [1, 2]; g [x] = x; g (f [7, 8])', '7'],
+    ['f [] y = [y]; f xs y = [1, 2]; g [a] = a; g (f [] 5)', '5'],
+    ['f xs 0 = [0]; f [] n = [1, 2]; g [a] = a; g (f [] 0)', '0'],
+    ['f xs 0 = [0]; f [] n = [1, 2]; g [a, b] = a; g (f [] 1)', '1'],
+    ['f n = [1, 2]; f 0 = [0]; g [a] = a; g (f 0)', '0'],
+    ['f "x" = [0]; f s = [1, 2]; g [a] = a; g (f "x")', '0'],
+    ['f true = [0]; f b = [1, 2]; g [a] = a; g (f true)', '0'],
+] as const) Deno.test(`first matching clause wins: ${source}`, () => {
+    const actual = run(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'f [] = [0]; f xs = [1, 2]; g [a, b] = a; g (f [])',
+    'f xs = [1, 2]; f [] = [0]; g [a] = a; g (f [])',
+    'f [a, b] = [a]; f other = [1, 2]; g [x] = x; g (f [7, 8, 9])',
+    'f x x = [0]; f x y = [1, 2]; g [a] = a; g (f 1 2)',
+    'f xs 0 = [0]; f [] n = [1, 2]; g [a] = a; g (f [] 1)',
+    'f n = [1, 2]; f 0 = [0]; g [a, b] = a; g (f 0)',
+    'f true = [0]; f b = [1, 2]; g [a] = a; g (f false)',
+    // Unknown lengths and typed clauses keep every possible clause.
+    'f [] = [0]; f xs = [1, 2]; g [a] = a; g (f (tail [1]))',
+    'f (Int n) = [0]; f xs = [1, 2]; g [a] = a; g (f 3)',
+]) Deno.test(`later clauses still count unless a match is definite: ${source}`, () => rejected(session(), source));
