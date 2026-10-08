@@ -458,6 +458,15 @@ print {
     x
 }                                   # => 5
 
+# Parameters accept them too, bare or parenthesized. A ':' followed by a
+# capitalized type is an annotation; otherwise it is a cons pattern.
+annotated x: Int = x + 1
+print (annotated 1)                 # => 2
+annotatedFn (k: Int -> Int) = k 2
+print (annotatedFn (+ 1))           # => 3
+tailOf (x:rest) = rest              # still a cons pattern
+print (tailOf [1, 2, 3])            # => [2, 3]
+
 # ---------------------------------------------------------
 # 14. ITERATION (`*`), pairs, format
 #    seq * fn — iterate and collect the results   runs fn for its effect; result is discarded.

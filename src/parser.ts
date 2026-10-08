@@ -195,6 +195,7 @@ class Parser {
                 return { p: "typeBind", name: typeName.v, value };
             }
             const p = this.parseConsPattern();
+            if (this.annotationAhead()) this.skipAnnotation(close);
             if (this.eatSym(",")) {
                 throw new Error("Parser: tuple patterns are not supported; use a list pattern [a, b, ...] instead");
             }
@@ -278,10 +279,31 @@ class Parser {
         throw new Error(`Parser: bad pattern '${this.tokenStr(t)}'`);
     }
 
+    // A legacy annotation: ':' followed by a capitalized type name. A cons tail
+    // is a list, so `x:Int` is never a useful cons pattern.
+    annotationAhead(): boolean {
+        const type = this.peek(1);
+        return this.isSym(":") && type.k === "ident" && /^[A-Z]/.test(type.v);
+    }
+
+    // Skip an ignored annotation inside a parenthesized parameter, up to its close.
+    skipAnnotation(close: string): void {
+        this.next(); // :
+        let depth = 0;
+        for (;;) {
+            const t = this.peek();
+            if (t.k === "eof") throw new Error(`Parser: expected '${close}'`);
+            if (t.k === "sym" && depth === 0 && (t.v === close || t.v === ",")) return;
+            if (t.k === "sym" && ["(", "{", "["].includes(t.v)) depth++;
+            if (t.k === "sym" && [")", "}", "]"].includes(t.v)) depth--;
+            this.next();
+        }
+    }
+
     // cons pattern: x:xs
     parseConsPattern(): Pattern {
         let p = this.parsePattern();
-        if (this.isSym(":")) {
+        if (this.isSym(":") && !this.annotationAhead()) {
             this.next();
             const tail = this.parseConsPattern();
             return { p: "cons", head: p, tail };
@@ -844,14 +866,15 @@ class Parser {
         const params: Pattern[] = [];
         while (this.startsParam(this.peek())) {
             // Preserve the legacy parenthesized annotation form.
-            const first = this.peek(1), colon = this.peek(2);
-            if (this.isSym("(") && first.k === "ident" && /^[a-z]/.test(first.v) && colon.k === "sym" && colon.v === ":") {
+            const first = this.peek(1), colon = this.peek(2), type = this.peek(3);
+            if (this.isSym("(") && first.k === "ident" && /^[a-z]/.test(first.v) && colon.k === "sym" && colon.v === ":" &&
+                    type.k === "ident" && /^[A-Z]/.test(type.v)) {
                 this.next();
                 do {
                     const name = this.next();
                     if (name.k !== "ident") throw new Error("Parser: expected parameter");
                     params.push({ p: "var", name: name.v });
-                    if (this.eatSym(":")) this.parseType();
+                    if (this.annotationAhead()) this.skipAnnotation(")");
                 } while (this.eatSym(","));
                 this.expectSym(")");
             } else params.push(this.parseConsPattern());

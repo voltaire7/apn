@@ -385,3 +385,18 @@ print (map (100 -) [1, 2])
 print (- 2)
 print (-2)
 print (10 - 2)`, ["7", "7", "94", "[99, 98]", "-2", "-2", "8"]);
+example("legacy parameter annotations are ignored", `
+f x: Int = x + 1
+g (x: Maybe Int) = x
+h (k: Int -> Int) = k 2
+add x: Int y: Int = x + y
+total x y : Int = x + y
+lam = (x: Int) -> x + 1
+pair = (a: Int, b: Int) -> a + b
+print [f 1, g 2, h (+ 1), add 1 2, total 3 4, lam 5, pair 6 7]`, ["[2, 2, 3, 3, 7, 6, 13]"]);
+example("cons parameters are not annotations", `
+f x:rest = rest
+g (x:rest) = rest
+one (x:[]) = x
+lam = (x:rest) -> rest
+print [f [1, 2], g [3, 4], one [5], lam [6, 7]]`, ["[[2], [4], 5, [7]]"]);

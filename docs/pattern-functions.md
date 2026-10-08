@@ -216,7 +216,9 @@ lambda. Write `((Int -> Int) f)` in a parameter or binding pattern to constrain
 printed arrow description is not a standalone type expression.
 
 Legacy `:` and `::` annotations are still accepted and ignored; they are
-separate from these runtime contracts.
+separate from these runtime contracts. On a parameter, `:` followed by a
+capitalized type starts an annotation (`f x: Int = ...`, `f (k: Int -> Int) = ...`,
+`(x: Int) -> ...`); anything else after `:` is a cons pattern (`f (x:rest) = ...`).
 
 
 ## Declared variant types in patterns
