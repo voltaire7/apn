@@ -1035,6 +1035,10 @@ print (onlyOne (vowelOrPair (vowelIfSingle .1)))     # 1
 vowelIfInt (Int n) = 'a'
 vowelIfInt x = 'z'
 print (onlyOne (vowelOrPair (vowelIfInt (UInt 3))))  # 1
+# Lengths count too, through parameters, map, and recursion.
+vowelIfShort xs = length xs < 2 ? 'a' : 'z'
+shortVowel ys = onlyOne (vowelOrPair (vowelIfShort (map (+ 1) ys)))
+print (shortVowel [7])                                # 1
 sortedAndReversed xs = [sort xs, reverse xs]
 firstOfBoth [[a, b], [c, d]] = [a, c]
 print (firstOfBoth (sortedAndReversed [3, 1]))  # [1, 1]

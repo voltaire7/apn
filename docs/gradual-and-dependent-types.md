@@ -317,7 +317,11 @@ and an operation the runtime rejects (a lossy exact/float mix, exact division by
 zero) gives no value. Fixed-width numbers keep their type: `Float32` rounds to
 single precision, and fixed-width integer overflow gives no value. A numeric
 conversion of a parameter (`h v = Float32 v`) is checked at each call, so
-`h 0.25` is accepted while `h "x"` is not. So with
+`h 0.25` is accepted while `h "x"` is not. The builtin `length` of a list or String is
+evaluated when its size is known: from a literal, an argument at the call,
+`x : xs`, `xs ++ ys`, builtins that keep a list's length (`map`, `sort`), and
+recursion over `[]` and `(x:xs)` clauses. A length that depends on element
+values (`filter`) stays unknown. So with
 `safe n = n > 0 ? Some n : None`, `f (safe 4)` uses the `Some` clause and
 `f (safe (-3))` the `None` one. Inside another function (`h v = g (f (safe v))`)
 the decision waits for `h`'s calls, where `v` is known. Where a value stays

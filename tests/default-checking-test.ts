@@ -515,3 +515,38 @@ for (const source of [
     'g (f (k "s"))',
     'k8 (Int8 x) = None; k8 x = Some x; g (f (k8 300))',
 ]) Deno.test(`lossless typed clauses stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${intClauses}; ${source}`));
+// The builtin length of a list or String is known when its size is: from a
+// literal, a parameter at its calls, cons, append, shaped builtins (map, sort)
+// and recursion over list patterns.
+const sizeClauses = 'import "std"; g [a] = a; sm n = n < 2 ? None : Some n; q xs = length xs < 2 ? None : Some 1; len [] = 0; len (x:xs) = 1 + len xs';
+for (const [source, expected] of [
+    ['g (f (sm (length [1])))', '0'],
+    ['k (Int x) = None; k x = Some x; g (f (k (length [1])))', '0'],
+    ['n = [1]; g (f (sm (length n)))', '0'],
+    ['g (f (sm (length "a")))', '0'],
+    ['hh xs = g (f (sm (length xs))); hh [5]', '0'],
+    ['hh xs = g (f (sm (length xs - 1))); hh [5, 6]', '0'],
+    ['hh s = g (f (sm (length s))); hh "a"', '0'],
+    ['hh ys = g (f (q ys)); hh [1]', '0'],
+    ['hh ys = g (f (q (1 : ys))); hh []', '0'],
+    ['hh ys = g (f (q (map (+ 1) ys))); hh [1]', '0'],
+    ['hh ys = g (f (q (sort ys))); hh [1]', '0'],
+    ['g (f (sm (len [1])))', '0'],
+    ['hh ys = g (f (sm (len ys))); hh [3]', '0'],
+] as const) Deno.test(`length calls: ${source}`, () => {
+    const actual = run(session(), `${optionClauses}; ${sizeClauses}; ${source}`);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'g (f (sm (length [1, 2, 3])))',
+    'g (f (sm (length [1] + 1)))',
+    'g (f (sm (length "ab")))',
+    'hh xs = g (f (sm (length xs))); hh [5, 6]',
+    'hh ys = g (f (q ys)); hh [1, 2]',
+    'hh ys = g (f (q (1 : ys))); hh [2]',
+    'hh ys = g (f (q (ys ++ ys))); hh [2]',
+    'hh ys = g (f (q (map (+ 1) ys))); hh [1, 2]',
+    'g (f (sm (len [1, 2])))',
+    // Lengths that depend on element values stay unknown: both clauses count.
+    'g (f (q (filter (> 1) [1])))',
+]) Deno.test(`length calls stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${source}`));

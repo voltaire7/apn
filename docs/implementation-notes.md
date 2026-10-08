@@ -257,7 +257,12 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   numbers other than plain `Int`/`Float` (`knownNumber`), and `knownType`
   gives `evaluateCall` the runtime type of a known value so typed clauses
   rank; `patternScore` scores a typed pattern exactly from a known value
-  (`numericOf`), and `evaluateCall` binds its converted payload. A numeric constructor applied to a type variable defers its
+  (`numericOf`), and `evaluateCall` binds its converted payload.
+  `Known.size` is a list's constant length: `valueEntry` reads it from the
+  type just inferred for the expression (the `inferred` map; read it only
+  right after inference, never from another context), `evaluateKnown`
+  derives it from list literals, `:`, `++`, callee shapes (`shapeAt`) and
+  summaries, and `evaluateCall` gives a `(x:xs)` tail one less. A numeric constructor applied to a type variable defers its
   conversion as a `construct` requirement instead of unifying. Compound arguments over
   enclosing parameters become a pending `expr`, re-evaluated after
   substitution. `substituteKnown` substitutes parameters inside pending calls

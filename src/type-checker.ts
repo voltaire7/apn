@@ -44,9 +44,9 @@ interface ClauseOrder { index: number; params: Pattern[]; refutable: Set<string>
 // may refer to parameters of an enclosing function, substituted at its calls).
 // number holds exact rationals and complex numbers (integers use index, floats
 // float); expr is an expression over enclosing parameters, evaluated once
-// they are known.
+// they are known. size is the known length of a list.
 interface Known {
-    index?: Index; boolean?: boolean; string?: string; char?: string; float?: number; number?: Numeric; tag?: string; ref?: string;
+    index?: Index; size?: bigint; boolean?: boolean; string?: string; char?: string; float?: number; number?: Numeric; tag?: string; ref?: string;
     call?: { summary: Summary; args: Known[] };
     expr?: { e: Expr; env: [string, Known][]; scope: Scope };
 }
@@ -56,6 +56,7 @@ interface Summary { clauses: (ClauseOrder & { body: Expr })[]; scope: Scope }
 interface Entry {
     type: Ty;
     index?: Index;
+    size?: bigint;
     boolean?: boolean;
     string?: string;
     char?: string;
@@ -243,7 +244,7 @@ function substituteKnown(known: Known, subst?: [string, Index], value?: [string,
     if (result.ref && value && result.ref === value[0]) {
         const v = value[1];
         // The whole value is the argument's, its index included (none for a non-integer).
-        result = { index: subst && known.index?.terms.has(subst[0]) ? result.index : v.index, boolean: v.boolean, string: v.string, char: v.char, float: v.float, number: v.number, tag: v.tag, ref: v.ref, call: v.call, expr: v.expr };
+        result = { index: subst && known.index?.terms.has(subst[0]) ? result.index : v.index, size: v.size, boolean: v.boolean, string: v.string, char: v.char, float: v.float, number: v.number, tag: v.tag, ref: v.ref, call: v.call, expr: v.expr };
     }
     if (result.call) result = { ...result, call: { ...result.call, args: result.call.args.map(a => substituteKnown(a, subst, value)) } };
     if (result.expr) result = { ...result, expr: { ...result.expr, env: result.expr.env.map(([n, k]) => [n, substituteKnown(k, subst, value)]) } };
@@ -425,7 +426,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The deferred call being evaluated, so deferring it again keeps the same node.
     let evaluatingCall: Extract<Ty, { k: "operation" }> | undefined;
     function deferredCall(f: Ty, argument: Entry): Ty {
-        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr } };
+        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, size: argument.size, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr } };
         requirements.push(result);
         return resolve(result);
     }
@@ -789,6 +790,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (e.t === "numeric" && e.v.kind === "int") return constant(e.v.v);
         if (e.t === "var") return scope.get(e.name)?.index;
         if (e.t === "block" && e.stmts.length === 1) return index(e.stmts[0], scope);
+        // The builtin length of a list is its static length.
+        if (e.t === "app" && e.f.t === "var" && e.f.name === "length" && scope.get("length")?.builtin) {
+            const t = resolve(inferred.get(e.a) ?? dynamic);
+            if (t.k === "list") return t.items ? constant(BigInt(t.items.length)) : t.length;
+            return;
+        }
         if (e.t === "unop" && e.op === "neg") {
             const a = index(e.e, scope);
             return a && indexScale(a, -1n);
@@ -1297,8 +1304,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             collect(argument.type);
             // With this argument's value known, the function's deferred checks
             // (calls on the parameter) see that value instead of its symbol.
-            const value: Known = { index: argument.index, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr };
-            const known = argument.index || argument.ref || argument.call || argument.expr || [argument.boolean, argument.string, argument.char, argument.float, argument.number, argument.tag].some(x => x !== undefined);
+            const value: Known = { index: argument.index, size: argument.size, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr };
+            const known = argument.index || argument.ref || argument.call || argument.expr || [argument.size, argument.boolean, argument.string, argument.char, argument.float, argument.number, argument.tag].some(x => x !== undefined);
             const pending = f.binder && known
                 ? checks.map(check => copy(check, new Map([...variables(check)].map(t => [t, t])),
                     argument.index ? [f.binder!, argument.index] : undefined, undefined, [f.binder!, value]))
@@ -1398,6 +1405,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return problem(`cannot apply ${text(f)}`, e);
     }
     let inferenceDepth = 0;
+    // The type each expression was last inferred with, for facts read right after.
+    const inferred = new WeakMap<Expr, Ty>();
     function infer(e: Expr, scope: Scope, expected?: Ty): Ty {
         spend(e);
         if (++inferenceDepth > 256) {
@@ -1410,7 +1419,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const previousExpression = activeExpression;
         activeExpression = e;
         try {
-            return inferExpression(e, scope, expected);
+            const t = inferExpression(e, scope, expected);
+            inferred.set(e, t);
+            return t;
         } finally {
             activeExpression = previousExpression;
             inferenceDepth--;
@@ -1895,10 +1906,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         });
         return { low, high, matches, fails };
     }
+    // The constant length of a list type.
+    function sizeOf(type: Ty | undefined): bigint | undefined {
+        const t = type && resolve(type);
+        if (t?.k !== "list") return undefined;
+        if (t.items) return BigInt(t.items.length);
+        return t.length && !t.length.terms.size ? t.length.constant : undefined;
+    }
     // Everything known about an expression's value, for an argument entry.
     function valueEntry(e: Expr, scope: Scope): Known {
         const known: Known = {
             index: index(e, scope),
+            size: sizeOf(inferred.get(e)),
             boolean: boolean(e, scope),
             string: e.t === "string" ? e.v : e.t === "var" ? scope.get(e.name)?.string : undefined,
             ref: e.t === "var" ? scope.get(e.name)?.ref : undefined,
@@ -1918,7 +1937,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const entry = scope.get(e.name);
             if (!entry) return {};
             if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
-            return { char: entry.char, float: entry.float, number: entry.number, tag: entry.tag };
+            return { size: entry.size, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag };
         }
         if (e.t === "app") {
             const args: Expr[] = [];
@@ -1926,7 +1945,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             while (head.t === "app") { args.unshift(head.a); head = head.f; }
             if (head.t !== "var") return {};
             const entry = scope.get(head.name);
-            if (NUMERIC_TYPES.includes(head.name) && entry?.builtin) return computed(e, scope);
+            if ((NUMERIC_TYPES.includes(head.name) || head.name === "length") && entry?.builtin) return computed(e, scope);
             if (/^[A-Z]/.test(head.name)) {
                 // A constructor applied to all its fields.
                 let t = resolve(entry?.type ?? dynamic);
@@ -1935,7 +1954,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             if (!trustsShape(entry)) return {};
             const summary = summaryAt(entry!.type, args.length);
-            if (!summary) return {};
+            // A builtin with a result shape (map keeps its list's length).
+            if (!summary) return shapeAt(entry!.type, args.length) ? computed(e, scope) : {};
             return resolveKnown({ call: { summary, args: args.map(a => valueEntry(a, scope)) } });
         }
         if (["binop", "unop", "ternary", "numeric"].includes(e.t)) return computed(e, scope);
@@ -1974,7 +1994,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             ? evaluateCall(known.call.summary, known.call.args.map(resolveKnown), 0)
             : evaluateKnown(known.expr!.e, new Map(known.expr!.env.map(([n, v]) => [n, resolveKnown(v)])), known.expr!.scope, 0);
         const result: Known = { ...known };
-        for (const key of ["index", "boolean", "string", "char", "float", "number", "tag"] as const) {
+        for (const key of ["index", "size", "boolean", "string", "char", "float", "number", "tag"] as const) {
             if (result[key] === undefined && facts?.[key] !== undefined) (result as Record<string, unknown>)[key] = facts[key];
         }
         return result;
@@ -1999,6 +2019,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 for (const name of patternNames(p)) env.set(name, {});
                 if (p.p === "var" && !clause.refutable.has(p.name)) env.set(p.name, args[i]);
                 // A typed pattern binds the converted value.
+                // The tail of a list of known size.
+                if (p.p === "cons" && p.tail.p === "var" && !clause.refutable.has(p.tail.name) && args[i].size) {
+                    env.set(p.tail.name, { size: args[i].size! - 1n });
+                }
                 const n = numericOf(args[i]);
                 if (p.p === "constr" && NUMERIC_TYPES.includes(p.tag) && p.args[0]?.p === "var" && !clause.refutable.has(p.args[0].name) && n) {
                     const tag = p.tag, inner = p.args[0].name;
@@ -2054,7 +2078,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!entry) return undefined;
                 if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
                 const index = entry.index && !entry.index.terms.size ? entry.index : undefined;
-                return { index, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag };
+                return { index, size: entry.size, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag };
             }
             case "block": {
                 if (e.stmts.some(st => st.t === "patDef" || st.t === "stmDef")) return undefined;
@@ -2073,7 +2097,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const n = numericOf(v);
                 return n === undefined ? undefined : attempt(() => n.typeName ? castNumeric(n.typeName, negate(n)) : negate(n));
             }
+            case "list": return { size: BigInt(e.v.length) };
             case "binop": {
+                // List sizes: x : xs is one longer than xs; xs ++ ys adds them.
+                if (e.op === ":") {
+                    const r = evaluateKnown(e.r, env, scope, depth)?.size;
+                    return r === undefined ? undefined : { size: r + 1n };
+                }
+                if (e.op === "++") {
+                    const l = evaluateKnown(e.l, env, scope, depth), r = evaluateKnown(e.r, env, scope, depth);
+                    if (l?.string !== undefined && r?.string !== undefined) return { string: l.string + r.string };
+                    return l?.size !== undefined && r?.size !== undefined ? { size: l.size + r.size } : undefined;
+                }
                 if (e.op === "&&" || e.op === "||") {
                     const l = truth(evaluateKnown(e.l, env, scope, depth));
                     if (l === undefined) return undefined;
@@ -2130,6 +2165,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     for (let n = 0; n < args.length && t.k === "fn"; n++) t = resolve(t.output);
                     return t.k === "variant" ? { tag: head.name } : undefined;
                 }
+                // The builtin length of a list or String whose length is known.
+                if (head.name === "length" && entry?.builtin && args.length === 1) {
+                    const k = evaluateKnown(args[0], env, scope, depth);
+                    const n = k?.size ?? (k?.string !== undefined ? BigInt(k.string.length) : undefined);
+                    return n === undefined ? undefined : { index: constant(n) };
+                }
                 // The runtime's numeric natives, when the name is the builtin itself.
                 const native = NUMBER_NATIVES.find(([name]) => name === head.name);
                 if (native && entry?.builtin && native[1] === args.length) {
@@ -2139,8 +2180,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return attempt(() => head.name === "expt" ? typedPower(numbers[0], numbers[1]) : numericNative(head.name, numbers));
                 }
                 if (!trustsShape(entry)) return undefined;
+                const values = args.map(a => evaluateKnown(a, env, scope, depth) ?? {});
                 const summary = summaryAt(entry!.type, args.length);
-                return summary && evaluateCall(summary, args.map(a => evaluateKnown(a, env, scope, depth) ?? {}), depth);
+                const result = summary && evaluateCall(summary, values, depth);
+                if (result?.size !== undefined) return result;
+                // A builtin's (or inferred) result shape: an argument itself, or a
+                // list as long as a constant or as an argument.
+                const shape = shapeAt(entry!.type, args.length);
+                const size = shape?.arg !== undefined ? values[shape.arg]?.size
+                    : shape?.length ? "constant" in shape.length ? shape.length.constant : values[shape.length.param]?.size
+                    : undefined;
+                return size === undefined ? result : { ...result, size };
             }
             default: return undefined;
         }
@@ -2151,7 +2201,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const result: Known = {};
         const same = (x: unknown, y: unknown) => x !== undefined && x === y;
         if (a.index && b.index && !a.index.terms.size && !b.index.terms.size && a.index.constant === b.index.constant) result.index = a.index;
-        for (const key of ["boolean", "string", "char", "float", "tag"] as const) {
+        for (const key of ["size", "boolean", "string", "char", "float", "tag"] as const) {
             if (same(a[key], b[key])) (result as Record<string, unknown>)[key] = a[key];
         }
         if (a.number && b.number && a.number.typeName === b.number.typeName && equalNumbers(a.number, b.number)) result.number = a.number;
@@ -2198,9 +2248,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // A lossless conversion (1) is certain only for a known value.
             return (score === 30 || score === 10 || score === 1) && irrefutable(p.args[0]);
         }
-        const t = resolve(argument.type);
-        if (t.k !== "list") return false;
-        const n = t.items ? BigInt(t.items.length) : t.length && !t.length.terms.size ? t.length.constant : undefined;
+        const n = sizeOf(argument.type) ?? argument.size;
         if (n === undefined) return false;
         if (p.p === "list") return p.v.every(irrefutable) && n === BigInt(p.v.length);
         if (p.p === "cons") return irrefutable(p.head) && irrefutable(p.tail) && n >= 1n;
@@ -2216,9 +2264,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (p.p === "range") return !!argument.index && !argument.index.terms.size && (argument.index.constant < p.lo || argument.index.constant > p.hi);
         if (p.p === "constr" && TYPE_NAMES.includes(p.tag)) return low === -1000 && high === -1000;
         if (p.p === "constr") return argument.tag !== undefined && argument.tag !== p.tag;
-        const t = resolve(argument.type);
-        if (t.k !== "list") return false;
-        const n = t.items ? BigInt(t.items.length) : t.length && !t.length.terms.size ? t.length.constant : undefined;
+        const n = sizeOf(argument.type) ?? argument.size;
         if (n === undefined) return false;
         if (p.p === "list") return n !== BigInt(p.v.length);
         if (p.p === "cons") return n === 0n;
