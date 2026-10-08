@@ -245,6 +245,12 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   re-registered in the enclosing function's requirements. A `require` check
   waits while its call does (`waiting`) instead of using the call's
   provisional `solution`.
+- A `fn` node's `returns` (`ResultValue`) describes its result value from its
+  code (`valueOf`: literal facts, or `arg` for an argument position), met over
+  clauses like shapes. `literalOf` uses it only for direct calls of trusted
+  entries (`trustsShape`: definitions with clauses or root `builtin`s; the
+  `inherited` flag only means "visible from an outer scope"). Literal facts on
+  variables apply only to names written once (`writes`).
 - `defineClauses` merges clauses of one input domain into a group. A clause
   whose type merges with its group's only after `withoutLengths` forgets list
   lengths becomes its own group (key `#index`), so overload ranking separates

@@ -1017,6 +1017,9 @@ vowelOrPair 'a' = [1]
 vowelOrPair c = [0, 0]
 onlyVowel c = onlyOne (vowelOrPair c)
 print (onlyVowel 'a')                         # 1
+# A function's result counts too, when it is called directly by name.
+alwaysA x = 'a'
+print (onlyOne (vowelOrPair (alwaysA 5)))     # 1
 sortedAndReversed xs = [sort xs, reverse xs]
 firstOfBoth [[a, b], [c, d]] = [a, c]
 print (firstOfBoth (sortedAndReversed [3, 1]))  # [1, 1]

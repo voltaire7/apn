@@ -19,7 +19,7 @@ type Ty =
     // shape describes the full result in terms of the arguments (see Shape); args
     // collects argument types across curried application. Both describe the
     // function's code, so they are trusted only at a direct call by name.
-    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[] }
+    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; returns?: ResultValue }
     | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number> }
     | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string> }
     | { k: "type"; value: Ty }
@@ -40,6 +40,9 @@ interface ClauseOrder { index: number; params: Pattern[]; refutable: Set<string>
 // itself is only known at that function's calls.
 // tag is the constructor that visibly built the value (None, Some 5).
 interface Known { index?: Index; boolean?: boolean; string?: string; char?: string; float?: number; tag?: string; ref?: string }
+// What a function's result value is, from its code: literal facts, or `arg`,
+// the value of that argument position. Trusted only at direct calls by name.
+type ResultValue = Known & { arg?: number };
 interface Entry {
     type: Ty;
     index?: Index;
@@ -51,7 +54,10 @@ interface Entry {
     ref?: string;
     clauses?: { params: Pattern[]; body: Expr }[];
     mono?: boolean;
+    // inherited: visible from an enclosing scope (blocks mark every outer entry).
     inherited?: boolean;
+    // builtin: a native or intrinsic from the checker's own root scope.
+    builtin?: boolean;
     nonGeneric?: Set<Ty>;
 }
 export type TypeScope = Map<string, Entry>;
@@ -1463,14 +1469,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     runtimeChecks++;
                     return explicitDynamic;
                 }
-                const result = application(callee, {
-                    type: infer(a, scope),
-                    index: index(a, scope),
-                    boolean: boolean(a, scope),
-                    string: a.t === "string" ? a.v : a.t === "var" ? scope.get(a.name)?.string : undefined,
-                    ref: a.t === "var" ? scope.get(a.name)?.ref : undefined,
-                    ...literalOf(a, scope),
-                }, a);
+                const result = application(callee, { type: infer(a, scope), ...valueEntry(a, scope) }, a);
                 // A partial application that leaves its call chain is an ordinary function value.
                 return callees.has(e) ? result : withoutShapes(result);
             }
@@ -1759,14 +1758,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Only a direct call of a function definition (or builtin) by name may use
     // its shape: a function value that flows elsewhere shares its type node.
     function trustsShape(entry: Entry | undefined): boolean {
-        return !!entry && !entry.mono && (!!entry.clauses || !!entry.inherited);
+        return !!entry && !entry.mono && (!!entry.clauses || !!entry.builtin);
     }
     // A copy of a function type's result chain without shapes or collected args.
     function withoutShapes(type: Ty, seen = new Map<Ty, Ty>()): Ty {
         const t = resolve(type);
-        if (t.k !== "fn" || !t.shape && !t.args && resolve(t.output).k !== "fn") return type;
+        if (t.k !== "fn" || !t.shape && !t.args && !t.returns && resolve(t.output).k !== "fn") return type;
         if (seen.has(t)) return seen.get(t)!;
-        const result = { ...t, shape: undefined, args: undefined };
+        const result = { ...t, shape: undefined, args: undefined, returns: undefined };
         seen.set(t, result);
         result.output = withoutShapes(t.output, seen);
         return result;
@@ -1828,8 +1827,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         });
         return { low, high, matches, fails };
     }
-    // Character, float and constructor values an expression visibly has.
-    function literalOf(e: Expr, scope: Scope): { char?: string; float?: number; tag?: string } {
+    // Everything known about an expression's value, for an argument entry.
+    function valueEntry(e: Expr, scope: Scope): Known {
+        const known: Known = {
+            index: index(e, scope),
+            boolean: boolean(e, scope),
+            string: e.t === "string" ? e.v : e.t === "var" ? scope.get(e.name)?.string : undefined,
+            ref: e.t === "var" ? scope.get(e.name)?.ref : undefined,
+        };
+        const extra = literalOf(e, scope);
+        for (const key of Object.keys(extra) as (keyof Known)[]) if (known[key] === undefined) (known as Record<string, unknown>)[key] = extra[key];
+        return known;
+    }
+    // Character, float and constructor values an expression visibly has, and
+    // any value a directly called function's result is known to have.
+    function literalOf(e: Expr, scope: Scope): Known {
         if (e.t === "char") return { char: e.v };
         if (e.t === "float") return { float: e.v };
         if (e.t === "unop" && e.op === "neg" && e.e.t === "float") return { float: -e.e.v };
@@ -1841,15 +1853,87 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return { char: entry.char, float: entry.float, tag: entry.tag };
         }
         if (e.t === "app") {
-            // A constructor applied to all its fields.
-            let head: Expr = e, count = 0;
-            while (head.t === "app") { head = head.f; count++; }
-            if (head.t !== "var" || !/^[A-Z]/.test(head.name)) return {};
-            let t = resolve(scope.get(head.name)?.type ?? dynamic);
-            for (let n = 0; n < count && t.k === "fn"; n++) t = resolve(t.output);
-            return t.k === "variant" ? { tag: head.name } : {};
+            const args: Expr[] = [];
+            let head: Expr = e;
+            while (head.t === "app") { args.unshift(head.a); head = head.f; }
+            if (head.t !== "var") return {};
+            const entry = scope.get(head.name);
+            if (/^[A-Z]/.test(head.name)) {
+                // A constructor applied to all its fields.
+                let t = resolve(entry?.type ?? dynamic);
+                for (let n = 0; n < args.length && t.k === "fn"; n++) t = resolve(t.output);
+                return t.k === "variant" ? { tag: head.name } : {};
+            }
+            if (!trustsShape(entry)) return {};
+            const result = returnsAt(entry!.type, args.length);
+            if (!result) return {};
+            if (result.arg !== undefined) return valueEntry(args[result.arg], scope);
+            const { arg: _, ...facts } = result;
+            return facts;
         }
         return {};
+    }
+    // The result value of a callee after `count` arguments, if the call is complete.
+    function returnsAt(type: Ty, count: number): ResultValue | undefined {
+        let t = resolve(type);
+        if (t.k === "overload") {
+            const choices = t.choices.map(choice => returnsAt(choice, count));
+            return choices.reduce((x, y) => meetValues(x, y));
+        }
+        for (let n = 1; n < count; n++) {
+            if (t.k !== "fn") return undefined;
+            t = resolve(t.output);
+        }
+        if (t.k !== "fn" || !t.returns) return undefined;
+        const next = resolve(t.output);
+        return next.k === "fn" && next.returns === t.returns ? undefined : t.returns;
+    }
+    // The facts both a and b agree on (clauses, ternary branches).
+    function meetValues(a: ResultValue | undefined, b: ResultValue | undefined): ResultValue | undefined {
+        if (!a || !b) return undefined;
+        const result: ResultValue = {};
+        const same = (x: unknown, y: unknown) => x !== undefined && x === y;
+        if (same(a.arg, b.arg)) result.arg = a.arg;
+        if (a.index && b.index && !a.index.terms.size && !b.index.terms.size && a.index.constant === b.index.constant) result.index = a.index;
+        for (const key of ["boolean", "string", "char", "float", "tag"] as const) {
+            if (same(a[key], b[key])) (result as Record<string, unknown>)[key] = a[key];
+        }
+        return Object.keys(result).length ? result : undefined;
+    }
+    // What a function body's value is, in terms of its parameters by position.
+    // Value-level and conservative, like shapeOf.
+    function valueOf(e: Expr, params: { name?: string; exact: boolean }[], scope: Scope): ResultValue | undefined {
+        if (e.t === "var") {
+            const n = params.findIndex(p => p.name === e.name);
+            if (n >= 0) return params[n].exact ? { arg: n } : undefined;
+        }
+        if (e.t === "block") {
+            const shadows = e.stmts.some(st => st.t === "patDef" || st.t === "stmDef" && params.some(p => p.name === st.name));
+            const last = e.stmts[e.stmts.length - 1];
+            return shadows || !last ? undefined : valueOf(last, params, scope);
+        }
+        if (e.t === "ternary") return meetValues(valueOf(e.then, params, scope), valueOf(e.els, params, scope));
+        if (e.t === "app") {
+            const args: Expr[] = [];
+            let head: Expr = e;
+            while (head.t === "app") { args.unshift(head.a); head = head.f; }
+            if (head.t === "var" && !params.some(p => p.name === (head as { name: string }).name) && !/^[A-Z]/.test(head.name)) {
+                const entry = scope.get(head.name);
+                const result = trustsShape(entry) ? returnsAt(entry!.type, args.length) : undefined;
+                if (result?.arg !== undefined) return valueOf(args[result.arg], params, scope);
+                if (result) return result;
+            }
+        }
+        // Literals and constructors; parameters carry no constant facts.
+        if (e.t === "var" && params.some(p => p.name === e.name)) return undefined;
+        const known: ResultValue = {};
+        const index = e.t === "int" ? constant(e.v) : e.t === "unop" && e.op === "neg" && e.e.t === "int" ? constant(-e.e.v) : undefined;
+        if (index) known.index = index;
+        if (e.t === "bool") known.boolean = e.v;
+        if (e.t === "string") known.string = e.v;
+        const facts = literalOf(e, scope);
+        for (const key of ["char", "float", "tag"] as const) if (facts[key] !== undefined) (known as Record<string, unknown>)[key] = facts[key];
+        return Object.keys(known).length ? known : undefined;
     }
     // Is the argument's value known to equal (true) or differ from (false) this
     // number, compared exactly as the runtime compares numbers?
@@ -2075,11 +2159,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : p.p === "constr" && p.args.length === 1 && p.args[0].p === "var" ? { name: p.args[0].name, exact: false }
             : { exact: false });
         const shape = shapeOf(body, named, scope);
+        const returns = valueOf(body, named, scope);
         for (let n = inputs.length - 1; n >= 0; n--) {
             const parameter = params[n];
             const selfName = parameter.p === "var" && parameter.name === recursiveName ? recursiveName : undefined;
             result = { k: "fn", input: inputs[n].type, output: result, binder: inputs[n].binder, coerce: inputs[n].coerce, checks: n === inputs.length - 1 ? checks : undefined, pattern: parameter, selfName };
             if (shape) result.shape = shape;
+            if (returns) result.returns = returns;
         }
         return result;
     }
@@ -2169,10 +2255,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             scope.set(name, {
                 type: t,
-                string: body.t === "string" ? body.v : undefined,
-                ...literalOf(body, scope),
-                index: (writes.get(name) ?? 0) > 1 ? undefined : index(clauses[0].body, scope),
-                boolean: (writes.get(name) ?? 0) > 1 ? undefined : boolean(clauses[0].body, scope),
+                // A name written more than once can change under a closure that captured it.
+                ...(writes.get(name) ?? 0) > 1 ? {} : valueEntry(body, scope),
                 nonGeneric: captured(new Map([...scope].filter(([key]) => key !== name))),
             });
             return;
@@ -2257,8 +2341,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // The group's type is the first clause's: keep only the shape every clause has.
                 const first = resolve(existing), next = resolve(t);
                 const shape = first.k === "fn" && next.k === "fn" ? meetShapes(first.shape, next.shape) : undefined;
+                const returns = first.k === "fn" && next.k === "fn" ? meetValues(first.returns, next.returns) : undefined;
                 unify(existing, t, c.body);
                 setShape(existing, shape);
+                for (let x = resolve(existing), seen = new Set<Ty>(); x.k === "fn" && !seen.has(x); x = resolve(x.output)) { seen.add(x); x.returns = returns; }
             }
             else groups.set(key, t);
         }
@@ -2348,7 +2434,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         native("bracket", [a, fn(a, b), fn(a, c)], c);
         for (const name of ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer", "withFile"]) scope.set(name, { type: explicitDynamic });
     }
-    for (const entry of scope.values()) entry.inherited = true;
+    for (const entry of scope.values()) { entry.inherited = true; entry.builtin = true; }
     if (options.initial) for (const [name, entry] of copyTypeScope(options.initial)) scope.set(name, entry);
     const originalScope = new Map(scope);
     const forward = new Map<string, Ty>();

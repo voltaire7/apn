@@ -303,7 +303,11 @@ uses the literal clause (as does `h 1` for `f (x - 1)`). Every literal kind
 works the same way: booleans, strings, characters, floats (compared
 numerically), integer ranges (`f [1..3] = ...` with `h 2`), and constructors
 the argument is visibly built with (`f None = ...` with `h None`, or
-`f (Some x) = ...` with `h (Some 7)`). A step function used with `repeatApply` may feed its own
+`f (Some x) = ...` with `h (Some 7)`). A function's result counts too when it
+is called directly by name: with `mk x = None`, `f (mk 1)` uses the `None`
+clause, and `pass v = v` passes its argument's value on. Results that depend on
+a value (`b ? None : Some 1`, or different clauses) are not assumed, nor are
+calls through a variable that holds a function. A step function used with `repeatApply` may feed its own
 results back through arithmetic (`g [a, b] = forceList [b, a + b]`).
 Record-template patterns convert positional lists at runtime and
 are checked against their named field types. Inferred parameters do not silently

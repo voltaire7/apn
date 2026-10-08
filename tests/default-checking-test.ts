@@ -372,3 +372,30 @@ for (const source of [
     'import "std/option"; f None = [0]; f x = [1, 2]; h x = g (f x); g [a] = a; h (Some 1)',
     'Light = | Off | On; f On = [1]; f x = [0, 0]; h l = g (f l); g [a] = a; h Off',
 ]) Deno.test(`more literal kinds stay checked: ${source}`, () => rejected(session(), source));
+// A function's result value (a literal or constructor, or one of its
+// arguments) is known at direct calls by name, so clause ranking can use it.
+for (const [source, expected] of [
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; mk x = None; g (f (mk 1))', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a, b] = a; mk x = Some x; g (f (mk 1))', '1'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; mk x = None; h v = g (f v); h (mk 3)', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; mk x = None; h v = g (f (mk v)); h 3', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; pass v = v; g (f (pass None))', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; mk x = None; mk2 y = mk y; g (f (mk2 1))', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; pick b = b ? None : None; g (f (pick true))', '0'],
+    ['f 0 = [0]; f x = [1, 2]; g [a] = a; zero x = 0; g (f (zero 9))', '0'],
+    ['f "x" = [0]; f s = [1, 2]; g [a] = a; named x = "x"; g (f (named 1))', '0'],
+    ["f 'a' = [0]; f s = [1, 2]; g [a] = a; letter x = 'a'; g (f (letter 1))", '0'],
+] as const) Deno.test(`function results select clauses: ${source}`, () => {
+    const actual = run(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; mk x = Some x; g (f (mk 1))',
+    'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; pass v = v; g (f (pass (Some 2)))',
+    // Results that depend on a value, or calls through a variable, stay unknown.
+    'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; pick b = b ? None : Some 1; g (f (pick true))',
+    'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; mk x = None; mk2 x = Some x; mkv = false ? mk : mk2; g (f (mkv 1))',
+    'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; mk x = None; mkv = mk; g (f (mkv 1))',
+    // A rebound variable can change under a closure that captured it.
+    "f 'a' = [0]; f x = [1, 2]; g [a] = a; c = 'a'; h u = g (f c); c = 'b'; h 0",
+]) Deno.test(`function results stay checked: ${source}`, () => rejected(session(), source));
