@@ -331,9 +331,13 @@ written in APN, such as `takeWhile`, `dropWhile`, `words`, `splitOn`, `trim`,
 `contains`, `all`, `any`, `find`, `sum`, `sort` and `isPrime`, including their
 blocks of local definitions. Lists are lazy here too: `take 1 [0..]` and
 `take 1 (repeat 0)` have one element. Recursion is followed as deep as the
-runtime's own stack allows. A block that binds the same name twice is not
-evaluated, and neither are input or effects; very long lists (more than 10000
-elements walked) and very large computations stay unknown. A function
+runtime's own stack allows. Blocks follow the runtime's binding rules: a name a
+block defines more than once is one binding, so lazy definitions and closures
+see its latest value and eager ones (`<-`) the value where they stand. Integer
+ranges are cut and indexed arithmetically (`length [1..1000000]`,
+`drop 1000000 [0..]`), and other long lists are walked as far as the work
+budget allows. Input and effects are not evaluated, and computations past the
+budget (such as summing a million elements) stay unknown. A function
 argument may be a lambda, an operator section, a named function, or a partial
 application, also when passed through a parameter: `filter (> 1) [1, 2]` and
 `hh (> 1)` with `hh p = filter p [1, 2]` both have one element. A recursive call

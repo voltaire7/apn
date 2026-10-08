@@ -254,8 +254,8 @@ for (const source of [
     'f n = [1, 2]; f 0 = [0]; g [a, b] = a; g (f 0)',
     'f true = [0]; f b = [1, 2]; g [a] = a; g (f false)',
     // Unknown lengths keep every possible clause.
-    // (drop walks at most 10000 elements statically.)
-    'f [] = [0]; f xs = [1, 2]; g [a] = a; g (f (tail (take 1 (drop 20000 [0..]))))',
+    // (Static evaluation is bounded in work: this filter scans a million elements.)
+    'f [] = [0]; f xs = [1, 2]; g [a] = a; g (f (tail (take 1 (filter (> 999999) [0..]))))',
 ]) Deno.test(`later clauses still count unless a match is definite: ${source}`, () => rejected(session(), source));
 // Typed clauses are ranked as the runtime ranks them: an exact type (30)
 // before a numeric aggregate (10) before a lossless conversion (1) before other
@@ -549,7 +549,7 @@ for (const source of [
     'hh ys = g (f (q (map (+ 1) ys))); hh [1, 2]',
     'g (f (sm (len [1, 2])))',
     // A predicate whose value stays unknown decides nothing: both clauses count.
-    'g (f (q (filter (x -> x > length (drop 20000 [1..30000])) [1, 2])))',
+    'g (f (q (filter (x -> x > sum [1..1000000]) [1, 2])))',
 ]) Deno.test(`length calls stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${source}`));
 // filter, map, take and drop over lists whose elements are known run as at
 // runtime, as do integer ranges.
@@ -648,8 +648,6 @@ for (const source of [
     // enumerate pairs each element with its index: [0, 7] has two elements.
     'g (f (q (head (enumerate [7]))))',
     'g (f (q (sort [3, 1])))',
-    // A block that rebinds a name is not evaluated (closures see the rebinding).
-    'local n = { k = n; k = 5; k }; g (f (r (local 1 == 5)))',
 ]) Deno.test(`builtins and std evaluated stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${textClauses}; ${source}`));
 // parse reads booleans and numbers as at runtime; recursion is evaluated as
 // deep as the runtime's own stack allows (non-tail recursion to depth 500).
@@ -676,3 +674,34 @@ for (const source of [
     'g (f (q (takeWhile (< 300) [1..])))',
     'g (f (q (take 2 (repeat 0))))',
 ]) Deno.test(`parse and deep recursion stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${textClauses}; ${deepClauses}; ${source}`));
+// A name a block binds twice is one binding: lazy definitions and closures
+// see its latest value, eager ones (<-) the value where they stand. Long lists
+// are walked within the work budget; ranges are cut arithmetically.
+for (const [source, expected] of [
+    ['local n = { k = n; k = 5; k }; g (f (r (local 1 == 5)))', '0'],
+    ['k y = { x = 1; h = () -> x; x = 5; h [] }; g (f (r (k 0 == 5)))', '0'],
+    ['x = 10; k y = { z = x + 1; x = 2; z }; g (f (r (k 0 == 3)))', '0'],
+    ['k y = { a = 1; b = a; a = 2; b }; g (f (r (k 0 == 2)))', '0'],
+    ['k y = { a <- 1; b <- a + 1; a <- 5; b }; g (f (r (k 0 == 2)))', '0'],
+    ['k y = { a <- 1; a <- a + 1; a }; g (f (r (k 0 == 2)))', '0'],
+    ['k y = { n = 1; h q = q + n; n = 10; h 1 }; g (f (r (k 0 == 11)))', '0'],
+    ['k y = { a = 1; b <- a; a = 2; [a, b] }; g (f (r (k 0 == [2, 1])))', '0'],
+    ['k y = { xs = 1 : xs; length (take 3 xs) }; g (f (r (k 0 == 3)))', '0'],
+    ['g (f (r (([a, b] -> a) [1, 2] == 1)))', '0'],
+    ['g (f (r (length [1..1000000] == 1000000)))', '0'],
+    ['g (f (r (head (drop 1000000 [0..]) == 1000000)))', '0'],
+    ['g (f (q (tail (take 1 (drop 20000 [0..])))))', '0'],
+    ['g (f (r (sum [1..20000] == 200010000)))', '0'],
+    ['g (f (r (length (filter (> 15000) [1..20000]) == 5000)))', '0'],
+    ['g (f (r ([5, 3..0] == [5, 3, 1])))', '0'],
+] as const) Deno.test(`rebinding blocks and long lists: ${source}`, () => {
+    const actual = run(session(), `${optionClauses}; ${sizeClauses}; ${textClauses}; ${source}`);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'k y = { x = 1; h = () -> x; x = 5; h [] }; g (f (r (k 0 == 1)))',
+    'k y = { a = 1; b = a; a = 2; b }; g (f (r (k 0 == 1)))',
+    'k y = { a <- 1; b <- a + 1; a <- 5; b }; g (f (r (k 0 == 6)))',
+    'g (f (r (length [1..1000000] == 999999)))',
+    'g (f (r (sum [1..20000] == 0)))',
+]) Deno.test(`rebinding blocks and long lists stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${textClauses}; ${source}`));

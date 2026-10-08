@@ -276,7 +276,9 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   for `:`, endless ranges, `iterate` and the list builtins, mirroring the
   runtime's `cell()`. Walk lists iteratively (`element`, `elementsOf`,
   `dropKnown`), never by recursion over indexes, and never materialize one
-  eagerly; `elementsOf` stops at 10000 elements. `evaluateNative` runs the
+  eagerly; `elementsOf` and `dropKnown` spend one unit of work per element,
+  and `Known.range` (`rangeKnown`, `rangeElement`) indexes, drops and takes
+  integer ranges arithmetically. `evaluateNative` runs the
   pure `EVALUATED_NATIVES`. Depth (`EVALUATION_DEPTH`) and work
   (`EVALUATION_BUDGET`, per root via `budgeted`) are bounded, and a
   JavaScript stack overflow (`RangeError`) in static evaluation leaves the
@@ -284,8 +286,11 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   `evaluateApp`/`evaluateBinop`/`evaluateBlock` cases) free of per-call
   closures, so frames stay small and recursion reaches the runtime's own
   depth. A ternary or clause set whose first result has no facts stops
-  early, so recursion over unknown values stays cheap. A block is evaluated
-  only if each name is bound once.
+  early, so recursion over unknown values stays cheap. A block gives each
+  name it defines one slot (`Known.slot`, read through `lookup`): lazy
+  definitions store a memoized thunk (`once`, which reports a value that
+  needs itself as unknown) and eager ones a value, so earlier closures see
+  later rebindings as at runtime.
   A recursive self-reference is marked `recursive` with the clause's
   `selfInputs`, and a recursive call strips the lengths of an argument whose
   parameter type has none. A single-group definition's entry keeps
