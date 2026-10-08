@@ -758,6 +758,21 @@ for (const [source, expected] of [
     ['counter = Mutable 0; box = Mutable [[]]; set box [set counter 3]; print box; g (f (r (counter + 0 == 3)))', '0'],
     ['counter = Mutable 0; box = Mutable [[]]; set box [set counter 3]; print box; set counter 8; print box; g (f (r (counter + 0 == 8)))', '0'],
     ['counter = Mutable 0; other = Mutable 7; m = HashMap [["a", 1]]; has "a" m ? set counter 5 : []; g (f (r (other + 0 == 7)))', '0'],
+    // Lazily computed elements run where the program forces them: map's
+    // elements when used, filter's predicate as its cells are reached.
+    ['counter = Mutable 0; print (map (x -> set counter x) [1, 2]); g (f (r (counter + 0 == 2)))', '0'],
+    ['counter = Mutable 0; bump x = set counter (counter + 1); xs = map (x -> bump x) [1, 2]; print (length xs); g (f (r (counter + 0 == 0)))', '0'],
+    ['counter = Mutable 0; bump x = set counter (counter + 1); print (head (map (x -> bump x) [1, 2])); g (f (r (counter + 0 == 1)))', '0'],
+    ['counter = Mutable 0; bump x = set counter (counter + 1); print (take 1 (map (x -> bump x) [1..])); g (f (r (counter + 0 == 1)))', '0'],
+    ['counter = Mutable 0; bump x = set counter (counter + 1); print (filter (x -> { bump x; true }) [1, 2]); g (f (r (counter + 0 == 2)))', '0'],
+    ['counter = Mutable 0; bump x = set counter (counter + 1); print ([1, 2] == map (x -> { bump x; x }) [5, 2]); g (f (r (counter + 0 == 1)))', '0'],
+    // A top-level action builds its list afresh at each use; a value keeps it.
+    ['counter = Mutable 0; bump x = set counter (counter + 1); xs = map (x -> bump x) [1, 2]; print xs; print xs; g (f (r (counter + 0 == 4)))', '0'],
+    ['counter = Mutable 0; bump x = set counter (counter + 1); ys = [bump 0, bump 0]; print ys; print ys; g (f (r (counter + 0 == 2)))', '0'],
+    // An uncertain statement reaching a lazily computed list follows what it is computed from.
+    ['counter = Mutable 0; other = Mutable 7; ys = map (x -> x * 2) [1, 2]; m = HashMap [["a", 1]]; has "a" m ? set counter (head ys) : []; g (f (r (other + 0 == 7)))', '0'],
+    // A load reaches only what the loaded file's source names.
+    ['counter = Mutable 0; other = Mutable 7; set other 8; load "examples/advent-of-code/lanternfish"; g (f (r (other + 0 == 8)))', '0'],
     // A top-level value is computed when first used and kept; a top-level
     // action (block, application or pipe body) runs at each use.
     ['counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 4)))', '0'],
@@ -782,8 +797,8 @@ for (const source of [
     'counter = Mutable 0; bump x = set counter (counter + 1); bump []; bump []; g (f (r (counter + 0 == 1)))',
     'counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; g (f (r ((counter + 0) + bump 0 == 2)))',
     'counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; print [bump 0, counter + 0]; g (f (r (counter + 0 == 0)))',
-    // Writes in elements forced while printing: their order is not followed.
-    'counter = Mutable 0; print (map (x -> set counter x) [1, 2]); g (f (r (counter + 0 == 2)))',
+    'counter = Mutable 0; print (map (x -> set counter x) [1, 2]); g (f (r (counter + 0 == 1)))',
+    'counter = Mutable 0; bump x = set counter (counter + 1); xs = map (x -> bump x) [1, 2]; print xs; print xs; g (f (r (counter + 0 == 2)))',
     'k y = { c = Mutable 1; xs = [c + 0]; set c 7; head xs }; g (f (r (k 0 == 1)))',
     'counter = Mutable 0; k y = { set counter 4; counter + 0 }; g (f (r (k 0 == 0)))',
     'counter = Mutable 0; [set counter 9, 1]; g (f (r (counter + 0 == 9)))',

@@ -52,6 +52,9 @@ interface ClauseOrder { index: number; params: Pattern[]; refutable: Set<string>
 // clauses with the bindings it closes over and any arguments already applied.
 type KnownFunction = { e: Expr; env: [string, Known][]; scope: Scope } | { summary: Summary; env: [string, Known][]; applied: Known[] };
 type Cell = { head: Known; tail: Known } | null | undefined;
+// What a lazy value (deferred, a lazy list, a block binding) is computed from:
+// expressions over env, and values; reachability follows these (see reachable).
+type Origin = { exprs: Expr[]; env?: Map<string, Known>; values?: Known[] };
 // A Mutable cell's contents, the root evaluation that created it, and the lazy
 // region its accesses happened in (see readMutable).
 // A top-level value whose body touches top-level cells, kept as its body: an
@@ -63,7 +66,7 @@ type KnownCell = { value: Known; root: number; program?: boolean; invalid?: bool
 // An integer range (hi null: endless), indexed and cut arithmetically.
 type KnownRange = { lo: bigint; step: bigint; hi: bigint | null };
 interface Known {
-    index?: Index; size?: bigint; items?: Known[]; cell?: () => Cell; range?: KnownRange; mutable?: KnownCell; deferred?: () => Known | undefined; slot?: () => Known | undefined; fn?: KnownFunction; boolean?: boolean; string?: string; char?: string; float?: number; number?: Numeric; tag?: string; ref?: string;
+    index?: Index; size?: bigint; items?: Known[]; cell?: () => Cell; range?: KnownRange; mutable?: KnownCell; deferred?: () => Known | undefined; origin?: Origin; slot?: () => Known | undefined; fn?: KnownFunction; boolean?: boolean; string?: string; char?: string; float?: number; number?: Numeric; tag?: string; ref?: string;
     call?: { summary: Summary; args: Known[] };
     expr?: { e: Expr; env: [string, Known][]; scope: Scope };
 }
@@ -118,6 +121,8 @@ export interface CheckOptions {
      * would read (undefined when unreadable) and getArgs. The runtime must see
      * the same snapshot. Lint and editor checks leave it unset. */
     inputs?: { readFile(path: string): string | undefined; args(): string[]; readStdin?(): string | undefined };
+    /** The variable names a file loaded by this path mentions, if the session checked it. */
+    loadedNames?: (path: string) => Set<string> | undefined;
     /** Whether any code in this session may write a Mutable cell (see mayMutate),
      * asked when a cell is read; computed from the program when unset. */
     mutation?: () => boolean;
@@ -2122,33 +2127,75 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function reachable(e: Expr, scope: Scope): { cells: Set<KnownCell>; lazies: Set<LazyTop>; all: boolean } {
         const cells = new Set<KnownCell>(), lazies = new Set<LazyTop>();
         let all = false;
-        const seenExpr = new Set<Expr>(), seenKnown = new Set<Known>();
+        const seenExpr = new Map<Expr, Set<Map<string, Known> | undefined>>(), seenKnown = new Set<Known>();
         const walkKnown = (k: Known | undefined): void => {
             if (!k || seenKnown.has(k) || all) return;
             seenKnown.add(k);
-            // An integer range holds only numbers; other lazy lists are opaque.
-            if (k.deferred || k.cell && !k.range || k.slot) { all = true; return; }
+            // A lazy value reaches what it is computed from; without a record of
+            // that it is opaque. An integer range holds only numbers.
+            if (k.deferred || k.cell && !k.range || k.slot) {
+                if (!k.origin) { all = true; return; }
+                k.origin.exprs.forEach(x => walkExpr(x, k.origin!.env));
+                k.origin.values?.forEach(walkKnown);
+            }
             if (k.mutable) { cells.add(k.mutable); walkKnown(k.mutable.value); }
             k.items?.forEach(walkKnown);
             if (k.fn) {
-                k.fn.env.forEach(([, v]) => walkKnown(v));
-                if ("summary" in k.fn) { k.fn.applied.forEach(walkKnown); k.fn.summary.clauses.forEach(c => walkExpr(c.body)); }
-                else walkExpr(k.fn.e);
+                const env = new Map(k.fn.env);
+                env.forEach(walkKnown);
+                if ("summary" in k.fn) { k.fn.applied.forEach(walkKnown); k.fn.summary.clauses.forEach(c => walkExpr(c.body, env)); }
+                else walkExpr(k.fn.e, env);
             }
         };
-        const walkExpr = (x: Expr): void => {
-            if (seenExpr.has(x) || all) return;
-            seenExpr.add(x);
+        const walkName = (name: string): void => {
+            const entry = scope.get(name);
+            if (entry?.lazyTop) { lazies.add(entry.lazyTop); walkExpr(entry.lazyTop.body); walkKnown(entry.lazyTop.memo); }
+            if (entry) walkKnown(entry);
+            for (const body of programDefinitions.get(name) ?? entry?.clauses?.map(c => c.body) ?? []) walkExpr(body);
+        };
+        const walkExpr = (x: Expr, env?: Map<string, Known>): void => {
+            if (all) return;
+            const envs = seenExpr.get(x) ?? new Set();
+            if (envs.has(env)) return;
+            envs.add(env);
+            seenExpr.set(x, envs);
             for (const name of mentionedNames(x)) {
+                if (env?.has(name)) { walkKnown(env.get(name)); continue; }
+                if (name === "load") {
+                    // A file loaded by a literal path reaches what its source names.
+                    const names = loadedNames(x);
+                    if (!names) { all = true; return; }
+                    names.forEach(walkName);
+                    continue;
+                }
                 if (MUTATING_NAMES.has(name)) { if (name !== "set") all = true; continue; }
-                const entry = scope.get(name);
-                if (entry?.lazyTop) { lazies.add(entry.lazyTop); walkExpr(entry.lazyTop.body); walkKnown(entry.lazyTop.memo); }
-                if (entry) walkKnown(entry);
-                for (const body of programDefinitions.get(name) ?? entry?.clauses?.map(c => c.body) ?? []) walkExpr(body);
+                walkName(name);
             }
         };
         walkExpr(e);
         return { cells, lazies, all };
+    }
+    // The names the files x loads mention, when every load in x names its
+    // file literally and the session checked that file (and it loads nothing,
+    // nor uses env or use).
+    function loadedNames(x: Expr): Set<string> | undefined {
+        const names = new Set<string>();
+        let loads = 0, literal = 0, ok = true;
+        const walk = (node: unknown): void => {
+            if (!node || typeof node !== "object") return;
+            if (Array.isArray(node)) { node.forEach(walk); return; }
+            const n = node as Record<string, unknown>;
+            if (n.t === "var" && n.name === "load") loads++;
+            if (n.t === "app" && (n.f as Record<string, unknown>)?.t === "var" && (n.f as Record<string, unknown>).name === "load" && (n.a as Record<string, unknown>)?.t === "string") {
+                literal++;
+                const mentioned = options.loadedNames?.((n.a as { v: string }).v);
+                if (!mentioned || [...mentioned].some(name => MUTATING_NAMES.has(name) && name !== "set")) ok = false;
+                else mentioned.forEach(name => names.add(name));
+            }
+            Object.values(n).forEach(value => value && typeof value === "object" && walk(value));
+        };
+        walk(x);
+        return ok && loads === literal ? names : undefined;
     }
     // Values left unforced by earlier statements, still held by top-level
     // cells or kept values; the cells and values holding them.
@@ -2248,7 +2295,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // (demand), as the run computes it.
     const CELL_TOUCHED = { cellTouched: true };
     let trial = 0;
-    function lazyValue(compute: () => Known | undefined): Known {
+    function lazyValue(compute: () => Known | undefined, origin?: Origin): Known {
         if (!(programMutates ?? options.mutation!())) return compute() ?? {};
         const flags = [cellRead, reordered, unknownWrite, incomplete] as const;
         trial++;
@@ -2257,23 +2304,40 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (error !== CELL_TOUCHED) throw error;
             [cellRead, reordered, unknownWrite, incomplete] = flags;
         } finally { trial--; }
-        // While a statement runs statically, a deferred value the run never
-        // forced may still be forced by the program in a way not modeled here.
-        const force = once(compute);
-        if (!executing) return { deferred: force };
-        // Made while a statement runs statically: kept (with its effects) only
-        // when forced in such a run; checking computes it without keeping it.
-        let forced = false;
-        const pending: Known = { deferred: () => {
-            if (forced) return force();
-            if (!executing || trial) return compute();
-            forced = true;
-            unforced.delete(pending);
-            pendingValues.delete(pending);
-            return force();
+        // Kept once forced where its value cannot depend on timing (see keeps);
+        // one made while a statement runs statically and never forced may still
+        // be forced later (unforced).
+        let forced = false, result: Known | undefined, busy = false;
+        const tracked = executing;
+        const pending: Known = { origin, deferred: () => {
+            if (forced) return result;
+            if (busy) return undefined;
+            busy = true;
+            const events = cellEvents;
+            let value: Known | undefined;
+            try { value = compute(); } finally { busy = false; }
+            if (keeps(events)) {
+                forced = true;
+                result = value;
+                unforced.delete(pending);
+                pendingValues.delete(pending);
+            }
+            return value;
         } };
-        unforced.add(pending);
+        if (tracked) unforced.add(pending);
         return pending;
+    }
+    // Look without forcing anything that touches a cell (fallback if it would).
+    function peek<T>(look: () => T, fallback: T): T {
+        if (!(programMutates ?? options.mutation!())) return look();
+        const flags = [cellRead, reordered, unknownWrite, incomplete] as const;
+        trial++;
+        try { return look(); }
+        catch (error) {
+            if (error !== CELL_TOUCHED) throw error;
+            [cellRead, reordered, unknownWrite, incomplete] = flags;
+            return fallback;
+        } finally { trial--; }
     }
     // A value where the program needs it: arithmetic, conditions, printing,
     // demanding builtins and application force a deferred value.
@@ -2309,15 +2373,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // A lazy list: its first cell (head and tail, null when empty, undefined
     // when unknown) is computed once, on demand, as the runtime's cell() does.
-    function lazyList(compute: () => Cell): Known {
+    function lazyList(compute: () => Cell, origin?: Origin): Known {
         let done = false, cell: Cell;
-        return { cell: () => {
-            if (!done) {
-                done = true;
-                try { cell = budgeted(() => lazily(compute)); } catch (error) { done = false; throw error; }
-            }
-            return cell;
+        return { origin, cell: () => {
+            if (done) return cell;
+            const events = cellEvents;
+            const result = budgeted(compute);
+            if (keeps(events)) { done = true; cell = result; }
+            return result;
         } };
+    }
+    // A lazily computed value is kept when computing it touched no cell, or
+    // when a statement's static run computed it (at the run's moment); checking
+    // otherwise recomputes it, as it may be forced later, at another moment.
+    function keeps(events: number): boolean {
+        return cellEvents === events || executing && !trial;
     }
     // The first cell of a known list.
     function cellOf(k: Known | undefined): Cell {
@@ -2404,11 +2474,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // A list built cell by cell from a step: each cell's head, and the state
     // its tail continues from (null ends the list, undefined is unknown).
-    function unfold<S>(state: S, step: (state: S) => { head: Known; next: S } | null | undefined): Known {
+    function unfold<S>(state: S, step: (state: S) => { head: Known; next: S } | null | undefined, origin?: Origin): Known {
         return lazyList(() => {
             const result = step(state);
-            return result && { head: result.head, tail: unfold(result.next, step) };
-        });
+            return result && { head: result.head, tail: unfold(result.next, step, origin) };
+        }, origin);
     }
     // An integer range, as the runtime enumerates it (hi null: endless).
     function rangeKnown(lo: bigint, step: bigint, hi: bigint | null): Known | undefined {
@@ -2543,7 +2613,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const inspects = (p: Pattern) => p.p !== "var" && p.p !== "wildcard";
         args = args.map((k, i) => summary.clauses.some(c => c.params[i] && inspects(c.params[i])) ? demand(k) ?? {} : k);
         const entries: Entry[] = args.map(k => ({ type: knownType(k), ...k }));
-        const ranked = summary.clauses.map(c => ({ clause: c, ...rankClause(c, entries) }));
+        // Ranking looks at every clause; the run forces only what the clause it
+        // tries inspects, so ranking does not force anything that touches a cell.
+        const ranked = summary.clauses.map(c => ({ clause: c, ...peek(() => rankClause(c, entries), { low: -1000, high: Infinity, matches: false, fails: false }) }));
         const sure = ranked.filter(r => r.matches);
         const before = (a: typeof ranked[number], b: typeof ranked[number]) =>
             a.low > b.high || a.low >= b.high && a.clause.index < b.clause.index;
@@ -2605,16 +2677,26 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         // Distinct nullary constructors differ; equal tags with fields may not be equal.
         if (a.tag !== undefined && b.tag !== undefined && a.tag !== b.tag) return false;
-        const left = elementsOf(a), right = elementsOf(b);
-        if (!left || !right || a.string !== undefined || b.string !== undefined) return undefined;
-        if (left.length !== right.length) return false;
-        let result: boolean | undefined = true;
-        for (let n = 0; n < left.length; n++) {
-            const same = equalKnown(left[n], right[n]);
-            if (same === false) return false;
-            if (same === undefined) result = undefined;
+        if (!isList(a) || !isList(b) || a.string !== undefined || b.string !== undefined) return undefined;
+        if (a.items && b.items) {
+            for (let n = 0; n < Math.min(a.items.length, b.items.length); n++) {
+                const same = equalKnown(a.items[n], b.items[n]);
+                if (same !== true) return same;
+            }
+            return a.items.length === b.items.length;
         }
-        return result;
+        // Cell by cell, comparing heads, and stopping at the first difference.
+        let left: Known | undefined = a, right: Known | undefined = b;
+        while (spendEvaluation(0)) {
+            const x = cellOf(left), y = cellOf(right);
+            if (x === undefined || y === undefined) return undefined;
+            if (x === null || y === null) return x === y;
+            const same = equalKnown(x.head, y.head);
+            if (same !== true) return same;
+            left = x.tail;
+            right = y.tail;
+        }
+        return undefined;
     }
     // A known value as toString renders it (primitives and lists of them).
     function renderKnown(k: Known | undefined): string | undefined {
@@ -2625,10 +2707,28 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (k.string !== undefined) return valueToString(mkStr(k.string));
         if (k.char !== undefined) return valueToString({ kind: "char", v: k.char });
         if (k.boolean !== undefined) return String(k.boolean);
-        const items = elementsOf(k);
-        if (!items) return undefined;
-        const parts = items.map(renderKnown);
-        return parts.some(x => x === undefined) ? undefined : `[${parts.join(", ")}]`;
+        if (!isList(k)) return undefined;
+        if (k.items) {
+            const shown: string[] = [];
+            for (const item of k.items) {
+                const part = renderKnown(item);
+                if (part === undefined) return undefined;
+                shown.push(part);
+            }
+            return `[${shown.join(", ")}]`;
+        }
+        // Cell by cell, rendering each element as it is reached.
+        const parts: string[] = [];
+        for (let rest: Known | undefined = k; spendEvaluation(0);) {
+            const cell = cellOf(rest);
+            if (cell === undefined) return undefined;
+            if (cell === null) return `[${parts.join(", ")}]`;
+            const part = renderKnown(cell.head);
+            if (part === undefined) return undefined;
+            parts.push(part);
+            rest = cell.tail;
+        }
+        return undefined;
     }
     // Numbers use the runtime's own arithmetic and comparison (numbers.ts,
     // type-system.ts); an operation the runtime would reject gives no value.
@@ -2660,11 +2760,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (hit) return hit.result;
         const events = cellEvents;
         const result = evaluateKnown(e, new Map(), scope, depth, true);
-        // A value that read or wrote a cell depends on this run's order.
-        if (events !== cellEvents) return result;
+        // A value that read or wrote a cell depends on this run's order, and one
+        // with lazy parts would share their forcing: evaluating the expression
+        // again (an action used twice) builds them afresh.
+        if (events !== cellEvents || (programMutates ?? options.mutation!()) && hasLazyParts(result)) return result;
         cached.push({ entries, result });
         evaluated.set(e, cached);
         return result;
+    }
+    function hasLazyParts(k: Known | undefined, seen = new Set<Known>()): boolean {
+        if (!k || seen.has(k)) return false;
+        seen.add(k);
+        if (k.deferred || k.cell && !k.range || k.slot) return true;
+        if (k.items?.some(x => hasLazyParts(x, seen))) return true;
+        return !!k.fn && k.fn.env.some(([, v]) => hasLazyParts(v, seen));
     }
     const evaluated = new WeakMap<Expr, { entries: (Entry | undefined)[]; result: Known | undefined }[]>();
     // Copies of a binding (blocks copy outer entries) evaluate alike: the same
@@ -2742,7 +2851,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const n = numericOf(v);
                 return n === undefined ? undefined : attempt(() => n.typeName ? castNumeric(n.typeName, negate(n)) : negate(n));
             }
-            case "list": return known(e.v.map(x => lazyValue(() => value(x))));
+            case "list": return known(e.v.map(x => lazyValue(() => value(x), { exprs: [x], env })));
             case "lambda": return { fn: { e, env: [...env], scope } };
             // A pattern lambda (() -> x, [a, b] -> a) is a one-clause local function.
             case "patternLambda": {
@@ -2785,7 +2894,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             for (const name of names) if (!slots.has(name)) {
                 const slot = { value: (): Known | undefined => undefined };
                 slots.set(name, slot);
-                local.set(name, { slot: () => slot.value() });
+                // What the binding can hold: any of the block's statements, over its scope.
+                local.set(name, { slot: () => slot.value(), origin: { exprs: e.stmts, env: local } });
             }
         }
         // A pattern's names take their parts of one shared value.
@@ -2844,8 +2954,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // x : xs; the tail may be endless (repeat x = x : repeat x).
         // The tail is evaluated only when an element past the head is needed.
         if (e.op === ":") {
-            const h = lazyValue(() => value(e.l));
-            return lazyList(() => ({ head: h, tail: value(e.r) ?? {} }));
+            const h = lazyValue(() => value(e.l), { exprs: [e.l], env });
+            return lazyList(() => ({ head: h, tail: value(e.r) ?? {} }), { exprs: [e.l, e.r], env });
         }
         if (e.op === "++") {
             const l = value(e.l), r = value(e.r);
@@ -2856,7 +2966,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const append = (left: Known): Known => lazyList(() => {
                 const cell = cellOf(left);
                 return cell === null ? cellOf(r) : cell && { head: cell.head, tail: append(cell.tail) };
-            });
+            }, { exprs: [e.l, e.r], env });
             return { ...append(l), ...size };
         }
         if (e.op === "&&" || e.op === "||") {
@@ -2908,7 +3018,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (args.length < head.params.length) return { fn: { e, env: [...env], scope } };
             if (!spendEvaluation(depth)) return undefined;
             const inner = new Map(env);
-            head.params.forEach((name, n) => inner.set(name, lazyValue(() => value(args[n]))));
+            head.params.forEach((name, n) => inner.set(name, lazyValue(() => value(args[n]), { exprs: [args[n]], env })));
             const result = evaluateKnown(head.body, inner, scope, depth + 1);
             if (args.length === head.params.length) return result;
             return apply(result, args.slice(head.params.length).map(a => value(a) ?? {}));
@@ -2916,7 +3026,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (head.t !== "var") return apply(value(head), args.map(a => value(a) ?? {}));
         // A function value applied to arguments (a parameter holding a lambda,
         // a section, a named or local function).
-        if (env.has(head.name)) return apply(lookup(env, head.name), args.map(a => lazyValue(() => value(a))));
+        if (env.has(head.name)) return apply(lookup(env, head.name), args.map(a => lazyValue(() => value(a), { exprs: [a], env })));
         const entry = scope.get(head.name);
         // A named function applied to fewer arguments than it takes is a function value.
         if (entry && !entry.mono && isFunction(entry.type)) {
@@ -2932,7 +3042,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const strict = STRICT_NATIVES.has(head.name);
             // A demanding builtin reads a cell's contents, except set's target.
             return evaluateNative(head.name, args.map((a, n) => () => !strict ? lazily(() => value(a))
-                : head.name === "set" && n === 0 ? demand(value(a)) : readMutable(value(a))), depth);
+                : head.name === "set" && n === 0 ? demand(value(a)) : readMutable(value(a))), depth, { exprs: args, env });
         }
         if (head.name === "Mutable" && builtin && args.length === 1) {
             const cell: KnownCell = { value: value(args[0]) ?? {}, root, program: creatingTopLevel };
@@ -2963,7 +3073,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return attempt(() => head.name === "expt" ? typedPower(numbers[0], numbers[1]) : numericNative(head.name, numbers));
         }
         if (!trustsShape(entry)) return undefined;
-        const values = args.map(a => lazyValue(() => value(a)));
+        const values = args.map(a => lazyValue(() => value(a), { exprs: [a], env }));
         const summary = summaryAt(entry!.type, args.length);
         const result = summary && evaluateCall(summary, values, depth);
         if (isList(result)) return result;
@@ -2976,10 +3086,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return size === undefined ? result : { ...result, size };
     }
     // The pure builtins, run on known arguments as the runtime runs them.
-    function evaluateNative(name: string, args: (() => Known | undefined)[], depth: number): Known | undefined {
+    function evaluateNative(name: string, args: (() => Known | undefined)[], depth: number, origin?: Origin): Known | undefined {
         const arity = name === "foldl" || name === "foldr" || name === "zipWith" ? 3 : name === "set" || LIST_NATIVES.includes(name) || name === "iterate" || name === "seq" ? 2 : 1;
         if (args.length !== arity) return undefined;
+        // Folds may apply f at other moments than here: a region. map, zipWith,
+        // filter and iterate apply it where the runtime does (lazily for heads).
         const call = (f: Known | undefined, values: Known[]) => { const g = demand(f)?.fn; return g && lazily(() => applyKnown(g, values, depth)); };
+        const now = (f: Known | undefined, values: Known[]) => { const g = demand(f)?.fn; return g && applyKnown(g, values, depth); };
         switch (name) {
             case "head": { const item = element(args[0](), 0); return item ?? undefined; }
             case "tail": {
@@ -3054,11 +3167,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return unfold<[Known, bigint]>([list, 0n], ([rest, n]) => {
                     const cell = cellOf(rest);
                     return cell && { head: known([{ index: constant(n) }, cell.head]), next: [cell.tail, n + 1n] };
-                });
+                }, origin);
             }
             case "iterate": {
                 const f = args[0]();
-                return unfold<Known>(args[1]() ?? {}, value => ({ head: value, next: call(f, [value]) ?? {} }));
+                return unfold<Known>(args[1]() ?? {}, value => ({ head: value, next: lazyValue(() => now(f, [value]), origin) }), origin);
             }
             case "foldl": case "foldr": {
                 const f = args[0](), items = elementsOf(args[2]());
@@ -3069,7 +3182,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return acc;
             }
             case "take": case "drop": {
-                const count = numericOf(args[0]()), list = args[1]();
+                const count = numericOf(readMutable(args[0]())), list = args[1]();
                 if (count?.kind !== "int" || count.v < 0n || !list) return undefined;
                 if (list.range) {
                     const { lo, step, hi } = list.range, n = count.v;
@@ -3086,17 +3199,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     if (left === 0) return null;
                     const cell = cellOf(rest);
                     return cell && { head: cell.head, next: [cell.tail, left - 1] };
-                });
+                }, origin);
                 return list.size === undefined ? undefined : { size: list.size < count.v ? list.size : count.v };
             }
             case "map": {
                 const f = args[0](), list = args[1]();
                 if (!list?.items && !list?.cell) return list?.size === undefined ? undefined : { size: list.size };
-                if (list.items) return known(list.items.map(item => call(f, [item]) ?? {}));
+                if (list.items) return known(list.items.map(item => lazyValue(() => now(f, [item]), origin)));
                 const mapped = unfold<Known>(list, rest => {
                     const cell = cellOf(rest);
-                    return cell && { head: call(f, [cell.head]) ?? {}, next: cell.tail };
-                });
+                    return cell && { head: lazyValue(() => now(f, [cell.head]), origin), next: cell.tail };
+                }, origin);
                 return list.size === undefined ? mapped : { ...mapped, size: list.size };
             }
             case "filter": {
@@ -3107,13 +3220,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     while (spendEvaluation(0)) {
                         const cell = cellOf(rest);
                         if (!cell) return cell;
-                        const keep = truth(call(f, [cell.head]));
+                        const keep = truth(now(f, [cell.head]));
                         if (keep === undefined) return undefined;
                         if (keep) return { head: cell.head, next: cell.tail };
                         rest = cell.tail;
                     }
                     return undefined;
-                });
+                }, origin);
             }
             case "zipWith": {
                 const f = args[0](), xs = args[1](), ys = args[2]();
@@ -3127,8 +3240,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const x = cellOf(left), y = cellOf(right);
                     if (x === null || y === null) return null;
                     if (x === undefined || y === undefined) return undefined;
-                    return { head: call(f, [x.head, y.head]) ?? {}, next: [x.tail, y.tail] };
-                });
+                    return { head: lazyValue(() => now(f, [x.head, y.head]), origin), next: [x.tail, y.tail] };
+                }, origin);
             }
         }
         return undefined;
@@ -3495,7 +3608,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const facts = (writes.get(name) ?? 0) > 1 ? {} : valueEntry(body, scope);
             // A top-level value touching top-level cells keeps its body instead,
             // to be used where the program uses it (see forceLazyTop).
-            const lazyTop: LazyTop | undefined = topLevelDefinition && touchedTopLevel && (writes.get(name) ?? 0) <= 1
+            // (Also one that can write a cell: its effects run where it is used.)
+            const writer = topLevelDefinition && programCells.size > 0 && !!(programMutates ?? options.mutation!()) && mayWrite(body, scope).write;
+            const lazyTop: LazyTop | undefined = topLevelDefinition && (touchedTopLevel || writer) && (writes.get(name) ?? 0) <= 1
                 ? { body, scope, action: ["block", "app", "pipe"].includes(body.t), forced: false } : undefined;
             if (lazyTop) lazyTops.add(lazyTop);
             touchedTopLevel = false;

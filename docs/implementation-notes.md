@@ -325,10 +325,18 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   renders deeply, `seq`, `assert`, `debug`, inspecting patterns in
   `evaluateCall`), or the `unforced` check gives up.
   An uncertain execution calls `forgetReachable`: the cells and `lazyTop`
-  values `reachable` from the statement's names (through definition bodies
-  and the facts of those names) become `invalid`; anything opaque (a
-  deferred value, a non-range lazy list, `load`/`use`/`env`) clears
-  `programValid`. Unforced values that persist (`unforcedPersists`) join
+  values `reachable` from the statement's names (through definition bodies,
+  the facts of those names, the `Known.origin` of lazy values, and
+  `CheckOptions.loadedNames` for literal loads) become `invalid`; `env`,
+  `use`, or a lazy value without an origin clears `programValid`. Lazy list
+  cells and deferred values keep their result only when computed touching
+  no cell or during an execution (`keeps`); `map`/`zipWith` heads and
+  `iterate`'s next value are deferred and `filter` applies its predicate in
+  the cell, as the runtime does; ranking only `peek`s; printing and `==`
+  walk cells in the runtime's order; and an evaluation result with lazy
+  parts is never cached (`hasLazyParts`), since evaluating it again builds
+  them afresh. A top-level value whose body can write a cell is kept as
+  `lazyTop` too. Unforced values that persist (`unforcedPersists`) join
   `pendingValues`; a statement reaching their holders runs statically, and a
   pending value keeps its result only when forced in such a run.
   `CheckOptions.inputs` is set only by `Interpreter.enableChecking`:

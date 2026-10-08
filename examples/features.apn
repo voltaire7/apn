@@ -1123,6 +1123,9 @@ pendingBox = Mutable [[]]
 set pendingBox [set mutableCounter $ 2]
 print pendingBox                              # [[]]
 print (onlyOne (vowelOrPair (vowelIfShort (take (mutableCounter - 1) [7, 8, 9]))))  # 1
+# map's elements run where they are used: printing runs both.
+print (map (x -> set mutableCounter $ x) [5, 1])  # [[], []]
+print (onlyOne (vowelOrPair (vowelIfShort (take mutableCounter [7, 8, 9]))))  # 1
 
 # p5 sketches are descriptions until built for the browser.
 p5 = import "std/p5"

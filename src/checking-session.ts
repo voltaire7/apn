@@ -49,6 +49,7 @@ export class CheckingSession {
             runtimeNames: !library && this.runtimeNames ? new Set(this.runtimeNames()) : undefined,
             inputs: library ? undefined : this.inputs,
             mutation: () => this.mutation,
+            loadedNames: path => this.loadedNames(path, directory),
             imports: module => {
                 const fields = this.module(module);
                 return fields;
@@ -96,6 +97,24 @@ export class CheckingSession {
         } finally { this.loading.delete(module); }
     }
 
+    /** Every variable name a checked loaded file mentions (see CheckOptions.loadedNames). */
+    loadedNames(name: string, directory: string): Set<string> | undefined {
+        const path = name.startsWith("/") ? `${name}.apn` : `${directory}/${name}.apn`;
+        const url = new URL(path, `file://${Deno.cwd()}/`);
+        let source = this.checkedLoads.get(url.href);
+        // A statement's static run precedes checking it: read the file it loads.
+        if (source === undefined) try { source = Deno.readTextFileSync(url); } catch { return undefined; }
+        const names = new Set<string>();
+        const walk = (node: unknown): void => {
+            if (!node || typeof node !== "object") return;
+            if (Array.isArray(node)) { node.forEach(walk); return; }
+            const n = node as Record<string, unknown>;
+            if (n.t === "var" && typeof n.name === "string") names.add(n.name);
+            Object.values(n).forEach(value => value && typeof value === "object" && walk(value));
+        };
+        walk(parse(source, url.pathname));
+        return names;
+    }
     load(name: string, directory: string, caller = this.scope): TypeScope {
         const base = name.slice(name.lastIndexOf("/") + 1);
         if (!base || base.includes(".")) throw new APNError("type", "load expects an extensionless file name");

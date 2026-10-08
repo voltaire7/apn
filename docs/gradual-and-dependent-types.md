@@ -362,7 +362,13 @@ when evaluation skips code or an uncertain branch, or when accesses could happen
 in another order. A statement whose run is uncertain (a write under a condition
 the checker cannot decide, code it cannot follow) leaves only the top-level
 cells and values it can reach unknown: those its names, and the definitions
-they name, refer to. A value a statement leaves unforced matters only if it is
+they name, refer to, including what its lazily computed values are computed
+from and what a file it loads (by a literal path) names; only `env` and `use`
+reach everything. Lazily computed list elements run where the program forces
+them, as at runtime: `map`'s elements when used, `filter`'s predicate as its
+cells are reached, printing and `==` cell by cell, so after
+`print (map (x -> set counter x) [1, 2])`, `counter` is 2, and a top-level
+action such as `xs = map f ys` builds its list afresh at each use. A value a statement leaves unforced matters only if it is
 kept, in a top-level cell or a kept top-level value; a later statement that can
 reach it runs statically too, so it is forced, once, where the program forces
 it: after `set box [set counter 3]; print box`, `counter` is 3. When the interpreter checks a
