@@ -274,7 +274,11 @@ error, and `[1, 2] + [3, 4, 5]` is rejected before running. Lengths follow a
 function only where it is called directly by name; a function value passed
 through a variable, ternary, list, or argument (`pick b = b ? sort : tail`)
 gives an unknown length. A list of unknown length (`tail`, `filter`) still
-needs a `Dynamic` boundary to meet a fixed-length pattern. A step function used with `repeatApply` may feed its own
+needs a `Dynamic` boundary to meet a fixed-length pattern. An empty-list pattern
+`[]` is the exception: lists of unknown length may reach it (recursion over
+`tail` needs that), but a list known to be non-empty is a static error. An
+empty-list clause and a cons clause are separate overload choices, so
+`f [] = "e"; f (x:xs) = x` gives `f [5]` the cons clause's type. A step function used with `repeatApply` may feed its own
 results back through arithmetic (`g [a, b] = forceList [b, a + b]`).
 Record-template patterns convert positional lists at runtime and
 are checked against their named field types. Inferred parameters do not silently

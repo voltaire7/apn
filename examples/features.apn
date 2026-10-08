@@ -983,6 +983,10 @@ swapPair [a, b] = [b, a]
 print (swapPair ([1, 2] * (x -> x * 10) + [3, 4]))  # [24, 13]
 print (swapPair (sort [9, 4]))                 # [9, 4]
 # Nested lengths follow too: each inner list keeps its argument's length.
+# An empty-list clause and a cons clause are checked as separate choices.
+emptyOrHead [] = "empty"
+emptyOrHead (x:xs) = x
+print (emptyOrHead [5] + 1)                   # 6
 sortedAndReversed xs = [sort xs, reverse xs]
 firstOfBoth [[a, b], [c, d]] = [a, c]
 print (firstOfBoth (sortedAndReversed [3, 1]))  # [1, 1]

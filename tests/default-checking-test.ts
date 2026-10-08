@@ -206,3 +206,23 @@ for (const source of [
     'keep xs = xs * (x -> x); drop1 xs = tail xs; fs = [keep, drop1]; g [a, b, c] = a; g ((fs 1) [1, 2, 3])',
     'import "std"; p = sortBy compare; g [a, b] = a; g (p [2, 1])',
 ]) Deno.test(`checker does not assume lengths: ${source}`, () => rejected(session(), source));
+// An empty-list pattern rejects a list known to be non-empty (it would fail at
+// runtime), while lists of unknown length still reach it, as recursion needs.
+// Empty-list and cons clauses are separate overload choices.
+for (const [source, expected] of [
+    ['g [] = 0; g []', '0'],
+    ['g [] = 0; g (tail [1])', '0'],
+    ['len [] = 0; len (x:rest) = 1 + len rest; len [1, 2, 3]', '3'],
+    ['rev [] = []; rev (x:xs) = rev xs ++ [x]; rev [1, 2, 3]', '[3, 2, 1]'],
+    ['f [] = 0; f (x:xs) = x; [f [], f [7, 8]]', '[0, 7]'],
+    ['f [] = "e"; f (x:xs) = x; f [5] + 1', '6'],
+    ['f [] = "e"; f (x:xs) = x; f [] ++ "!"', '"e!"'],
+] as const) Deno.test(`empty-list patterns: ${source}`, () => {
+    const actual = run(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'g [] = 0; g [1]',
+    'g [] = 0; g (map (x -> x) [1])',
+    'f [] = [0]; f xs = [1, 2]; g [] = 0; g (f [])',
+]) Deno.test(`empty-list pattern rejects a non-empty list: ${source}`, () => rejected(session(), source));

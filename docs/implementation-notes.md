@@ -224,6 +224,10 @@ Behavior: `docs/gradual-and-dependent-types.md`.
 - Binding a variable to a union drops the variable's own occurrences, after
   expanding nested unions: `v = v | t` has the least solution `v = t`. A union
   is not a structural node, so keeping the self-reference never terminates.
+- An empty-list pattern's type has `items: []` and no length, so unknown-length
+  lists still match it; `unify` rejects one with a known non-zero length.
+  `domain()` keys such clauses separately (`empty:`), because a group's input
+  type is its first clause's and would otherwise reject the cons clause's inputs.
 - List lengths through functions are a property of a function's code, never
   of a type node: unification shares one node between values of different
   lengths (a fold's seed and result) and between different function values (a

@@ -612,6 +612,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return;
         }
         if (expected.k === "list" && actual.k === "list") {
+            // An empty-list pattern carries no length, so recursion over lists of
+            // unknown length still checks; a list known to be non-empty cannot match it.
+            const knownLength = (t: Extract<Ty, { k: "list" }>) =>
+                t.items?.length ? BigInt(t.items.length) : t.length && !t.length.terms.size ? t.length.constant : undefined;
+            const empty = (t: Extract<Ty, { k: "list" }>) => t.items?.length === 0;
+            for (const [zero, other] of [[expected, actual], [actual, expected]] as const) {
+                const n = knownLength(other);
+                if (empty(zero) && n !== undefined && n !== 0n) {
+                    problem(`length mismatch: expected ${zero === expected ? 0 : n}, got ${zero === expected ? n : 0}`, e);
+                }
+            }
             if (expected.items && actual.items && expected.items.length === actual.items.length) expected.items.forEach((t, n) => unify(t, actual.items![n], e, seen));
             else unify(expected.element, actual.element, e, seen);
             if (expected.length && actual.length) {
@@ -1963,7 +1974,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (matcher.k !== "fn" || matcher.pattern?.p === "var" || matcher.pattern?.p === "wildcard") return [];
                 return [text(matcher.input)];
             }).join("&");
-            return (input.k === "variant" ? input.name : input.k === "var" ? "*" : text(input)) + patterns + ";" +
+            // An empty-list clause is its own choice: merged with a cons clause, its
+            // input type would reject every non-empty argument.
+            const empty = input.k === "list" && input.items?.length === 0 ? "empty:" : "";
+            return empty + (input.k === "variant" ? input.name : input.k === "var" ? "*" : text(input)) + patterns + ";" +
                 domain(t.output, seen);
         };
         const bindsSelf = (p: Pattern): boolean => {
