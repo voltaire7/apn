@@ -32,9 +32,9 @@ for (const [source, expected] of cases) Deno.test(`combinator: ${source}`, () =>
     const actual = i.renderString(i.run(parse(source)));
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
 });
-Deno.test("combinators are exported by std and as a module record", () => {
-    const i = new Interpreter(); i.run(parse('std = import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]'));
-    if (i.renderString(i.run(parse('std.combinators.I 42'))) !== '42') throw new Error("missing std export");
+Deno.test("combinators are exported as a record and as module fields", () => {
+    const i = new Interpreter(); i.run(parse('module = import "combinator"'));
+    if (i.renderString(i.run(parse('module.combinators.I 42'))) !== '42') throw new Error("missing combinators record");
     i.run(parse('c = import "combinator"'));
     if (i.renderString(i.run(parse('c.yCombinator (f x -> x) 42'))) !== '42') throw new Error("missing module export");
 });

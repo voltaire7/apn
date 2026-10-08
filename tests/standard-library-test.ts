@@ -64,7 +64,7 @@ const cases: [string, string][] = [
 ];
 for (const [source, expected] of cases) Deno.test(`std: ${source}`, () => {
     const i = new Interpreter();
-    i.run(parse('import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]'));
+    i.run(parse('import ["function","option","sequence","number","text","map"]'));
     const actual = i.renderString(i.run(parse(source)));
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
 });
@@ -77,7 +77,7 @@ for (const [source, message] of [
     ['import 123', 'string'],
 ]) Deno.test(`std rejects: ${source}`, () => {
     const i = new Interpreter();
-    i.run(parse('import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]'));
+    i.run(parse('import ["sequence","number","text"]'));
     try { i.renderString(i.run(parse(source))); }
     catch (error) {
         if (error instanceof Error && error.message.includes(message)) return;
@@ -92,13 +92,13 @@ Deno.test("imports are cached, isolated from caller bindings, and independent of
     if (i.renderString(i.run(parse('mean [1,2]'))) !== 'Some 3/2') throw new Error("caller leaked into module");
     const first = i.importStandard("sequence");
     if (i.importStandard("sequence") !== first) throw new Error("import did not reuse module");
-    i.run(parse('s = import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]'));
+    i.run(parse('s = import "sequence"'));
     if (i.renderString(i.run(parse('s.takeWhile (<3) [1..]'))) !== '[1,2]') throw new Error("native export missing");
 });
 
 Deno.test("a bare import does not echo an infinite export record", () => {
     const i = new Interpreter();
-    if (i.run(parse('import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]')).kind !== "list") throw new Error("import must be quiet");
+    if (i.run(parse('import "function"')).kind !== "list") throw new Error("import must be quiet");
 });
 Deno.test("standard natives require importing their module", () => {
     const i = new Interpreter();
@@ -123,17 +123,17 @@ for (const eager of ['=', '<-']) {
         const i = new Interpreter();
         if (cached) i.importStandard('system', false);
         const before = new Set(i.env.map.keys());
-        i.run(parse(`[halt] ${eager} import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]`));
+        i.run(parse(`[halt] ${eager} import "system"`));
         const added = [...i.env.map.keys()].filter(name => !before.has(name));
         if (JSON.stringify(added) !== '["halt"]') throw new Error(`leaked exports: ${added}`);
         if (!i.env.get('halt')) throw new Error('missing selected export');
-        i.run(parse('import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]'));
+        i.run(parse('import "number"'));
         if (!i.env.get('fibonacci')) throw new Error('bare import must still open exports');
     });
 }
 Deno.test('selective imports rename fields and preserve unselected bindings', () => {
     const i = new Interpreter();
-    i.run(parse('fibonacci = 123; [halt: stop] = import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]'));
+    i.run(parse('fibonacci = 123; [halt: stop] = import "system"'));
     if (!i.env.get('stop') || i.env.get('halt')) throw new Error('wrong selected names');
     if (i.renderString(i.run(parse('fibonacci'))) !== '123') throw new Error('overwrote unselected binding');
 });
@@ -141,6 +141,6 @@ Deno.test('failed selective imports leave the caller scope intact', () => {
     const i = new Interpreter();
     const before = [...i.env.map.keys()].join(',');
     let failed = false;
-    try { i.run(parse('[missingExport] = import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]')); } catch { failed = true; }
+    try { i.run(parse('[missingExport] = import "function"')); } catch { failed = true; }
     if (!failed || [...i.env.map.keys()].join(',') !== before) throw new Error('failed import leaked names');
 });

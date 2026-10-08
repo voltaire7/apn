@@ -27,7 +27,7 @@ for (const [source, expected] of [
     ['x = [name: "old", age: 1]; scope <- Dynamic env; scope.x = [name: "new", age: 2]; x.name', '"new"'],
     ['xs = [1,2]; scope <- Dynamic env; scope.xs = [3,4]; xs', '[3,4]'],
     ['((Int -> Int) f) <- (x -> x); scope <- Dynamic env; scope.f = Dynamic (x -> x + 1); f 1', '2'],
-    ['Dynamic (import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]); 123', '123'],
+    ['Dynamic (import "function"); 123', '123'],
     ['Dynamic (import ["text","type"]); 123', '123'],
     ['x = 1; Dynamic $ use [x: 2]; x', '2'],
     ['Option a = Some a | None; x <- Some 1; scope <- Dynamic env; scope.x = None; x', 'None'],

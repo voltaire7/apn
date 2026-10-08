@@ -25,8 +25,8 @@ for (const [source, expected] of [
     ['n = 3; [n..1]', '[3,2,1]'],
     ['end = 1; [0,0.5..end]', '[0.0,0.5,1.0]'],
     ['n = 4; take 3 [n..]', '[4,5,6]'],
-    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; factorial 0', '1'],
-    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; factorial n = product [1..n]; factorial 5', '120'],
+    ['import "number"; factorial 0', '1'],
+    ['import "sequence"; factorial n = product [1..n]; factorial 5', '120'],
 ]) Deno.test(`range regression: ${source}`, () => {
     const actual = value(new Interpreter(), source);
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);

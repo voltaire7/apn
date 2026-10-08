@@ -47,7 +47,7 @@ for (const [source, error] of [
     ['mine t x = match x [(source value) -> t value]\nmine Int (Float .2)', 'lossy conversion'],
     ['mine t (source x) = t x\nmine Int (Complex .2)', 'lossy conversion'],
     ['types = import "type"\ntypes.cast Int (Float .2)', 'lossy conversion'],
-    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]\ncast Int (Float .2)', 'lossy conversion'],
+    ['import "type"\ncast Int (Float .2)', 'lossy conversion'],
     ['cast String [1]', 'list of Char'],
     ['cast String ["h"]', 'list of Char'],
     ["String ['h',missing]", 'unbound variable'],

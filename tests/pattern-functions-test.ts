@@ -3,7 +3,7 @@ import { parse } from "../src/parser.ts";
 
 function result(code: string): string {
     const i = new Interpreter();
-    return i.renderString(i.run(parse('import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; ' + code)));
+    return i.renderString(i.run(parse('import ["option","sequence"]; ' + code)));
 }
 for (const [code, expected] of [
     ['(Some x -> x) (Some 123)', '123'],

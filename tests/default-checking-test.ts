@@ -19,8 +19,8 @@ function rejected(i: Interpreter, source: string): void {
     throw new Error(`accepted: ${source}`);
 }
 for (const [source, expected] of [
-    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; sum [1,2,3]', '6'],
-    ['std = import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; std.sum (Int * [1,2,3])', '6'],
+    ['import "sequence"; sum [1,2,3]', '6'],
+    ['seqs = import "sequence"; seqs.sum (Int * [1,2,3])', '6'],
     ['import ["function","number"]; id (sq 3)', '9'],
     ['ns = [double: (x -> x * 2)]; use ns; double 3', '6'],
     ['use [[one: 1],[two: 2]]; one + two', '3'],
@@ -36,7 +36,7 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; sum ["bad"]',
+    'import "sequence"; sum ["bad"]',
     'f x = x + 1; f "bad"',
     'apply f x = f x; apply (x -> x + 1) "bad"',
     'x | missingGuard -> x',
@@ -118,10 +118,10 @@ Deno.test("default checking reports an unbound name with a suggestion", () => {
 // A variable bound to a union containing itself (v = v | t) resolves to t,
 // and functions that return their list parameter preserve its length.
 for (const [source, expected] of [
-    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = forceList [b,a + b]; repeatApply 3 g [1,2]', '[5,8]'],
-    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; tick [a,b,c,d,e,f,g,h,i] = forceList [b,c,d,e,f,g,h + a,i,a]; sum (repeatApply 80 tick [0,1,1,2,1,0,0,0,0])', '5934'],
+    ['import "sequence"; g [a,b] = forceList [b,a + b]; repeatApply 3 g [1,2]', '[5,8]'],
+    ['import "sequence"; tick [a,b,c,d,e,f,g,h,i] = forceList [b,c,d,e,f,g,h + a,i,a]; sum (repeatApply 80 tick [0,1,1,2,1,0,0,0,0])', '5934'],
     ['f (List xs) = xs; g [a,b] = f [b,a + b]; g (g [1,2])', '[3,5]'],
-    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = a + b; g (forceList [1,2])', '3'],
+    ['import "sequence"; g [a,b] = a + b; g (forceList [1,2])', '3'],
     ['g [a,b] = a + b; g (map (x -> x * 2) [1,2])', '6'],
     ['xs = map (x -> x + 1) [1,2]; ys = map (x -> x * 2) [1,2,3]; g [a,b] = a + b; [g xs,length ys]', '[5,3]'],
     ['x (x:xs) = 42; x [x]', '42'],
@@ -130,8 +130,8 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = forceList [b,a ++ "x"]; repeatApply 3 g [1,2]',
-    'import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = a + b; g (forceList [1,2,3])',
+    'import "sequence"; g [a,b] = forceList [b,a ++ "x"]; repeatApply 3 g [1,2]',
+    'import "sequence"; g [a,b] = a + b; g (forceList [1,2,3])',
     'g [a,b] = a + b; g (map (x -> x) [1,2,3])',
     'g [a,b] = a + b; g (map (x -> x) (tail [1,2,3]))',
     'g [a,b] = a + b; g (tail [0,1,2])',
@@ -167,18 +167,18 @@ for (const source of [
 // change a list's length (folds, cons, append, filter) stay unknown, even when
 // their result has the same type as their input.
 for (const [source, expected] of [
-    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = a + b; g (reverse [1,2])','3'],
-    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = a - b; g (sort [2,1])','-1'],
-    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = a - b; g (sortBy compare [2,1])','-1'],
-    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = a - b; g (sortOn (x -> -x) [1,2])','1'],
-    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [p,q] = p; g (zipWithIndex [5,6])','[0,5]'],
-    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; reverse "abc" ++ "!"','"cba!"'],
+    ['import "sequence"; g [a,b] = a + b; g (reverse [1,2])','3'],
+    ['import "sequence"; g [a,b] = a - b; g (sort [2,1])','-1'],
+    ['import "sequence"; g [a,b] = a - b; g (sortBy compare [2,1])','-1'],
+    ['import "sequence"; g [a,b] = a - b; g (sortOn (x -> -x) [1,2])','1'],
+    ['import "sequence"; g [p,q] = p; g (zipWithIndex [5,6])','[0,5]'],
+    ['import "sequence"; reverse "abc" ++ "!"','"cba!"'],
 ] as const) Deno.test(`stdlib keeps list lengths: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = a + b; g (reverse [1,2,3])',
+    'import "sequence"; g [a,b] = a + b; g (reverse [1,2,3])',
     'f xs = foldl (acc x -> x : acc) xs [1,2]; g [a,b] = a + b; g (f [1,2])',
     'f xs = foldl (acc x -> x : acc) xs [1,2]; g [a,b,c,d] = a + b; g (f [1,2])',
     'f xs = 0 : xs; g [a,b] = a + b; g (f [1,2])',
@@ -192,7 +192,7 @@ for (const [source, expected] of [
     ['h a b = [map (x -> x) a,map (x -> x) b]; g [[x],[y,z]] = x + y + z; g (h [1] [1,2])', '4'],
     ['pairUp a b = [a,b]; g [[x],[y,z]] = x + y + z; g (pairUp [1] [2,3])', '6'],
     ['h a b = [map (x -> x) a,map (x -> x) b]; h2 a b = h b a; g [[x,y],[z]] = x + y + z; g (h2 [1] [1,2])', '4'],
-    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; both xs = [sort xs,reverse xs]; g [[a,b],[c,d]] = a + d; g (both [2,1])', '3'],
+    ['import "sequence"; both xs = [sort xs,reverse xs]; g [[a,b],[c,d]] = a + d; g (both [2,1])', '3'],
 ] as const) Deno.test(`checker tracks nested list lengths: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -204,7 +204,7 @@ for (const source of [
     'keep xs = xs * (x -> x); drop1 xs = tail xs; pick b = b ? keep : drop1; g [a,b,c] = a; g ((pick false) [1,2,3])',
     'keep xs = xs * (x -> x); drop1 xs = tail xs; h = false ? keep : drop1; g [a,b,c] = a; g (h [1,2,3])',
     'keep xs = xs * (x -> x); drop1 xs = tail xs; fs = [keep,drop1]; g [a,b,c] = a; g ((fs 1) [1,2,3])',
-    'import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; p = sortBy compare; g [a,b] = a; g (p [2,1])',
+    'import "sequence"; p = sortBy compare; g [a,b] = a; g (p [2,1])',
 ]) Deno.test(`checker does not assume lengths: ${source}`, () => rejected(session(), source));
 // An empty-list pattern rejects a list known to be non-empty (it would fail at
 // runtime), while lists of unknown length still reach it, as recursion needs.
@@ -519,7 +519,7 @@ for (const source of [
 // The builtin length of a list or String is known when its size is: from a
 // literal, a parameter at its calls, cons, append, shaped builtins (map, sort)
 // and recursion over list patterns.
-const sizeClauses = 'import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a] = a; sm n = n < 2 ? None : Some n; q xs = length xs < 2 ? None : Some 1; len [] = 0; len (x:xs) = 1 + len xs';
+const sizeClauses = 'import ["option","sequence","number"]; g [a] = a; sm n = n < 2 ? None : Some n; q xs = length xs < 2 ? None : Some 1; len [] = 0; len (x:xs) = 1 + len xs';
 for (const [source, expected] of [
     ['g (f (sm (length [1])))', '0'],
     ['k (Int x) = None; k x = Some x; g (f (k (length [1])))', '0'],

@@ -4,7 +4,7 @@ function result(i: Interpreter, source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['std = import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]\nuse std\nidentity 123', '123'],
+    ['combinators = import "combinator"\nuse combinators\nidentity 123', '123'],
     ['unused = missing + 1\nuse [x: 1, unused: unused]\nx', '1'],
     ['use [[x: 1],[y: 2, x: 3]]\n[x,y]', '[3,2]'],
     ['use []', '[]'],
