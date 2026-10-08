@@ -329,12 +329,17 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   values `reachable` from the statement's names (through definition bodies,
   the facts of those names, the `Known.origin` of lazy values, and
   `CheckOptions.loadedNames` for literal loads, `Entry.opened` for names
-  `use` opened, and `envAccess` fields for `env` views) become `invalid`.
-  `envAccess` accepts only `env`, its aliases and `Dynamic env` in literal
-  field positions; anything else, an opaque `use`, or another session
-  program doing so (`CheckOptions.envElsewhere`), a name such a program
-  bound (`CheckOptions.envNames`, which also takes the names of programs
-  mentioning one), or a lazy value without an origin clears `programValid`. Lazy list
+  `use` opened, and `viewFields` for `env` views) become `invalid`.
+  `envSites` finds a view's sites (literal fields, or keys `knownKey`
+  evaluates where reached, refusing names bound in the walked code or its
+  clause parameters, `paramsOf`, and keys that touch a cell); `envAccess`
+  reports whether every view stays at its sites. The session shares
+  aliases (`envAliases`), top-level views once their program ran
+  (`envTopViews`; the evaluator reads a top-level view's field at the root),
+  and the names an escaping program bound or used (`envNames`, growing
+  through programs mentioning one). An escape, a tainted name, an opaque
+  `use` here or elsewhere (`CheckOptions.openedElsewhere`), or a lazy value
+  without an origin clears `programValid`. Lazy list
   cells and deferred values keep their result only when computed touching
   no cell or during an execution (`keeps`); `map`/`zipWith` heads and
   `iterate`'s next value are deferred and `filter` applies its predicate in

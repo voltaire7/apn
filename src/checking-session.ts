@@ -1,6 +1,6 @@
 import { APNError } from "./errors.ts";
 import { parse } from "./parser.ts";
-import { type CheckOptions, checkTypes, copyTypeScope, envAccess, mayMutate, mentionsAny, topNames, type TypeScope } from "./type-checker.ts";
+import { type CheckOptions, checkTypes, copyTypeScope, envAccess, isEnvView, mayMutate, mentionsAny, namesIn, topNames, type TypeScope } from "./type-checker.ts";
 import type { TopLevel } from "./ast.ts";
 
 const moduleNames = new Set(["type", "function", "option", "sequence", "array", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5", "ffi"]);
@@ -35,20 +35,35 @@ export class CheckingSession {
 
     commit(candidate: TypeScope, visible: Set<string>): void {
         this.scope = new Map([...candidate].filter(([name]) => visible.has(name)));
+        // A binding to an env view counts once its program has run.
+        for (const name of this.stagedViews) this.envTopViews.add(name);
+        this.stagedViews.clear();
     }
 
     /** Whether any program this session has checked may write a Mutable cell. */
     private mutation = false;
-    /** Programs whose env or use the checker cannot trace from another program. */
-    private opaquePrograms = new Set<TopLevel[]>();
-    /** Names bound by such programs, or by programs using those names: they may hold an env view. */
+    /** Programs that used use on a record of unknown fields. */
+    private opaqueUses = new Set<TopLevel[]>();
+    /** Names bound to env views in any program (see envAccess). */
+    private envAliases = new Set<string>();
+    /** Top-level names whose latest binding is an env view; staged until the program runs. */
+    private envTopViews = new Set<string>();
+    private stagedViews = new Set<string>();
+    /** Names a program that let an env view escape (or used such a name)
+     * bound or mentioned: they may hold a view. */
     private envNames = new Set<string>();
+    /** Names programs bound at the top level. */
+    private userNames = new Set<string>();
 
     private check(program: TopLevel[], directory: string, initial: TypeScope, library: boolean): { scope: TypeScope; exports: TypeScope } {
+        // Views staged by a program that never ran are dropped.
+        if (this.checking++ === 0) this.stagedViews.clear();
+        try { return this.checkProgram(program, directory, initial, library); } finally { this.checking--; }
+    }
+    private checking = 0;
+    private checkProgram(program: TopLevel[], directory: string, initial: TypeScope, library: boolean): { scope: TypeScope; exports: TypeScope } {
         this.mutation ||= mayMutate(program);
-        const access = envAccess(program);
-        if (!access.literal || access.aliases.size > 1 || mentionsAny(program, new Set(["use"]))) this.opaquePrograms.add(program);
-        if (this.opaquePrograms.has(program) || mentionsAny(program, this.envNames)) topNames(program).forEach(name => this.envNames.add(name));
+        this.trackViews(program, library);
         let scope: TypeScope = new Map();
         let exports: TypeScope = new Map();
         const result = checkTypes(program, {
@@ -56,7 +71,9 @@ export class CheckingSession {
             runtimeNames: !library && this.runtimeNames ? new Set(this.runtimeNames()) : undefined,
             inputs: library ? undefined : this.inputs,
             mutation: () => this.mutation,
-            envElsewhere: () => [...this.opaquePrograms].some(p => p !== program),
+            openedElsewhere: () => [...this.opaqueUses].some(p => p !== program),
+            envAliases: () => this.envAliases,
+            envTopViews: () => this.envTopViews,
             envNames: () => this.envNames,
             loadedNames: path => this.loadedNames(path, directory),
             imports: module => {
@@ -69,6 +86,7 @@ export class CheckingSession {
             },
             result: (value, published) => { scope = value; exports = published; },
         });
+        if (result.opaqueUse) this.opaqueUses.add(program);
         if (result.issues.length) {
             const issue = result.issues[0];
             const error = new APNError("type", issue.message, issue);
@@ -76,6 +94,31 @@ export class CheckingSession {
             throw error;
         }
         return { scope, exports };
+    }
+
+    // Follow env views across programs: the names bound to them, the top-level
+    // bindings that are views, and the names that may hold an escaped view.
+    private trackViews(program: TopLevel[], library: boolean): void {
+        const access = envAccess(program, this.envAliases);
+        access.aliases.forEach(name => name !== "env" && this.envAliases.add(name));
+        const bound = topNames(program);
+        if (!library) bound.forEach(name => this.userNames.add(name));
+        // Each name's last binding here decides; a view counts once the program runs.
+        const views = new Set<string>();
+        for (const statement of program) {
+            const value = statement.t === "patDef" ? statement.value : statement.t === "def" && !statement.clauses[0].params.length ? statement.clauses[0].body : undefined;
+            for (const name of topNames([statement])) {
+                if (value && isEnvView(value, new Set(["env"]))) views.add(name); else views.delete(name);
+            }
+        }
+        for (const name of bound) {
+            if (views.has(name)) this.stagedViews.add(name);
+            else { this.envTopViews.delete(name); this.stagedViews.delete(name); }
+        }
+        if (!access.literal || mentionsAny(program, this.envNames)) {
+            bound.forEach(name => this.envNames.add(name));
+            for (const name of namesIn(program)) if (this.userNames.has(name)) this.envNames.add(name);
+        }
     }
 
     module(module: string | string[]): TypeScope {

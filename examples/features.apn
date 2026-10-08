@@ -1126,11 +1126,13 @@ print (onlyOne (vowelOrPair (vowelIfShort (take (mutableCounter - 1) [7, 8, 9]))
 # map's elements run where they are used: printing runs both.
 print (map (x -> set mutableCounter $ x) [5, 1])  # [[], []]
 print (onlyOne (vowelOrPair (vowelIfShort (take mutableCounter [7, 8, 9]))))  # 1
-# An uncertain statement forgets only what it reaches; through env, the names it uses.
+# An uncertain statement forgets only what it reaches; through env, the
+# bindings it names, by literal fields or keys the checker knows.
 counterView <- Dynamic env
 otherCounter = Mutable 4
 uncertainKeys = HashMap [["a", 1]]
-has "a" uncertainKeys ? counterView.bumpCounter 0 : 0
+counterKey = "bumpCounter"
+has "a" uncertainKeys ? (counterView counterKey) 0 : 0
 print (onlyOne (vowelOrPair (vowelIfShort (take (otherCounter - 3) [7, 8, 9]))))  # 1
 
 # p5 sketches are descriptions until built for the browser.

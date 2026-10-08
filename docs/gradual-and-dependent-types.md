@@ -364,11 +364,15 @@ the checker cannot decide, code it cannot follow) leaves only the top-level
 cells and values it can reach unknown: those its names, and the definitions
 they name, refer to, including what its lazily computed values are computed
 from and what a file it loads (by a literal path) names. An `env` view
-(`scope <- Dynamic env`) reaches the bindings it names by literal fields
-(`scope.bump`, `scope "bump"`, `scope.[a, b]`, `scope.x = v`), and a name opened by `use`
-reaches the field it was opened from; an `env` view used any other way (a
-computed key, passed on, an earlier REPL input or loaded file using one, or
-opened by `use` from a record of unknown fields) reaches everything. Lazily computed list elements run where the program forces
+(`scope <- Dynamic env`, also one bound by an earlier REPL input) reaches the
+bindings it names: literal fields (`scope.bump`, `scope "bump"`,
+`scope.[a, b]`, `scope.x = v`) and keys whose string the checker knows where
+the view is used (`key = "bump"; (scope key) 0`, with `key` read as bound
+then). A key it does not know (a parameter or local, a name bound more than
+once, a cell's contents) reaches everything, as does a view stored or passed
+on, here or in an earlier REPL input, through every name that input used. A
+name opened by `use` reaches the field it was opened from; one opened from a
+record of unknown fields reaches everything. Lazily computed list elements run where the program forces
 them, as at runtime: `map`'s elements when used, `filter`'s predicate as its
 cells are reached, printing and `==` cell by cell, so after
 `print (map (x -> set counter x) [1, 2])`, `counter` is 2, and a top-level
