@@ -3,17 +3,20 @@ Dynamic $ load "meta/parser"
 Dynamic $ load "meta/evaluator"
 Dynamic $ load "meta/primitives"
 
+# The reader's output is ordinary APN lists; their shape is not statically typed.
+metaParse source = Dynamic (mpParse source)
+
 # Parse once, then evaluate syntax in our own environment and closure machinery.
 metaEval source = Dynamic {
-    [program] = [metaParse source]
+    [program] = [mpParse source]
     seq (mpForce program) (meRun (fst program) (snd program) metaPrimitives)
 }
 
 # Evaluate the evaluator's source, then ask that interpreted evaluator to run
 # the user's parsed program. Neither layer calls the host parser/evaluator.
 metaSelfEval evaluatorSource source = Dynamic {
-    [core] = [metaParse evaluatorSource]
-    [program] = [metaParse source]
+    [core] = [mpParse evaluatorSource]
+    [program] = [mpParse source]
     [expression] = [["scope", fst program, snd program]]
     [call] = [["apply", ["apply", ["variable", "meEval"], ["literal", metaPrimitives]], ["literal", expression]]]
     seq (mpForce core) (seq (mpForce program) (meRun (fst core) call metaPrimitives))

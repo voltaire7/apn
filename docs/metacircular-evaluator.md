@@ -15,16 +15,18 @@ subset** of APN; it is not a replacement for the entire host implementation.
 
 ```sh
 apn examples/metacircular.apn
-deno run --allow-read examples/metacircular-self.ts
+apn examples/metacircular-self.apn                     # from the repository root
+deno run --allow-read examples/metacircular-self.ts    # from any directory
 deno test --allow-read tests/metacircular-test.ts
 ```
 
-The second command prints `42` three times. Its small TypeScript driver only
-reads the actual `lib/meta/evaluator.apn` file as text, binds that text, and
-starts the APN demonstration. All subsequent parsing and evaluation happens in
-APN:
+The self-evaluation demo prints `42` three times. It reads the actual
+`lib/meta/evaluator.apn` file as plain text with `readFile` (the path is its
+first argument, defaulting to the repository-relative one); the small
+TypeScript driver only supplies the absolute path. All parsing and evaluation
+happens in APN:
 
-1. `metaParse` reads the evaluator's actual source into ordinary APN lists.
+1. The APN reader (`metaParse`) turns the evaluator's source into ordinary APN lists.
 2. `meRun` evaluates those definitions, constructing an interpreted `meEval`.
 3. The interpreted `meEval` evaluates an arithmetic expression, an identity
    function application, and a conditional with an unbound unused branch.

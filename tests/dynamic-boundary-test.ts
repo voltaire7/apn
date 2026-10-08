@@ -135,3 +135,7 @@ Deno.test('guarding an action does not execute it to discover its result type', 
     }
     throw new Error('missing runtime error');
 });
+Deno.test("set on an explicit Dynamic target is checked at runtime", () => {
+    const value = run("cell = Dynamic (Mutable 1); set cell 2; Int (Dynamic cell) + 1");
+    if (value !== "3") throw new Error(`expected 3, got ${value}`);
+});

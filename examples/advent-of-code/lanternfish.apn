@@ -7,6 +7,8 @@ fishPopulation days text = {
     [counts] = [frequencies timers]
     initial = map (timer -> getOr 0 timer counts) [0..8]
     tick [a,b,c,d,e,f,g,h,i] = forceList [b,c,d,e,f,g,h + a,i,a]
-    valid ? sum (repeatApply days tick initial) : fail "fish timers must be between 0 and 8"
+    # The checker cannot infer a step that both adds and is forced, so the
+    # iteration is an explicit Dynamic boundary converted back to Int.
+    valid ? Int (Dynamic (sum (repeatApply days tick initial))) : fail "fish timers must be between 0 and 8"
 }
 solveFish text = fishPopulation 80 text

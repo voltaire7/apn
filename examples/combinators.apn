@@ -12,9 +12,10 @@ print (combinators.Z factorialStep 5)         # 120
 print (combinators.Theta factorialStep 5)     # 120
 print (fix factorialStep 5)                  # 120
 
-# S K K behaves like I. K leaves its second argument unevaluated.
+# S K K behaves like I. K leaves its second argument unevaluated: `_` raises
+# "not implemented" if it is ever evaluated.
 print (combinators.S combinators.K combinators.K 42) # 42
-print (combinators.K 42 missing)              # 42
+print (combinators.K 42 _)                    # 42
 print (combinators.B (*2) (+1) 20)            # 42
 print (combinators.W (+) 21)                  # 42
 print (combinators.M (x -> 42))               # 42

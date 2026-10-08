@@ -361,6 +361,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return { k: "type", value: { k: "variant", name: `distinct${serial++}`, args: [], base: a.value } };
         }
         if (t.op === "set") {
+            // An explicit Dynamic target (such as an FFI Pointer) is checked at runtime.
+            if (isExplicit(a)) { runtimeChecks++; return list(variable(), constant(0n)); }
             if (a.k !== "mutable") return problem("set expects a Mutable reference");
             convert(a.value, b, { t: "placeholder" });
             return list(variable(), constant(0n));

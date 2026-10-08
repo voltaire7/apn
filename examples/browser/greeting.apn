@@ -1,7 +1,7 @@
 import "std/html"
 browser = import "std/browser"
 
-GreetingMsg = NameChanged a | ClearName
+GreetingMsg = NameChanged String | ClearName
 
 update msg model = match msg [
     (NameChanged name) -> name

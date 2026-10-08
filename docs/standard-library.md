@@ -196,7 +196,8 @@ Run `apn examples/standard-library.apn` for a complete example.
 ## Metacircular evaluator — `std/meta`
 
 `metaEval source` runs the supported APN core through an APN-written reader and
-evaluator. `metaSelfEval evaluatorSource source` adds another evaluation layer:
+evaluator. `metaParse source` returns the reader's output, `[definitions,
+expression]`, as `Dynamic` data. `metaSelfEval evaluatorSource source` adds another evaluation layer:
 it evaluates the evaluator's source, then runs the program with that evaluator.
 See [the proof, supported subset and primitive boundary](metacircular-evaluator.md).
 

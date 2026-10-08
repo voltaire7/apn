@@ -131,7 +131,7 @@ mpProgram tokens definitions = mpDefinition tokens ? {
     [body] = [mpExpr 1 "" tokens]
     null (mpSkip (snd body)) ? [reverse definitions, fst body] : fail ("meta reader: trailing token " ++ mpText (snd body))
 }
-metaParse source = mpProgram (mpSkip (mpLex source)) []
+mpParse source = mpProgram (mpSkip (mpLex source)) []
 
 # Syntax is finite. Finish reading before execution so parser thunks do not
 # accumulate underneath evaluator frames; object-language values stay lazy.

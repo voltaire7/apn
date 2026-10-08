@@ -1,7 +1,11 @@
-import "std/meta"
+import ["std/meta", "std/io"]
 
-# evaluatorSource is supplied as plain file text by metacircular-self.ts.
-# The APN reader parses it. The APN evaluator runs the parsed evaluator.
+# The evaluator's own source, read as plain text. Pass its path as the first
+# argument, or run from the repository root to use the default.
+args <- getArgs
+evaluatorSource <- readFile (null args ? "lib/meta/evaluator.apn" : head args)
+
+# The APN reader parses that text. The APN evaluator runs the parsed evaluator.
 # That interpreted evaluator then runs each of these programs.
 print (metaSelfEval evaluatorSource "20 + 22")
 print (metaSelfEval evaluatorSource "id x = x; id 42")

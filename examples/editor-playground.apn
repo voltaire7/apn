@@ -1,3 +1,4 @@
+import "std/option"
 # Open with: ./editors/neovim/try-apn examples/editor-playground.apn
 # Try K over double, or Ctrl-X Ctrl-O after typing part of a name.
 # Delete the 2 below: a diagnostic appears. Restore it: the error clears.
@@ -5,9 +6,10 @@
 double x = x * 2
 
 handlers = [
-    Some y -> print y
-    None -> ()
+    Some y -> y
+    None -> 0
 ]
+print (match (Some 42) handlers)          # 42
 
 print (double 21)                         # 42
 
