@@ -1,6 +1,6 @@
 import { type Expr, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
 import { castNumeric, NUMERIC_TYPES, numericType, TYPE_NAMES } from "./type-system.ts";
-import { APNError } from "./errors.ts";
+import { APNError, didYouMean } from "./errors.ts";
 import { parse, parseDocument } from "./parser.ts";
 
 type Index = { constant: bigint; terms: Map<string, bigint> };
@@ -41,6 +41,8 @@ export interface CheckOptions {
     initial?: TypeScope;
     imports?: (module: string | string[]) => TypeScope;
     result?: (scope: TypeScope, exports: TypeScope) => void;
+    /** Names bound in the running interpreter; with it, other unknown names are reported as unbound. */
+    runtimeNames?: ReadonlySet<string>;
 }
 export function copyTypeScope(scope: TypeScope): TypeScope {
     const nodes = new Map<Ty, Ty>(), vars = new Map<Ty, Ty>();
@@ -55,6 +57,7 @@ export interface TypeIssue {
     len: number;
     source?: string;
     file?: string;
+    hint?: string;
 }
 export interface CheckResult {
     issues: TypeIssue[];
@@ -277,6 +280,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let dynamicBoundaries = 0, runtimeChecks = 0, serial = 0, budget = 50000;
     let activeExpression: Expr | undefined, checkingExpression: Expr | undefined;
     let firstUnknown: Expr | undefined;
+    let firstUnbound: { expr: Expr; name: string; hint?: string } | undefined;
     const unknown = (): Ty => {
         firstUnknown ??= activeExpression ?? checkingExpression;
         dynamicBoundaries++;
@@ -1221,6 +1225,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     entry = rootScope.get(e.name);
                     if (entry) scope.set(e.name, entry);
                 }
+                if (!entry && !firstUnbound && options.runtimeNames && !options.runtimeNames.has(e.name)) {
+                    const near = didYouMean(e.name, [...scope.keys(), ...options.runtimeNames]);
+                    firstUnbound = { expr: e, name: e.name, hint: near ? `did you mean '${near}'?` : undefined };
+                }
                 return entry ? instantiate(entry) : unknown();
             }
             case "placeholder":
@@ -1896,7 +1904,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             } else throw error;
         }
     }
-    if (options.strict && dynamicBoundaries && !issues.length) {
+    if (options.strict && dynamicBoundaries && !issues.length && firstUnbound) {
+        // An unknown name is the usual cause; report it rather than the boundary count.
+        const loc = sourceLocations.get(firstUnbound.expr);
+        issues.push({ message: `unbound variable '${firstUnbound.name}'`, hint: firstUnbound.hint, pos: loc?.start ?? 0, len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)), source: loc?.source, file: loc?.file });
+    } else if (options.strict && dynamicBoundaries && !issues.length) {
         const loc = firstUnknown && sourceLocations.get(firstUnknown);
         issues.push({ message: `cannot establish static types: ${dynamicBoundaries} unresolved dynamic boundaries; mark runtime code with Dynamic`, pos: loc?.start ?? 0, len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)), source: loc?.source, file: loc?.file });
     }

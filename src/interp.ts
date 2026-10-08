@@ -55,6 +55,7 @@ export class Interpreter {
         this.checking = new CheckingSession();
         this.checking.moduleSources = this.moduleSources;
         this.checking.extendDefinitions = this.extendDefinitions;
+        this.checking.runtimeNames = () => envNames(this.env);
     }
     private preludeBindings = new Map<string, Value>();
     hostNatives = new Map<string, (args: Value[]) => Value>();

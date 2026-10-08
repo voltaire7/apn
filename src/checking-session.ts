@@ -24,6 +24,8 @@ export class CheckingSession {
     }
     moduleSources?: Record<string, string>;
     extendDefinitions = false;
+    /** Names the interpreter can resolve, so the checker can tell a typo from a runtime-only builtin. */
+    runtimeNames?: () => Iterable<string>;
 
     prepare(program: TopLevel[], directory = "."): TypeScope {
         return this.check(program, directory, this.scope, false).scope;
@@ -38,6 +40,7 @@ export class CheckingSession {
         let exports: TypeScope = new Map();
         const result = checkTypes(program, {
             strict: true, initial, library, extendDefinitions: this.extendDefinitions,
+            runtimeNames: !library && this.runtimeNames ? new Set(this.runtimeNames()) : undefined,
             imports: module => {
                 const fields = this.module(module);
                 return fields;

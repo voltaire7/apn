@@ -107,3 +107,11 @@ Deno.test("unary collection constraints distribute over heterogeneous list shape
     const actual = run(session(), 'map length [[1], [2,3]]');
     if (actual !== '[1, 2]') throw new Error(actual);
 });
+Deno.test("default checking reports an unbound name with a suggestion", () => {
+    try { run(session(), "y = 3; yy + 1"); } catch (error) {
+        const e = error as { kind?: string; message?: string; hint?: string };
+        if (e.kind !== "type" || e.message !== "unbound variable 'yy'" || e.hint !== "did you mean 'y'?") throw error;
+        return;
+    }
+    throw new Error("accepted an unbound name");
+});

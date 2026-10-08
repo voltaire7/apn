@@ -26,7 +26,7 @@ Import the standard library from any directory:
 import "std"
 take 10 primes
 mean [1,2]                         # Some 3/2
-"one two one" $ words $ frequencies
+frequencies $ words $ "one two one"
 ```
 
 Load individual modules with `import "std/text"`, `import "std/map"`, etc.
