@@ -27,16 +27,7 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
                 const path = str(args[0]);
                 return mkStr(i.inputFile(path) ?? Deno.readTextFileSync(path));
             }
-            const decoder = new TextDecoder();
-            const buffer = new Uint8Array(65536);
-            const chunks: string[] = [];
-            for (;;) {
-                const count = Deno.stdin.readSync(buffer);
-                if (count === null) break;
-                chunks.push(decoder.decode(buffer.subarray(0, count), { stream: true }));
-            }
-            chunks.push(decoder.decode());
-            return mkStr(chunks.join(""));
+            return mkStr(i.inputStdin());
         } catch (error) {
             throw new APNError("runtime", `${name}: ${error instanceof Error ? error.message : error}`);
         }

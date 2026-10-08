@@ -342,12 +342,19 @@ elements) stay unknown.
 Effects are never performed while checking, but their results are known:
 `print x` and `emit x` are `x`, and `set`, `assert` and `debug` give `[]`. A
 `Mutable` cell's contents are known when nothing checked in the session can
-write a cell (no `set`, `load`, `use` or `env`); otherwise reading a cell stays
-unknown, since a later `set` may change it. When the interpreter checks a
-program right before running it (the CLI and the REPL), `readFile` and
-`getArgs` (and so `readInput`) see the program's actual input, and the run
-reads the same file contents the checker saw. `readStdin` stays unknown, and
-lint and editor checks never read input. A function
+write a cell (no `set`, `load`, `use` or `env`). Otherwise contents are followed
+in the run's order for a cell created within the value being decided: block
+statements, eager bindings (`<-`) and operands run in order, and a lazy binding
+is read when used, so `{ c = Mutable 1; a = c + 0; set c 5; a + 0 }` is 5. A
+read stays unknown when a written cell is also used in a lazily evaluated
+place (a list element, a call argument evaluated elsewhere), when evaluation
+skips code or an uncertain branch, or for a cell defined at the top level,
+which other top-level code may write at any time. When the interpreter checks a
+program right before running it (the CLI and the REPL), `readFile`, `getArgs`
+(and so `readInput`) and `readStdin` see the program's actual input, and the run
+reads the same text the checker saw. Stdin is read ahead only when it is not a
+terminal (a pipe or a redirected file), so interactive programs are unaffected;
+at a terminal it stays unknown. Lint and editor checks never read input. A function
 argument may be a lambda, an operator section, a named function, or a partial
 application, also when passed through a parameter: `filter (> 1) [1, 2]` and
 `hh (> 1)` with `hh p = filter p [1, 2]` both have one element. A recursive call

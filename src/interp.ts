@@ -58,7 +58,27 @@ export class Interpreter {
         this.checking.runtimeNames = () => envNames(this.env);
         // Checking right before running may read the program's input; the run
         // then sees the same file contents and arguments.
-        this.checking.inputs = { readFile: path => this.inputFile(path), args: () => this.programArgs };
+        this.checking.inputs = {
+            readFile: path => this.inputFile(path), args: () => this.programArgs,
+            // Interactive input is never read ahead of the program.
+            readStdin: () => Deno.stdin.isTerminal() ? undefined : this.inputStdin(),
+        };
+    }
+    // All of stdin, read once: readStdin returns the same text every time, so
+    // the checker (reading ahead of a non-interactive run) and the run agree.
+    private stdinText?: string;
+    inputStdin(): string {
+        if (this.stdinText !== undefined) return this.stdinText;
+        const decoder = new TextDecoder();
+        const buffer = new Uint8Array(65536);
+        const chunks: string[] = [];
+        for (;;) {
+            const count = Deno.stdin.readSync(buffer);
+            if (count === null) break;
+            chunks.push(decoder.decode(buffer.subarray(0, count), { stream: true }));
+        }
+        chunks.push(decoder.decode());
+        return this.stdinText = chunks.join("");
     }
     // Files readFile reads, captured once per interpreter (see enableChecking).
     private inputFiles = new Map<string, string>();

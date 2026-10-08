@@ -721,10 +721,33 @@ for (const [source, expected] of [
 });
 for (const source of [
     'k y = { c = Mutable 5; c + 1 }; g (f (r (k 0 == 7)))',
-    // A closure reading a cell after set: the read stays unknown.
-    'k y = { c = Mutable 1; h = () -> c + 0; set c 2; h [] }; g (f (r (k 0 == 2)))',
+    'k y = { c = Mutable 1; h = () -> c + 0; set c 2; h [] }; g (f (r (k 0 == 1)))',
     'c = Mutable 5; bump x = set c x; g (f (r (c + 1 == 6)))',
 ]) Deno.test(`effects and cells stay checked: ${source}`, () => rejected(session(), `${effectPrelude}; ${source}`));
+// Writes after reads follow the run's order: block statements, eager
+// bindings and operands run in order, and a lazy binding is read when used.
+for (const [source, expected] of [
+    ['k y = { c = Mutable 1; set c (c + 1); set c (c * 10); c + 0 }; g (f (r (k 0 == 20)))', '0'],
+    ['k y = { c = Mutable 1; a <- c + 0; set c 5; a + 0 }; g (f (r (k 0 == 1)))', '0'],
+    ['k y = { c = Mutable 1; a = c + 0; set c 5; a + 0 }; g (f (r (k 0 == 5)))', '0'],
+    ['bump c = set c (c + 1); k y = { c = Mutable 1; bump c; bump c; c + 0 }; g (f (r (k 0 == 3)))', '0'],
+    ['k y = { c = Mutable 1; (c + 0) + { set c 5; c + 0 } }; g (f (r (k 0 == 6)))', '0'],
+    ['k y = { c = Mutable 1; h = () -> c + 0; set c 2; h [] }; g (f (r (k 0 == 2)))', '0'],
+    ['sw c = { set c 9; c + 0 }; k y = { c = Mutable 1; a = c + 0; sw c + a }; g (f (r (k 0 == 18)))', '0'],
+] as const) Deno.test(`cells written after reads: ${source}`, () => {
+    const actual = run(session(), `${effectPrelude}; ${source}`);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'k y = { c = Mutable 1; set c (c + 1); set c (c * 10); c + 0 }; g (f (r (k 0 == 21)))',
+    'k y = { c = Mutable 1; a <- c + 0; set c 5; a + 0 }; g (f (r (k 0 == 5)))',
+    'k y = { c = Mutable 1; a = c + 0; set c 5; a + 0 }; g (f (r (k 0 == 1)))',
+    'sw c = { set c 9; c + 0 }; k y = { c = Mutable 1; a = c + 0; sw c + a }; g (f (r (k 0 == 10)))',
+    // A list element is computed when used, after the set: unknown here.
+    'k y = { c = Mutable 1; xs = [c + 0]; set c 7; head xs }; g (f (r (k 0 == 7)))',
+    // Other top-level code may write a top-level cell at any time.
+    'counter = Mutable 0; k y = { set counter 4; counter + 0 }; g (f (r (k 0 == 4)))',
+]) Deno.test(`cells written after reads stay checked: ${source}`, () => rejected(session(), `${effectPrelude}; ${source}`));
 Deno.test("a set from an earlier REPL input keeps later cell reads unknown", () => {
     const i = session();
     run(i, `${effectPrelude}; bump c = set c 9`);
@@ -747,6 +770,18 @@ Deno.test("getArgs and readInput see the program's arguments", () => {
     const two = session();
     two.programArgs = [hill, "x"];
     rejected(two, `${inputPrelude}; g (f (q getArgs))`);
+});
+Deno.test("readStdin is read when the run's stdin is not interactive", () => {
+    const check = (stdin: string | undefined) => {
+        const c = new CheckingSession();
+        c.inputs = { readFile: () => undefined, args: () => [], readStdin: () => stdin };
+        try { c.prepare(parse(`${inputPrelude}; g (f (q (words (readStdin []))))`), "."); return true; }
+        catch { return false; }
+    };
+    if (!check("one\n")) throw new Error("one word rejected");
+    if (check("one two\n")) throw new Error("two words accepted");
+    // A terminal is never read ahead: the value stays unknown.
+    if (check(undefined)) throw new Error("unknown stdin decided");
 });
 Deno.test("checking without a run does not read input", () => {
     let accepted = true;

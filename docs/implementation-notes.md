@@ -292,15 +292,22 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   meet is unknown or endless, and argument-free compound expressions are
   cached per node and the bindings of the names they mention
   (`sameBinding`), since nested call arguments are each evaluated.
-  Effects (`print`, `emit`, `set`, `assert`, `debug`) only return their
-  results statically. `Known.mutable` is a cell; `readMutable` gives its
-  contents only while `CheckOptions.mutation` (the session-wide `mayMutate`
-  scan of every checked program for `set`, `load`, `use`, `env`) is false,
-  because static evaluation does not force lazy values in the runtime's
-  order. `CheckOptions.inputs` is set only by `Interpreter.enableChecking`:
+  Effects (`print`, `emit`, `assert`, `debug`) only return their results
+  statically. `Known.mutable` is a cell. While `CheckOptions.mutation` (the
+  session-wide `mayMutate` scan for `set`, `load`, `use`, `env`) is false,
+  `readMutable` gives its first contents. Otherwise cells are followed per
+  root (`KnownCell.root`): `writeMutable` updates them in evaluation order,
+  every lazily evaluated computation runs under `lazily` as its own region,
+  and `accessCell` marks the root `reordered` when a written cell is
+  accessed from two regions; `budgeted` drops a root's value that read a
+  cell if it was reordered, wrote an unknown target, or was `incomplete`
+  (skipped code: an unevaluated application, an uncertain branch or clause
+  set, the budget). Values that touched cells are not cached.
+  `CheckOptions.inputs` is set only by `Interpreter.enableChecking`:
   `readFile` and `getArgs` read through `Interpreter.inputFile`, a snapshot
   cleared at each top-level checked run and shared with the runtime
-  `readFile`, so check and run agree. A block gives each
+  `readFile`; `readStdin` reads `Interpreter.inputStdin` (all of stdin, once,
+  also for the runtime) unless stdin is a terminal. A block gives each
   name it defines one slot (`Known.slot`, read through `lookup`): lazy
   definitions store a memoized thunk (`once`, which reports a value that
   needs itself as unknown) and eager ones a value, so earlier closures see

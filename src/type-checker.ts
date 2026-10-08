@@ -52,8 +52,9 @@ interface ClauseOrder { index: number; params: Pattern[]; refutable: Set<string>
 // clauses with the bindings it closes over and any arguments already applied.
 type KnownFunction = { e: Expr; env: [string, Known][]; scope: Scope } | { summary: Summary; env: [string, Known][]; applied: Known[] };
 type Cell = { head: Known; tail: Known } | null | undefined;
-// A Mutable cell's contents (see readMutable).
-type KnownCell = { value: Known };
+// A Mutable cell's contents, the root evaluation that created it, and the lazy
+// region its accesses happened in (see readMutable).
+type KnownCell = { value: Known; root: number; region?: number; written?: boolean; mixed?: boolean };
 // An integer range (hi null: endless), indexed and cut arithmetically.
 type KnownRange = { lo: bigint; step: bigint; hi: bigint | null };
 interface Known {
@@ -109,7 +110,7 @@ export interface CheckOptions {
     /** The program's input, when checking right before a run: the files readFile
      * would read (undefined when unreadable) and getArgs. The runtime must see
      * the same snapshot. Lint and editor checks leave it unset. */
-    inputs?: { readFile(path: string): string | undefined; args(): string[] };
+    inputs?: { readFile(path: string): string | undefined; args(): string[]; readStdin?(): string | undefined };
     /** Whether any code in this session may write a Mutable cell (see mayMutate),
      * asked when a cell is read; computed from the program when unset. */
     mutation?: () => boolean;
@@ -271,7 +272,12 @@ const LIST_NATIVES = ["filter", "map", "take", "drop", "zipWith"];
 const EVALUATED_NATIVES = new Set([
     ...LIST_NATIVES, "length", "head", "tail", "null", "foldl", "foldr", "iterate", "enumerate",
     "chars", "fromChars", "upper", "lower", "toString", "intToString", "seq", "parse",
-    "print", "emit", "debug", "assert", "set", "readFile",
+    "print", "emit", "debug", "assert", "set", "readFile", "readStdin",
+]);
+// Builtins that demand their arguments when called.
+const STRICT_NATIVES = new Set([
+    "head", "tail", "null", "length", "chars", "fromChars", "upper", "lower", "toString", "intToString",
+    "parse", "print", "emit", "debug", "assert", "set", "seq", "readFile", "readStdin",
 ]);
 // Static evaluation limits: nesting (recursion) depth, and work per root value.
 const EVALUATION_DEPTH = 5000;
@@ -1983,20 +1989,61 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let budgetDepth = 0;
     let evaluationLimit = EVALUATION_BUDGET;
     function budgeted<T>(f: () => T, limit = EVALUATION_BUDGET): T | undefined {
-        if (budgetDepth++ === 0) { evaluations = 0; evaluationLimit = limit; }
-        try { return f(); } catch (error) { if (error instanceof RangeError) return undefined; throw error; } finally { budgetDepth--; }
+        const outermost = budgetDepth++ === 0;
+        if (outermost) {
+            evaluations = 0; evaluationLimit = limit;
+            root++; cellRead = reordered = unknownWrite = incomplete = false;
+        }
+        try {
+            const result = f();
+            // The run's order of cell accesses is known only if nothing was
+            // skipped or uncertain, and no access sat in a lazy position.
+            if (outermost && cellRead && (unknownWrite || incomplete || reordered)) return undefined;
+            return result;
+        } catch (error) { if (error instanceof RangeError) return undefined; throw error; } finally { budgetDepth--; }
     }
-    // The contents of a Mutable cell, where arithmetic, printing or a condition
-    // reads it. Static evaluation does not force lazy values in the runtime's
-    // order, so contents are known only when no code in the session can write
-    // a cell at all; then every cell keeps its first contents.
+    // Mutable cells. When no code in the session can write a cell, every cell
+    // keeps its first contents. Otherwise a cell's contents are tracked within
+    // the root evaluation that created it, in evaluation order. Each lazily
+    // evaluated computation (a call argument, a list element, a lazy list's
+    // cell) is a region the run may evaluate at another time; within one
+    // region the order is the run's. So a cell is trusted while all its
+    // accesses share a region, and budgeted discards any value that read a
+    // cell when a written cell was accessed across regions, a write hit an
+    // unknown target, or evaluation skipped code or an uncertain branch.
     const programMutates = options.mutation ? undefined : mayMutate(program);
+    let root = 0, cellRead = false, reordered = false, unknownWrite = false, incomplete = false;
+    let regions: number[] = [], regionCount = 0, cellEvents = 0;
+    function lazily<T>(f: () => T): T {
+        regions.push(++regionCount);
+        try { return f(); } finally { regions.pop(); }
+    }
+    function accessCell(cell: KnownCell, write: boolean): void {
+        cellEvents++;
+        const region = regions.length ? regions[regions.length - 1] : 0;
+        if (cell.region === undefined) cell.region = region;
+        else if (cell.region !== region) cell.mixed = true;
+        if (write) cell.written = true;
+        if (cell.mixed && cell.written) reordered = true;
+    }
     function readMutable(k: Known | undefined): Known | undefined {
         if (!k?.mutable) return k;
-        return (programMutates ?? options.mutation!()) ? undefined : k.mutable.value;
+        if (!(programMutates ?? options.mutation!())) return k.mutable.value;
+        if (k.mutable.root !== root || budgetDepth === 0) return undefined;
+        cellRead = true;
+        accessCell(k.mutable, false);
+        return k.mutable.value;
+    }
+    function writeMutable(target: Known | undefined, value: () => Known | undefined): void {
+        const cell = target?.mutable;
+        if (!cell || cell.root !== root || budgetDepth === 0) { unknownWrite = true; return; }
+        cell.value = value() ?? {};
+        accessCell(cell, true);
     }
     function spendEvaluation(depth: number): boolean {
-        return depth <= EVALUATION_DEPTH && ++evaluations <= evaluationLimit;
+        if (depth <= EVALUATION_DEPTH && ++evaluations <= evaluationLimit) return true;
+        incomplete = true;
+        return false;
     }
     // Apply a known function value to known arguments, as the runtime does:
     // too few arguments give a function value, extra ones apply its result.
@@ -2024,7 +2071,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function lazyList(compute: () => Cell): Known {
         let done = false, cell: Cell;
         return { cell: () => {
-            if (!done) { done = true; cell = budgeted(compute); }
+            if (!done) { done = true; cell = budgeted(() => lazily(compute)); }
             return cell;
         } };
     }
@@ -2254,6 +2301,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const before = (a: typeof ranked[number], b: typeof ranked[number]) =>
             a.low > b.high || a.low >= b.high && a.clause.index < b.clause.index;
         const candidates = ranked.filter(r => !r.fails && !sure.some(d => d !== r && before(d, r)));
+        if (candidates.length !== 1) incomplete = true;
         if (!candidates.length) return undefined;
         let result: Known | undefined;
         for (const [n, { clause }] of candidates.entries()) {
@@ -2394,7 +2442,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const cached = evaluated.get(e) ?? [];
             const hit = cached.find(c => c.entries.every((entry, n) => sameBinding(entry, entries[n])));
             if (hit) return hit.result;
+            const events = cellEvents;
             const result = evaluateKnown(e, env, scope, depth, true);
+            // A value that read or wrote a cell depends on this run's order.
+            if (events !== cellEvents) return result;
             cached.push({ entries, result });
             evaluated.set(e, cached);
             return result;
@@ -2422,6 +2473,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const condition = truth(value(e.cond));
                 if (condition === true) return value(e.then);
                 if (condition === false) return value(e.els);
+                incomplete = true;
                 // Only facts both branches share survive; skip the second when the
                 // first has none (recursive branches would otherwise multiply).
                 const then = value(e.then);
@@ -2433,7 +2485,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const n = numericOf(v);
                 return n === undefined ? undefined : attempt(() => n.typeName ? castNumeric(n.typeName, negate(n)) : negate(n));
             }
-            case "list": return known(e.v.map(x => value(x) ?? {}));
+            case "list": return known(lazily(() => e.v.map(x => value(x) ?? {})));
             case "lambda": return { fn: { e, env: [...env], scope } };
             // A pattern lambda (() -> x, [a, b] -> a) is a one-clause local function.
             case "patternLambda": {
@@ -2453,7 +2505,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return range.t === "range" ? rangeKnown(range.lo, range.step, range.hi) : undefined;
             }
             case "binop": return evaluateBinop(e, env, scope, depth);
-            case "app": return evaluateApp(e, env, scope, depth);
+            case "app": {
+                const result = evaluateApp(e, env, scope, depth);
+                if (result === undefined) incomplete = true;
+                return result;
+            }
             default: return undefined;
         }
     }
@@ -2500,6 +2556,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const fn: Known = { fn: { summary, env: [...local], applied: [] } };
                 slots.get(st.name)!.value = () => fn;
             } else if (last) return evaluateKnown(st, local, scope, depth);
+            // A statement in the middle runs for its effects, in order.
+            else evaluateKnown(st, local, scope, depth);
         }
         return undefined;
     }
@@ -2525,7 +2583,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // x : xs; the tail may be endless (repeat x = x : repeat x).
         // The tail is evaluated only when an element past the head is needed.
         if (e.op === ":") {
-            const h = value(e.l) ?? {};
+            const h = lazily(() => value(e.l)) ?? {};
             return lazyList(() => ({ head: h, tail: value(e.r) ?? {} }));
         }
         if (e.op === "++") {
@@ -2589,7 +2647,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (args.length < head.params.length) return { fn: { e, env: [...env], scope } };
             if (!spendEvaluation(depth)) return undefined;
             const inner = new Map(env);
-            head.params.forEach((name, n) => inner.set(name, value(args[n]) ?? {}));
+            head.params.forEach((name, n) => inner.set(name, lazily(() => value(args[n])) ?? {}));
             const result = evaluateKnown(head.body, inner, scope, depth + 1);
             if (args.length === head.params.length) return result;
             return apply(result, args.slice(head.params.length).map(a => value(a) ?? {}));
@@ -2597,7 +2655,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (head.t !== "var") return apply(value(head), args.map(a => value(a) ?? {}));
         // A function value applied to arguments (a parameter holding a lambda,
         // a section, a named or local function).
-        if (env.has(head.name)) return apply(lookup(env, head.name), args.map(a => value(a) ?? {}));
+        if (env.has(head.name)) return apply(lookup(env, head.name), lazily(() => args.map(a => value(a) ?? {})));
         const entry = scope.get(head.name);
         // A named function applied to fewer arguments than it takes is a function value.
         if (entry && !entry.mono && isFunction(entry.type)) {
@@ -2607,9 +2665,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (t?.k === "fn") return { fn: { e, env: [...env], scope } };
         }
         const builtin = !!entry?.builtin;
-        if (builtin && EVALUATED_NATIVES.has(head.name)) return evaluateNative(head.name, args.map(a => () => value(a)), depth);
+        if (builtin && EVALUATED_NATIVES.has(head.name)) {
+            // Demanding builtins read their arguments where they stand; the rest
+            // (map, filter, folds, ...) only as their results are walked.
+            const strict = STRICT_NATIVES.has(head.name);
+            return evaluateNative(head.name, args.map(a => () => strict ? value(a) : lazily(() => value(a))), depth);
+        }
         if (head.name === "Mutable" && builtin && args.length === 1) {
-            return { mutable: { value: value(args[0]) ?? {} } };
+            return { mutable: { value: value(args[0]) ?? {}, root } };
         }
         if (head.name === "Bool" && builtin && args.length === 1) {
             const b = truth(value(args[0]));
@@ -2635,7 +2698,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return attempt(() => head.name === "expt" ? typedPower(numbers[0], numbers[1]) : numericNative(head.name, numbers));
         }
         if (!trustsShape(entry)) return undefined;
-        const values = args.map(a => value(a) ?? {});
+        const values = lazily(() => args.map(a => value(a) ?? {}));
         const summary = summaryAt(entry!.type, args.length);
         const result = summary && evaluateCall(summary, values, depth);
         if (isList(result)) return result;
@@ -2651,7 +2714,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function evaluateNative(name: string, args: (() => Known | undefined)[], depth: number): Known | undefined {
         const arity = name === "foldl" || name === "foldr" || name === "zipWith" ? 3 : name === "set" || LIST_NATIVES.includes(name) || name === "iterate" || name === "seq" ? 2 : 1;
         if (args.length !== arity) return undefined;
-        const call = (f: Known | undefined, values: Known[]) => f?.fn && applyKnown(f.fn, values, depth);
+        const call = (f: Known | undefined, values: Known[]) => f?.fn && lazily(() => applyKnown(f.fn!, values, depth));
         switch (name) {
             case "head": { const item = element(args[0](), 0); return item ?? undefined; }
             case "tail": {
@@ -2674,8 +2737,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // Effects are not performed; their results are known. print and
             // emit return their argument; debug, assert and set return [].
             case "print": case "emit": return args[0]();
-            case "debug": case "assert": case "set": return known([]);
+            case "debug": case "assert": return known([]);
+            case "set": writeMutable(args[0](), args[1]); return known([]);
             // Input read at check time, from the same snapshot the run uses.
+            case "readStdin": {
+                const text = options.inputs?.readStdin?.();
+                return text === undefined ? undefined : { string: text };
+            }
             case "readFile": {
                 const path = args[0]()?.string;
                 const text = path === undefined ? undefined : options.inputs?.readFile(path);
