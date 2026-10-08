@@ -254,7 +254,7 @@ for (const source of [
     'f n = [1, 2]; f 0 = [0]; g [a, b] = a; g (f 0)',
     'f true = [0]; f b = [1, 2]; g [a] = a; g (f false)',
     // Unknown lengths keep every possible clause.
-    'import "std"; f [] = [0]; f xs = [1, 2]; g [a] = a; g (f (tail (words "a")))',
+    'import "std"; f [] = [0]; f xs = [1, 2]; g [a] = a; g (f (tail (words (toString (parse "1")))))',
 ]) Deno.test(`later clauses still count unless a match is definite: ${source}`, () => rejected(session(), source));
 // Typed clauses are ranked as the runtime ranks them: an exact type (30)
 // before a numeric aggregate (10) before a lossless conversion (1) before other
@@ -547,8 +547,8 @@ for (const source of [
     'hh ys = g (f (q (ys ++ ys))); hh [2]',
     'hh ys = g (f (q (map (+ 1) ys))); hh [1, 2]',
     'g (f (sm (len [1, 2])))',
-    // A predicate that calls an unevaluated builtin decides nothing: both clauses count.
-    'g (f (q (filter (x -> toString x == "1") [1, 2])))',
+    // A predicate that calls an unevaluated builtin (parse) decides nothing: both clauses count.
+    'g (f (q (filter (x -> parse (toString x) == 1) [1, 2])))',
 ]) Deno.test(`length calls stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${source}`));
 // filter, map, take and drop over lists whose elements are known run as at
 // runtime, as do integer ranges.
@@ -609,3 +609,44 @@ for (const source of [
     // A recursive call still has to fit a parameter whose pattern fixes a length.
     'h [a] = h [a, a]; h [1]',
 ]) Deno.test(`zip and takeWhile lengths stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${source}`));
+// The pure builtins and the standard library written in APN (folds, endless
+// lists, text, local definitions) are evaluated on known values too.
+const textClauses = 'import "std/text"; r b = b ? None : Some 1';
+for (const [source, expected] of [
+    ['g (f (q (dropWhile (< 2) [1, 2])))', '0'],
+    ['g (f (q (words "a")))', '0'],
+    ['hh s = g (f (q (words s))); hh "x"', '0'],
+    ['g (f (q (splitOn "," "a")))', '0'],
+    ['g (f (r (trim "  a " == "a")))', '0'],
+    ['g (f (r (toString 12 == "12")))', '0'],
+    ['g (f (r (toString [1, 2] == "[1, 2]")))', '0'],
+    ['g (f (r (reverse "ab" == "ba")))', '0'],
+    ['g (f (r (upper "a" == "A")))', '0'],
+    ['g (f (r (contains 2 [1, 2])))', '0'],
+    ['g (f (r (all (> 0) [1, 2])))', '0'],
+    ['g (f (r (isSome (find (> 1) [1, 2]))))', '0'],
+    ['g (f (r (sum [1, 2] == 3)))', '0'],
+    ['g (f (r (foldr (x acc -> x + acc) 0 [1, 2] == 3)))', '0'],
+    ['g (f (q (take 1 (repeat 0))))', '0'],
+    ['g (f (q (take 1 [0..])))', '0'],
+    ['g (f (q (filter (> 3) (take 5 [0..]))))', '0'],
+    ['g (f (r (isPrime 7)))', '0'],
+    ['g (f (q (sort [3])))', '0'],
+    ['local n = { k = n + 1; twice x = x * 2; twice k }; g (f (r (local 1 == 4)))', '0'],
+] as const) Deno.test(`builtins and std evaluated: ${source}`, () => {
+    const actual = run(session(), `${optionClauses}; ${sizeClauses}; ${textClauses}; ${source}`);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'g (f (q (dropWhile (< 2) [1, 2, 3])))',
+    'g (f (q (words "a b")))',
+    'hh s = g (f (q (words s))); hh "x y"',
+    'g (f (r (trim "  a " == "b")))',
+    'g (f (r (any (> 5) [1, 2])))',
+    'g (f (r (isPrime 8)))',
+    // enumerate pairs each element with its index: [0, 7] has two elements.
+    'g (f (q (head (enumerate [7]))))',
+    'g (f (q (sort [3, 1])))',
+    // A block that rebinds a name is not evaluated (closures see the rebinding).
+    'local n = { k = n; k = 5; k }; g (f (r (local 1 == 5)))',
+]) Deno.test(`builtins and std evaluated stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${textClauses}; ${source}`));

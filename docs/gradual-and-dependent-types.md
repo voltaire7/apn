@@ -322,9 +322,15 @@ evaluated when its size is known: from a literal, an argument at the call,
 `x : xs`, `xs ++ ys`, builtins that keep a list's length (`map`, `sort`), and
 recursion over `[]` and `(x:xs)` clauses. Where a list's elements are known
 too (literals, integer ranges such as `[1..n]` with `n` known, and lists built
-from them), `filter`, `map`, `take`, `drop`, `zipWith` (and `zip`, which stops
-at the shorter list), `head`, `tail` and `null` run on them as at runtime, as do
-standard-library functions written in APN such as `takeWhile`. A function
+from them), the pure builtins run on them as at runtime: `filter`, `map`,
+`take`, `drop`, `zipWith` (and `zip`, which stops at the shorter list), `head`,
+`tail`, `null`, `foldl`, `foldr`, `iterate`, `enumerate`, `chars`, `fromChars`,
+`upper`, `lower`, `toString` and `intToString`. So do standard-library functions
+written in APN, such as `takeWhile`, `dropWhile`, `words`, `splitOn`, `trim`,
+`contains`, `all`, `any`, `find`, `sum`, `sort` and `isPrime`, including their
+blocks of local definitions. Lists are lazy here too: `take 1 [0..]` and
+`take 1 (repeat 0)` have one element. A block that binds the same name twice is
+not evaluated, and neither are `parse`, input, or effects. A function
 argument may be a lambda, an operator section, a named function, or a partial
 application, also when passed through a parameter: `filter (> 1) [1, 2]` and
 `hh (> 1)` with `hh p = filter p [1, 2]` both have one element. A recursive call

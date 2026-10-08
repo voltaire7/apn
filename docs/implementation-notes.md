@@ -267,10 +267,18 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   literals, finite integer ranges, `:`, `++`); `evaluateKnown` runs the
   `LIST_NATIVES` (`filter`, `map`, `take`, `drop`) over them by applying the
   function expression to a synthetic `$item`, and applies lambdas (including
-  sections) directly. Ranges stop at 10000 elements. `Known.fn` is a function
-  value (an expression with its env and scope) applied by `applyKnown`; a
-  computed value over parameters drops `fn`, since its closure is only known
-  at their calls. A recursive self-reference is marked `recursive` with the
+  sections) directly. Finite ranges stop at 10000 elements. `Known.fn` is a
+  function value (an expression with its env and scope, or a block-local
+  definition's clauses with its closure and applied arguments) applied by
+  `applyKnown`; a computed value over parameters drops `fn` and `seq`, since
+  their closures are only known at the parameters' calls. `Known.seq` is a
+  lazy list (element n, `null` past the end) used for `:`, endless ranges,
+  `iterate` and the list builtins; never materialize one eagerly
+  (`listKnown` stays lazy; `knownLength`/`elementsOf` walk at most 10000
+  elements on demand). `evaluateNative` runs the pure `EVALUATED_NATIVES`.
+  The work budget (`budgeted`) is per root, and a ternary or clause set whose
+  first result has no facts stops early, so recursion over unknown values
+  stays cheap. A block is evaluated only if each name is bound once. A recursive self-reference is marked `recursive` with the
   clause's `selfInputs`, and a recursive call strips the lengths of an
   argument whose parameter type has none. A single-group definition's entry
   keeps `alternatives[0]` as its type, which carries the summary. A numeric constructor applied to a type variable defers its

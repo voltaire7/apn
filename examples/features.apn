@@ -1048,6 +1048,10 @@ print (pairedVowel [9])                               # 1
 leadingVowel limit = onlyOne (vowelOrPair (vowelIfShort (takeWhile (< limit) [1, 2, 3])))
 print (leadingVowel 2)                                # 1
 print (true ? (1 : []) : [])                          # [1]
+# Library code runs statically on known values: words, dropWhile, endless lists.
+wordVowel text = onlyOne (vowelOrPair (vowelIfShort (words text)))
+print (wordVowel "hello")                             # 1
+print (onlyOne (vowelOrPair (vowelIfShort (take 1 [0..]))))  # 1
 sortedAndReversed xs = [sort xs, reverse xs]
 firstOfBoth [[a, b], [c, d]] = [a, c]
 print (firstOfBoth (sortedAndReversed [3, 1]))  # [1, 1]
