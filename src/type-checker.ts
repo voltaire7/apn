@@ -115,7 +115,7 @@ export interface CheckOptions {
     strict?: boolean;
     library?: boolean;
     extendDefinitions?: boolean;
-    loads?: (path: string, scope: TypeScope) => TypeScope;
+    loads?: (path: string, scope: TypeScope, tail?: boolean) => TypeScope;
     initial?: TypeScope;
     imports?: (module: string | string[]) => TypeScope;
     result?: (scope: TypeScope, exports: TypeScope) => void;
@@ -1965,7 +1965,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 callees.add(e.f);
                 const callee = infer(e.f, scope), resolved = resolve(callee);
                 if (resolved.k === "intrinsic" && resolved.name === "load" && a.t === "string" && options.loads) {
-                    const loaded = options.loads(a.v, scope);
+                    const loaded = options.loads(a.v, scope, e === tailStatement);
                     for (const [name, entry] of loaded) scope.set(name, entry);
                     return { k: "record", fields: new Map([...loaded].map(([name, entry]) => [name, entry.type])) };
                 }
@@ -2417,6 +2417,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const executedParts = new Map<Expr, Known | undefined>();
     const unforced = new Set<Known>();
     let touchedTopLevel = false, opaqueUse = false;
+    // The program's last statement, where a load replaces the running file (a tail load).
+    const lastStatement = program[program.length - 1];
+    const tailStatement = lastStatement?.t === "expr" ? lastStatement.value : undefined;
     const ownNames = new Set(topNames(program));
     for (const statement of program) {
         if (statement.t === "expr" || statement.t === "patDef") topLevelCode.add(statement.value);

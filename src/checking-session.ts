@@ -11,6 +11,12 @@ const nativeExports: Record<string, string[]> = {
     text: ["chars", "fromChars", "upper", "lower"],
 };
 /** Static state is separate from evaluation: checking never runs an APN action. */
+// The file load "name" reads from directory (a trailing / or not).
+function loadUrl(name: string, directory: string): URL {
+    const path = name.startsWith("/") ? `${name}.apn` : `${directory.replace(/\/+$/, "")}/${name}.apn`;
+    return new URL(path, `file://${Deno.cwd()}/`);
+}
+
 export class CheckingSession {
     private scope: TypeScope = new Map();
     private modules = new Map<string, TypeScope>();
@@ -18,8 +24,7 @@ export class CheckingSession {
     private checkedLoads = new Map<string, string>();
 
     verifyLoad(name: string, directory: string, source: string): void {
-        const path = name.startsWith("/") ? `${name}.apn` : `${directory}/${name}.apn`;
-        const url = new URL(path, `file://${Deno.cwd()}/`);
+        const url = loadUrl(name, directory);
         if (this.checkedLoads.get(url.href) !== source) throw new APNError("type", `load '${name}' was not checked with this source; resubmit its definition or use Dynamic for runtime loading`);
     }
     moduleSources?: Record<string, string>;
@@ -78,8 +83,8 @@ export class CheckingSession {
                 const fields = this.module(module);
                 return fields;
             },
-            loads: (path, caller) => {
-                const fields = this.load(path, directory, caller);
+            loads: (path, caller, tail) => {
+                const fields = this.load(path, directory, caller, tail);
                 return fields;
             },
             result: (value, published) => { scope = value; exports = published; },
@@ -144,8 +149,7 @@ export class CheckingSession {
 
     /** Every variable name a checked loaded file mentions (see CheckOptions.loadedNames). */
     loadedNames(name: string, directory: string): Set<string> | undefined {
-        const path = name.startsWith("/") ? `${name}.apn` : `${directory}/${name}.apn`;
-        const url = new URL(path, `file://${Deno.cwd()}/`);
+        const url = loadUrl(name, directory);
         let source = this.checkedLoads.get(url.href);
         // A statement's static run precedes checking it: read the file it loads.
         if (source === undefined) try { source = Deno.readTextFileSync(url); } catch { return undefined; }
@@ -160,15 +164,18 @@ export class CheckingSession {
         walk(parse(source, url.pathname));
         return names;
     }
-    load(name: string, directory: string, caller = this.scope): TypeScope {
+    // A tail load (a program's last statement) may load a file already being
+    // checked: the runtime replaces the running file with it, so it binds
+    // nothing new where it stands.
+    load(name: string, directory: string, caller = this.scope, tail = false): TypeScope {
         const base = name.slice(name.lastIndexOf("/") + 1);
         if (!base || base.includes(".")) throw new APNError("type", "load expects an extensionless file name");
-        const path = name.startsWith("/") ? `${name}.apn` : `${directory}/${name}.apn`;
-        const url = new URL(path, `file://${Deno.cwd()}/`);
-        const key = url.href;
+        const key = loadUrl(name, directory).href;
+        if (this.loading.has(key) && tail) return new Map();
         if (this.loading.has(key)) throw new APNError("type", `cyclic load '${name}'; use an explicit Dynamic boundary for runtime loading`);
         this.loading.add(key);
         try {
+            const url = new URL(key);
             const source = Deno.readTextFileSync(url);
             const exports = this.check(parse(source, url.pathname), new URL(".", url).pathname, copyTypeScope(caller), false).exports;
             this.checkedLoads.set(key, source);

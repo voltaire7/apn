@@ -255,8 +255,9 @@ Static checking follows literal `import` and `load` dependencies and infers thei
 exports. Namespaced imports stay namespaced. `use` opens statically known records
 or lists of records. Loaded files are checked with their lexical caller scope;
 a source change between checking and execution is rejected. Resubmit the loading
-definition to check the new source. Cyclic or computed loads need an explicit
-`Dynamic` boundary. The checker never executes APN to discover types.
+definition to check the new source. A file's final `load` of itself (or of a
+file cycling back to it) is a tail load, accepted without checking that file
+again; other cyclic loads and computed loads need an explicit `Dynamic` boundary. The checker never executes APN to discover types.
 
 Overloaded arithmetic retains constraints in inferred functions: `f x = x + 1`
 can be called with compatible numeric inputs, and `f "bad"` is rejected. List

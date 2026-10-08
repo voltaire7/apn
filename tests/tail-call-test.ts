@@ -1,3 +1,4 @@
+import { CheckingSession } from "../src/checking-session.ts";
 import { Interpreter, setInterruptFlag } from "../src/interp.ts";
 import { parseDocument } from "../src/parser.ts";
 
@@ -81,4 +82,27 @@ Deno.test('tail load failure restores context without publishing unfinished expo
     }
     if (!failed || i.env !== scope || i.sourceDir !== directory || i.stack !== 0) throw new Error('context leaked');
     if (i.renderString(i.run(parseDocument('counter'))) !== '0') throw new Error('effects did not run');
+});
+Deno.test('checking a file that tail-loads itself terminates', () => {
+    const directory = new URL('./fixtures/tail-load/', import.meta.url).pathname;
+    // The directory ends in '/'; the cycle must still be recognised.
+    new CheckingSession().load('forever', directory);
+    let message = '';
+    try { new CheckingSession().load('self-non-tail', directory); }
+    catch (error) { message = String((error as Error).message); }
+    if (!message.includes('cyclic load')) throw new Error(`non-tail cycle: ${message}`);
+});
+Deno.test('a checked run tail-loads itself', () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    i.sourceDir = new URL('./fixtures/tail-load/', import.meta.url).pathname;
+    const flag = new Int32Array(new SharedArrayBuffer(8));
+    const log = console.log;
+    let lines = 0;
+    console.log = () => { if (++lines === 30) Atomics.store(flag, 0, 1); };
+    setInterruptFlag(flag);
+    try { i.run(parseDocument('load "forever"')); throw new Error('finished'); }
+    catch (error) { if ((error as Error).message !== 'interrupted') throw error; }
+    finally { console.log = log; setInterruptFlag(null); }
+    if (lines < 30) throw new Error(`stopped after ${lines} lines`);
 });
