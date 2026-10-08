@@ -225,10 +225,13 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   expanding nested unions: `v = v | t` has the least solution `v = t`. A union
   is not a structural node, so keeping the self-reference never terminates.
 - List types carry an optional `size`: an inferred, unchecked length name that
-  `inferFunction` gives unknown-length list parameters (and `map`'s signature
-  shares between input and output). Nothing unifies or checks `size`; only
-  `application` substitutes it with the argument's known length in the result
-  (via `copy`). Explicit `length` (Vect) semantics are unchanged.
+  `inferFunction` gives unknown-length list parameters, `map`'s signature
+  shares between input and output, and length-preserving operations copy from
+  their input via `sameLength` (enumerate, `*` iteration, elementwise
+  arithmetic). Nothing unifies or checks `size`; only `application` substitutes
+  it with the argument's known length in the result (via `copy`).
+  `instantiate` renames sizes per use, like type variables, so separate calls
+  never share a length. Explicit `length` (Vect) semantics are unchanged.
 - Keep implicit unknowns separate from explicit `Dynamic`: a concrete type
   requires a runtime constructor/contract or an actually converting pattern,
   never a silently inserted conversion.

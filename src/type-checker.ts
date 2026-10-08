@@ -186,16 +186,20 @@ function captured(scope: Scope): Set<Ty> {
     }
     return found;
 }
+// Each use of a generic entry gets fresh size names, just as it gets fresh type
+// variables: two calls of one function must not tie their lists' lengths.
+let sizeSerial = 0;
 function instantiate(entry: Entry): Ty {
     return entry.mono
         ? entry.type
-        : copy(entry.type, new Map([...(entry.nonGeneric ?? [])].map((t) => [resolve(t), resolve(t)])));
+        : copy(entry.type, new Map([...(entry.nonGeneric ?? [])].map((t) => [resolve(t), resolve(t)])), undefined, undefined, new Map());
 }
 function copy(
     t: Ty,
     vars = new Map<Ty, Ty>(),
     subst?: [string, Index],
     nodes = new Map<Ty, Ty>(),
+    sizes?: Map<string, string>,
 ): Ty {
     t = resolve(t);
     if (vars.has(t)) return vars.get(t)!;
@@ -209,7 +213,7 @@ function copy(
     // into the new graph rather than the original polymorphic instance.
     const result = { ...t } as Ty;
     nodes.set(t, result);
-    const go = (x: Ty) => copy(x, vars, subst, nodes);
+    const go = (x: Ty) => copy(x, vars, subst, nodes, sizes);
     switch (t.k) {
         case "overload":
         case "union":
@@ -227,6 +231,10 @@ function copy(
         case "list": {
             let length = t.length, size = t.size;
             if (!length && subst && size === subst[0]) { length = subst[1]; size = undefined; }
+            if (size && sizes) {
+                if (!sizes.has(size)) sizes.set(size, `size${sizeSerial++}`);
+                size = sizes.get(size);
+            }
             if (length && subst && length.terms.has(subst[0])) {
                 const terms = new Map(length.terms), coefficient = terms.get(subst[0])!;
                 terms.delete(subst[0]);
@@ -318,6 +326,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try { const result = evaluateOperation(t); return result === t ? t.solution ?? t : result; }
         finally { resolving.delete(t); }
     }
+    // The length of a list derived element-for-element from xs: its known
+    // length, or else a shared inferred size (see the list Ty's size).
+    function sameLength(xs: Extract<Ty, { k: "list" }>): { length?: Index; size?: string } {
+        if (xs.length) return { length: xs.length };
+        if (xs.items) return {};
+        xs.size ??= `size${sizeSerial++}`;
+        return { size: xs.size };
+    }
     function pair(key: Ty, value: Ty): Ty { return { k: "list", element: union([key, value]), items: [key, value], length: constant(2n) }; }
     function union(types: Ty[]): Ty {
         const choices = types.flatMap(t => { const r = resolve(t); return r.k === "union" ? r.choices : [t]; });
@@ -379,7 +395,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return b;
         }
         if (t.op === "negate") {
-            if (a.k === "list") return list(operation("negate", [a.element]), a.length);
+            if (a.k === "list") return { k: "list", element: operation("negate", [a.element]), ...sameLength(a) };
             if (a.k === "record") return { k: "record", fields: new Map([...a.fields].map(([k, v]) => [k, operation("negate", [v])])) };
             if (a.k === "atom" && NUMERIC_TYPES.includes(a.name)) return a;
             if (isExplicit(a)) return a;
@@ -432,8 +448,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             let key: Ty, value: Ty;
             if (a.k === "map") { key = a.key; value = a.value; }
-            else if (a.k === "record" && t.op === "pairs") { key = atom("String"); value = union([...a.fields.values()]); }
-            else if (a.k === "list" && t.op === "enumerate") { key = atom("Int"); value = a.element; }
+            else if (a.k === "record" && t.op === "pairs") {
+                // One [key, value] pair per field, in field order.
+                const items = [...a.fields.values()].map(field => pair(atom("String"), field));
+                return { k: "list", element: union(items), items, length: constant(BigInt(items.length)) };
+            }
+            else if (a.k === "list" && t.op === "enumerate") return { k: "list", element: pair(atom("Int"), a.element), ...sameLength(a) };
             else return problem(`${t.op} requires a collection; got ${text(a)}`);
             return list(t.op === "keys" ? key : t.op === "values" ? value : pair(key, value));
         }
@@ -457,7 +477,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.op === "*" && (callable(a) || callable(b))) {
             const f = callable(b) ? b : a, input = callable(b) ? a : b;
             let element: Ty;
-            if (input.k === "list") element = input.element;
+            if (input.k === "list") return { k: "list", element: application(f, { type: input.element }, { t: "placeholder" }), ...sameLength(input) };
             else if (input.k === "record") element = { k: "list", element: union([atom("String"), ...input.fields.values()]), items: [atom("String"), union([...input.fields.values()])], length: constant(2n) };
             else if (input.k === "atom" && input.name === "Int") element = input;
             else return problem(`iteration needs a list, record, or Int; got ${text(input)}`);
@@ -470,11 +490,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (t.op === "-" && callable(a) && numeric(b)) return application(a, { type: b }, { t: "placeholder" });
         if (a.k === "list" || b.k === "list") {
-            if (a.k === "list" && b.k === "list") return list(operation(t.op, [a.element, b.element]));
+            if (a.k === "list" && b.k === "list") {
+                // Elementwise arithmetic pairs lists of equal length.
+                if (a.length && b.length && !a.length.terms.size && !b.length.terms.size && a.length.constant !== b.length.constant) {
+                    return problem(`elementwise '${t.op}' needs equal lengths; got ${indexText(a.length)} and ${indexText(b.length)}`);
+                }
+                return { k: "list", element: operation(t.op, [a.element, b.element]), ...sameLength(a.length || !b.length ? a : b) };
+            }
             const xs = a.k === "list" ? a : b as Extract<Ty, { k: "list" }>;
             const scalar = a.k === "list" ? b : a;
             if (!numeric(scalar)) return problem("array broadcast requires a number");
-            return list(operation(t.op, a.k === "list" ? [xs.element, scalar] : [scalar, xs.element]));
+            return { k: "list", element: operation(t.op, a.k === "list" ? [xs.element, scalar] : [scalar, xs.element]), ...sameLength(xs) };
         }
         if (a.k === "record" || b.k === "record") {
             if (a.k === "record" && b.k === "record") {
@@ -1694,7 +1720,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (declared) { unify(declared, result, body); result = declared; }
         for (const input of inputs) {
             const t = resolve(input.type);
-            if (t.k === "list" && !t.length && !t.items && !t.size) t.size = `size${serial++}`;
+            if (t.k === "list" && !t.length && !t.items && !t.size) t.size = `size${sizeSerial++}`;
         }
         for (let n = inputs.length - 1; n >= 0; n--) {
             const parameter = params[n];

@@ -977,6 +977,9 @@ print (repeatApply 5 (*2) 1)                   # 32
 # keep their argument's length, so the [a, b] pattern always fits.
 fibStep [a, b] = forceList [b, a + b]
 print (repeatApply 10 fibStep [0, 1])          # [55, 89]
+# The same holds for enumerate, xs * f, and elementwise list arithmetic.
+swapPair [a, b] = [b, a]
+print (swapPair ([1, 2] * (x -> x * 10) + [3, 4]))  # [24, 13]
 print (lookup 3 (bfsDistances (n -> n < 3 ? [n + 1] : []) [0])) # 3
 # I/O in scripts: readFile "input.input", readStdin [], getArgs [], readInput [].
 

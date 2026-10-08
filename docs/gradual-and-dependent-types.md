@@ -261,11 +261,14 @@ definition to check the new source. Cyclic or computed loads need an explicit
 Overloaded arithmetic retains constraints in inferred functions: `f x = x + 1`
 can be called with compatible numeric inputs, and `f "bad"` is rejected. List
 literals retain positional types; homogeneous operations check every possible
-element type. A function that returns its list parameter unchanged in length
-(such as `forceList`, `map`, or your own wrapper) gives each call's result the
-argument's length, so `g [a, b] = ...; g (map f [1, 2])` checks, while a list of
-unknown length (`tail`, `filter`) still needs a `Dynamic` boundary to meet a
-fixed-length pattern. A step function used with `repeatApply` may feed its own
+element type. Length-preserving operations keep their input's length: `map`,
+`enumerate`, `xs * f` iteration, elementwise arithmetic (`-xs`, `xs + ys`,
+`xs * 2`), and functions that return their list parameter such as `forceList` or
+your own wrappers. `pairs record` has one pair per field. So
+`g [a, b] = ...; g (map f [1, 2])` checks, `g (map f [1, 2, 3])` is a length
+error, and `[1, 2] + [3, 4, 5]` is rejected before running. Each call keeps its
+own length. A list of unknown length (`tail`, `filter`) still needs a `Dynamic`
+boundary to meet a fixed-length pattern. A step function used with `repeatApply` may feed its own
 results back through arithmetic (`g [a, b] = forceList [b, a + b]`).
 Record-template patterns convert positional lists at runtime and
 are checked against their named field types. Inferred parameters do not silently
