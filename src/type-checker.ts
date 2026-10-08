@@ -57,9 +57,9 @@ type Cell = { head: Known; tail: Known } | null | undefined;
 // A top-level value whose body touches top-level cells, kept as its body: an
 // action (block, application or pipe body) runs at each use, a thunk is
 // remembered from its first use.
-type LazyTop = { body: Expr; scope: Map<string, Entry>; action: boolean; forced: boolean; memo?: Known; busy?: boolean };
+type LazyTop = { body: Expr; scope: Map<string, Entry>; action: boolean; forced: boolean; memo?: Known; busy?: boolean; invalid?: boolean };
 // A top-level cell (program) persists across statements (see executeTopLevel).
-type KnownCell = { value: Known; root: number; program?: boolean; regionRoot?: number; region?: number; written?: boolean; mixed?: boolean };
+type KnownCell = { value: Known; root: number; program?: boolean; invalid?: boolean; regionRoot?: number; region?: number; written?: boolean; mixed?: boolean };
 // An integer range (hi null: endless), indexed and cut arithmetically.
 type KnownRange = { lo: bigint; step: bigint; hi: bigint | null };
 interface Known {
@@ -2026,7 +2026,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let regions: number[] = [], regionCount = 0, cellEvents = 0;
     // Top-level cells: created by a top-level definition, followed through the
     // statements that may write them, executed statically in program order.
-    const programCells = new Set<KnownCell>();
+    const programCells = new Set<KnownCell>(), lazyTops = new Set<LazyTop>();
     // The values a statement's static run gave its parts (see executeTopLevel).
     const executedParts = new Map<Expr, Known | undefined>();
     const unforced = new Set<Known>();
@@ -2066,6 +2066,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function forceLazyTop(lazy: LazyTop, depth: number): Known | undefined {
         // Its value depends on when it is used: a result using it is not cached.
         cellEvents++;
+        if (lazy.invalid) return undefined;
         if (!lazy.action && lazy.forced) return lazy.memo;
         if (topLevelDefinition) { touchedTopLevel = true; return undefined; }
         if (lazy.busy) return undefined;
@@ -2083,15 +2084,105 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         statementWrote = false;
         if (!programCells.size || !programValid || !(programMutates ?? options.mutation!())) return;
         const reach = mayWrite(e, scope);
-        if (!reach.write && !reach.forces) return;
-        if (reach.lazy) { programValid = false; return; }
+        // A statement that can reach a value an earlier statement left unforced
+        // runs statically too, so the value is forced where the program forces it.
+        let reachesPending = false;
+        if (pendingValues.size) {
+            const holders = pendingHolders();
+            if (!holders.cells.size && !holders.lazies.size) pendingValues.clear();
+            else {
+                const r = reachable(e, scope);
+                reachesPending = r.all || [...holders.cells].some(c => r.cells.has(c)) || [...holders.lazies].some(l => r.lazies.has(l));
+            }
+        }
+        if (!reach.write && !reach.forces && !reachesPending) return;
+        if (reach.lazy) { forgetReachable(e, scope); return; }
         programWrote = false;
         executedParts.clear();
         unforced.clear();
         executing = true;
         try { budgeted(() => evaluateKnown(e, new Map(), scope, 0)); } finally { executing = false; }
-        if (incomplete || unknownWrite || reordered || unforced.size) programValid = false;
+        // Uncertainty only affects what the statement can reach. A value the run
+        // left unforced matters only if later code can still reach it.
+        const persists = unforced.size > 0 && unforcedPersists();
+        if (persists) for (const value of unforced) pendingValues.add(value);
+        if (incomplete || unknownWrite || reordered) forgetReachable(e, scope);
         statementWrote = programWrote;
+    }
+    // Stop following the top-level cells and kept values a statement can reach:
+    // those its names (and the definitions they name, transitively) refer to,
+    // and those held in the values of those names. Anything opaque (a lazy list
+    // not yet computed, a deferred value, env) means all of them.
+    function forgetReachable(e: Expr, scope: Scope): void {
+        const { cells, lazies, all } = reachable(e, scope);
+        if (all) { programValid = false; return; }
+        for (const cell of cells) cell.invalid = true;
+        for (const lazy of lazies) lazy.invalid = true;
+    }
+    function reachable(e: Expr, scope: Scope): { cells: Set<KnownCell>; lazies: Set<LazyTop>; all: boolean } {
+        const cells = new Set<KnownCell>(), lazies = new Set<LazyTop>();
+        let all = false;
+        const seenExpr = new Set<Expr>(), seenKnown = new Set<Known>();
+        const walkKnown = (k: Known | undefined): void => {
+            if (!k || seenKnown.has(k) || all) return;
+            seenKnown.add(k);
+            // An integer range holds only numbers; other lazy lists are opaque.
+            if (k.deferred || k.cell && !k.range || k.slot) { all = true; return; }
+            if (k.mutable) { cells.add(k.mutable); walkKnown(k.mutable.value); }
+            k.items?.forEach(walkKnown);
+            if (k.fn) {
+                k.fn.env.forEach(([, v]) => walkKnown(v));
+                if ("summary" in k.fn) { k.fn.applied.forEach(walkKnown); k.fn.summary.clauses.forEach(c => walkExpr(c.body)); }
+                else walkExpr(k.fn.e);
+            }
+        };
+        const walkExpr = (x: Expr): void => {
+            if (seenExpr.has(x) || all) return;
+            seenExpr.add(x);
+            for (const name of mentionedNames(x)) {
+                if (MUTATING_NAMES.has(name)) { if (name !== "set") all = true; continue; }
+                const entry = scope.get(name);
+                if (entry?.lazyTop) { lazies.add(entry.lazyTop); walkExpr(entry.lazyTop.body); walkKnown(entry.lazyTop.memo); }
+                if (entry) walkKnown(entry);
+                for (const body of programDefinitions.get(name) ?? entry?.clauses?.map(c => c.body) ?? []) walkExpr(body);
+            }
+        };
+        walkExpr(e);
+        return { cells, lazies, all };
+    }
+    // Values left unforced by earlier statements, still held by top-level
+    // cells or kept values; the cells and values holding them.
+    const pendingValues = new Set<Known>();
+    function pendingHolders(): { cells: Set<KnownCell>; lazies: Set<LazyTop> } {
+        const cells = new Set<KnownCell>(), lazies = new Set<LazyTop>();
+        for (const cell of programCells) if (holdsPending(cell.value)) cells.add(cell);
+        for (const lazy of lazyTops) if (holdsPending(lazy.memo)) lazies.add(lazy);
+        return { cells, lazies };
+    }
+    function holdsPending(k: Known | undefined, seen = new Set<Known>()): boolean {
+        if (!k || seen.has(k)) return false;
+        seen.add(k);
+        if (pendingValues.has(k)) return true;
+        if (k.mutable && holdsPending(k.mutable.value, seen)) return true;
+        if (k.items?.some(x => holdsPending(x, seen))) return true;
+        return !!k.fn && (k.fn.env.some(([, v]) => holdsPending(v, seen)) || "summary" in k.fn && k.fn.applied.some(x => holdsPending(x, seen)));
+    }
+    // Can a deferred value the run left unforced still be forced later: is it
+    // held by a top-level cell or a kept top-level value?
+    function unforcedPersists(): boolean {
+        const seen = new Set<Known>();
+        const holds = (k: Known | undefined): boolean => {
+            if (!k || seen.has(k)) return false;
+            seen.add(k);
+            if (unforced.has(k) || k.cell && !k.range || k.slot) return true;
+            if (k.mutable && holds(k.mutable.value)) return true;
+            if (k.items?.some(holds)) return true;
+            if (k.fn && (k.fn.env.some(([, v]) => holds(v)) || "summary" in k.fn && k.fn.applied.some(holds))) return true;
+            return !!k.deferred;
+        };
+        for (const cell of programCells) if (holds(cell.value)) return true;
+        for (const lazy of lazyTops) if (holds(lazy.memo)) return true;
+        return false;
     }
     function lazily<T>(f: () => T): T {
         regions.push(++regionCount);
@@ -2119,7 +2210,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // lazy definition reads it (its timing is unknown) or the statement
             // itself writes it; while executing, reads follow the usual order.
             if (topLevelDefinition) touchedTopLevel = true;
-            if (!programCells.has(cell) || !programValid || topLevelDefinition || budgetDepth === 0) return undefined;
+            if (!programCells.has(cell) || !programValid || cell.invalid || topLevelDefinition || budgetDepth === 0) return undefined;
             cellEvents++;
             if (!executing) return statementWrote ? undefined : cell.value;
             cellRead = true;
@@ -2138,6 +2229,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const cell = target?.mutable;
         if (cell?.program) {
             if (topLevelDefinition) touchedTopLevel = true;
+            if (cell.invalid) return;
             if (executing && programValid && programCells.has(cell)) {
                 cell.value = value() ?? {};
                 accessCell(cell, true);
@@ -2169,7 +2261,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // forced may still be forced by the program in a way not modeled here.
         const force = once(compute);
         if (!executing) return { deferred: force };
-        const pending = { deferred: () => { unforced.delete(pending); return force(); } };
+        // Made while a statement runs statically: kept (with its effects) only
+        // when forced in such a run; checking computes it without keeping it.
+        let forced = false;
+        const pending: Known = { deferred: () => {
+            if (forced) return force();
+            if (!executing || trial) return compute();
+            forced = true;
+            unforced.delete(pending);
+            pendingValues.delete(pending);
+            return force();
+        } };
         unforced.add(pending);
         return pending;
     }
@@ -2828,7 +2930,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // Demanding builtins read their arguments where they stand; the rest
             // (map, filter, folds, ...) only as their results are walked.
             const strict = STRICT_NATIVES.has(head.name);
-            return evaluateNative(head.name, args.map(a => () => strict ? demand(value(a)) : lazily(() => value(a))), depth);
+            // A demanding builtin reads a cell's contents, except set's target.
+            return evaluateNative(head.name, args.map((a, n) => () => !strict ? lazily(() => value(a))
+                : head.name === "set" && n === 0 ? demand(value(a)) : readMutable(value(a))), depth);
         }
         if (head.name === "Mutable" && builtin && args.length === 1) {
             const cell: KnownCell = { value: value(args[0]) ?? {}, root, program: creatingTopLevel };
@@ -3393,6 +3497,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // to be used where the program uses it (see forceLazyTop).
             const lazyTop: LazyTop | undefined = topLevelDefinition && touchedTopLevel && (writes.get(name) ?? 0) <= 1
                 ? { body, scope, action: ["block", "app", "pipe"].includes(body.t), forced: false } : undefined;
+            if (lazyTop) lazyTops.add(lazyTop);
             touchedTopLevel = false;
             scope.set(name, {
                 type: t,

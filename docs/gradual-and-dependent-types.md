@@ -359,9 +359,13 @@ uses it: `snap = counter + 0` is computed at its first use and kept, and an
 action such as `init = set counter 5` runs at each use, so after
 `set counter 4; print snap; set counter 9`, `snap` is 4. A read stays unknown
 when evaluation skips code or an uncertain branch, or when accesses could happen
-in another order. Once a top-level statement
-that can write cells is uncertain, or leaves a value unforced that the program
-might force later, top-level cells stay unknown for the rest of the program. When the interpreter checks a
+in another order. A statement whose run is uncertain (a write under a condition
+the checker cannot decide, code it cannot follow) leaves only the top-level
+cells and values it can reach unknown: those its names, and the definitions
+they name, refer to. A value a statement leaves unforced matters only if it is
+kept, in a top-level cell or a kept top-level value; a later statement that can
+reach it runs statically too, so it is forced, once, where the program forces
+it: after `set box [set counter 3]; print box`, `counter` is 3. When the interpreter checks a
 program right before running it (the CLI and the REPL), `readFile`, `getArgs`
 (and so `readInput`) and `readStdin` see the program's actual input, and the run
 reads the same text the checker saw. Stdin is read ahead only when it is not a

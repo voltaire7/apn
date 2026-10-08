@@ -750,6 +750,14 @@ for (const [source, expected] of [
     ['counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; g (f (r (bump 0 + (counter + 0) == 2)))', '0'],
     ['counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; print [bump 0, counter + 0]; g (f (r (counter + 0 == 1)))', '0'],
     ['counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; seq (bump 0) []; g (f (r (counter + 0 == 1)))', '0'],
+    // Values a statement leaves unforced are harmless unless kept; a kept one
+    // is forced (once) where a later statement forces it. An uncertain
+    // statement only affects the cells and values it can reach.
+    ['counter = Mutable 0; [set counter 9, 1]; g (f (r (counter + 0 == 0)))', '0'],
+    ['counter = Mutable 0; box = Mutable [[]]; set box [set counter 3]; g (f (r (counter + 0 == 0)))', '0'],
+    ['counter = Mutable 0; box = Mutable [[]]; set box [set counter 3]; print box; g (f (r (counter + 0 == 3)))', '0'],
+    ['counter = Mutable 0; box = Mutable [[]]; set box [set counter 3]; print box; set counter 8; print box; g (f (r (counter + 0 == 8)))', '0'],
+    ['counter = Mutable 0; other = Mutable 7; m = HashMap [["a", 1]]; has "a" m ? set counter 5 : []; g (f (r (other + 0 == 7)))', '0'],
     // A top-level value is computed when first used and kept; a top-level
     // action (block, application or pipe body) runs at each use.
     ['counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 4)))', '0'],
@@ -778,9 +786,9 @@ for (const source of [
     'counter = Mutable 0; print (map (x -> set counter x) [1, 2]); g (f (r (counter + 0 == 2)))',
     'k y = { c = Mutable 1; xs = [c + 0]; set c 7; head xs }; g (f (r (k 0 == 1)))',
     'counter = Mutable 0; k y = { set counter 4; counter + 0 }; g (f (r (k 0 == 0)))',
-    // A value the static run never forced might be forced by the program
-    // later: top-level cells are no longer followed.
-    'counter = Mutable 0; [set counter 9, 1]; g (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0; [set counter 9, 1]; g (f (r (counter + 0 == 9)))',
+    // A statement whose run is uncertain leaves what it can reach unknown.
+    'counter = Mutable 0; m = HashMap [["a", 1]]; has "a" m ? set counter 5 : []; g (f (r (counter + 0 == 5)))',
     'counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 0)))',
     'counter = Mutable 0; snap = counter + 0; set counter 4; print snap; set counter 9; g (f (r (snap + 0 == 9)))',
     'counter = Mutable 0; init = set counter 5; init; set counter 1; init; g (f (r (counter + 0 == 1)))',

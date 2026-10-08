@@ -324,6 +324,13 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   `programValid`. Model every place the runtime forces a value (`print`
   renders deeply, `seq`, `assert`, `debug`, inspecting patterns in
   `evaluateCall`), or the `unforced` check gives up.
+  An uncertain execution calls `forgetReachable`: the cells and `lazyTop`
+  values `reachable` from the statement's names (through definition bodies
+  and the facts of those names) become `invalid`; anything opaque (a
+  deferred value, a non-range lazy list, `load`/`use`/`env`) clears
+  `programValid`. Unforced values that persist (`unforcedPersists`) join
+  `pendingValues`; a statement reaching their holders runs statically, and a
+  pending value keeps its result only when forced in such a run.
   `CheckOptions.inputs` is set only by `Interpreter.enableChecking`:
   `readFile` and `getArgs` read through `Interpreter.inputFile`, a snapshot
   cleared at each top-level checked run and shared with the runtime
