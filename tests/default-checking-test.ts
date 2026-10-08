@@ -469,3 +469,27 @@ for (const source of [
     // A shadowed builtin is not evaluated as the builtin.
     'g [a] = a; min a b = 99; r x = min x 1 < 1 ? None : Some x; g (f (r 0))',
 ]) Deno.test(`float and rational conditions stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${source}`));
+// Fixed-width numbers keep their type: Float32 rounds to single precision and
+// Int8 overflow is a runtime error, so it gives no value.
+for (const [source, expected] of [
+    ['g [a] = a; s x = Float32 x < Float32 0.5 ? None : Some x; g (f (s 0.25))', '0'],
+    ['g [a] = a; e3 x = Float32 x + Float32 0.2 == Float32 0.3 ? None : Some x; g (f (e3 0.1))', '0'],
+    ['g [a] = a; b x = Int8 x + Int8 100 > Int8 0 ? None : Some x; g (f (b 20))', '0'],
+    ['g [a, b] = a; b x = -(Int8 x) < Int8 0 ? Some x : None; g (f (b 5))', '1'],
+    ['g [a] = a; s x = Float32 x < Float32 0.5 ? None : Some x; h v = g (f (s v)); h 0.25', '0'],
+    ['g [a] = a; k (Float32 x) = None; k x = Some x; h v = g (f (k (Float32 v))); h 0.5', '0'],
+    ['g [a] = a; z = Int32 7; s x = x == Int32 7 ? None : Some x; g (f (s z))', '0'],
+    ['h v = Int8 v; h 5', 'Int8 5'],
+] as const) Deno.test(`fixed-width conditions: ${source}`, () => {
+    const actual = run(session(), `${optionClauses}; ${source}`);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'g [a] = a; e3 x = Float32 x + Float32 0.2 == Float32 0.3 ? Some x : None; g (f (e3 0.1))',
+    'g [a] = a; s x = Float32 x + Float64 0.5 < Float32 1.0 ? None : Some x; g (f (s 0.25))',
+    'g [a] = a; b x = Int8 x + Int8 100 > Int8 0 ? None : Some x; g (f (b 100))',
+    'g [a] = a; b x = -(Int8 x) > Int8 0 ? None : Some x; g (f (b (-128)))',
+    'g [a] = a; b x = UInt8 x - UInt8 1 > UInt8 0 ? None : Some x; g (f (b 0))',
+    'g [a] = a; b x = Int8 x > Int8 0 ? None : Some x; g (f (b 2.5))',
+    'h v = Int8 v; h "x"',
+]) Deno.test(`fixed-width conditions stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${source}`));

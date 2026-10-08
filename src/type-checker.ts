@@ -1206,6 +1206,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 requirements.push({ k: "operation", op: "construct", args: [f, argument.type] });
                 return t;
             }
+            // A numeric conversion of an unknown value (such as a parameter) is
+            // checked once the value's type is known, not forced to the target.
+            if (t.k === "atom" && NUMERIC_TYPES.includes(t.name) && a.k === "var") {
+                requirements.push({ k: "operation", op: "construct", args: [f, argument.type] });
+                return t;
+            }
             if (t.k === "atom") {
                 if (t.name === "Type" && ["type", "factory", "alias", "list", "record"].includes(a.k)) return argument.type;
                 if (t.name === "List" && a.k === "list") return a;
@@ -1905,7 +1911,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const entry = scope.get(e.name);
             if (!entry) return {};
             if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
-            return { char: entry.char, float: entry.float, tag: entry.tag };
+            return { char: entry.char, float: entry.float, number: entry.number, tag: entry.tag };
         }
         if (e.t === "app") {
             const args: Expr[] = [];
@@ -1913,6 +1919,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             while (head.t === "app") { args.unshift(head.a); head = head.f; }
             if (head.t !== "var") return {};
             const entry = scope.get(head.name);
+            if (NUMERIC_TYPES.includes(head.name) && entry?.builtin) return computed(e, scope);
             if (/^[A-Z]/.test(head.name)) {
                 // A constructor applied to all its fields.
                 let t = resolve(entry?.type ?? dynamic);
@@ -1924,22 +1931,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (!summary) return {};
             return resolveKnown({ call: { summary, args: args.map(a => valueEntry(a, scope)) } });
         }
-        if (["binop", "unop", "ternary", "numeric"].includes(e.t)) {
-            // Over enclosing parameters the value is known only at their calls.
-            const names = new Set<string>();
-            const collect = (x: Expr): void => {
-                if (x.t === "var" && scope.get(x.name)?.ref) names.add(x.name);
-                else if (x.t === "binop") { collect(x.l); collect(x.r); }
-                else if (x.t === "unop") collect(x.e);
-                else if (x.t === "ternary") { collect(x.cond); collect(x.then); collect(x.els); }
-                else if (x.t === "app") { collect(x.f); collect(x.a); }
-            };
-            collect(e);
-            const facts = evaluateKnown(e, new Map(), scope, 0) ?? {};
-            if (!names.size) return facts;
-            return { ...facts, expr: { e, scope, env: [...names].map(n => [n, valueEntry({ t: "var", name: n }, scope)]) } };
-        }
+        if (["binop", "unop", "ternary", "numeric"].includes(e.t)) return computed(e, scope);
         return {};
+    }
+    // A computed value; over enclosing parameters it is known only at their calls.
+    function computed(e: Expr, scope: Scope): Known {
+        const names = new Set<string>();
+        const collect = (x: Expr): void => {
+            if (x.t === "var" && scope.get(x.name)?.ref) names.add(x.name);
+            else if (x.t === "binop") { collect(x.l); collect(x.r); }
+            else if (x.t === "unop") collect(x.e);
+            else if (x.t === "ternary") { collect(x.cond); collect(x.then); collect(x.els); }
+            else if (x.t === "app") { collect(x.f); collect(x.a); }
+        };
+        collect(e);
+        const facts = evaluateKnown(e, new Map(), scope, 0) ?? {};
+        if (!names.size) return facts;
+        return { ...facts, expr: { e, scope, env: [...names].map(n => [n, valueEntry({ t: "var", name: n }, scope)]) } };
     }
     // The summary of a callee called with `count` arguments, if the call is complete.
     function summaryAt(type: Ty, count: number): Summary | undefined {
@@ -1969,7 +1977,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let evaluations = 0;
     function evaluateCall(summary: Summary, args: Known[], depth: number): Known | undefined {
         if (depth > 24 || ++evaluations > 20000) return undefined;
-        const entries: Entry[] = args.map(k => ({ type: dynamic, ...k }));
+        const entries: Entry[] = args.map(k => ({ type: knownType(k), ...k }));
         const ranked = summary.clauses.map(c => ({ clause: c, ...rankClause(c, entries) }));
         const sure = ranked.filter(r => r.matches);
         const before = (a: typeof ranked[number], b: typeof ranked[number]) =>
@@ -1989,6 +1997,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (!result) return undefined;
         }
         return result;
+    }
+    // The runtime type a known value certainly has, for ranking typed clauses.
+    function knownType(k: Known): Ty {
+        if (k.number?.typeName) return atom(k.number.typeName);
+        if (k.float !== undefined) return atom("Float");
+        if (k.index && !k.index.terms.size) return atom("Int");
+        if (k.boolean !== undefined) return atom("Bool");
+        if (k.string !== undefined) return atom("String");
+        if (k.char !== undefined) return atom("Char");
+        return dynamic;
     }
     // What e evaluates to, given known values of the names in env.
     function evaluateKnown(e: Expr, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
@@ -2040,7 +2058,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const v = evaluateKnown(e.e, env, scope, depth);
                 if (e.op === "not") { const t = truth(v); return t === undefined ? undefined : { boolean: !t }; }
                 const n = numericOf(v);
-                return n === undefined ? undefined : attempt(() => negate(n));
+                return n === undefined ? undefined : attempt(() => n.typeName ? castNumeric(n.typeName, negate(n)) : negate(n));
             }
             case "binop": {
                 if (e.op === "&&" || e.op === "||") {
@@ -2088,6 +2106,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 while (head.t === "app") { args.unshift(head.a); head = head.f; }
                 if (head.t !== "var" || env.has(head.name)) return undefined;
                 const entry = scope.get(head.name);
+                // A numeric type applied to a number: floating types round, others
+                // convert losslessly or fail, as at runtime.
+                if (NUMERIC_TYPES.includes(head.name) && entry?.builtin && args.length === 1) {
+                    const n = numericOf(evaluateKnown(args[0], env, scope, depth));
+                    return n === undefined ? undefined : attempt(() => castNumeric(head.name, n, ["Float", "Float32", "Float64"].includes(head.name)));
+                }
                 if (/^[A-Z]/.test(head.name)) {
                     let t = resolve(entry?.type ?? dynamic);
                     for (let n = 0; n < args.length && t.k === "fn"; n++) t = resolve(t.output);
@@ -2117,7 +2141,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (const key of ["boolean", "string", "char", "float", "tag"] as const) {
             if (same(a[key], b[key])) (result as Record<string, unknown>)[key] = a[key];
         }
-        if (a.number && b.number && equalNumbers(a.number, b.number)) result.number = a.number;
+        if (a.number && b.number && a.number.typeName === b.number.typeName && equalNumbers(a.number, b.number)) result.number = a.number;
         return Object.keys(result).length ? result : undefined;
     }
     // Is the argument's value known to equal (true) or differ from (false) this
@@ -2133,11 +2157,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (k.float !== undefined) return floating(k.float);
         return k.number;
     }
-    // Facts for a number; fixed-width typed numbers (Int32, Float32 ...) are left
-    // alone, while Int and Float label plain numbers.
+    // Facts for a number. Int and Float label plain numbers; other typed numbers
+    // (Int32, Float32, ...) keep their type in `number`, so later arithmetic
+    // checks overflow and rounds as the runtime does.
     function knownNumber(n: Numeric | boolean): Known | undefined {
         if (typeof n === "boolean") return { boolean: n };
-        if (n.typeName && n.typeName !== "Int" && n.typeName !== "Float") return undefined;
+        if (n.typeName && n.typeName !== "Int" && n.typeName !== "Float") return { number: n };
         if (n.typeName) n = { ...n, typeName: undefined } as Numeric;
         if (n.kind === "int") return { index: constant(n.v) };
         if (n.kind === "float") return { float: n.v };

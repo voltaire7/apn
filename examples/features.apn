@@ -1028,6 +1028,9 @@ print (onlyVowelIf true)                      # 1
 # Float and exact-rational conditions are evaluated as the runtime computes them.
 vowelBelowHalf x = x < 1 / 2 ? 'a' : 'z'
 print (onlyOne (vowelOrPair (vowelBelowHalf 0.25)))  # 1
+# Fixed-width numbers keep their precision: in Float32, .1 + .2 == .3.
+vowelIfSingle x = Float32 x + Float32 .2 == Float32 .3 ? 'a' : 'z'
+print (onlyOne (vowelOrPair (vowelIfSingle .1)))     # 1
 sortedAndReversed xs = [sort xs, reverse xs]
 firstOfBoth [[a, b], [c, d]] = [a, c]
 print (firstOfBoth (sortedAndReversed [3, 1]))  # [1, 1]

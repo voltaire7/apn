@@ -253,8 +253,11 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   `rankClause` and evaluates bodies with `evaluateKnown` (bounded by depth and
   `evaluations`). Numbers go through the runtime's `typedArithmetic`,
   `typedPower`, `equalNumbers`, `compareNumbers` and `numericNative` (for real
-  builtins only); `Known.number` holds rationals and complex values, and
-  `knownNumber` drops fixed-width typed results. Compound arguments over
+  builtins only); `Known.number` holds rationals, complex values and typed
+  numbers other than plain `Int`/`Float` (`knownNumber`), and `knownType`
+  gives `evaluateCall` the runtime type of a known value so typed clauses
+  rank. A numeric constructor applied to a type variable defers its
+  conversion as a `construct` requirement instead of unifying. Compound arguments over
   enclosing parameters become a pending `expr`, re-evaluated after
   substitution. `substituteKnown` substitutes parameters inside pending calls
   and `callArgs`. An overload call that stays ambiguous because its arguments
