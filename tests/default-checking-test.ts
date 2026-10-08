@@ -162,8 +162,6 @@ for (const source of [
     'g [p, q] = p; g (pairs [x: 1])',
     'h a b = [map (x -> x) a, map (x -> x) b]; g [[x], [y, z]] = x + y + z; g (h [1, 2] [1])',
     'g [p, q] = p + q; g (tail [1, 2, 3] * (x -> x))',
-    // Lengths inside a freshly built list are not tracked through a function.
-    'h a b = [map (x -> x) a, map (x -> x) b]; g [[x], [y, z]] = x + y + z; g (h [1] [1, 2])',
 ]) Deno.test(`checker rejects mismatched builtin list lengths: ${source}`, () => rejected(session(), source));
 // Standard-library list functions keep their argument's length; functions that
 // change a list's length (folds, cons, append, filter) stay unknown, even when
@@ -188,3 +186,23 @@ for (const source of [
     'f xs = filter (x -> x > 0) xs; g [a, b] = a + b; g (f [1, 2])',
     'f xs = { xs = [1, 2, 3]; xs }; g [a, b] = a + b; g (f [1, 2])',
 ]) Deno.test(`length changes stay unknown: ${source}`, () => rejected(session(), source));
+// Nested lengths: a function's result shape is described in terms of its
+// arguments, and is trusted only where the function is called directly by name.
+for (const [source, expected] of [
+    ['h a b = [map (x -> x) a, map (x -> x) b]; g [[x], [y, z]] = x + y + z; g (h [1] [1, 2])', '4'],
+    ['pairUp a b = [a, b]; g [[x], [y, z]] = x + y + z; g (pairUp [1] [2, 3])', '6'],
+    ['h a b = [map (x -> x) a, map (x -> x) b]; h2 a b = h b a; g [[x, y], [z]] = x + y + z; g (h2 [1] [1, 2])', '4'],
+    ['import "std"; both xs = [sort xs, reverse xs]; g [[a, b], [c, d]] = a + d; g (both [2, 1])', '3'],
+] as const) Deno.test(`checker tracks nested list lengths: ${source}`, () => {
+    const actual = run(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'h a b = [map (x -> x) a, map (x -> x) b]; g [[x], [y, z]] = x + y + z; g (h [1, 2] [1])',
+    // A function value that flows through a ternary, list, variable, or partial
+    // application shares its type with other functions: no length is assumed.
+    'keep xs = xs * (x -> x); drop1 xs = tail xs; pick b = b ? keep : drop1; g [a, b, c] = a; g ((pick false) [1, 2, 3])',
+    'keep xs = xs * (x -> x); drop1 xs = tail xs; h = false ? keep : drop1; g [a, b, c] = a; g (h [1, 2, 3])',
+    'keep xs = xs * (x -> x); drop1 xs = tail xs; fs = [keep, drop1]; g [a, b, c] = a; g ((fs 1) [1, 2, 3])',
+    'import "std"; p = sortBy compare; g [a, b] = a; g (p [2, 1])',
+]) Deno.test(`checker does not assume lengths: ${source}`, () => rejected(session(), source));

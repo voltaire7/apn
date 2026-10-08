@@ -14,15 +14,21 @@ type Ty =
     | { k: "dynamic"; explicit?: boolean }
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
-    // keepsLength: the result is a list as long as this (final) argument. It is a
-    // property of the function's code, never of a shared type node.
-    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; keepsLength?: boolean }
+    // shape describes the full result in terms of the arguments (see Shape); args
+    // collects argument types across curried application. Both describe the
+    // function's code, so they are trusted only at a direct call by name.
+    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[] }
     | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number> }
     | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string> }
     | { k: "type"; value: Ty }
     | { k: "factory"; args: Entry[] }
     | { k: "alias"; params: string[]; body: Expr; scope: Scope; args: Entry[] }
     | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty };
+// A function result's list structure in terms of its parameters, by position:
+// `arg` is that argument itself; otherwise a list whose length is an argument's
+// length or a constant, with an optional shape for each item.
+type LengthRef = { param: number } | { constant: bigint };
+interface Shape { arg?: number; length?: LengthRef; items?: (Shape | undefined)[] }
 interface Entry {
     type: Ty;
     index?: Index;
@@ -288,6 +294,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let activeExpression: Expr | undefined, checkingExpression: Expr | undefined;
     let firstUnknown: Expr | undefined;
     let firstUnbound: { expr: Expr; name: string; hint?: string } | undefined;
+    // Callee positions of application chains, where a function's shape is trusted.
+    const callees = new WeakSet<Expr>();
     const unknown = (): Ty => {
         firstUnknown ??= activeExpression ?? checkingExpression;
         dynamicBoundaries++;
@@ -1150,12 +1158,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (output.k === "fn") output.checks = [...output.checks ?? [], ...checks];
             else for (const requirement of checks) resolve(requirement);
             if (f.binder && argument.index) {
-                return copy(f.output, new Map([...variables(f.output)].map((t) => [t, t])), [f.binder, argument.index]);
+                const next = copy(f.output, new Map([...variables(f.output)].map((t) => [t, t])), [f.binder, argument.index]);
+                const out = resolve(next);
+                return f.shape && out.k === "fn" && out.shape === f.shape ? { ...out, args: [...f.args ?? [], argument.type] } : next;
             }
-            // A fresh node for this call's result: the shared output type is untouched.
-            if (f.keepsLength && actual.k === "list" && actual.length) {
-                const result = resolve(f.output);
-                if (result.k === "list" && !result.length && !result.items) return { ...result, length: actual.length };
+            if (f.shape) {
+                const args = [...f.args ?? [], argument.type], next = resolve(f.output);
+                if (next.k === "fn" && next.shape === f.shape) return { ...next, args };
+                return buildShape(f.shape, f.output, args);
             }
             return f.output;
         }
@@ -1280,7 +1290,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const near = didYouMean(e.name, [...scope.keys(), ...options.runtimeNames]);
                     firstUnbound = { expr: e, name: e.name, hint: near ? `did you mean '${near}'?` : undefined };
                 }
-                return entry ? instantiate(entry) : unknown();
+                if (!entry) return unknown();
+                const type = instantiate(entry);
+                return callees.has(e) && trustsShape(entry) ? type : withoutShapes(type);
             }
             case "placeholder":
                 return variable();
@@ -1338,6 +1350,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "app":
             case "pipe": {
                 const a = e.t === "app" ? e.a : e.x;
+                callees.add(e.f);
                 const callee = infer(e.f, scope), resolved = resolve(callee);
                 if (resolved.k === "intrinsic" && resolved.name === "load" && a.t === "string" && options.loads) {
                     const loaded = options.loads(a.v, scope);
@@ -1364,12 +1377,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     runtimeChecks++;
                     return explicitDynamic;
                 }
-                return application(callee, {
+                const result = application(callee, {
                     type: infer(a, scope),
                     index: index(a, scope),
                     boolean: boolean(a, scope),
                     string: a.t === "string" ? a.v : a.t === "var" ? scope.get(a.name)?.string : undefined,
                 }, a);
+                // A partial application that leaves its call chain is an ordinary function value.
+                return callees.has(e) ? result : withoutShapes(result);
             }
             case "setFields": {
                 let rec = resolve(infer(e.rec, scope));
@@ -1653,43 +1668,123 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return unknown();
         }
     }
-    // Does e evaluate to a list exactly as long as the list bound to name? Only
-    // the value itself or length-preserving operations on it qualify; anything
-    // else (folds, cons, appends, filters) is conservatively "unknown".
-    function preservesLength(e: Expr, name: string, scope: Scope): boolean {
+    // Only a direct call of a function definition (or builtin) by name may use
+    // its shape: a function value that flows elsewhere shares its type node.
+    function trustsShape(entry: Entry | undefined): boolean {
+        return !!entry && !entry.mono && (!!entry.clauses || !!entry.inherited);
+    }
+    // A copy of a function type's result chain without shapes or collected args.
+    function withoutShapes(type: Ty, seen = new Map<Ty, Ty>()): Ty {
+        const t = resolve(type);
+        if (t.k !== "fn" || !t.shape && !t.args && resolve(t.output).k !== "fn") return type;
+        if (seen.has(t)) return seen.get(t)!;
+        const result = { ...t, shape: undefined, args: undefined };
+        seen.set(t, result);
+        result.output = withoutShapes(t.output, seen);
+        return result;
+    }
+    function lengthOf(shape: Shape | undefined): LengthRef | undefined {
+        return shape?.length ?? (shape?.arg !== undefined ? { param: shape.arg } : undefined);
+    }
+    function sameRef(a: LengthRef | undefined, b: LengthRef | undefined): boolean {
+        if (!a || !b) return false;
+        return "param" in a ? "param" in b && a.param === b.param : "constant" in b && a.constant === b.constant;
+    }
+    // The shape both a and b satisfy (clauses, ternary branches).
+    function meetShapes(a: Shape | undefined, b: Shape | undefined): Shape | undefined {
+        if (!a || !b) return undefined;
+        if (a.arg !== undefined && a.arg === b.arg) return a;
+        const length = sameRef(lengthOf(a), lengthOf(b)) ? lengthOf(a) : undefined;
+        const items = a.items && b.items && a.items.length === b.items.length
+            ? a.items.map((x, n) => meetShapes(x, b.items![n])) : undefined;
+        return length || items?.some(Boolean) ? { length, items } : undefined;
+    }
+    // Rewrite a callee's shape in terms of the caller's parameters.
+    function substituteShape(shape: Shape | undefined, args: (Shape | undefined)[]): Shape | undefined {
+        if (!shape) return undefined;
+        if (shape.arg !== undefined) return args[shape.arg];
+        const length = shape.length && "param" in shape.length ? lengthOf(args[shape.length.param]) : shape.length;
+        const items = shape.items?.map(item => substituteShape(item, args));
+        return length || items?.some(Boolean) ? { length, items } : undefined;
+    }
+    // The shape of a callee's result after `count` arguments, if it is complete.
+    function shapeAt(type: Ty, count: number): Shape | undefined {
+        let t = resolve(type);
+        if (t.k === "overload") {
+            // Choices that cannot take a list (such as reverse's String clause) are excluded.
+            const choices = t.choices.filter(choice => { const c = resolve(choice); return c.k === "fn" && resolve(c.input).k !== "atom"; });
+            return choices.length ? choices.map(c => shapeAt(c, count)).reduce((x, y) => meetShapes(x, y)) : undefined;
+        }
+        for (let n = 1; n < count; n++) {
+            if (t.k !== "fn") return undefined;
+            t = resolve(t.output);
+        }
+        if (t.k !== "fn" || !t.shape) return undefined;
+        const next = resolve(t.output);
+        return next.k === "fn" && next.shape === t.shape ? undefined : t.shape;
+    }
+    // What e evaluates to, in terms of the parameters (exact: bound to the
+    // whole argument; otherwise only its length is known). Value-level and
+    // conservative: folds, cons, appends and filters give no shape.
+    function shapeOf(e: Expr, params: { name?: string; exact: boolean }[], scope: Scope): Shape | undefined {
         switch (e.t) {
-            case "var": return e.name === name;
-            case "block": {
-                const shadows = e.stmts.some(st => st.t === "stmDef" && st.name === name || st.t === "patDef");
-                const last = e.stmts[e.stmts.length - 1];
-                return !shadows && !!last && preservesLength(last, name, scope);
+            case "var": {
+                const n = params.findIndex(p => p.name === e.name);
+                return n < 0 ? undefined : params[n].exact ? { arg: n } : { length: { param: n } };
             }
-            case "ternary": return preservesLength(e.then, name, scope) && preservesLength(e.els, name, scope);
-            case "unop": return e.op === "neg" && preservesLength(e.e, name, scope);
-            case "binop":
-                return ["+", "-", "*", "/", "%", "^"].includes(e.op) &&
-                    (preservesLength(e.l, name, scope) || preservesLength(e.r, name, scope));
+            case "list":
+                return { length: constant(BigInt(e.v.length)), items: e.v.map(x => shapeOf(x, params, scope)) } as Shape;
+            case "block": {
+                const shadows = e.stmts.some(st => st.t === "patDef" || st.t === "stmDef" && params.some(p => p.name === st.name));
+                const last = e.stmts[e.stmts.length - 1];
+                return shadows || !last ? undefined : shapeOf(last, params, scope);
+            }
+            case "ternary": return meetShapes(shapeOf(e.then, params, scope), shapeOf(e.els, params, scope));
+            case "unop": {
+                const length = e.op === "neg" ? lengthOf(shapeOf(e.e, params, scope)) : undefined;
+                return length && { length };
+            }
+            case "binop": {
+                if (!["+", "-", "*", "/", "%", "^"].includes(e.op)) return undefined;
+                const length = lengthOf(shapeOf(e.l, params, scope)) ?? lengthOf(shapeOf(e.r, params, scope));
+                return length && { length };
+            }
             case "app": {
                 const args: Expr[] = [];
                 let head: Expr = e;
                 while (head.t === "app") { args.unshift(head.a); head = head.f; }
-                if (head.t !== "var" || head.name === name || !preservesLength(args[args.length - 1], name, scope)) return false;
-                if (head.name === "enumerate" && args.length === 1) return true;
+                if (head.t !== "var" || params.some(p => p.name === (head as { name: string }).name)) return undefined;
+                if (head.name === "enumerate" && args.length === 1) {
+                    const length = lengthOf(shapeOf(args[0], params, scope));
+                    return length && { length };
+                }
                 const callee = scope.get(head.name);
-                return !!callee && keepsLengthAt(callee.type, args.length);
+                if (!trustsShape(callee)) return undefined;
+                return substituteShape(shapeAt(callee!.type, args.length), args.map(a => shapeOf(a, params, scope)));
             }
-            default: return false;
+            default: return undefined;
         }
     }
-    // Is the function value applied to `count` arguments marked keepsLength on its last one?
-    function keepsLengthAt(type: Ty, count: number): boolean {
-        let t = resolve(type);
-        if (t.k === "overload") return t.choices.some(choice => keepsLengthAt(choice, count));
-        for (let n = 1; n < count; n++) {
-            if (t.k !== "fn") return false;
-            t = resolve(t.output);
+    // A fresh result type: the shape's lengths and arguments filled in from args.
+    function buildShape(shape: Shape, type: Ty, args: Ty[]): Ty {
+        if (shape.arg !== undefined) return args[shape.arg] ?? type;
+        const t = resolve(type);
+        if (t.k !== "list") return type;
+        let length = t.length;
+        if (!length && shape.length) {
+            if ("constant" in shape.length) length = constant(shape.length.constant);
+            else { const a = args[shape.length.param] && resolve(args[shape.length.param]); if (a?.k === "list") length = a.length; }
         }
-        return t.k === "fn" && !!t.keepsLength;
+        let items = t.items, element = t.element;
+        if (shape.items && t.items && t.items.length === shape.items.length) {
+            items = t.items.map((item, n) => shape.items![n] ? buildShape(shape.items![n]!, item, args) : item);
+            if (items.some((item, n) => item !== t.items![n])) element = union(items);
+        }
+        return length === t.length && items === t.items ? type : { ...t, length, items, element };
+    }
+    function setShape(type: Ty, shape: Shape | undefined): void {
+        const seen = new Set<Ty>();
+        for (let t = resolve(type); t.k === "fn" && !seen.has(t); t = resolve(t.output)) { seen.add(t); t.shape = shape; }
     }
     function functionType(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr): Ty {
         const outerFacts = lengthFacts;
@@ -1747,15 +1842,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try { if (guard) infer(guard, scope); result = infer(body, scope); checks = [...patternRequirements, ...requirements]; }
         finally { requirements = outerRequirements; }
         if (declared) { unify(declared, result, body); result = declared; }
-        const last = params[params.length - 1];
-        const listName = last?.p === "var" ? last.name
-            : last?.p === "constr" && last.args.length === 1 && last.args[0].p === "var" ? last.args[0].name : undefined;
-        const keepsLength = !!listName && listName !== recursiveName && preservesLength(body, listName, scope);
+        const named = params.map(p => p.p === "var" && p.name !== recursiveName ? { name: p.name, exact: true }
+            : p.p === "constr" && p.args.length === 1 && p.args[0].p === "var" ? { name: p.args[0].name, exact: false }
+            : { exact: false });
+        const shape = shapeOf(body, named, scope);
         for (let n = inputs.length - 1; n >= 0; n--) {
             const parameter = params[n];
             const selfName = parameter.p === "var" && parameter.name === recursiveName ? recursiveName : undefined;
             result = { k: "fn", input: inputs[n].type, output: result, binder: inputs[n].binder, coerce: inputs[n].coerce, checks: n === inputs.length - 1 ? checks : undefined, pattern: parameter, selfName };
-            if (keepsLength && n === inputs.length - 1) result.keepsLength = true;
+            if (shape) result.shape = shape;
         }
         return result;
     }
@@ -1764,12 +1859,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const entry = scope.get(name);
         if (options.library && entry && DECLARED_KEEPS_LENGTH.has(name)) declareKeepsLength(entry.type);
     }
-    // Mark the final list parameter of each overload choice.
+    // The result is a list as long as the final argument, for each overload
+    // choice that takes a list.
     function declareKeepsLength(type: Ty): void {
-        let t = resolve(type);
+        const t = resolve(type);
         if (t.k === "overload") { t.choices.forEach(declareKeepsLength); return; }
-        while (t.k === "fn" && resolve(t.output).k === "fn") t = resolve(t.output);
-        if (t.k === "fn" && resolve(t.input).k !== "atom") t.keepsLength = true;
+        let count = 0, last: Ty = t;
+        for (let x: Ty = t; x.k === "fn"; x = resolve(x.output)) { count++; last = x; }
+        if (count && last.k === "fn" && resolve(last.input).k !== "atom") setShape(t, { length: { param: count - 1 } });
     }
     function defineClauses(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
         if (/^[A-Z]/.test(name) && clauses[0].params.every((p) => p.p === "var")) {
@@ -1885,7 +1982,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (const c of clauses) {
             const t = functionType(c.params, c.body, scope, name);
             const key = `${c.params.some(bindsSelf) ? "self:" : ""}${domain(t)}`, existing = groups.get(key);
-            if (existing) unify(existing, t, c.body);
+            if (existing) {
+                // The group's type is the first clause's: keep only the shape every clause has.
+                const first = resolve(existing), next = resolve(t);
+                const shape = first.k === "fn" && next.k === "fn" ? meetShapes(first.shape, next.shape) : undefined;
+                unify(existing, t, c.body);
+                setShape(existing, shape);
+            }
             else groups.set(key, t);
         }
         const alternatives = [...groups.values()];
@@ -1906,7 +2009,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             print: fn(a, list(variable(), constant(0n))),
             head: fn(list(a), a),
             tail: fn(list(a), list(a)),
-            map: fn(fn(a, b), { ...fn(list(a), list(b)), keepsLength: true } as Ty),
+            map: fn(fn(a, b), fn(list(a), list(b))),
             filter: fn(fn(a, b), fn(list(a), list(a))),
             length: fn(dynamic, atom("Int")),
             typeOf: fn(a, atom("Type")),
@@ -1937,7 +2040,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     { const a = variable(), b = variable(), c = variable(); native("zipWith", [fn(a, fn(b, c)), list(a), list(b)], list(c)); }
     { const a = variable(), b = variable(); native("seq", [a, b], b); }
-    { const seq = scope.get("seq"); if (seq) { const t = resolve(seq.type); if (t.k === "fn" && t.output.k === "fn") t.output.keepsLength = true; } }
+    { const seq = scope.get("seq"); if (seq) setShape(seq.type, { arg: 1 }); }
+    setShape(scope.get("map")!.type, { length: { param: 1 } });
     native("toString", [variable()], str);
     native("intToString", [int], str);
     native("format", [str, list(variable())], str);

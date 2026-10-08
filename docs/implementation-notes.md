@@ -224,16 +224,20 @@ Behavior: `docs/gradual-and-dependent-types.md`.
 - Binding a variable to a union drops the variable's own occurrences, after
   expanding nested unions: `v = v | t` has the least solution `v = t`. A union
   is not a structural node, so keeping the self-reference never terminates.
-- Length preservation is a property of a function's code, never of a type
-  node: unification shares one node between values of different lengths (a
-  fold's seed and result). A `fn` node's `keepsLength` says its result is a list
-  as long as its final argument; `application` then returns a fresh result node
-  with the argument's length. `inferFunction` sets it only when
-  `preservesLength` proves the body is the last parameter passed through
-  length-preserving operations (`map`, `seq`, `enumerate`, arithmetic and `*`,
-  ternaries, blocks without shadowing, other `keepsLength` calls).
-  `DECLARED_KEEPS_LENGTH` marks library functions it cannot analyse; add each
-  one to `tests/stdlib-length-test.ts`, which verifies the claim at runtime.
+- List lengths through functions are a property of a function's code, never
+  of a type node: unification shares one node between values of different
+  lengths (a fold's seed and result) and between different function values (a
+  ternary's branches). A `fn` node's `shape` describes its result in terms of
+  argument positions (`Shape`: the argument itself, or a list whose length is
+  an argument's or a constant, with item shapes). `application` collects
+  `args` across curried calls and `buildShape` returns a fresh result type.
+  `shapeOf` derives shapes from bodies (value-level and conservative);
+  multi-clause groups keep only `meetShapes` of all clauses. Shapes are trusted
+  only in callee position of a direct call to a definition or builtin
+  (`callees`, `trustsShape`); every other reference, and any partial
+  application leaving its chain, goes through `withoutShapes`.
+  `DECLARED_KEEPS_LENGTH` marks library functions `shapeOf` cannot analyse; add
+  each to `tests/stdlib-length-test.ts`, which verifies the claim at runtime.
 - Keep implicit unknowns separate from explicit `Dynamic`: a concrete type
   requires a runtime constructor/contract or an actually converting pattern,
   never a silently inserted conversion.
