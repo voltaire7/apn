@@ -8,7 +8,8 @@
 //        deno run --allow-read main.ts examples/features.apn
 // =====================================================================
 
-import { CLI_HELP, readCliOptions } from "./src/cli-options.ts";
+import { CLI_HELP, readCliOptions, VERSION } from "./src/cli-options.ts";
+import { setLooseSpacing } from "./src/parser.ts";
 import { formatFileReadError } from "./src/errors.ts";
 import { Interpreter, dirname } from "./src/interp.ts";
 import { runSource, repl, formatError } from "./src/repl.ts";
@@ -18,15 +19,19 @@ export { lex } from "./src/lexer.ts";
 // ---------------- main ----------------
 
 if (import.meta.main) {
-    const { args: _args, literalFile, error } = readCliOptions(Deno.args);
+    const { args: _args, literalFile, loose, error } = readCliOptions(Deno.args);
     if (error) {
         const label = Deno.stderr.isTerminal() ? "\x1b[1;31merror:\x1b[0m" : "error:";
         console.error(`${label} ${error}`);
         Deno.exit(2);
     }
 
+    setLooseSpacing(loose);
+
     if (!literalFile && (_args[0] === "--help" || _args[0] === "-h")) {
         console.log(CLI_HELP);
+    } else if (!literalFile && _args[0] === "--version") {
+        console.log(`apn ${VERSION}`);
     } else if (!literalFile && _args[0] === "--check") {
         const { runTypeCheck } = await import("./src/type-checker.ts");
         Deno.exit(await runTypeCheck(_args.slice(1)));

@@ -8,7 +8,7 @@ for (const [code, expected] of [
     ['f x = x * (x + 1); f', 'x -> x * (x + 1)'],
     ['f 0 = 1; f x = x; f', 'f 0 = 1\nf x = x'],
     ['f x y = x + y; f missing', '(x y -> x + y) (missing)'],
-    ['f x = match x [0 -> "zero", n -> "nonzero"]; f', 'x -> match x [0 -> "zero", n -> "nonzero"]'],
+    ['f x = match x [0 -> "zero",n -> "nonzero"]; f', 'x -> match x [0 -> "zero",n -> "nonzero"]'],
     ['print', 'print'],
 ]) Deno.test(`function display: ${code}`, () => {
     const i = new Interpreter();

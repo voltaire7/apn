@@ -4,7 +4,7 @@ import { parseDocument } from "../src/parser.ts";
 
 for (
     const source of [
-        'id x = x; [id 1, id "hi"]',
+        'id x = x; [id 1,id "hi"]',
         "f (Int x) = x; f 1",
         'f x = x.x; f [x: 1, y: "extra"]',
         "Option a = Some a | None; f (Some x) = x; f None = 0; f (Some 1)",
@@ -46,13 +46,13 @@ for (
 }
 for (
     const [source, expected] of [
-        ["Vect 3 Int [1,2,3]", "[1, 2, 3]"],
-        ["V n = Vect (n + 1) Int; V 2 [1,2,3]", "[1, 2, 3]"],
-        ["f n ((Vect n Int) xs) = xs; f 3 [1,2,3]", "[1, 2, 3]"],
+        ["Vect 3 Int [1,2,3]", "[1,2,3]"],
+        ["V n = Vect (n + 1) Int; V 2 [1,2,3]", "[1,2,3]"],
+        ["f n ((Vect n Int) xs) = xs; f 3 [1,2,3]", "[1,2,3]"],
         ["typeOf (Vect 3 Int [1,2,3])", "Vect 3 Int"],
-        ["v = Vect 2 Int [1,2]; v 0 = 3; [v, typeOf v]", "[[3, 2], Vect 2 Int]"],
-        ["[isType (Vect 2 Int) [1,2], isType (Vect 2 Int) [1]]", "[true, false]"],
-        ["[(Vect 2 Int) == (Vect 2 Int), (Vect 2 Int) == (Vect 3 Int)]", "[true, false]"],
+        ["v = Vect 2 Int [1,2]; v 0 = 3; [v,typeOf v]", "[[3,2],Vect 2 Int]"],
+        ["[isType (Vect 2 Int) [1,2],isType (Vect 2 Int) [1]]", "[true,false]"],
+        ["[(Vect 2 Int) == (Vect 2 Int),(Vect 2 Int) == (Vect 3 Int)]", "[true,false]"],
         ['f (Dynamic x) = x; f "hi"', '"hi"'],
     ]
 ) {
@@ -84,13 +84,13 @@ for (
 
 for (
     const source of [
-        "add (Int x) (Int y) = x + y; add (Float x) (Float y) = x + y; [add 1 2, add .1 .2]",
+        "add (Int x) (Int y) = x + y; add (Float x) (Float y) = x + y; [add 1 2,add .1 .2]",
         'x = 1; { x = "local"; x }; x',
         "f (Int32 x) = x; f 1",
         "f t n ((Vect n t) xs) = xs; f Int 2 [1,2]",
         "f (Type t) x = t x; f Int 1",
         "Option a = Some a | None; Option Int (Some 1)",
-        'Choice flag = flag ? Int : String; [Choice true 1, Choice false "hello"]',
+        'Choice flag = flag ? Int : String; [Choice true 1,Choice false "hello"]',
     ]
 ) {
     Deno.test(`gradual APN compatibility: ${source}`, () => {
@@ -120,8 +120,8 @@ Deno.test("captured variables are not spuriously generalized", () => {
 });
 Deno.test("runtime value-dependent type selection", () => {
     const i = new Interpreter();
-    const source = 'Choice flag = flag ? Int : String; [Choice true 1, Choice false "hello"]';
-    if (i.renderString(i.run(parseDocument(source))) !== '[1, "hello"]') throw new Error("wrong selected type");
+    const source = 'Choice flag = flag ? Int : String; [Choice true 1,Choice false "hello"]';
+    if (i.renderString(i.run(parseDocument(source))) !== '[1,"hello"]') throw new Error("wrong selected type");
 });
 for (
     const source of [
@@ -177,7 +177,7 @@ Deno.test("rebound indices keep lazy aliases dynamic", () => {
     const result = checkSource(source);
     if (result.issues.length || !result.dynamicBoundaries) throw new Error(JSON.stringify(result));
     const i = new Interpreter();
-    if (i.renderString(i.run(parseDocument(source))) !== "[1, 2, 3]") throw new Error("lazy alias changed");
+    if (i.renderString(i.run(parseDocument(source))) !== "[1,2,3]") throw new Error("lazy alias changed");
 });
 
 Deno.test('gradual checking accepts list selection and atomic swaps', () => {

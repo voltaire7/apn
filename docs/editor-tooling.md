@@ -98,6 +98,7 @@ The integration uses Neovim's built-in [`vim.lsp.start`](https://neovim.io/doc/u
 The server implements the relevant parts of the
 [Language Server Protocol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/).
 
+For relaxed spacing (as `apn --loose`), pass `init_options = { looseSpacing = true }`.
 For optional type diagnostics, pass `init_options = { typeChecking = true }`
 to the APN LSP configuration, or use `apn --lint --types FILE.apn` independently.
 See [Static checking and dependent patterns](gradual-and-dependent-types.md) for supported

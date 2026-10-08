@@ -8,14 +8,14 @@ update msg model = match msg [
     ClearName -> ""
 ]
 
-view model = div [style "font-family" "system-ui", style "padding" "2rem"] [
+view model = div [style "font-family" "system-ui",style "padding" "2rem"] [
     h1 [] [text "Hello from APN"]
     label [] [
         text "Your name "
-        input [value model, placeholder "Your name", onInput NameChanged] []
+        input [value model,placeholder "Your name",onInput NameChanged] []
     ]
     p [] [text ("Hello, " ++ model ++ "!")]
-    button [onClick ClearName, disabled (model == "")] [text "Clear"]
+    button [onClick ClearName,disabled (model == "")] [text "Clear"]
 ]
 
 main = browser.sandbox [init: "", update: update, view: view]

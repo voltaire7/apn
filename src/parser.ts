@@ -37,24 +37,86 @@ class Parser {
 
     constructor(toks: Token[], private source: string, private file = "<repl>") { this.toks = toks; }
 
-    // A { } block written on one line keeps exactly one space inside each
-    // brace: { 123 }, not {123} or { 123  }. An empty {} or { }, a { ending its
-    // line and a } starting one are fine.
-    checkBraceSpacing(): void {
+    // Spacing: around a binding's = and at ',' (see checkEqualsSpacing and
+    // checkCommaSpacing), and inside brackets on one line: a { } block keeps exactly one space
+    // inside each brace ({ 123 }), while ( ) and [ ] keep none ((123), [1,2]);
+    // empty ones are {}, () and []. A bracket ending its line (before an
+    // optional comment) or a closing one starting its line is laid out instead.
+    checkBracketSpacing(): void {
+        const pairs: Record<string, string> = { "{": "}", "(": ")", "[": "]", "}": "{", ")": "(", "]": "[" };
+        // What each open bracket holds: record fields, or list items (and groups).
+        const holds: boolean[] = [];
         for (const [index, t] of this.toks.entries()) {
-            if (t.k !== "sym" || (t.v !== "{" && t.v !== "}")) continue;
-            const open = t.v === "{", neighbour = this.toks[index + (open ? 1 : -1)];
-            if (neighbour?.k === "sym" && neighbour.v === (open ? "}" : "{") && /^ ?$/.test(this.source.slice(Math.min(t.pos, neighbour.pos) + 1, Math.max(t.pos, neighbour.pos)))) continue;
-            if (open) {
+            if (t.k === "sym" && t.v === "=") this.checkEqualsSpacing(t);
+            if (t.k === "sym" && t.v === ",") this.checkCommaSpacing(t, holds[holds.length - 1] ?? false);
+            if (t.k === "sym" && "([{".includes(t.v)) holds.push(t.v === "[" && this.opensRecord(index));
+            if (t.k === "sym" && ")]}".includes(t.v)) holds.pop();
+            if (t.k !== "sym" || !(t.v in pairs)) continue;
+            const open = "{([".includes(t.v), brace = t.v === "{" || t.v === "}";
+            const neighbour = this.toks[index + (open ? 1 : -1)];
+            let gap: string;
+            if (neighbour?.k === "sym" && neighbour.v === pairs[t.v]) {
+                gap = this.source.slice(Math.min(t.pos, neighbour.pos) + 1, Math.max(t.pos, neighbour.pos));
+                if (gap === "" || /\n/.test(gap)) continue;
+                this.seen = t;
+                throw new Error(`Parser: write an empty ${brace ? "block" : "group"} as ${open ? t.v + pairs[t.v] : pairs[t.v] + t.v}`);
+            } else if (open) {
                 const rest = this.source.slice(t.pos + 1).split("\n", 1)[0];
-                if (/^\s*(#.*)?$/.test(rest) || /^ \S/.test(rest)) continue;
+                if (/^\s*(#.*)?$/.test(rest)) continue;
+                gap = rest.match(/^\s*/)![0];
+                if (brace ? gap === " " : gap === "") continue;
             } else {
                 const before = this.source.slice(this.source.lastIndexOf("\n", t.pos - 1) + 1, t.pos);
-                if (/^\s*$/.test(before) || /\S $/.test(before)) continue;
+                if (/^\s*$/.test(before)) continue;
+                gap = before.match(/\s*$/)![0];
+                if (brace ? gap === " " : gap === "") continue;
             }
             this.seen = t;
-            throw new Error(open ? "Parser: put exactly one space after '{' (write { x })" : "Parser: put exactly one space before '}' (write { x })");
+            const side = open ? `after '${t.v}'` : `before '${t.v}'`;
+            throw new Error(brace ? `Parser: put exactly one space ${side} (write { x }, or {} when empty)` : `Parser: remove the space ${side} (write ${open ? t.v : pairs[t.v]}x${open ? pairs[t.v] : t.v})`);
         }
+    }
+
+    // A binding's = has exactly one space on each side (x = 1), or ends its line.
+    checkEqualsSpacing(t: Token): void {
+        const before = this.source.slice(this.source.lastIndexOf("\n", t.pos - 1) + 1, t.pos);
+        const after = this.source.slice(t.pos + 1).split("\n", 1)[0];
+        if (/\S $/.test(before) && (/^ \S/.test(after) || /^\s*(#.*)?$/.test(after))) return;
+        this.seen = t;
+        throw new Error("Parser: put exactly one space on each side of '=' (write x = 1)");
+    }
+
+    // Whether the [ at index opens record fields ([x: 1], [.x], keyed patterns
+    // and selections) rather than list items.
+    opensRecord(index: number): boolean {
+        let i = index + 1;
+        while (["newline", "indent", "dedent"].includes(this.toks[i]?.k)) i++;
+        const first = this.toks[i], second = this.toks[i + 1];
+        if (first?.k === "sym" && first.v === "." && second?.k === "ident") return true;
+        const saved = this.i;
+        this.i = i;
+        try { return this.isKeyedEntry(); } finally { this.i = saved; }
+    }
+
+    // A ',' follows its item directly. List items take nothing after it
+    // ([1,2,3]); record fields take one space ([x: 1, y: 2]). A ',' may also
+    // end its line.
+    checkCommaSpacing(t: Token, record: boolean): void {
+        const after = this.source.slice(t.pos + 1).split("\n", 1)[0];
+        if (!/\s/.test(this.source[t.pos - 1] ?? " ") && (/^\s*(#.*)?$/.test(after) || (record ? /^ \S/ : /^\S/).test(after))) return;
+        this.seen = t;
+        throw new Error(record ? "Parser: separate record fields with ', ' (write [x: 1, y: 2])" : "Parser: separate list items with ',' alone (write [1,2,3])");
+    }
+
+    // A record key's ':' follows the key directly, with one space after it
+    // (x: 1); a ':' ending its line leaves the value to the next.
+    keyColon(): void {
+        if (looseSpacing) return;
+        const t = this.peek();
+        const after = this.source.slice(t.pos + 1).split("\n", 1)[0];
+        if (!/\s/.test(this.source[t.pos - 1] ?? " ") && (/^ \S/.test(after) || /^\s*(#.*)?$/.test(after))) return;
+        this.seen = t;
+        throw new Error("Parser: write a record field as key: value (no space before ':', one after)");
     }
 
     lineIndent(token: Token): number {
@@ -206,6 +268,7 @@ class Parser {
                     if (mode === "bare") throw new Error("Parser: pattern cannot mix bare names and 'key: name' entries");
                     mode = "keyed";
                     const key = this.parseKey();
+                    this.keyColon();
                     this.next(); // :
                     const nm = this.next();
                     if (nm.k !== "ident") throw new Error("Parser: expected a binding name after ':' in record pattern");
@@ -748,6 +811,7 @@ class Parser {
                                     }
                                 } else {
                                     const key = this.parseKey();
+                                    if (this.isSym(":")) this.keyColon();
                                     this.expectSym(":");
                                     fs.push([key, this.parseDelimitedExpr()]);
                                 }
@@ -990,6 +1054,7 @@ class Parser {
             this.skipListLeading();
             while (!this.isSym("]")) {
                 entries.push(this.parseKey());
+                if (this.isSym(":")) this.keyColon();
                 if (this.eatSym(":")) aliases.push(this.parseKey());
                 this.skipListSeparators();
                 if (this.isSym("]")) break;
@@ -1417,6 +1482,10 @@ export function parseDocument(src: string): TopLevel[] {
     }
 }
 
+// Loose spacing (apn --loose): none of the spacing rules apply.
+let looseSpacing = false;
+export function setLooseSpacing(loose: boolean): void { looseSpacing = loose; }
+
 export function parse(src: string, file = "<repl>"): TopLevel[] {
     let toks: Token[];
     try {
@@ -1427,7 +1496,7 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
     }
     const p = new Parser(toks, src, file);
     try {
-        p.checkBraceSpacing();
+        if (!looseSpacing) p.checkBracketSpacing();
         const out = p.parseTopLevel();
         return groupClauses(out);
     } catch (err) {
@@ -1474,10 +1543,10 @@ export function groupClauses(program: TopLevel[]): TopLevel[] {
 // Render an expression back to source text (for debug / quote inspection).
 export function exprToSource(e: Expr): string {
     switch (e.t) {
-        case "computedRange": return `[${exprToSource(e.lo)}${e.second === null ? "" : ", " + exprToSource(e.second)}..${e.hi === null ? "" : exprToSource(e.hi)}]`;
-        case "import": return `import ${JSON.stringify(e.module)}`;
+        case "computedRange": return `[${exprToSource(e.lo)}${e.second === null ? "" : "," + exprToSource(e.second)}..${e.hi === null ? "" : exprToSource(e.hi)}]`;
+        case "import": return `import ${Array.isArray(e.module) ? `[${e.module.map(m => JSON.stringify(m)).join(",")}]` : JSON.stringify(e.module)}`;
         case "numeric": return numberText(e.v);
-        case "rationalRange": return `[${numberText(e.lo)}, ${numberText(arithmetic("+", e.lo, e.step))}..${e.hi === null ? "" : numberText(e.hi)}]`;
+        case "rationalRange": return `[${numberText(e.lo)},${numberText(arithmetic("+", e.lo, e.step))}..${e.hi === null ? "" : numberText(e.hi)}]`;
         case "int": return String(e.v);
         case "float": return numberText({ kind: "float", v: e.v });
         case "bool": return e.v ? "true" : "false";
@@ -1491,26 +1560,26 @@ export function exprToSource(e: Expr): string {
         case "functionType": return functionSpecSource(e.spec);
         case "patternLambda": return `${e.params.map(patternSource).join(" ")}${e.guard ? " | " + exprToSource(e.guard) : ""} -> ${exprToSource(e.body)}`;
         case "lambda": return `${e.params.join(" ")} -> ${exprToSource(e.body)}`;
-        case "list": return `[${e.v.map(exprToSource).join(", ")}]`;
+        case "list": return `[${e.v.map(exprToSource).join(",")}]`;
         case "record": return `[${e.v.map(([k, x]) => `${keySource(k)}: ${exprToSource(x)}`).join(", ")}]`;
     case "floatRange": {
         const decimal = (v: number) => Number.isInteger(v) ? `${v}.0` : String(v);
-        return `[${decimal(e.lo)}${e.step !== 1 ? `, ${decimal(e.lo + e.step)}` : ""}..${e.hi === null ? "" : decimal(e.hi)}]`;
+        return `[${decimal(e.lo)}${e.step !== 1 ? `,${decimal(e.lo + e.step)}` : ""}..${e.hi === null ? "" : decimal(e.hi)}]`;
     }
     case "range":
       return e.hi === null
-        ? `[${e.lo}${e.step !== 1n ? `, ${e.lo + e.step}` : ""}..]`
-        : `[${e.lo}${e.step !== 1n ? `, ${e.lo + e.step}` : ""}..${e.hi}]`;
+        ? `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..]`
+        : `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..${e.hi}]`;
         case "ternary": return `${exprToSource(e.cond)} ? ${exprToSource(e.then)} : ${exprToSource(e.els)}`;
         case "pipe": return `${exprToSource(e.f)} $ ${exprToSource(e.x)}`;
         case "recordAccess":
             return `${exprToSource(e.rec)}.${e.scoped && e.argument ? exprToSource(e.argument) : keySource(e.field)}`;
         case "pluck":
             if (e.values) return `${exprToSource(e.rec)}.${exprToSource(e.values)}`;
-            return `${exprToSource(e.rec)}.[${e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`).join(", ")}]`;
+            return `${exprToSource(e.rec)}.[${e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`).join(e.entries.some(x => typeof x !== "string") ? ", " : ",")}]`;
         case "setItem": return `${exprToSource(e.rec)} (${exprToSource(e.index)}) = ${exprToSource(e.value)}`;
         case "setFields":
-            return `${exprToSource(e.rec)}.${(e.path ?? []).map(keySource).map(key => key + ".").join("")}[${e.entries.map((key, n) => keySource(key) + (e.aliases ? ": " + keySource(e.aliases[n]) : "")).join(", ")}] = ${exprToSource(e.value)}`;
+            return `${exprToSource(e.rec)}.${(e.path ?? []).map(keySource).map(key => key + ".").join("")}[${e.entries.map((key, n) => keySource(key) + (e.aliases ? ": " + keySource(e.aliases[n]) : "")).join(e.aliases ? ", " : ",")}] = ${exprToSource(e.value)}`;
         case "block": {
             const one = e.stmts.length === 1 && e.stmts[0].t !== "stmDef" && e.stmts[0].t !== "patDef";
             if (one && e.style === "(") return exprToSource(e.stmts[0]);
@@ -1520,7 +1589,7 @@ export function exprToSource(e: Expr): string {
                 if (st.t === "patDef") return `${patternSource(st.pattern)} ${st.eager ? "<-" : "="} ${exprToSource(st.value)}`;
                 return exprToSource(st);
             }).join("; ");
-            return `${e.style === "(" ? "(" : "{"} ${body} ${e.style === "(" ? ")" : "}"}`;
+            return e.style === "(" ? `(${body})` : `{ ${body} }`;
         }
         default: return "<expr>";
     }
@@ -1540,7 +1609,7 @@ export function patternSource(p: Pattern): string {
         case "string": return JSON.stringify(p.v);
         case "char": return `'${p.v}'`;
         case "float": return numberText({ kind: "float", v: p.v });
-        case "list": return `[${p.v.map(patternSource).join(", ")}]`;
+        case "list": return `[${p.v.map(patternSource).join(",")}]`;
         case "cons": return `(${patternSource(p.head)} : ${patternSource(p.tail)})`;
         case "constr": return p.args.length ? `(${p.tag} ${p.args.map(patternSource).join(" ")})` : p.tag;
         case "typeBind": return `(${p.name} ${patternSource(p.value)})`;

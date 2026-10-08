@@ -30,8 +30,8 @@ Deno.test("event messages are lazy and failed updates leave the old model usable
     const counter = app(`import "std/html"
 import "std/browser"
 HtmlTestMsg = GoodEvent | BadEvent
-update msg model = match msg [GoodEvent -> model + 1, BadEvent -> missing]
-view model = div [] [button [onClick GoodEvent] [text (toString model)], button [onClick BadEvent] [text "bad"]]
+update msg model = match msg [GoodEvent -> model + 1,BadEvent -> missing]
+view model = div [] [button [onClick GoodEvent] [text (toString model)],button [onClick BadEvent] [text "bad"]]
 main = sandbox [init: 0, update: update, view: view]`);
     if (content(counter.render()) !== '0bad') throw new Error("initial render");
     try { counter.dispatch(1); throw new Error("expected failure"); }

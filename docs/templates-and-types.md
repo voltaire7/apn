@@ -33,14 +33,14 @@ construction `Int .2` also errors; use `Int (floor .2)` to round down explicitly
 | Template | Application |
 | --- | --- |
 | `[f].[x]` | One slot: `[f x]` |
-| `[f, g].[x, y]` | Two slots: `[f x, g y]` |
+| `[f,g].[x,y]` | Two slots: `[f x,g y]` |
 | `[].[]` | Empty list |
 | `[f].[]` or `[f].[x,y]` | Length mismatch |
 
 ```apn
-[(* 2), (* 3)].[1, 2]   # [2, 6]
-[Int, String].[1, "hi"] # [1, "hi"]
-Int * [1, 2, 3]         # mapping, separate from template application
+[(* 2),(* 3)].[1,2]   # [2, 6]
+[Int,String].[1,"hi"] # [1, "hi"]
+Int * [1,2,3]         # mapping, separate from template application
 map Int [0..]           # lazy mapping over an infinite list
 ```
 
@@ -56,14 +56,14 @@ the record has fields. Converted fields remain lazy:
 
 ```apn
 [Float].[x: 1]                        # [x: 1.0]
-[String, Int].[name: "a", age: 2]      # [name: "a", age: 2]
-[(+ 1), (* 2)].[b: 3, a: 4]           # [b: 4, a: 8]
+[String,Int].[name: "a", age: 2]      # [name: "a", age: 2]
+[(+ 1),(* 2)].[b: 3, a: 4]           # [b: 4, a: 8]
 ```
 
 Strings supply Unicode code-point characters using the same positional rules:
 
 ```apn
-[Char, Char]."hi"       # ['h', 'i']
+[Char,Char]."hi"       # ['h', 'i']
 [Char]."h"              # ['h']
 [].""                  # []
 chars "hello"           # arbitrary-length character conversion
@@ -78,8 +78,8 @@ with the record fields in scope.
 ```apn
 import "std/text"
 cast String $ chars "hello"          # "hello"
-cast String $ cast [Char, Char] $ "hi"  # "hi"
-String ['h', 'i']                    # "hi"
+cast String $ cast [Char,Char] $ "hi"  # "hi"
+String ['h','i']                    # "hi"
 String []                            # ""
 ```
 
@@ -121,16 +121,16 @@ For updates and swaps, see [computed keys and multiple indices](#computed-keys-a
 
 ### Association-list lookup
 
-Applying a list to a string looks up the first matching `[string, value]` pair:
+Applying a list to a string looks up the first matching `[string,value]` pair:
 
 ```apn
-entries = [["x", 1], ["y", 2]]
+entries = [["x",1],["y",2]]
 entries "x"                 # 1
 key = "y"
 entries key                 # 2
 entries 0                   # ["x", 1] (positional indexing)
-entries [1, 0]              # [["y", 2], ["x", 1]] (index selection)
-[["x", 1], ["x", 2]] "x"    # 1 (first match wins)
+entries [1,0]              # [["y", 2], ["x", 1]] (index selection)
+[["x",1],["x",2]] "x"    # 1 (first match wins)
 ```
 
 Lookup scans incrementally. It does not evaluate skipped values or entries after
@@ -158,7 +158,7 @@ a list; it does not acquire record fields or record construction behavior.
 [x: Int, y: 0] [x: 1, y: 2]    # [x: 1, y: 2]
 [x: Int, y: Int] [x: 123]        # [x: 123, y: 0]
 [x: Int] [x: 123, z: "extra"]    # [x: 123, z: "extra"]
-[x: Int, y: (* 2)] [1, 2]       # [x: 1, y: 4]
+[x: Int, y: (* 2)] [1,2]       # [x: 1, y: 4]
 ```
 
 Supplied existing fields are applied, omitted type slots are initialized,
@@ -179,14 +179,14 @@ named arguments, see [lists and records as arguments](pattern-functions.md#lists
 | --- | --- | --- |
 | Association list, string key | `entries "x"` or `entries key` | `entries "x" = value` or `entries key = value` |
 | List, one index | `arr i` or `arr (i + 1)` | `arr i = value` or `arr (i + 1) = value` |
-| List, several indices | `arr [2, 0]` or `arr indices` | `arr [2, 0] = [a, b]` or `arr indices = values` |
+| List, several indices | `arr [2,0]` or `arr indices` | `arr [2,0] = [a,b]` or `arr indices = values` |
 | Record, literal field | `obj.x` | `obj.x = value` |
 | Record, computed string key | `obj key` or `obj (prefix ++ key)` | `obj key = value` or `obj (prefix ++ key) = value` |
-| Record, several literal fields | `obj.[x, y]` | `obj.[x, y] = [a, b]` |
+| Record, several literal fields | `obj.[x,y]` | `obj.[x,y] = [a,b]` |
 | Record, one-field selection | `obj.[x]` returns a one-element list | `obj.[x] = [value]` |
 | Nested record | `obj.child.x` | `obj.child.x = value` |
-| Nested field selection | `obj.child.[x, y]` | `obj.child.[x, y] = [a, b]` |
-| Record, positional entry | `obj 0` returns `[key, value]` | Not supported; assign by field name |
+| Nested field selection | `obj.child.[x,y]` | `obj.child.[x,y] = [a,b]` |
+| Record, positional entry | `obj 0` returns `[key,value]` | Not supported; assign by field name |
 | Record, renamed selection | `obj.[x: a, y: b]` | `obj.[x: a, y: b] = [a: 10, b: 20]` |
 
 Bare dot field names are literal strings. Use `obj key` for a computed name
@@ -196,7 +196,7 @@ quote characters: `obj."x"` is equivalent to `obj "\"x\""`.
 See [record key identity](semantics.md#record-fields-string-keys-and-positions) for the full rules.
 
 List dot syntax performs template application, not indexing or assignment:
-`templates.values`, `templates.(expression)`, and `[Int, Float].[1, 2]`.
+`templates.values`, `templates.(expression)`, and `[Int,Float].[1,2]`.
 Use `arr indices = values` for a list update, not `arr.[indices] = values`.
 
 ## Slot assignment
@@ -206,7 +206,7 @@ copy in the current scope. Numeric values retain their lossless conversion
 checks, variants retain their family, and wrapped functions retain their contracts.
 
 ```apn
-arr = [1, 2]
+arr = [1,2]
 arr 0 = 3.0                # stores integer 3
 # arr 0 = 3.5              # error: lossy conversion
 
@@ -240,11 +240,11 @@ Record application remains a separate operation: `[f: (* 2)] [f: 3]` produces
 ### Computed keys and multiple indices
 
 ```apn
-arr = [10, 20, 30]
+arr = [10,20,30]
 i = 0
 arr i = 11
 arr (i + 1) = 22
-arr [1, 2] = arr [2, 1]     # swaps the old values
+arr [1,2] = arr [2,1]     # swaps the old values
 
 obj = [x: 0]
 key = "x"
@@ -272,12 +272,12 @@ Unnamed bracketed selections require a list with one value per selected field, e
 obj = [x: 1, y: 2]
 obj.[x] = [10]             # assigns 10 to x
 # obj.[x] = 10             # error: RHS must be a list
-obj.[x, y] = obj.[y, x]    # swaps the old values
+obj.[x,y] = obj.[y,x]    # swaps the old values
 obj.[] = []                # no change
 
 obj.items = []
-obj.[items] = [[1, 2]]     # stores the list [1, 2]
-obj.items = [3, 4]         # direct assignment takes the value itself
+obj.[items] = [[1,2]]     # stores the list [1, 2]
+obj.items = [3,4]         # direct assignment takes the value itself
 ```
 
 ### Renamed field assignment
@@ -300,7 +300,7 @@ continues to require a list.
 obj = [child: [x: Float 1, y: 2], label: "kept"]
 obj.child.x = 10
 # [child: [x: 10.0, y: 2], label: "kept"]
-obj.child.[x, y] = [20, 30]
+obj.child.[x,y] = [20,30]
 ```
 
 The update rebuilds the parent records and rebinds `obj`, preserving sibling
@@ -361,7 +361,7 @@ Points = [Point]
 Count 123                  # 123
 Numbers.[1]                # [1]; Numbers.[1, 2] errors
 Point [x: 1, y: 2]         # [x: 1.0, y: 2.0]
-cast [Int, Int] [1, 2]          # [1, 2]
+cast [Int,Int] [1,2]          # [1, 2]
 Type [Int]                # [Int]
 isType Type [(* 2)]        # false
 ```
@@ -454,7 +454,7 @@ Each shorthand entry must be a dot followed by a variable name. Use an explicit
 field for an expression or renamed value. Values retain ordinary record laziness;
 undefined names receive the same checks as explicit field values.
 
-`[x, y]` remains a positional list. `[y, x]` swaps its positions; `[.y, .x]`
+`[x,y]` remains a positional list. `[y,x]` swaps its positions; `[.y, .x]`
 creates named fields in that order. To exchange named values, use `[x: y, y: x]`.
 The shorthand is record-construction syntax, independent of the receiving function
 or inferred types. Existing record patterns and pluck syntax are unchanged.

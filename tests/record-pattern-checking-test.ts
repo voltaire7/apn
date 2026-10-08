@@ -33,7 +33,7 @@ for (const argument of ["[]", "[1,2]", "[1,2,3,4]", '[1,"bad",3]', "[x: 1, y: 2]
 for (const [source, expected] of [
     [`${schema}; Alias = Vector3; f (Alias v) = v.z; f [1,2,3]`, "3.0"],
     ['Shape = [point: [x: Float], label: String]; f (Shape v) = v.point.x; f [point: [x: 1], label: "a"]', "1.0"],
-    ['Pair = [String, Int]; f (Pair xs) = xs 1; f ["x", 2]', "2"],
+    ['Pair = [String,Int]; f (Pair xs) = xs 1; f ["x",2]', "2"],
 ] as const) Deno.test(`checked structural schema preserves payload types: ${source}`, () => {
     const interpreter = new Interpreter();
     interpreter.enableChecking();
@@ -55,19 +55,19 @@ Deno.test("record-pattern printing converts positional input before the body run
     if (lines.join("\n") !== "1.0") throw new Error(JSON.stringify(lines));
 });
 for (const [source, expected] of [
-    ["[x, y] = [y: 2, x: 10]; x - y", "8"],
-    ['[x, y] = [y: "b", x: 1]; [x + 1, y ++ "c"]', '[2, "bc"]'],
-    ["[x, y] <- [y: 2, x: 10]; x - y", "8"],
-    ["r = { [x, y] = [y: 2, x: 10]; x - y }; r", "8"],
+    ["[x,y] = [y: 2, x: 10]; x - y", "8"],
+    ['[x,y] = [y: "b", x: 1]; [x + 1,y ++ "c"]', '[2,"bc"]'],
+    ["[x,y] <- [y: 2, x: 10]; x - y", "8"],
+    ["r = { [x,y] = [y: 2, x: 10]; x - y }; r", "8"],
     ["[x] = [x: 1, y: 2]; x", "1"],
-    ["[a, b] = [1, 2]; a + b", "3"],
+    ["[a,b] = [1,2]; a + b", "3"],
 ] as const) Deno.test(`checked standalone list pattern: ${source}`, () => {
     const interpreter = new Interpreter();
     interpreter.enableChecking();
     const result = interpreter.renderString(interpreter.run(parse(source)));
     if (result !== expected) throw new Error(`expected ${expected}, got ${result}`);
 });
-for (const source of ["[x, z] = [y: 2, x: 1]; x", '[x, y] = [y: "b", x: 1]; y + 1']) {
+for (const source of ["[x,z] = [y: 2, x: 1]; x", '[x,y] = [y: "b", x: 1]; y + 1']) {
     Deno.test(`checked standalone list pattern rejects: ${source}`, () => {
         const interpreter = new Interpreter();
         interpreter.enableChecking();

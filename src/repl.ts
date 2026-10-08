@@ -1,6 +1,7 @@
 import { keySource } from "./record-keys.ts";
 import { lex, type Token } from "./lexer.ts";
 import { parse } from "./parser.ts";
+import { VERSION } from "./cli-options.ts";
 import { APNError } from "./errors.ts";
 import { NATIVES, envNames, dirname, Interpreter, setInterruptFlag, resetInterrupt } from "./interp.ts";
 import type { Value, Env } from "./types.ts";
@@ -225,7 +226,7 @@ export function showValue(v: Value): string {
         case "char": return paint(A.green, `'${v.v}'`);
         case "bool": return paint(A.magenta, String(v.v));
         case "list":
-            return paint(A.gray, "[") + v.v.map(showValue).join(paint(A.gray, ", ")) +
+            return paint(A.gray, "[") + v.v.map(showValue).join(paint(A.gray, ",")) +
                 paint(A.gray, "]");
         case "lazyList": return paint(A.gray, "<lazy>");
         case "record":
@@ -376,7 +377,7 @@ function helpText(): string {
         `  a \`f\` b            infix call == f a b`,
         `  (+ 2)  (2 +)  (+)  (10 -)  (-)  operator sections   ((- 2) stays unary minus)`,
         `  ( ) and { } are groups/blocks: [] when empty, value = last stmt`,
-        `  a one-line { } block keeps exactly one space inside each brace: { 123 }`,
+        `  spacing: x = 1, lists [1,2,3], records [x: 1, y: 2], (x), { x } (apn --loose relaxes it)`,
         `  ; or newline       statement separators (blocks & top level)`,
         `  x <- action        run now and bind the returned value (outer value only)`,
         `  indentation: strict 4-space layout (exactly +4 per level)`,
@@ -1085,7 +1086,7 @@ async function replPiped(): Promise<void> {
 }
 
 export async function repl(): Promise<void> {
-    console.log("APN interpreter v1.1.0");
+    console.log(`APN interpreter v${VERSION}`);
     console.log("Applicative Polish Notation — lazy, statically checked with inference and Dynamic boundaries.");
     if (Deno.stdin.isTerminal()) {
         console.log(":help :quit  |  Up/Down history  |  Tab complete/indent  |  Ctrl+C/D quit");

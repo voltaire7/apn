@@ -1,7 +1,7 @@
 // Startup loads the bundled interpreter prelude; editor launchers must allow
 // reading lib/type.apn and lib/do.apn for Deno versions that gate text imports on permissions.
 import { lint, position, type Range } from "./lint.ts";
-import { parseDocument } from "./parser.ts";
+import { parseDocument, setLooseSpacing } from "./parser.ts";
 import { lex, KEYWORDS } from "./lexer.ts";
 import { NATIVES } from "./interp.ts";
 import { semanticTokens, TOKEN_TYPES } from "./highlight.ts";
@@ -71,6 +71,8 @@ export class LanguageServer {
         if (message.method === "initialize" && !this.initialized) {
             this.initialized = true;
             this.typeChecking = p.initializationOptions?.typeChecking === true;
+            // Loose spacing, as apn --loose.
+            setLooseSpacing(p.initializationOptions?.looseSpacing === true);
             reply({ capabilities: { positionEncoding: "utf-16", textDocumentSync: { openClose: true, change: 1 },
                 semanticTokensProvider: { legend: { tokenTypes: TOKEN_TYPES, tokenModifiers: [] }, full: true },
                 completionProvider: {}, hoverProvider: true, documentSymbolProvider: true },

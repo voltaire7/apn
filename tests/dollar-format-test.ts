@@ -16,7 +16,7 @@ for (const [source, expected] of [
     ['format "" []', '""'],
     ['format "%/%" [1..2]', '"1/2"'],
     ['format "%" ["50%"]', '"50%"'],
-    ['toAST (head $ [1,2])', '["$", "head", [1, 2]]'],
+    ['toAST (head $ [1,2])', '["$","head",[1,2]]'],
 ] as const) Deno.test(`application and format: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -28,7 +28,7 @@ for (const [source, error] of [
     ['format "%" [1..]', 'expected 1 arguments'],
     ['format "%" [x: 1]', 'expects a list'],
     ['format "%" 1', 'expects a list'],
-    ['format "%" [missing, missing]', 'expected 1 arguments'],
+    ['format "%" [missing,missing]', 'expected 1 arguments'],
 ] as const) Deno.test(`format rejects: ${source}`, () => {
     try { result(source); } catch (e) {
         if (String(e).includes(error)) return;

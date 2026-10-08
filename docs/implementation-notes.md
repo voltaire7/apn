@@ -42,7 +42,7 @@ intentional evaluation change.
   statement's `=`/`<-`) and `rejectLambdaAnnotation` (`( ... ) ->`) report a
   `:` followed by a capitalized type by token shape, before any lookahead runs;
   a ternary `c ? Int : String` never matches either shape. Application
-  statements such as `print $ head $ [1, 2, 3]` lack `=`, so they stay
+  statements such as `print $ head $ [1,2,3]` lack `=`, so they stay
   expressions. `skipContinuation` handles indented definition bodies.
 - `groupClauses` merges consecutive same-name, same-arity definitions into one
   `clauseFn`. It accumulates applied arguments as lazy thunks (supporting
@@ -54,7 +54,7 @@ intentional evaluation change.
   propagate.
 - Field/pluck assignment desugars to an eager pattern binding
   `vec = setFields(vec, entries, rhs)` that reads the old record and the RHS
-  before rebinding (so `vec.[x, y] = vec.[y, x]` swaps).
+  before rebinding (so `vec.[x,y] = vec.[y,x]` swaps).
 - `(-2)` is negation because the lexer has no whitespace information.
 - The REPL echo is gated by `lastIsBinding`, which keeps assignments silent.
 - Inside `{ }`, statements sit at one flat level; an `indent` token directly
@@ -406,7 +406,7 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   state only after successful execution, restoring binding maps on runtime
   failure. Internal module/load runs must not re-check against the caller's
   root session.
-- `Vect n t` uses a type descriptor with `[length, element type]` arguments;
+- `Vect n t` uses a type descriptor with `[length,element type]` arguments;
   `list.schema` keeps its contract through index updates and `typeOf`.
 - Tests: `tests/strict-checking-test.ts`, `tests/default-checking-test.ts`,
   `tests/gradual-types-test.ts`, `tests/dynamic-boundary-test.ts`,

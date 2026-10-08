@@ -8,7 +8,7 @@ frequencies $ words $ "one two one" # HashMap [["one",2],["two",1]]
 ```
 
 `import` accepts a literal module name or a list of literal module names.
-For example, `import ["std/number", "std/text"]` opens both modules and returns
+For example, `import ["std/number","std/text"]` opens both modules and returns
 a merged export record. Later modules win name collisions, and `import []`
 returns an empty record. Commas or newlines separate module names. `import "std"` brings the library into
 scope; individual modules use `import "std/text"`, etc. Dependencies are imported
@@ -23,7 +23,7 @@ imported names. A bare import statement is silent. In an expression, imports ret
 Like other lazy definitions, this form takes effect when `s` is demanded.
 
 `use record` brings its fields into the current scope without forcing their
-values. `use [recordA, recordB]` opens a finite list of records in order; later
+values. `use [recordA,recordB]` opens a finite list of records in order; later
 fields replace earlier bindings. It returns `()`. Fields must be valid binding
 identifiers (not quoted keys, numeric keys, `_`, or keywords). Invalid input is
 rejected before any fields are installed. Bindings inside a block stay local.
@@ -33,14 +33,14 @@ std = import "std"
 use std
 identity 123
 
-use [[first: 10], [second: 20]]
+use [[first: 10],[second: 20]]
 first + second                         # 30
 ```
 
 `use` is an ordinary builtin function, so aliases and pipelines work too.
 An APN wrapper function opens the record in its own scope, not its caller's.
 
-List imports support the same selection: `[id, sum] = import ["std/function", "std/sequence"]`.
+List imports support the same selection: `[id,sum] = import ["std/function","std/sequence"]`.
 
 Destructuring imports select only the requested exports: `[halt] = import "std"`
 binds `halt` without introducing `fibonacci`, `primes`, or other library names.
@@ -111,7 +111,7 @@ Existing `map`, `filter`, `take`, `drop`, `zipWith`, `iterate`, `foldl`, and
 | API | Behavior |
 | --- | --- |
 | `repeat x`, `replicate n x`, `cycle xs` | Infinite repetition, bounded repetition, repeated list (`cycle []` is empty) |
-| `zip xs ys`, `zipWithIndex xs` | Pair corresponding values; zero-based `[index, value]` pairs |
+| `zip xs ys`, `zipWithIndex xs` | Pair corresponding values; zero-based `[index,value]` pairs |
 | `concat xss`, `flatten xss`, `concatMap f xs` | Flatten one level, optionally mapping first |
 | `scanl f seed xs` | Lazy running accumulators, including the seed |
 | `sum xs`, `product xs` | Strict left folds with identities 0 and 1 |
@@ -120,10 +120,10 @@ Existing `map`, `filter`, `take`, `drop`, `zipWith`, `iterate`, `foldl`, and
 | `headOption xs`, `lastOption xs`, `atOption n xs` | Optional access; `atOption` is zero-based and returns None for negative/out-of-range indexes |
 | `takeWhile predicate xs`, `dropWhile predicate xs` | Consume a matching prefix |
 | `takeUntil predicate xs` | Prefix before the first match |
-| `splitAt n xs`, `span predicate xs` | `[prefix, remainder]` |
+| `splitAt n xs`, `span predicate xs` | `[prefix,remainder]` |
 | `chunksOf n xs` | Positive-sized chunks; final chunk may be shorter |
 | `intersperse separator xs` | Insert separators between elements |
-| `partition predicate xs` | `[matching, nonmatching]` |
+| `partition predicate xs` | `[matching,nonmatching]` |
 | `unique xs` | Preserve the first occurrence of each value |
 | `reverse value` | Overloaded for List and String; reverses finite lists or Unicode code points |
 | `compare x y` | Negative, zero, or positive integer |

@@ -82,7 +82,7 @@ Deno.test("Ctrl+W release does not delete twice", () => {
 });
 
 Deno.test("Enter submits an unfinished list after an element", () => {
-    equal(editor("[1,2,3").enter(), "submit");
+    equal(editor("[1, 2, 3").enter(), "submit");
 });
 for (const opener of ["(", "{", "["]) {
     Deno.test(`Enter indents immediately after ${opener} at the cursor`, () => {
@@ -111,7 +111,7 @@ for (const [open, close] of [["[", "]"], ["{", "}"], ["(", ")"]]) {
     });
 }
 Deno.test("an earlier unrelated line does not make a bracket multiline", () => {
-    equal(editor("x = 1\n[1,2,3").enter(), "submit");
+    equal(editor("x = 1\n[1, 2, 3").enter(), "submit");
 });
 Deno.test("Enter inside a pasted multiline list uses cursor position", () => {
     const src = "[\n    1\n]";

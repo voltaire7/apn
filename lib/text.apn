@@ -16,9 +16,9 @@ splitOn delimiter text = delimiter == "" ? map (c -> fromChars [c]) (chars text)
     width = 0 + length marker
     step state c = {
         current = c : snd state
-        take width current == marker ? [_prepend (fromChars (reverse (drop width current))) (fst state), []] : [fst state, current]
+        take width current == marker ? [_prepend (fromChars (reverse (drop width current))) (fst state),[]] : [fst state,current]
     }
-    state = foldl step [[], []] (chars text)
+    state = foldl step [[],[]] (chars text)
     reverse (fromChars (reverse (snd state)) : fst state)
 }
 joinWith delimiter xs = fromChars (concat (intersperse (chars delimiter) (map chars xs)))

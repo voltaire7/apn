@@ -3355,14 +3355,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (part === undefined) return undefined;
                 shown.push(part);
             }
-            return `[${shown.join(", ")}]`;
+            return `[${shown.join(",")}]`;
         }
         // Cell by cell, rendering each element as it is reached.
         const parts: string[] = [];
         for (let rest: Known | undefined = k; spendEvaluation(0);) {
             const cell = cellOf(rest);
             if (cell === undefined) return undefined;
-            if (cell === null) return `[${parts.join(", ")}]`;
+            if (cell === null) return `[${parts.join(",")}]`;
             const part = renderKnown(cell.head);
             if (part === undefined) return undefined;
             parts.push(part);

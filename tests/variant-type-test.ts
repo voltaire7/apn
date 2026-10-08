@@ -5,12 +5,12 @@ function result(source: string): string {
     return interpreter.renderString(interpreter.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['Maybe x = Just x | Nothing\nf (Maybe x) = match x [Just y -> y, Nothing -> 0]\n[f (Just 123), f Nothing]', '[123, 0]'],
-    ['Maybe x = Just x | Nothing\nf (Maybe x) = true\nf _ = false\n[f (Just missing), f Nothing, f 123]', '[true, true, false]'],
+    ['Maybe x = Just x | Nothing\nf (Maybe x) = match x [Just y -> y,Nothing -> 0]\n[f (Just 123),f Nothing]', '[123,0]'],
+    ['Maybe x = Just x | Nothing\nf (Maybe x) = true\nf _ = false\n[f (Just missing),f Nothing,f 123]', '[true,true,false]'],
     ['Maybe x = Just x | Nothing\nOther x = | Else x\nf (Maybe x) = true\nf _ = false\nf (Else 1)', 'false'],
     ['Maybe x = Just x | Nothing\nmatch (Just 3) [Maybe x -> x]', 'Just 3'],
-    ['Maybe x = Just x | Nothing\n[match Nothing [Maybe x -> 1, _ -> 0], match 2 [Maybe x -> 1, _ -> 0]]', '[1, 0]'],
-    ['Maybe x = Just x | Nothing\n[Maybe (Just 1), cast Maybe Nothing, isType Maybe (Just missing), isType Maybe 1, typeOf (Just 1)]', '[Just 1, Nothing, true, false, Maybe]'],
+    ['Maybe x = Just x | Nothing\n[match Nothing [Maybe x -> 1,_ -> 0],match 2 [Maybe x -> 1,_ -> 0]]', '[1,0]'],
+    ['Maybe x = Just x | Nothing\n[Maybe (Just 1),cast Maybe Nothing,isType Maybe (Just missing),isType Maybe 1,typeOf (Just 1)]', '[Just 1,Nothing,true,false,Maybe]'],
     ['Maybe x = Just x | Nothing\nf (Just x) = x\nf (Just 123)', '123'],
     ['Box x = | Box x\nf (Box x) = x\nf (Box 123)', '123'],
 ] as const) {

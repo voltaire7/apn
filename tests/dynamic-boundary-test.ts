@@ -16,19 +16,19 @@ for (const [source, expected] of [
     ['cast Int (Dynamic 42)', '42'],
     ['((Int -> Int) f) <- (Dynamic (x -> x + 1)); f 2', '3'],
     ['((Int -> Int) f) <- (x -> x); f (Dynamic 2)', '2'],
-    ['Vect 2 Int (Dynamic [1,2])', '[1, 2]'],
-    ['xs <- Vect 2 Int (Dynamic [1, missing]); head xs', '1'],
+    ['Vect 2 Int (Dynamic [1,2])', '[1,2]'],
+    ['xs <- Vect 2 Int (Dynamic [1,missing]); head xs', '1'],
     ['xs = 1:xs; scope <- Dynamic env; scope.xs = Dynamic [2..]; head xs', '2'],
-    ['Vect 2 Int [Dynamic 1, Dynamic 2]', '[1, 2]'],
+    ['Vect 2 Int [Dynamic 1,Dynamic 2]', '[1,2]'],
     ['xs <- Vect 2 Int [1,2]; scope <- Dynamic env; scope.xs = [3,4]; typeOf xs', 'Vect 2 Int'],
     ['x = 1; scope <- Dynamic env; scope.x = 2; x', '2'],
     ['x = 1; scope <- Dynamic env; key = "x"; Int (scope key)', '1'],
     ['scope <- Dynamic env; scope.newName = 42; Int scope.newName', '42'],
     ['x = [name: "old", age: 1]; scope <- Dynamic env; scope.x = [name: "new", age: 2]; x.name', '"new"'],
-    ['xs = [1,2]; scope <- Dynamic env; scope.xs = [3,4]; xs', '[3, 4]'],
+    ['xs = [1,2]; scope <- Dynamic env; scope.xs = [3,4]; xs', '[3,4]'],
     ['((Int -> Int) f) <- (x -> x); scope <- Dynamic env; scope.f = Dynamic (x -> x + 1); f 1', '2'],
     ['Dynamic (import "std"); 123', '123'],
-    ['Dynamic (import ["std/text", "std/type"]); 123', '123'],
+    ['Dynamic (import ["std/text","std/type"]); 123', '123'],
     ['x = 1; Dynamic $ use [x: 2]; x', '2'],
     ['Option a = Some a | None; x <- Some 1; scope <- Dynamic env; scope.x = None; x', 'None'],
 ] as const) Deno.test(`explicit Dynamic boundary: ${source}`, () => {
@@ -81,7 +81,7 @@ Deno.test('reflected batch writes validate before publishing scalar changes', ()
     const i = new Interpreter(); i.checkedExecution = true;
     try { i.run(parseDocument(source)); } catch (error) {
         if (!String(error).includes('cannot replace string with int')) throw error;
-        if (i.renderString(i.run(parseDocument('[a,b]'))) !== '[1, "old"]') throw new Error('partial write');
+        if (i.renderString(i.run(parseDocument('[a,b]'))) !== '[1,"old"]') throw new Error('partial write');
         return;
     }
     throw new Error('missing runtime error');
@@ -112,7 +112,7 @@ Deno.test('load exports cannot invalidate checked bindings', () => {
     throw new Error('missing runtime error');
 });
 
-for (const module of ['"std/function"', '["std/type", "std/function"]']) {
+for (const module of ['"std/function"', '["std/type","std/function"]']) {
     Deno.test(`import protects existing bindings: ${module}`, () => {
         const source = `x = "old"; Dynamic (import ${module}); x`;
         requireChecked(source);

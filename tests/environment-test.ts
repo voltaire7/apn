@@ -13,16 +13,16 @@ for (const [source, expected] of [
     ['env.newName = 42; newName', '42'],
     ['scope <- env; x = 1; scope.x', '1'],
     ['x = 1; scope <- env; x = 2; scope.x', '2'],
-    ['x = 1; scope <- env; other <- scope; other.x = 3; [x, scope.x]', '[3, 3]'],
+    ['x = 1; scope <- env; other <- scope; other.x = 3; [x,scope.x]', '[3,3]'],
     ['x = 1; { env.x = 2 }; x', '2'],
-    ['x = 1; inner = { x = 3; env.x = 4; x }; [inner,x]', '[4, 1]'],
+    ['x = 1; inner = { x = 3; env.x = 4; x }; [inner,x]', '[4,1]'],
     ['make x = env; scope <- make 42; scope.x', '42'],
     ['make x = env; scope <- make 42; scope.x = 7; scope.x', '7'],
     ['make x = { get ignored = x; env }; scope <- make 42; scope.x = 7; scope.get []', '7'],
     ['scope <- { local = 42; env }; scope.local', '42'],
-    ['a = 1; b = 2; env.[a,b] = env.[b,a]; [a,b]', '[2, 1]'],
+    ['a = 1; b = 2; env.[a,b] = env.[b,a]; [a,b]', '[2,1]'],
     ['x = 1; env.[x]', '[1]'],
-    ['scope <- env; [scope == env, typeOf scope]', '[true, Record]'],
+    ['scope <- env; [scope == env,typeOf scope]', '[true,Record]'],
     ['env.head [42]', '42'],
     ['scope <- env; { local = 42; env.local }; scope == env', 'true'],
 ] as const) Deno.test(`live environment: ${source}`, () => {
@@ -32,9 +32,9 @@ for (const [source, expected] of [
 Deno.test('environment conversions fail atomically', () => {
     const i = new Interpreter();
     i.run(parseDocument('a = 1; b = 2'));
-    try { i.run(parseDocument('env.[a,b] = [3, 1.5]')); } catch (e) {
+    try { i.run(parseDocument('env.[a,b] = [3,1.5]')); } catch (e) {
         if (!String(e).includes('lossy conversion')) throw e;
-        if (i.renderString(i.run(parseDocument('[a,b]'))) !== '[1, 2]') throw new Error('partial write');
+        if (i.renderString(i.run(parseDocument('[a,b]'))) !== '[1,2]') throw new Error('partial write');
         return;
     }
     throw new Error('expected failure');

@@ -8,7 +8,7 @@ record template to a list or record of supplied fields:
 Vector3 = [x: Float, y: Float, z: Float]
 vec = Vector3 []        # [x: 0.0, y: 0.0, z: 0.0]
 vec.x = 1              # [x: 1.0, y: 0.0, z: 0.0]
-Vector3 [1, 2, 3]      # [x: 1.0, y: 2.0, z: 3.0]
+Vector3 [1,2,3]      # [x: 1.0, y: 2.0, z: 3.0]
 # Vector3 [1, 2]       # error: positional fields must be complete
 Vector3 [z: 3]         # [x: 0.0, y: 0.0, z: 3.0]
 Vector3                # [x: Float, y: Float, z: Float]

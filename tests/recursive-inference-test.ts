@@ -7,14 +7,14 @@ for (
         "self f = f f",
         "self f = f f; self self",
         "self f = f f; self (x -> x)",
-        "self f = f f; [self (x -> 123), self (x -> true)]",
+        "self f = f f; [self (x -> 123),self (x -> true)]",
         "omega = (x -> x x) (x -> x x)",
         "loop x = loop x",
         "forever x = forever; forever 1 2",
         "x = x",
         "xs = 1 : xs",
         "Y f = (x -> f (x x)) (x -> f (x x))",
-    "Option a = Some a | None; self f = f f; a = self (x -> Some x); [a, self (x -> Some x)]",
+    "Option a = Some a | None; self f = f f; a = self (x -> Some x); [a,self (x -> Some x)]",
     "self f = f f; a = self (x -> [x]); b = self (x -> [x]); a ++ b",
     "self f = f f; a = self (x -> [next: x]); b = self (x -> [next: x]); [a,b]",
     ]
@@ -32,7 +32,7 @@ for (
         "self f = f f; self 123",
         "self f = f f; Int (self (x -> true))",
         'self f = f f; self (x -> x); self "bad"',
-        'self f = f f; [self (x -> 1), self (x -> true)]; Int (self (x -> "bad"))',
+        'self f = f f; [self (x -> 1),self (x -> true)]; Int (self (x -> "bad"))',
         'outer x = { self f = f f; self (ignored -> x) }; Int (outer "bad")',
         "loop (Int x) = loop x; loop true",
         'xs = 1 : xs; map (x -> x + 1) (xs ++ ["bad"])',
@@ -66,7 +66,7 @@ Deno.test("a copied recursive function keeps its result relationship", () => {
     const actual = interpreter.renderString(
         interpreter.run(parseDocument(source)),
     );
-    if (actual !== '[123, "hello"]') throw new Error(actual);
+    if (actual !== '[123,"hello"]') throw new Error(actual);
 });
 
 Deno.test("checking depth exhaustion is an error, not Dynamic success", () => {

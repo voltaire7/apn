@@ -12,7 +12,7 @@ Deno.test('gradual editor analysis remains available', () => {
     const result = checkSource('import "std"');
     if (result.issues.length || !result.dynamicBoundaries) throw new Error(JSON.stringify(result));
 });
-for (const source of ['id x = x; [id 1, id true]', 'loop x = loop x', 'self f = f f; self (x -> 123)', 'x = x']) {
+for (const source of ['id x = x; [id 1,id true]', 'loop x = loop x', 'self f = f f; self (x -> 123)', 'x = x']) {
     Deno.test(`checked recursion and inference: ${source}`, () => { requireChecked(source); });
 }
 Deno.test('inferred arguments are not silently converted without runtime wrappers', () => {

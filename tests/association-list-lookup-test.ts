@@ -3,17 +3,17 @@ import { parseDocument } from "../src/parser.ts";
 import { checkSource } from "../src/type-checker.ts";
 
 for (const [source, expected] of [
-    ['[["x", 1]] "x"', '1'],
-    ['entries = [["x", 1], ["y", 2]]; key = "y"; entries key', '2'],
-    ['[["x", 1], ["x", 2]] "x"', '1'],
-    ['[["other", missing], ["x", 42]] "x"', '42'],
-    ['([["x", 42]] ++ missing) "x"', '42'],
-    ['[["x", 42], missing] "x"', '42'],
-    ['[["x", [1,2]]] "x"', '[1, 2]'],
-    ['[["x", (* 2)]] "x" 3', '6'],
-    ['entries = [["0", 42]]; [entries "0", entries 0, entries [0]]', '[42, ["0", 42], [["0", 42]]]'],
-    ['entries = map (n -> [toString n, n]) [0..]; entries "3"', '3'],
-    ['[["", 7]] ""', '7'],
+    ['[["x",1]] "x"', '1'],
+    ['entries = [["x",1],["y",2]]; key = "y"; entries key', '2'],
+    ['[["x",1],["x",2]] "x"', '1'],
+    ['[["other",missing],["x",42]] "x"', '42'],
+    ['([["x",42]] ++ missing) "x"', '42'],
+    ['[["x",42],missing] "x"', '42'],
+    ['[["x",[1,2]]] "x"', '[1,2]'],
+    ['[["x",(* 2)]] "x" 3', '6'],
+    ['entries = [["0",42]]; [entries "0",entries 0,entries [0]]', '[42,["0",42],[["0",42]]]'],
+    ['entries = map (n -> [toString n,n]) [0..]; entries "3"', '3'],
+    ['[["",7]] ""', '7'],
 ] as const) Deno.test(`association lookup: ${source}`, () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(source)));

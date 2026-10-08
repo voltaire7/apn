@@ -3,7 +3,7 @@ import "std/io"
 ffi = import "std/ffi"
 args <- getArgs
 ffi.withLibrary (head args) [
-    add: ffi.function [Int32, Int32] Int32
+    add: ffi.function [Int32,Int32] Int32
     greeting: ffi.function [] String
     text_length: ffi.function [String] Int32
     echo_u64: ffi.function [UInt64] UInt64

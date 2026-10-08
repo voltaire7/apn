@@ -8,21 +8,21 @@ function result(source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['UserId = distinct Int\n[UserId, UserId 3, typeOf (UserId 3)]', '[UserId, UserId 3, UserId]'],
+    ['UserId = distinct Int\n[UserId,UserId 3,typeOf (UserId 3)]', '[UserId,UserId 3,UserId]'],
     ['Distance = distinct Float\nDistance 2 + Distance 3', 'Distance 5.0'],
     ['Distance = distinct Int\n-Distance 2', 'Distance -2'],
     ['Distance = distinct Int\nDistance 2 < Distance 3', 'true'],
-    ['UserId = distinct Int\nf (t x) = [t, x]\nf (UserId 3)', '[UserId, 3]'],
-    ['UserId = distinct Int\nAlias = UserId\n[Alias == UserId, Alias 3 == UserId 3]', '[true, true]'],
-    ['UserId = distinct Int\nOrderId = distinct Int\n[UserId == OrderId, UserId 3 == OrderId 3, UserId 3 == 3]', '[false, false, false]'],
+    ['UserId = distinct Int\nf (t x) = [t,x]\nf (UserId 3)', '[UserId,3]'],
+    ['UserId = distinct Int\nAlias = UserId\n[Alias == UserId,Alias 3 == UserId 3]', '[true,true]'],
+    ['UserId = distinct Int\nOrderId = distinct Int\n[UserId == OrderId,UserId 3 == OrderId 3,UserId 3 == 3]', '[false,false,false]'],
     ['UserId = distinct Int\nunpack (UserId n) = n\nunpack (UserId 123)', '123'],
     ['UserId = distinct Int\nOrderId = distinct Int\nf (UserId n) = n\nf _ = 0\nf (OrderId 3)', '0'],
     ['UserId = distinct Int\n[v: UserId] []', '[v: UserId 0]'],
     ['v = [x: Int] [y: 2]\nv', '[x: 0, y: 2]'],
     ['assert true', '[]'],
     ['import "std/function"\ncount = Mutable 0\nbracket 42 (_ -> set count 1) (x -> x + 1)\ncount', '1'],
-    ['import "std/function"\nbracket 42 (_ -> []) (x -> [x, x+1])', '[42, 43]'],
-    ['import "std/function"\ncount = Mutable 0\nv <- bracket 1 (_ -> set count 9) (_ -> [count + 1])\n[v, count]', '[[1], 9]'],
+    ['import "std/function"\nbracket 42 (_ -> []) (x -> [x,x+1])', '[42,43]'],
+    ['import "std/function"\ncount = Mutable 0\nv <- bracket 1 (_ -> set count 9) (_ -> [count + 1])\n[v,count]', '[[1],9]'],
 ]) Deno.test(`Odin-inspired rule: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -70,9 +70,9 @@ Deno.test('withFile closes handles even when saved outside the scope', () => {
 });
 for (const [code, warnings] of [
     ['Option a = Some a | None\nf (Option value) = match value [Some x -> x]', 1],
-    ['Option a = Some a | None\nf (Option value) = match value [Some x -> x, None -> 0]', 0],
-    ['Option a = Some a | None\nf (Option value) = match value [Some x | x > 0 -> x, None -> 0]', 1],
-    ['Option a = Some a | None\nf (Option value) = match value [Some x -> x, _ -> 0]', 0],
+    ['Option a = Some a | None\nf (Option value) = match value [Some x -> x,None -> 0]', 0],
+    ['Option a = Some a | None\nf (Option value) = match value [Some x | x > 0 -> x,None -> 0]', 1],
+    ['Option a = Some a | None\nf (Option value) = match value [Some x -> x,_ -> 0]', 0],
     ['Option a = Some a | None\nf (Option value) = match value handlers', 0],
     ['Option a = Some a | None\nf (Option value) = match value [handler]', 0],
     ['Option a = Some a | None\nf (Option value) = (value -> match value [Some x -> x])', 0],

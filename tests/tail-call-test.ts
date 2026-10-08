@@ -12,19 +12,19 @@ for (const [source, expected] of [
     ['even n = n == 0 ? true : odd (n - 1); odd n = n == 0 ? false : even (n - 1); even 10001', 'false'],
     ['loop n = n == 0 ? 42 : { next <- n - 1; loop $ next }; loop 10000', '42'],
     ['loop n ignored = n == 0 ? 42 : loop (n - 1) missing; loop 10000 missing', '42'],
-    ['loop n = n == 0 ? [42, missing] : loop (n - 1); head (loop 10000)', '42'],
+    ['loop n = n == 0 ? [42,missing] : loop (n - 1); head (loop 10000)', '42'],
     ['sum n total = n == 0 ? total : { next <- total + n; sum (n - 1) next }; sum 10000 0', '50005000'],
 ] as const) Deno.test(`tail call: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
-for (const [file, expected] of [['repeat', '[0, 42]'], ['outer', '[0, 10, 20]']] as const) {
+for (const [file, expected] of [['repeat', '[0,42]'], ['outer', '[0,10,20]']] as const) {
     Deno.test(`tail load preserves exports and relative paths: ${file}`, () => {
         const i = new Interpreter();
         const scope = i.env;
         const directory = new URL('./fixtures/tail-load/', import.meta.url).pathname;
         i.sourceDir = directory;
-        const expression = file === 'repeat' ? '[counter, module.exported]' : '[counter, module.outerValue, module.innerValue]';
+        const expression = file === 'repeat' ? '[counter,module.exported]' : '[counter,module.outerValue,module.innerValue]';
         const actual = i.renderString(i.run(parseDocument(`counter = Mutable 1500; module <- load "${file}"; ${expression}`)));
         if (actual !== expected) throw new Error(actual);
         if (i.env !== scope || i.sourceDir !== directory || i.stack !== 0) throw new Error('execution context leaked');

@@ -45,10 +45,10 @@ the live evaluator source, so the proof cannot silently drift from the code.
 | `lib/meta/evaluator.apn` | Environments, closures, recursive scope, application, dispatch |
 | `lib/meta/primitives.apn` | Explicit object-language primitive environment |
 
-Syntax is data: `["literal", 42]`, `["variable", "x"]`,
-`["lambda", "x", body]`, `["apply", function, argument]`,
-`["if", condition, yes, no]`, `["list", expressions]`, and
-`["scope", definitions, body]`. `metaParse` returns `[definitions, expression]`.
+Syntax is data: `["literal",42]`, `["variable","x"]`,
+`["lambda","x",body]`, `["apply",function,argument]`,
+`["if",condition,yes,no]`, `["list",expressions]`, and
+`["scope",definitions,body]`. `metaParse` returns `[definitions,expression]`.
 
 Environments are persistent HashMaps. A closure is a map containing its
 parameter, body and lexical environment. Applying a closure extends that

@@ -1,26 +1,26 @@
 # Metacircular core. No host eval, parse, toAST, or interpreter callback.
 # Syntax is data: [tag, ...]. Environments are persistent maps of lazy values.
 meCons x xs = x : xs
-meBindings definitions scope = null definitions ? [] : meCons [head (head definitions), meEval scope ((head definitions) 1)] (meBindings (tail definitions) scope)
+meBindings definitions scope = null definitions ? [] : meCons [head (head definitions),meEval scope ((head definitions) 1)] (meBindings (tail definitions) scope)
 meScope definitions parent = {
     scope = [insert (meBindings definitions (head scope)) parent]
     head scope
 }
 meList scope expressions = null expressions ? [] : meCons (meEval scope (head expressions)) (meList scope (tail expressions))
-meClosure parameter body scope = HashMap [["__closure", true], ["parameter", parameter], ["body", body], ["scope", scope]]
+meClosure parameter body scope = HashMap [["__closure",true],["parameter",parameter],["body",body],["scope",scope]]
 meZipTemplate functions values = null functions ? (null values ? [] : fail "list template and input must have the same length") : null values ? fail "list template and input must have the same length" : meCons (meTemplateSlot (head functions) (head values)) (meZipTemplate (tail functions) (tail values))
 meTemplateInput value = typeOf value == typeOf "text" ? chars value : value
 meTemplate functions values = meZipTemplate functions values
 meTemplateSlot function argument = typeOf function == typeOf [] ? meTemplate function (meTemplateInput argument) : meApply function argument
-meApply function argument = typeOf function == HashMap ? has "__closure" function ? meEval (insert [[lookup "parameter" function, argument]] (lookup "scope" function)) (lookup "body" function) : function argument : function argument
+meApply function argument = typeOf function == HashMap ? has "__closure" function ? meEval (insert [[lookup "parameter" function,argument]] (lookup "scope" function)) (lookup "body" function) : function argument : function argument
 meEval scope expression = lookup (head expression) (HashMap [
-    ["literal", expression 1],
-    ["variable", lookup (expression 1) scope],
-    ["lambda", meClosure (expression 1) (expression 2) scope],
-    ["template", meTemplate (meEval scope (expression 1)) (meTemplateInput (meEval scope (expression 2)))],
-    ["apply", meApply (meEval scope (expression 1)) (meEval scope (expression 2))],
-    ["if", meEval scope (expression 1) ? meEval scope (expression 2) : meEval scope (expression 3)],
-    ["list", meList scope (expression 1)],
-    ["scope", meEval (meScope (expression 1) scope) (expression 2)]
+    ["literal",expression 1],
+    ["variable",lookup (expression 1) scope],
+    ["lambda",meClosure (expression 1) (expression 2) scope],
+    ["template",meTemplate (meEval scope (expression 1)) (meTemplateInput (meEval scope (expression 2)))],
+    ["apply",meApply (meEval scope (expression 1)) (meEval scope (expression 2))],
+    ["if",meEval scope (expression 1) ? meEval scope (expression 2) : meEval scope (expression 3)],
+    ["list",meList scope (expression 1)],
+    ["scope",meEval (meScope (expression 1) scope) (expression 2)]
 ])
 meRun definitions expression primitives = meEval (meScope definitions primitives) expression

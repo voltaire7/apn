@@ -2,11 +2,11 @@ import { Interpreter, setInterruptFlag, resetInterrupt } from "../src/interp.ts"
 import { parseDocument } from "../src/parser.ts";
 import { integer, numberText } from "../src/numbers.ts";
 
-for (const source of ['2 ^ 100000000', 'vec = [x: 1,y: 2,z: 3]; vec.[x,y] ^ 100000000']) {
+for (const source of ['2 ^ 100000000', 'vec = [x: 1, y: 2, z: 3]; vec.[x,y] ^ 100000000']) {
     Deno.test(`power is interruptible: ${source}`, async () => {
         const i = new Interpreter();
         const flag = new Int32Array(new SharedArrayBuffer(8));
-        const worker = new Worker('data:application/javascript,' + encodeURIComponent('self.onmessage = e => { const flag = new Int32Array(e.data); self.postMessage("ready"); setTimeout(() => Atomics.store(flag,0,1), 50); };'), { type: 'module' });
+        const worker = new Worker('data:application/javascript,' + encodeURIComponent('self.onmessage = e => { const flag = new Int32Array(e.data); self.postMessage("ready"); setTimeout(() => Atomics.store(flag, 0, 1), 50); };'), { type: 'module' });
         const ready = new Promise<void>(resolve => worker.onmessage = () => resolve());
         worker.postMessage(flag.buffer); await ready;
         setInterruptFlag(flag);

@@ -77,21 +77,21 @@ export function valueToString(v: Value): string {
         case "type": {
             return (v.description ?? v.name) + (v.arguments?.length ? " " + v.arguments.map(typeToString).join(" ") : "");
         }
-        case "hashmap": return `HashMap [${[...v.entries.values()].map(([k, x]) => `[${valueToString(k)}, ${valueToString(x)}]`).join(", ")}]`;
+        case "hashmap": return `HashMap [${[...v.entries.values()].map(([k, x]) => `[${valueToString(k)},${valueToString(x)}]`).join(",")}]`;
         case "rationalRange": return "<rational range>";
         case "bool": return String(v.v);
         case "string": return `"${v.v}"`;
         case "char": return `'${v.v === "\0" ? "\\0" : v.v}'`;
-        case "list": return `[${v.v.map(valueToString).join(", ")}]`;
+        case "list": return `[${v.v.map(valueToString).join(",")}]`;
         case "lazyList":
         case "cons": return "<lazy list>";
         case "deferred": return "<thunk>";
         case "floatRange": return `<float range>`;
         case "range": {
-            if (v.hi === null) return `[${v.lo}${v.step !== 1n ? `, ${v.lo + v.step}` : ""}..]`;
+            if (v.hi === null) return `[${v.lo}${v.step !== 1n ? `,${v.lo + v.step}` : ""}..]`;
             const out: Value[] = [];
             for (let i = v.lo; v.step > 0 ? i <= v.hi : i >= v.hi; i += v.step) out.push(mkInt(i));
-            return `[${out.map(valueToString).join(", ")}]`;
+            return `[${out.map(valueToString).join(",")}]`;
         }
         case "record":
             if (v.scope) return "env";
@@ -147,7 +147,7 @@ export class Env {
 // Render nested type descriptions without constructing data defaults.
 export function typeToString(v: Value): string {
     if (v.kind === "type") return valueToString({ ...v, inspect: true });
-    if (v.kind === "list") return `[${v.v.map(typeToString).join(", ")}]`;
+    if (v.kind === "list") return `[${v.v.map(typeToString).join(",")}]`;
     if (v.kind === "record") return `[${v.v.map(([k, x]) => `${keySource(k)}: ${typeToString(x)}`).join(", ")}]`;
     return valueToString(v);
 }

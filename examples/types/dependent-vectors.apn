@@ -5,9 +5,9 @@ Ints n = Vect n Int
 copy n ((Ints n) values) = values
 appendOne n ((Ints n) values) (Int value) = Ints (n + 1) (values ++ [value])
 
-print (copy 3 [10, 20, 30])
-print (appendOne 3 [10, 20, 30] 40)
-print (typeOf (Ints 3 [10, 20, 30]))
+print (copy 3 [10,20,30])
+print (appendOne 3 [10,20,30] 40)
+print (typeOf (Ints 3 [10,20,30]))
 
 # A type can depend on a Boolean value too.
 Choice flag = flag ? Int : String

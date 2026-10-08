@@ -1,18 +1,18 @@
 import { Interpreter } from "../src/interp.ts";
-import { parseDocument } from "../src/parser.ts";
+import { parseDocument, setLooseSpacing } from "../src/parser.ts";
 import { checkSource } from "../src/type-checker.ts";
 for (const [source, expected] of [
-    ['obj = [x: 3,y: 4]; obj.(x + y)', '7'],
+    ['obj = [x: 3, y: 4]; obj.(x + y)', '7'],
     ['x = 100; outside = 10; obj = [x: 3]; obj.(x + outside)', '13'],
-    ['obj = [x: 3,y: 4]; obj.([x,y])', '[3, 4]'],
-    ['obj = [x: 3]; result <- obj.(x = 10; x); [result,obj.x]', '[10, 3]'],
+    ['obj = [x: 3, y: 4]; obj.([x,y])', '[3,4]'],
+    ['obj = [x: 3]; result <- obj.(x = 10; x); [result,obj.x]', '[10,3]'],
     ['obj = [x: 3]; f = obj.(y -> x + y); f 4', '7'],
     ['obj = [x: 3]; values = obj.([x]); values', '[3]'],
     ['obj = [x: 3]; obj.()', '[]'],
     ['obj = [x: 3]; obj.(sqrt (x ^ 2))', '3'],
-    ['values = [1,2]; [Int,Float].(values)', '[1, 2.0]'],
-    ['obj = [(x): 9,x: 3]; [obj "(x)",obj.(x)]', '[9, 3]'],
-    ['obj = [child: [x: 1]]; result <- obj.(child.x = 10; child.x); [result,obj.child.x]', '[10, 1]'],
+    ['values = [1,2]; [Int,Float].(values)', '[1,2.0]'],
+    ['obj = [(x): 9, x: 3]; [obj "(x)",obj.(x)]', '[9,3]'],
+    ['obj = [child: [x: 1]]; result <- obj.(child.x = 10; child.x); [result,obj.child.x]', '[10,1]'],
     ['obj = [x: 3]; obj.(inner = [x: 4]; inner.(x) + x)', '7'],
 ] as const) Deno.test(`record scope: ${source}`, () => {
     const i = new Interpreter();
@@ -33,7 +33,7 @@ Deno.test('scoped expressions are not field assignment targets', () => {
     }
 });
 Deno.test('static checker resolves record scope fields', () => {
-    const result = checkSource('obj = [x: 3,y: 4]; obj.(x + y)');
+    const result = checkSource('obj = [x: 3, y: 4]; obj.(x + y)');
     if (result.issues.length) throw new Error(JSON.stringify(result.issues));
 });
 
@@ -52,7 +52,7 @@ for (const [source, expected] of [
     ['vec = [x: 1]; vec.{ x = 10; x }; vec.x', '1'],
     ['vec = [x: 1]; vec.{}', '[]'],
     ['vec = [x: 1]; f = vec.{ y -> x + y }; f 2', '3'],
-    ['[Int, Float].{ [1, 2] }', '[1, 2.0]'],
+    ['[Int,Float].{ [1,2] }', '[1,2.0]'],
     ['vec = [x: 1]; vec.{ [y: x + 1] }.y', '2'],
 ] as const) Deno.test(`braced scope: ${source}`, () => {
     const i = new Interpreter();
@@ -84,13 +84,34 @@ Deno.test('braces and parentheses share grouped expression and pattern behavior'
         if (actual !== expected) throw new Error(`${source}: ${actual}`);
     }
 });
-Deno.test('a one-line brace block keeps exactly one space inside each brace', () => {
-    for (const source of ['{123}', '{ 123}', '{123 }', '{ 123  }', '{  123 }', '{  }', '{\t123 }', 'print {4 * 3}', '{+ 2} 3', 'f {Int x} = x + 1']) {
+Deno.test('one-line brackets: exactly one space inside braces, none inside ( ) and [ ]', () => {
+    for (const source of ['{123}', '{ 123}', '{123 }', '{ 123  }', '{  123 }', '{ }', '{  }', '{\t123 }', 'print {4 * 3}', '{+ 2} 3', 'f {Int x} = x + 1',
+            '( 123 )', '( 123)', '(123 )', '( )', '[ 1 ]', '[1, 2 ]', '[ ]']) {
         try { parseDocument(source); } catch (error) {
             if ((error as { kind?: string }).kind === 'parse') continue;
             throw error;
         }
         throw new Error(`accepted: ${source}`);
     }
-    for (const source of ['{ 123 }', '{}', '{ }', 'f x = {\n    x\n}', 'f x = {  # note\n    x\n}', 's = "{x}"', 'print { 1 }  # c', 'obj = [x: 1]; obj.{ x + 1 }']) parseDocument(source);
+    for (const source of ['{ 123 }', '{}', '()', '[]', '(123)', '[1,2]', 'f x = {\n    x\n}', 'f x = {  # note\n    x\n}', 'xs = [\n    1\n]', 's = "{x}"', 'print { 1 }  # c', 'obj = [x: 1]; obj.{ x + 1 }']) parseDocument(source);
+});
+Deno.test('spacing at =, commas and record colons', () => {
+    for (const source of ['x=1', 'x =1', 'x= 1', 'x  = 1', 'x =  1', '[1, 2]', '[1 ,2]', '[x: 1,y: 2]', '[x: 1 , y: 2]', '[x: 1,  y: 2]',
+            '[x:1]', '[x : 1]', '[x:  1]', 'f [x:a] = a', 'v = [x: 1]; v.[x:a] = [a: 2]', 'print [ [1,2] ]']) {
+        try { parseDocument(source); } catch (error) {
+            if ((error as { kind?: string }).kind === 'parse') continue;
+            throw error;
+        }
+        throw new Error(`accepted: ${source}`);
+    }
+    for (const source of ['x = 1', 'f x = x + 1', 'z =\n    5', '[1,2,3,4]', '[[1,2],[3]]', '[x: 1, y: 2]', '[x: [1,2], y: 3]', '[-1: 1, (x): 2]',
+            'f [x: a, y: b] = a', 'f (x:xs) = x', 'xs = [\n    1,\n    2\n]', 'v = [x: 1, y: 2]; v.[x,y]', 'v = [x: 1, y: 2]; v.[x: a, y: b]']) parseDocument(source);
+});
+Deno.test('loose spacing accepts any spacing', () => {
+    setLooseSpacing(true);
+    try {
+        for (const source of ['x=1', '[ 1 , 2 ]', '[x:1,y : 2]', '{x}', '( 1 )', '{ }']) parseDocument(source);
+    } finally { setLooseSpacing(false); }
+    try { parseDocument('x=1'); } catch { return; }
+    throw new Error('strict spacing not restored');
 });

@@ -5,8 +5,8 @@ const cases: [string, string][] = [
     ["takeWhile (x -> 1) [1]", "[1]"],
     ['head (reverse [1..10000])', '10000'],
     ['length (reverse [1..10000])', '10000'],
-    ['reverse (reverse [1,2,3])', '[1, 2, 3]'],
-    ['reverse [1,2,3]', '[3, 2, 1]'],
+    ['reverse (reverse [1,2,3])', '[1,2,3]'],
+    ['reverse [1,2,3]', '[3,2,1]'],
     ['reverse []', '[]'],
     ['reverse ""', '""'],
     ['head (reverse [missing,2])', '2'],
@@ -18,11 +18,11 @@ const cases: [string, string][] = [
     ['mapOption missing None', 'None'],
     ['mapResult (*2) (Ok 3)', 'Ok 6'],
     ['mapError upper (Err "oops")', 'Err "OOPS"'],
-    ['take 5 (repeat 7)', '[7, 7, 7, 7, 7]'],
-    ['take 7 (cycle [1,2,3])', '[1, 2, 3, 1, 2, 3, 1]'],
+    ['take 5 (repeat 7)', '[7,7,7,7,7]'],
+    ['take 7 (cycle [1,2,3])', '[1,2,3,1,2,3,1]'],
     ['cycle []', '[]'],
-    ['take 5 (concatMap (x -> [x,x]) [1..])', '[1, 1, 2, 2, 3]'],
-    ['take 5 (scanl (+) 0 [1..])', '[0, 1, 3, 6, 10]'],
+    ['take 5 (concatMap (x -> [x,x]) [1..])', '[1,1,2,2,3]'],
+    ['take 5 (scanl (+) 0 [1..])', '[0,1,3,6,10]'],
     ['all (x -> x < 10000) [0..9999]', 'true'],
     ['any (==3) [1..]', 'true'],
     ['find (==9999) [0..]', 'Some 9999'],
@@ -31,13 +31,13 @@ const cases: [string, string][] = [
     ['headOption []', 'None'],
     ['lastOption [1,2,3]', 'Some 3'],
     ['atOption 4 [1]', 'None'],
-    ['takeWhile (<4) [1..]', '[1, 2, 3]'],
+    ['takeWhile (<4) [1..]', '[1,2,3]'],
     ['head (dropWhile (<10000) [0..])', '10000'],
-    ['chunksOf 2 [1..5]', '[[1, 2], [3, 4], [5]]'],
-    ['intersperse 0 [1,2,3]', '[1, 0, 2, 0, 3]'],
-    ['partition isEven [1..5]', '[[2, 4], [1, 3, 5]]'],
-    ['unique [3,1,3,2,1]', '[3, 1, 2]'],
-    ['sortOn fst [[2,"b"],[1,"a"],[2,"c"]]', '[[1, "a"], [2, "b"], [2, "c"]]'],
+    ['chunksOf 2 [1..5]', '[[1,2],[3,4],[5]]'],
+    ['intersperse 0 [1,2,3]', '[1,0,2,0,3]'],
+    ['partition isEven [1..5]', '[[2,4],[1,3,5]]'],
+    ['unique [3,1,3,2,1]', '[3,1,2]'],
+    ['sortOn fst [[2,"b"],[1,"a"],[2,"c"]]', '[[1,"a"],[2,"b"],[2,"c"]]'],
     ['minimum []', 'None'],
     ['factorial 20', '2432902008176640000'],
     ['factorial 3.0', '6'],
@@ -45,12 +45,12 @@ const cases: [string, string][] = [
     ['variance [1,2,3]', 'Some 2/3'],
     ['median [9,1,2,8]', 'Some 5'],
     ['mean []', 'None'],
-    ['take 10 fibonacci', '[0, 1, 1, 2, 3, 5, 8, 13, 21, 34]'],
-    ['take 10 primes', '[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]'],
+    ['take 10 fibonacci', '[0,1,1,2,3,5,8,13,21,34]'],
+    ['take 10 primes', '[2,3,5,7,11,13,17,19,23,29]'],
     ['reverse "a😀b"', '"b😀a"'],
     ['textLength "a😀b"', '3'],
     ['textTake 2 "a😀b"', '"a😀"'],
-    ['words " a\t b\r\n c "', '["a", "b", "c"]'],
+    ['words " a\t b\r\n c "', '["a","b","c"]'],
     ['joinWith "/" ["a","b"]', '"a/b"'],
     ['startsWith "ab" "abc"', 'true'],
     ['endsWith "😀" "a😀"', 'true'],
@@ -59,8 +59,8 @@ const cases: [string, string][] = [
     ['getOr missing "x" (HashMap [x: 2])', '2'],
     ['lookup "a" (frequencies ["a","b","a"])', '2'],
     ['lookup "a" (mergeWith (+) (HashMap [a: 2]) (HashMap [a: 3]))', '5'],
-    ['lookup 1 (groupBy (x -> x % 2) [1..5])', '[1, 3, 5]'],
-    ['pairs (filterMap (key value -> value > 2) (HashMap [a: 1,b: 3]))', '[["b", 3]]'],
+    ['lookup 1 (groupBy (x -> x % 2) [1..5])', '[1,3,5]'],
+    ['pairs (filterMap (key value -> value > 2) (HashMap [a: 1, b: 3]))', '[["b",3]]'],
 ];
 for (const [source, expected] of cases) Deno.test(`std: ${source}`, () => {
     const i = new Interpreter();
@@ -93,7 +93,7 @@ Deno.test("imports are cached, isolated from caller bindings, and independent of
     const first = i.importStandard("std");
     if (i.importStandard("std") !== first) throw new Error("import did not reuse module");
     i.run(parse('s = import "std"'));
-    if (i.renderString(i.run(parse('s.takeWhile (<3) [1..]'))) !== '[1, 2]') throw new Error("native export missing");
+    if (i.renderString(i.run(parse('s.takeWhile (<3) [1..]'))) !== '[1,2]') throw new Error("native export missing");
 });
 
 Deno.test("a bare import does not echo an infinite export record", () => {
@@ -104,7 +104,7 @@ Deno.test("standard natives require importing their module", () => {
     const i = new Interpreter();
     if (i.env.get("words") !== undefined) throw new Error("stdlib leaked into builtins");
     i.run(parse('import "std/text"'));
-    if (i.renderString(i.run(parse('words "a b"'))) !== '["a", "b"]') throw new Error("missing export");
+    if (i.renderString(i.run(parse('words "a b"'))) !== '["a","b"]') throw new Error("missing export");
 });
 
 Deno.test("reverse uses APN typed clauses and is available from either module", () => {

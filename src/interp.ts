@@ -1695,7 +1695,7 @@ export class Interpreter {
                 emit("[");
                 let first = true;
                 for (const item of this.elements(v)) {
-                    if (!first) emit(", ");
+                    if (!first) emit(",");
                     first = false;
                     this.render(item, emit, false, ancestors);
                 }

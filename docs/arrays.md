@@ -35,7 +35,7 @@ Elements are shared after evaluation, just like other lazy list elements.
 
 `xs * function` and `function * xs` iterate with the same behavior; `xs * ys` multiplies
 numeric collections elementwise. Iteration is eager for lists, so use `map`
-for lazy or infinite inputs. Records supply `[key, value]` entries, and integer
+for lazy or infinite inputs. Records supply `[key,value]` entries, and integer
 counts supply indexes starting at zero. Equality remains structural, and comparisons
 do not automatically produce masks. Use `map` for predicates and `filter` for
 selection. Matrix multiplication is explicit via `matmul`.

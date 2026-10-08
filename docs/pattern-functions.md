@@ -43,11 +43,11 @@ parameters are curried:
 identity value = value
 add x y = x + y
 first x y = x
-[identity [1, 2], identity [x: 1, y: 2], add 1 2, first [1, 2] 99]
+[identity [1,2],identity [x: 1, y: 2],add 1 2,first [1,2] 99]
 # [[1, 2], [x: 1, y: 2], 3, [1, 2]]
 ```
 
-`add [1, 2]` supplies only `x` and returns a function awaiting `y`. It does not
+`add [1,2]` supplies only `x` and returns a function awaiting `y`. It does not
 mean `add 1 2`. A collection variable works the same way as a literal.
 
 ### Destructuring one argument
@@ -55,18 +55,18 @@ mean `add 1 2`. A collection variable works the same way as a literal.
 | Parameter pattern | List argument | Record argument |
 | --- | --- | --- |
 | `value` | Binds the entire list | Binds the entire record |
-| `[x, y]` | Binds exactly two elements by position | Binds fields named `x` and `y` |
+| `[x,y]` | Binds exactly two elements by position | Binds fields named `x` and `y` |
 | `[x: a, y: b]` | Does not match | Binds fields `x` and `y` as `a` and `b` |
 | `(x:xs)` | Binds the head and tail of a nonempty list | Does not match |
 
 ```apn
-sumPair [x, y] = x + y
-[sumPair [1, 2], sumPair [y: 2, x: 1, extra: 99]]
+sumPair [x,y] = x + y
+[sumPair [1,2],sumPair [y: 2, x: 1, extra: 99]]
 # [3, 3]
 ```
 
 List patterns require the exact length. For records, the bare-name pattern
-`[x, y]` requires those fields, ignores field order, and permits extra fields.
+`[x,y]` requires those fields, ignores field order, and permits extra fields.
 This record interpretation only applies when every element of the pattern is a
 variable name. Renaming those variables also changes which fields it selects.
 Use a keyed pattern when local variable names should differ from field names:
@@ -78,18 +78,18 @@ sumFields [y: 2, x: 1]       # 3
 
 Missing fields or a wrong list length cause pattern mismatch; another clause
 may handle the input. If no clause matches, the call errors. These patterns
-also work in lambdas, such as `([x, y] -> x + y) [1, 2]`.
+also work in lambdas, such as `([x,y] -> x + y) [1,2]`.
 
 ### Records as named arguments
 
 A record argument supplies named inputs without separate named-call syntax:
 
 ```apn
-area [width, height] = width * height
+area [width,height] = width * height
 area [height: 20, width: 10] # 200
 ```
 
-This function also accepts `area [10, 20]`. To require a record, write
+This function also accepts `area [10,20]`. To require a record, write
 `area [width: w, height: h] = w * h`. Required fields must be present;
 destructuring does not itself supply defaults for omitted names.
 
@@ -100,7 +100,7 @@ A template pattern converts an argument before binding its local name:
 ```apn
 Vector3 = [x: Float, y: Float, z: Float]
 lengthSquared (Vector3 v) = v.x ^ 2 + v.y ^ 2 + v.z ^ 2
-lengthSquared [1, 2, 3]      # 14.0
+lengthSquared [1,2,3]      # 14.0
 ```
 
 The positional list must have exactly as many elements as the record template.
@@ -119,7 +119,7 @@ change obj = {
 }
 original = [child: [x: 1]]
 changed = change original
-[original.child.x, changed.child.x] # [1, 10]
+[original.child.x,changed.child.x] # [1, 10]
 ```
 
 List index updates work the same way. Shared references such as `Mutable` and
@@ -133,8 +133,8 @@ does not inspect the collection; a destructuring pattern demands the shape it
 needs. List elements remain deferred when bound to variables:
 
 ```apn
-firstPair [x, y] = x
-firstPair [42, missing]      # 42; the unused second element is not evaluated
+firstPair [x,y] = x
+firstPair [42,missing]      # 42; the unused second element is not evaluated
 ```
 
 An exact-length list pattern checks the spine length; a cons pattern only needs
@@ -298,10 +298,10 @@ in ordinary matching patterns.
 conversion happens: the left and right patterns see the original value.
 
 ```apn
-func v.x = print [v, x]
+func v.x = print [v,x]
 func 1                            # [1, 1]
 
-show whole.[x,y] = print [whole, x, y]
+show whole.[x,y] = print [whole,x,y]
 show [x: 1, y: 2, z: 3]           # [[x: 1, y: 2, z: 3], 1, 2]
 show [1,2]                        # [[1, 2], 1, 2]
 
@@ -335,7 +335,7 @@ A lowercase name not already bound in a schema pattern captures the supplied
 value's type. Concrete type names retain their existing checking/conversion role.
 
 ```apn
-inspect ([t] [x]) = print [t, x]
+inspect ([t] [x]) = print [t,x]
 inspect [1]                       # [Int, 1]
 inspect ["hello"]                 # [String, "hello"]
 
@@ -350,7 +350,7 @@ type in each position. Existing lowercase type bindings are used as schemas;
 capitalized constructors such as `Int` are never new capture names.
 
 Like `(t x)`, a captured numeric type exposes its numeric payload separately:
-`inspect [Int32 1]` prints `[Int32, 1]`. `_` accepts a value without capturing
+`inspect [Int32 1]` prints `[Int32,1]`. `_` accepts a value without capturing
 its type or stripping its annotation. These patterns still participate in static
 inference; they are not `Dynamic` boundaries.
 

@@ -11,11 +11,11 @@ for (const source of ['["old"].["new"]', '[0].[1]', '[false].[true]', "['a'].['b
     });
 }
 for (const [source, expected] of [
-    ['[String, Int].["new",1]', '["new", 1]'],
+    ['[String,Int].["new",1]', '["new",1]'],
     ['[(* 2)].[3]', '[6]'],
     ['[x: "old"] [x: "new"]', '[x: "new"]'],
     ['[x: [0]] [x: [1]]', '[x: [1]]'],
-    ['[x: 1,y: 2].[y,x]', '[2, 1]'],
+    ['[x: 1, y: 2].[y,x]', '[2,1]'],
 ] as const) Deno.test(`dot and record distinction: ${source}`, () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(source)));
