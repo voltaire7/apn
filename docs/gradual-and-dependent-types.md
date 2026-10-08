@@ -336,8 +336,18 @@ block defines more than once is one binding, so lazy definitions and closures
 see its latest value and eager ones (`<-`) the value where they stand. Integer
 ranges are cut and indexed arithmetically (`length [1..1000000]`,
 `drop 1000000 [0..]`), and other long lists are walked as far as the work
-budget allows. Input and effects are not evaluated, and computations past the
-budget (such as summing a million elements) stay unknown. A function
+budget allows; computations past the budget (such as summing a million
+elements) stay unknown.
+
+Effects are never performed while checking, but their results are known:
+`print x` and `emit x` are `x`, and `set`, `assert` and `debug` give `[]`. A
+`Mutable` cell's contents are known when nothing checked in the session can
+write a cell (no `set`, `load`, `use` or `env`); otherwise reading a cell stays
+unknown, since a later `set` may change it. When the interpreter checks a
+program right before running it (the CLI and the REPL), `readFile` and
+`getArgs` (and so `readInput`) see the program's actual input, and the run
+reads the same file contents the checker saw. `readStdin` stays unknown, and
+lint and editor checks never read input. A function
 argument may be a lambda, an operator section, a named function, or a partial
 application, also when passed through a parameter: `filter (> 1) [1, 2]` and
 `hh (> 1)` with `hh p = filter p [1, 2]` both have one element. A recursive call

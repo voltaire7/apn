@@ -22,7 +22,11 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
     if (name === "getArgs") return mkList(i.programArgs.map(mkStr));
     if (name === "readFile" || name === "readStdin") {
         try {
-            if (name === "readFile") return mkStr(Deno.readTextFileSync(str(args[0])));
+            if (name === "readFile") {
+                // The contents the checker saw, when it read this file before the run.
+                const path = str(args[0]);
+                return mkStr(i.inputFile(path) ?? Deno.readTextFileSync(path));
+            }
             const decoder = new TextDecoder();
             const buffer = new Uint8Array(65536);
             const chunks: string[] = [];

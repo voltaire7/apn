@@ -86,7 +86,9 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
 - **Bindings:** `name = value` rebinds in scope; records and lists are never
   mutated in place (updates bind a modified copy). Only `Mutable` cells and
   `env` views mutate.
-- **Static checking** never evaluates user code; neither do lint/LSP features.
+- **Static checking** never evaluates user code or performs effects; neither
+  do lint/LSP features. It reads program input only when the interpreter checks
+  right before a run, through the snapshot that run uses.
 - **File mode never auto-prints**; the REPL echoes expression results but
   not assignments.
 

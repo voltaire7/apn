@@ -56,6 +56,21 @@ export class Interpreter {
         this.checking.moduleSources = this.moduleSources;
         this.checking.extendDefinitions = this.extendDefinitions;
         this.checking.runtimeNames = () => envNames(this.env);
+        // Checking right before running may read the program's input; the run
+        // then sees the same file contents and arguments.
+        this.checking.inputs = { readFile: path => this.inputFile(path), args: () => this.programArgs };
+    }
+    // Files readFile reads, captured once per interpreter (see enableChecking).
+    private inputFiles = new Map<string, string>();
+    inputFile(path: string): string | undefined {
+        if (this.inputFiles.has(path)) return this.inputFiles.get(path);
+        try {
+            const text = Deno.readTextFileSync(path);
+            this.inputFiles.set(path, text);
+            return text;
+        } catch {
+            return undefined;
+        }
     }
     private preludeBindings = new Map<string, Value>();
     hostNatives = new Map<string, (args: Value[]) => Value>();
@@ -149,6 +164,8 @@ export class Interpreter {
     }
 
     run(program: TopLevel[], tailLoad = false): Value {
+        // Each checked top-level run takes a fresh input snapshot.
+        if (this.checking && !this.runDepth && !this.dynamicDepth) this.inputFiles.clear();
         const candidate = this.checking && !this.runDepth && !this.dynamicDepth
             ? this.checking.prepare(program, this.sourceDir) : undefined;
         const saved = candidate ? new Map(this.env.map) : undefined;

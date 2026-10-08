@@ -291,7 +291,16 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   a list's length is never walked when the other side of a `zipWith` or a
   meet is unknown or endless, and argument-free compound expressions are
   cached per node and the bindings of the names they mention
-  (`sameBinding`), since nested call arguments are each evaluated. A block gives each
+  (`sameBinding`), since nested call arguments are each evaluated.
+  Effects (`print`, `emit`, `set`, `assert`, `debug`) only return their
+  results statically. `Known.mutable` is a cell; `readMutable` gives its
+  contents only while `CheckOptions.mutation` (the session-wide `mayMutate`
+  scan of every checked program for `set`, `load`, `use`, `env`) is false,
+  because static evaluation does not force lazy values in the runtime's
+  order. `CheckOptions.inputs` is set only by `Interpreter.enableChecking`:
+  `readFile` and `getArgs` read through `Interpreter.inputFile`, a snapshot
+  cleared at each top-level checked run and shared with the runtime
+  `readFile`, so check and run agree. A block gives each
   name it defines one slot (`Known.slot`, read through `lookup`): lazy
   definitions store a memoized thunk (`once`, which reports a value that
   needs itself as unknown) and eager ones a value, so earlier closures see

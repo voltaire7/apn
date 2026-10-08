@@ -52,10 +52,12 @@ interface ClauseOrder { index: number; params: Pattern[]; refutable: Set<string>
 // clauses with the bindings it closes over and any arguments already applied.
 type KnownFunction = { e: Expr; env: [string, Known][]; scope: Scope } | { summary: Summary; env: [string, Known][]; applied: Known[] };
 type Cell = { head: Known; tail: Known } | null | undefined;
+// A Mutable cell's contents (see readMutable).
+type KnownCell = { value: Known };
 // An integer range (hi null: endless), indexed and cut arithmetically.
 type KnownRange = { lo: bigint; step: bigint; hi: bigint | null };
 interface Known {
-    index?: Index; size?: bigint; items?: Known[]; cell?: () => Cell; range?: KnownRange; slot?: () => Known | undefined; fn?: KnownFunction; boolean?: boolean; string?: string; char?: string; float?: number; number?: Numeric; tag?: string; ref?: string;
+    index?: Index; size?: bigint; items?: Known[]; cell?: () => Cell; range?: KnownRange; mutable?: KnownCell; slot?: () => Known | undefined; fn?: KnownFunction; boolean?: boolean; string?: string; char?: string; float?: number; number?: Numeric; tag?: string; ref?: string;
     call?: { summary: Summary; args: Known[] };
     expr?: { e: Expr; env: [string, Known][]; scope: Scope };
 }
@@ -69,6 +71,7 @@ interface Entry {
     items?: Known[];
     cell?: () => Cell;
     range?: KnownRange;
+    mutable?: KnownCell;
     fn?: Known["fn"];
     boolean?: boolean;
     string?: string;
@@ -103,6 +106,25 @@ export interface CheckOptions {
     result?: (scope: TypeScope, exports: TypeScope) => void;
     /** Names bound in the running interpreter; with it, other unknown names are reported as unbound. */
     runtimeNames?: ReadonlySet<string>;
+    /** The program's input, when checking right before a run: the files readFile
+     * would read (undefined when unreadable) and getArgs. The runtime must see
+     * the same snapshot. Lint and editor checks leave it unset. */
+    inputs?: { readFile(path: string): string | undefined; args(): string[] };
+    /** Whether any code in this session may write a Mutable cell (see mayMutate),
+     * asked when a cell is read; computed from the program when unset. */
+    mutation?: () => boolean;
+}
+// Code that may write a Mutable cell: set, or code loaded or opened at runtime.
+const MUTATING_NAMES = new Set(["set", "load", "use", "env"]);
+export function mayMutate(program: unknown): boolean {
+    const walk = (x: unknown): boolean => {
+        if (!x || typeof x !== "object") return false;
+        if (Array.isArray(x)) return x.some(walk);
+        const node = x as Record<string, unknown>;
+        if (node.t === "var" && typeof node.name === "string" && MUTATING_NAMES.has(node.name)) return true;
+        return Object.values(node).some(value => value && typeof value === "object" && walk(value));
+    };
+    return walk(program);
 }
 export function copyTypeScope(scope: TypeScope): TypeScope {
     const nodes = new Map<Ty, Ty>(), vars = new Map<Ty, Ty>();
@@ -249,6 +271,7 @@ const LIST_NATIVES = ["filter", "map", "take", "drop", "zipWith"];
 const EVALUATED_NATIVES = new Set([
     ...LIST_NATIVES, "length", "head", "tail", "null", "foldl", "foldr", "iterate", "enumerate",
     "chars", "fromChars", "upper", "lower", "toString", "intToString", "seq", "parse",
+    "print", "emit", "debug", "assert", "set", "readFile",
 ]);
 // Static evaluation limits: nesting (recursion) depth, and work per root value.
 const EVALUATION_DEPTH = 5000;
@@ -272,7 +295,7 @@ function substituteKnown(known: Known, subst?: [string, Index], value?: [string,
     if (result.ref && value && result.ref === value[0]) {
         const v = value[1];
         // The whole value is the argument's, its index included (none for a non-integer).
-        result = { index: subst && known.index?.terms.has(subst[0]) ? result.index : v.index, size: v.size, items: v.items, cell: v.cell, range: v.range, fn: v.fn, boolean: v.boolean, string: v.string, char: v.char, float: v.float, number: v.number, tag: v.tag, ref: v.ref, call: v.call, expr: v.expr };
+        result = { index: subst && known.index?.terms.has(subst[0]) ? result.index : v.index, size: v.size, items: v.items, cell: v.cell, range: v.range, mutable: v.mutable, fn: v.fn, boolean: v.boolean, string: v.string, char: v.char, float: v.float, number: v.number, tag: v.tag, ref: v.ref, call: v.call, expr: v.expr };
     }
     if (result.call) result = { ...result, call: { ...result.call, args: result.call.args.map(a => substituteKnown(a, subst, value)) } };
     if (result.items) result = { ...result, items: result.items.map(a => substituteKnown(a, subst, value)) };
@@ -456,7 +479,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The deferred call being evaluated, so deferring it again keeps the same node.
     let evaluatingCall: Extract<Ty, { k: "operation" }> | undefined;
     function deferredCall(f: Ty, argument: Entry): Ty {
-        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, range: argument.range, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr } };
+        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, range: argument.range, mutable: argument.mutable, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr } };
         requirements.push(result);
         return resolve(result);
     }
@@ -1334,8 +1357,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             collect(argument.type);
             // With this argument's value known, the function's deferred checks
             // (calls on the parameter) see that value instead of its symbol.
-            const value: Known = { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, range: argument.range, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr };
-            const known = argument.index || argument.ref || argument.call || argument.expr || [argument.size, argument.items, argument.cell, argument.range, argument.fn, argument.boolean, argument.string, argument.char, argument.float, argument.number, argument.tag].some(x => x !== undefined);
+            const value: Known = { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, range: argument.range, mutable: argument.mutable, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr };
+            const known = argument.index || argument.ref || argument.call || argument.expr || [argument.size, argument.items, argument.cell, argument.range, argument.mutable, argument.fn, argument.boolean, argument.string, argument.char, argument.float, argument.number, argument.tag].some(x => x !== undefined);
             const pending = f.binder && known
                 ? checks.map(check => copy(check, new Map([...variables(check)].map(t => [t, t])),
                     argument.index ? [f.binder!, argument.index] : undefined, undefined, [f.binder!, value]))
@@ -1963,6 +1986,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (budgetDepth++ === 0) { evaluations = 0; evaluationLimit = limit; }
         try { return f(); } catch (error) { if (error instanceof RangeError) return undefined; throw error; } finally { budgetDepth--; }
     }
+    // The contents of a Mutable cell, where arithmetic, printing or a condition
+    // reads it. Static evaluation does not force lazy values in the runtime's
+    // order, so contents are known only when no code in the session can write
+    // a cell at all; then every cell keeps its first contents.
+    const programMutates = options.mutation ? undefined : mayMutate(program);
+    function readMutable(k: Known | undefined): Known | undefined {
+        if (!k?.mutable) return k;
+        return (programMutates ?? options.mutation!()) ? undefined : k.mutable.value;
+    }
     function spendEvaluation(depth: number): boolean {
         return depth <= EVALUATION_DEPTH && ++evaluations <= evaluationLimit;
     }
@@ -2141,7 +2173,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             while (head.t === "app") { args.unshift(head.a); head = head.f; }
             if (head.t !== "var") return {};
             const entry = scope.get(head.name);
-            if ((NUMERIC_TYPES.includes(head.name) || EVALUATED_NATIVES.has(head.name) || head.name === "Bool") && entry?.builtin) return computed(e, scope);
+            if ((NUMERIC_TYPES.includes(head.name) || EVALUATED_NATIVES.has(head.name) || head.name === "Bool" || head.name === "Mutable") && entry?.builtin) return computed(e, scope);
             if (/^[A-Z]/.test(head.name)) {
                 // A constructor applied to all its fields.
                 let t = resolve(entry?.type ?? dynamic);
@@ -2205,7 +2237,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : evaluateKnown(known.expr!.e, new Map(known.expr!.env.map(([n, v]) => [n, resolveKnown(v)])), known.expr!.scope, 0),
             symbolic(known) ? SYMBOLIC_BUDGET : EVALUATION_BUDGET);
         const result: Known = { ...known };
-        for (const key of ["index", "size", "items", "cell", "range", "fn", "boolean", "string", "char", "float", "number", "tag"] as const) {
+        for (const key of ["index", "size", "items", "cell", "range", "mutable", "fn", "boolean", "string", "char", "float", "number", "tag"] as const) {
             if (result[key] === undefined && facts?.[key] !== undefined) (result as Record<string, unknown>)[key] = facts[key];
         }
         return result;
@@ -2290,6 +2322,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // A known value as toString renders it (primitives and lists of them).
     function renderKnown(k: Known | undefined): string | undefined {
+        k = readMutable(k);
         if (!k) return undefined;
         const n = numericOf(k);
         if (n !== undefined) return valueToString(n as Value);
@@ -2308,6 +2341,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Truthiness as the runtime defines it, where the value decides it.
     function truth(k: Known | undefined): boolean | undefined {
+        k = readMutable(k);
         if (!k) return undefined;
         if (k.boolean !== undefined) return k.boolean;
         const n = numericOf(k);
@@ -2330,7 +2364,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (a === b) return true;
         if (!a || !b) return false;
         return a.type === b.type && a.builtin === b.builtin && a.mono === b.mono && a.clauses === b.clauses &&
-            (["index", "size", "items", "cell", "range", "boolean", "string", "char", "float", "number", "tag", "ref", "call", "expr", "fn"] as const).every(key => a[key] === b[key]);
+            (["index", "size", "items", "cell", "range", "mutable", "boolean", "string", "char", "float", "number", "tag", "ref", "call", "expr", "fn"] as const).every(key => a[key] === b[key]);
     }
     // Every variable name an expression mentions (shadowing ignored: more is safe).
     const mentioned = new WeakMap<Expr, string[]>();
@@ -2379,8 +2413,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!entry) return undefined;
                 if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
                 if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope } };
+                if (e.name === "getArgs" && entry.builtin && options.inputs) return known(options.inputs.args().map(string => ({ string })));
                 const index = entry.index && !entry.index.terms.size ? entry.index : undefined;
-                return { index, size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag };
+                return { index, size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag };
             }
             case "block": return evaluateBlock(e, env, scope, depth);
             case "ternary": {
@@ -2393,7 +2428,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return hasFacts(then) ? meetValues(then, value(e.els)) : undefined;
             }
             case "unop": {
-                const v = value(e.e);
+                const v = readMutable(value(e.e));
                 if (e.op === "not") { const t = truth(v); return t === undefined ? undefined : { boolean: !t }; }
                 const n = numericOf(v);
                 return n === undefined ? undefined : attempt(() => n.typeName ? castNumeric(n.typeName, negate(n)) : negate(n));
@@ -2512,7 +2547,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const r = truth(value(e.r));
             return r === undefined ? undefined : { boolean: r };
         }
-        const l = value(e.l), r = value(e.r);
+        const l = readMutable(value(e.l)), r = readMutable(value(e.r));
         const x = numericOf(l), y = numericOf(r);
         if (x !== undefined && y !== undefined) {
             if (["+", "-", "*", "/", "%"].includes(e.op)) return attempt(() => typedArithmetic(e.op, x, y));
@@ -2573,6 +2608,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         const builtin = !!entry?.builtin;
         if (builtin && EVALUATED_NATIVES.has(head.name)) return evaluateNative(head.name, args.map(a => () => value(a)), depth);
+        if (head.name === "Mutable" && builtin && args.length === 1) {
+            return { mutable: { value: value(args[0]) ?? {} } };
+        }
         if (head.name === "Bool" && builtin && args.length === 1) {
             const b = truth(value(args[0]));
             return b === undefined ? undefined : { boolean: b };
@@ -2580,7 +2618,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A numeric type applied to a number: floating types round, others
         // convert losslessly or fail, as at runtime.
         if (NUMERIC_TYPES.includes(head.name) && builtin && args.length === 1) {
-            const n = numericOf(value(args[0]));
+            const n = numericOf(readMutable(value(args[0])));
             return n === undefined ? undefined : attempt(() => castNumeric(head.name, n, ["Float", "Float32", "Float64"].includes(head.name)));
         }
         if (/^[A-Z]/.test(head.name)) {
@@ -2591,7 +2629,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // The runtime's numeric natives, when the name is the builtin itself.
         const native = NUMBER_NATIVES.find(([name]) => name === head.name);
         if (native && builtin && native[1] === args.length) {
-            const values = args.map(a => numericOf(value(a)));
+            const values = args.map(a => numericOf(readMutable(value(a))));
             if (values.some(v => v === undefined)) return undefined;
             const numbers = values as Numeric[];
             return attempt(() => head.name === "expt" ? typedPower(numbers[0], numbers[1]) : numericNative(head.name, numbers));
@@ -2611,7 +2649,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // The pure builtins, run on known arguments as the runtime runs them.
     function evaluateNative(name: string, args: (() => Known | undefined)[], depth: number): Known | undefined {
-        const arity = name === "foldl" || name === "foldr" || name === "zipWith" ? 3 : ["head", "tail", "null", "length", "enumerate", "chars", "fromChars", "upper", "lower", "toString", "intToString", "parse"].includes(name) ? 1 : 2;
+        const arity = name === "foldl" || name === "foldr" || name === "zipWith" ? 3 : name === "set" || LIST_NATIVES.includes(name) || name === "iterate" || name === "seq" ? 2 : 1;
         if (args.length !== arity) return undefined;
         const call = (f: Known | undefined, values: Known[]) => f?.fn && applyKnown(f.fn, values, depth);
         switch (name) {
@@ -2633,6 +2671,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return n === undefined ? undefined : { index: constant(n) };
             }
             case "seq": return args[1]();
+            // Effects are not performed; their results are known. print and
+            // emit return their argument; debug, assert and set return [].
+            case "print": case "emit": return args[0]();
+            case "debug": case "assert": case "set": return known([]);
+            // Input read at check time, from the same snapshot the run uses.
+            case "readFile": {
+                const path = args[0]()?.string;
+                const text = path === undefined ? undefined : options.inputs?.readFile(path);
+                return text === undefined ? undefined : { string: text };
+            }
             // Booleans and number literals, as the runtime parses them.
             case "parse": {
                 const text = args[0]()?.string?.trim();

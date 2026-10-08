@@ -705,3 +705,59 @@ for (const source of [
     'g (f (r (length [1..1000000] == 999999)))',
     'g (f (r (sum [1..20000] == 0)))',
 ]) Deno.test(`rebinding blocks and long lists stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${textClauses}; ${source}`));
+// Effects are not performed, but their results are known. Mutable cells keep
+// their contents unless code in the session can write one (set, load, use, env).
+const effectPrelude = `${optionClauses}; ${sizeClauses}; ${textClauses}`;
+for (const [source, expected] of [
+    ['g (f (r (print 3 == 3)))', '0'],
+    ['g (f (r (emit 3 == 3)))', '0'],
+    ['g (f (r (null (assert true))))', '0'],
+    ['g (f (r (null (debug 4))))', '0'],
+    ['k y = { c = Mutable 5; c + 1 }; g (f (r (k 0 == 6)))', '0'],
+    ['c = Mutable 5; g (f (r (c + 1 == 6)))', '0'],
+] as const) Deno.test(`effects and cells: ${source}`, () => {
+    const actual = run(session(), `${effectPrelude}; ${source}`);
+    if (actual !== expected.trim()) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'k y = { c = Mutable 5; c + 1 }; g (f (r (k 0 == 7)))',
+    // A closure reading a cell after set: the read stays unknown.
+    'k y = { c = Mutable 1; h = () -> c + 0; set c 2; h [] }; g (f (r (k 0 == 2)))',
+    'c = Mutable 5; bump x = set c x; g (f (r (c + 1 == 6)))',
+]) Deno.test(`effects and cells stay checked: ${source}`, () => rejected(session(), `${effectPrelude}; ${source}`));
+Deno.test("a set from an earlier REPL input keeps later cell reads unknown", () => {
+    const i = session();
+    run(i, `${effectPrelude}; bump c = set c 9`);
+    rejected(i, 'g (f (r ((Mutable 5) + 1 == 6)))');
+});
+// When checking right before a run, readFile and getArgs see the program's
+// input; the run reads the same snapshot. Lint and editor checks do not.
+const fish = "examples/advent-of-code/samples/fish.input", hill = "examples/advent-of-code/samples/hill.input";
+const inputPrelude = `import "std/io"; ${effectPrelude}`;
+Deno.test("readFile is read when checking before a run", () => {
+    const actual = run(session(), `${inputPrelude}; g (f (q (words (readFile "${fish}"))))`);
+    if (actual !== "0") throw new Error(actual);
+    rejected(session(), `${inputPrelude}; g (f (q (words (readFile "${hill}"))))`);
+});
+Deno.test("getArgs and readInput see the program's arguments", () => {
+    const one = session();
+    one.programArgs = [fish];
+    if (run(one, `${inputPrelude}; g (f (q getArgs))`) !== "0") throw new Error("getArgs");
+    if (run(one, `${inputPrelude}; g (f (q (words (readInput []))))`) !== "0") throw new Error("readInput");
+    const two = session();
+    two.programArgs = [hill, "x"];
+    rejected(two, `${inputPrelude}; g (f (q getArgs))`);
+});
+Deno.test("checking without a run does not read input", () => {
+    let accepted = true;
+    try { new CheckingSession().prepare(parse(`${inputPrelude}; g (f (q (words (readFile "${fish}"))))`), "."); }
+    catch { accepted = false; }
+    if (accepted) throw new Error("lint read the input file");
+});
+Deno.test("the run reads the file contents the checker saw", () => {
+    const i = session();
+    const text = Deno.readTextFileSync(fish);
+    if (run(i, `import "std/io"; import "std/text"; words (readFile "${fish}")`) !== `["${text.trim()}"]`) throw new Error("run");
+    // One snapshot per run: the checker's read is the one the run used.
+    if (i.inputFile(fish) !== text) throw new Error("snapshot");
+});

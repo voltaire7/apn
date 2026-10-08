@@ -1,6 +1,6 @@
 import { APNError } from "./errors.ts";
 import { parse } from "./parser.ts";
-import { checkTypes, copyTypeScope, type TypeScope } from "./type-checker.ts";
+import { type CheckOptions, checkTypes, copyTypeScope, mayMutate, type TypeScope } from "./type-checker.ts";
 import type { TopLevel } from "./ast.ts";
 
 const moduleNames = new Set(["type", "function", "option", "sequence", "array", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5", "ffi"]);
@@ -26,6 +26,8 @@ export class CheckingSession {
     extendDefinitions = false;
     /** Names the interpreter can resolve, so the checker can tell a typo from a runtime-only builtin. */
     runtimeNames?: () => Iterable<string>;
+    /** The program's input when checking right before a run (see CheckOptions.inputs). */
+    inputs?: CheckOptions["inputs"];
 
     prepare(program: TopLevel[], directory = "."): TypeScope {
         return this.check(program, directory, this.scope, false).scope;
@@ -35,12 +37,18 @@ export class CheckingSession {
         this.scope = new Map([...candidate].filter(([name]) => visible.has(name)));
     }
 
+    /** Whether any program this session has checked may write a Mutable cell. */
+    private mutation = false;
+
     private check(program: TopLevel[], directory: string, initial: TypeScope, library: boolean): { scope: TypeScope; exports: TypeScope } {
+        this.mutation ||= mayMutate(program);
         let scope: TypeScope = new Map();
         let exports: TypeScope = new Map();
         const result = checkTypes(program, {
             strict: true, initial, library, extendDefinitions: this.extendDefinitions,
             runtimeNames: !library && this.runtimeNames ? new Set(this.runtimeNames()) : undefined,
+            inputs: library ? undefined : this.inputs,
+            mutation: () => this.mutation,
             imports: module => {
                 const fields = this.module(module);
                 return fields;
