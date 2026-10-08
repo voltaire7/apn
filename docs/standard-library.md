@@ -28,8 +28,9 @@ REPL) before the standard library:
 
 A local `text.apn` therefore shadows the standard `text` module for code next
 to it. Each file of a module runs in its own scope of builtins, and resolves
-its own imports and loads relative to its directory. Browser builds bundle the
-standard library only.
+its own imports and loads relative to its directory. Browser builds (`apn
+--html`) bundle the standard library and the local modules the program
+imports, so the same imports work in the browser.
 
 Each interpreter evaluates each module once in a scope containing builtins and
 its dependencies, independent of caller bindings. Reimporting restores the same

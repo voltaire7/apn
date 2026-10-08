@@ -1,4 +1,5 @@
 /// <reference lib="dom" />
+import { BUNDLE_APP } from "./modules.ts";
 import { Interpreter } from "./interp.ts";
 import { P5Sketch, P5_EVENTS, type P5Instance } from "./p5.ts";
 import { parse } from "./parser.ts";
@@ -54,6 +55,7 @@ try {
     const payload = JSON.parse(document.getElementById("apn-program")!.textContent!);
     const interpreter = new Interpreter();
     interpreter.moduleSources = payload.modules;
+    interpreter.sourceDir = BUNDLE_APP;
     interpreter.enableChecking();
     interpreter.run(parse(payload.source));
     const program = interpreter.env.get("main");

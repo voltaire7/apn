@@ -97,6 +97,8 @@ export class Interpreter {
     private preludeBindings = new Map<string, Value>();
     hostNatives = new Map<string, (args: Value[]) => Value>();
     programArgs: string[] = [];
+    // A bundle (a browser build) to import from instead of the disk: virtual
+    // paths to sources (see bundleProgram in modules.ts).
     moduleSources?: Record<string, string>;
     extendDefinitions = false;
     private modules = new Map<string, Extract<Value, { kind: "record" }>>();

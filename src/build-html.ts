@@ -1,16 +1,16 @@
 import { CheckingSession } from "./checking-session.ts";
 import { parse } from "./parser.ts";
+import { BUNDLE_APP, bundleProgram } from "./modules.ts";
 
 export async function buildHtml(sourceFile: string, outputFile: string): Promise<void> {
     const source = Deno.readTextFileSync(sourceFile);
     parse(source); // Catch syntax errors without executing user effects during the build.
-    const modules: Record<string, string> = {};
-    for (const entry of Deno.readDirSync(new URL("../lib/", import.meta.url))) {
-        if (entry.isFile && entry.name.endsWith(".apn")) modules[entry.name.slice(0, -4)] = Deno.readTextFileSync(new URL(`../lib/${entry.name}`, import.meta.url));
-    }
+    // The standard library and the local modules the program imports, checked
+    // from the bundle exactly as the browser will run them.
+    const modules = bundleProgram(source, new URL(".", new URL(sourceFile, `file://${Deno.cwd()}/`)).pathname);
     const checking = new CheckingSession();
     checking.moduleSources = modules;
-    checking.prepare(parse(source), new URL(".", new URL(sourceFile, `file://${Deno.cwd()}/`)).pathname);
+    checking.prepare(parse(source), BUNDLE_APP);
     const temporary = Deno.makeTempDirSync({ prefix: "apn-html-" });
     try {
         const output = `${temporary}/runtime.js`;

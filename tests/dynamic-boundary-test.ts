@@ -117,7 +117,8 @@ for (const module of ['"function"', '["type","function"]']) {
         const source = `x = "old"; Dynamic (import ${module}); x`;
         requireChecked(source);
         const i = new Interpreter(); i.checkedExecution = true;
-        i.moduleSources = { function: 'x = 123', type: '' };
+        i.moduleSources = { "/lib/function.apn": 'x = 123', "/lib/type.apn": '' };
+        i.sourceDir = "/app/";
         try { i.run(parseDocument(source)); } catch (error) {
             if (!String(error).includes('cannot replace string with int')) throw error;
             if (i.renderString(i.run(parseDocument('x'))) !== '"old"') throw new Error('binding changed');

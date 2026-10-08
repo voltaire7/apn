@@ -1,3 +1,4 @@
+import { bundleProgram } from "../src/modules.ts";
 import { Interpreter } from "../src/interp.ts";
 import { parse } from "../main.ts";
 import { BrowserSandbox, type HtmlNode } from "../src/html.ts";
@@ -54,9 +55,10 @@ for (const [view, error] of [
 Deno.test("bundled modules load without filesystem access", () => {
     const i = new Interpreter();
     i.moduleSources = {
-        html: Deno.readTextFileSync(new URL("../lib/html.apn", import.meta.url)),
-        browser: Deno.readTextFileSync(new URL("../lib/browser.apn", import.meta.url)),
+        "/lib/html.apn": Deno.readTextFileSync(new URL("../lib/html.apn", import.meta.url)),
+        "/lib/browser.apn": Deno.readTextFileSync(new URL("../lib/browser.apn", import.meta.url)),
     };
+    i.sourceDir = "/app/";
     i.run(parse('import "html"; import "browser"; main = sandbox [init: 1, update: (msg model -> model), view: (n -> text (toString n))]'));
     if (content(new BrowserSandbox(i, i.env.get("main")!).render()) !== '1') throw new Error("bundled app failed");
     try { i.importStandard('text'); }
@@ -67,4 +69,26 @@ Deno.test("nullary constructor function clauses do not consume the next paramete
     const i = new Interpreter();
     const source = 'Choice = FirstChoice | SecondChoice; choose FirstChoice x = x; choose SecondChoice x = x + 1; choose SecondChoice 41';
     if (i.renderString(i.run(parse(source))) !== '42') throw new Error("nullary constructor pattern failed");
+});
+Deno.test("a browser build bundles the local modules a program imports", () => {
+    const directory = new URL("./fixtures/packages/", import.meta.url).pathname;
+    const source = 'import ["uses-hello","shapes"]\nanswer = [exported,square 3]';
+    const bundle = bundleProgram(source, directory);
+    const local = Object.keys(bundle).filter(path => path.startsWith("/app/")).sort();
+    // The imported files and what they import, not the rest of the folder.
+    if (JSON.stringify(local) !== '["/app/hello.apn","/app/shapes/cube.apn","/app/shapes/square.apn","/app/uses-hello.apn"]') throw new Error(JSON.stringify(local));
+    if (!bundle["/lib/option.apn"]) throw new Error("standard library missing");
+    for (const checked of [false, true]) {
+        const i = new Interpreter();
+        i.moduleSources = bundle;
+        i.sourceDir = "/app/";
+        if (checked) i.enableChecking();
+        i.run(parse(source));
+        if (i.renderString(i.run(parse("answer"))) !== '["hi pkg",9]') throw new Error(`checked=${checked}`);
+        try { i.run(parse('import "both"')); } catch (error) {
+            if (error instanceof Error && error.message.includes("not bundled")) continue;
+            throw error;
+        }
+        throw new Error("an unbundled local module resolved");
+    }
 });

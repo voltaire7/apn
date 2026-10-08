@@ -175,8 +175,12 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   the resolved path (`key`), so a module and its checked types always come from
   the same files. Each file of a folder module runs (and is checked) in its own
   builtins scope with `sourceDir` set to its directory. With `moduleSources`
-  (browser builds) only bundled standard modules resolve.
-  Tests: `tests/package-import-test.ts`.
+  (a bundle) the same lookup runs over virtual paths: the standard library
+  under `/lib/` and the program's folder at `/app/` (its `sourceDir` in the
+  browser). `bundleProgram` collects the program's literal imports
+  transitively; `apn --html` checks the program against that bundle, so a build
+  succeeds only when the browser will find every module.
+  Tests: `tests/package-import-test.ts`, `tests/html-test.ts`.
 
 ## Mutable references and `env`
 

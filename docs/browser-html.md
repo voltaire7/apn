@@ -8,8 +8,10 @@ open counter.html
 ```
 
 `apn examples/browser/counter.apn` only evaluates its definitions and exits.
-The `--html` command embeds the APN interpreter, source, and standard modules
-into one HTML file. Open that file in a browser; no server or runtime download
+The `--html` command embeds the APN interpreter, source, standard modules, and
+the local modules the program imports (files or folders next to it, and what
+they import in turn) into one HTML file. `load` is not available in the
+browser. Open that file in a browser; no server or runtime download
 is required. Rebuild and refresh after editing the APN source.
 
 ```apn

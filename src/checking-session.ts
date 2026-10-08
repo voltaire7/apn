@@ -32,6 +32,8 @@ export class CheckingSession {
         const url = loadUrl(name, directory);
         if (this.checkedLoads.get(url.href) !== source) throw new APNError("type", `load '${name}' was not checked with this source; resubmit its definition or use Dynamic for runtime loading`);
     }
+    // A bundle (a browser build) to import from instead of the disk: virtual
+    // paths to sources (see bundleProgram in modules.ts).
     moduleSources?: Record<string, string>;
     /** The runtime's natives by arity (to follow env views through calls). */
     nativeArities?: Map<string, number>;
