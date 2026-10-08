@@ -1460,7 +1460,7 @@ halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 # inside multiline input the arrows move between lines), persisted history, Tab
 # completion + 4-space tabs, colored input/echo, multi-line chunks
 # with auto-indent. These are interactive-only and cannot run in this
-# file-mode showcase: see :help inside the REPL, or AGENTS.md.
+# file-mode showcase: see :help inside the REPL, or docs/repl.md.
 # ---------------------------------------------------------
 
 # REPL editing: Option+Left/Right moves by word. Enter submits unless the
