@@ -307,8 +307,13 @@ the argument is visibly built with (`f None = ...` with `h None`, or
 is called directly by name: with `mk x = None`, `f (mk 1)` uses the `None`
 clause, and `pass v = v` passes its argument's value on. Results that depend on
 argument values are evaluated: the checker runs the called function's clauses
-(ranked as at runtime) and its conditions (comparisons, `!`, `&&`, `||`, integer
-arithmetic, truthiness) with what it knows about the arguments. So with
+(ranked as at runtime) and its conditions (comparisons, `!`, `&&`, `||`,
+arithmetic, numeric builtins such as `abs`, `floor`, `sqrt`, `min`, truthiness)
+with what it knows about the arguments. Numbers use the runtime's own
+arithmetic, so exact rationals stay exact (`1 / 2 == 0.5`), binary floats round
+as at runtime (`0.1 + 0.2 == 0.3` is false), comparisons with NaN are false,
+and an operation the runtime rejects (a lossy exact/float mix, exact division by
+zero) gives no value. Fixed-width types such as `Float32` are not evaluated. So with
 `safe n = n > 0 ? Some n : None`, `f (safe 4)` uses the `Some` clause and
 `f (safe (-3))` the `None` one. Inside another function (`h v = g (f (safe v))`)
 the decision waits for `h`'s calls, where `v` is known. Where a value stays

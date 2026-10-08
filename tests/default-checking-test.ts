@@ -429,3 +429,43 @@ for (const source of [
     'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); k w = h w; k 9',
     'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); [h 0, h 1]',
 ]) Deno.test(`value-dependent results stay checked: ${source}`, () => rejected(session(), source));
+// Floating-point and exact rational conditions are evaluated with the
+// runtime's own arithmetic and comparison, including NaN and lossy-mix rules.
+const optionClauses = 'import "std/option"; f None = [0]; f x = [1, 2]';
+for (const [source, expected] of [
+    ['g [a] = a; small x = x < 0.5 ? None : Some x; g (f (small 0.25))', '0'],
+    ['g [a, b] = a; small x = x < 0.5 ? None : Some x; g (f (small 0.75))', '1'],
+    ['g [a] = a; small x = x * 2.0 - 0.5 < 0.0 ? None : Some x; g (f (small 0.1))', '0'],
+    ['g [a, b] = a; e3 x = x + 0.2 == 0.3 ? None : Some x; g (f (e3 0.1))', '1'],
+    ['g [a] = a; half x = x / 2 == 1 / 2 ? None : Some x; g (f (half 1))', '0'],
+    ['g [a] = a; third x = x < 1 / 3 ? None : Some x; g (f (third (1 / 4)))', '0'],
+    ['g [a] = a; m x = x == 0.5 ? None : Some x; g (f (m (1 / 2)))', '0'],
+    ['g [a, b] = a; n x = x < 1.0 ? None : Some x; g (f (n (0.0 / 0.0)))', '1'],
+    ['g [a] = a; r x = floor x == 2 ? None : Some x; g (f (r 2.7))', '0'],
+    ['g [a] = a; r x y = min (abs x) y < 1 ? None : Some x; g (f (r (-0.5) 4))', '0'],
+    ['g [a] = a; r x = x ^ 2 == 1 / 4 ? None : Some x; g (f (r (1 / 2)))', '0'],
+    ['g [a] = a; small x = x < 0.5 ? None : Some x; h v = g (f (small v)); h 0.25', '0'],
+    ['g [a] = a; small x = x < 0.5 ? None : Some x; h v = g (f (small (v / 4))); h 1', '0'],
+] as const) Deno.test(`float and rational conditions: ${source}`, () => {
+    const actual = run(session(), `${optionClauses}; ${source}`);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const [source, expected] of [
+    ['f 0.5 = [0]; f x = [1, 2]; g [a] = a; g (f (1 / 2))', '0'],
+    ['f 2 = [0]; f x = [1, 2]; g [a] = a; g (f (6 / 3))', '0'],
+] as const) Deno.test(`number patterns match computed values: ${source}`, () => {
+    const actual = run(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'g [a] = a; small x = x * 2.0 - 0.5 < 0.0 ? None : Some x; g (f (small 0.4))',
+    'g [a] = a; e3 x = x + 0.2 == 0.3 ? None : Some x; g (f (e3 0.1))',
+    'g [a] = a; n x = x < 1.0 ? None : Some x; g (f (n (0.0 / 0.0)))',
+    'g [a] = a; small x = x < 0.5 ? None : Some x; h v = g (f (small v)); h 0.75',
+    'g [a] = a; small x = x < 0.5 ? None : Some x; h v = g (f (small (v / 4))); h 3',
+    // Operations the runtime rejects give no value: both clauses count.
+    'g [a] = a; r x = x + 0.5 < 1.0 ? None : Some x; g (f (r (1 / 3)))',
+    'g [a] = a; r x = 1 / x > 0 ? None : Some x; g (f (r 0))',
+    // A shadowed builtin is not evaluated as the builtin.
+    'g [a] = a; min a b = 99; r x = min x 1 < 1 ? None : Some x; g (f (r 0))',
+]) Deno.test(`float and rational conditions stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${source}`));

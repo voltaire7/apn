@@ -1,5 +1,6 @@
 import { type Expr, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
-import { castNumeric, NUMERIC_TYPES, numericType, TYPE_NAMES } from "./type-system.ts";
+import { castNumeric, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
+import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numericNative, type Numeric } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import { parse, parseDocument } from "./parser.ts";
 
@@ -41,7 +42,14 @@ interface ClauseOrder { index: number; params: Pattern[]; refutable: Set<string>
 // tag is the constructor that visibly built the value (None, Some 5); call is
 // a direct call whose result is evaluated once its arguments are known (they
 // may refer to parameters of an enclosing function, substituted at its calls).
-interface Known { index?: Index; boolean?: boolean; string?: string; char?: string; float?: number; tag?: string; ref?: string; call?: { summary: Summary; args: Known[] } }
+// number holds exact rationals and complex numbers (integers use index, floats
+// float); expr is an expression over enclosing parameters, evaluated once
+// they are known.
+interface Known {
+    index?: Index; boolean?: boolean; string?: string; char?: string; float?: number; number?: Numeric; tag?: string; ref?: string;
+    call?: { summary: Summary; args: Known[] };
+    expr?: { e: Expr; env: [string, Known][]; scope: Scope };
+}
 // A function's clauses and defining scope, so a direct call by name can
 // evaluate what its result value is from what is known about the arguments.
 interface Summary { clauses: (ClauseOrder & { body: Expr })[]; scope: Scope }
@@ -53,8 +61,10 @@ interface Entry {
     char?: string;
     float?: number;
     tag?: string;
+    number?: Numeric;
     ref?: string;
     call?: Known["call"];
+    expr?: Known["expr"];
     clauses?: { params: Pattern[]; body: Expr }[];
     mono?: boolean;
     // inherited: visible from an enclosing scope (blocks mark every outer entry).
@@ -233,9 +243,10 @@ function substituteKnown(known: Known, subst?: [string, Index], value?: [string,
     if (result.ref && value && result.ref === value[0]) {
         const v = value[1];
         // The whole value is the argument's, its index included (none for a non-integer).
-        result = { index: subst && known.index?.terms.has(subst[0]) ? result.index : v.index, boolean: v.boolean, string: v.string, char: v.char, float: v.float, tag: v.tag, ref: v.ref, call: v.call };
+        result = { index: subst && known.index?.terms.has(subst[0]) ? result.index : v.index, boolean: v.boolean, string: v.string, char: v.char, float: v.float, number: v.number, tag: v.tag, ref: v.ref, call: v.call, expr: v.expr };
     }
     if (result.call) result = { ...result, call: { ...result.call, args: result.call.args.map(a => substituteKnown(a, subst, value)) } };
+    if (result.expr) result = { ...result, expr: { ...result.expr, env: result.expr.env.map(([n, k]) => [n, substituteKnown(k, subst, value)]) } };
     return result;
 }
 // The names a pattern binds.
@@ -407,14 +418,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Does this value depend on a parameter of an enclosing function?
     function symbolic(k: Known): boolean {
-        return !!k.ref || !!k.index?.terms.size || !!k.call?.args.some(symbolic);
+        return !!k.ref || !!k.index?.terms.size || !!k.call?.args.some(symbolic) || !!k.expr?.env.some(([, v]) => symbolic(v));
     }
     // Set while deciding leftover checks at the end: symbolic values no longer wait.
     let deciding = false;
     // The deferred call being evaluated, so deferring it again keeps the same node.
     let evaluatingCall: Extract<Ty, { k: "operation" }> | undefined;
     function deferredCall(f: Ty, argument: Entry): Ty {
-        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, tag: argument.tag, ref: argument.ref, call: argument.call } };
+        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr } };
         requirements.push(result);
         return resolve(result);
     }
@@ -1280,8 +1291,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             collect(argument.type);
             // With this argument's value known, the function's deferred checks
             // (calls on the parameter) see that value instead of its symbol.
-            const value: Known = { index: argument.index, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, tag: argument.tag, ref: argument.ref, call: argument.call };
-            const known = argument.index || argument.ref || argument.call || [argument.boolean, argument.string, argument.char, argument.float, argument.tag].some(x => x !== undefined);
+            const value: Known = { index: argument.index, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr };
+            const known = argument.index || argument.ref || argument.call || argument.expr || [argument.boolean, argument.string, argument.char, argument.float, argument.number, argument.tag].some(x => x !== undefined);
             const pending = f.binder && known
                 ? checks.map(check => copy(check, new Map([...variables(check)].map(t => [t, t])),
                     argument.index ? [f.binder!, argument.index] : undefined, undefined, [f.binder!, value]))
@@ -1913,6 +1924,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (!summary) return {};
             return resolveKnown({ call: { summary, args: args.map(a => valueEntry(a, scope)) } });
         }
+        if (["binop", "unop", "ternary", "numeric"].includes(e.t)) {
+            // Over enclosing parameters the value is known only at their calls.
+            const names = new Set<string>();
+            const collect = (x: Expr): void => {
+                if (x.t === "var" && scope.get(x.name)?.ref) names.add(x.name);
+                else if (x.t === "binop") { collect(x.l); collect(x.r); }
+                else if (x.t === "unop") collect(x.e);
+                else if (x.t === "ternary") { collect(x.cond); collect(x.then); collect(x.els); }
+                else if (x.t === "app") { collect(x.f); collect(x.a); }
+            };
+            collect(e);
+            const facts = evaluateKnown(e, new Map(), scope, 0) ?? {};
+            if (!names.size) return facts;
+            return { ...facts, expr: { e, scope, env: [...names].map(n => [n, valueEntry({ t: "var", name: n }, scope)]) } };
+        }
         return {};
     }
     // The summary of a callee called with `count` arguments, if the call is complete.
@@ -1928,10 +1954,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Facts plus whatever a pending call evaluates to with its arguments now.
     function resolveKnown(known: Known): Known {
-        if (!known.call) return known;
-        const facts = evaluateCall(known.call.summary, known.call.args.map(resolveKnown), 0);
+        if (!known.call && !known.expr) return known;
+        const facts = known.call
+            ? evaluateCall(known.call.summary, known.call.args.map(resolveKnown), 0)
+            : evaluateKnown(known.expr!.e, new Map(known.expr!.env.map(([n, v]) => [n, resolveKnown(v)])), known.expr!.scope, 0);
         const result: Known = { ...known };
-        for (const key of ["index", "boolean", "string", "char", "float", "tag"] as const) {
+        for (const key of ["index", "boolean", "string", "char", "float", "number", "tag"] as const) {
             if (result[key] === undefined && facts?.[key] !== undefined) (result as Record<string, unknown>)[key] = facts[key];
         }
         return result;
@@ -1964,13 +1992,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // What e evaluates to, given known values of the names in env.
     function evaluateKnown(e: Expr, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
-        const number = (k: Known | undefined) => k?.index && !k.index.terms.size ? k.index.constant : k?.float;
+        // Numbers use the runtime's own arithmetic and comparison (numbers.ts,
+        // type-system.ts); an operation the runtime would reject gives no value.
+        const attempt = (f: () => Numeric | boolean): Known | undefined => {
+            try { return knownNumber(f()); } catch { return undefined; }
+        };
         // Truthiness as the runtime defines it, where the value decides it.
         const truth = (k: Known | undefined): boolean | undefined => {
             if (!k) return undefined;
             if (k.boolean !== undefined) return k.boolean;
-            const n = number(k);
-            if (n !== undefined) return typeof n === "bigint" ? n !== 0n : n !== 0 && !Number.isNaN(n);
+            const n = numericOf(k);
+            if (n !== undefined) {
+                const real = (x: Numeric): boolean => x.kind === "complex" ? real(x.re) || real(x.im) : x.kind === "float" ? x.v !== 0 && !Number.isNaN(x.v) : !equalNumbers(x, integer(0n));
+                return real(n);
+            }
             if (k.string !== undefined) return k.string.length > 0;
             if (k.tag !== undefined || k.char !== undefined) return true;
             return undefined;
@@ -1978,6 +2013,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         switch (e.t) {
             case "int": return { index: constant(e.v) };
             case "float": return { float: e.v };
+            case "numeric": return knownNumber(e.v);
             case "bool": return { boolean: e.v };
             case "string": return { string: e.v };
             case "char": return { char: e.v };
@@ -1987,7 +2023,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!entry) return undefined;
                 if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
                 const index = entry.index && !entry.index.terms.size ? entry.index : undefined;
-                return { index, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, tag: entry.tag };
+                return { index, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag };
             }
             case "block": {
                 if (e.stmts.some(st => st.t === "patDef" || st.t === "stmDef")) return undefined;
@@ -2003,8 +2039,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "unop": {
                 const v = evaluateKnown(e.e, env, scope, depth);
                 if (e.op === "not") { const t = truth(v); return t === undefined ? undefined : { boolean: !t }; }
-                const n = number(v);
-                return typeof n === "bigint" ? { index: constant(-n) } : typeof n === "number" ? { float: -n } : undefined;
+                const n = numericOf(v);
+                return n === undefined ? undefined : attempt(() => negate(n));
             }
             case "binop": {
                 if (e.op === "&&" || e.op === "||") {
@@ -2015,36 +2051,36 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return r === undefined ? undefined : { boolean: r };
                 }
                 const l = evaluateKnown(e.l, env, scope, depth), r = evaluateKnown(e.r, env, scope, depth);
-                const x = number(l), y = number(r);
-                if (["+", "-", "*"].includes(e.op) && typeof x === "bigint" && typeof y === "bigint") {
-                    return { index: constant(e.op === "+" ? x + y : e.op === "-" ? x - y : x * y) };
-                }
-                if (["==", "!=", "<", ">", "<=", ">="].includes(e.op)) {
-                    let order: number | undefined;
-                    if (x !== undefined && y !== undefined) {
-                        // Exact numeric comparison, as the runtime compares mixed numbers.
-                        const big = (v: bigint | number) => typeof v === "bigint" ? v : Number.isInteger(v) ? BigInt(v) : undefined;
-                        const bx = big(x), by = big(y);
-                        order = bx !== undefined && by !== undefined ? (bx < by ? -1 : bx > by ? 1 : 0)
-                            : Number(x) < Number(y) ? -1 : Number(x) > Number(y) ? 1 : Number(x) === Number(y) ? 0 : undefined;
-                    } else {
-                        for (const key of ["string", "char"] as const) {
-                            if (l?.[key] !== undefined && r?.[key] !== undefined) order = l[key]! < r[key]! ? -1 : l[key]! > r[key]! ? 1 : 0;
-                        }
-                        if (order === undefined && (e.op === "==" || e.op === "!=")) {
-                            const plain = (k: Known | undefined) => k?.boolean !== undefined && number(k) === undefined && k.string === undefined;
-                            if (plain(l) && plain(r)) order = l!.boolean === r!.boolean ? 0 : 1;
-                            // Distinct nullary constructors differ; equal tags with fields may not be equal.
-                            else if (l?.tag !== undefined && r?.tag !== undefined && l.tag !== r.tag) order = 1;
-                        }
+                const x = numericOf(l), y = numericOf(r);
+                if (x !== undefined && y !== undefined) {
+                    if (["+", "-", "*", "/", "%"].includes(e.op)) return attempt(() => typedArithmetic(e.op, x, y));
+                    if (e.op === "^") return attempt(() => typedPower(x, y));
+                    if (e.op === "==" || e.op === "!=") return attempt(() => equalNumbers(x, y) === (e.op === "=="));
+                    if (["<", ">", "<=", ">="].includes(e.op)) {
+                        return attempt(() => {
+                            const c = compareNumbers(x, y);
+                            // Ordered comparisons involving NaN are false.
+                            if (Number.isNaN(c)) return false;
+                            return e.op === "<" ? c < 0 : e.op === ">" ? c > 0 : e.op === "<=" ? c <= 0 : c >= 0;
+                        });
                     }
-                    if (order === undefined) return undefined;
-                    if (e.op === "==") return { boolean: order === 0 };
-                    if (e.op === "!=") return { boolean: order !== 0 };
-                    if (!["<", ">", "<=", ">="].includes(e.op)) return undefined;
-                    return { boolean: e.op === "<" ? order < 0 : e.op === ">" ? order > 0 : e.op === "<=" ? order <= 0 : order >= 0 };
+                    return undefined;
                 }
-                return undefined;
+                if (!["==", "!=", "<", ">", "<=", ">="].includes(e.op)) return undefined;
+                let order: number | undefined;
+                for (const key of ["string", "char"] as const) {
+                    if (l?.[key] !== undefined && r?.[key] !== undefined) order = l[key]! < r[key]! ? -1 : l[key]! > r[key]! ? 1 : 0;
+                }
+                if (order === undefined && (e.op === "==" || e.op === "!=")) {
+                    const plain = (k: Known | undefined) => k?.boolean !== undefined && numericOf(k) === undefined && k.string === undefined;
+                    if (plain(l) && plain(r)) order = l!.boolean === r!.boolean ? 0 : 1;
+                    // Distinct nullary constructors differ; equal tags with fields may not be equal.
+                    else if (l?.tag !== undefined && r?.tag !== undefined && l.tag !== r.tag) order = 1;
+                }
+                if (order === undefined) return undefined;
+                if (e.op === "==") return { boolean: order === 0 };
+                if (e.op === "!=") return { boolean: order !== 0 };
+                return { boolean: e.op === "<" ? order < 0 : e.op === ">" ? order > 0 : e.op === "<=" ? order <= 0 : order >= 0 };
             }
             case "app": {
                 const args: Expr[] = [];
@@ -2056,6 +2092,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     let t = resolve(entry?.type ?? dynamic);
                     for (let n = 0; n < args.length && t.k === "fn"; n++) t = resolve(t.output);
                     return t.k === "variant" ? { tag: head.name } : undefined;
+                }
+                // The runtime's numeric natives, when the name is the builtin itself.
+                const native = NUMBER_NATIVES.find(([name]) => name === head.name);
+                if (native && entry?.builtin && native[1] === args.length) {
+                    const values = args.map(a => numericOf(evaluateKnown(a, env, scope, depth)));
+                    if (values.some(v => v === undefined)) return undefined;
+                    const numbers = values as Numeric[];
+                    return attempt(() => head.name === "expt" ? typedPower(numbers[0], numbers[1]) : numericNative(head.name, numbers));
                 }
                 if (!trustsShape(entry)) return undefined;
                 const summary = summaryAt(entry!.type, args.length);
@@ -2073,16 +2117,31 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (const key of ["boolean", "string", "char", "float", "tag"] as const) {
             if (same(a[key], b[key])) (result as Record<string, unknown>)[key] = a[key];
         }
+        if (a.number && b.number && equalNumbers(a.number, b.number)) result.number = a.number;
         return Object.keys(result).length ? result : undefined;
     }
     // Is the argument's value known to equal (true) or differ from (false) this
     // number, compared exactly as the runtime compares numbers?
     function equalsNumber(argument: Entry, value: bigint | number): boolean | undefined {
-        const int = argument.index && !argument.index.terms.size ? argument.index.constant : undefined;
-        const float = argument.float;
-        if (int !== undefined) return typeof value === "bigint" ? int === value : Number.isInteger(value) && BigInt(value) === int;
-        if (float !== undefined) return typeof value === "number" ? float === value : Number.isInteger(float) && BigInt(float) === value;
-        return undefined;
+        const n = numericOf(argument);
+        return n === undefined ? undefined : equalNumbers(n, typeof value === "bigint" ? integer(value) : floating(value));
+    }
+    // A known untyped number, as the runtime represents it.
+    function numericOf(k: Known | undefined): Numeric | undefined {
+        if (!k) return undefined;
+        if (k.index && !k.index.terms.size) return integer(k.index.constant);
+        if (k.float !== undefined) return floating(k.float);
+        return k.number;
+    }
+    // Facts for a number; fixed-width typed numbers (Int32, Float32 ...) are left
+    // alone, while Int and Float label plain numbers.
+    function knownNumber(n: Numeric | boolean): Known | undefined {
+        if (typeof n === "boolean") return { boolean: n };
+        if (n.typeName && n.typeName !== "Int" && n.typeName !== "Float") return undefined;
+        if (n.typeName) n = { ...n, typeName: undefined } as Numeric;
+        if (n.kind === "int") return { index: constant(n.v) };
+        if (n.kind === "float") return { float: n.v };
+        return { number: n };
     }
     // Does this argument always match p? Only what the checker knows exactly
     // qualifies (list lengths, literal values, exact types); repeated names never do.

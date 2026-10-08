@@ -1025,6 +1025,9 @@ vowelIf b = b ? 'a' : 'z'
 print (onlyOne (vowelOrPair (vowelIf true)))  # 1
 onlyVowelIf b = onlyOne (vowelOrPair (vowelIf b))
 print (onlyVowelIf true)                      # 1
+# Float and exact-rational conditions are evaluated as the runtime computes them.
+vowelBelowHalf x = x < 1 / 2 ? 'a' : 'z'
+print (onlyOne (vowelOrPair (vowelBelowHalf 0.25)))  # 1
 sortedAndReversed xs = [sort xs, reverse xs]
 firstOfBoth [[a, b], [c, d]] = [a, c]
 print (firstOfBoth (sortedAndReversed [3, 1]))  # [1, 1]

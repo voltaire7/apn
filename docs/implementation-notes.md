@@ -251,7 +251,12 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   scope"), `literalOf` records a pending `call` in the argument's `Known`;
   `resolveKnown` evaluates it with `evaluateCall`, which ranks clauses with
   `rankClause` and evaluates bodies with `evaluateKnown` (bounded by depth and
-  `evaluations`). `substituteKnown` substitutes parameters inside pending calls
+  `evaluations`). Numbers go through the runtime's `typedArithmetic`,
+  `typedPower`, `equalNumbers`, `compareNumbers` and `numericNative` (for real
+  builtins only); `Known.number` holds rationals and complex values, and
+  `knownNumber` drops fixed-width typed results. Compound arguments over
+  enclosing parameters become a pending `expr`, re-evaluated after
+  substitution. `substituteKnown` substitutes parameters inside pending calls
   and `callArgs`. An overload call that stays ambiguous because its arguments
   are `symbolic` is deferred (`evaluatingCall` keeps one node), and `waiting`
   holds checks on it. At the end, checks still waiting only on symbolic values
