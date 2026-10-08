@@ -14,11 +14,10 @@ type Ty =
     | { k: "dynamic"; explicit?: boolean }
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
-    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string }
-    // size names an inferred, unchecked length: a function that returns its list
-    // parameter gives each call's result the argument's length. Unlike length,
-    // it never constrains anything; only application substitutes it.
-    | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number>; size?: string }
+    // keepsLength: the result is a list as long as this (final) argument. It is a
+    // property of the function's code, never of a shared type node.
+    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; keepsLength?: boolean }
+    | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number> }
     | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string> }
     | { k: "type"; value: Ty }
     | { k: "factory"; args: Entry[] }
@@ -186,20 +185,21 @@ function captured(scope: Scope): Set<Ty> {
     }
     return found;
 }
-// Each use of a generic entry gets fresh size names, just as it gets fresh type
-// variables: two calls of one function must not tie their lists' lengths.
-let sizeSerial = 0;
+// Standard-library functions that return a list as long as their final list
+// argument, which the checker cannot derive from their code (they rebuild the
+// list with a fold or a merge sort). tests/stdlib-length-test.ts verifies each
+// one at runtime. sort, sortOn and forceList are inferred from these.
+export const DECLARED_KEEPS_LENGTH = new Set(["reverse", "sortBy", "zipWithIndex"]);
 function instantiate(entry: Entry): Ty {
     return entry.mono
         ? entry.type
-        : copy(entry.type, new Map([...(entry.nonGeneric ?? [])].map((t) => [resolve(t), resolve(t)])), undefined, undefined, new Map());
+        : copy(entry.type, new Map([...(entry.nonGeneric ?? [])].map((t) => [resolve(t), resolve(t)])));
 }
 function copy(
     t: Ty,
     vars = new Map<Ty, Ty>(),
     subst?: [string, Index],
     nodes = new Map<Ty, Ty>(),
-    sizes?: Map<string, string>,
 ): Ty {
     t = resolve(t);
     if (vars.has(t)) return vars.get(t)!;
@@ -213,7 +213,7 @@ function copy(
     // into the new graph rather than the original polymorphic instance.
     const result = { ...t } as Ty;
     nodes.set(t, result);
-    const go = (x: Ty) => copy(x, vars, subst, nodes, sizes);
+    const go = (x: Ty) => copy(x, vars, subst, nodes);
     switch (t.k) {
         case "overload":
         case "union":
@@ -229,12 +229,7 @@ function copy(
             Object.assign(result, { input: go(t.input), output: go(t.output), checks: t.checks?.map(go) });
             break;
         case "list": {
-            let length = t.length, size = t.size;
-            if (!length && subst && size === subst[0]) { length = subst[1]; size = undefined; }
-            if (size && sizes) {
-                if (!sizes.has(size)) sizes.set(size, `size${sizeSerial++}`);
-                size = sizes.get(size);
-            }
+            let length = t.length;
             if (length && subst && length.terms.has(subst[0])) {
                 const terms = new Map(length.terms), coefficient = terms.get(subst[0])!;
                 terms.delete(subst[0]);
@@ -248,7 +243,6 @@ function copy(
                 element: go(t.element),
                 items: t.items?.map(go),
                 length,
-                size,
             });
             break;
         }
@@ -326,13 +320,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try { const result = evaluateOperation(t); return result === t ? t.solution ?? t : result; }
         finally { resolving.delete(t); }
     }
-    // The length of a list derived element-for-element from xs: its known
-    // length, or else a shared inferred size (see the list Ty's size).
-    function sameLength(xs: Extract<Ty, { k: "list" }>): { length?: Index; size?: string } {
-        if (xs.length) return { length: xs.length };
-        if (xs.items) return {};
-        xs.size ??= `size${sizeSerial++}`;
-        return { size: xs.size };
+    // The length of a list derived element-for-element from xs.
+    function sameLength(xs: Extract<Ty, { k: "list" }>): { length?: Index } {
+        return xs.length ? { length: xs.length } : {};
     }
     function pair(key: Ty, value: Ty): Ty { return { k: "list", element: union([key, value]), items: [key, value], length: constant(2n) }; }
     function union(types: Ty[]): Ty {
@@ -1162,9 +1152,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (f.binder && argument.index) {
                 return copy(f.output, new Map([...variables(f.output)].map((t) => [t, t])), [f.binder, argument.index]);
             }
-            // An inferred parameter size becomes the argument's known length in the result.
-            if (expected.k === "list" && expected.size && !expected.length && actual.k === "list" && actual.length) {
-                return copy(f.output, new Map([...variables(f.output)].map((t) => [t, t])), [expected.size, actual.length]);
+            // A fresh node for this call's result: the shared output type is untouched.
+            if (f.keepsLength && actual.k === "list" && actual.length) {
+                const result = resolve(f.output);
+                if (result.k === "list" && !result.length && !result.items) return { ...result, length: actual.length };
             }
             return f.output;
         }
@@ -1662,6 +1653,44 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return unknown();
         }
     }
+    // Does e evaluate to a list exactly as long as the list bound to name? Only
+    // the value itself or length-preserving operations on it qualify; anything
+    // else (folds, cons, appends, filters) is conservatively "unknown".
+    function preservesLength(e: Expr, name: string, scope: Scope): boolean {
+        switch (e.t) {
+            case "var": return e.name === name;
+            case "block": {
+                const shadows = e.stmts.some(st => st.t === "stmDef" && st.name === name || st.t === "patDef");
+                const last = e.stmts[e.stmts.length - 1];
+                return !shadows && !!last && preservesLength(last, name, scope);
+            }
+            case "ternary": return preservesLength(e.then, name, scope) && preservesLength(e.els, name, scope);
+            case "unop": return e.op === "neg" && preservesLength(e.e, name, scope);
+            case "binop":
+                return ["+", "-", "*", "/", "%", "^"].includes(e.op) &&
+                    (preservesLength(e.l, name, scope) || preservesLength(e.r, name, scope));
+            case "app": {
+                const args: Expr[] = [];
+                let head: Expr = e;
+                while (head.t === "app") { args.unshift(head.a); head = head.f; }
+                if (head.t !== "var" || head.name === name || !preservesLength(args[args.length - 1], name, scope)) return false;
+                if (head.name === "enumerate" && args.length === 1) return true;
+                const callee = scope.get(head.name);
+                return !!callee && keepsLengthAt(callee.type, args.length);
+            }
+            default: return false;
+        }
+    }
+    // Is the function value applied to `count` arguments marked keepsLength on its last one?
+    function keepsLengthAt(type: Ty, count: number): boolean {
+        let t = resolve(type);
+        if (t.k === "overload") return t.choices.some(choice => keepsLengthAt(choice, count));
+        for (let n = 1; n < count; n++) {
+            if (t.k !== "fn") return false;
+            t = resolve(t.output);
+        }
+        return t.k === "fn" && !!t.keepsLength;
+    }
     function functionType(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr): Ty {
         const outerFacts = lengthFacts;
         lengthFacts = new Map(outerFacts);
@@ -1718,18 +1747,31 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try { if (guard) infer(guard, scope); result = infer(body, scope); checks = [...patternRequirements, ...requirements]; }
         finally { requirements = outerRequirements; }
         if (declared) { unify(declared, result, body); result = declared; }
-        for (const input of inputs) {
-            const t = resolve(input.type);
-            if (t.k === "list" && !t.length && !t.items && !t.size) t.size = `size${sizeSerial++}`;
-        }
+        const last = params[params.length - 1];
+        const listName = last?.p === "var" ? last.name
+            : last?.p === "constr" && last.args.length === 1 && last.args[0].p === "var" ? last.args[0].name : undefined;
+        const keepsLength = !!listName && listName !== recursiveName && preservesLength(body, listName, scope);
         for (let n = inputs.length - 1; n >= 0; n--) {
             const parameter = params[n];
             const selfName = parameter.p === "var" && parameter.name === recursiveName ? recursiveName : undefined;
             result = { k: "fn", input: inputs[n].type, output: result, binder: inputs[n].binder, coerce: inputs[n].coerce, checks: n === inputs.length - 1 ? checks : undefined, pattern: parameter, selfName };
+            if (keepsLength && n === inputs.length - 1) result.keepsLength = true;
         }
         return result;
     }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
+        defineClauses(name, clauses, scope, location);
+        const entry = scope.get(name);
+        if (options.library && entry && DECLARED_KEEPS_LENGTH.has(name)) declareKeepsLength(entry.type);
+    }
+    // Mark the final list parameter of each overload choice.
+    function declareKeepsLength(type: Ty): void {
+        let t = resolve(type);
+        if (t.k === "overload") { t.choices.forEach(declareKeepsLength); return; }
+        while (t.k === "fn" && resolve(t.output).k === "fn") t = resolve(t.output);
+        if (t.k === "fn" && resolve(t.input).k !== "atom") t.keepsLength = true;
+    }
+    function defineClauses(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
         if (/^[A-Z]/.test(name) && clauses[0].params.every((p) => p.p === "var")) {
             const c = clauses[0];
             scope.set(name, {
@@ -1864,7 +1906,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             print: fn(a, list(variable(), constant(0n))),
             head: fn(list(a), a),
             tail: fn(list(a), list(a)),
-            map: fn(fn(a, b), fn({ k: "list", element: a, size: "mapSize" }, { k: "list", element: b, size: "mapSize" })),
+            map: fn(fn(a, b), { ...fn(list(a), list(b)), keepsLength: true } as Ty),
             filter: fn(fn(a, b), fn(list(a), list(a))),
             length: fn(dynamic, atom("Int")),
             typeOf: fn(a, atom("Type")),
@@ -1895,6 +1937,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     { const a = variable(), b = variable(), c = variable(); native("zipWith", [fn(a, fn(b, c)), list(a), list(b)], list(c)); }
     { const a = variable(), b = variable(); native("seq", [a, b], b); }
+    { const seq = scope.get("seq"); if (seq) { const t = resolve(seq.type); if (t.k === "fn" && t.output.k === "fn") t.output.keepsLength = true; } }
     native("toString", [variable()], str);
     native("intToString", [int], str);
     native("format", [str, list(variable())], str);

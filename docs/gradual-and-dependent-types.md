@@ -263,11 +263,15 @@ can be called with compatible numeric inputs, and `f "bad"` is rejected. List
 literals retain positional types; homogeneous operations check every possible
 element type. Length-preserving operations keep their input's length: `map`,
 `enumerate`, `xs * f` iteration, elementwise arithmetic (`-xs`, `xs + ys`,
-`xs * 2`), and functions that return their list parameter such as `forceList` or
-your own wrappers. `pairs record` has one pair per field. So
-`g [a, b] = ...; g (map f [1, 2])` checks, `g (map f [1, 2, 3])` is a length
-error, and `[1, 2] + [3, 4, 5]` is rejected before running. Each call keeps its
-own length. A list of unknown length (`tail`, `filter`) still needs a `Dynamic`
+`xs * 2`), and the standard library's `reverse`, `sort`, `sortBy`, `sortOn`,
+`zipWithIndex`, and `forceList`. `pairs record` has one pair per field. Your own
+function keeps its last argument's length when its result is that argument
+passed only through such operations (`twice xs = xs * (x -> x * 2)`); a fold,
+cons, append, or filter makes the length unknown. So
+`g [a, b] = ...; g (sort [2, 1])` checks, `g (map f [1, 2, 3])` is a length
+error, and `[1, 2] + [3, 4, 5]` is rejected before running. Lengths inside a
+freshly built list (`h a b = [map f a, map f b]`) are not tracked through the
+function. A list of unknown length (`tail`, `filter`) still needs a `Dynamic`
 boundary to meet a fixed-length pattern. A step function used with `repeatApply` may feed its own
 results back through arithmetic (`g [a, b] = forceList [b, a + b]`).
 Record-template patterns convert positional lists at runtime and

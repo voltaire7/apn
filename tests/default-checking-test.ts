@@ -137,8 +137,8 @@ for (const source of [
     'g [a, b] = a + b; g (tail [0, 1, 2])',
     'g [a, b] = tail [0, b, a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1, 2]',
 ]) Deno.test(`checker still rejects: ${source}`, () => rejected(session(), source));
-// Length-preserving builtins carry their input's length (or inferred size),
-// and separate uses of one generic function keep independent lengths.
+// Length-preserving builtins carry their input's length, and separate uses of
+// one generic function keep independent lengths.
 for (const [source, expected] of [
     ['g [p, q] = p; g (enumerate [10, 20])', '[0, 10]'],
     ['g [p, q] = p + q; g ([1, 2] * (x -> x * 10))', '30'],
@@ -151,7 +151,6 @@ for (const [source, expected] of [
     ['number xs = enumerate xs; g [p, q] = p; [g (number [1, 2]), length (number [1, 2, 3])]', '[[0, 1], 3]'],
     ['h a b = [map (x -> x) a, map (x -> x) b]; h [1] [1, 2]', '[[1], [1, 2]]'],
     ['f (List xs) = xs; h a b = [f a, f b]; h [1] [1, 2]', '[[1], [1, 2]]'],
-    ['h a b = [map (x -> x) a, map (x -> x) b]; g [[x], [y, z]] = x + y + z; g (h [1] [1, 2])', '4'],
 ] as const) Deno.test(`checker keeps builtin list lengths: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -163,4 +162,29 @@ for (const source of [
     'g [p, q] = p; g (pairs [x: 1])',
     'h a b = [map (x -> x) a, map (x -> x) b]; g [[x], [y, z]] = x + y + z; g (h [1, 2] [1])',
     'g [p, q] = p + q; g (tail [1, 2, 3] * (x -> x))',
+    // Lengths inside a freshly built list are not tracked through a function.
+    'h a b = [map (x -> x) a, map (x -> x) b]; g [[x], [y, z]] = x + y + z; g (h [1] [1, 2])',
 ]) Deno.test(`checker rejects mismatched builtin list lengths: ${source}`, () => rejected(session(), source));
+// Standard-library list functions keep their argument's length; functions that
+// change a list's length (folds, cons, append, filter) stay unknown, even when
+// their result has the same type as their input.
+for (const [source, expected] of [
+    ['import "std"; g [a, b] = a + b; g (reverse [1, 2])', '3'],
+    ['import "std"; g [a, b] = a - b; g (sort [2, 1])', '-1'],
+    ['import "std"; g [a, b] = a - b; g (sortBy compare [2, 1])', '-1'],
+    ['import "std"; g [a, b] = a - b; g (sortOn (x -> -x) [1, 2])', '1'],
+    ['import "std"; g [p, q] = p; g (zipWithIndex [5, 6])', '[0, 5]'],
+    ['import "std"; reverse "abc" ++ "!"', '"cba!"'],
+] as const) Deno.test(`stdlib keeps list lengths: ${source}`, () => {
+    const actual = run(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'import "std"; g [a, b] = a + b; g (reverse [1, 2, 3])',
+    'f xs = foldl (acc x -> x : acc) xs [1, 2]; g [a, b] = a + b; g (f [1, 2])',
+    'f xs = foldl (acc x -> x : acc) xs [1, 2]; g [a, b, c, d] = a + b; g (f [1, 2])',
+    'f xs = 0 : xs; g [a, b] = a + b; g (f [1, 2])',
+    'f xs = xs ++ xs; g [a, b] = a + b; g (f [1, 2])',
+    'f xs = filter (x -> x > 0) xs; g [a, b] = a + b; g (f [1, 2])',
+    'f xs = { xs = [1, 2, 3]; xs }; g [a, b] = a + b; g (f [1, 2])',
+]) Deno.test(`length changes stay unknown: ${source}`, () => rejected(session(), source));
