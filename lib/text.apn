@@ -1,4 +1,4 @@
-import "std/sequence"
+import "sequence"
 # Unicode code-point operations; chars/fromChars preserve astral characters.
 textLength text = length (chars text)
 textTake n text = fromChars (take n (chars text))

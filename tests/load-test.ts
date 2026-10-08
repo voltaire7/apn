@@ -22,9 +22,9 @@ Deno.test("extensionless load reports the resolved APN path", () => {
     throw new Error("expected missing source error");
 });
 
-Deno.test("std/system exposes halt as a deferred action", () => {
+Deno.test("system exposes halt as a deferred action", () => {
     const i = new Interpreter();
-    const module = i.run(parse('system = import "std/system"; system'));
+    const module = i.run(parse('system = import "system"; system'));
     if (i.env.get("halt")) throw new Error("namespaced import opened halt");
     if (module.kind !== "record" || !module.v.some(([key]) => key === "halt")) throw new Error("halt was not exported in the module");
     if (!i.renderString(module).includes("halt:")) throw new Error("module inspection lost halt");

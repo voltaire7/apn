@@ -3,7 +3,7 @@
 APN calls shared C libraries through Deno FFI. No new call syntax is required:
 
 ```apn
-ffi = import "std/ffi"
+ffi = import "ffi"
 ffi.withLibrary "./libmath.dylib" [
     add: ffi.function [Int32, Int32] Int32
 ] c -> {
@@ -104,7 +104,7 @@ or memory with an explicit native ownership protocol.
 ## Pointer memory
 
 ```apn
-ffi = import "std/ffi"
+ffi = import "ffi"
 p = ffi.allocate Int32 2
 set p $ 41
 ffi.peek Int32 p                # Int32 41
@@ -138,7 +138,7 @@ The library stays open only during the callback. Functions and library pointers
 that escape it reject later use. The callback's outer result is demanded before
 closing; lazy list/record fields are not recursively forced. Complete any C calls
 inside the callback before returning their results (for example, print there or
-use `forceList` from `std/sequence` for a finite list). APN-managed allocations
+use `forceList` from `sequence` for a finite list). APN-managed allocations
 are freed by garbage collection once no pointer aliases retain them.
 
 This version supports synchronous fixed-signature functions. Structs by value,

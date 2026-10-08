@@ -47,7 +47,7 @@ Deno.test('environment validates new binding names', () => {
     throw new Error('expected failure');
 });
 Deno.test('resource scopes reject escaping environment references', () => {
-    try { result('import "std/function"; bracket 1 (_ -> []) (_ -> env)'); } catch (e) {
+    try { result('import "function"; bracket 1 (_ -> []) (_ -> env)'); } catch (e) {
         if (String(e).includes('must return data')) return;
         throw e;
     }

@@ -64,7 +64,7 @@ const cases: [string, string][] = [
 ];
 for (const [source, expected] of cases) Deno.test(`std: ${source}`, () => {
     const i = new Interpreter();
-    i.run(parse('import "std"'));
+    i.run(parse('import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]'));
     const actual = i.renderString(i.run(parse(source)));
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
 });
@@ -77,7 +77,7 @@ for (const [source, message] of [
     ['import 123', 'string'],
 ]) Deno.test(`std rejects: ${source}`, () => {
     const i = new Interpreter();
-    i.run(parse('import "std"'));
+    i.run(parse('import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]'));
     try { i.renderString(i.run(parse(source))); }
     catch (error) {
         if (error instanceof Error && error.message.includes(message)) return;
@@ -88,27 +88,27 @@ for (const [source, message] of [
 Deno.test("imports are cached, isolated from caller bindings, and independent of source directory", () => {
     const i = new Interpreter();
     i.sourceDir = "/unrelated/directory";
-    i.run(parse('sum xs = 999\nimport "std/number"'));
+    i.run(parse('sum xs = 999\nimport "number"'));
     if (i.renderString(i.run(parse('mean [1,2]'))) !== 'Some 3/2') throw new Error("caller leaked into module");
-    const first = i.importStandard("std");
-    if (i.importStandard("std") !== first) throw new Error("import did not reuse module");
-    i.run(parse('s = import "std"'));
+    const first = i.importStandard("sequence");
+    if (i.importStandard("sequence") !== first) throw new Error("import did not reuse module");
+    i.run(parse('s = import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]'));
     if (i.renderString(i.run(parse('s.takeWhile (<3) [1..]'))) !== '[1,2]') throw new Error("native export missing");
 });
 
 Deno.test("a bare import does not echo an infinite export record", () => {
     const i = new Interpreter();
-    if (i.run(parse('import "std"')).kind !== "list") throw new Error("import must be quiet");
+    if (i.run(parse('import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]')).kind !== "list") throw new Error("import must be quiet");
 });
 Deno.test("standard natives require importing their module", () => {
     const i = new Interpreter();
     if (i.env.get("words") !== undefined) throw new Error("stdlib leaked into builtins");
-    i.run(parse('import "std/text"'));
+    i.run(parse('import "text"'));
     if (i.renderString(i.run(parse('words "a b"'))) !== '["a","b"]') throw new Error("missing export");
 });
 
 Deno.test("reverse uses APN typed clauses and is available from either module", () => {
-    for (const module of ["std/sequence", "std/text"]) {
+    for (const module of ["sequence", "text"]) {
         const i = new Interpreter();
         i.importStandard(module);
         const fn = i.demand(i.env.get("reverse")!);
@@ -121,19 +121,19 @@ Deno.test("reverse uses APN typed clauses and is available from either module", 
 for (const eager of ['=', '<-']) {
     for (const cached of [false, true]) Deno.test(`selective import ${eager}, cached ${cached}`, () => {
         const i = new Interpreter();
-        if (cached) i.importStandard('std', false);
+        if (cached) i.importStandard('system', false);
         const before = new Set(i.env.map.keys());
-        i.run(parse(`[halt] ${eager} import "std"`));
+        i.run(parse(`[halt] ${eager} import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]`));
         const added = [...i.env.map.keys()].filter(name => !before.has(name));
         if (JSON.stringify(added) !== '["halt"]') throw new Error(`leaked exports: ${added}`);
         if (!i.env.get('halt')) throw new Error('missing selected export');
-        i.run(parse('import "std"'));
+        i.run(parse('import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]'));
         if (!i.env.get('fibonacci')) throw new Error('bare import must still open exports');
     });
 }
 Deno.test('selective imports rename fields and preserve unselected bindings', () => {
     const i = new Interpreter();
-    i.run(parse('fibonacci = 123; [halt: stop] = import "std"'));
+    i.run(parse('fibonacci = 123; [halt: stop] = import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]'));
     if (!i.env.get('stop') || i.env.get('halt')) throw new Error('wrong selected names');
     if (i.renderString(i.run(parse('fibonacci'))) !== '123') throw new Error('overwrote unselected binding');
 });
@@ -141,6 +141,6 @@ Deno.test('failed selective imports leave the caller scope intact', () => {
     const i = new Interpreter();
     const before = [...i.env.map.keys()].join(',');
     let failed = false;
-    try { i.run(parse('[missingExport] = import "std"')); } catch { failed = true; }
+    try { i.run(parse('[missingExport] = import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]')); } catch { failed = true; }
     if (!failed || [...i.env.map.keys()].join(',') !== before) throw new Error('failed import leaked names');
 });

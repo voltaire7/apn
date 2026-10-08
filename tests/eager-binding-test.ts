@@ -47,7 +47,7 @@ Deno.test('failed eager binding preserves the previous binding', () => {
 Deno.test('getArgs supports bare capture and existing unit calls', () => {
     const i = new Interpreter();
     i.programArgs = ['first', 'second'];
-    equal(i.renderString(i.run(parseDocument('import "std/io"\nargs <- getArgs\nargs'))), '["first","second"]');
+    equal(i.renderString(i.run(parseDocument('import "io"\nargs <- getArgs\nargs'))), '["first","second"]');
     equal(i.renderString(i.run(parseDocument('getArgs []'))), '["first","second"]');
     equal(i.renderString(i.run(parseDocument('[args] = [getArgs]\nargs'))), '["first","second"]');
 });

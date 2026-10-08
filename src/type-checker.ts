@@ -203,9 +203,9 @@ const VIEW_HOLDING_NATIVES = new Set(["map", "filter", "foldl", "foldr", "zipWit
 const HIGHER_ORDER_NATIVES = new Map([["map", 0], ["filter", 0], ["foldl", 0], ["foldr", 0], ["zipWith", 0], ["iterate", 1], ["match", 1]]);
 // Constructors the standard library declares, by module (for import hints).
 const STD_CONSTRUCTORS: Record<string, string> = {
-    Some: "std/option", None: "std/option", Ok: "std/option", Err: "std/option",
-    HtmlText: "std/html", HtmlElement: "std/html", HtmlAttr: "std/html", HtmlStyle: "std/html", HtmlClick: "std/html", HtmlInput: "std/html", HtmlSubmit: "std/html",
-    BrowserSandbox: "std/browser",
+    Some: "option", None: "option", Ok: "option", Err: "option",
+    HtmlText: "html", HtmlElement: "html", HtmlAttr: "html", HtmlStyle: "html", HtmlClick: "html", HtmlInput: "html", HtmlSubmit: "html",
+    BrowserSandbox: "browser",
 };
 // Code that runs in the top-level scope: statements and top-level values.
 const topLevelCode = new WeakSet<Expr>();
@@ -1434,7 +1434,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const module = STD_CONSTRUCTORS[p.tag];
                     const near = didYouMean(p.tag, [...scope.keys()].filter(name => /^[A-Z]/.test(name)));
                     firstUnbound = { expr: e, name: p.tag, inPattern: true,
-                        hint: module ? `${p.tag} comes from ${module}: add import "${module}"` : near ? `did you mean '${near}'?` : undefined };
+                        hint: module ? `${p.tag} comes from the ${module} module: add import "${module}"` : near ? `did you mean '${near}'?` : undefined };
                 }
                 if (t.k === "factory" && p.args.length === 3) {
                     const [size, element, value] = p.args;
@@ -1917,7 +1917,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!entry && !firstUnbound && options.runtimeNames && !options.runtimeNames.has(e.name)) {
                     const near = didYouMean(e.name, [...scope.keys(), ...options.runtimeNames]);
                     const module = STD_CONSTRUCTORS[e.name];
-                    firstUnbound = { expr: e, name: e.name, hint: module ? `${e.name} comes from ${module}: add import "${module}"` : near ? `did you mean '${near}'?` : undefined };
+                    firstUnbound = { expr: e, name: e.name, hint: module ? `${e.name} comes from the ${module} module: add import "${module}"` : near ? `did you mean '${near}'?` : undefined };
                 }
                 if (!entry) return unknown();
                 const type = instantiate(entry);

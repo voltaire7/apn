@@ -1,4 +1,4 @@
-import "std"
+import ["function","option","sequence","number","text","map"]
 
 # Infinite streams, finite answers.
 print (take 12 primes)

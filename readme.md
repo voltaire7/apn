@@ -23,16 +23,17 @@ deno test --allow-read tests/*-test.ts
 | `tests/` | Evaluation regression tests |
 | `docs/` | [Evaluation semantics](docs/semantics.md), [templates and types](docs/templates-and-types.md), [zero initialization](docs/zero-initialization.md), [operator precedence](docs/semantics.md#operator-precedence-and-associativity) |
 
-Import the standard library from any directory:
+Import standard modules by name from any directory (and your own files or
+folders the same way, see [the standard library](docs/standard-library.md)):
 
 ```apn
-import "std"
+import ["sequence","number","text","map"]
 take 10 primes
 mean [1,2]                         # Some 3/2
 frequencies $ words $ "one two one"
 ```
 
-Load individual modules with `import "std/text"`, `import "std/map"`, etc.
+Load individual modules with `import "text"`, `import "map"`, etc.
 See the [standard library reference](docs/standard-library.md) or run
 `apn examples/standard-library.apn`. Imports are cached; `load "file"`
 executes a file each time, relative to the current source file.
@@ -93,7 +94,7 @@ See [editor tooling](docs/editor-tooling.md) for session-only LazyVim setup and 
 
 ## C interop
 
-`import "std/ffi"` exposes typed native calls and `Pointer` memory access.
+`import "ffi"` exposes typed native calls and `Pointer` memory access.
 Run `./examples/c-interop/run-demo` for a compiled C example, or
 `./examples/c-interop/run-donut` for a terminal donut driven by APN (Ctrl+C stops).
 The scripts build temporary libraries using `cc`; nothing is installed.

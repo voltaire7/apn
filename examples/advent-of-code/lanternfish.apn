@@ -1,4 +1,4 @@
-import "std"
+import ["function","sequence","text","map"]
 
 # AoC 2021 day 6: keep nine timer counts, never an exponentially growing list.
 fishPopulation days text = {

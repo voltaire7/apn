@@ -1,4 +1,4 @@
-import "std/function"
+import "function"
 # Explicit absence and recoverable errors. No exceptions hidden in pipelines.
 Option a = Some a | None
 Result a e = Ok a | Err e

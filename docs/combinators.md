@@ -1,7 +1,7 @@
 # Self-application and combinators
 
 ```apn
-import "std/combinator"
+import "combinator"
 
 selfFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1)))
 selfFactorial 5  # 120

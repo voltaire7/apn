@@ -8,6 +8,7 @@ import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
 import doSource from "../lib/do.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
+import { type ModuleFile, resolveModule, unknownModule } from "./modules.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { parseNumberText, isNumeric, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
@@ -102,7 +103,7 @@ export class Interpreter {
     private importing = new Set<string>();
 
     importStandard(module: string | string[], open = true): Value {
-        if (this.checking && !this.dynamicDepth) this.checking.module(module);
+        if (this.checking && !this.dynamicDepth) this.checking.module(module, this.sourceDir);
         if (Array.isArray(module)) {
             const fields = new Map<string, Value>();
             for (const name of module) {
@@ -112,54 +113,64 @@ export class Interpreter {
             if (open) this.publishForeignBindings(this.env, [...fields]);
             return { kind: "record", v: [...fields] };
         }
-        const names = ["type", "function", "option", "sequence", "array", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5", "ffi"];
-        const name = module === "std" ? "std" : module.startsWith("std/") && names.includes(module.slice(4)) ? module.slice(4) : null;
-        if (!name) throw new APNError("runtime", `unknown module '${module}'`);
-        let record = this.modules.get(module);
+        const resolved = resolveModule(module, this.sourceDir, this.moduleSources);
+        if (!resolved) { const { message, hint } = unknownModule(module, !!this.moduleSources); throw new APNError("runtime", message, { hint }); }
+        let record = this.modules.get(resolved.key);
         if (!record) {
-            if (this.importing.has(module)) throw new APNError("runtime", `cyclic import '${module}'`);
-            this.importing.add(module);
-            const caller = this.env;
-            const callerDir = this.sourceDir;
-            const extend = this.extendDefinitions;
-            // Modules resolve against builtins, never arbitrary caller bindings.
-            const builtins = new Env();
-            for (const type of TYPE_NAMES) builtins.setLocal(type, { kind: "type", name: type });
-            for (const [name, arity] of [...NATIVES, ...STANDARD_NATIVES]) builtins.setLocal(name, { kind: "native", name, arity, applied: [] });
-            for (const [name, value] of this.preludeBindings) builtins.setLocal(name, value);
-            const scope = new Env(builtins);
-            const builtinExports: Record<string, string[]> = {
-                ffi: ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer"],
-                io: ["withFile", "readFile", "readStdin", "getArgs"],
-                function: ["bracket", "fail", "seq", "do"],
-                sequence: [],
-                text: ["chars", "fromChars", "upper", "lower"],
-            };
-            for (const exported of builtinExports[name] ?? []) scope.setLocal(exported, builtins.get(exported)!);
+            if (this.importing.has(resolved.key)) throw new APNError("runtime", `cyclic import '${module}'`);
+            this.importing.add(resolved.key);
             try {
-                const source = this.moduleSources
-                    ? this.moduleSources[name] ?? (() => { throw new APNError("runtime", `module '${module}' is not bundled`); })()
-                    : Deno.readTextFileSync(new URL(`../lib/${name}.apn`, import.meta.url));
-                const program = parse(source, module);
-                this.env = scope;
-                this.extendDefinitions = false;
-                this.sourceDir = new URL("../lib/", import.meta.url).pathname;
-                this.runDepth++;
-                try { this.run(program); } finally { this.runDepth--; }
-                // The bundled cast is already installed from this exact source.
-                // Reuse its identity when std/type reexports it.
-                if (name === "type" && source === typeSource) scope.setLocal("cast", this.preludeBindings.get("cast")!);
-                record = { kind: "record", v: [...scope.map.entries()] };
-                this.modules.set(module, record);
-            } finally {
-                this.env = caller;
-                this.sourceDir = callerDir;
-                this.extendDefinitions = extend;
-                this.importing.delete(module);
-            }
+                // A folder's files are modules of their own; their exports merge.
+                const fields = new Map<string, Value>();
+                for (const file of resolved.files) {
+                    for (const [name, value] of this.runModuleFile(file)) {
+                        if (fields.has(name) && resolved.files.length > 1) throw new APNError("runtime", `'${name}' is defined by more than one file of '${module}'`);
+                        fields.set(name, value);
+                    }
+                }
+                record = { kind: "record", v: [...fields] };
+                this.modules.set(resolved.key, record);
+            } finally { this.importing.delete(resolved.key); }
         }
         if (open) this.publishForeignBindings(this.env, record.v);
         return record;
+    }
+
+    // Run one module file against builtins only (never the caller's bindings);
+    // its top-level bindings are its exports.
+    private runModuleFile(file: ModuleFile): Array<[string, Value]> {
+        const caller = this.env;
+        const callerDir = this.sourceDir;
+        const extend = this.extendDefinitions;
+        const builtins = new Env();
+        for (const type of TYPE_NAMES) builtins.setLocal(type, { kind: "type", name: type });
+        for (const [name, arity] of [...NATIVES, ...STANDARD_NATIVES]) builtins.setLocal(name, { kind: "native", name, arity, applied: [] });
+        for (const [name, value] of this.preludeBindings) builtins.setLocal(name, value);
+        const scope = new Env(builtins);
+        const builtinExports: Record<string, string[]> = {
+            ffi: ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer"],
+            io: ["withFile", "readFile", "readStdin", "getArgs"],
+            function: ["bracket", "fail", "seq", "do"],
+            sequence: [],
+            text: ["chars", "fromChars", "upper", "lower"],
+        };
+        for (const exported of file.std ? builtinExports[file.std] ?? [] : []) scope.setLocal(exported, builtins.get(exported)!);
+        try {
+            const program = parse(file.source, file.label);
+            this.env = scope;
+            this.extendDefinitions = false;
+            this.sourceDir = file.directory;
+            this.runDepth++;
+            try { this.run(program); } finally { this.runDepth--; }
+            // The bundled cast is already installed from this exact source.
+            // Reuse its identity when type reexports it.
+            if (file.std === "type" && file.source === typeSource) scope.setLocal("cast", this.preludeBindings.get("cast")!);
+            return [...scope.map.entries()];
+        } finally {
+            this.env = caller;
+            this.sourceDir = callerDir;
+            this.extendDefinitions = extend;
+        }
     }
 
     env = new Env();

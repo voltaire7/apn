@@ -1,4 +1,4 @@
-import "std/text"
+import "text"
 
 # A source reader written in APN. Tokens are [kind, value]; no native parser.
 mpToken kind value = [kind,value]

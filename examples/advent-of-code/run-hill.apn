@@ -1,2 +1,3 @@
+import "io"
 load "hill-climbing"
 print (solveHill (readInput []))

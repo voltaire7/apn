@@ -1,4 +1,4 @@
-import "std/map"
+import "map"
 
 # Breadth-first traversal with level frontiers; keys must be HashMap scalar keys.
 # Mark on insertion so cycles and duplicate edges cannot enqueue a node twice.

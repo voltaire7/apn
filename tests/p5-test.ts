@@ -26,7 +26,7 @@ Deno.test("p5 example dispatches setup, animation, and mutable click events", ()
 });
 Deno.test("p5 call supports overload arguments and rejects unsafe integer conversion", () => {
     const i = new Interpreter();
-    i.run(parse('p5 = import "std/p5"; main = p5.sketch [setup: (p -> p.call "fill" [255,0,0]), draw: (p -> p.circle 9007199254740993 0 10)]'));
+    i.run(parse('p5 = import "p5"; main = p5.sketch [setup: (p -> p.call "fill" [255,0,0]), draw: (p -> p.circle 9007199254740993 0 10)]'));
     let args: unknown[] = [];
     const sketch = new P5Sketch(i, i.env.get('main')!, { fill: (...a: unknown[]) => { args = a; }, circle: () => {} });
     sketch.dispatch('setup');

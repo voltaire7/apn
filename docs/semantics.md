@@ -302,7 +302,7 @@ zero-argument action needed to obtain its outer result, then binds that result
 in the current scope. This is an eager binding, not monadic `do` notation.
 
 ```apn
-import "std/io"
+import "io"
 args <- getArgs
 
 result <- print "hello"  # prints now, even if result is never used
@@ -576,7 +576,7 @@ Numeric equality ignores
 annotations: `.2 == Float .2` remains true. Int and Float values display without
 a prefix; specialized types such as Int32, Float32 and Float64 retain theirs.
 
-`cast` remains a compatibility helper in the APN prelude and `std/type`:
+`cast` remains a compatibility helper in the APN prelude and `type`:
 
 ```apn
 cast (Type target) value = target value
@@ -683,15 +683,19 @@ values are returned unchanged. For example, `myTypeOf (t x) = print t` still pri
 It inspects the outer value without forcing list contents. Repeating the type
 variable, as in `(t x) (t y)`, requires both arguments to have the same type.
 
-## Standard module imports
+## Module imports
 
-`import "std"` (or `std/function`, `std/option`, `std/sequence`, `std/number`,
-`std/text`, `std/map`) evaluates a bundled module once per interpreter and brings
-its exports into the current scope. Module evaluation uses an isolated scope
-with builtins and explicit dependencies; caller bindings do not affect it.
-Reimporting installs the cached exports again. Imports return an export record.
-A definition such as `s = import "std"` defers importing until demanded.
-Names resolve relative to the APN installation, independently of sourceDir.
+`import "name"` evaluates a module once per interpreter and brings its exports
+into the current scope. The name is looked up next to the importing file (the
+current directory in the REPL) as `name.apn`, then as a `name/` folder, whose
+`.apn` files (not subfolders: `import "name/sub"`) form one module; a file wins
+over a folder of the same name. Otherwise it is a standard module such as
+`function`, `option`, `sequence`, `number`, `text` or `map`. Standard modules
+take no prefix; `import "std"` and `import "std/text"` are errors. Module
+evaluation uses an isolated scope with builtins and explicit dependencies;
+caller bindings do not affect it. Reimporting installs the cached exports
+again. Imports return an export record. A definition such as
+`s = import "sequence"` defers importing until demanded.
 `load` remains uncached file execution relative to the current source file.
 See [the standard library reference](standard-library.md) for APIs and limits.
 
@@ -758,7 +762,7 @@ before that statement executes; circular loads are not rejected.
 
 ## Sequencing expression lists
 
-`do` is an ordinary APN function available in the prelude and `std/function`:
+`do` is an ordinary APN function available in the prelude and `function`:
 
 ```apn
 do [print "hi",print "there"]

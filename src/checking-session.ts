@@ -1,9 +1,9 @@
 import { APNError } from "./errors.ts";
 import { parse } from "./parser.ts";
+import { resolveModule, unknownModule } from "./modules.ts";
 import { type CheckOptions, checkTypes, copyTypeScope, isEnvView, mayMutate, mentionsAny, topNames, type TypeScope } from "./type-checker.ts";
 import type { TopLevel } from "./ast.ts";
 
-const moduleNames = new Set(["type", "function", "option", "sequence", "array", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5", "ffi"]);
 const nativeExports: Record<string, string[]> = {
     ffi: ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer"],
     io: ["withFile", "readFile", "readStdin", "getArgs"],
@@ -11,6 +11,11 @@ const nativeExports: Record<string, string[]> = {
     text: ["chars", "fromChars", "upper", "lower"],
 };
 /** Static state is separate from evaluation: checking never runs an APN action. */
+// A module file's name within its package, for messages.
+function fileName(label: string): string {
+    return label.slice(label.lastIndexOf("/") + 1).replace(/\.apn$/, "") + ".apn";
+}
+
 // The file load "name" reads from directory (a trailing / or not).
 function loadUrl(name: string, directory: string): URL {
     const path = name.startsWith("/") ? `${name}.apn` : `${directory.replace(/\/+$/, "")}/${name}.apn`;
@@ -80,7 +85,7 @@ export class CheckingSession {
             nativeArities: this.nativeArities,
             loadedNames: path => this.loadedNames(path, directory),
             imports: module => {
-                const fields = this.module(module);
+                const fields = this.module(module, directory);
                 return fields;
             },
             loads: (path, caller, tail) => {
@@ -119,32 +124,39 @@ export class CheckingSession {
         }
     }
 
-    module(module: string | string[]): TypeScope {
+    module(module: string | string[], directory = "."): TypeScope {
         if (Array.isArray(module)) {
             const fields: TypeScope = new Map();
-            for (const item of module) for (const [name, value] of this.module(item)) fields.set(name, value);
+            for (const item of module) for (const [name, value] of this.module(item, directory)) fields.set(name, value);
             return fields;
         }
-        if (this.modules.has(module)) return copyTypeScope(this.modules.get(module)!);
-        const name = module === "std" ? "std" : module.startsWith("std/") && moduleNames.has(module.slice(4)) ? module.slice(4) : null;
-        if (!name) throw new APNError("type", `unknown module '${module}'`);
-        if (this.loading.has(module)) throw new APNError("type", `cyclic import '${module}'`);
-        this.loading.add(module);
+        const resolved = resolveModule(module, directory, this.moduleSources);
+        if (!resolved) { const { message, hint } = unknownModule(module, !!this.moduleSources); throw new APNError("type", message, { hint }); }
+        if (this.modules.has(resolved.key)) return copyTypeScope(this.modules.get(resolved.key)!);
+        if (this.loading.has(resolved.key)) throw new APNError("type", `cyclic import '${module}'`);
+        this.loading.add(resolved.key);
         try {
-            const source = this.moduleSources ? this.moduleSources[name] : Deno.readTextFileSync(new URL(`../lib/${name}.apn`, import.meta.url));
-            if (source === undefined) throw new APNError("type", `module '${module}' is not bundled`);
-            const checked = this.check(parse(source, module), new URL("../lib/", import.meta.url).pathname, new Map(), true);
-            for (const key of nativeExports[name] ?? []) {
-                const entry = checked.scope.get(key);
-                if (entry) checked.exports.set(key, entry);
+            // A folder's files are modules of their own; their exports merge.
+            const exports: TypeScope = new Map(), from = new Map<string, string>();
+            for (const file of resolved.files) {
+                const checked = this.check(parse(file.source, file.label), file.directory, new Map(), true);
+                for (const key of file.std ? nativeExports[file.std] ?? [] : []) {
+                    const entry = checked.scope.get(key);
+                    if (entry) checked.exports.set(key, entry);
+                }
+                for (const [name, entry] of checked.exports) {
+                    if (from.has(name) && resolved.files.length > 1) throw new APNError("type", `'${name}' is defined by both ${from.get(name)} and ${fileName(file.label)}`);
+                    entry.nonGeneric = undefined; entry.mono = false;
+                    exports.set(name, entry);
+                    from.set(name, fileName(file.label));
+                }
             }
-            for (const entry of checked.exports.values()) { entry.nonGeneric = undefined; entry.mono = false; }
-            this.modules.set(module, checked.exports);
-            return copyTypeScope(checked.exports);
+            this.modules.set(resolved.key, exports);
+            return copyTypeScope(exports);
         } catch (error) {
-            if (error instanceof APNError) error.message = `${module}: ${error.message}`;
+            if (error instanceof APNError && !error.message.startsWith(`${module}: `)) error.message = `${module}: ${error.message}`;
             throw error;
-        } finally { this.loading.delete(module); }
+        } finally { this.loading.delete(resolved.key); }
     }
 
     /** Every variable name a checked loaded file mentions (see CheckOptions.loadedNames). */

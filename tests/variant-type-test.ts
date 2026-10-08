@@ -26,7 +26,7 @@ Deno.test("parent type checks leave fields of partially-applied constructors laz
 Deno.test("parent type pattern resolves in the function's module scope", () => {
     const interpreter = new Interpreter();
     interpreter.moduleSources = { option: 'Maybe x = Just x | Nothing\nf (Maybe x) = 42' };
-    const actual = interpreter.renderString(interpreter.run(parseDocument('m = import "std/option"\nMaybe x = | Other x\nm.f (m.Just missing)')));
+    const actual = interpreter.renderString(interpreter.run(parseDocument('m = import "option"\nMaybe x = | Other x\nm.f (m.Just missing)')));
     if (actual !== '42') throw new Error(actual);
 });
 Deno.test("user's original pattern dispatch prints the payload", () => {

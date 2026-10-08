@@ -1,4 +1,4 @@
-p5 = import "std/p5"
+p5 = import "p5"
 clicks = Mutable 0
 setup p = {
     p.createCanvas 640 360

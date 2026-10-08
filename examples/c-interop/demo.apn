@@ -1,6 +1,6 @@
 # Run ./examples/c-interop/run-demo to compile the C library and call it.
-import "std/io"
-ffi = import "std/ffi"
+import "io"
+ffi = import "ffi"
 args <- getArgs
 ffi.withLibrary (head args) [
     add: ffi.function [Int32,Int32] Int32

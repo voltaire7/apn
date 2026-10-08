@@ -11,8 +11,8 @@ for (const [source, expected, effects] of [
     ['do (map (n -> print n) [1,2,3])', '3', ['1', '2', '3']],
     ['do [1..10000]', '10000', []],
     ['head (do [print "hi",[42,missing]])', '42', ['hi']],
-    ['f = import "std/function"; f.do [1,42]', '42', []],
-    ['import "std"; do [42]', '42', []],
+    ['f = import "function"; f.do [1,42]', '42', []],
+    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; do [42]', '42', []],
     ['apply f x = f x; apply do [42]', '42', []],
 ] as const) Deno.test(`do: ${source}`, () => {
     const i = new Interpreter();

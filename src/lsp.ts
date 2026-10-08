@@ -47,8 +47,8 @@ const builtins = new Map<string, string>([
     ["match", "match value alternatives — try unary pattern functions in order."],
     ["distinct", "distinct Type — create a fresh nominal type; bind it once to a capitalized name."],
     ["assert", "assert condition — require a truthy value; failures include the expression and source location."],
-    ["bracket", "bracket acquire release use — finish returned data before cleanup, even on failure (std/function)."],
-    ["withFile", "withFile path use — scoped UTF-8 file reader; callback receives file.read (std/io)."],
+    ["bracket", "bracket acquire release use — finish returned data before cleanup, even on failure (function)."],
+    ["withFile", "withFile path use — scoped UTF-8 file reader; callback receives file.read (io)."],
 ]);
 
 export class LanguageServer {

@@ -28,13 +28,13 @@ for (const combinator of ['combinators.Y', 'combinators.Z', 'combinators.Theta',
     cases.push([`${combinator} (recurse x y -> x + y) 20 22`, '42']);
 }
 for (const [source, expected] of cases) Deno.test(`combinator: ${source}`, () => {
-    const i = new Interpreter(); i.run(parse('import "std/combinator"'));
+    const i = new Interpreter(); i.run(parse('import "combinator"'));
     const actual = i.renderString(i.run(parse(source)));
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
 });
 Deno.test("combinators are exported by std and as a module record", () => {
-    const i = new Interpreter(); i.run(parse('std = import "std"'));
+    const i = new Interpreter(); i.run(parse('std = import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]'));
     if (i.renderString(i.run(parse('std.combinators.I 42'))) !== '42') throw new Error("missing std export");
-    i.run(parse('c = import "std/combinator"'));
+    i.run(parse('c = import "combinator"'));
     if (i.renderString(i.run(parse('c.yCombinator (f x -> x) 42'))) !== '42') throw new Error("missing module export");
 });

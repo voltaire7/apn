@@ -1,5 +1,5 @@
-import "std/function"
-import "std/option"
+import "function"
+import "option"
 # Producers and prefix consumers work with infinite lists.
 repeat x = x : repeat x
 replicate n x = take n (repeat x)

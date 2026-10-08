@@ -76,7 +76,7 @@ with the record fields in scope.
 `String` converts a finite character list back to text, using `fromChars`:
 
 ```apn
-import "std/text"
+import "text"
 cast String $ chars "hello"          # "hello"
 cast String $ cast [Char,Char] $ "hi"  # "hi"
 String ['h','i']                    # "hi"

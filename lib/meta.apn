@@ -1,4 +1,4 @@
-import "std/text"
+import "text"
 Dynamic $ load "meta/parser"
 Dynamic $ load "meta/evaluator"
 Dynamic $ load "meta/primitives"

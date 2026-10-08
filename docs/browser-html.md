@@ -13,8 +13,8 @@ into one HTML file. Open that file in a browser; no server or runtime download
 is required. Rebuild and refresh after editing the APN source.
 
 ```apn
-import "std/html"
-browser = import "std/browser"
+import "html"
+browser = import "browser"
 
 Msg = Increment | Decrement
 
@@ -36,10 +36,10 @@ main = browser.sandbox [init: 0, update: update, view: view]
 the resulting model is passed to `view`. Multiline lists need no commas.
 Inside an enclosing parenthesized expression, existing APN layout rules suppress
 newlines; use commas there or bind the view separately, as above.
-HTML nodes and attributes are ordinary APN variants defined in `std/html`.
+HTML nodes and attributes are ordinary APN variants defined in `html`.
 The host adapter interprets them using DOM APIs; text is rendered literally.
 
-Import `std/html` explicitly. It exports `text`, `node tag attributes children`,
+Import `html` explicitly. It exports `text`, `node tag attributes children`,
 `div`, `span`, `p`, `h1`, `h2`, `button`, `input`, `textarea`, `label`, `form`,
 `ul`, `li`, `a`, `section`, and `mainElement`.
 
@@ -71,5 +71,5 @@ inline JavaScript event attributes, and executable URL attributes are rejected.
 The design follows Elm's [buttons example](https://guide.elm-lang.org/architecture/buttons.html)
 while retaining APN notation and its existing interpreter.
 
-For animated canvas sketches, use [std/p5](p5.md). p5 builds load a pinned
+For animated canvas sketches, use [p5](p5.md). p5 builds load a pinned
 external p5.js script; HTML sandbox builds remain self-contained.

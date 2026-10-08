@@ -14,7 +14,7 @@ export function matchDiagnostics(program: TopLevel[], source: string): Diagnosti
         if (node.t === "type") add(node.def.name, node.def.variants.map(v => [v.tag, v.arity]));
         if (node.t === "expr" && node.value.t === "import") {
             const modules = [node.value.module].flat();
-            if (modules.includes("std") || modules.includes("std/option")) {
+            if (modules.includes("option")) {
                 add("Option", [["Some", 1], ["None", 0]]);
                 add("Result", [["Ok", 1], ["Err", 1]]);
             }

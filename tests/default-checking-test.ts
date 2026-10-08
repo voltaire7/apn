@@ -19,9 +19,9 @@ function rejected(i: Interpreter, source: string): void {
     throw new Error(`accepted: ${source}`);
 }
 for (const [source, expected] of [
-    ['import "std"; sum [1,2,3]', '6'],
-    ['std = import "std"; std.sum (Int * [1,2,3])', '6'],
-    ['import ["std/function","std/number"]; id (sq 3)', '9'],
+    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; sum [1,2,3]', '6'],
+    ['std = import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; std.sum (Int * [1,2,3])', '6'],
+    ['import ["function","number"]; id (sq 3)', '9'],
     ['ns = [double: (x -> x * 2)]; use ns; double 3', '6'],
     ['use [[one: 1],[two: 2]]; one + two', '3'],
     ['x = Mutable 1; set x 2; x + 1', '3'],
@@ -30,13 +30,13 @@ for (const [source, expected] of [
     ['xs = [1]; xs = [2,3]; xs', '[2,3]'],
     ['f x = x + 1; [f 1,f 2.0]', '[2,3.0]'],
     ['factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1)); factorial 5', '120'],
-    ['import "std/type"; cast Float32 (Float64 .2)', 'Float32 0.2'],
+    ['import "type"; cast Float32 (Float64 .2)', 'Float32 0.2'],
 ] as const) Deno.test(`default checking session: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "std"; sum ["bad"]',
+    'import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; sum ["bad"]',
     'f x = x + 1; f "bad"',
     'apply f x = f x; apply (x -> x + 1) "bad"',
     'x | missingGuard -> x',
@@ -71,7 +71,7 @@ Deno.test("runtime failure restores bindings and their checking state", () => {
     rejected(i, 'existing = "bad"');
 });
 Deno.test("namespaced import does not open conflicting exports", () => {
-    const i = session(); run(i, 'span = 123; html = import "std/html"');
+    const i = session(); run(i, 'span = 123; html = import "html"');
     run(i, 'html.text "hello"');
     if (run(i, 'span') !== '123' || i.env.get('button')) throw new Error('namespace leaked');
 });
@@ -87,7 +87,7 @@ Deno.test("invalid loaded source is rejected before any output", () => {
 });
 Deno.test("all standard modules check without evaluation", () => {
     const checker = new CheckingSession();
-    for (const name of ['std', 'std/meta', 'std/html', 'std/browser', 'std/p5', 'std/ffi']) checker.module(name);
+    for (const name of ['type', 'function', 'option', 'sequence', 'array', 'number', 'text', 'map', 'combinator', 'io', 'system', 'search', 'meta', 'html', 'browser', 'p5', 'ffi']) checker.module(name);
 });
 
 Deno.test("Dynamic writes cannot invalidate a checked Mutable payload", () => {
@@ -118,10 +118,10 @@ Deno.test("default checking reports an unbound name with a suggestion", () => {
 // A variable bound to a union containing itself (v = v | t) resolves to t,
 // and functions that return their list parameter preserve its length.
 for (const [source, expected] of [
-    ['import "std"; g [a,b] = forceList [b,a + b]; repeatApply 3 g [1,2]', '[5,8]'],
-    ['import "std"; tick [a,b,c,d,e,f,g,h,i] = forceList [b,c,d,e,f,g,h + a,i,a]; sum (repeatApply 80 tick [0,1,1,2,1,0,0,0,0])', '5934'],
+    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = forceList [b,a + b]; repeatApply 3 g [1,2]', '[5,8]'],
+    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; tick [a,b,c,d,e,f,g,h,i] = forceList [b,c,d,e,f,g,h + a,i,a]; sum (repeatApply 80 tick [0,1,1,2,1,0,0,0,0])', '5934'],
     ['f (List xs) = xs; g [a,b] = f [b,a + b]; g (g [1,2])', '[3,5]'],
-    ['import "std"; g [a,b] = a + b; g (forceList [1,2])', '3'],
+    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = a + b; g (forceList [1,2])', '3'],
     ['g [a,b] = a + b; g (map (x -> x * 2) [1,2])', '6'],
     ['xs = map (x -> x + 1) [1,2]; ys = map (x -> x * 2) [1,2,3]; g [a,b] = a + b; [g xs,length ys]', '[5,3]'],
     ['x (x:xs) = 42; x [x]', '42'],
@@ -130,8 +130,8 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "std"; g [a,b] = forceList [b,a ++ "x"]; repeatApply 3 g [1,2]',
-    'import "std"; g [a,b] = a + b; g (forceList [1,2,3])',
+    'import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = forceList [b,a ++ "x"]; repeatApply 3 g [1,2]',
+    'import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = a + b; g (forceList [1,2,3])',
     'g [a,b] = a + b; g (map (x -> x) [1,2,3])',
     'g [a,b] = a + b; g (map (x -> x) (tail [1,2,3]))',
     'g [a,b] = a + b; g (tail [0,1,2])',
@@ -167,18 +167,18 @@ for (const source of [
 // change a list's length (folds, cons, append, filter) stay unknown, even when
 // their result has the same type as their input.
 for (const [source, expected] of [
-    ['import "std"; g [a,b] = a + b; g (reverse [1,2])','3'],
-    ['import "std"; g [a,b] = a - b; g (sort [2,1])','-1'],
-    ['import "std"; g [a,b] = a - b; g (sortBy compare [2,1])','-1'],
-    ['import "std"; g [a,b] = a - b; g (sortOn (x -> -x) [1,2])','1'],
-    ['import "std"; g [p,q] = p; g (zipWithIndex [5,6])','[0,5]'],
-    ['import "std"; reverse "abc" ++ "!"','"cba!"'],
+    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = a + b; g (reverse [1,2])','3'],
+    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = a - b; g (sort [2,1])','-1'],
+    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = a - b; g (sortBy compare [2,1])','-1'],
+    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = a - b; g (sortOn (x -> -x) [1,2])','1'],
+    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [p,q] = p; g (zipWithIndex [5,6])','[0,5]'],
+    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; reverse "abc" ++ "!"','"cba!"'],
 ] as const) Deno.test(`stdlib keeps list lengths: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "std"; g [a,b] = a + b; g (reverse [1,2,3])',
+    'import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a,b] = a + b; g (reverse [1,2,3])',
     'f xs = foldl (acc x -> x : acc) xs [1,2]; g [a,b] = a + b; g (f [1,2])',
     'f xs = foldl (acc x -> x : acc) xs [1,2]; g [a,b,c,d] = a + b; g (f [1,2])',
     'f xs = 0 : xs; g [a,b] = a + b; g (f [1,2])',
@@ -192,7 +192,7 @@ for (const [source, expected] of [
     ['h a b = [map (x -> x) a,map (x -> x) b]; g [[x],[y,z]] = x + y + z; g (h [1] [1,2])', '4'],
     ['pairUp a b = [a,b]; g [[x],[y,z]] = x + y + z; g (pairUp [1] [2,3])', '6'],
     ['h a b = [map (x -> x) a,map (x -> x) b]; h2 a b = h b a; g [[x,y],[z]] = x + y + z; g (h2 [1] [1,2])', '4'],
-    ['import "std"; both xs = [sort xs,reverse xs]; g [[a,b],[c,d]] = a + d; g (both [2,1])', '3'],
+    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; both xs = [sort xs,reverse xs]; g [[a,b],[c,d]] = a + d; g (both [2,1])', '3'],
 ] as const) Deno.test(`checker tracks nested list lengths: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -204,7 +204,7 @@ for (const source of [
     'keep xs = xs * (x -> x); drop1 xs = tail xs; pick b = b ? keep : drop1; g [a,b,c] = a; g ((pick false) [1,2,3])',
     'keep xs = xs * (x -> x); drop1 xs = tail xs; h = false ? keep : drop1; g [a,b,c] = a; g (h [1,2,3])',
     'keep xs = xs * (x -> x); drop1 xs = tail xs; fs = [keep,drop1]; g [a,b,c] = a; g ((fs 1) [1,2,3])',
-    'import "std"; p = sortBy compare; g [a,b] = a; g (p [2,1])',
+    'import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; p = sortBy compare; g [a,b] = a; g (p [2,1])',
 ]) Deno.test(`checker does not assume lengths: ${source}`, () => rejected(session(), source));
 // An empty-list pattern rejects a list known to be non-empty (it would fail at
 // runtime), while lists of unknown length still reach it, as recursion needs.
@@ -358,9 +358,9 @@ for (const [source, expected] of [
     ['f 2.0 = [0]; f x = [1,2]; g [a] = a; g (f 2)','0'],
     ['f [1..3] = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h 2','0'],
     ['f [1..3] = [0]; f x = [1,2]; h x = g (f x); g [a,b] = a; h 7','1'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h None','0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a,b] = a; h (Some 1)','1'],
-    ['import "std/option"; f (Some x) = [x]; f other = [1,2]; h v = g (f v); g [a] = a; h (Some 7)','7'],
+    ['import "option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h None','0'],
+    ['import "option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a,b] = a; h (Some 1)','1'],
+    ['import "option"; f (Some x) = [x]; f other = [1,2]; h v = g (f v); g [a] = a; h (Some 7)','7'],
     ['Light = | Off | On; f On = [1]; f x = [0,0]; h l = g (f l); g [a] = a; h On','1'],
 ] as const) Deno.test(`more literal kinds select clauses: ${source}`, () => {
     const actual = run(session(), source);
@@ -370,19 +370,19 @@ for (const source of [
     "f 'a' = [0]; f c = [1,2]; h x = g (f x); g [a] = a; h 'b'",
     'f 1.5 = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h 2.5',
     'f [1..3] = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h 7',
-    'import "std/option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h (Some 1)',
+    'import "option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h (Some 1)',
     'Light = | Off | On; f On = [1]; f x = [0,0]; h l = g (f l); g [a] = a; h Off',
 ]) Deno.test(`more literal kinds stay checked: ${source}`, () => rejected(session(), source));
 // A function's result value (a literal or constructor, or one of its
 // arguments) is known at direct calls by name, so clause ranking can use it.
 for (const [source, expected] of [
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; g (f (mk 1))', '0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a,b] = a; mk x = Some x; g (f (mk 1))', '1'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; h v = g (f v); h (mk 3)', '0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; h v = g (f (mk v)); h 3', '0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; pass v = v; g (f (pass None))', '0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; mk2 y = mk y; g (f (mk2 1))', '0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; pick b = b ? None : None; g (f (pick true))', '0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; g (f (mk 1))', '0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a,b] = a; mk x = Some x; g (f (mk 1))', '1'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; h v = g (f v); h (mk 3)', '0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; h v = g (f (mk v)); h 3', '0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; pass v = v; g (f (pass None))', '0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; mk2 y = mk y; g (f (mk2 1))', '0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; pick b = b ? None : None; g (f (pick true))', '0'],
     ['f 0 = [0]; f x = [1,2]; g [a] = a; zero x = 0; g (f (zero 9))', '0'],
     ['f "x" = [0]; f s = [1,2]; g [a] = a; named x = "x"; g (f (named 1))', '0'],
     ["f 'a' = [0]; f s = [1,2]; g [a] = a; letter x = 'a'; g (f (letter 1))", '0'],
@@ -391,11 +391,11 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = Some x; g (f (mk 1))',
-    'import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; pass v = v; g (f (pass (Some 2)))',
+    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = Some x; g (f (mk 1))',
+    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; pass v = v; g (f (pass (Some 2)))',
     // Results that depend on a value, or calls through a variable, stay unknown.
-    'import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; mk2 x = Some x; mkv = false ? mk : mk2; g (f (mkv 1))',
-    'import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; mkv = mk; g (f (mkv 1))',
+    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; mk2 x = Some x; mkv = false ? mk : mk2; g (f (mkv 1))',
+    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; mkv = mk; g (f (mkv 1))',
     // A rebound variable can change under a closure that captured it.
     "f 'a' = [0]; f x = [1,2]; g [a] = a; c = 'a'; h u = g (f c); c = 'b'; h 0",
 ]) Deno.test(`function results stay checked: ${source}`, () => rejected(session(), source));
@@ -403,36 +403,36 @@ for (const source of [
 // called function's clauses and conditions with what is known about the
 // arguments, and decides calls through parameters at the enclosing calls.
 for (const [source, expected] of [
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; pick b = b ? None : Some 1; g (f (pick true))','0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a,b] = a; pick b = b ? None : Some 1; g (f (pick false))','1'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; mk 0 = None; mk n = Some n; g (f (mk 0))','0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a,b] = a; mk 0 = None; mk n = Some n; g (f (mk 5))','1'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n > 0 ? Some n : None; g (f (safe (-3)))','0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a,b] = a; safe n = n > 0 ? Some n : None; g (f (safe 4))','1'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n - 1 > 0 ? Some n : None; g (f (safe 1))','0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; both p q = p && q ? Some 1 : None; g (f (both true false))','0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; z n = !n ? None : Some 1; g (f (z 0))','0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; is s = s == "x" ? None : Some 1; g (f (is "x"))','0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; count 0 = None; count n = count (n - 1); g (f (count 5))','0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); h 0','0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a,b] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); h 5','1'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); k w = h w; k (-1)','0'],
-    ['import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n > 0 ? Some n : None; h (Int v) = g (f (safe v)); h 0','0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; pick b = b ? None : Some 1; g (f (pick true))','0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a,b] = a; pick b = b ? None : Some 1; g (f (pick false))','1'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk 0 = None; mk n = Some n; g (f (mk 0))','0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a,b] = a; mk 0 = None; mk n = Some n; g (f (mk 5))','1'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n > 0 ? Some n : None; g (f (safe (-3)))','0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a,b] = a; safe n = n > 0 ? Some n : None; g (f (safe 4))','1'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n - 1 > 0 ? Some n : None; g (f (safe 1))','0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; both p q = p && q ? Some 1 : None; g (f (both true false))','0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; z n = !n ? None : Some 1; g (f (z 0))','0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; is s = s == "x" ? None : Some 1; g (f (is "x"))','0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; count 0 = None; count n = count (n - 1); g (f (count 5))','0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); h 0','0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a,b] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); h 5','1'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); k w = h w; k (-1)','0'],
+    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n > 0 ? Some n : None; h (Int v) = g (f (safe v)); h 0','0'],
     ['fib 0 = 0; fib 1 = 1; fib n = fib (n - 1) + fib (n - 2); f 6765 = [0]; f x = [1,2]; g [a] = a; g (f (fib 20))','0'],
 ] as const) Deno.test(`value-dependent results: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; pick b = b ? None : Some 1; g (f (pick false))',
-    'import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; mk 0 = None; mk n = Some n; g (f (mk 5))',
-    'import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); h 3',
-    'import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); k w = h w; k 9',
-    'import "std/option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); [h 0,h 1]',
+    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; pick b = b ? None : Some 1; g (f (pick false))',
+    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk 0 = None; mk n = Some n; g (f (mk 5))',
+    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); h 3',
+    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); k w = h w; k 9',
+    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); [h 0,h 1]',
 ]) Deno.test(`value-dependent results stay checked: ${source}`, () => rejected(session(), source));
 // Floating-point and exact rational conditions are evaluated with the
 // runtime's own arithmetic and comparison, including NaN and lossy-mix rules.
-const optionClauses = 'import "std/option"; f None = [0]; f x = [1,2]';
+const optionClauses = 'import "option"; f None = [0]; f x = [1,2]';
 for (const [source, expected] of [
     ['g [a] = a; small x = x < 0.5 ? None : Some x; g (f (small 0.25))', '0'],
     ['g [a,b] = a; small x = x < 0.5 ? None : Some x; g (f (small 0.75))', '1'],
@@ -519,7 +519,7 @@ for (const source of [
 // The builtin length of a list or String is known when its size is: from a
 // literal, a parameter at its calls, cons, append, shaped builtins (map, sort)
 // and recursion over list patterns.
-const sizeClauses = 'import "std"; g [a] = a; sm n = n < 2 ? None : Some n; q xs = length xs < 2 ? None : Some 1; len [] = 0; len (x:xs) = 1 + len xs';
+const sizeClauses = 'import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; g [a] = a; sm n = n < 2 ? None : Some n; q xs = length xs < 2 ? None : Some 1; len [] = 0; len (x:xs) = 1 + len xs';
 for (const [source, expected] of [
     ['g (f (sm (length [1])))', '0'],
     ['k (Int x) = None; k x = Some x; g (f (k (length [1])))', '0'],
@@ -612,7 +612,7 @@ for (const source of [
 ]) Deno.test(`zip and takeWhile lengths stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${source}`));
 // The pure builtins and the standard library written in APN (folds, endless
 // lists, text, local definitions) are evaluated on known values too.
-const textClauses = 'import "std/text"; r b = b ? None : Some 1';
+const textClauses = 'import "text"; r b = b ? None : Some 1';
 for (const [source, expected] of [
     ['g (f (q (dropWhile (< 2) [1,2])))', '0'],
     ['g (f (q (words "a")))', '0'],
@@ -904,8 +904,8 @@ Deno.test("a view an earlier REPL input stored reaches what its uses name", () =
 for (const source of ['x:xs = []', 'x:y:z = [1]', 'f n = { x:xs = []; x }']) Deno.test(`a cons binding of a list known too short is rejected: ${source}`, () => rejected(session(), source));
 Deno.test("an unknown constructor in a pattern is named, with the module that declares it", () => {
     for (const [source, message, hint] of [
-        ["func (Some x):xs = print [x,xs]", "unknown constructor 'Some' in a pattern", 'add import "std/option"'],
-        ["print None", "unbound variable 'None'", 'add import "std/option"'],
+        ["func (Some x):xs = print [x,xs]", "unknown constructor 'Some' in a pattern", 'add import "option"'],
+        ["print None", "unbound variable 'None'", 'add import "option"'],
         ["Maybe a = Just a | Nothing; k (Jsut x) = x", "unknown constructor 'Jsut' in a pattern", "did you mean 'Just'?"],
     ]) {
         try { run(session(), source); } catch (error) {
@@ -915,7 +915,7 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
         }
         throw new Error(`accepted: ${source}`);
     }
-    if (run(session(), 'import "std/option"; func (Some x):xs = [x,xs]; func [Some 1,None]') !== "[1,[None]]") throw new Error("with the import");
+    if (run(session(), 'import "option"; func (Some x):xs = [x,xs]; func [Some 1,None]') !== "[1,[None]]") throw new Error("with the import");
 });
 Deno.test("a set from an earlier REPL input keeps later cell reads unknown", () => {
     const i = session();
@@ -925,7 +925,7 @@ Deno.test("a set from an earlier REPL input keeps later cell reads unknown", () 
 // When checking right before a run, readFile and getArgs see the program's
 // input; the run reads the same snapshot. Lint and editor checks do not.
 const fish = "examples/advent-of-code/samples/fish.input", hill = "examples/advent-of-code/samples/hill.input";
-const inputPrelude = `import "std/io"; ${effectPrelude}`;
+const inputPrelude = `import "io"; ${effectPrelude}`;
 Deno.test("readFile is read when checking before a run", () => {
     const actual = run(session(), `${inputPrelude}; g (f (q (words (readFile "${fish}"))))`);
     if (actual !== "0") throw new Error(actual);
@@ -961,7 +961,7 @@ Deno.test("checking without a run does not read input", () => {
 Deno.test("the run reads the file contents the checker saw", () => {
     const i = session();
     const text = Deno.readTextFileSync(fish);
-    if (run(i, `import "std/io"; import "std/text"; words (readFile "${fish}")`) !== `["${text.trim()}"]`) throw new Error("run");
+    if (run(i, `import "io"; import "text"; words (readFile "${fish}")`) !== `["${text.trim()}"]`) throw new Error("run");
     // One snapshot per run: the checker's read is the one the run used.
     if (i.inputFile(fish) !== text) throw new Error("snapshot");
 });

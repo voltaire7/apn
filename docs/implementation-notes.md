@@ -92,9 +92,9 @@ of representation (`numericHash`). Tests: `tests/hash-map-test.ts`.
 The default prelude embeds `lib/type.apn` and `lib/do.apn` as text imports, so
 editor launchers must let Deno read both. `cast` is a `clauseFn`, not a native:
 its clauses validate list templates with `Type` and dispatch to
-`(Type target).(value)`, other types to `target value`. Expose `std/type`
+`(Type target).(value)`, other types to `target value`. Expose `type`
 through module loading and browser bundles. `do` is an ordinary function
-exported by `std/function`. Tests: `tests/language-cast-test.ts`,
+exported by `function`. Tests: `tests/language-cast-test.ts`,
 `tests/do-test.ts`.
 
 ## Records, keys, and assignment
@@ -170,6 +170,13 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   the active evaluation scope, so wrapper functions don't export into their
   caller. Failed list imports must not install earlier modules' names.
   Tests: `tests/use-test.ts`, `tests/import-list-test.ts`, `tests/load-test.ts`.
+- `src/modules.ts` `resolveModule` is the one place imports resolve, used by
+  both `Interpreter.importStandard` and `CheckingSession.module`; both cache by
+  the resolved path (`key`), so a module and its checked types always come from
+  the same files. Each file of a folder module runs (and is checked) in its own
+  builtins scope with `sourceDir` set to its directory. With `moduleSources`
+  (browser builds) only bundled standard modules resolve.
+  Tests: `tests/package-import-test.ts`.
 
 ## Mutable references and `env`
 
@@ -427,7 +434,7 @@ configuration. Tests: `tests/lsp-test.ts`.
 
 ## Metacircular evaluator
 
-`lib/meta.apn` exposes `std/meta`; the implementation lives in `lib/meta/`. It
+`lib/meta.apn` exposes `meta`; the implementation lives in `lib/meta/`. It
 must never delegate object source to host `parse`, `toAST`, `load`, or an eval
 callback, and its core must stay within the reader's supported subset. After
 changes run `tests/metacircular-test.ts` and
@@ -447,7 +454,7 @@ arbitrary host object access. Tests: `tests/html-test.ts`, `tests/p5-test.ts`.
 
 ## C interop
 
-`src/ffi.ts` implements the opt-in `std/ffi` module and Pointer operations.
+`src/ffi.ts` implements the opt-in `ffi` module and Pointer operations.
 Keep ABI signatures fixed-width and conversions lossless; never map unbounded
 Int to C int. `withLibrary` must close in `finally` and reject escaped
 functions and pointers afterward. Pointer allocations retain memory and bounds

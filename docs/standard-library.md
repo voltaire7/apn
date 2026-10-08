@@ -1,25 +1,40 @@
 # Standard library
 
 ```apn
-import "std"
+import ["sequence","number","text","map"]
 take 10 primes
 mean [1,2]                          # Some 3/2
 frequencies $ words $ "one two one" # HashMap [["one",2],["two",1]]
 ```
 
 `import` accepts a literal module name or a list of literal module names.
-For example, `import ["std/number","std/text"]` opens both modules and returns
+For example, `import ["number","text"]` opens both modules and returns
 a merged export record. Later modules win name collisions, and `import []`
-returns an empty record. Commas or newlines separate module names. `import "std"` brings the library into
-scope; individual modules use `import "std/text"`, etc. Dependencies are imported
-with them. Files resolve relative to APN's installation, so this works from any
-working directory. Imports require Deno read permission (the `apn` launcher
-already provides it).
+returns an empty record. Commas or newlines separate module names. Standard
+modules are imported by name, with no prefix: `import "text"`. There is no
+whole-library module; `import "std"` and `import "std/text"` are errors.
+Dependencies are imported with them. Imports require Deno read permission (the
+`apn` launcher already provides it).
+
+A name is looked up next to the importing file (the current directory in the
+REPL) before the standard library:
+
+- `import "name"` imports `name.apn`;
+- otherwise, if `name/` is a folder, it imports every `.apn` file directly in
+  it, in name order, as one module. A name two of its files define is an
+  error. Subfolders are not included; import them as `import "name/sub"`;
+- when both `name.apn` and `name/` exist, the file is the package's entry and
+  `name/...` reaches inside (like `lib/meta.apn` beside `lib/meta/`).
+
+A local `text.apn` therefore shadows the standard `text` module for code next
+to it. Each file of a module runs in its own scope of builtins, and resolves
+its own imports and loads relative to its directory. Browser builds bundle the
+standard library only.
 
 Each interpreter evaluates each module once in a scope containing builtins and
 its dependencies, independent of caller bindings. Reimporting restores the same
 exports without reexecuting the module. Existing local names are replaced by
-imported names. A bare import statement is silent. In an expression, imports return a record: `s = import "std"` allows `s.sum`.
+imported names. A bare import statement is silent. In an expression, imports return a record: `s = import "sequence"` allows `s.sum`.
 Like other lazy definitions, this form takes effect when `s` is demanded.
 
 `use record` brings its fields into the current scope without forcing their
@@ -29,8 +44,8 @@ identifiers (not quoted keys, numeric keys, `_`, or keywords). Invalid input is
 rejected before any fields are installed. Bindings inside a block stay local.
 
 ```apn
-std = import "std"
-use std
+combinators = import "combinator"
+use combinators
 identity 123
 
 use [[first: 10],[second: 20]]
@@ -40,22 +55,22 @@ first + second                         # 30
 `use` is an ordinary builtin function, so aliases and pipelines work too.
 An APN wrapper function opens the record in its own scope, not its caller's.
 
-List imports support the same selection: `[id,sum] = import ["std/function","std/sequence"]`.
+List imports support the same selection: `[id,sum] = import ["function","sequence"]`.
 
-Destructuring imports select only the requested exports: `[halt] = import "std"`
-binds `halt` without introducing `fibonacci`, `primes`, or other library names.
-Renaming works too: `[halt: stop] = import "std"` binds only `stop`. Unselected
+Destructuring imports select only the requested exports: `[halt] = import "system"`
+binds `halt` without introducing the module's other names.
+Renaming works too: `[halt: stop] = import "system"` binds only `stop`. Unselected
 local bindings remain unchanged, including when the module is already cached.
 
 `load "file"` remains file execution (the `.apn` extension must be omitted): paths are relative to the source file,
-loading executes again each time, and it uses the caller's scope. `import` currently
-recognizes only the bundled modules below; use `load` for other APN files.
+loading executes again each time, and it uses the caller's scope; `import`
+runs a module once, in its own scope.
 Names without an extension receive `.apn`; explicitly supplied extensions are
 used literally. `load` parses file contents as APN regardless of their extension.
-`sq` lives in `std/number`; `halt` lives in `std/system`. The obsolete
+`sq` lives in `number`; `halt` lives in `system`. The obsolete
 `lib/core.apn` has been removed; replace its loads with these imports.
 
-## Types — `std/type`
+## Types — `type`
 
 `cast Type value` is an ordinary APN compatibility wrapper for `Type value`,
 implemented in `lib/type.apn` and loaded by the default prelude. Both require
@@ -63,7 +78,7 @@ lossless conversion. Use `Int (floor value)`, `Int (truncate value)`, or
 `Float (inexact value)` to choose the intended rounding explicitly.
 See [zero initialization](zero-initialization.md) for type defaults and inspection.
 
-## Functions — `std/function`
+## Functions — `function`
 
 | API | Behavior |
 | --- | --- |
@@ -78,7 +93,7 @@ See [zero initialization](zero-initialization.md) for type defaults and inspecti
 | `seq value next` | Demand the outer value, then return `next`; does not deeply force lists |
 | `fail message` | Raise a runtime error when demanded |
 
-## Absence and errors — `std/option`
+## Absence and errors — `option`
 
 ```apn
 Option a = Some a | None
@@ -97,13 +112,13 @@ Result a e = Ok a | Err e
 
 These are ordinary APN variants. `Result` does not catch runtime exceptions.
 
-## Arrays — `std/array`
+## Arrays — `array`
 
 `dot`, `transpose`, `matmul`, and `shape` are implemented in APN and included
 in `std`. Numeric collection operators work without an import. See
 [arrays](arrays.md) for broadcasting, shape rules, and lazy error behavior.
 
-## Sequences — `std/sequence`
+## Sequences — `sequence`
 
 Existing `map`, `filter`, `take`, `drop`, `zipWith`, `iterate`, `foldl`, and
 `foldr` remain builtins. Function arguments come first; data comes last for `$`.
@@ -137,7 +152,7 @@ filtering, so it is best for modest inputs. Lazy accumulator chains in `scanl`
 can reach the interpreter's evaluation-depth limit if many preceding values
 are skipped without being demanded.
 
-## Numbers — `std/number`
+## Numbers — `number`
 
 | API | Behavior |
 | --- | --- |
@@ -153,7 +168,7 @@ Empty statistics return `None`. Exact inputs preserve exact arithmetic:
 `variance [1,2,3]` is `Some 2/3`. Irrational square roots are inexact. Typed numeric
 operations retain APN's existing overflow checks and lossless conversion rules.
 
-## Text — `std/text`
+## Text — `text`
 
 | API | Behavior |
 | --- | --- |
@@ -171,7 +186,7 @@ operations retain APN's existing overflow checks and lossless conversion rules.
 Code points preserve emoji outside the BMP but are not grapheme clusters:
 combining marks and multi-code-point emoji remain separate characters.
 
-## Persistent maps — `std/map`
+## Persistent maps — `map`
 
 These operate on existing `HashMap` values. Builtin construction, `insert`,
 `lookup`, `has`, `remove`, `keys`, `values`, and `pairs` are unchanged.
@@ -193,7 +208,7 @@ order is preserved. Keys follow the existing HashMap scalar-key rules.
 Run `apn examples/standard-library.apn` for a complete example.
 
 
-## Metacircular evaluator — `std/meta`
+## Metacircular evaluator — `meta`
 
 `metaEval source` runs the supported APN core through an APN-written reader and
 evaluator. `metaParse source` returns the reader's output, `[definitions,
@@ -206,7 +221,7 @@ The standard-library native boundary is `seq`, `fail`, `chars`, `fromChars`,
 joining, replacement and trimming are implemented in APN.
 
 
-## Combinators — `std/combinator`
+## Combinators — `combinator`
 
 `std` also exports the classical `combinators` record (I, K, KI, S, B, C, W,
 M, T, V, B1, Q, U, Y, Z, Theta), descriptive equivalents, and shared `fix`.
@@ -214,7 +229,7 @@ All are implemented in APN. See [equations, self-application factorial, and
 Haskell's type distinction](combinators.md).
 
 
-## Input and puzzle utilities — `std/io`, `std/search`
+## Input and puzzle utilities — `io`, `search`
 
 `readFile path` reads UTF-8 text, `readStdin` reads to EOF (once: every call
 returns the same text), and `getArgs` returns script arguments. `readInput []` chooses the first file argument or
@@ -229,13 +244,13 @@ See [runnable Advent of Code solutions and limits](advent-of-code.md).
 
 ## Browser modules
 
-Explicitly import `std/html` for HTML constructors and `std/browser` for
+Explicitly import `html` for HTML constructors and `browser` for
 `sandbox [init: ..., update: ..., view: ...]`. These are not automatically
 imported by `std`. See [browser HTML](browser-html.md) for the API and build command.
 
-## Process control — `std/system`
+## Process control — `system`
 
-`halt` exits successfully when used (`halt = exit 0`); importing `std/system`
+`halt` exits successfully when used (`halt = exit 0`); importing `system`
 or `std` does not run it. The builtin `exit n` exits with an explicit status.
 
 Constructor declarations use capitalized bindings: `Maybe a = Just a | Nothing`.
@@ -254,9 +269,9 @@ Maybe a =
 Use a leading `|` to explicitly declare a single constructor when its name
 is already in scope, e.g. `Box a = | Box a`.
 
-## Creative coding — `std/p5`
+## Creative coding — `p5`
 
-`p5 = import "std/p5"` exposes `p5.sketch callbacks`. See the [p5 reference](p5.md)
+`p5 = import "p5"` exposes `p5.sketch callbacks`. See the [p5 reference](p5.md)
 for drawing methods, events, the browser build command, and current scope.
 
 ## Matching
@@ -273,7 +288,7 @@ requests the full record and can stream indefinitely if it contains infinite lis
 
 ## Resource scopes and type utilities
 
-`std/function` exports `bracket acquire release use`; `std/io` exports
+`function` exports `bracket acquire release use`; `io` exports
 `withFile path use`. Returned data is completed before cleanup.
 `distinct` and `assert` are available without imports.
 See [type and resource rules](type-and-resource-rules.md) for examples and limits.

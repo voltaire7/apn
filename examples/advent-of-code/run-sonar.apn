@@ -1,2 +1,3 @@
+import "io"
 load "sonar-sweep"
 print (solveSonar (readInput []))

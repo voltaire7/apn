@@ -63,7 +63,7 @@ families with payloads do not participate in ordinal arithmetic.
 The linter/LSP warns when a known variant family has no unconditional handler
 for one or more constructors in a literal `match` list. Local family declarations,
 direct constructor expressions, `(Family value)` parameters, and explicitly
-imported `std/option` families provide the necessary information. Catch-all
+imported `option` families provide the necessary information. Catch-all
 lambdas cover everything. Guards and constrained payload patterns do not prove
 coverage. Unknown or dynamically constructed alternatives remain runtime-checked.
 
@@ -85,7 +85,7 @@ stack. Assertions are always enabled and evaluate their argument once.
 
 ## Scoped resources
 
-`std/function` exports `bracket acquire release use`. It acquires a value once,
+`function` exports `bracket acquire release use`. It acquires a value once,
 calls `use resource`, finishes its returned data, and calls `release resource`
 in a finally block. Both callbacks must accept one remaining argument; they are
 validated before acquisition. Cleanup runs on successful completion, callback errors,
@@ -94,7 +94,7 @@ failure does not run cleanup. Nested scopes release in reverse order. As with
 other process-level effects, forced process termination cannot run APN cleanup.
 
 ```apn
-import "std/function"
+import "function"
 released = Mutable false
 answer <- bracket 42 (_ -> set released true) (n -> [n,n + 1])
 # answer is [42, 43]; released is true
@@ -108,10 +108,10 @@ prevent deferred reads after cleanup. A failing cleanup propagates its own error
 A generic bracket cannot prevent a callback from stashing a resource elsewhere;
 resource implementations must enforce their own lifetime.
 
-`std/io` exports `withFile path use`, a read-only UTF-8 file scope:
+`io` exports `withFile path use`, a read-only UTF-8 file scope:
 
 ```apn
-import "std/io"
+import "io"
 text <- withFile "input.txt" (file -> file.read)
 ```
 

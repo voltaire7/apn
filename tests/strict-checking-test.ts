@@ -1,5 +1,5 @@
 import { requireChecked, checkSource } from "../src/type-checker.ts";
-for (const source of ['import "std"', 'env', 'missing', 'load "file"']) {
+for (const source of ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]', 'env', 'missing', 'load "file"']) {
     Deno.test(`checked execution rejects unknowns: ${source}`, () => {
         try { requireChecked(source); } catch (e) {
             if (String(e).includes('cannot establish static types')) return;
@@ -9,7 +9,7 @@ for (const source of ['import "std"', 'env', 'missing', 'load "file"']) {
     });
 }
 Deno.test('gradual editor analysis remains available', () => {
-    const result = checkSource('import "std"');
+    const result = checkSource('import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]');
     if (result.issues.length || !result.dynamicBoundaries) throw new Error(JSON.stringify(result));
 });
 for (const source of ['id x = x; [id 1,id true]', 'loop x = loop x', 'self f = f f; self (x -> 123)', 'x = x']) {

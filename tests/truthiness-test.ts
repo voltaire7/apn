@@ -19,7 +19,7 @@ for (const [source, expected] of [
     ['n = Mutable 0; test = { set n (n + 1); 1 }; test && 1; n', '1'],
     ['filter (x -> x) [0,1,2,0]', '[1,2]'],
     ['match 1 [x | [] -> 0,x | 1 -> x]', '1'],
-    ['import "std"; [takeWhile (x -> x) [1,2,0,3],all (x -> x) [1,2],any (x -> x) [0,1]]', '[[1,2],true,true]'],
+    ['import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]; [takeWhile (x -> x) [1,2,0,3],all (x -> x) [1,2],any (x -> x) [0,1]]', '[[1,2],true,true]'],
     ['[1 || 0 && missing,0 || 1 && 2]', '[true,true]'],
     ['[(0 &&) missing,(1 ||) missing]', '[false,true]'],
     ['[0 == false,[] == false]', '[false,false]'],

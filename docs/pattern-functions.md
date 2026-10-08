@@ -4,7 +4,7 @@ Pattern matching belongs to function parameters. A pattern lambda applies just
 like any other function:
 
 ```apn
-import "std"
+import "option"
 (Some x -> print x) (Some 123)  # prints 123
 (None -> print "no") None      # prints no
 ```

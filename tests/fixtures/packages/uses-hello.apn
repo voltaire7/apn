@@ -1,0 +1,2 @@
+import "hello"
+exported = greet "pkg"

@@ -1,4 +1,4 @@
-import "std/combinator"
+import "combinator"
 
 # The supplied Scheme expression, translated directly. "self" replaces "!",
 # which APN reserves for logical negation. The definition never names itself.

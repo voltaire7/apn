@@ -21,7 +21,7 @@ const signatures = `[
 ]`;
 function run(source: string): string {
     const interpreter = new Interpreter();
-    return interpreter.renderString(interpreter.run(parseDocument('ffi = import "std/ffi"\n' + source)));
+    return interpreter.renderString(interpreter.run(parseDocument('ffi = import "ffi"\n' + source)));
 }
 function call(body: string): string {
     return `ffi.withLibrary ${JSON.stringify(library)} ${signatures} c -> {\n${body.split('\n').map((s) => '    ' + s).join('\n')}\n}`;

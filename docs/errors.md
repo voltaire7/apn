@@ -15,7 +15,7 @@ rendered by `formatError(err, color)`:
   `cannot apply '+' to list and int`.
 - **Type errors** name an unknown name before any boundary count: `unbound
   variable 'x'`, or `unknown constructor 'Some' in a pattern`. A standard
-  library constructor's hint names its module (`add import "std/option"`);
+  library constructor's hint names its module (`add import "option"`);
   others get `did you mean '...'?`.
 - Messages carry no `Parser:`/`Lexer:`/`Runtime:` prefixes — the headline
   category replaces them. `tokenStr` returns BARE token text (the message
