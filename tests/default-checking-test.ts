@@ -750,6 +750,15 @@ for (const [source, expected] of [
     ['counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; g (f (r (bump 0 + (counter + 0) == 2)))', '0'],
     ['counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; print [bump 0, counter + 0]; g (f (r (counter + 0 == 1)))', '0'],
     ['counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; seq (bump 0) []; g (f (r (counter + 0 == 1)))', '0'],
+    // A top-level value is computed when first used and kept; a top-level
+    // action (block, application or pipe body) runs at each use.
+    ['counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 4)))', '0'],
+    ['counter = Mutable 0; snap = counter + 0; set counter 4; print snap; set counter 9; g (f (r (snap + 0 == 4)))', '0'],
+    ['counter = Mutable 0; snap = counter + 0; set counter 4; h x = snap + x; set counter 9; g (f (r (h 0 == 9)))', '0'],
+    ['counter = Mutable 0; a = counter + 0; b = a + 1; set counter 3; print a; set counter 8; g (f (r (b + 0 == 4)))', '0'],
+    ['counter = Mutable 0; init = set counter 5; init; set counter 1; init; g (f (r (counter + 0 == 5)))', '0'],
+    ['counter = Mutable 0; init = set counter 5; set counter 1; g (f (r (counter + 0 == 1)))', '0'],
+    ['counter = Mutable 0; snap = (counter + 0); set counter 2; print snap; set counter 7; g (f (r (snap + 0 == 7)))', '0'],
     // A writer passed by value runs where it is called.
     ['counter = Mutable 0; twice h = { h []; h [] }; twice (_ -> set counter (counter + 3)); g (f (r (counter + 0 == 6)))', '0'],
 ] as const) Deno.test(`cells written after reads: ${source}`, () => {
@@ -772,8 +781,9 @@ for (const source of [
     // A value the static run never forced might be forced by the program
     // later: top-level cells are no longer followed.
     'counter = Mutable 0; [set counter 9, 1]; g (f (r (counter + 0 == 0)))',
-    // A top-level value runs when first used: it does not read top-level cells statically.
-    'counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 4)))',
+    'counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 0)))',
+    'counter = Mutable 0; snap = counter + 0; set counter 4; print snap; set counter 9; g (f (r (snap + 0 == 9)))',
+    'counter = Mutable 0; init = set counter 5; init; set counter 1; init; g (f (r (counter + 0 == 1)))',
 ]) Deno.test(`cells written after reads stay checked: ${source}`, () => rejected(session(), `${effectPrelude}; ${source}`));
 Deno.test("a set from an earlier REPL input keeps later cell reads unknown", () => {
     const i = session();

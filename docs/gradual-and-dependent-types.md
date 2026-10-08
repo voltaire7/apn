@@ -354,9 +354,12 @@ which the checker runs in program order before checking each one: after
 that writes top-level cells, each part has the value that run gave it, so with
 `bump x = { set counter (counter + 1); counter + 0 }`, `(counter + 0) + bump 0`
 is 1 and `bump 0 + (counter + 0)` is 2; printing forces every element, in order.
-A read stays unknown when evaluation skips code or an uncertain branch, when
-accesses could happen in another order, and in a top-level value
-(`snap = counter + 0`), which runs when first used. Once a top-level statement
+A top-level value that uses a top-level cell is followed where the program
+uses it: `snap = counter + 0` is computed at its first use and kept, and an
+action such as `init = set counter 5` runs at each use, so after
+`set counter 4; print snap; set counter 9`, `snap` is 4. A read stays unknown
+when evaluation skips code or an uncertain branch, or when accesses could happen
+in another order. Once a top-level statement
 that can write cells is uncertain, or leaves a value unforced that the program
 might force later, top-level cells stay unknown for the rest of the program. When the interpreter checks a
 program right before running it (the CLI and the REPL), `readFile`, `getArgs`

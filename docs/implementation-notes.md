@@ -313,8 +313,13 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   runs each top-level statement that `mayWrite` (reaches `set`, `load`, `use`
   or `env` through named definitions) before it is checked; reads in that
   statement come from `executedParts`, the values that run gave each
-  argument-free part (unknown if it never evaluated them), reads in lazy
-  top-level values (`topLevelDefinition`) are unknown, and an uncertain
+  argument-free part (unknown if it never evaluated them). A top-level value
+  whose definition touches a top-level cell (`touchedTopLevel`) keeps its
+  body as `Entry.lazyTop`; `forceLazyTop` re-runs an action and keeps a
+  thunk's value from its first use in an execution, and `mayWrite.forces`
+  schedules executions for statements that may use one. Every cell access,
+  even unapplied, and every `forceLazyTop` makes a result uncacheable
+  (`cellEvents`), or a cached value would skip its effects. An uncertain
   execution, or one leaving a deferred value `unforced`, clears
   `programValid`. Model every place the runtime forces a value (`print`
   renders deeply, `seq`, `assert`, `debug`, inspecting patterns in

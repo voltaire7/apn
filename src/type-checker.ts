@@ -54,6 +54,10 @@ type KnownFunction = { e: Expr; env: [string, Known][]; scope: Scope } | { summa
 type Cell = { head: Known; tail: Known } | null | undefined;
 // A Mutable cell's contents, the root evaluation that created it, and the lazy
 // region its accesses happened in (see readMutable).
+// A top-level value whose body touches top-level cells, kept as its body: an
+// action (block, application or pipe body) runs at each use, a thunk is
+// remembered from its first use.
+type LazyTop = { body: Expr; scope: Map<string, Entry>; action: boolean; forced: boolean; memo?: Known; busy?: boolean };
 // A top-level cell (program) persists across statements (see executeTopLevel).
 type KnownCell = { value: Known; root: number; program?: boolean; regionRoot?: number; region?: number; written?: boolean; mixed?: boolean };
 // An integer range (hi null: endless), indexed and cut arithmetically.
@@ -90,6 +94,8 @@ interface Entry {
     inherited?: boolean;
     // builtin: a native or intrinsic from the checker's own root scope.
     builtin?: boolean;
+    // lazyTop: a top-level value that touches top-level cells (see forceLazyTop).
+    lazyTop?: LazyTop;
     // recursive: the definition being inferred, referred to from its own body;
     // selfInputs are the current clause's parameter types.
     recursive?: boolean;
@@ -2024,31 +2030,50 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The values a statement's static run gave its parts (see executeTopLevel).
     const executedParts = new Map<Expr, Known | undefined>();
     const unforced = new Set<Known>();
+    let touchedTopLevel = false;
     let topLevelDefinition = false, creatingTopLevel = false, executing = false, statementWrote = false, programWrote = false, programValid = true;
     // The program's definitions by name, to tell which code can reach set.
     const programDefinitions = new Map<string, Expr[]>();
     for (const statement of program) if (statement.t === "def") programDefinitions.set(statement.name, statement.clauses.map(c => c.body));
     const lazyDefinitions = new Set(program.flatMap(st => st.t === "def" && !st.clauses[0].params.length ? [st.name] : []));
-    const writers = new Map<Expr, { write: boolean; lazy: boolean }>();
-    // Can evaluating e write a cell: does it reach set (or load, use, env)
-    // through the definitions it names? lazy: through a top-level value, which
-    // runs when first used rather than where it is named.
-    function mayWrite(e: Expr, scope: Scope): { write: boolean; lazy: boolean } {
-        const known = writers.get(e);
-        if (known) return known;
-        const result = { write: false, lazy: false };
-        writers.set(e, result);
-        for (const name of mentionedNames(e)) {
-            if (MUTATING_NAMES.has(name)) { result.write = true; continue; }
-            const bodies = programDefinitions.get(name) ?? scope.get(name)?.clauses?.map(c => c.body);
-            for (const body of bodies ?? []) {
-                const inner = mayWrite(body, scope);
-                if (!inner.write) continue;
-                result.write = true;
-                if (inner.lazy || lazyDefinitions.has(name)) result.lazy = true;
+    // What evaluating e may reach through the definitions it names: write a
+    // cell (set, load, use, env); force a top-level value kept as its body
+    // (forces); or write through a top-level value that is not (lazy), whose
+    // effects run when it is first used rather than where it is named.
+    function mayWrite(e: Expr, scope: Scope): { write: boolean; lazy: boolean; forces: boolean } {
+        const result = { write: false, lazy: false, forces: false };
+        const seen = new Set<Expr>();
+        const walk = (x: Expr, through?: string): void => {
+            if (seen.has(x)) return;
+            seen.add(x);
+            for (const name of mentionedNames(x)) {
+                if (MUTATING_NAMES.has(name)) {
+                    result.write = true;
+                    if (through && !scope.get(through)?.lazyTop) result.lazy = true;
+                    continue;
+                }
+                if (scope.get(name)?.lazyTop) result.forces = true;
+                const bodies = programDefinitions.get(name) ?? scope.get(name)?.clauses?.map(c => c.body);
+                for (const body of bodies ?? []) walk(body, through ?? (lazyDefinitions.has(name) ? name : undefined));
             }
-        }
+        };
+        walk(e);
         return result;
+    }
+    // Use a top-level value kept as its body, where the program uses it: an
+    // action runs again; a thunk runs once, remembered when a statement's
+    // static run first uses it (any other use computes it without keeping it).
+    function forceLazyTop(lazy: LazyTop, depth: number): Known | undefined {
+        // Its value depends on when it is used: a result using it is not cached.
+        cellEvents++;
+        if (!lazy.action && lazy.forced) return lazy.memo;
+        if (topLevelDefinition) { touchedTopLevel = true; return undefined; }
+        if (lazy.busy) return undefined;
+        lazy.busy = true;
+        let value: Known | undefined;
+        try { value = evaluateKnown(lazy.body, new Map(), lazy.scope, depth + 1); } finally { lazy.busy = false; }
+        if (!lazy.action && executing && !trial) { lazy.forced = true; lazy.memo = value; }
+        return value;
     }
     // Run a top-level statement for its effects on top-level cells, before
     // checking it, so later statements see the contents it leaves. Anything
@@ -2058,7 +2083,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         statementWrote = false;
         if (!programCells.size || !programValid || !(programMutates ?? options.mutation!())) return;
         const reach = mayWrite(e, scope);
-        if (!reach.write) return;
+        if (!reach.write && !reach.forces) return;
         if (reach.lazy) { programValid = false; return; }
         programWrote = false;
         executedParts.clear();
@@ -2086,11 +2111,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (!k?.mutable) return k;
         if (!(programMutates ?? options.mutation!())) return k.mutable.value;
         if (trial) throw CELL_TOUCHED;
+        // Any access, even one that stays unknown, makes a value uncacheable.
+        cellEvents++;
         const cell = k.mutable;
         if (cell.program) {
             // A top-level cell holds its contents as of this statement, unless a
             // lazy definition reads it (its timing is unknown) or the statement
             // itself writes it; while executing, reads follow the usual order.
+            if (topLevelDefinition) touchedTopLevel = true;
             if (!programCells.has(cell) || !programValid || topLevelDefinition || budgetDepth === 0) return undefined;
             cellEvents++;
             if (!executing) return statementWrote ? undefined : cell.value;
@@ -2105,8 +2133,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     function writeMutable(target: Known | undefined, value: () => Known | undefined): void {
         if (trial) throw CELL_TOUCHED;
+        // A write, applied or not, must run again wherever it is evaluated.
+        cellEvents++;
         const cell = target?.mutable;
         if (cell?.program) {
+            if (topLevelDefinition) touchedTopLevel = true;
             if (executing && programValid && programCells.has(cell)) {
                 cell.value = value() ?? {};
                 accessCell(cell, true);
@@ -2586,6 +2617,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const entry = scope.get(e.name);
                 if (!entry) return undefined;
                 if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
+                if (entry.lazyTop) return forceLazyTop(entry.lazyTop, depth);
                 if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope } };
                 if (e.name === "getArgs" && entry.builtin && options.inputs) return known(options.inputs.args().map(string => ({ string })));
                 const index = entry.index && !entry.index.terms.size ? entry.index : undefined;
@@ -3348,6 +3380,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const pending = previous ? undefined : variable();
             if (pending) scope.set(name, { type: pending, mono: true });
             const body = clauses[0].body;
+            touchedTopLevel = false;
             const t = infer(body, ["import", "app", "pipe"].includes(body.t) ? new Map(scope) : scope);
             if (pending) unify(pending, t, location);
             if (previous && !previous.inherited) {
@@ -3355,10 +3388,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (old.k === "list" && next.k === "list" && !old.contracted) unify(old.element, next.element, location);
                 else unify(previous.type, t, location);
             }
+            const facts = (writes.get(name) ?? 0) > 1 ? {} : valueEntry(body, scope);
+            // A top-level value touching top-level cells keeps its body instead,
+            // to be used where the program uses it (see forceLazyTop).
+            const lazyTop: LazyTop | undefined = topLevelDefinition && touchedTopLevel && (writes.get(name) ?? 0) <= 1
+                ? { body, scope, action: ["block", "app", "pipe"].includes(body.t), forced: false } : undefined;
+            touchedTopLevel = false;
             scope.set(name, {
                 type: t,
                 // A name written more than once can change under a closure that captured it.
-                ...(writes.get(name) ?? 0) > 1 ? {} : valueEntry(body, scope),
+                ...lazyTop ? { lazyTop } : facts,
                 nonGeneric: captured(new Map([...scope].filter(([key]) => key !== name))),
             });
             return;

@@ -1113,6 +1113,11 @@ bumpCounter x = {
     mutableCounter + 0
 }
 print (onlyOne (vowelOrPair (vowelIfShort (take (bumpCounter 0 - 2) [7, 8, 9]))))  # 1
+# A top-level value using a cell is computed at its first use and kept.
+counterAtFirstUse = mutableCounter + 0
+print counterAtFirstUse                      # 3
+set mutableCounter $ 10
+print (onlyOne (vowelOrPair (vowelIfShort (take (counterAtFirstUse - 2) [7, 8, 9]))))  # 1
 
 # p5 sketches are descriptions until built for the browser.
 p5 = import "std/p5"
