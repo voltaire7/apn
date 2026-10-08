@@ -254,7 +254,7 @@ for (const source of [
     'f n = [1, 2]; f 0 = [0]; g [a, b] = a; g (f 0)',
     'f true = [0]; f b = [1, 2]; g [a] = a; g (f false)',
     // Unknown lengths keep every possible clause.
-    'f [] = [0]; f xs = [1, 2]; g [a] = a; g (f (tail [1]))',
+    'import "std"; f [] = [0]; f xs = [1, 2]; g [a] = a; g (f (tail (words "a")))',
 ]) Deno.test(`later clauses still count unless a match is definite: ${source}`, () => rejected(session(), source));
 // Typed clauses are ranked as the runtime ranks them: an exact type (30)
 // before a numeric aggregate (10) before a lossless conversion (1) before other
@@ -547,8 +547,8 @@ for (const source of [
     'hh ys = g (f (q (ys ++ ys))); hh [2]',
     'hh ys = g (f (q (map (+ 1) ys))); hh [1, 2]',
     'g (f (sm (len [1, 2])))',
-    // A predicate passed as a parameter is not evaluated: both clauses count.
-    'hh p = g (f (q (filter p [1, 2]))); hh (> 5)',
+    // A predicate that calls an unevaluated builtin decides nothing: both clauses count.
+    'g (f (q (filter (x -> toString x == "1") [1, 2])))',
 ]) Deno.test(`length calls stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${source}`));
 // filter, map, take and drop over lists whose elements are known run as at
 // runtime, as do integer ranges.
@@ -578,3 +578,34 @@ for (const source of [
     'hh n = g (f (q [1..n])); hh 0',
     'g (f (q (take (-1) [1])))',
 ]) Deno.test(`list builtin lengths stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${source}`));
+// zip, zipWith and takeWhile; functions passed as arguments are applied too.
+for (const [source, expected] of [
+    ['g (f (q (zip [1] [2, 3])))', '0'],
+    ['g (f (q (zipWith (+) [1] [2, 3])))', '0'],
+    ['hh xs = g (f (q (zip xs [7, 8]))); hh [1]', '0'],
+    ['g (f (q (takeWhile (< 2) [1, 2, 3])))', '0'],
+    ['g (f (q (takeWhile (> 5) [1..20])))', '0'],
+    ['hh n = g (f (q (takeWhile (< n) [1, 2, 3]))); hh 2', '0'],
+    ['hh xs = g (f (q (takeWhile (< 2) xs))); hh [1, 5, 0]', '0'],
+    ['g (f (q (takeUntil (> 1) [1, 2])))', '0'],
+    ['hh p = g (f (q (filter p [1, 2]))); hh (> 1)', '0'],
+    ['big x = x > 1; hh p = g (f (q (filter p [1, 2]))); hh big', '0'],
+    ['hh p = g (f (q (takeWhile p [1, 2, 3]))); hh (< 2)', '0'],
+    ['g (f (q (filter (x -> head x > 1) [[1], [2]])))', '0'],
+    ['g (f (q (tail [1, 2])))', '0'],
+    ['f2 [] = [0]; f2 xs = [1, 2]; g (f2 (tail [1]))', '0'],
+    // A recursive call with a literal list does not fix an open parameter length.
+    ['tw xs = null xs ? [] : tw []; length (tw [1, 2])', '0'],
+] as const) Deno.test(`zip and takeWhile lengths: ${source}`, () => {
+    const actual = run(session(), `${optionClauses}; ${sizeClauses}; ${source}`);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'g (f (q (zip [1, 2] [2, 3])))',
+    'g (f (q (takeWhile (< 3) [1, 2, 3])))',
+    'g (f (q (takeWhile (> 0) [1..20])))',
+    'hh n = g (f (q (takeWhile (< n) [1, 2, 3]))); hh 3',
+    'hh p = g (f (q (filter p [1, 2]))); hh (> 0)',
+    // A recursive call still has to fit a parameter whose pattern fixes a length.
+    'h [a] = h [a, a]; h [1]',
+]) Deno.test(`zip and takeWhile lengths stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${source}`));

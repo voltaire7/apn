@@ -267,7 +267,13 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   literals, finite integer ranges, `:`, `++`); `evaluateKnown` runs the
   `LIST_NATIVES` (`filter`, `map`, `take`, `drop`) over them by applying the
   function expression to a synthetic `$item`, and applies lambdas (including
-  sections) directly. Ranges stop at 10000 elements. A numeric constructor applied to a type variable defers its
+  sections) directly. Ranges stop at 10000 elements. `Known.fn` is a function
+  value (an expression with its env and scope) applied by `applyKnown`; a
+  computed value over parameters drops `fn`, since its closure is only known
+  at their calls. A recursive self-reference is marked `recursive` with the
+  clause's `selfInputs`, and a recursive call strips the lengths of an
+  argument whose parameter type has none. A single-group definition's entry
+  keeps `alternatives[0]` as its type, which carries the summary. A numeric constructor applied to a type variable defers its
   conversion as a `construct` requirement instead of unifying. Compound arguments over
   enclosing parameters become a pending `expr`, re-evaluated after
   substitution. `substituteKnown` substitutes parameters inside pending calls

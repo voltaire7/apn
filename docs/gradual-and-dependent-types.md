@@ -322,10 +322,14 @@ evaluated when its size is known: from a literal, an argument at the call,
 `x : xs`, `xs ++ ys`, builtins that keep a list's length (`map`, `sort`), and
 recursion over `[]` and `(x:xs)` clauses. Where a list's elements are known
 too (literals, integer ranges such as `[1..n]` with `n` known, and lists built
-from them), `filter`, `map`, `take` and `drop` run on them as at runtime, with
-a lambda, an operator section, or a named function: `filter (> 1) [1, 2]` has
-one element. A predicate passed in as a parameter is not evaluated, so its
-result length stays unknown. So with
+from them), `filter`, `map`, `take`, `drop`, `zipWith` (and `zip`, which stops
+at the shorter list), `head`, `tail` and `null` run on them as at runtime, as do
+standard-library functions written in APN such as `takeWhile`. A function
+argument may be a lambda, an operator section, a named function, or a partial
+application, also when passed through a parameter: `filter (> 1) [1, 2]` and
+`hh (> 1)` with `hh p = filter p [1, 2]` both have one element. A recursive call
+does not fix the length of a parameter whose pattern leaves it open, so
+`go xs = null xs ? [] : go []` accepts lists of any length. So with
 `safe n = n > 0 ? Some n : None`, `f (safe 4)` uses the `Some` clause and
 `f (safe (-3))` the `None` one. Inside another function (`h v = g (f (safe v))`)
 the decision waits for `h`'s calls, where `v` is known. Where a value stays

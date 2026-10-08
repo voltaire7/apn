@@ -851,10 +851,12 @@ class Parser {
         return this.eatSym("->") ? { from: left, to: this.parseFunctionSpec() } : left;
     }
 
+    // Inside brackets, `:` is cons again even within a ternary branch.
     parseDelimitedExpr(): Expr {
-        const saved = this.noLambda;
+        const saved = this.noLambda, savedCons = this.noCons;
         this.noLambda = 0;
-        try { return this.parseExpr(); } finally { this.noLambda = saved; }
+        this.noCons = 0;
+        try { return this.parseExpr(); } finally { this.noLambda = saved; this.noCons = savedCons; }
     }
 
     noLambda = 0;

@@ -1042,6 +1042,12 @@ print (shortVowel [7])                                # 1
 # filter and take run on known elements: only 3 is above the limit.
 aboveVowel limit = onlyOne (vowelOrPair (vowelIfShort (filter (> limit) [1, 2, 3])))
 print (aboveVowel 2)                                  # 1
+# zip stops at the shorter list; takeWhile stops at the first failure.
+pairedVowel ys = onlyOne (vowelOrPair (vowelIfShort (zip ys [1, 2, 3])))
+print (pairedVowel [9])                               # 1
+leadingVowel limit = onlyOne (vowelOrPair (vowelIfShort (takeWhile (< limit) [1, 2, 3])))
+print (leadingVowel 2)                                # 1
+print (true ? (1 : []) : [])                          # [1]
 sortedAndReversed xs = [sort xs, reverse xs]
 firstOfBoth [[a, b], [c, d]] = [a, c]
 print (firstOfBoth (sortedAndReversed [3, 1]))  # [1, 1]

@@ -64,7 +64,8 @@ use `match` with guarded pattern lambdas instead (see
 [pattern functions](pattern-functions.md)).
 
 There is no `if`/`then`/`else`; use the ternary `cond ? a : b`. Only the
-selected branch runs.
+selected branch runs. Inside a branch, `:` belongs to the ternary; bracket a
+cons to use it there: `b ? (x : xs) : []`.
 
 Operator sections: `(+ 2)` is `x -> x + 2`, `(2 +)` is `x -> 2 + x`, and a lone
 operator `(+)` is a two-argument function. `-` works in the same positions,
