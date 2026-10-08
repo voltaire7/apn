@@ -18,8 +18,8 @@
    finishing. Do not leave the project in a broken state.
 3. **Keep the docs true.** When behavior changes, update the matching file in
    `docs/` (and the REPL `:help` block for new syntax). `docs/semantics.md` is
-   authoritative for evaluation rules; maintainer invariants live in
-   `docs/implementation-notes.md`. Do not grow this file into a feature log.
+   authoritative for language behavior; `docs/implementation-notes.md` holds
+   only implementation constraints and must not restate it. Do not grow this file into a feature log.
 4. **Layout:** `main.ts`, `apn`, `readme.md`, and `AGENTS.md` stay in the root.
    `src/` interpreter, `lib/` standard library, `examples/` runnable examples,
    `tests/` regression tests, `docs/` documentation. No dependencies.

@@ -5,6 +5,103 @@ cons tails, and variant fields. Forcing reveals the outer value and memoizes it;
 it does not recursively evaluate a whole collection. Explicit actions remain
 repeatable, as described below. `tests/semantics-test.ts` asserts these rules.
 
+## Syntax basics
+
+### Layout and blocks
+
+Indentation is strict: every nested level is exactly four spaces deeper than
+its parent (`+2`, `+8`, and other steps are syntax errors). Blank and
+comment-only lines are ignored for layout. A newline at the same level ends a
+statement, and `;` also separates statements. A definition's body may start on
+the next line indented four spaces; other top-level statements cannot continue
+onto an indented line.
+
+Definition brace layout is mandatory: write `func = {` on one line. In a
+multiline brace block, each statement starts exactly four spaces deeper than
+that opening line, and the closing `}` aligns with the opening line. Inline
+`func = { expr; expr }` is valid. A newline after `=` may introduce an indented
+expression, but never an opening `{`, even for an inline block.
+
+A closing `)` starting a separate line must align with the indentation of the
+line containing its opening `(`. A closing parenthesis after an expression on
+the same line remains valid.
+
+Parentheses suppress newlines for grouped expressions, but a `{ ... }` block
+or `[ ... ]` list nested inside them restores its own layout. Local definitions
+in a parenthesized lambda's brace body therefore remain separate statements;
+list elements on separate lines remain separate elements.
+
+List literals separate elements with commas or newlines, so a multi-line list
+needs no commas. Juxtaposition on one line is application: `[f 2]` is a
+one-element list. Write a cons expression inside a list literal in parentheses,
+`[(0:[])]`, because `[0:[]]` is record syntax.
+
+`( )` and `{ }` are interchangeable statement groups. Their value is the last
+statement's value (`(4 * 3)` and `{4 * 3}` are both `12`), and an empty group is
+`[]`. Definitions inside a group are local to it:
+`x = 1; y = { x = 40; x + 2 }` leaves `x` as `1` and `y` as `42`.
+There are no tuples: `(1, 2)` is a syntax error; use a list such as
+`[213, "hello"]` for mixed values.
+
+### Functions and conditionals
+
+`f x y = body` and `f = x y -> body` both define curried functions, so
+`add 2` is a partial application. A function may be written as several
+equations, tried in source order:
+
+```apn
+len [] = 0
+len (x:rest) = 1 + len rest
+```
+
+When no equation matches, the error names the function: `no clause of 'len'
+matches the given arguments`. Guards are not allowed on definition clauses;
+use `match` with guarded pattern lambdas instead (see
+[pattern functions](pattern-functions.md)).
+
+There is no `if`/`then`/`else`; use the ternary `cond ? a : b`. Only the
+selected branch runs.
+
+Operator sections: `(+ 2)` is `x -> x + 2`, `(2 +)` is `x -> 2 + x`, and a lone
+operator `(+)` is a two-argument function. `(-2)` and `(- 2)` are negative
+numbers rather than sections, and a left section of `-` such as `(10 -)` does
+not parse; write `x -> 10 - x`.
+
+### Iteration and ranges
+
+`*` with a function operand iterates and returns the list of results. A list
+supplies its elements, a record its `[key, value]` pairs, and an integer `n`
+the indexes `0` to `n - 1` (a negative `n` counts down: `-3 * f` passes
+`0, -1, -2`).
+Function iteration accepts either operand order: `print * [1,2,3]` is equivalent
+to `[1,2,3] * print`. Records pass `[key, value]` pairs and integer counts pass
+indexes. Numeric operands still multiply (including numeric arrays); two
+functions are not composed by `*`—use `\` for composition.
+
+`[a..b]` is an inclusive range whose step follows the direction of the bounds
+(`[5..3]` is `[5, 4, 3]`). `[a,b..c]` uses the step `b - a`; an explicit step
+pointing away from the end produces `[]` (`[0,1..-100]`). `[a..]` and
+`[a,b..]` are infinite lazy ranges.
+Range expression bounds may now be runtime expressions: `[1..n]`, `[a,b..end]`,
+`[start..]`. They must evaluate to real numbers. Existing automatic descending
+steps are preserved, so `[1..0]` is `[1,0]`; std factorial handles zero separately.
+A range pattern `[lo..hi]` matches any integer from `lo` to `hi` inclusive.
+
+### Bindings and output
+
+`name = value` is the only binding form; there is no `let`. A binding inside a
+group is scoped to that group. The left side may be a pattern:
+`[a, b] = [1, 2]`, `Just x = maybeValue` (parentheses optional), or a keyed
+record pattern `[x: a] = record`. A failed match is an error. In function
+parameters and `match` alternatives, a bare `[x, y]` pattern also matches a
+record, selecting the fields named `x` and `y`. A new capitalized name on the
+left binds a type alias; see [templates and type aliases](templates-and-types.md)
+for aliases and variant declarations.
+
+In file mode, bare expressions run for their effects but are not printed; use
+`print`. The REPL echoes expression results but not assignments, so `x = x`
+never hangs the prompt.
+
 ## Operator precedence and associativity
 
 From tightest to loosest binding; operators in the same row have equal precedence.
@@ -51,7 +148,6 @@ Unary operators take a power expression as their operand; nest them with parenth
 as in `-(-x)`. For negative function arguments use `f (-1)`. The experimental
 function-minus overload also allows `f -1`, but follows binary subtraction's
 precedence: `sqrt -1 * 4` groups as `sqrt - (1 * 4)`.
-
 
 See [templates and type aliases](templates-and-types.md) for scalar/container
 application, slot updates, aliases, and parameterized variant types.
@@ -125,6 +221,7 @@ It does not invoke an ordinary function stored in the old slot. A new field is
 inserted unchanged. On an unbound name or an existing function, `f "x" = value`
 remains a string-pattern function clause.
 
+An empty list `[]` becomes a record on its first field assignment.
 `obj.[x] = [10]` requires a one-element RHS list; `obj.[x] = 10` errors.
 `obj.child.x = 10` and `obj.child.[x, y] = [10, 20]` rebuild nested parent records.
 See the [access and assignment reference](templates-and-types.md#access-and-assignment-reference)
@@ -360,7 +457,6 @@ deno run --allow-read main.ts examples/features.apn
 The assertions cover finite prefixes, shared effects, patterns, errors, and
 streaming/interruption recovery. The showcase is the broader syntax reference.
 
-
 ## List index assignment
 
 `arr 0 = 10` rebinds an existing list to a modified copy in the current scope,
@@ -380,12 +476,10 @@ index assignments execute in order. Inside a block the update shadows the outer
 binding. On an unbound name or an existing function, the same syntax remains a
 literal-pattern function definition (`f 0 = 10`).
 
-
 Leading-dot decimals such as `.1`, `.2`, and `-.5` are float literals. Like other
 floats, `.1 + .2` yields `0.30000000000000004` under binary floating-point
 arithmetic. An attached numeric field access (`rec.1`) stays record access;
 whitespace allows a float argument (`print .1`). Range dots (`[1..3]`) are unchanged.
-
 
 Float ranges support finite and infinite forms, including `[0,0.5..100]` and
 `[0,.5..]`. Each value is calculated from the origin and an index to avoid
@@ -398,31 +492,6 @@ A lambda with an explicit `{ ... }` body ends at the closing brace. Operators
 following that brace belong to the surrounding expression: `[1, 2] * x ->
 { x + 1 } * x -> x * 2` produces `[4, 6]`. Unbraced lambda bodies continue
 to consume a full expression.
-
-Definition brace layout is mandatory: write `func = {` on one line. In a
-multiline brace block, each statement starts exactly four spaces deeper than
-that opening line, and the closing `}` aligns with the opening line. Inline
-`func = { expr; expr }` is valid. A newline after `=` may introduce an indented
-expression, but never an opening `{`, even for an inline block.
-
-A closing `)` starting a separate line must align with the indentation of the
-line containing its opening `(`. A closing parenthesis after an expression on
-the same line remains valid.
-
-Parentheses suppress newlines for grouped expressions, but a `{ ... }` block
-or `[ ... ]` list nested inside them restores its own layout. Local definitions
-in a parenthesized lambda's brace body therefore remain separate statements;
-list elements on separate lines remain separate elements.
-
-In the interactive REPL, Enter submits except immediately after an opening
-`(`, `{`, or `[` (allowing whitespace), where it inserts an indented newline.
-Inside a bracket opened on an earlier line, Enter continues at the current
-indentation. An unfinished single-line `[1,2,3` submits and reports a syntax error. Bracketed paste preserves copied indentation and blank lines without applying
-auto-indent or closing-bracket dedent; press Enter afterward to submit.
-Shift+Enter reverses that choice, even
-for invalid code. Brackets inside strings/comments are ignored. Option-arrow
-keys move by word. Shift+Enter requires distinct terminal key encoding (Kitty
-keyboard protocol or xterm modifyOtherKeys).
 
 Bounded character ranges such as `['a'..'e']` produce strings. They follow
 Unicode scalar order (skipping surrogate code points); descending bounds reverse
@@ -553,7 +622,8 @@ and `Int 3 * Int 2` returns `6`, both still typed Int.
 constructs from a record. Empty construction is `HashMap []`. Keys may be finite
 numbers, strings, chars, or booleans. Numerically equal keys share an entry
 regardless of exactness or numeric type; distinct strings/chars stay distinct.
-Duplicate keys keep the last value. Insertion order is preserved for traversal.
+Duplicate keys keep the last value. Insertion order is preserved for traversal,
+and replacing an existing key keeps its position.
 
 `insert [x: 123] $ HashMap []` returns a map containing x. `insert` accepts a
 record or association list; `remove key map` returns a map without the key.
@@ -583,7 +653,6 @@ values are returned unchanged. For example, `myTypeOf (t x) = print t` still pri
 It inspects the outer value without forcing list contents. Repeating the type
 variable, as in `(t x) (t y)`, requires both arguments to have the same type.
 
-
 ## Standard module imports
 
 `import "std"` (or `std/function`, `std/option`, `std/sequence`, `std/number`,
@@ -596,18 +665,16 @@ Names resolve relative to the APN installation, independently of sourceDir.
 `load` remains uncached file execution relative to the current source file.
 See [the standard library reference](standard-library.md) for APIs and limits.
 
+## REPL clauses
 
-## REPL clauses and range syntax
+The interactive editor (Enter/Shift+Enter, paste, history, completion) is
+described in [the REPL guide](repl.md).
 
 Separate REPL submissions extend existing function clauses of the same arity.
 An equivalent parameter pattern replaces its previous clause in place; fresh
 patterns are appended. Renaming a parameter does not create another overload.
 Numeric literal/type dispatch retains its normal specificity rules. Module
 loading retains its existing definition behavior.
-
-Range expression bounds may now be runtime expressions: `[1..n]`, `[a,b..end]`,
-`[start..]`. They must evaluate to real numbers. Existing automatic descending
-steps are preserved, so `[1..0]` is `[1,0]`; std factorial handles zero separately.
 
 ## Mutable references
 
@@ -633,7 +700,6 @@ actions still run when demanded; inspecting one as a record field shows its body
 and runtime function contracts are described in [pattern functions](pattern-functions.md).
 Only pattern mismatch or a false guard selects the next alternative; runtime
 errors propagate and unused alternatives remain unevaluated. Guards use truthiness.
-
 
 ## CLI file errors
 
@@ -681,11 +747,6 @@ syntax inside lists: local definitions still belong in blocks.
 Numeric lists and records support elementwise arithmetic and scalar broadcasting;
 `++` remains concatenation, and `*` with a function remains iteration.
 See [numeric arrays](arrays.md) for matching-shape rules and lazy validation.
-
-Function iteration accepts either operand order: `print * [1,2,3]` is equivalent
-to `[1,2,3] * print`. Records pass `[key, value]` pairs and integer counts pass
-indexes. Numeric operands still multiply (including numeric arrays); two
-functions are not composed by `*`—use `\` for composition.
 
 ## Zero is initialization
 

@@ -33,7 +33,9 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   the editor requests Kitty keyboard disambiguation and also accepts xterm
   modifyOtherKeys Shift+Enter. Auto-indentation still applies to newlines.
 - **Paste**: bracketed paste mode is enabled (`ESC[?2004h`), so pasted
-  multi-line text is inserted verbatim, never auto-run; Enter then runs it.
+  multi-line text is inserted verbatim, never auto-run: copied indentation and
+  blank lines are kept, without auto-indent or closing-bracket dedent. Enter
+  then runs it.
 - **Colors** (Catppuccin Frappé palette, truecolor): input is highlighted as
   typed (comments overlay0, strings/chars green, numbers yellow,
   bools mauve, natives blue, capital idents sky,
