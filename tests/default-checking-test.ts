@@ -722,7 +722,7 @@ for (const [source, expected] of [
 for (const source of [
     'k y = { c = Mutable 5; c + 1 }; g (f (r (k 0 == 7)))',
     'k y = { c = Mutable 1; h = () -> c + 0; set c 2; h [] }; g (f (r (k 0 == 1)))',
-    'c = Mutable 5; bump x = set c x; g (f (r (c + 1 == 6)))',
+    'c = Mutable 5; bump x = set c x; g (f (r (c + 1 == 5)))',
 ]) Deno.test(`effects and cells stay checked: ${source}`, () => rejected(session(), `${effectPrelude}; ${source}`));
 // Writes after reads follow the run's order: block statements, eager
 // bindings and operands run in order, and a lazy binding is read when used.
@@ -734,6 +734,18 @@ for (const [source, expected] of [
     ['k y = { c = Mutable 1; (c + 0) + { set c 5; c + 0 } }; g (f (r (k 0 == 6)))', '0'],
     ['k y = { c = Mutable 1; h = () -> c + 0; set c 2; h [] }; g (f (r (k 0 == 2)))', '0'],
     ['sw c = { set c 9; c + 0 }; k y = { c = Mutable 1; a = c + 0; sw c + a }; g (f (r (k 0 == 18)))', '0'],
+    // List elements and call arguments that read a cell are computed when used.
+    ['k y = { c = Mutable 1; xs = [c + 0]; set c 7; head xs }; g (f (r (k 0 == 7)))', '0'],
+    ['k y = { c = Mutable 1; xs = [c + 0]; v <- head xs + 0; set c 7; v }; g (f (r (k 0 == 1)))', '0'],
+    ['p x c = { set c 3; x + 0 }; k y = { c = Mutable 1; p (c + 0) c }; g (f (r (k 0 == 3)))', '0'],
+    // Top-level cells follow the statements that write them, in program order.
+    ['counter = Mutable 0; set counter 4; g (f (r (counter + 0 == 4)))', '0'],
+    ['counter = Mutable 0; bump x = set counter (counter + 1); bump []; bump []; g (f (r (counter + 0 == 2)))', '0'],
+    ['counter = Mutable 0; set counter 4; print (counter + 0); set counter 9; g (f (r (counter + 0 == 9)))', '0'],
+    ['counter <- Mutable 2; set counter (counter * 5); g (f (r (counter + 0 == 10)))', '0'],
+    // Elements that are never forced never write; a writer passed by value runs where called.
+    ['counter = Mutable 0; [set counter 9, 1]; g (f (r (counter + 0 == 0)))', '0'],
+    ['counter = Mutable 0; twice h = { h []; h [] }; twice (_ -> set counter (counter + 3)); g (f (r (counter + 0 == 6)))', '0'],
 ] as const) Deno.test(`cells written after reads: ${source}`, () => {
     const actual = run(session(), `${effectPrelude}; ${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -743,10 +755,15 @@ for (const source of [
     'k y = { c = Mutable 1; a <- c + 0; set c 5; a + 0 }; g (f (r (k 0 == 5)))',
     'k y = { c = Mutable 1; a = c + 0; set c 5; a + 0 }; g (f (r (k 0 == 1)))',
     'sw c = { set c 9; c + 0 }; k y = { c = Mutable 1; a = c + 0; sw c + a }; g (f (r (k 0 == 10)))',
-    // A list element is computed when used, after the set: unknown here.
-    'k y = { c = Mutable 1; xs = [c + 0]; set c 7; head xs }; g (f (r (k 0 == 7)))',
-    // Other top-level code may write a top-level cell at any time.
+    'counter = Mutable 0; set counter 4; g (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0; bump x = set counter (counter + 1); bump []; bump []; g (f (r (counter + 0 == 1)))',
+    // Writes in elements forced while printing: their order is not followed.
+    'counter = Mutable 0; print (map (x -> set counter x) [1, 2]); g (f (r (counter + 0 == 2)))',
+    'k y = { c = Mutable 1; xs = [c + 0]; set c 7; head xs }; g (f (r (k 0 == 1)))',
+    // A statement that writes a top-level cell does not also read it statically.
     'counter = Mutable 0; k y = { set counter 4; counter + 0 }; g (f (r (k 0 == 4)))',
+    // A top-level value runs when first used: it does not read top-level cells statically.
+    'counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 4)))',
 ]) Deno.test(`cells written after reads stay checked: ${source}`, () => rejected(session(), `${effectPrelude}; ${source}`));
 Deno.test("a set from an earlier REPL input keeps later cell reads unknown", () => {
     const i = session();

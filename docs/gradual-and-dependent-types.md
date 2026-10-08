@@ -343,13 +343,19 @@ Effects are never performed while checking, but their results are known:
 `print x` and `emit x` are `x`, and `set`, `assert` and `debug` give `[]`. A
 `Mutable` cell's contents are known when nothing checked in the session can
 write a cell (no `set`, `load`, `use` or `env`). Otherwise contents are followed
-in the run's order for a cell created within the value being decided: block
-statements, eager bindings (`<-`) and operands run in order, and a lazy binding
-is read when used, so `{ c = Mutable 1; a = c + 0; set c 5; a + 0 }` is 5. A
-read stays unknown when a written cell is also used in a lazily evaluated
-place (a list element, a call argument evaluated elsewhere), when evaluation
-skips code or an uncertain branch, or for a cell defined at the top level,
-which other top-level code may write at any time. When the interpreter checks a
+in the run's order: block statements, eager bindings (`<-`) and operands run in
+order, a lazy binding is read when used, and a list element or call argument
+that reads a cell is computed where it is first needed, so
+`{ c = Mutable 1; a = c + 0; set c 5; a + 0 }` is 5 and
+`{ c = Mutable 1; xs = [c + 0]; set c 7; head xs }` is 7. A cell defined at the
+top level is followed through the top-level statements that can write it,
+which the checker runs in program order before checking each one: after
+`counter = Mutable 0; set counter 4`, `counter + 0` is 4. A read stays unknown
+when evaluation skips code or an uncertain branch, when accesses could happen
+in another order, in a top-level statement that itself writes the cell, and in
+a top-level value (`snap = counter + 0`), which runs when first used; once a
+top-level statement that can write cells is uncertain, top-level cells stay
+unknown for the rest of the program. When the interpreter checks a
 program right before running it (the CLI and the REPL), `readFile`, `getArgs`
 (and so `readInput`) and `readStdin` see the program's actual input, and the run
 reads the same text the checker saw. Stdin is read ahead only when it is not a

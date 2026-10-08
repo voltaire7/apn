@@ -1105,6 +1105,8 @@ print mutableCounter                         # 1
 counterAlias = mutableCounter
 set counterAlias $ 2
 print mutableCounter                         # 2
+# The checker follows top-level cells through the statements that write them.
+print (onlyOne (vowelOrPair (vowelIfShort (take (mutableCounter - 1) [7, 8, 9]))))  # 1
 
 # p5 sketches are descriptions until built for the browser.
 p5 = import "std/p5"

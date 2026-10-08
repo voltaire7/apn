@@ -302,7 +302,19 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   accessed from two regions; `budgeted` drops a root's value that read a
   cell if it was reordered, wrote an unknown target, or was `incomplete`
   (skipped code: an unevaluated application, an uncertain branch or clause
-  set, the budget). Values that touched cells are not cached.
+  set, the budget, any expression kind the evaluator does not follow).
+  Values that touched cells are not cached. In lazy positions (list
+  elements, cons heads, call arguments) `lazyValue` runs a trial that throws
+  `CELL_TOUCHED` at any cell access (`once` and `lazyList` reset on it); a
+  value that touches a cell becomes `Known.deferred`, forced by `demand` at
+  the points the run forces it (`readMutable`, strict builtins, application,
+  equality). Top-level cells (`KnownCell.program`, made while
+  `creatingTopLevel`) are written only by `executeTopLevel`, which statically
+  runs each top-level statement that `mayWrite` (reaches `set`, `load`, `use`
+  or `env` through named definitions) before it is checked; reads in that
+  statement (`statementWrote`) and in lazy top-level values
+  (`topLevelDefinition`) are unknown, and an uncertain execution clears
+  `programValid`.
   `CheckOptions.inputs` is set only by `Interpreter.enableChecking`:
   `readFile` and `getArgs` read through `Interpreter.inputFile`, a snapshot
   cleared at each top-level checked run and shared with the runtime
