@@ -19,7 +19,7 @@ type Ty =
     // shape describes the full result in terms of the arguments (see Shape); args
     // collects argument types across curried application. Both describe the
     // function's code, so they are trusted only at a direct call by name.
-    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; returns?: ResultValue }
+    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; summary?: Summary }
     | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number> }
     | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string> }
     | { k: "type"; value: Ty }
@@ -38,11 +38,13 @@ interface Shape { arg?: number; length?: LengthRef; items?: (Shape | undefined)[
 interface ClauseOrder { index: number; params: Pattern[]; refutable: Set<string> }
 // ref names the parameter (by binder) whose value this is, when the value
 // itself is only known at that function's calls.
-// tag is the constructor that visibly built the value (None, Some 5).
-interface Known { index?: Index; boolean?: boolean; string?: string; char?: string; float?: number; tag?: string; ref?: string }
-// What a function's result value is, from its code: literal facts, or `arg`,
-// the value of that argument position. Trusted only at direct calls by name.
-type ResultValue = Known & { arg?: number };
+// tag is the constructor that visibly built the value (None, Some 5); call is
+// a direct call whose result is evaluated once its arguments are known (they
+// may refer to parameters of an enclosing function, substituted at its calls).
+interface Known { index?: Index; boolean?: boolean; string?: string; char?: string; float?: number; tag?: string; ref?: string; call?: { summary: Summary; args: Known[] } }
+// A function's clauses and defining scope, so a direct call by name can
+// evaluate what its result value is from what is known about the arguments.
+interface Summary { clauses: (ClauseOrder & { body: Expr })[]; scope: Scope }
 interface Entry {
     type: Ty;
     index?: Index;
@@ -52,6 +54,7 @@ interface Entry {
     float?: number;
     tag?: string;
     ref?: string;
+    call?: Known["call"];
     clauses?: { params: Pattern[]; body: Expr }[];
     mono?: boolean;
     // inherited: visible from an enclosing scope (blocks mark every outer entry).
@@ -222,6 +225,33 @@ function instantiate(entry: Entry): Ty {
         ? entry.type
         : copy(entry.type, new Map([...(entry.nonGeneric ?? [])].map((t) => [resolve(t), resolve(t)])));
 }
+// A parameter's value is now the argument's (a literal, or another parameter),
+// in these facts and in the arguments of any pending call.
+function substituteKnown(known: Known, subst?: [string, Index], value?: [string, Known]): Known {
+    let result = known;
+    if (result.index && subst && result.index.terms.has(subst[0])) result = { ...result, index: substituteIndex(result.index, subst) };
+    if (result.ref && value && result.ref === value[0]) {
+        const v = value[1];
+        // The whole value is the argument's, its index included (none for a non-integer).
+        result = { index: subst && known.index?.terms.has(subst[0]) ? result.index : v.index, boolean: v.boolean, string: v.string, char: v.char, float: v.float, tag: v.tag, ref: v.ref, call: v.call };
+    }
+    if (result.call) result = { ...result, call: { ...result.call, args: result.call.args.map(a => substituteKnown(a, subst, value)) } };
+    return result;
+}
+// The names a pattern binds.
+function patternNames(p: Pattern): string[] {
+    switch (p.p) {
+        case "var": return [p.name];
+        case "as": return [...patternNames(p.left), ...patternNames(p.right)];
+        case "typeBind": return [p.name, ...patternNames(p.value)];
+        case "schema": case "contract": return patternNames(p.value);
+        case "list": return p.v.flatMap(patternNames);
+        case "cons": return [...patternNames(p.head), ...patternNames(p.tail)];
+        case "constr": return p.args.flatMap(patternNames);
+        case "recPat": return p.v.map(([, binding]) => binding);
+        default: return [];
+    }
+}
 // Replace one symbolic term of an index with a value.
 function substituteIndex(index: Index, [name, value]: [string, Index]): Index {
     const terms = new Map(index.terms), coefficient = terms.get(name)!;
@@ -256,19 +286,14 @@ function copy(
         case "intrinsic": Object.assign(result, { args: t.args?.map(go) }); break;
         case "mutable": Object.assign(result, { value: go(t.value) }); break;
         case "map": Object.assign(result, { key: go(t.key), value: go(t.value) }); break;
-        case "operation": {
-            let known = t.known;
-            if (known?.index && subst && known.index.terms.has(subst[0])) known = { ...known, index: substituteIndex(known.index, subst) };
-            // The parameter's value is now the argument's: a literal, or another parameter.
-            if (known?.ref && value && known.ref === value[0]) {
-                const v = value[1];
-                known = { index: known.index, boolean: v.boolean, string: v.string, char: v.char, float: v.float, tag: v.tag, ref: v.ref };
-            }
-            Object.assign(result, { args: t.args.map(go), solution: t.solution && go(t.solution), known });
+        case "operation":
+            Object.assign(result, { args: t.args.map(go), solution: t.solution && go(t.solution), known: t.known && substituteKnown(t.known, subst, value) });
             break;
-        }
         case "fn":
-            Object.assign(result, { input: go(t.input), output: go(t.output), checks: t.checks?.map(go) });
+            Object.assign(result, {
+                input: go(t.input), output: go(t.output), checks: t.checks?.map(go),
+                callArgs: t.callArgs?.map(a => ({ ...a, ...substituteKnown(a, subst, value), type: go(a.type) })),
+            });
             break;
         case "list": {
             let length = t.length;
@@ -377,10 +402,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.k === "var") return true;
         if (t.k !== "operation" || seen.has(t)) return false;
         seen.add(t);
+        if (!deciding && t.op === "call" && t.known && symbolic(t.known)) return true;
         return t.args.some(x => waiting(x, seen));
     }
+    // Does this value depend on a parameter of an enclosing function?
+    function symbolic(k: Known): boolean {
+        return !!k.ref || !!k.index?.terms.size || !!k.call?.args.some(symbolic);
+    }
+    // Set while deciding leftover checks at the end: symbolic values no longer wait.
+    let deciding = false;
+    // The deferred call being evaluated, so deferring it again keeps the same node.
+    let evaluatingCall: Extract<Ty, { k: "operation" }> | undefined;
     function deferredCall(f: Ty, argument: Entry): Ty {
-        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, tag: argument.tag, ref: argument.ref } };
+        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, tag: argument.tag, ref: argument.ref, call: argument.call } };
         requirements.push(result);
         return resolve(result);
     }
@@ -506,7 +540,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         const numeric = (x: Ty) => x.k === "atom" && NUMERIC_TYPES.includes(x.name);
         const callable = (x: Ty) => ["fn", "type", "overload"].includes(x.k);
-        if (t.op === "call") return application(a, { type: b, ...t.known }, { t: "placeholder" });
+        if (t.op === "call") {
+            const outer = evaluatingCall;
+            evaluatingCall = t;
+            try { return application(a, { type: b, ...resolveKnown(t.known ?? {}) }, { t: "placeholder" }); }
+            finally { evaluatingCall = outer; }
+        }
         if (t.op === "compare") {
             if (numeric(a) && numeric(b) || a.k === "atom" && b.k === "atom" && a.name === b.name && ["String", "Char"].includes(a.name)) return atom("Bool");
             return problem(`cannot compare ${text(a)} and ${text(b)}`);
@@ -1112,6 +1151,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     a.low > b.high || a.low >= b.high && a.clause.index < b.clause.index;
                 const runs = (r: typeof ranked[number]) => !r.fails && !sure.some(d => d !== r && before(d, r));
                 outputs = outputs.filter((_, n) => accepted[n].clauses!.some(c => runs(ranked.find(r => r.clause === c)!)));
+                // Still ambiguous, and the arguments depend on an enclosing function's
+                // parameters: decide at that function's calls, where they are known.
+                if (!deciding && outputs.length > 1 && outputs.some(x => text(x) !== text(outputs[0])) && accepted.some(a => a.call!.some(symbolic))) {
+                    return evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument);
+                }
             }
             if (!outputs.length) return problem(`no overload accepts ${text(argument.type)}`, e);
             if (outputs.length === 1 || outputs.every((x) => text(x) === text(outputs[0]))) return outputs[0];
@@ -1236,8 +1280,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             collect(argument.type);
             // With this argument's value known, the function's deferred checks
             // (calls on the parameter) see that value instead of its symbol.
-            const value: Known = { index: argument.index, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, tag: argument.tag, ref: argument.ref };
-            const known = argument.index || argument.ref || [argument.boolean, argument.string, argument.char, argument.float, argument.tag].some(x => x !== undefined);
+            const value: Known = { index: argument.index, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, tag: argument.tag, ref: argument.ref, call: argument.call };
+            const known = argument.index || argument.ref || argument.call || [argument.boolean, argument.string, argument.char, argument.float, argument.tag].some(x => x !== undefined);
             const pending = f.binder && known
                 ? checks.map(check => copy(check, new Map([...variables(check)].map(t => [t, t])),
                     argument.index ? [f.binder!, argument.index] : undefined, undefined, [f.binder!, value]))
@@ -1763,9 +1807,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A copy of a function type's result chain without shapes or collected args.
     function withoutShapes(type: Ty, seen = new Map<Ty, Ty>()): Ty {
         const t = resolve(type);
-        if (t.k !== "fn" || !t.shape && !t.args && !t.returns && resolve(t.output).k !== "fn") return type;
+        if (t.k !== "fn" || !t.shape && !t.args && !t.summary && resolve(t.output).k !== "fn") return type;
         if (seen.has(t)) return seen.get(t)!;
-        const result = { ...t, shape: undefined, args: undefined, returns: undefined };
+        const result = { ...t, shape: undefined, args: undefined, summary: undefined };
         seen.set(t, result);
         result.output = withoutShapes(t.output, seen);
         return result;
@@ -1865,75 +1909,171 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return t.k === "variant" ? { tag: head.name } : {};
             }
             if (!trustsShape(entry)) return {};
-            const result = returnsAt(entry!.type, args.length);
-            if (!result) return {};
-            if (result.arg !== undefined) return valueEntry(args[result.arg], scope);
-            const { arg: _, ...facts } = result;
-            return facts;
+            const summary = summaryAt(entry!.type, args.length);
+            if (!summary) return {};
+            return resolveKnown({ call: { summary, args: args.map(a => valueEntry(a, scope)) } });
         }
         return {};
     }
-    // The result value of a callee after `count` arguments, if the call is complete.
-    function returnsAt(type: Ty, count: number): ResultValue | undefined {
+    // The summary of a callee called with `count` arguments, if the call is complete.
+    function summaryAt(type: Ty, count: number): Summary | undefined {
         let t = resolve(type);
-        if (t.k === "overload") {
-            const choices = t.choices.map(choice => returnsAt(choice, count));
-            return choices.reduce((x, y) => meetValues(x, y));
-        }
+        if (t.k === "overload") t = resolve(t.choices[0]);
         for (let n = 1; n < count; n++) {
             if (t.k !== "fn") return undefined;
             t = resolve(t.output);
         }
-        if (t.k !== "fn" || !t.returns) return undefined;
-        const next = resolve(t.output);
-        return next.k === "fn" && next.returns === t.returns ? undefined : t.returns;
+        if (t.k !== "fn" || !t.summary || t.summary.clauses[0].params.length !== count) return undefined;
+        return t.summary;
+    }
+    // Facts plus whatever a pending call evaluates to with its arguments now.
+    function resolveKnown(known: Known): Known {
+        if (!known.call) return known;
+        const facts = evaluateCall(known.call.summary, known.call.args.map(resolveKnown), 0);
+        const result: Known = { ...known };
+        for (const key of ["index", "boolean", "string", "char", "float", "tag"] as const) {
+            if (result[key] === undefined && facts?.[key] !== undefined) (result as Record<string, unknown>)[key] = facts[key];
+        }
+        return result;
+    }
+    // Evaluate a call statically: rank its clauses as the runtime would, and
+    // meet the results of every clause that might run. Bounded in depth and work.
+    let evaluations = 0;
+    function evaluateCall(summary: Summary, args: Known[], depth: number): Known | undefined {
+        if (depth > 24 || ++evaluations > 20000) return undefined;
+        const entries: Entry[] = args.map(k => ({ type: dynamic, ...k }));
+        const ranked = summary.clauses.map(c => ({ clause: c, ...rankClause(c, entries) }));
+        const sure = ranked.filter(r => r.matches);
+        const before = (a: typeof ranked[number], b: typeof ranked[number]) =>
+            a.low > b.high || a.low >= b.high && a.clause.index < b.clause.index;
+        const candidates = ranked.filter(r => !r.fails && !sure.some(d => d !== r && before(d, r)));
+        if (!candidates.length) return undefined;
+        let result: Known | undefined;
+        for (const [n, { clause }] of candidates.entries()) {
+            // Pattern-bound names shadow outer variables; only plain names get the argument's value.
+            const env = new Map<string, Known>();
+            clause.params.forEach((p, i) => {
+                for (const name of patternNames(p)) env.set(name, {});
+                if (p.p === "var" && !clause.refutable.has(p.name)) env.set(p.name, args[i]);
+            });
+            const value = evaluateKnown(clause.body, env, summary.scope, depth + 1);
+            result = n === 0 ? value : meetValues(result, value);
+            if (!result) return undefined;
+        }
+        return result;
+    }
+    // What e evaluates to, given known values of the names in env.
+    function evaluateKnown(e: Expr, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
+        const number = (k: Known | undefined) => k?.index && !k.index.terms.size ? k.index.constant : k?.float;
+        // Truthiness as the runtime defines it, where the value decides it.
+        const truth = (k: Known | undefined): boolean | undefined => {
+            if (!k) return undefined;
+            if (k.boolean !== undefined) return k.boolean;
+            const n = number(k);
+            if (n !== undefined) return typeof n === "bigint" ? n !== 0n : n !== 0 && !Number.isNaN(n);
+            if (k.string !== undefined) return k.string.length > 0;
+            if (k.tag !== undefined || k.char !== undefined) return true;
+            return undefined;
+        };
+        switch (e.t) {
+            case "int": return { index: constant(e.v) };
+            case "float": return { float: e.v };
+            case "bool": return { boolean: e.v };
+            case "string": return { string: e.v };
+            case "char": return { char: e.v };
+            case "var": {
+                if (env.has(e.name)) return resolveKnown(env.get(e.name)!);
+                const entry = scope.get(e.name);
+                if (!entry) return undefined;
+                if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
+                const index = entry.index && !entry.index.terms.size ? entry.index : undefined;
+                return { index, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, tag: entry.tag };
+            }
+            case "block": {
+                if (e.stmts.some(st => st.t === "patDef" || st.t === "stmDef")) return undefined;
+                const last = e.stmts[e.stmts.length - 1];
+                return last && evaluateKnown(last, env, scope, depth);
+            }
+            case "ternary": {
+                const condition = truth(evaluateKnown(e.cond, env, scope, depth));
+                if (condition === true) return evaluateKnown(e.then, env, scope, depth);
+                if (condition === false) return evaluateKnown(e.els, env, scope, depth);
+                return meetValues(evaluateKnown(e.then, env, scope, depth), evaluateKnown(e.els, env, scope, depth));
+            }
+            case "unop": {
+                const v = evaluateKnown(e.e, env, scope, depth);
+                if (e.op === "not") { const t = truth(v); return t === undefined ? undefined : { boolean: !t }; }
+                const n = number(v);
+                return typeof n === "bigint" ? { index: constant(-n) } : typeof n === "number" ? { float: -n } : undefined;
+            }
+            case "binop": {
+                if (e.op === "&&" || e.op === "||") {
+                    const l = truth(evaluateKnown(e.l, env, scope, depth));
+                    if (l === undefined) return undefined;
+                    if (e.op === "&&" ? !l : l) return { boolean: l };
+                    const r = truth(evaluateKnown(e.r, env, scope, depth));
+                    return r === undefined ? undefined : { boolean: r };
+                }
+                const l = evaluateKnown(e.l, env, scope, depth), r = evaluateKnown(e.r, env, scope, depth);
+                const x = number(l), y = number(r);
+                if (["+", "-", "*"].includes(e.op) && typeof x === "bigint" && typeof y === "bigint") {
+                    return { index: constant(e.op === "+" ? x + y : e.op === "-" ? x - y : x * y) };
+                }
+                if (["==", "!=", "<", ">", "<=", ">="].includes(e.op)) {
+                    let order: number | undefined;
+                    if (x !== undefined && y !== undefined) {
+                        // Exact numeric comparison, as the runtime compares mixed numbers.
+                        const big = (v: bigint | number) => typeof v === "bigint" ? v : Number.isInteger(v) ? BigInt(v) : undefined;
+                        const bx = big(x), by = big(y);
+                        order = bx !== undefined && by !== undefined ? (bx < by ? -1 : bx > by ? 1 : 0)
+                            : Number(x) < Number(y) ? -1 : Number(x) > Number(y) ? 1 : Number(x) === Number(y) ? 0 : undefined;
+                    } else {
+                        for (const key of ["string", "char"] as const) {
+                            if (l?.[key] !== undefined && r?.[key] !== undefined) order = l[key]! < r[key]! ? -1 : l[key]! > r[key]! ? 1 : 0;
+                        }
+                        if (order === undefined && (e.op === "==" || e.op === "!=")) {
+                            const plain = (k: Known | undefined) => k?.boolean !== undefined && number(k) === undefined && k.string === undefined;
+                            if (plain(l) && plain(r)) order = l!.boolean === r!.boolean ? 0 : 1;
+                            // Distinct nullary constructors differ; equal tags with fields may not be equal.
+                            else if (l?.tag !== undefined && r?.tag !== undefined && l.tag !== r.tag) order = 1;
+                        }
+                    }
+                    if (order === undefined) return undefined;
+                    if (e.op === "==") return { boolean: order === 0 };
+                    if (e.op === "!=") return { boolean: order !== 0 };
+                    if (!["<", ">", "<=", ">="].includes(e.op)) return undefined;
+                    return { boolean: e.op === "<" ? order < 0 : e.op === ">" ? order > 0 : e.op === "<=" ? order <= 0 : order >= 0 };
+                }
+                return undefined;
+            }
+            case "app": {
+                const args: Expr[] = [];
+                let head: Expr = e;
+                while (head.t === "app") { args.unshift(head.a); head = head.f; }
+                if (head.t !== "var" || env.has(head.name)) return undefined;
+                const entry = scope.get(head.name);
+                if (/^[A-Z]/.test(head.name)) {
+                    let t = resolve(entry?.type ?? dynamic);
+                    for (let n = 0; n < args.length && t.k === "fn"; n++) t = resolve(t.output);
+                    return t.k === "variant" ? { tag: head.name } : undefined;
+                }
+                if (!trustsShape(entry)) return undefined;
+                const summary = summaryAt(entry!.type, args.length);
+                return summary && evaluateCall(summary, args.map(a => evaluateKnown(a, env, scope, depth) ?? {}), depth);
+            }
+            default: return undefined;
+        }
     }
     // The facts both a and b agree on (clauses, ternary branches).
-    function meetValues(a: ResultValue | undefined, b: ResultValue | undefined): ResultValue | undefined {
+    function meetValues(a: Known | undefined, b: Known | undefined): Known | undefined {
         if (!a || !b) return undefined;
-        const result: ResultValue = {};
+        const result: Known = {};
         const same = (x: unknown, y: unknown) => x !== undefined && x === y;
-        if (same(a.arg, b.arg)) result.arg = a.arg;
         if (a.index && b.index && !a.index.terms.size && !b.index.terms.size && a.index.constant === b.index.constant) result.index = a.index;
         for (const key of ["boolean", "string", "char", "float", "tag"] as const) {
             if (same(a[key], b[key])) (result as Record<string, unknown>)[key] = a[key];
         }
         return Object.keys(result).length ? result : undefined;
-    }
-    // What a function body's value is, in terms of its parameters by position.
-    // Value-level and conservative, like shapeOf.
-    function valueOf(e: Expr, params: { name?: string; exact: boolean }[], scope: Scope): ResultValue | undefined {
-        if (e.t === "var") {
-            const n = params.findIndex(p => p.name === e.name);
-            if (n >= 0) return params[n].exact ? { arg: n } : undefined;
-        }
-        if (e.t === "block") {
-            const shadows = e.stmts.some(st => st.t === "patDef" || st.t === "stmDef" && params.some(p => p.name === st.name));
-            const last = e.stmts[e.stmts.length - 1];
-            return shadows || !last ? undefined : valueOf(last, params, scope);
-        }
-        if (e.t === "ternary") return meetValues(valueOf(e.then, params, scope), valueOf(e.els, params, scope));
-        if (e.t === "app") {
-            const args: Expr[] = [];
-            let head: Expr = e;
-            while (head.t === "app") { args.unshift(head.a); head = head.f; }
-            if (head.t === "var" && !params.some(p => p.name === (head as { name: string }).name) && !/^[A-Z]/.test(head.name)) {
-                const entry = scope.get(head.name);
-                const result = trustsShape(entry) ? returnsAt(entry!.type, args.length) : undefined;
-                if (result?.arg !== undefined) return valueOf(args[result.arg], params, scope);
-                if (result) return result;
-            }
-        }
-        // Literals and constructors; parameters carry no constant facts.
-        if (e.t === "var" && params.some(p => p.name === e.name)) return undefined;
-        const known: ResultValue = {};
-        const index = e.t === "int" ? constant(e.v) : e.t === "unop" && e.op === "neg" && e.e.t === "int" ? constant(-e.e.v) : undefined;
-        if (index) known.index = index;
-        if (e.t === "bool") known.boolean = e.v;
-        if (e.t === "string") known.string = e.v;
-        const facts = literalOf(e, scope);
-        for (const key of ["char", "float", "tag"] as const) if (facts[key] !== undefined) (known as Record<string, unknown>)[key] = facts[key];
-        return Object.keys(known).length ? known : undefined;
     }
     // Is the argument's value known to equal (true) or differ from (false) this
     // number, compared exactly as the runtime compares numbers?
@@ -2159,13 +2299,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : p.p === "constr" && p.args.length === 1 && p.args[0].p === "var" ? { name: p.args[0].name, exact: false }
             : { exact: false });
         const shape = shapeOf(body, named, scope);
-        const returns = valueOf(body, named, scope);
+        const all = params.flatMap(patternNames);
+        const summary: Summary = { scope: parent, clauses: [{ index: 0, params, body, refutable: new Set([
+            ...recursiveName ? [recursiveName] : [], ...all.filter((x, n) => all.indexOf(x) !== n)]) }] };
         for (let n = inputs.length - 1; n >= 0; n--) {
             const parameter = params[n];
             const selfName = parameter.p === "var" && parameter.name === recursiveName ? recursiveName : undefined;
             result = { k: "fn", input: inputs[n].type, output: result, binder: inputs[n].binder, coerce: inputs[n].coerce, checks: n === inputs.length - 1 ? checks : undefined, pattern: parameter, selfName };
             if (shape) result.shape = shape;
-            if (returns) result.returns = returns;
+            result.summary = summary;
         }
         return result;
     }
@@ -2300,19 +2442,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         };
         const orders = new Map<string, ClauseOrder[]>();
-        const names = (p: Pattern): string[] => {
-            switch (p.p) {
-                case "var": return [p.name];
-                case "as": return [...names(p.left), ...names(p.right)];
-                case "typeBind": return [p.name, ...names(p.value)];
-                case "schema": case "contract": return names(p.value);
-                case "list": return p.v.flatMap(names);
-                case "cons": return [...names(p.head), ...names(p.tail)];
-                case "constr": return p.args.flatMap(names);
-                case "recPat": return p.v.map(([, binding]) => binding);
-                default: return [];
-            }
-        };
         for (const [index, c] of clauses.entries()) {
             const t = functionType(c.params, c.body, scope, name);
             let key = `${c.params.some(bindsSelf) ? "self:" : ""}${domain(t)}`, existing = groups.get(key);
@@ -2333,7 +2462,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     existing = undefined;
                 }
             }
-            const all = c.params.flatMap(names);
+            const all = c.params.flatMap(patternNames);
             const refutable = new Set([name, ...all.filter((x, n) => all.indexOf(x) !== n)]);
             if (!orders.has(key)) orders.set(key, []);
             orders.get(key)!.push({ index, params: c.params, refutable });
@@ -2341,18 +2470,22 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // The group's type is the first clause's: keep only the shape every clause has.
                 const first = resolve(existing), next = resolve(t);
                 const shape = first.k === "fn" && next.k === "fn" ? meetShapes(first.shape, next.shape) : undefined;
-                const returns = first.k === "fn" && next.k === "fn" ? meetValues(first.returns, next.returns) : undefined;
                 unify(existing, t, c.body);
                 setShape(existing, shape);
-                for (let x = resolve(existing), seen = new Set<Ty>(); x.k === "fn" && !seen.has(x); x = resolve(x.output)) { seen.add(x); x.returns = returns; }
             }
             else groups.set(key, t);
         }
+        // Every choice evaluates calls against all clauses, as the runtime dispatches.
+        const summary: Summary = { scope, clauses: clauses.map((c, index) => {
+            const order = [...orders.values()].flat().find(o => o.index === index)!;
+            return { ...order, body: c.body };
+        }) };
         for (const [key, group] of groups) {
             const seen = new Set<Ty>();
             for (let t = resolve(group); t.k === "fn" && !seen.has(t); t = resolve(t.output)) {
                 seen.add(t);
                 t.clauses = orders.get(key);
+                t.summary = summary;
             }
         }
         const alternatives = [...groups.values()];
@@ -2404,7 +2537,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     { const a = variable(), b = variable(), c = variable(); native("zipWith", [fn(a, fn(b, c)), list(a), list(b)], list(c)); }
     { const a = variable(), b = variable(); native("seq", [a, b], b); }
-    { const seq = scope.get("seq"); if (seq) setShape(seq.type, { arg: 1 }); }
+    { const seq = scope.get("seq"); if (seq) {
+        setShape(seq.type, { arg: 1 });
+        const summary: Summary = { scope, clauses: [{ index: 0, params: [{ p: "var", name: "a" }, { p: "var", name: "b" }], body: { t: "var", name: "b" }, refutable: new Set() }] };
+        for (let t = resolve(seq.type), n = 0; t.k === "fn" && n < 2; t = resolve(t.output), n++) t.summary = summary;
+    } }
     setShape(scope.get("map")!.type, { length: { param: 1 } });
     native("toString", [variable()], str);
     native("intToString", [int], str);
@@ -2479,6 +2616,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             } else throw error;
         }
     }
+    // A check that still waits only because a value was symbolic must not be
+    // skipped: decide it now, treating that value as unknown.
+    const leftover = requirements.filter(r => { deciding = false; const waits = waiting(r); deciding = true; return waits && !waiting(r); });
+    for (const requirement of leftover) {
+        try { resolve(requirement); }
+        catch (error) {
+            if (error && typeof error === "object" && "pos" in error && "message" in error) issues.push(error as TypeIssue);
+            else throw error;
+        }
+    }
+    deciding = false;
     if (options.strict && dynamicBoundaries && !issues.length && firstUnbound) {
         // An unknown name is the usual cause; report it rather than the boundary count.
         const loc = sourceLocations.get(firstUnbound.expr);

@@ -245,11 +245,17 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   re-registered in the enclosing function's requirements. A `require` check
   waits while its call does (`waiting`) instead of using the call's
   provisional `solution`.
-- A `fn` node's `returns` (`ResultValue`) describes its result value from its
-  code (`valueOf`: literal facts, or `arg` for an argument position), met over
-  clauses like shapes. `literalOf` uses it only for direct calls of trusted
-  entries (`trustsShape`: definitions with clauses or root `builtin`s; the
-  `inherited` flag only means "visible from an outer scope"). Literal facts on
+- A `fn` node's `summary` holds all of its definition's clauses and defining
+  scope. At a direct call of a trusted entry (`trustsShape`: definitions with
+  clauses or root `builtin`s; `inherited` only means "visible from an outer
+  scope"), `literalOf` records a pending `call` in the argument's `Known`;
+  `resolveKnown` evaluates it with `evaluateCall`, which ranks clauses with
+  `rankClause` and evaluates bodies with `evaluateKnown` (bounded by depth and
+  `evaluations`). `substituteKnown` substitutes parameters inside pending calls
+  and `callArgs`. An overload call that stays ambiguous because its arguments
+  are `symbolic` is deferred (`evaluatingCall` keeps one node), and `waiting`
+  holds checks on it. At the end, checks still waiting only on symbolic values
+  are decided with `deciding` set, so none is skipped. Literal facts on
   variables apply only to names written once (`writes`).
 - `defineClauses` merges clauses of one input domain into a group. A clause
   whose type merges with its group's only after `withoutLengths` forgets list

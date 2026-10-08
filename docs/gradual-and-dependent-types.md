@@ -306,8 +306,15 @@ the argument is visibly built with (`f None = ...` with `h None`, or
 `f (Some x) = ...` with `h (Some 7)`). A function's result counts too when it
 is called directly by name: with `mk x = None`, `f (mk 1)` uses the `None`
 clause, and `pass v = v` passes its argument's value on. Results that depend on
-a value (`b ? None : Some 1`, or different clauses) are not assumed, nor are
-calls through a variable that holds a function. A step function used with `repeatApply` may feed its own
+argument values are evaluated: the checker runs the called function's clauses
+(ranked as at runtime) and its conditions (comparisons, `!`, `&&`, `||`, integer
+arithmetic, truthiness) with what it knows about the arguments. So with
+`safe n = n > 0 ? Some n : None`, `f (safe 4)` uses the `Some` clause and
+`f (safe (-3))` the `None` one. Inside another function (`h v = g (f (safe v))`)
+the decision waits for `h`'s calls, where `v` is known. Where a value stays
+unknown, every possible result counts. Evaluation is bounded, so deep recursion
+falls back to that. Calls through a variable that holds a function are not
+evaluated. A step function used with `repeatApply` may feed its own
 results back through arithmetic (`g [a, b] = forceList [b, a + b]`).
 Record-template patterns convert positional lists at runtime and
 are checked against their named field types. Inferred parameters do not silently

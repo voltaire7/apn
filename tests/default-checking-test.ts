@@ -393,9 +393,39 @@ for (const source of [
     'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; mk x = Some x; g (f (mk 1))',
     'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; pass v = v; g (f (pass (Some 2)))',
     // Results that depend on a value, or calls through a variable, stay unknown.
-    'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; pick b = b ? None : Some 1; g (f (pick true))',
     'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; mk x = None; mk2 x = Some x; mkv = false ? mk : mk2; g (f (mkv 1))',
     'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; mk x = None; mkv = mk; g (f (mkv 1))',
     // A rebound variable can change under a closure that captured it.
     "f 'a' = [0]; f x = [1, 2]; g [a] = a; c = 'a'; h u = g (f c); c = 'b'; h 0",
 ]) Deno.test(`function results stay checked: ${source}`, () => rejected(session(), source));
+// Results that depend on argument values: the checker evaluates a directly
+// called function's clauses and conditions with what is known about the
+// arguments, and decides calls through parameters at the enclosing calls.
+for (const [source, expected] of [
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; pick b = b ? None : Some 1; g (f (pick true))', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a, b] = a; pick b = b ? None : Some 1; g (f (pick false))', '1'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; mk 0 = None; mk n = Some n; g (f (mk 0))', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a, b] = a; mk 0 = None; mk n = Some n; g (f (mk 5))', '1'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; safe n = n > 0 ? Some n : None; g (f (safe (-3)))', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a, b] = a; safe n = n > 0 ? Some n : None; g (f (safe 4))', '1'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; safe n = n - 1 > 0 ? Some n : None; g (f (safe 1))', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; both p q = p && q ? Some 1 : None; g (f (both true false))', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; z n = !n ? None : Some 1; g (f (z 0))', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; is s = s == "x" ? None : Some 1; g (f (is "x"))', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; count 0 = None; count n = count (n - 1); g (f (count 5))', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); h 0', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a, b] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); h 5', '1'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); k w = h w; k (-1)', '0'],
+    ['import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; safe n = n > 0 ? Some n : None; h (Int v) = g (f (safe v)); h 0', '0'],
+    ['fib 0 = 0; fib 1 = 1; fib n = fib (n - 1) + fib (n - 2); f 6765 = [0]; f x = [1, 2]; g [a] = a; g (f (fib 20))', '0'],
+] as const) Deno.test(`value-dependent results: ${source}`, () => {
+    const actual = run(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; pick b = b ? None : Some 1; g (f (pick false))',
+    'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; mk 0 = None; mk n = Some n; g (f (mk 5))',
+    'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); h 3',
+    'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); k w = h w; k 9',
+    'import "std/option"; f None = [0]; f x = [1, 2]; g [a] = a; safe n = n > 0 ? Some n : None; h v = g (f (safe v)); [h 0, h 1]',
+]) Deno.test(`value-dependent results stay checked: ${source}`, () => rejected(session(), source));
