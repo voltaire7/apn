@@ -133,7 +133,7 @@ export function runSource(src: string, interp: Interpreter, binding = false): st
 
 // Does this parse error mean "input is still incomplete, keep reading"?
 function isIncompleteError(msg: string): boolean {
-    return /'EOF'|end of file|unterminated|expected '->'|unexpected 'newline'|unexpected 'indent'|unexpected 'dedent'/.test(msg);
+    return /'EOF'|end of file|unterminated|expected '->'|expected an expression after|unexpected 'newline'|unexpected 'indent'|unexpected 'dedent'/.test(msg);
 }
 
 // Scan only text before the cursor; tolerate incomplete/invalid source.
@@ -162,21 +162,35 @@ export function insideBrackets(src: string, multilineOnly = false): boolean {
 }
 
 export function afterOpeningBracket(src: string): boolean {
-    let quote = "", comment = false, escaped = false, last = "";
+    return "([{".includes(lastSignificant(src).slice(-1) || "?");
+}
+// A line ending in a binding's = (or <-, ->) still awaits its body.
+export function awaitsBody(src: string): boolean {
+    const end = lastSignificant(src);
+    return end.endsWith("<-") || end.endsWith("->") || end.endsWith("=") && !/[=<>!]=$/.test(end);
+}
+// The end of the last token before the cursor, ignoring comments; empty
+// inside an unterminated string.
+function lastSignificant(src: string): string {
+    let quote = "", comment = false, escaped = false, token = "", lastToken = "";
     for (const ch of src) {
         if (comment) { if (ch === "\n") comment = false; continue; }
         if (quote) {
             if (escaped) escaped = false;
             else if (ch === "\\") escaped = true;
             else if (ch === quote) quote = "";
+            token += ch;
             continue;
         }
-        if (/\s/.test(ch)) continue;
-        last = ch;
-        if (ch === "#") comment = true;
-        else if (ch === '"' || ch === "'") quote = ch;
+        if (/\s/.test(ch) || ch === "#") {
+            if (token) { lastToken = token; token = ""; }
+            if (ch === "#") comment = true;
+            continue;
+        }
+        token += ch;
+        if (ch === '"' || ch === "'") quote = ch;
     }
-    return last !== "" && "([{".includes(last) && !quote && !comment;
+    return quote ? "" : (token || lastToken).slice(-2);
 }
 
 // ---- ANSI colors (TTY REPL only; piped output stays plain) ----
@@ -551,7 +565,7 @@ export class ReplEditor {
         const line = this.lines[this.row];
         const indent = (/^ */.exec(line) ?? [""])[0];
         const prefix = [...this.lines.slice(0, this.row), line.slice(0, this.col)].join("\n");
-        const deeper = line.slice(0, this.col).trim() !== "" && afterOpeningBracket(prefix) ? "    " : "";
+        const deeper = line.slice(0, this.col).trim() !== "" && (afterOpeningBracket(prefix) || awaitsBody(prefix)) ? "    " : "";
         this.lines[this.row] = line.slice(0, this.col);
         this.lines.splice(this.row + 1, 0, indent + deeper + line.slice(this.col));
         this.row++;
@@ -650,7 +664,7 @@ export class ReplEditor {
 
     enter(shift = false): KeyAction {
         const prefix = [...this.lines.slice(0, this.row), this.lines[this.row].slice(0, this.col)].join("\n");
-        const continueLine = afterOpeningBracket(prefix) || insideBrackets(prefix, true);
+        const continueLine = afterOpeningBracket(prefix) || awaitsBody(prefix) || insideBrackets(prefix, true);
         if (continueLine === shift) return "submit";
         this.splitLine();
         return "cont";

@@ -1268,7 +1268,7 @@ class Parser {
             while (this.toks[j] && this.toks[j].k === "newline") j++;
             if (this.toks[j] && this.toks[j].k === "indent") {
                 const first = this.toks[j + 1];
-                if (first?.k === "sym" && first.v === "{") {
+                if (first?.k === "sym" && first.v === "{" && !looseSpacing) {
                     this.i = j + 1;
                     throw new Error(`Parser: a definition's opening { must be on the same line as '${operator}'`);
                 }

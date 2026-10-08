@@ -23,7 +23,8 @@ line loop — no colors, no editor, same chunk semantics. Interactive features:
   one level first, and deleting a lone `}`/`]` at column 0 of a continuation
   line restores that indent (the assist is symmetric).
 - **Enter** submits regardless of syntax validity, except immediately after
-  an opening `(`, `{`, or `[` (allowing whitespace), where it inserts an
+  an opening `(`, `{`, or `[`, or a trailing `=`, `<-` or `->` that still
+  awaits its body (allowing whitespace and a comment), where it inserts an
   indented newline. Enter also continues inside a bracket opened on an earlier
   line, preserving indentation. An unfinished single-line `[1,2,3` submits
   and reports a syntax error.

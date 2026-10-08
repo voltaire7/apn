@@ -13,7 +13,7 @@ function equal(actual: unknown, expected: unknown) {
     if (actual !== expected) throw new Error(`${JSON.stringify(actual)} != ${JSON.stringify(expected)}`);
 }
 for (const [src, offset, inside] of [
-    ["foo =", 5, false], ["x ->", 4, false],
+    ["foo =", 5, true], ["x ->", 4, true], ["y <-", 4, true], ["x == ", 5, false], ["foo = 1", 7, false], ['s = "="', 7, false],
     ["(1)", 2, false], ["(1)", 3, false],
     ["[1]", 1, true], ["{ 1 }", 3, false],
     ['"("', 3, false], ["# [", 3, false],
@@ -26,7 +26,7 @@ for (const [src, offset, inside] of [
     });
 }
 Deno.test("Shift+Enter inserts a newline outside brackets", () => {
-    const ed = editor("foo =");
+    const ed = editor("foo = 1");
     ed.enter(true);
     equal(ed.lines.length, 2);
 });
@@ -215,4 +215,12 @@ Deno.test("inline and pasted closing parentheses keep their indentation", () => 
     const pasted = editor("f (\n    ");
     pasted.insertPaste(")");
     equal(pasted.src(), "f (\n    )");
+});
+Deno.test("Enter after a trailing = indents the body", () => {
+    const ed = editor("func =");
+    equal(ed.enter(), "cont");
+    equal(ed.lines[1], "    ");
+    ed.insertText("{");
+    equal(ed.enter(), "cont");
+    equal(ed.lines[2], "        ");
 });

@@ -60,7 +60,8 @@ Spacing is part of the syntax (a parse error otherwise):
 
 Lists print the same way: `print [1,2,[3]]` shows `[1,2,[3]]` and records show
 `[x: 1, y: 2]`. `apn --loose` (or the language server's `looseSpacing` option)
-turns every spacing rule off.
+turns every spacing rule off, and lets a definition's `{` start on the next,
+indented line (`func =` then `    {`, with the `}` aligned under the `{`).
 
 ### Functions and conditionals
 

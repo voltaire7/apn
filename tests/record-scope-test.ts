@@ -110,8 +110,10 @@ Deno.test('spacing at =, commas and record colons', () => {
 Deno.test('loose spacing accepts any spacing', () => {
     setLooseSpacing(true);
     try {
-        for (const source of ['x=1', '[ 1 , 2 ]', '[x:1,y : 2]', '{x}', '( 1 )', '{ }']) parseDocument(source);
+        for (const source of ['x=1', '[ 1 , 2 ]', '[x:1,y : 2]', '{x}', '( 1 )', '{ }', 'func =\n    {\n        print "hello"\n    }']) parseDocument(source);
     } finally { setLooseSpacing(false); }
-    try { parseDocument('x=1'); } catch { return; }
-    throw new Error('strict spacing not restored');
+    for (const source of ['x=1', 'func =\n    {\n        print "hello"\n    }']) {
+        try { parseDocument(source); } catch { continue; }
+        throw new Error(`strict rules not restored: ${source}`);
+    }
 });
