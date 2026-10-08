@@ -38,9 +38,9 @@ one-element list. Write a cons expression inside a list literal in parentheses,
 
 `( )` and `{ }` are interchangeable statement groups. Their value is the last
 statement's value (`(4 * 3)` and `{ 4 * 3 }` are both `12`), and an empty group is
-`[]`. A `{ }` group written on one line keeps a space inside each brace:
-`{ 123 }` is valid and `{123}` is a parse error (`{}` stays empty, and a `{`
-ending its line opens an indented block). Definitions inside a group are local to it:
+`[]`. A `{ }` group written on one line keeps exactly one space inside each
+brace: `{ 123 }` is valid, while `{123}` and `{ 123  }` are parse errors (`{}`
+and `{ }` are empty, and a `{` ending its line opens an indented block). Definitions inside a group are local to it:
 `x = 1; y = { x = 40; x + 2 }` leaves `x` as `1` and `y` as `42`.
 There are no tuples: `(1, 2)` is a syntax error; use a list such as
 `[213, "hello"]` for mixed values.

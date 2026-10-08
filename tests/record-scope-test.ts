@@ -84,13 +84,13 @@ Deno.test('braces and parentheses share grouped expression and pattern behavior'
         if (actual !== expected) throw new Error(`${source}: ${actual}`);
     }
 });
-Deno.test('a one-line brace block keeps a space inside each brace', () => {
-    for (const source of ['{123}', '{ 123}', '{123 }', 'print {4 * 3}', '{+ 2} 3', 'f {Int x} = x + 1']) {
+Deno.test('a one-line brace block keeps exactly one space inside each brace', () => {
+    for (const source of ['{123}', '{ 123}', '{123 }', '{ 123  }', '{  123 }', '{  }', '{\t123 }', 'print {4 * 3}', '{+ 2} 3', 'f {Int x} = x + 1']) {
         try { parseDocument(source); } catch (error) {
             if ((error as { kind?: string }).kind === 'parse') continue;
             throw error;
         }
         throw new Error(`accepted: ${source}`);
     }
-    for (const source of ['{ 123 }', '{}', '{ }', 'f x = {\n    x\n}', 's = "{x}"', 'obj = [x: 1]; obj.{ x + 1 }']) parseDocument(source);
+    for (const source of ['{ 123 }', '{}', '{ }', 'f x = {\n    x\n}', 'f x = {  # note\n    x\n}', 's = "{x}"', 'print { 1 }  # c', 'obj = [x: 1]; obj.{ x + 1 }']) parseDocument(source);
 });

@@ -37,16 +37,23 @@ class Parser {
 
     constructor(toks: Token[], private source: string, private file = "<repl>") { this.toks = toks; }
 
-    // A { } block written on one line keeps a space inside each brace:
-    // { 123 }, not {123}. An empty {} and a { ending its line are fine.
+    // A { } block written on one line keeps exactly one space inside each
+    // brace: { 123 }, not {123} or { 123  }. An empty {} or { }, a { ending its
+    // line and a } starting one are fine.
     checkBraceSpacing(): void {
         for (const [index, t] of this.toks.entries()) {
             if (t.k !== "sym" || (t.v !== "{" && t.v !== "}")) continue;
             const open = t.v === "{", neighbour = this.toks[index + (open ? 1 : -1)];
-            if (neighbour?.k === "sym" && neighbour.v === (open ? "}" : "{")) continue;
-            if (/\s/.test(this.source[t.pos + (open ? 1 : -1)] ?? " ")) continue;
+            if (neighbour?.k === "sym" && neighbour.v === (open ? "}" : "{") && /^ ?$/.test(this.source.slice(Math.min(t.pos, neighbour.pos) + 1, Math.max(t.pos, neighbour.pos)))) continue;
+            if (open) {
+                const rest = this.source.slice(t.pos + 1).split("\n", 1)[0];
+                if (/^\s*(#.*)?$/.test(rest) || /^ \S/.test(rest)) continue;
+            } else {
+                const before = this.source.slice(this.source.lastIndexOf("\n", t.pos - 1) + 1, t.pos);
+                if (/^\s*$/.test(before) || /\S $/.test(before)) continue;
+            }
             this.seen = t;
-            throw new Error(open ? "Parser: put a space after '{' (write { x }, not {x})" : "Parser: put a space before '}' (write { x }, not {x})");
+            throw new Error(open ? "Parser: put exactly one space after '{' (write { x })" : "Parser: put exactly one space before '}' (write { x })");
         }
     }
 

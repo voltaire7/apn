@@ -579,7 +579,7 @@ print { 5 }                  # => 5             (braces group like parens; space
 print (5)                    # => 5             (parens group like braces)
 print (4 * 3)                # => 12
 print { 4 * 3 }              # => 12
-# print {5}                  # parse error: a one-line block keeps a space inside each brace
+# print {5}, print { 5  }    # parse errors: exactly one space inside each brace
 
 group = { 1; 2; 3 }          # a 0-arg function: its body is the block
 print (group)                # => 3    (the parens run it)
