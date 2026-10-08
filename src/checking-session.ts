@@ -1,6 +1,6 @@
 import { APNError } from "./errors.ts";
 import { parse } from "./parser.ts";
-import { type CheckOptions, checkTypes, copyTypeScope, mayMutate, type TypeScope } from "./type-checker.ts";
+import { type CheckOptions, checkTypes, copyTypeScope, envAccess, mayMutate, mentionsAny, topNames, type TypeScope } from "./type-checker.ts";
 import type { TopLevel } from "./ast.ts";
 
 const moduleNames = new Set(["type", "function", "option", "sequence", "array", "number", "text", "map", "meta", "combinator", "io", "search", "html", "browser", "system", "p5", "ffi"]);
@@ -39,9 +39,16 @@ export class CheckingSession {
 
     /** Whether any program this session has checked may write a Mutable cell. */
     private mutation = false;
+    /** Programs whose env or use the checker cannot trace from another program. */
+    private opaquePrograms = new Set<TopLevel[]>();
+    /** Names bound by such programs, or by programs using those names: they may hold an env view. */
+    private envNames = new Set<string>();
 
     private check(program: TopLevel[], directory: string, initial: TypeScope, library: boolean): { scope: TypeScope; exports: TypeScope } {
         this.mutation ||= mayMutate(program);
+        const access = envAccess(program);
+        if (!access.literal || access.aliases.size > 1 || mentionsAny(program, new Set(["use"]))) this.opaquePrograms.add(program);
+        if (this.opaquePrograms.has(program) || mentionsAny(program, this.envNames)) topNames(program).forEach(name => this.envNames.add(name));
         let scope: TypeScope = new Map();
         let exports: TypeScope = new Map();
         const result = checkTypes(program, {
@@ -49,6 +56,8 @@ export class CheckingSession {
             runtimeNames: !library && this.runtimeNames ? new Set(this.runtimeNames()) : undefined,
             inputs: library ? undefined : this.inputs,
             mutation: () => this.mutation,
+            envElsewhere: () => [...this.opaquePrograms].some(p => p !== program),
+            envNames: () => this.envNames,
             loadedNames: path => this.loadedNames(path, directory),
             imports: module => {
                 const fields = this.module(module);

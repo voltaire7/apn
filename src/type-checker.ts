@@ -97,6 +97,8 @@ interface Entry {
     inherited?: boolean;
     // builtin: a native or intrinsic from the checker's own root scope.
     builtin?: boolean;
+    // opened: the record expression a use opened this name from.
+    opened?: Expr;
     // lazyTop: a top-level value that touches top-level cells (see forceLazyTop).
     lazyTop?: LazyTop;
     // recursive: the definition being inferred, referred to from its own body;
@@ -123,18 +125,94 @@ export interface CheckOptions {
     inputs?: { readFile(path: string): string | undefined; args(): string[]; readStdin?(): string | undefined };
     /** The variable names a file loaded by this path mentions, if the session checked it. */
     loadedNames?: (path: string) => Set<string> | undefined;
+    /** Whether code checked in this session outside this program uses env or
+     * use opaquely (its names cannot be traced here). */
+    envElsewhere?: () => boolean;
+    /** Names other session programs bound that may hold an env view (any write, any reach). */
+    envNames?: () => ReadonlySet<string>;
     /** Whether any code in this session may write a Mutable cell (see mayMutate),
      * asked when a cell is read; computed from the program when unset. */
     mutation?: () => boolean;
 }
-// Code that may write a Mutable cell: set, or code loaded or opened at runtime.
-const MUTATING_NAMES = new Set(["set", "load", "use", "env"]);
+// Code that may write a Mutable cell: set, or code loaded at runtime. (env
+// rebinds names and use opens a record's fields; neither writes a cell.)
+const MUTATING_NAMES = new Set(["set", "load"]);
+// How a program uses env: literal when every occurrence of env, of a name
+// bound directly to it, or of either through Dynamic, reads or writes literal
+// fields (env.x, e "x", e.[x, y], e.x = v); fields are those field names. Anything else (a computed key,
+// pairs env, passing the view on) can reach any binding.
+export function envAccess(program: unknown): { literal: boolean; fields: Set<string>; aliases: Set<string> } {
+    const aliases = new Set<string>(["env"]), fields = new Set<string>();
+    // A view: env, a name bound to it, or either through Dynamic (Dynamic env), grouped or not.
+    const isEnv = (n: unknown): boolean => {
+        const x = n as Record<string, any> | undefined;
+        if (!x || typeof x !== "object") return false;
+        if (x.t === "var") return aliases.has(x.name);
+        if (x.t === "block" && x.style === "(" && x.stmts?.length === 1) return isEnv(x.stmts[0]);
+        return x.t === "app" && x.f?.t === "var" && x.f.name === "Dynamic" && isEnv(x.a);
+    };
+    // Names bound directly to env, until no new one appears.
+    for (let grown = true; grown;) {
+        grown = false;
+        const find = (node: unknown): void => {
+            if (!node || typeof node !== "object") return;
+            if (Array.isArray(node)) { node.forEach(find); return; }
+            const n = node as Record<string, any>;
+            const bound = n.t === "patDef" && n.pattern?.p === "var" && isEnv(n.value) ? n.pattern.name
+                : (n.t === "def" || n.t === "stmDef") && n.clauses?.length === 1 && !n.clauses[0].params.length && isEnv(n.clauses[0].body) ? n.name : undefined;
+            if (bound && !aliases.has(bound)) { aliases.add(bound); grown = true; }
+            Object.values(n).forEach(find);
+        };
+        find(program);
+    }
+    let literal = true;
+    const walk = (node: unknown): void => {
+        if (!node || typeof node !== "object") return;
+        if (Array.isArray(node)) { node.forEach(x => walk(x)); return; }
+        const n = node as Record<string, any>;
+        if (n.t === "var" && aliases.has(n.name)) literal = false;
+        // (A plain field access also carries its name as a variable, argument.)
+        const plain = !n.scoped && (!n.argument || n.argument.t === "var" && n.argument.name === n.field);
+        if (n.t === "recordAccess" && isEnv(n.rec) && plain) { fields.add(n.field); return; }
+        if (n.t === "app" && isEnv(n.f) && n.a?.t === "string") { fields.add(n.a.v); return; }
+        if (n.t === "pluck" && isEnv(n.rec) && n.quoted !== false) {
+            n.entries.forEach((k: string | [string, string]) => fields.add(typeof k === "string" ? k : k[0]));
+            return;
+        }
+        if (n.t === "setFields" && isEnv(n.rec) && !n.path) { n.entries.forEach((k: string) => fields.add(k)); walk(n.value); return; }
+        if (n.t === "setItem" && isEnv(n.rec) && n.index?.t === "string") { fields.add(n.index.v); walk(n.value); return; }
+        if (n.t === "patDef" && n.pattern?.p === "var" && isEnv(n.value)) return;
+        if ((n.t === "def" || n.t === "stmDef") && n.clauses?.length === 1 && !n.clauses[0].params.length && isEnv(n.clauses[0].body)) return;
+        Object.values(n).forEach(x => walk(x));
+    };
+    walk(program);
+    return { literal, fields, aliases };
+}
+// The names a program binds at its top level.
+export function topNames(program: TopLevel[]): string[] {
+    const names: string[] = [];
+    const pattern = (p: unknown): void => {
+        if (!p || typeof p !== "object") return;
+        if (Array.isArray(p)) { p.forEach(pattern); return; }
+        const n = p as Record<string, unknown>;
+        if (n.p === "var" && typeof n.name === "string") names.push(n.name);
+        Object.values(n).forEach(pattern);
+    };
+    for (const statement of program) {
+        if (statement.t === "def") names.push(statement.name);
+        if (statement.t === "patDef") pattern(statement.pattern);
+    }
+    return names;
+}
 export function mayMutate(program: unknown): boolean {
+    return mentionsAny(program, MUTATING_NAMES);
+}
+export function mentionsAny(program: unknown, names: ReadonlySet<string>): boolean {
     const walk = (x: unknown): boolean => {
         if (!x || typeof x !== "object") return false;
         if (Array.isArray(x)) return x.some(walk);
         const node = x as Record<string, unknown>;
-        if (node.t === "var" && typeof node.name === "string" && MUTATING_NAMES.has(node.name)) return true;
+        if (node.t === "var" && typeof node.name === "string" && names.has(node.name)) return true;
         return Object.values(node).some(value => value && typeof value === "object" && walk(value));
     };
     return walk(program);
@@ -284,12 +362,12 @@ const LIST_NATIVES = ["filter", "map", "take", "drop", "zipWith"];
 const EVALUATED_NATIVES = new Set([
     ...LIST_NATIVES, "length", "head", "tail", "null", "foldl", "foldr", "iterate", "enumerate",
     "chars", "fromChars", "upper", "lower", "toString", "intToString", "seq", "parse",
-    "print", "emit", "debug", "assert", "set", "readFile", "readStdin",
+    "print", "emit", "debug", "assert", "set", "readFile", "readStdin", "use",
 ]);
 // Builtins that demand their arguments when called.
 const STRICT_NATIVES = new Set([
     "head", "tail", "null", "length", "chars", "fromChars", "upper", "lower", "toString", "intToString",
-    "parse", "print", "emit", "debug", "assert", "set", "seq", "readFile", "readStdin",
+    "parse", "print", "emit", "debug", "assert", "set", "seq", "readFile", "readStdin", "use",
 ]);
 // Static evaluation limits: nesting (recursion) depth, and work per root value.
 const EVALUATION_DEPTH = 5000;
@@ -1598,9 +1676,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (resolved.k === "intrinsic" && resolved.name === "use") {
                     const open = (type: Ty): void => {
                         const t = resolve(type);
-                        if (t.k === "record") for (const [name, type] of t.fields) scope.set(name, { type });
+                        if (t.k === "record") for (const [name, type] of t.fields) scope.set(name, { type, opened: a });
                         else if (t.k === "list" && t.items) t.items.forEach(open);
-                        else if (isExplicit(t)) runtimeChecks++;
+                        else if (isExplicit(t)) { runtimeChecks++; opaqueUse = true; }
                         else problem("use needs a statically known record or list of records; use Dynamic for runtime exports", a);
                     };
                     open(infer(a, scope));
@@ -2035,7 +2113,28 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The values a statement's static run gave its parts (see executeTopLevel).
     const executedParts = new Map<Expr, Known | undefined>();
     const unforced = new Set<Known>();
-    let touchedTopLevel = false;
+    let touchedTopLevel = false, opaqueUse = false;
+    // env used only with literal fields reaches those names; otherwise anything.
+    const envUse = envAccess(program);
+    // Aliases of env bound at the top level (they view the top-level scope).
+    const viewsEnv = (x: Expr): boolean => x.t === "var" ? x.name === "env"
+        : x.t === "block" && x.style === "(" && x.stmts.length === 1 ? viewsEnv(x.stmts[0])
+        : x.t === "app" && x.f.t === "var" && x.f.name === "Dynamic" && viewsEnv(x.a);
+    const topAliases = new Set(program.flatMap(st => st.t === "patDef" && st.pattern.p === "var" && viewsEnv(st.value) ? [st.pattern.name]
+        : st.t === "def" && !st.clauses[0].params.length && viewsEnv(st.clauses[0].body) ? [st.name] : []));
+    // Which scope a view expression shows: env itself (here), or a top-level alias.
+    function envView(x: Expr, env: Map<string, Known>): "here" | "top" | undefined {
+        if (!envTraceable()) return undefined;
+        if (x.t === "block" && x.style === "(" && x.stmts.length === 1) return envView(x.stmts[0], env);
+        if (x.t === "app" && x.f.t === "var" && x.f.name === "Dynamic") return envView(x.a, env);
+        if (x.t !== "var" || env.has(x.name)) return undefined;
+        if (x.name === "env") return "here";
+        return topAliases.has(x.name) ? "top" : undefined;
+    }
+    const envTraceable = () => envUse.literal && !options.envElsewhere?.();
+    // A name another program bound that may hold an env view.
+    const ownNames = new Set(topNames(program));
+    const foreignView = (name: string) => !ownNames.has(name) && !!options.envNames?.().has(name);
     let topLevelDefinition = false, creatingTopLevel = false, executing = false, statementWrote = false, programWrote = false, programValid = true;
     // The program's definitions by name, to tell which code can reach set.
     const programDefinitions = new Map<string, Expr[]>();
@@ -2057,6 +2156,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     if (through && !scope.get(through)?.lazyTop) result.lazy = true;
                     continue;
                 }
+                if (envUse.aliases.has(name) || foreignView(name)) {
+                    // Through env: the fields it names, or (opaquely) anything.
+                    if (!envTraceable() || foreignView(name)) { result.write = true; if (through) result.lazy = true; continue; }
+                    for (const field of envUse.fields) for (const body of programDefinitions.get(field) ?? scope.get(field)?.clauses?.map(c => c.body) ?? []) walk(body, through);
+                    continue;
+                }
+                const opened = scope.get(name)?.opened;
+                if (opened) walk(opened, through);
                 if (scope.get(name)?.lazyTop) result.forces = true;
                 const bodies = programDefinitions.get(name) ?? scope.get(name)?.clauses?.map(c => c.body);
                 for (const body of bodies ?? []) walk(body, through ?? (lazyDefinitions.has(name) ? name : undefined));
@@ -2151,6 +2258,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const entry = scope.get(name);
             if (entry?.lazyTop) { lazies.add(entry.lazyTop); walkExpr(entry.lazyTop.body); walkKnown(entry.lazyTop.memo); }
             if (entry) walkKnown(entry);
+            if (entry?.opened) walkExpr(entry.opened);
             for (const body of programDefinitions.get(name) ?? entry?.clauses?.map(c => c.body) ?? []) walkExpr(body);
         };
         const walkExpr = (x: Expr, env?: Map<string, Known>): void => {
@@ -2168,7 +2276,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     names.forEach(walkName);
                     continue;
                 }
-                if (MUTATING_NAMES.has(name)) { if (name !== "set") all = true; continue; }
+                if (MUTATING_NAMES.has(name)) continue;
+                if (envUse.aliases.has(name) || foreignView(name)) {
+                    if (!envTraceable() || foreignView(name)) { all = true; return; }
+                    envUse.fields.forEach(walkName);
+                    continue;
+                }
+                // A name a Dynamic use may have opened has no visible origin.
+                if ((opaqueUse || options.envElsewhere?.()) && !scope.has(name)) { all = true; return; }
                 walkName(name);
             }
         };
@@ -2189,7 +2304,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (n.t === "app" && (n.f as Record<string, unknown>)?.t === "var" && (n.f as Record<string, unknown>).name === "load" && (n.a as Record<string, unknown>)?.t === "string") {
                 literal++;
                 const mentioned = options.loadedNames?.((n.a as { v: string }).v);
-                if (!mentioned || [...mentioned].some(name => MUTATING_NAMES.has(name) && name !== "set")) ok = false;
+                if (!mentioned || ["load", "env", "use"].some(name => mentioned.has(name))) ok = false;
                 else mentioned.forEach(name => names.add(name));
             }
             Object.values(n).forEach(value => value && typeof value === "object" && walk(value));
@@ -2878,6 +2993,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             // f $ x applies f to x.
             case "pipe": return evaluateKnown({ t: "app", f: e.f, a: e.x }, env, scope, depth);
+            // A literal field of an environment view is that binding: env.x is x
+            // here; a top-level alias (e <- env) views the top-level scope.
+            case "recordAccess": {
+                const view = envView(e.rec, env);
+                const plain = !e.scoped && (!e.argument || e.argument.t === "var" && e.argument.name === e.field);
+                if (view === undefined || !plain) { incomplete = true; return undefined; }
+                return view === "here" ? value({ t: "var", name: e.field }) : evaluateKnown({ t: "var", name: e.field }, new Map(), rootScope, depth);
+            }
             // Code this evaluator does not follow may have effects: mark it skipped.
             default: incomplete = true; return undefined;
         }
@@ -3120,7 +3243,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (renderKnown(shown) === undefined) incomplete = true;
                 return shown;
             }
-            case "debug": case "assert": args[0](); return known([]);
+            // use forces its record and binds its fields (lazily): no other effect.
+            case "debug": case "assert": case "use": args[0](); return known([]);
             case "set": writeMutable(args[0](), args[1]); return known([]);
             // Input read at check time, from the same snapshot the run uses.
             case "readStdin": {

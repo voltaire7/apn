@@ -342,7 +342,7 @@ elements) stay unknown.
 Effects are never performed while checking, but their results are known:
 `print x` and `emit x` are `x`, and `set`, `assert` and `debug` give `[]`. A
 `Mutable` cell's contents are known when nothing checked in the session can
-write a cell (no `set`, `load`, `use` or `env`). Otherwise contents are followed
+write a cell (no `set` or `load`). Otherwise contents are followed
 in the run's order: block statements, eager bindings (`<-`) and operands run in
 order, a lazy binding is read when used, and a list element or call argument
 that reads a cell is computed where it is first needed, so
@@ -363,8 +363,12 @@ in another order. A statement whose run is uncertain (a write under a condition
 the checker cannot decide, code it cannot follow) leaves only the top-level
 cells and values it can reach unknown: those its names, and the definitions
 they name, refer to, including what its lazily computed values are computed
-from and what a file it loads (by a literal path) names; only `env` and `use`
-reach everything. Lazily computed list elements run where the program forces
+from and what a file it loads (by a literal path) names. An `env` view
+(`scope <- Dynamic env`) reaches the bindings it names by literal fields
+(`scope.bump`, `scope "bump"`, `scope.[a, b]`, `scope.x = v`), and a name opened by `use`
+reaches the field it was opened from; an `env` view used any other way (a
+computed key, passed on, an earlier REPL input or loaded file using one, or
+opened by `use` from a record of unknown fields) reaches everything. Lazily computed list elements run where the program forces
 them, as at runtime: `map`'s elements when used, `filter`'s predicate as its
 cells are reached, printing and `==` cell by cell, so after
 `print (map (x -> set counter x) [1, 2])`, `counter` is 2, and a top-level

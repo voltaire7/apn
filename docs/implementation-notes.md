@@ -294,7 +294,8 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   (`sameBinding`), since nested call arguments are each evaluated.
   Effects (`print`, `emit`, `assert`, `debug`) only return their results
   statically. `Known.mutable` is a cell. While `CheckOptions.mutation` (the
-  session-wide `mayMutate` scan for `set`, `load`, `use`, `env`) is false,
+  session-wide `mayMutate` scan for `set` and `load`; `env` and `use` only
+  expose bindings that scan saw) is false,
   `readMutable` gives its first contents. Otherwise cells are followed per
   root (`KnownCell.root`): `writeMutable` updates them in evaluation order,
   every lazily evaluated computation runs under `lazily` as its own region,
@@ -310,8 +311,8 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   the points the run forces it (`readMutable`, strict builtins, application,
   equality). Top-level cells (`KnownCell.program`, made while
   `creatingTopLevel`) are written only by `executeTopLevel`, which statically
-  runs each top-level statement that `mayWrite` (reaches `set`, `load`, `use`
-  or `env` through named definitions) before it is checked; reads in that
+  runs each top-level statement that `mayWrite` (reaches `set` or `load`
+  through named definitions, `env` views and `use`d fields) before it is checked; reads in that
   statement come from `executedParts`, the values that run gave each
   argument-free part (unknown if it never evaluated them). A top-level value
   whose definition touches a top-level cell (`touchedTopLevel`) keeps its
@@ -327,8 +328,13 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   An uncertain execution calls `forgetReachable`: the cells and `lazyTop`
   values `reachable` from the statement's names (through definition bodies,
   the facts of those names, the `Known.origin` of lazy values, and
-  `CheckOptions.loadedNames` for literal loads) become `invalid`; `env`,
-  `use`, or a lazy value without an origin clears `programValid`. Lazy list
+  `CheckOptions.loadedNames` for literal loads, `Entry.opened` for names
+  `use` opened, and `envAccess` fields for `env` views) become `invalid`.
+  `envAccess` accepts only `env`, its aliases and `Dynamic env` in literal
+  field positions; anything else, an opaque `use`, or another session
+  program doing so (`CheckOptions.envElsewhere`), a name such a program
+  bound (`CheckOptions.envNames`, which also takes the names of programs
+  mentioning one), or a lazy value without an origin clears `programValid`. Lazy list
   cells and deferred values keep their result only when computed touching
   no cell or during an execution (`keeps`); `map`/`zipWith` heads and
   `iterate`'s next value are deferred and `filter` applies its predicate in

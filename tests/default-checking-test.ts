@@ -773,6 +773,9 @@ for (const [source, expected] of [
     ['counter = Mutable 0; other = Mutable 7; ys = map (x -> x * 2) [1, 2]; m = HashMap [["a", 1]]; has "a" m ? set counter (head ys) : []; g (f (r (other + 0 == 7)))', '0'],
     // A load reaches only what the loaded file's source names.
     ['counter = Mutable 0; other = Mutable 7; set other 8; load "examples/advent-of-code/lanternfish"; g (f (r (other + 0 == 8)))', '0'],
+    // An env view reaches the bindings it names; use, the fields it opened.
+    ['counter = Mutable 0; other = Mutable 7; bumpC x = set counter (counter + 1); scope <- Dynamic env; m = HashMap [["a", 1]]; has "a" m ? scope.bumpC 0 : []; g (f (r (other + 0 == 7)))', '0'],
+    ['counter = Mutable 0; other = Mutable 7; ns = [bump: (x -> set counter 3)]; use ns; m = HashMap [["a", 1]]; has "a" m ? bump 0 : []; g (f (r (other + 0 == 7)))', '0'],
     // A top-level value is computed when first used and kept; a top-level
     // action (block, application or pipe body) runs at each use.
     ['counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 4)))', '0'],
@@ -804,10 +807,28 @@ for (const source of [
     'counter = Mutable 0; [set counter 9, 1]; g (f (r (counter + 0 == 9)))',
     // A statement whose run is uncertain leaves what it can reach unknown.
     'counter = Mutable 0; m = HashMap [["a", 1]]; has "a" m ? set counter 5 : []; g (f (r (counter + 0 == 5)))',
+    'counter = Mutable 0; other = Mutable 7; bumpC x = set counter (counter + 1); scope <- Dynamic env; m = HashMap [["a", 1]]; has "a" m ? scope.bumpC 0 : []; g (f (r (counter + 0 == 1)))',
+    'counter = Mutable 0; other = Mutable 7; bumpO x = set other 1; scope <- Dynamic env; m = HashMap [["a", 1]]; has "a" m ? scope.bumpO 0 : []; g (f (r (other + 0 == 7)))',
+    // A computed key can name any binding.
+    'counter = Mutable 0; other = Mutable 7; bumpO x = set other 1; scope <- Dynamic env; key = "bumpO"; m = HashMap [["a", 1]]; has "a" m ? (scope key) 0 : []; g (f (r (other + 0 == 7)))',
+    'counter = Mutable 0; other = Mutable 7; scope <- Dynamic env; scope.other = Mutable 1; g (f (r (other + 0 == 7)))',
+    'counter = Mutable 0; other = Mutable 7; ns = [bump: (x -> set other 3)]; use ns; m = HashMap [["a", 1]]; has "a" m ? bump 0 : []; g (f (r (other + 0 == 7)))',
+    'counter = Mutable 0; other = Mutable 7; ns = [bump: (x -> set counter 3)]; use ns; m = HashMap [["a", 1]]; has "a" m ? bump 0 : []; g (f (r (counter + 0 == 0)))',
     'counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 0)))',
     'counter = Mutable 0; snap = counter + 0; set counter 4; print snap; set counter 9; g (f (r (snap + 0 == 9)))',
     'counter = Mutable 0; init = set counter 5; init; set counter 1; init; g (f (r (counter + 0 == 1)))',
 ]) Deno.test(`cells written after reads stay checked: ${source}`, () => rejected(session(), `${effectPrelude}; ${source}`));
+Deno.test("an env view with computed keys in an earlier REPL input reaches every binding", () => {
+    const i = session();
+    run(i, `${effectPrelude}; scope <- Dynamic env; key = "bumpO"`);
+    const later = (call: string) => `counter = Mutable 0; other = Mutable 7; bumpO x = set other 1; m = HashMap [["a", 1]]; has "a" m ? ${call} : []; g (f (r (other + 0 == 7)))`;
+    if (run(i, later("[]")) !== "0") throw new Error("unrelated statement");
+    rejected(i, later("(scope key) 0"));
+    // Through a name a later input bound using the view.
+    run(i, 'call k = (scope k) 0; ((Int -> Int) hidden) <- (Dynamic (x -> seq ((scope key) x) 0))');
+    rejected(i, later("call key"));
+    rejected(i, later("hidden 0"));
+});
 Deno.test("a set from an earlier REPL input keeps later cell reads unknown", () => {
     const i = session();
     run(i, `${effectPrelude}; bump c = set c 9`);
