@@ -201,6 +201,12 @@ const VIEW_PICKING_NATIVES = new Set(["head"]);
 const VIEW_HOLDING_NATIVES = new Set(["map", "filter", "foldl", "foldr", "zipWith", "iterate", "enumerate", "match", "distinct", "has", "lookup", "remove", "insert", "HashMap"]);
 // Natives calling a function argument, by its position.
 const HIGHER_ORDER_NATIVES = new Map([["map", 0], ["filter", 0], ["foldl", 0], ["foldr", 0], ["zipWith", 0], ["iterate", 1], ["match", 1]]);
+// Constructors the standard library declares, by module (for import hints).
+const STD_CONSTRUCTORS: Record<string, string> = {
+    Some: "std/option", None: "std/option", Ok: "std/option", Err: "std/option",
+    HtmlText: "std/html", HtmlElement: "std/html", HtmlAttr: "std/html", HtmlStyle: "std/html", HtmlClick: "std/html", HtmlInput: "std/html", HtmlSubmit: "std/html",
+    BrowserSandbox: "std/browser",
+};
 // Code that runs in the top-level scope: statements and top-level values.
 const topLevelCode = new WeakSet<Expr>();
 const isFunctionExpr = (e: Expr): e is Extract<Expr, { t: "lambda" | "patternLambda" }> => e.t === "lambda" || e.t === "patternLambda";
@@ -806,7 +812,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let dynamicBoundaries = 0, runtimeChecks = 0, serial = 0, budget = 50000;
     let activeExpression: Expr | undefined, checkingExpression: Expr | undefined;
     let firstUnknown: Expr | undefined;
-    let firstUnbound: { expr: Expr; name: string; hint?: string } | undefined;
+    let firstUnbound: { expr: Expr; name: string; hint?: string; inPattern?: boolean } | undefined;
     // Callee positions of application chains, where a function's shape is trusted.
     const callees = new WeakSet<Expr>();
     const unknown = (): Ty => {
@@ -1424,6 +1430,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "constr": {
                 const entry = scope.get(p.tag), t = entry ? copy(entry.type) : dynamic;
+                if (!entry && !firstUnbound && options.runtimeNames && !options.runtimeNames.has(p.tag)) {
+                    const module = STD_CONSTRUCTORS[p.tag];
+                    const near = didYouMean(p.tag, [...scope.keys()].filter(name => /^[A-Z]/.test(name)));
+                    firstUnbound = { expr: e, name: p.tag, inPattern: true,
+                        hint: module ? `${p.tag} comes from ${module}: add import "${module}"` : near ? `did you mean '${near}'?` : undefined };
+                }
                 if (t.k === "factory" && p.args.length === 3) {
                     const [size, element, value] = p.args;
                     let length: Index | undefined;
@@ -1904,7 +1916,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 if (!entry && !firstUnbound && options.runtimeNames && !options.runtimeNames.has(e.name)) {
                     const near = didYouMean(e.name, [...scope.keys(), ...options.runtimeNames]);
-                    firstUnbound = { expr: e, name: e.name, hint: near ? `did you mean '${near}'?` : undefined };
+                    const module = STD_CONSTRUCTORS[e.name];
+                    firstUnbound = { expr: e, name: e.name, hint: module ? `${e.name} comes from ${module}: add import "${module}"` : near ? `did you mean '${near}'?` : undefined };
                 }
                 if (!entry) return unknown();
                 const type = instantiate(entry);
@@ -4541,7 +4554,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     if (options.strict && dynamicBoundaries && !issues.length && firstUnbound) {
         // An unknown name is the usual cause; report it rather than the boundary count.
         const loc = sourceLocations.get(firstUnbound.expr);
-        issues.push({ message: `unbound variable '${firstUnbound.name}'`, hint: firstUnbound.hint, pos: loc?.start ?? 0, len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)), source: loc?.source, file: loc?.file });
+        issues.push({ message: firstUnbound.inPattern ? `unknown constructor '${firstUnbound.name}' in a pattern` : `unbound variable '${firstUnbound.name}'`, hint: firstUnbound.hint, pos: loc?.start ?? 0, len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)), source: loc?.source, file: loc?.file });
     } else if (options.strict && dynamicBoundaries && !issues.length) {
         const loc = firstUnknown && sourceLocations.get(firstUnknown);
         issues.push({ message: `cannot establish static types: ${dynamicBoundaries} unresolved dynamic boundaries; mark runtime code with Dynamic`, pos: loc?.start ?? 0, len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)), source: loc?.source, file: loc?.file });

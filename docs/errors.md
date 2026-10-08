@@ -13,6 +13,10 @@ rendered by `formatError(err, color)`:
   and missing record fields (over the record's fields). The non-exhaustive
   function error names the function. Operator type errors are uniform:
   `cannot apply '+' to list and int`.
+- **Type errors** name an unknown name before any boundary count: `unbound
+  variable 'x'`, or `unknown constructor 'Some' in a pattern`. A standard
+  library constructor's hint names its module (`add import "std/option"`);
+  others get `did you mean '...'?`.
 - Messages carry no `Parser:`/`Lexer:`/`Runtime:` prefixes — the headline
   category replaces them. `tokenStr` returns BARE token text (the message
   templates add the quotes; the old version double-quoted).

@@ -902,6 +902,21 @@ Deno.test("a view an earlier REPL input stored reaches what its uses name", () =
     if (run(i, later('((head box) "bumpC") 0').replace("bumpO x", "bumpC x = set counter 1; bumpO x")) !== "0") throw new Error("stored view");
 });
 for (const source of ['x:xs = []', 'x:y:z = [1]', 'f n = { x:xs = []; x }']) Deno.test(`a cons binding of a list known too short is rejected: ${source}`, () => rejected(session(), source));
+Deno.test("an unknown constructor in a pattern is named, with the module that declares it", () => {
+    for (const [source, message, hint] of [
+        ["func (Some x):xs = print [x,xs]", "unknown constructor 'Some' in a pattern", 'add import "std/option"'],
+        ["print None", "unbound variable 'None'", 'add import "std/option"'],
+        ["Maybe a = Just a | Nothing; k (Jsut x) = x", "unknown constructor 'Jsut' in a pattern", "did you mean 'Just'?"],
+    ]) {
+        try { run(session(), source); } catch (error) {
+            const e = error as { message: string; hint?: string };
+            if (e.message !== message || !e.hint?.includes(hint)) throw new Error(`${source}: ${e.message} (${e.hint})`);
+            continue;
+        }
+        throw new Error(`accepted: ${source}`);
+    }
+    if (run(session(), 'import "std/option"; func (Some x):xs = [x,xs]; func [Some 1,None]') !== "[1,[None]]") throw new Error("with the import");
+});
 Deno.test("a set from an earlier REPL input keeps later cell reads unknown", () => {
     const i = session();
     run(i, `${effectPrelude}; bump c = set c 9`);
