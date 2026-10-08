@@ -228,14 +228,14 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   lists still match it; `unify` rejects one with a known non-zero length.
   `domain()` keys such clauses separately (`empty:`), because a group's input
   type is its first clause's and would otherwise reject the cons clause's inputs.
-- Overload choices carry their clauses' runtime order (`ClauseOrder`: literal
-  score, source index, patterns, names that make a variable refutable). Each
-  application records which clauses definitely matched or failed so far
-  (`matched`, `ruledOut` on the partial result); at the final argument,
-  choices made only of clauses after the first definite match, or whose clauses
-  all failed, are dropped. This mirrors `clauseFn` dispatch in `interp.ts`;
-  functions with typed constructor patterns (ranked by runtime type) are left
-  alone. Keep the scoring in step with the runtime's.
+- Overload choices carry their clauses (`ClauseOrder`: source index, patterns,
+  names that make a variable refutable); partial applications collect the
+  call's arguments (`callArgs`). For a complete call, `rankClause` gives each
+  clause a score interval from `patternScore`, which mirrors the `clauseFn`
+  scoring in `interp.ts` using static argument types, and decides whether it
+  definitely matches or fails. Choices whose clauses all fail, or all come
+  certainly after a definitely matching clause, are dropped. Keep
+  `patternScore` in step with the runtime's scoring.
 - List lengths through functions are a property of a function's code, never
   of a type node: unification shares one node between values of different
   lengths (a fold's seed and result) and between different function values (a

@@ -17,7 +17,7 @@ type Ty =
     // shape describes the full result in terms of the arguments (see Shape); args
     // collects argument types across curried application. Both describe the
     // function's code, so they are trusted only at a direct call by name.
-    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; position?: number; matched?: number[]; ruledOut?: number[] }
+    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[] }
     | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number> }
     | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string> }
     | { k: "type"; value: Ty }
@@ -29,12 +29,11 @@ type Ty =
 // length or a constant, with an optional shape for each item.
 type LengthRef = { param: number } | { constant: bigint };
 interface Shape { arg?: number; length?: LengthRef; items?: (Shape | undefined)[] }
-// A clause's place in the runtime's dispatch order (score, then source index)
-// and its patterns: overload choices carry them to drop choices that a
-// definitely matching earlier clause makes unreachable. matched lists the
-// clauses that definitely matched every argument applied so far; ruledOut
-// those that definitely failed one.
-interface ClauseOrder { index: number; score: number; params: Pattern[]; refutable: Set<string> }
+// A clause of an overload choice: its source index and patterns, plus the
+// names that make a variable pattern refutable (repeated names compare values).
+// callArgs collects a call's arguments so the complete call can be ranked as
+// the runtime ranks clauses (see clauseFn dispatch in interp.ts).
+interface ClauseOrder { index: number; params: Pattern[]; refutable: Set<string> }
 interface Entry {
     type: Ty;
     index?: Index;
@@ -1043,37 +1042,32 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const input = resolve(argument.type);
             if (input.k === "var" || input.k === "operation") return operation("call", [f, argument.type]);
             let outputs: Ty[] = [];
-            const accepted: { clauses?: ClauseOrder[]; sure?: number[] }[] = [];
+            const accepted: { clauses?: ClauseOrder[]; call?: Entry[] }[] = [];
             for (const choice of f.choices) {
                 const instance = copy(choice), node = resolve(instance);
                 try {
                     const out = application(instance, { ...argument, type: copy(argument.type) }, e);
                     outputs.push(out);
-                    let sure: number[] | undefined;
+                    let call: Entry[] | undefined;
                     if (node.k === "fn" && node.clauses) {
-                        const prior = node.matched ?? node.clauses.map(c => c.index);
-                        const matched = node.clauses.filter(c => prior.includes(c.index) &&
-                            definitelyMatches(c.params[node.position!], argument, c.refutable)).map(c => c.index);
-                        const ruledOut = [...node.ruledOut ?? [], ...node.clauses
-                            .filter(c => definitelyFails(c.params[node.position!], argument)).map(c => c.index)];
-                        // No clause of this choice can run: it contributes nothing.
-                        if (node.clauses.every(c => ruledOut.includes(c.index))) { outputs.pop(); continue; }
-                        const next = resolve(out);
-                        if (next.k === "fn" && next.clauses === node.clauses) { next.matched = matched; next.ruledOut = ruledOut; }
-                        else sure = matched;
+                        const args = [...node.callArgs ?? [], argument], next = resolve(out);
+                        if (next.k === "fn" && next.clauses === node.clauses) next.callArgs = args;
+                        else call = args;
                     }
-                    accepted.push({ clauses: node.k === "fn" ? node.clauses : undefined, sure });
+                    accepted.push({ clauses: node.k === "fn" ? node.clauses : undefined, call });
                 } catch (error) {
                     if (!error || typeof error !== "object" || !("message" in error)) throw error;
                 }
             }
-            // The runtime tries clauses by score, then source order: once one
-            // definitely matches, choices made only of later clauses cannot run.
-            if (accepted.every(a => a.clauses)) {
-                const before = (a: ClauseOrder, b: ClauseOrder) => a.score > b.score || a.score === b.score && a.index <= b.index;
-                const first = accepted.flatMap(a => a.clauses!.filter(c => a.sure?.includes(c.index)))
-                    .reduce<ClauseOrder | undefined>((best, c) => !best || before(c, best) ? c : best, undefined);
-                if (first) outputs = outputs.filter((_, n) => accepted[n].clauses!.some(c => before(c, first)));
+            // A complete call: drop choices none of whose clauses can run, because
+            // each definitely fails or comes after a clause that definitely matches.
+            if (accepted.length && accepted.every(a => a.clauses && a.call)) {
+                const ranked = accepted.flatMap(a => a.clauses!.map(c => ({ clause: c, ...rankClause(c, a.call!) })));
+                const sure = ranked.filter(r => r.matches);
+                const before = (a: typeof ranked[number], b: typeof ranked[number]) =>
+                    a.low > b.high || a.low >= b.high && a.clause.index < b.clause.index;
+                const runs = (r: typeof ranked[number]) => !r.fails && !sure.some(d => d !== r && before(d, r));
+                outputs = outputs.filter((_, n) => accepted[n].clauses!.some(c => runs(ranked.find(r => r.clause === c)!)));
             }
             if (!outputs.length) return problem(`no overload accepts ${text(argument.type)}`, e);
             if (outputs.length === 1 || outputs.every((x) => text(x) === text(outputs[0]))) return outputs[0];
@@ -1725,14 +1719,75 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         result.output = withoutShapes(t.output, seen);
         return result;
     }
+    // What the runtime knows about an argument's value from its static type.
+    type Category = { numeric: string } | { kind: string } | undefined;
+    function category(type: Ty): Category {
+        const t = resolve(type);
+        if (t.k === "atom" && NUMERIC_TYPES.includes(t.name)) {
+            return ["Number", "Real", "Integer", "Exact", "Inexact"].includes(t.name) ? undefined : { numeric: t.name === "Float64" ? "Float" : t.name };
+        }
+        if (t.k === "atom" && ["String", "Bool", "Char"].includes(t.name)) return { kind: t.name };
+        if (t.k === "list") return { kind: "List" };
+        if (t.k === "record") return { kind: "Record" };
+        if (t.k === "map") return { kind: "HashMap" };
+        if (t.k === "variant" && !t.base) return { kind: "Variant" };
+        if (["fn", "overload", "intrinsic"].includes(t.k)) return { kind: "Function" };
+        return undefined;
+    }
+    // The runtime's dispatch score for one pattern, as the range the argument's
+    // static type allows: literals 40; a typed pattern 30 for the exact type, 10
+    // for a matching numeric aggregate, 1 for a lossless conversion, -1000 when
+    // it cannot match; other patterns 0.
+    function patternScore(p: Pattern, argument: Entry): [number, number] {
+        if (["int", "bool", "string"].includes(p.p)) return [40, 40];
+        if (p.p !== "constr" || !TYPE_NAMES.includes(p.tag)) return [0, 0];
+        const c = category(argument.type), tag = p.tag;
+        if (tag === "Dynamic") return [30, 30];
+        if (tag === "Vect") return !c ? [-1000, 30] : "kind" in c && c.kind === "List" ? [30, 30] : [-1000, -1000];
+        if (tag === "Mutable" || tag === "Pointer") return [-1000, 30];
+        if (!NUMERIC_TYPES.includes(tag)) return !c ? [-1000, 30] : "kind" in c && c.kind === tag ? [30, 30] : [-1000, -1000];
+        if (c && "kind" in c) return [-1000, -1000];
+        const name = c?.numeric;
+        const int = name !== undefined && /^U?Int(8|16|32|64|128)?$/.test(name), float = name !== undefined && /^Float(32)?$/.test(name);
+        if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(tag)) {
+            if (!name) return [-1000, 10];
+            const known: Record<string, boolean | undefined> = {
+                Number: true,
+                Real: name === "Complex" || name === "ComplexExact" ? undefined : true,
+                Integer: int ? true : undefined,
+                Exact: int || name === "Fraction" || name === "ComplexExact" ? true : float ? false : undefined,
+                Inexact: float ? true : int || name === "Fraction" || name === "ComplexExact" ? false : undefined,
+            };
+            const result = known[tag];
+            return result === undefined ? [-1000, 10] : result ? [10, 10] : [-1000, -1000];
+        }
+        if (!name) return [-1000, 30];
+        return (tag === "Float64" ? "Float" : tag) === name ? [30, 30] : [-1000, 1];
+    }
+    // Score range of a clause for a complete call, and whether it definitely
+    // matches (every pattern certain to succeed) or definitely fails.
+    function rankClause(c: ClauseOrder, args: Entry[]): { low: number; high: number; matches: boolean; fails: boolean } {
+        let low = 0, high = 0, matches = true, fails = false;
+        c.params.forEach((p, n) => {
+            const [a, b] = patternScore(p, args[n]);
+            low += a; high += b;
+            if (!definitelyMatches(p, args[n], c.refutable, a)) matches = false;
+            if (definitelyFails(p, args[n], a, b)) fails = true;
+        });
+        return { low, high, matches, fails };
+    }
     // Does this argument always match p? Only what the checker knows exactly
-    // qualifies (list lengths, literal values); repeated names never do.
-    function definitelyMatches(p: Pattern, argument: Entry, refutable: Set<string>): boolean {
+    // qualifies (list lengths, literal values, exact types); repeated names never do.
+    function definitelyMatches(p: Pattern, argument: Entry, refutable: Set<string>, score: number): boolean {
         const irrefutable = (q: Pattern) => q.p === "wildcard" || q.p === "var" && !refutable.has(q.name);
         if (irrefutable(p)) return true;
         if (p.p === "int") return !!argument.index && !argument.index.terms.size && argument.index.constant === p.v;
         if (p.p === "bool") return argument.boolean === p.v;
         if (p.p === "string") return argument.string === p.v;
+        // A certain exact-type (30) or aggregate (10) match, binding the value whole.
+        if (p.p === "constr" && TYPE_NAMES.includes(p.tag) && p.tag !== "Vect" && p.args.length === 1) {
+            return (score === 30 || score === 10) && irrefutable(p.args[0]);
+        }
         const t = resolve(argument.type);
         if (t.k !== "list") return false;
         const n = t.items ? BigInt(t.items.length) : t.length && !t.length.terms.size ? t.length.constant : undefined;
@@ -1741,11 +1796,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (p.p === "cons") return irrefutable(p.head) && irrefutable(p.tail) && n >= 1n;
         return false;
     }
-    // Can this argument never match p? Literal mismatches and known lengths.
-    function definitelyFails(p: Pattern, argument: Entry): boolean {
+    // Can this argument never match p? Literal mismatches, known lengths, and
+    // typed patterns that the argument's type cannot satisfy.
+    function definitelyFails(p: Pattern, argument: Entry, low: number, high: number): boolean {
         if (p.p === "int") return !!argument.index && !argument.index.terms.size && argument.index.constant !== p.v;
         if (p.p === "bool") return argument.boolean !== undefined && argument.boolean !== p.v;
         if (p.p === "string") return argument.string !== undefined && argument.string !== p.v;
+        if (p.p === "constr" && TYPE_NAMES.includes(p.tag)) return low === -1000 && high === -1000;
         const t = resolve(argument.type);
         if (t.k !== "list") return false;
         const n = t.items ? BigInt(t.items.length) : t.length && !t.length.terms.size ? t.length.constant : undefined;
@@ -2054,9 +2111,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 default: return false;
             }
         };
-        // Typed constructor patterns are ranked by the argument's runtime type,
-        // so only functions without them have a statically known clause order.
-        const ordered = !clauses.some(c => c.params.some(p => p.p === "constr" && TYPE_NAMES.includes(p.tag)));
         const orders = new Map<string, ClauseOrder[]>();
         const names = (p: Pattern): string[] => {
             switch (p.p) {
@@ -2076,9 +2130,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const key = `${c.params.some(bindsSelf) ? "self:" : ""}${domain(t)}`, existing = groups.get(key);
             const all = c.params.flatMap(names);
             const refutable = new Set([name, ...all.filter((x, n) => all.indexOf(x) !== n)]);
-            const score = c.params.filter(p => ["int", "bool", "string"].includes(p.p)).length * 40;
             if (!orders.has(key)) orders.set(key, []);
-            orders.get(key)!.push({ index, score, params: c.params, refutable });
+            orders.get(key)!.push({ index, params: c.params, refutable });
             if (existing) {
                 // The group's type is the first clause's: keep only the shape every clause has.
                 const first = resolve(existing), next = resolve(t);
@@ -2088,15 +2141,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             else groups.set(key, t);
         }
-        if (ordered) {
-            for (const [key, group] of groups) {
-                const seen = new Set<Ty>();
-                let position = 0;
-                for (let t = resolve(group); t.k === "fn" && !seen.has(t); t = resolve(t.output)) {
-                    seen.add(t);
-                    t.clauses = orders.get(key);
-                    t.position = position++;
-                }
+        for (const [key, group] of groups) {
+            const seen = new Set<Ty>();
+            for (let t = resolve(group); t.k === "fn" && !seen.has(t); t = resolve(t.output)) {
+                seen.add(t);
+                t.clauses = orders.get(key);
             }
         }
         const alternatives = [...groups.values()];

@@ -253,7 +253,30 @@ for (const source of [
     'f xs 0 = [0]; f [] n = [1, 2]; g [a] = a; g (f [] 1)',
     'f n = [1, 2]; f 0 = [0]; g [a, b] = a; g (f 0)',
     'f true = [0]; f b = [1, 2]; g [a] = a; g (f false)',
-    // Unknown lengths and typed clauses keep every possible clause.
+    // Unknown lengths keep every possible clause.
     'f [] = [0]; f xs = [1, 2]; g [a] = a; g (f (tail [1]))',
-    'f (Int n) = [0]; f xs = [1, 2]; g [a] = a; g (f 3)',
 ]) Deno.test(`later clauses still count unless a match is definite: ${source}`, () => rejected(session(), source));
+// Typed clauses are ranked as the runtime ranks them: an exact type (30)
+// before a numeric aggregate (10) before a lossless conversion (1) before other
+// patterns (0); literals (40) first. Value-dependent cases keep both clauses.
+for (const [source, expected] of [
+    ['f (Int n) = [0]; f xs = [1, 2]; g [a] = a; g (f 3)', '0'],
+    ['f xs = [1, 2]; f (Int n) = [0]; g [a] = a; g (f 3)', '0'],
+    ['f (Int n) = [0]; f xs = [1, 2]; g [a, b] = a; g (f "s")', '1'],
+    ['f (Int n) = [0]; f (String s) = [1, 2]; g [a] = a; g (f 3)', '0'],
+    ['f (Int n) = [0]; f (String s) = [1, 2]; g [a, b] = a; g (f "x")', '1'],
+    ['f (Number n) = [0]; f xs = [1, 2]; g [a] = a; g (f 2.5)', '0'],
+    ['f (Exact n) = [0]; f xs = [1, 2]; g [a, b] = a; g (f 2.5)', '1'],
+    ['f (List xs) = [0]; f other = [1, 2]; g [a] = a; g (f [5, 6])', '0'],
+    ['f (Int n) = [0]; f xs = [1, 2]; h x = g (f x); g [a] = a; h 3', '0'],
+] as const) Deno.test(`typed clauses rank like the runtime: ${source}`, () => {
+    const actual = run(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'f xs = [1, 2]; f (Int n) = [0]; g [a, b] = a; g (f 3)',
+    'f (Int n) = [0]; f xs = [1, 2]; g [a] = a; g (f "s")',
+    'f (Int n) = [0]; f xs = [1, 2]; h x = g (f x); g [a] = a; h "s"',
+    // Whether 2.0 converts to Int8 depends on the value: both clauses count.
+    'f (Int8 n) = [0]; f xs = [1, 2]; g [a] = a; g (f 2.0)',
+]) Deno.test(`typed clauses keep possible clauses: ${source}`, () => rejected(session(), source));

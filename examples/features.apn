@@ -992,6 +992,10 @@ zeroOrPair [] = [0]
 zeroOrPair xs = [1, 2]
 onlyOne [a] = a
 print (onlyOne (zeroOrPair []))               # 0
+# Typed clauses rank as at runtime: an exact type comes before a plain variable.
+pairOrZero xs = [1, 2]
+pairOrZero (Int n) = [0]
+print (onlyOne (pairOrZero 3))                # 0
 sortedAndReversed xs = [sort xs, reverse xs]
 firstOfBoth [[a, b], [c, d]] = [a, c]
 print (firstOfBoth (sortedAndReversed [3, 1]))  # [1, 1]

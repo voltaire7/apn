@@ -282,14 +282,19 @@ empty-list clause and a cons clause are separate overload choices, so
 
 When several clauses could apply, the result must fit each of them, unless one
 definitely matches: then, as at runtime, clauses that come after it cannot run.
-Clauses are tried by literal patterns first, then source order. A clause
-definitely matches when every argument fits its pattern for certain: a variable
-or `_` (not a repeated name), a list pattern of variables with a list of that
-known length, `[]` or `(x:xs)` with a known empty or non-empty list, or a
-literal pattern with that same literal argument. So with `f [] = [0]` before
-`f xs = [1, 2]`, `f []` is a one-element list. A clause whose literal or length
-definitely differs from the argument is skipped. Functions with typed clauses
-(`f (Int n) = ...`) are ranked by runtime type, so all their clauses count. A step function used with `repeatApply` may feed its own
+The runtime ranks clauses by a score, then source order: literal patterns 40,
+a typed pattern 30 for the argument's exact type, 10 for a matching numeric
+aggregate (`Number`, `Real`, `Integer`, `Exact`, `Inexact`), 1 for a lossless
+conversion, and other patterns 0. The checker computes the same ranking from
+argument types; where only the value decides (whether `2.0` fits `Int8`), it
+keeps both possibilities. A clause definitely matches when every argument fits
+its pattern for certain: a variable or `_` (not a repeated name), a list
+pattern of variables with a list of that known length, `[]` or `(x:xs)` with a
+known empty or non-empty list, a literal pattern with that same literal, or a
+typed pattern with its exact type. So with `f [] = [0]` before `f xs = [1, 2]`,
+`f []` is a one-element list, and with `f xs = [1, 2]` before `f (Int n) = [0]`,
+`f 3` is too. A clause whose literal, length, or type definitely differs from
+the argument is skipped. A step function used with `repeatApply` may feed its own
 results back through arithmetic (`g [a, b] = forceList [b, a + b]`).
 Record-template patterns convert positional lists at runtime and
 are checked against their named field types. Inferred parameters do not silently
