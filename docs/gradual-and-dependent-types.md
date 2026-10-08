@@ -325,12 +325,15 @@ too (literals, integer ranges such as `[1..n]` with `n` known, and lists built
 from them), the pure builtins run on them as at runtime: `filter`, `map`,
 `take`, `drop`, `zipWith` (and `zip`, which stops at the shorter list), `head`,
 `tail`, `null`, `foldl`, `foldr`, `iterate`, `enumerate`, `chars`, `fromChars`,
-`upper`, `lower`, `toString` and `intToString`. So do standard-library functions
+`upper`, `lower`, `toString`, `intToString` and `parse` (booleans and number
+literals). So do standard-library functions
 written in APN, such as `takeWhile`, `dropWhile`, `words`, `splitOn`, `trim`,
 `contains`, `all`, `any`, `find`, `sum`, `sort` and `isPrime`, including their
 blocks of local definitions. Lists are lazy here too: `take 1 [0..]` and
-`take 1 (repeat 0)` have one element. A block that binds the same name twice is
-not evaluated, and neither are `parse`, input, or effects. A function
+`take 1 (repeat 0)` have one element. Recursion is followed as deep as the
+runtime's own stack allows. A block that binds the same name twice is not
+evaluated, and neither are input or effects; very long lists (more than 10000
+elements walked) and very large computations stay unknown. A function
 argument may be a lambda, an operator section, a named function, or a partial
 application, also when passed through a parameter: `filter (> 1) [1, 2]` and
 `hh (> 1)` with `hh p = filter p [1, 2]` both have one element. A recursive call
@@ -339,8 +342,8 @@ does not fix the length of a parameter whose pattern leaves it open, so
 `safe n = n > 0 ? Some n : None`, `f (safe 4)` uses the `Some` clause and
 `f (safe (-3))` the `None` one. Inside another function (`h v = g (f (safe v))`)
 the decision waits for `h`'s calls, where `v` is known. Where a value stays
-unknown, every possible result counts. Evaluation is bounded, so deep recursion
-falls back to that. Calls through a variable that holds a function are not
+unknown, every possible result counts. Evaluation is bounded in work, so very
+long computations fall back to that. Calls through a variable that holds a function are not
 evaluated. A step function used with `repeatApply` may feed its own
 results back through arithmetic (`g [a, b] = forceList [b, a + b]`).
 Record-template patterns convert positional lists at runtime and

@@ -1052,6 +1052,10 @@ print (true ? (1 : []) : [])                          # [1]
 wordVowel text = onlyOne (vowelOrPair (vowelIfShort (words text)))
 print (wordVowel "hello")                             # 1
 print (onlyOne (vowelOrPair (vowelIfShort (take 1 [0..]))))  # 1
+# parse reads numbers and booleans; recursion runs as deep as the runtime's.
+print (onlyOne (vowelOrPair (vowelIfShort (take (Int (parse "1")) [0..]))))  # 1
+countDown n = n == 0 ? [] : n : countDown (n - 1)
+print (onlyOne (vowelOrPair (vowelIfShort (drop 299 (countDown 300)))))  # 1
 sortedAndReversed xs = [sort xs, reverse xs]
 firstOfBoth [[a, b], [c, d]] = [a, c]
 print (firstOfBoth (sortedAndReversed [3, 1]))  # [1, 1]

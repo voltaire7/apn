@@ -254,7 +254,8 @@ for (const source of [
     'f n = [1, 2]; f 0 = [0]; g [a, b] = a; g (f 0)',
     'f true = [0]; f b = [1, 2]; g [a] = a; g (f false)',
     // Unknown lengths keep every possible clause.
-    'import "std"; f [] = [0]; f xs = [1, 2]; g [a] = a; g (f (tail (words (toString (parse "1")))))',
+    // (drop walks at most 10000 elements statically.)
+    'f [] = [0]; f xs = [1, 2]; g [a] = a; g (f (tail (take 1 (drop 20000 [0..]))))',
 ]) Deno.test(`later clauses still count unless a match is definite: ${source}`, () => rejected(session(), source));
 // Typed clauses are ranked as the runtime ranks them: an exact type (30)
 // before a numeric aggregate (10) before a lossless conversion (1) before other
@@ -547,8 +548,8 @@ for (const source of [
     'hh ys = g (f (q (ys ++ ys))); hh [2]',
     'hh ys = g (f (q (map (+ 1) ys))); hh [1, 2]',
     'g (f (sm (len [1, 2])))',
-    // A predicate that calls an unevaluated builtin (parse) decides nothing: both clauses count.
-    'g (f (q (filter (x -> parse (toString x) == 1) [1, 2])))',
+    // A predicate whose value stays unknown decides nothing: both clauses count.
+    'g (f (q (filter (x -> x > length (drop 20000 [1..30000])) [1, 2])))',
 ]) Deno.test(`length calls stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${source}`));
 // filter, map, take and drop over lists whose elements are known run as at
 // runtime, as do integer ranges.
@@ -650,3 +651,28 @@ for (const source of [
     // A block that rebinds a name is not evaluated (closures see the rebinding).
     'local n = { k = n; k = 5; k }; g (f (r (local 1 == 5)))',
 ]) Deno.test(`builtins and std evaluated stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${textClauses}; ${source}`));
+// parse reads booleans and numbers as at runtime; recursion is evaluated as
+// deep as the runtime's own stack allows (non-tail recursion to depth 500).
+const deepClauses = 'count n = n == 0 ? 0 : 1 + count (n - 1); upto n = n == 0 ? [] : n : upto (n - 1)';
+for (const [source, expected] of [
+    ['g (f (r (parse "12" == 12)))', '0'],
+    ['g (f (r (parse " true ")))', '0'],
+    ['g (f (r (parse "1/2" == 0.5)))', '0'],
+    ['g (f (q (integers "4")))', '0'],
+    ['g (f (r (count 500 == 500)))', '0'],
+    ['g (f (r (length (upto 450) == 450)))', '0'],
+    ['g (f (r (len [1..400] == 400)))', '0'],
+    ['g (f (r (sum (map (* 2) [1..5000]) == 25005000)))', '0'],
+    ['g (f (r (isPrime 7919)))', '0'],
+    ['g (f (q (take 1 (repeat 0))))', '0'],
+] as const) Deno.test(`parse and deep recursion: ${source}`, () => {
+    const actual = run(session(), `${optionClauses}; ${sizeClauses}; ${textClauses}; ${deepClauses}; ${source}`);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'g (f (r (parse "x" == 1)))',
+    'g (f (q (integers "4 5")))',
+    'g (f (r (length (upto 450) == 449)))',
+    'g (f (q (takeWhile (< 300) [1..])))',
+    'g (f (q (take 2 (repeat 0))))',
+]) Deno.test(`parse and deep recursion stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${textClauses}; ${deepClauses}; ${source}`));

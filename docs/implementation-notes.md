@@ -271,18 +271,27 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   function value (an expression with its env and scope, or a block-local
   definition's clauses with its closure and applied arguments) applied by
   `applyKnown`; a computed value over parameters drops `fn` and `seq`, since
-  their closures are only known at the parameters' calls. `Known.seq` is a
-  lazy list (element n, `null` past the end) used for `:`, endless ranges,
-  `iterate` and the list builtins; never materialize one eagerly
-  (`listKnown` stays lazy; `knownLength`/`elementsOf` walk at most 10000
-  elements on demand). `evaluateNative` runs the pure `EVALUATED_NATIVES`.
-  The work budget (`budgeted`) is per root, and a ternary or clause set whose
-  first result has no facts stops early, so recursion over unknown values
-  stays cheap. A block is evaluated only if each name is bound once. A recursive self-reference is marked `recursive` with the
-  clause's `selfInputs`, and a recursive call strips the lengths of an
-  argument whose parameter type has none. A single-group definition's entry
-  keeps `alternatives[0]` as its type, which carries the summary. A numeric constructor applied to a type variable defers its
-  conversion as a `construct` requirement instead of unifying. Compound arguments over
+  their closures are only known at the parameters' calls. `Known.cell` is a
+  lazy list's memoized first cell (head and tail; `null` when empty) used
+  for `:`, endless ranges, `iterate` and the list builtins, mirroring the
+  runtime's `cell()`. Walk lists iteratively (`element`, `elementsOf`,
+  `dropKnown`), never by recursion over indexes, and never materialize one
+  eagerly; `elementsOf` stops at 10000 elements. `evaluateNative` runs the
+  pure `EVALUATED_NATIVES`. Depth (`EVALUATION_DEPTH`) and work
+  (`EVALUATION_BUDGET`, per root via `budgeted`) are bounded, and a
+  JavaScript stack overflow (`RangeError`) in static evaluation leaves the
+  value unknown; keep the recursive path (`evaluateKnown` and its
+  `evaluateApp`/`evaluateBinop`/`evaluateBlock` cases) free of per-call
+  closures, so frames stay small and recursion reaches the runtime's own
+  depth. A ternary or clause set whose first result has no facts stops
+  early, so recursion over unknown values stays cheap. A block is evaluated
+  only if each name is bound once.
+  A recursive self-reference is marked `recursive` with the clause's
+  `selfInputs`, and a recursive call strips the lengths of an argument whose
+  parameter type has none. A single-group definition's entry keeps
+  `alternatives[0]` as its type, which carries the summary. A numeric
+  constructor applied to a type variable defers its conversion as a
+  `construct` requirement instead of unifying. Compound arguments over
   enclosing parameters become a pending `expr`, re-evaluated after
   substitution. `substituteKnown` substitutes parameters inside pending calls
   and `callArgs`. An overload call that stays ambiguous because its arguments

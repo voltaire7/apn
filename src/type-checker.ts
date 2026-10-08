@@ -1,6 +1,6 @@
 import { type Expr, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
-import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numericNative, type Numeric } from "./numbers.ts";
+import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numericNative, type Numeric, parseNumberText } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import { parse, parseDocument, rangeExpr } from "./parser.ts";
 import { mkStr, type Value, valueToString } from "./types.ts";
@@ -46,14 +46,14 @@ interface ClauseOrder { index: number; params: Pattern[]; refutable: Set<string>
 // number holds exact rationals and complex numbers (integers use index, floats
 // float); expr is an expression over enclosing parameters, evaluated once
 // they are known. size is the known length of a list, items what is known
-// about each of its elements (when the whole list is known), seq a lazy list
-// (element n, null past its end, undefined when unknown). fn is a function
+// about each of its elements (when the whole list is known), cell a lazy
+// list's first cell (null when empty, undefined when unknown). fn is a function
 // value: an expression evaluated in env and scope, or a local definition's
 // clauses with the bindings it closes over and any arguments already applied.
 type KnownFunction = { e: Expr; env: [string, Known][]; scope: Scope } | { summary: Summary; env: [string, Known][]; applied: Known[] };
-type Seq = (n: number) => Known | null | undefined;
+type Cell = { head: Known; tail: Known } | null | undefined;
 interface Known {
-    index?: Index; size?: bigint; items?: Known[]; seq?: Seq; fn?: KnownFunction; boolean?: boolean; string?: string; char?: string; float?: number; number?: Numeric; tag?: string; ref?: string;
+    index?: Index; size?: bigint; items?: Known[]; cell?: () => Cell; fn?: KnownFunction; boolean?: boolean; string?: string; char?: string; float?: number; number?: Numeric; tag?: string; ref?: string;
     call?: { summary: Summary; args: Known[] };
     expr?: { e: Expr; env: [string, Known][]; scope: Scope };
 }
@@ -65,7 +65,7 @@ interface Entry {
     index?: Index;
     size?: bigint;
     items?: Known[];
-    seq?: Seq;
+    cell?: () => Cell;
     fn?: Known["fn"];
     boolean?: boolean;
     string?: string;
@@ -245,8 +245,11 @@ const LIST_NATIVES = ["filter", "map", "take", "drop", "zipWith"];
 // Builtins the checker evaluates on known values (all pure).
 const EVALUATED_NATIVES = new Set([
     ...LIST_NATIVES, "length", "head", "tail", "null", "foldl", "foldr", "iterate", "enumerate",
-    "chars", "fromChars", "upper", "lower", "toString", "intToString", "seq",
+    "chars", "fromChars", "upper", "lower", "toString", "intToString", "seq", "parse",
 ]);
+// Static evaluation limits: nesting (recursion) depth, and work per root value.
+const EVALUATION_DEPTH = 5000;
+const EVALUATION_BUDGET = 100000;
 // Standard-library functions that return a list as long as their final list
 // argument, which the checker cannot derive from their code (they rebuild the
 // list with a fold or a merge sort). tests/stdlib-length-test.ts verifies each
@@ -265,7 +268,7 @@ function substituteKnown(known: Known, subst?: [string, Index], value?: [string,
     if (result.ref && value && result.ref === value[0]) {
         const v = value[1];
         // The whole value is the argument's, its index included (none for a non-integer).
-        result = { index: subst && known.index?.terms.has(subst[0]) ? result.index : v.index, size: v.size, items: v.items, seq: v.seq, fn: v.fn, boolean: v.boolean, string: v.string, char: v.char, float: v.float, number: v.number, tag: v.tag, ref: v.ref, call: v.call, expr: v.expr };
+        result = { index: subst && known.index?.terms.has(subst[0]) ? result.index : v.index, size: v.size, items: v.items, cell: v.cell, fn: v.fn, boolean: v.boolean, string: v.string, char: v.char, float: v.float, number: v.number, tag: v.tag, ref: v.ref, call: v.call, expr: v.expr };
     }
     if (result.call) result = { ...result, call: { ...result.call, args: result.call.args.map(a => substituteKnown(a, subst, value)) } };
     if (result.items) result = { ...result, items: result.items.map(a => substituteKnown(a, subst, value)) };
@@ -449,7 +452,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The deferred call being evaluated, so deferring it again keeps the same node.
     let evaluatingCall: Extract<Ty, { k: "operation" }> | undefined;
     function deferredCall(f: Ty, argument: Entry): Ty {
-        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, size: argument.size, items: argument.items, seq: argument.seq, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr } };
+        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr } };
         requirements.push(result);
         return resolve(result);
     }
@@ -1327,8 +1330,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             collect(argument.type);
             // With this argument's value known, the function's deferred checks
             // (calls on the parameter) see that value instead of its symbol.
-            const value: Known = { index: argument.index, size: argument.size, items: argument.items, seq: argument.seq, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr };
-            const known = argument.index || argument.ref || argument.call || argument.expr || [argument.size, argument.items, argument.seq, argument.fn, argument.boolean, argument.string, argument.char, argument.float, argument.number, argument.tag].some(x => x !== undefined);
+            const value: Known = { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr };
+            const known = argument.index || argument.ref || argument.call || argument.expr || [argument.size, argument.items, argument.cell, argument.fn, argument.boolean, argument.string, argument.char, argument.float, argument.number, argument.tag].some(x => x !== undefined);
             const pending = f.binder && known
                 ? checks.map(check => copy(check, new Map([...variables(check)].map(t => [t, t])),
                     argument.index ? [f.binder!, argument.index] : undefined, undefined, [f.binder!, value]))
@@ -1948,14 +1951,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function hasFacts(k: Known | undefined): boolean {
         return !!k && Object.values(k).some(v => v !== undefined);
     }
-    // Static evaluation is bounded per root (a pending value being decided).
+    // Static evaluation is bounded per root (a pending value being decided);
+    // recursion deeper than the JavaScript stack (a RangeError) leaves it unknown.
     let budgetDepth = 0;
-    function budgeted<T>(f: () => T): T {
+    function budgeted<T>(f: () => T): T | undefined {
         if (budgetDepth++ === 0) evaluations = 0;
-        try { return f(); } finally { budgetDepth--; }
+        try { return f(); } catch (error) { if (error instanceof RangeError) return undefined; throw error; } finally { budgetDepth--; }
     }
     function spendEvaluation(depth: number): boolean {
-        return depth <= 24 && ++evaluations <= 20000;
+        return depth <= EVALUATION_DEPTH && ++evaluations <= EVALUATION_BUDGET;
     }
     // Apply a known function value to known arguments, as the runtime does:
     // too few arguments give a function value, extra ones apply its result.
@@ -1978,33 +1982,54 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function known(items: Known[]): Known {
         return { size: BigInt(items.length), items };
     }
-    // A lazy list; elements are computed once, on demand.
-    function lazy(at: Seq): Known {
-        const cache: (Known | null | undefined)[] = [];
-        return { seq: n => n in cache ? cache[n] : (cache[n] = at(n)) };
+    // A lazy list: its first cell (head and tail, null when empty, undefined
+    // when unknown) is computed once, on demand, as the runtime's cell() does.
+    function lazyList(compute: () => Cell): Known {
+        let done = false, cell: Cell;
+        return { cell: () => {
+            if (!done) { done = true; cell = budgeted(compute); }
+            return cell;
+        } };
+    }
+    // The first cell of a known list.
+    function cellOf(k: Known | undefined): Cell {
+        if (!k) return undefined;
+        if (k.cell) return k.cell();
+        if (k.items) return k.items.length ? { head: k.items[0], tail: known(k.items.slice(1)) } : null;
+        if (k.size !== undefined) return k.size > 0n ? { head: {}, tail: { size: k.size - 1n } } : null;
+        return undefined;
     }
     // Element n of a known list: null past its end, {} when it exists but its
-    // value is unknown, undefined when even that is unknown.
+    // value is unknown, undefined when even that is unknown. Walks cells
+    // iteratively, so long lists need no deep recursion.
     function element(k: Known | undefined, n: number): Known | null | undefined {
-        if (!k) return undefined;
-        if (k.items) return n < k.items.length ? k.items[n] : null;
-        if (k.seq) return k.seq(n);
-        if (k.size !== undefined) return BigInt(n) < k.size ? {} : null;
-        return undefined;
+        let current = k;
+        for (let i = 0; ; i++) {
+            if (!current) return undefined;
+            if (current.items) return n - i < current.items.length ? current.items[n - i] : null;
+            if (!current.cell && current.size !== undefined) return BigInt(n - i) < current.size ? {} : null;
+            const cell = cellOf(current);
+            if (!cell) return cell;
+            if (i === n) return cell.head;
+            current = cell.tail;
+        }
     }
     // Every element of a finite known list (bounded).
     function elementsOf(k: Known | undefined): Known[] | undefined {
         if (!k) return undefined;
         if (k.items) return k.items;
-        if (!k.seq && k.size === undefined) return undefined;
+        if (!k.cell && k.size === undefined) return undefined;
         const items: Known[] = [];
-        for (let n = 0; ; n++) {
-            if (n >= 10000) return undefined;
-            const item = element(k, n);
-            if (item === null) return items;
-            if (item === undefined) return undefined;
-            items.push(item);
+        let current: Known | undefined = k;
+        while (items.length < 10000) {
+            if (current?.items) return [...items, ...current.items];
+            const cell = cellOf(current);
+            if (cell === null) return items;
+            if (cell === undefined) return undefined;
+            items.push(cell.head);
+            current = cell.tail;
         }
+        return undefined;
     }
     // The length of a finite known list.
     function knownLength(k: Known | undefined): bigint | undefined {
@@ -2012,19 +2037,34 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const items = elementsOf(k);
         return items && BigInt(items.length);
     }
-    // A known list as a value, computed on demand (it may be endless).
-    function listKnown(at: Seq): Known {
-        return lazy(at);
+    function isList(k: Known | undefined): boolean {
+        return !!k && (!!k.items || !!k.cell || k.size !== undefined);
     }
+    // The list after its first count elements.
     function dropKnown(k: Known, count: number): Known {
         if (k.items) return known(k.items.slice(count));
-        if (k.seq) return listKnown(n => element(k, n + count));
-        return k.size === undefined ? {} : { size: k.size > BigInt(count) ? k.size - BigInt(count) : 0n };
+        let current: Known = k;
+        for (let n = 0; n < count; n++) {
+            if (current.items) return known(current.items.slice(count - n));
+            const cell = cellOf(current);
+            if (cell === null) return known([]);
+            if (cell === undefined) return {};
+            current = cell.tail;
+        }
+        return current;
+    }
+    // A list built cell by cell from a step: each cell's head, and the state
+    // its tail continues from (null ends the list, undefined is unknown).
+    function unfold<S>(state: S, step: (state: S) => { head: Known; next: S } | null | undefined): Known {
+        return lazyList(() => {
+            const result = step(state);
+            return result && { head: result.head, tail: unfold(result.next, step) };
+        });
     }
     // An integer range, as the runtime enumerates it (hi null: endless).
     function rangeKnown(lo: bigint, step: bigint, hi: bigint | null): Known | undefined {
         if (step === 0n) return undefined;
-        if (hi === null) return lazy(n => ({ index: constant(lo + BigInt(n) * step) }));
+        if (hi === null) return unfold(lo, v => ({ head: { index: constant(v) }, next: v + step }));
         const items: Known[] = [];
         for (let v = lo; step > 0n ? v <= hi : v >= hi; v += step) {
             if (items.length >= 10000) return undefined;
@@ -2111,7 +2151,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const facts = budgeted(() => evaluateKnown(e, new Map(), scope, 0)) ?? {};
         if (!names.size) return facts;
         // Function values and lazy lists over parameters are only known at their calls.
-        return { ...facts, fn: undefined, seq: undefined, expr: { e, scope, env: [...names].map(n => [n, valueEntry({ t: "var", name: n }, scope)]) } };
+        return { ...facts, fn: undefined, cell: undefined, expr: { e, scope, env: [...names].map(n => [n, valueEntry({ t: "var", name: n }, scope)]) } };
     }
     // The summary of a callee called with `count` arguments, if the call is complete.
     function summaryAt(type: Ty, count: number): Summary | undefined {
@@ -2131,7 +2171,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             ? evaluateCall(known.call.summary, known.call.args.map(resolveKnown), 0)
             : evaluateKnown(known.expr!.e, new Map(known.expr!.env.map(([n, v]) => [n, resolveKnown(v)])), known.expr!.scope, 0));
         const result: Known = { ...known };
-        for (const key of ["index", "size", "items", "seq", "fn", "boolean", "string", "char", "float", "number", "tag"] as const) {
+        for (const key of ["index", "size", "items", "cell", "fn", "boolean", "string", "char", "float", "number", "tag"] as const) {
             if (result[key] === undefined && facts?.[key] !== undefined) (result as Record<string, unknown>)[key] = facts[key];
         }
         return result;
@@ -2188,7 +2228,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (k.boolean !== undefined) return atom("Bool");
         if (k.string !== undefined) return atom("String");
         if (k.char !== undefined) return atom("Char");
-        if (k.items || k.seq || k.size !== undefined) return list(dynamic);
+        if (isList(k)) return list(dynamic);
         return dynamic;
     }
     // Whether two known values are equal, as the runtime compares them.
@@ -2227,32 +2267,31 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const parts = items.map(renderKnown);
         return parts.some(x => x === undefined) ? undefined : `[${parts.join(", ")}]`;
     }
+    // Numbers use the runtime's own arithmetic and comparison (numbers.ts,
+    // type-system.ts); an operation the runtime would reject gives no value.
+    function attempt(f: () => Numeric | boolean): Known | undefined {
+        try { return knownNumber(f()); } catch { return undefined; }
+    }
+    // Truthiness as the runtime defines it, where the value decides it.
+    function truth(k: Known | undefined): boolean | undefined {
+        if (!k) return undefined;
+        if (k.boolean !== undefined) return k.boolean;
+        const n = numericOf(k);
+        if (n !== undefined) {
+            const real = (x: Numeric): boolean => x.kind === "complex" ? real(x.re) || real(x.im) : x.kind === "float" ? x.v !== 0 && !Number.isNaN(x.v) : !equalNumbers(x, integer(0n));
+            return real(n);
+        }
+        if (k.string !== undefined) return k.string.length > 0;
+        if (isList(k)) {
+            const first = element(k, 0);
+            return first === undefined ? undefined : first !== null;
+        }
+        if (k.tag !== undefined || k.char !== undefined || k.fn) return true;
+        return undefined;
+    }
     // What e evaluates to, given known values of the names in env.
     function evaluateKnown(e: Expr, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
-        // Numbers use the runtime's own arithmetic and comparison (numbers.ts,
-        // type-system.ts); an operation the runtime would reject gives no value.
-        const attempt = (f: () => Numeric | boolean): Known | undefined => {
-            try { return knownNumber(f()); } catch { return undefined; }
-        };
-        // Truthiness as the runtime defines it, where the value decides it.
-        const truth = (k: Known | undefined): boolean | undefined => {
-            if (!k) return undefined;
-            if (k.boolean !== undefined) return k.boolean;
-            const n = numericOf(k);
-            if (n !== undefined) {
-                const real = (x: Numeric): boolean => x.kind === "complex" ? real(x.re) || real(x.im) : x.kind === "float" ? x.v !== 0 && !Number.isNaN(x.v) : !equalNumbers(x, integer(0n));
-                return real(n);
-            }
-            if (k.string !== undefined) return k.string.length > 0;
-            if (k.items || k.seq || k.size !== undefined) {
-                const first = element(k, 0);
-                return first === undefined ? undefined : first !== null;
-            }
-            if (k.tag !== undefined || k.char !== undefined || k.fn) return true;
-            return undefined;
-        };
         const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
-        const apply = (f: Known | undefined, args: Known[]) => f?.fn && applyKnown(f.fn, args, depth);
         switch (e.t) {
             case "int": return { index: constant(e.v) };
             case "float": return { float: e.v };
@@ -2267,36 +2306,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
                 if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope } };
                 const index = entry.index && !entry.index.terms.size ? entry.index : undefined;
-                return { index, size: entry.size, items: entry.items, seq: entry.seq, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag };
+                return { index, size: entry.size, items: entry.items, cell: entry.cell, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag };
             }
-            case "block": {
-                // Local definitions, each bound once (a closure sees a later
-                // rebinding, which this does not track), then the last expression.
-                const defined = e.stmts.flatMap(st => st.t === "patDef" ? patternNames(st.pattern) : st.t === "stmDef" ? [st.name] : []);
-                if (new Set(defined).size !== defined.length) return undefined;
-                const local = new Map(env);
-                for (const [n, st] of e.stmts.entries()) {
-                    const last = n === e.stmts.length - 1;
-                    if (st.t === "patDef") {
-                        if (last || st.update || st.value.t === "setItem" || st.value.t === "setFields") return undefined;
-                        bindKnown(st.pattern, evaluateKnown(st.value, local, scope, depth) ?? {}, local, new Set());
-                    } else if (st.t === "stmDef") {
-                        if (last) return undefined;
-                        if (!st.clauses[0].params.length) {
-                            local.set(st.name, evaluateKnown(st.clauses[0].body, local, scope, depth) ?? {});
-                            continue;
-                        }
-                        const summary: Summary = { scope, clauses: st.clauses.map((c, index) => {
-                            const names = c.params.flatMap(patternNames);
-                            return { index, params: c.params, body: c.body, refutable: new Set([st.name, ...names.filter((x, i) => names.indexOf(x) !== i)]) };
-                        }) };
-                        const fn: KnownFunction = { summary, env: [], applied: [] };
-                        local.set(st.name, { fn });
-                        fn.env = [...local];
-                    } else if (last) return evaluateKnown(st, local, scope, depth);
-                }
-                return undefined;
-            }
+            case "block": return evaluateBlock(e, env, scope, depth);
             case "ternary": {
                 const condition = truth(value(e.cond));
                 if (condition === true) return value(e.then);
@@ -2324,134 +2336,169 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const range = rangeExpr(lo as Real, second as Real | null, hi as Real | null);
                 return range.t === "range" ? rangeKnown(range.lo, range.step, range.hi) : undefined;
             }
-            case "binop": {
-                // x : xs; the tail may be endless (repeat x = x : repeat x).
-                if (e.op === ":") {
-                    const h = value(e.l) ?? {}, r = value(e.r);
-                    if (r?.items) return known([h, ...r.items]);
-                    const result = lazy(n => n === 0 ? h : element(r, n - 1));
-                    return r?.size !== undefined ? { ...result, size: r.size + 1n } : result;
-                }
-                if (e.op === "++") {
-                    const l = value(e.l), r = value(e.r);
-                    if (l?.string !== undefined && r?.string !== undefined) return { string: l.string + r.string };
-                    if (l?.items && r?.items) return known([...l.items, ...r.items]);
-                    const size = l?.size !== undefined && r?.size !== undefined ? { size: l.size + r.size } : {};
-                    if (!l?.items && !l?.seq) return l?.size !== undefined && r?.size !== undefined ? size : undefined;
-                    return { ...listKnown(n => {
-                        const item = element(l, n);
-                        if (item !== null) return item;
-                        const count = knownLength(l);
-                        return count === undefined ? undefined : element(r, n - Number(count));
-                    }), ...size };
-                }
-                if (e.op === "&&" || e.op === "||") {
-                    const l = truth(value(e.l));
-                    if (l === undefined) return undefined;
-                    if (e.op === "&&" ? !l : l) return { boolean: l };
-                    const r = truth(value(e.r));
-                    return r === undefined ? undefined : { boolean: r };
-                }
-                const l = value(e.l), r = value(e.r);
-                const x = numericOf(l), y = numericOf(r);
-                if (x !== undefined && y !== undefined) {
-                    if (["+", "-", "*", "/", "%"].includes(e.op)) return attempt(() => typedArithmetic(e.op, x, y));
-                    if (e.op === "^") return attempt(() => typedPower(x, y));
-                    if (e.op === "==" || e.op === "!=") return attempt(() => equalNumbers(x, y) === (e.op === "=="));
-                    if (["<", ">", "<=", ">="].includes(e.op)) {
-                        return attempt(() => {
-                            const c = compareNumbers(x, y);
-                            // Ordered comparisons involving NaN are false.
-                            if (Number.isNaN(c)) return false;
-                            return e.op === "<" ? c < 0 : e.op === ">" ? c > 0 : e.op === "<=" ? c <= 0 : c >= 0;
-                        });
-                    }
-                    return undefined;
-                }
-                if (e.op === "==" || e.op === "!=") {
-                    const same = equalKnown(l, r);
-                    return same === undefined ? undefined : { boolean: same === (e.op === "==") };
-                }
-                if (!["<", ">", "<=", ">="].includes(e.op)) return undefined;
-                let order: number | undefined;
-                for (const key of ["string", "char"] as const) {
-                    if (l?.[key] !== undefined && r?.[key] !== undefined) order = l[key]! < r[key]! ? -1 : l[key]! > r[key]! ? 1 : 0;
-                }
-                if (order === undefined) return undefined;
-                return { boolean: e.op === "<" ? order < 0 : e.op === ">" ? order > 0 : e.op === "<=" ? order <= 0 : order >= 0 };
-            }
-            case "app": {
-                const args: Expr[] = [];
-                let head: Expr = e;
-                while (head.t === "app") { args.unshift(head.a); head = head.f; }
-                if (head.t === "block" && head.stmts.length === 1 && head.style === "(") head = head.stmts[0];
-                // A lambda (or operator section): too few arguments give a function
-                // value, extra ones apply its result.
-                if (head.t === "lambda") {
-                    if (args.length < head.params.length) return { fn: { e, env: [...env], scope } };
-                    if (!spendEvaluation(depth)) return undefined;
-                    const inner = new Map(env);
-                    head.params.forEach((name, n) => inner.set(name, value(args[n]) ?? {}));
-                    const result = evaluateKnown(head.body, inner, scope, depth + 1);
-                    if (args.length === head.params.length) return result;
-                    return apply(result, args.slice(head.params.length).map(a => value(a) ?? {}));
-                }
-                if (head.t !== "var") return undefined;
-                // A function value applied to arguments (a parameter holding a lambda,
-                // a section, a named or local function).
-                if (env.has(head.name)) return apply(resolveKnown(env.get(head.name)!), args.map(a => value(a) ?? {}));
-                const entry = scope.get(head.name);
-                // A named function applied to fewer arguments than it takes is a function value.
-                if (entry && !entry.mono && isFunction(entry.type)) {
-                    let t: Ty | undefined = resolve(entry.type);
-                    if (t.k === "overload") t = resolve(t.choices[0]);
-                    for (let n = 0; n < args.length; n++) t = t?.k === "fn" ? resolve(t.output) : undefined;
-                    if (t?.k === "fn") return { fn: { e, env: [...env], scope } };
-                }
-                const builtin = !!entry?.builtin;
-                if (builtin && EVALUATED_NATIVES.has(head.name)) return evaluateNative(head.name, args.map(a => () => value(a)), depth, truth);
-                if (head.name === "Bool" && builtin && args.length === 1) {
-                    const b = truth(value(args[0]));
-                    return b === undefined ? undefined : { boolean: b };
-                }
-                // A numeric type applied to a number: floating types round, others
-                // convert losslessly or fail, as at runtime.
-                if (NUMERIC_TYPES.includes(head.name) && builtin && args.length === 1) {
-                    const n = numericOf(value(args[0]));
-                    return n === undefined ? undefined : attempt(() => castNumeric(head.name, n, ["Float", "Float32", "Float64"].includes(head.name)));
-                }
-                if (/^[A-Z]/.test(head.name)) {
-                    let t = resolve(entry?.type ?? dynamic);
-                    for (let n = 0; n < args.length && t.k === "fn"; n++) t = resolve(t.output);
-                    return t.k === "variant" ? { tag: head.name } : undefined;
-                }
-                // The runtime's numeric natives, when the name is the builtin itself.
-                const native = NUMBER_NATIVES.find(([name]) => name === head.name);
-                if (native && builtin && native[1] === args.length) {
-                    const values = args.map(a => numericOf(value(a)));
-                    if (values.some(v => v === undefined)) return undefined;
-                    const numbers = values as Numeric[];
-                    return attempt(() => head.name === "expt" ? typedPower(numbers[0], numbers[1]) : numericNative(head.name, numbers));
-                }
-                if (!trustsShape(entry)) return undefined;
-                const values = args.map(a => value(a) ?? {});
-                const summary = summaryAt(entry!.type, args.length);
-                const result = summary && evaluateCall(summary, values, depth);
-                if (result?.size !== undefined || result?.items || result?.seq) return result;
-                // A builtin's (or inferred) result shape: an argument itself, or a
-                // list as long as a constant or as an argument.
-                const shape = shapeAt(entry!.type, args.length);
-                const size = shape?.arg !== undefined ? values[shape.arg]?.size
-                    : shape?.length ? "constant" in shape.length ? shape.length.constant : values[shape.length.param]?.size
-                    : undefined;
-                return size === undefined ? result : { ...result, size };
-            }
+            case "binop": return evaluateBinop(e, env, scope, depth);
+            case "app": return evaluateApp(e, env, scope, depth);
             default: return undefined;
         }
     }
+    // A block: its local definitions, then its last expression.
+    function evaluateBlock(e: Extract<Expr, { t: "block" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
+        const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
+        // Local definitions, each bound once (a closure sees a later
+        // rebinding, which this does not track), then the last expression.
+        const defined = e.stmts.flatMap(st => st.t === "patDef" ? patternNames(st.pattern) : st.t === "stmDef" ? [st.name] : []);
+        if (new Set(defined).size !== defined.length) return undefined;
+        const local = new Map(env);
+        for (const [n, st] of e.stmts.entries()) {
+            const last = n === e.stmts.length - 1;
+            if (st.t === "patDef") {
+                if (last || st.update || st.value.t === "setItem" || st.value.t === "setFields") return undefined;
+                bindKnown(st.pattern, evaluateKnown(st.value, local, scope, depth) ?? {}, local, new Set());
+            } else if (st.t === "stmDef") {
+                if (last) return undefined;
+                if (!st.clauses[0].params.length) {
+                    local.set(st.name, evaluateKnown(st.clauses[0].body, local, scope, depth) ?? {});
+                    continue;
+                }
+                const summary: Summary = { scope, clauses: st.clauses.map((c, index) => {
+                    const names = c.params.flatMap(patternNames);
+                    return { index, params: c.params, body: c.body, refutable: new Set([st.name, ...names.filter((x, i) => names.indexOf(x) !== i)]) };
+                }) };
+                const fn: KnownFunction = { summary, env: [], applied: [] };
+                local.set(st.name, { fn });
+                fn.env = [...local];
+            } else if (last) return evaluateKnown(st, local, scope, depth);
+        }
+        return undefined;
+    }
+    // A binary operator on known operands.
+    function evaluateBinop(e: Extract<Expr, { t: "binop" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
+        const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
+        // x : xs; the tail may be endless (repeat x = x : repeat x).
+        // The tail is evaluated only when an element past the head is needed.
+        if (e.op === ":") {
+            const h = value(e.l) ?? {};
+            return lazyList(() => ({ head: h, tail: value(e.r) ?? {} }));
+        }
+        if (e.op === "++") {
+            const l = value(e.l), r = value(e.r);
+            if (l?.string !== undefined && r?.string !== undefined) return { string: l.string + r.string };
+            if (l?.items && r?.items) return known([...l.items, ...r.items]);
+            const size = l?.size !== undefined && r?.size !== undefined ? { size: l.size + r.size } : {};
+            if (!l?.items && !l?.cell) return l?.size !== undefined && r?.size !== undefined ? size : undefined;
+            const append = (left: Known): Known => lazyList(() => {
+                const cell = cellOf(left);
+                return cell === null ? cellOf(r) : cell && { head: cell.head, tail: append(cell.tail) };
+            });
+            return { ...append(l), ...size };
+        }
+        if (e.op === "&&" || e.op === "||") {
+            const l = truth(value(e.l));
+            if (l === undefined) return undefined;
+            if (e.op === "&&" ? !l : l) return { boolean: l };
+            const r = truth(value(e.r));
+            return r === undefined ? undefined : { boolean: r };
+        }
+        const l = value(e.l), r = value(e.r);
+        const x = numericOf(l), y = numericOf(r);
+        if (x !== undefined && y !== undefined) {
+            if (["+", "-", "*", "/", "%"].includes(e.op)) return attempt(() => typedArithmetic(e.op, x, y));
+            if (e.op === "^") return attempt(() => typedPower(x, y));
+            if (e.op === "==" || e.op === "!=") return attempt(() => equalNumbers(x, y) === (e.op === "=="));
+            if (["<", ">", "<=", ">="].includes(e.op)) {
+                return attempt(() => {
+                    const c = compareNumbers(x, y);
+                    // Ordered comparisons involving NaN are false.
+                    if (Number.isNaN(c)) return false;
+                    return e.op === "<" ? c < 0 : e.op === ">" ? c > 0 : e.op === "<=" ? c <= 0 : c >= 0;
+                });
+            }
+            return undefined;
+        }
+        if (e.op === "==" || e.op === "!=") {
+            const same = equalKnown(l, r);
+            return same === undefined ? undefined : { boolean: same === (e.op === "==") };
+        }
+        if (!["<", ">", "<=", ">="].includes(e.op)) return undefined;
+        let order: number | undefined;
+        for (const key of ["string", "char"] as const) {
+            if (l?.[key] !== undefined && r?.[key] !== undefined) order = l[key]! < r[key]! ? -1 : l[key]! > r[key]! ? 1 : 0;
+        }
+        if (order === undefined) return undefined;
+        return { boolean: e.op === "<" ? order < 0 : e.op === ">" ? order > 0 : e.op === "<=" ? order <= 0 : order >= 0 };
+    }
+    // An application: lambdas, function values, pure builtins, and calls by name.
+    function evaluateApp(e: Extract<Expr, { t: "app" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
+        const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
+        const apply = (f: Known | undefined, args: Known[]) => f?.fn && applyKnown(f.fn, args, depth);
+        const args: Expr[] = [];
+        let head: Expr = e;
+        while (head.t === "app") { args.unshift(head.a); head = head.f; }
+        if (head.t === "block" && head.stmts.length === 1 && head.style === "(") head = head.stmts[0];
+        // A lambda (or operator section): too few arguments give a function
+        // value, extra ones apply its result.
+        if (head.t === "lambda") {
+            if (args.length < head.params.length) return { fn: { e, env: [...env], scope } };
+            if (!spendEvaluation(depth)) return undefined;
+            const inner = new Map(env);
+            head.params.forEach((name, n) => inner.set(name, value(args[n]) ?? {}));
+            const result = evaluateKnown(head.body, inner, scope, depth + 1);
+            if (args.length === head.params.length) return result;
+            return apply(result, args.slice(head.params.length).map(a => value(a) ?? {}));
+        }
+        if (head.t !== "var") return undefined;
+        // A function value applied to arguments (a parameter holding a lambda,
+        // a section, a named or local function).
+        if (env.has(head.name)) return apply(resolveKnown(env.get(head.name)!), args.map(a => value(a) ?? {}));
+        const entry = scope.get(head.name);
+        // A named function applied to fewer arguments than it takes is a function value.
+        if (entry && !entry.mono && isFunction(entry.type)) {
+            let t: Ty | undefined = resolve(entry.type);
+            if (t.k === "overload") t = resolve(t.choices[0]);
+            for (let n = 0; n < args.length; n++) t = t?.k === "fn" ? resolve(t.output) : undefined;
+            if (t?.k === "fn") return { fn: { e, env: [...env], scope } };
+        }
+        const builtin = !!entry?.builtin;
+        if (builtin && EVALUATED_NATIVES.has(head.name)) return evaluateNative(head.name, args.map(a => () => value(a)), depth);
+        if (head.name === "Bool" && builtin && args.length === 1) {
+            const b = truth(value(args[0]));
+            return b === undefined ? undefined : { boolean: b };
+        }
+        // A numeric type applied to a number: floating types round, others
+        // convert losslessly or fail, as at runtime.
+        if (NUMERIC_TYPES.includes(head.name) && builtin && args.length === 1) {
+            const n = numericOf(value(args[0]));
+            return n === undefined ? undefined : attempt(() => castNumeric(head.name, n, ["Float", "Float32", "Float64"].includes(head.name)));
+        }
+        if (/^[A-Z]/.test(head.name)) {
+            let t = resolve(entry?.type ?? dynamic);
+            for (let n = 0; n < args.length && t.k === "fn"; n++) t = resolve(t.output);
+            return t.k === "variant" ? { tag: head.name } : undefined;
+        }
+        // The runtime's numeric natives, when the name is the builtin itself.
+        const native = NUMBER_NATIVES.find(([name]) => name === head.name);
+        if (native && builtin && native[1] === args.length) {
+            const values = args.map(a => numericOf(value(a)));
+            if (values.some(v => v === undefined)) return undefined;
+            const numbers = values as Numeric[];
+            return attempt(() => head.name === "expt" ? typedPower(numbers[0], numbers[1]) : numericNative(head.name, numbers));
+        }
+        if (!trustsShape(entry)) return undefined;
+        const values = args.map(a => value(a) ?? {});
+        const summary = summaryAt(entry!.type, args.length);
+        const result = summary && evaluateCall(summary, values, depth);
+        if (isList(result)) return result;
+        // A builtin's (or inferred) result shape: an argument itself, or a
+        // list as long as a constant or as an argument.
+        const shape = shapeAt(entry!.type, args.length);
+        const size = shape?.arg !== undefined ? values[shape.arg]?.size
+            : shape?.length ? "constant" in shape.length ? shape.length.constant : values[shape.length.param]?.size
+            : undefined;
+        return size === undefined ? result : { ...result, size };
+    }
     // The pure builtins, run on known arguments as the runtime runs them.
-    function evaluateNative(name: string, args: (() => Known | undefined)[], depth: number, truth: (k: Known | undefined) => boolean | undefined): Known | undefined {
-        const arity = name === "foldl" || name === "foldr" || name === "zipWith" ? 3 : ["head", "tail", "null", "length", "enumerate", "chars", "fromChars", "upper", "lower", "toString", "intToString"].includes(name) ? 1 : 2;
+    function evaluateNative(name: string, args: (() => Known | undefined)[], depth: number): Known | undefined {
+        const arity = name === "foldl" || name === "foldr" || name === "zipWith" ? 3 : ["head", "tail", "null", "length", "enumerate", "chars", "fromChars", "upper", "lower", "toString", "intToString", "parse"].includes(name) ? 1 : 2;
         if (args.length !== arity) return undefined;
         const call = (f: Known | undefined, values: Known[]) => f?.fn && applyKnown(f.fn, values, depth);
         switch (name) {
@@ -2473,6 +2520,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return n === undefined ? undefined : { index: constant(n) };
             }
             case "seq": return args[1]();
+            // Booleans and number literals, as the runtime parses them.
+            case "parse": {
+                const text = args[0]()?.string?.trim();
+                if (text === undefined) return undefined;
+                if (text === "true" || text === "false") return { boolean: text === "true" };
+                const n = parseNumberText(text);
+                return n === null ? undefined : knownNumber(n);
+            }
             case "chars": {
                 const text = args[0]()?.string;
                 return text === undefined ? undefined : known([...text].map(c => ({ char: c })));
@@ -2496,14 +2551,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "enumerate": {
                 const list = args[0]();
-                if (!list?.items && !list?.seq) return list?.size === undefined ? undefined : { size: list.size };
-                return listKnown(n => { const item = element(list, n); return item && known([{ index: constant(BigInt(n)) }, item]); });
+                if (!list?.items && !list?.cell) return list?.size === undefined ? undefined : { size: list.size };
+                return unfold<[Known, bigint]>([list, 0n], ([rest, n]) => {
+                    const cell = cellOf(rest);
+                    return cell && { head: known([{ index: constant(n) }, cell.head]), next: [cell.tail, n + 1n] };
+                });
             }
             case "iterate": {
-                const f = args[0](), seed = args[1]() ?? {};
-                const at: Seq = n => n === 0 ? seed : call(f, [element(result, n - 1) ?? {}]) ?? {};
-                const result = lazy(at);
-                return result;
+                const f = args[0]();
+                return unfold<Known>(args[1]() ?? {}, value => ({ head: value, next: call(f, [value]) ?? {} }));
             }
             case "foldl": case "foldr": {
                 const f = args[0](), items = elementsOf(args[2]());
@@ -2518,45 +2574,51 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (count?.kind !== "int" || count.v < 0n || !list) return undefined;
                 if (count.v > 10000n) return undefined;
                 const c = Number(count.v);
-                if (name === "drop") return list.items || list.seq || list.size !== undefined ? dropKnown(list, c) : undefined;
-                if (list.items || list.seq) return listKnown(n => n < c ? element(list, n) : null);
+                if (name === "drop") return isList(list) ? dropKnown(list, c) : undefined;
+                if (list.items) return known(list.items.slice(0, c));
+                if (list.cell) return unfold<[Known, number]>([list, c], ([rest, left]) => {
+                    if (left === 0) return null;
+                    const cell = cellOf(rest);
+                    return cell && { head: cell.head, next: [cell.tail, left - 1] };
+                });
                 return list.size === undefined ? undefined : { size: list.size < count.v ? list.size : count.v };
             }
             case "map": {
                 const f = args[0](), list = args[1]();
-                if (!list?.items && !list?.seq) return list?.size === undefined ? undefined : { size: list.size };
-                return { ...listKnown(n => { const item = element(list, n); return item && (call(f, [item]) ?? {}); }), ...list.size !== undefined ? { size: list.size } : {} };
+                if (!list?.items && !list?.cell) return list?.size === undefined ? undefined : { size: list.size };
+                if (list.items) return known(list.items.map(item => call(f, [item]) ?? {}));
+                return unfold<Known>(list, rest => {
+                    const cell = cellOf(rest);
+                    return cell && { head: call(f, [cell.head]) ?? {}, next: cell.tail };
+                });
             }
             case "filter": {
                 const f = args[0](), list = args[1]();
-                if (!list?.items && !list?.seq) return undefined;
-                // Element n of the result is the n-th element the predicate keeps.
-                const kept: Known[] = [];
-                let scanned = 0;
-                return listKnown(n => {
-                    while (kept.length <= n) {
-                        if (scanned >= 10000) return undefined;
-                        const item = element(list, scanned++);
-                        if (item === null) return null;
-                        if (item === undefined) return undefined;
-                        const keep = truth(call(f, [item]));
-                        if (keep === undefined) { scanned--; return undefined; }
-                        if (keep) kept.push(item);
+                if (!list?.items && !list?.cell) return undefined;
+                // Each cell holds the next element the predicate keeps.
+                return unfold<Known>(list, rest => {
+                    for (let scanned = 0; scanned < 10000; scanned++) {
+                        const cell = cellOf(rest);
+                        if (!cell) return cell;
+                        const keep = truth(call(f, [cell.head]));
+                        if (keep === undefined) return undefined;
+                        if (keep) return { head: cell.head, next: cell.tail };
+                        rest = cell.tail;
                     }
-                    return kept[n];
+                    return undefined;
                 });
             }
             case "zipWith": {
                 const f = args[0](), xs = args[1](), ys = args[2]();
-                if (!xs?.items && !xs?.seq || !ys?.items && !ys?.seq) {
+                if (!xs?.items && !xs?.cell || !ys?.items && !ys?.cell) {
                     const a = knownLength(xs), b = knownLength(ys);
                     return a === undefined || b === undefined ? undefined : { size: a < b ? a : b };
                 }
-                return listKnown(n => {
-                    const x = element(xs, n), y = element(ys, n);
+                return unfold<[Known, Known]>([xs, ys], ([left, right]) => {
+                    const x = cellOf(left), y = cellOf(right);
                     if (x === null || y === null) return null;
                     if (x === undefined || y === undefined) return undefined;
-                    return call(f, [x, y]) ?? {};
+                    return { head: call(f, [x.head, y.head]) ?? {}, next: [x.tail, y.tail] };
                 });
             }
         }
@@ -2568,7 +2630,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const result: Known = {};
         const same = (x: unknown, y: unknown) => x !== undefined && x === y;
         if (a.index && b.index && !a.index.terms.size && !b.index.terms.size && a.index.constant === b.index.constant) result.index = a.index;
-        if ((a.seq || b.seq) && (a.items || a.seq || a.size !== undefined) && (b.items || b.seq || b.size !== undefined)) {
+        if ((a.cell || b.cell) && isList(a) && isList(b)) {
             const x = knownLength(a), y = knownLength(b);
             if (x !== undefined && x === y) result.size = x;
         }
@@ -2627,7 +2689,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function listLength(argument: Entry, count: number): boolean | undefined {
         const n = sizeOf(argument.type) ?? argument.size;
         if (n !== undefined) return n === BigInt(count);
-        if (!argument.items && !argument.seq) return undefined;
+        if (!argument.items && !argument.cell) return undefined;
         const last = count ? element(argument, count - 1) : {}, next = element(argument, count);
         if (last === null || next) return false;
         return last === undefined || next === undefined ? undefined : true;
