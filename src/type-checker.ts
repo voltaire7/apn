@@ -253,6 +253,7 @@ const EVALUATED_NATIVES = new Set([
 // Static evaluation limits: nesting (recursion) depth, and work per root value.
 const EVALUATION_DEPTH = 5000;
 const EVALUATION_BUDGET = 300000;
+const SYMBOLIC_BUDGET = 200;
 // Standard-library functions that return a list as long as their final list
 // argument, which the checker cannot derive from their code (they rebuild the
 // list with a fold or a merge sort). tests/stdlib-length-test.ts verifies each
@@ -1957,12 +1958,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Static evaluation is bounded per root (a pending value being decided);
     // recursion deeper than the JavaScript stack (a RangeError) leaves it unknown.
     let budgetDepth = 0;
-    function budgeted<T>(f: () => T): T | undefined {
-        if (budgetDepth++ === 0) evaluations = 0;
+    let evaluationLimit = EVALUATION_BUDGET;
+    function budgeted<T>(f: () => T, limit = EVALUATION_BUDGET): T | undefined {
+        if (budgetDepth++ === 0) { evaluations = 0; evaluationLimit = limit; }
         try { return f(); } catch (error) { if (error instanceof RangeError) return undefined; throw error; } finally { budgetDepth--; }
     }
     function spendEvaluation(depth: number): boolean {
-        return depth <= EVALUATION_DEPTH && ++evaluations <= EVALUATION_BUDGET;
+        return depth <= EVALUATION_DEPTH && ++evaluations <= evaluationLimit;
     }
     // Apply a known function value to known arguments, as the runtime does:
     // too few arguments give a function value, extra ones apply its result.
@@ -2022,6 +2024,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function elementsOf(k: Known | undefined): Known[] | undefined {
         if (!k) return undefined;
         if (k.items) return k.items;
+        if (k.range?.hi === null) return undefined;
         if (!k.cell && k.size === undefined) return undefined;
         // Each element walked spends from the work budget.
         return budgeted(() => {
@@ -2038,9 +2041,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return undefined;
         });
     }
+    // Does a known list have exactly n elements? Walks at most n + 1 cells.
+    function hasLength(k: Known, n: number): boolean {
+        return budgeted(() => {
+            if (k.range || k.size !== undefined || k.items) return knownLength(k) === BigInt(n);
+            let current: Known = k;
+            for (let i = 0; i < n; i++) {
+                if (!spendEvaluation(0)) return false;
+                const cell = cellOf(current);
+                if (!cell) return false;
+                current = cell.tail;
+            }
+            return cellOf(current) === null;
+        }) ?? false;
+    }
     // The length of a finite known list.
     function knownLength(k: Known | undefined): bigint | undefined {
-        if (k?.size !== undefined) return k.size;
+        if (k?.size !== undefined || k?.range) return k.size;
         const items = elementsOf(k);
         return items && BigInt(items.length);
     }
@@ -2135,7 +2152,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const summary = summaryAt(entry!.type, args.length);
             // A builtin with a result shape (map keeps its list's length).
             if (!summary) return shapeAt(entry!.type, args.length) ? computed(e, scope) : {};
-            return resolveKnown({ call: { summary, args: args.map(a => valueEntry(a, scope)) } });
+            const values = args.map(a => valueEntry(a, scope));
+            // Over no parameters, evaluate (and cache) the whole application.
+            if (!values.some(symbolic)) return computed(e, scope);
+            return resolveKnown({ call: { summary, args: values } });
         }
         if (["binop", "unop", "ternary", "numeric", "list", "range", "computedRange", "lambda"].includes(e.t)) return computed(e, scope);
         return {};
@@ -2159,7 +2179,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         };
         collect(e);
-        const facts = budgeted(() => evaluateKnown(e, new Map(), scope, 0)) ?? {};
+        // Over parameters, the value is decided again at each call; evaluating it
+        // now (with the parameters unknown) rarely tells more, so spend little.
+        const facts = budgeted(() => evaluateKnown(e, new Map(), scope, 0), names.size ? SYMBOLIC_BUDGET : EVALUATION_BUDGET) ?? {};
         if (!names.size) return facts;
         // Function values and lazy lists over parameters are only known at their calls.
         return { ...facts, fn: undefined, cell: undefined, expr: { e, scope, env: [...names].map(n => [n, valueEntry({ t: "var", name: n }, scope)]) } };
@@ -2180,7 +2202,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (!known.call && !known.expr) return known;
         const facts = budgeted(() => known.call
             ? evaluateCall(known.call.summary, known.call.args.map(resolveKnown), 0)
-            : evaluateKnown(known.expr!.e, new Map(known.expr!.env.map(([n, v]) => [n, resolveKnown(v)])), known.expr!.scope, 0));
+            : evaluateKnown(known.expr!.e, new Map(known.expr!.env.map(([n, v]) => [n, resolveKnown(v)])), known.expr!.scope, 0),
+            symbolic(known) ? SYMBOLIC_BUDGET : EVALUATION_BUDGET);
         const result: Known = { ...known };
         for (const key of ["index", "size", "items", "cell", "range", "fn", "boolean", "string", "char", "float", "number", "tag"] as const) {
             if (result[key] === undefined && facts?.[key] !== undefined) (result as Record<string, unknown>)[key] = facts[key];
@@ -2300,8 +2323,48 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (k.tag !== undefined || k.char !== undefined || k.fn) return true;
         return undefined;
     }
+    const evaluated = new WeakMap<Expr, { entries: (Entry | undefined)[]; result: Known | undefined }[]>();
+    // Copies of a binding (blocks copy outer entries) evaluate alike: the same
+    // type and the same facts.
+    function sameBinding(a: Entry | undefined, b: Entry | undefined): boolean {
+        if (a === b) return true;
+        if (!a || !b) return false;
+        return a.type === b.type && a.builtin === b.builtin && a.mono === b.mono && a.clauses === b.clauses &&
+            (["index", "size", "items", "cell", "range", "boolean", "string", "char", "float", "number", "tag", "ref", "call", "expr", "fn"] as const).every(key => a[key] === b[key]);
+    }
+    // Every variable name an expression mentions (shadowing ignored: more is safe).
+    const mentioned = new WeakMap<Expr, string[]>();
+    function mentionedNames(e: Expr): string[] {
+        let names = mentioned.get(e);
+        if (!names) {
+            const found = new Set<string>();
+            const walk = (x: unknown): void => {
+                if (!x || typeof x !== "object") return;
+                if (Array.isArray(x)) { x.forEach(walk); return; }
+                const node = x as Record<string, unknown>;
+                if (node.t === "var" && typeof node.name === "string") found.add(node.name);
+                for (const value of Object.values(node)) if (value && typeof value === "object") walk(value);
+            };
+            walk(e);
+            mentioned.set(e, names = [...found]);
+        }
+        return names;
+    }
     // What e evaluates to, given known values of the names in env.
-    function evaluateKnown(e: Expr, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
+    function evaluateKnown(e: Expr, env: Map<string, Known>, scope: Scope, depth: number, fresh = false): Known | undefined {
+        // A compound expression over no local values is evaluated once for the
+        // same bindings of the names it mentions: nested arguments (f (g (h x)))
+        // are each checked as call arguments, in copies of one scope.
+        if (!fresh && env.size === 0 && (e.t === "app" || e.t === "binop" || e.t === "block")) {
+            const names = mentionedNames(e), entries = names.map(name => scope.get(name));
+            const cached = evaluated.get(e) ?? [];
+            const hit = cached.find(c => c.entries.every((entry, n) => sameBinding(entry, entries[n])));
+            if (hit) return hit.result;
+            const result = evaluateKnown(e, env, scope, depth, true);
+            cached.push({ entries, result });
+            evaluated.set(e, cached);
+            return result;
+        }
         const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
         switch (e.t) {
             case "int": return { index: constant(e.v) };
@@ -2669,7 +2732,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "zipWith": {
                 const f = args[0](), xs = args[1](), ys = args[2]();
                 if (!xs?.items && !xs?.cell || !ys?.items && !ys?.cell) {
-                    const a = knownLength(xs), b = knownLength(ys);
+                    // A list of unknown length decides nothing; skip walking the other.
+                    if (!isList(xs) || !isList(ys)) return undefined;
+                    const a = knownLength(xs), b = a === undefined ? undefined : knownLength(ys);
                     return a === undefined || b === undefined ? undefined : { size: a < b ? a : b };
                 }
                 return unfold<[Known, Known]>([xs, ys], ([left, right]) => {
@@ -2688,9 +2753,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const result: Known = {};
         const same = (x: unknown, y: unknown) => x !== undefined && x === y;
         if (a.index && b.index && !a.index.terms.size && !b.index.terms.size && a.index.constant === b.index.constant) result.index = a.index;
+        // A lazy list meets a list of known length if it has exactly that many
+        // elements; only that many cells are walked.
         if ((a.cell || b.cell) && isList(a) && isList(b)) {
-            const x = knownLength(a), y = knownLength(b);
-            if (x !== undefined && x === y) result.size = x;
+            const [fixed, other] = a.cell ? [b, a] : [a, b];
+            const n = fixed.cell ? undefined : knownLength(fixed);
+            if (n !== undefined && n <= BigInt(Number.MAX_SAFE_INTEGER) && hasLength(other, Number(n))) result.size = n;
         }
         for (const key of ["size", "boolean", "string", "char", "float", "tag"] as const) {
             if (same(a[key], b[key])) (result as Record<string, unknown>)[key] = a[key];

@@ -286,7 +286,12 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   `evaluateApp`/`evaluateBinop`/`evaluateBlock` cases) free of per-call
   closures, so frames stay small and recursion reaches the runtime's own
   depth. A ternary or clause set whose first result has no facts stops
-  early, so recursion over unknown values stays cheap. A block gives each
+  early, so recursion over unknown values stays cheap. A value over
+  parameters gets only `SYMBOLIC_BUDGET` (it is decided again at each call),
+  a list's length is never walked when the other side of a `zipWith` or a
+  meet is unknown or endless, and argument-free compound expressions are
+  cached per node and the bindings of the names they mention
+  (`sameBinding`), since nested call arguments are each evaluated. A block gives each
   name it defines one slot (`Known.slot`, read through `lookup`): lazy
   definitions store a memoized thunk (`once`, which reports a value that
   needs itself as unknown) and eager ones a value, so earlier closures see
