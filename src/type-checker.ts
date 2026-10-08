@@ -36,12 +36,15 @@ interface Shape { arg?: number; length?: LengthRef; items?: (Shape | undefined)[
 // callArgs collects a call's arguments so the complete call can be ranked as
 // the runtime ranks clauses (see clauseFn dispatch in interp.ts).
 interface ClauseOrder { index: number; params: Pattern[]; refutable: Set<string> }
-interface Known { index?: Index; boolean?: boolean; string?: string }
+// ref names the parameter (by binder) whose value this is, when the value
+// itself is only known at that function's calls.
+interface Known { index?: Index; boolean?: boolean; string?: string; ref?: string }
 interface Entry {
     type: Ty;
     index?: Index;
     boolean?: boolean;
     string?: string;
+    ref?: string;
     clauses?: { params: Pattern[]; body: Expr }[];
     mono?: boolean;
     inherited?: boolean;
@@ -220,6 +223,7 @@ function copy(
     vars = new Map<Ty, Ty>(),
     subst?: [string, Index],
     nodes = new Map<Ty, Ty>(),
+    value?: [string, Known],
 ): Ty {
     t = resolve(t);
     if (vars.has(t)) return vars.get(t)!;
@@ -233,7 +237,7 @@ function copy(
     // into the new graph rather than the original polymorphic instance.
     const result = { ...t } as Ty;
     nodes.set(t, result);
-    const go = (x: Ty) => copy(x, vars, subst, nodes);
+    const go = (x: Ty) => copy(x, vars, subst, nodes, value);
     switch (t.k) {
         case "overload":
         case "union":
@@ -245,6 +249,11 @@ function copy(
         case "operation": {
             let known = t.known;
             if (known?.index && subst && known.index.terms.has(subst[0])) known = { ...known, index: substituteIndex(known.index, subst) };
+            // The parameter's value is now the argument's: a literal, or another parameter.
+            if (known?.ref && value && known.ref === value[0]) {
+                const v = value[1];
+                known = { index: known.index, boolean: v.boolean, string: v.string, ref: v.ref };
+            }
             Object.assign(result, { args: t.args.map(go), solution: t.solution && go(t.solution), known });
             break;
         }
@@ -361,7 +370,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return t.args.some(x => waiting(x, seen));
     }
     function deferredCall(f: Ty, argument: Entry): Ty {
-        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, boolean: argument.boolean, string: argument.string } };
+        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, boolean: argument.boolean, string: argument.string, ref: argument.ref } };
         requirements.push(result);
         return resolve(result);
     }
@@ -1212,8 +1221,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             collect(argument.type);
             // With this argument's value known, the function's deferred checks
             // (calls on the parameter) see that value instead of its symbol.
-            const pending = f.binder && argument.index
-                ? checks.map(check => copy(check, new Map([...variables(check)].map(t => [t, t])), [f.binder!, argument.index!]))
+            const value: Known = { index: argument.index, boolean: argument.boolean, string: argument.string, ref: argument.ref };
+            const known = argument.index || argument.boolean !== undefined || argument.string !== undefined || argument.ref;
+            const pending = f.binder && known
+                ? checks.map(check => copy(check, new Map([...variables(check)].map(t => [t, t])),
+                    argument.index ? [f.binder!, argument.index] : undefined, undefined, [f.binder!, value]))
                 : checks;
             const output = resolve(f.output);
             if (output.k === "fn") output.checks = [...output.checks ?? [], ...pending];
@@ -1447,6 +1459,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     index: index(a, scope),
                     boolean: boolean(a, scope),
                     string: a.t === "string" ? a.v : a.t === "var" ? scope.get(a.name)?.string : undefined,
+                    ref: a.t === "var" ? scope.get(a.name)?.ref : undefined,
                 }, a);
                 // A partial application that leaves its call chain is an ordinary function value.
                 return callees.has(e) ? result : withoutShapes(result);
@@ -1978,6 +1991,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     ...scope.get(name)!,
                     mono: true,
                     index: { constant: 0n, terms: new Map([[binder!, 1n]]) },
+                    ref: binder,
                 });
             }
             const constructor = p.p === "constr" ? resolve(scope.get(p.tag)?.type ?? dynamic) : undefined;

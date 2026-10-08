@@ -1003,6 +1003,11 @@ print (onlyOne (zeroOrPairOf 0))              # 0
 # The literal can also arrive through another function's parameter.
 onlyOneOf n = onlyOne (zeroOrPairOf n)
 print (onlyOneOf 0)                           # 0
+# Booleans and strings too: the clause is chosen at each call of the wrapper.
+flagged true = [1]
+flagged b = [0, 0]
+onlyFlag b = onlyOne (flagged b)
+print (onlyFlag true)                         # 1
 sortedAndReversed xs = [sort xs, reverse xs]
 firstOfBoth [[a, b], [c, d]] = [a, c]
 print (firstOfBoth (sortedAndReversed [3, 1]))  # [1, 1]

@@ -322,3 +322,25 @@ for (const source of [
     'f (Int n) = [0]; f (String s) = [1, 2]; h x = g (f x); k y = h y; g [a] = a; k "s"',
     'f (Int n) = 1; h x = (f x) + 1; k y = h y; k "s"',
 ]) Deno.test(`literals through parameters stay checked: ${source}`, () => rejected(session(), source));
+// Boolean and string literals reach clauses through parameters too.
+for (const [source, expected] of [
+    ['f true = [0]; f b = [1, 2]; h x = g (f x); g [a] = a; h true', '0'],
+    ['f true = [0]; f b = [1, 2]; h x = g (f x); g [a, b] = a; h false', '1'],
+    ['f "x" = [0]; f s = [1, 2]; h x = g (f x); g [a] = a; h "x"', '0'],
+    ['f "x" = [0]; f s = [1, 2]; h x = g (f x); g [a, b] = a; h "y"', '1'],
+    ['f true = [0]; f b = [1, 2]; h x = g (f x); k y = h y; g [a] = a; k true', '0'],
+    ['f "x" = [0]; f s = [1, 2]; h x = g (f x); k y = h y; m z = k z; g [a] = a; m "x"', '0'],
+    ['f "x" = [0]; f s = [1, 2]; h n s = g (f s); g [a] = a; h 1 "x"', '0'],
+    ['f "x" = [0]; f s = [1, 2]; h x = { x = "y"; g (f x) }; g [a, b] = a; h "x"', '1'],
+] as const) Deno.test(`boolean and string literals through parameters: ${source}`, () => {
+    const actual = run(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'f true = [0]; f b = [1, 2]; h x = g (f x); g [a] = a; h false',
+    'f true = [0]; f b = [1, 2]; h x = g (f x); g [a, b] = a; h true',
+    'f "x" = [0]; f s = [1, 2]; h x = g (f x); g [a] = a; h "y"',
+    'f true = [0]; f b = [1, 2]; h x = g (f x); k y = h y; g [a] = a; k false',
+    'f true = [0]; f b = [1, 2]; h x = g (f x); g [a] = a; [h true, h false]',
+    'f "x" = [0]; f s = [1, 2]; h x = { x = "y"; g (f x) }; g [a] = a; h "x"',
+]) Deno.test(`boolean and string literals through parameters stay checked: ${source}`, () => rejected(session(), source));

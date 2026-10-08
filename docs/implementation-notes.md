@@ -237,9 +237,10 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   certainly after a definitely matching clause, are dropped. Keep
   `patternScore` in step with the runtime's scoring.
 - A deferred call (`deferredCall`) keeps what is known about its argument's
-  value (`known`, possibly a parameter's symbolic index). Applying a function
-  whose parameter has a binder substitutes the argument's index into copies of
-  its pending checks; checks still waiting on an unknown argument are
+  value (`known`: a literal, a parameter's symbolic index, or `ref`, the binder
+  of the parameter whose value it is). Applying a function whose parameter has
+  a binder substitutes the argument's index and value (`copy`'s `value`) into
+  copies of its pending checks; checks still waiting on an unknown argument are
   re-registered in the enclosing function's requirements. A `require` check
   waits while its call does (`waiting`) instead of using the call's
   provisional `solution`.
