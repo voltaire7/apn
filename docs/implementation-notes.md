@@ -412,7 +412,8 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   while trying an overload's choices (`choosing`), and function minus keeps its negated
   operand's facts as the `-` operation's `known`. `castKnown` converts a
   known argument value to the parameter type (list elements, or a list's
-  elements to a record schema's fields; a pending `expr` is re-evaluated once
+  elements to a record schema's fields, or a one-field variant's `payload`,
+  which constructor applications record; a pending `expr` is re-evaluated once
   no longer symbolic); `problem` reports a deferred
   check (a `placeholder`) at the active call, except while the top-level
   definition that deferred it (`operation.within`, `outermost`) is still

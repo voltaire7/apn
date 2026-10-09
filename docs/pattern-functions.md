@@ -70,6 +70,10 @@ patterns, which convert as a whole-argument type pattern does:
 `pair [UInt8 a,UInt8 b] = a + b` accepts `pair [3,3]` (and
 `[UInt8 a,UInt8 b] = [3,3]` as a binding), while `pair [3,300]` is a static
 range error; `firstFloat ((Float x):rest) = x` returns `1.0` for `[1,2]`.
+Variant payloads convert the same way: `g (Some (Float x)) = x` returns `1.0`
+for `g (Some 1)`, and `g (Some 300)` is a static range error for
+`g (Some (UInt8 x))`, also through a variable (`k = Some 300`) or another
+function (`h x = g (Some x)` rejects `h 300`).
 
 For records, the bare-name pattern
 `[x,y]` requires those fields, ignores field order, and permits extra fields.

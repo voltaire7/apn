@@ -1054,6 +1054,12 @@ for (const [source, expected] of [
     ['[UInt8 a,UInt8 b] = [3,3]; a + b', '6'],
     ['(Float x):rest = [1,2]; x', '1.0'],
     ['g [UInt8 a,UInt8 b] = a; h x = g [x,x * 100]; h 1', '1'],
+    ['import "option"; g (Some (UInt8 x)) = x; g (Some 3)', '3'],
+    ['import "option"; g (Some (Float x)) = x; g (Some 1)', '1.0'],
+    ['import "option"; (Some (Float x)) = Some 1; x', '1.0'],
+    ['import "option"; g (Some (UInt8 x)) = x; k = Some 3; g k', '3'],
+    ['import "option"; g (Some (UInt8 x)) = x; h x = g (Some x); h 3', '3'],
+    ['import "option"; g (Some (UInt8 x)) = x; h x = g x; h (Some 3)', '3'],
     ['f y = { Float x = y; x * 2 }; f 1.5', '3.0'],
 ] as const) Deno.test(`typed binding: ${source}`, () => {
     if (run(session(), source) !== expected) throw new Error(source);
@@ -1070,7 +1076,11 @@ for (const source of ['Int x = "a"', 'Int x = 2.5', 'Int8 x = 300', 'Int x = 1; 
     'Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g [x,-x]; h 2', 'Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g x; h [2,-2]',
     'Pt = [x: Float, y: Float]; g (Pt p) = p.x; h x = g x; h [1]', 'g ((Int -> Int) f) = f 1; h x = g x; h 5', 'g (String s) = s; h x = g x; h 1',
     'g [UInt8 a,UInt8 b] = a; g [3,300]', 'g [UInt8 a,UInt8 b] = a; g [3,-1]', 'g [UInt8 a,UInt8 b] = a; h x = g [x,x * 100]; h 3',
-    '[UInt8 a,UInt8 b] = [3,300]', 'g [String s,Int n] = s; g [1,2]']) {
+    '[UInt8 a,UInt8 b] = [3,300]', 'g [String s,Int n] = s; g [1,2]',
+    'import "option"; g (Some (UInt8 x)) = x; g (Some 300)', 'import "option"; g (Some (UInt8 x)) = x; g (Some (-1))',
+    'import "option"; g (Some (Int x)) = x; g (Some 2.5)', 'import "option"; (Some (UInt8 x)) = Some 300',
+    'import "option"; g (Some (String x)) = x; g (Some 1)', 'import "option"; g (Some (UInt8 x)) = x; k = Some 300; g k',
+    'import "option"; g (Some (UInt8 x)) = x; h x = g (Some x); h 300', 'import "option"; g (Some (UInt8 x)) = x; h x = g x; h (Some 300)']) {
     Deno.test(`typed binding rejects: ${source}`, () => rejected(session(), source));
 }
 for (const source of ['Int = 5', 'Int x y = 5']) Deno.test(`a built-in type name is not redefined: ${source}`, () => {

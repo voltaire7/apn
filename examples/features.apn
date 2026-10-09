@@ -474,6 +474,8 @@ typedLam = (Int x) -> x + 1         # lambdas take constructor patterns too
 print (typedLam 5)                  # => 6
 bytePair [UInt8 a,UInt8 b] = a + b  # typed elements convert like a typed parameter
 print (bytePair [3,4])              # => 7 (bytePair [3,300] is a static range error)
+someFloat (Just (Float x)) = x      # so do variant payloads
+print (someFloat (Just 1))          # => 1.0
 tailOf (x:rest) = rest              # ':' in a pattern is always cons
 print (tailOf [1,2,3])            # => [2,3]
 
