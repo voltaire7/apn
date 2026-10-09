@@ -36,6 +36,11 @@ needs no commas. Juxtaposition on one line is application: `[f 2]` is a
 one-element list. Write a cons expression inside a list literal in parentheses,
 `[(0:[])]`, because `[0: []]` is record syntax.
 
+`:` always adds one element, the mirror of the cons pattern `x:xs`, which binds
+one element: `[1,2]:[[3,4]]` is `[[1,2],[3,4]]`, and inner lists may differ in
+length as in a literal (`[1]:[[3,4]]`). It never joins lists: `[1,2]:[3,4]`
+is a type error whose hint suggests `++` (`[1,2] ++ [3,4]`).
+
 `( )` and `{ }` are interchangeable statement groups. Their value is the last
 statement's value (`(4 * 3)` and `{ 4 * 3 }` are both `12`), and an empty group is
 `[]`. Definitions inside a group are local to it:

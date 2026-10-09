@@ -999,6 +999,20 @@ for (const [source, line, column] of [
     }
     throw new Error("accepted");
 });
+// ':' adds one element (the mirror of the x:xs pattern); joining is ++.
+Deno.test("':' adds one element and hints at ++ for a list on its left", () => {
+    for (const source of ['[1,2]:[3,4]', '[1,2]:3:[4,5]']) {
+        try { run(session(), source); } catch (error) {
+            if ((error as { hint?: string }).hint?.includes("use ++")) continue;
+            throw error;
+        }
+        throw new Error(`accepted: ${source}`);
+    }
+    for (const [source, expected] of [['[1]:[[3,4]]', '[[1],[3,4]]'], ['xs = [[3,4]]; [1,2,3]:xs', '[[1,2,3],[3,4]]'], ['[1,2]:[[3,4]]', '[[1,2],[3,4]]'],
+            ['x:xs = [1]:[[3,4]]; x', '[1]'], ['length ([1]:[[3,4]])', '2']]) {
+        if (run(session(), source) !== expected) throw new Error(source);
+    }
+});
 Deno.test("a broken reader of a broken definition reports the original problem", () => {
     try { run(session(), 'c n = n * 2; a = c 1; b x = a + x; d x = b x; c s = s ++ "?"; d 1'); } catch (error) {
         const { message, hint } = error as { message: string; hint?: string };

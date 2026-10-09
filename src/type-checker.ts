@@ -2443,7 +2443,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return atom("Bool");
                 }
                 if (e.op === ":") {
-                    unify(list(a), b, e);
+                    const head = resolve(a), before = resolve(b);
+                    const inner = before.k === "list" ? resolve(before.element) : undefined;
+                    // Lists of different lengths share a list of lists, as in a
+                    // literal ([1]:[[3,4]] is [[1],[3,4]]).
+                    if (head.k === "list" && inner?.k === "list" && before.k === "list") {
+                        unify(head.element, inner.element, e);
+                        return list(list(head.element), before.length ? indexAdd(before.length, constant(1n)) : undefined);
+                    }
+                    // ':' adds one element; a list on its left that does not fit
+                    // is probably meant to be joined.
+                    try { unify(list(a), b, e); }
+                    catch (error) {
+                        if (head.k === "list" && error && typeof error === "object" && "message" in error && !(error as TypeIssue).hint) {
+                            (error as TypeIssue).hint = "':' adds one element; to join lists use ++ (write [1,2] ++ [3,4])";
+                        }
+                        throw error;
+                    }
                     const tail = resolve(b);
                     return list(a, tail.k === "list" && tail.length ? indexAdd(tail.length, constant(1n)) : undefined);
                 }
