@@ -51,6 +51,8 @@ for (const [name, source, expected] of [
         ["Node Leaf 2 Leaf 3", "[2,3]"]],
     ["Functor and Monad patterns", 'import "option"\ndouble (Functor m) = fmap (* 2) m\nprint (double [1,2])\nprint (double (Some 3))\nx <- double (return 4)\nprint x\nisMonad (Monad m) = true\nisMonad x = false\nprint [isMonad [1],isMonad 1]',
         ["[2,4]", "Some 6", "8", "[true,false]"]],
+    ["undecided values and actions print without running", 'print $ return 123\nprint [return "a"]\nprint (return 1 >>= (x -> return x))\nprint (print 1)',
+        ["Monad 123", '[Monad "a"]', "Monad", "IO print"]],
 ] as const) Deno.test(`monads: ${name}`, () => {
     for (const checked of [true, false]) {
         const actual = run(source, checked);

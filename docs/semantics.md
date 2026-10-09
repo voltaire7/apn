@@ -369,8 +369,8 @@ to do. `print "hi"` builds the action that prints `hi`; nothing is printed
 until the action runs. The effectful builtins all return actions: `print` and
 `emit` (yielding `[]`), `readFile`, `readStdin`, `getArgs`, `fetch`, `exit`,
 `set` (writing a `Mutable` cell), `env`, `bracket`, `withFile` and
-`ffi.withLibrary`. An action prints as `<IO>` (with the builtin's name, as in
-`<IO print>`) and `typeOf` describes it as `IO`.
+`ffi.withLibrary`. An action prints as `IO` followed by the builtin that made it (`print 1`
+prints as `IO print`), and `typeOf` describes it as `IO`.
 
 Actions run in exactly two places:
 
@@ -458,7 +458,8 @@ takes the monad of the first context that names one:
 - running it: a statement or `<-` runs it as IO.
 
 Until then it stays undecided, so one `return` value can be used in several
-monads. `Monad` and `Functor` are also types for patterns: `(Functor m)`
+monads; it prints as `Monad` and its value (`print (return 123)` prints
+`Monad 123`), and an undecided `>>=` or do-block prints as `Monad`. `Monad` and `Functor` are also types for patterns: `(Functor m)`
 accepts any value `fmap` works on, `(Monad m)` any monadic value.
 
 A do-block is in the monad of its first `<-` (or annotation): a list block

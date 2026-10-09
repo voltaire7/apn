@@ -3986,7 +3986,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         k = readMutable(k);
         if (!k) return undefined;
         // An action renders without running (its label is not known here).
-        if (demand(k)?.action) return "<IO>";
+        if (demand(k)?.action) return "IO";
         const n = numericOf(k);
         if (n !== undefined) return valueToString(n as Value);
         if (k.string !== undefined) return valueToString(mkStr(k.string));

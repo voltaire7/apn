@@ -58,7 +58,7 @@ function source(e: Expr, parent = -1): string {
 // Inspect syntax only: never demand bound arguments or walk a captured environment.
 function argument(v: Value): string {
     if (v.kind === "thunk") return source(v.body);
-    if (v.kind === "deferred") return "<deferred>";
+    if (v.kind === "deferred") return "...";
     return valueToString(v);
 }
 export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" | "native" }>): string {

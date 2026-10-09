@@ -243,7 +243,7 @@ export function showValue(v: Value): string {
         case "list":
             return paint(A.gray, "[") + v.v.map(showValue).join(paint(A.gray, ",")) +
                 paint(A.gray, "]");
-        case "lazyList": return paint(A.gray, "<lazy>");
+        case "lazyList": return paint(A.gray, "[...]");
         case "record":
             return paint(A.gray, "[") +
                 v.v.map(([k, x]) => `${keySource(k)}${paint(A.gray, ": ")}${showValue(x)}`).join(paint(A.gray, ", ")) +

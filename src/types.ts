@@ -1,6 +1,6 @@
 import { keySource } from "./record-keys.ts";
 import { functionSource } from "./function-source.ts";
-import { type Numeric, type Real, numberText } from "./numbers.ts";
+import { type Numeric, type Real, arithmetic, numberText } from "./numbers.ts";
 import type { Expr, Pattern } from "./ast.ts";
 
 // ---------------- Types & values ----------------
@@ -95,15 +95,15 @@ export function valueToString(v: Value): string {
             return (v.description ?? v.name) + (v.arguments?.length ? " " + v.arguments.map(typeToString).join(" ") : "");
         }
         case "hashmap": return `HashMap [${[...v.entries.values()].map(([k, x]) => `[${valueToString(k)},${valueToString(x)}]`).join(",")}]`;
-        case "rationalRange": return "<rational range>";
+        case "rationalRange": return rangeText(v.lo, arithmetic("+", v.lo, v.step), v.hi);
         case "bool": return String(v.v);
         case "string": return `"${v.v}"`;
         case "char": return `'${v.v === "\0" ? "\\0" : v.v}'`;
         case "list": return `[${v.v.map(valueToString).join(",")}]`;
         case "lazyList":
-        case "cons": return "<lazy list>";
-        case "deferred": return "<thunk>";
-        case "floatRange": return `<float range>`;
+        case "cons": return "[...]";
+        case "deferred": return "...";
+        case "floatRange": return rangeText({ kind: "float", v: v.lo }, { kind: "float", v: v.lo + v.step }, v.hi === null ? null : { kind: "float", v: v.hi });
         case "range": {
             if (v.hi === null) return `[${v.lo}${v.step !== 1n ? `,${v.lo + v.step}` : ""}..]`;
             const out: Value[] = [];
@@ -118,13 +118,22 @@ export function valueToString(v: Value): string {
             return v.tag + args;
         }
         case "closure": return functionSource(v);
-        case "thunk": return "<thunk>";
+        case "thunk": return "...";
         case "native": return functionSource(v);
         case "clauseFn": return functionSource(v);
-        case "nomatch": return "<nomatch>";
-        case "io": return v.label ? `<IO ${v.label}>` : "<IO>";
-        case "pending": return "<Monad>";
+        case "nomatch": return "nomatch";
+        // An action shows the builtin that made it; running it is the only way
+        // to see its result.
+        case "io": return v.label ? `IO ${v.label}` : "IO";
+        // An undecided return shows its value; a >>= or do-block cannot be
+        // shown without running it.
+        case "pending": return v.step.op === "return" ? `Monad ${valueToString(v.step.value)}` : "Monad";
     }
+}
+
+// A range in source form: [lo,next..hi], or [lo,next..] when endless.
+function rangeText(lo: Numeric, next: Numeric, hi: Numeric | null): string {
+    return `[${numberText(lo)},${numberText(next)}..${hi === null ? "" : numberText(hi)}]`;
 }
 
 // Environment: a chain of hash maps. Shared mutable object per scope.

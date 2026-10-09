@@ -2098,6 +2098,11 @@ export class Interpreter {
             } else if (v.kind === "variant") {
                 emit(v.tag, "variant");
                 for (const arg of v.v) { emit(" "); this.render(arg, emit, false, ancestors); }
+            } else if (v.kind === "pending" && v.step.op === "return") {
+                // An undecided return shows like a constructor: Monad 123.
+                emit("Monad", "variant");
+                emit(" ");
+                this.render(v.step.value, emit, false, ancestors);
             } else emit(raw ? rawString(v) : valueToString(v), v.kind);
         } finally {
             ancestors.delete(v);
