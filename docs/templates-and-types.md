@@ -393,10 +393,10 @@ constructor needs a leading pipe:
 
 ```apn
 Option a = Some a | None
-Maybe a = Option a
+Optional a = Option a
 UserId = | MkUserId Int
 
-(Maybe Int) (Some 123)     # Some 123
+(Optional Int) (Some 123)  # Some 123
 (Option Int) None          # None
 MkUserId 123               # MkUserId 123
 Some value = Some 123      # destructures; value is 123

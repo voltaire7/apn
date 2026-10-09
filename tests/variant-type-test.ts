@@ -5,13 +5,13 @@ function result(source: string): string {
     return interpreter.renderString(interpreter.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['Maybe x = Just x | Nothing\nf (Maybe x) = match x [Just y -> y,Nothing -> 0]\n[f (Just 123),f Nothing]', '[123,0]'],
-    ['Maybe x = Just x | Nothing\nf (Maybe x) = true\nf _ = false\n[f (Just missing),f Nothing,f 123]', '[true,true,false]'],
-    ['Maybe x = Just x | Nothing\nOther x = | Else x\nf (Maybe x) = true\nf _ = false\nf (Else 1)', 'false'],
-    ['Maybe x = Just x | Nothing\nmatch (Just 3) [Maybe x -> x]', 'Just 3'],
-    ['Maybe x = Just x | Nothing\n[match Nothing [Maybe x -> 1,_ -> 0],match 2 [Maybe x -> 1,_ -> 0]]', '[1,0]'],
-    ['Maybe x = Just x | Nothing\n[Maybe (Just 1),cast Maybe Nothing,isType Maybe (Just missing),isType Maybe 1,typeOf (Just 1)]', '[Just 1,Nothing,true,false,Maybe]'],
-    ['Maybe x = Just x | Nothing\nf (Just x) = x\nf (Just 123)', '123'],
+    ['Option x = Some x | None\nf (Option x) = match x [Some y -> y,None -> 0]\n[f (Some 123),f None]', '[123,0]'],
+    ['Option x = Some x | None\nf (Option x) = true\nf _ = false\n[f (Some missing),f None,f 123]', '[true,true,false]'],
+    ['Option x = Some x | None\nOther x = | Else x\nf (Option x) = true\nf _ = false\nf (Else 1)', 'false'],
+    ['Option x = Some x | None\nmatch (Some 3) [Option x -> x]', 'Some 3'],
+    ['Option x = Some x | None\n[match None [Option x -> 1,_ -> 0],match 2 [Option x -> 1,_ -> 0]]', '[1,0]'],
+    ['Option x = Some x | None\n[Option (Some 1),cast Option None,isType Option (Some missing),isType Option 1,typeOf (Some 1)]', '[Some 1,None,true,false,Option]'],
+    ['Option x = Some x | None\nf (Some x) = x\nf (Some 123)', '123'],
     ['Box x = | Box x\nf (Box x) = x\nf (Box 123)', '123'],
 ] as const) {
     Deno.test(`declared variant types: ${source}`, () => {
@@ -25,16 +25,16 @@ Deno.test("parent type checks leave fields of partially-applied constructors laz
 });
 Deno.test("parent type pattern resolves in the function's module scope", () => {
     const interpreter = new Interpreter();
-    interpreter.moduleSources = { "/lib/option.apn": 'Maybe x = Just x | Nothing\nf (Maybe x) = 42' };
+    interpreter.moduleSources = { "/lib/option.apn": 'Option x = Some x | None\nf (Option x) = 42' };
     interpreter.sourceDir = "/app/";
-    const actual = interpreter.renderString(interpreter.run(parseDocument('m = import "option"\nMaybe x = | Other x\nm.f (m.Just missing)')));
+    const actual = interpreter.renderString(interpreter.run(parseDocument('m = import "option"\nOption x = | Other x\nm.f (m.Some missing)')));
     if (actual !== '42') throw new Error(actual);
 });
 Deno.test("user's original pattern dispatch prints the payload", () => {
     const output: string[] = [];
     const log = console.log;
     console.log = (value) => output.push(String(value));
-    try { result('Maybe x = Just x | Nothing\nfunc (Maybe x) = match x [\n    Just x -> print x\n    Nothing -> _\n]\nfunc (Just 123)'); }
+    try { result('Option x = Some x | None\nfunc (Option x) = match x [\n    Some x -> print x\n    None -> _\n]\nfunc (Some 123)'); }
     finally { console.log = log; }
     if (output.join() !== '123') throw new Error(JSON.stringify(output));
 });

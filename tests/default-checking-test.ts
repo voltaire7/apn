@@ -906,7 +906,7 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
     for (const [source, message, hint] of [
         ["func (Some x):xs = print [x,xs]", "unknown constructor 'Some' in a pattern", 'add import "option"'],
         ["print None", "unbound variable 'None'", 'add import "option"'],
-        ["Maybe a = Just a | Nothing; k (Jsut x) = x", "unknown constructor 'Jsut' in a pattern", "did you mean 'Just'?"],
+        ["Option a = Some a | None; k (Smoe x) = x", "unknown constructor 'Smoe' in a pattern", "did you mean 'Some'?"],
     ]) {
         try { run(session(), source); } catch (error) {
             const e = error as { message: string; hint?: string };
@@ -1068,6 +1068,8 @@ for (const [source, expected] of [
     ['import "option"; g (Some (UInt8 x)) = x; g (Some 3)', '3'],
     ['import "option"; g (Some (Float x)) = x; g (Some 1)', '1.0'],
     ['import "option"; (Some (Float x)) = Some 1; x', '1.0'],
+    // An imported constructor destructures without parentheses, as a declared one does.
+    ['import "option"; Some v = Some 123; f (Some (Float x)) = x; [v,f (Some 1)]', '[123,1.0]'],
     ['import "option"; g (Some (UInt8 x)) = x; k = Some 3; g k', '3'],
     ['import "option"; g (Some (UInt8 x)) = x; h x = g (Some x); h 3', '3'],
     ['import "option"; g (Some (UInt8 x)) = x; h x = g x; h (Some 3)', '3'],

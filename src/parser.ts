@@ -340,7 +340,7 @@ class Parser {
                 const value = this.parsePattern();
                 return { p: "constr", tag: name, args: [size, element, value] };
             }
-            // constructor application: Just x
+            // constructor application: Some x
             if (/^[A-Z]/.test(name)) {
                 const args = [] as Pattern[];
                 while (this.startsParam(this.peek())) {
@@ -1026,10 +1026,10 @@ class Parser {
     }
 
     // Destructuring binding:  pattern = value
-    //   [name, hello] = [...],  (Just x) = ...,  Just v = ...
+    //   [name, hello] = [...],  (Some x) = ...,  Some v = ...
     // Only unambiguous pattern starts are tried - `[`, `(` + Uppercase
     // constructor, a bare Uppercase constructor, or a dotted name - so statements like
-    // `[1, 2, 3] $ head`, `name = 5`, or `Just (f x)` never reach the pattern
+    // `[1, 2, 3] $ head`, `name = 5`, or `Some (f x)` never reach the pattern
     // path.
     startsPatBinding(): boolean {
         const t = this.peek();
@@ -1249,7 +1249,7 @@ class Parser {
     // Lookahead: is the statement starting at the current identifier a binding
     // definition? Recognizes  name = expr  and the Haskell-style
     // name p1 p2 p3 = expr  where each pi is a PATTERN
-    // (in `[x, y]`, `(x:rest)`, `[]`, `(Just x)`, a literal, a bare var, ...).
+    // (in `[x, y]`, `(x:rest)`, `[]`, `(Some x)`, a literal, a bare var, ...).
     isDef(): boolean {
         const save = this.i;
         try {
@@ -1474,7 +1474,7 @@ class Parser {
                 // A binding definition. Supports the Haskell-style param form too:
                 //   name = expr            name a b c = expr
                 // An Uppercase constructor on the LHS is a destructuring BINDING
-                // (Just v = ...), not a function definition.
+                // (Some v = ...), not a function definition.
                 if (this.isPatBinding()) {
                     out.push(this.parsePatBinding() as TopLevel);
                     continue;
@@ -1528,7 +1528,7 @@ class Parser {
 }
 
 // Constructors declared via capitalized bindings. This is what makes an Uppercase LHS with
-// args ambiguous: `Just v = ...` destructures only when `Just` was DECLARED a
+// args ambiguous: `Some v = ...` destructures only when `Some` was DECLARED a
 // constructor; otherwise `Vector3 x y z = [x: x, y: y, z: z]` stays a plain
 // (record-constructor) function def. Module-level so declarations persist
 // across REPL lines (each line is re-parsed standalone).

@@ -15,14 +15,13 @@
 
 # ---------------------------------------------------------
 # 1. DATA TYPES (variants / ADTs)
-#    Unary constructor `Just` wraps a value; bare `Nothing` is a tag.
+#    The option module declares  Option a = Some a | None : the unary
+#    constructor `Some` wraps a value; bare `None` is a tag.
 # ---------------------------------------------------------
-Maybe a =
-    | Just a
-    | Nothing
+import "option"
 
-print (Just 42)        # => Just 42
-print Nothing          # => Nothing
+print (Some 42)        # => Some 42
+print None             # => None
 
 # ---------------------------------------------------------
 # 2. FUNCTIONS & LAMBDAS
@@ -70,14 +69,12 @@ print (fib 10)         # => 55
 #         f pat1 = body1
 #         f pat2 = body2
 # ---------------------------------------------------------
-Maybe a = Just a | Nothing
-
 safeHead xs = match xs [
-    [] -> Nothing
-    x:rest -> Just x
+    [] -> None
+    x:rest -> Some x
 ]
-print (safeHead [1,2,3])   # => Just 1
-print (safeHead [])          # => Nothing
+print (safeHead [1,2,3])   # => Some 1
+print (safeHead [])          # => None
 
 # multiple equations (clauses), like Haskell
 len [] = 0
@@ -136,11 +133,11 @@ print (factC 6)             # => 720
 
 # all patterns work here too: cons, literals, _ , guards, ...
 safeM xs = match xs [
-    [] -> Nothing
-    x:rest -> Just x
+    [] -> None
+    x:rest -> Some x
 ]
-print (safeM [3,4])        # => Just 3
-print (safeM [])            # => Nothing
+print (safeM [3,4])        # => Some 3
+print (safeM [])            # => None
 
 classM n = match n [
     x | x < 0 -> "negative"
@@ -370,12 +367,12 @@ print [first,rest]         # => [1,[2,3,4]]
 print others               # => [3,4]
 # first:rest = []          # static error: an empty list has no head
 
-# Constructor patterns destructure like Haskell — bare (Just v = ...),
-# parenthesized ((Just v) = ...), or nested in a list ([Just v] = [...]).
+# Constructor patterns destructure like Haskell — bare (Some v = ...),
+# parenthesized ((Some v) = ...), or nested in a list ([Some v] = [...]).
 # Existing constructor names destructure; new capital names bind type aliases.
-# Constructor declarations use | (a leading | for a single constructor).
-Maybe a = Just a | Nothing
-Just v = Just 123
+# Constructor declarations use | (a leading | for a single constructor),
+# as option's  Option a = Some a | None  does.
+Some v = Some 123
 print v                    # => 123
 
 # RENAME destructuring (Rust-style):  [srcKey: name, ...]  pulls those fields
@@ -474,8 +471,8 @@ typedLam = (Int x) -> x + 1         # lambdas take constructor patterns too
 print (typedLam 5)                  # => 6
 bytePair [UInt8 a,UInt8 b] = a + b  # typed elements convert like a typed parameter
 print (bytePair [3,4])              # => 7 (bytePair [3,300] is a static range error)
-someFloat (Just (Float x)) = x      # so do variant payloads
-print (someFloat (Just 1))          # => 1.0
+someFloat (Some (Float x)) = x      # so do variant payloads
+print (someFloat (Some 1))          # => 1.0
 Reading = Celsius Float | NoReading # a concrete field converts when constructed
 print (Celsius 21)                  # => Celsius 21.0
 Span = Span2 Int Int | NoSpan       # every payload field converts, by value
@@ -964,8 +961,8 @@ print (Point [x: 1, y: 2])          # => [x: 1.0, y: 2.0]
 firstNumber (Numbers values) = head values
 print (firstNumber [123])           # => 123
 print (cast [Int,Int] [1,2])           # => [1,2]
-NumericMaybe a = Maybe a
-print ((NumericMaybe Int) (Just 123)) # => Just 123
+NumericOption a = Option a
+print ((NumericOption Int) (Some 123)) # => Some 123
 UserId = | MkUserId Int
 print (MkUserId 123)                # => MkUserId 123
 
@@ -1255,14 +1252,14 @@ editorDouble x = x * 2
 print (editorDouble 21)                     # => 42
 
 # Parent type patterns bind the whole variant; constructor patterns unpack it.
-ExampleMaybe a = ExampleJust a | ExampleNothing
-exampleUnwrap (ExampleMaybe value) = match value [
-    ExampleJust x -> x
-    ExampleNothing -> 0
+ExampleOption a = ExampleSome a | ExampleNone
+exampleUnwrap (ExampleOption value) = match value [
+    ExampleSome x -> x
+    ExampleNone -> 0
 ]
-print (exampleUnwrap (ExampleJust 123))      # => 123
-print (exampleUnwrap ExampleNothing)        # => 0
-print (typeOf (ExampleJust 123))             # => ExampleMaybe
+print (exampleUnwrap (ExampleSome 123))      # => 123
+print (exampleUnwrap ExampleNone)        # => 0
+print (typeOf (ExampleSome 123))             # => ExampleOption
 
 # C interop is opt-in: importing it and declaring signatures runs no C code.
 ffiExample = import "ffi"
@@ -1282,9 +1279,9 @@ print (lazyCapture 1)                         # => 42
 
 # REPL regression: paste this expression, move after `match` on its first line,
 # and press Enter. Output must start below the closing ], preserving every line.
-match (Just 123) [
-    Just x -> print x
-    Nothing -> _
+match (Some 123) [
+    Some x -> print x
+    None -> _
 ]
 
 print (2 ^ 3 ^ 2)              # => 512

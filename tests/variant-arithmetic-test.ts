@@ -25,8 +25,8 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'Maybe a = Some a | None\nNone + 1',
-    'Maybe a = Some a | None\nSome 1 + 1',
+    'Option a = Some a | None\nNone + 1',
+    'Option a = Some a | None\nSome 1 + 1',
     'Direction + 1',
     'West / North',
     'UserId = distinct Int\nUserId 1 + East',

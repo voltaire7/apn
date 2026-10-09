@@ -247,20 +247,20 @@ constructor form (`f (Int x) = x`, `x = Int 5`).
 A declaration retains both the parent type and its constructors:
 
 ```apn
-Maybe a = Just a | Nothing
-func (Maybe value) = match value [
-    Just x -> print x
-    Nothing -> []
+Option a = Some a | None
+func (Option value) = match value [
+    Some x -> print x
+    None -> []
 ]
-func (Just 123)
+func (Some 123)
 ```
 
-`(Maybe value)` accepts either `Just ...` or `Nothing`, binding the entire
-variant to `value` without forcing its fields. `(Just x)` instead binds the
+`(Option value)` accepts either `Some ...` or `None`, binding the entire
+variant to `value` without forcing its fields. `(Some x)` instead binds the
 payload. Unrelated values fail the parent type pattern and may fall through to
-another clause. `Maybe value`, `cast Maybe value`, and `isType Maybe value` also
-check this membership; `typeOf (Just 123)` returns `Maybe`. Specialization such
-as `(Maybe Int) (Just 123)` applies the parameter's payload contract lazily.
+another clause. `Option value`, `cast Option value`, and `isType Option value` also
+check this membership; `typeOf (Some 123)` returns `Option`. Specialization such
+as `(Option Int) (Some 123)` applies the parameter's payload contract lazily.
 See [templates and type aliases](templates-and-types.md).
 
 When the parent and constructor share a name (`Box a = | Box a`), that name keeps

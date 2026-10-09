@@ -4482,6 +4482,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         return result;
     }
+    // A value constructor: a variant, or a function that returns one.
+    function isConstructor(entry: Entry | undefined): boolean {
+        if (!entry) return false;
+        let t = resolve(entry.type);
+        for (const seen = new Set<Ty>(); t.k === "fn" && !seen.has(t); t = resolve(t.output)) seen.add(t);
+        return t.k === "variant";
+    }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
         defineClauses(name, clauses, scope, location);
         const entry = scope.get(name);
@@ -4497,6 +4504,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (count && last.k === "fn" && resolve(last.input).k !== "atom") setShape(t, { length: { param: count - 1 } });
     }
     function defineClauses(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
+        // An existing constructor destructures (Some v = Some 123), also one
+        // imported, which the parser cannot see; as at runtime (evalDef).
+        if (/^[A-Z]/.test(name) && clauses.length === 1 && isConstructor(scope.get(name))) {
+            infer({ t: "patDef", pattern: { p: "constr", tag: name, args: clauses[0].params }, value: clauses[0].body }, scope);
+            return;
+        }
         if (/^[A-Z]/.test(name) && clauses[0].params.every((p) => p.p === "var")) {
             const c = clauses[0];
             scope.set(name, {

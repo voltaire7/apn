@@ -605,7 +605,7 @@ export class Interpreter {
         throw new APNError("runtime", "indexed assignment expects an existing list or record");
     }
 
-    // Destructuring binding:  [name, hello] = value  (or (Just x) = value, ...).
+    // Destructuring binding:  [name, hello] = value  (or (Some x) = value, ...).
     // Evaluates the RHS, matches the pattern, and binds the destructured names
     // in the CURRENT environment (top level or the enclosing block's env).
     evalPatBinding(b: { pattern: Pattern; value: Expr; eager?: boolean; update?: { name: string; value: Expr; error?: string } }): Value {

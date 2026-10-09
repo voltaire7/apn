@@ -137,7 +137,8 @@ A range pattern `[lo..hi]` matches any integer from `lo` to `hi` inclusive.
 `name = value` is the only binding form; there is no `let`. A binding inside a
 group is scoped to that group. The left side may be a pattern:
 `[a,b] = [1,2]`, a cons pattern `x:xs = [1,2,3,4]` (or `x:y:rest`),
-`Just x = maybeValue` (parentheses optional), or a keyed
+`Some x = optionValue` (parentheses optional, also for an imported
+constructor), or a keyed
 record pattern `[x: a] = record`. A failed match is an error. A bare `[x,y]`
 pattern also matches a record, selecting the fields named `x` and `y` (extra
 fields are ignored), in bindings, function parameters, and `match` alternatives. A new capitalized name on the

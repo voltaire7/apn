@@ -329,7 +329,7 @@ imported by `std`. See [browser HTML](browser-html.md) for the API and build com
 `halt` exits successfully when used (`halt = exit 0`); importing `system`
 or `std` does not run it. The builtin `exit n` exits with an explicit status.
 
-Constructor declarations use capitalized bindings: `Maybe a = Just a | Nothing`.
+Constructor declarations use capitalized bindings: `Option a = Some a | None`.
 A new capitalized name also supports a single constructor: `Box a = Box a`.
 An already declared constructor on the left remains a destructuring pattern
 unless `|` introduces alternatives. Neither `type` nor `data` is a keyword.
@@ -337,9 +337,9 @@ unless `|` introduces alternatives. Neither `type` nor `data` is a keyword.
 A leading `|` is optional, and alternatives can span lines:
 
 ```apn
-Maybe a =
-    | Just a
-    | Nothing
+Option a =
+    | Some a
+    | None
 ```
 
 Use a leading `|` to explicitly declare a single constructor when its name
