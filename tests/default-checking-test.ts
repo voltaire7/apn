@@ -984,6 +984,15 @@ for (const source of [
     'c n = n * 2; ev 0 = c 0; ev n = od (n - 1); od 0 = 1; od n = ev (n - 1); c s = s ++ "?"; od 3',
     'h = { c n = n * 2; f x = c x; c s = s ++ "?"; f 1 }; h',
 ]) Deno.test(`a reader of a rebound name is checked against it: ${source}`, () => rejected(session(), source));
+Deno.test("a broken reader of a broken definition reports the original problem", () => {
+    try { run(session(), 'c n = n * 2; a = c 1; b x = a + x; d x = b x; c s = s ++ "?"; d 1'); } catch (error) {
+        const { message, hint } = error as { message: string; hint?: string };
+        if (!message.startsWith("'d' no longer type-checks: cannot append Int and String")) throw error;
+        if (hint !== "'d' reads 'b', which reads 'a', which reads 'c', which was rebound after 'd' was defined") throw new Error(hint);
+        return;
+    }
+    throw new Error("accepted");
+});
 Deno.test("a reader follows a name rebound by a later REPL input or a load", () => {
     const i = session();
     run(i, 'c n = n * 2; f x = c x; []');

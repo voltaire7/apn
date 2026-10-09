@@ -116,9 +116,12 @@ interface Entry {
     definition?: Expr;
     // broken: why the definition no longer checks after a name it reads was
     // rebound; using it is an error.
-    broken?: { message: string; rebound: string };
+    // through: the broken definitions it reads on the way to the rebound name.
+    broken?: Broken;
 }
 export type TypeScope = Map<string, Entry>;
+/** Why a definition no longer checks: the original problem, the rebound name, and the broken readers between. */
+interface Broken { message: string; rebound: string; through: string[] }
 /** A definition, by name and its clauses (a function) or body (a value). */
 interface Definition { name: string; clauses?: { params: Pattern[]; body: Expr }[]; body?: Expr }
 type Scope = TypeScope;
@@ -1935,12 +1938,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!entry) return unknown();
                 if (deferred && defining && entry.capture && defining.name !== e.name) entry.capture.users.add(defining);
                 if (entry.broken) {
-                    const loc = sourceLocations.get(e);
-                    throw {
-                        message: `'${e.name}' no longer type-checks: ${entry.broken.message}`,
-                        hint: `'${e.name}' reads '${entry.broken.rebound}', which was rebound after '${e.name}' was defined`,
+                    const loc = sourceLocations.get(e), { message, rebound, through } = entry.broken;
+                    const chain = [...through, rebound].map(name => `'${name}'`).join(", which reads ");
+                    const issue: TypeIssue & { broken: Broken } = {
+                        message: `'${e.name}' no longer type-checks: ${message}`,
+                        hint: `'${e.name}' reads ${chain}, which was rebound after '${e.name}' was defined`,
                         pos: loc?.start ?? 0, len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)), source: loc?.source, file: loc?.file,
-                    } satisfies TypeIssue;
+                        // A reader of this definition reports the original problem.
+                        broken: { message, rebound, through: [e.name, ...through] },
+                    };
+                    throw issue;
                 }
                 const type = instantiate(entry);
                 return callees.has(e) && trustsShape(entry) ? type : withoutShapes(type);
@@ -4313,7 +4320,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         } catch (error) {
             if (!error || typeof error !== "object" || !("message" in error) || !("pos" in error)) throw error;
-            scope.set(user.name, { ...entry, broken: { message: (error as TypeIssue).message, rebound } });
+            const cause = (error as { broken?: Broken }).broken;
+            scope.set(user.name, { ...entry, broken: cause ?? { message: (error as TypeIssue).message, rebound, through: [] } });
         }
         for (const reader of [...entry.capture?.users ?? []]) rederive(reader, user.name, scope);
     }

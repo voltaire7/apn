@@ -173,7 +173,8 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   rebinding: each reader still bound to the same clauses or `definition`
   is re-derived in the current scope (closures and actions take the new
   type, other values must unify with the old). Failures set `Entry.broken`,
-  reported at the next use; `rederiving` guards cycles. Tests:
+  reported at the next use (a reader broken by reading a broken definition
+  keeps its original problem and adds to `through`); `rederiving` guards cycles. Tests:
   `tests/default-checking-test.ts`.
 - A statically checked load (`verifyLoad` ran) publishes without
   `protectDynamicWrite`. For other loads, `publishForeignBindings` records,

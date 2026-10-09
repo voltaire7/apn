@@ -32,7 +32,9 @@ after a name is rebound (by a definition or a checked `load`) it calls the new
 definition. The checker follows this: code that reads a rebound name is
 checked again against the new definition, and so is code that reads that
 code in turn. A later use is checked against the result. A definition that
-no longer checks is an error only where it is used afterwards:
+no longer checks is an error only where it is used afterwards. The error
+names the original problem; its hint names the chain of readers back to the
+rebound name (`'d' reads 'b', which reads 'c', which was rebound ...`):
 
 ```apn
 c n = n * 2
