@@ -31,7 +31,7 @@ runCounter (MkCounter f) s = f s
     [a,s1] = g s
     runCounter (f a) s1
 })
-return ((Counter _ _) x) = MkCounter (s -> [x,s])
+return x = MkCounter (s -> [x,s])
 tick = MkCounter (s -> [s,s + 1])`;
 
 for (const [name, source, expected] of [
@@ -51,6 +51,8 @@ for (const [name, source, expected] of [
         ["Node (Leaf 2) (Leaf 3)", "[2,3]"]],
     ["Functor and Monad patterns", 'import "option"\ndouble (Functor m) = fmap (* 2) m\nprint (double [1,2])\nprint (double (Some 3))\nx <- double (return 4)\nprint x\nisMonad (Monad m) = true\nisMonad x = false\nprint [isMonad [1],isMonad 1]',
         ["[2,4]", "Some 6", "8", "[true,false]"]],
+    ["return is overloaded on its result", 'import "option"\nWrap a = | MkWrap a\nreturn = MkWrap\n(MkWrap x) >>= f = f x\nprint (Wrap Int { return 5 })\nprint (Option Int { return 6 })\nprint (Result Int String { return 7 })\nprint (List Int { return 8 })',
+        ["MkWrap 5", "Some 6", "Ok 7", "[8]"]],
     ["undecided values and actions print without running", 'print $ return 123\nprint [return "a"]\nprint (return 1 >>= (x -> return x))\nprint (print 1)\nprint (IO Int { return 1 })\nprint (typeOf (print 1))\nprint (typeOf (return 1))',
         ["Monad 123", '[Monad "a"]', "Monad", "IO []", "IO Int", "IO []", "Monad Int"]],
     ["constructor arguments print as source writes them", 'import "option"\nprint (return (Some 1))\nprint (Some (Some (-1)))\nprint (Some [1,2])',
@@ -70,8 +72,6 @@ for (const [source, message, kind] of [
     ['import "option"\nx = Option Int {\n    a <- Some 1\n    a + 1\n}', "the last statement of a do-block must be an action", "type"],
     ["xs = List Int {\n    a <- [1,2]\n    print a\n    return a\n}", "an IO action cannot run in a List do-block", "type"],
     ["return a b = a", "return takes one argument", "parse"],
-    ["return x = x", "a return instance names its monad", "parse"],
-    ["return x = Option t { Some x }", "a return instance names its monad", "parse"],
 ] as const) Deno.test(`monads reject: ${JSON.stringify(source)}`, () => fails(source, message, kind));
 Deno.test("monads: a type without a return instance cannot take return", () => {
     try { run("Tree = Leaf Int | Node Tree Tree\nprint (Tree { return 1 })", false); }

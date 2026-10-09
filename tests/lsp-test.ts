@@ -21,7 +21,7 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     const unused = (source: string) => lint(source).filter(d => d.code === "unused").map(d => [d.range.start.line, d.range.start.character, d.message]);
     equal(unused("f x y = x"), [[0, 4, "'y' is never used; write _ to discard it"]]);
     equal(unused("f x _ = x\ng _y = 1\nh x = { scope <- env; return [] }"), []);
-    equal(unused("return ((Counter s a) x) = MkCounter (s -> [x,s])").map(d => d[2]), ["'s' is never used; write _ to discard it", "'a' is never used; write _ to discard it"]);
+    equal(unused("return x = MkCounter (s -> [1,s])").map(d => d[2]), ["'x' is never used; write _ to discard it"]);
     equal(unused("xs = [0,0]\ni = 0\nxs i = 1\nSome v = Some 1"), []);
     equal(unused("copy n ((Vect n Int) xs) = xs\nk = x y -> x"), [[1, 6, "'y' is never used; write _ to discard it"]]);
     equal(lint("handlers = [\n    Some y -> print y\n    None -> []\n]"), []);

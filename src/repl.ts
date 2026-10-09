@@ -403,7 +403,7 @@ function helpText(): string {
         `  f n = { print n; return n }   a block running an action is an action; it ends with one`,
         `  IO [] is the type of an action yielding []; IO [] { print "hi" } checks one; return x`,
         `  fmap/<$>, return, <*>, >>=, >>, =<<, sequence, mapM, when, unless (IO, lists, Option)`,
-        `  fmap f (Leaf x) = ...; (Box x) >>= f = ...; return ((Box _) x) = Box x   instances`,
+        `  fmap f (Leaf x) = ...; (Box x) >>= f = ...; return = Box   instances`,
         `  Option Int { return 42 } => Some 42; List Int { a <- [1,2]; return a }   any monad`,
         `  indentation: strict 4-space layout (exactly +4 per level)`,
         `  [1,2,3] * x -> print x      (seq * fn iterates; int * fn counts)`,

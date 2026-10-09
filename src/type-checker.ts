@@ -14,6 +14,11 @@ function isIO(t: Ty): boolean { return t.k === "variant" && t.name === "IO" && t
 function pendingTy(t: Ty): Ty { return { k: "variant", name: "Monad", args: [t] }; }
 function isPending(t: Ty): boolean { return t.k === "variant" && t.name === "Monad" && t.args.length === 1; }
 const METHODS = new Set(["fmap", ">>=", "<*>", "return"]);
+// A definition that adds an instance instead of binding a name: clauses for
+// a method, or any return (return = Some), whose result names its monad.
+function isInstance(name: string, clauses: { params: Pattern[] }[]): boolean {
+    return METHODS.has(name) && (name === "return" || clauses.some(c => c.params.length));
+}
 
 type Index = { constant: bigint; terms: Map<string, bigint> };
 type Ty =
@@ -401,7 +406,7 @@ function viewFlow(programs: TopLevel[][], nativeArity: (name: string) => number 
         if (Array.isArray(node)) { node.forEach(collect); return; }
         const n = node as Record<string, any>;
         // Instance clauses (fmap, >>=, <*>, return) bind no name.
-        if ((n.t === "def" || n.t === "stmDef") && METHODS.has(n.name) && n.clauses.some((c: { params: Pattern[] }) => c.params.length)) {
+        if ((n.t === "def" || n.t === "stmDef") && isInstance(n.name, n.clauses)) {
             Object.values(n).forEach(collect);
             return;
         }
@@ -547,7 +552,7 @@ export function topNames(program: TopLevel[]): string[] {
     };
     for (const statement of program) {
         // Instance clauses (fmap, >>=, <*>, return) bind no name.
-        if (statement.t === "def" && !(METHODS.has(statement.name) && statement.clauses[0].params.length)) names.push(statement.name);
+        if (statement.t === "def" && !isInstance(statement.name, statement.clauses)) names.push(statement.name);
         if (statement.t === "patDef") pattern(statement.pattern);
     }
     return names;
@@ -4905,7 +4910,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
         // Clauses for fmap, >>=, <*> or return define an instance: inferred on
         // their own and recorded for the session; the method stays as it is.
-        if (METHODS.has(name) && clauses[0].params.length && options.instances) {
+        if (isInstance(name, clauses) && options.instances) {
             const forward = variable();
             options.instances.set(name, [...options.instances.get(name) ?? [], forward]);
             const own: Scope = new Map(scope);

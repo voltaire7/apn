@@ -374,6 +374,17 @@ export class Interpreter {
             this.env.setLocal(name, fn);
             return fn;
         }
+        // return = Some adds a return instance, like clauses for a method do.
+        if (name === "return" && !this.loadingPrelude) {
+            const scope = this.env, body = clauses[0].body;
+            const method = this.defer(() => {
+                const caller = this.env;
+                this.env = scope;
+                try { return this.reference(this.eval(body)); } finally { this.env = caller; }
+            });
+            this.registerInstance(name, method, []);
+            return method;
+        }
         // Value-style def: single clause, no params.
         const value = clauses[0].body;
         if (value.t === "import") {
@@ -1914,6 +1925,21 @@ export class Interpreter {
         return undefined;
     }
 
+    // return x in a monad: return is overloaded on its result, so the newest
+    // return instance whose result is in the target monad makes it.
+    private returnIn(target: Value, x: Value): Value | undefined {
+        const family = target.kind === "type" ? target.family : undefined;
+        if (!family) return undefined;
+        const fns = this.instances.get("return") ?? [];
+        for (let n = fns.length - 1; n >= 0; n--) {
+            const result = this.apply(fns[n], x, true);
+            if (result.kind === "nomatch") continue;
+            const made = this.demand(result);
+            if (made.kind === "variant" && made.family === family) return made;
+        }
+        return undefined;
+    }
+
     // The monad a concrete monadic value belongs to, as a type: IO, List, or its variant type.
     monadTypeOf(v: Value): Extract<Value, { kind: "type" }> | undefined {
         if (v.kind === "io") return { kind: "type", name: "IO" };
@@ -1936,9 +1962,9 @@ export class Interpreter {
         if (step.op === "do") return this.desugarDo(step.block as Extract<Expr, { t: "block" }>, step.env, step.start, target, step.first);
         if (this.isIOType(target)) { const value = step.value; return { kind: "io", result: () => this.typeText(value), run: () => value }; }
         if (this.isListType(target)) return mkList([step.value]);
-        const made = this.instance("return", [target, step.value]);
-        if (made) return this.reference(made);
-        throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as return ((Option _) x) = Some x" });
+        const made = this.returnIn(target, step.value);
+        if (made) return made;
+        throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as return = Some" });
     }
 
     // m >>= f: through m's monad. f's results are realized in the same monad.
@@ -3136,7 +3162,7 @@ export class Interpreter {
                     return input !== null && this.matchPattern(p.args[0], this.conform(type, input), binds);
                 }
                 if (type.kind === "type" && type.family) {
-                    // The type itself, described (the monad of return ((Option t) x) = Some x):
+                    // The type itself, described (Option t matching the type Option Int):
                     // its arguments bind to the pattern's.
                     const described = this.reference(v);
                     if (described.kind === "type" && described.family === type.family) {
