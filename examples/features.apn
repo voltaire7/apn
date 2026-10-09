@@ -71,14 +71,14 @@ print (fib 10)         # => 55
 # ---------------------------------------------------------
 safeHead xs = match xs [
     [] -> None
-    x:rest -> Some x
+    x:_ -> Some x
 ]
 print (safeHead [1,2,3])   # => Some 1
 print (safeHead [])          # => None
 
 # multiple equations (clauses), like Haskell
 len [] = 0
-len (x:rest) = 1 + len rest
+len (_:rest) = 1 + len rest
 print (len [1,2,3])        # => 3
 
 sumList xs = match xs [
@@ -134,7 +134,7 @@ print (factC 6)             # => 720
 # all patterns work here too: cons, literals, _ , guards, ...
 safeM xs = match xs [
     [] -> None
-    x:rest -> Some x
+    x:_ -> Some x
 ]
 print (safeM [3,4])        # => Some 3
 print (safeM [])            # => None
@@ -500,14 +500,14 @@ print (someFloat (Some 1))          # => 1.0
 Reading = Celsius Float | NoReading # a concrete field converts when constructed
 print (Celsius 21)                  # => Celsius 21.0
 Span = Span2 Int Int | NoSpan       # every payload field converts, by value
-spanEnd (Span2 a (UInt8 b)) = b     # spanEnd (Span2 1 300) is a static range error
+spanEnd (Span2 _ (UInt8 b)) = b     # spanEnd (Span2 1 300) is a static range error
 print (spanEnd (Span2 1 3))         # => 3
 byteField ([x: UInt8] r) = r.x      # record fields are checked by value too
 scaled v = byteField [x: v * 100]   # scaled 3 is a static range error
 print (scaled 1)                    # => UInt8 100
 print (byteField [x: 300, _: [x: 3]])  # => UInt8 3 (a later spread wins, as at runtime)
 print ([1,2]:[3,4])                 # => [[1,2],3,4]  (':' adds one element; joining is ++)
-tailOf (x:rest) = rest              # ':' in a pattern is always cons
+tailOf (_:rest) = rest              # ':' in a pattern is always cons
 print (tailOf [1,2,3])            # => [2,3]
 
 # ---------------------------------------------------------
@@ -731,7 +731,7 @@ actionValue = { print "action"; return 4 }  # an IO action: defining it runs not
 actionResult <- actionValue # => action (<- runs it and binds its result)
 print actionResult          # => 4
 actionValue                 # => action (each run repeats the effect)
-keepFirst x y = x
+keepFirst x _ = x
 print (keepFirst 7 (Dynamic missingEvaluationArg)) # => 7 (unused argument is deferred)
 print (true ? 8 : (Dynamic missingEvaluationArg))  # => 8 (unselected branch is deferred)
 # Lazy heads, tails, and recursive lists:
@@ -756,7 +756,7 @@ print (12345678901234567890 * 12345678901234567890)
 # => 152415787532388367501905199875019052100
 print (take 3 [9007199254740993..])
 # => [9007199254740993,9007199254740994,9007199254740995]
-print (foldl (a b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
+print (foldl (_ b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 # tests/bigint-test.ts checks F1500 beyond the old floating-point overflow.
 
 # ---------------------------------------------------------
@@ -900,7 +900,7 @@ runCounter (MkCounter f) s = f s
     [a,s1] = g s
     runCounter (f a) s1
 })
-return ((Counter s a) x) = MkCounter (s -> [x,s])
+return ((Counter _ _) x) = MkCounter (s -> [x,s])
 tick = MkCounter (s -> [s,s + 1])
 twoTicks = Counter Int Int {
     a <- tick
@@ -1007,8 +1007,8 @@ print (typedAdd (1/3) (1/6))          # => 1/2
 # Int32 2147483648, Float32 (Float .1), and UInt (-1) are checked errors.
 
 # Numeric patterns only accept lossless conversions, even for bare literals.
-integerClause (Int x) = "integer"
-integerClause x = "fallback"
+integerClause (Int _) = "integer"
+integerClause _ = "fallback"
 print (integerClause .2)            # => "fallback"
 print (integerClause 2.0)           # => "integer"
 # A lone (Int x) clause applied to .2 reports no matching clause.
@@ -1102,7 +1102,7 @@ print (Record [x: 1])    # => [x: 1]
 print ((Function (x -> x + 1)) 2) # => 3
 print (Type Bool)        # => Bool
 
-myTypeOf (t x) = print t
+myTypeOf (t _) = print t
 myTypeOf true       # => Bool
 myTypeOf (Int32 5)  # => Int32
 
@@ -1171,16 +1171,16 @@ print (swapPair (sort [9,4]))                 # [9, 4]
 # Nested lengths follow too: each inner list keeps its argument's length.
 # An empty-list clause and a cons clause are checked as separate choices.
 emptyOrHead [] = "empty"
-emptyOrHead (x:xs) = x
+emptyOrHead (x:_) = x
 print (emptyOrHead [5] + 1)                   # 6
 # The first clause that definitely matches decides the result, as at runtime.
 zeroOrPair [] = [0]
-zeroOrPair xs = [1,2]
+zeroOrPair _ = [1,2]
 onlyOne [a] = a
 print (onlyOne (zeroOrPair []))               # 0
 # Typed clauses rank as at runtime: an exact type comes before a plain variable.
-pairOrZero xs = [1,2]
-pairOrZero (Int n) = [0]
+pairOrZero _ = [1,2]
+pairOrZero (Int _) = [0]
 print (onlyOne (pairOrZero 3))                # 0
 # Clauses may return lists of different lengths; each call gets its clause's.
 zeroOrPairOf (Int n) = [n,n]
@@ -1191,20 +1191,20 @@ onlyOneOf n = onlyOne (zeroOrPairOf n)
 print (onlyOneOf 0)                           # 0
 # Booleans and strings too: the clause is chosen at each call of the wrapper.
 flagged true = [1]
-flagged b = [0,0]
+flagged _ = [0,0]
 onlyFlag b = onlyOne (flagged b)
 print (onlyFlag true)                         # 1
 # Characters and floats are literal patterns too, compared as at runtime.
 classify 'a' = "letter a"
 classify 1.5 = "one and a half"
-classify other = "other"
+classify _ = "other"
 print [classify 'a',classify 1.5,classify 'b']  # ["letter a", "one and a half", "other"]
 vowelOrPair 'a' = [1]
-vowelOrPair c = [0,0]
+vowelOrPair _ = [0,0]
 onlyVowel c = onlyOne (vowelOrPair c)
 print (onlyVowel 'a')                         # 1
 # A function's result counts too, when it is called directly by name.
-alwaysA x = 'a'
+alwaysA _ = 'a'
 print (onlyOne (vowelOrPair (alwaysA 5)))     # 1
 # Results that depend on argument values are evaluated at each call.
 vowelIf b = b ? 'a' : 'z'
@@ -1218,8 +1218,8 @@ print (onlyOne (vowelOrPair (vowelBelowHalf 0.25)))  # 1
 vowelIfSingle x = Float32 x + Float32 .2 == Float32 .3 ? 'a' : 'z'
 print (onlyOne (vowelOrPair (vowelIfSingle .1)))     # 1
 # A known value that converts losslessly selects a typed clause, as at runtime.
-vowelIfInt (Int n) = 'a'
-vowelIfInt x = 'z'
+vowelIfInt (Int _) = 'a'
+vowelIfInt _ = 'z'
 print (onlyOne (vowelOrPair (vowelIfInt (UInt 3))))  # 1
 # Lengths count too, through parameters, map, and recursion.
 vowelIfShort xs = length xs < 2 ? 'a' : 'z'
@@ -1257,7 +1257,7 @@ print (onlyOne (vowelOrPair (vowelIfShort (drop 999999 [1..1000000]))))  # 1
 emitted <- emit [7]                                    # [7] (output actions yield [])
 print (onlyOne (vowelOrPair (vowelIfShort emitted)))  # 1
 # A cell written after it is read follows the run's order.
-bumped y = {
+bumped _ = {
     c = Mutable 1
     set c (c + 1)
     return (c + 0)
@@ -1265,7 +1265,7 @@ bumped y = {
 bumpedValue <- bumped 0
 print (onlyOne (vowelOrPair (vowelIfShort (take (bumpedValue - 1) [7,8,9]))))  # 1
 sortedAndReversed xs = [sort xs,reverse xs]
-firstOfBoth [[a,b],[c,d]] = [a,c]
+firstOfBoth [[a,_],[c,_]] = [a,c]
 print (firstOfBoth (sortedAndReversed [3,1]))  # [1, 1]
 print (lookup 3 (bfsDistances (n -> n < 3 ? [n + 1] : []) [0])) # 3
 # I/O in scripts: readFile "input.input", readStdin [], getArgs [], readInput [].
@@ -1302,7 +1302,7 @@ print mutableCounter                         # 2
 # The checker follows top-level cells through the statements that write them.
 print (onlyOne (vowelOrPair (vowelIfShort (take (mutableCounter - 1) [7,8,9]))))  # 1
 # A statement may write and read them: each part sees the run's order.
-bumpCounter x = {
+bumpCounter _ = {
     set mutableCounter $ (mutableCounter + 1)
     return (mutableCounter + 0)
 }
@@ -1608,10 +1608,10 @@ print (Bool * [0,1,"","hello",[],[0]])  # => [false,true,false,true,false,true]
 print (0 && (Dynamic missingTruthinessName))        # => false; right side is skipped
 print (1 || (Dynamic missingTruthinessName))        # => true
 print (filter (x -> x) [0,1,2])        # => [1,2]
-print (match 42 [x | [] -> 0,x | 1 -> x]) # => 42
+print (match 42 [_ | [] -> 0,x | 1 -> x]) # => 42
 
 # Type variables preserve relationships between inputs and outputs.
-print (typeOf (x y -> x))                # => a -> b -> a
+print (typeOf (x _ -> x))                # => a -> b -> a
 print (typeOf (f x -> f x))              # => (a -> b) -> a -> b
 print (typeOf (x -> [x,x]))              # => a -> [a]
 
@@ -1680,7 +1680,7 @@ print (bracePattern 2)              # => 3
 # Recursive inference accepts self-application without Dynamic or new wrappers.
 # Strict --check rejects unresolved operations elsewhere in this full showcase.
 inferredSelf f = f f
-print (inferredSelf (ignored -> 123))       # => 123
+print (inferredSelf (_ -> 123))       # => 123
 inferredFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1)))
 print (inferredFactorial 5)                 # => 120
 # loop x = loop x and x = x remain legal; checking never executes them.

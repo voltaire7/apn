@@ -79,7 +79,7 @@ for (const [code, warnings] of [
     ['Option a = Some a | None\nf match (Option value) = match value [Some x -> x]', 0],
     ['import "option"\nf (Option value) = match value [None -> 0]', 1],
 ] as const) Deno.test(`exhaustiveness diagnostic: ${code}`, () => {
-    const ds = lint(code);
+    const ds = lint(code).filter(d => d.code !== 'unused');
     if (ds.length !== warnings || ds.some(d => d.code !== 'non-exhaustive-match' || d.severity !== 2)) throw new Error(JSON.stringify(ds));
 });
 

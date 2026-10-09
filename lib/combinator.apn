@@ -2,8 +2,8 @@ import "function"
 
 # Classical combinators, written entirely as APN functions.
 identity x = x
-kestrel x ignored = x
-kite ignored y = y
+kestrel x _ = x
+kite _ y = y
 starling f g x = f x (g x)
 bluebird f g x = f (g x)
 cardinal f x y = f y x

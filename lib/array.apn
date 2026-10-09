@@ -11,7 +11,7 @@ matmul left right = {
     columns = transpose right
     seq (_arrayWidth right) (width == length right ? map (row -> map (dot row) columns) left : fail "matrix dimensions do not match")
 }
-shape (Number x) = []
+shape (Number _) = []
 shape [] = [0]
 shape (x:xs) = {
     dimensions = shape x

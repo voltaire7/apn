@@ -14,7 +14,7 @@ product xs = foldl (*) (Number 1) xs
 contains x xs = any (y -> x == y) xs
 findIndex predicate xs = mapOption fst (find (entry -> predicate (snd entry)) (zipWithIndex xs))
 headOption xs = null xs ? None : Some (head xs)
-lastOption xs = foldl (ignored x -> Some x) None xs
+lastOption xs = foldl (_ x -> Some x) None xs
 atOption n xs = n < 0 ? None : headOption (drop n xs)
 takeUntil predicate xs = takeWhile (x -> not (predicate x)) xs
 splitAt n xs = [take n xs,drop n xs]
@@ -46,7 +46,7 @@ scanl f seed xs = seed : (null xs ? [] : scanl f (f seed (head xs)) (tail xs))
 
 # Stable merge sort; equal keys always take the earlier (left) element.
 _order (Integer value) = value
-_order value = fail "sortBy comparator must return an integer"
+_order _ = fail "sortBy comparator must return an integer"
 _mergeSorted compare left right = null left ? right : null right ? left : _order (compare (head left) (head right)) <= 0 ? _prepend (head left) (_mergeSorted compare (tail left) right) : _prepend (head right) (_mergeSorted compare left (tail right))
 sortBy compare xs = {
     n = 0 + length xs
@@ -55,6 +55,6 @@ sortBy compare xs = {
 }
 
 # Force finite accumulator elements between simulation steps, not whole trees.
-forceList xs = seq (foldl (ignored x -> seq x []) [] xs) xs
-repeatApply n f seed = foldl (value ignored -> f value) seed (take n [0..])
+forceList xs = seq (foldl (_ x -> seq x []) [] xs) xs
+repeatApply n f seed = foldl (value _ -> f value) seed (take n [0..])
 count predicate xs = foldl (n x -> predicate x ? n + 1 : n) 0 xs

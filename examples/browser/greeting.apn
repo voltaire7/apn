@@ -3,7 +3,7 @@ browser = import "browser"
 
 GreetingMsg = NameChanged String | ClearName
 
-update msg model = match msg [
+update msg _ = match msg [
     (NameChanged name) -> name
     ClearName -> ""
 ]

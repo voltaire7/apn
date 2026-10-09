@@ -57,7 +57,7 @@ fmap = primFmap
 return = primReturn
 (<*>) = primAp
 (>>=) = primBind
-m >> k = m >>= (ignored -> k)
+m >> k = m >>= (_ -> k)
 f =<< m = m >>= f
 # Actions over lists: sequence runs each, yielding their results; mapM f xs
 # runs f on each element; when and unless run an action on a condition.

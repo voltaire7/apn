@@ -1938,7 +1938,7 @@ export class Interpreter {
         if (this.isListType(target)) return mkList([step.value]);
         const made = this.instance("return", [target, step.value]);
         if (made) return this.reference(made);
-        throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as return ((Option t) x) = Some x" });
+        throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as return ((Option _) x) = Some x" });
     }
 
     // m >>= f: through m's monad. f's results are realized in the same monad.

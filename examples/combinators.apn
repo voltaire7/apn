@@ -18,7 +18,7 @@ print (combinators.S combinators.K combinators.K 42) # 42
 print (combinators.K 42 _)                    # 42
 print (combinators.B (*2) (+1) 20)            # 42
 print (combinators.W (+) 21)                  # 42
-print (combinators.M (x -> 42))               # 42
+print (combinators.M (_ -> 42))               # 42
 
 # Fixed points also describe productive infinite data.
 print (take 5 (fix (xs -> 1 : xs)))           # [1, 1, 1, 1, 1]

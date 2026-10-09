@@ -5,29 +5,29 @@ Result a e = Ok a | Err e
 # Option and Result are functors and monads: Some x and Ok x hold the value;
 # None and Err e pass through (return in Option is Some, in Result Ok).
 fmap f (Some x) = Some (f x)
-fmap f None = None
+fmap _ None = None
 (Some x) >>= f = f x
-None >>= f = None
-return ((Option t) x) = Some x
+None >>= _ = None
+return ((Option _) x) = Some x
 fmap f (Ok x) = Ok (f x)
-fmap f (Err error) = Err error
+fmap _ (Err error) = Err error
 (Ok x) >>= f = f x
-(Err error) >>= f = Err error
-return ((Result t e) x) = Ok x
-isSome (Some x) = true
+(Err error) >>= _ = Err error
+return ((Result _ _) x) = Ok x
+isSome (Some _) = true
 isSome None = false
 isNone value = not (isSome value)
-withDefault fallback (Some x) = x
+withDefault _ (Some x) = x
 withDefault fallback None = fallback
 mapOption f (Some x) = Some (f x)
-mapOption f None = None
+mapOption _ None = None
 andThen f (Some x) = f x
-andThen f None = None
+andThen _ None = None
 mapResult f (Ok x) = Ok (f x)
-mapResult f (Err error) = Err error
-mapError f (Ok x) = Ok x
+mapResult _ (Err error) = Err error
+mapError _ (Ok x) = Ok x
 mapError f (Err error) = Err (f error)
 andThenResult f (Ok x) = f x
-andThenResult f (Err error) = Err error
-resultDefault fallback (Ok x) = x
-resultDefault fallback (Err error) = fallback
+andThenResult _ (Err error) = Err error
+resultDefault _ (Ok x) = x
+resultDefault fallback (Err _) = fallback

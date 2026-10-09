@@ -64,8 +64,10 @@ files (including warning-only results), 1 for errors, and 2 for missing file arg
 
 The linter checks syntax and APN's strict layout rules. It reports the
 first parse/lex error in each file, because the parser does not yet recover after
-an error. It does not claim to detect undefined variables, unused names, runtime
-errors or general type errors. It also issues conservative variant-exhaustiveness
+an error. It does not claim to detect undefined variables, runtime
+errors or general type errors. It warns about a parameter its body never uses
+(`f x y = x` warns about `y`; write `_` to discard it). Names starting with `_`
+are exempt, and so is a body that reads `env`, which can use any name. It also issues conservative variant-exhaustiveness
 warnings for statically recognizable matches; see [type and resource rules](type-and-resource-rules.md). `_` placeholders are valid syntax.
 
 ## Server capabilities

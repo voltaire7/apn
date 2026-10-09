@@ -31,7 +31,7 @@ runCounter (MkCounter f) s = f s
     [a,s1] = g s
     runCounter (f a) s1
 })
-return ((Counter s a) x) = MkCounter (s -> [x,s])
+return ((Counter _ _) x) = MkCounter (s -> [x,s])
 tick = MkCounter (s -> [s,s + 1])`;
 
 for (const [name, source, expected] of [

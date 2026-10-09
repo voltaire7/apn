@@ -441,10 +441,10 @@ runs. `lib/option.apn` holds Option's and Result's:
 
 ```apn
 fmap f (Some x) = Some (f x)
-fmap f None = None
+fmap _ None = None
 (Some x) >>= f = f x
-None >>= f = None
-return ((Option t) x) = Some x     # return names its monad on its argument
+None >>= _ = None
+return ((Option _) x) = Some x     # return names its monad on its argument
 ```
 
 `return` takes one argument; the type on it names the monad the instance

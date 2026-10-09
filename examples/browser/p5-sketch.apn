@@ -13,7 +13,7 @@ draw p = {
     p.textSize 18
     p.text ("Clicks: " ++ toString clicks) 20 30
 }
-mousePressed p = {
+mousePressed _ = {
     set clicks $ (clicks + 1)
     return false
 }
