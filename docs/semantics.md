@@ -546,6 +546,8 @@ Experimental function-minus overload: `f - x` applies a function `f` to the
 negated numeric value of `x`. It accepts native functions, lambdas, and named
 functions (including partial applications). Both operands are demanded as for
 ordinary subtraction. `sqrt -1` and `sqrt - 1` both produce `0+1i`.
+The checker checks the negated argument as a call would, so `g -1` for
+`g (UInt n)` is a static error like `g (-1)`.
 Numeric subtraction is unchanged. Precedence and associativity are unchanged:
 `sqrt -1 * 4` means `sqrt -(1 * 4)`, while `sqrt -1 + 2` means
 `(sqrt -1) + 2`. Use parentheses when a different grouping is intended.

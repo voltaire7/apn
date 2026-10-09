@@ -841,6 +841,7 @@ print ((1+2i) * (3+4i))  # => -5+10i
 # Experimental function-minus: a function receives the negated numeric RHS.
 print (sqrt -1)       # => 0+1i
 print (sqrt - 1)      # => 0+1i (spacing makes no difference)
+# natural (UInt n) = n; natural -1   # static error: UInt cannot represent a negative integer
 print (10 - 1)        # => 9
 print ((x -> x * 2) -3) # => -6
 

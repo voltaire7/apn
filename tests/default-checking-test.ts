@@ -1016,12 +1016,15 @@ for (const [source, expected] of [
     ['Int n = -1; n', '-1'],
     ['UInt8 n = 2 * 100; n', '200'],
     ['Float x = -1; x', '-1.0'],
+    ['g (Int n) = n; g -1', '-1'],
+    ['sqrt -1 + 2', '2+1i'],
     ['f y = { Float x = y; x * 2 }; f 1.5', '3.0'],
 ] as const) Deno.test(`typed binding: ${source}`, () => {
     if (run(session(), source) !== expected) throw new Error(source);
 });
 for (const source of ['Int x = "a"', 'Int x = 2.5', 'Int8 x = 300', 'Int x = 1; x = "a"', 'Int x = 1; x = 2.5',
-    'UInt n = -1', 'UInt n = (-1)', 'Int n = -2.5', 'UInt n = 0 - 1', 'k = 100; UInt8 n = k * 3', 'g (UInt n) = n; g (-1)']) {
+    'UInt n = -1', 'UInt n = (-1)', 'Int n = -2.5', 'UInt n = 0 - 1', 'k = 100; UInt8 n = k * 3', 'g (UInt n) = n; g (-1)',
+    'g (UInt n) = n; g -1', 'g (UInt n) = n; g - 1', 'g (Int n) = n; g -2.5']) {
     Deno.test(`typed binding rejects: ${source}`, () => rejected(session(), source));
 }
 for (const source of ['Int = 5', 'Int x y = 5']) Deno.test(`a built-in type name is not redefined: ${source}`, () => {

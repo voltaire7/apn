@@ -2281,6 +2281,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 // Numeric/array arithmetic and callable * retain runtime overload selection.
                 const x = resolve(a), y = resolve(b);
+                // Function minus (g -1) applies g to the negated value: check
+                // that argument as written, so a literal converts statically.
+                if (e.op === "-" && ["fn", "type", "overload"].includes(x.k) && y.k === "atom" && NUMERIC_TYPES.includes(y.name)) {
+                    const negated: Expr = { t: "unop", op: "neg", e: e.r };
+                    const loc = sourceLocations.get(e.r) ?? sourceLocations.get(e);
+                    if (loc) sourceLocations.set(negated, loc);
+                    return application(a, { type: b }, negated);
+                }
                 if (x.k === "atom" && y.k === "atom") {
                     if (NUMERIC_TYPES.includes(x.name) && NUMERIC_TYPES.includes(y.name)) {
                         if (["Float", "Float32", "Float64"].includes(x.name) && ["Float", "Float32", "Float64"].includes(y.name)) {
