@@ -1938,7 +1938,7 @@ export class Interpreter {
         if (this.isListType(target)) return mkList([step.value]);
         const made = this.instance("return", [target, step.value]);
         if (made) return this.reference(made);
-        throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as return x = Option t { Some x }" });
+        throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as return ((Option t) x) = Some x" });
     }
 
     // m >>= f: through m's monad. f's results are realized in the same monad.
@@ -3136,7 +3136,7 @@ export class Interpreter {
                     return input !== null && this.matchPattern(p.args[0], this.conform(type, input), binds);
                 }
                 if (type.kind === "type" && type.family) {
-                    // The type itself, described (the monad of return x = Option t { Some x }):
+                    // The type itself, described (the monad of return ((Option t) x) = Some x):
                     // its arguments bind to the pattern's.
                     const described = this.reference(v);
                     if (described.kind === "type" && described.family === type.family) {

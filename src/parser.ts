@@ -1640,21 +1640,22 @@ export function groupClauses(program: TopLevel[]): TopLevel[] {
 
 
 // Render an expression back to source text (for debug / quote inspection).
-// A return instance names its monad with the annotation on its body:
-//     return x = Counter s a { MkCounter (s -> [x,s]) }
+// A return instance names its monad on its argument:
+//     return ((Counter s a) x) = MkCounter (s -> [x,s])
 // It is kept as a clause on the monad's type and the value, which is how the
 // runtime and the checker look the instance up: return (Counter _ _) x = ...
 function returnInstance(params: Pattern[], body: Expr, pos: number | undefined): { params: Pattern[]; body: Expr } {
+    const p = params[0];
+    let head: Expr | undefined = p?.p === "schema" ? p.type : undefined;
+    if (head?.t === "block" && head.style === "(" && head.stmts.length === 1) head = head.stmts[0];
     const args: Expr[] = [];
-    let head = body;
-    while (head.t === "app") { args.unshift(head.a); head = head.f; }
-    const value = args.pop();
-    if (params.length !== 1 || head.t !== "var" || !/^[A-Z]/.test(head.name) || !value || value.t !== "block") {
-        throw new APNError("parse", params.length !== 1 ? "return takes one argument" : "a return instance names its monad: annotate the body with it", {
-            pos, hint: "return x = Counter s a { MkCounter (s -> [x,s]) }",
+    while (head?.t === "app") { args.unshift(head.a); head = head.f; }
+    if (params.length !== 1 || p.p !== "schema" || head?.t !== "var" || !/^[A-Z]/.test(head.name)) {
+        throw new APNError("parse", params.length !== 1 ? "return takes one argument" : "a return instance names its monad on its argument", {
+            pos, hint: "return ((Option t) x) = Some x",
         });
     }
-    return { params: [{ p: "constr", tag: head.name, args: args.map((): Pattern => ({ p: "wildcard" })) }, params[0]], body: value };
+    return { params: [{ p: "constr", tag: head.name, args: args.map((): Pattern => ({ p: "wildcard" })) }, p.value], body };
 }
 
 export function exprToSource(e: Expr): string {

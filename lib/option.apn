@@ -8,12 +8,12 @@ fmap f (Some x) = Some (f x)
 fmap f None = None
 (Some x) >>= f = f x
 None >>= f = None
-return x = Option t { Some x }
+return ((Option t) x) = Some x
 fmap f (Ok x) = Ok (f x)
 fmap f (Err error) = Err error
 (Ok x) >>= f = f x
 (Err error) >>= f = Err error
-return x = Result t e { Ok x }
+return ((Result t e) x) = Ok x
 isSome (Some x) = true
 isSome None = false
 isNone value = not (isSome value)

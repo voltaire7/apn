@@ -31,7 +31,7 @@ runCounter (MkCounter f) s = f s
     [a,s1] = g s
     runCounter (f a) s1
 })
-return x = Counter s a { MkCounter (s -> [x,s]) }
+return ((Counter s a) x) = MkCounter (s -> [x,s])
 tick = MkCounter (s -> [s,s + 1])`;
 
 for (const [name, source, expected] of [
@@ -71,6 +71,7 @@ for (const [source, message, kind] of [
     ["xs = List Int {\n    a <- [1,2]\n    print a\n    return a\n}", "an IO action cannot run in a List do-block", "type"],
     ["return a b = a", "return takes one argument", "parse"],
     ["return x = x", "a return instance names its monad", "parse"],
+    ["return x = Option t { Some x }", "a return instance names its monad", "parse"],
 ] as const) Deno.test(`monads reject: ${JSON.stringify(source)}`, () => fails(source, message, kind));
 Deno.test("monads: a type without a return instance cannot take return", () => {
     try { run("Tree = Leaf Int | Node Tree Tree\nprint (Tree { return 1 })", false); }

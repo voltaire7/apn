@@ -444,11 +444,11 @@ fmap f (Some x) = Some (f x)
 fmap f None = None
 (Some x) >>= f = f x
 None >>= f = None
-return x = Option t { Some x }     # return names its monad with an annotation
+return ((Option t) x) = Some x     # return names its monad on its argument
 ```
 
-`return` takes one argument; the annotation on its body names the monad the
-instance makes, and that is how a context that names a monad finds it.
+`return` takes one argument; the type on it names the monad the instance
+makes, and that is how a context that names a monad finds it.
 
 `fmap` and `<*>` follow from `>>=` and `return` when a type defines no
 instance of its own. A type used where no instance accepts it is an error

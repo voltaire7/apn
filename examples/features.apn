@@ -900,7 +900,7 @@ runCounter (MkCounter f) s = f s
     [a,s1] = g s
     runCounter (f a) s1
 })
-return x = Counter s a { MkCounter (s -> [x,s]) }
+return ((Counter s a) x) = MkCounter (s -> [x,s])
 tick = MkCounter (s -> [s,s + 1])
 twoTicks = Counter Int Int {
     a <- tick
