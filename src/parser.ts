@@ -49,6 +49,7 @@ class Parser {
         for (const [index, t] of this.toks.entries()) {
             if (t.k === "sym" && t.v === "=") this.checkEqualsSpacing(t);
             if (t.k === "sym" && t.v === ",") this.checkCommaSpacing(t, holds[holds.length - 1] ?? false);
+            if (t.k === "sym" && t.v === ";") this.checkSemicolon(index);
             if (t.k === "sym" && "([{".includes(t.v)) holds.push(t.v === "[" && this.opensRecord(index));
             if (t.k === "sym" && ")]}".includes(t.v)) holds.pop();
             if (t.k !== "sym" || !(t.v in pairs)) continue;
@@ -84,6 +85,22 @@ class Parser {
         if (/\S $/.test(before) && (/^ \S/.test(after) || /^\s*(#.*)?$/.test(after))) return;
         this.seen = t;
         throw new Error("Parser: put exactly one space on each side of '=' (write x = 1)");
+    }
+
+    // A ';' separates two statements on one line (print 1; print 2): it
+    // follows the first directly and takes one space before the second. A
+    // newline already ends a statement, so a ';' ending its line, starting
+    // one, doubled, or next to a bracket's inside is redundant.
+    checkSemicolon(index: number): void {
+        const t = this.toks[index], previous = this.toks[index - 1], next = this.toks[index + 1];
+        const before = this.source.slice(this.source.lastIndexOf("\n", t.pos - 1) + 1, t.pos);
+        const after = this.source.slice(t.pos + 1).split("\n", 1)[0];
+        const opens = (x?: Token) => x?.k === "sym" && ["{", "(", "[", ";"].includes(x.v);
+        const closes = (x?: Token) => x?.k === "sym" && ["}", ")", "]", ";"].includes(x.v);
+        this.seen = t;
+        if (/^\s*(#.*)?$/.test(after)) throw new Error("Parser: a newline already ends a statement; remove the ';' at the end of the line");
+        if (/^\s*$/.test(before) || opens(previous) || closes(next)) throw new Error("Parser: ';' separates two statements on one line; remove this one");
+        if (/\s$/.test(before) || !/^ \S/.test(after)) throw new Error("Parser: separate statements on one line with '; ' (write print 1; print 2)");
     }
 
     // Whether the [ at index opens record fields ([x: 1], [.x], keyed patterns

@@ -57,6 +57,10 @@ Spacing is part of the syntax (a parse error otherwise):
   are `()`, `[]` and `{}`.
 - Across lines, a bracket or comma ending its line (before an optional comment)
   and a closing bracket starting one follow the layout rules instead.
+- A `;` only separates two statements on one line, written `print 1; print 2`
+  (no space before, one after). A newline already ends a statement, so a `;`
+  at the end of a line, at the start of one, doubled (`;;`), or next to a
+  bracket's inside (`{ print 1; }`) is an error.
 
 Lists print the same way: `print [1,2,[3]]` shows `[1,2,[3]]` and records show
 `[x: 1, y: 2]`. `apn --loose` (or the language server's `looseSpacing` option)

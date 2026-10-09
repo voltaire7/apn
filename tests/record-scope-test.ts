@@ -107,10 +107,21 @@ Deno.test('spacing at =, commas and record colons', () => {
     for (const source of ['x = 1', 'f x = x + 1', 'z =\n    5', '[1,2,3,4]', '[[1,2],[3]]', '[x: 1, y: 2]', '[x: [1,2], y: 3]', '[-1: 1, (x): 2]',
             'f [x: a, y: b] = a', 'f (x:xs) = x', 'xs = [\n    1,\n    2\n]', 'v = [x: 1, y: 2]; v.[x,y]', 'v = [x: 1, y: 2]; v.[x: a, y: b]']) parseDocument(source);
 });
+Deno.test("a ';' separates two statements on one line", () => {
+    for (const source of ['{\n    print 123;\n    print 321;\n}', '{\n    print 123;print 321;\n}', '{ print 1; }', '{ ; print 1 }', 'print 1;; print 2',
+            'print 1 ; print 2', 'print 1;print 2', ';print 1', 'print 1;  # note', '(print 1;)']) {
+        try { parseDocument(source); } catch (error) {
+            if ((error as { kind?: string }).kind === 'parse') continue;
+            throw error;
+        }
+        throw new Error(`accepted: ${source}`);
+    }
+    for (const source of ['print 1; print 2', '{ print 1; print 2 }', '{\n    print 123; print 321\n}', 'x = 1; y = 2  # note']) parseDocument(source);
+});
 Deno.test('loose spacing accepts any spacing', () => {
     setLooseSpacing(true);
     try {
-        for (const source of ['x=1', '[ 1 , 2 ]', '[x:1,y : 2]', '{x}', '( 1 )', '{ }', 'func =\n    {\n        print "hello"\n    }']) parseDocument(source);
+        for (const source of ['x=1', '[ 1 , 2 ]', '[x:1,y : 2]', '{x}', '( 1 )', '{ }', 'func =\n    {\n        print "hello"\n    }', '{\n    print 1;\n}', 'print 1;print 2']) parseDocument(source);
     } finally { setLooseSpacing(false); }
     for (const source of ['x=1', 'func =\n    {\n        print "hello"\n    }']) {
         try { parseDocument(source); } catch { continue; }

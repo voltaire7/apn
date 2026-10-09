@@ -595,7 +595,9 @@ print (parse "42")            # => 42
 #    ( ) and { } are interchangeable: both are groups/blocks.
 #    Empty groups/blocks return an empty list. A block's value is the LAST statement's value.
 #    Newlines act as implicit semicolons; an explicit `;` also separates
-#    statements. Indentation is rigid: every nested level is exactly +4.
+#    statements, but only two on one line (`a; b`): a `;` ending a line,
+#    doubled, or before a closing bracket is an error, being redundant.
+#    Indentation is rigid: every nested level is exactly +4.
 # ---------------------------------------------------------
 print []                     # => []            (empty list)
 print {}                     # => []            (empty block result)
