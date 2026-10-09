@@ -3,8 +3,9 @@ import type { DefClause } from "./types.ts";
 
 // ---------------- AST ----------------
 
-export type BinOp = "+" | "-" | "*" | "/" | "%" | "^" | "==" | "!=" | "<" | ">" | "<=" | ">="
-    | "&&" | "||" | "++" | ":" | "\\";
+// A binary operator's name: a built-in one (+, ==, :, ...) or one a program
+// defines; its meaning and fixity come from the prelude or a definition.
+export type BinOp = string;
 
 export type UnOp = "neg" | "not";
 

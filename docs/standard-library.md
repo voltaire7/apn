@@ -7,6 +7,10 @@ mean [1,2]                          # Some 3/2
 frequencies $ words $ "one two one" # HashMap [["one",2],["two",1]]
 ```
 
+The prelude, `lib/prelude.apn`, needs no import: it defines every binary
+operator (`(+) = primAdd`, ...) and its fixity, and is in scope in every file
+and module. See [operators](semantics.md#defining-and-overloading-operators).
+
 `import` accepts a literal module name or a list of literal module names.
 For example, `import ["number","text"]` opens both modules and returns
 a merged export record. Later modules win name collisions, and `import []`

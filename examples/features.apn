@@ -416,6 +416,30 @@ print (-2)                                # => -2  ((- 2) is NOT a section:
                                           #     unary minus wins; use x -> x - 2)
 
 # ---------------------------------------------------------
+# 10b. OPERATORS ARE FUNCTIONS
+#    The prelude (lib/prelude.apn) defines every binary operator as a
+#    function bound to its symbol, with a fixity declaration:
+#        infixl 6 + - ++        (+) = primAdd
+#    infixl / infixr / infix give a precedence 0..9; an operator without
+#    one is infixl 9. Overloading an operator is fine; creating new
+#    operators works too but is NOT recommended (prefer a named function).
+# ---------------------------------------------------------
+print ((+) 1 2)                           # => 3
+print (primMul 6 7)                       # => 42  (the intrinsic behind *)
+
+# overloading: these clauses run first; anything else falls back to the
+# builtin +, as the inner (a + b) on two Ints does
+Cents = | Cents Int
+(Cents a) + (Cents b) = Cents (a + b)
+print (Cents 150 + Cents 75)              # => Cents 225
+print (1 + 2)                             # => 3
+
+# a new operator with a fixity (possible, but not recommended)
+infixr 5 +++
+xs +++ ys = xs ++ [0] ++ ys
+print ([1] +++ [2] +++ [3])               # => [1,0,2,0,3]
+
+# ---------------------------------------------------------
 # 11. HIGHER-ORDER FUNCTIONS — map / filter / foldl / foldr
 # ---------------------------------------------------------
 nums = [1,2,3,4,5]

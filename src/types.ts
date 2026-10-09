@@ -46,7 +46,8 @@ export type Value =
     | { kind: "variant"; tag: string; v: Value[]; family?: VariantFamily; arguments?: Value[] }
     | { kind: "closure"; params: string[]; body: Expr; env: Env; mutableValue?: Value }
     | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string; family?: VariantFamily; invoke?: (args: Value[]) => Value }
-    | { kind: "clauseFn"; name: string; clauses: DefClause[]; arity: number; env: Env; applied: Value[] }
+    // fallback: an overloaded operator's previous meaning, applied when no clause matches.
+    | { kind: "clauseFn"; name: string; clauses: DefClause[]; arity: number; env: Env; applied: Value[]; fallback?: Value }
     | { kind: "floatRange"; lo: number; step: number; hi: number | null; index?: number }
     | { kind: "range"; lo: bigint; step: bigint; hi: bigint | null }
     | { kind: "nomatch" }

@@ -303,13 +303,14 @@ export function highlightLine(s: string, ternaries: number[] = [0]): string {
             out += paint(A.operator, c); i++; continue;
         }
         if (c === ";" || c === ",") ternaries[ternaries.length - 1] = 0;
-        const comparison = s.slice(i).match(/^(?:==|!=|<=|>=)/)?.[0];
-        if (comparison) {
-            out += [...comparison].map((ch) => paint(A.operator, ch)).join("");
-            i += comparison.length; continue;
+        // A run of operator characters is one operator (<+>, >>=), as lexed.
+        const run = s.slice(i).match(/^[!$%&*+\-/<=>\\^|~:]+/)?.[0];
+        if (run && run.length > 1) {
+            out += [...run].map((ch) => paint(A.operator, ch)).join("");
+            i += run.length; continue;
         }
         // Keep assignment and delimiters gray; operators use peach.
-        if ("+-*/%^!<>$&|?\\`@".includes(c)) out += paint(A.operator, c);
+        if ("+-*/%^!<>$&|?\\`@~".includes(c)) out += paint(A.operator, c);
         else if ("(){}[];,:.=".includes(c)) out += paint(A.gray, c);
         else out += c;
         i++;
@@ -389,8 +390,10 @@ function helpText(): string {
         `  ones = 1:ones; take 5 ones   lazy heads/tails; drop 5 ones`,
         `  map/filter/zipWith/foldr consume lazy lists; Ctrl+C stops output`,
         `  f $ x             application: f (x); f $ g $ x = f (g x)`,
-        `  a \`f\` b            infix call == f a b`,
         `  (+ 2)  (2 +)  (+)  (10 -)  (-)  operator sections   ((- 2) stays unary minus)`,
+        `  operators are prelude functions: (+) 1 2; infixl/infixr/infix 0..9 declare fixity`,
+        `  (Money a) + (Money b) = Money (a + b)   overload (unmatched args use the old +)`,
+        `  xs +++ ys = ...; (<+>) = f   new operators work but are not recommended`,
         `  ( ) and { } are groups/blocks: [] when empty, value = last stmt`,
         `  spacing: x = 1, lists [1,2,3], records [x: 1, y: 2], (x), { x } (apn --loose relaxes it)`,
         `  ; or newline       statement separators (blocks & top level)`,

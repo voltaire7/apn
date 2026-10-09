@@ -17,11 +17,11 @@ export const KEYWORDS = new Set([
     "import", "true", "false", "rec",
 ]);
 
-const SYMBOLS = [
-  "..", "\\",
-    ">>>", "==>", "$", "<<", "<<=", ">>=", "==", "!=", "<=", ">=", "=>", "->", "<-",
-    "&&", "||", "++", "::", ":=",
-];
+// Operators are runs of these characters (maximal munch, as in Haskell):
+// + ++ >>= <$> and any new ones. Exactly "=", "|", ":", "->", "<-" and "!"
+// keep their syntactic roles; ".", "..", "?", "@", "," and brackets are not
+// operator characters. "#" starts a comment.
+export const OPERATOR_CHARS = "!$%&*+-/<=>\\^|~:";
 
 
 export function lex(src: string): Token[] {
@@ -118,20 +118,18 @@ export function lex(src: string): Token[] {
             continue;
         }
 
-        // symbols (multi-char first)
-        let matchedSym = false;
-        for (const s of SYMBOLS) {
-            if (src.startsWith(s, pos)) {
-                if (s === "<-" || s === "->" || s === "=>") {
-                    // used contextually as constructor/member token `:` handled separately
-                }
-                toks.push({ k: "sym", v: s, pos: start });
-                pos += s.length;
-                matchedSym = true;
-                break;
-            }
+        if (src.startsWith("..", pos)) {
+            toks.push({ k: "sym", v: "..", pos: start });
+            pos += 2;
+            continue;
         }
-        if (matchedSym) continue;
+        if (OPERATOR_CHARS.includes(c)) {
+            let end = pos;
+            while (end < src.length && OPERATOR_CHARS.includes(src[end])) end++;
+            toks.push({ k: "sym", v: src.slice(pos, end), pos: start });
+            pos = end;
+            continue;
+        }
 
         // Decimal, radix and exponent literals; signs remain unary operators.
         if (/\d/.test(c) || (c === "." && /\d/.test(src[pos + 1] ?? "") &&
@@ -155,7 +153,7 @@ export function lex(src: string): Token[] {
         // `[`/`]` DO NOT: newlines and indentation inside a list literal are
         // significant, so elements can be separated just by being on their own
         // lines. `{`/`}` likewise participate in the global 4-space layout.
-        if (":()[]{}.,;|".includes(c)) {
+        if ("()[]{}.,;".includes(c)) {
             if ("([{".includes(c)) {
                 delimiters.push({ close: c === '(' ? ')' : c === '[' ? ']' : '}', parens: parenDepth, indents: [...indentStack], pos: start });
                 if (c === '(') parenDepth++;
@@ -190,13 +188,12 @@ export function lex(src: string): Token[] {
                     if (c !== ')' && frame.parens > 0) indentStack.splice(0, indentStack.length, ...frame.indents);
                 }
             }
-            // `:` is cons in this language; `::` handled above as symbol
-            toks.push({ k: "sym", v: c === ":" ? ":" : c, pos: start });
+            toks.push({ k: "sym", v: c, pos: start });
             pos++;
             continue;
         }
 
-        if ("=+-*/%^<>!&?@".includes(c)) {
+        if ("?@".includes(c)) {
             toks.push({ k: "sym", v: c, pos: start });
             pos++;
             continue;

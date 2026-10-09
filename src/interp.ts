@@ -7,6 +7,7 @@ import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
 import doSource from "../lib/do.apn" with { type: "text" };
+import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
@@ -17,7 +18,7 @@ import type { DefClause, Type } from "./types.ts";
 import { type Value, Env } from "./types.ts";
 import { mkInt, mkBool, mkStr, mkList, valueToString, rawString } from "./types.ts";
 import { KEYWORDS } from "./lexer.ts";
-import { parse, exprToSource, patternSource, rangeExpr } from "./parser.ts";
+import { parse, exprToSource, patternSource, rangeExpr, isOperatorName, PRIMITIVE_OPERATORS } from "./parser.ts";
 
 // ---------------- Evaluator ----------------
 
@@ -28,6 +29,9 @@ class TailCall {
 class TailLoad {
     constructor(readonly path: Value, readonly env: Env) {}
 }
+
+// Operators whose builtin meaning does not demand both operands first.
+const LAZY_OPERATORS = new Set([":", "++", "&&", "||", "$"]);
 
 const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 
@@ -41,6 +45,7 @@ export const NATIVES: Array<[string, number]> = [
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
     ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1], ["use", 1],
     ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1],
+    ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
 ];
 
 export class Interpreter {
@@ -194,6 +199,9 @@ export class Interpreter {
         const outer = this.env;
         this.env = new Env(outer);
         this.env.setLocal("fail", { kind: "native", name: "fail", arity: 1, applied: [] });
+        this.run(parse(preludeSource));
+        // Bind each operator to its value itself, so evaluation finds the intrinsic.
+        for (const [name, value] of this.env.map) if (name !== "fail") this.preludeBindings.set(name, this.reference(value));
         this.run(parse(typeSource));
         this.run(parse(doSource));
         for (const name of ["cast", "do"]) this.preludeBindings.set(name, this.env.get(name)!);
@@ -332,8 +340,13 @@ export class Interpreter {
             }
             // Capture a shared env containing the binding itself, enabling recursion.
             const child = new Env(this.env);
+            // Clauses for an operator overload it: the previous meaning still
+            // applies to arguments no clause matches.
+            // Redefining the clauses in the same scope keeps that fallback.
+            const overloaded = !isOperatorName(name) || previous === undefined ? undefined
+                : previous.kind === "clauseFn" && this.env.map.get(name) === previous ? previous.fallback : previous;
             const fn: Value = {
-                kind: "clauseFn", name, clauses, arity, env: child, applied: [],
+                kind: "clauseFn", name, clauses, arity, env: child, applied: [], ...overloaded ? { fallback: overloaded } : {},
             };
             child.setLocal(name, fn);
             this.env.setLocal(name, fn);
@@ -1070,6 +1083,11 @@ export class Interpreter {
                         break;
                     }
                     case "pipe": {
+                        const dollar = this.env.get("$");
+                        if (!(dollar?.kind === "native" && dollar.name === "primApply" && !dollar.applied.length)) {
+                            r = this.evalBinop({ t: "binop", op: "$", l: e.f, r: e.x });
+                            break;
+                        }
                         const result = this.apply(this.eval(e.f), { kind: "thunk", body: e.x, env: this.env }, false, true, tailLoad);
                         if (result instanceof TailCall) next = result; else r = result;
                         break;
@@ -1118,15 +1136,33 @@ export class Interpreter {
     }
 
     evalBinop(e: Extract<Expr, { t: "binop" }>): Value {
-        if (e.op === ":") {
+        if (e.op === ":" && ["int", "float", "bool", "string", "char", "record", "lambda"].includes(e.r.t)) {
             // Reject a definitely non-list tail without evaluating either side.
             // Unknown tails stay lazy, so head (1:missing) remains productive.
-            if (["int", "float", "bool", "string", "char", "record", "lambda"].includes(e.r.t)) {
+            const cons = this.env.get(":");
+            if (cons?.kind === "native" && cons.name === "primCons" && !cons.applied.length) {
                 throw new APNError("runtime", `cons tail expected a list, got ${e.r.t}`);
             }
-            const tail = this.delay(e.r);
+        }
+        const bound = this.env.get(e.op);
+        if (bound === undefined) throw new APNError("runtime", `unbound operator '${e.op}'`);
+        const f = bound.kind === "thunk" || bound.kind === "deferred" ? this.reference(bound) : bound;
+        // A prelude operator bound to its intrinsic runs it directly; strict
+        // ones evaluate their operands in place.
+        const op = f.kind === "native" && !f.applied.length ? PRIMITIVE_OPERATORS.get(f.name) : undefined;
+        if (op && !LAZY_OPERATORS.has(op)) return this.operate(op, this.eval(e.l), this.eval(e.r));
+        const l = this.delay(e.l), r = this.delay(e.r);
+        if (op) return this.operate(op, l, r);
+        return this.apply(this.apply(f, l), r);
+    }
+
+    // The builtin meaning of an operator, over lazy operands.
+    operate(op: string, lThunk: Value, rThunk: Value): Value {
+        if (op === "$") return this.apply(this.demand(lThunk), rThunk);
+        if (op === ":") {
+            const tail = rThunk;
             return {
-                kind: "cons", head: this.delay(e.l),
+                kind: "cons", head: lThunk,
                 tail: {
                     kind: "deferred", describes: tail,
                     compute: () => {
@@ -1137,55 +1173,55 @@ export class Interpreter {
                 },
             };
         }
-        if (e.op === "++") {
-            const l = this.dataValue(this.eval(e.l));
-            const r = this.delay(e.r);
+        if (op === "++") {
+            const l = this.dataValue(lThunk);
+            const r = rThunk;
             if (this.isList(l)) return this.append(l, r);
             const right = this.dataValue(r);
             if (l.kind === "string" && right.kind === "string") return mkStr(l.v + right.v);
             throw new APNError("runtime", `cannot apply '++' to ${l.kind} and ${right.kind}`);
         }
-        if (e.op === "&&" || e.op === "||") {
-            const left = this.truthy(this.eval(e.l));
-            return mkBool(e.op === "&&"
-                ? left && this.truthy(this.eval(e.r))
-                : left || this.truthy(this.eval(e.r)));
+        if (op === "&&" || op === "||") {
+            const left = this.truthy(lThunk);
+            return mkBool(op === "&&"
+                ? left && this.truthy(rThunk)
+                : left || this.truthy(rThunk));
         }
-        let l = this.demand(this.eval(e.l));
-        let r = this.demand(this.eval(e.r));
-        if (e.op === "*") {
+        let l = this.demand(lThunk);
+        let r = this.demand(rThunk);
+        if (op === "*") {
             const callable = (v: Value) => ["closure", "clauseFn", "native", "type", "contract", "functionType"].includes(v.kind);
             if (callable(r)) return this.iterate(l, r);
             if (callable(l)) return this.iterate(r, l);
         }
-        if (e.op === "==" || e.op === "!=") return mkBool(this.equals(l, r) === (e.op === "=="));
+        if (op === "==" || op === "!=") return mkBool(this.equals(l, r) === (op === "=="));
         if ((l.kind === "variant" && l.family?.base) || (r.kind === "variant" && r.family?.base)) {
             if (l.kind !== "variant" || r.kind !== "variant" || l.family !== r.family) {
                 throw new APNError("runtime", "distinct arithmetic requires the same distinct type on both sides");
             }
             const a = this.demand(l.v[0]), b = this.demand(r.v[0]);
-            if (isNumeric(a) && isNumeric(b) && ["+", "-", "*", "/", "%", "^"].includes(e.op)) {
-                const result = e.op === "^" ? typedPower(a, b) : typedArithmetic(e.op, a, b);
+            if (isNumeric(a) && isNumeric(b) && ["+", "-", "*", "/", "%", "^"].includes(op)) {
+                const result = op === "^" ? typedPower(a, b) : typedArithmetic(op, a, b);
                 return this.conform({ kind: "type", name: l.family!.name, family: l.family }, result);
             }
-            if (["<", ">", "<=", ">="].includes(e.op)) {
+            if (["<", ">", "<=", ">="].includes(op)) {
                 const order = this.compare(a, b);
-                return mkBool(e.op === "<" ? order < 0 : e.op === ">" ? order > 0 : e.op === "<=" ? order <= 0 : order >= 0);
+                return mkBool(op === "<" ? order < 0 : op === ">" ? order > 0 : op === "<=" ? order <= 0 : order >= 0);
             }
-            throw new APNError("runtime", `operator '${e.op}' requires unwrapping this distinct value`);
+            throw new APNError("runtime", `operator '${op}' requires unwrapping this distinct value`);
         }
-        if (["+", "-", "*", "/", "%", "^"].includes(e.op)) {
+        if (["+", "-", "*", "/", "%", "^"].includes(op)) {
             l = this.arithmeticValue(l); r = this.arithmeticValue(r);
-        } else if (e.op !== "\\") { l = this.dataValue(l); r = this.dataValue(r); }
-        if (["+", "-", "*", "/", "%", "^"].includes(e.op) &&
+        } else if (op !== "\\") { l = this.dataValue(l); r = this.dataValue(r); }
+        if (["+", "-", "*", "/", "%", "^"].includes(op) &&
                 (this.isList(l) || this.isList(r) || l.kind === "record" || r.kind === "record")) {
-            return this.arrayArithmetic(e.op, l, r);
+            return this.arrayArithmetic(op, l, r);
         }
         const bad = (): never => {
-            throw new APNError("runtime", `cannot apply '${e.op}' to ${l.kind} and ${r.kind}`);
+            throw new APNError("runtime", `cannot apply '${op}' to ${l.kind} and ${r.kind}`);
         };
-        if (isNumeric(l) && isNumeric(r) && ["+", "-", "*", "/", "%"].includes(e.op)) return typedArithmetic(e.op, l, r);
-        if (e.op === "\\") {
+        if (isNumeric(l) && isNumeric(r) && ["+", "-", "*", "/", "%"].includes(op)) return typedArithmetic(op, l, r);
+        if (op === "\\") {
             const functions = ["closure", "clauseFn", "native", "type", "contract", "functionType"];
             if (!functions.includes(l.kind) || !functions.includes(r.kind)) {
                 throw new APNError("runtime", "composition expects functions on both sides of '\\'");
@@ -1199,11 +1235,11 @@ export class Interpreter {
                     a: { t: "app", f: { t: "var", name: "g" }, a: { t: "var", name: "x" } } },
             };
         }
-        if (e.op === "^") {
+        if (op === "^") {
             if (!isNumeric(l) || !isNumeric(r)) return bad();
             return typedPower(l, r);
         }
-        switch (e.op) {
+        switch (op) {
             case "+":
                 if (l.kind === "string" && r.kind === "string") return mkStr(l.v + r.v);
                 return bad();
@@ -1218,8 +1254,8 @@ export class Interpreter {
             case ">": return this.compare(l, r) > 0 ? mkBool(true) : mkBool(false);
             case "<=": return this.compare(l, r) <= 0 ? mkBool(true) : mkBool(false);
             case ">=": return this.compare(l, r) >= 0 ? mkBool(true) : mkBool(false);
-
         }
+        throw new APNError("runtime", `'${op}' has no builtin meaning`);
     }
 
     private arrayNegate(value: Value): Value {
@@ -1478,6 +1514,7 @@ export class Interpreter {
                         return this.eval(clause.body);
                     } finally { this.env = old; }
                 }
+                if (f.fallback) return raw.reduce((g: Value, x) => this.apply(g, x), f.fallback);
                 if (probe) return { kind: "nomatch" };
                 throw new APNError(
                     "runtime",
@@ -2085,6 +2122,8 @@ export class Interpreter {
             throw new APNError("runtime", "non-exhaustive match: no alternative fits this value");
         }
 
+        const primitive = PRIMITIVE_OPERATORS.get(name);
+        if (primitive) return this.operate(primitive, argsIn[0], argsIn[1]);
         const host = this.hostNatives.get(name);
         if (host) return host(argsIn);
         if (name === "use") {

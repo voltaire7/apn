@@ -164,23 +164,27 @@ never hangs the prompt.
 
 ## Operator precedence and associativity
 
-From tightest to loosest binding; operators in the same row have equal precedence.
+Every binary operator is an ordinary function defined in the language: the
+prelude (`lib/prelude.apn`, in scope everywhere) binds each symbol to an
+intrinsic function and declares its fixity, and `a + b` applies whatever `+`
+is bound to. The table below is the prelude's, from tightest to loosest
+binding; operators in the same row have equal precedence.
 
-| Operation | Associativity | Grouping example |
-| --- | --- | --- |
-| Field access and pluck `.` | Left | `a.b.c` → `(a.b).c` |
-| Function application | Left | `f x y` → `(f x) y` |
-| Composition `\` | Right | `f \ g \ h` → `f \ (g \ h)` |
-| Exponentiation `^` | Right | `a ^ b ^ c` → `a ^ (b ^ c)` |
-| Unary `-`, `!` | Prefix | `-f x` → `-(f x)` |
-| `*`, `/`, `%` | Left | `a / b * c` → `(a / b) * c` |
-| `+`, `-`, `++` | Left | `a - b - c` → `(a - b) - c` |
-| Cons `:` | Right | `a : b : xs` → `a : (b : xs)` |
-| `==`, `!=`, `<`, `>`, `<=`, `>=` | Left | `a < b == c` → `(a < b) == c` |
-| Logical `&&` | Left | `a && b && c` → `(a && b) && c` |
-| Logical `\|\|` | Left | `a \|\| b \|\| c` → `(a \|\| b) \|\| c` |
-| Ternary `? :` | Right | `a ? b : c ? d : e` → `a ? b : (c ? d : e)` |
-| Application `$` | Right | `f $ g $ x` → `f (g x)` |
+| Operation | Fixity | Associativity | Grouping example |
+| --- | --- | --- | --- |
+| Field access and pluck `.` | syntax | Left | `a.b.c` → `(a.b).c` |
+| Function application | syntax | Left | `f x y` → `(f x) y` |
+| Composition `\` | `infixr 9` | Right | `f \ g \ h` → `f \ (g \ h)` |
+| Exponentiation `^` | `infixr 8` | Right | `a ^ b ^ c` → `a ^ (b ^ c)` |
+| Unary `-`, `!` | syntax | Prefix | `-f x` → `-(f x)` |
+| `*`, `/`, `%` | `infixl 7` | Left | `a / b * c` → `(a / b) * c` |
+| `+`, `-`, `++` | `infixl 6` | Left | `a - b - c` → `(a - b) - c` |
+| Cons `:` | `infixr 5` | Right | `a : b : xs` → `a : (b : xs)` |
+| `==`, `!=`, `<`, `>`, `<=`, `>=` | `infixl 4` | Left | `a < b == c` → `(a < b) == c` |
+| Logical `&&` | `infixl 3` | Left | `a && b && c` → `(a && b) && c` |
+| Logical `\|\|` | `infixl 2` | Left | `a \|\| b \|\| c` → `(a \|\| b) \|\| c` |
+| Ternary `? :` | syntax | Right | `a ? b : c ? d : e` → `a ? b : (c ? d : e)` |
+| Application `$` | `infixr 0` | Right | `f $ g $ x` → `f (g x)` |
 
 `f \ g` creates a function that computes `f (g x)` when called with `x`.
 Both operands must be functions (constructors are accepted). Ordinary calls
@@ -193,8 +197,9 @@ Parentheses override precedence: `2 + 3 * 4` is `14`, while `(2 + 3) * 4`
 is `20`. Comparison chains are ordinary left-associated operations, not
 mathematical chained comparisons.
 
-Backtick infix functions are not supported; write `f a b`. `=` and `<-` introduce
-bindings and are not expression operators; they have no expression precedence. Range `..` belongs
+Backtick infix functions are not supported; write `f a b`. `=`, `<-`, `->`, `|`
+and prefix `!` are syntax, not operators: they cannot be defined or used as
+sections, and `=` and `<-` have no expression precedence. Range `..` belongs
 inside range syntax, and `@` belongs to polar numeric literals. Inside function-contract patterns,
 arrows associate right: `Int -> Int -> Int` means `Int -> (Int -> Int)`.
 In expressions, arrows always form lambdas, including `Int -> Int`.
@@ -208,6 +213,43 @@ Unary operators take a power expression as their operand; nest them with parenth
 as in `-(-x)`. For negative function arguments use `f (-1)`. The experimental
 function-minus overload also allows `f -1`, but follows binary subtraction's
 precedence: `sqrt -1 * 4` groups as `sqrt - (1 * 4)`.
+
+### Defining and overloading operators
+
+An operator is any run of the characters `! $ % & * + - / < = > \ ^ | ~ :`,
+read as one token (so `a+-b` is one operator, `+-`; write `a + -b`). It is a
+function named by its symbol:
+
+```apn
+(+)                          # the function behind +: (+) 1 2 is 3
+infixr 5 +++                 # a fixity declaration: infixl, infixr or infix, 0..9
+xs +++ ys = xs ++ [0] ++ ys  # an infix definition; (+++) = f binds a function
+[1] +++ [2] +++ [3]          # [1,0,2,0,3]
+```
+
+A fixity declaration stands on its own line, anywhere at the top level of the
+file that uses the operator; it applies to the whole file and to later REPL
+input. An operator without one is `infixl 9`. `infix` operators do not chain:
+`a == b == c` is fine (`==` is `infixl`), but two `infix` operators of the
+same precedence side by side need parentheses.
+
+Overloading an existing operator is fine and is the recommended way to give
+your own types arithmetic or comparison. Clauses defined for an operator are
+tried first; arguments no clause matches fall back to the operator's previous
+meaning, so the builtin behavior stays available:
+
+```apn
+Money = | Money Int
+(Money a) + (Money b) = Money (a + b)   # the inner + is the builtin one
+Money 3 + Money 4                       # Money 7
+1 + 2                                   # 3
+```
+
+**Creating new operators is possible but not recommended.** A named function
+is easier to read, to search for and to explain; reach for a new symbol only
+where it is already conventional. Rebinding a prelude operator to something
+unrelated (`(+) = max`) is allowed for the rest of its scope, and equally
+discouraged.
 
 See [templates and type aliases](templates-and-types.md) for scalar/container
 application, slot updates, aliases, and parameterized variant types.

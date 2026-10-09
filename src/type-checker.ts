@@ -2,8 +2,10 @@ import { type Expr, type Pattern, sourceLocations, type TopLevel } from "./ast.t
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numericNative, type Numeric, parseNumberText } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
-import { parse, parseDocument, rangeExpr } from "./parser.ts";
+import { parse, parseDocument, rangeExpr, PRIMITIVE_OPERATORS } from "./parser.ts";
 import { mkStr, type Value, valueToString } from "./types.ts";
+
+const PRELUDE_OPERATORS = new Set(PRIMITIVE_OPERATORS.values());
 
 type Index = { constant: bigint; terms: Map<string, bigint> };
 type Ty =
@@ -1274,7 +1276,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const b = boolean(e.e, scope);
             return b === undefined ? undefined : !b;
         }
-        if (e.t === "binop" && ["==", "!=", "<", ">", "<=", ">="].includes(e.op)) {
+        if (e.t === "binop" && ["==", "!=", "<", ">", "<=", ">="].includes(e.op) && builtinAt(e, scope)) {
             const a = index(e.l, scope), b = index(e.r, scope);
             if (a && b && !a.terms.size && !b.terms.size) {
                 const x = a.constant, y = b.constant;
@@ -1310,7 +1312,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const a = index(e.e, scope);
             return a && indexScale(a, -1n);
         }
-        if (e.t === "binop") {
+        if (e.t === "binop" && builtinAt(e, scope)) {
             const a = index(e.l, scope), b = index(e.r, scope);
             if (!a || !b) return;
             if (e.op === "+" || e.op === "-") return indexAdd(a, b, e.op === "+" ? 1n : -1n);
@@ -1784,12 +1786,24 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         return list(apply(t.element, a.element, e), t.length);
     }
+    // An operator intrinsic applied as a function ((+) is a section, but
+    // add = primAdd; add 1 2 applies the intrinsic).
+    function operatorApplication(op: string, a: Ty, b: Ty, e: Expr): Ty {
+        if (isExplicit(a) || isExplicit(b)) { runtimeChecks++; return ["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(op) ? atom("Bool") : explicitDynamic; }
+        if (["==", "!=", "&&", "||"].includes(op)) return atom("Bool");
+        if (["<", ">", "<=", ">="].includes(op)) { operation("compare", [a, b]); return atom("Bool"); }
+        if (op === ":") { unify(list(a), b, e); return list(a); }
+        if (op === "$") return application(a, { type: b }, e);
+        return operation(op, [a, b]);
+    }
     function application(f: Ty, argument: Entry, e: Expr): Ty {
         spend(e);
         f = resolve(f);
         if (f.k === "intrinsic") {
             const args = [...f.args ?? [], argument.type];
-            return args.length < (f.arity ?? 1) ? { ...f, args } : operation(f.name, args);
+            if (args.length < (f.arity ?? 1)) return { ...f, args };
+            if (PRELUDE_OPERATORS.has(f.name)) return operatorApplication(f.name, args[0], args[1], e);
+            return operation(f.name, args);
         }
         if (f.k === "operation") return deferredCall(f, argument);
         if (f.k === "dynamic") return f.explicit ? explicitDynamic : unknown();
@@ -2074,6 +2088,48 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let inferenceDepth = 0;
     // The type each expression was last inferred with, for facts read right after.
     const inferred = new WeakMap<Expr, Ty>();
+    // The builtin operator an entry's type stands for (the prelude binds
+    // each operator to its intrinsic), if any.
+    function builtinOperator(type: Ty | undefined): string | undefined {
+        const t = type && resolve(type);
+        return t?.k === "intrinsic" && !t.args?.length && PRELUDE_OPERATORS.has(t.name) ? t.name : undefined;
+    }
+    // A user's operator application as the call it is: (op l) r.
+    // Whether a binop is the builtin operator in this scope: the prelude's,
+    // or an overload of it whose clauses do not accept the operands' types.
+    function builtinAt(e: Extract<Expr, { t: "binop" }>, scope: Scope): boolean {
+        const bound = scope.get(e.op);
+        if (builtinOperator(bound?.type) === e.op) return true;
+        if (!bound || !PRELUDE_OPERATORS.has(e.op)) return false;
+        const l = inferred.get(e.l), r = inferred.get(e.r);
+        return !!l && !!r && ![l, r].some(x => ["var", "operation", "dynamic"].includes(resolve(x).k)) && !overloadAccepts(bound.type, l, r);
+    }
+    const operatorCalls = new WeakMap<Expr, Expr>();
+    function operatorCall(e: Extract<Expr, { t: "binop" }>): Expr {
+        const cached = operatorCalls.get(e);
+        if (cached) return cached;
+        const partial: Expr = { t: "app", f: { t: "var", name: e.op }, a: e.l };
+        const call: Expr = { t: "app", f: partial, a: e.r };
+        const loc = sourceLocations.get(e);
+        if (loc) { sourceLocations.set(partial, loc); sourceLocations.set(call, loc); sourceLocations.set((partial as Extract<Expr, { t: "app" }>).f, loc); }
+        operatorCalls.set(e, call);
+        return call;
+    }
+    // Whether an operator overload's clauses accept operands of these
+    // (known) types, tried on copies.
+    function overloadAccepts(f: Ty, l: Ty, r: Ty): boolean {
+        if ([f, l, r].some(x => ["var", "operation", "dynamic"].includes(resolve(x).k))) return false;
+        const vars = new Map<Ty, Ty>(), pending = requirements, saved = pending.length;
+        choosing++;
+        try {
+            const partial = application(copy(f, vars), { type: copy(l, vars) }, { t: "placeholder" });
+            application(partial, { type: copy(r, vars) }, { t: "placeholder" });
+            return true;
+        } catch (error) {
+            if (error && typeof error === "object" && "message" in error && "pos" in error) return false;
+            throw error;
+        } finally { choosing--; pending.length = saved; }
+    }
     function infer(e: Expr, scope: Scope, expected?: Ty): Ty {
         spend(e);
         if (++inferenceDepth > 256) {
@@ -2194,6 +2250,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return functionType(e.params, e.body, scope, undefined, e.guard);
             case "app":
             case "pipe": {
+                if (e.t === "pipe" && builtinOperator(scope.get("$")?.type) !== "$") {
+                    const call: Expr = { t: "binop", op: "$", l: e.f, r: e.x };
+                    const loc = sourceLocations.get(e);
+                    if (loc) sourceLocations.set(call, loc);
+                    return infer(call, scope, expected);
+                }
                 const a = e.t === "app" ? e.a : e.x;
                 callees.add(e.f);
                 const callee = infer(e.f, scope), resolved = resolve(callee);
@@ -2431,27 +2493,42 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return a;
             }
             case "binop": {
+                const bound = scope.get(e.op);
+                if (!bound) return problem(`unbound operator '${e.op}'`, e);
+                let op = builtinOperator(bound.type), operands: [Ty, Ty] | undefined;
+                if (op === undefined) {
+                    // A user's operator is applied like any function. One that
+                    // overloads a prelude operator falls back to its builtin
+                    // meaning for operands its clauses do not accept.
+                    const call = operatorCall(e);
+                    if (!PRELUDE_OPERATORS.has(e.op)) return infer(call, scope, expected);
+                    const l = infer(e.l, scope), r = infer(e.r, scope);
+                    if (overloadAccepts(bound.type, l, r)) return infer(call, scope, expected);
+                    op = e.op;
+                    operands = [l, r];
+                }
                 // A numeric result constraint disambiguates arithmetic from
                 // callable iteration. Do not guess numeric inputs otherwise.
                 const resultConstraint = expected && resolve(expected);
                 const constrain = (value: Ty): Ty => {
-                    if (["+", "-", "*"].includes(e.op) && resultConstraint?.k === "atom" &&
+                    if (["+", "-", "*"].includes(op) && resultConstraint?.k === "atom" &&
                         NUMERIC_TYPES.includes(resultConstraint.name) && resolve(value).k === "var") {
                         unify(value, resultConstraint, e);
                     }
                     return value;
                 };
-                const a = constrain(infer(e.l, scope)), b = constrain(infer(e.r, scope));
+                const [a, b] = operands ?? [constrain(infer(e.l, scope)), constrain(infer(e.r, scope))];
                 if (isExplicit(a) || isExplicit(b)) {
                     runtimeChecks++;
-                    return ["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(e.op) ? atom("Bool") : explicitDynamic;
+                    return ["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(op) ? atom("Bool") : explicitDynamic;
                 }
-                if (["==", "!=", "&&", "||"].includes(e.op)) return atom("Bool");
-                if (["<", ">", "<=", ">="].includes(e.op)) {
+                if (op === "$") return application(a, { type: b, ...valueEntry(e.r, scope) }, e.r);
+                if (["==", "!=", "&&", "||"].includes(op)) return atom("Bool");
+                if (["<", ">", "<=", ">="].includes(op)) {
                     operation("compare", [a, b]);
                     return atom("Bool");
                 }
-                if (e.op === ":") {
+                if (op === ":") {
                     // ':' adds one element. One that does not fit the tail's
                     // elements makes a mixed list, as in a literal
                     // ([1,2]:[3,4] is [[1,2],3,4]; [1]:[[3,4]] is [[1],[3,4]]).
@@ -2463,7 +2540,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const tail = resolve(b);
                     return list(a, tail.k === "list" && tail.length ? indexAdd(tail.length, constant(1n)) : undefined);
                 }
-                if (e.op === "++") {
+                if (op === "++") {
                     const x = resolve(a), y = resolve(b);
                     if (x.k === "list" && y.k === "list") {
                         return list(union([x.element, y.element]), x.length && y.length ? indexAdd(x.length, y.length) : undefined);
@@ -2474,7 +2551,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const x = resolve(a), y = resolve(b);
                 // Function minus (g -1) applies g to the negated value: check
                 // that argument as written, so a literal converts statically.
-                if (e.op === "-" && ["fn", "type", "overload"].includes(x.k) && y.k === "atom" && NUMERIC_TYPES.includes(y.name)) {
+                if (op === "-" && ["fn", "type", "overload"].includes(x.k) && y.k === "atom" && NUMERIC_TYPES.includes(y.name)) {
                     const negated: Expr = { t: "unop", op: "neg", e: e.r };
                     const loc = sourceLocations.get(e.r) ?? sourceLocations.get(e);
                     if (loc) sourceLocations.set(negated, loc);
@@ -2486,22 +2563,22 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                             if (x.name !== "Float" && y.name !== "Float" && x.name !== y.name) return problem("mixed Float32 and Float64 arithmetic requires an explicit cast", e);
                             return x.name === "Float" ? y : x;
                         }
-                        return e.op === "/" ? atom("Number") : x.name === y.name ? x : atom("Number");
+                        return op === "/" ? atom("Number") : x.name === y.name ? x : atom("Number");
                     }
-                    if (e.op === "+" && x.name === "String" && y.name === "String") return atom("String");
-                    return problem(`operator '${e.op}' cannot combine ${text(x)} and ${text(y)}`, e);
+                    if (op === "+" && x.name === "String" && y.name === "String") return atom("String");
+                    return problem(`operator '${op}' cannot combine ${text(x)} and ${text(y)}`, e);
                 }
-                if (e.op !== "*" && e.op !== "-" && e.op !== "\\" && (x.k === "type" || y.k === "type")) {
-                    return problem(`operator '${e.op}' requires values, not a type constructor`, e);
+                if (op !== "*" && op !== "-" && op !== "\\" && (x.k === "type" || y.k === "type")) {
+                    return problem(`operator '${op}' requires values, not a type constructor`, e);
                 }
-                if (e.op === "-") {
+                if (op === "-") {
                     // Possibly function minus, decided later (h x = g -x): keep
                     // the negated value, known once the enclosing call is.
                     const result: Ty = { k: "operation", op: "-", args: [a, b], known: valueEntry({ t: "unop", op: "neg", e: e.r }, scope) };
                     requirements.push(result);
                     return resolve(result);
                 }
-                return operation(e.op, [a, b]);
+                return operation(op, [a, b]);
             }
             case "unop": {
                 const operand = infer(e.e, scope);
@@ -3879,6 +3956,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // A binary operator on known operands.
     function evaluateBinop(e: Extract<Expr, { t: "binop" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
+        // A user's operator is a call, as is an overload of a builtin one.
+        // An overload of a prelude operator is its builtin for operands of
+        // types its clauses do not accept, as inferred.
+        if (!env.has(e.op) && !builtinAt(e, scope)) return evaluateKnown(operatorCall(e), env, scope, depth);
+        if (env.has(e.op)) { incomplete = true; return undefined; }
         const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
         // x : xs; the tail may be endless (repeat x = x : repeat x).
         // The tail is evaluated only when an element past the head is needed.
@@ -4351,7 +4433,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return length && { length };
             }
             case "binop": {
-                if (!["+", "-", "*", "/", "%", "^"].includes(e.op)) return undefined;
+                if (!["+", "-", "*", "/", "%", "^"].includes(e.op) || !builtinAt(e, scope)) return undefined;
                 const length = lengthOf(shapeOf(e.l, params, scope)) ?? lengthOf(shapeOf(e.r, params, scope));
                 return length && { length };
             }
@@ -4827,6 +4909,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     scope.set("set", { type: { k: "intrinsic", name: "set", arity: 2 } });
     scope.set("insert", { type: { k: "intrinsic", name: "insert", arity: 2 } });
+    // The prelude's operators and their intrinsics (one per operator).
+    for (const [name, op] of PRIMITIVE_OPERATORS) {
+        const t: Ty = { k: "intrinsic", name: op, arity: 2 };
+        scope.set(name, { type: t });
+        scope.set(op, { type: t });
+    }
     scope.set("cast", { type: { k: "intrinsic", name: "cast", arity: 2 } });
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
     scope.set("match", { type: { k: "intrinsic", name: "match", arity: 2 } });

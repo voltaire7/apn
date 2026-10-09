@@ -1,0 +1,42 @@
+# The prelude: every binary operator, as an ordinary function bound to its
+# symbol, and its fixity. It is in scope everywhere, modules included.
+#
+# A fixity declaration gives operators a precedence (0, loosest, to 9) and an
+# associativity: infixl (left), infixr (right) or infix (none). An operator
+# without one is infixl 9. Application binds tighter than any operator, and
+# prefix - and ! bind tighter than * but looser than ^.
+#
+# Operators are functions: (+) is the function, (+ 1) and (1 +) are sections,
+# and a + b = ... or (+) = ... defines one. Overloading an existing operator
+# with typed clauses is fine; its clauses are tried first, then these:
+#     (Money a) + (Money b) = Money (a + b)
+# Defining new operators is possible but not recommended: a named function is
+# easier to read and to search for.
+infixr 0 $
+infixl 2 ||
+infixl 3 &&
+infixl 4 == != < > <= >=
+infixr 5 :
+infixl 6 + - ++
+infixl 7 * / %
+infixr 8 ^
+infixr 9 \
+
+($) = primApply
+(||) = primOr
+(&&) = primAnd
+(==) = primEq
+(!=) = primNe
+(<) = primLt
+(>) = primGt
+(<=) = primLe
+(>=) = primGe
+(:) = primCons
+(+) = primAdd
+(-) = primSub
+(++) = primAppend
+(*) = primMul
+(/) = primDiv
+(%) = primMod
+(^) = primPow
+(\) = primCompose

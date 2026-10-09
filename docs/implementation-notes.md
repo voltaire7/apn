@@ -111,8 +111,22 @@ Behavior: `docs/standard-library.md` (`http`, `json`).
 
 ## Prelude and `cast`
 
-The default prelude embeds `lib/type.apn` and `lib/do.apn` as text imports, so
-editor launchers must let Deno read both. `cast` is a `clauseFn`, not a native:
+The default prelude embeds `lib/prelude.apn`, `lib/type.apn` and `lib/do.apn`
+as text imports, so editor launchers must let Deno read them.
+
+Operators: the lexer reads a maximal run of operator characters as one token;
+the parser seeds its fixity table from `lib/prelude.apn` at module load and
+pre-scans every parsed source for fixity declarations, which persist across
+parses (later REPL input). The prelude binds each operator to a `prim*`
+native (`PRIMITIVE_OPERATORS` in `src/parser.ts`), forced at startup so a
+binop finds the native itself: `evalBinop` then runs `operate` directly
+(strict operands evaluated in place, `:`/`++`/`&&`/`||`/`$` over thunks) and
+applies any other binding as a function. A `clauseFn` defined for an operator
+name keeps the previous binding as `fallback`. The checker gives operator
+names an intrinsic type per builtin; a binop on another binding is inferred as
+the call `(op l) r`, and an overload of a prelude operator falls back to the
+builtin rule when its clauses do not accept known operand types. Tests:
+`tests/operators-test.ts`. `cast` is a `clauseFn`, not a native:
 its clauses validate list templates with `Type` and dispatch to
 `(Type target).(value)`, other types to `target value`. Expose `type`
 through module loading and browser bundles. `do` is an ordinary function

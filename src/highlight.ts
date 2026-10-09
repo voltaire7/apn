@@ -56,9 +56,10 @@ export function highlightTokens(source: string, natives: Set<string>): Highlight
             ternaries[ternaries.length - 1]--; take(1, "operator"); continue;
         }
         if (c === ";" || c === ",") ternaries[ternaries.length - 1] = 0;
-        const comparison = source.slice(i).match(/^(?:==|!=|<=|>=)/)?.[0];
-        if (comparison) { take(2, "operator"); continue; }
-        take(1, "+-*/%^!<>$&|?\\@".includes(c) ? "operator"
+        // A run of operator characters is one operator (<+>, >>=), as lexed.
+        const run = source.slice(i).match(/^[!$%&*+\-/<=>\\^|~:]+/)?.[0];
+        if (run && run.length > 1) { take(run.length, "operator"); continue; }
+        take(1, "+-*/%^!<>$&|?\\@~".includes(c) ? "operator"
             : "(){}[];,:.=".includes(c) ? "punctuation" : undefined);
     }
     return tokens;

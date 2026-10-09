@@ -22,11 +22,58 @@ function rangeSyntax(lo: Expr, second: Expr | null, hi: Expr | null): Expr {
     try { return rangeExpr(rangeNum(lo), second === null ? null : rangeNum(second), hi === null ? null : rangeNum(hi)); }
     catch { return { t: "computedRange", lo, second, hi }; }
 }
-import { lex } from "./lexer.ts";
+import { lex, OPERATOR_CHARS } from "./lexer.ts";
+import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { APNError, tokLen } from "./errors.ts";
 import type { Expr, Pattern, TopLevel, BinOp, FunctionSpec } from "./ast.ts";
 import type { Type, Value, Env } from "./types.ts";
 import type { Token } from "./lexer.ts";
+
+// ---------------- Fixity ----------------
+
+// An operator's precedence (0 loosest .. 9) and associativity, from fixity
+// declarations: the prelude's, and any a program makes (infixl 6 +, infixr 5
+// ++ +++, infix 4 ==). An undeclared operator is infixl 9.
+export interface Fixity { prec: number; assoc: "left" | "right" | "none" }
+const fixities = new Map<string, Fixity>();
+export function fixityOf(op: string): Fixity {
+    return fixities.get(op) ?? { prec: 9, assoc: "left" };
+}
+// Tokens that are syntax, not operators, though made of operator characters.
+const RESERVED_OPERATORS = new Set(["=", "|", "->", "<-", "!"]);
+// The intrinsics behind the prelude's operators (lib/prelude.apn binds
+// each symbol to one), keyed by name.
+export const PRIMITIVE_OPERATORS = new Map<string, string>([
+    ["primApply", "$"], ["primOr", "||"], ["primAnd", "&&"], ["primEq", "=="], ["primNe", "!="],
+    ["primLt", "<"], ["primGt", ">"], ["primLe", "<="], ["primGe", ">="], ["primCons", ":"],
+    ["primAdd", "+"], ["primSub", "-"], ["primAppend", "++"], ["primMul", "*"], ["primDiv", "/"],
+    ["primMod", "%"], ["primPow", "^"], ["primCompose", "\\"],
+]);
+
+export function isOperatorName(text: string): boolean {
+    return text.length > 0 && [...text].every((c) => OPERATOR_CHARS.includes(c)) && !RESERVED_OPERATORS.has(text);
+}
+function isFixityStart(toks: Token[], i: number): boolean {
+    const t = toks[i], previous = toks[i - 1], next = toks[i + 1];
+    return t.k === "ident" && ["infixl", "infixr", "infix"].includes(t.v) && next?.k === "int" &&
+        (!previous || ["newline", "indent", "dedent"].includes(previous.k) || previous.k === "sym" && previous.v === ";");
+}
+// Record a source's fixity declarations, wherever they stand in it, before
+// it is parsed; they then hold for every later parse too (REPL inputs, and
+// files parsed after the module that declares them).
+function declareFixities(toks: Token[]): void {
+    for (let i = 0; i < toks.length; i++) {
+        if (!isFixityStart(toks, i)) continue;
+        const kind = (toks[i] as { v: string }).v, level = Number((toks[i + 1] as { v: bigint }).v);
+        let j = i + 2;
+        for (; toks[j]?.k === "sym" && isOperatorName((toks[j] as { v: string }).v); j++) {
+            if (level > 9) throw new APNError("parse", "a precedence is 0 to 9", { pos: toks[i + 1].pos });
+            fixities.set((toks[j] as { v: string }).v, { prec: level, assoc: kind === "infixl" ? "left" : kind === "infixr" ? "right" : "none" });
+        }
+        if (j === i + 2) throw new APNError("parse", `${kind} needs the operators it declares (write ${kind} 6 +)`, { pos: toks[i].pos });
+    }
+}
+declareFixities(lex(preludeSource));
 
 // ---------------- Parser ----------------
 
@@ -456,120 +503,62 @@ class Parser {
         while (this.peek().k === "newline" || this.peek().k === "indent") this.next();
     }
 
-    parsePipe(): Expr {
-        const start = this.peek().pos;
-        const f = this.parseTernary();
-        sourceLocations.set(f, { source: this.source, file: this.file, start, end: this.peek().pos });
-        if (!this.isSym("$")) return f;
-        this.next();
-        const argumentStart = this.peek().pos;
-        const x = this.parsePipe();
-        sourceLocations.set(x, { source: this.source, file: this.file, start: argumentStart, end: this.peek().pos });
-        return { t: "pipe", f, x };
-    }
-
-    // Ternary:  cond ? a : b    (right-associative, lower precedence than comparison)
-    parseTernary(): Expr {
-        let e = this.parseLogicalOr();
-        if (this.isSym("?")) {
-            this.next();
-            this.skipLayout();
-            const saved = this.noCons;
-            this.noCons = 1;
-            const then = this.parseTernary();
-            this.noCons = saved;
-            this.expectSym(":");
-            const els = this.parseTernary();
-            e = { t: "ternary", cond: e, then, els };
-        }
-        return e;
-    }
-
-    parseLogicalOr(): Expr {
-        let e = this.parseLogicalAnd();
-        while (this.isSym("||")) {
-            this.next();
-            e = { t: "binop", op: "||", l: e, r: this.parseLogicalAnd() };
-        }
-        return e;
-    }
-
-    parseLogicalAnd(): Expr {
-        let e = this.parseCompare();
-        while (this.isSym("&&")) {
-            this.next();
-            e = { t: "binop", op: "&&", l: e, r: this.parseCompare() };
-        }
-        return e;
-    }
-
-    parseCompare(): Expr {
-        let e = this.parseConcat();
-        while (["==", "!=", "<", ">", "<=", ">="].some((s) => this.isSym(s))) {
-            const op = (this.next() as { v: string }).v as BinOp;
-            const r = this.parseConcat();
-            e = { t: "binop", op, l: e, r };
-        }
-        return e;
-    }
+    // Operators by precedence climbing over their fixities (see fixityOf).
+    // Below every operator but $ sits the ternary c ? a : b (level 1, right);
+    // prefix - and ! take an operand of level 8 (so -2 ^ 2 is -(2 ^ 2), and
+    // 2 ^ -3 works). f $ x is a pipe node, x : xs and the rest binops.
+    parsePipe(): Expr { return this.parseOperators(0); }
+    parseTernary(): Expr { return this.parseOperators(1); }
+    parseUnary(): Expr { return this.parseOperators(8); }
 
     noCons = 0; // >0 while parsing a ternary branch (`:` belongs to the ternary)
 
-    parseConcat(): Expr {
-        let e = this.parseAdd();
-        while (this.isSym(":") && this.noCons === 0) {
-            this.next();
-            const r = this.parseConcat(); // right-associative:  0 : 1 : xs
-            e = { t: "binop", op: ":", l: e, r };
-        }
-        return e;
-    }
-
-    parseAdd(): Expr {
-        let e = this.parseMul();
-        while (this.isSym("+") || this.isSym("-") || this.isSym("++")) {
-            const op = (this.next() as { v: string }).v as BinOp;
-            const r = this.parseMul();
-            e = { t: "binop", op, l: e, r };
-        }
-        return e;
-    }
-
-    parseMul(): Expr {
-        let e = this.parseUnary();
-        while (this.isSym("*") || this.isSym("/") || this.isSym("%")) {
-            const op = (this.next() as { v: string }).v as BinOp;
-            const r = this.parseUnary();
-            e = { t: "binop", op, l: e, r };
-        }
-        return e;
-    }
-
-    parseUnary(): Expr {
-        if (this.isSym("-")) { this.next(); return { t: "unop", op: "neg", e: this.parsePower() }; }
-        if (this.isSym("!")) { this.next(); return { t: "unop", op: "not", e: this.parsePower() }; }
-        return this.parsePower();
-    }
-
-    parsePower(): Expr {
-        const left = this.parseComposition();
-        // Leave a trailing ^ for the operand-front operator section (2 ^).
-        if (this.isSym("^") && !(this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === ")")) {
-            this.next();
-            return { t: "binop", op: "^", l: left, r: this.parseUnary() };
-        }
-        return left;
-    }
-
-    // Application binds tighter than composition; composition binds tighter than *.
-    parseComposition(): Expr {
-        const left = this.parseApp();
-        if (this.isSym("\\") && !(this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === ")")) {
+    parseOperators(minPrec: number): Expr {
+        const start = this.peek().pos;
+        let left = this.parseOperand();
+        for (;;) {
+            const t = this.peek();
+            if (t.k !== "sym") break;
+            if (t.v === "?") {
+                if (minPrec > 1) break;
+                this.next();
+                this.skipLayout();
+                const saved = this.noCons;
+                this.noCons = 1;
+                const then = this.parseOperators(1);
+                this.noCons = saved;
+                this.expectSym(":");
+                const els = this.parseOperators(1);
+                left = { t: "ternary", cond: left, then, els };
+                continue;
+            }
+            if (!isOperatorName(t.v) || t.v === ":" && this.noCons) break;
+            // Leave a trailing operator for the operand-front section (2 ^).
+            const after = this.peek(1);
+            if (after.k === "sym" && (after.v === ")" || after.v === "}")) break;
+            const fixity = fixityOf(t.v);
+            if (fixity.prec < minPrec) break;
             this.next();
             this.skipContinuation();
-            return { t: "binop", op: "\\", l: left, r: this.parseComposition() };
+            const rightStart = this.peek().pos;
+            const right = this.parseOperators(fixity.assoc === "right" ? fixity.prec : fixity.prec + 1);
+            if (t.v === "$") {
+                sourceLocations.set(left, { source: this.source, file: this.file, start, end: t.pos });
+                sourceLocations.set(right, { source: this.source, file: this.file, start: rightStart, end: this.peek().pos });
+                left = { t: "pipe", f: left, x: right };
+            } else left = { t: "binop", op: t.v, l: left, r: right };
+            const following = this.peek();
+            if (fixity.assoc === "none" && following.k === "sym" && isOperatorName(following.v) && fixityOf(following.v).prec === fixity.prec) {
+                throw new Error(`Parser: '${t.v}' is non-associative (infix ${fixity.prec}); add parentheses`);
+            }
         }
         return left;
+    }
+
+    parseOperand(): Expr {
+        if (this.isSym("-")) { this.next(); return { t: "unop", op: "neg", e: this.parseOperators(8) }; }
+        if (this.isSym("!")) { this.next(); return { t: "unop", op: "not", e: this.parseOperators(8) }; }
+        return this.parseApp();
     }
 
     parseApp(): Expr {
@@ -830,6 +819,9 @@ class Parser {
                             if (tb.k === "sym" && tb.v === "," && t.v === "(") {
                                 throw new Error("Parser: tuples are not supported; use a list [a, b, ...] instead");
                             }
+                            if (this.skipFixityDeclaration()) continue;
+                            const operator = this.tryOperatorDefinition();
+                            if (operator) { stmts.push({ t: "stmDef", ...operator }); continue; }
                             this.rejectDefinitionAnnotation();
                             if (this.isEagerBinding()) {
                                 stmts.push(this.parseEagerBinding());
@@ -891,14 +883,14 @@ class Parser {
                         // no upper bound = INFINITE. Falls back to a normal list literal.
                         {
                             const save = this.i;
-                            const loE = this.parseAdd();
+                            const loE = this.parseOperators(6);
                             if (this.isSym("..")) {
                                 this.next();
                                 if (this.isSym("]")) {
                                     this.next();
                                     return rangeSyntax(loE, null, null);
                                 }
-                                const hi = this.parseAdd();
+                                const hi = this.parseOperators(6);
                                 this.expectSym("]");
                                 if (loE.t === "char" && hi.t === "char") {
                                     const start = loE.v.codePointAt(0)!, end = hi.v.codePointAt(0)!;
@@ -920,7 +912,7 @@ class Parser {
                                     !(this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === "]")) {
                                 const save2 = this.i;
                                 this.next();
-                                const sE = this.parseAdd();
+                                const sE = this.parseOperators(6);
                                 if (this.isSym("..")) {
                                     this.next();
 
@@ -928,7 +920,7 @@ class Parser {
                                         this.next();
                                         return rangeSyntax(loE, sE, null);
                                     }
-                                    const hi = this.parseAdd();
+                                    const hi = this.parseOperators(6);
                                     this.expectSym("]");
                                     return rangeSyntax(loE, sE, hi);
                                 }
@@ -1186,35 +1178,32 @@ class Parser {
         return { t: "patDef", pattern, value, ...(update ? { update } : {}) };
     }
 
-    // Operator sections:  (+ 2) -> \x -> x + 2    (2 +) -> \x -> 2 + x
-    // (- 2) is NOT a section (no whitespace info in the lexer) — it stays unary
-    // negation; use a lambda for that. (10 -) and a lone (-) are unambiguous,
-    // so they are sections.
-    static sectionOps = ["&&", "||", "\\", "^", "+", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=", "++"];
+    // Operator sections, for every operator: (+ 2) is x -> x + 2, (2 +) is
+    // x -> 2 + x, and a lone (+) is the operator's function. (- 2) is not a
+    // section: it stays unary negation (use a lambda); (10 -) and (-) are.
+    // Each is a lambda over a binop, so the operator's meaning is looked up
+    // where it is applied, like any other use of it.
+    static operatorBody(op: string, l: Expr, r: Expr): Expr {
+        return op === "$" ? { t: "pipe", f: l, x: r } : { t: "binop", op, l, r };
+    }
 
     tryOperatorSection(close: string): Expr | null {
         const save = this.i;
         const t = this.peek();
         const lone = this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === close;
         // op-front:  (+ 2)   (op followed by an operand, then ')')
-        if (t.k === "sym" && (t.v === "-" ? lone : Parser.sectionOps.includes((t as { v: string }).v))) {
+        if (t.k === "sym" && isOperatorName(t.v) && (t.v !== "-" || lone)) {
             try {
                 // lone (op): a 2-arg lambda —  add = (+)
                 if (lone) {
-                    const op = t.v as BinOp;
                     this.next(); // op
                     this.next(); // )
-                    return {
-                        t: "lambda",
-                        params: ["$L", "$R"],
-                        body: { t: "binop", op, l: { t: "var", name: "$L" }, r: { t: "var", name: "$R" } },
-                    };
+                    return { t: "lambda", params: ["$L", "$R"], body: Parser.operatorBody(t.v, { t: "var", name: "$L" }, { t: "var", name: "$R" }) };
                 }
                 this.next(); // op
                 const operand = this.parseUnary();
                 this.expectSym(close);
-                const op = t.v as BinOp;
-                return { t: "lambda", params: ["$S"], body: { t: "binop", op, l: { t: "var", name: "$S" }, r: operand } };
+                return { t: "lambda", params: ["$S"], body: Parser.operatorBody(t.v, { t: "var", name: "$S" }, operand) };
             } catch {
                 this.i = save;
             }
@@ -1223,12 +1212,10 @@ class Parser {
         try {
             const operand = this.parseUnary();
             const op = this.peek();
-            if (op.k === "sym" && ((op as { v: string }).v === "-" ||
-                    Parser.sectionOps.includes((op as { v: string }).v)) &&
-                    this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === close) {
+            if (op.k === "sym" && isOperatorName(op.v) && this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === close) {
                 this.next(); // op
                 this.next(); // )
-                return { t: "lambda", params: ["$S"], body: { t: "binop", op: (op as { v: string }).v as BinOp, l: operand, r: { t: "var", name: "$S" } } };
+                return { t: "lambda", params: ["$S"], body: Parser.operatorBody(op.v, operand, { t: "var", name: "$S" }) };
             }
         } catch {
             // fall through to the normal parenthesized-expression parse
@@ -1237,7 +1224,43 @@ class Parser {
         return null;
     }
 
-// Skip newlines, indents, AND dedents (used where layout boundaries separate
+    // A fixity declaration (infixl 6 +): already recorded (declareFixities),
+    // so the statement only needs skipping.
+    skipFixityDeclaration(): boolean {
+        if (!isFixityStart(this.toks, this.i)) return false;
+        this.i += 2;
+        while (this.peek().k === "sym" && isOperatorName((this.peek() as { v: string }).v)) this.next();
+        return true;
+    }
+
+    // An operator definition: (+) = value, or a + b = body with one pattern
+    // on each side (the patterns of a two-argument clause).
+    tryOperatorDefinition(): { name: string; clauses: { params: Pattern[]; body: Expr }[] } | null {
+        const save = this.i;
+        const t = this.peek(), op = this.peek(1), close = this.peek(2), eq = this.peek(3);
+        if (t.k === "sym" && t.v === "(" && op.k === "sym" && isOperatorName(op.v) && close.k === "sym" && close.v === ")" && eq.k === "sym" && eq.v === "=") {
+            this.i += 3;
+            this.next(); // =
+            return { name: op.v, clauses: [{ params: [], body: this.parseDefBody("=") }] };
+        }
+        try {
+            const left = this.parsePatternAtom();
+            const name = this.peek();
+            // x:xs = ... binds a cons pattern; it defines no operator.
+            if (name.k === "sym" && isOperatorName(name.v) && name.v !== ":") {
+                this.next();
+                const right = this.parsePatternAtom();
+                if (this.isSym("=")) {
+                    this.next();
+                    return { name: name.v, clauses: [{ params: [left, right], body: this.parseDefBody("=") }] };
+                }
+            }
+        } catch { /* not an operator definition */ }
+        this.i = save;
+        return null;
+    }
+
+    // Skip newlines, indents, AND dedents (used where layout boundaries separate
     // the parts of a single construct, e.g. a type signature).
     skipAll() {
         while (["newline", "indent", "dedent"].includes(this.peek().k)) this.next();
@@ -1405,6 +1428,12 @@ class Parser {
                 throw new Error("Parser: top-level statements must not be indented");
             }
 
+            if (this.skipFixityDeclaration()) continue;
+            const operator = this.tryOperatorDefinition();
+            if (operator) {
+                out.push({ t: "def", ...operator });
+                continue;
+            }
             if (t.k === "ident") this.rejectDefinitionAnnotation();
             if (this.isEagerBinding()) {
                 out.push(this.parseEagerBinding() as TopLevel);
@@ -1564,6 +1593,7 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
     }
     const p = new Parser(toks, src, file);
     try {
+        declareFixities(toks);
         if (!looseSpacing) p.checkBracketSpacing();
         const out = p.parseTopLevel();
         return groupClauses(out);

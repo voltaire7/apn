@@ -1,7 +1,7 @@
 import { keySource } from "./record-keys.ts";
 import type { Expr, Pattern } from "./ast.ts";
 import type { Value } from "./types.ts";
-import { exprToSource, functionSpecSource } from "./parser.ts";
+import { exprToSource, fixityOf, functionSpecSource } from "./parser.ts";
 import { valueToString } from "./types.ts";
 
 function pattern(p: Pattern): string {
@@ -24,23 +24,24 @@ function pattern(p: Pattern): string {
         case "range": return `[${p.lo}..${p.hi}]`;
     }
 }
-const precedence: Record<string, number> = { "\\": 9.5, "||": 2, "&&": 3, "==": 4, "!=": 4, "<": 4, ">": 4, "<=": 4, ">=": 4, ":": 5, "++": 5, "+": 6, "-": 6, "*": 7, "/": 7, "%": 7, "^": 9 };
-function source(e: Expr, parent = 0): string {
+function source(e: Expr, parent = -1): string {
     let text: string, level = 12;
     switch (e.t) {
         case "string": return JSON.stringify(e.v);
         case "app": level = 10; text = `${source(e.f, 10)} ${source(e.a, 11)}`; break;
         case "binop": {
-            level = precedence[e.op];
-            const right = e.op === ":" || e.op === "++" || e.op === "^" || e.op === "\\";
-            text = `${source(e.l, level + (right ? 1 : 0))} ${e.op} ${source(e.r, level + (right ? 0 : 1))}`;
+            // Levels follow the fixity table: operators 0..9, application 10.
+            const { prec, assoc } = fixityOf(e.op);
+            level = prec;
+            text = `${source(e.l, prec + (assoc === "left" ? 0 : 1))} ${e.op} ${source(e.r, prec + (assoc === "right" ? 0 : 1))}`;
             break;
         }
-        case "unop": level = 8; text = `${e.op === "neg" ? "-" : "!"}${source(e.e, 9)}`; break;
-        case "patternLambda": level = 0; text = `${e.params.map(pattern).join(" ")}${e.guard ? " | " + source(e.guard) : ""} -> ${source(e.body)}`; break;
-        case "lambda": level = 0; text = `${e.params.join(" ")} -> ${source(e.body)}`; break;
-        case "pipe": level = 1; text = `${source(e.f, 2)} $ ${source(e.x, 1)}`; break;
-        case "ternary": level = 0; text = `${source(e.cond, 1)} ? ${source(e.then)} : ${source(e.els)}`; break;
+        // Prefix - and ! bind tighter than * (7) and looser than ^ (8).
+        case "unop": level = 7.5; text = `${e.op === "neg" ? "-" : "!"}${source(e.e, 8)}`; break;
+        case "patternLambda": level = -1; text = `${e.params.map(pattern).join(" ")}${e.guard ? " | " + source(e.guard) : ""} -> ${source(e.body)}`; break;
+        case "lambda": level = -1; text = `${e.params.join(" ")} -> ${source(e.body)}`; break;
+        case "pipe": level = 0; text = `${source(e.f, 1)} $ ${source(e.x, 0)}`; break;
+        case "ternary": level = 1; text = `${source(e.cond, 2)} ? ${source(e.then, 6)} : ${source(e.els, 2)}`; break;
         case "list": return `[${e.v.map(x => source(x)).join(",")}]`;
         case "record": return `[${e.v.map(([k, v]) => `${keySource(k)}: ${source(v)}`).join(", ")}]`;
         case "block": {
