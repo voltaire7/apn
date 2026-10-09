@@ -481,6 +481,9 @@ print (Celsius 21)                  # => Celsius 21.0
 Span = Span2 Int Int | NoSpan       # every payload field converts, by value
 spanEnd (Span2 a (UInt8 b)) = b     # spanEnd (Span2 1 300) is a static range error
 print (spanEnd (Span2 1 3))         # => 3
+byteField ([x: UInt8] r) = r.x      # record fields are checked by value too
+scaled v = byteField [x: v * 100]   # scaled 3 is a static range error
+print (scaled 1)                    # => UInt8 100
 tailOf (x:rest) = rest              # ':' in a pattern is always cons
 print (tailOf [1,2,3])            # => [2,3]
 

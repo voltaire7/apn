@@ -73,6 +73,8 @@ interface Known {
     expr?: { e: Expr; env: [string, Known][]; scope: Scope };
     // payload: a constructor application's fields (Some 300).
     payload?: Known[];
+    // fields: a record literal's field values ([x: 300]).
+    fields?: [string, Known][];
 }
 // A function's clauses and defining scope, so a direct call by name can
 // evaluate what its result value is from what is known about the arguments.
@@ -95,6 +97,7 @@ interface Entry {
     ref?: string;
     call?: Known["call"];
     payload?: Known[];
+    fields?: [string, Known][];
     expr?: Known["expr"];
     clauses?: { params: Pattern[]; body: Expr }[];
     mono?: boolean;
@@ -723,11 +726,12 @@ function substituteOnce(known: Known, subst: [string, Index] | undefined, value:
     if (result.ref && value && result.ref === value[0]) {
         const v = value[1];
         // The whole value is the argument's, its index included (none for a non-integer).
-        result = { index: subst && known.index?.terms.has(subst[0]) ? result.index : v.index, size: v.size, items: v.items, cell: v.cell, range: v.range, mutable: v.mutable, fn: v.fn, boolean: v.boolean, string: v.string, char: v.char, float: v.float, number: v.number, tag: v.tag, ref: v.ref, call: v.call, expr: v.expr, payload: v.payload };
+        result = { index: subst && known.index?.terms.has(subst[0]) ? result.index : v.index, size: v.size, items: v.items, cell: v.cell, range: v.range, mutable: v.mutable, fn: v.fn, boolean: v.boolean, string: v.string, char: v.char, float: v.float, number: v.number, tag: v.tag, ref: v.ref, call: v.call, expr: v.expr, payload: v.payload, fields: v.fields };
     }
     if (result.call) result = { ...result, call: { ...result.call, args: result.call.args.map(go) } };
     if (result.items) result = { ...result, items: result.items.map(go) };
     if (result.payload) result = { ...result, payload: result.payload.map(go) };
+    if (result.fields) result = { ...result, fields: result.fields.map(([key, k]) => [key, go(k)]) };
     if (result.fn) result = { ...result, fn: { ...result.fn, env: result.fn.env.map(([n, k]) => [n, go(k)]) } };
     if (result.expr) result = { ...result, expr: { ...result.expr, env: result.expr.env.map(([n, k]) => [n, go(k)]) } };
     return result;
@@ -913,7 +917,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // An argument whose value, or an element's, depends on an enclosing parameter.
     function symbolicArgument(argument: Known): boolean {
         return symbolic({ index: argument.index, ref: argument.ref, call: argument.call, expr: argument.expr, fn: argument.fn }) ||
-            !!argument.items?.some(symbolicArgument) || !!argument.payload?.some(symbolicArgument);
+            !!argument.items?.some(symbolicArgument) || !!argument.payload?.some(symbolicArgument) ||
+            !!argument.fields?.some(([, k]) => symbolicArgument(k));
     }
     // A type still waiting for an unknown type, at its top or in a part ([x,-x]).
     function waitingWithin(type: Ty, seen = new Set<Ty>()): boolean {
@@ -928,7 +933,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The deferred call being evaluated, so deferring it again keeps the same node.
     let evaluatingCall: Extract<Ty, { k: "operation" }> | undefined;
     function deferredCall(f: Ty, argument: Entry): Ty {
-        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, range: argument.range, mutable: argument.mutable, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr, payload: argument.payload } };
+        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, range: argument.range, mutable: argument.mutable, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr, payload: argument.payload, fields: argument.fields } };
         requirements.push(result);
         return resolve(result);
     }
@@ -1612,6 +1617,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             });
             return;
         }
+        // A record's fields, by name ([x: 300] for [x: UInt8]).
+        if (t.k === "record" && known.fields) {
+            for (const [key, value] of known.fields) {
+                const type = t.fields.get(key);
+                const field = e.t === "record" ? e.v.find(([k]) => k === key)?.[1] ?? e : e;
+                if (type) castKnown(type, demand(value) ?? value, field);
+            }
+            return;
+        }
         // One payload of a variant (Some 300).
         if (t.k === "variant" && t.args.length === 1 && known.payload?.length === 1) {
             castKnown(t.args[0], known.payload[0], e.t === "app" ? e.a : e);
@@ -1924,8 +1938,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             collect(argument.type);
             // With this argument's value known, the function's deferred checks
             // (calls on the parameter) see that value instead of its symbol.
-            const value: Known = { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, range: argument.range, mutable: argument.mutable, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr, payload: argument.payload };
-            const known = argument.index || argument.ref || argument.call || argument.expr || [argument.size, argument.items, argument.cell, argument.range, argument.mutable, argument.fn, argument.boolean, argument.string, argument.char, argument.float, argument.number, argument.tag].some(x => x !== undefined);
+            const value: Known = { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, range: argument.range, mutable: argument.mutable, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr, payload: argument.payload, fields: argument.fields };
+            const known = argument.index || argument.ref || argument.call || argument.expr || [argument.size, argument.items, argument.cell, argument.range, argument.mutable, argument.fn, argument.boolean, argument.string, argument.char, argument.float, argument.number, argument.tag, argument.payload, argument.fields].some(x => x !== undefined);
             const pending = f.binder && known
                 ? checks.map(check => copy(check, new Map([...variables(check)].map(t => [t, t])),
                     argument.index ? [f.binder!, argument.index] : undefined, undefined, [f.binder!, value]))
@@ -3376,6 +3390,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // any value a directly called function's result is known to have.
     function literalOf(e: Expr, scope: Scope): Known {
         if (e.t === "char") return { char: e.v };
+        // A record literal's fields (not one that spreads another record).
+        if (e.t === "record" && e.v.every(([key]) => key !== "_")) return { fields: e.v.map(([key, x]) => [key, valueEntry(x, scope)]) };
         if (e.t === "float") return { float: e.v };
         if (e.t === "unop" && e.op === "neg" && e.e.t === "float") return { float: -e.e.v };
         if (e.t === "block" && e.stmts.length === 1) return literalOf(e.stmts[0], scope);
@@ -3385,7 +3401,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (!entry) return {};
             if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
             if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope } };
-            return { size: entry.size, items: entry.items, mutable: entry.mutable, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload };
+            return { size: entry.size, items: entry.items, mutable: entry.mutable, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };
         }
         if (e.t === "app") {
             const args: Expr[] = [];
@@ -3457,7 +3473,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : evaluateKnown(known.expr!.e, new Map(known.expr!.env.map(([n, v]) => [n, resolveKnown(v)])), known.expr!.scope, 0),
             symbolic(known) ? SYMBOLIC_BUDGET : EVALUATION_BUDGET);
         const result: Known = { ...known };
-        for (const key of ["index", "size", "items", "cell", "range", "mutable", "fn", "boolean", "string", "char", "float", "number", "tag", "payload"] as const) {
+        for (const key of ["index", "size", "items", "cell", "range", "mutable", "fn", "boolean", "string", "char", "float", "number", "tag", "payload", "fields"] as const) {
             if (result[key] === undefined && facts?.[key] !== undefined) (result as Record<string, unknown>)[key] = facts[key];
         }
         return result;
@@ -3691,7 +3707,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope } };
                 if (e.name === "getArgs" && entry.builtin && options.inputs) return known(options.inputs.args().map(string => ({ string })));
                 const index = entry.index && !entry.index.terms.size ? entry.index : undefined;
-                return { index, size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload };
+                return { index, size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };
             }
             case "block": return evaluateBlock(e, env, scope, depth);
             case "ternary": {
@@ -3711,6 +3727,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return n === undefined ? undefined : attempt(() => n.typeName ? castNumeric(n.typeName, negate(n)) : negate(n));
             }
             case "list": return known(e.v.map(x => lazyValue(() => value(x), { exprs: [x], env })));
+            // A record literal's fields, each computed when demanded, as a list's elements are.
+            case "record":
+                if (e.v.some(([key]) => key === "_")) { incomplete = true; return undefined; }
+                return { fields: e.v.map(([key, x]) => [key, lazyValue(() => value(x), { exprs: [x], env })]) };
             case "lambda": return { fn: { e, env: [...env], scope } };
             // A pattern lambda (() -> x, [a, b] -> a) is a one-clause local function.
             case "patternLambda": {

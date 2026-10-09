@@ -414,7 +414,9 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   concrete fields are `coerce` functions; a converting payload pattern on a
   concrete field converts it (`bind`). `castPattern` walks a parameter or
   binding pattern beside the argument's known value (variant `payload`s of
-  any arity, list `items`, cons cells) and converts each typed part. `substituteKnown` skips values it is
+  any arity, list `items`, cons cells) and converts each typed part. Record
+  literals record their `fields` (lazy in `evaluateKnown`, as list elements
+  are; not a record that spreads `_`), which `castKnown` converts by name. `substituteKnown` skips values it is
   already inside (a recursive function in its own env). `castKnown` converts a
   known argument value to the parameter type (list elements, or a list's
   elements to a record schema's fields, or a one-field variant's `payload`,

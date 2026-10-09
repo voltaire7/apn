@@ -77,7 +77,10 @@ function (`h x = g (Some x)` rejects `h 300`). This holds for every field of
 a constructor with several: with `P = P2 Int Int | P0`, `g (P2 a (UInt8 y))`
 accepts `g (P2 1 3)` and rejects `g (P2 1 300)`, and with
 `Pair a b = MkPair a b | NoPair`, `g (MkPair (Float x) (UInt8 y))` rejects
-`g (MkPair 1 300)`.
+`g (MkPair 1 300)`. Record literals are checked by field the same way: for
+`g ([x: UInt8] r)`, `g [x: 300]` is a static range error, as are
+`k = [x: 300]; g k`, `h r = g r; h [x: 300]` and `h v = g [x: v * 100]; h 3`,
+while `h 1` passes.
 
 For records, the bare-name pattern
 `[x,y]` requires those fields, ignores field order, and permits extra fields.
