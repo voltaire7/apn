@@ -65,7 +65,13 @@ sumPair [x,y] = x + y
 # [3, 3]
 ```
 
-List patterns require the exact length. For records, the bare-name pattern
+List patterns require the exact length. Their elements may be type
+patterns, which convert as a whole-argument type pattern does:
+`pair [UInt8 a,UInt8 b] = a + b` accepts `pair [3,3]` (and
+`[UInt8 a,UInt8 b] = [3,3]` as a binding), while `pair [3,300]` is a static
+range error; `firstFloat ((Float x):rest) = x` returns `1.0` for `[1,2]`.
+
+For records, the bare-name pattern
 `[x,y]` requires those fields, ignores field order, and permits extra fields.
 This record interpretation only applies when every element of the pattern is a
 variable name. Renaming those variables also changes which fields it selects.

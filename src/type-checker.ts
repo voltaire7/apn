@@ -2411,9 +2411,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         capture: carried(old),
                     });
                     rederiveUsers(e.pattern.name, old, scope);
-                } else if (e.pattern.p === "constr" && resolve(scope.get(e.pattern.tag)?.type ?? dynamic).k === "type") {
-                    // A type pattern (Int x = 1, Float y = 1) converts its value
-                    // as a parameter pattern converts an argument.
+                } else if (e.pattern.p === "constr" && resolve(scope.get(e.pattern.tag)?.type ?? dynamic).k === "type" ||
+                    (e.pattern.p === "list" || e.pattern.p === "cons") && patternConverts(e.pattern, scope)) {
+                    // A type pattern (Int x = 1, Float y = 1, [UInt8 a,UInt8 b] = ...)
+                    // converts its value as a parameter pattern converts an argument.
                     const target = variable();
                     bind(e.pattern, target, scope, e);
                     convert(target, t, e.value, false, new Map(), true);
@@ -4249,6 +4250,24 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const seen = new Set<Ty>();
         for (let t = resolve(type); t.k === "fn" && !seen.has(t); t = resolve(t.output)) { seen.add(t); t.shape = shape; }
     }
+    // Whether a pattern converts the value it matches (Int n, a schema, a
+    // contract), in whole or in a part ([UInt8 a,UInt8 b], (Float x):rest).
+    // A variant pattern checks its tag, not the inferred types of its
+    // payloads. Only real type patterns can project Dynamic arguments.
+    function patternConverts(p: Pattern, scope: Scope): boolean {
+        switch (p.p) {
+            case "schema": case "contract": case "int": return true;
+            case "constr": {
+                const constructor = resolve(scope.get(p.tag)?.type ?? dynamic);
+                return constructor.k === "type" && !variables(constructor.value).size || constructor.k === "record" || constructor.k === "list";
+            }
+            case "list": return p.v.some(item => patternConverts(item, scope));
+            case "cons": return patternConverts(p.head, scope) || patternConverts(p.tail, scope);
+            case "as": return patternConverts(p.left, scope) || patternConverts(p.right, scope);
+            case "typeBind": return patternConverts(p.value, scope);
+            default: return false;
+        }
+    }
     function functionType(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr): Ty {
         const outerFacts = lengthFacts;
         lengthFacts = new Map(outerFacts);
@@ -4279,12 +4298,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     ref: binder,
                 });
             }
-            const constructor = p.p === "constr" ? resolve(scope.get(p.tag)?.type ?? dynamic) : undefined;
-            // A variant pattern checks its tag, not the inferred types of its
-            // payloads. Only real type patterns can project Dynamic arguments.
-            const converts = constructor?.k === "type" && !variables(constructor.value).size ||
-                constructor?.k === "record" || constructor?.k === "list";
-            inputs.push({ type: t, binder, coerce: p.p === "schema" || p.p === "contract" || p.p === "int" || converts });
+            inputs.push({ type: t, binder, coerce: patternConverts(p, scope) });
         }
         // An explicit result constructor supplies the recursive signature before
         // checking the body. Only inspect its descriptor; never run user code.

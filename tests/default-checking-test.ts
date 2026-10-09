@@ -1048,6 +1048,12 @@ for (const [source, expected] of [
     ['Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g [x,-x]; h 0', 'UInt 0'],
     ['Pt = [x: Float, y: Float]; g (Pt p) = p.y; h x = g [x,x]; h 2', '2.0'],
     ['g ((Int -> Int) f) = f 1; h x = g x; h (+ 1)', '2'],
+    ['g [UInt8 a,UInt8 b] = a + b; g [3,3]', '6'],
+    ['g [Float a,b] = a; g [1,"x"]', '1.0'],
+    ['g ((Float x):rest) = x; g [1,2]', '1.0'],
+    ['[UInt8 a,UInt8 b] = [3,3]; a + b', '6'],
+    ['(Float x):rest = [1,2]; x', '1.0'],
+    ['g [UInt8 a,UInt8 b] = a; h x = g [x,x * 100]; h 1', '1'],
     ['f y = { Float x = y; x * 2 }; f 1.5', '3.0'],
 ] as const) Deno.test(`typed binding: ${source}`, () => {
     if (run(session(), source) !== expected) throw new Error(source);
@@ -1062,7 +1068,9 @@ for (const source of ['Int x = "a"', 'Int x = 2.5', 'Int8 x = 300', 'Int x = 1; 
     'g (UInt n) = n; h x = g (-x); d y = h 2; 1', 'g (UInt n) = n; h x = g x; d y = h "a"; 1',
     'import "text"; g (UInt n) = n; h x = { y = g x; z = upper x; y }; 1',
     'Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g [x,-x]; h 2', 'Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g x; h [2,-2]',
-    'Pt = [x: Float, y: Float]; g (Pt p) = p.x; h x = g x; h [1]', 'g ((Int -> Int) f) = f 1; h x = g x; h 5', 'g (String s) = s; h x = g x; h 1']) {
+    'Pt = [x: Float, y: Float]; g (Pt p) = p.x; h x = g x; h [1]', 'g ((Int -> Int) f) = f 1; h x = g x; h 5', 'g (String s) = s; h x = g x; h 1',
+    'g [UInt8 a,UInt8 b] = a; g [3,300]', 'g [UInt8 a,UInt8 b] = a; g [3,-1]', 'g [UInt8 a,UInt8 b] = a; h x = g [x,x * 100]; h 3',
+    '[UInt8 a,UInt8 b] = [3,300]', 'g [String s,Int n] = s; g [1,2]']) {
     Deno.test(`typed binding rejects: ${source}`, () => rejected(session(), source));
 }
 for (const source of ['Int = 5', 'Int x y = 5']) Deno.test(`a built-in type name is not redefined: ${source}`, () => {
