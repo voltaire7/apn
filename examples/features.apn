@@ -736,6 +736,7 @@ import "system"               # halt is a deferred action
 
 numbers = load "../lib/number"      # namespaced module record
 print (numbers.sq 4)           # => 16
+print (numbers.cube 2)         # => 8; each use loads the file again, replacing its own definitions
 
 # step into the imported halt (an action whose body is exit 0):
 debug $ step 1 halt          # => exit 0

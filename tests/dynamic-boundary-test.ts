@@ -140,3 +140,17 @@ Deno.test("set on an explicit Dynamic target is checked at runtime", () => {
     const value = run("cell = Dynamic (Mutable 1); set cell 2; Int (Dynamic cell) + 1");
     if (value !== "3") throw new Error(`expected 3, got ${value}`);
 });
+
+Deno.test('a value binding may load the same file again', () => {
+    const fixtures = new URL('./fixtures/', import.meta.url).pathname;
+    const i = new Interpreter(); i.enableChecking(); i.sourceDir = fixtures;
+    // Each use of h runs the load again; it replaces only what it published.
+    i.run(parseDocument('h = load "reload"\nfirst = h.double 1\nsecond = h.double h.limit'));
+    if (i.renderString(i.run(parseDocument('[first,second]'))) !== '[2,20]') throw new Error('reload');
+    const j = new Interpreter(); j.enableChecking(); j.sourceDir = fixtures;
+    try { j.run(parseDocument('load "reload"\ndouble n = n + 1\nload "reload"')); } catch (error) {
+        if (String(error).includes("Dynamic write to 'double'")) return;
+        throw error;
+    }
+    throw new Error('a reload replaced a rebound function');
+});

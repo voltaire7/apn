@@ -699,6 +699,10 @@ caller bindings do not affect it. Reimporting installs the cached exports
 again. Imports return an export record. A definition such as
 `s = import "sequence"` defers importing until demanded.
 `load` remains uncached file execution relative to the current source file.
+`numbers = load "number"` is a repeatable action like any other, so each use
+of `numbers` loads the file again. Loading the same file (with unchanged
+text) again replaces the definitions it published in the caller's scope; a
+name the program rebound in between keeps the usual write checks.
 See [the standard library reference](standard-library.md) for APIs and limits.
 
 ## REPL clauses

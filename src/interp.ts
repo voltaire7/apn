@@ -463,14 +463,24 @@ export class Interpreter {
         return value;
     }
 
-    private publishForeignBindings(scope: Env, bindings: Array<[string, Value]>): void {
+    // origin names the source of the bindings (a loaded file's path and
+    // text): running the same source again may replace what it published,
+    // since its checked definitions are the same.
+    private publishForeignBindings(scope: Env, bindings: Array<[string, Value]>, origin?: string): void {
         const pending = new Map<string, Value>();
+        const published = this.publishedBy.get(scope);
         for (const [key, value] of bindings) {
             const old = pending.get(key) ?? (this.checking && !this.dynamicDepth ? scope.map.get(key) : scope.get(key));
-            pending.set(key, this.checkedExecution && old ? this.protectDynamicWrite(old, value, key) : value);
+            const own = origin !== undefined && old !== undefined && published?.get(key)?.origin === origin && published.get(key)!.value === old;
+            pending.set(key, this.checkedExecution && old && !own ? this.protectDynamicWrite(old, value, key) : value);
         }
         for (const [key, value] of pending) scope.setLocal(key, value);
+        if (origin === undefined) { for (const [key] of pending) published?.delete(key); return; }
+        const record = published ?? new Map<string, { origin: string; value: Value }>();
+        for (const [key, value] of pending) record.set(key, { origin, value });
+        this.publishedBy.set(scope, record);
     }
+    private publishedBy = new WeakMap<Env, Map<string, { origin: string; value: Value }>>();
 
     private listIndex(value: Value): bigint | undefined {
         if (value.kind === "int") return value.v;
@@ -2314,7 +2324,7 @@ export class Interpreter {
     // so a tail load never retains a JavaScript evaluator stack frame.
     loadFile(pathValue: Value): Value {
         const caller = this.env, callerDir = this.sourceDir;
-        const frames: Array<{ caller: Env; loaded: Env }> = [];
+        const frames: Array<{ caller: Env; loaded: Env; origin: string }> = [];
         try {
             for (;;) {
                 checkInterrupt();
@@ -2343,7 +2353,7 @@ export class Interpreter {
                 catch (err) { throw new APNError("runtime", `load: parse error in '${path}': ${(err as Error).message}`); }
                 if (this.checking && !this.dynamicDepth) this.checking.verifyLoad(pathValue.v, this.sourceDir, src);
                 const loaded = new Env(this.env);
-                frames.push({ caller: this.env, loaded });
+                frames.push({ caller: this.env, loaded, origin: `${path}\0${src}` });
                 this.env = loaded;
                 this.sourceDir = dirname(path);
                 try {
@@ -2361,7 +2371,7 @@ export class Interpreter {
                     checkInterrupt();
                     const frame = frames.pop()!;
                     const fields: Array<[string, Value]> = [];
-                    this.publishForeignBindings(frame.caller, [...frame.loaded.map]);
+                    this.publishForeignBindings(frame.caller, [...frame.loaded.map], frame.origin);
                     for (const [key] of frame.loaded.map) fields.push([key, frame.caller.get(key)!]);
                     result = { kind: "record", v: fields };
                 }

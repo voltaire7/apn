@@ -166,6 +166,10 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   success, error, or interruption. Non-tail calls keep the depth guard
   (`STACK_LIMIT`). Tests: `tests/tail-call-test.ts`, `tests/repl-interrupt-pty.py`.
 - `load` rejects explicit extensions before any file access.
+- `publishForeignBindings` records, per caller scope, which load origin
+  (path plus source text) published each binding (`publishedBy`). A checked
+  write skips `protectDynamicWrite` only when the same origin replaces the
+  exact value it published. Tests: `tests/dynamic-boundary-test.ts`.
 - `use` validates every key as a binding identifier before publishing and opens
   the active evaluation scope, so wrapper functions don't export into their
   caller. Failed list imports must not install earlier modules' names.
