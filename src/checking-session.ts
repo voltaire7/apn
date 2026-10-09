@@ -44,8 +44,11 @@ export class CheckingSession {
     inputs?: CheckOptions["inputs"];
 
     prepare(program: TopLevel[], directory = "."): TypeScope {
+        // The program's folder: imports search up to it (see resolveModule).
+        this.root = directory;
         return this.check(program, directory, this.scope, false).scope;
     }
+    private root?: string;
 
     commit(candidate: TypeScope, visible: Set<string>): void {
         this.scope = new Map([...candidate].filter(([name]) => visible.has(name)));
@@ -132,7 +135,7 @@ export class CheckingSession {
             for (const item of module) for (const [name, value] of this.module(item, directory)) fields.set(name, value);
             return fields;
         }
-        const resolved = resolveModule(module, directory, this.moduleSources);
+        const resolved = resolveModule(module, directory, this.moduleSources, this.root);
         if (!resolved) { const { message, hint } = unknownModule(module, !!this.moduleSources); throw new APNError("type", message, { hint }); }
         if (this.modules.has(resolved.key)) return copyTypeScope(this.modules.get(resolved.key)!);
         if (this.loading.has(resolved.key)) throw new APNError("type", `cyclic import '${module}'`);

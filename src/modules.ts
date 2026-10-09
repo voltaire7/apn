@@ -1,7 +1,9 @@
 // Where `import "name"` finds its code. Next to the importing file (the
 // current directory in the REPL): name.apn, else every .apn file directly in
-// a name/ folder (subfolders are imported as name/sub). Otherwise the standard
-// library, found the same way under lib/. Standard modules take no prefix and
+// a name/ folder (subfolders are imported as name/sub). Then the same in each
+// parent folder up to the program's root (the main program's folder), so a
+// module in a subfolder can import its siblings' packages; the nearest wins.
+// Otherwise the standard library, found the same way under lib/. Standard modules take no prefix and
 // there is no whole-library module: "std" and "std/name" are errors.
 //
 // The files come from the disk, or from a bundle (a browser build): a map
@@ -67,13 +69,32 @@ function find(files: Files, base: string, name: string, std: boolean): ResolvedM
     };
 }
 
-/** Resolve an import from code in directory, from the disk or a bundle. */
-export function resolveModule(spec: string, directory: string, bundle?: Record<string, string>): ResolvedModule | undefined {
+// The folders an import from directory searches: it, then its parents up
+// to root (only it when it is outside root).
+function searchFolders(directory: string, root: string | undefined): string[] {
+    const folders = [directory];
+    if (root === undefined || !directory.startsWith(root)) return folders;
+    for (let folder = directory; folder !== root;) {
+        folder = folder.slice(0, folder.lastIndexOf("/", folder.length - 2) + 1);
+        folders.push(folder);
+    }
+    return folders;
+}
+
+/**
+ * Resolve an import from code in directory, from the disk or a bundle,
+ * searching parent folders up to root (the program's folder).
+ */
+export function resolveModule(spec: string, directory: string, bundle?: Record<string, string>, root?: string): ResolvedModule | undefined {
     if (!NAME.test(spec) || spec === "std" || spec.startsWith("std/")) return undefined;
     const files = bundle ? bundleFiles(bundle) : disk;
-    const local = find(files, absolute(directory, files), spec, false);
+    const start = absolute(directory, files);
     // Inside the standard library, local modules are the library's own.
-    if (local) return local.key.startsWith(files.lib) ? find(files, files.lib, spec, true) : local;
+    if (start.startsWith(files.lib)) return find(files, start, spec, true) ?? find(files, files.lib, spec, true);
+    for (const folder of searchFolders(start, root === undefined ? undefined : absolute(root, files))) {
+        const local = find(files, folder, spec, false);
+        if (local) return local;
+    }
     return find(files, files.lib, spec, true);
 }
 
@@ -82,7 +103,7 @@ export function unknownModule(spec: string, bundled = false): { message: string;
     if (spec === "std") return { message: "unknown module 'std'", hint: 'import the standard modules you need, such as import "option" or import ["option","text"]' };
     if (spec.startsWith("std/")) return { message: `unknown module '${spec}'`, hint: `standard modules take no prefix: import "${spec.slice(4)}"` };
     if (bundled) return { message: `module '${spec}' is not bundled`, hint: "a browser build bundles the standard library and the local modules the program imports" };
-    return { message: `unknown module '${spec}'`, hint: `no ${spec}.apn or ${spec}/ next to this file, and no standard module '${spec}'` };
+    return { message: `unknown module '${spec}'`, hint: `no ${spec}.apn or ${spec}/ here or in a parent folder of the program, and no standard module '${spec}'` };
 }
 
 // The literal module names a program imports.
@@ -117,7 +138,7 @@ export function bundleProgram(source: string, directory: string): Record<string,
     const seen = new Set<string>();
     const visit = (code: string, label: string, from: string) => {
         for (const spec of importsOf(code, label)) {
-            const module = resolveModule(spec, from);
+            const module = resolveModule(spec, from, undefined, root);
             if (!module || seen.has(module.key) || module.files.some(file => file.std)) continue;
             seen.add(module.key);
             for (const file of module.files) {

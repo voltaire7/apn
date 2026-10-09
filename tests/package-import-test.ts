@@ -1,5 +1,6 @@
 import { Interpreter } from "../src/interp.ts";
 import { parseDocument } from "../src/parser.ts";
+import { resolveModule } from "../src/modules.ts";
 
 const directory = new URL("./fixtures/packages/", import.meta.url).pathname;
 function interpreter(checked: boolean): Interpreter {
@@ -51,3 +52,16 @@ for (const checked of [false, true]) {
         throw new Error("accepted a clash");
     });
 }
+for (const checked of [false, true]) Deno.test(`a module imports packages from parent folders up to the program's (checked=${checked})`, () => {
+    // nested/deep/inner.apn imports hello (two folders up) and greeting,
+    // of which nested/greeting.apn is nearer than the program's.
+    const actual = result(interpreter(checked), 'import "nested/deep/inner"; inner');
+    if (actual !== '["hi deep","near"]') throw new Error(actual);
+});
+Deno.test("imports never search above the program's folder", () => {
+    // From nested/ as the program's folder, the outer hello.apn is out of reach.
+    const nested = `${directory}nested/`;
+    if (resolveModule("hello", `${nested}deep/`, undefined, nested)) throw new Error("searched above the root");
+    if (!resolveModule("hello", `${nested}deep/`, undefined, directory)) throw new Error("did not search up to the root");
+    if (resolveModule("hello", `${nested}deep/`)) throw new Error("searched up without a root");
+});

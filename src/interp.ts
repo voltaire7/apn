@@ -115,7 +115,7 @@ export class Interpreter {
             if (open) this.publishForeignBindings(this.env, [...fields]);
             return { kind: "record", v: [...fields] };
         }
-        const resolved = resolveModule(module, this.sourceDir, this.moduleSources);
+        const resolved = resolveModule(module, this.sourceDir, this.moduleSources, this.moduleRoot);
         if (!resolved) { const { message, hint } = unknownModule(module, !!this.moduleSources); throw new APNError("runtime", message, { hint }); }
         let record = this.modules.get(resolved.key);
         if (!record) {
@@ -180,6 +180,8 @@ export class Interpreter {
     // Directory of the source file currently being evaluated — `load` resolves
     // relative paths against it ("relative to your current file").
     sourceDir: string = ".";
+    // The program's folder, where import stops searching parent folders.
+    moduleRoot?: string;
     sourceFile = "<repl>";
 
     constructor() {
@@ -198,6 +200,8 @@ export class Interpreter {
     }
 
     run(program: TopLevel[], tailLoad = false): Value {
+        // The outermost run's folder is the program's: imports search up to it.
+        if (!this.runDepth && !this.dynamicDepth) this.moduleRoot = this.sourceDir;
         // Each checked top-level run takes a fresh input snapshot.
         if (this.checking && !this.runDepth && !this.dynamicDepth) this.inputFiles.clear();
         const candidate = this.checking && !this.runDepth && !this.dynamicDepth

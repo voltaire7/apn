@@ -689,7 +689,9 @@ variable, as in `(t x) (t y)`, requires both arguments to have the same type.
 into the current scope. The name is looked up next to the importing file (the
 current directory in the REPL) as `name.apn`, then as a `name/` folder, whose
 `.apn` files (not subfolders: `import "name/sub"`) form one module; a file wins
-over a folder of the same name. Otherwise it is a standard module such as
+over a folder of the same name. Failing that, each parent folder is searched
+the same way up to the program's folder (the nearest match wins). Otherwise it
+is a standard module such as
 `function`, `option`, `sequence`, `number`, `text` or `map`. Standard modules
 take no prefix; `import "std"` and `import "std/text"` are errors. Module
 evaluation uses an isolated scope with builtins and explicit dependencies;

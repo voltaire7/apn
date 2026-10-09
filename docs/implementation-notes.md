@@ -174,7 +174,10 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   both `Interpreter.importStandard` and `CheckingSession.module`; both cache by
   the resolved path (`key`), so a module and its checked types always come from
   the same files. Each file of a folder module runs (and is checked) in its own
-  builtins scope with `sourceDir` set to its directory. With `moduleSources`
+  builtins scope with `sourceDir` set to its directory. The parent-folder
+  search stops at the program's folder: `Interpreter.moduleRoot` (the outermost
+  run's `sourceDir`) and `CheckingSession.prepare`'s directory, passed as
+  `resolveModule`'s `root`. With `moduleSources`
   (a bundle) the same lookup runs over virtual paths: the standard library
   under `/lib/` and the program's folder at `/app/` (its `sourceDir` in the
   browser). `bundleProgram` collects the program's literal imports

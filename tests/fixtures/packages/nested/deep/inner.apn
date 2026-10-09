@@ -1,0 +1,2 @@
+import ["hello","greeting"]
+inner = [greet "deep",greeting]
