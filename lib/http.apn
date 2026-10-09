@@ -1,0 +1,13 @@
+# HTTP requests. fetch url options sends one and returns its response, whatever
+# its status, as [status: Int, ok: Bool, statusText: String, url: String,
+# headers: HashMap, body: String] (headers by lowercase name). options is a
+# record of method (default "GET"), headers (a record or HashMap of strings),
+# body (a String) and timeout (milliseconds), each optional; [] for none.
+
+# The body of a successful (2xx) response; any other status fails.
+fetchText url options = {
+    response <- fetch url options
+    response.ok ? response.body : fail ("fetch: " ++ response.url ++ " answered " ++ toString response.status ++ " " ++ response.statusText)
+}
+# A successful response's body, decoded as JSON (see the json module).
+fetchJson url options = fromJson (fetchText url options)
