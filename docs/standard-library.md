@@ -32,6 +32,10 @@ directory in the REPL), so `widgets/view.apn` can `import "labels"` from
 `labels.apn` beside the program. The nearest match wins, and the search never
 goes above the program's folder.
 
+`examples/packages/main.apn` uses each of these: a file module, a folder
+module, a subfolder package, a file that is its folder's entry, and imports
+from a parent folder (`apn examples/packages/main.apn`).
+
 A local `text.apn` therefore shadows the standard `text` module for code in
 its folder and below. Each file of a module runs in its own scope of builtins,
 and resolves its own imports and loads relative to its directory. Browser builds (`apn

@@ -1,0 +1,4 @@
+# report.apn beside report/ is the package's entry: import "report" runs this
+# file, which reaches inside its folder with import "report/lines".
+import "report/lines"
+report shapes = joinLines (map describe shapes)

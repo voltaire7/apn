@@ -17,6 +17,9 @@ const examples = new URL("../examples/", import.meta.url);
 for (const file of apnFiles(examples)) {
     const name = file.pathname.slice(examples.pathname.length);
     Deno.test(`example type-checks: ${name}`, () => {
-        new CheckingSession().prepare(parse(Deno.readTextFileSync(file), name), new URL(".", file).pathname.replace(/\/$/, ""));
+        // A file inside an example's folder (a package's module) is checked
+        // with that folder as the program's, so its parent-folder imports resolve.
+        const top = name.includes("/") ? new URL(`${name.slice(0, name.indexOf("/"))}/`, examples).pathname : examples.pathname;
+        new CheckingSession().prepare(parse(Deno.readTextFileSync(file), name), new URL(".", file).pathname.replace(/\/$/, ""), top);
     });
 }

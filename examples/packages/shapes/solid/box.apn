@@ -1,0 +1,4 @@
+# A subfolder is its own package: import "shapes/solid".
+# Its import "shapes" finds the folder two levels up.
+import "shapes"
+boxVolume width height depth = rectangleArea width height * depth

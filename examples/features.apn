@@ -1103,6 +1103,7 @@ print (rangeFactorial 5)                       # 120
 # apn --html examples/browser/counter.apn counter.html
 # The build also bundles the local modules (files or folders) the program imports.
 # A module in a subfolder imports packages from parent folders up to the program's.
+# examples/packages/main.apn demonstrates file, folder and subfolder packages.
 html = import "html"
 browserPreview = html.div [] [
     html.button [] [html.text "-"]

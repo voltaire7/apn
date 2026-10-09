@@ -43,9 +43,9 @@ export class CheckingSession {
     /** The program's input when checking right before a run (see CheckOptions.inputs). */
     inputs?: CheckOptions["inputs"];
 
-    prepare(program: TopLevel[], directory = "."): TypeScope {
+    prepare(program: TopLevel[], directory = ".", root = directory): TypeScope {
         // The program's folder: imports search up to it (see resolveModule).
-        this.root = directory;
+        this.root = root;
         return this.check(program, directory, this.scope, false).scope;
     }
     private root?: string;

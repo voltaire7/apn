@@ -1,0 +1,2 @@
+# A file module: import "greetings" runs this file and opens its definitions.
+greet name = "Hello, " ++ name ++ "!"

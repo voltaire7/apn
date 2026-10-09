@@ -1,0 +1,2 @@
+# shapes/ is a folder module: import "shapes" opens every .apn file in it.
+squareArea side = side * side

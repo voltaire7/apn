@@ -65,3 +65,15 @@ Deno.test("imports never search above the program's folder", () => {
     if (!resolveModule("hello", `${nested}deep/`, undefined, directory)) throw new Error("did not search up to the root");
     if (resolveModule("hello", `${nested}deep/`)) throw new Error("searched up without a root");
 });
+Deno.test("the package example runs", () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    const file = new URL("../examples/packages/main.apn", import.meta.url);
+    i.sourceDir = new URL(".", file).pathname;
+    const printed: string[] = [];
+    const log = console.log;
+    console.log = (...args: unknown[]) => { printed.push(args.join(" ")); };
+    try { i.run(parseDocument(Deno.readTextFileSync(file))); } finally { console.log = log; }
+    const expected = ["Hello, packages!", "[9,10]", "24 m³", "16", "square: 9 m²\nrectangle: 10 m²"];
+    if (JSON.stringify(printed) !== JSON.stringify(expected)) throw new Error(JSON.stringify(printed));
+});

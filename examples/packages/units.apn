@@ -1,0 +1,4 @@
+# Shared helpers, imported from subfolders too (imports search parent folders
+# up to the program's folder).
+squareMetres n = toString n ++ " m²"
+cubicMetres n = toString n ++ " m³"

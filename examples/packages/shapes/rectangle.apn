@@ -1,0 +1,1 @@
+rectangleArea width height = width * height
