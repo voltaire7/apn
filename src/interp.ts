@@ -766,7 +766,21 @@ export class Interpreter {
         seq = this.dataValue(seq);
         const out: Value[] = [];
         if (this.isList(seq)) {
-            for (const x of this.elements(seq)) out.push(this.demand(this.apply(f, x)));
+            const items = this.elements(seq);
+            for (let next = items.next(); !next.done; next = items.next()) {
+                const result = this.demand(this.apply(f, next.value));
+                // Iterating an action streams: one action running each element's
+                // action as it reaches it ([0..] * print prints until Ctrl+C).
+                if (result.kind === "io" && !out.length) {
+                    const list = seq;
+                    return { kind: "io", run: () => {
+                        const results: Value[] = [];
+                        for (const x of this.elements(list)) results.push(this.runIO(this.apply(f, x)));
+                        return mkList(results);
+                    } };
+                }
+                out.push(result);
+            }
         } else if (seq.kind === "record") {
             for (const [k, x] of seq.v) out.push(this.apply(f, mkList([mkStr(keyText(k)), x])));
 

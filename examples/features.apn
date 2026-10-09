@@ -849,6 +849,8 @@ countdown n = n == 0 ? IO "liftoff" : {
 launched <- countdown 3    # => 3 2 1 (recursive actions run in constant stack)
 print launched             # => liftoff (on the same line)
 # (print 1) + 1 is a type error: an action is not its result (bind it first).
+# Iterating an action runs each as it is reached: [0..] * print streams
+# until Ctrl+C (not run here).
 
 # Functor, Applicative and Monad without type classes: fmap (<$>), pure,
 # <*>, >>= and >> work on actions, lists, and Option-like variants (the

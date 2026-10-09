@@ -437,7 +437,8 @@ and the other constructors (`None`, `Err e`) pass through unchanged.
 | `do actions` | runs each action in order, yielding the last result |
 
 `xs * f` iterates: when `f` returns actions it is the single action running
-each in turn (`[1,2,3] * x -> print x`), yielding the results.
+each in turn (`[1,2,3] * x -> print x`), yielding the results. It runs each
+element's action as it reaches it, so `[0..] * print` streams until Ctrl+C.
 
 ### Where laziness ends
 
@@ -445,7 +446,7 @@ APN uses call-by-need for deferred values, arguments, list elements, cons tails,
 and variant fields. Pattern matching forces only what it inspects. That does
 not make every operation lazy: `<-` evaluates now, numeric operations demand
 operands, actions run where statements run them, and `*` iteration eagerly
-collects its results. `map` produces results lazily. Consumers such as `length`
+collects its results (over actions, it runs each as it goes). `map` produces results lazily. Consumers such as `length`
 and sorting need finite input; printing an infinite list keeps streaming until
 interrupted.
 

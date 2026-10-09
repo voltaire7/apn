@@ -1,4 +1,4 @@
-import { Interpreter } from "../src/interp.ts";
+import { Interpreter, setInterruptFlag } from "../src/interp.ts";
 import { parse } from "../src/parser.ts";
 
 // Effects are IO actions: values that statements and <- bindings run.
@@ -70,4 +70,23 @@ for (const [source, message, kind] of [
 Deno.test("IO: an action is not a condition", () => {
     try { run("x = print 1\nprint (x ? 1 : 2)", false); } catch (e) { if (String(e).includes("not a condition")) return; throw e; }
     throw new Error("accepted");
+});
+Deno.test("IO: iterating an infinite list streams each action until interrupted", () => {
+    for (const source of ["[0..] * print", "print * [0..]"]) {
+        const i = new Interpreter();
+        i.enableChecking();
+        const flag = new Int32Array(new SharedArrayBuffer(8));
+        const log = console.log;
+        let count = 0, interrupted = false;
+        console.log = () => { if (++count === 1000) Atomics.store(flag, 0, 1); };
+        setInterruptFlag(flag);
+        try { i.run(parse(source)); }
+        catch (e) { if (e instanceof Error && e.message === "interrupted") interrupted = true; else throw e; }
+        finally { setInterruptFlag(null); console.log = log; }
+        if (!interrupted || count !== 1000) throw new Error(`${source} did not stream`);
+    }
+});
+Deno.test("IO: an iteration action reruns from the start", () => {
+    const shown = run("a = [1,2] * print\na\na");
+    if (JSON.stringify(shown) !== '["1","2","1","2"]') throw new Error(JSON.stringify(shown));
 });
