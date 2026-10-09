@@ -181,8 +181,9 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   (a bundle) the same lookup runs over virtual paths: the standard library
   under `/lib/` and the program's folder at `/app/` (its `sourceDir` in the
   browser). `bundleProgram` collects the program's literal imports and
-  literal-path loads transitively (`loadPath`/`readLoad` read loads from the
-  same bundle at runtime and while checking); `apn --html` checks the program against that bundle, so a build
+  literal-path loads transitively, or the whole folder once any file
+  mentions `load` other than applied to a literal (`loadPath`/`readLoad`
+  read loads from the same bundle at runtime and while checking); `apn --html` checks the program against that bundle, so a build
   succeeds only when the browser will find every module.
   Tests: `tests/package-import-test.ts`, `tests/html-test.ts`.
 

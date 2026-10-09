@@ -11,8 +11,11 @@ open counter.html
 The `--html` command embeds the APN interpreter, source, standard modules, and
 the local modules the program imports and the files it loads by a literal path
 (`load "helpers"`), with what those import and load in turn, into one HTML
-file. Only files inside the program's folder are bundled; a `load` of a
-computed path, or of a file outside that folder, fails with "not bundled".
+file. A `load` of a computed path (`Dynamic $ load ("levels/" ++ name)`) can
+name any file, so once the program or a file it uses has one, the build
+bundles every `.apn` file in the program's folder and its subfolders (hidden
+folders excepted). Only files inside the program's folder are bundled; a
+`load` of a file outside it fails with "not bundled".
 Open that file in a browser; no server or runtime download is required.
 Rebuild and refresh after editing the APN source.
 

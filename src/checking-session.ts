@@ -188,7 +188,7 @@ export class CheckingSession {
             const source = readLoad(key, this.moduleSources);
             if (source === undefined) {
                 throw new APNError("type", this.moduleSources ? `load '${name}' is not bundled` : `load: cannot read '${name}' (looked in '${key}')`,
-                    this.moduleSources ? { hint: "a browser build bundles the files the program loads by a literal path inside its folder" } : {});
+                    this.moduleSources ? { hint: "a browser build bundles only files inside the program's folder" } : {});
             }
             const exports = this.check(parse(source, key), key.slice(0, key.lastIndexOf("/") + 1), copyTypeScope(caller), false).exports;
             this.checkedLoads.set(key, source);

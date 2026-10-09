@@ -2332,7 +2332,7 @@ export class Interpreter {
                 let src: string;
                 if (this.moduleSources) {
                     const bundled = readLoad(path, this.moduleSources);
-                    if (bundled === undefined) throw new APNError("runtime", `load: '${p}' is not bundled`, { hint: "a browser build bundles the files the program loads by a literal path inside its folder" });
+                    if (bundled === undefined) throw new APNError("runtime", `load: '${p}' is not bundled`, { hint: "a browser build bundles only files inside the program's folder" });
                     src = bundled;
                 } else {
                     try { src = Deno.readTextFileSync(path); }

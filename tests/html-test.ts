@@ -113,6 +113,26 @@ Deno.test("a browser build bundles the files a program loads", () => {
         throw new Error("an unbundled file loaded");
     }
 });
+Deno.test("a browser build bundles the whole folder for a computed load", () => {
+    const directory = new URL("./fixtures/bundle-load/", import.meta.url).pathname;
+    const source = 'part = "suffix"\nanswer = Dynamic $ load ("parts/" ++ part)';
+    const bundle = bundleProgram(source, directory);
+    const local = Object.keys(bundle).filter(path => path.startsWith("/app/")).sort();
+    if (JSON.stringify(local) !== '["/app/helpers.apn","/app/parts/extra.apn","/app/parts/suffix.apn","/app/unused.apn"]') throw new Error(JSON.stringify(local));
+    for (const checked of [false, true]) {
+        const i = new Interpreter();
+        i.moduleSources = bundle;
+        i.sourceDir = "/app/";
+        if (checked) i.enableChecking();
+        i.run(parse(source));
+        if (i.renderString(i.run(parse("answer.mark"))) !== '"!"') throw new Error(`checked=${checked}`);
+        try { i.run(parse('Dynamic $ load ("../" ++ "outside")')); } catch (error) {
+            if (error instanceof Error && error.message.includes("not bundled")) continue;
+            throw error;
+        }
+        throw new Error("a file outside the folder loaded");
+    }
+});
 Deno.test("standard modules that load their own files work from a bundle", () => {
     const i = new Interpreter();
     i.moduleSources = bundleProgram('import "meta"', "/tmp");

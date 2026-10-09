@@ -40,8 +40,9 @@ A local `text.apn` therefore shadows the standard `text` module for code in
 its folder and below. Each file of a module runs in its own scope of builtins,
 and resolves its own imports and loads relative to its directory. Browser builds (`apn
 --html`) bundle the standard library, the local modules the program imports
-and the files it loads by a literal path, so the same imports and loads work
-in the browser.
+and the files it loads (every `.apn` file in the program's folder once a
+load names a computed path), so the same imports and loads work in the
+browser.
 
 Each interpreter evaluates each module once in a scope containing builtins and
 its dependencies, independent of caller bindings. Reimporting restores the same
