@@ -57,6 +57,9 @@ Spacing is part of the syntax (a parse error otherwise):
   `match` clause lists and import lists.
 - A `,` separates two items, so a trailing one is an error: `[1,2,]`, and a
   multi-line list or record whose last item ends in `,`.
+- Application is juxtaposition with a space, also before a list:
+  `Vector3 [1,2,3]`, not `Vector3[1,2,3]` (a `[` directly after a name,
+  literal or closing bracket is an error). Selections keep their dot: `v.[x,y]`.
 - Record fields take `key: value` separated by `, `: `[x: 1, y: 2]`, not
   `[x:1]` or `[x: 1,y: 2]`; likewise keyed patterns and selections
   (`[x: a, y: b]`).

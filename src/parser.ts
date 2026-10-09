@@ -56,6 +56,11 @@ class Parser {
             if (t.k === "sym" && "([{".includes(t.v)) holds.push(t.v === "[" && this.opensRecord(index));
             if (t.k === "sym" && ")]}".includes(t.v)) holds.pop();
             if (t.k !== "sym" || !(t.v in pairs)) continue;
+            // Application is juxtaposition with a space: Vector3 [1,2,3], not Vector3[1,2,3].
+            if (t.v === "[" && /[A-Za-z0-9_'")\]}]/.test(this.source[t.pos - 1] ?? "")) {
+                this.seen = t;
+                throw new Error("Parser: put a space before '[' to apply to a list (write f [1,2], not f[1,2])");
+            }
             const open = "{([".includes(t.v), brace = t.v === "{" || t.v === "}";
             const neighbour = this.toks[index + (open ? 1 : -1)];
             let gap: string;

@@ -1348,7 +1348,7 @@ print (-[1,2,3])                         # => [-1,-2,-3]
 print (take 3 ([0..] + [10..]))           # => [10,12,14]
 print ([x: 1, y: 2] + [y: 20, x: 10])   # => [x: 11, y: 22]
 ArrayVector = [x: Float, y: Float, z: Float]
-print (ArrayVector [1,2,3] * 2)           # => [x: 2.0, y: 4.0, z: 6.0]
+print (ArrayVector [1,2,3] * 2)           # => [x: 2.0, y: 4.0, z: 6.0]  (ArrayVector[1,2,3], without the space, is an error)
 print ([1,2] ++ [3,4])                   # => [1,2,3,4]
 import "array"
 print (shape [[1,2],[3,4]])               # => [2,2]
