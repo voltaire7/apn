@@ -992,6 +992,22 @@ myTypeOf (t x) = print t
 myTypeOf true       # => Bool
 myTypeOf (Int32 5)  # => Int32
 
+# HTTP and JSON. fetch url options returns the response as a record (status,
+# ok, statusText, url, headers, body); fetchText and fetchJson return a
+# successful body. toJson / prettyJson / fromJson are JSON.stringify / JSON.parse.
+# A data: URL needs no network; ./apn grants network access for real requests:
+#   fetch "https://www.youtube-transcript.io/api/channels" [
+#       method: "POST",
+#       headers: [Authorization: "Basic <token>", "Content-Type": "application/json"],
+#       body: toJson [ids: ["jawed"]],
+#   ]
+import ["http","json"]
+reply <- fetch "data:application/json,{\"ids\":[\"jawed\"]}" [method: "GET"]
+print [reply.status,reply.ok]                # => [200,true]
+print ((fromJson reply.body).ids)            # => ["jawed"]
+print (toJson [ids: ["jawed"], count: 1])    # => {"ids":["jawed"],"count":1}
+print (fetchJson "data:application/json,[1,2.5,null]" [])  # => [1,2.5,[]]
+
 # Standard modules are cached imports, separate from file execution with load.
 # Each is imported by name (there is no whole-library module); a list imports several.
 import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]

@@ -255,6 +255,65 @@ reachable scalar-key nodes. Sequence helpers include `count predicate xs`,
 Text helpers include `parseInt text`, `integers text`, and `nonEmptyLines text`.
 See [runnable Advent of Code solutions and limits](advent-of-code.md).
 
+## HTTP — `http`
+
+`fetch url options` sends one request and returns the response, whatever its
+status, as a record:
+
+| Field | Value |
+| --- | --- |
+| `status`, `ok`, `statusText` | `Int`, `Bool` (a 2xx status), `String` |
+| `url` | the final URL, after redirects |
+| `headers` | a `HashMap` by lowercase name (`lookup "content-type" r.headers`) |
+| `body` | the body as text |
+
+`options` is a record whose fields are all optional, or `[]` for none: `method`
+(`"GET"` by default), `headers` (a record or a `HashMap` of strings; quoted keys
+such as `"Content-Type"` name headers that are not plain names), `body` (a
+`String`) and `timeout` (milliseconds). Any other field is an error.
+
+```apn
+import ["http","json"]
+response <- fetch "https://www.youtube-transcript.io/api/channels" [
+    method: "POST",
+    headers: [
+        "Authorization": "Basic <your-api-token>",
+        "Content-Type": "application/json",
+    ],
+    body: toJson [ids: ["jawed"]],
+]
+channels = fromJson response.body
+```
+
+`fetchText url options` returns a successful (2xx) response's body and fails
+with the status otherwise; `fetchJson url options` decodes that body as JSON.
+A request that gets no response (no network, a refused connection, a timeout)
+fails with the reason. Requests are synchronous, like the rest of APN, and
+cannot be interrupted with Ctrl+C; give long ones a `timeout`. Network access
+needs Deno's `--allow-net` (the `apn` launcher grants it). Static checking
+never sends a request; `data:` URLs need no network. In a browser build,
+`fetch` uses a synchronous request, subject to the page's CORS rules.
+
+## JSON — `json`
+
+`toJson value` is `JSON.stringify`, `prettyJson value` the same indented by two
+spaces, and `fromJson text` is `JSON.parse`:
+
+| APN | JSON |
+| --- | --- |
+| record, `HashMap` with string keys | object (a quoted key loses its quotes) |
+| list (also lazy or a range, if finite) | array |
+| `String`, `Char` | string |
+| `Int` (exact, any size), `Float` | number |
+| `Bool` | `true`, `false` |
+
+A fraction, complex number, variant or function has no JSON form and is an
+error; convert it first. `fromJson` returns an object as a record whose keys
+are plain where they are names and quoted otherwise, as a record literal writes
+them (`r.status`, `r."odd-key"`), an integer as an exact `Int`, other numbers
+as `Float`, and `null` as `[]`. Its result is `Dynamic`; give it a type with a
+pattern or `cast` where the program needs one.
+
 ## Browser modules
 
 Explicitly import `html` for HTML constructors and `browser` for

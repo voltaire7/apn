@@ -87,6 +87,23 @@ Maps are immutable association snapshots; a mutable JS `Map` is used only while
 building a new snapshot. Numeric keys hash by exact normalized value regardless
 of representation (`numericHash`). Tests: `tests/hash-map-test.ts`.
 
+## HTTP and JSON
+
+Behavior: `docs/standard-library.md` (`http`, `json`).
+
+- `src/http.ts` makes `fetch` synchronous: in Deno a per-request worker (a
+  `data:` URL, so nothing extra to bundle or permit) runs the platform fetch
+  while the interpreter waits with `Atomics.wait`; the JSON-encoded response
+  crosses a fixed shared buffer in chunks. The worker is terminated after each
+  request so it never keeps the process alive. In a browser build
+  (`typeof Deno === "undefined"`) a synchronous `XMLHttpRequest` replaces it.
+- `fetch`, `toJson`, `prettyJson` and `fromJson` are standard natives exported
+  only through their modules; none is in `EVALUATED_NATIVES`, so static
+  checking never sends a request.
+- `src/json.ts` parses JSON itself so integers stay exact `bigint`s; object
+  keys that are names stay plain, others become quoted keys (`stringKey`).
+  Tests: `tests/http-test.ts` (its server test needs `--allow-net`).
+
 ## Prelude and `cast`
 
 The default prelude embeds `lib/type.apn` and `lib/do.apn` as text imports, so

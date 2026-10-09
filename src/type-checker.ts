@@ -4759,7 +4759,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             fail: fn(atom("String"), variable()),
         })
     ) scope.set(name, { type });
-    const standardOnly = new Set(["seq", "chars", "fromChars", "upper", "lower", "readFile", "readStdin"]);
+    const standardOnly = new Set(["seq", "chars", "fromChars", "upper", "lower", "readFile", "readStdin", "fetch", "toJson", "prettyJson", "fromJson"]);
     const native = (name: string, inputs: Ty[], output: Ty) => {
         if (!standardOnly.has(name) || options.library) scope.set(name, { type: inputs.reduceRight((result, input) => fn(input, result), output) });
     };
@@ -4795,6 +4795,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("fromChars", [list(atom("Char"))], str);
     for (const name of ["upper", "lower", "readFile"]) native(name, [str], str);
     native("readStdin", [empty], str);
+    // HTTP and JSON (the http and json modules): a response is a record; decoded JSON is Dynamic.
+    native("fetch", [str, variable()], { k: "record", fields: new Map<string, Ty>([
+        ["status", int], ["ok", bool], ["statusText", str], ["url", str], ["headers", { k: "map", key: str, value: str }], ["body", str],
+    ]) });
+    for (const name of ["toJson", "prettyJson"]) native(name, [variable()], str);
+    native("fromJson", [str], explicitDynamic);
     if (options.library) scope.set("getArgs", { type: list(str) });
     for (const name of ["isInteger", "isExact", "isInexact", "isReal", "isComplex", "isRational", "isNumber", "isFinite", "isNaN", "isEven", "isOdd", "isInfinite", "isZero", "isPositive", "isNegative"]) native(name, [["isNumber", "isComplex", "isReal", "isRational", "isInteger"].includes(name) ? variable() : num], bool);
     for (const name of ["sqrt", "sin", "cos", "tan", "asin", "acos", "atan", "exp", "log", "abs", "exact", "inexact", "realPart", "imagPart", "magnitude", "angle", "conjugate"]) native(name, [num], num);

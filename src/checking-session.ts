@@ -9,6 +9,8 @@ const nativeExports: Record<string, string[]> = {
     io: ["withFile", "readFile", "readStdin", "getArgs"],
     function: ["bracket", "fail", "seq", "do"],
     text: ["chars", "fromChars", "upper", "lower"],
+    http: ["fetch"],
+    json: ["toJson", "prettyJson", "fromJson"],
 };
 /** Static state is separate from evaluation: checking never runs an APN action. */
 // A module file's name within its package, for messages.

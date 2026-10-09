@@ -155,6 +155,8 @@ export class Interpreter {
             function: ["bracket", "fail", "seq", "do"],
             sequence: [],
             text: ["chars", "fromChars", "upper", "lower"],
+            http: ["fetch"],
+            json: ["toJson", "prettyJson", "fromJson"],
         };
         for (const exported of file.std ? builtinExports[file.std] ?? [] : []) scope.setLocal(exported, builtins.get(exported)!);
         try {

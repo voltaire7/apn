@@ -1,14 +1,17 @@
 import { bracket, withFile } from "./resource-scope.ts";
 import { FFI_NATIVES, ffiNative } from "./ffi.ts";
 import type { Interpreter } from "./interp.ts";
-import { type Value, mkList, mkStr } from "./types.ts";
+import { type Value, mkBool, mkInt, mkList, mkStr } from "./types.ts";
 import { APNError } from "./errors.ts";
+import { fetchSync, HttpFailure } from "./http.ts";
+import { fromJson, jsonKey, toJson } from "./json.ts";
 
 // Representation, effects and Unicode casing are the stdlib's native boundary.
 export const STANDARD_NATIVES: Array<[string, number]> = [
     ...FFI_NATIVES,
     ["bracket", 3], ["withFile", 2], ["readFile", 1], ["readStdin", 1], ["getArgs", 0],
     ["seq", 2], ["fail", 1], ["chars", 1], ["fromChars", 1], ["upper", 1], ["lower", 1],
+    ["fetch", 2], ["toJson", 1], ["prettyJson", 1], ["fromJson", 1],
 ];
 export function standardNative(i: Interpreter, name: string, args: Value[]): Value {
     if (name === "bracket") return bracket(i, args[0], args[1], args[2]);
@@ -20,6 +23,9 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
         return v.v;
     };
     if (name === "getArgs") return mkList(i.programArgs.map(mkStr));
+    if (name === "toJson" || name === "prettyJson") return mkStr(toJson(i, args[0], name === "prettyJson" ? 2 : 0, name));
+    if (name === "fromJson") return fromJson(str(args[0]));
+    if (name === "fetch") return fetchNative(i, str(args[0]), args[1]);
     if (name === "readFile" || name === "readStdin") {
         try {
             if (name === "readFile") {
@@ -42,4 +48,48 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
     }).join(""));
     const text = str(args[0]);
     return mkStr(name === "upper" ? text.toUpperCase() : text.toLowerCase());
+}
+
+// fetch url options: options is a record of method, headers, body and timeout
+// (milliseconds), each optional, or [] for none. The response is a record of
+// status, ok, statusText, url, headers (a HashMap by lowercase name) and body.
+function fetchNative(i: Interpreter, url: string, optionsValue: Value): Value {
+    const fail = (message: string, hint?: string): never => { throw new APNError("runtime", `fetch: ${message}`, hint ? { hint } : {}); };
+    const text = (value: Value, what: string): string => {
+        const v = i.dataValue(value);
+        return v.kind === "string" ? v.v : fail(`${what} must be a string`);
+    };
+    const options = i.dataValue(optionsValue);
+    const fields: Array<[string, Value]> = options.kind === "record" ? options.v : i.isList(options) && !i.items(options).length ? [] :
+        fail("options must be a record such as [method: \"POST\"], or [] for none");
+    let method = "GET", body: string | undefined, timeout: number | undefined;
+    const headers: Array<[string, string]> = [];
+    for (const [key, value] of fields) {
+        const option = jsonKey(key);
+        if (option === "method") method = text(value, "method").toUpperCase();
+        else if (option === "body") body = text(value, "body");
+        else if (option === "timeout") {
+            const v = i.dataValue(value);
+            if (v.kind !== "int" || v.v <= 0n) fail("timeout must be a positive Int (milliseconds)");
+            timeout = Number((v as { v: bigint }).v);
+        } else if (option === "headers") {
+            const h = i.dataValue(value);
+            const entries: Array<[Value | string, Value]> = h.kind === "record" ? h.v.map(([k, v]) => [jsonKey(k), v])
+                : h.kind === "hashmap" ? [...h.entries.values()] : fail("headers must be a record or a HashMap of strings");
+            for (const [k, v] of entries) headers.push([typeof k === "string" ? k : text(k, "a header name"), text(v, "a header value")]);
+        } else fail(`unknown option '${option}'`, "fetch options are method, headers, body and timeout");
+    }
+    let response;
+    try { response = fetchSync({ url, method, headers, body, timeout }); }
+    catch (error) {
+        if (!(error instanceof HttpFailure)) throw error;
+        return fail(`${url}: ${error.message}`, error.permission ? "allow network access: run with ./apn, or deno run --allow-net" : undefined);
+    }
+    const map = new Map<string, [Value, Value]>(response.headers.map(([k, v]) => [i.hashKey(mkStr(k)), [mkStr(k), mkStr(v)]]));
+    return {
+        kind: "record", v: [
+            ["status", mkInt(response.status)], ["ok", mkBool(response.ok)], ["statusText", mkStr(response.statusText)],
+            ["url", mkStr(response.url)], ["headers", { kind: "hashmap", entries: map }], ["body", mkStr(response.body)],
+        ],
+    };
 }

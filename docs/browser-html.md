@@ -69,9 +69,10 @@ Updates patch elements in place by position, preserving input focus and avoiding
 unnecessary value resets. Runtime errors appear on the page. Failed APN updates
 or view evaluation retain the last successful model.
 
-This first API supports synchronous sandbox apps. Commands, subscriptions,
-HTTP effects, routing, keyed children, SVG, and loading files the build did not
-bundle are not implemented. Deno file, stdin, and process operations are unavailable
+This first API supports synchronous sandbox apps. The `http` module's `fetch`
+works there as a synchronous request (subject to CORS), but commands,
+subscriptions, asynchronous HTTP effects, routing, keyed children, SVG, and
+loading files the build did not bundle are not implemented. Deno file, stdin, and process operations are unavailable
 in the browser. Computation runs on the browser's main thread. Embedded scripts,
 inline JavaScript event attributes, and executable URL attributes are rejected.
 

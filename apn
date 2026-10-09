@@ -2,7 +2,8 @@
 # APN launcher:  ./apn          interactive REPL
 #                ./apn FILE [ARGS...]  run a file with script arguments
 # Grants everything the REPL needs up front: read (load, the showcase),
-# write + env(HOME) for the persistent history in ~/.apn_history.
+# write + env(HOME) for the persistent history in ~/.apn_history, and net for
+# the http module's fetch.
 SCRIPT="$0"
 while [ -L "$SCRIPT" ]; do
     DIR="$(cd -P "$(dirname "$SCRIPT")" && pwd)"
@@ -29,6 +30,6 @@ case "${1-}" in
     --allow-ffi|--allow-ffi=*) APN_FFI_FLAG="$1"; shift ;;
 esac
 if [ -n "$APN_FFI_FLAG" ]; then
-    exec deno run "$APN_FFI_FLAG" --allow-read --allow-write --allow-env=HOME --allow-run=stty,deno "$DIR/main.ts" "$@"
+    exec deno run "$APN_FFI_FLAG" --allow-read --allow-write --allow-net --allow-env=HOME --allow-run=stty,deno "$DIR/main.ts" "$@"
 fi
-exec deno run --allow-read --allow-write --allow-env=HOME --allow-run=stty,deno "$DIR/main.ts" "$@"
+exec deno run --allow-read --allow-write --allow-net --allow-env=HOME --allow-run=stty,deno "$DIR/main.ts" "$@"
