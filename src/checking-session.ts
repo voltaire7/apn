@@ -32,6 +32,8 @@ export class CheckingSession {
     moduleSources?: Record<string, string>;
     /** The runtime's natives by arity (to follow env views through calls). */
     nativeArities?: Map<string, number>;
+    // Instances of fmap, >>=, <*> and return the session's programs and modules define.
+    instances = new Map<string, unknown[]>();
     extendDefinitions = false;
     /** Names the interpreter can resolve, so the checker can tell a typo from a runtime-only builtin. */
     runtimeNames?: () => Iterable<string>;
@@ -83,6 +85,7 @@ export class CheckingSession {
             viewPrograms: () => this.usesEnv ? this.programs : [],
             envTopViews: () => this.envTopViews,
             nativeArities: this.nativeArities,
+            instances: this.instances,
             loadedNames: path => this.loadedNames(path, directory),
             imports: module => {
                 const fields = this.module(module, directory);

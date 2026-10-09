@@ -214,6 +214,7 @@ export class Interpreter {
         this.run(parse(typeSource));
         this.run(parse(doSource));
         for (const name of ["cast", "do"]) this.preludeBindings.set(name, this.env.get(name)!);
+        this.loadingPrelude = false;
         this.env = outer;
         for (const [name, value] of this.preludeBindings) outer.setLocal(name, value);
     }
@@ -350,6 +351,13 @@ export class Interpreter {
             }
             // Capture a shared env containing the binding itself, enabling recursion.
             const child = new Env(this.env);
+            // Clauses for fmap, >>=, <*> or return define an instance: they join
+            // the method everywhere instead of shadowing it here.
+            if (Interpreter.METHODS.has(name) && !this.loadingPrelude) {
+                const method: Value = { kind: "clauseFn", name, clauses, arity, env: child, applied: [] };
+                this.registerInstance(name, method, clauses);
+                return method;
+            }
             // Clauses for an operator overload it: the previous meaning still
             // applies to arguments no clause matches.
             // Redefining the clauses in the same scope keeps that fallback.
@@ -644,7 +652,7 @@ export class Interpreter {
         // an error, except a load (which runs a file and yields its exports).
         if (b.eager && !isLoadCall(b.value) && b.value.t !== "import") {
             const action = this.reference(evaluated);
-            if (action.kind !== "io") throw new APNError("runtime", `<- runs an action, not a ${action.kind}`, { hint: "bind a value with =" });
+            if (action.kind !== "io" && action.kind !== "pending") throw new APNError("runtime", `<- runs an action, not a ${action.kind}`, { hint: "bind a value with =" });
         }
         // The result's outer value is evaluated now (x <- return (x + 1) reads the old x).
         const v = b.eager ? this.reference(this.runIO(evaluated)) : b.pattern.p === "as" ? evaluated : this.force(evaluated);
@@ -759,7 +767,7 @@ export class Interpreter {
             ) break;
             // An action has no source form: the level stays as written.
             const level = this.demand(this.eval(expr));
-            if (level.kind === "io") break;
+            if (level.kind === "io" || level.kind === "pending") break;
             expr = this.valueToExpr(level);
             val = { kind: "list", v: [] };
         }
@@ -781,7 +789,7 @@ export class Interpreter {
                 const result = this.demand(this.apply(f, next.value));
                 // Iterating an action streams: one action running each element's
                 // action as it reaches it ([0..] * print prints until Ctrl+C).
-                if (result.kind === "io" && !out.length) {
+                if ((result.kind === "io" || result.kind === "pending") && !out.length) {
                     const list = seq;
                     return { kind: "io", run: () => {
                         const results: Value[] = [];
@@ -806,7 +814,7 @@ export class Interpreter {
             });
         }
         // Iterating an action (xs * print) is one action running each in turn.
-        if (out.length && this.reference(out[0]).kind === "io") {
+        if (out.length && ["io", "pending"].includes(this.reference(out[0]).kind)) {
             return { kind: "io", run: () => mkList(out.map(x => this.runIO(x))) };
         }
         return mkList(out);
@@ -910,20 +918,22 @@ export class Interpreter {
     // A statement runs its value when that is an IO action.
     runStmt(v: Value, tailLoad = false): Value {
         const value = this.demand(v, tailLoad);
-        const result = value.kind === "io" ? this.runIO(value) : value;
-        this.ranAction = value.kind === "io";
+        const action = value.kind === "io" || value.kind === "pending";
+        const result = action ? this.runIO(value) : value;
+        this.ranAction = action;
         return result;
     }
 
     // Run an IO action: its effects, then its result. A do-block's last step
     // (an IOTail) continues this loop, so recursive actions use no stack.
     runIO(v: Value): Value {
-        let current = this.reference(v);
+        const io: Value = { kind: "type", name: "IO" };
+        let current = this.realize(v, io);
         while (current.kind === "io") {
             checkInterrupt();
             const result = current.run();
             if (!(result instanceof IOTail)) return result;
-            current = this.reference(result.next);
+            current = this.realize(result.next, io);
         }
         return current;
     }
@@ -938,13 +948,13 @@ export class Interpreter {
             let r: Value = { kind: "list", v: [] };
             for (let i = start; i < e.stmts.length; i++) {
                 const s = e.stmts[i];
-                if (i === start && first) r = this.runIO(first);
+                if (i === start && first) { const result = this.runIO(first); r = s.t === "patDef" ? this.bindResult(s, result) : result; }
                 else if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
                 else if (s.t === "patDef") r = this.evalPatBinding(s);
                 else if (i < e.stmts.length - 1) this.runStmt(this.eval(s));
                 else {
                     // The last statement is the action whose result the block yields.
-                    const last = this.reference(this.eval(s));
+                    const last = this.realize(this.eval(s), { kind: "type", name: "IO" });
                     if (last.kind !== "io") throw new APNError("runtime", `the last statement of a do-block must be an action, not a ${last.kind}`, { hint: "return x is the action yielding x" });
                     return new IOTail(last);
                 }
@@ -1195,10 +1205,22 @@ export class Interpreter {
                                 // A <- binding, or a discarded statement whose value is an
                                 // action, makes the rest of the block a do-block: the block
                                 // is the action that runs it.
-                                const value = s.t === "patDef" ? undefined : this.demand(this.eval(s));
+                                // Its monad: IO for an action (or a load), undecided for
+                                // return and the like, else the <- value's own (a list, an Option).
+                                const value = s.t === "patDef" ? (isLoadCall(s.value) || s.value.t === "import" ? undefined : this.reference(this.eval(s.value))) : this.demand(this.eval(s));
+                                const block = e, start = si;
                                 if (!value || value.kind === "io") {
-                                    const block = e, start = si;
                                     r = { kind: "io", run: () => this.runDoBlock(block, child, start, value) };
+                                    break;
+                                }
+                                if (value.kind === "pending") {
+                                    r = { kind: "pending", step: { op: "do", block, env: child, start, first: value } };
+                                    break;
+                                }
+                                if (s.t === "patDef") {
+                                    const target = this.monadTypeOf(value);
+                                    if (!target) throw new APNError("runtime", `<- runs an action, not a ${value.kind}`, { hint: "bind a value with =" });
+                                    r = this.desugarDo(block, child, start, target, value);
                                     break;
                                 }
                                 r = value;
@@ -1835,49 +1857,186 @@ export class Interpreter {
             }
             return { kind: "type", name: "IO", arguments: [this.reference(value)] };
         }
-        const action = this.reference(value);
+        const action = this.realize(value, type);
         if (action.kind !== "io") throw new APNError("runtime", `${valueToString(type)} expects an action, not a ${action.kind}`, { hint: "return x is the action yielding x" });
         const result = type.arguments[0];
         return { kind: "io", label: action.label, run: () => this.conform(result, this.runIO(action)) };
     }
 
-    // The constructor a variant maps over: its type's first constructor, when
-    // that has exactly one field (Some in Option a, Ok in Result a e).
-    private functorTag(v: Extract<Value, { kind: "variant" }>): string | undefined {
-        const first = v.family?.fields ? [...v.family.fields][0] : undefined;
-        return first && first[1].length === 1 ? first[0] : undefined;
+    // List T: the type of lists of T; applied to a value, a list of T
+    // (a pending monadic value becomes a list).
+    private listType(type: Extract<Value, { kind: "type" }>, value: Value): Value {
+        if (!type.arguments?.length && this.isTypeValue(value)) return { kind: "type", name: "List", arguments: [this.reference(value)] };
+        const list = this.realize(value, type);
+        if (!this.isList(list)) throw new APNError("runtime", `List constructor expects a List value`);
+        const element = type.arguments?.[0];
+        if (!element) return list;
+        return this.mapList({ kind: "native", name: "<List>", arity: 1, applied: [], invoke: ([x]) => this.conform(element, x) }, list);
     }
 
-    // fmap f m, m >>= f and mf <*> mx over an action, a list, or an
-    // Option-like variant (whose other constructors pass through unchanged).
-    private monadic(name: string, a: Value, b: Value): Value {
-        const m = this.dataValue(name === "primFmap" ? b : a);
-        const fail = (): never => {
-            const what = name === "primFmap" ? "fmap" : name === "primBind" ? "'>>='" : "'<*>'";
-            throw new APNError("runtime", `${what} needs an action, a list or an Option-like variant, not a ${m.kind}`);
+    // ---- Monads: instances of fmap, >>=, <*> and return ----
+    // Clause functions a program defines for these methods, newest last: tried
+    // (newest first) before the builtin IO and list instances.
+    static readonly METHODS = new Set(["fmap", ">>=", "<*>", "return"]);
+    private instances = new Map<string, Value[]>();
+    // The variant families each method has an instance for (Monad/Functor patterns).
+    private instanceFamilies = new Map<string, Set<unknown>>();
+    private loadingPrelude = true;
+
+    private registerInstance(method: string, fn: Value, clauses: DefClause[]): void {
+        this.instances.set(method, [...this.instances.get(method) ?? [], fn]);
+        const position = method === "fmap" ? 1 : 0;
+        const families = this.instanceFamilies.get(method) ?? new Set();
+        for (const clause of clauses) {
+            const p = clause.params[position];
+            const tag = p?.p === "constr" ? p.tag : undefined;
+            const bound = tag ? this.env.get(tag) : undefined;
+            const value = bound && this.force(bound);
+            const family = value && (value.kind === "type" || value.kind === "variant" || value.kind === "native") ? value.family : undefined;
+            if (family) families.add(family);
+        }
+        this.instanceFamilies.set(method, families);
+    }
+
+    // The first instance whose clauses accept these arguments.
+    private instance(method: string, args: Value[]): Value | undefined {
+        const fns = this.instances.get(method) ?? [];
+        for (let n = fns.length - 1; n >= 0; n--) {
+            let f = fns[n];
+            for (let i = 0; i < args.length - 1; i++) f = this.apply(f, args[i]);
+            const result = this.apply(f, args[args.length - 1], true);
+            if (result.kind !== "nomatch") return result;
+        }
+        return undefined;
+    }
+
+    // The monad a concrete monadic value belongs to, as a type: IO, List, or its variant type.
+    monadTypeOf(v: Value): Extract<Value, { kind: "type" }> | undefined {
+        if (v.kind === "io") return { kind: "type", name: "IO" };
+        if (this.isList(v)) return { kind: "type", name: "List" };
+        if (v.kind === "variant" && v.family) return { kind: "type", name: v.family.name, family: v.family };
+        return undefined;
+    }
+    private isIOType(t: Value): boolean { return t.kind === "type" && t.name === "IO" && !t.family; }
+    private isListType(t: Value): boolean { return t.kind === "type" && t.name === "List" && !t.family; }
+
+    pendingReturn(value: Value): Value { return { kind: "pending", step: { op: "return", value } }; }
+
+    // A value in the target monad: a pending value is realized there (return
+    // by that monad's instance); a concrete one is itself.
+    realize(v: Value, target: Value): Value {
+        const m = this.reference(v);
+        if (m.kind !== "pending") return m;
+        const step = m.step;
+        if (step.op === "bind") return this.bind(this.realize(step.m, target), step.f);
+        if (step.op === "do") return this.desugarDo(step.block as Extract<Expr, { t: "block" }>, step.env, step.start, target, step.first);
+        if (this.isIOType(target)) { const value = step.value; return { kind: "io", run: () => value }; }
+        if (this.isListType(target)) return mkList([step.value]);
+        const made = this.instance("return", [target, step.value]);
+        if (made) return this.reference(made);
+        throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as return (Option t) x = Some x" });
+    }
+
+    // m >>= f: through m's monad. f's results are realized in the same monad.
+    bind(mIn: Value, f: Value): Value {
+        const m = this.dataValue(mIn);
+        if (m.kind === "pending") return { kind: "pending", step: { op: "bind", m, f } };
+        const target = this.monadTypeOf(m);
+        if (!target) throw new APNError("runtime", `'>>=' needs an action, a list or a monadic value, not a ${m.kind}`);
+        if (m.kind === "io") return { kind: "io", run: () => new IOTail(this.realize(this.apply(f, this.runIO(m)), target)) };
+        const k: Value = { kind: "native", name: "<bind>", arity: 1, applied: [], invoke: ([x]) => this.realize(this.apply(f, x), target) };
+        if (this.isList(m)) return this.concatMapList(m, k);
+        const result = this.instance(">>=", [m, k]);
+        if (result) return result;
+        throw new APNError("runtime", `no >>= instance for ${valueToString(target)}`, { hint: "define one, such as (Some x) >>= f = f x" });
+    }
+
+    // fmap f m: an instance, or derived from m's monad (m >>= (x -> return (f x))).
+    fmapValue(f: Value, mIn: Value): Value {
+        const m = this.dataValue(mIn);
+        if (m.kind === "io") return { kind: "io", run: () => this.apply(f, this.runIO(m)) };
+        if (this.isList(m)) return this.mapList(f, m);
+        if (m.kind !== "pending") {
+            if (!this.monadTypeOf(m)) throw new APNError("runtime", `fmap needs an action, a list or a functor, not a ${m.kind}`);
+            const result = this.instance("fmap", [f, m]);
+            if (result) return result;
+        }
+        return this.bind(m, { kind: "native", name: "<fmap>", arity: 1, applied: [], invoke: ([x]) => this.pendingReturn(this.defer(() => this.apply(f, x))) });
+    }
+
+    // mf <*> mx: an instance, or derived from the monad.
+    apValue(mfIn: Value, mx: Value): Value {
+        const mf = this.dataValue(mfIn);
+        if (mf.kind === "io") return { kind: "io", run: () => { const f = this.runIO(mf); return this.apply(f, this.runIO(mx)); } };
+        if (this.isList(mf)) return this.concatMapList(mf, { kind: "native", name: "<ap>", arity: 1, applied: [], invoke: ([f]) => this.fmapValue(f, mx) });
+        if (mf.kind !== "pending") {
+            const result = this.instance("<*>", [mf, mx]);
+            if (result) return result;
+        }
+        return this.bind(mf, { kind: "native", name: "<ap>", arity: 1, applied: [], invoke: ([f]) => this.fmapValue(f, mx) });
+    }
+
+    // xs >>= k for lists: k's lists concatenated, lazily.
+    private concatMapList(list: Value, k: Value): Value {
+        return this.defer(() => {
+            const cell = this.cell(list);
+            return cell === null ? mkList([]) : this.dataValue(this.append(this.apply(k, cell.head), this.concatMapList(cell.tail, k)));
+        });
+    }
+
+    // A do-block in a monad other than IO: its statements chained with >>=.
+    private desugarDo(e: Extract<Expr, { t: "block" }>, env: Env, start: number, target: Value, first?: Value): Value {
+        if (this.isIOType(target)) return { kind: "io", run: () => this.runDoBlock(e, env, start, first) };
+        const lastAction = (what: string): never => {
+            throw new APNError("runtime", `the last statement of a do-block must be an action, not ${what}`, { hint: "end the block with return x" });
         };
-        if (m.kind === "io") {
-            if (name === "primFmap") return { kind: "io", run: () => this.apply(a, this.runIO(m)) };
-            if (name === "primBind") return { kind: "io", run: () => new IOTail(this.apply(b, this.runIO(m))) };
-            return { kind: "io", run: () => { const f = this.runIO(m); return this.apply(f, this.runIO(b)); } };
-        }
-        if (this.isList(m)) {
-            if (name === "primFmap") return this.mapList(a, m);
-            // xs >>= f concatenates f's lists; fs <*> xs applies each f to each x.
-            const each = (list: Value, f: (x: Value) => Value): Value => this.defer(() => {
-                const cell = this.cell(list);
-                return cell === null ? mkList([]) : this.dataValue(this.append(f(cell.head), each(cell.tail, f)));
-            });
-            if (name === "primBind") return each(m, x => this.apply(b, x));
-            return each(m, f => this.mapList(f, b));
-        }
-        if (m.kind !== "variant") return fail();
-        const tag = this.functorTag(m);
-        if (!tag) return fail();
-        if (m.tag !== tag) return m;
-        if (name === "primFmap") return { kind: "variant", tag: m.tag, family: m.family, v: [this.defer(() => this.apply(a, m.v[0]))] };
-        if (name === "primBind") return this.apply(b, m.v[0]);
-        return this.monadic("primFmap", m.v[0], b);
+        const go = (scope: Env, from: number, given?: Value): Value => {
+            const caller = this.env;
+            this.env = scope;
+            try {
+                for (let i = from; i < e.stmts.length; i++) {
+                    const s = e.stmts[i], last = i === e.stmts.length - 1;
+                    if (s.t === "stmDef") { this.evalDef(s.name, s.clauses); continue; }
+                    if (s.t === "patDef" && !s.eager) { this.evalPatBinding(s); continue; }
+                    if (s.t === "patDef" && last) return lastAction("a binding");
+                    const m = given ?? (s.t === "patDef" ? this.reference(this.eval(s.value)) : this.demand(this.eval(s)));
+                    given = undefined;
+                    if (last) {
+                        const value = this.realize(m, target);
+                        if (!this.monadTypeOf(value)) lastAction(`a ${value.kind}`);
+                        return value;
+                    }
+                    // A discarded statement outside the monad (assert ...) is pure;
+                    // an IO action cannot run here.
+                    if (m.kind === "io") throw new APNError("runtime", `an IO action cannot run in a ${valueToString(target)} do-block`);
+                    if (s.t !== "patDef" && m.kind !== "pending" && !this.sameMonad(m, target)) continue;
+                    const next = i + 1, binding = s;
+                    return this.bind(this.realize(m, target), { kind: "native", name: "<do>", arity: 1, applied: [], invoke: ([x]) => {
+                        const child = new Env(scope);
+                        if (binding.t === "patDef") {
+                            const old = this.env;
+                            this.env = child;
+                            try { this.bindResult(binding, x); } finally { this.env = old; }
+                        }
+                        return go(child, next);
+                    } });
+                }
+                return lastAction("nothing");
+            } finally { this.env = caller; }
+        };
+        return go(new Env(env), start, first);
+    }
+    private sameMonad(v: Value, target: Value): boolean {
+        const t = this.monadTypeOf(v);
+        return !!t && target.kind === "type" && t.name === target.name && t.family === target.family;
+    }
+    // Bind a <- binding's pattern to the result its action yielded.
+    private bindResult(b: { pattern: Pattern }, result: Value): Value {
+        const v = this.reference(result);
+        const binds = new Map<string, Value>();
+        if (!this.matchPattern(b.pattern, v, binds)) throw new APNError("runtime", "binding pattern did not match its value");
+        for (const [k, bv] of binds) this.env.setLocal(k, bv);
+        return v;
     }
 
     append(xs: Value, ys: Value): Value {
@@ -2004,7 +2163,10 @@ export class Interpreter {
             if (type.name === "IO" && !type.family) return this.actionType(type, value);
             if (type.name === "Dynamic" && !type.family) return this.constructType("Dynamic", value);
             if (type.name === "$any") return value;
-            const actual = type.name === "Type" ? this.demand(value) : this.dataValue(value);
+            if (type.name === "List" && !type.family) return this.listType(type, value);
+            let actual = type.name === "Type" ? this.demand(value) : this.dataValue(value);
+            // A pending monadic value takes this type's monad (Option Int { return 42 }).
+            if (actual.kind === "pending" && type.family) actual = this.realize(actual, type);
             if (type.family?.base) {
                 if (actual.kind === "variant" && actual.family?.base) {
                     if (actual.family !== type.family) throw new APNError("runtime", `${type.name} requires explicit unwrapping of ${actual.family.name}`);
@@ -2148,6 +2310,13 @@ export class Interpreter {
 
     matchesValueType(name: string, value: Value): boolean {
         if (name === "Dynamic") return true;
+        if (name === "Monad" || name === "Functor") {
+            const v = this.dataValue(value);
+            if (v.kind === "io" || v.kind === "pending" || this.isList(v)) return true;
+            if (v.kind !== "variant" || !v.family) return false;
+            const methods = name === "Monad" ? [">>="] : ["fmap", ">>="];
+            return methods.some(m => this.instanceFamilies.get(m)?.has(v.family));
+        }
         if (name === "Type") return this.isTypeValue(value);
         if (name !== "Function" && name !== "Mutable") value = this.dataValue(value);
         if (name === "Pointer") return value.kind === "pointer";
@@ -2167,7 +2336,7 @@ export class Interpreter {
     truthy(value: Value): boolean {
         const v = this.dataValue(value);
         if (v.kind === "bool") return v.v;
-        if (v.kind === "io") throw new APNError("runtime", "an action is not a condition", { hint: "run it first: x <- action" });
+        if (v.kind === "io" || v.kind === "pending") throw new APNError("runtime", "an action is not a condition", { hint: "run it first: x <- action" });
         if (isNumeric(v)) {
             if (v.kind === "complex") return this.truthy(v.re) || this.truthy(v.im);
             if (v.kind === "float") return v.v !== 0 && !Number.isNaN(v.v);
@@ -2278,8 +2447,10 @@ export class Interpreter {
 
         const primitive = PRIMITIVE_OPERATORS.get(name);
         if (primitive) return this.operate(primitive, argsIn[0], argsIn[1]);
-        if (name === "primFmap" || name === "primBind" || name === "primAp") return this.monadic(name, argsIn[0], argsIn[1]);
-        if (name === "primReturn") { const value = argsIn[0]; return { kind: "io", run: () => value }; }
+        if (name === "primFmap") return this.fmapValue(argsIn[0], argsIn[1]);
+        if (name === "primBind") return this.bind(argsIn[0], argsIn[1]);
+        if (name === "primAp") return this.apValue(argsIn[0], argsIn[1]);
+        if (name === "primReturn") return this.pendingReturn(argsIn[0]);
         const host = this.hostNatives.get(name);
         if (host) return host(argsIn);
         if (name === "use") {
@@ -2945,6 +3116,12 @@ export class Interpreter {
                     return input !== null && this.matchPattern(p.args[0], this.conform(type, input), binds);
                 }
                 if (type.kind === "type" && type.family) {
+                    // The type itself, described (return (Option t) x = Some x):
+                    // its arguments bind to the pattern's.
+                    const described = this.reference(v);
+                    if (described.kind === "type" && described.family === type.family) {
+                        return p.args.every((arg, i) => this.matchPattern(arg, described.arguments?.[i] ?? { kind: "type", name: "$any" }, binds));
+                    }
                     const actual = this.dataValue(v);
                     return p.args.length === 1 && actual.kind === "variant" && actual.family === type.family &&
                         this.matchPattern(p.args[0], type.family.base ? actual.v[0] : this.conform(type, actual), binds);

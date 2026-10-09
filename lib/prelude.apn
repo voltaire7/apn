@@ -43,12 +43,12 @@ infixr 9 \
 (^) = primPow
 (\) = primCompose
 
-# Functor, Applicative and Monad, without type classes: each works on an IO
-# action, a list, or a variant whose first constructor has one field (Option's
-# Some x, Result's Ok x), mapping or chaining that field and passing the other
-# constructors (None, Err e) through unchanged.
+# Functor, Applicative and Monad. IO and lists are built in; any other type
+# joins by defining instance clauses for fmap, >>= and return (as the option
+# module does for Option and Result), which add to these methods everywhere.
 #     fmap f m      m with f applied to what it holds or yields
-#     return x      the action yielding x (of type IO T when x is a T)
+#     return x      x in the monad the context decides (an annotation, a >>=,
+#                   or IO when run)
 #     mf <*> mx     the function mf holds applied to what mx holds
 #     m >>= f       f applied to what m holds or yields, flattened
 #     m >> k        m, then k: m >>= (_ -> k)

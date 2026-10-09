@@ -388,7 +388,7 @@ Applying such a type to a value checks it as `Int 5` converts: the value must
 be an action, and its result is converted to the type when it runs, so
 `sayHello = IO [] { print "hello" }` is an action and `IO Int (print 1)`
 is an error. `IO` applied to anything but a type (`IO { ... }`, `IO 5`) is an
-error. `return x` is the action yielding `x`, as in
+error. `return x` yields `x` in whatever monad the context needs (see below), as in
 `check n = n > 0 ? return n : fail "negative"`.
 
 ### Blocks are do-blocks
@@ -428,17 +428,57 @@ after the action and pattern succeed, so `x <- return (x + 1)` reads the previou
 `x <- return v` the strict form of `x = v`; only the outer value is:
 `xs <- return [missing,42]` does not evaluate `missing`.
 
-### Functor, Applicative and Monad
+### Monads and instances
 
-The prelude provides the usual functions without type classes. Each works on
-an action, a list, or a variant whose first constructor has one field
-(`Some x` in `Option`, `Ok x` in `Result`): that field is mapped or chained,
-and the other constructors (`None`, `Err e`) pass through unchanged.
+`fmap`, `<*>`, `>>=` and `return` work in any monad. IO and lists are built
+in; any other type joins by **instances**: clauses defined for these methods,
+written like ordinary overloads. Instance clauses add to the method
+everywhere (prelude helpers, do-blocks and other modules see them) instead of
+shadowing it, and the newest instance whose clauses accept the arguments
+runs. `lib/option.apn` holds Option's and Result's:
+
+```apn
+fmap f (Some x) = Some (f x)
+fmap f None = None
+(Some x) >>= f = f x
+None >>= f = None
+return (Option t) x = Some x       # return, keyed by the type it makes
+```
+
+`fmap` and `<*>` follow from `>>=` and `return` when a type defines no
+instance of its own. A type used where no instance accepts it is an error
+(`no fmap instance for Tree`).
+
+`return x` is a value in a monad not decided yet (its type is `Monad T`). It
+takes the monad of the first context that names one:
+
+- an annotation: `Option Int { return 42 }` is `Some 42`, `List Int { return 43 }`
+  is `[43]`, `IO Int { return 44 }` an action yielding 44;
+- a `>>=` with a concrete value: `Some 3 >>= (x -> return (x * 2))` is `Some 6`;
+- running it: a statement or `<-` runs it as IO.
+
+Until then it stays undecided, so one `return` value can be used in several
+monads. `Monad` and `Functor` are also types for patterns: `(Functor m)`
+accepts any value `fmap` works on, `(Monad m)` any monadic value.
+
+A do-block is in the monad of its first `<-` (or annotation): a list block
+tries every combination, an Option block stops at the first `None`; an IO
+action cannot run inside a block of another monad. Its statements are
+chained with `>>=`, and its last statement must be a value in the same monad
+(`return x`):
+
+```apn
+pairs = List Int {
+    a <- [1,2]
+    b <- [10,20]
+    return (a + b)       # [11,21,12,22]
+}
+```
 
 | Function | Meaning |
 | --- | --- |
 | `fmap f m`, `f <$> m` | `m` with `f` applied to what it holds or yields |
-| `return x` | the action yielding `x` |
+| `return x` | `x` in the monad the context decides |
 | `mf <*> mx` | the function `mf` holds, applied to what `mx` holds |
 | `m >>= f` | `f` applied to what `m` holds or yields, flattened |
 | `m >> k`, `f =<< m` | `m >>= (_ -> k)`; `m >>= f` |

@@ -118,6 +118,10 @@ Option a = Some a | None
 Result a e = Ok a | Err e
 ```
 
+Importing `option` also brings the Functor and Monad instances of both types
+(`fmap`, `>>=` and `return`): `fmap f (Some x)` is `Some (f x)`, `None` and
+`Err e` pass through, and an `Option` do-block stops at the first `None`.
+
 | API | Behavior |
 | --- | --- |
 | `isSome option`, `isNone option` | Inspect presence |

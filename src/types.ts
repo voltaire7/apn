@@ -54,6 +54,10 @@ export type Value =
     // An IO action: running it performs its effects and yields its result
     // (or an IOTail, the action to continue with, so loops run in constant stack).
     | { kind: "io"; run: () => Value | IOTail; label?: string }
+    // A monadic value whose monad is not decided yet (return 42, or a do-block
+    // or bind built from one): realized in a monad by an annotation, a >>=
+    // with a concrete value, or as IO when run.
+    | { kind: "pending"; step: PendingStep }
     | { kind: "thunk"; body: Expr; env: Env; value?: Value; busy?: boolean };
 
 // Numbers are accepted only for bounded host counters such as array lengths.
@@ -71,6 +75,11 @@ export function mkList(v: Value[]): Value { return { kind: "list", v }; }
 export function rawString(v: Value): string {
     return v.kind === "string" ? v.v : valueToString(v);
 }
+
+export type PendingStep =
+    | { op: "return"; value: Value }
+    | { op: "bind"; m: Value; f: Value }
+    | { op: "do"; block: Expr; env: Env; start: number; first?: Value };
 
 // What an IO action continues with: its last step, run by the caller's loop.
 export class IOTail { constructor(public next: Value) {} }
@@ -114,6 +123,7 @@ export function valueToString(v: Value): string {
         case "clauseFn": return functionSource(v);
         case "nomatch": return "<nomatch>";
         case "io": return v.label ? `<IO ${v.label}>` : "<IO>";
+        case "pending": return "<Monad>";
     }
 }
 

@@ -855,19 +855,63 @@ print launched             # => liftoff (on the same line)
 # Iterating an action runs each as it is reached: [0..] * print streams
 # until Ctrl+C (not run here).
 
-# Functor, Applicative and Monad without type classes: fmap (<$>), return,
-# <*>, >>= and >> work on actions, lists, and Option-like variants (the
-# first constructor's field is mapped; None and Err e pass through).
+# ---------------------------------------------------------
+# 17c. FUNCTORS AND MONADS — instances by overloading
+#    fmap (<$>), <*>, >>=, >>, return, sequence, mapM, when and unless work
+#    in any monad. IO and lists are built in; a type joins by defining
+#    instance clauses for fmap, >>= and return, which add to the method
+#    everywhere (Option's and Result's live in the option module).
+#    return x is undecided until its monad is known: an annotation, a >>=
+#    with a concrete value, or running it (IO).
+# ---------------------------------------------------------
 print (fmap (* 2) [1,2,3])                 # => [2,4,6]
 print ((+ 1) <$> Some 41)                  # => Some 42
 print (Some 3 >>= (x -> x > 2 ? Some (x * 10) : None))  # => Some 30
 print ([1,2] >>= (x -> [x,x * 10]))        # => [1,10,2,20]
 print ([(+ 1),(* 2)] <*> [10,20])          # => [11,21,20,40]
-return "chained" >>= print                   # => chained
+return "chained" >>= print                 # => chained
 print "first" >> print "second"            # => first, then second
 doubled <- mapM (x -> return (x * 2)) [1,2,3]
 print doubled                              # => [2,4,6]
 when (length doubled == 3) (print "three") # => three
+print (Option Int { return 42 })           # => Some 42
+print (List Int { return 43 })             # => [43]
+fromIO <- IO Int { return 44 }
+print fromIO                               # => 44
+# A do-block over any monad: a List block tries every combination, an
+# Option block stops at the first None.
+sums = List Int {
+    a <- [1,2]
+    b <- [10,20]
+    return (a + b)
+}
+print sums                                 # => [11,21,12,22]
+noSum = Option Int {
+    a <- Some 1
+    b <- None
+    return (a + b)
+}
+print noSum                                # => None
+# A monad of your own: a counter threading a number through each step.
+Counter s a = | MkCounter Function
+runCounter (MkCounter f) s = f s
+(MkCounter g) >>= f = MkCounter (s -> {
+    [a,s1] = g s
+    runCounter (f a) s1
+})
+return (Counter s a) x = MkCounter (s -> [x,s])
+tick = MkCounter (s -> [s,s + 1])
+twoTicks = Counter Int Int {
+    a <- tick
+    b <- tick
+    return (a * 100 + b)
+}
+print (runCounter twoTicks 5)              # => [506,7]
+print (runCounter (fmap (* 2) tick) 3)     # => [6,4] (fmap from >>= and return)
+# Functor and Monad are types: a parameter accepts any functor.
+doubleAll (Functor m) = fmap (* 2) m
+print [doubleAll [1,2],doubleAll [3]]      # => [[2,4],[6]]
+print (doubleAll (Some 4))                 # => Some 8
 
 # Explicit braces end a lambda body, so maps can chain after the closing brace.
 [x: 1, y: 2, z: 3] * [field,value] -> {

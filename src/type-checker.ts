@@ -9,6 +9,11 @@ const PRELUDE_OPERATORS = new Set(PRIMITIVE_OPERATORS.values());
 // IO t: an action yielding t.
 function io(t: Ty): Ty { return { k: "variant", name: "IO", args: [t] }; }
 function isIO(t: Ty): boolean { return t.k === "variant" && t.name === "IO" && t.args.length === 1; }
+// Monad t: a value in a monad not decided yet (return x), which any monad's
+// type accepts.
+function pendingTy(t: Ty): Ty { return { k: "variant", name: "Monad", args: [t] }; }
+function isPending(t: Ty): boolean { return t.k === "variant" && t.name === "Monad" && t.args.length === 1; }
+const METHODS = new Set(["fmap", ">>=", "<*>", "return"]);
 
 type Index = { constant: bigint; terms: Map<string, bigint> };
 type Ty =
@@ -163,6 +168,8 @@ export interface CheckOptions {
     viewPrograms?: () => TopLevel[][];
     /** The runtime's natives by arity; otherwise read from their types. */
     nativeArities?: Map<string, number>;
+    // Instance types (fmap, >>=, <*>, return) shared by a session's checks.
+    instances?: Map<string, unknown[]>;
     /** Top-level names whose latest binding in the session is an env view. */
     envTopViews?: () => ReadonlySet<string>;
     /** Whether any code in this session may write a Mutable cell (see mayMutate),
@@ -391,6 +398,11 @@ function viewFlow(programs: TopLevel[][], nativeArity: (name: string) => number 
         if (!node || typeof node !== "object") return;
         if (Array.isArray(node)) { node.forEach(collect); return; }
         const n = node as Record<string, any>;
+        // Instance clauses (fmap, >>=, <*>, return) bind no name.
+        if ((n.t === "def" || n.t === "stmDef") && METHODS.has(n.name) && n.clauses.some((c: { params: Pattern[] }) => c.params.length)) {
+            Object.values(n).forEach(collect);
+            return;
+        }
         if ((n.t === "def" || n.t === "stmDef") && n.clauses.some((c: { params: Pattern[] }) => c.params.length)) {
             define(n.name, { key: n.clauses, arity: Math.min(...n.clauses.map((c: { params: Pattern[] }) => c.params.length)), clauses: n.clauses });
         } else if ((n.t === "def" || n.t === "stmDef") && functionExpr(n.clauses[0].body)) define(n.name, lambdaFunction(functionExpr(n.clauses[0].body)!));
@@ -532,7 +544,8 @@ export function topNames(program: TopLevel[]): string[] {
         Object.values(n).forEach(pattern);
     };
     for (const statement of program) {
-        if (statement.t === "def") names.push(statement.name);
+        // Instance clauses (fmap, >>=, <*>, return) bind no name.
+        if (statement.t === "def" && !(METHODS.has(statement.name) && statement.clauses[0].params.length)) names.push(statement.name);
         if (statement.t === "patDef") pattern(statement.pattern);
     }
     return names;
@@ -970,8 +983,28 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const container = op === "fmap" ? b : a, other = op === "fmap" ? a : b;
         if (isExplicit(container) || isExplicit(other)) { runtimeChecks++; return explicitDynamic; }
         const name = op === "fmap" ? "fmap" : op === "ap" ? "'<*>'" : op === "then" ? "'>>'" : "'>>='";
+        // A monad not decided yet (return x, a Monad or Functor parameter).
+        if (isPending(container) || container.k === "atom" && (container.name === "Monad" || container.name === "Functor")) {
+            const value = isPending(container) ? (container as Extract<Ty, { k: "variant" }>).args[0] : variable();
+            if (op === "fmap") return pendingTy(application(other, { type: value }, at));
+            if (op === "then") return other;
+            if (op === "bind") return application(other, { type: value }, at);
+            const input = monadHeld(other) ?? variable();
+            return pendingTy(application(value, { type: input }, at));
+        }
+        // A variant monad: through its instances (fmap and <*> derive from >>=).
+        if (container.k === "variant" && !isIO(container)) {
+            const method = op === "fmap" ? "fmap" : op === "ap" ? "<*>" : ">>=";
+            const k = op === "then" ? fn(variable(), other) : other;
+            const direct = viaInstance(method, op === "fmap" ? [other, container] : [container, k]);
+            if (direct) return direct;
+            if (op !== "bind" && op !== "then" && instanceFor(">>=", [container])) {
+                return { k: "variant", name: container.name, args: container.args.map(() => variable()) };
+            }
+            return problem(`no ${name} instance for ${text(container)}`, undefined, "define one, such as fmap f (Some x) = Some (f x)");
+        }
         const held = (m: Ty): Ty => isIO(m) ? (m as Extract<Ty, { k: "variant" }>).args[0] : m.k === "list" ? m.element
-            : m.k === "variant" && m.args.length ? m.args[0] : problem(`${name} needs an action, a list or an Option-like variant, not ${text(m)}`);
+            : problem(`${name} needs an action, a list or a monadic value, not ${text(m)}`);
         const rebuild = (m: Ty, inner: Ty): Ty => isIO(m) ? io(inner) : m.k === "list" ? list(inner)
             : { k: "variant", name: (m as Extract<Ty, { k: "variant" }>).name, args: [inner, ...(m as Extract<Ty, { k: "variant" }>).args.slice(1)] };
         const value = held(container);
@@ -988,15 +1021,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // m >>= f: f's result is a container of the same kind; m >> k is k.
         const next = op === "then" ? other : application(other, { type: value }, at);
         const shape = rebuild(container, variable());
-        if (container.k === "list") { unify(list((shape as Extract<Ty, { k: "list" }>).element), next); return list(resolve(next).k === "list" ? (resolve(next) as Extract<Ty, { k: "list" }>).element : variable()); }
+        if (container.k === "list") { unify(list((shape as Extract<Ty, { k: "list" }>).element), next); return list(monadHeld(next) ?? variable()); }
         unify(shape, next);
-        return next;
+        return isPending(resolve(next)) ? io(monadHeld(next) ?? variable()) : next;
     }
     // What running a value of type t yields: an action's result, or the
     // value itself (x <- 5 binds 5); decided once t is known.
     function runType(t: Ty): Ty {
         const v = resolve(t);
-        if (isIO(v)) return (v as Extract<Ty, { k: "variant" }>).args[0];
+        if (isIO(v) || isPending(v)) return (v as Extract<Ty, { k: "variant" }>).args[0];
         return v.k === "var" || v.k === "operation" ? operation("run", [v]) : v;
     }
     function evaluateOperation(t: Extract<Ty, { k: "operation" }>): Ty {
@@ -1140,15 +1173,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const f = callable(b) ? b : a, input = callable(b) ? a : b;
             let element: Ty;
             // Iterating an action (xs * print) is one action yielding the results.
-            const results = (each: Ty, list: Ty): Ty => isIO(resolve(each)) ? io(list) : list;
+            const action = (each: Ty) => isIO(resolve(each)) || isPending(resolve(each));
+            const results = (each: Ty, list: Ty): Ty => action(each) ? io(list) : list;
             if (input.k === "list") {
                 const each = application(f, { type: input.element }, { t: "placeholder" });
-                return results(each, { k: "list", element: isIO(resolve(each)) ? runType(each) : each, ...sameLength(input) });
+                return results(each, { k: "list", element: action(each) ? runType(each) : each, ...sameLength(input) });
             } else if (input.k === "record") element = { k: "list", element: union([atom("String"), ...input.fields.values()]), items: [atom("String"), union([...input.fields.values()])], length: constant(2n) };
             else if (input.k === "atom" && input.name === "Int") element = input;
             else return problem(`iteration needs a list, record, or Int; got ${text(input)}`);
             const each = application(f, { type: element }, { t: "placeholder" });
-            return results(each, list(isIO(resolve(each)) ? runType(each) : each));
+            return results(each, list(action(each) ? runType(each) : each));
         }
         if (t.op === "\\" && callable(a) && callable(b)) {
             const input = variable();
@@ -1259,10 +1293,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return problem(`cannot use ${text(actual)} where ${text(expected)} is required`, e);
         }
         if (actual.k === "union") { for (const choice of actual.choices) unify(expected, choice, e, seen); return; }
+        // A pending monadic value takes the type of the monad it is used in.
+        if (isPending(expected) || isPending(actual)) {
+            const pending = (isPending(expected) ? expected : actual) as Extract<Ty, { k: "variant" }>;
+            const other = pending === expected ? actual : expected;
+            const held = monadHeld(other);
+            if (held === undefined) return problem(`cannot use ${text(actual)} where ${text(expected)} is required`, e);
+            if (held !== null) unify(pending.args[0], held, e, seen);
+            return;
+        }
 
         if (
             expected.k === "atom" && expected.name === "Type" && actual.k === "type"
         ) return;
+        // A Function field or parameter accepts any function.
+        if (expected.k === "atom" && expected.name === "Function" && ["fn", "overload", "intrinsic"].includes(actual.k)) return;
+        // A Monad or Functor parameter accepts any monadic value.
+        if (expected.k === "atom" && (expected.name === "Monad" || expected.name === "Functor") && monadHeld(actual) !== undefined) return;
         if (expected.k === "atom" && actual.k === "atom") {
             if (expected.name === actual.name) return;
             if (expected.name === "Number" && NUMERIC_TYPES.includes(actual.name)) {
@@ -1949,6 +1996,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (f.k === "type") {
             const t = resolve(f.value), a = resolve(argument.type);
+            // List T: the type of lists of T.
+            if (t.k === "atom" && t.name === "List" && (a.k === "type" || a.k === "list" && (a.items ?? []).every(x => resolve(x).k === "type"))) {
+                return { k: "type", value: list(a.k === "type" ? a.value : schemaValue(a, e)) };
+            }
             // IO T: the type of actions yielding T.
             if (t.k === "atom" && t.name === "IO") {
                 if (a.k === "type") return { k: "type", value: io(a.value) };
@@ -1958,7 +2009,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             // IO T action: the action, its result converted to T.
             if (isIO(t)) {
-                if (!isIO(a) && a.k !== "var") return problem(`${text(t)} expects an action, not ${text(a)}`, e, "return x is the action yielding x");
+                if (!isIO(a) && !isPending(a) && a.k !== "var") return problem(`${text(t)} expects an action, not ${text(a)}`, e, "return x is the action yielding x");
                 const result = variable();
                 unify(io(result), a, e);
                 convert((t as Extract<Ty, { k: "variant" }>).args[0], result, e);
@@ -2160,6 +2211,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (f.k === "atom" && ["String", "Char", "Bool"].includes(f.name)) {
             return problem(`cannot apply ${text(f)}`, e);
         }
+        // A value known only as some Function (a Function field): any argument,
+        // a result of its own (unknown) type.
+        if (f.k === "atom" && f.name === "Function") return variable();
         return problem(`cannot apply ${text(f)}`, e);
     }
     let inferenceDepth = 0;
@@ -2194,6 +2248,84 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Whether an operator overload's clauses accept operands of these
     // (known) types, tried on copies.
+    // The do-blocks being inferred, innermost last, each with its monad once
+    // a statement decides it (IO, a list, or a monadic variant).
+    const doBlocks: { monad?: Ty }[] = [];
+    // What x <- m binds: m's value in the enclosing do-block's monad (top
+    // level and IO blocks: an action's result).
+    function boundBy(v: Ty, rhs: Expr): Ty {
+        const block = doBlocks[doBlocks.length - 1];
+        if (isPending(v)) return (v as Extract<Ty, { k: "variant" }>).args[0];
+        if (["var", "operation", "dynamic", "intrinsic"].includes(v.k) || rhs.t === "import" || isLoadCall(rhs)) return runType(v);
+        const mixed = (m: Ty) => block?.monad && monadKind(block.monad) !== monadKind(m);
+        if (isIO(v)) {
+            if (block && mixed(v)) return problem(`<- needs a ${text(block.monad!)} here, not ${text(v)}`, rhs);
+            if (block) block.monad ??= v;
+            return (v as Extract<Ty, { k: "variant" }>).args[0];
+        }
+        const held = block ? monadHeld(v) : undefined;
+        if (held === undefined) return problem(`<- runs an action, not ${text(v)}`, rhs, "bind a value with =");
+        if (mixed(v)) return problem(`<- needs a ${text(block!.monad!)} here, not ${text(v)}`, rhs);
+        block!.monad ??= v;
+        return held ?? variable();
+    }
+    function monadKind(t: Ty): string {
+        const r = resolve(t);
+        return r.k === "list" ? "List" : r.k === "variant" ? r.name : r.k;
+    }
+    // The value a monadic type holds: IO t and Monad t hold t, a list its
+    // element, a variant what its >>= instance passes on (null: unknown);
+    // undefined for a type that is not monadic.
+    function monadHeld(type: Ty): Ty | null | undefined {
+        const t = resolve(type);
+        if (isIO(t) || isPending(t)) return (t as Extract<Ty, { k: "variant" }>).args[0];
+        if (t.k === "list") return t.element;
+        if (t.k === "atom" && (t.name === "Monad" || t.name === "Functor")) return null;
+        if (t.k === "variant") return boundType(t);
+        return undefined;
+    }
+    // What m >>= f passes to f, from m's >>= instance.
+    function boundType(m: Ty): Ty | null {
+        const inst = instanceFor(">>=", [m]);
+        if (!inst) return null;
+        const continuation = resolve(application(copy(inst), { type: m }, { t: "placeholder" }));
+        if (continuation.k !== "fn") return null;
+        const k = resolve(continuation.input);
+        return k.k === "fn" ? k.input : null;
+    }
+    // The newest instance of a method whose clauses accept these arguments
+    // (still being inferred: unknown).
+    function instanceFor(method: string, args: Ty[]): Ty | undefined {
+        const types = (options.instances?.get(method) ?? []) as Ty[];
+        for (let n = types.length - 1; n >= 0; n--) {
+            const t = resolve(types[n]);
+            if (t.k === "var") return t;
+            if (acceptsAll(t, args)) return t;
+        }
+        return undefined;
+    }
+    function acceptsAll(f: Ty, args: Ty[]): boolean {
+        if (args.some(x => ["var", "operation", "dynamic"].includes(resolve(x).k))) return false;
+        const vars = new Map<Ty, Ty>(), pending = requirements, saved = pending.length;
+        choosing++;
+        try {
+            let r = copy(f, vars);
+            for (const a of args) r = application(r, { type: copy(a, vars) }, { t: "placeholder" });
+            return true;
+        } catch (error) {
+            if (error && typeof error === "object" && "message" in error && "pos" in error) return false;
+            throw error;
+        } finally { choosing--; pending.length = saved; }
+    }
+    // A method applied through its instance (a copy of its type).
+    function viaInstance(method: string, args: Ty[]): Ty | undefined {
+        const inst = instanceFor(method, args);
+        if (!inst) return undefined;
+        if (resolve(inst).k === "var") return variable();
+        let r = copy(inst);
+        for (const a of args) r = application(r, { type: a }, { t: "placeholder" });
+        return r;
+    }
     function overloadAccepts(f: Ty, l: Ty, r: Ty): boolean {
         if ([f, l, r].some(x => ["var", "operation", "dynamic"].includes(resolve(x).k))) return false;
         const vars = new Map<Ty, Ty>(), pending = requirements, saved = pending.length;
@@ -2671,20 +2803,45 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "block": {
                 const child: Scope = new Map([...scope].map(([name, entry]) => [name, { ...entry, inherited: true }]));
                 let result: Ty = list(dynamic, constant(0n)), action = false;
-                for (const [n, s] of e.stmts.entries()) {
-                    result = infer(s, child);
-                    // A <- binding, or a discarded statement that is an action,
-                    // makes the block a do-block: its last statement is the action
-                    // whose result it yields.
-                    if (s.t === "patDef" ? s.eager : s.t !== "stmDef" && n < e.stmts.length - 1 && isIO(resolve(result))) action = true;
-                }
+                const block: { monad?: Ty } = {};
+                doBlocks.push(block);
+                try {
+                    for (const [n, s] of e.stmts.entries()) {
+                        result = infer(s, child);
+                        // A <- binding, or a discarded statement that is an action,
+                        // makes the block a do-block: its last statement is the action
+                        // whose result it yields, in the block's monad.
+                        const discarded = s.t !== "patDef" && s.t !== "stmDef" && n < e.stmts.length - 1 ? resolve(result) : undefined;
+                        if (s.t === "patDef" ? s.eager : discarded && (isIO(discarded) || isPending(discarded))) action = true;
+                        if (discarded && isIO(discarded)) {
+                            if (block.monad && !isIO(resolve(block.monad))) problem(`an IO action cannot run in a ${monadKind(block.monad)} do-block`, s);
+                            block.monad ??= discarded;
+                        }
+                    }
+                } finally { doBlocks.pop(); }
                 if (!action) return result;
                 const last = e.stmts[e.stmts.length - 1];
                 if (last.t === "patDef" || last.t === "stmDef") return problem("the last statement of a do-block must be an action, not a binding", last, "end the block with an action, such as return x");
-                const final = resolve(result);
-                if (isIO(final) || isExplicit(final)) return final;
-                if (final.k === "var") { const t = io(variable()); unify(final, t, last); return t; }
-                return problem(`the last statement of a do-block must be an action, not ${text(final)}`, last, "return x is the action yielding x");
+                const final = resolve(result), monad = block.monad && resolve(block.monad);
+                if (isExplicit(final)) return final;
+                const notAction = () => problem(`the last statement of a do-block must be an action, not ${text(final)}`, last, "return x is the action yielding x");
+                // A list or variant monad: the last value is one, or return.
+                if (monad && !isIO(monad)) {
+                    const held = isPending(final) ? (final as Extract<Ty, { k: "variant" }>).args[0] : undefined;
+                    if (monad.k === "list") {
+                        if (held) return list(held);
+                        if (final.k === "list" || final.k === "var") { unify(list(variable()), final, last); return final; }
+                        return notAction();
+                    }
+                    if (held || final.k === "var") return { k: "variant", name: (monad as Extract<Ty, { k: "variant" }>).name, args: (monad as Extract<Ty, { k: "variant" }>).args.map(() => variable()) };
+                    if (monadKind(final) === monadKind(monad)) return final;
+                    return notAction();
+                }
+                if (isIO(final)) return final;
+                // Undecided (a block of returns): pending until used.
+                if (isPending(final)) return monad ? io((final as Extract<Ty, { k: "variant" }>).args[0]) : final;
+                if (final.k === "var") { const t = monad ? io(variable()) : pendingTy(variable()); unify(t, final, last); return t; }
+                return notAction();
             }
             case "stmDef":
                 define(e.name, e.clauses, scope, e);
@@ -2700,11 +2857,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     () => {
                         const value = valueType = infer(e.value, e.value.t === "import" ? new Map(scope) : scope);
                         if (!e.eager) return value;
-                        const v = resolve(value);
-                        if (!isIO(v) && !["var", "operation", "dynamic", "intrinsic"].includes(v.k) && e.value.t !== "import" && !isLoadCall(e.value)) {
-                            return problem(`<- runs an action, not ${text(v)}`, e.value, "bind a value with =");
-                        }
-                        return runType(value);
+                        return boundBy(resolve(value), e.value);
                     });
                 // A top-level x <- action knows what the action yields, run statically.
                 const ran = e === eagerResult?.statement ? eagerResult.known
@@ -4060,7 +4213,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     if (last || st.update || st.value.t === "setItem" || st.value.t === "setFields") { incomplete = true; return undefined; }
                     if (st.eager) {
                         if (!running) return { action: () => steps(n, true) };
-                        const v = runKnown(evaluateKnown(st.value, local, scope, depth));
+                        const known = evaluateKnown(st.value, local, scope, depth);
+                        // Only IO is followed: a list or Option do-block is not.
+                        if (!demand(known)?.action) { incomplete = true; return undefined; }
+                        const v = runKnown(known);
                         assign(st.pattern, () => v);
                     } else assign(st.pattern, once(() => evaluateKnown(st.value, local, scope, depth)));
                 } else if (st.t === "stmDef") {
@@ -4744,6 +4900,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return t.k === "variant";
     }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
+        // Clauses for fmap, >>=, <*> or return define an instance: inferred on
+        // their own and recorded for the session; the method stays as it is.
+        if (METHODS.has(name) && clauses[0].params.length && options.instances) {
+            const forward = variable();
+            options.instances.set(name, [...options.instances.get(name) ?? [], forward]);
+            const own: Scope = new Map(scope);
+            defineClauses(name, clauses, own, location);
+            (forward as Extract<Ty, { k: "var" }>).link = own.get(name)!.type;
+            return;
+        }
         defineClauses(name, clauses, scope, location);
         const entry = scope.get(name);
         if (options.library && entry && DECLARED_KEEPS_LENGTH.has(name)) declareKeepsLength(entry.type);
@@ -5093,7 +5259,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         [[">>"], "then", 2], [["=<<"], "bindFlip", 2], [["sequence"], "sequence", 1], [["mapM"], "mapM", 2]] as const) {
         for (const name of names) scope.set(name, { type: { k: "intrinsic", name: op, arity } });
     }
-    for (const name of ["return", "primReturn"]) { const t = variable(); scope.set(name, { type: fn(t, io(t)) }); }
+    for (const name of ["return", "primReturn"]) { const t = variable(); scope.set(name, { type: fn(t, pendingTy(t)) }); }
     for (const name of ["when", "unless"]) { const t = variable(); scope.set(name, { type: fn(variable(), fn(io(t), io(list(variable(), constant(0n))))) }); }
     scope.set("cast", { type: { k: "intrinsic", name: "cast", arity: 2 } });
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
