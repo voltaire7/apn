@@ -152,8 +152,8 @@ Deno.test("no two standard modules define the same name", () => {
         if (!entry.isFile || !entry.name.endsWith(".apn")) continue;
         const module = entry.name.slice(0, -4);
         for (const statement of parse(Deno.readTextFileSync(new URL(`../lib/${entry.name}`, import.meta.url)), module)) {
-            // Instances (fmap, >>=, <*> clauses, and any return) join a method; they bind no name.
-            const instance = statement.t === "def" && (statement.name === "return" || ["fmap", ">>=", "<*>"].includes(statement.name) && statement.clauses[0].params.length > 0);
+            // Instances (any definition of fmap, >>=, <*> or return) join a method; they bind no name.
+            const instance = statement.t === "def" && ["fmap", ">>=", "<*>", "return"].includes(statement.name);
             const names = instance ? [] : statement.t === "def" ? [statement.name]
                 : statement.t === "type" ? [statement.def.name, ...statement.def.variants.map(v => v.tag)]
                 : statement.t === "patDef" && statement.pattern.p === "var" ? [statement.pattern.name] : [];

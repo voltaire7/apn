@@ -71,6 +71,8 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   a hidden parameter or call it with a different arity internally (no rewriting
   `return ((Option _) x) = Some x` into a two-parameter clause on the type):
   carry such information as metadata instead.
+- Things that act the same share one implementation: never special-case one
+  spelling of a definition (curried or with parameters) for no reason.
 - Favor curried (point-free) definitions when parameters are only passed
   through or discarded: `return = Some`, not `return ((Option _) x) = Some x`.
 - APN style in examples: whole-function `match` uses the same-line form
@@ -89,7 +91,8 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   and counts require exact integers.
 - **Layout:** strict 4-space indentation across the whole language; newlines
   at the same level end statements, +4 continues them.
-- **Bindings:** `name = value` rebinds in scope; records and lists are never
+- **Bindings:** `name = value` rebinds in scope (`f = x -> ...` is a clause
+  of `f`, like `f x = ...`); records and lists are never
   mutated in place (updates bind a modified copy). Only `Mutable` cells and
   `env` views mutate, and only through IO actions.
 - **Purity:** effectful builtins return IO actions and never act when applied;

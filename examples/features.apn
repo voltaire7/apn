@@ -914,6 +914,7 @@ doubleAll (Functor m) = fmap (* 2) m
 print [doubleAll [1,2],doubleAll [3]]      # => [[2,4],[6]]
 print (doubleAll (Some 4))                 # => Some 8
 # return is also overloaded on its result: return = MkLabel is return in Label.
+# Any definition of fmap, >>=, <*> or return is an instance, curried or not.
 Label a = | MkLabel a
 (MkLabel x) >>= f = f x
 return = MkLabel
@@ -1009,6 +1010,10 @@ typedAdd (Number x) (Number y) = x + y
 print (typedAdd (Int 2) (Int 3))      # => 5
 print (typedAdd (Float 2) (Float 3))  # => 5.0
 print (typedAdd (1/3) (1/6))          # => 1/2
+# f = Int x -> ... is the curried spelling of f (Int x) = ..., so it overloads too.
+describe = Int _ -> "an Int"
+describe = Float _ -> "a Float"
+print [describe 1,describe 1.5]       # => ["an Int","a Float"]
 # Int32 2147483648, Float32 (Float .1), and UInt (-1) are checked errors.
 
 # Numeric patterns only accept lossless conversions, even for bare literals.

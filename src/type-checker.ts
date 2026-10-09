@@ -14,10 +14,10 @@ function isIO(t: Ty): boolean { return t.k === "variant" && t.name === "IO" && t
 function pendingTy(t: Ty): Ty { return { k: "variant", name: "Monad", args: [t] }; }
 function isPending(t: Ty): boolean { return t.k === "variant" && t.name === "Monad" && t.args.length === 1; }
 const METHODS = new Set(["fmap", ">>=", "<*>", "return"]);
-// A definition that adds an instance instead of binding a name: clauses for
-// a method, or any return (return = Some), whose result names its monad.
-function isInstance(name: string, clauses: { params: Pattern[] }[]): boolean {
-    return METHODS.has(name) && (name === "return" || clauses.some(c => c.params.length));
+// A definition that adds an instance instead of binding a name: any
+// definition of a method (fmap f (Some x) = ..., return = Some).
+function isInstance(name: string, _clauses: { params: Pattern[] }[]): boolean {
+    return METHODS.has(name);
 }
 
 type Index = { constant: bigint; terms: Map<string, bigint> };

@@ -1340,7 +1340,7 @@ class Parser {
     }
 
     // Parse  name p1 p2 = body  (isDef() must already have returned true).
-    parseDefStatement(): { name: string; clauses: { params: Pattern[]; body: Expr; monad?: string }[] } {
+    parseDefStatement(): { name: string; clauses: { params: Pattern[]; body: Expr; guard?: Expr; monad?: string }[] } {
         const name = (this.next() as { v: string }).v;
         const params: Pattern[] = [];
         // Haskell-style params are PATTERNS:  f [x, y] = ..., f (x:rest) = ...
@@ -1348,7 +1348,17 @@ class Parser {
             params.push(this.parseConsPattern());
         }
         const equals = this.next(); // =
-        const body = this.parseDefBody();
+        let body = this.parseDefBody();
+        // f = Int x -> ... is the curried spelling of f (Int x) = ...: the
+        // same clause, so another one overloads it the same way.
+        let guard: Expr | undefined;
+        const lambda = !params.length && /^[a-z]/.test(name) ? curried(name, body) : undefined;
+        if (lambda) {
+            params.push(...lambda.params);
+            guard = lambda.guard;
+            body = lambda.body;
+        }
+        if (guard) return { name, clauses: [{ params, body, guard }] };
         if (name === "return" && params.length > 1) throw new APNError("parse", "return takes one argument", { pos: equals.pos, hint: "return = Some" });
         if (name === "return" && params.length) return { name, clauses: [returnClause(params[0], body)] };
         return { name, clauses: [{ params, body }] };
@@ -1641,6 +1651,31 @@ export function groupClauses(program: TopLevel[]): TopLevel[] {
 
 
 // Render an expression back to source text (for debug / quote inspection).
+// The lambda a definition's body is, with its parameters as patterns. An
+// operator like (+) is a value, and a parameter named after the definition
+// would mean equality with it as a clause (x x = x), so neither is one.
+function curried(name: string, body: Expr): { params: Pattern[]; body: Expr; guard?: Expr } | undefined {
+    const names = body.t === "lambda" ? body.params : body.t === "patternLambda" ? body.params.flatMap(patternVariables) : [];
+    if (names.some(n => n === name || n.startsWith("$"))) return undefined;
+    if (body.t === "lambda" && body.params.length) return { params: body.params.map((name): Pattern => name === "_" ? { p: "wildcard" } : { p: "var", name }), body: body.body };
+    if (body.t === "patternLambda" && body.params.length) return { params: body.params, body: body.body, guard: body.guard };
+    return undefined;
+}
+
+function patternVariables(p: Pattern): string[] {
+    switch (p.p) {
+        case "var": return [p.name];
+        case "typeBind": return [p.name, ...patternVariables(p.value)];
+        case "as": return [...patternVariables(p.left), ...patternVariables(p.right)];
+        case "schema": case "contract": return patternVariables(p.value);
+        case "list": return p.v.flatMap(patternVariables);
+        case "cons": return [...patternVariables(p.head), ...patternVariables(p.tail)];
+        case "constr": return p.args.flatMap(patternVariables);
+        case "recPat": return p.v.map(([, v]) => v);
+        default: return [];
+    }
+}
+
 // A return instance can name its monad on its parameter:
 //     return ((Option _) x) = Some x
 // It takes one parameter, x; the type only says which monad it makes.

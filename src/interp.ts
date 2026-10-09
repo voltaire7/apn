@@ -317,6 +317,19 @@ export class Interpreter {
             this.env.setLocal(name, alias);
             return alias;
         }
+        // A definition of fmap, >>=, <*> or return defines an instance: it joins
+        // the method everywhere instead of shadowing it here. Its clauses are
+        // the instance (return x = Some x), or its value is (return = Some).
+        if (Interpreter.METHODS.has(name) && !this.loadingPrelude) {
+            const child = new Env(this.env), arity = clauses[0].params.length, body = clauses[0].body;
+            const method: Value = arity ? { kind: "clauseFn", name, clauses, arity, env: child, applied: [] } : this.defer(() => {
+                const caller = this.env;
+                this.env = child;
+                try { return this.reference(this.eval(body)); } finally { this.env = caller; }
+            });
+            this.registerInstance(name, method);
+            return method;
+        }
         // Existing collections interpret the parameter as a key expression;
         // unbound/function names retain ordinary pattern-clause definitions.
         const previous = this.env.get(name);
@@ -355,13 +368,6 @@ export class Interpreter {
             }
             // Capture a shared env containing the binding itself, enabling recursion.
             const child = new Env(this.env);
-            // Clauses for fmap, >>=, <*> or return define an instance: they join
-            // the method everywhere instead of shadowing it here.
-            if (Interpreter.METHODS.has(name) && !this.loadingPrelude) {
-                const method: Value = { kind: "clauseFn", name, clauses, arity, env: child, applied: [] };
-                this.registerInstance(name, method, clauses);
-                return method;
-            }
             // Clauses for an operator overload it: the previous meaning still
             // applies to arguments no clause matches.
             // Redefining the clauses in the same scope keeps that fallback.
@@ -373,17 +379,6 @@ export class Interpreter {
             child.setLocal(name, fn);
             this.env.setLocal(name, fn);
             return fn;
-        }
-        // return = Some adds a return instance, like clauses for a method do.
-        if (name === "return" && !this.loadingPrelude) {
-            const scope = this.env, body = clauses[0].body;
-            const method = this.defer(() => {
-                const caller = this.env;
-                this.env = scope;
-                try { return this.reference(this.eval(body)); } finally { this.env = caller; }
-            });
-            this.registerInstance(name, method, []);
-            return method;
         }
         // Value-style def: single clause, no params.
         const value = clauses[0].body;
@@ -1898,19 +1893,30 @@ export class Interpreter {
     private instanceFamilies = new Map<string, Set<unknown>>();
     private loadingPrelude = true;
 
-    private registerInstance(method: string, fn: Value, clauses: DefClause[]): void {
+    private registerInstance(method: string, fn: Value): void {
         this.instances.set(method, [...this.instances.get(method) ?? [], fn]);
-        const position = method === "fmap" ? 1 : 0;
-        const families = this.instanceFamilies.get(method) ?? new Set();
-        for (const clause of clauses) {
-            const p = clause.params[position];
-            const tag = p?.p === "constr" ? p.tag : undefined;
-            const bound = tag ? this.env.get(tag) : undefined;
-            const value = bound && this.force(bound);
-            const family = value && (value.kind === "type" || value.kind === "variant" || value.kind === "native") ? value.family : undefined;
-            if (family) families.add(family);
+        this.instanceFamilies.delete(method);
+    }
+    // The variant families a method's instances take, read from their clauses
+    // (fmap's second parameter, the others' first), whether they were written
+    // as clauses or as a value (fmap = mapTree).
+    private familiesOf(method: string): Set<unknown> {
+        const known = this.instanceFamilies.get(method);
+        if (known) return known;
+        const families = new Set<unknown>(), position = method === "fmap" ? 1 : 0;
+        for (const instance of this.instances.get(method) ?? []) {
+            const fn = this.force(instance);
+            if (fn.kind !== "clauseFn") continue;
+            for (const clause of fn.clauses) {
+                const p = clause.params[position];
+                const bound = p?.p === "constr" ? fn.env.get(p.tag) : undefined;
+                const value = bound && this.force(bound);
+                const family = value && (value.kind === "type" || value.kind === "variant" || value.kind === "native") ? value.family : undefined;
+                if (family) families.add(family);
+            }
         }
         this.instanceFamilies.set(method, families);
+        return families;
     }
 
     // The first instance whose clauses accept these arguments.
@@ -2362,7 +2368,7 @@ export class Interpreter {
             if (v.kind === "io" || v.kind === "pending" || this.isList(v)) return true;
             if (v.kind !== "variant" || !v.family) return false;
             const methods = name === "Monad" ? [">>="] : ["fmap", ">>="];
-            return methods.some(m => this.instanceFamilies.get(m)?.has(v.family));
+            return methods.some(m => this.familiesOf(m).has(v.family));
         }
         if (name === "Type") return this.isTypeValue(value);
         if (name !== "Function" && name !== "Mutable") value = this.dataValue(value);

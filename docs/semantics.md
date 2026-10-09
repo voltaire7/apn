@@ -355,12 +355,18 @@ wildcard in patterns. Both sides of `=` are required: `foo =`, `foo = ;`, and
 | Definition | What it binds |
 | --- | --- |
 | `f x = x + 1` | A pattern-dispatch function |
-| `f = x -> x + 1` | A lambda closure |
+| `f = x -> x + 1` | The same function as `f x = x + 1` |
 | `v = 1 + 2` | A lazy value, computed when first used and kept |
 | `a = print 3` | An IO action (not run here) |
 | `a = { print 3; 4 }` | An IO action yielding 4 (a do-block) |
 | `b = { x = 2; x + 1 }` | A lazy value (a block of bindings) |
 | `xs = 1:xs` | A memoized cons cell with deferred head and tail |
+
+`f = Int x -> ...` is the curried spelling of `f (Int x) = ...`: the same
+clause, so `f = Float x -> ...` after it overloads `f` exactly as a second
+clause would. A lambda whose parameter has the definition's own name
+(`x = x -> x`) stays a lambda, since as a clause that parameter would mean
+equality with `x`.
 
 ## IO actions
 
@@ -433,11 +439,11 @@ after the action and pattern succeed, so `x <- return (x + 1)` reads the previou
 ### Monads and instances
 
 `fmap`, `<*>`, `>>=` and `return` work in any monad. IO and lists are built
-in; any other type joins by **instances**: clauses defined for these methods,
-written like ordinary overloads. Instance clauses add to the method
-everywhere (prelude helpers, do-blocks and other modules see them) instead of
-shadowing it, and the newest instance whose clauses accept the arguments
-runs. `lib/option.apn` holds Option's and Result's:
+in; any other type joins by **instances**: definitions of these methods,
+written like ordinary overloads, with parameters or curried (`fmap = mapTree`,
+`return = Some`). An instance adds to the method everywhere (prelude helpers,
+do-blocks and other modules see it) instead of shadowing it, and the newest
+instance whose clauses accept the arguments runs. `lib/option.apn` holds Option's and Result's:
 
 ```apn
 fmap f (Some x) = Some (f x)
