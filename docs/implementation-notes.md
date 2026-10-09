@@ -166,6 +166,15 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   success, error, or interruption. Non-tail calls keep the depth guard
   (`STACK_LIMIT`). Tests: `tests/tail-call-test.ts`, `tests/repl-interrupt-pty.py`.
 - `load` rejects explicit extensions before any file access.
+- Late binding in the checker: each binding's `Entry.capture` (shared by
+  its copies, carried over by rebindings) lists the definitions whose
+  deferred code read it (`defining`/`deferred`: function clauses, lambdas,
+  lazy values). `define` and lazy `patDef` call `rederiveUsers` after a
+  rebinding: each reader still bound to the same clauses or `definition`
+  is re-derived in the current scope (closures and actions take the new
+  type, other values must unify with the old). Failures set `Entry.broken`,
+  reported at the next use; `rederiving` guards cycles. Tests:
+  `tests/default-checking-test.ts`.
 - A statically checked load (`verifyLoad` ran) publishes without
   `protectDynamicWrite`. For other loads, `publishForeignBindings` records,
   per caller scope, which origin (path plus source text) published each

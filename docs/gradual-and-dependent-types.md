@@ -27,6 +27,21 @@ and dependent list lengths. Inner scopes may shadow names with another type.
 Clauses for the same input domain must share a result type; distinct typed
 input domains remain overloads. No `::` declaration is required.
 
+A function, lambda, or lazy value reads the names it uses when it runs, so
+after a name is rebound (by a definition or a checked `load`) it calls the new
+definition. The checker follows this: code that reads a rebound name is
+checked again against the new definition, and so is code that reads that
+code in turn. A later use is checked against the result. A definition that
+no longer checks is an error only where it is used afterwards:
+
+```apn
+c n = n * 2
+f x = c x
+c s = s ++ "?"
+print (f "a")                      # a?; f calls the new c
+# print (f 1)                      # static error: cannot append Int and String
+```
+
 ```apn
 identity x = x
 print (identity 123)

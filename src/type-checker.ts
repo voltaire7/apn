@@ -108,8 +108,19 @@ interface Entry {
     recursive?: boolean;
     selfInputs?: Ty[];
     nonGeneric?: Set<Ty>;
+    // capture: shared by every copy of one binding: the definitions whose
+    // deferred code (a function body, a lambda, a lazy value) reads it, so
+    // see a later rebinding when they run (see rederive).
+    capture?: { users: Set<Definition> };
+    // definition: the value expression of a value binding (its identity).
+    definition?: Expr;
+    // broken: why the definition no longer checks after a name it reads was
+    // rebound; using it is an error.
+    broken?: { message: string; rebound: string };
 }
 export type TypeScope = Map<string, Entry>;
+/** A definition, by name and its clauses (a function) or body (a value). */
+interface Definition { name: string; clauses?: { params: Pattern[]; body: Expr }[]; body?: Expr }
 type Scope = TypeScope;
 export interface CheckOptions {
     strict?: boolean;
@@ -836,6 +847,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
     }
     let requirements: Ty[] = [];
+    // Inside deferred code (see Entry.capture), and the definition being checked.
+    let deferred = 0, defining: Definition | undefined;
     const resolving = new Set<Ty>();
     function resolve(t: Ty): Ty {
         if (t.k === "var" && t.link) return resolve(t.link);
@@ -1920,6 +1933,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     firstUnbound = { expr: e, name: e.name, hint: module ? `${e.name} comes from the ${module} module: add import "${module}"` : near ? `did you mean '${near}'?` : undefined };
                 }
                 if (!entry) return unknown();
+                if (deferred && defining && entry.capture && defining.name !== e.name) entry.capture.users.add(defining);
+                if (entry.broken) {
+                    const loc = sourceLocations.get(e);
+                    throw {
+                        message: `'${e.name}' no longer type-checks: ${entry.broken.message}`,
+                        hint: `'${e.name}' reads '${entry.broken.rebound}', which was rebound after '${e.name}' was defined`,
+                        pos: loc?.start ?? 0, len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)), source: loc?.source, file: loc?.file,
+                    } satisfies TypeIssue;
+                }
                 const type = instantiate(entry);
                 return callees.has(e) && trustsShape(entry) ? type : withoutShapes(type);
             }
@@ -2285,7 +2307,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     if (e.update.error) return problem(e.update.error, e);
                     return infer({ t: "patDef", pattern: { p: "var", name: e.update.name }, value: e.update.value }, scope);
                 }
-                const t = infer(e.value, e.value.t === "import" ? new Map(scope) : scope);
+                const t = inferDefinition(e.pattern.p === "var" ? { name: e.pattern.name, body: e.value } : undefined, !e.eager,
+                    () => infer(e.value, e.value.t === "import" ? new Map(scope) : scope));
                 if (e.pattern.p === "var") {
                     const old = scope.get(e.pattern.name);
                     if (old && !old.inherited && e.value.t !== "setFields" && e.value.t !== "setItem") {
@@ -2300,7 +2323,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                             ? valueEntry(e.value, scope).mutable : undefined,
                         nonGeneric: captured(scope),
                         bound: e.value,
+                        definition: e.value,
+                        capture: carried(old),
                     });
+                    rederiveUsers(e.pattern.name, old, scope);
                 } else {
                     bind(e.pattern, recordSelection(e.pattern, t, e.value), scope, e);
                     for (const name of patternNames(e.pattern)) { const entry = scope.get(name); if (entry) entry.bound = e.value; }
@@ -4134,8 +4160,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function functionType(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr): Ty {
         const outerFacts = lengthFacts;
         lengthFacts = new Map(outerFacts);
+        deferred++;
         try { return inferFunction(params, body, parent, recursiveName, guard); }
-        finally { lengthFacts = outerFacts; }
+        finally { lengthFacts = outerFacts; deferred--; }
     }
     function inferFunction(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr): Ty {
         const scope = new Map(parent), inputs: { type: Ty; binder?: string; coerce: boolean }[] = [];
@@ -4237,7 +4264,62 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return;
         }
         const previous = scope.get(name);
-        if (options.extendDefinitions && previous?.clauses && !previous.inherited && clauses[0].params.length === previous.clauses[0].params.length) {
+        defineBinding(name, clauses, scope, location, previous);
+        rederiveUsers(name, previous, scope);
+    }
+    // A definition's code, inferred as that definition (deferred when lazy).
+    function inferDefinition<T>(definition: Definition | undefined, lazy: boolean, run: () => T): T {
+        const outer = defining;
+        if (definition) defining = definition;
+        if (lazy) deferred++;
+        try { return run(); } finally { defining = outer; if (lazy) deferred--; }
+    }
+    // A rebinding keeps the readers of a binding that reads its earlier self
+    // (x = x + 1); a fresh binding starts with none.
+    function carried(previous: Entry | undefined): { users: Set<Definition> } {
+        return { users: new Set(previous?.inherited ? [] : previous?.capture?.users ?? []) };
+    }
+    // Deferred code reads a name when it runs, so after a rebinding it calls
+    // the new definition: check each definition that reads it again, as it
+    // now stands in scope, and so on for those that read it in turn.
+    function rederiveUsers(name: string, previous: Entry | undefined, scope: Scope): void {
+        if (!previous || previous.inherited || !previous.capture?.users.size) return;
+        const current = scope.get(name);
+        if (!current || current === previous || current.type === previous.type) return;
+        for (const user of [...previous.capture.users]) rederive(user, name, scope);
+    }
+    function rederive(user: Definition, rebound: string, scope: Scope): void {
+        const entry = scope.get(user.name);
+        // A reader rebound since, or not visible here, is not this definition.
+        if (!entry || entry.inherited || (user.clauses ? entry.clauses !== user.clauses : entry.definition !== user.body)) return;
+        if (rederiving.has(user)) return;
+        rederiving.add(user);
+        try { rederiveNow(user, entry, rebound, scope); } finally { rederiving.delete(user); }
+    }
+    function rederiveNow(user: Definition, entry: Entry, rebound: string, scope: Scope): void {
+        // A definition that no longer checks is an error only where it is used.
+        // define passes a change on to its own readers; otherwise do it here.
+        try {
+            if (user.clauses) { define(user.name, user.clauses, scope, user.clauses[0].body); return; }
+            // A closure, or an action run at each use, reads the name each
+            // time: it takes the new type. Another value may have been
+            // computed already, so it must fit both.
+            const body = user.body!, t = inferDefinition(user, true, () => infer(body, new Map(scope)));
+            if (["lambda", "patternLambda", "app", "pipe", "block"].includes(body.t)) {
+                scope.set(user.name, { type: t, definition: body, capture: entry.capture, nonGeneric: entry.nonGeneric, bound: entry.bound });
+            } else {
+                unify(entry.type, t, body);
+                if (entry.broken) scope.set(user.name, { ...entry, broken: undefined });
+            }
+        } catch (error) {
+            if (!error || typeof error !== "object" || !("message" in error) || !("pos" in error)) throw error;
+            scope.set(user.name, { ...entry, broken: { message: (error as TypeIssue).message, rebound } });
+        }
+        for (const reader of [...entry.capture?.users ?? []]) rederive(reader, user.name, scope);
+    }
+    const rederiving = new Set<Definition>();
+    function defineBinding(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr, previous: Entry | undefined): void {
+        if (options.extendDefinitions && previous?.clauses && !previous.inherited && clauses[0].params.length === previous.clauses[0].params.length && !rederiving.size) {
             const key = (clause: { params: Pattern[] }): string => {
                 const names = new Map<string, number>([[name, -1]]);
                 return JSON.stringify(clause.params, (field, value) => {
@@ -4284,7 +4366,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (pending) scope.set(name, { type: pending, mono: true });
             const body = clauses[0].body;
             touchedTopLevel = false;
-            const t = infer(body, ["import", "app", "pipe"].includes(body.t) ? new Map(scope) : scope);
+            // A value definition is lazy: it reads its names when first used.
+            const t = inferDefinition({ name, body }, true, () => infer(body, ["import", "app", "pipe"].includes(body.t) ? new Map(scope) : scope));
             if (pending) unify(pending, t, location);
             if (previous && !previous.inherited) {
                 const old = resolve(previous.type), next = resolve(t);
@@ -4305,6 +4388,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // A name written more than once can change under a closure that captured it.
                 ...lazyTop ? { lazyTop } : facts,
                 nonGeneric: captured(new Map([...scope].filter(([key]) => key !== name))),
+                definition: body,
+                capture: carried(previous),
             });
             return;
         }
@@ -4312,7 +4397,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const nonGeneric = captured(scope);
         const pending = forward.get(name) ?? variable();
         forward.delete(name);
-        scope.set(name, { type: pending, mono: true, recursive: true });
+        // Mutually recursive definitions read it while it is being inferred.
+        const capture = carried(previous);
+        scope.set(name, { type: pending, mono: true, recursive: true, capture });
         const groups = new Map<string, Ty>();
         const domain = (t: Ty, seen = new Set<Ty>()): string => {
             t = resolve(t);
@@ -4347,8 +4434,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         };
         const orders = new Map<string, ClauseOrder[]>();
+        const definition: Definition = { name, clauses };
         for (const [index, c] of clauses.entries()) {
-            const t = functionType(c.params, c.body, scope, name);
+            const t = inferDefinition(definition, false, () => functionType(c.params, c.body, scope, name));
             let key = `${c.params.some(bindsSelf) ? "self:" : ""}${domain(t)}`, existing = groups.get(key);
             // A clause whose type differs from its group's only in list lengths
             // (f (Int n) = [1, 2]; f 0 = [0]) becomes its own overload choice;
@@ -4394,15 +4482,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         }
         const alternatives = [...groups.values()];
+        const type: Ty = alternatives.length === 1 ? alternatives[0] : { k: "overload", choices: alternatives };
         if (alternatives.length === 1) {
             unify(pending, alternatives[0], location);
             // The definition's own type keeps its summary and shape; a recursive
             // call may have resolved pending to the call site's function node.
-            scope.set(name, { type: alternatives[0], nonGeneric, clauses });
+            scope.set(name, { type, nonGeneric, clauses, capture });
         } else {
-            const overload: Ty = { k: "overload", choices: alternatives };
-            if (pending.k === "var" && !pending.link) pending.link = overload;
-            scope.set(name, { type: overload, nonGeneric, clauses });
+            if (pending.k === "var" && !pending.link) pending.link = type;
+            scope.set(name, { type, nonGeneric, clauses, capture });
         }
     }
     const scope: Scope = new Map(TYPE_NAMES.map((name) => [name, { type: { k: "type", value: atom(name) } }]));

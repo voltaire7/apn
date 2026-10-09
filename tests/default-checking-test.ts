@@ -965,3 +965,35 @@ Deno.test("the run reads the file contents the checker saw", () => {
     // One snapshot per run: the checker's read is the one the run used.
     if (i.inputFile(fish) !== text) throw new Error("snapshot");
 });
+// Code reads names when it runs, so the checker re-derives it after a rebinding.
+for (const [source, expected] of [
+    ['c n = n * 2; f x = c x; c s = s ++ "?"; f "a"', '"a?"'],
+    ['c s = s ++ "?"; f x = c x; c n = n * 2; f 1', '2'],
+    ['c n = n * 2; f x = c x; c s = s ++ "?"; c n = n + 1; f 1', '2'],
+    ['c n = n * 2; g = x -> c x; c s = s ++ "?"; g "a"', '"a?"'],
+    ['c n = n * 2; f x = c x; c s = s ++ "?"; 1', '1'],
+    ['c n = n * 2; y <- c 1; c s = s ++ "?"; y', '2'],
+    ['h = { c n = n * 2; f x = c x; c s = s ++ "?"; f "a" }; h', '"a?"'],
+] as const) Deno.test(`a reader follows a rebound name: ${source}`, () => {
+    if (run(session(), source) !== expected) throw new Error(source);
+});
+for (const source of [
+    'c n = n * 2; f x = c x; c s = s ++ "?"; f 1',
+    'c n = n * 2; f x = c x; g y = f y + 1; c s = s ++ "?"; g 1',
+    'c n = n * 2; y = c 1; c s = s ++ "?"; y',
+    'c n = n * 2; ev 0 = c 0; ev n = od (n - 1); od 0 = 1; od n = ev (n - 1); c s = s ++ "?"; od 3',
+    'h = { c n = n * 2; f x = c x; c s = s ++ "?"; f 1 }; h',
+]) Deno.test(`a reader of a rebound name is checked against it: ${source}`, () => rejected(session(), source));
+Deno.test("a reader follows a name rebound by a later REPL input or a load", () => {
+    const i = session();
+    run(i, 'c n = n * 2; f x = c x; []');
+    run(i, 'c s = s ++ "?"; []');
+    if (run(i, 'f "a"') !== '"a?"') throw new Error("later input");
+    rejected(i, 'f 1');
+    const j = session();
+    j.sourceDir = new URL("./fixtures/", import.meta.url).pathname;
+    run(j, 'load "reload"; twice x = double x; []');
+    run(j, 'load "reload-text"; []');
+    if (run(j, 'twice "a"') !== '"aa"') throw new Error("load");
+    rejected(j, 'twice 1');
+});

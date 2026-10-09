@@ -743,6 +743,14 @@ print (numbers.cube 2)         # => 8; each use loads the file again, replacing 
     load "../lib/number"           # ... does not stop a later load from replacing it
     print (sq 3)                   # => 9
 }
+# Functions read names when they run, so they call a rebound definition;
+# the checker checks later calls against it (cube 2 would be a type error).
+{
+    shout s = s ++ "!"
+    loud x = shout x
+    shout s = s ++ "!!"
+    print (loud "hi")              # => hi!!
+}
 
 # step into the imported halt (an action whose body is exit 0):
 debug $ step 1 halt          # => exit 0
