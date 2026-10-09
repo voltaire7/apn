@@ -912,7 +912,9 @@ Resource scopes reject environment views as escaping references.
 ### Type descriptions
 
 `typeOf [1,2,3]` displays `[Int]`; heterogeneous literal lists display their
-known alternatives, for example `[Int | String]`. Empty lists and unresolved
+known alternatives, for example `[Int | String]`. A list built with `:` is
+described the same way (`typeOf ([1,2]:[3,4])` is `[[Int] | Int]`, as for
+`[[1,2],3,4]`), reading its unevaluated tail without running it. Empty lists and unresolved
 lazy computations display `[a]`. Integer ranges display `[Int]`, including
 infinite ranges, without traversing them.
 

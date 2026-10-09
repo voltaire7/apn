@@ -1456,6 +1456,7 @@ describeIdentity (Int x) = x
 print (typeOf describeIdentity)          # => Int -> Int
 print (typeOf (x -> print x))            # => a -> []
 print (typeOf [1,"hello"])              # => [Int | String]
+print (typeOf (1:["hello"]))            # => [Int | String]  (a ':' list is described the same)
 
 # Empty results are lists; conditions use truthiness.
 print ({} == [])                        # => true

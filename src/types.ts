@@ -40,7 +40,8 @@ export type Value =
     | { kind: "list"; v: Value[]; schema?: Value }
     | { kind: "lazyList"; exprs: Expr[]; env: Env; value?: Value }
     | { kind: "cons"; head: Value; tail: Value }
-    | { kind: "deferred"; compute: () => Value; value?: Value; busy?: boolean }
+    // describes: an unevaluated value it will be (a cons tail's thunk), for typeOf.
+    | { kind: "deferred"; compute: () => Value; value?: Value; busy?: boolean; describes?: Value }
     | { kind: "record"; v: Array<[string, Value]>; scope?: Env; guarded?: boolean }
     | { kind: "variant"; tag: string; v: Value[]; family?: VariantFamily; arguments?: Value[] }
     | { kind: "closure"; params: string[]; body: Expr; env: Env; mutableValue?: Value }

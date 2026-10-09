@@ -162,7 +162,8 @@ export function describeType(value: Value): string {
             case "binop": {
                 if (["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(e.op)) return named("Bool");
                 const l = expr(e.l, env, locals), r = expr(e.r, env, locals);
-                if (e.op === ":") { const result = list(l); unify(result, r); return result; }
+                // A different element makes a mixed list, as in a literal.
+                if (e.op === ":") return unify(list(l), r);
                 if (e.op === "\\") {
                     const input = fresh(); return arrow(input, apply(l, apply(r, input)));
                 }
@@ -205,13 +206,13 @@ export function describeType(value: Value): string {
             case "int": case "float": case "rational": case "complex": return named(numericType(v));
             case "type": case "functionType": return named("Type");
             case "thunk": return v.value ? inspect(v.value) : expr(v.body, v.env);
-            case "deferred": return v.value ? inspect(v.value) : fresh();
+            case "deferred": return v.value ? inspect(v.value) : v.describes ? inspect(v.describes) : fresh();
             case "lazyList": return v.value ? inspect(v.value) : sequence(v.exprs.map(e => expr(e, v.env)));
             case "list": return sequence(v.v.map(inspect));
             case "range": return list(named("Int"));
             case "floatRange": return list(named("Float"));
             case "rationalRange": return list(named("Fraction"));
-            case "cons": { const t = list(inspect(v.head)); unify(t, inspect(v.tail)); return t; }
+            case "cons": return unify(list(inspect(v.head)), inspect(v.tail));
             case "contract": return arrow(named(typeToString(v.from)), named(typeToString(v.to)));
             case "closure": return fn(v.params.map(name => ({ p: "var", name })), v.body, v.env);
             case "clauseFn": return join(v.clauses.map(c => fn(c.params, c.body, v.env, v.applied)));

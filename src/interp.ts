@@ -1125,11 +1125,14 @@ export class Interpreter {
             const tail = this.delay(e.r);
             return {
                 kind: "cons", head: this.delay(e.l),
-                tail: this.defer(() => {
-                    const value = this.dataValue(tail);
-                    if (!this.isList(value)) throw new APNError("runtime", `cons tail expected a list, got ${value.kind}`);
-                    return value;
-                }),
+                tail: {
+                    kind: "deferred", describes: tail,
+                    compute: () => {
+                        const value = this.dataValue(tail);
+                        if (!this.isList(value)) throw new APNError("runtime", `cons tail expected a list, got ${value.kind}`);
+                        return value;
+                    },
+                },
             };
         }
         if (e.op === "++") {
