@@ -400,7 +400,7 @@ function helpText(): string {
         `  ; or newline       statement separators (blocks & top level)`,
         `  print, readFile, fetch, set, env ... are IO actions: statements and <- run them`,
         `  x <- action        run it now and bind its result (outer value only)`,
-        `  f n = { print n; n }   a block that runs an action is itself an action (do-block)`,
+        `  f n = { print n; return n }   a block running an action is an action; it ends with one`,
         `  IO [] is the type of an action yielding []; IO [] { print "hi" } checks one; pure x`,
         `  fmap/<$>, pure, <*>, >>=, >>, =<<, sequence, mapM, when, unless (IO, lists, Option)`,
         `  indentation: strict 4-space layout (exactly +4 per level)`,

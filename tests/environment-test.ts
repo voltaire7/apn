@@ -14,8 +14,8 @@ for (const [source, expected] of [
     ['scope <- env; x = 1; scope.x', '1'],
     ['x = 1; scope <- env; x = 2; scope.x', '2'],
     ['x = 1; scope <- env; other <- scope; other.x = 3; [x,scope.x]', '[3,3]'],
-    ['x = 1; { e <- env; e.x = 2 }; x', '2'],
-    ['x = 1; inner <- { x = 3; e <- env; e.x = 4; x }; [inner,x]', '[4,1]'],
+    ['x = 1; { e <- env; e.x = 2; return [] }; x', '2'],
+    ['x = 1; inner <- { x = 3; e <- env; e.x = 4; return x }; [inner,x]', '[4,1]'],
     ['make x = env; scope <- make 42; scope.x', '42'],
     ['make x = env; scope <- make 42; scope.x = 7; scope.x', '7'],
     ['make x = { get ignored = x; env }; scope <- make 42; scope.x = 7; scope.get []', '7'],
@@ -24,7 +24,7 @@ for (const [source, expected] of [
     ['x = 1; e <- env; e.[x]', '[1]'],
     ['scope <- env; again <- env; [scope == again,typeOf scope]', '[true,Record]'],
     ['e <- env; e.head [42]', '42'],
-    ['scope <- env; { local = 42; e <- env; e.local }; again <- env; scope == again', 'true'],
+    ['scope <- env; { local = 42; e <- env; return e.local }; again <- env; scope == again', 'true'],
 ] as const) Deno.test(`live environment: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

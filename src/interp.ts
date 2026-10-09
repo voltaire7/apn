@@ -750,7 +750,10 @@ export class Interpreter {
                 expr === null ||
                 ["int", "float", "bool", "string", "char"].includes(expr.t)
             ) break;
-            expr = this.valueToExpr(this.demand(this.eval(expr)));
+            // An action has no source form: the level stays as written.
+            const level = this.demand(this.eval(expr));
+            if (level.kind === "io") break;
+            expr = this.valueToExpr(level);
             val = { kind: "list", v: [] };
         }
         if (expr === null) return val;
@@ -933,11 +936,13 @@ export class Interpreter {
                 else if (s.t === "patDef") r = this.evalPatBinding(s);
                 else if (i < e.stmts.length - 1) this.runStmt(this.eval(s));
                 else {
+                    // The last statement is the action whose result the block yields.
                     const last = this.reference(this.eval(s));
-                    return last.kind === "io" ? new IOTail(last) : last;
+                    if (last.kind !== "io") throw new APNError("runtime", `the last statement of a do-block must be an action, not a ${last.kind}`, { hint: "return x (or pure x) is the action yielding x" });
+                    return new IOTail(last);
                 }
             }
-            return r;
+            throw new APNError("runtime", "the last statement of a do-block must be an action, not a binding", { hint: "end the block with an action, such as return x" });
         } finally { this.env = caller; }
     }
 

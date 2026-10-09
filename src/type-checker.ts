@@ -2673,10 +2673,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 for (const [n, s] of e.stmts.entries()) {
                     result = infer(s, child);
                     // A <- binding, or a discarded statement that is an action,
-                    // makes the block a do-block: an action yielding its last value.
+                    // makes the block a do-block: its last statement is the action
+                    // whose result it yields.
                     if (s.t === "patDef" ? s.eager : s.t !== "stmDef" && n < e.stmts.length - 1 && isIO(resolve(result))) action = true;
                 }
-                return action ? io(runType(result)) : result;
+                if (!action) return result;
+                const last = e.stmts[e.stmts.length - 1];
+                if (last.t === "patDef" || last.t === "stmDef") return problem("the last statement of a do-block must be an action, not a binding", last, "end the block with an action, such as return x");
+                const final = resolve(result);
+                if (isIO(final) || isExplicit(final)) return final;
+                if (final.k === "var") { const t = io(variable()); unify(final, t, last); return t; }
+                return problem(`the last statement of a do-block must be an action, not ${text(final)}`, last, "return x (or pure x) is the action yielding x");
             }
             case "stmDef":
                 define(e.name, e.clauses, scope, e);
@@ -4227,7 +4234,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             } };
         }
         // pure x: the action yielding x.
-        if ((head.name === "pure" || head.name === "primPure") && builtin && args.length === 1) {
+        if ((head.name === "pure" || head.name === "return" || head.name === "primPure") && builtin && args.length === 1) {
             const inner = value(args[0]);
             return { action: () => inner };
         }
@@ -5074,7 +5081,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         [[">>"], "then", 2], [["=<<"], "bindFlip", 2], [["sequence"], "sequence", 1], [["mapM"], "mapM", 2]] as const) {
         for (const name of names) scope.set(name, { type: { k: "intrinsic", name: op, arity } });
     }
-    for (const name of ["pure", "primPure"]) { const t = variable(); scope.set(name, { type: fn(t, io(t)) }); }
+    for (const name of ["pure", "return", "primPure"]) { const t = variable(); scope.set(name, { type: fn(t, io(t)) }); }
     for (const name of ["when", "unless"]) { const t = variable(); scope.set(name, { type: fn(variable(), fn(io(t), io(list(variable(), constant(0n))))) }); }
     scope.set("cast", { type: { k: "intrinsic", name: "cast", arity: 2 } });
     scope.set("do", { type: { k: "intrinsic", name: "do" } });

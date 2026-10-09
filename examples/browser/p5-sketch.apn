@@ -15,6 +15,6 @@ draw p = {
 }
 mousePressed p = {
     set clicks $ (clicks + 1)
-    false
+    return false
 }
 main = p5.sketch [setup: setup, draw: draw, mousePressed: mousePressed]

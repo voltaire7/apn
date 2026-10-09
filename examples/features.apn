@@ -593,12 +593,12 @@ debug 42                      # => 42
 # a LIVE value: debug shows the level's source, <- runs an action.
 inner = {
     print "inner"
-    42
+    return 42
 }
 stepped <- step 1 inner       # => inner          (runs the action)
 print stepped                 # => 42
 debug $ step 1 inner         # => { print "inner"; 42 }
-debug $ step 2 inner         # => 42     (the block's tail statement)
+debug $ step 2 inner         # => return 42     (the block's tail statement)
 
 # quote — the expression's SOURCE TEXT as a string (parens kept), never
 # evaluated:
@@ -650,10 +650,10 @@ print "hello"; print ", world"        # prints: hello
                                       # prints: , world
 
 # a multi-line `{ }` block as a function body (value = last statement);
-# with an effect in it, the body is an action
+# with an effect in it, the body is an action, ending with one (return)
 area w h = {
     print "computing area"
-    w * h
+    return (w * h)
 }
 computedArea <- area 3 4     # prints: computing area
 print computedArea           # => 12
@@ -671,7 +671,7 @@ print (both)                 # => 42
 seqOf = {
     print "one"
 
-    6 * 7
+    return (6 * 7)
 }
 seqResult <- seqOf           # prints: one
 print seqResult              # => 42
@@ -727,7 +727,7 @@ print editable               # => [10,11,30]
 # ---------------------------------------------------------
 evaluationValue = 2 + 1
 print evaluationValue       # => 3 (computed when first used, then kept)
-actionValue = { print "action"; 4 }  # an IO action: defining it runs nothing
+actionValue = { print "action"; return 4 }  # an IO action: defining it runs nothing
 actionResult <- actionValue # => action (<- runs it and binds its result)
 print actionResult          # => 4
 actionValue                 # => action (each run repeats the effect)
@@ -824,13 +824,15 @@ print "still running before the final halt"
 #    implicit do-block), and x <- action runs one and binds its result.
 #    A block that runs anything (a <- binding, or a discarded statement
 #    whose value is an action) is a do-block: the block is itself an
-#    action yielding its last value. A block of bindings stays a value.
+#    action, and its last statement must be an action too (return x yields
+#    a plain x). A block of bindings stays a value: Int { 42 } is an Int,
+#    IO Int { return 42 } an action yielding one.
 #    IO is a type constructor: IO [] is the type of an action yielding [],
 #    and IO [] action checks one. pure x is the action yielding x.
 # ---------------------------------------------------------
 lazyNote = {
     print "lazyNote WAS called"
-    6 * 7
+    return (6 * 7)
 }
 noted <- lazyNote          # => lazyNote WAS called
 print (noted * 2)          # => 84
@@ -1213,7 +1215,7 @@ print (onlyOne (vowelOrPair (vowelIfShort emitted)))  # 1
 bumped y = {
     c = Mutable 1
     set c (c + 1)
-    c + 0
+    return (c + 0)
 }
 bumpedValue <- bumped 0
 print (onlyOne (vowelOrPair (vowelIfShort (take (bumpedValue - 1) [7,8,9]))))  # 1
@@ -1257,7 +1259,7 @@ print (onlyOne (vowelOrPair (vowelIfShort (take (mutableCounter - 1) [7,8,9]))))
 # A statement may write and read them: each part sees the run's order.
 bumpCounter x = {
     set mutableCounter $ (mutableCounter + 1)
-    mutableCounter + 0
+    return (mutableCounter + 0)
 }
 counted <- bumpCounter 0
 print (onlyOne (vowelOrPair (vowelIfShort (take (counted - 2) [7,8,9]))))  # 1
@@ -1338,7 +1340,7 @@ print (ffiExample.function [Int32,Int32] Int32) # signature record
 # Zero-argument C actions use bare fields: c.donut_finish; print c.greeting.
 
 # <- runs an action now and keeps its result; = only names the action.
-captured <- { print "captured now"; "kept" } # => captured now
+captured <- { print "captured now"; return "kept" } # => captured now
 print captured                               # => kept (the stored result)
 eagerArgs <- getArgs
 print eagerArgs                              # => [] without CLI arguments

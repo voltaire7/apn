@@ -2,5 +2,5 @@
 do [] = pure []
 do (expression:rest) = {
     result <- expression
-    null rest ? result : do rest
+    null rest ? return result : do rest
 }

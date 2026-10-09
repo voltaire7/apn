@@ -682,10 +682,10 @@ for (const [source, expected] of [
     ['k y = { x = 1; h = () -> x; x = 5; h [] }; g (f (r (k 0 == 5)))','0'],
     ['x = 10; k y = { z = x + 1; x = 2; z }; g (f (r (k 0 == 3)))','0'],
     ['k y = { a = 1; b = a; a = 2; b }; g (f (r (k 0 == 2)))','0'],
-    ['k y = { a <- 1; b <- a + 1; a <- 5; b }; w <- k 0; g (f (r (w == 2)))','0'],
-    ['k y = { a <- 1; a <- a + 1; a }; w <- k 0; g (f (r (w == 2)))','0'],
+    ['k y = { a <- 1; b <- a + 1; a <- 5; return b }; w <- k 0; g (f (r (w == 2)))','0'],
+    ['k y = { a <- 1; a <- a + 1; return a }; w <- k 0; g (f (r (w == 2)))','0'],
     ['k y = { n = 1; h q = q + n; n = 10; h 1 }; g (f (r (k 0 == 11)))','0'],
-    ['k y = { a = 1; b <- a; a = 2; [a,b] }; w <- k 0; g (f (r (w == [2,1])))','0'],
+    ['k y = { a = 1; b <- a; a = 2; return [a,b] }; w <- k 0; g (f (r (w == [2,1])))','0'],
     ['k y = { xs = 1 : xs; length (take 3 xs) }; g (f (r (k 0 == 3)))','0'],
     ['g (f (r (([a,b] -> a) [1,2] == 1)))','0'],
     ['g (f (r (length [1..1000000] == 1000000)))','0'],
@@ -701,7 +701,7 @@ for (const [source, expected] of [
 for (const source of [
     'k y = { x = 1; h = () -> x; x = 5; h [] }; g (f (r (k 0 == 1)))',
     'k y = { a = 1; b = a; a = 2; b }; g (f (r (k 0 == 1)))',
-    'k y = { a <- 1; b <- a + 1; a <- 5; b }; w <- k 0; g (f (r (w == 6)))',
+    'k y = { a <- 1; b <- a + 1; a <- 5; return b }; w <- k 0; g (f (r (w == 6)))',
     'g (f (r (length [1..1000000] == 999999)))',
     'g (f (r (sum [1..20000] == 0)))',
 ]) Deno.test(`rebinding blocks and long lists stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${textClauses}; ${source}`));
@@ -721,23 +721,23 @@ for (const [source, expected] of [
 });
 for (const source of [
     'k y = { c = Mutable 5; c + 1 }; g (f (r (k 0 == 7)))',
-    'k y = { c = Mutable 1; h = () -> c + 0; set c 2; h [] }; w <- k 0; g (f (r (w == 1)))',
+    'k y = { c = Mutable 1; h = () -> c + 0; set c 2; return (h []) }; w <- k 0; g (f (r (w == 1)))',
     'c = Mutable 5; bump x = set c x; g (f (r (c + 1 == 5)))',
 ]) Deno.test(`effects and cells stay checked: ${source}`, () => rejected(session(), `${effectPrelude}; ${source}`));
 // Writes after reads follow the run's order: block statements, eager
 // bindings and operands run in order, and a lazy binding is read when used.
 for (const [source, expected] of [
-    ['k y = { c = Mutable 1; set c (c + 1); set c (c * 10); c + 0 }; w <- k 0; g (f (r (w == 20)))', '0'],
-    ['k y = { c = Mutable 1; a <- c + 0; set c 5; a + 0 }; w <- k 0; g (f (r (w == 1)))', '0'],
-    ['k y = { c = Mutable 1; a = c + 0; set c 5; a + 0 }; w <- k 0; g (f (r (w == 5)))', '0'],
-    ['bump c = set c (c + 1); k y = { c = Mutable 1; bump c; bump c; c + 0 }; w <- k 0; g (f (r (w == 3)))', '0'],
-    ['k y = { c = Mutable 1; a <- c + 0; b <- { set c 5; c + 0 }; a + b }; w <- k 0; g (f (r (w == 6)))', '0'],
-    ['k y = { c = Mutable 1; h = () -> c + 0; set c 2; h [] }; w <- k 0; g (f (r (w == 2)))', '0'],
-    ['sw c = { set c 9; c + 0 }; k y = { c = Mutable 1; a = c + 0; s <- sw c; s + a }; w <- k 0; g (f (r (w == 18)))', '0'],
+    ['k y = { c = Mutable 1; set c (c + 1); set c (c * 10); return (c + 0) }; w <- k 0; g (f (r (w == 20)))', '0'],
+    ['k y = { c = Mutable 1; a <- c + 0; set c 5; return (a + 0) }; w <- k 0; g (f (r (w == 1)))', '0'],
+    ['k y = { c = Mutable 1; a = c + 0; set c 5; return (a + 0) }; w <- k 0; g (f (r (w == 5)))', '0'],
+    ['bump c = set c (c + 1); k y = { c = Mutable 1; bump c; bump c; return (c + 0) }; w <- k 0; g (f (r (w == 3)))', '0'],
+    ['k y = { c = Mutable 1; a <- c + 0; b <- { set c 5; return (c + 0) }; return (a + b) }; w <- k 0; g (f (r (w == 6)))', '0'],
+    ['k y = { c = Mutable 1; h = () -> c + 0; set c 2; return (h []) }; w <- k 0; g (f (r (w == 2)))', '0'],
+    ['sw c = { set c 9; return (c + 0) }; k y = { c = Mutable 1; a = c + 0; s <- sw c; return (s + a) }; w <- k 0; g (f (r (w == 18)))', '0'],
     // List elements and call arguments that read a cell are computed when used.
-    ['k y = { c = Mutable 1; xs = [c + 0]; set c 7; head xs }; w <- k 0; g (f (r (w == 7)))', '0'],
-    ['k y = { c = Mutable 1; xs = [c + 0]; v <- head xs + 0; set c 7; v }; w <- k 0; g (f (r (w == 1)))', '0'],
-    ['p x c = { set c 3; x + 0 }; k y = { c = Mutable 1; p (c + 0) c }; w <- k 0; g (f (r (w == 3)))', '0'],
+    ['k y = { c = Mutable 1; xs = [c + 0]; set c 7; return (head xs) }; w <- k 0; g (f (r (w == 7)))', '0'],
+    ['k y = { c = Mutable 1; xs = [c + 0]; v <- head xs + 0; set c 7; return v }; w <- k 0; g (f (r (w == 1)))', '0'],
+    ['p x c = { set c 3; return (x + 0) }; k y = { c = Mutable 1; p (c + 0) c }; w <- k 0; g (f (r (w == 3)))', '0'],
     // Top-level cells follow the statements that write them, in program order.
     ['counter = Mutable 0; set counter 4; g (f (r (counter + 0 == 4)))', '0'],
     ['counter = Mutable 0; bump x = set counter (counter + 1); bump []; bump []; g (f (r (counter + 0 == 2)))', '0'],
@@ -745,11 +745,11 @@ for (const [source, expected] of [
     ['counter <- Mutable 2; set counter (counter * 5); g (f (r (counter + 0 == 10)))', '0'],
     // A statement that writes and reads top-level cells: each part has the
     // value the statement's static run gave it, in the run's order.
-    ['counter = Mutable 0; k y = { set counter 4; counter + 0 }; w <- k 0; g (f (r (w == 4)))', '0'],
-    ['counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; a <- counter + 0; b <- bump 0; g (f (r (a + b == 1)))', '0'],
-    ['counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; b <- bump 0; g (f (r (b + (counter + 0) == 2)))', '0'],
-    ['counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; b <- bump 0; print [b,counter + 0]; g (f (r (counter + 0 == 1)))', '0'],
-    ['counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; seq (bump 0) []; g (f (r (counter + 0 == 0)))', '0'],
+    ['counter = Mutable 0; k y = { set counter 4; return (counter + 0) }; w <- k 0; g (f (r (w == 4)))', '0'],
+    ['counter = Mutable 0; bump x = { set counter (counter + 1); return (counter + 0) }; a <- counter + 0; b <- bump 0; g (f (r (a + b == 1)))', '0'],
+    ['counter = Mutable 0; bump x = { set counter (counter + 1); return (counter + 0) }; b <- bump 0; g (f (r (b + (counter + 0) == 2)))', '0'],
+    ['counter = Mutable 0; bump x = { set counter (counter + 1); return (counter + 0) }; b <- bump 0; print [b,counter + 0]; g (f (r (counter + 0 == 1)))', '0'],
+    ['counter = Mutable 0; bump x = { set counter (counter + 1); return (counter + 0) }; seq (bump 0) []; g (f (r (counter + 0 == 0)))', '0'],
     // Values a statement leaves unforced are harmless unless kept; a kept one
     // is forced (once) where a later statement forces it. An uncertain
     // statement only affects the cells and values it can reach.
@@ -808,18 +808,18 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'k y = { c = Mutable 1; set c (c + 1); set c (c * 10); c + 0 }; w <- k 0; g (f (r (w == 21)))',
-    'k y = { c = Mutable 1; a <- c + 0; set c 5; a + 0 }; w <- k 0; g (f (r (w == 5)))',
-    'k y = { c = Mutable 1; a = c + 0; set c 5; a + 0 }; w <- k 0; g (f (r (w == 1)))',
-    'sw c = { set c 9; c + 0 }; k y = { c = Mutable 1; a = c + 0; s <- sw c; s + a }; w <- k 0; g (f (r (w == 10)))',
+    'k y = { c = Mutable 1; set c (c + 1); set c (c * 10); return (c + 0) }; w <- k 0; g (f (r (w == 21)))',
+    'k y = { c = Mutable 1; a <- c + 0; set c 5; return (a + 0) }; w <- k 0; g (f (r (w == 5)))',
+    'k y = { c = Mutable 1; a = c + 0; set c 5; return (a + 0) }; w <- k 0; g (f (r (w == 1)))',
+    'sw c = { set c 9; return (c + 0) }; k y = { c = Mutable 1; a = c + 0; s <- sw c; return (s + a) }; w <- k 0; g (f (r (w == 10)))',
     'counter = Mutable 0; set counter 4; g (f (r (counter + 0 == 0)))',
     'counter = Mutable 0; bump x = set counter (counter + 1); bump []; bump []; g (f (r (counter + 0 == 1)))',
-    'counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; a <- counter + 0; b <- bump 0; g (f (r (a + b == 2)))',
-    'counter = Mutable 0; bump x = { set counter (counter + 1); counter + 0 }; b <- bump 0; print [b,counter + 0]; g (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0; bump x = { set counter (counter + 1); return (counter + 0) }; a <- counter + 0; b <- bump 0; g (f (r (a + b == 2)))',
+    'counter = Mutable 0; bump x = { set counter (counter + 1); return (counter + 0) }; b <- bump 0; print [b,counter + 0]; g (f (r (counter + 0 == 0)))',
     'counter = Mutable 0; do (map (x -> set counter x) [1,2]); g (f (r (counter + 0 == 1)))',
     'counter = Mutable 0; bump x = set counter (counter + 1); xs = map (x -> bump x) [1,2]; do xs; do xs; g (f (r (counter + 0 == 2)))',
-    'k y = { c = Mutable 1; xs = [c + 0]; set c 7; head xs }; w <- k 0; g (f (r (w == 1)))',
-    'counter = Mutable 0; k y = { set counter 4; counter + 0 }; w <- k 0; g (f (r (w == 0)))',
+    'k y = { c = Mutable 1; xs = [c + 0]; set c 7; return (head xs) }; w <- k 0; g (f (r (w == 1)))',
+    'counter = Mutable 0; k y = { set counter 4; return (counter + 0) }; w <- k 0; g (f (r (w == 0)))',
     'counter = Mutable 0; [set counter 9,1]; g (f (r (counter + 0 == 9)))',
     // A statement whose run is uncertain leaves what it can reach unknown.
     'counter = Mutable 0; m = HashMap [["a",1]]; has "a" m ? set counter 5 : pure []; g (f (r (counter + 0 == 5)))',

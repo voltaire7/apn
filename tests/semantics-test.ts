@@ -42,14 +42,14 @@ print 42
 `, ["42"]);
 
 example("an action runs only where a statement or <- runs it", `
-value = { print 2; 2 }
+value = { print 2; return 2 }
 print "defined"
 v <- value
 print (v + 1)
 `, ["defined", "2", "3"]);
 
 example("actions repeat each time they run", `
-action = { print "run"; 3 }
+action = { print "run"; return 3 }
 x <- action
 y <- action
 print (x + y)
@@ -183,7 +183,7 @@ xs = [print 2,missing]
 head xs
 head xs
 double x = x + x
-v <- { print 3; 3 }
+v <- { print 3; return 3 }
 print (double v)
 `, ["2", "2", "3", "6"]);
 

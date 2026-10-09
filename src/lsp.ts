@@ -47,6 +47,7 @@ const builtins = new Map<string, string>([
     ["IO", "IO T — the type of actions yielding T; IO [] action checks an action (pure x makes one)."],
     ["fmap", "fmap f m — m with f applied to what it holds: an action, a list, or an Option-like variant."],
     ["pure", "pure x — the action yielding x."],
+    ["return", "return x — the action yielding x (pure x)."],
     ["sequence", "sequence actions — action running each, yielding the list of results."],
     ["mapM", "mapM f xs — sequence (map f xs)."],
     ["when", "when condition action — run the action when the condition is true."],

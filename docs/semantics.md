@@ -386,24 +386,28 @@ Applying such a type to a value checks it as `Int 5` converts: the value must
 be an action, and its result is converted to the type when it runs, so
 `sayHello = IO [] { print "hello" }` is an action and `IO Int (print 1)`
 is an error. `IO` applied to anything but a type (`IO { ... }`, `IO 5`) is an
-error. `pure x` is the action yielding `x`, as in `check n = n > 0 ? pure n : fail "negative"`.
+error. `pure x` (also spelled `return x`) is the action yielding `x`, as in
+`check n = n > 0 ? return n : fail "negative"`.
 
 ### Blocks are do-blocks
 
 A block that runs anything is a **do-block**: the block evaluates to an action
-that, when run, executes its statements in order and yields its last
-statement's value (running it if that is an action too). A block becomes a
-do-block at its first `<-` binding, or at its first discarded statement (one
-before the last) whose value is an action. A block of bindings, or of
-discarded pure statements such as `assert`, stays an ordinary value:
+that, when run, executes its statements in order. A block becomes a do-block
+at its first `<-` binding, or at its first discarded statement (one before
+the last) whose value is an action. Its last statement must itself be an
+action, whose result the block yields, as in Haskell: end with `return x` to
+yield a plain value. A block of bindings, or of discarded pure statements such
+as `assert`, stays an ordinary value:
 
 ```apn
 area w h = {
     print "computing area"    # an action, discarded: area returns an action
-    w * h
+    return (w * h)            # a plain w * h here is an error
 }
 size <- area 3 4              # prints, then binds 12
 double n = { assert (n > 0); n * 2 }   # a plain function: double 3 is 6
+answer = Int { 42 }           # an Int
+action = IO Int { return 42 } # an action yielding an Int
 ```
 
 Each run of a do-block starts a fresh scope for the statements from that point
@@ -431,7 +435,7 @@ and the other constructors (`None`, `Err e`) pass through unchanged.
 | Function | Meaning |
 | --- | --- |
 | `fmap f m`, `f <$> m` | `m` with `f` applied to what it holds or yields |
-| `pure x` | the action yielding `x` |
+| `pure x`, `return x` | the action yielding `x` |
 | `mf <*> mx` | the function `mf` holds, applied to what `mx` holds |
 | `m >>= f` | `f` applied to what `m` holds or yields, flattened |
 | `m >> k`, `f =<< m` | `m >>= (_ -> k)`; `m >>= f` |

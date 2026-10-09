@@ -46,7 +46,7 @@ for (const [name, body, expected] of [
     ['UTF8 input', 'c.text_length "hé😀"', 'Int32 7'],
     ['UTF8 result', 'c.greeting', '"hello from C"'],
     ['null pointer', 'isType Pointer (c.null_pointer [])', 'true'],
-    ['managed pointer mutation', 'p = ffi.allocate Int32 1\nset p $ 41\nc.increment p\nffi.peek Int32 p', 'Int32 42'],
+    ['managed pointer mutation', 'p = ffi.allocate Int32 1\nset p $ 41\nc.increment p\nreturn (ffi.peek Int32 p)', 'Int32 42'],
     ['byte offset', 'p = ffi.allocate Int32 2\nffi.poke Int32 9 (ffi.offset 4 p)\nffi.peek Int32 (ffi.offset 4 p)', 'Int32 9'],
     ['pointer identity through C', 'p = ffi.allocate Int32 1\nc.echo_pointer p == p', 'true'],
     ['external C memory writes', 'p = c.cell_pointer []\nffi.poke Int32 42 p\nc.cell_value []', 'Int32 42'],

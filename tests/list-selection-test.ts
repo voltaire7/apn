@@ -49,8 +49,8 @@ Deno.test('computed index and replacement from actions run once', () => {
     const actual = i.renderString(i.run(parseDocument(`
 keyCalls = Mutable 0
 valueCalls = Mutable 0
-keys = { set keyCalls (keyCalls + 1); [0,1] }
-values = { set valueCalls (valueCalls + 1); [3,4] }
+keys = { set keyCalls (keyCalls + 1); return [0,1] }
+values = { set valueCalls (valueCalls + 1); return [3,4] }
 arr = [1,2]
 k <- keys
 v <- values
