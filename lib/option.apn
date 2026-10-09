@@ -8,12 +8,12 @@ fmap f (Some x) = Some (f x)
 fmap _ None = None
 (Some x) >>= f = f x
 None >>= _ = None
-return = Some
+return ((Option _) x) = Some x
 fmap f (Ok x) = Ok (f x)
 fmap _ (Err error) = Err error
 (Ok x) >>= f = f x
 (Err error) >>= _ = Err error
-return = Ok
+return ((Result _ _) x) = Ok x
 isSome (Some _) = true
 isSome None = false
 isNone value = not (isSome value)

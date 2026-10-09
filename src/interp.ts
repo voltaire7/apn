@@ -1925,14 +1925,20 @@ export class Interpreter {
         return undefined;
     }
 
-    // return x in a monad: return is overloaded on its result, so the newest
-    // return instance whose result is in the target monad makes it.
+    // return x in a monad: the newest return instance for it makes it. One
+    // keyed by the monad on its argument (return ((Option _) x)) takes the
+    // target type first; any other is overloaded on its result, so it is used
+    // when its result is in the target monad.
     private returnIn(target: Value, x: Value): Value | undefined {
         const family = target.kind === "type" ? target.family : undefined;
         if (!family) return undefined;
         const fns = this.instances.get("return") ?? [];
         for (let n = fns.length - 1; n >= 0; n--) {
-            const result = this.apply(fns[n], x, true);
+            const fn = fns[n];
+            const keyed = fn.kind === "clauseFn" && fn.arity === 2;
+            const partial = keyed ? this.apply(fn, target, true) : fn;
+            if (partial.kind === "nomatch") continue;
+            const result = this.apply(partial, x, true);
             if (result.kind === "nomatch") continue;
             const made = this.demand(result);
             if (made.kind === "variant" && made.family === family) return made;
@@ -1964,7 +1970,7 @@ export class Interpreter {
         if (this.isListType(target)) return mkList([step.value]);
         const made = this.returnIn(target, step.value);
         if (made) return made;
-        throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as return = Some" });
+        throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as return = Some or return ((Option _) x) = Some x" });
     }
 
     // m >>= f: through m's monad. f's results are realized in the same monad.

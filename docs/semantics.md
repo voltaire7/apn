@@ -444,13 +444,14 @@ fmap f (Some x) = Some (f x)
 fmap _ None = None
 (Some x) >>= f = f x
 None >>= _ = None
-return = Some                      # return in Option
+return ((Option _) x) = Some x     # return, naming its monad on its argument
 ```
 
-`return` is overloaded on its result rather than its argument: `return = Some`
-adds a `return` whose result is an Option, and a context that names Option
-uses it. With currying this needs no special syntax; `return x = MkCounter
-(s -> [x,s])` defines one for a user-defined `Counter` the same way.
+A `return` instance names its monad on its argument, as above. `return` is also
+overloaded on its result, so with currying `return = Some` defines the same
+instance point-free: a context that names Option uses the newest `return` whose
+result is an Option. Either form works, and the newest instance for a monad is
+the one used.
 
 `fmap` and `<*>` follow from `>>=` and `return` when a type defines no
 instance of its own. A type used where no instance accepts it is an error

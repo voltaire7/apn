@@ -900,7 +900,7 @@ runCounter (MkCounter f) s = f s
     [a,s1] = g s
     runCounter (f a) s1
 })
-return x = MkCounter (s -> [x,s])
+return ((Counter _ _) x) = MkCounter (s -> [x,s])
 tick = MkCounter (s -> [s,s + 1])
 twoTicks = Counter Int Int {
     a <- tick
@@ -913,6 +913,11 @@ print (runCounter (fmap (* 2) tick) 3)     # => [6,4] (fmap from >>= and return)
 doubleAll (Functor m) = fmap (* 2) m
 print [doubleAll [1,2],doubleAll [3]]      # => [[2,4],[6]]
 print (doubleAll (Some 4))                 # => Some 8
+# return is also overloaded on its result: return = MkLabel is return in Label.
+Label a = | MkLabel a
+(MkLabel x) >>= f = f x
+return = MkLabel
+print (Label Int { return 9 })             # => MkLabel 9
 
 # Explicit braces end a lambda body, so maps can chain after the closing brace.
 [x: 1, y: 2, z: 3] * [field,value] -> {

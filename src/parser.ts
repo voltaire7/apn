@@ -1349,7 +1349,8 @@ class Parser {
         }
         const equals = this.next(); // =
         const body = this.parseDefBody();
-        if (name === "return" && params.length > 1) throw new APNError("parse", "return takes one argument", { pos: equals.pos, hint: "return = Some, or return x = Some x" });
+        if (name === "return" && params.length > 1) throw new APNError("parse", "return takes one argument", { pos: equals.pos, hint: "return = Some, or return ((Option _) x) = Some x" });
+        if (name === "return" && params.length) return { name, clauses: [returnInstance(params[0], body)] };
         return { name, clauses: [{ params, body }] };
     }
 
@@ -1640,6 +1641,22 @@ export function groupClauses(program: TopLevel[]): TopLevel[] {
 
 
 // Render an expression back to source text (for debug / quote inspection).
+// A return instance can name its monad on its argument:
+//     return ((Option _) x) = Some x
+// It is kept as a clause on the monad's type and the value, which is how the
+// runtime and the checker look it up: return (Option _) x = Some x. Any other
+// return (return = Some, return x = Some x) is chosen by its result.
+function returnInstance(p: Pattern, body: Expr): { params: Pattern[]; body: Expr } {
+    let head: Expr | undefined = p.p === "schema" ? p.type : undefined;
+    if (head?.t === "block" && head.style === "(" && head.stmts.length === 1) head = head.stmts[0];
+    const args: Expr[] = [];
+    while (head?.t === "app") { args.unshift(head.a); head = head.f; }
+    if (p.p !== "schema" || head?.t !== "var" || !/^[A-Z]/.test(head.name)) return { params: [p], body };
+    // Its type's arguments bind like a constructor's: (Counter s a) binds s and a.
+    const typeArgument = (a: Expr): Pattern => a.t === "var" && /^[a-z]/.test(a.name) ? { p: "var", name: a.name } : { p: "wildcard" };
+    return { params: [{ p: "constr", tag: head.name, args: args.map(typeArgument) }, p.value], body };
+}
+
 export function exprToSource(e: Expr): string {
     switch (e.t) {
         case "computedRange": return `[${exprToSource(e.lo)}${e.second === null ? "" : "," + exprToSource(e.second)}..${e.hi === null ? "" : exprToSource(e.hi)}]`;

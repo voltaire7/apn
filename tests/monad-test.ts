@@ -53,6 +53,8 @@ for (const [name, source, expected] of [
         ["[2,4]", "Some 6", "8", "[true,false]"]],
     ["return is overloaded on its result", 'import "option"\nWrap a = | MkWrap a\nreturn = MkWrap\n(MkWrap x) >>= f = f x\nprint (Wrap Int { return 5 })\nprint (Option Int { return 6 })\nprint (Result Int String { return 7 })\nprint (List Int { return 8 })',
         ["MkWrap 5", "Some 6", "Ok 7", "[8]"]],
+    ["return can name its monad on its argument", 'Wrap a = | MkWrap a\nreturn ((Wrap _) x) = MkWrap x\nBox a = | MkBox a\nreturn = MkBox\nprint (Wrap Int { return 5 })\nprint (Box Int { return 6 })',
+        ["MkWrap 5", "MkBox 6"]],
     ["undecided values and actions print without running", 'print $ return 123\nprint [return "a"]\nprint (return 1 >>= (x -> return x))\nprint (print 1)\nprint (IO Int { return 1 })\nprint (typeOf (print 1))\nprint (typeOf (return 1))',
         ["Monad 123", '[Monad "a"]', "Monad", "IO []", "IO Int", "IO []", "Monad Int"]],
     ["constructor arguments print as source writes them", 'import "option"\nprint (return (Some 1))\nprint (Some (Some (-1)))\nprint (Some [1,2])',
