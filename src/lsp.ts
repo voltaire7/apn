@@ -44,7 +44,7 @@ const builtins = new Map<string, string>([
     ["print", "print value — action printing the value and a newline; yields []."],
     ["emit", "emit value — action printing the value without a newline; yields []."],
     ["set", "set cell value — action replacing a Mutable cell's contents; yields []."],
-    ["IO", "IO T — the type of actions yielding T; (IO []) action checks an action (pure x makes one)."],
+    ["IO", "IO T — the type of actions yielding T; IO [] action checks an action (pure x makes one)."],
     ["fmap", "fmap f m — m with f applied to what it holds: an action, a list, or an Option-like variant."],
     ["pure", "pure x — the action yielding x."],
     ["sequence", "sequence actions — action running each, yielding the list of results."],

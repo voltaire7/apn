@@ -1955,7 +1955,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (a.k === "var") return { k: "type", value: io(variable()) };
                 return problem("IO is a type constructor: IO [] is the type of an action yielding []", e, "pure x is the action yielding x");
             }
-            // (IO T) action: the action, its result converted to T.
+            // IO T action: the action, its result converted to T.
             if (isIO(t)) {
                 if (!isIO(a) && a.k !== "var") return problem(`${text(t)} expects an action, not ${text(a)}`, e, "pure x is the action yielding x");
                 const result = variable();

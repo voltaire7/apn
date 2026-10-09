@@ -1815,7 +1815,7 @@ export class Interpreter {
     }
 
     // IO is a type constructor: IO T is the type of actions yielding T, and
-    // (IO T) action converts the action's result to T when it runs.
+    // IO T action converts the action's result to T when it runs.
     private actionType(type: Extract<Value, { kind: "type" }>, value: Value): Value {
         if (!type.arguments?.length) {
             if (!this.isTypeValue(value)) {

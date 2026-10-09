@@ -826,7 +826,7 @@ print "still running before the final halt"
 #    whose value is an action) is a do-block: the block is itself an
 #    action yielding its last value. A block of bindings stays a value.
 #    IO is a type constructor: IO [] is the type of an action yielding [],
-#    and (IO []) action checks one. pure x is the action yielding x.
+#    and IO [] action checks one. pure x is the action yielding x.
 # ---------------------------------------------------------
 lazyNote = {
     print "lazyNote WAS called"
@@ -834,7 +834,7 @@ lazyNote = {
 }
 noted <- lazyNote          # => lazyNote WAS called
 print (noted * 2)          # => 84
-sayHello = (IO []) { print "hello" }   # IO { ... } is an error: IO needs a type
+sayHello = IO [] { print "hello" }   # IO { ... } is an error: IO needs a type
 sayHello                   # => hello
 sayHello                   # => hello (each run repeats the effect)
 unused = print "never"     # naming an action does not run it

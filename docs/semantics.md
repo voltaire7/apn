@@ -384,7 +384,7 @@ Actions run in exactly two places:
 yielding `[]` (what `print` builds), `IO Int` of one yielding an `Int`.
 Applying such a type to a value checks it as `Int 5` converts: the value must
 be an action, and its result is converted to the type when it runs, so
-`sayHello = (IO []) { print "hello" }` is an action and `(IO Int) (print 1)`
+`sayHello = IO [] { print "hello" }` is an action and `IO Int (print 1)`
 is an error. `IO` applied to anything but a type (`IO { ... }`, `IO 5`) is an
 error. `pure x` is the action yielding `x`, as in `check n = n > 0 ? pure n : fail "negative"`.
 

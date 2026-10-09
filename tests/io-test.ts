@@ -30,7 +30,7 @@ for (const [name, source, expected] of [
     ["<- runs an action and binds its result", 'x <- { print 5; 5 }\nprint (x + 1)', ["5", "6"]],
     ["print yields []", 'x <- print 5\nprint (null x)', ["5", "true"]],
     ["<- binds a plain value as it is", "x <- 2 + 3\nprint x", ["5"]],
-    ["IO T is a type that checks an action", 'sayHello = (IO []) { print "hello" }\nsayHello', ["hello"]],
+    ["IO T is a type that checks an action", 'sayHello = IO [] { print "hello" }\nsayHello', ["hello"]],
     ["pure x is the action yielding x", "x <- pure 42\nprint x", ["42"]],
     ["IO types describe actions", "print (IO [])\nprint (IO Int)", ["IO []", "IO Int"]],
     ["a block with an action statement is an action", 'f n = { print n; n * 2 }\ny <- f 3\nprint y', ["3", "6"]],
@@ -68,7 +68,7 @@ for (const [source, message, kind] of [
     ["x = (+ 1) <$> 5", "fmap needs an action", "type"],
     ['sayHello = IO { print "hello" }', "IO is a type constructor", "type"],
     ["x = IO 5", "IO is a type constructor", "type"],
-    ['x = (IO Int) (print 1)', "where Int is required", "type"],
+    ['x = IO Int (print 1)', "where Int is required", "type"],
     ["x = 1\n(Dynamic env).x", "an action has no fields", "runtime"],
 ] as const) Deno.test(`IO rejects: ${JSON.stringify(source)}`, () => fails(source, message, kind));
 Deno.test("IO: an action is not a condition", () => {
