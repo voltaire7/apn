@@ -1,5 +1,5 @@
 # The action running a list of actions in order, yielding the last result.
-do [] = pure []
+do [] = return []
 do (expression:rest) = {
     result <- expression
     null rest ? return result : do rest

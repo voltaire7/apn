@@ -16,7 +16,7 @@ for (const [source, expected] of [
     ['xs = [Float]; xs 0 = .2; xs 0 = 1; xs', '[1.0]'],
     ['v = [x: Float] []; v "x" = 123; v.[x] = [456]; v.x', '456.0'],
     ['Id = distinct Int; v = [id: Id 1]; v.id = 2; v.id', 'Id 2'],
-    ['((Int -> Int) identity) <- pure ((x -> x)); v = [f: identity]; v.f = (x -> x + 1); v.f 2', '3'],
+    ['((Int -> Int) identity) <- return ((x -> x)); v = [f: identity]; v.f = (x -> x + 1); v.f 2', '3'],
     ['[x: 1] [y: 2]', '[x: 1, y: 2]'],
 ] as const) Deno.test(`slot replacement: ${source}`, () => {
     const actual = result(source);

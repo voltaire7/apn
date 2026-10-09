@@ -14,23 +14,23 @@ for (const [source, expected] of [
     ['f (Dynamic x) = x x; Int (f (y -> 42))', '42'],
     ['f (Int x) = x + 1; f (Dynamic 2)', '3'],
     ['cast Int (Dynamic 42)', '42'],
-    ['((Int -> Int) f) <- pure ((Dynamic (x -> x + 1))); f 2', '3'],
-    ['((Int -> Int) f) <- pure ((x -> x)); f (Dynamic 2)', '2'],
+    ['((Int -> Int) f) <- return ((Dynamic (x -> x + 1))); f 2', '3'],
+    ['((Int -> Int) f) <- return ((x -> x)); f (Dynamic 2)', '2'],
     ['Vect 2 Int (Dynamic [1,2])', '[1,2]'],
-    ['xs <- pure (Vect 2 Int (Dynamic [1,missing])); head xs', '1'],
+    ['xs <- return (Vect 2 Int (Dynamic [1,missing])); head xs', '1'],
     ['xs = 1:xs; scope <- Dynamic env; scope.xs = Dynamic [2..]; head xs', '2'],
     ['Vect 2 Int [Dynamic 1,Dynamic 2]', '[1,2]'],
-    ['xs <- pure (Vect 2 Int [1,2]); scope <- Dynamic env; scope.xs = [3,4]; typeOf xs', 'Vect 2 Int'],
+    ['xs <- return (Vect 2 Int [1,2]); scope <- Dynamic env; scope.xs = [3,4]; typeOf xs', 'Vect 2 Int'],
     ['x = 1; scope <- Dynamic env; scope.x = 2; x', '2'],
     ['x = 1; scope <- Dynamic env; key = "x"; Int (scope key)', '1'],
     ['scope <- Dynamic env; scope.newName = 42; Int scope.newName', '42'],
     ['x = [name: "old", age: 1]; scope <- Dynamic env; scope.x = [name: "new", age: 2]; x.name', '"new"'],
     ['xs = [1,2]; scope <- Dynamic env; scope.xs = [3,4]; xs', '[3,4]'],
-    ['((Int -> Int) f) <- pure ((x -> x)); scope <- Dynamic env; scope.f = Dynamic (x -> x + 1); f 1', '2'],
+    ['((Int -> Int) f) <- return ((x -> x)); scope <- Dynamic env; scope.f = Dynamic (x -> x + 1); f 1', '2'],
     ['Dynamic (import "function"); 123', '123'],
     ['Dynamic (import ["text","type"]); 123', '123'],
     ['x = 1; Dynamic $ use [x: 2]; x', '2'],
-    ['Option a = Some a | None; x <- pure (Some 1); scope <- Dynamic env; scope.x = None; x', 'None'],
+    ['Option a = Some a | None; x <- return (Some 1); scope <- Dynamic env; scope.x = None; x', 'None'],
 ] as const) Deno.test(`explicit Dynamic boundary: ${source}`, () => {
     const result = requireChecked(source);
     if (result.dynamicBoundaries || !result.runtimeChecks) throw new Error(JSON.stringify(result));
@@ -51,8 +51,8 @@ for (const source of [
 
 for (const [source, message] of [
     ['Int (Dynamic "bad")', 'Int expects a number'],
-    ['((Int -> Int) f) <- pure ((x -> x)); f (Dynamic "bad")', 'Int expects a number'],
-    ['((Int -> Int) f) <- pure (Dynamic (x -> "bad")); f 1', 'Int expects a number'],
+    ['((Int -> Int) f) <- return ((x -> x)); f (Dynamic "bad")', 'Int expects a number'],
+    ['((Int -> Int) f) <- return (Dynamic (x -> "bad")); f 1', 'Int expects a number'],
     ['Vect 2 Int (Dynamic [1])', 'length mismatch'],
     ['Vect 2 Int (Dynamic [1,"bad"])', 'Int expects a number'],
     ['x = "old"; scope <- Dynamic env; scope.x = 123; x', 'cannot replace string with int'],
@@ -62,10 +62,10 @@ for (const [source, message] of [
     ['xs = [1,2]; scope <- Dynamic env; scope.xs = [3]; xs', 'list length changed'],
     ['xs = ["old"]; scope <- Dynamic env; scope.xs = [123]; xs', 'cannot replace string with int'],
     ['f x = x; scope <- Dynamic env; scope.f = Dynamic (x -> "bad")', 'explicit function contract'],
-    ['((Int -> Int) f) <- pure ((x -> x)); scope <- Dynamic env; scope.f = Dynamic (x -> "bad"); f 1', 'Int expects a number'],
+    ['((Int -> Int) f) <- return ((x -> x)); scope <- Dynamic env; scope.f = Dynamic (x -> "bad"); f 1', 'Int expects a number'],
     ['x = "old"; Dynamic (use [x: 123]); x', 'cannot replace string with int'],
     ['scope <- Dynamic env; scope.Int = String', 'cannot change an established type descriptor'],
-    ['Option a = Some a | None; x <- pure (Some 1); scope <- Dynamic env; scope.x = Some "bad"; x', 'cannot convert String to Int'],
+    ['Option a = Some a | None; x <- return (Some 1); scope <- Dynamic env; scope.x = Some "bad"; x', 'cannot convert String to Int'],
 ]) Deno.test(`Dynamic runtime boundary rejects: ${source}`, () => {
     requireChecked(source);
     try { run(source); } catch (error) {
@@ -88,7 +88,7 @@ Deno.test('reflected batch writes validate before publishing scalar changes', ()
 });
 
 Deno.test('Dynamic construction and patterns preserve Mutable identity', () => {
-    const actual = run('x <- pure (Mutable 1); f (Dynamic v) = v; d <- pure (Dynamic x); alias <- pure (f d); set alias 2; x', false);
+    const actual = run('x <- return (Mutable 1); f (Dynamic v) = v; d <- return (Dynamic x); alias <- return (f d); set alias 2; x', false);
     if (actual !== '2') throw new Error(actual);
 });
 

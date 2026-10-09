@@ -14,7 +14,7 @@ for (const [source, expected] of [
     ['loop n = n == 0 ? 42 : { next = n - 1; loop $ next }; loop 10000', '42'],
     ['loop n ignored = n == 0 ? 42 : loop (n - 1) missing; loop 10000 missing', '42'],
     ['loop n = n == 0 ? [42,missing] : loop (n - 1); head (loop 10000)', '42'],
-    ['sum n total = n == 0 ? return total : { next <- pure (total + n); sum (n - 1) next }; s <- sum 10000 0; s', '50005000'],
+    ['sum n total = n == 0 ? return total : { next <- return (total + n); sum (n - 1) next }; s <- sum 10000 0; s', '50005000'],
 ] as const) Deno.test(`tail call: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

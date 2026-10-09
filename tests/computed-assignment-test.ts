@@ -15,7 +15,7 @@ for (const [source, expected] of [
     ['arr = [0..]\ni = 2\narr i = 9\ntake 4 arr', '[0,1,9,3]'],
     ['arr = [0,missing]\ni = 0\narr i = 9\nhead arr', '9'],
     ['arr = [0,0]\ni = 0\ninside = { arr (i + 1) = 2; arr }\n[inside,arr]', '[[0,2],[0,0]]'],
-    ['arr = [0]\ni = 0\nold <- pure (arr)\narr i = 2\n[old,arr]', '[[0],[2]]'],
+    ['arr = [0]\ni = 0\nold <- return (arr)\narr i = 2\n[old,arr]', '[[0],[2]]'],
     ['arr = [Int32].[0]\ni = 0\narr i = 2\narr', '[Int32 2]'],
     ['obj = [x: 1]\nkey = "x"\nobj key = 2\nobj', '[x: 2]'],
     ['obj = [x: 1]\nkey = "y"\nobj (key ++ "z") = 2\nobj', '[x: 1, yz: 2]'],

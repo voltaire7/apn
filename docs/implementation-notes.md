@@ -213,7 +213,7 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   (`isLoadCall` excepts `load`), run with `runIO` and its result `reference`d
   before matching, keeping Mutable/Pointer references and lazy container
   fields. The checker never re-derives an eager binding (no `definition`), and
-  view/key analysis sees through `pure`/`return`. Don't change `=` semantics.
+  view/key analysis sees through `return`/`return`. Don't change `=` semantics.
   Tests: `tests/eager-binding-test.ts`.
 - `Interpreter.eval` consumes internal `TailCall` transfers for fully applied
   functions, ternary branches, and block tails. `TailLoad` transfers propagate

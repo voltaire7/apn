@@ -51,7 +51,7 @@ export const NATIVES: Array<[string, number]> = [
     ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
-    ["primFmap", 2], ["primBind", 2], ["primAp", 2], ["primPure", 1],
+    ["primFmap", 2], ["primBind", 2], ["primAp", 2], ["primReturn", 1],
 ];
 
 export class Interpreter {
@@ -646,7 +646,7 @@ export class Interpreter {
             const action = this.reference(evaluated);
             if (action.kind !== "io") throw new APNError("runtime", `<- runs an action, not a ${action.kind}`, { hint: "bind a value with =" });
         }
-        // The result's outer value is evaluated now (x <- pure (x + 1) reads the old x).
+        // The result's outer value is evaluated now (x <- return (x + 1) reads the old x).
         const v = b.eager ? this.reference(this.runIO(evaluated)) : b.pattern.p === "as" ? evaluated : this.force(evaluated);
         if ((b.value.t === "setFields" || b.value.t === "setItem") && v.kind === "record" && v.scope) return v;
         const binds = new Map<string, Value>();
@@ -945,7 +945,7 @@ export class Interpreter {
                 else {
                     // The last statement is the action whose result the block yields.
                     const last = this.reference(this.eval(s));
-                    if (last.kind !== "io") throw new APNError("runtime", `the last statement of a do-block must be an action, not a ${last.kind}`, { hint: "return x (or pure x) is the action yielding x" });
+                    if (last.kind !== "io") throw new APNError("runtime", `the last statement of a do-block must be an action, not a ${last.kind}`, { hint: "return x is the action yielding x" });
                     return new IOTail(last);
                 }
             }
@@ -1831,12 +1831,12 @@ export class Interpreter {
     private actionType(type: Extract<Value, { kind: "type" }>, value: Value): Value {
         if (!type.arguments?.length) {
             if (!this.isTypeValue(value)) {
-                throw new APNError("runtime", "IO is a type constructor: IO [] is the type of an action yielding []", { hint: "pure x is the action yielding x" });
+                throw new APNError("runtime", "IO is a type constructor: IO [] is the type of an action yielding []", { hint: "return x is the action yielding x" });
             }
             return { kind: "type", name: "IO", arguments: [this.reference(value)] };
         }
         const action = this.reference(value);
-        if (action.kind !== "io") throw new APNError("runtime", `${valueToString(type)} expects an action, not a ${action.kind}`, { hint: "pure x is the action yielding x" });
+        if (action.kind !== "io") throw new APNError("runtime", `${valueToString(type)} expects an action, not a ${action.kind}`, { hint: "return x is the action yielding x" });
         const result = type.arguments[0];
         return { kind: "io", label: action.label, run: () => this.conform(result, this.runIO(action)) };
     }
@@ -2279,7 +2279,7 @@ export class Interpreter {
         const primitive = PRIMITIVE_OPERATORS.get(name);
         if (primitive) return this.operate(primitive, argsIn[0], argsIn[1]);
         if (name === "primFmap" || name === "primBind" || name === "primAp") return this.monadic(name, argsIn[0], argsIn[1]);
-        if (name === "primPure") { const value = argsIn[0]; return { kind: "io", run: () => value }; }
+        if (name === "primReturn") { const value = argsIn[0]; return { kind: "io", run: () => value }; }
         const host = this.hostNatives.get(name);
         if (host) return host(argsIn);
         if (name === "use") {

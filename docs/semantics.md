@@ -388,7 +388,7 @@ Applying such a type to a value checks it as `Int 5` converts: the value must
 be an action, and its result is converted to the type when it runs, so
 `sayHello = IO [] { print "hello" }` is an action and `IO Int (print 1)`
 is an error. `IO` applied to anything but a type (`IO { ... }`, `IO 5`) is an
-error. `pure x` (also spelled `return x`) is the action yielding `x`, as in
+error. `return x` is the action yielding `x`, as in
 `check n = n > 0 ? return n : fail "negative"`.
 
 ### Blocks are do-blocks
@@ -423,10 +423,10 @@ operator. `f x <- ...`, `x <- y <- ...`, and missing right-hand sides are invali
 An indented continuation is allowed; opening braces follow the same layout rule
 as definitions: put `{` on the line containing `<-`. It supports the same
 patterns as destructuring (`[a,b] <- action`, `_ <- action`); names are bound
-after the action and pattern succeed, so `x <- pure (x + 1)` reads the previous
+after the action and pattern succeed, so `x <- return (x + 1)` reads the previous
 `x`. The result's outer value is evaluated as it is bound, which makes
-`x <- pure v` the strict form of `x = v`; only the outer value is:
-`xs <- pure [missing,42]` does not evaluate `missing`.
+`x <- return v` the strict form of `x = v`; only the outer value is:
+`xs <- return [missing,42]` does not evaluate `missing`.
 
 ### Functor, Applicative and Monad
 
@@ -438,7 +438,7 @@ and the other constructors (`None`, `Err e`) pass through unchanged.
 | Function | Meaning |
 | --- | --- |
 | `fmap f m`, `f <$> m` | `m` with `f` applied to what it holds or yields |
-| `pure x`, `return x` | the action yielding `x` |
+| `return x` | the action yielding `x` |
 | `mf <*> mx` | the function `mf` holds, applied to what `mx` holds |
 | `m >>= f` | `f` applied to what `m` holds or yields, flattened |
 | `m >> k`, `f =<< m` | `m >>= (_ -> k)`; `m >>= f` |
@@ -466,7 +466,7 @@ interrupted.
 All thunks traversed in an alias chain share the resulting outer value. Repeated
 uses of a deferred value, including bare statements, reuse that value:
 `value = 2 + 1` computes 3 once. List elements and arguments likewise share
-demanded results. Values are pure, so sharing is never observable except
+demanded results. Values are return, so sharing is never observable except
 through `debug` (which prints the source it is given) and FFI calls, the two
 deliberate escape hatches.
 
@@ -894,11 +894,11 @@ before that statement executes; circular loads are not rejected.
 
 ```apn
 do [print "hi",print "there"]
-answer <- do [print "calculating",pure 42]   # prints, binds 42
+answer <- do [print "calculating",return 42]   # prints, binds 42
 ```
 
 `do actions` is the action running each element in order, yielding the last
-result; `do []` yields []. Each element must be an action (`pure x` for a value).
+result; `do []` yields []. Each element must be an action (`return x` for a value).
 An error stops the sequence. It accepts computed lists too, and processes the
 spine incrementally. Each run of the action runs the elements again.
 

@@ -31,5 +31,5 @@ Deno.test("target-first set supports partial application and dollar", () => {
     check('x = Mutable 0; put = set x; put 1; set x $ x + 1; x', '2');
 });
 Deno.test("target-first set preserves the captured cell reference", () => {
-    check('x = Mutable 0; put = set x; alias <- pure (x); put 7; alias', '7');
+    check('x = Mutable 0; put = set x; alias <- return (x); put 7; alias', '7');
 });

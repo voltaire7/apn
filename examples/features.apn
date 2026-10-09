@@ -828,7 +828,7 @@ print "still running before the final halt"
 #    a plain x). A block of bindings stays a value: Int { 42 } is an Int,
 #    IO Int { return 42 } an action yielding one.
 #    IO is a type constructor: IO [] is the type of an action yielding [],
-#    and IO [] action checks one. pure x is the action yielding x.
+#    and IO [] action checks one. return x is the action yielding x.
 # ---------------------------------------------------------
 lazyNote = {
     print "lazyNote WAS called"
@@ -845,7 +845,7 @@ pureBlock = {
     base + 2
 }
 print (pureBlock + 0)      # => 42 (only bindings: a plain value)
-countdown n = n == 0 ? pure "liftoff" : {
+countdown n = n == 0 ? return "liftoff" : {
     emit (toString n ++ " ")
     countdown (n - 1)
 }
@@ -855,7 +855,7 @@ print launched             # => liftoff (on the same line)
 # Iterating an action runs each as it is reached: [0..] * print streams
 # until Ctrl+C (not run here).
 
-# Functor, Applicative and Monad without type classes: fmap (<$>), pure,
+# Functor, Applicative and Monad without type classes: fmap (<$>), return,
 # <*>, >>= and >> work on actions, lists, and Option-like variants (the
 # first constructor's field is mapped; None and Err e pass through).
 print (fmap (* 2) [1,2,3])                 # => [2,4,6]
@@ -863,9 +863,9 @@ print ((+ 1) <$> Some 41)                  # => Some 42
 print (Some 3 >>= (x -> x > 2 ? Some (x * 10) : None))  # => Some 30
 print ([1,2] >>= (x -> [x,x * 10]))        # => [1,10,2,20]
 print ([(+ 1),(* 2)] <*> [10,20])          # => [11,21,20,40]
-pure "chained" >>= print                   # => chained
+return "chained" >>= print                   # => chained
 print "first" >> print "second"            # => first, then second
-doubled <- mapM (x -> pure (x * 2)) [1,2,3]
+doubled <- mapM (x -> return (x * 2)) [1,2,3]
 print doubled                              # => [2,4,6]
 when (length doubled == 3) (print "three") # => three
 
@@ -1283,11 +1283,11 @@ counterView <- Dynamic env
 otherCounter = Mutable 4
 uncertainKeys = HashMap [["a",1]]
 counterKey = "bumpCounter"
-has "a" uncertainKeys ? (counterView counterKey) 0 : pure 0
+has "a" uncertainKeys ? (counterView counterKey) 0 : return 0
 print (onlyOne (vowelOrPair (vowelIfShort (take (otherCounter - 3) [7,8,9]))))  # 1
 # Also through a view stored in a record, with a key bound locally.
 viewHolder = [view: counterView]
-has "a" uncertainKeys ? { localKey = "bumpCounter"; (viewHolder.view localKey) 0 } : pure 0
+has "a" uncertainKeys ? { localKey = "bumpCounter"; (viewHolder.view localKey) 0 } : return 0
 print (onlyOne (vowelOrPair (vowelIfShort (take (otherCounter - 3) [7,8,9]))))  # 1
 
 # p5 sketches are descriptions until built for the browser.
@@ -1344,9 +1344,9 @@ captured <- { print "captured now"; return "kept" } # => captured now
 print captured                               # => kept (the stored result)
 eagerArgs <- getArgs
 print eagerArgs                              # => [] without CLI arguments
-lazyCapture <- pure [Dynamic missing,42]    # pure v: <- binds v now (outer value only)
+lazyCapture <- return [Dynamic missing,42]    # return v: <- binds v now (outer value only)
 print (lazyCapture 1)                         # => 42
-# x <- 42 is an error: <- runs an action; bind a value with = (or <- pure v).
+# x <- 42 is an error: <- runs an action; bind a value with = (or <- return v).
 
 # REPL regression: paste this expression, move after `match` on its first line,
 # and press Enter. Output must start below the closing ], preserving every line.
@@ -1369,7 +1369,7 @@ print (tailCountdown 10000)          # => 42
 
 # do runs a list of actions in order: an action yielding the last result.
 do [print "hi",print "there"]       # => hi, then there
-lastOne <- do [pure 1,pure 2,pure 42]  # each element is an action
+lastOne <- do [return 1,return 2,return 42]  # each element is an action
 print lastOne                       # => 42
 noneRun <- do []
 print noneRun                       # => []
@@ -1654,7 +1654,7 @@ print ((_ _ -> 1) 2 3)                    # => 1
 # Files and REPL submissions check by default; Dynamic marks runtime boundaries.
 dynamicNumber = Dynamic 41
 print (Int dynamicNumber + 1)              # => 42
-((Int -> Int) checkedIncrement) <- pure (Dynamic (x -> x + 1))
+((Int -> Int) checkedIncrement) <- return (Dynamic (x -> x + 1))
 print (checkedIncrement 41)                # => 42
 reflectedNumber = 1
 reflectedScope <- Dynamic env

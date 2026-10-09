@@ -253,7 +253,7 @@ x:xs = [1,2,3,4]
 print [x,xs]
 (a:b:rest) = [5,6,7]
 print [a,b,rest]
-h:t <- pure ([8,9])
+h:t <- return ([8,9])
 print t
 `, ["[1,[2,3,4]]", "[5,6,[7]]", "[9]"]);
 failure("take rejects negative counts", "print (take (-1) [])", "non-negative int");

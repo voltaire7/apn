@@ -48,22 +48,21 @@ infixr 9 \
 # Some x, Result's Ok x), mapping or chaining that field and passing the other
 # constructors (None, Err e) through unchanged.
 #     fmap f m      m with f applied to what it holds or yields
-#     pure x        the action yielding x (of type IO T when x is a T); also return x
+#     return x      the action yielding x (of type IO T when x is a T)
 #     mf <*> mx     the function mf holds applied to what mx holds
 #     m >>= f       f applied to what m holds or yields, flattened
 #     m >> k        m, then k: m >>= (_ -> k)
 fmap = primFmap
 (<$>) = primFmap
-pure = primPure
-return = primPure
+return = primReturn
 (<*>) = primAp
 (>>=) = primBind
 m >> k = m >>= (ignored -> k)
 f =<< m = m >>= f
 # Actions over lists: sequence runs each, yielding their results; mapM f xs
 # runs f on each element; when and unless run an action on a condition.
-sequence [] = pure []
+sequence [] = return []
 sequence actions = actions * action -> action
 mapM f xs = sequence (map f xs)
-when condition action = condition ? action >> pure [] : pure []
-unless condition action = condition ? pure [] : action >> pure []
+when condition action = condition ? action >> return [] : return []
+unless condition action = condition ? return [] : action >> return []

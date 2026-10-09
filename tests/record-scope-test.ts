@@ -5,14 +5,14 @@ for (const [source, expected] of [
     ['obj = [x: 3, y: 4]; obj.(x + y)', '7'],
     ['x = 100; outside = 10; obj = [x: 3]; obj.(x + outside)', '13'],
     ['obj = [x: 3, y: 4]; obj.([x,y])', '[3,4]'],
-    ['obj = [x: 3]; result <- pure obj.(x = 10; x); [result,obj.x]', '[10,3]'],
+    ['obj = [x: 3]; result <- return obj.(x = 10; x); [result,obj.x]', '[10,3]'],
     ['obj = [x: 3]; f = obj.(y -> x + y); f 4', '7'],
     ['obj = [x: 3]; values = obj.([x]); values', '[3]'],
     ['obj = [x: 3]; obj.()', '[]'],
     ['obj = [x: 3]; obj.(sqrt (x ^ 2))', '3'],
     ['values = [1,2]; [Int,Float].(values)', '[1,2.0]'],
     ['obj = [(x): 9, x: 3]; [obj "(x)",obj.(x)]', '[9,3]'],
-    ['obj = [child: [x: 1]]; result <- pure obj.(child.x = 10; child.x); [result,obj.child.x]', '[10,1]'],
+    ['obj = [child: [x: 1]]; result <- return obj.(child.x = 10; child.x); [result,obj.child.x]', '[10,1]'],
     ['obj = [x: 3]; obj.(inner = [x: 4]; inner.(x) + x)', '7'],
 ] as const) Deno.test(`record scope: ${source}`, () => {
     const i = new Interpreter();

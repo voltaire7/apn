@@ -5,7 +5,7 @@ import { checkSource } from "../src/type-checker.ts";
 for (const [source, expected] of [
     ['obj = [child: [x: 1, y: 2], z: 3]; obj.child.x = 10; obj', '[child: [x: 10, y: 2], z: 3]'],
     ['obj = [a: [b: [x: 1]]]; obj.a.b.x = 10; obj.a.b.x', '10'],
-    ['obj = [child: [x: 1]]; old <- pure (obj); obj.child.x = 10; old.child.x', '1'],
+    ['obj = [child: [x: 1]]; old <- return (obj); obj.child.x = 10; old.child.x', '1'],
     ['obj = [child: [x: 1]]; { obj.child.x = 10 }; obj.child.x', '1'],
     ['obj = [child: [x: Float 1]]; obj.child.x = 10; obj.child.x', '10.0'],
     ['obj = [child: [x: 1]]; obj.child.y = 2; obj.child', '[x: 1, y: 2]'],

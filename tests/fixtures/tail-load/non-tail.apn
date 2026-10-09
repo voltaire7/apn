@@ -1,2 +1,2 @@
 load "repeat"
-after <- pure (counter + 7)
+after <- return (counter + 7)

@@ -48,7 +48,7 @@ for (const checked of [false, true]) {
                 "f whole.([t] [x]) = [whole,t,x]; f [x: 1, y: 2]",
                 "[[x: 1, y: 2],Int,1]",
             ],
-            ["([t] [x]) <- pure ([x: 1]); [t,x]", "[Int,1]"],
+            ["([t] [x]) <- return ([x: 1]); [t,x]", "[Int,1]"],
             [
                 'f ([t] [x]) = [t,x]; [f [1],f [x: "hi"]]',
                 '[[Int,1],[String,"hi"]]',

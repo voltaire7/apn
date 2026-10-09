@@ -14,8 +14,8 @@ for (const checked of [false, true]) {
         ['f ([items: [_,Int]] v) = v.items; f [items: ["hi",2]]', '["hi",2]'],
         ['f ([x: _] v) = 42; f [Dynamic missing]', '42'],
         ['f ([x: _] v) = v.x; f [x: [1,2]]', '[1,2]'],
-        ['f ([x: _] v) = { set v.x 2; return 0 }; cell <- pure (Mutable 1); f [cell]; cell', '2'],
-        ['([x: _] v) <- pure ([1]); v.x', '1'],
+        ['f ([x: _] v) = { set v.x 2; return 0 }; cell <- return (Mutable 1); f [cell]; cell', '2'],
+        ['([x: _] v) <- return ([1]); v.x', '1'],
         ['(([x: _] v) -> v.x) [1]', '1'],
         ['f ([x: (_)] v) = v.x; f [1]', '1'],
     ]) Deno.test(`wildcard schema (checked=${checked}): ${source}`, () => {

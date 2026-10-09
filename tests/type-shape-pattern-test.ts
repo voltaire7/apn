@@ -17,7 +17,7 @@ for (const checked of [false, true]) {
                 'f ([t] [x]) = [t,x]; [f [1],f ["hi"]]',
                 '[[Int,1],[String,"hi"]]',
             ],
-            ["([t] [x]) <- pure ([1]); [t,x]", "[Int,1]"],
+            ["([t] [x]) <- return ([1]); [t,x]", "[Int,1]"],
         ]
     ) {
         Deno.test(`type-shape pattern checked=${checked}: ${source}`, () => {

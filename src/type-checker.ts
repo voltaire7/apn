@@ -217,11 +217,11 @@ interface ViewContext { frames: ViewFrame[]; local: boolean }
 // (unresolved), the strings a key may be, and views whose scope is known.
 interface ViewHooks { unresolved?: (name: string) => number; key?: (key: Expr) => string[] | undefined; direct?: (e: Expr) => boolean }
 // Natives that may take a view without reading its bindings, returning it at most.
-const VIEW_SAFE_NATIVES = new Set(["print", "emit", "debug", "assert", "typeOf", "isType", "toString", "set", "Dynamic", "Mutable", "pure", "return", "primPure",
+const VIEW_SAFE_NATIVES = new Set(["print", "emit", "debug", "assert", "typeOf", "isType", "toString", "set", "Dynamic", "Mutable", "return", "primReturn",
     "Int", "UInt", "Int8", "UInt8", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64", "Int128", "UInt128",
     "Float", "Float32", "Float64", "Fraction", "Complex", "ComplexExact", "Number", "Real", "Integer", "Exact", "Inexact", "Bool", "String", "Char"]);
-// pure x (return x) yields x itself when run by <-.
-const VIEW_IDENTITY_NATIVES = new Set(["print", "emit", "debug", "Dynamic", "Mutable", "pure", "return", "primPure"]);
+// return x (return x) yields x itself when run by <-.
+const VIEW_IDENTITY_NATIVES = new Set(["print", "emit", "debug", "Dynamic", "Mutable", "return", "primReturn"]);
 // Natives that fail on a record and only rearrange (or pick from) lists.
 const VIEW_LIST_NATIVES = new Set(["head", "tail", "take", "drop", "length", "null"]);
 const VIEW_PICKING_NATIVES = new Set(["head"]);
@@ -693,7 +693,7 @@ function captured(scope: Scope): Set<Ty> {
 }
 // Builtins evaluated over lists whose size or elements are known.
 const LIST_NATIVES = ["filter", "map", "take", "drop", "zipWith"];
-// Builtins the checker evaluates on known values (all pure).
+// Builtins the checker evaluates on known values (all return).
 const EVALUATED_NATIVES = new Set([
     ...LIST_NATIVES, "length", "head", "tail", "null", "foldl", "foldr", "iterate", "enumerate",
     "chars", "fromChars", "upper", "lower", "toString", "intToString", "seq", "parse",
@@ -1954,11 +1954,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (a.k === "type") return { k: "type", value: io(a.value) };
                 if (a.k === "list" && (a.items ?? []).every(x => resolve(x).k === "type")) return { k: "type", value: io(schemaValue(a, e)) };
                 if (a.k === "var") return { k: "type", value: io(variable()) };
-                return problem("IO is a type constructor: IO [] is the type of an action yielding []", e, "pure x is the action yielding x");
+                return problem("IO is a type constructor: IO [] is the type of an action yielding []", e, "return x is the action yielding x");
             }
             // IO T action: the action, its result converted to T.
             if (isIO(t)) {
-                if (!isIO(a) && a.k !== "var") return problem(`${text(t)} expects an action, not ${text(a)}`, e, "pure x is the action yielding x");
+                if (!isIO(a) && a.k !== "var") return problem(`${text(t)} expects an action, not ${text(a)}`, e, "return x is the action yielding x");
                 const result = variable();
                 unify(io(result), a, e);
                 convert((t as Extract<Ty, { k: "variant" }>).args[0], result, e);
@@ -2684,7 +2684,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const final = resolve(result);
                 if (isIO(final) || isExplicit(final)) return final;
                 if (final.k === "var") { const t = io(variable()); unify(final, t, last); return t; }
-                return problem(`the last statement of a do-block must be an action, not ${text(final)}`, last, "return x (or pure x) is the action yielding x");
+                return problem(`the last statement of a do-block must be an action, not ${text(final)}`, last, "return x is the action yielding x");
             }
             case "stmDef":
                 define(e.name, e.clauses, scope, e);
@@ -2941,8 +2941,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (!node || typeof node !== "object") return;
             if (Array.isArray(node)) { node.forEach(walk); return; }
             const n = node as Record<string, any>;
-            // k <- pure v (return v) binds v.
-            const yielded = (v: Expr): Expr => v.t === "app" && v.f.t === "var" && ["pure", "return"].includes(v.f.name) ? v.a : v;
+            // k <- return v (return v) binds v.
+            const yielded = (v: Expr): Expr => v.t === "app" && v.f.t === "var" && ["return"].includes(v.f.name) ? v.a : v;
             const simple = n.t === "patDef" && n.pattern?.p === "var" && !n.update ? [n.pattern.name, n.eager ? yielded(n.value) : n.value]
                 : n.t === "stmDef" && n.clauses?.length === 1 && !n.clauses[0].params.length ? [n.name, n.clauses[0].body] : undefined;
             if (simple) {
@@ -4245,8 +4245,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return undefined;
             } };
         }
-        // pure x: the action yielding x.
-        if ((head.name === "pure" || head.name === "return" || head.name === "primPure") && builtin && args.length === 1) {
+        // return x: the action yielding x.
+        if ((head.name === "return" || head.name === "primReturn") && builtin && args.length === 1) {
             const inner = value(args[0]);
             return { action: () => inner };
         }
@@ -5093,7 +5093,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         [[">>"], "then", 2], [["=<<"], "bindFlip", 2], [["sequence"], "sequence", 1], [["mapM"], "mapM", 2]] as const) {
         for (const name of names) scope.set(name, { type: { k: "intrinsic", name: op, arity } });
     }
-    for (const name of ["pure", "return", "primPure"]) { const t = variable(); scope.set(name, { type: fn(t, io(t)) }); }
+    for (const name of ["return", "primReturn"]) { const t = variable(); scope.set(name, { type: fn(t, io(t)) }); }
     for (const name of ["when", "unless"]) { const t = variable(); scope.set(name, { type: fn(variable(), fn(io(t), io(list(variable(), constant(0n))))) }); }
     scope.set("cast", { type: { k: "intrinsic", name: "cast", arity: 2 } });
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
