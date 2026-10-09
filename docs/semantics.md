@@ -548,7 +548,11 @@ functions (including partial applications). Both operands are demanded as for
 ordinary subtraction. `sqrt -1` and `sqrt - 1` both produce `0+1i`.
 The checker checks the negated argument as a call would, so `g -1` (or
 `g -k` with `k = 1`) for `g (UInt n)` is a static error like `g (-1)`; so is
-`h 2` for `h x = g -x`, where the value is known only at the call.
+`h 2` for `h x = g -x` or `h x = g (-x)`, where the value is known only at
+the call. A typed numeric parameter given a value that depends on an
+enclosing function's parameter is checked at that function's calls, by
+value: `h (-2)` passes `2` to `g`, and `h x = g x` accepts `h 2` and rejects
+`h (-2)` and `h "a"`.
 Numeric subtraction is unchanged. Precedence and associativity are unchanged:
 `sqrt -1 * 4` means `sqrt -(1 * 4)`, while `sqrt -1 + 2` means
 `(sqrt -1) + 2`. Use parentheses when a different grouping is intended.

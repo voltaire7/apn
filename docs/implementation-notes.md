@@ -406,7 +406,11 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   substitution. `substituteKnown` substitutes parameters inside pending calls
   and `callArgs`. An overload call that stays ambiguous because its arguments
   are `symbolic` is deferred (`evaluatingCall` keeps one node), and `waiting`
-  holds checks on it. At the end, checks still waiting only on symbolic values
+  holds checks on it; so is a call of a typed numeric parameter (`coerce`)
+  with a waiting, symbolic argument, and function minus keeps its negated
+  operand's facts as the `-` operation's `known`. `castKnown` converts a
+  known argument value to the parameter type; `problem` reports a deferred
+  check (a `placeholder`) at the active call. At the end, checks still waiting only on symbolic values
   are decided with `deciding` set, so none is skipped. Literal facts on
   variables apply only to names written once (`writes`).
 - `defineClauses` merges clauses of one input domain into a group. A clause

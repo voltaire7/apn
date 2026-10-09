@@ -835,7 +835,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return dynamic;
     };
     const problem = (message: string, e?: Expr): never => {
-        const expression = e ?? activeExpression ?? checkingExpression;
+        // A deferred check (a placeholder) reports at the call being checked.
+        const expression = (e?.t === "placeholder" ? undefined : e) ?? activeExpression ?? checkingExpression;
         const loc = expression && sourceLocations.get(expression);
         throw {
             message,
@@ -890,6 +891,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Does this value depend on a parameter of an enclosing function?
     function symbolic(k: Known): boolean {
         return !!k.ref || !!k.index?.terms.size || !!k.call?.args.some(symbolic) || !!k.expr?.env.some(([, v]) => symbolic(v)) || !!k.fn?.env.some(([, v]) => symbolic(v));
+    }
+    function symbolicArgument(argument: Entry): boolean {
+        return symbolic({ index: argument.index, ref: argument.ref, call: argument.call, expr: argument.expr, fn: argument.fn });
     }
     // Set while deciding leftover checks at the end: symbolic values no longer wait.
     let deciding = false;
@@ -1513,10 +1517,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function castKnown(target: Ty, known: Known, e: Expr): void {
         const t = resolve(target);
         if (t.k !== "atom" || !NUMERIC_TYPES.includes(t.name) || numericLiteral(e)) return;
-        const number = known.number ?? (known.index && !known.index.terms.size ? integer(known.index.constant) : undefined);
+        const number = known.number ?? (known.index && !known.index.terms.size ? integer(known.index.constant) : undefined) ??
+            (known.float !== undefined ? floating(known.float) : undefined);
         if (!number) return;
-        // A deferred check (placeholder) reports at the call being checked.
-        try { castNumeric(t.name, number); } catch (error) { problem((error as Error).message, e.t === "placeholder" ? undefined : e); }
+        try { castNumeric(t.name, number); } catch (error) { problem((error as Error).message, e); }
     }
     // A numeric literal, negated or parenthesized: -1, (2.5).
     function numericLiteral(e: Expr): Numeric | undefined {
@@ -1632,6 +1636,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (f.k === "operation") return deferredCall(f, argument);
         if (f.k === "dynamic") return f.explicit ? explicitDynamic : unknown();
+        // A typed numeric parameter given a value that depends on an enclosing
+        // function's parameter (h x = g (-x)): convert it at that function's
+        // calls, where the value is known, as for an overload.
+        if (f.k === "fn" && f.coerce && !deciding && waiting(argument.type) && symbolicArgument(argument)) {
+            const input = resolve(f.input);
+            if (input.k === "atom" && NUMERIC_TYPES.includes(input.name)) {
+                return evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument);
+            }
+        }
         if (f.k === "overload") {
             const input = resolve(argument.type);
             if (input.k === "var" || input.k === "operation") return deferredCall(f, argument);
