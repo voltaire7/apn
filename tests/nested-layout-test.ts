@@ -22,7 +22,7 @@ Deno.test("parenthesized lambda block preserves statement boundaries and prints 
 });
 
 for (const [source, expected] of [
-    ["([\n    1,\n    2\n])", "[1,2]"],
+    ["([\n    1,2\n    3\n])", "[1,2,3]"],
     ["([\n    1\n    2\n])", "[1,2]"],
     ["(\n    {\n        x = 2\n        x + 3\n    }\n)", "5"],
     ["(x -> {\n    y = (x +\n        x)\n    y * y\n}) 3", "36"],
@@ -40,6 +40,7 @@ for (const source of [
     "(x -> {\n    x\n    }) 1",
     "(x -> {\n  x\n}) 1",
     "([\n    1,\n    2,\n])",
+    "([\n    1,\n    2\n])",
 ]) Deno.test(`reject invalid nested block layout: ${source}`, () => {
     try { parseDocument(source); } catch { return; }
     throw new Error("accepted invalid block indentation");

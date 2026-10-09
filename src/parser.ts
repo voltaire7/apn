@@ -56,10 +56,12 @@ class Parser {
             if (t.k === "sym" && "([{".includes(t.v)) holds.push(t.v === "[" && this.opensRecord(index));
             if (t.k === "sym" && ")]}".includes(t.v)) holds.pop();
             if (t.k !== "sym" || !(t.v in pairs)) continue;
-            // Application is juxtaposition with a space: Vector3 [1,2,3], not Vector3[1,2,3].
-            if (t.v === "[" && /[A-Za-z0-9_'")\]}]/.test(this.source[t.pos - 1] ?? "")) {
+            // Application is juxtaposition with a space: Vector3 [1,2,3],
+            // func (123) and run { x }, not Vector3[1,2,3], func(123) or run{ x }.
+            if ("([{".includes(t.v) && /[A-Za-z0-9_'")\]}]/.test(this.source[t.pos - 1] ?? "")) {
                 this.seen = t;
-                throw new Error("Parser: put a space before '[' to apply to a list (write f [1,2], not f[1,2])");
+                const example = { "[": "f [1,2], not f[1,2]", "(": "f (x), not f(x)", "{": "f { x }, not f{ x }" }[t.v];
+                throw new Error(`Parser: put a space before '${t.v}' to apply to it (write ${example})`);
             }
             const open = "{([".includes(t.v), brace = t.v === "{" || t.v === "}";
             const neighbour = this.toks[index + (open ? 1 : -1)];
@@ -135,12 +137,13 @@ class Parser {
     }
 
     // A ',' follows its item directly. List items take nothing after it
-    // ([1,2,3]); record fields take one space ([x: 1, y: 2]). A ',' may also
-    // end its line.
+    // ([1,2,3]); record fields take one space ([x: 1, y: 2]). A newline
+    // already separates items, so a ',' ending its line is redundant.
     checkCommaSpacing(t: Token, record: boolean): void {
         const after = this.source.slice(t.pos + 1).split("\n", 1)[0];
-        if (!/\s/.test(this.source[t.pos - 1] ?? " ") && (/^\s*(#.*)?$/.test(after) || (record ? /^ \S/ : /^\S/).test(after))) return;
         this.seen = t;
+        if (/^\s*(#.*)?$/.test(after)) throw new Error("Parser: a newline already separates items; remove the ',' at the end of the line");
+        if (!/\s/.test(this.source[t.pos - 1] ?? " ") && (record ? /^ \S/ : /^\S/).test(after)) return;
         throw new Error(record ? "Parser: separate record fields with ', ' (write [x: 1, y: 2])" : "Parser: separate list items with ',' alone (write [1,2,3])");
     }
 

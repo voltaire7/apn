@@ -55,19 +55,23 @@ Spacing is part of the syntax (a parse error otherwise):
 - List items are separated by a bare comma: `[1,2,3,4]`, not `[1, 2]`; this
   covers list patterns, bare selections (`v.[x,y]`), ranges (`[1,3..9]`),
   `match` clause lists and import lists.
-- A `,` separates two items, so a trailing one is an error: `[1,2,]`, and a
-  multi-line list or record whose last item ends in `,`.
-- Application is juxtaposition with a space, also before a list:
-  `Vector3 [1,2,3]`, not `Vector3[1,2,3]` (a `[` directly after a name,
-  literal or closing bracket is an error). Selections keep their dot: `v.[x,y]`.
+- A `,` separates two items on one line. A newline already separates items,
+  so a `,` ending a line is an error, as is a trailing one (`[1,2,]`); a
+  multi-line list or record puts one item per line without commas (or several
+  per line, `1,2`, separated by commas).
+- Application is juxtaposition with a space, also before a list, a group or a
+  block: `Vector3 [1,2,3]`, `func (123)` and `run { x }`, not `Vector3[1,2,3]`,
+  `func(123)` or `run{ x }` (a `[`, `(` or `{` directly after a name, literal
+  or closing bracket is an error). Selections keep their dot: `v.[x,y]`,
+  `v.(key)`, `obj.{ x + 1 }`.
 - Record fields take `key: value` separated by `, `: `[x: 1, y: 2]`, not
   `[x:1]` or `[x: 1,y: 2]`; likewise keyed patterns and selections
   (`[x: a, y: b]`).
 - `( )` and `[ ]` take no space inside (`(123)`, `[1,2]`); a `{ }` block on one
   line takes exactly one (`{ 123 }`, not `{123}` or `{ 123  }`). Empty groups
   are `()`, `[]` and `{}`.
-- Across lines, a bracket or comma ending its line (before an optional comment)
-  and a closing bracket starting one follow the layout rules instead.
+- Across lines, a bracket ending its line (before an optional comment) and a
+  closing bracket starting one follow the layout rules instead.
 - A `;` only separates two statements on one line, written `print 1; print 2`
   (no space before, one after). A newline already ends a statement, so a `;`
   at the end of a line, at the start of one, doubled (`;;`), or next to a

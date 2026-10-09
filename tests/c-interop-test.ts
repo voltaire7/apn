@@ -3,20 +3,20 @@ import { parseDocument } from "../src/parser.ts";
 
 const library = Deno.args[0];
 const signatures = `[
-    add: ffi.function [Int32,Int32] Int32,
-    echo_u64: ffi.function [UInt64] UInt64,
-    half: ffi.function [Float] Float,
-    half_f32: ffi.function [Float32] Float32,
-    invert: ffi.function [Bool] Bool,
-    answer: ffi.function [] Int32,
-    text_length: ffi.function [String] Int32,
-    greeting: ffi.function [] String,
-    increment: ffi.function [Pointer] [],
-    echo_pointer: ffi.function [Pointer] Pointer,
-    tick: ffi.function [] Int32,
-    tick_void: ffi.function [] [],
-    cell_pointer: ffi.function [] Pointer,
-    cell_value: ffi.function [] Int32,
+    add: ffi.function [Int32,Int32] Int32
+    echo_u64: ffi.function [UInt64] UInt64
+    half: ffi.function [Float] Float
+    half_f32: ffi.function [Float32] Float32
+    invert: ffi.function [Bool] Bool
+    answer: ffi.function [] Int32
+    text_length: ffi.function [String] Int32
+    greeting: ffi.function [] String
+    increment: ffi.function [Pointer] []
+    echo_pointer: ffi.function [Pointer] Pointer
+    tick: ffi.function [] Int32
+    tick_void: ffi.function [] []
+    cell_pointer: ffi.function [] Pointer
+    cell_value: ffi.function [] Int32
     null_pointer: ffi.function [] Pointer
 ]`;
 function run(source: string): string {

@@ -276,11 +276,11 @@ key (`"Content-Type": ...`) is a different key and an error here.
 ```apn
 import ["http","json"]
 response <- fetch "https://www.youtube-transcript.io/api/channels" [
-    method: "POST",
+    method: "POST"
     headers: [
-        Authorization: "Basic <your-api-token>",
+        Authorization: "Basic <your-api-token>"
         Content-Type: "application/json"
-    ],
+    ]
     body: toJson [ids: ["jawed"]]
 ]
 channels = fromJson response.body

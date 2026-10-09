@@ -89,11 +89,11 @@ Deno.test({ name: "fetch sends method, headers and body to a server", ignore: !n
         const i = session();
         run(`import ["http","json"]
 response <- fetch "${base}/api/channels" [
-    method: "POST",
+    method: "POST"
     headers: [
-        Authorization: "Basic token",
+        Authorization: "Basic token"
         Content-Type: "application/json"
-    ],
+    ]
     body: toJson [ids: ["jawed"]]
 ]
 data = fromJson response.body

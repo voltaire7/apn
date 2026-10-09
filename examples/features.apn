@@ -608,7 +608,14 @@ print (4 * 3)                # => 12
 print { 4 * 3 }              # => 12
 # print {5}, print { 5  }    # parse errors: exactly one space inside each brace
 # Spacing is syntax: x = 1, [1,2,3], [x: 1, y: 2], (x), { x }. So x=1, [1, 2],
-# [x:1] and ( 1 ) are parse errors too; apn --loose FILE relaxes every spacing rule.
+# [x:1] and ( 1 ) are parse errors too, as are f(x), f[1] and f{ x } (application
+# needs a space) and a ',' ending a line (newlines separate items):
+layoutItems = [
+    1,2
+    3
+]
+print layoutItems            # => [1,2,3]
+# apn --loose FILE relaxes every spacing rule.
 
 group = { 1; 2; 3 }          # a 0-arg function: its body is the block
 print (group)                # => 3    (the parens run it)
@@ -998,8 +1005,8 @@ myTypeOf (Int32 5)  # => Int32
 # Ctrl+C in the REPL interrupts a slow request; a timeout option bounds one.
 # A data: URL needs no network; ./apn grants network access for real requests:
 #   fetch "https://www.youtube-transcript.io/api/channels" [
-#       method: "POST",
-#       headers: [Authorization: "Basic <token>", Content-Type: "application/json"],
+#       method: "POST"
+#       headers: [Authorization: "Basic <token>", Content-Type: "application/json"]
 #       body: toJson [ids: ["jawed"]]
 #   ]
 import ["http","json"]
