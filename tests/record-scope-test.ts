@@ -121,9 +121,10 @@ Deno.test("a ';' separates two statements on one line", () => {
 Deno.test('loose spacing accepts any spacing', () => {
     setLooseSpacing(true);
     try {
-        for (const source of ['x=1', '[ 1 , 2 ]', '[x:1,y : 2]', '{x}', '( 1 )', '{ }', 'func =\n    {\n        print "hello"\n    }', '{\n    print 1;\n}', 'print 1;print 2']) parseDocument(source);
+        for (const source of ['x=1', '[ 1 , 2 ]', '[x:1,y : 2]', '{x}', '( 1 )', '{ }', 'func =\n    {\n        print "hello"\n    }', '{\n    print 1;\n}', 'print 1;print 2',
+            '{ print 1;print 2 }', '{ print 1; }', 'print 1;; print 2', ';print 1', 'print 1 ; print 2']) parseDocument(source);
     } finally { setLooseSpacing(false); }
-    for (const source of ['x=1', 'func =\n    {\n        print "hello"\n    }']) {
+    for (const source of ['x=1', 'func =\n    {\n        print "hello"\n    }', '{ print 1;print 2 }']) {
         try { parseDocument(source); } catch { continue; }
         throw new Error(`strict rules not restored: ${source}`);
     }
