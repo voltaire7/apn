@@ -14,7 +14,9 @@ type Ty =
     | { k: "intrinsic"; name: string; arity?: number; args?: Ty[] }
     // known: what a deferred call knows about its argument's value (a literal,
     // possibly symbolic in a parameter), so clause ranking can use it later.
-    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known }
+    // written: where a call deferred to its enclosing function's calls was written.
+    // within: the top-level definition being checked when it was deferred.
+    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known; written?: Expr; within?: object }
     | { k: "dynamic"; explicit?: boolean }
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
@@ -853,6 +855,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let requirements: Ty[] = [];
     // Inside deferred code (see Entry.capture), and the definition being checked.
     let deferred = 0, defining: Definition | undefined;
+    // The top-level definition being checked (see the operation's within).
+    let outermost: Definition | undefined;
     const resolving = new Set<Ty>();
     function resolve(t: Ty): Ty {
         if (t.k === "var" && t.link) return resolve(t.link);
@@ -1027,10 +1031,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const numeric = (x: Ty) => x.k === "atom" && NUMERIC_TYPES.includes(x.name);
         const callable = (x: Ty) => ["fn", "type", "overload"].includes(x.k);
         if (t.op === "call") {
-            const outer = evaluatingCall;
+            const outer = evaluatingCall, active = activeExpression;
             evaluatingCall = t;
+            // Decided while its own definition is checked (not at a call that
+            // supplies the value, which reports there): report where it was written.
+            if (t.written && outermost && t.within === outermost) activeExpression = t.written;
             try { return application(a, { type: b, ...resolveKnown(t.known ?? {}) }, { t: "placeholder" }); }
-            finally { evaluatingCall = outer; }
+            finally { evaluatingCall = outer; activeExpression = active; }
         }
         if (t.op === "compare") {
             if (numeric(a) && numeric(b) || a.k === "atom" && b.k === "atom" && a.name === b.name && ["String", "Char"].includes(a.name)) return atom("Bool");
@@ -1642,7 +1649,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (f.k === "fn" && f.coerce && !deciding && waiting(argument.type) && symbolicArgument(argument)) {
             const input = resolve(f.input);
             if (input.k === "atom" && NUMERIC_TYPES.includes(input.name)) {
-                return evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument);
+                const deferred = evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument);
+                if (deferred.k === "operation" && e.t !== "placeholder" && !deferred.written) { deferred.written = e; deferred.within = outermost; }
+                return deferred;
             }
         }
         if (f.k === "overload") {
@@ -4326,10 +4335,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // A definition's code, inferred as that definition (deferred when lazy).
     function inferDefinition<T>(definition: Definition | undefined, lazy: boolean, run: () => T): T {
-        const outer = defining;
-        if (definition) defining = definition;
+        const outer = defining, top = outermost;
+        if (definition) { defining = definition; outermost ??= definition; }
         if (lazy) deferred++;
-        try { return run(); } finally { defining = outer; if (lazy) deferred--; }
+        try { return run(); } finally { defining = outer; outermost = top; if (lazy) deferred--; }
     }
     // A rebinding keeps the readers of a binding that reads its earlier self
     // (x = x + 1); a fresh binding starts with none.

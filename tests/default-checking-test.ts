@@ -984,6 +984,21 @@ for (const source of [
     'c n = n * 2; ev 0 = c 0; ev n = od (n - 1); od 0 = 1; od n = ev (n - 1); c s = s ++ "?"; od 3',
     'h = { c n = n * 2; f x = c x; c s = s ++ "?"; f 1 }; h',
 ]) Deno.test(`a reader of a rebound name is checked against it: ${source}`, () => rejected(session(), source));
+// A deferred typed numeric call reports at the call that supplies the value,
+// or where it was written when its own definition decides it.
+for (const [source, line, column] of [
+    ['g (UInt n) = n\nh x = g (-x)\nprint (h 2)', 3, 8],
+    ['g (UInt n) = n\nh x = g x\nd y = h "a"', 3, 7],
+    ['import "text"\ng (UInt n) = n\nh x = {\n    y = g x\n    z = upper x\n    y\n}', 4, 11],
+] as const) Deno.test(`a deferred numeric call reports at line ${line}: ${source}`, () => {
+    try { run(session(), source); } catch (error) {
+        const { pos } = error as { pos: number };
+        const before = source.slice(0, pos).split("\n");
+        if (before.length !== line || before[before.length - 1].length + 1 !== column) throw new Error(`at ${before.length}:${before[before.length - 1].length + 1}`);
+        return;
+    }
+    throw new Error("accepted");
+});
 Deno.test("a broken reader of a broken definition reports the original problem", () => {
     try { run(session(), 'c n = n * 2; a = c 1; b x = a + x; d x = b x; c s = s ++ "?"; d 1'); } catch (error) {
         const { message, hint } = error as { message: string; hint?: string };
@@ -1028,6 +1043,7 @@ for (const [source, expected] of [
     ['g (UInt n) = n; h x = g x; h 2', '2'],
     ['g (Int n) = n; h x = g x + 1; h 2', '3'],
     ['g (Float n) = n; h x = g x; h 1', '1.0'],
+    ['g (UInt n) = n; h x = g (-x); d y = h y; 1', '1'],
     ['f y = { Float x = y; x * 2 }; f 1.5', '3.0'],
 ] as const) Deno.test(`typed binding: ${source}`, () => {
     if (run(session(), source) !== expected) throw new Error(source);
@@ -1038,7 +1054,9 @@ for (const source of ['Int x = "a"', 'Int x = 2.5', 'Int8 x = 300', 'Int x = 1; 
     'g (UInt8 n) = n; k = 1; g -k', 'g (UInt n) = n; k = 1; g (-k)', 'g (UInt n) = n; g (0 - 1)', 'g (UInt8 n) = n; k = 100; g (k * 3)',
     'g (UInt n) = n; h x = g -x; h 2', 'g (UInt n) = n; h x = g -x; d y = h (y * 2); d 1',
     'g (UInt n) = n; h x = g (-x); h 2', 'g (UInt n) = n; h x = g x; h (-2)', 'g (UInt n) = n; h x = g x; h "a"',
-    'g (Int n) = n; h x = g x; h 2.5', 'g (UInt n) = n; h x = g (-x); d y = h (y * 2); d 1']) {
+    'g (Int n) = n; h x = g x; h 2.5', 'g (UInt n) = n; h x = g (-x); d y = h (y * 2); d 1',
+    'g (UInt n) = n; h x = g (-x); d y = h 2; 1', 'g (UInt n) = n; h x = g x; d y = h "a"; 1',
+    'import "text"; g (UInt n) = n; h x = { y = g x; z = upper x; y }; 1']) {
     Deno.test(`typed binding rejects: ${source}`, () => rejected(session(), source));
 }
 for (const source of ['Int = 5', 'Int x y = 5']) Deno.test(`a built-in type name is not redefined: ${source}`, () => {

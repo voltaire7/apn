@@ -552,7 +552,11 @@ The checker checks the negated argument as a call would, so `g -1` (or
 the call. A typed numeric parameter given a value that depends on an
 enclosing function's parameter is checked at that function's calls, by
 value: `h (-2)` passes `2` to `g`, and `h x = g x` accepts `h 2` and rejects
-`h (-2)` and `h "a"`.
+`h (-2)` and `h "a"`. Such calls are checked even if `h` is never called: a
+call of `h` inside another, uncalled function (`d y = h 2`) is checked with
+its value, and `h`'s own definition is checked by type, so a parameter `h`
+also uses as a String cannot reach `g (UInt n)`. The error points at the call
+that supplies the value, or at `g x` when `h`'s definition alone decides it.
 Numeric subtraction is unchanged. Precedence and associativity are unchanged:
 `sqrt -1 * 4` means `sqrt -(1 * 4)`, while `sqrt -1 + 2` means
 `(sqrt -1) + 2`. Use parentheses when a different grouping is intended.
