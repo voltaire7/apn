@@ -1508,6 +1508,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         }
     }
+    // A numeric literal, negated or parenthesized: -1, (2.5).
+    function numericLiteral(e: Expr): Numeric | undefined {
+        if (e.t === "numeric") return e.v;
+        if (e.t === "int") return { kind: "int", v: e.v };
+        if (e.t === "float") return { kind: "float", v: e.v };
+        if (e.t === "unop" && e.op === "neg") { const n = numericLiteral(e.e); return n && negate(n); }
+        if (e.t === "block" && e.style === "(" && e.stmts.length === 1 && e.stmts[0].t !== "stmDef" && e.stmts[0].t !== "patDef") return numericLiteral(e.stmts[0] as Expr);
+        return undefined;
+    }
     function convert(
         target: Ty,
         actual: Ty,
@@ -1526,13 +1535,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         ) {
             if (t.name === a.name) return target;
             // Literal conversion is decidable; unknown magnitudes retain runtime losslessness checks.
-            const literal = e.t === "numeric"
-                ? e.v
-                : e.t === "int"
-                ? { kind: "int" as const, v: e.v }
-                : e.t === "float"
-                ? { kind: "float" as const, v: e.v }
-                : undefined;
+            const literal = numericLiteral(e);
             if (literal) {
                 try {
                     castNumeric(
@@ -2340,6 +2343,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const target = variable();
                     bind(e.pattern, target, scope, e);
                     convert(target, t, e.value, false, new Map(), true);
+                    // A value the checker knows (k * 2, 0 - 1) converts now too.
+                    const known = valueEntry(e.value, scope);
+                    const number = known.number ?? (known.index && !known.index.terms.size ? integer(known.index.constant) : undefined);
+                    if (number && !numericLiteral(e.value) && NUMERIC_TYPES.includes(e.pattern.tag)) {
+                        try { castNumeric(e.pattern.tag, number); } catch (error) { problem((error as Error).message, e.value); }
+                    }
                     for (const name of patternNames(e.pattern)) { const entry = scope.get(name); if (entry) entry.bound = e.value; }
                 } else {
                     bind(e.pattern, recordSelection(e.pattern, t, e.value), scope, e);

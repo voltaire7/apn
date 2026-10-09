@@ -129,7 +129,10 @@ entries. State types with constructors, `x = Int 5` or `f (Int x) = ...`; see
 [pattern functions](pattern-functions.md). A type pattern is also a binding,
 so `Int x = 1` (or `x <- ...` with `Int x <- ...`) declares a typed name: the
 value converts as an argument converts for `f (Int x)`, so `Float y = 1`
-binds `1.0` and `Int z = 2.5` is a lossy-conversion error, and later
+binds `1.0` and `Int z = 2.5` is a lossy-conversion error. A value the
+checker knows (a negated or parenthesized literal, or a constant such as
+`0 - 1` or `k * 3`) is converted statically, so `UInt n = -1` is a static
+error, and so is a call such as `g (-1)` for `g (UInt n)`. Later
 assignments keep the type (`x = "a"` is a type error). Built-in type names
 cannot be redefined, so `Int x = ...` is always this binding; `Int = 5` and
 `Int x y = 5` remain errors.
