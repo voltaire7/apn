@@ -1074,6 +1074,10 @@ for (const [source, expected] of [
     ['g ([x: UInt8] r) = r.x; h r = g r; h [x: 3]', 'UInt8 3'],
     ['g ([x: UInt8] r) = r.x; h v = g [x: v * 100]; h 1', 'UInt8 100'],
     ['Pt = [x: Float, y: Float]; g (Pt p) = p.y; h v = g [x: v, y: v]; h 2', '2.0'],
+    ['g ([x: UInt8, y: UInt8] r) = r.y; b = [x: 1, y: 300]; g [_: b, y: 2]', 'UInt8 2'],
+    ['g ([x: UInt8] r) = r.x; g [x: 300, _: [x: 3]]', 'UInt8 3'],
+    ['g ([x: UInt8, y: UInt8] r) = r.x; h b = g [_: b, x: 3]; h [x: 1, y: 2]', 'UInt8 3'],
+    ['g ([x: UInt8] r) = r.x; h v = g [_: [x: v]]; h 3', 'UInt8 3'],
     ['f y = { Float x = y; x * 2 }; f 1.5', '3.0'],
 ] as const) Deno.test(`typed binding: ${source}`, () => {
     if (run(session(), source) !== expected) throw new Error(source);
@@ -1102,7 +1106,10 @@ for (const source of ['Int x = "a"', 'Int x = 2.5', 'Int8 x = 300', 'Int x = 1; 
     'P = P2 Int Int | P0; g (P2 a (UInt8 y)) = y; h v = g (P2 1 v); h 300', 'P = P2 Int Int | P0; (P2 a (UInt8 y)) = P2 1 300',
     'Pair a b = MkPair a b | NoPair; g (MkPair (Float x) (UInt8 y)) = y; h x = g x; h (MkPair 1 300)',
     'g ([x: UInt8] r) = r.x; g [x: 300]', 'g ([x: UInt8] r) = r.x; k = [x: 300]; g k', 'g ([x: UInt8] r) = r.x; h r = g r; h [x: 300]',
-    'g ([x: UInt8] r) = r.x; h v = g [x: v * 100]; h 3', 'Pt = [x: UInt8, y: UInt8]; g (Pt p) = p.y; g [x: 1, y: 300]']) {
+    'g ([x: UInt8] r) = r.x; h v = g [x: v * 100]; h 3', 'Pt = [x: UInt8, y: UInt8]; g (Pt p) = p.y; g [x: 1, y: 300]',
+    'g ([x: UInt8, y: UInt8] r) = r.y; b = [x: 1, y: 300]; g [_: b, x: 2]', 'g ([x: UInt8] r) = r.x; g [_: [x: 300]]',
+    'g ([x: UInt8] r) = r.x; g [x: 3, _: [x: 300]]', 'g ([x: UInt8, y: UInt8] r) = r.x; h b = g [_: b, x: 300]; h [x: 1, y: 2]',
+    'g ([x: UInt8, y: UInt8] r) = r.y; h b = g [_: b, x: 3]; h [x: 1, y: 300]', 'g ([x: UInt8] r) = r.x; h v = g [_: [x: v]]; h 300']) {
     Deno.test(`typed binding rejects: ${source}`, () => rejected(session(), source));
 }
 for (const source of ['Int = 5', 'Int x y = 5']) Deno.test(`a built-in type name is not redefined: ${source}`, () => {

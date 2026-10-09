@@ -80,7 +80,10 @@ accepts `g (P2 1 3)` and rejects `g (P2 1 300)`, and with
 `g (MkPair 1 300)`. Record literals are checked by field the same way: for
 `g ([x: UInt8] r)`, `g [x: 300]` is a static range error, as are
 `k = [x: 300]; g k`, `h r = g r; h [x: 300]` and `h v = g [x: v * 100]; h 3`,
-while `h 1` passes.
+while `h 1` passes. A spread (`_: other`) contributes its fields in order, as
+at runtime, so `g [x: 300, _: [x: 3]]` passes (the spread's `x` wins) and
+`g [x: 3, _: [x: 300]]` is rejected; with `h b = g [_: b, x: 3]`, a field of
+`b` is checked at each call of `h`.
 
 For records, the bare-name pattern
 `[x,y]` requires those fields, ignores field order, and permits extra fields.

@@ -1556,6 +1556,30 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // A value the checker knows (k * 2, 0 - 1, -k) converts now, as a literal
     // does in convert.
+    // The expression that gives a record literal's field its value: the last
+    // entry for it, unless a later spread (_) may replace it.
+    function fieldExpr(e: Expr, key: string): Expr {
+        if (e.t !== "record") return e;
+        let found: Expr = e;
+        for (const [k, x] of e.v) {
+            if (k === key) found = x;
+            else if (k === "_") found = e;
+        }
+        return found;
+    }
+    // A record literal's known fields, in order: later entries win, a spread
+    // (_) contributes its known fields, and a spread of unknown fields may
+    // replace any field before it.
+    function recordFields(entries: [string, () => Known][]): [string, Known][] {
+        const fields = new Map<string, Known>();
+        for (const [key, value] of entries) {
+            if (key !== "_") { fields.set(key, value()); continue; }
+            const spread = demand(value()) ?? {};
+            if (!spread.fields) { fields.clear(); continue; }
+            for (const [name, field] of spread.fields) fields.set(name, field);
+        }
+        return [...fields];
+    }
     // A pending compound value ([x,-x]) whose parameters are now known: its facts afresh.
     function freshKnown(known: Known): Known {
         if (!known.expr || symbolic(known)) return known;
@@ -1621,7 +1645,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.k === "record" && known.fields) {
             for (const [key, value] of known.fields) {
                 const type = t.fields.get(key);
-                const field = e.t === "record" ? e.v.find(([k]) => k === key)?.[1] ?? e : e;
+                const field = fieldExpr(e, key);
                 if (type) castKnown(type, demand(value) ?? value, field);
             }
             return;
@@ -1708,7 +1732,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 convert(
                     type,
                     a.fields.get(key)!,
-                    e.t === "record" ? e.v.find(([k]) => key === k)?.[1] ?? e : e,
+                    fieldExpr(e, key),
                     false,
                     seen,
                     runtimeProjection || explicitFloat,
@@ -3390,8 +3414,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // any value a directly called function's result is known to have.
     function literalOf(e: Expr, scope: Scope): Known {
         if (e.t === "char") return { char: e.v };
-        // A record literal's fields (not one that spreads another record).
-        if (e.t === "record" && e.v.every(([key]) => key !== "_")) return { fields: e.v.map(([key, x]) => [key, valueEntry(x, scope)]) };
+        // A record literal's fields, a spread (_: other) contributing its own;
+        // over parameters, decided again at each call (see computed).
+        if (e.t === "record") return computed(e, scope);
         if (e.t === "float") return { float: e.v };
         if (e.t === "unop" && e.op === "neg" && e.e.t === "float") return { float: -e.e.v };
         if (e.t === "block" && e.stmts.length === 1) return literalOf(e.stmts[0], scope);
@@ -3438,6 +3463,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             else if (x.t === "ternary") { collect(x.cond); collect(x.then); collect(x.els); }
             else if (x.t === "app") { collect(x.f); collect(x.a); }
             else if (x.t === "list") x.v.forEach(collect);
+            else if (x.t === "record") x.v.forEach(([, y]) => collect(y));
             else if (x.t === "computedRange") [x.lo, x.second, x.hi].forEach(y => y && collect(y));
             else if (x.t === "lambda") collect(x.body);
             else if (x.t === "block") for (const st of x.stmts) {
@@ -3727,10 +3753,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return n === undefined ? undefined : attempt(() => n.typeName ? castNumeric(n.typeName, negate(n)) : negate(n));
             }
             case "list": return known(e.v.map(x => lazyValue(() => value(x), { exprs: [x], env })));
-            // A record literal's fields, each computed when demanded, as a list's elements are.
+            // A record literal's fields, each computed when demanded, as a list's
+            // elements are; a spread is computed now, for its field names.
             case "record":
-                if (e.v.some(([key]) => key === "_")) { incomplete = true; return undefined; }
-                return { fields: e.v.map(([key, x]) => [key, lazyValue(() => value(x), { exprs: [x], env })]) };
+                return { fields: recordFields(e.v.map(([key, x]) => [key, key === "_" ? () => value(x) ?? {} : () => lazyValue(() => value(x), { exprs: [x], env })])) };
             case "lambda": return { fn: { e, env: [...env], scope } };
             // A pattern lambda (() -> x, [a, b] -> a) is a one-clause local function.
             case "patternLambda": {
