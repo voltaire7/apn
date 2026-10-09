@@ -709,7 +709,15 @@ function instantiate(entry: Entry): Ty {
 }
 // A parameter's value is now the argument's (a literal, or another parameter),
 // in these facts and in the arguments of any pending call.
-function substituteKnown(known: Known, subst?: [string, Index], value?: [string, Known]): Known {
+// A value that refers to itself (a recursive function in its own env) is
+// substituted once: a repeat visit returns the value as it was.
+function substituteKnown(known: Known, subst?: [string, Index], value?: [string, Known], visiting = new Set<Known>()): Known {
+    if (visiting.has(known)) return known;
+    visiting.add(known);
+    try { return substituteOnce(known, subst, value, visiting); } finally { visiting.delete(known); }
+}
+function substituteOnce(known: Known, subst: [string, Index] | undefined, value: [string, Known] | undefined, visiting: Set<Known>): Known {
+    const go = (k: Known) => substituteKnown(k, subst, value, visiting);
     let result = known;
     if (result.index && subst && result.index.terms.has(subst[0])) result = { ...result, index: substituteIndex(result.index, subst) };
     if (result.ref && value && result.ref === value[0]) {
@@ -717,11 +725,11 @@ function substituteKnown(known: Known, subst?: [string, Index], value?: [string,
         // The whole value is the argument's, its index included (none for a non-integer).
         result = { index: subst && known.index?.terms.has(subst[0]) ? result.index : v.index, size: v.size, items: v.items, cell: v.cell, range: v.range, mutable: v.mutable, fn: v.fn, boolean: v.boolean, string: v.string, char: v.char, float: v.float, number: v.number, tag: v.tag, ref: v.ref, call: v.call, expr: v.expr, payload: v.payload };
     }
-    if (result.call) result = { ...result, call: { ...result.call, args: result.call.args.map(a => substituteKnown(a, subst, value)) } };
-    if (result.items) result = { ...result, items: result.items.map(a => substituteKnown(a, subst, value)) };
-    if (result.payload) result = { ...result, payload: result.payload.map(a => substituteKnown(a, subst, value)) };
-    if (result.fn) result = { ...result, fn: { ...result.fn, env: result.fn.env.map(([n, k]) => [n, substituteKnown(k, subst, value)]) } };
-    if (result.expr) result = { ...result, expr: { ...result.expr, env: result.expr.env.map(([n, k]) => [n, substituteKnown(k, subst, value)]) } };
+    if (result.call) result = { ...result, call: { ...result.call, args: result.call.args.map(go) } };
+    if (result.items) result = { ...result, items: result.items.map(go) };
+    if (result.payload) result = { ...result, payload: result.payload.map(go) };
+    if (result.fn) result = { ...result, fn: { ...result.fn, env: result.fn.env.map(([n, k]) => [n, go(k)]) } };
+    if (result.expr) result = { ...result, expr: { ...result.expr, env: result.expr.env.map(([n, k]) => [n, go(k)]) } };
     return result;
 }
 // The names a pattern binds.
@@ -4733,7 +4741,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 for (const v of d.variants) {
                     let t = result as Ty;
-                    for (const field of [...v.fields ?? []].reverse()) t = fn(typeExpr(field, fieldsScope), t);
+                    // A field of a concrete type converts its value as a typed
+                    // parameter does (Circle 2 holds 2.0); a type parameter does not.
+                    for (const field of [...v.fields ?? []].reverse()) {
+                        const type = typeExpr(field, fieldsScope);
+                        t = fn(type, t, undefined, !variables(type).size);
+                    }
                     scope.set(v.tag, { type: t });
                 }
             } else if (statement.t === "expr") {

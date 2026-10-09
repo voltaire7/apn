@@ -1060,6 +1060,11 @@ for (const [source, expected] of [
     ['import "option"; g (Some (UInt8 x)) = x; k = Some 3; g k', '3'],
     ['import "option"; g (Some (UInt8 x)) = x; h x = g (Some x); h 3', '3'],
     ['import "option"; g (Some (UInt8 x)) = x; h x = g x; h (Some 3)', '3'],
+    ['Shape = Circle Float | Sq Float; Circle 2', 'Circle 2.0'],
+    ['P = P2 Float Int | P0; P2 1 2', 'P2 1.0 2'],
+    ['B = Byte UInt8 | NoByte; mk x = Byte x; mk 3', 'Byte UInt8 3'],
+    ['Shape = Circle Float | Sq Float; area (Circle r) = r * r; area (Circle 2)', '4.0'],
+    ['M = Named String | Clear; applyTo f = f "a"; applyTo Named', 'Named "a"'],
     ['f y = { Float x = y; x * 2 }; f 1.5', '3.0'],
 ] as const) Deno.test(`typed binding: ${source}`, () => {
     if (run(session(), source) !== expected) throw new Error(source);
@@ -1080,7 +1085,9 @@ for (const source of ['Int x = "a"', 'Int x = 2.5', 'Int8 x = 300', 'Int x = 1; 
     'import "option"; g (Some (UInt8 x)) = x; g (Some 300)', 'import "option"; g (Some (UInt8 x)) = x; g (Some (-1))',
     'import "option"; g (Some (Int x)) = x; g (Some 2.5)', 'import "option"; (Some (UInt8 x)) = Some 300',
     'import "option"; g (Some (String x)) = x; g (Some 1)', 'import "option"; g (Some (UInt8 x)) = x; k = Some 300; g k',
-    'import "option"; g (Some (UInt8 x)) = x; h x = g (Some x); h 300', 'import "option"; g (Some (UInt8 x)) = x; h x = g x; h (Some 300)']) {
+    'import "option"; g (Some (UInt8 x)) = x; h x = g (Some x); h 300', 'import "option"; g (Some (UInt8 x)) = x; h x = g x; h (Some 300)',
+    'B = Byte UInt8 | NoByte; Byte 300', 'B = Byte UInt8 | NoByte; Byte (-1)', 'B = Byte UInt8 | NoByte; Byte "a"',
+    'P = P2 Float Int | P0; P2 1 2.5', 'B = Byte UInt8 | NoByte; mk x = Byte x; mk 300', 'B = Byte UInt8 | NoByte; k = 300; Byte k']) {
     Deno.test(`typed binding rejects: ${source}`, () => rejected(session(), source));
 }
 for (const source of ['Int = 5', 'Int x y = 5']) Deno.test(`a built-in type name is not redefined: ${source}`, () => {

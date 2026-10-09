@@ -409,7 +409,12 @@ without demanding its payload. Explicit specialization retains its arguments:
 `typeOf ((Option Int) None)` is `Option Int`. Different type arguments produce
 different type descriptions. Payload conversions are deferred until used.
 Concrete fields such as `Int` in `MkUserId Int` are enforced on construction,
-also lazily. Grouped and structural payload types compose:
+also lazily. They convert as a typed parameter does, and the static check
+follows: with `Shape = Circle Float | Square Float`, `Circle 2` holds `2.0`;
+with `Byte = MkByte UInt8 | NoByte`, `MkByte 300` is a static range error,
+also when the value comes from a variable or from another function's
+parameter (`mk x = MkByte x` rejects `mk 300`). A field that is a type
+parameter (`Some value`) holds its value unchanged. Grouped and structural payload types compose:
 `Tree a = Branch [a] | Leaf a`.
 
 `func ((Option Int) value) = ...` checks parent membership and applies the

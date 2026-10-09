@@ -410,7 +410,9 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   symbolic argument whose type waits (for a list or record schema, in a part
   too: `waitingWithin`; `symbolicArgument` includes list `items`), except
   while trying an overload's choices (`choosing`), and function minus keeps its negated
-  operand's facts as the `-` operation's `known`. `castKnown` converts a
+  operand's facts as the `-` operation's `known`. Constructors of
+  concrete fields are `coerce` functions. `substituteKnown` skips values it is
+  already inside (a recursive function in its own env). `castKnown` converts a
   known argument value to the parameter type (list elements, or a list's
   elements to a record schema's fields, or a one-field variant's `payload`,
   which constructor applications record; a pending `expr` is re-evaluated once

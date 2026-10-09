@@ -476,6 +476,8 @@ bytePair [UInt8 a,UInt8 b] = a + b  # typed elements convert like a typed parame
 print (bytePair [3,4])              # => 7 (bytePair [3,300] is a static range error)
 someFloat (Just (Float x)) = x      # so do variant payloads
 print (someFloat (Just 1))          # => 1.0
+Reading = Celsius Float | NoReading # a concrete field converts when constructed
+print (Celsius 21)                  # => Celsius 21.0
 tailOf (x:rest) = rest              # ':' in a pattern is always cons
 print (tailOf [1,2,3])            # => [2,3]
 
