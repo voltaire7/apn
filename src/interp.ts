@@ -50,7 +50,7 @@ export const NATIVES: Array<[string, number]> = [
     ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
-    ["primFmap", 2], ["primBind", 2], ["primAp", 2],
+    ["primFmap", 2], ["primBind", 2], ["primAp", 2], ["primPure", 1],
 ];
 
 export class Interpreter {
@@ -1814,6 +1814,21 @@ export class Interpreter {
         }
     }
 
+    // IO is a type constructor: IO T is the type of actions yielding T, and
+    // (IO T) action converts the action's result to T when it runs.
+    private actionType(type: Extract<Value, { kind: "type" }>, value: Value): Value {
+        if (!type.arguments?.length) {
+            if (!this.isTypeValue(value)) {
+                throw new APNError("runtime", "IO is a type constructor: IO [] is the type of an action yielding []", { hint: "pure x is the action yielding x" });
+            }
+            return { kind: "type", name: "IO", arguments: [this.reference(value)] };
+        }
+        const action = this.reference(value);
+        if (action.kind !== "io") throw new APNError("runtime", `${valueToString(type)} expects an action, not a ${action.kind}`, { hint: "pure x is the action yielding x" });
+        const result = type.arguments[0];
+        return { kind: "io", label: action.label, run: () => this.conform(result, this.runIO(action)) };
+    }
+
     // The constructor a variant maps over: its type's first constructor, when
     // that has exactly one field (Some in Option a, Ok in Result a e).
     private functorTag(v: Extract<Value, { kind: "variant" }>): string | undefined {
@@ -1974,6 +1989,7 @@ export class Interpreter {
             return { kind: "list", schema: type, v: values.map(x => this.defer(() => this.conform(element, x))) };
         }
         if (type.kind === "type") {
+            if (type.name === "IO" && !type.family) return this.actionType(type, value);
             if (type.name === "Dynamic" && !type.family) return this.constructType("Dynamic", value);
             if (type.name === "$any") return value;
             const actual = type.name === "Type" ? this.demand(value) : this.dataValue(value);
@@ -2161,11 +2177,6 @@ export class Interpreter {
             return actual.kind === "record" && actual.scope ? this.environmentValue(actual.scope, true) : actual;
         }
         if (name === "Bool") return mkBool(this.truthy(value));
-        // IO x is x when x is an action, else the action that returns x.
-        if (name === "IO") {
-            const actual = this.reference(value);
-            return actual.kind === "io" ? actual : { kind: "io", run: () => actual };
-        }
         if (name === "Type") {
             if (!this.isTypeValue(value)) throw new APNError("runtime", "Type constructor expects a Type value");
             return this.inspectType(value);
@@ -2256,6 +2267,7 @@ export class Interpreter {
         const primitive = PRIMITIVE_OPERATORS.get(name);
         if (primitive) return this.operate(primitive, argsIn[0], argsIn[1]);
         if (name === "primFmap" || name === "primBind" || name === "primAp") return this.monadic(name, argsIn[0], argsIn[1]);
+        if (name === "primPure") { const value = argsIn[0]; return { kind: "io", run: () => value }; }
         const host = this.hostNatives.get(name);
         if (host) return host(argsIn);
         if (name === "use") {

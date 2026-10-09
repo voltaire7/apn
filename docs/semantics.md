@@ -380,9 +380,13 @@ Actions run in exactly two places:
 - **`<-` bindings.** `x <- action` runs the action now and binds its result:
   `text <- readFile "input.txt"`. A plain value is bound as it is (`x <- 2 + 3`).
 
-`IO x` is `x` when `x` is an action, else the action yielding `x`; `pure` is
-`IO`. So `sayHello = IO { print "hello" }` names an action, and a function
-whose result should be an action can say so: `check n = n > 0 ? IO n : fail "negative"`.
+`IO` is a type constructor, like `Option`: `IO []` is the type of an action
+yielding `[]` (what `print` builds), `IO Int` of one yielding an `Int`.
+Applying such a type to a value checks it as `Int 5` converts: the value must
+be an action, and its result is converted to the type when it runs, so
+`sayHello = (IO []) { print "hello" }` is an action and `(IO Int) (print 1)`
+is an error. `IO` applied to anything but a type (`IO { ... }`, `IO 5`) is an
+error. `pure x` is the action yielding `x`, as in `check n = n > 0 ? pure n : fail "negative"`.
 
 ### Blocks are do-blocks
 
@@ -427,7 +431,7 @@ and the other constructors (`None`, `Err e`) pass through unchanged.
 | Function | Meaning |
 | --- | --- |
 | `fmap f m`, `f <$> m` | `m` with `f` applied to what it holds or yields |
-| `pure x` | the action yielding `x` (`IO x`) |
+| `pure x` | the action yielding `x` |
 | `mf <*> mx` | the function `mf` holds, applied to what `mx` holds |
 | `m >>= f` | `f` applied to what `m` holds or yields, flattened |
 | `m >> k`, `f =<< m` | `m >>= (_ -> k)`; `m >>= f` |
@@ -883,7 +887,7 @@ before that statement executes; circular loads are not rejected.
 
 ```apn
 do [print "hi",print "there"]
-answer <- do [print "calculating",IO 42]   # prints, binds 42
+answer <- do [print "calculating",pure 42]   # prints, binds 42
 ```
 
 `do actions` is the action running each element in order, yielding the last

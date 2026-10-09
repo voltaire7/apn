@@ -825,7 +825,8 @@ print "still running before the final halt"
 #    A block that runs anything (a <- binding, or a discarded statement
 #    whose value is an action) is a do-block: the block is itself an
 #    action yielding its last value. A block of bindings stays a value.
-#    IO x is x when it is an action, else the action yielding x.
+#    IO is a type constructor: IO [] is the type of an action yielding [],
+#    and (IO []) action checks one. pure x is the action yielding x.
 # ---------------------------------------------------------
 lazyNote = {
     print "lazyNote WAS called"
@@ -833,7 +834,7 @@ lazyNote = {
 }
 noted <- lazyNote          # => lazyNote WAS called
 print (noted * 2)          # => 84
-sayHello = IO { print "hello" }
+sayHello = (IO []) { print "hello" }   # IO { ... } is an error: IO needs a type
 sayHello                   # => hello
 sayHello                   # => hello (each run repeats the effect)
 unused = print "never"     # naming an action does not run it
@@ -842,7 +843,7 @@ pureBlock = {
     base + 2
 }
 print (pureBlock + 0)      # => 42 (only bindings: a plain value)
-countdown n = n == 0 ? IO "liftoff" : {
+countdown n = n == 0 ? pure "liftoff" : {
     emit (toString n ++ " ")
     countdown (n - 1)
 }
@@ -862,7 +863,7 @@ print ([1,2] >>= (x -> [x,x * 10]))        # => [1,10,2,20]
 print ([(+ 1),(* 2)] <*> [10,20])          # => [11,21,20,40]
 pure "chained" >>= print                   # => chained
 print "first" >> print "second"            # => first, then second
-doubled <- mapM (x -> IO (x * 2)) [1,2,3]
+doubled <- mapM (x -> pure (x * 2)) [1,2,3]
 print doubled                              # => [2,4,6]
 when (length doubled == 3) (print "three") # => three
 
@@ -1280,11 +1281,11 @@ counterView <- Dynamic env
 otherCounter = Mutable 4
 uncertainKeys = HashMap [["a",1]]
 counterKey = "bumpCounter"
-has "a" uncertainKeys ? (counterView counterKey) 0 : IO 0
+has "a" uncertainKeys ? (counterView counterKey) 0 : pure 0
 print (onlyOne (vowelOrPair (vowelIfShort (take (otherCounter - 3) [7,8,9]))))  # 1
 # Also through a view stored in a record, with a key bound locally.
 viewHolder <- [view: counterView]
-has "a" uncertainKeys ? { localKey = "bumpCounter"; (viewHolder.view localKey) 0 } : IO 0
+has "a" uncertainKeys ? { localKey = "bumpCounter"; (viewHolder.view localKey) 0 } : pure 0
 print (onlyOne (vowelOrPair (vowelIfShort (take (otherCounter - 3) [7,8,9]))))  # 1
 
 # p5 sketches are descriptions until built for the browser.

@@ -1948,8 +1948,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (f.k === "type") {
             const t = resolve(f.value), a = resolve(argument.type);
-            // IO x: x when x is an action, else the action that yields x.
-            if (t.k === "atom" && t.name === "IO") return io(runType(a));
+            // IO T: the type of actions yielding T.
+            if (t.k === "atom" && t.name === "IO") {
+                if (a.k === "type") return { k: "type", value: io(a.value) };
+                if (a.k === "list" && (a.items ?? []).every(x => resolve(x).k === "type")) return { k: "type", value: io(schemaValue(a, e)) };
+                if (a.k === "var") return { k: "type", value: io(variable()) };
+                return problem("IO is a type constructor: IO [] is the type of an action yielding []", e, "pure x is the action yielding x");
+            }
+            // (IO T) action: the action, its result converted to T.
+            if (isIO(t)) {
+                if (!isIO(a) && a.k !== "var") return problem(`${text(t)} expects an action, not ${text(a)}`, e, "pure x is the action yielding x");
+                const result = variable();
+                unify(io(result), a, e);
+                convert((t as Extract<Ty, { k: "variant" }>).args[0], result, e);
+                return t;
+            }
             if (t.k === "variant" && t.base) { convert(t.base, argument.type, e); return t; }
             if (t.k === "var") {
                 requirements.push({ k: "operation", op: "construct", args: [f, argument.type] });
@@ -4213,10 +4226,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return undefined;
             } };
         }
-        // IO x: x when it is an action, else the action yielding x.
-        if (head.name === "IO" && builtin && args.length === 1) {
+        // pure x: the action yielding x.
+        if ((head.name === "pure" || head.name === "primPure") && builtin && args.length === 1) {
             const inner = value(args[0]);
-            return demand(inner)?.action ? inner : { action: () => inner };
+            return { action: () => inner };
         }
         if (head.name === "Bool" && builtin && args.length === 1) {
             const b = truth(value(args[0]));
@@ -5061,7 +5074,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         [[">>"], "then", 2], [["=<<"], "bindFlip", 2], [["sequence"], "sequence", 1], [["mapM"], "mapM", 2]] as const) {
         for (const name of names) scope.set(name, { type: { k: "intrinsic", name: op, arity } });
     }
-    scope.set("pure", { type: { k: "type", value: atom("IO") } });
+    for (const name of ["pure", "primPure"]) { const t = variable(); scope.set(name, { type: fn(t, io(t)) }); }
     for (const name of ["when", "unless"]) { const t = variable(); scope.set(name, { type: fn(variable(), fn(io(t), io(list(variable(), constant(0n))))) }); }
     scope.set("cast", { type: { k: "intrinsic", name: "cast", arity: 2 } });
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
