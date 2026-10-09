@@ -549,9 +549,12 @@ ordinary subtraction. `sqrt -1` and `sqrt - 1` both produce `0+1i`.
 The checker checks the negated argument as a call would, so `g -1` (or
 `g -k` with `k = 1`) for `g (UInt n)` is a static error like `g (-1)`; so is
 `h 2` for `h x = g -x` or `h x = g (-x)`, where the value is known only at
-the call. A typed numeric parameter given a value that depends on an
-enclosing function's parameter is checked at that function's calls, by
-value: `h (-2)` passes `2` to `g`, and `h x = g x` accepts `h 2` and rejects
+the call. A typed parameter (a numeric type, a schema, a contract) given a
+value that depends on an enclosing function's parameter is checked at that
+function's calls, by value, as a direct call would be: with
+`Pt = [x: Float, y: Float]` and `g (Pt p)`, `h x = g x` accepts `h [1,2]` as
+`g [1,2]` does, and `h x = g [x,-x]` rejects `h 2` for `[x: UInt, y: UInt]`
+but accepts `h 0`. For numbers: `h (-2)` passes `2` to `g`, and `h x = g x` accepts `h 2` and rejects
 `h (-2)` and `h "a"`. Such calls are checked even if `h` is never called: a
 call of `h` inside another, uncalled function (`d y = h 2`) is checked with
 its value, and `h`'s own definition is checked by type, so a parameter `h`

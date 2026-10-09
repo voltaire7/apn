@@ -406,10 +406,14 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   substitution. `substituteKnown` substitutes parameters inside pending calls
   and `callArgs`. An overload call that stays ambiguous because its arguments
   are `symbolic` is deferred (`evaluatingCall` keeps one node), and `waiting`
-  holds checks on it; so is a call of a typed numeric parameter (`coerce`)
-  with a waiting, symbolic argument, and function minus keeps its negated
+  holds checks on it; so is a call of a typed parameter (`coerce`) with a
+  symbolic argument whose type waits (for a list or record schema, in a part
+  too: `waitingWithin`; `symbolicArgument` includes list `items`), except
+  while trying an overload's choices (`choosing`), and function minus keeps its negated
   operand's facts as the `-` operation's `known`. `castKnown` converts a
-  known argument value to the parameter type; `problem` reports a deferred
+  known argument value to the parameter type (list elements, or a list's
+  elements to a record schema's fields; a pending `expr` is re-evaluated once
+  no longer symbolic); `problem` reports a deferred
   check (a `placeholder`) at the active call, except while the top-level
   definition that deferred it (`operation.within`, `outermost`) is still
   being checked, where it reports at `operation.written`. At the end, checks still waiting only on symbolic values

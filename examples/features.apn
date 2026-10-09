@@ -846,6 +846,7 @@ print (sqrt - 1)      # => 0+1i (spacing makes no difference)
 #                     negated x = natural -x; negated 2   # and at the call that supplies it
 #                     negated x = natural (-x); negated 2 # likewise; negated (-2) is natural 2
 #                     unused y = negated 2                # an error even if unused is never called
+# Schemas too: with Pt = [x: Float, y: Float] and g (Pt p), h x = g x accepts h [1,2] as g [1,2] does.
 print (10 - 1)        # => 9
 print ((x -> x * 2) -3) # => -6
 

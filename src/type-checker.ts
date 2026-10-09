@@ -896,8 +896,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function symbolic(k: Known): boolean {
         return !!k.ref || !!k.index?.terms.size || !!k.call?.args.some(symbolic) || !!k.expr?.env.some(([, v]) => symbolic(v)) || !!k.fn?.env.some(([, v]) => symbolic(v));
     }
-    function symbolicArgument(argument: Entry): boolean {
-        return symbolic({ index: argument.index, ref: argument.ref, call: argument.call, expr: argument.expr, fn: argument.fn });
+    // Trying an overload's choices, which defers a call on its own (see application).
+    let choosing = 0;
+    // An argument whose value, or an element's, depends on an enclosing parameter.
+    function symbolicArgument(argument: Known): boolean {
+        return symbolic({ index: argument.index, ref: argument.ref, call: argument.call, expr: argument.expr, fn: argument.fn }) ||
+            !!argument.items?.some(symbolicArgument);
+    }
+    // A type still waiting for an unknown type, at its top or in a part ([x,-x]).
+    function waitingWithin(type: Ty, seen = new Set<Ty>()): boolean {
+        if (waiting(type)) return true;
+        const t = resolve(type);
+        if (seen.has(t) || t.k === "fn" || t.k === "operation") return false;
+        seen.add(t);
+        return children(t).some(child => waitingWithin(child, seen));
     }
     // Set while deciding leftover checks at the end: symbolic values no longer wait.
     let deciding = false;
@@ -1523,6 +1535,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // does in convert.
     function castKnown(target: Ty, known: Known, e: Expr): void {
         const t = resolve(target);
+        // A pending compound value ([x,-x]) whose parameters are now known: its facts afresh.
+        if (known.expr && !symbolic(known)) {
+            const fresh = resolveKnown({ expr: known.expr });
+            known = { ...known, ...Object.fromEntries(Object.entries(fresh).filter(([, value]) => value !== undefined)) };
+        }
+        // A list's elements, or a list converted to a record schema's fields, in order.
+        if (known.items && (t.k === "list" || t.k === "record")) {
+            const fields = t.k === "record" ? [...t.fields.values()] : undefined;
+            known.items.forEach((item, n) => {
+                const part = t.k === "list" ? t.items?.[n] ?? t.element : fields![n];
+                if (part) castKnown(part, item, e.t === "list" ? e.v[n] ?? e : e);
+            });
+            return;
+        }
         if (t.k !== "atom" || !NUMERIC_TYPES.includes(t.name) || numericLiteral(e)) return;
         const number = known.number ?? (known.index && !known.index.terms.size ? integer(known.index.constant) : undefined) ??
             (known.float !== undefined ? floating(known.float) : undefined);
@@ -1643,16 +1669,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (f.k === "operation") return deferredCall(f, argument);
         if (f.k === "dynamic") return f.explicit ? explicitDynamic : unknown();
-        // A typed numeric parameter given a value that depends on an enclosing
-        // function's parameter (h x = g (-x)): convert it at that function's
-        // calls, where the value is known, as for an overload.
-        if (f.k === "fn" && f.coerce && !deciding && waiting(argument.type) && symbolicArgument(argument)) {
-            const input = resolve(f.input);
-            if (input.k === "atom" && NUMERIC_TYPES.includes(input.name)) {
-                const deferred = evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument);
-                if (deferred.k === "operation" && e.t !== "placeholder" && !deferred.written) { deferred.written = e; deferred.within = outermost; }
-                return deferred;
-            }
+        // A typed parameter (one that converts: Int n, a schema, a contract)
+        // given a value that depends on an enclosing function's parameter
+        // (h x = g (-x)): convert it at that function's calls, where the
+        // value is known, as for an overload.
+        if (f.k === "fn" && f.coerce && !deciding && !choosing && symbolicArgument(argument) &&
+            (waiting(argument.type) || ["list", "record"].includes(resolve(f.input).k) && waitingWithin(argument.type))) {
+            const deferred = evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument);
+            if (deferred.k === "operation" && e.t !== "placeholder" && !deferred.written) { deferred.written = e; deferred.within = outermost; }
+            return deferred;
         }
         if (f.k === "overload") {
             const input = resolve(argument.type);
@@ -1661,6 +1686,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const accepted: { clauses?: ClauseOrder[]; call?: Entry[] }[] = [];
             for (const choice of f.choices) {
                 const instance = copy(choice), node = resolve(instance);
+                choosing++;
                 try {
                     const out = application(instance, { ...argument, type: copy(argument.type) }, e);
                     outputs.push(out);
@@ -1673,7 +1699,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     accepted.push({ clauses: node.k === "fn" ? node.clauses : undefined, call });
                 } catch (error) {
                     if (!error || typeof error !== "object" || !("message" in error)) throw error;
-                }
+                } finally { choosing--; }
             }
             // A complete call: drop choices none of whose clauses can run, because
             // each definitely fails or comes after a clause that definitely matches.
