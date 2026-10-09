@@ -590,12 +590,13 @@ debug [1 + 2,3 + 4]          # => [1 + 2,3 + 4]
 debug 42                      # => 42
 
 # step n descends n levels into a value's unevaluated structure and yields
-# a LIVE action: debug shows the level's source, print RUNS it.
+# a LIVE value: debug shows the level's source, <- runs an action.
 inner = {
     print "inner"
     42
 }
-print $ step 1 inner          # => inner          (prints, returns 42)
+stepped <- step 1 inner       # => inner          (runs the action)
+print stepped                 # => 42
 debug $ step 1 inner         # => { print "inner"; 42 }
 debug $ step 2 inner         # => 42     (the block's tail statement)
 
@@ -648,13 +649,14 @@ print (inlineBlock)          # => 2
 print "hello"; print ", world"        # prints: hello
                                       # prints: , world
 
-# a multi-line `{ }` block as a function body (value = last statement)
+# a multi-line `{ }` block as a function body (value = last statement);
+# with an effect in it, the body is an action
 area w h = {
     print "computing area"
     w * h
 }
-print (area 3 4)             # prints: computing area
-                             # => 12
+computedArea <- area 3 4     # prints: computing area
+print computedArea           # => 12
 
 # local definitions are allowed inside a block
 both = {
@@ -671,8 +673,8 @@ seqOf = {
 
     6 * 7
 }
-print (seqOf)                # prints: one
-                             # => 42
+seqResult <- seqOf           # prints: one
+print seqResult              # => 42
 
 # Unfinished definitions use an explicit placeholder; defining it is silent.
 unfinished = _
@@ -720,15 +722,15 @@ print editable               # => [10,11,30]
 
 # ---------------------------------------------------------
 # 16b. EVALUATION CONTRACT (see docs/semantics.md and tests/semantics-test.ts)
-#    Deferred values share their result across calls;
-#    block/application/pipe definitions are repeatable actions.
+#    Pure values are lazy and computed once; effects are IO actions, which
+#    only statements and <- bindings run (section 17b).
 # ---------------------------------------------------------
-evaluationValue = (print 2) + 1
-print evaluationValue       # => 2, then 3
-actionValue = { print "action"; 4 }
-print actionValue           # => action, then 4
-print evaluationValue       # => 3 (the value is memoized)
-print actionValue           # => action, then 4 again
+evaluationValue = 2 + 1
+print evaluationValue       # => 3 (computed when first used, then kept)
+actionValue = { print "action"; 4 }  # an IO action: defining it runs nothing
+actionResult <- actionValue # => action (<- runs it and binds its result)
+print actionResult          # => 4
+actionValue                 # => action (each run repeats the effect)
 keepFirst x y = x
 print (keepFirst 7 (Dynamic missingEvaluationArg)) # => 7 (unused argument is deferred)
 print (true ? 8 : (Dynamic missingEvaluationArg))  # => 8 (unselected branch is deferred)
@@ -814,19 +816,53 @@ print (scoped)              # => 36
 
 print "still running before the final halt"
 
-# 0-arg defs: an ACTION body (f = { ... } or f = print "x" — the same
-# thing) declares a 0-arg FUNCTION. Nothing runs at the definition; the bare
-# name at STATEMENT level runs it (and so does (f) — the group's statement);
-# demand contexts (operands, record access, consuming natives) run it too;
-# print f demands and runs the action:
+# ---------------------------------------------------------
+# 17b. IO ACTIONS — effects are values
+#    print, emit, readFile, readStdin, getArgs, fetch, set, exit and env
+#    are IO actions: print 5 BUILDS an action and nothing happens until it
+#    runs. A top-level statement runs its action (a file's statements are an
+#    implicit do-block), and x <- action runs one and binds its result.
+#    A block that runs anything (a <- binding, or a discarded statement
+#    whose value is an action) is a do-block: the block is itself an
+#    action yielding its last value. A block of bindings stays a value.
+#    IO x is x when it is an action, else the action yielding x.
+# ---------------------------------------------------------
 lazyNote = {
     print "lazyNote WAS called"
     6 * 7
 }
-print (lazyNote * 2)      # mentioning lazyNote runs the body (side effect)
-                          # then uses the block's value:   # => 84
-                          # Other expression bodies create deferred thunks;
-                          # see docs/semantics.md for memoization and lazy list rules.
+noted <- lazyNote          # => lazyNote WAS called
+print (noted * 2)          # => 84
+sayHello = IO { print "hello" }
+sayHello                   # => hello
+sayHello                   # => hello (each run repeats the effect)
+unused = print "never"     # naming an action does not run it
+pureBlock = {
+    base = 40
+    base + 2
+}
+print (pureBlock + 0)      # => 42 (only bindings: a plain value)
+countdown n = n == 0 ? IO "liftoff" : {
+    emit (toString n ++ " ")
+    countdown (n - 1)
+}
+launched <- countdown 3    # => 3 2 1 (recursive actions run in constant stack)
+print launched             # => liftoff (on the same line)
+# (print 1) + 1 is a type error: an action is not its result (bind it first).
+
+# Functor, Applicative and Monad without type classes: fmap (<$>), pure,
+# <*>, >>= and >> work on actions, lists, and Option-like variants (the
+# first constructor's field is mapped; None and Err e pass through).
+print (fmap (* 2) [1,2,3])                 # => [2,4,6]
+print ((+ 1) <$> Some 41)                  # => Some 42
+print (Some 3 >>= (x -> x > 2 ? Some (x * 10) : None))  # => Some 30
+print ([1,2] >>= (x -> [x,x * 10]))        # => [1,10,2,20]
+print ([(+ 1),(* 2)] <*> [10,20])          # => [11,21,20,40]
+pure "chained" >>= print                   # => chained
+print "first" >> print "second"            # => first, then second
+doubled <- mapM (x -> IO (x * 2)) [1,2,3]
+print doubled                              # => [2,4,6]
+when (length doubled == 3) (print "three") # => three
 
 # Explicit braces end a lambda body, so maps can chain after the closing brace.
 [x: 1, y: 2, z: 3] * [field,value] -> {
@@ -1037,7 +1073,8 @@ print ((fromJson reply.body).ids)            # => ["jawed"]
 print (toJson [ids: ["jawed"], count: 1])    # => {"ids":["jawed"],"count":1}
 header = [Content-Type: "json", my value: 1] # bare keys may hold '-' and spaces
 print (header "Content-Type")                # => json  (not the quoted key "Content-Type")
-print (fetchJson "data:application/json,[1,2.5,null]" [])  # => [1,2.5,[]]
+decoded <- fetchJson "data:application/json,[1,2.5,null]" []
+print decoded                                 # => [1,2.5,[]]
 
 # Standard modules are cached imports, separate from file execution with load.
 # Each is imported by name (there is no whole-library module); a list imports several.
@@ -1166,15 +1203,17 @@ latest xs = {
 }
 print (onlyOne (vowelOrPair (vowelIfShort (latest [7,8,9]))))  # 1
 print (onlyOne (vowelOrPair (vowelIfShort (drop 999999 [1..1000000]))))  # 1
-# Effects are not performed while checking, but their results are known.
-print (onlyOne (vowelOrPair (vowelIfShort (emit [7]))))  # [7]1
+# Checking performs no effects, but knows what an action run with <- yields.
+emitted <- emit [7]                                    # [7] (output actions yield [])
+print (onlyOne (vowelOrPair (vowelIfShort emitted)))  # 1
 # A cell written after it is read follows the run's order.
 bumped y = {
     c = Mutable 1
     set c (c + 1)
     c + 0
 }
-print (onlyOne (vowelOrPair (vowelIfShort (take (bumped 0 - 1) [7,8,9]))))  # 1
+bumpedValue <- bumped 0
+print (onlyOne (vowelOrPair (vowelIfShort (take (bumpedValue - 1) [7,8,9]))))  # 1
 sortedAndReversed xs = [sort xs,reverse xs]
 firstOfBoth [[a,b],[c,d]] = [a,c]
 print (firstOfBoth (sortedAndReversed [3,1]))  # [1, 1]
@@ -1217,19 +1256,21 @@ bumpCounter x = {
     set mutableCounter $ (mutableCounter + 1)
     mutableCounter + 0
 }
-print (onlyOne (vowelOrPair (vowelIfShort (take (bumpCounter 0 - 2) [7,8,9]))))  # 1
+counted <- bumpCounter 0
+print (onlyOne (vowelOrPair (vowelIfShort (take (counted - 2) [7,8,9]))))  # 1
 # A top-level value using a cell is computed at its first use and kept.
 counterAtFirstUse = mutableCounter + 0
 print counterAtFirstUse                      # 3
 set mutableCounter $ 10
 print (onlyOne (vowelOrPair (vowelIfShort (take (counterAtFirstUse - 2) [7,8,9]))))  # 1
-# A value kept unforced in a cell runs where a later statement forces it.
-pendingBox = Mutable [[]]
+# An action kept in a cell runs where a later statement runs it.
+pendingBox = Mutable [set mutableCounter $ 0]
 set pendingBox [set mutableCounter $ 2]
-print pendingBox                              # [[]]
+print pendingBox                              # [<IO set>] (storing it runs nothing)
+head pendingBox                               # runs the stored action
 print (onlyOne (vowelOrPair (vowelIfShort (take (mutableCounter - 1) [7,8,9]))))  # 1
-# map's elements run where they are used: printing runs both.
-print (map (x -> set mutableCounter $ x) [5,1])  # [[], []]
+# map builds a list of actions; do runs them in order.
+do (map (x -> set mutableCounter $ x) [5,1])
 print (onlyOne (vowelOrPair (vowelIfShort (take mutableCounter [7,8,9]))))  # 1
 # An uncertain statement forgets only what it reaches; through env, the
 # bindings it names, by literal fields or keys the checker knows.
@@ -1237,11 +1278,11 @@ counterView <- Dynamic env
 otherCounter = Mutable 4
 uncertainKeys = HashMap [["a",1]]
 counterKey = "bumpCounter"
-has "a" uncertainKeys ? (counterView counterKey) 0 : 0
+has "a" uncertainKeys ? (counterView counterKey) 0 : IO 0
 print (onlyOne (vowelOrPair (vowelIfShort (take (otherCounter - 3) [7,8,9]))))  # 1
 # Also through a view stored in a record, with a key bound locally.
 viewHolder <- [view: counterView]
-has "a" uncertainKeys ? { localKey = "bumpCounter"; (viewHolder.view localKey) 0 } : 0
+has "a" uncertainKeys ? { localKey = "bumpCounter"; (viewHolder.view localKey) 0 } : IO 0
 print (onlyOne (vowelOrPair (vowelIfShort (take (otherCounter - 3) [7,8,9]))))  # 1
 
 # p5 sketches are descriptions until built for the browser.
@@ -1293,9 +1334,9 @@ print (ffiExample.function [Int32,Int32] Int32) # signature record
 # ./examples/c-interop/run-donut animates a C-rendered donut driven by APN.
 # Zero-argument C actions use bare fields: c.donut_finish; print c.greeting.
 
-# Eager result capture, without changing = actions or lazy destructuring.
-captured <- print "captured now"             # => captured now
-print captured                               # => captured now (stored string)
+# <- runs an action now and keeps its result; = only names the action.
+captured <- { print "captured now"; "kept" } # => captured now
+print captured                               # => kept (the stored result)
 eagerArgs <- getArgs
 print eagerArgs                              # => [] without CLI arguments
 lazyCapture <- [Dynamic missing,42]
@@ -1320,10 +1361,12 @@ tailCountdown n = tailCountdown (n - 1)
 print (tailCountdown 10000)          # => 42
 # A file ending in load "itself" likewise repeats until Ctrl+C.
 
-# do sequences expressions like a block, returning the last result.
+# do runs a list of actions in order: an action yielding the last result.
 do [print "hi",print "there"]       # => hi, then there
-print (do [1,2,42])                 # => 42
-print (do [])                         # => []
+lastOne <- do [1,2,42]              # plain values are results as they are
+print lastOne                       # => 42
+noneRun <- do []
+print noneRun                       # => []
 
 # A new top-level statement after a closed block must start at column one.
 # f = { print "hi" }
@@ -1468,11 +1511,13 @@ assert (compassName Up == "up")
 # Scoped cleanup runs after returned lazy data has been evaluated.
 import "function"
 released = Mutable false
-print (bracket 42 (_ -> set released true) (n -> [n,n + 1])) # => [42,43]
+bracketed <- bracket 42 (_ -> set released true) (n -> [n,n + 1])
+print bracketed                    # => [42,43]
 print released                     # => true
 import "io"
 # A read-only OS device keeps the showcase independent of its working directory.
-print (withFile "/dev/null" (file -> file.read)) # => empty line
+nothing <- withFile "/dev/null" (file -> file.read)
+print nothing                      # => empty line
 
 # Dot field spellings are literal string keys, including punctuation.
 oddKeys = []
@@ -1487,14 +1532,15 @@ implicitNumber.x = 1.0
 print implicitNumber                  # => [x: 1]
 # implicitNumber.x = 1.5               # error: lossy conversion to Int
 
-# A first-class live view of the lexical environment.
+# A first-class live view of the lexical environment: env is the action
+# yielding it, so scope <- env (or Dynamic env) binds the view.
 environmentExample = 1
 scope <- Dynamic env
 scope.environmentExample = 2
 print environmentExample              # => 2
 environmentExample = 3
 print scope.environmentExample        # => 3
-print (Dynamic env).[environmentExample]        # => [3]
+print scope.[environmentExample]      # => [3]
 
 # Rich type descriptions inspect lazy elements and function bodies without running them.
 print (typeOf [1,2,3,4])              # => [Int]

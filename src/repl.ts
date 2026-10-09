@@ -81,6 +81,7 @@ function runSourceValue(src: string, interp: Interpreter, binding = false): Valu
     const last = program[program.length - 1];
     if (last?.t === "expr" && isLoadCommand(last.value)) return null;
     val = interp.force(val);
+    if (last?.t === "expr" && interp.ranAction && val.kind === "list" && val.v.length === 0) return null;
     return val;
 }
 
@@ -397,17 +398,21 @@ function helpText(): string {
         `  ( ) and { } are groups/blocks: [] when empty, value = last stmt`,
         `  spacing: x = 1, lists [1,2,3], records [x: 1, y: 2], (x), { x } (apn --loose relaxes it)`,
         `  ; or newline       statement separators (blocks & top level)`,
-        `  x <- action        run now and bind the returned value (outer value only)`,
+        `  print, readFile, fetch, set, env ... are IO actions: statements and <- run them`,
+        `  x <- action        run it now and bind its result (outer value only)`,
+        `  f n = { print n; n }   a block that runs an action is itself an action (do-block)`,
+        `  sayHello = IO { print "hi" }; IO x is x when x is an action, else pure x`,
+        `  fmap/<$>, pure, <*>, >>=, >>, =<<, sequence, mapM, when, unless (IO, lists, Option)`,
         `  indentation: strict 4-space layout (exactly +4 per level)`,
         `  [1,2,3] * x -> print x      (seq * fn iterates; int * fn counts)`,
         `  recursion, higher-order fns, records, variants`,
         `  import "option"; import ["function","number"] (multiple modules; a file or a folder)`,
         `  use namespace (or a list of namespace records) opens fields in this scope`,
-        `  readFile "input.input"; readInput (); getArgs () (script I/O)`,
+        `  text <- readFile "input.input"; input <- readInput []; args <- getArgs (script I/O)`,
         `  Bool true; String "hi"; Char 'a'; List [1,2]; Record [x: 1]`,
         `  Function (x -> x); Type Int; Variant (YourConstructor value)`,
         `  Int/UInt, Int8..Int128/UInt8..UInt128, Float/Float32, Fraction, Complex`,
-        `  do [print "hi", 42] — run expressions in order; return the last result`,
+        `  do [print "hi", IO 42] — run actions in order; yield the last result`,
         `  Int32 123; Int (truncate 3.7); typeOf value; Type [x: Float]`,
         `  myTypeOf (t x) = print t   (bind the runtime type and value)`,
         `  f (Int x) = ...; f (Number x) = ... (typed overloads)`,

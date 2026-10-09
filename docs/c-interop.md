@@ -14,9 +14,13 @@ ffi.withLibrary "./libmath.dylib" [
 The full record key string must match the exported C symbol name. Use `add:`
 for the C symbol `add`, accessed with `c.add` or `c "add"`. Quoted field syntax
 includes literal quotes in the symbol name. `ffi.function` is written in
-APN; it builds `[parameters: ..., result: ...]`. `withLibrary` loads the library,
-passes a record of curried functions to its callback, and closes the library in
-`finally`, including after an APN error. Relative paths resolve against the APN
+APN; it builds `[parameters: ..., result: ...]`. `withLibrary` is an action:
+running it loads the library, passes a record of curried functions to its
+callback, runs the callback's result if that is an action, and closes the
+library in `finally`, including after an APN error. C calls themselves are not
+wrapped in IO: they run where they are evaluated, an escape hatch from purity
+(as are `allocate`, `peek` and `poke`); keep them inside the callback's
+do-block. Relative paths resolve against the APN
 source directory (the working directory in the REPL).
 
 ## Try it

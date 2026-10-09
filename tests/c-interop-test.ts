@@ -75,12 +75,12 @@ for (const [body, error] of [
     } });
 }
 Deno.test({ name: 'escaped C functions cannot call unloaded code', ignore: !library, fn() {
-    try { run(`escaped = ${call('c.add')}\nescaped 1 2`); }
+    try { run(`escaped <- ${call('c.add')}\nescaped 1 2`); }
     catch (e) { if (String(e).includes('library is closed')) return; throw e; }
     throw new Error('Expected closed-library error');
 } });
 Deno.test({ name: 'escaped C pointers cannot access unloaded storage', ignore: !library, fn() {
-    try { run(`escaped = ${call('c.null_pointer []')}\nffi.peek Int32 escaped`); }
+    try { run(`escaped <- ${call('c.null_pointer []')}\nffi.peek Int32 escaped`); }
     catch (e) { if (String(e).includes('closed library')) return; throw e; }
     throw new Error('Expected closed-library error');
 } });
@@ -91,7 +91,7 @@ Deno.test('C interop rejects ambiguous Int ABI before loading a library', () => 
 });
 
 Deno.test({ name: 'escaped lazy nullary C action rejects use after library closure', ignore: !library, fn() {
-    try { run(`escaped = ${call('[c.answer]')}\nhead escaped`); }
+    try { run(`escaped <- ${call('[c.answer]')}\nhead escaped`); }
     catch (e) { if (String(e).includes('library is closed')) return; throw e; }
     throw new Error('Expected closed-library error');
 } });

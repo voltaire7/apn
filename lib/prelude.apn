@@ -13,9 +13,11 @@
 # Defining new operators is possible but not recommended: a named function is
 # easier to read and to search for.
 infixr 0 $
+infixl 1 >>= >>
+infixr 1 =<<
 infixl 2 ||
 infixl 3 &&
-infixl 4 == != < > <= >=
+infixl 4 == != < > <= >= <$> <*>
 infixr 5 :
 infixl 6 + - ++
 infixl 7 * / %
@@ -40,3 +42,26 @@ infixr 9 \
 (%) = primMod
 (^) = primPow
 (\) = primCompose
+
+# Functor, Applicative and Monad, without type classes: each works on an IO
+# action, a list, or a variant whose first constructor has one field (Option's
+# Some x, Result's Ok x), mapping or chaining that field and passing the other
+# constructors (None, Err e) through unchanged.
+#     fmap f m      m with f applied to what it holds or yields
+#     pure x        the action yielding x (IO x)
+#     mf <*> mx     the function mf holds applied to what mx holds
+#     m >>= f       f applied to what m holds or yields, flattened
+#     m >> k        m, then k: m >>= (_ -> k)
+fmap = primFmap
+(<$>) = primFmap
+pure = IO
+(<*>) = primAp
+(>>=) = primBind
+m >> k = m >>= (ignored -> k)
+f =<< m = m >>= f
+# Actions over lists: sequence runs each, yielding their results; mapM f xs
+# runs f on each element; when and unless run an action on a condition.
+sequence actions = IO (actions * action -> action)
+mapM f xs = sequence (map f xs)
+when condition action = condition ? action >> IO [] : IO []
+unless condition action = condition ? IO [] : action >> IO []

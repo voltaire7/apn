@@ -196,6 +196,7 @@ export function ffiNative(i: Interpreter, name: string, args: Value[]): Value {
     try {
         // Demand the callback result while the library is open. Lazy fields that
         // escape retain closed checks rather than calling unloaded machine code.
-        return i.demand(i.apply(i.demand(args[2]), bindings));
+        // A callback that returns an action runs it here, too.
+        return i.demand(i.runIO(i.apply(i.demand(args[2]), bindings)));
     } finally { owner.closed = true; library.close(); }
 }

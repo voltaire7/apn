@@ -101,7 +101,7 @@ data = fromJson response.body
         if (run("[response.status,data.method,data.auth,data.type,data.body]", i) !== '[200,"POST","Basic token","application/json","{"ids":["jawed"]}"]') throw new Error(run("data", i));
         if (run('lookup "x-echo" response.headers', i) !== '"yes"') throw new Error("response headers");
         if (run(`missing <- fetch "${base}/missing" []; [missing.status,missing.ok,missing.statusText,missing.body]`, i) !== '[404,false,"Not Found","nope"]') throw new Error("404");
-        if (run(`length (fetchText "${base}/big" [])`, i) !== "3000000") throw new Error("big body");
+        if (run(`big <- fetchText "${base}/big" []; length big`, i) !== "3000000") throw new Error("big body");
         fails(`import "http"; fetchText "${base}/missing" []`, "answered 404 Not Found");
         fails(`import "http"; fetchText "${base}/slow" [timeout: 100]`, "timed out after 100 ms");
     } finally {

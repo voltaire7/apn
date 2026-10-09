@@ -1,5 +1,5 @@
-# Run a sequence in order, sharing each evaluated result exactly once.
-do [] = []
+# The action running a list of actions in order, yielding the last result.
+do [] = IO []
 do (expression:rest) = {
     result <- expression
     null rest ? result : do rest

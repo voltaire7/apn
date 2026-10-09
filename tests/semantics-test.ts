@@ -41,17 +41,19 @@ action = print "unexpected"
 print 42
 `, ["42"]);
 
-example("separate native calls share memoized value bindings", `
-value = (print 2) + 1
-print value
-print value
-`, ["2", "3", "3"]);
+example("an action runs only where a statement or <- runs it", `
+value = { print 2; 2 }
+print "defined"
+v <- value
+print (v + 1)
+`, ["defined", "2", "3"]);
 
-example("actions repeat when demanded", `
+example("actions repeat each time they run", `
 action = { print "run"; 3 }
-print action
-print action
-`, ["run", "3", "run", "3"]);
+x <- action
+y <- action
+print (x + y)
+`, ["run", "run", "6"]);
 
 example("application and pipe bodies are repeatable actions", `
 action = print 3
@@ -62,12 +64,10 @@ piped
 piped
 `, ["3", "3", "4", "4"]);
 
-example("bare value statements share the cached value", `
-value = (print 2) + 1
-print value
-value
-print value
-`, ["2", "3", "3"]);
+example("a block of pure statements stays a value", `
+twice x = { assert (x > 0); x * 2 }
+print (twice 3 + 1)
+`, ["7"]);
 
 example("unforced values see later bindings in their lexical environment", `
 n = 1
@@ -90,11 +90,12 @@ print (first 7 missing)
 print (other 8 missing)
 `, ["7", "8"]);
 
-example("pattern fallthrough demands a side-effecting argument once", `
+example("an action is a value: functions pass it along unrun", `
 choose 0 = 0
-choose 1 = 10
 choose x = x
-print (choose (print 2))
+greet = choose (print 2)
+greet
+greet
 `, ["2", "2"]);
 
 example("ternary evaluates only the selected branch", `
@@ -177,13 +178,14 @@ print (length (map (x -> missing) [1,2,3]))
 print (head (map (x -> x) [7,missing]))
 `, ["3", "7"]);
 
-example("list elements and function arguments share their effects", `
+example("lists hold actions; running one runs only it", `
 xs = [print 2,missing]
-print (head xs)
-print (head xs)
+head xs
+head xs
 double x = x + x
-print (double (print 3))
-`, ["2", "2", "2", "3", "6"]);
+v <- { print 3; 3 }
+print (double v)
+`, ["2", "2", "3", "6"]);
 
 example("cons and exact-list patterns inspect only needed structure", `
 first (x:xs) = x

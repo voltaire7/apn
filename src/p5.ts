@@ -75,6 +75,7 @@ export class P5Sketch {
         for (const [method, arity] of Object.entries(P5_METHODS)) if (arity === 0) this.i.hostNatives.set(this.id + method, () => this.invoke(method, []));
         fields.push(["call", { kind: "native", name: this.id + "call", arity: 2, applied: [] }]);
         for (const property of properties) fields.push([property, fromJS(this.p[property])]);
-        return this.i.demand(this.i.apply(callback, { kind: "record", v: fields }));
+        // A callback returns the action that draws (or the new state); run it.
+        return this.i.demand(this.i.runIO(this.i.apply(callback, { kind: "record", v: fields })));
     }
 }

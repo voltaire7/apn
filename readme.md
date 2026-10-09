@@ -1,6 +1,8 @@
 # APN
 
-A lazy functional scripting language implemented in dependency-free Deno/TypeScript.
+A lazy, pure functional scripting language implemented in dependency-free
+Deno/TypeScript. Effects are IO actions that statements and `x <- action` run;
+operators are ordinary functions defined in the prelude.
 
 Requires Deno 2.8.0 or newer (`deno upgrade` updates an older install); the
 `apn` launcher checks this before starting.
@@ -21,7 +23,7 @@ deno test --allow-read tests/*-test.ts
 | `lib/` | Modular standard library |
 | `examples/` | Runnable feature showcase |
 | `tests/` | Evaluation regression tests |
-| `docs/` | [Evaluation semantics](docs/semantics.md), [templates and types](docs/templates-and-types.md), [zero initialization](docs/zero-initialization.md), [operator precedence](docs/semantics.md#operator-precedence-and-associativity) |
+| `docs/` | [Evaluation semantics](docs/semantics.md), [templates and types](docs/templates-and-types.md), [zero initialization](docs/zero-initialization.md), [operator precedence](docs/semantics.md#operator-precedence-and-associativity), [IO actions](docs/semantics.md#io-actions) |
 
 Import standard modules by name from any directory (and your own files or
 folders the same way, see [the standard library](docs/standard-library.md)):

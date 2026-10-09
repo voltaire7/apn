@@ -33,9 +33,9 @@ files supply the input and print the answer. Unreachable hill paths return None.
 
 ```apn
 import "io"
-text = readFile "input.input"
-args = getArgs
-input = readInput ()
+text <- readFile "input.input"
+args <- getArgs
+input <- readInput []
 ```
 
 `apn program.apn first second` makes `getArgs` return `["first","second"]`.
@@ -44,8 +44,8 @@ argument or the first argument is `"-"`. `readStdin` explicitly reads stdin
 to EOF; stdin is read once, and every call returns the same text. File paths resolve against the process working directory. Text input is
 UTF-8; stdin decoding handles multibyte characters spanning read buffers.
 
-Input calls are effects. APN application bindings are repeatable actions; to
-read once and share the result use `[input] = [readInput ()]`. Stdin helpers are
+Input calls are IO actions: `x <- action` runs one and binds what it read,
+once; `input = readInput []` only names the action. Stdin helpers are
 intended for script execution, not simultaneous use with the interactive REPL
 editor. `load` still executes APN source and is distinct from `readFile`.
 

@@ -356,91 +356,107 @@ wildcard in patterns. Both sides of `=` are required: `foo =`, `foo = ;`, and
 | --- | --- |
 | `f x = x + 1` | A pattern-dispatch function |
 | `f = x -> x + 1` | A lambda closure |
-| `a = { print 3; 4 }` | A repeatable zero-argument action |
-| `a = print 3` | A repeatable action (application body) |
-| `a = print $ 3` | A repeatable action (pipe body) |
-| `v = 1 + 2` | A memoized deferred value |
+| `v = 1 + 2` | A lazy value, computed when first used and kept |
+| `a = print 3` | An IO action (not run here) |
+| `a = { print 3; 4 }` | An IO action yielding 4 (a do-block) |
+| `b = { x = 2; x + 1 }` | A lazy value (a block of bindings) |
 | `xs = 1:xs` | A memoized cons cell with deferred head and tail |
 
-The parsed body determines the category. Blocks, applications, and pipes remain
-APN actions; other non-lambda bodies are thunks. This is an intentional APN
-convention, not uniform Haskell semantics. Parentheses are statement groups, so
-introducing a group can change the definition's category.
+## IO actions
 
-An action runs when used as a statement or demanded by an operand or native.
-`a = print 3; a; a` prints twice. Applying an action first runs it and applies its
-result, so `addTwo = add 2; addTwo 10` still works. To define reusable lazy data
-through a function, write a parameterized producer such as `numbers n = n :
-numbers (n + 1)`; its result is a lazy list.
+APN code is pure; effects are **IO actions**, ordinary values describing what
+to do. `print "hi"` builds the action that prints `hi`; nothing is printed
+until the action runs. The effectful builtins all return actions: `print` and
+`emit` (yielding `[]`), `readFile`, `readStdin`, `getArgs`, `fetch`, `exit`,
+`set` (writing a `Mutable` cell), `env`, `bracket`, `withFile` and
+`ffi.withLibrary`. An action prints as `<IO>` (with the builtin's name, as in
+`<IO print>`) and `typeOf` describes it as `IO`.
 
-## Eager result binding with `<-`
+Actions run in exactly two places:
 
-`pattern <- expression` evaluates the right-hand side immediately, runs any
-zero-argument action needed to obtain its outer result, then binds that result
-in the current scope. This is an eager binding, not monadic `do` notation.
+- **Statements.** A file's top-level statements, and each REPL input, form an
+  implicit do-block: a statement whose value is an action runs it, in order.
+  `a = print 3; a; a` prints twice; `a` alone names the action.
+- **`<-` bindings.** `x <- action` runs the action now and binds its result:
+  `text <- readFile "input.txt"`. A plain value is bound as it is (`x <- 2 + 3`).
 
-```apn
-import "io"
-args <- getArgs
+`IO x` is `x` when `x` is an action, else the action yielding `x`; `pure` is
+`IO`. So `sayHello = IO { print "hello" }` names an action, and a function
+whose result should be an action can say so: `check n = n > 0 ? IO n : fail "negative"`.
 
-result <- print "hello"  # prints now, even if result is never used
-print result             # prints the captured string; does not rerun the action
+### Blocks are do-blocks
 
-greet = print "hello"    # still a repeatable action
-greet = { print "hello" } # still the same behavior
-```
-
-`getArgs` is now genuinely zero-argument; existing `getArgs` calls also work.
-The `<-` binding can occur at top level or inside a block, and supports the
-same value patterns as destructuring. `_ <- action` runs and discards a result.
-The names become bound after the RHS and pattern succeed, so `x <- x + 1`
-reads the previous x. A failed binding leaves previous bindings intact, but
-effects already performed are not rolled back. Bindings are local to their block.
-
-Only the outer value is evaluated. `xs <- [missing,42]` does not evaluate
-`missing`, and `xs <- [0..]` does not traverse the infinite range. Mutable cells
-and pointers are captured as references. A function that takes arguments remains
-a callable value. `=` destructuring remains unchanged:
+A block that runs anything is a **do-block**: the block evaluates to an action
+that, when run, executes its statements in order and yields its last
+statement's value (running it if that is an action too). A block becomes a
+do-block at its first `<-` binding, or at its first discarded statement (one
+before the last) whose value is an action. A block of bindings, or of
+discarded pure statements such as `assert`, stays an ordinary value:
 
 ```apn
-[args] = [getArgs]        # lazy element: obtain arguments only when needed
-args <- getArgs          # obtain them now
+area w h = {
+    print "computing area"    # an action, discarded: area returns an action
+    w * h
+}
+size <- area 3 4              # prints, then binds 12
+double n = { assert (n > 0); n * 2 }   # a plain function: double 3 is 6
 ```
+
+Each run of a do-block starts a fresh scope for the statements from that point
+on, so running an action twice repeats its effects and its bindings. A recursive
+action (`loop n = { print n; loop (n + 1) }`) runs its last statement in place,
+in constant stack. Using an action where a value is needed is an error that
+says so: `(print 1) + 1`, `env.x`, `action ? a : b`. Bind the result first.
 
 `<-` is a statement binding, not a function-definition form or chainable binary
 operator. `f x <- ...`, `x <- y <- ...`, and missing right-hand sides are invalid.
 An indented continuation is allowed; opening braces follow the same layout rule
-as definitions: put `{` on the line containing `<-`.
+as definitions: put `{` on the line containing `<-`. It supports the same
+patterns as destructuring (`[a,b] <- action`, `_ <- action`); names are bound
+after the action and pattern succeed, so `x <- x + 1` reads the previous `x`.
+Only the outer value of the result is evaluated: `xs <- [missing,42]` does not
+evaluate `missing`. For a strict pure binding use `seq` (`seq x body`).
+
+### Functor, Applicative and Monad
+
+The prelude provides the usual functions without type classes. Each works on
+an action, a list, or a variant whose first constructor has one field
+(`Some x` in `Option`, `Ok x` in `Result`): that field is mapped or chained,
+and the other constructors (`None`, `Err e`) pass through unchanged.
+
+| Function | Meaning |
+| --- | --- |
+| `fmap f m`, `f <$> m` | `m` with `f` applied to what it holds or yields |
+| `pure x` | the action yielding `x` (`IO x`) |
+| `mf <*> mx` | the function `mf` holds, applied to what `mx` holds |
+| `m >>= f` | `f` applied to what `m` holds or yields, flattened |
+| `m >> k`, `f =<< m` | `m >>= (_ -> k)`; `m >>= f` |
+| `sequence actions` | runs each action, yielding the list of results |
+| `mapM f xs` | `sequence (map f xs)` |
+| `when c action`, `unless c action` | runs the action when `c` is true (false) |
+| `do actions` | runs each action in order, yielding the last result |
+
+`xs * f` iterates: when `f` returns actions it is the single action running
+each in turn (`[1,2,3] * x -> print x`), yielding the results.
 
 ### Where laziness ends
 
 APN uses call-by-need for deferred values, arguments, list elements, cons tails,
 and variant fields. Pattern matching forces only what it inspects. That does
 not make every operation lazy: `<-` evaluates now, numeric operations demand
-operands, effects run when demanded, and `*` iteration eagerly collects its
-results. `map` produces results lazily. Consumers such as `length` and sorting
-need finite input; printing an infinite list keeps streaming until interrupted.
+operands, actions run where statements run them, and `*` iteration eagerly
+collects its results. `map` produces results lazily. Consumers such as `length`
+and sorting need finite input; printing an infinite list keeps streaming until
+interrupted.
 
-## Memoization and effects
+## Memoization and sharing
 
 All thunks traversed in an alias chain share the resulting outer value. Repeated
 uses of a deferred value, including bare statements, reuse that value:
-
-```text
-value = (print 2) + 1
-print value           # prints 2, then 3
-print value           # prints only 3
-```
-
-List elements and arguments likewise share demanded results. An action passed
-as an argument runs at most once when that argument thunk is demanded within
-the call. A new call creates new argument thunks. Direct uses of the action
-itself remain repeatable.
-
-This changes earlier behavior: native calls no longer accidentally recompute
-named deferred values. Side effects inside unused list elements no longer run.
-Use `*` iteration for explicitly executing an operation over every element;
-`map` produces a lazy result and only demanded elements execute its function.
+`value = 2 + 1` computes 3 once. List elements and arguments likewise share
+demanded results. Values are pure, so sharing is never observable except
+through `debug` (which prints the source it is given) and FFI calls, the two
+deliberate escape hatches.
 
 ## Lists and consumers
 
@@ -486,14 +502,14 @@ value retains its result after rebinding. Only the selected ternary branch runs.
 
 Record literals retain their existing field-expression evaluation behavior;
 records do not become uniformly lazy. Rendering resolves ordinary data fields
-but shows zero-argument action fields as functions, so inspecting a module does
-not execute its `halt` action.
+but shows zero-argument definition fields as functions, so inspecting a module
+does not evaluate its `halt` action.
 
 ## Inspection and numbers
 
 `quote` and `toAST` inspect syntax without evaluating their arguments. `debug`
 forces its argument without running a returned action: `a = print 3; debug a`
-prints `a`. Forcing other expressions can still have effects. `step` retains
+prints `a`. `step` retains
 its expression-inspection/evaluation rules demonstrated in `examples/features.apn`.
 `toString` demands its argument and collects its full rendering into a string.
 
@@ -791,7 +807,7 @@ caller bindings do not affect it. Reimporting installs the cached exports
 again. Imports return an export record. A definition such as
 `s = import "sequence"` defers importing until demanded.
 `load` remains uncached file execution relative to the current source file.
-`numbers = load "number"` is a repeatable action like any other, so each use
+`numbers = load "number"` is repeatable like a zero-argument definition, so each use
 of `numbers` loads the file again. A load the static check follows (a literal
 path outside `Dynamic`) rebinds the file's definitions as a definition
 would, even names the program rebound in between. A `Dynamic` load may
@@ -812,21 +828,21 @@ loading retains its existing definition behavior.
 
 ## Mutable references
 
-`x = Mutable 0` allocates a shared cell when first used. A zero-argument binding
-returning a cell retains that cell across calls; functions taking arguments can
-create independent cells. `set cell value` (or `set cell $ value`) evaluates the
-new outer value before replacing the old contents and returns []. A failed
-update leaves the cell unchanged. Aliases and inner scopes share the cell.
-Arithmetic and printing read its contents; `typeOf x` reports `Mutable`.
-Existing lazy calculations still memoize: a previously forced calculation is
-not recomputed after mutation. Compound contents retain ordinary lazy semantics;
-`set` does not deep-copy or deeply force them.
+`x = Mutable 0` allocates a shared cell when first used (an IORef); functions
+taking arguments can create independent cells. Writing is an action:
+`set cell value` (or `set cell $ value`) builds the action that, when run,
+evaluates the new outer value, replaces the old contents and yields []. A
+failed update leaves the cell unchanged. Aliases and inner scopes share the
+cell. Arithmetic and printing read its contents as they are when evaluated;
+`typeOf x` reports `Mutable`. Existing lazy calculations still memoize: a
+previously forced calculation is not recomputed after mutation. Compound
+contents retain ordinary lazy semantics; `set` does not deep-copy or deeply
+force them.
 
 Function values display source: `func x = print x; print func` prints
 `x -> print x` without running the body. Multiple clauses display their
 equations; partially applied functions include their bound arguments without
-forcing them. Captured environments are not expanded. Existing zero-argument
-actions still run when demanded; inspecting one as a record field shows its body.
+forcing them. Captured environments are not expanded.
 
 ## Pattern functions
 
@@ -866,17 +882,13 @@ before that statement executes; circular loads are not rejected.
 
 ```apn
 do [print "hi",print "there"]
-answer = do [print "calculating",42]
-do []  # ()
+answer <- do [print "calculating",IO 42]   # prints, binds 42
 ```
 
-It evaluates each list element in order and returns the last result, like a
-block of expression statements. Empty input returns []. An error stops the
-sequence. It accepts computed lists too, and processes the spine incrementally.
-List elements retain normal sharing: reusing an already-evaluated list does not
-rerun its memoized expressions. For a repeatable action, construct the list in
-the action body, as in `greet = do [print "hi"]`. This does not add statement
-syntax inside lists: local definitions still belong in blocks.
+`do actions` is the action running each element in order, yielding the last
+result; `do []` yields []. Plain values in the list are results as they are.
+An error stops the sequence. It accepts computed lists too, and processes the
+spine incrementally. Each run of the action runs the elements again.
 
 Numeric lists and records support elementwise arithmetic and scalar broadcasting;
 `++` remains concatenation, and `*` with a function remains iteration.
@@ -948,20 +960,22 @@ returns `[1,2.0]`, evaluating the input expression in the surrounding scope.
 
 ## Live environment
 
-`env` is a live record view of the current lexical scope and visible parent
-bindings, including builtins. It captures binding references without forcing
-values. `scope <- env` retains that scope; later definitions and rebindings
-are visible through it. `env.x` and `env "x"` read bindings.
+`env` is the action yielding a live record view of the current lexical scope
+and visible parent bindings, including builtins; views exist only inside IO.
+The view captures binding references without forcing values. `scope <- env`
+retains that scope; later definitions and rebindings are visible through it.
+`scope.x` and `scope "x"` read bindings (`env.x` itself is an error: an action
+has no fields). Checked code marks the boundary: `scope <- Dynamic env`.
 
-`env.x = value` and `scope "x" = value` update the nearest visible binding,
+`scope.x = value` and `scope "x" = value` update the nearest visible binding,
 using the same type conversion checks as field assignment. New names are
 created in the captured scope. This explicitly writes through the view even
 from an inner block; ordinary `x = value` still follows normal scope rules.
 Pluck assignments validate all conversions before publishing updates.
 
-The view can escape a function and keep its local scope alive. `pairs env`
+The view can escape a function and keep its local scope alive. `pairs scope`
 exposes its visible entries; plucks produce ordinary lists or records.
-`typeOf env` is Record. Environment views compare by scope identity.
+`typeOf scope` is Record. Environment views compare by scope identity.
 Printing displays bindings as a record; actions are shown without invoking
 them, and recursive references to the same environment print as `env`.
 Ordinary lazy data is rendered normally, so an infinite list can keep printing.

@@ -24,7 +24,7 @@ Deno.test('function-left print runs immediately in element order', () => {
         const i = new Interpreter();
         const value = i.run(parseDocument('print * [1,2,3,4]'));
         if (lines.join(',') !== '1,2,3,4') throw new Error(JSON.stringify(lines));
-        if (i.renderString(value) !== '[1,2,3,4]') throw new Error('lost results');
+        if (i.renderString(value) !== '[[],[],[],[]]') throw new Error('lost results');
         if (lines.length !== 4) throw new Error('repeated effects');
     } finally { console.log = original; }
 });

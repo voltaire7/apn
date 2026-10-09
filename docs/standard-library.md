@@ -8,8 +8,9 @@ frequencies $ words $ "one two one" # HashMap [["one",2],["two",1]]
 ```
 
 The prelude, `lib/prelude.apn`, needs no import: it defines every binary
-operator (`(+) = primAdd`, ...) and its fixity, and is in scope in every file
-and module. See [operators](semantics.md#defining-and-overloading-operators).
+operator (`(+) = primAdd`, ...) and its fixity, and the Functor, Applicative
+and Monad functions (`fmap`, `<$>`, `pure`, `<*>`, `>>=`, `>>`, `=<<`,
+`sequence`, `mapM`, `when`, `unless`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).
 
 `import` accepts a literal module name or a list of literal module names.
 For example, `import ["number","text"]` opens both modules and returns
@@ -248,10 +249,10 @@ Haskell's type distinction](combinators.md).
 
 ## Input and puzzle utilities — `io`, `search`
 
-`readFile path` reads UTF-8 text, `readStdin` reads to EOF (once: every call
-returns the same text), and `getArgs` returns script arguments. `readInput []` chooses the first file argument or
-stdin (absent argument or `"-"`). These are also available through `std`.
-Input is effectful; use `[input] = [readInput ()]` to share one read.
+`readFile path` is the action reading UTF-8 text, `readStdin` reads to EOF
+(once: every run yields the same text), and `getArgs` yields the script
+arguments. `readInput []` chooses the first file argument or stdin (absent
+argument or `"-"`). Run one with `<-`: `input <- readInput []`.
 
 `bfsDistances neighbors starts` returns shortest unweighted distances for all
 reachable scalar-key nodes. Sequence helpers include `count predicate xs`,
@@ -261,8 +262,8 @@ See [runnable Advent of Code solutions and limits](advent-of-code.md).
 
 ## HTTP — `http`
 
-`fetch url options` sends one request and returns the response, whatever its
-status, as a record:
+`fetch url options` is the action sending one request; it yields the
+response, whatever its status, as a record:
 
 | Field | Value |
 | --- | --- |
@@ -290,8 +291,9 @@ response <- fetch "https://www.youtube-transcript.io/api/channels" [
 channels = fromJson response.body
 ```
 
-`fetchText url options` returns a successful (2xx) response's body and fails
+`fetchText url options` yields a successful (2xx) response's body and fails
 with the status otherwise; `fetchJson url options` decodes that body as JSON.
+All three are actions: `body <- fetchText url []`.
 A request that gets no response (no network, a refused connection, a timeout)
 fails with the reason. Requests are synchronous, like the rest of APN; Ctrl+C
 in the REPL interrupts a slow one (abandoning it), and `timeout` bounds one in
@@ -369,6 +371,7 @@ requests the full record and can stream indefinitely if it contains infinite lis
 ## Resource scopes and type utilities
 
 `function` exports `bracket acquire release use`; `io` exports
-`withFile path use`. Returned data is completed before cleanup.
+`withFile path use`. Both are actions; an acquire, use or release that is an
+action runs in turn. Returned data is completed before cleanup.
 `distinct` and `assert` are available without imports.
 See [type and resource rules](type-and-resource-rules.md) for examples and limits.

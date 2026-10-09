@@ -85,8 +85,9 @@ stack. Assertions are always enabled and evaluate their argument once.
 
 ## Scoped resources
 
-`function` exports `bracket acquire release use`. It acquires a value once,
-calls `use resource`, finishes its returned data, and calls `release resource`
+`function` exports `bracket acquire release use`, an action. Running it
+acquires a value once (running `acquire` if it is an action), runs
+`use resource`, finishes its returned data, and runs `release resource`
 in a finally block. Both callbacks must accept one remaining argument; they are
 validated before acquisition. Cleanup runs on successful completion, callback errors,
 errors forcing lazy results, and normal interpreter interruption. Acquisition
@@ -102,7 +103,7 @@ answer <- bracket 42 (_ -> set released true) (n -> [n,n + 1])
 
 The returned value must be finite data: lists, records, variants and HashMaps are
 traversed while the resource is alive. Callable values, type descriptors, pointers,
-and mutable references cannot be returned. Cyclic data errors; an infinite list
+actions and mutable references cannot be returned. Cyclic data errors; an infinite list
 will not finish without interruption. This boundary is intentionally strict to
 prevent deferred reads after cleanup. A failing cleanup propagates its own error.
 A generic bracket cannot prevent a callback from stashing a resource elsewhere;
@@ -115,7 +116,7 @@ import "io"
 text <- withFile "input.txt" (file -> file.read)
 ```
 
-`file.read` reads the remaining contents. It is a nullary action and an additional
+`file.read` is the action reading the remaining contents; an additional
 read at EOF returns an empty string. The file closes even on failure. Stashed
 read handles explicitly reject use after closure. Returned lazy reads are
 completed before closing. File access uses the existing Deno read permissions.

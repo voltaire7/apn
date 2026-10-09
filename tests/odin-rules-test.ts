@@ -58,7 +58,7 @@ Deno.test('resource release runs when a lazy result fails', () => {
     if (i.renderString(i.run(parseDocument('count'))) !== '7') throw new Error('cleanup skipped');
 });
 Deno.test('withFile evaluates a lazy read before closing', () => {
-    const source = 'import "io"\nwithFile "lib/io.apn" (f -> [f.read])';
+    const source = 'import "io"\nwithFile "lib/io.apn" (f -> f.read)';
     const actual = result(source);
     if (!actual.includes('readInput')) throw new Error(actual);
 });
@@ -106,12 +106,11 @@ Deno.test('bracket does not release a resource that failed to acquire', () => {
     try { i.run(parseDocument('bracket missing (_ -> set released true) (x -> x)')); } catch { /* expected */ }
     if (i.renderString(i.run(parseDocument('released'))) !== 'false') throw new Error('released absent resource');
 });
-Deno.test('assert reports piped source and evaluates the condition once', () => {
+Deno.test('assert reports piped source', () => {
     const i = new Interpreter();
     i.run(parseDocument('counter = Mutable 0'));
-    try { i.run(parse('assert $ { set counter $ (counter + 1); false }', 'pipe.apn')); }
+    try { i.run(parse('assert $ (counter == 1)', 'pipe.apn')); throw new Error('accepted'); }
     catch (e) { if (!String(e).includes('pipe.apn:1')) throw e; }
-    if (i.renderString(i.run(parseDocument('counter'))) !== '1') throw new Error('repeated condition');
 });
 
 Deno.test("assert accepts a truthy number", () => {

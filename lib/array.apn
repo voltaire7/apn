@@ -7,10 +7,9 @@ _arrayWidth rows = null rows ? 0 : {
     all (row -> length row == width) rows ? width : fail "matrix rows must have equal lengths"
 }
 matmul left right = {
-    width <- _arrayWidth left
-    rightWidth <- _arrayWidth right
+    width = _arrayWidth left
     columns = transpose right
-    width == length right ? map (row -> map (dot row) columns) left : fail "matrix dimensions do not match"
+    seq (_arrayWidth right) (width == length right ? map (row -> map (dot row) columns) left : fail "matrix dimensions do not match")
 }
 shape (Number x) = []
 shape [] = [0]

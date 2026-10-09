@@ -1,3 +1,4 @@
 import "io"
 load "hill-climbing"
-print (solveHill (readInput []))
+input <- readInput []
+print (solveHill input)

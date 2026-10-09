@@ -14,7 +14,7 @@ for (const [source, expected] of [
     ['obj = [child: [x: 1]]; obj.child.[x] = [10]; obj.child.x', '10'],
     ['obj = ["child": [(x): 1]]; obj."child".[(x)] = [10]; obj."child" "(x)"', '10'],
     ['obj = [child: [x: 1]]; scope <- env; scope.obj.child.x = 10; obj.child.x', '10'],
-    ['calls = Mutable 0; obj = { set calls (calls + 1); [child: [x: 1]] }; obj.child.x = 10; [obj.child.x,calls]', '[10,1]'],
+    ['calls = Mutable 0; make = { set calls (calls + 1); [child: [x: 1]] }; obj <- make; obj.child.x = 10; [obj.child.x,calls]', '[10,1]'],
 ] as const) Deno.test(`nested field update: ${source}`, () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(source)));

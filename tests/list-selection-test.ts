@@ -44,7 +44,7 @@ for (const assignment of [
     if (!failed || actual !== '[1,2]') throw new Error(actual);
 });
 
-Deno.test('computed index and replacement effects run once', () => {
+Deno.test('computed index and replacement from actions run once', () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(`
 keyCalls = Mutable 0
@@ -52,7 +52,9 @@ valueCalls = Mutable 0
 keys = { set keyCalls (keyCalls + 1); [0,1] }
 values = { set valueCalls (valueCalls + 1); [3,4] }
 arr = [1,2]
-arr keys = values
+k <- keys
+v <- values
+arr k = v
 [arr,keyCalls,valueCalls]
 `)));
     if (actual !== '[[3,4],1,1]') throw new Error(actual);

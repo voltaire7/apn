@@ -224,7 +224,7 @@ export function describeType(value: Value): string {
                     result = c.fields.reduceRight((result, input) => arrow(input, result), c.result);
                 } else {
                     const signatures: Record<string, Shape> = {
-                        print: arrow(a, named("[]")), head: arrow(list(a), a), tail: arrow(list(a), list(a)),
+                        print: arrow(a, named("IO", [named("[]")])), head: arrow(list(a), a), tail: arrow(list(a), list(a)),
                         map: arrow(arrow(a, b), arrow(list(a), list(b))),
                         filter: arrow(arrow(a, b), arrow(list(a), list(a))),
                         length: arrow(a, named("Int")), null: arrow(a, named("Bool")),
@@ -236,7 +236,7 @@ export function describeType(value: Value): string {
                 return v.arity ? result : arrow(named("[]"), result);
             }
             case "variant": return v.family ? constructor(v.family, v.tag).result : named("Variant");
-            default: return named({ bool: "Bool", string: "String", char: "Char", record: "Record", mutable: "Mutable", pointer: "Pointer", hashmap: "HashMap", nomatch: "a" }[v.kind]);
+            default: return named({ bool: "Bool", string: "String", char: "Char", record: "Record", mutable: "Mutable", pointer: "Pointer", hashmap: "HashMap", nomatch: "a", io: "IO" }[v.kind]);
         }
     }
     const names = new Map<Shape, string>();

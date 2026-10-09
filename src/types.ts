@@ -51,6 +51,9 @@ export type Value =
     | { kind: "floatRange"; lo: number; step: number; hi: number | null; index?: number }
     | { kind: "range"; lo: bigint; step: bigint; hi: bigint | null }
     | { kind: "nomatch" }
+    // An IO action: running it performs its effects and yields its result
+    // (or an IOTail, the action to continue with, so loops run in constant stack).
+    | { kind: "io"; run: () => Value | IOTail; label?: string }
     | { kind: "thunk"; body: Expr; env: Env; value?: Value; busy?: boolean };
 
 // Numbers are accepted only for bounded host counters such as array lengths.
@@ -68,6 +71,9 @@ export function mkList(v: Value[]): Value { return { kind: "list", v }; }
 export function rawString(v: Value): string {
     return v.kind === "string" ? v.v : valueToString(v);
 }
+
+// What an IO action continues with: its last step, run by the caller's loop.
+export class IOTail { constructor(public next: Value) {} }
 
 export function valueToString(v: Value): string {
     switch (v.kind) {
@@ -107,6 +113,7 @@ export function valueToString(v: Value): string {
         case "native": return functionSource(v);
         case "clauseFn": return functionSource(v);
         case "nomatch": return "<nomatch>";
+        case "io": return v.label ? `<IO ${v.label}>` : "<IO>";
     }
 }
 

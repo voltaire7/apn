@@ -11,4 +11,7 @@ fetchText url options = {
     response.ok ? response.body : fail ("fetch: " ++ response.url ++ " answered " ++ toString response.status ++ " " ++ response.statusText)
 }
 # A successful response's body, decoded as JSON (see the json module).
-fetchJson url options = fromJson (fetchText url options)
+fetchJson url options = {
+    text <- fetchText url options
+    fromJson text
+}

@@ -80,7 +80,7 @@ declarations, record literals/access, ranges, decimal/radix/complex literals,
 assignment, imports, or APN's strict indentation checks. Programs consist of
 zero or more definitions and one final expression; arbitrary sequences of
 expression statements are not supported. Braces delimit local scopes explicitly.
-Its pure definition semantics do not reproduce APN's repeatable action bindings.
+It has no IO actions: its definitions are pure values.
 Malformed or unsupported input errors rather than falling back to host parsing.
 
 The core evaluator's own source deliberately stays within this subset. The

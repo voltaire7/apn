@@ -6,6 +6,9 @@ import { parse, parseDocument, rangeExpr, PRIMITIVE_OPERATORS } from "./parser.t
 import { mkStr, type Value, valueToString } from "./types.ts";
 
 const PRELUDE_OPERATORS = new Set(PRIMITIVE_OPERATORS.values());
+// IO t: an action yielding t.
+function io(t: Ty): Ty { return { k: "variant", name: "IO", args: [t] }; }
+function isIO(t: Ty): boolean { return t.k === "variant" && t.name === "IO" && t.args.length === 1; }
 
 type Index = { constant: bigint; terms: Map<string, bigint> };
 type Ty =
@@ -77,6 +80,8 @@ interface Known {
     payload?: Known[];
     // fields: a record literal's field values ([x: 300]).
     fields?: [string, Known][];
+    // action: an IO action, run (statically) where the program runs it.
+    action?: () => Known | undefined;
 }
 // A function's clauses and defining scope, so a direct call by name can
 // evaluate what its result value is from what is known about the arguments.
@@ -854,7 +859,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         dynamicBoundaries++;
         return dynamic;
     };
-    const problem = (message: string, e?: Expr): never => {
+    const problem = (message: string, e?: Expr, hint?: string): never => {
         // A deferred check (a placeholder) reports at the call being checked.
         const expression = (e?.t === "placeholder" ? undefined : e) ?? activeExpression ?? checkingExpression;
         const loc = expression && sourceLocations.get(expression);
@@ -862,7 +867,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             message,
             pos: loc?.start ?? 0,
             len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)),
-            source: loc?.source, file: loc?.file,
+            source: loc?.source, file: loc?.file, ...hint ? { hint } : {},
         } satisfies TypeIssue;
     };
     function spend(e?: Expr): void {
@@ -944,6 +949,55 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         requirements.push(result);
         return resolve(result);
     }
+    // fmap, <*>, >>=, >>, =<<, sequence and mapM over an action, a list, or
+    // an Option-like variant (mapping its first type parameter).
+    function monadicType(op: string, a: Ty, b: Ty): Ty {
+        const at = { t: "placeholder" } as Expr;
+        if (op === "bindFlip") return monadicType("bind", b, a);
+        if (op === "mapM") {
+            if (b.k !== "list") return problem("mapM expects a list");
+            return monadicType("sequence", list(application(a, { type: b.element }, at)), b);
+        }
+        if (op === "sequence") {
+            if (isExplicit(a)) { runtimeChecks++; return explicitDynamic; }
+            if (a.k !== "list") return problem("sequence expects a list of actions");
+            if (a.items && !a.items.length) return io(list(variable(), constant(0n)));
+            const each = variable();
+            unify(a.element, io(each));
+            return io({ k: "list", element: each, ...sameLength(a) });
+        }
+        const container = op === "fmap" ? b : a, other = op === "fmap" ? a : b;
+        if (isExplicit(container) || isExplicit(other)) { runtimeChecks++; return explicitDynamic; }
+        const name = op === "fmap" ? "fmap" : op === "ap" ? "'<*>'" : op === "then" ? "'>>'" : "'>>='";
+        const held = (m: Ty): Ty => isIO(m) ? (m as Extract<Ty, { k: "variant" }>).args[0] : m.k === "list" ? m.element
+            : m.k === "variant" && m.args.length ? m.args[0] : problem(`${name} needs an action, a list or an Option-like variant, not ${text(m)}`);
+        const rebuild = (m: Ty, inner: Ty): Ty => isIO(m) ? io(inner) : m.k === "list" ? list(inner)
+            : { k: "variant", name: (m as Extract<Ty, { k: "variant" }>).name, args: [inner, ...(m as Extract<Ty, { k: "variant" }>).args.slice(1)] };
+        const value = held(container);
+        if (op === "fmap") {
+            const out = application(other, { type: value }, at);
+            return container.k === "list" ? { k: "list", element: out, ...sameLength(container) } : rebuild(container, out);
+        }
+        if (op === "ap") {
+            const input = held(resolve(other));
+            // A list of different functions applies each one.
+            if (container.k === "list" && container.items) return list(union(container.items.map(f => application(f, { type: input }, at))));
+            return rebuild(container, application(value, { type: input }, at));
+        }
+        // m >>= f: f's result is a container of the same kind; m >> k is k.
+        const next = op === "then" ? other : application(other, { type: value }, at);
+        const shape = rebuild(container, variable());
+        if (container.k === "list") { unify(list((shape as Extract<Ty, { k: "list" }>).element), next); return list(resolve(next).k === "list" ? (resolve(next) as Extract<Ty, { k: "list" }>).element : variable()); }
+        unify(shape, next);
+        return next;
+    }
+    // What running a value of type t yields: an action's result, or the
+    // value itself (x <- 5 binds 5); decided once t is known.
+    function runType(t: Ty): Ty {
+        const v = resolve(t);
+        if (isIO(v)) return (v as Extract<Ty, { k: "variant" }>).args[0];
+        return v.k === "var" || v.k === "operation" ? operation("run", [v]) : v;
+    }
     function evaluateOperation(t: Extract<Ty, { k: "operation" }>): Ty {
         const operands = t.args.map(resolve);
         if (["+", "-", "*", "/", "%", "^", "compare", "negate"].includes(t.op)) {
@@ -954,6 +1008,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         const [a, b] = operands;
         if (t.args.some(x => { const v = resolve(x); return v.k === "var" || v.k === "operation"; })) return t;
+        if (t.op === "run") return runType(a);
+        if (["fmap", "ap", "bind", "then", "bindFlip", "sequence", "mapM"].includes(t.op)) return monadicType(t.op, a, b);
         if (t.op === "merge-record") {
             if (isExplicit(a) || isExplicit(b)) return explicitDynamic;
             if (a.k !== "record" || b.k !== "record") return problem("record flattening expects a record");
@@ -978,10 +1034,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (t.op === "set") {
             // An explicit Dynamic target (such as an FFI Pointer) is checked at runtime.
-            if (isExplicit(a)) { runtimeChecks++; return list(variable(), constant(0n)); }
+            if (isExplicit(a)) { runtimeChecks++; return io(list(variable(), constant(0n))); }
             if (a.k !== "mutable") return problem("set expects a Mutable reference");
             convert(a.value, b, { t: "placeholder" });
-            return list(variable(), constant(0n));
+            return io(list(variable(), constant(0n)));
         }
         if (t.op === "insert") {
             if (b.k !== "map") return problem("insert expects a HashMap");
@@ -1009,7 +1065,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.op === "template") return template(a, b, { t: "placeholder" });
         if (t.op === "do") {
             if (a.k !== "list") return problem("do expects a list of expressions");
-            return a.items ? a.items[a.items.length - 1] ?? list(variable(), constant(0n)) : a.element;
+            return io(runType(a.items ? a.items[a.items.length - 1] ?? list(variable(), constant(0n)) : a.element));
         }
         if (t.op === "match") {
             if (b.k !== "list") return problem("match expects a list of alternatives");
@@ -1082,11 +1138,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.op === "*" && (callable(a) || callable(b))) {
             const f = callable(b) ? b : a, input = callable(b) ? a : b;
             let element: Ty;
-            if (input.k === "list") return { k: "list", element: application(f, { type: input.element }, { t: "placeholder" }), ...sameLength(input) };
-            else if (input.k === "record") element = { k: "list", element: union([atom("String"), ...input.fields.values()]), items: [atom("String"), union([...input.fields.values()])], length: constant(2n) };
+            // Iterating an action (xs * print) is one action yielding the results.
+            const results = (each: Ty, list: Ty): Ty => isIO(resolve(each)) ? io(list) : list;
+            if (input.k === "list") {
+                const each = application(f, { type: input.element }, { t: "placeholder" });
+                return results(each, { k: "list", element: isIO(resolve(each)) ? runType(each) : each, ...sameLength(input) });
+            } else if (input.k === "record") element = { k: "list", element: union([atom("String"), ...input.fields.values()]), items: [atom("String"), union([...input.fields.values()])], length: constant(2n) };
             else if (input.k === "atom" && input.name === "Int") element = input;
             else return problem(`iteration needs a list, record, or Int; got ${text(input)}`);
-            return list(application(f, { type: element }, { t: "placeholder" }));
+            const each = application(f, { type: element }, { t: "placeholder" });
+            return results(each, list(isIO(resolve(each)) ? runType(each) : each));
         }
         if (t.op === "\\" && callable(a) && callable(b)) {
             const input = variable();
@@ -1887,6 +1948,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (f.k === "type") {
             const t = resolve(f.value), a = resolve(argument.type);
+            // IO x: x when x is an action, else the action that yields x.
+            if (t.k === "atom" && t.name === "IO") return io(runType(a));
             if (t.k === "variant" && t.base) { convert(t.base, argument.type, e); return t; }
             if (t.k === "var") {
                 requirements.push({ k: "operation", op: "construct", args: [f, argument.type] });
@@ -2453,6 +2516,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 if (rec.k === "dynamic") return unknown();
                 if (rec.k === "operation") return operation(`field:${e.field}`, [rec]);
+                if (isIO(rec)) return problem("an action has no fields", e, "bind its result first: x <- action (scope <- env; scope.x)");
                 if (rec.k !== "record") return problem("field access requires a record", e);
                 if (!rec.fields.has(e.field)) {
                     if (rec.open) rec.fields.set(e.field, variable());
@@ -2518,6 +2582,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return value;
                 };
                 const [a, b] = operands ?? [constrain(infer(e.l, scope)), constrain(infer(e.r, scope))];
+                // An action is not the value it yields.
+                if (op !== "$" && op !== ":" && [a, b].some(x => isIO(resolve(x)))) {
+                    return problem(`operator '${op}' cannot use an action (${text(isIO(resolve(a)) ? a : b)}) as a value`, e, "bind its result first: x <- action");
+                }
                 if (isExplicit(a) || isExplicit(b)) {
                     runtimeChecks++;
                     return ["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(op) ? atom("Bool") : explicitDynamic;
@@ -2588,9 +2656,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "block": {
                 const child: Scope = new Map([...scope].map(([name, entry]) => [name, { ...entry, inherited: true }]));
-                let result: Ty = list(dynamic, constant(0n));
-                for (const s of e.stmts) result = infer(s, child);
-                return result;
+                let result: Ty = list(dynamic, constant(0n)), action = false;
+                for (const [n, s] of e.stmts.entries()) {
+                    result = infer(s, child);
+                    // A <- binding, or a discarded statement that is an action,
+                    // makes the block a do-block: an action yielding its last value.
+                    if (s.t === "patDef" ? s.eager : s.t !== "stmDef" && n < e.stmts.length - 1 && isIO(resolve(result))) action = true;
+                }
+                return action ? io(runType(result)) : result;
             }
             case "stmDef":
                 define(e.name, e.clauses, scope, e);
@@ -2600,8 +2673,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     if (e.update.error) return problem(e.update.error, e);
                     return infer({ t: "patDef", pattern: { p: "var", name: e.update.name }, value: e.update.value }, scope);
                 }
+                // x <- action binds the action's result.
+                let valueType: Ty | undefined;
                 const t = inferDefinition(e.pattern.p === "var" ? { name: e.pattern.name, body: e.value } : undefined, !e.eager,
-                    () => infer(e.value, e.value.t === "import" ? new Map(scope) : scope));
+                    () => { const value = valueType = infer(e.value, e.value.t === "import" ? new Map(scope) : scope); return e.eager ? runType(value) : value; });
+                // A top-level x <- action knows what the action yields, run statically.
+                const ran = e === eagerResult?.statement ? eagerResult.known
+                    ?? (valueType && resolve(valueType).k !== "mutable" ? runLocally(e.value, scope) : undefined) : undefined;
                 if (e.pattern.p === "var") {
                     const old = scope.get(e.pattern.name);
                     if (old && !old.inherited && e.value.t !== "setFields" && e.value.t !== "setItem") {
@@ -2618,6 +2696,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         bound: e.value,
                         definition: e.value,
                         capture: carried(old),
+                        ...ran && (writes.get(e.pattern.name) ?? 0) <= 1 ? factsOf(ran) : {},
                     });
                     rederiveUsers(e.pattern.name, old, scope);
                 } else if (e.pattern.p === "constr" && resolve(scope.get(e.pattern.tag)?.type ?? dynamic).k === "type" ||
@@ -3005,6 +3084,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         return [...strings];
     }
+    // executed: the last executeTopLevel ran its statement statically.
+    let executed = false, eagerResult: { statement: TopLevel; known?: Known } | undefined;
     let topLevelDefinition = false, creatingTopLevel = false, executing = false, statementWrote = false, programWrote = false, programValid = true;
     // The program's definitions by name, to tell which code can reach set.
     const programDefinitions = new Map<string, Expr[]>();
@@ -3065,7 +3146,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // checking it, so later statements see the contents it leaves. Anything
     // uncertain in that run (skipped code, an uncertain branch, a write to an
     // unknown target, accesses out of order) stops following top-level cells.
-    function executeTopLevel(e: Expr, scope: Scope): void {
+    function executeTopLevel(e: Expr, scope: Scope): Known | undefined {
         statementWrote = false;
         if (!programCells.size || !programValid || !(programMutates ?? options.mutation!())) return;
         const reach = mayWrite(e, scope);
@@ -3086,13 +3167,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         executedParts.clear();
         unforced.clear();
         executing = true;
-        try { budgeted(() => evaluateKnown(e, new Map(), scope, 0)); } finally { executing = false; }
+        let result: Known | undefined;
+        try { result = budgeted(() => demand(runKnown(evaluateKnown(e, new Map(), scope, 0)))); } finally { executing = false; }
         // Uncertainty only affects what the statement can reach. A value the run
         // left unforced matters only if later code can still reach it.
         const persists = unforced.size > 0 && unforcedPersists();
         if (persists) for (const value of unforced) pendingValues.add(value);
         if (incomplete || unknownWrite || reordered) forgetReachable(e, scope);
         statementWrote = programWrote;
+        executed = true;
+        return result;
     }
     // Stop following the top-level cells and kept values a statement can reach:
     // those its names (and the definitions they name, transitively) refer to,
@@ -3334,6 +3418,26 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function demand(k: Known | undefined): Known | undefined {
         while (k?.deferred) k = k.deferred();
         return k;
+    }
+    // Run an action statically outside the program's statement order: cells
+    // it creates are its own, not top-level cells.
+    function runLocally(e: Expr, scope: Scope): Known | undefined {
+        const creating = creatingTopLevel;
+        creatingTopLevel = false;
+        try { return budgeted(() => demand(runKnown(evaluateKnown(e, new Map(), scope, 0)))); }
+        finally { creatingTopLevel = creating; }
+    }
+    // The facts a binding keeps from a known value.
+    function factsOf(k: Known): Partial<Entry> {
+        const d = demand(k);
+        if (!d || d.action) return {};
+        return { size: d.size, items: d.items, cell: d.cell, range: d.range, boolean: d.boolean, string: d.string, char: d.char, float: d.float, number: d.number, tag: d.tag, payload: d.payload, fields: d.fields,
+            ...d.index && !d.index.terms.size ? { index: d.index } : {} };
+    }
+    // Run an action as a statement or <- runs it: its result; other values are themselves.
+    function runKnown(k: Known | undefined): Known | undefined {
+        const d = demand(k);
+        return d?.action ? d.action() : k;
     }
     function spendEvaluation(depth: number): boolean {
         if (depth <= EVALUATION_DEPTH && ++evaluations <= evaluationLimit) return true;
@@ -3696,6 +3800,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function renderKnown(k: Known | undefined): string | undefined {
         k = readMutable(k);
         if (!k) return undefined;
+        // An action renders without running (its label is not known here).
+        if (demand(k)?.action) return "<IO>";
         const n = numericOf(k);
         if (n !== undefined) return valueToString(n as Value);
         if (k.string !== undefined) return valueToString(mkStr(k.string));
@@ -3824,7 +3930,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
                 if (entry.lazyTop) return forceLazyTop(entry.lazyTop, depth);
                 if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope } };
-                if (e.name === "getArgs" && entry.builtin && options.inputs) return known(options.inputs.args().map(string => ({ string })));
+                if (e.name === "getArgs" && entry.builtin && options.inputs) { const inputs = options.inputs; return { action: () => known(inputs.args().map(string => ({ string }))) }; }
                 const index = entry.index && !entry.index.terms.size ? entry.index : undefined;
                 return { index, size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };
             }
@@ -3913,29 +4019,44 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             });
             for (const name of patternNames(pattern)) slots.get(name)!.value = () => parts()?.get(name);
         };
-        for (const [n, st] of e.stmts.entries()) {
-            const last = n === e.stmts.length - 1;
-            if (st.t === "patDef") {
-                if (last || st.update || st.value.t === "setItem" || st.value.t === "setFields") { incomplete = true; return undefined; }
-                if (st.eager) { const v = evaluateKnown(st.value, local, scope, depth); assign(st.pattern, () => v); }
-                else assign(st.pattern, once(() => evaluateKnown(st.value, local, scope, depth)));
-            } else if (st.t === "stmDef") {
-                if (last) { incomplete = true; return undefined; }
-                if (!st.clauses[0].params.length) {
-                    slots.get(st.name)!.value = once(() => evaluateKnown(st.clauses[0].body, local, scope, depth));
-                    continue;
+        // A <- binding, or a discarded statement that is an action, makes the
+        // rest of the block an action, run where the program runs it.
+        const steps = (from: number, running: boolean): Known | undefined => {
+            for (let n = from; n < e.stmts.length; n++) {
+                const st = e.stmts[n], last = n === e.stmts.length - 1;
+                if (st.t === "patDef") {
+                    if (last || st.update || st.value.t === "setItem" || st.value.t === "setFields") { incomplete = true; return undefined; }
+                    if (st.eager) {
+                        if (!running) return { action: () => steps(n, true) };
+                        const v = runKnown(evaluateKnown(st.value, local, scope, depth));
+                        assign(st.pattern, () => v);
+                    } else assign(st.pattern, once(() => evaluateKnown(st.value, local, scope, depth)));
+                } else if (st.t === "stmDef") {
+                    if (last) { incomplete = true; return undefined; }
+                    if (!st.clauses[0].params.length) {
+                        slots.get(st.name)!.value = once(() => evaluateKnown(st.clauses[0].body, local, scope, depth));
+                        continue;
+                    }
+                    const summary: Summary = { scope, clauses: st.clauses.map((c, index) => {
+                        const names = c.params.flatMap(patternNames);
+                        return { index, params: c.params, body: c.body, refutable: new Set([st.name, ...names.filter((x, i) => names.indexOf(x) !== i)]) };
+                    }) };
+                    const fn: Known = { fn: { summary, env: [...local], applied: [] } };
+                    slots.get(st.name)!.value = () => fn;
+                } else if (last) {
+                    const v = evaluateKnown(st, local, scope, depth);
+                    return running ? runKnown(v) : v;
+                } else {
+                    const v = evaluateKnown(st, local, scope, depth);
+                    if (demand(v)?.action) {
+                        if (!running) return { action: () => { runKnown(v); return steps(n + 1, true); } };
+                        runKnown(v);
+                    }
                 }
-                const summary: Summary = { scope, clauses: st.clauses.map((c, index) => {
-                    const names = c.params.flatMap(patternNames);
-                    return { index, params: c.params, body: c.body, refutable: new Set([st.name, ...names.filter((x, i) => names.indexOf(x) !== i)]) };
-                }) };
-                const fn: Known = { fn: { summary, env: [...local], applied: [] } };
-                slots.get(st.name)!.value = () => fn;
-            } else if (last) return evaluateKnown(st, local, scope, depth);
-            // A statement in the middle runs for its effects, in order.
-            else evaluateKnown(st, local, scope, depth);
-        }
-        return undefined;
+            }
+            return undefined;
+        };
+        return steps(0, false);
     }
     // A name's known value in env: a block binding's current value, or a fact.
     function lookup(env: Map<string, Known>, name: string): Known | undefined {
@@ -4077,6 +4198,26 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (cell.program) programCells.add(cell);
             return { mutable: cell };
         }
+        // do xs: the action running each element in order, yielding the last.
+        if (head.name === "do" && builtin && args.length === 1) {
+            const list = value(args[0]);
+            return { action: () => {
+                let result: Known | undefined = known([]);
+                for (let rest: Known | undefined = list; spendEvaluation(depth);) {
+                    const cell = cellOf(rest);
+                    if (cell === undefined) { incomplete = true; return undefined; }
+                    if (cell === null) return result;
+                    result = runKnown(cell.head);
+                    rest = cell.tail;
+                }
+                return undefined;
+            } };
+        }
+        // IO x: x when it is an action, else the action yielding x.
+        if (head.name === "IO" && builtin && args.length === 1) {
+            const inner = value(args[0]);
+            return demand(inner)?.action ? inner : { action: () => inner };
+        }
         if (head.name === "Bool" && builtin && args.length === 1) {
             const b = truth(value(args[0]));
             return b === undefined ? undefined : { boolean: b };
@@ -4140,27 +4281,26 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return n === undefined ? undefined : { index: constant(n) };
             }
             case "seq": args[0](); return args[1]();
-            // Effects are not performed; their results are known. print and
-            // emit return their argument; debug, assert and set return [].
-            // Printing renders, forcing every element in order.
-            case "print": case "emit": {
-                const shown = args[0]();
-                if (renderKnown(shown) === undefined) incomplete = true;
-                return shown;
-            }
+            // Effects are actions, run statically where the program runs them;
+            // print, emit, debug, assert and set yield []. Printing renders,
+            // forcing every element in order.
+            case "print": case "emit": return { action: () => {
+                if (renderKnown(args[0]()) === undefined) incomplete = true;
+                return known([]);
+            } };
             // use forces its record and binds its fields (lazily): no other effect.
             case "debug": case "assert": case "use": args[0](); return known([]);
-            case "set": writeMutable(args[0](), args[1]); return known([]);
+            case "set": return { action: () => { writeMutable(args[0](), args[1]); return known([]); } };
             // Input read at check time, from the same snapshot the run uses.
-            case "readStdin": {
+            case "readStdin": return { action: () => {
                 const text = options.inputs?.readStdin?.();
                 return text === undefined ? undefined : { string: text };
-            }
-            case "readFile": {
+            } };
+            case "readFile": return { action: () => {
                 const path = args[0]()?.string;
                 const text = path === undefined ? undefined : options.inputs?.readFile(path);
                 return text === undefined ? undefined : { string: text };
-            }
+            } };
             // Booleans and number literals, as the runtime parses them.
             case "parse": {
                 const text = args[0]()?.string?.trim();
@@ -4843,7 +4983,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const a = variable(), b = variable();
     for (
         const [name, type] of Object.entries({
-            print: fn(a, list(variable(), constant(0n))),
+            print: fn(a, io(list(variable(), constant(0n)))),
             head: fn(list(a), a),
             tail: fn(list(a), list(a)),
             map: fn(fn(a, b), fn(list(a), list(b))),
@@ -4860,13 +5000,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     };
     const int = atom("Int"), str = atom("String"), bool = atom("Bool"), num = atom("Number");
     const empty = list(variable(), constant(0n));
-    for (const name of ["print", "emit"]) { const t = variable(); native(name, [t], t); }
+    for (const name of ["print", "emit"]) native(name, [variable()], io(empty));
     native("assert", [variable()], empty);
     native("isType", [variable(), variable()], bool);
     native("parse", [str], explicitDynamic);
     native("step", [int, variable()], explicitDynamic);
     for (const name of ["quote", "debug", "toAST", "use", "distinct", "load"]) scope.set(name, { type: { k: "intrinsic", name } });
-    native("exit", [int], empty);
+    native("exit", [int], io(empty));
     native("null", [variable()], bool);
     native("length", [list(variable())], int);
     for (const name of ["take", "drop"]) { const t = variable(); native(name, [int, list(t)], list(t)); }
@@ -4888,15 +5028,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("format", [str, list(variable())], str);
     native("chars", [str], list(atom("Char")));
     native("fromChars", [list(atom("Char"))], str);
-    for (const name of ["upper", "lower", "readFile"]) native(name, [str], str);
-    native("readStdin", [empty], str);
+    for (const name of ["upper", "lower"]) native(name, [str], str);
+    native("readFile", [str], io(str));
+    native("readStdin", [empty], io(str));
     // HTTP and JSON (the http and json modules): a response is a record; decoded JSON is Dynamic.
-    native("fetch", [str, variable()], { k: "record", fields: new Map<string, Ty>([
+    native("fetch", [str, variable()], io({ k: "record", fields: new Map<string, Ty>([
         ["status", int], ["ok", bool], ["statusText", str], ["url", str], ["headers", { k: "map", key: str, value: str }], ["body", str],
-    ]) });
+    ]) }));
     for (const name of ["toJson", "prettyJson"]) native(name, [variable()], str);
     native("fromJson", [str], explicitDynamic);
-    if (options.library) scope.set("getArgs", { type: list(str) });
+    if (options.library) scope.set("getArgs", { type: io(list(str)) });
     for (const name of ["isInteger", "isExact", "isInexact", "isReal", "isComplex", "isRational", "isNumber", "isFinite", "isNaN", "isEven", "isOdd", "isInfinite", "isZero", "isPositive", "isNegative"]) native(name, [["isNumber", "isComplex", "isReal", "isRational", "isInteger"].includes(name) ? variable() : num], bool);
     for (const name of ["sqrt", "sin", "cos", "tan", "asin", "acos", "atan", "exp", "log", "abs", "exact", "inexact", "realPart", "imagPart", "magnitude", "angle", "conjugate"]) native(name, [num], num);
     for (const name of ["floor", "ceiling", "truncate", "round", "numerator", "denominator"]) native(name, [num], num);
@@ -4915,12 +5056,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         scope.set(name, { type: t });
         scope.set(op, { type: t });
     }
+    // The prelude's Functor/Applicative/Monad functions (see lib/prelude.apn).
+    for (const [names, op, arity] of [[["fmap", "<$>", "primFmap"], "fmap", 2], [["<*>", "primAp"], "ap", 2], [[">>=", "primBind"], "bind", 2],
+        [[">>"], "then", 2], [["=<<"], "bindFlip", 2], [["sequence"], "sequence", 1], [["mapM"], "mapM", 2]] as const) {
+        for (const name of names) scope.set(name, { type: { k: "intrinsic", name: op, arity } });
+    }
+    scope.set("pure", { type: { k: "type", value: atom("IO") } });
+    for (const name of ["when", "unless"]) { const t = variable(); scope.set(name, { type: fn(variable(), fn(io(t), io(list(variable(), constant(0n))))) }); }
     scope.set("cast", { type: { k: "intrinsic", name: "cast", arity: 2 } });
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
     scope.set("match", { type: { k: "intrinsic", name: "match", arity: 2 } });
     if (options.library) {
         const a = variable(), b = variable(), c = variable();
-        native("bracket", [a, fn(a, b), fn(a, c)], c);
+        native("bracket", [a, fn(a, b), fn(a, c)], io(runType(c)));
         for (const name of ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer", "withFile"]) scope.set(name, { type: explicitDynamic });
     }
     for (const entry of scope.values()) { entry.inherited = true; entry.builtin = true; }
@@ -4978,7 +5126,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             } else {
                 // An eager binding (<-) runs where it stands; a lazy one when first used.
                 const eager = statement.t === "patDef" && !!statement.eager;
-                if (eager) executeTopLevel(statement.value, scope);
+                // What a top-level x <- action binds: the action's known result.
+                eagerResult = undefined;
+                if (eager) {
+                    executed = false;
+                    const ran = executeTopLevel(statement.value, scope);
+                    eagerResult = { statement, known: executed ? ran : undefined };
+                }
                 topLevelDefinition = statement.t === "patDef" && !eager;
                 creatingTopLevel = statement.t === "patDef";
                 try { validate(infer(statement, scope)); }

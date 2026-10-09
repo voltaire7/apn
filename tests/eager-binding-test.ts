@@ -17,7 +17,7 @@ for (const [name, source, expected] of [
     ['executes now, once', 'action = print "run"\nx <- action\nprint "bound"\nx\nx', ['run', 'bound']],
     ['applications execute now, once', 'x <- print "run"\nx\nx', ['run']],
     ['ordinary actions still repeat', 'a = print "a"\nb = { print "b" }\na\na\nb\nb', ['a', 'a', 'b', 'b']],
-    ['destructuring stays lazy', '[x] = [print "run"]\nprint "bound"\nprint x\nprint x', ['bound', 'run', 'run', 'run']],
+    ['destructuring stays lazy', '[x] = [print "run"]\nprint "bound"\nx\nx', ['bound', 'run', 'run']],
     ['unused destructuring stays unevaluated', '[x] = [missing]\nprint 42', ['42']],
     ['eager lists retain lazy elements', 'xs <- [missing,42]\nprint (xs 1)', ['42']],
     ['eager ranges remain productive', 'xs <- [0..]\nprint (take 3 xs)', ['[0,1,2]']],

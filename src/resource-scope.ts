@@ -8,8 +8,8 @@ export function scopedData(i: Interpreter, value: Value, ancestors = new Set<Val
     checkInterrupt();
     const v = i.reference(value);
     if (ancestors.has(v)) throw new APNError("runtime", "resource scope cannot return cyclic data");
-    if ((v.kind === "record" && v.scope) || ["closure", "clauseFn", "native", "contract", "mutable", "pointer", "type", "functionType"].includes(v.kind)) {
-        throw new APNError("runtime", "resource scope must return data, not a callable or reference");
+    if ((v.kind === "record" && v.scope) || ["closure", "clauseFn", "native", "contract", "mutable", "pointer", "type", "functionType", "io"].includes(v.kind)) {
+        throw new APNError("runtime", "resource scope must return data, not a callable, action or reference");
     }
     const path = new Set(ancestors); path.add(v);
     if (i.isList(v)) return mkList(i.items(v).map(item => scopedData(i, item, path)));
@@ -29,9 +29,10 @@ function unary(i: Interpreter, value: Value, role: string): Value {
 export function bracket(i: Interpreter, acquire: Value, release: Value, use: Value): Value {
     release = unary(i, release, "bracket release");
     use = unary(i, use, "bracket callback");
-    const resource = i.reference(acquire);
-    try { return scopedData(i, i.reference(i.apply(i.demand(use), resource))); }
-    finally { i.demand(i.apply(i.demand(release), resource)); }
+    // Each part may be an action: acquiring, using and releasing run in turn.
+    const resource = i.runIO(acquire);
+    try { return scopedData(i, i.runIO(i.apply(i.demand(use), resource))); }
+    finally { i.runIO(i.apply(i.demand(release), resource)); }
 }
 
 export function withFile(i: Interpreter, path: Value, use: Value): Value {
@@ -42,7 +43,7 @@ export function withFile(i: Interpreter, path: Value, use: Value): Value {
     try { file = Deno.openSync(path.v, { read: true }); }
     catch (e) { throw new APNError("runtime", `withFile: ${(e as Error).message}`); }
     let open = true;
-    const read: Value = { kind: "native", name: "file.read", arity: 0, applied: [], invoke: () => {
+    const read: Value = { kind: "native", name: "file.read", arity: 0, applied: [], invoke: () => ({ kind: "io", label: "read", run: () => {
         if (!open) throw new APNError("runtime", "file resource is closed");
         const decoder = new TextDecoder(), bytes = new Uint8Array(65536), chunks: string[] = [];
         for (;;) {
@@ -53,9 +54,9 @@ export function withFile(i: Interpreter, path: Value, use: Value): Value {
         }
         chunks.push(decoder.decode());
         return mkStr(chunks.join(""));
-    } };
+    } }) };
     try {
         const resource: Value = { kind: "record", v: [["read", read]] };
-        return scopedData(i, i.reference(i.apply(i.demand(use), resource)));
+        return scopedData(i, i.runIO(i.apply(i.demand(use), resource)));
     } finally { open = false; file.close(); }
 }

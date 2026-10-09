@@ -85,7 +85,11 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   at the same level end statements, +4 continues them.
 - **Bindings:** `name = value` rebinds in scope; records and lists are never
   mutated in place (updates bind a modified copy). Only `Mutable` cells and
-  `env` views mutate.
+  `env` views mutate, and only through IO actions.
+- **Purity:** effectful builtins return IO actions and never act when applied;
+  only statements, `<-` and running do-blocks run actions (`runIO`, keeping
+  recursive actions in constant stack). Operators are prelude functions
+  (`lib/prelude.apn`); intrinsics are named functions, not syntax.
 - **Static checking** never evaluates user code or performs effects; neither
   do lint/LSP features. It reads program input only when the interpreter checks
   right before a run, through the snapshot that run uses (stdin only when it is
@@ -99,7 +103,7 @@ Read the relevant doc and its tests before changing an area:
 
 | Area | Docs | Tests / extra checks |
 | --- | --- | --- |
-| Evaluation, laziness, operators, records, indexing | `docs/semantics.md`, `docs/implementation-notes.md` | `tests/semantics-test.ts` |
+| Evaluation, laziness, operators, IO, records, indexing | `docs/semantics.md`, `docs/implementation-notes.md` | `tests/semantics-test.ts`, `tests/operators-test.ts`, `tests/io-test.ts` |
 | Numbers and numeric types | `docs/semantics.md`, `docs/implementation-notes.md` | `tests/numeric-tower-test.ts`, `tests/bigint-test.ts`, `tests/type-system-test.ts` |
 | Static/gradual/dependent types, `Dynamic` | `docs/gradual-and-dependent-types.md`, `docs/type-and-resource-rules.md` | `tests/strict-checking-test.ts`, `tests/default-checking-test.ts`, `tests/dynamic-boundary-test.ts`, `tests/gradual-types-test.ts` |
 | Templates, type aliases, zero initialization | `docs/templates-and-types.md`, `docs/zero-initialization.md` | `tests/template-application-test.ts`, `tests/zero-initialization-test.ts` |

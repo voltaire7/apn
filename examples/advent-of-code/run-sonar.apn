@@ -1,3 +1,4 @@
 import "io"
 load "sonar-sweep"
-print (solveSonar (readInput []))
+input <- readInput []
+print (solveSonar input)

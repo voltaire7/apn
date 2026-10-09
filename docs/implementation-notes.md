@@ -196,10 +196,22 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
 
 ## Eager binding, tail calls, and loading
 
-- `pattern <- expression` sets AST `patDef.eager`, which selects `reference()`
-  before matching: run zero-argument actions now, but keep Mutable/Pointer
-  references and lazy container fields. Don't change `=` semantics.
-  `getArgs` is a nullary native action. Tests: `tests/eager-binding-test.ts`.
+- IO: an action is a `Value` of kind `io` whose `run` performs it. `IO_NATIVES`
+  (and host natives) return actions from `callNative` instead of acting;
+  `runStmt` (top-level statements) and `runIO` run them. A do-block's last
+  step returns an `IOTail` that `runIO`'s loop continues, so recursive actions
+  use no stack; never run a tail action recursively. Block evaluation turns
+  into a do-block at its first `<-` (always) or discarded statement whose value
+  is an action, and `runDoBlock` creates a fresh `Env` per run from that point.
+  The checker mirrors this: `IO t` is the variant type `IO` (`io`, `isIO`),
+  `runType` gives what running yields (a deferred `run` operation while
+  unknown), and the static evaluator's `Known.action` runs only through
+  `runKnown`, at statements, `<-` and inside running do-blocks; a top-level
+  `x <- action` keeps the run's facts (`runLocally` keeps its cells local).
+  Tests: `tests/io-test.ts`.
+- `pattern <- expression` sets AST `patDef.eager`, which runs the value with
+  `runIO` before matching, keeping Mutable/Pointer references and lazy
+  container fields. Don't change `=` semantics. Tests: `tests/eager-binding-test.ts`.
 - `Interpreter.eval` consumes internal `TailCall` transfers for fully applied
   functions, ternary branches, and block tails. `TailLoad` transfers propagate
   only from a loaded program's final expression. `loadFile` owns the iterative
@@ -247,8 +259,9 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
 
 - `reference()` preserves cell identity; `demand()` reads the contents without
   memoizing the read over the cell. Tests: `tests/mutable-test.ts`.
-- `env` is a live record view backed by `Env` (`record.scope`), capturing the
-  lexical scope when the builtin is referenced. Never enumerate by forcing
+- `env` evaluates to an action yielding a live record view backed by `Env`
+  (`record.scope`), capturing the lexical scope where `env` is evaluated;
+  `Dynamic` of an action converts its result. Never enumerate by forcing
   values. Writes use `Env.set` (nearest owner, else local) and must not rebind
   the view's name. Tests: `tests/environment-test.ts`.
 
