@@ -1508,6 +1508,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         }
     }
+    // A value the checker knows (k * 2, 0 - 1, -k) converts now, as a literal
+    // does in convert.
+    function castKnown(target: Ty, known: Known, e: Expr): void {
+        const t = resolve(target);
+        if (t.k !== "atom" || !NUMERIC_TYPES.includes(t.name) || numericLiteral(e)) return;
+        const number = known.number ?? (known.index && !known.index.terms.size ? integer(known.index.constant) : undefined);
+        if (!number) return;
+        try { castNumeric(t.name, number); } catch (error) { problem((error as Error).message, e); }
+    }
     // A numeric literal, negated or parenthesized: -1, (2.5).
     function numericLiteral(e: Expr): Numeric | undefined {
         if (e.t === "numeric") return e.v;
@@ -1768,6 +1777,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             try {
                 if (options.strict && !f.coerce) unify(f.input, argument.type, e);
                 else convert(f.input, argument.type, e, false, new Map(), !!f.coerce);
+                if (f.coerce) castKnown(f.input, argument, e);
             } catch (error) {
                 if (f.selfName && error && typeof error === "object" && "message" in error &&
                     /^(cannot use |Dynamic requires an explicit conversion)/.test(String(error.message))) {
@@ -2287,7 +2297,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const negated: Expr = { t: "unop", op: "neg", e: e.r };
                     const loc = sourceLocations.get(e.r) ?? sourceLocations.get(e);
                     if (loc) sourceLocations.set(negated, loc);
-                    return application(a, { type: b }, negated);
+                    return application(a, { type: b, ...valueEntry(negated, scope) }, negated);
                 }
                 if (x.k === "atom" && y.k === "atom") {
                     if (NUMERIC_TYPES.includes(x.name) && NUMERIC_TYPES.includes(y.name)) {
@@ -2351,12 +2361,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const target = variable();
                     bind(e.pattern, target, scope, e);
                     convert(target, t, e.value, false, new Map(), true);
-                    // A value the checker knows (k * 2, 0 - 1) converts now too.
-                    const known = valueEntry(e.value, scope);
-                    const number = known.number ?? (known.index && !known.index.terms.size ? integer(known.index.constant) : undefined);
-                    if (number && !numericLiteral(e.value) && NUMERIC_TYPES.includes(e.pattern.tag)) {
-                        try { castNumeric(e.pattern.tag, number); } catch (error) { problem((error as Error).message, e.value); }
-                    }
+                    castKnown(target, valueEntry(e.value, scope), e.value);
                     for (const name of patternNames(e.pattern)) { const entry = scope.get(name); if (entry) entry.bound = e.value; }
                 } else {
                     bind(e.pattern, recordSelection(e.pattern, t, e.value), scope, e);

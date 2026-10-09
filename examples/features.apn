@@ -842,6 +842,7 @@ print ((1+2i) * (3+4i))  # => -5+10i
 print (sqrt -1)       # => 0+1i
 print (sqrt - 1)      # => 0+1i (spacing makes no difference)
 # natural (UInt n) = n; natural -1   # static error: UInt cannot represent a negative integer
+#                     one = 1; natural -one   # likewise, with a known value
 print (10 - 1)        # => 9
 print ((x -> x * 2) -3) # => -6
 

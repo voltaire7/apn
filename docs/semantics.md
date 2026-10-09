@@ -132,7 +132,7 @@ value converts as an argument converts for `f (Int x)`, so `Float y = 1`
 binds `1.0` and `Int z = 2.5` is a lossy-conversion error. A value the
 checker knows (a negated or parenthesized literal, or a constant such as
 `0 - 1` or `k * 3`) is converted statically, so `UInt n = -1` is a static
-error, and so is a call such as `g (-1)` for `g (UInt n)`. Later
+error, and so is a call such as `g (-1)` or `g (k * 3)` for `g (UInt n)`. Later
 assignments keep the type (`x = "a"` is a type error). Built-in type names
 cannot be redefined, so `Int x = ...` is always this binding; `Int = 5` and
 `Int x y = 5` remain errors.
@@ -546,8 +546,8 @@ Experimental function-minus overload: `f - x` applies a function `f` to the
 negated numeric value of `x`. It accepts native functions, lambdas, and named
 functions (including partial applications). Both operands are demanded as for
 ordinary subtraction. `sqrt -1` and `sqrt - 1` both produce `0+1i`.
-The checker checks the negated argument as a call would, so `g -1` for
-`g (UInt n)` is a static error like `g (-1)`.
+The checker checks the negated argument as a call would, so `g -1` (or
+`g -k` with `k = 1`) for `g (UInt n)` is a static error like `g (-1)`.
 Numeric subtraction is unchanged. Precedence and associativity are unchanged:
 `sqrt -1 * 4` means `sqrt -(1 * 4)`, while `sqrt -1 + 2` means
 `(sqrt -1) + 2`. Use parentheses when a different grouping is intended.
