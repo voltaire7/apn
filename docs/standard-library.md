@@ -278,9 +278,9 @@ response <- fetch "https://www.youtube-transcript.io/api/channels" [
     method: "POST",
     headers: [
         "Authorization": "Basic <your-api-token>",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     ],
-    body: toJson [ids: ["jawed"]],
+    body: toJson [ids: ["jawed"]]
 ]
 channels = fromJson response.body
 ```

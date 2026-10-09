@@ -55,6 +55,8 @@ Spacing is part of the syntax (a parse error otherwise):
 - List items are separated by a bare comma: `[1,2,3,4]`, not `[1, 2]`; this
   covers list patterns, bare selections (`v.[x,y]`), ranges (`[1,3..9]`),
   `match` clause lists and import lists.
+- A `,` separates two items, so a trailing one is an error: `[1,2,]`, and a
+  multi-line list or record whose last item ends in `,`.
 - Record fields take `key: value` separated by `, `: `[x: 1, y: 2]`, not
   `[x:1]` or `[x: 1,y: 2]`; likewise keyed patterns and selections
   (`[x: a, y: b]`).

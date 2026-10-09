@@ -97,7 +97,8 @@ Deno.test('one-line brackets: exactly one space inside braces, none inside ( ) a
 });
 Deno.test('spacing at =, commas and record colons', () => {
     for (const source of ['x=1', 'x =1', 'x= 1', 'x  = 1', 'x =  1', '[1, 2]', '[1 ,2]', '[x: 1,y: 2]', '[x: 1 , y: 2]', '[x: 1,  y: 2]',
-            '[x:1]', '[x : 1]', '[x:  1]', 'f [x:a] = a', 'v = [x: 1]; v.[x:a] = [a: 2]', 'print [ [1,2] ]']) {
+            '[x:1]', '[x : 1]', '[x:  1]', 'f [x:a] = a', 'v = [x: 1]; v.[x:a] = [a: 2]', 'print [ [1,2] ]',
+            '[1,2,]', '[x: 1, y: 2,]', 'xs = [\n    1,\n    2,\n]', 'r = [\n    a: 1,  # note\n]']) {
         try { parseDocument(source); } catch (error) {
             if ((error as { kind?: string }).kind === 'parse') continue;
             throw error;
@@ -122,7 +123,7 @@ Deno.test('loose spacing accepts any spacing', () => {
     setLooseSpacing(true);
     try {
         for (const source of ['x=1', '[ 1 , 2 ]', '[x:1,y : 2]', '{x}', '( 1 )', '{ }', 'func =\n    {\n        print "hello"\n    }', '{\n    print 1;\n}', 'print 1;print 2',
-            '{ print 1;print 2 }', '{ print 1; }', 'print 1;; print 2', ';print 1', 'print 1 ; print 2']) parseDocument(source);
+            '{ print 1;print 2 }', '{ print 1; }', 'print 1;; print 2', ';print 1', 'print 1 ; print 2', '[1,2,]', 'xs = [\n    1,\n    2,\n]']) parseDocument(source);
     } finally { setLooseSpacing(false); }
     for (const source of ['x=1', 'func =\n    {\n        print "hello"\n    }', '{ print 1;print 2 }']) {
         try { parseDocument(source); } catch { continue; }

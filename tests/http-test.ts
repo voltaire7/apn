@@ -88,9 +88,9 @@ response <- fetch "${base}/api/channels" [
     method: "POST",
     headers: [
         "Authorization": "Basic token",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     ],
-    body: toJson [ids: ["jawed"]],
+    body: toJson [ids: ["jawed"]]
 ]
 data = fromJson response.body
 []`, i);

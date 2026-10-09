@@ -48,7 +48,10 @@ class Parser {
         const holds: boolean[] = [];
         for (const [index, t] of this.toks.entries()) {
             if (t.k === "sym" && t.v === "=") this.checkEqualsSpacing(t);
-            if (t.k === "sym" && t.v === ",") this.checkCommaSpacing(t, holds[holds.length - 1] ?? false);
+            if (t.k === "sym" && t.v === ",") {
+                this.checkTrailingComma(index);
+                this.checkCommaSpacing(t, holds[holds.length - 1] ?? false);
+            }
             if (t.k === "sym" && t.v === ";") this.checkSemicolon(index);
             if (t.k === "sym" && "([{".includes(t.v)) holds.push(t.v === "[" && this.opensRecord(index));
             if (t.k === "sym" && ")]}".includes(t.v)) holds.pop();
@@ -113,6 +116,17 @@ class Parser {
         const saved = this.i;
         this.i = i;
         try { return this.isKeyedEntry(); } finally { this.i = saved; }
+    }
+
+    // A ',' separates two items; one before a closing bracket (even on the
+    // next line) separates nothing ([1,2,] is written [1,2]).
+    checkTrailingComma(index: number): void {
+        let next = index + 1;
+        while (["newline", "indent", "dedent"].includes(this.toks[next]?.k)) next++;
+        const close = this.toks[next];
+        if (close?.k !== "sym" || !["]", ")", "}"].includes(close.v)) return;
+        this.seen = this.toks[index];
+        throw new Error(`Parser: remove the trailing ',' before '${close.v}'`);
     }
 
     // A ',' follows its item directly. List items take nothing after it

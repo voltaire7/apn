@@ -1000,7 +1000,7 @@ myTypeOf (Int32 5)  # => Int32
 #   fetch "https://www.youtube-transcript.io/api/channels" [
 #       method: "POST",
 #       headers: [Authorization: "Basic <token>", "Content-Type": "application/json"],
-#       body: toJson [ids: ["jawed"]],
+#       body: toJson [ids: ["jawed"]]
 #   ]
 import ["http","json"]
 reply <- fetch "data:application/json,{\"ids\":[\"jawed\"]}" [method: "GET"]
