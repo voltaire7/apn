@@ -69,7 +69,7 @@ for (const checked of [false, true]) {
 Deno.test('REPL extension keeps self-equality and ordinary clauses distinct', () => {
     const i = new Interpreter();
     i.enableChecking();
-    i.extendDefinitions = true;
+   
     i.run(parseDocument('x x = 1'));
     i.run(parseDocument('x other = 2'));
     const actual = i.renderString(i.run(parseDocument('[x x,x 0]')));

@@ -209,14 +209,14 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   `runKnown`, at statements, `<-` and inside running do-blocks; a top-level
   `x <- action` keeps the run's facts (`runLocally` keeps its cells local).
   Tests: `tests/io-test.ts`.
-- Monads: clauses for `Interpreter.METHODS` (fmap, >>=, <*>, return) defined
+- Monads: clauses for `Interpreter.METHODS` (map, >>=, <*>, return) defined
   after the prelude are registered in `instances` (newest tried first, by a
   probing apply) and bind no name; `instanceFamilies` records the types they
   cover for `Monad`/`Functor` patterns. `return` builds a `pending` value
   (`PendingStep` return/bind/do) that `realize` turns into a concrete monad
   (IO, List, or a `return` instance keyed by a type pattern that matches type
-  descriptors). `bind`/`fmapValue`/`apValue` dispatch IO and lists natively,
-  then instances; fmap and <*> derive from >>= and return. A block's first
+  descriptors). `bind`/`mapValue`/`apValue` dispatch IO and lists natively,
+  then instances; map and <*> derive from >>= and return. A block's first
   `<-` value decides its monad: IO keeps `runDoBlock`, others go through
   `desugarDo` (a fresh scope per continuation). The checker types pending as
   `Monad t` (unifies with any monadic type), records instance types in the

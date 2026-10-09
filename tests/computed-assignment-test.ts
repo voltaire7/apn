@@ -48,7 +48,7 @@ for (const [index, error] of [
 });
 
 Deno.test('REPL variable indices stay assignments across submissions', () => {
-    const i = new Interpreter(); i.extendDefinitions = true;
+    const i = new Interpreter();
     for (const line of ['arr = [0]', 'i = 0', 'arr i = 2', 'arr (i + 0) = 3']) i.run(parseDocument(line));
     if (i.renderString(i.run(parseDocument('arr'))) !== '[3]') throw new Error('not an updated list');
 });

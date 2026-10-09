@@ -402,8 +402,8 @@ function helpText(): string {
         `  x <- action        run it now and bind its result (outer value only); x <- return v is strict`,
         `  f n = { print n; return n }   a block running an action is an action; it ends with one`,
         `  IO [] is the type of an action yielding []; IO [] { print "hi" } checks one; return x`,
-        `  fmap/<$>, return, <*>, >>=, >>, =<<, sequence, mapM, when, unless (IO, lists, Option)`,
-        `  fmap f (Leaf x) = ...; (Box x) >>= f = ...; return = Box   instances`,
+        `  map/<$>, return, <*>, >>=, >>, =<<, sequence, mapM, when, unless (IO, lists, Option)`,
+        `  map f (Leaf x) = ...; (Box x) >>= f = ...; return = Box   instances`,
         `  Option Int { return 42 } => Some 42; List Int { a <- [1,2]; return a }   any monad`,
         `  indentation: strict 4-space layout (exactly +4 per level)`,
         `  [1,2,3] * x -> print x      (seq * fn iterates; int * fn counts)`,
@@ -966,7 +966,6 @@ async function setTtyCooked(saved: string): Promise<void> {
 
 async function replTTY(): Promise<void> {
     const interp = new Interpreter();
-    interp.extendDefinitions = true;
     interp.enableChecking();
     const hist = loadHistory();
     const ed = new ReplEditor(interp, hist);
@@ -1037,7 +1036,6 @@ async function replTTY(): Promise<void> {
 
 async function replPiped(): Promise<void> {
     const interp = new Interpreter();
-    interp.extendDefinitions = true;
     interp.enableChecking();
 
     const decoder = new TextDecoder();

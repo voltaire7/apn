@@ -1,4 +1,4 @@
-import { type Expr, isLoadCall, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
+import { type Expr, isLoadCall, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numericNative, type Numeric, parseNumberText } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
@@ -13,9 +13,9 @@ function isIO(t: Ty): boolean { return t.k === "variant" && t.name === "IO" && t
 // type accepts.
 function pendingTy(t: Ty): Ty { return { k: "variant", name: "Monad", args: [t] }; }
 function isPending(t: Ty): boolean { return t.k === "variant" && t.name === "Monad" && t.args.length === 1; }
-const METHODS = new Set(["fmap", ">>=", "<*>", "return"]);
+const METHODS = new Set(["map", ">>=", "<*>", "return"]);
 // A definition that adds an instance instead of binding a name: any
-// definition of a method (fmap f (Some x) = ..., return = Some).
+// definition of a method (map f (Some x) = ..., return = Some).
 function isInstance(name: string, _clauses: { params: Pattern[] }[]): boolean {
     return METHODS.has(name);
 }
@@ -155,7 +155,6 @@ type Scope = TypeScope;
 export interface CheckOptions {
     strict?: boolean;
     library?: boolean;
-    extendDefinitions?: boolean;
     loads?: (path: string, scope: TypeScope, tail?: boolean) => TypeScope;
     initial?: TypeScope;
     imports?: (module: string | string[]) => TypeScope;
@@ -175,7 +174,7 @@ export interface CheckOptions {
     viewPrograms?: () => TopLevel[][];
     /** The runtime's natives by arity; otherwise read from their types. */
     nativeArities?: Map<string, number>;
-    // Instance types (fmap, >>=, <*>, return) shared by a session's checks.
+    // Instance types (map, >>=, <*>, return) shared by a session's checks.
     instances?: Map<string, unknown[]>;
     /** Top-level names whose latest binding in the session is an env view. */
     envTopViews?: () => ReadonlySet<string>;
@@ -405,7 +404,7 @@ function viewFlow(programs: TopLevel[][], nativeArity: (name: string) => number 
         if (!node || typeof node !== "object") return;
         if (Array.isArray(node)) { node.forEach(collect); return; }
         const n = node as Record<string, any>;
-        // Instance clauses (fmap, >>=, <*>, return) bind no name.
+        // Instances (map, >>=, <*>, return) bind no name.
         if ((n.t === "def" || n.t === "stmDef") && isInstance(n.name, n.clauses)) {
             Object.values(n).forEach(collect);
             return;
@@ -551,7 +550,7 @@ export function topNames(program: TopLevel[]): string[] {
         Object.values(n).forEach(pattern);
     };
     for (const statement of program) {
-        // Instance clauses (fmap, >>=, <*>, return) bind no name.
+        // Instances (map, >>=, <*>, return) bind no name.
         if (statement.t === "def" && !isInstance(statement.name, statement.clauses)) names.push(statement.name);
         if (statement.t === "patDef") pattern(statement.pattern);
     }
@@ -970,7 +969,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         requirements.push(result);
         return resolve(result);
     }
-    // fmap, <*>, >>=, >>, =<<, sequence and mapM over an action, a list, or
+    // map, <*>, >>=, >>, =<<, sequence and mapM over an action, a list, or
     // an Option-like variant (mapping its first type parameter).
     function monadicType(op: string, a: Ty, b: Ty): Ty {
         const at = { t: "placeholder" } as Expr;
@@ -987,35 +986,35 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             unify(a.element, io(each));
             return io({ k: "list", element: each, ...sameLength(a) });
         }
-        const container = op === "fmap" ? b : a, other = op === "fmap" ? a : b;
+        const container = op === "map" ? b : a, other = op === "map" ? a : b;
         if (isExplicit(container) || isExplicit(other)) { runtimeChecks++; return explicitDynamic; }
-        const name = op === "fmap" ? "fmap" : op === "ap" ? "'<*>'" : op === "then" ? "'>>'" : "'>>='";
+        const name = op === "map" ? "map" : op === "ap" ? "'<*>'" : op === "then" ? "'>>'" : "'>>='";
         // A monad not decided yet (return x, a Monad or Functor parameter).
         if (isPending(container) || container.k === "atom" && (container.name === "Monad" || container.name === "Functor")) {
             const value = isPending(container) ? (container as Extract<Ty, { k: "variant" }>).args[0] : variable();
-            if (op === "fmap") return pendingTy(application(other, { type: value }, at));
+            if (op === "map") return pendingTy(application(other, { type: value }, at));
             if (op === "then") return other;
             if (op === "bind") return application(other, { type: value }, at);
             const input = monadHeld(other) ?? variable();
             return pendingTy(application(value, { type: input }, at));
         }
-        // A variant monad: through its instances (fmap and <*> derive from >>=).
+        // A variant monad: through its instances (map and <*> derive from >>=).
         if (container.k === "variant" && !isIO(container)) {
-            const method = op === "fmap" ? "fmap" : op === "ap" ? "<*>" : ">>=";
+            const method = op === "map" ? "map" : op === "ap" ? "<*>" : ">>=";
             const k = op === "then" ? fn(variable(), other) : other;
-            const direct = viaInstance(method, op === "fmap" ? [other, container] : [container, k]);
+            const direct = viaInstance(method, op === "map" ? [other, container] : [container, k]);
             if (direct) return direct;
             if (op !== "bind" && op !== "then" && instanceFor(">>=", [container])) {
                 return { k: "variant", name: container.name, args: container.args.map(() => variable()) };
             }
-            return problem(`no ${name} instance for ${text(container)}`, undefined, "define one, such as fmap f (Some x) = Some (f x)");
+            return problem(`no ${name} instance for ${text(container)}`, undefined, "define one, such as map f (Some x) = Some (f x)");
         }
         const held = (m: Ty): Ty => isIO(m) ? (m as Extract<Ty, { k: "variant" }>).args[0] : m.k === "list" ? m.element
             : problem(`${name} needs an action, a list or a monadic value, not ${text(m)}`);
         const rebuild = (m: Ty, inner: Ty): Ty => isIO(m) ? io(inner) : m.k === "list" ? list(inner)
             : { k: "variant", name: (m as Extract<Ty, { k: "variant" }>).name, args: [inner, ...(m as Extract<Ty, { k: "variant" }>).args.slice(1)] };
         const value = held(container);
-        if (op === "fmap") {
+        if (op === "map") {
             const out = application(other, { type: value }, at);
             return container.k === "list" ? { k: "list", element: out, ...sameLength(container) } : rebuild(container, out);
         }
@@ -1050,7 +1049,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const [a, b] = operands;
         if (t.args.some(x => { const v = resolve(x); return v.k === "var" || v.k === "operation"; })) return t;
         if (t.op === "run") return runType(a);
-        if (["fmap", "ap", "bind", "then", "bindFlip", "sequence", "mapM"].includes(t.op)) return monadicType(t.op, a, b);
+        if (["map", "ap", "bind", "then", "bindFlip", "sequence", "mapM"].includes(t.op)) return monadicType(t.op, a, b);
         if (t.op === "merge-record") {
             if (isExplicit(a) || isExplicit(b)) return explicitDynamic;
             if (a.k !== "record" || b.k !== "record") return problem("record flattening expects a record");
@@ -4908,7 +4907,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return t.k === "variant";
     }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
-        // Clauses for fmap, >>=, <*> or return define an instance: inferred on
+        // Definitions of map, >>=, <*> or return define an instance: inferred on
         // their own and recorded for the session; the method stays as it is.
         if (isInstance(name, clauses) && options.instances) {
             const forward = variable();
@@ -5010,21 +5009,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     const rederiving = new Set<Definition>();
     function defineBinding(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr, previous: Entry | undefined): void {
-        if (options.extendDefinitions && previous?.clauses && !previous.inherited && clauses[0].params.length === previous.clauses[0].params.length && !rederiving.size) {
-            const key = (clause: { params: Pattern[] }): string => {
-                const names = new Map<string, number>([[name, -1]]);
-                return JSON.stringify(clause.params, (field, value) => {
-                    if (field === "name") { if (!names.has(value)) names.set(value, names.size); return names.get(value); }
-                    return typeof value === "bigint" ? `${value}n` : value;
-                });
-            };
-            const additions = new Map(clauses.map(c => [key(c), c]));
-            clauses = previous.clauses.map(c => {
-                const replacement = additions.get(key(c));
-                additions.delete(key(c));
-                return replacement ?? c;
-            }).concat([...additions.values()]);
-        }
         const collection = previous && resolve(previous.type), c = clauses[0];
         if (collection && (collection.k === "list" || collection.k === "record" || isExplicit(collection)) && c.params.length === 1) {
             const p = c.params[0];
@@ -5049,6 +5033,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 scope.set(name, { type: t });
                 return;
             }
+        }
+        // As at runtime: more clauses extend a function of this scope (an
+        // equivalent one rebinds its clause).
+        if (clauses[0].params.length) {
+            const extended = previous?.clauses && !previous.inherited && clauses[0].params.length === previous.clauses[0].params.length && !rederiving.size;
+            clauses = mergeClauses(name, extended ? previous!.clauses! : [], clauses);
         }
         if (!clauses[0].params.length) {
             // A fresh lazy definition can refer to itself. Reassignments still
@@ -5192,7 +5182,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             print: fn(a, io(list(variable(), constant(0n)))),
             head: fn(list(a), a),
             tail: fn(list(a), list(a)),
-            map: fn(fn(a, b), fn(list(a), list(b))),
             filter: fn(fn(a, b), fn(list(a), list(a))),
             length: fn(dynamic, atom("Int")),
             typeOf: fn(a, atom("Type")),
@@ -5228,7 +5217,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const summary: Summary = { scope, clauses: [{ index: 0, params: [{ p: "var", name: "a" }, { p: "var", name: "b" }], body: { t: "var", name: "b" }, refutable: new Set() }] };
         for (let t = resolve(seq.type), n = 0; t.k === "fn" && n < 2; t = resolve(t.output), n++) t.summary = summary;
     } }
-    setShape(scope.get("map")!.type, { length: { param: 1 } });
     native("toString", [variable()], str);
     native("intToString", [int], str);
     native("format", [str, list(variable())], str);
@@ -5263,7 +5251,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         scope.set(op, { type: t });
     }
     // The prelude's Functor/Applicative/Monad functions (see lib/prelude.apn).
-    for (const [names, op, arity] of [[["fmap", "<$>", "primFmap"], "fmap", 2], [["<*>", "primAp"], "ap", 2], [[">>=", "primBind"], "bind", 2],
+    for (const [names, op, arity] of [[["map", "<$>"], "map", 2], [["<*>", "primAp"], "ap", 2], [[">>=", "primBind"], "bind", 2],
         [[">>"], "then", 2], [["=<<"], "bindFlip", 2], [["sequence"], "sequence", 1], [["mapM"], "mapM", 2]] as const) {
         for (const name of names) scope.set(name, { type: { k: "intrinsic", name: op, arity } });
     }

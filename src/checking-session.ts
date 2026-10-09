@@ -32,9 +32,8 @@ export class CheckingSession {
     moduleSources?: Record<string, string>;
     /** The runtime's natives by arity (to follow env views through calls). */
     nativeArities?: Map<string, number>;
-    // Instances of fmap, >>=, <*> and return the session's programs and modules define.
+    // Instances of map, >>=, <*> and return the session's programs and modules define.
     instances = new Map<string, unknown[]>();
-    extendDefinitions = false;
     /** Names the interpreter can resolve, so the checker can tell a typo from a runtime-only builtin. */
     runtimeNames?: () => Iterable<string>;
     /** The program's input when checking right before a run (see CheckOptions.inputs). */
@@ -77,7 +76,7 @@ export class CheckingSession {
         let scope: TypeScope = new Map();
         let exports: TypeScope = new Map();
         const result = checkTypes(program, {
-            strict: true, initial, library, extendDefinitions: this.extendDefinitions,
+            strict: true, initial, library,
             runtimeNames: !library && this.runtimeNames ? new Set(this.runtimeNames()) : undefined,
             inputs: library ? undefined : this.inputs,
             mutation: () => this.mutation,

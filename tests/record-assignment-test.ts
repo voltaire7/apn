@@ -23,7 +23,7 @@ for (const [name, source, expected] of [
 }
 Deno.test("REPL record assignment preserves the record", () => {
     const i = new Interpreter();
-    i.extendDefinitions = true;
+   
     for (const line of ['obj = [x: 1]', 'obj "x"', 'obj "x" = 10']) i.run(parseDocument(line));
     const actual = i.renderString(i.run(parseDocument('obj')));
     if (actual !== '[x: 10]') throw new Error(actual);

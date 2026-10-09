@@ -4,7 +4,7 @@ import { CheckingSession } from "../src/checking-session.ts";
 
 function session(): Interpreter {
     const i = new Interpreter();
-    i.extendDefinitions = true;
+   
     i.enableChecking();
     return i;
 }

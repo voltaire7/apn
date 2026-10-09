@@ -14,9 +14,9 @@ const cases: [string, string][] = [
     ['compose (*2) (+1) 4', '10'],
     ['uncurry (+) [2,3]', '5'],
     ['withDefault missing (Some 42)', '42'],
-    ['mapOption (*2) (Some 3)', 'Some 6'],
-    ['mapOption missing None', 'None'],
-    ['mapResult (*2) (Ok 3)', 'Ok 6'],
+    ['map (*2) (Some 3)', 'Some 6'],
+    ['map missing None', 'None'],
+    ['map (*2) (Ok 3)', 'Ok 6'],
     ['mapError upper (Err "oops")', 'Err "OOPS"'],
     ['take 5 (repeat 7)', '[7,7,7,7,7]'],
     ['take 7 (cycle [1,2,3])', '[1,2,3,1,2,3,1]'],
@@ -152,8 +152,8 @@ Deno.test("no two standard modules define the same name", () => {
         if (!entry.isFile || !entry.name.endsWith(".apn")) continue;
         const module = entry.name.slice(0, -4);
         for (const statement of parse(Deno.readTextFileSync(new URL(`../lib/${entry.name}`, import.meta.url)), module)) {
-            // Instances (any definition of fmap, >>=, <*> or return) join a method; they bind no name.
-            const instance = statement.t === "def" && ["fmap", ">>=", "<*>", "return"].includes(statement.name);
+            // Instances (any definition of map, >>=, <*> or return) join a method; they bind no name.
+            const instance = statement.t === "def" && ["map", ">>=", "<*>", "return"].includes(statement.name);
             const names = instance ? [] : statement.t === "def" ? [statement.name]
                 : statement.t === "type" ? [statement.def.name, ...statement.def.variants.map(v => v.tag)]
                 : statement.t === "patDef" && statement.pattern.p === "var" ? [statement.pattern.name] : [];

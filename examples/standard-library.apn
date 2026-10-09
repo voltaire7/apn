@@ -24,7 +24,7 @@ print (groupBy (x -> x % 3) [1..9])
 print (mergeWith (+) (HashMap [apples: 3]) (HashMap [apples: 4, pears: 2]))
 
 # Absence and failure are values you can transform.
-print (mapOption sq $ find (>100) $ [1..])  # Some 10201
+print (map sq $ find (>100) $ [1..])  # Some 10201
 print (mapError upper $ Err "invalid input")
 print (reverse "APN 😀")
 

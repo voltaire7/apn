@@ -44,16 +44,15 @@ infixr 9 \
 (\) = primCompose
 
 # Functor, Applicative and Monad. IO and lists are built in; any other type
-# joins by defining instance clauses for fmap, >>= and return (as the option
+# joins by defining instances of map, >>= and return (as the option
 # module does for Option and Result), which add to these methods everywhere.
-#     fmap f m      m with f applied to what it holds or yields
+#     map f m       m with f applied to what it holds or yields
 #     return x      x in the monad the context decides (an annotation, a >>=,
 #                   or IO when run)
 #     mf <*> mx     the function mf holds applied to what mx holds
 #     m >>= f       f applied to what m holds or yields, flattened
 #     m >> k        m, then k: m >>= (_ -> k)
-fmap = primFmap
-(<$>) = primFmap
+(<$>) = map
 return = primReturn
 (<*>) = primAp
 (>>=) = primBind

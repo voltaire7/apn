@@ -4,13 +4,13 @@ Option a = Some a | None
 Result a e = Ok a | Err e
 # Option and Result are functors and monads: Some x and Ok x hold the value;
 # None and Err e pass through (return in Option is Some, in Result Ok).
-fmap f (Some x) = Some (f x)
-fmap _ None = None
+map f (Some x) = Some (f x)
+map _ None = None
 (Some x) >>= f = f x
 None >>= _ = None
 return = Some
-fmap f (Ok x) = Ok (f x)
-fmap _ (Err error) = Err error
+map f (Ok x) = Ok (f x)
+map _ (Err error) = Err error
 (Ok x) >>= f = f x
 (Err error) >>= _ = Err error
 return = Ok
@@ -19,12 +19,8 @@ isSome None = false
 isNone value = not (isSome value)
 withDefault _ (Some x) = x
 withDefault fallback None = fallback
-mapOption f (Some x) = Some (f x)
-mapOption _ None = None
 andThen f (Some x) = f x
 andThen _ None = None
-mapResult f (Ok x) = Ok (f x)
-mapResult _ (Err error) = Err error
 mapError _ (Ok x) = Ok x
 mapError f (Err error) = Err (f error)
 andThenResult f (Ok x) = f x

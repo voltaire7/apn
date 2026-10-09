@@ -362,6 +362,10 @@ wildcard in patterns. Both sides of `=` are required: `foo =`, `foo = ;`, and
 | `b = { x = 2; x + 1 }` | A lazy value (a block of bindings) |
 | `xs = 1:xs` | A memoized cons cell with deferred head and tail |
 
+More clauses for a function in the same scope extend it, wherever they are
+defined: a clause with a new pattern overloads it, and one with an equivalent
+pattern rebinds that clause in place (`f (Int x) = 1` then `f (Int y) = 2`
+rebinds; parameter names do not matter, and `_` is a name nothing uses).
 `f = Int x -> ...` is the curried spelling of `f (Int x) = ...`: the same
 clause, so `f = Float x -> ...` after it overloads `f` exactly as a second
 clause would. A lambda whose parameter has the definition's own name
@@ -438,16 +442,16 @@ after the action and pattern succeed, so `x <- return (x + 1)` reads the previou
 
 ### Monads and instances
 
-`fmap`, `<*>`, `>>=` and `return` work in any monad. IO and lists are built
+`map`, `<*>`, `>>=` and `return` work in any monad. IO and lists are built
 in; any other type joins by **instances**: definitions of these methods,
-written like ordinary overloads, with parameters or curried (`fmap = mapTree`,
+written like ordinary overloads, with parameters or curried (`map = mapTree`,
 `return = Some`). An instance adds to the method everywhere (prelude helpers,
 do-blocks and other modules see it) instead of shadowing it, and the newest
 instance whose clauses accept the arguments runs. `lib/option.apn` holds Option's and Result's:
 
 ```apn
-fmap f (Some x) = Some (f x)
-fmap _ None = None
+map f (Some x) = Some (f x)
+map _ None = None
 (Some x) >>= f = f x
 None >>= _ = None
 return = Some                      # return in Option
@@ -459,9 +463,9 @@ can name its monad on it, `return ((Counter _ _) x) = MkCounter (s -> [x,s])`;
 it still takes the one argument `x`, and making anything but a Counter is an
 error.
 
-`fmap` and `<*>` follow from `>>=` and `return` when a type defines no
+`map` and `<*>` follow from `>>=` and `return` when a type defines no
 instance of its own. A type used where no instance accepts it is an error
-(`no fmap instance for Tree`).
+(`no map instance for Tree`).
 
 `return x` is a value in a monad not decided yet (its type is `Monad T`). It
 takes the monad of the first context that names one:
@@ -475,7 +479,7 @@ Until then it stays undecided, so one `return` value can be used in several
 monads; it prints as `Monad` and its value (`print (return 123)` prints
 `Monad 123`, and its `typeOf` is `Monad Int`), and an undecided `>>=` or
 do-block prints as `Monad`. `Monad` and `Functor` are also types for patterns: `(Functor m)`
-accepts any value `fmap` works on, `(Monad m)` any monadic value.
+accepts any value `map` works on, `(Monad m)` any monadic value.
 
 A do-block is in the monad of its first `<-` (or annotation): a list block
 tries every combination, an Option block stops at the first `None`; an IO
@@ -493,7 +497,7 @@ pairs = List Int {
 
 | Function | Meaning |
 | --- | --- |
-| `fmap f m`, `f <$> m` | `m` with `f` applied to what it holds or yields |
+| `map f m`, `f <$> m` | `m` with `f` applied to what it holds or yields |
 | `return x` | `x` in the monad the context decides |
 | `mf <*> mx` | the function `mf` holds, applied to what `mx` holds |
 | `m >>= f` | `f` applied to what `m` holds or yields, flattened |
@@ -892,9 +896,8 @@ See [the standard library reference](standard-library.md) for APIs and limits.
 The interactive editor (Enter/Shift+Enter, paste, history, completion) is
 described in [the REPL guide](repl.md).
 
-Separate REPL submissions extend existing function clauses of the same arity.
-An equivalent parameter pattern replaces its previous clause in place; fresh
-patterns are appended. Renaming a parameter does not create another overload.
+Separate REPL submissions extend existing function clauses of the same arity,
+as later clauses do anywhere (see "Definitions and actions").
 Numeric literal/type dispatch retains its normal specificity rules. Module
 loading retains its existing definition behavior.
 

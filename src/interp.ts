@@ -14,7 +14,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, ca
 import { parseNumberText, isNumeric, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { isLoadCall } from "./ast.ts";
+import { isLoadCall, mergeClauses } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { compoundArgument, mkInt, mkBool, mkStr, mkList, valueToString, rawString } from "./types.ts";
@@ -55,7 +55,7 @@ export const NATIVES: Array<[string, number]> = [
     ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
-    ["primFmap", 2], ["primBind", 2], ["primAp", 2], ["primReturn", 1],
+    ["primBind", 2], ["primAp", 2], ["primReturn", 1],
 ];
 
 export class Interpreter {
@@ -71,7 +71,6 @@ export class Interpreter {
         this.checking = new CheckingSession();
         this.checking.moduleSources = this.moduleSources;
         this.checking.nativeArities = new Map([...NATIVES, ...STANDARD_NATIVES]);
-        this.checking.extendDefinitions = this.extendDefinitions;
         this.checking.runtimeNames = () => envNames(this.env);
         // Checking right before running may read the program's input; the run
         // then sees the same file contents and arguments.
@@ -118,7 +117,6 @@ export class Interpreter {
     // A bundle (a browser build) to import from instead of the disk: virtual
     // paths to sources (see bundleProgram in modules.ts).
     moduleSources?: Record<string, string>;
-    extendDefinitions = false;
     private modules = new Map<string, Extract<Value, { kind: "record" }>>();
     private importing = new Set<string>();
 
@@ -161,7 +159,6 @@ export class Interpreter {
     private runModuleFile(file: ModuleFile): Array<[string, Value]> {
         const caller = this.env;
         const callerDir = this.sourceDir;
-        const extend = this.extendDefinitions;
         const builtins = new Env();
         for (const type of TYPE_NAMES) builtins.setLocal(type, { kind: "type", name: type });
         for (const [name, arity] of [...NATIVES, ...STANDARD_NATIVES]) builtins.setLocal(name, { kind: "native", name, arity, applied: [] });
@@ -180,7 +177,6 @@ export class Interpreter {
         try {
             const program = parse(file.source, file.label);
             this.env = scope;
-            this.extendDefinitions = false;
             this.sourceDir = file.directory;
             this.runDepth++;
             try { this.run(program); } finally { this.runDepth--; }
@@ -191,7 +187,6 @@ export class Interpreter {
         } finally {
             this.env = caller;
             this.sourceDir = callerDir;
-            this.extendDefinitions = extend;
         }
     }
 
@@ -317,7 +312,7 @@ export class Interpreter {
             this.env.setLocal(name, alias);
             return alias;
         }
-        // A definition of fmap, >>=, <*> or return defines an instance: it joins
+        // A definition of map, >>=, <*> or return defines an instance: it joins
         // the method everywhere instead of shadowing it here. Its clauses are
         // the instance (return x = Some x), or its value is (return = Some).
         if (Interpreter.METHODS.has(name) && !this.loadingPrelude) {
@@ -351,21 +346,10 @@ export class Interpreter {
         // A def with parameters is a pattern-dispatch function.
         if (clauses[0].params.length >= 1) {
             const arity = clauses[0].params.length;
-            if (this.extendDefinitions && previous?.kind === "clauseFn" && previous.arity === arity && this.env.map.get(name) === previous) {
-                const key = (c: DefClause) => {
-                    const names = new Map<string, number>([[name, -1]]);
-                    return JSON.stringify(c.params, (field, value) => {
-                        if (field === "name") { if (!names.has(value)) names.set(value, names.size); return names.get(value); }
-                        return typeof value === "bigint" ? `${value}n` : value;
-                    });
-                };
-                const additions = new Map(clauses.map((c) => [key(c), c]));
-                clauses = previous.clauses.map((c) => {
-                    const replacement = additions.get(key(c));
-                    additions.delete(key(c));
-                    return replacement ?? c;
-                }).concat([...additions.values()]);
-            }
+            // More clauses for a function of this scope extend it (an
+            // equivalent one rebinds its clause), wherever they are defined.
+            const extended = previous?.kind === "clauseFn" && previous.arity === arity && this.env.map.get(name) === previous;
+            clauses = mergeClauses(name, extended ? previous.clauses : [], clauses);
             // Capture a shared env containing the binding itself, enabling recursion.
             const child = new Env(this.env);
             // Clauses for an operator overload it: the previous meaning still
@@ -1884,10 +1868,10 @@ export class Interpreter {
         return this.mapList({ kind: "native", name: "<List>", arity: 1, applied: [], invoke: ([x]) => this.conform(element, x) }, list);
     }
 
-    // ---- Monads: instances of fmap, >>=, <*> and return ----
+    // ---- Monads: instances of map, >>=, <*> and return ----
     // Clause functions a program defines for these methods, newest last: tried
     // (newest first) before the builtin IO and list instances.
-    static readonly METHODS = new Set(["fmap", ">>=", "<*>", "return"]);
+    static readonly METHODS = new Set(["map", ">>=", "<*>", "return"]);
     private instances = new Map<string, Value[]>();
     // The variant families each method has an instance for (Monad/Functor patterns).
     private instanceFamilies = new Map<string, Set<unknown>>();
@@ -1898,12 +1882,12 @@ export class Interpreter {
         this.instanceFamilies.delete(method);
     }
     // The variant families a method's instances take, read from their clauses
-    // (fmap's second parameter, the others' first), whether they were written
-    // as clauses or as a value (fmap = mapTree).
+    // (map's second parameter, the others' first), whether they were written
+    // as clauses or as a value (map = mapTree).
     private familiesOf(method: string): Set<unknown> {
         const known = this.instanceFamilies.get(method);
         if (known) return known;
-        const families = new Set<unknown>(), position = method === "fmap" ? 1 : 0;
+        const families = new Set<unknown>(), position = method === "map" ? 1 : 0;
         for (const instance of this.instances.get(method) ?? []) {
             const fn = this.force(instance);
             if (fn.kind !== "clauseFn") continue;
@@ -1993,29 +1977,29 @@ export class Interpreter {
         throw new APNError("runtime", `no >>= instance for ${valueToString(target)}`, { hint: "define one, such as (Some x) >>= f = f x" });
     }
 
-    // fmap f m: an instance, or derived from m's monad (m >>= (x -> return (f x))).
-    fmapValue(f: Value, mIn: Value): Value {
+    // map f m: lazily over a list, an instance, or derived from m's monad (m >>= (x -> return (f x))).
+    mapValue(f: Value, mIn: Value): Value {
         const m = this.dataValue(mIn);
         if (m.kind === "io") return { kind: "io", run: () => this.apply(f, this.runIO(m)) };
         if (this.isList(m)) return this.mapList(f, m);
         if (m.kind !== "pending") {
-            if (!this.monadTypeOf(m)) throw new APNError("runtime", `fmap needs an action, a list or a functor, not a ${m.kind}`);
-            const result = this.instance("fmap", [f, m]);
+            if (!this.monadTypeOf(m)) throw new APNError("runtime", `map needs an action, a list or a functor, not a ${m.kind}`);
+            const result = this.instance("map", [f, m]);
             if (result) return result;
         }
-        return this.bind(m, { kind: "native", name: "<fmap>", arity: 1, applied: [], invoke: ([x]) => this.pendingReturn(this.defer(() => this.apply(f, x))) });
+        return this.bind(m, { kind: "native", name: "<map>", arity: 1, applied: [], invoke: ([x]) => this.pendingReturn(this.defer(() => this.apply(f, x))) });
     }
 
     // mf <*> mx: an instance, or derived from the monad.
     apValue(mfIn: Value, mx: Value): Value {
         const mf = this.dataValue(mfIn);
         if (mf.kind === "io") return { kind: "io", run: () => { const f = this.runIO(mf); return this.apply(f, this.runIO(mx)); } };
-        if (this.isList(mf)) return this.concatMapList(mf, { kind: "native", name: "<ap>", arity: 1, applied: [], invoke: ([f]) => this.fmapValue(f, mx) });
+        if (this.isList(mf)) return this.concatMapList(mf, { kind: "native", name: "<ap>", arity: 1, applied: [], invoke: ([f]) => this.mapValue(f, mx) });
         if (mf.kind !== "pending") {
             const result = this.instance("<*>", [mf, mx]);
             if (result) return result;
         }
-        return this.bind(mf, { kind: "native", name: "<ap>", arity: 1, applied: [], invoke: ([f]) => this.fmapValue(f, mx) });
+        return this.bind(mf, { kind: "native", name: "<ap>", arity: 1, applied: [], invoke: ([f]) => this.mapValue(f, mx) });
     }
 
     // xs >>= k for lists: k's lists concatenated, lazily.
@@ -2367,7 +2351,7 @@ export class Interpreter {
             const v = this.dataValue(value);
             if (v.kind === "io" || v.kind === "pending" || this.isList(v)) return true;
             if (v.kind !== "variant" || !v.family) return false;
-            const methods = name === "Monad" ? [">>="] : ["fmap", ">>="];
+            const methods = name === "Monad" ? [">>="] : ["map", ">>="];
             return methods.some(m => this.familiesOf(m).has(v.family));
         }
         if (name === "Type") return this.isTypeValue(value);
@@ -2500,7 +2484,6 @@ export class Interpreter {
 
         const primitive = PRIMITIVE_OPERATORS.get(name);
         if (primitive) return this.operate(primitive, argsIn[0], argsIn[1]);
-        if (name === "primFmap") return this.fmapValue(argsIn[0], argsIn[1]);
         if (name === "primBind") return this.bind(argsIn[0], argsIn[1]);
         if (name === "primAp") return this.apValue(argsIn[0], argsIn[1]);
         if (name === "primReturn") return this.pendingReturn(argsIn[0]);
@@ -2628,7 +2611,9 @@ export class Interpreter {
         // never inspects its input, and list producers defer their first cell.
         if (name === "__constr") return { kind: "variant", tag: tag!, v: argsIn };
         if (name === "iterate") return this.iterateList(argsIn[0], argsIn[1]);
-        if (name === "map") return this.mapList(argsIn[0], argsIn[1]);
+        // map over anything with an instance; a list stays lazy (its spine is
+        // not demanded until the result is).
+        if (name === "map") { const [f, m] = argsIn; return this.defer(() => this.force(this.mapValue(f, m))); }
         if (name === "filter") return this.filterList(argsIn[0], argsIn[1]);
         if (name === "zipWith") return this.zipList(argsIn[0], argsIn[1], argsIn[2]);
         if (name === "foldr") return this.foldRight(argsIn[0], argsIn[1], argsIn[2]);

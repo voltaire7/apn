@@ -9,7 +9,7 @@ frequencies $ words $ "one two one" # HashMap [["one",2],["two",1]]
 
 The prelude, `lib/prelude.apn`, needs no import: it defines every binary
 operator (`(+) = primAdd`, ...) and its fixity, and the Functor, Applicative
-and Monad functions (`fmap`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
+and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
 `sequence`, `mapM`, `when`, `unless`, `return`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).
 
 `import` accepts a literal module name or a list of literal module names.
@@ -119,15 +119,15 @@ Result a e = Ok a | Err e
 ```
 
 Importing `option` also brings the Functor and Monad instances of both types
-(`fmap`, `>>=` and `return`): `fmap f (Some x)` is `Some (f x)`, `None` and
+(`map`, `>>=` and `return`): `map f (Some x)` is `Some (f x)`, `None` and
 `Err e` pass through, and an `Option` do-block stops at the first `None`.
 
 | API | Behavior |
 | --- | --- |
 | `isSome option`, `isNone option` | Inspect presence |
 | `withDefault fallback option` | Unwrap `Some`; only demand fallback for `None` |
-| `mapOption f option`, `andThen f option` | Transform a value, or chain a function returning an Option |
-| `mapResult f result` | Transform `Ok`, preserve `Err` |
+| `map f option`, `map f result` | Transform `Some`/`Ok`, preserve `None`/`Err` (the `map` instances) |
+| `andThen f option` | Chain a function returning an Option |
 | `mapError f result` | Transform `Err`, preserve `Ok` |
 | `andThenResult f result` | Chain a function returning a Result |
 | `resultDefault fallback result` | Unwrap `Ok`, use fallback for `Err` |

@@ -6,7 +6,6 @@ const definition = "func (Vector3 v) = v.x";
 for (const argument of ["[1,2,3]", "[x: 1, y: 2, z: 3]"]) {
     for (const incremental of [false, true]) Deno.test(`checked record pattern: ${argument}, incremental=${incremental}`, () => {
         const interpreter = new Interpreter();
-        interpreter.extendDefinitions = true;
         interpreter.enableChecking();
         const statements = [schema, definition, `func ${argument}`];
         let value;

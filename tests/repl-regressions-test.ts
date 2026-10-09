@@ -2,7 +2,7 @@ import { Interpreter, setInterruptFlag, resetInterrupt } from "../src/interp.ts"
 import { parse } from "../main.ts";
 function value(i: Interpreter, source: string): string { return i.renderString(i.run(parse(source))); }
 Deno.test("REPL submissions extend clauses and replace matching clauses", () => {
-    const i = new Interpreter(); i.extendDefinitions = true;
+    const i = new Interpreter();
     i.run(parse('func 0 = 1')); i.run(parse('func 1 = 0'));
     if (value(i, 'func 0') !== '1' || value(i, 'func 1') !== '0') throw new Error("clause lost");
     i.run(parse('func 0 = 42'));
@@ -13,7 +13,7 @@ Deno.test("REPL submissions extend clauses and replace matching clauses", () => 
     if (value(i, "f 2") !== "3") throw new Error("renamed parameter was not replaced");
 });
 Deno.test("Existing range patterns and list destructuring work on separate submissions", () => {
-    const i = new Interpreter(); i.extendDefinitions = true;
+    const i = new Interpreter();
     i.run(parse('within [0..10] = true')); i.run(parse('within x = false'));
     if (value(i, 'within 0') !== 'true' || value(i, 'within 10') !== 'true' || value(i, 'within 11') !== 'false') throw new Error("range pattern failed");
     if (value(i, 'first (x:xs) = x; first [3..]') !== '3') throw new Error("range destructuring failed");
