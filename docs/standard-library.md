@@ -136,7 +136,7 @@ Existing `map`, `filter`, `take`, `drop`, `zipWith`, `iterate`, `foldl`, and
 | `headOption xs`, `lastOption xs`, `atOption n xs` | Optional access; `atOption` is zero-based and returns None for negative/out-of-range indexes |
 | `takeWhile predicate xs`, `dropWhile predicate xs` | Consume a matching prefix |
 | `takeUntil predicate xs` | Prefix before the first match |
-| `splitAt n xs`, `span predicate xs` | `[prefix,remainder]` |
+| `splitAt n xs`, `splitWhile predicate xs` | `[prefix,remainder]` |
 | `chunksOf n xs` | Positive-sized chunks; final chunk may be shorter |
 | `intersperse separator xs` | Insert separators between elements |
 | `partition predicate xs` | `[matching,nonmatching]` |

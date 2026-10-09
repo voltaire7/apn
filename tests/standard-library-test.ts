@@ -144,3 +144,30 @@ Deno.test('failed selective imports leave the caller scope intact', () => {
     try { i.run(parse('[missingExport] = import "function"')); } catch { failed = true; }
     if (!failed || [...i.env.map.keys()].join(',') !== before) throw new Error('failed import leaked names');
 });
+Deno.test("no two standard modules define the same name", () => {
+    // A checked program cannot import two modules that bind one name to
+    // different functions (a rebinding must keep its type).
+    const owners = new Map<string, string>();
+    for (const entry of Deno.readDirSync(new URL("../lib/", import.meta.url))) {
+        if (!entry.isFile || !entry.name.endsWith(".apn")) continue;
+        const module = entry.name.slice(0, -4);
+        for (const statement of parse(Deno.readTextFileSync(new URL(`../lib/${entry.name}`, import.meta.url)), module)) {
+            const names = statement.t === "def" ? [statement.name]
+                : statement.t === "type" ? [statement.def.name, ...statement.def.variants.map(v => v.tag)]
+                : statement.t === "patDef" && statement.pattern.p === "var" ? [statement.pattern.name] : [];
+            for (const name of names) {
+                const owner = owners.get(name);
+                if (owner && owner !== module) throw new Error(`'${name}' is defined by both ${owner} and ${module}`);
+                owners.set(name, module);
+            }
+        }
+    }
+});
+Deno.test("html and text import together, in either order", () => {
+    for (const source of ['import "html"\nimport "text"', 'import "text"\nimport "html"']) {
+        const i = new Interpreter();
+        i.enableChecking();
+        i.run(parse(source));
+        if (i.renderString(i.run(parse('[splitWhile (< 3) [1,2,3],upper "a"]'))) !== '[[[1,2],[3]],"A"]') throw new Error(source);
+    }
+});
