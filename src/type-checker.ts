@@ -1,4 +1,4 @@
-import { type Expr, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
+import { type Expr, isLoadCall, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numericNative, type Numeric, parseNumberText } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
@@ -217,10 +217,11 @@ interface ViewContext { frames: ViewFrame[]; local: boolean }
 // (unresolved), the strings a key may be, and views whose scope is known.
 interface ViewHooks { unresolved?: (name: string) => number; key?: (key: Expr) => string[] | undefined; direct?: (e: Expr) => boolean }
 // Natives that may take a view without reading its bindings, returning it at most.
-const VIEW_SAFE_NATIVES = new Set(["print", "emit", "debug", "assert", "typeOf", "isType", "toString", "set", "Dynamic", "Mutable",
+const VIEW_SAFE_NATIVES = new Set(["print", "emit", "debug", "assert", "typeOf", "isType", "toString", "set", "Dynamic", "Mutable", "pure", "return", "primPure",
     "Int", "UInt", "Int8", "UInt8", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64", "Int128", "UInt128",
     "Float", "Float32", "Float64", "Fraction", "Complex", "ComplexExact", "Number", "Real", "Integer", "Exact", "Inexact", "Bool", "String", "Char"]);
-const VIEW_IDENTITY_NATIVES = new Set(["print", "emit", "debug", "Dynamic", "Mutable"]);
+// pure x (return x) yields x itself when run by <-.
+const VIEW_IDENTITY_NATIVES = new Set(["print", "emit", "debug", "Dynamic", "Mutable", "pure", "return", "primPure"]);
 // Natives that fail on a record and only rearrange (or pick from) lists.
 const VIEW_LIST_NATIVES = new Set(["head", "tail", "take", "drop", "length", "null"]);
 const VIEW_PICKING_NATIVES = new Set(["head"]);
@@ -2696,7 +2697,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // x <- action binds the action's result.
                 let valueType: Ty | undefined;
                 const t = inferDefinition(e.pattern.p === "var" ? { name: e.pattern.name, body: e.value } : undefined, !e.eager,
-                    () => { const value = valueType = infer(e.value, e.value.t === "import" ? new Map(scope) : scope); return e.eager ? runType(value) : value; });
+                    () => {
+                        const value = valueType = infer(e.value, e.value.t === "import" ? new Map(scope) : scope);
+                        if (!e.eager) return value;
+                        const v = resolve(value);
+                        if (!isIO(v) && !["var", "operation", "dynamic", "intrinsic"].includes(v.k) && e.value.t !== "import" && !isLoadCall(e.value)) {
+                            return problem(`<- runs an action, not ${text(v)}`, e.value, "bind a value with =");
+                        }
+                        return runType(value);
+                    });
                 // A top-level x <- action knows what the action yields, run statically.
                 const ran = e === eagerResult?.statement ? eagerResult.known
                     ?? (valueType && resolve(valueType).k !== "mutable" ? runLocally(e.value, scope) : undefined) : undefined;
@@ -2714,7 +2723,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                             ? valueEntry(e.value, scope).mutable : undefined,
                         nonGeneric: captured(scope),
                         bound: e.value,
-                        definition: e.value,
+                        // An eager binding's value is fixed where it runs: never re-derived.
+                        definition: e.eager ? undefined : e.value,
                         capture: carried(old),
                         ...ran && (writes.get(e.pattern.name) ?? 0) <= 1 ? factsOf(ran) : {},
                     });
@@ -2931,7 +2941,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (!node || typeof node !== "object") return;
             if (Array.isArray(node)) { node.forEach(walk); return; }
             const n = node as Record<string, any>;
-            const simple = n.t === "patDef" && n.pattern?.p === "var" && !n.update ? [n.pattern.name, n.value]
+            // k <- pure v (return v) binds v.
+            const yielded = (v: Expr): Expr => v.t === "app" && v.f.t === "var" && ["pure", "return"].includes(v.f.name) ? v.a : v;
+            const simple = n.t === "patDef" && n.pattern?.p === "var" && !n.update ? [n.pattern.name, n.eager ? yielded(n.value) : n.value]
                 : n.t === "stmDef" && n.clauses?.length === 1 && !n.clauses[0].params.length ? [n.name, n.clauses[0].body] : undefined;
             if (simple) {
                 values.set(simple[0], [...values.get(simple[0]) ?? [], simple[1]]);

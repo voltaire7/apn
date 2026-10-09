@@ -11,7 +11,7 @@ for (const [source, expected] of [
     ['[Int == 0,Float == 0,Int == Float,Int == Int]', '[false,false,false,true]'],
     ['[isType Int Int,isType Bool Bool,isType Type Int]', '[false,false,true]'],
     ['[typeOf Int,typeOf (Int 1),typeOf (Float 1),typeOf (Int32 1)]', '[Type,Int,Float,Int32]'],
-    ['((Int -> Float) identity) <- (x -> x); [Type Int,Type [Int],Type [x: Float],typeOf identity]', '[Int,[Int],[x: Float],Int -> Float]'],
+    ['((Int -> Float) identity) <- pure ((x -> x)); [Type Int,Type [Int],Type [x: Float],typeOf identity]', '[Int,[Int],[x: Float],Int -> Float]'],
     ['Count = Int\n[Count,Count 3]', '[Int,3]'],
     ['f (Type t) = t 123\nf Int', '123'],
     ['f (t x) = [t,x]\nf (Int32 7)', '[Int32,7]'],
@@ -86,7 +86,7 @@ Deno.test("failed typed-value conversion preserves the record", () => {
 
 Deno.test("omitted concrete actions stay callable without running during inspection", () => {
     const i = new Interpreter();
-    i.run(parseDocument('count = Mutable 0; action = { set count $ (count + 1) }; v <- [action: action] []'));
+    i.run(parseDocument('count = Mutable 0; action = { set count $ (count + 1) }; v <- pure ([action: action] [])'));
     i.renderString(i.env.get('v')!);
     if (i.renderString(i.run(parseDocument('count'))) !== '0') throw new Error('inspection executed action');
     i.run(parseDocument('v.action'));
@@ -112,7 +112,7 @@ for (const [source, expected] of [
     ['xs = [Int,Float]\nxs (-1) = 2\nxs', '[Int,2]'],
     ['xs = [Int]\ni = 0\nxs (i + 0) = 1\nxs', '[1]'],
     ['UserId = distinct Int\nv = [id: UserId]\nv.id = 3\nv', '[id: 3]'],
-    ['((Int -> Int) identity) <- (x -> x); v = [f: typeOf identity]\nv.f = (+ 1)\nv.f 2', '3'],
+    ['((Int -> Int) identity) <- pure ((x -> x)); v = [f: typeOf identity]\nv.f = (+ 1)\nv.f 2', '3'],
 ] as const) Deno.test(`assignment replaces bare type slots: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

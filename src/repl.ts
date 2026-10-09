@@ -399,7 +399,7 @@ function helpText(): string {
         `  spacing: x = 1, lists [1,2,3], records [x: 1, y: 2], (x), { x } (apn --loose relaxes it)`,
         `  ; or newline       statement separators (blocks & top level)`,
         `  print, readFile, fetch, set, env ... are IO actions: statements and <- run them`,
-        `  x <- action        run it now and bind its result (outer value only)`,
+        `  x <- action        run it now and bind its result (outer value only); x <- pure v is strict`,
         `  f n = { print n; return n }   a block running an action is an action; it ends with one`,
         `  IO [] is the type of an action yielding []; IO [] { print "hi" } checks one; pure x`,
         `  fmap/<$>, pure, <*>, >>=, >>, =<<, sequence, mapM, when, unless (IO, lists, Option)`,

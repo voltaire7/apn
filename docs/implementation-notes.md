@@ -209,9 +209,12 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   `runKnown`, at statements, `<-` and inside running do-blocks; a top-level
   `x <- action` keeps the run's facts (`runLocally` keeps its cells local).
   Tests: `tests/io-test.ts`.
-- `pattern <- expression` sets AST `patDef.eager`, which runs the value with
-  `runIO` before matching, keeping Mutable/Pointer references and lazy
-  container fields. Don't change `=` semantics. Tests: `tests/eager-binding-test.ts`.
+- `pattern <- expression` sets AST `patDef.eager`: the value must be an action
+  (`isLoadCall` excepts `load`), run with `runIO` and its result `reference`d
+  before matching, keeping Mutable/Pointer references and lazy container
+  fields. The checker never re-derives an eager binding (no `definition`), and
+  view/key analysis sees through `pure`/`return`. Don't change `=` semantics.
+  Tests: `tests/eager-binding-test.ts`.
 - `Interpreter.eval` consumes internal `TailCall` transfers for fully applied
   functions, ternary branches, and block tails. `TailLoad` transfers propagate
   only from a loaded program's final expression. `loadFile` owns the iterative

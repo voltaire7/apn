@@ -378,7 +378,9 @@ Actions run in exactly two places:
   implicit do-block: a statement whose value is an action runs it, in order.
   `a = print 3; a; a` prints twice; `a` alone names the action.
 - **`<-` bindings.** `x <- action` runs the action now and binds its result:
-  `text <- readFile "input.txt"`. A plain value is bound as it is (`x <- 2 + 3`).
+  `text <- readFile "input.txt"`. The right side must be an action: `x <- 2 + 3`
+  is an error (bind a value with `=`). The one exception is `load`, which runs
+  a file: `module <- load "file"` binds its exports.
 
 `IO` is a type constructor, like `Option`: `IO []` is the type of an action
 yielding `[]` (what `print` builds), `IO Int` of one yielding an `Int`.
@@ -421,9 +423,10 @@ operator. `f x <- ...`, `x <- y <- ...`, and missing right-hand sides are invali
 An indented continuation is allowed; opening braces follow the same layout rule
 as definitions: put `{` on the line containing `<-`. It supports the same
 patterns as destructuring (`[a,b] <- action`, `_ <- action`); names are bound
-after the action and pattern succeed, so `x <- x + 1` reads the previous `x`.
-Only the outer value of the result is evaluated: `xs <- [missing,42]` does not
-evaluate `missing`. For a strict pure binding use `seq` (`seq x body`).
+after the action and pattern succeed, so `x <- pure (x + 1)` reads the previous
+`x`. The result's outer value is evaluated as it is bound, which makes
+`x <- pure v` the strict form of `x = v`; only the outer value is:
+`xs <- pure [missing,42]` does not evaluate `missing`.
 
 ### Functor, Applicative and Monad
 
@@ -895,7 +898,7 @@ answer <- do [print "calculating",pure 42]   # prints, binds 42
 ```
 
 `do actions` is the action running each element in order, yielding the last
-result; `do []` yields []. Plain values in the list are results as they are.
+result; `do []` yields []. Each element must be an action (`pure x` for a value).
 An error stops the sequence. It accepts computed lists too, and processes the
 spine incrementally. Each run of the action runs the elements again.
 

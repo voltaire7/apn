@@ -26,7 +26,7 @@ for (const [source, expected] of [
     ['[.2 == Float .2,Int 1 == Float 1,Int32 1 == 1]', '[true,true,true]'],
     ['cast Bool true', 'true'],
     ['take 1 (cast List [1,missing])', '[1]'],
-    ['((Int -> Int) identity) <- (x -> x); (cast (typeOf identity) (x -> x + 1)) 2', '3'],
+    ['((Int -> Int) identity) <- pure ((x -> x)); (cast (typeOf identity) (x -> x + 1)) 2', '3'],
     ['Float .2 + .3', '0.5'],
     ['Int 1 + .2', '1.2'],
 ] as const) Deno.test(`APN cast: ${source}`, () => {

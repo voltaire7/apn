@@ -4,16 +4,16 @@ import { parseDocument } from "../src/parser.ts";
 for (const [source, expected, effects] of [
     ['do []', '[]', []],
     ['do [print "hi"]', '[]', ['hi']],
-    ['do [print "hi",print "there",42]', '42', ['hi', 'there']],
+    ['do [print "hi",print "there",pure 42]', '42', ['hi', 'there']],
     ['greet = do [print "hi"]; greet; greet', '[]', ['hi', 'hi']],
     ['xs = [print "hi"]; do xs; do xs', '[]', ['hi', 'hi']],
     ['say = print "hi"; do [say,say]', '[]', ['hi', 'hi']],
     ['do (map (n -> print n) [1,2,3])', '[]', ['1', '2', '3']],
-    ['do [1..10000]', '10000', []],
-    ['v <- do [print "hi",[42,missing]]; head v', '42', ['hi']],
-    ['f = import "function"; f.do [1,42]', '42', []],
-    ['import "function"; do [42]', '42', []],
-    ['apply f x = f x; apply do [42]', '42', []],
+    ['do (map pure [1..10000])', '10000', []],
+    ['v <- do [print "hi",pure [42,missing]]; head v', '42', ['hi']],
+    ['f = import "function"; f.do [pure 1,pure 42]', '42', []],
+    ['import "function"; do [pure 42]', '42', []],
+    ['apply f x = f x; apply do [pure 42]', '42', []],
 ] as const) Deno.test(`do: ${source}`, () => {
     const i = new Interpreter();
     const log = console.log;

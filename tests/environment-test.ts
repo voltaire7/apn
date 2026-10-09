@@ -13,7 +13,7 @@ for (const [source, expected] of [
     ['e <- env; e.newName = 42; newName', '42'],
     ['scope <- env; x = 1; scope.x', '1'],
     ['x = 1; scope <- env; x = 2; scope.x', '2'],
-    ['x = 1; scope <- env; other <- scope; other.x = 3; [x,scope.x]', '[3,3]'],
+    ['x = 1; scope <- env; other <- pure (scope); other.x = 3; [x,scope.x]', '[3,3]'],
     ['x = 1; { e <- env; e.x = 2; return [] }; x', '2'],
     ['x = 1; inner <- { x = 3; e <- env; e.x = 4; return x }; [inner,x]', '[4,1]'],
     ['make x = env; scope <- make 42; scope.x', '42'],
@@ -29,7 +29,7 @@ for (const [source, expected] of [
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
-Deno.test('env is an action: its fields need <- first', () => {
+Deno.test('env is an action: its fields need <- pure (first)', () => {
     try { result('x = 1; env.x'); } catch (e) { if (String(e).includes('an action has no fields')) return; throw e; }
     throw new Error('expected failure');
 });

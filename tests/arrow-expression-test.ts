@@ -16,7 +16,7 @@ for (const source of [
 for (const source of [
     "func ((Int -> Int) f) = f 123; func (+ 1)",
     "func { { Int -> Int } f } = f 123; func { + 1 }",
-    "((Int -> Int) f) <- Dynamic (x -> x + 1); f 123",
+    "((Int -> Int) f) <- pure (Dynamic (x -> x + 1)); f 123",
     "(Int x -> x + 1) 123",
 ]) Deno.test(`pattern contracts and typed lambdas: ${source}`, () => {
     const i = new Interpreter();

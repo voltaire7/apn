@@ -19,15 +19,15 @@ for (const [name, source, expected] of [
     ['ordinary actions still repeat', 'a = print "a"\nb = { print "b" }\na\na\nb\nb', ['a', 'a', 'b', 'b']],
     ['destructuring stays lazy', '[x] = [print "run"]\nprint "bound"\nx\nx', ['bound', 'run', 'run']],
     ['unused destructuring stays unevaluated', '[x] = [missing]\nprint 42', ['42']],
-    ['eager lists retain lazy elements', 'xs <- [missing,42]\nprint (xs 1)', ['42']],
-    ['eager ranges remain productive', 'xs <- [0..]\nprint (take 3 xs)', ['[0,1,2]']],
-    ['destructured eager result retains lazy fields', '[x,y] <- [missing,42]\nprint y', ['42']],
+    ['eager lists retain lazy elements', 'xs <- pure [missing,42]\nprint (xs 1)', ['42']],
+    ['eager ranges remain productive', 'xs <- pure [0..]\nprint (take 3 xs)', ['[0,1,2]']],
+    ['destructured eager result retains lazy fields', '[x,y] <- pure [missing,42]\nprint y', ['42']],
     ['wildcard runs action', '_ <- print "run"', ['run']],
-    ['scoped binding reads old value', 'x = 1\n{ x <- x + 1; print x }\nprint x', ['2', '1']],
-    ['mutable capture preserves cell identity', 'm <- Mutable 0\nset m $ 42\nprint m', ['42']],
-    ['capture argument-taking function', 'f <- x -> x + 1\nprint (f 2)', ['3']],
+    ['scoped binding reads old value', 'x = 1\n{ x <- pure (x + 1); print x }\nprint x', ['2', '1']],
+    ['mutable capture preserves cell identity', 'm = Mutable 0\nset m $ 42\nprint m', ['42']],
+    ['capture argument-taking function', 'f <- pure (x -> x + 1)\nprint (f 2)', ['3']],
     ['function source preserves eager bindings', 'f x = { y <- print x; y }\nprint f', ['x -> { y <- print x; y }']],
-    ['multiline eager body', 'x <-\n    1 + 2\nprint x', ['3']],
+    ['multiline eager body', 'x <-\n    pure (1 + 2)\nprint x', ['3']],
 ] as const) {
     Deno.test(`eager binding: ${name}`, () => equal(execute(source), expected));
 }

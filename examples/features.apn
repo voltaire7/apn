@@ -1286,7 +1286,7 @@ counterKey = "bumpCounter"
 has "a" uncertainKeys ? (counterView counterKey) 0 : pure 0
 print (onlyOne (vowelOrPair (vowelIfShort (take (otherCounter - 3) [7,8,9]))))  # 1
 # Also through a view stored in a record, with a key bound locally.
-viewHolder <- [view: counterView]
+viewHolder = [view: counterView]
 has "a" uncertainKeys ? { localKey = "bumpCounter"; (viewHolder.view localKey) 0 } : pure 0
 print (onlyOne (vowelOrPair (vowelIfShort (take (otherCounter - 3) [7,8,9]))))  # 1
 
@@ -1344,8 +1344,9 @@ captured <- { print "captured now"; return "kept" } # => captured now
 print captured                               # => kept (the stored result)
 eagerArgs <- getArgs
 print eagerArgs                              # => [] without CLI arguments
-lazyCapture <- [Dynamic missing,42]
+lazyCapture <- pure [Dynamic missing,42]    # pure v: <- binds v now (outer value only)
 print (lazyCapture 1)                         # => 42
+# x <- 42 is an error: <- runs an action; bind a value with = (or <- pure v).
 
 # REPL regression: paste this expression, move after `match` on its first line,
 # and press Enter. Output must start below the closing ], preserving every line.
@@ -1368,7 +1369,7 @@ print (tailCountdown 10000)          # => 42
 
 # do runs a list of actions in order: an action yielding the last result.
 do [print "hi",print "there"]       # => hi, then there
-lastOne <- do [1,2,42]              # plain values are results as they are
+lastOne <- do [pure 1,pure 2,pure 42]  # each element is an action
 print lastOne                       # => 42
 noneRun <- do []
 print noneRun                       # => []
@@ -1653,7 +1654,7 @@ print ((_ _ -> 1) 2 3)                    # => 1
 # Files and REPL submissions check by default; Dynamic marks runtime boundaries.
 dynamicNumber = Dynamic 41
 print (Int dynamicNumber + 1)              # => 42
-((Int -> Int) checkedIncrement) <- (Dynamic (x -> x + 1))
+((Int -> Int) checkedIncrement) <- pure (Dynamic (x -> x + 1))
 print (checkedIncrement 41)                # => 42
 reflectedNumber = 1
 reflectedScope <- Dynamic env

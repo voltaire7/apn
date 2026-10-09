@@ -14,6 +14,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, ca
 import { parseNumberText, isNumeric, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
+import { isLoadCall } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { mkInt, mkBool, mkStr, mkList, valueToString, rawString } from "./types.ts";
@@ -639,8 +640,14 @@ export class Interpreter {
         const evaluated = b.pattern.p === "as" && !b.eager ? this.delay(b.value) : b.value.t === "import"
             ? this.importStandard(b.value.module, false)
             : this.eval(b.value);
-        // x <- action runs the action and binds its result.
-        const v = b.eager ? this.runIO(evaluated) : b.pattern.p === "as" ? evaluated : this.force(evaluated);
+        // x <- action runs the action and binds its result; anything else is
+        // an error, except a load (which runs a file and yields its exports).
+        if (b.eager && !isLoadCall(b.value) && b.value.t !== "import") {
+            const action = this.reference(evaluated);
+            if (action.kind !== "io") throw new APNError("runtime", `<- runs an action, not a ${action.kind}`, { hint: "bind a value with =" });
+        }
+        // The result's outer value is evaluated now (x <- pure (x + 1) reads the old x).
+        const v = b.eager ? this.reference(this.runIO(evaluated)) : b.pattern.p === "as" ? evaluated : this.force(evaluated);
         if ((b.value.t === "setFields" || b.value.t === "setItem") && v.kind === "record" && v.scope) return v;
         const binds = new Map<string, Value>();
         if (!this.matchPattern(b.pattern, v, binds)) {

@@ -54,7 +54,7 @@ for (const checked of [false, true]) {
             ["f v.x = 42; f (Dynamic missing)", "42"],
             ["v.x = Dynamic missing; 42", "42"],
             ["f v.(x:xs) = x; f [1..]", "1"],
-            ["v.x <- Mutable 1; set x 2; v", "2"],
+            ["v.x <- pure (Mutable 1); set x 2; v", "2"],
         ]
     ) {
         Deno.test(`dotted pattern checked=${checked}: ${source}`, () => {

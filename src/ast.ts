@@ -73,3 +73,10 @@ export type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "
 // Source metadata is kept out of AST serialization and source round-trips.
 export interface SourceLocation { source: string; file: string; start: number; end: number; }
 export const sourceLocations = new WeakMap<Expr, SourceLocation>();
+
+// A direct load call (load "file", load $ path): <- may bind its exports.
+export function isLoadCall(e: Expr): boolean {
+    if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return isLoadCall(e.stmts[0]);
+    return (e.t === "app" || e.t === "pipe") && e.f.t === "var" && e.f.name === "load";
+}
+

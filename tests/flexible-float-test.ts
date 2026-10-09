@@ -20,7 +20,7 @@ for (const [source, expected] of [
     ['expt (Float32 .5) (Float 2)', 'Float32 0.25'],
     ['Float32 .5 ^ 2', 'Float32 0.25'],
     ['Float32 .1 + Float32 (Float64 .2)', 'Float32 0.3'],
-    ['x = .2; ignored <- Float32 .1 + x; x', '0.2'],
+    ['x = .2; ignored <- pure (Float32 .1 + x); x', '0.2'],
 ] as const) Deno.test(`precision result: ${source}`, () => {
     if (result(source) !== expected) throw new Error(result(source));
 });
