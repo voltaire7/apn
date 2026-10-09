@@ -999,19 +999,16 @@ for (const [source, line, column] of [
     }
     throw new Error("accepted");
 });
-// ':' adds one element (the mirror of the x:xs pattern); joining is ++.
-Deno.test("':' adds one element and hints at ++ for a list on its left", () => {
-    for (const source of ['[1,2]:[3,4]', '[1,2]:3:[4,5]']) {
-        try { run(session(), source); } catch (error) {
-            if ((error as { hint?: string }).hint?.includes("use ++")) continue;
-            throw error;
-        }
-        throw new Error(`accepted: ${source}`);
-    }
-    for (const [source, expected] of [['[1]:[[3,4]]', '[[1],[3,4]]'], ['xs = [[3,4]]; [1,2,3]:xs', '[[1,2,3],[3,4]]'], ['[1,2]:[[3,4]]', '[[1,2],[3,4]]'],
-            ['x:xs = [1]:[[3,4]]; x', '[1]'], ['length ([1]:[[3,4]])', '2']]) {
+// ':' adds one element (the mirror of the x:xs pattern), making a mixed list
+// as a literal would when it differs from the tail's elements; joining is ++.
+Deno.test("':' adds one element, mixed or not", () => {
+    for (const [source, expected] of [['[1,2]:[3,4]', '[[1,2],3,4]'], ['[1,2]:3:[4,5]', '[[1,2],3,4,5]'], ['1:["a"]', '[1,"a"]'],
+            ['x:xs = [1,2]:[3,4]; [x,xs]', '[[1,2],[3,4]]'], ['length ([1,2]:[3,4])', '3'],
+            ['[1]:[[3,4]]', '[[1],[3,4]]'], ['xs = [[3,4]]; [1,2,3]:xs', '[[1,2,3],[3,4]]'], ['[1,2]:[[3,4]]', '[[1,2],[3,4]]'],
+            ['x:xs = [1]:[[3,4]]; x', '[1]'], ['[1,2] ++ [3,4]', '[1,2,3,4]']]) {
         if (run(session(), source) !== expected) throw new Error(source);
     }
+    rejected(session(), '1:2');
 });
 Deno.test("a broken reader of a broken definition reports the original problem", () => {
     try { run(session(), 'c n = n * 2; a = c 1; b x = a + x; d x = b x; c s = s ++ "?"; d 1'); } catch (error) {

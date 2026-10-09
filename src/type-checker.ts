@@ -1567,6 +1567,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         return found;
     }
+    // Whether x and y unify, tried on copies (nothing is bound or required).
+    function fits(x: Ty, y: Ty): boolean {
+        const vars = new Map<Ty, Ty>(), pending = requirements, saved = pending.length;
+        try { unify(copy(x, vars), copy(y, vars)); return true; }
+        catch (error) {
+            if (error && typeof error === "object" && "message" in error && "pos" in error) return false;
+            throw error;
+        } finally { pending.length = saved; }
+    }
     // A record literal's known fields, in order: later entries win, a spread
     // (_) contributes its known fields, and a spread of unknown fields may
     // replace any field before it.
@@ -2443,23 +2452,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return atom("Bool");
                 }
                 if (e.op === ":") {
-                    const head = resolve(a), before = resolve(b);
-                    const inner = before.k === "list" ? resolve(before.element) : undefined;
-                    // Lists of different lengths share a list of lists, as in a
-                    // literal ([1]:[[3,4]] is [[1],[3,4]]).
-                    if (head.k === "list" && inner?.k === "list" && before.k === "list") {
-                        unify(head.element, inner.element, e);
-                        return list(list(head.element), before.length ? indexAdd(before.length, constant(1n)) : undefined);
+                    // ':' adds one element. One that does not fit the tail's
+                    // elements makes a mixed list, as in a literal
+                    // ([1,2]:[3,4] is [[1,2],3,4]; [1]:[[3,4]] is [[1],[3,4]]).
+                    const before = resolve(b);
+                    if (before.k === "list" && !fits(list(a), before)) {
+                        return list(union([a, before.element]), before.length ? indexAdd(before.length, constant(1n)) : undefined);
                     }
-                    // ':' adds one element; a list on its left that does not fit
-                    // is probably meant to be joined.
-                    try { unify(list(a), b, e); }
-                    catch (error) {
-                        if (head.k === "list" && error && typeof error === "object" && "message" in error && !(error as TypeIssue).hint) {
-                            (error as TypeIssue).hint = "':' adds one element; to join lists use ++ (write [1,2] ++ [3,4])";
-                        }
-                        throw error;
-                    }
+                    unify(list(a), b, e);
                     const tail = resolve(b);
                     return list(a, tail.k === "list" && tail.length ? indexAdd(tail.length, constant(1n)) : undefined);
                 }
