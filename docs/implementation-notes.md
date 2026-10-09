@@ -93,7 +93,9 @@ Behavior: `docs/standard-library.md` (`http`, `json`).
 
 - `src/http.ts` makes `fetch` synchronous: in Deno a per-request worker (a
   `data:` URL, so nothing extra to bundle or permit) runs the platform fetch
-  while the interpreter waits with `Atomics.wait`; the JSON-encoded response
+  while the interpreter waits with `Atomics.wait` in 20 ms slices, calling
+  `checkInterrupt` between them (an interrupt terminates the worker and with it
+  the request); the JSON-encoded response
   crosses a fixed shared buffer in chunks. The worker is terminated after each
   request so it never keeps the process alive. In a browser build
   (`typeof Deno === "undefined"`) a synchronous `XMLHttpRequest` replaces it.
@@ -102,7 +104,8 @@ Behavior: `docs/standard-library.md` (`http`, `json`).
   checking never sends a request.
 - `src/json.ts` parses JSON itself so integers stay exact `bigint`s; object
   keys that are names stay plain, others become quoted keys (`stringKey`).
-  Tests: `tests/http-test.ts` (its server test needs `--allow-net`).
+  Tests: `tests/http-test.ts` (its server test needs `--allow-net`),
+  `tests/repl-interrupt-pty.py` (Ctrl+C during a slow request).
 
 ## Prelude and `cast`
 

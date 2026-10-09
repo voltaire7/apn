@@ -288,8 +288,9 @@ channels = fromJson response.body
 `fetchText url options` returns a successful (2xx) response's body and fails
 with the status otherwise; `fetchJson url options` decodes that body as JSON.
 A request that gets no response (no network, a refused connection, a timeout)
-fails with the reason. Requests are synchronous, like the rest of APN, and
-cannot be interrupted with Ctrl+C; give long ones a `timeout`. Network access
+fails with the reason. Requests are synchronous, like the rest of APN; Ctrl+C
+in the REPL interrupts a slow one (abandoning it), and `timeout` bounds one in
+a script. Network access
 needs Deno's `--allow-net` (the `apn` launcher grants it). Static checking
 never sends a request; `data:` URLs need no network. In a browser build,
 `fetch` uses a synchronous request, subject to the page's CORS rules.

@@ -995,6 +995,7 @@ myTypeOf (Int32 5)  # => Int32
 # HTTP and JSON. fetch url options returns the response as a record (status,
 # ok, statusText, url, headers, body); fetchText and fetchJson return a
 # successful body. toJson / prettyJson / fromJson are JSON.stringify / JSON.parse.
+# Ctrl+C in the REPL interrupts a slow request; a timeout option bounds one.
 # A data: URL needs no network; ./apn grants network access for real requests:
 #   fetch "https://www.youtube-transcript.io/api/channels" [
 #       method: "POST",

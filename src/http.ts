@@ -3,6 +3,8 @@
 // waits on shared memory; the response comes back in chunks through a fixed
 // buffer. In a browser build, a synchronous XMLHttpRequest does the same.
 
+import { checkInterrupt } from "./interrupt.ts";
+
 export interface HttpRequest { url: string; method: string; headers: Array<[string, string]>; body?: string; timeout?: number }
 export interface HttpResponse { status: number; statusText: string; ok: boolean; url: string; headers: Array<[string, string]>; body: string }
 /** Why a request failed (no response at all): the message, and whether permission was missing. */
@@ -56,7 +58,9 @@ function fetchInWorker(request: HttpRequest): HttpResponse {
         worker.postMessage({ request, control, buffer });
         const chunks: Uint8Array[] = [];
         for (;;) {
-            Atomics.wait(state, 0, 0);
+            // Wait in slices so Ctrl+C interrupts a slow request (the worker,
+            // and with it the request, is dropped in finally).
+            while (Atomics.wait(state, 0, 0, 20) === "timed-out") checkInterrupt();
             chunks.push(new Uint8Array(buffer, 0, Atomics.load(state, 1)).slice());
             const last = Atomics.load(state, 2) === 1;
             Atomics.store(state, 0, 0);
