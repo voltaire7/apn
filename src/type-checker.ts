@@ -1535,7 +1535,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         bind(arg, unknown(), scope, e, bound);
                         continue;
                     }
-                    bind(arg, f.input, scope, e, bound);
+                    // A converting payload pattern on a concrete field (UInt8 y
+                    // for an Int field) converts that field's value.
+                    if (!variables(f.input).size && patternConverts(arg, scope)) {
+                        const local = variable();
+                        bind(arg, local, scope, e, bound);
+                        convert(local, f.input, e, false, new Map(), true);
+                    } else bind(arg, f.input, scope, e, bound);
                     rest = f.output;
                 }
                 unify(rest, expected, e);
@@ -1545,13 +1551,58 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // A value the checker knows (k * 2, 0 - 1, -k) converts now, as a literal
     // does in convert.
+    // A pending compound value ([x,-x]) whose parameters are now known: its facts afresh.
+    function freshKnown(known: Known): Known {
+        if (!known.expr || symbolic(known)) return known;
+        const fresh = resolveKnown({ expr: known.expr });
+        return { ...known, ...Object.fromEntries(Object.entries(fresh).filter(([, value]) => value !== undefined)) };
+    }
+    // A known value against the pattern that matches it, part by part: each
+    // typed part (Int n) converts its known value, inside variant payloads
+    // (any number of fields), list elements and cons cells.
+    function castPattern(p: Pattern, known: Known, e: Expr): void {
+        known = freshKnown(known);
+        switch (p.p) {
+            case "as": castPattern(p.left, known, e); castPattern(p.right, known, e); return;
+            case "typeBind": castPattern(p.value, known, e); return;
+            case "list":
+                if (known.items?.length === p.v.length) p.v.forEach((item, n) => castPattern(item, known.items![n], e.t === "list" ? e.v[n] ?? e : e));
+                return;
+            case "cons":
+                if (known.items?.length) {
+                    castPattern(p.head, known.items[0], e.t === "list" ? e.v[0] ?? e : e);
+                    castPattern(p.tail, { items: known.items.slice(1) }, e);
+                }
+                return;
+            case "constr": {
+                if (NUMERIC_TYPES.includes(p.tag) && p.args.length === 1) {
+                    const number = knownNumberOf(known);
+                    if (number) try { castNumeric(p.tag, number); } catch (error) { problem((error as Error).message, e); }
+                    return;
+                }
+                if (known.tag !== p.tag || !known.payload) return;
+                const args = payloadExprs(e, p.args.length);
+                p.args.forEach((arg, n) => { if (known.payload![n]) castPattern(arg, known.payload![n], args[n] ?? e); });
+                return;
+            }
+            default: return;
+        }
+    }
+    function knownNumberOf(known: Known): Numeric | undefined {
+        return known.number ?? (known.index && !known.index.terms.size ? integer(known.index.constant) : undefined) ??
+            (known.float !== undefined ? floating(known.float) : undefined);
+    }
+    // The field expressions of a constructor applied in e (P2 1 300, or in parentheses).
+    function payloadExprs(e: Expr, count: number): Expr[] {
+        let call = e;
+        while (call.t === "block" && call.style === "(" && call.stmts.length === 1 && call.stmts[0].t !== "stmDef" && call.stmts[0].t !== "patDef") call = call.stmts[0] as Expr;
+        const args: Expr[] = [];
+        while (call.t === "app") { args.unshift(call.a); call = call.f; }
+        return args.length === count ? args : [];
+    }
     function castKnown(target: Ty, known: Known, e: Expr): void {
         const t = resolve(target);
-        // A pending compound value ([x,-x]) whose parameters are now known: its facts afresh.
-        if (known.expr && !symbolic(known)) {
-            const fresh = resolveKnown({ expr: known.expr });
-            known = { ...known, ...Object.fromEntries(Object.entries(fresh).filter(([, value]) => value !== undefined)) };
-        }
+        known = freshKnown(known);
         // A list's elements, or a list converted to a record schema's fields, in order.
         if (known.items && (t.k === "list" || t.k === "record")) {
             const fields = t.k === "record" ? [...t.fields.values()] : undefined;
@@ -1853,6 +1904,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (options.strict && !f.coerce) unify(f.input, argument.type, e);
                 else convert(f.input, argument.type, e, false, new Map(), !!f.coerce);
                 if (f.coerce) castKnown(f.input, argument, e);
+                if (f.coerce && f.pattern) castPattern(f.pattern, argument, e);
             } catch (error) {
                 if (f.selfName && error && typeof error === "object" && "message" in error &&
                     /^(cannot use |Dynamic requires an explicit conversion)/.test(String(error.message))) {
@@ -2444,7 +2496,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const target = variable();
                     bind(e.pattern, target, scope, e);
                     convert(target, t, e.value, false, new Map(), true);
-                    castKnown(target, valueEntry(e.value, scope), e.value);
+                    const known = valueEntry(e.value, scope);
+                    castKnown(target, known, e.value);
+                    castPattern(e.pattern, known, e.value);
                     for (const name of patternNames(e.pattern)) { const entry = scope.get(name); if (entry) entry.bound = e.value; }
                 } else {
                     bind(e.pattern, recordSelection(e.pattern, t, e.value), scope, e);

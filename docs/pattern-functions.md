@@ -73,7 +73,11 @@ range error; `firstFloat ((Float x):rest) = x` returns `1.0` for `[1,2]`.
 Variant payloads convert the same way: `g (Some (Float x)) = x` returns `1.0`
 for `g (Some 1)`, and `g (Some 300)` is a static range error for
 `g (Some (UInt8 x))`, also through a variable (`k = Some 300`) or another
-function (`h x = g (Some x)` rejects `h 300`).
+function (`h x = g (Some x)` rejects `h 300`). This holds for every field of
+a constructor with several: with `P = P2 Int Int | P0`, `g (P2 a (UInt8 y))`
+accepts `g (P2 1 3)` and rejects `g (P2 1 300)`, and with
+`Pair a b = MkPair a b | NoPair`, `g (MkPair (Float x) (UInt8 y))` rejects
+`g (MkPair 1 300)`.
 
 For records, the bare-name pattern
 `[x,y]` requires those fields, ignores field order, and permits extra fields.

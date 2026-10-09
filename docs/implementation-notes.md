@@ -411,7 +411,10 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   too: `waitingWithin`; `symbolicArgument` includes list `items`), except
   while trying an overload's choices (`choosing`), and function minus keeps its negated
   operand's facts as the `-` operation's `known`. Constructors of
-  concrete fields are `coerce` functions. `substituteKnown` skips values it is
+  concrete fields are `coerce` functions; a converting payload pattern on a
+  concrete field converts it (`bind`). `castPattern` walks a parameter or
+  binding pattern beside the argument's known value (variant `payload`s of
+  any arity, list `items`, cons cells) and converts each typed part. `substituteKnown` skips values it is
   already inside (a recursive function in its own env). `castKnown` converts a
   known argument value to the parameter type (list elements, or a list's
   elements to a record schema's fields, or a one-field variant's `payload`,
