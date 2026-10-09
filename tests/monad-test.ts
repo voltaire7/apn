@@ -53,8 +53,8 @@ for (const [name, source, expected] of [
         ["[2,4]", "Some 6", "8", "[true,false]"]],
     ["return is overloaded on its result", 'import "option"\nWrap a = | MkWrap a\nreturn = MkWrap\n(MkWrap x) >>= f = f x\nprint (Wrap Int { return 5 })\nprint (Option Int { return 6 })\nprint (Result Int String { return 7 })\nprint (List Int { return 8 })',
         ["MkWrap 5", "Some 6", "Ok 7", "[8]"]],
-    ["return can name its monad on its argument", 'Wrap a = | MkWrap a\nreturn ((Wrap _) x) = MkWrap x\nBox a = | MkBox a\nreturn = MkBox\nprint (Wrap Int { return 5 })\nprint (Box Int { return 6 })',
-        ["MkWrap 5", "MkBox 6"]],
+    ["return can name its monad on its argument", 'Wrap a = | MkWrap a\nreturn ((Wrap _) x) = MkWrap (x * 2)\nBox a = | MkBox a\nreturn = MkBox\nprint (Wrap Int { return 5 })\nprint (Box Int { return 6 })',
+        ["MkWrap 10", "MkBox 6"]],
     ["undecided values and actions print without running", 'print $ return 123\nprint [return "a"]\nprint (return 1 >>= (x -> return x))\nprint (print 1)\nprint (IO Int { return 1 })\nprint (typeOf (print 1))\nprint (typeOf (return 1))',
         ["Monad 123", '[Monad "a"]', "Monad", "IO []", "IO Int", "IO []", "Monad Int"]],
     ["constructor arguments print as source writes them", 'import "option"\nprint (return (Some 1))\nprint (Some (Some (-1)))\nprint (Some [1,2])',
@@ -75,6 +75,11 @@ for (const [source, message, kind] of [
     ["xs = List Int {\n    a <- [1,2]\n    print a\n    return a\n}", "an IO action cannot run in a List do-block", "type"],
     ["return a b = a", "return takes one argument", "parse"],
 ] as const) Deno.test(`monads reject: ${JSON.stringify(source)}`, () => fails(source, message, kind));
+Deno.test("monads: a return naming its monad must make it", () => {
+    try { run("Wrap a = | MkWrap a\nBox a = | MkBox a\nreturn ((Wrap _) x) = MkBox x\nprint (Wrap Int { return 5 })", false); }
+    catch (e) { if (String(e).includes("return for Wrap made MkBox 5, not a Wrap")) return; throw e; }
+    throw new Error("accepted");
+});
 Deno.test("monads: a type without a return instance cannot take return", () => {
     try { run("Tree = Leaf Int | Node Tree Tree\nprint (Tree { return 1 })", false); }
     catch (e) { if (String(e).includes("no return instance for Tree")) return; throw e; }

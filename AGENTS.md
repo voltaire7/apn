@@ -67,6 +67,12 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   `force`/pattern/equality switch — they are exhaustive.
 - Every user-facing failure is an `APNError` (parse/lex/runtime/type) with a
   position and optional `hint:`; see `docs/errors.md`.
+- A definition takes exactly the parameters it is written with. Never give one
+  a hidden parameter or call it with a different arity internally (no rewriting
+  `return ((Option _) x) = Some x` into a two-parameter clause on the type):
+  carry such information as metadata instead.
+- Favor curried (point-free) definitions when parameters are only passed
+  through or discarded: `return = Some`, not `return ((Option _) x) = Some x`.
 - APN style in examples: whole-function `match` uses the same-line form
   (`f x = match x [ ... ]`); a definition's `{` stays on the `=` line, with
   the body exactly +4 and `}` aligned with the opening line.

@@ -10,7 +10,9 @@ export interface VariantFamily { base?: Value; name: string; parameters?: string
 export type Type = string; // lightweight: we represent types as printable strings
 
 // One equation of a Haskell-style function definition:  f p1 p2 ... = body
-export interface DefClause { params: Pattern[]; body: Expr; guard?: Expr; }
+// monad: the monad a return instance makes, named on its parameter
+// (return ((Option _) x) = Some x); the clause still takes just x.
+export interface DefClause { params: Pattern[]; body: Expr; guard?: Expr; monad?: string; }
 
 // Runtime values (dynamically typed, like JS)
 export interface NativePointer {
