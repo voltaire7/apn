@@ -1098,11 +1098,14 @@ class Parser {
     isPatBinding(): boolean {
         if (!this.startsPatBinding()) return false;
         const t = this.peek();
-        if (t.k === "ident" && !declaredCtors.has(t.v) && !(this.peek(1).k === "sym" && [".", ":"].includes((this.peek(1) as { v: string }).v))) return false;
+        // A built-in type name cannot be redefined, so Int x = 1 is a typed binding.
+        if (t.k === "ident" && !declaredCtors.has(t.v) && !TYPE_NAMES.includes(t.v) && !(this.peek(1).k === "sym" && [".", ":"].includes((this.peek(1) as { v: string }).v))) return false;
         const save = this.i;
         try {
             const p = this.parseConsPattern();
             if (p.p === "var") return false;
+            // A typed binding names one value: Int x = 1.
+            if (t.k === "ident" && TYPE_NAMES.includes(t.v) && !declaredCtors.has(t.v) && !(p.p === "constr" && p.args.length === 1)) return false;
             return this.isSym("=");
         } catch {
             return false;

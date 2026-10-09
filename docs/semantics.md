@@ -126,7 +126,13 @@ for aliases and variant declarations.
 
 There are no type annotations or signatures: `:` only builds lists and record
 entries. State types with constructors, `x = Int 5` or `f (Int x) = ...`; see
-[pattern functions](pattern-functions.md).
+[pattern functions](pattern-functions.md). A type pattern is also a binding,
+so `Int x = 1` (or `x <- ...` with `Int x <- ...`) declares a typed name: the
+value converts as an argument converts for `f (Int x)`, so `Float y = 1`
+binds `1.0` and `Int z = 2.5` is a lossy-conversion error, and later
+assignments keep the type (`x = "a"` is a type error). Built-in type names
+cannot be redefined, so `Int x = ...` is always this binding; `Int = 5` and
+`Int x y = 5` remain errors.
 
 In file mode, bare expressions run for their effects but are not printed; use
 `print`. The REPL echoes expression results but not assignments, so `x = x`

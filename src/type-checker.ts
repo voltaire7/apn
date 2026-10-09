@@ -2334,6 +2334,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         capture: carried(old),
                     });
                     rederiveUsers(e.pattern.name, old, scope);
+                } else if (e.pattern.p === "constr" && resolve(scope.get(e.pattern.tag)?.type ?? dynamic).k === "type") {
+                    // A type pattern (Int x = 1, Float y = 1) converts its value
+                    // as a parameter pattern converts an argument.
+                    const target = variable();
+                    bind(e.pattern, target, scope, e);
+                    convert(target, t, e.value, false, new Map(), true);
+                    for (const name of patternNames(e.pattern)) { const entry = scope.get(name); if (entry) entry.bound = e.value; }
                 } else {
                     bind(e.pattern, recordSelection(e.pattern, t, e.value), scope, e);
                     for (const name of patternNames(e.pattern)) { const entry = scope.get(name); if (entry) entry.bound = e.value; }

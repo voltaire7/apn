@@ -1006,3 +1006,21 @@ Deno.test("a reader follows a name rebound by a later REPL input or a load", () 
     if (run(j, 'twice "a"') !== '"aa"') throw new Error("load");
     rejected(j, 'twice 1');
 });
+// A built-in type name on the left declares a typed binding.
+for (const [source, expected] of [
+    ['Int x = 1; x', '1'],
+    ['Float y = 1; y', '1.0'],
+    ['String s = "hi"; s ++ "!"', '"hi!"'],
+    ['Int x <- 5; x + 1', '6'],
+    ['Int x = 2.0; x', '2'],
+    ['f y = { Float x = y; x * 2 }; f 1.5', '3.0'],
+] as const) Deno.test(`typed binding: ${source}`, () => {
+    if (run(session(), source) !== expected) throw new Error(source);
+});
+for (const source of ['Int x = "a"', 'Int x = 2.5', 'Int8 x = 300', 'Int x = 1; x = "a"', 'Int x = 1; x = 2.5']) {
+    Deno.test(`typed binding rejects: ${source}`, () => rejected(session(), source));
+}
+for (const source of ['Int = 5', 'Int x y = 5']) Deno.test(`a built-in type name is not redefined: ${source}`, () => {
+    try { parse(source); } catch (error) { if (String(error).includes("built-in type names cannot be reassigned")) return; throw error; }
+    throw new Error("parsed");
+});

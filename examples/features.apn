@@ -462,6 +462,9 @@ print {
     x = Int 20                      # construct a typed value
     x * 2
 }                                   # => 40
+Int typedCount = 3                  # a type pattern binding declares a typed name
+Float typedRatio = 1                # it converts as an argument would: 1.0
+print [typedCount,typedRatio]       # => [3,1.0]
 typedInc (Int x) = x + 1            # a constructor pattern requires an Int
 print (typedInc 1)                  # => 2
 typedFn ((Int -> Int) k) = k 2      # a function contract

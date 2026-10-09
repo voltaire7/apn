@@ -437,7 +437,7 @@ function helpText(): string {
         `               print f also runs it; debug f shows its name without running it`,
         ``,
         `Types come from constructors; ':' is only cons/record syntax:`,
-        `  x = Int 5    f (Int x) = x + 1    ((Int -> Int) f) <- expr`,
+        `  x = Int 5    Int x = 5    f (Int x) = x + 1    ((Int -> Int) f) <- expr`,
         `Run: deno run --allow-read main.ts examples/features.apn`,
         ``,
         `REPL:`,
