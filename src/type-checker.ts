@@ -1051,7 +1051,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const output = application(a, { type: application(b, { type: input }, { t: "placeholder" }) }, { t: "placeholder" });
             return fn(input, output);
         }
-        if (t.op === "-" && callable(a) && numeric(b)) return application(a, { type: b }, { t: "placeholder" });
+        if (t.op === "-" && callable(a) && numeric(b)) return application(a, { type: b, ...resolveKnown(t.known ?? {}) }, { t: "placeholder" });
         if (a.k === "list" || b.k === "list") {
             if (a.k === "list" && b.k === "list") {
                 // Elementwise arithmetic pairs lists of equal length.
@@ -1515,7 +1515,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.k !== "atom" || !NUMERIC_TYPES.includes(t.name) || numericLiteral(e)) return;
         const number = known.number ?? (known.index && !known.index.terms.size ? integer(known.index.constant) : undefined);
         if (!number) return;
-        try { castNumeric(t.name, number); } catch (error) { problem((error as Error).message, e); }
+        // A deferred check (placeholder) reports at the call being checked.
+        try { castNumeric(t.name, number); } catch (error) { problem((error as Error).message, e.t === "placeholder" ? undefined : e); }
     }
     // A numeric literal, negated or parenthesized: -1, (2.5).
     function numericLiteral(e: Expr): Numeric | undefined {
@@ -2312,6 +2313,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 if (e.op !== "*" && e.op !== "-" && e.op !== "\\" && (x.k === "type" || y.k === "type")) {
                     return problem(`operator '${e.op}' requires values, not a type constructor`, e);
+                }
+                if (e.op === "-") {
+                    // Possibly function minus, decided later (h x = g -x): keep
+                    // the negated value, known once the enclosing call is.
+                    const result: Ty = { k: "operation", op: "-", args: [a, b], known: valueEntry({ t: "unop", op: "neg", e: e.r }, scope) };
+                    requirements.push(result);
+                    return resolve(result);
                 }
                 return operation(e.op, [a, b]);
             }

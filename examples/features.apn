@@ -843,6 +843,7 @@ print (sqrt -1)       # => 0+1i
 print (sqrt - 1)      # => 0+1i (spacing makes no difference)
 # natural (UInt n) = n; natural -1   # static error: UInt cannot represent a negative integer
 #                     one = 1; natural -one   # likewise, with a known value
+#                     negated x = natural -x; negated 2   # and at the call that supplies it
 print (10 - 1)        # => 9
 print ((x -> x * 2) -3) # => -6
 
