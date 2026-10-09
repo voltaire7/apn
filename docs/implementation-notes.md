@@ -102,8 +102,10 @@ Behavior: `docs/standard-library.md` (`http`, `json`).
 - `fetch`, `toJson`, `prettyJson` and `fromJson` are standard natives exported
   only through their modules; none is in `EVALUATED_NATIVES`, so static
   checking never sends a request.
-- `src/json.ts` parses JSON itself so integers stay exact `bigint`s; object
-  keys that are names stay plain, others become quoted keys (`stringKey`).
+- `src/json.ts` parses JSON itself so integers stay exact `bigint`s; record
+  keys and JSON keys are the same strings both ways (a quoted key's text keeps
+  its quotes), so nothing is renamed and `x`/`"x"` never collide. `fetch`
+  rejects quoted option and header keys (`isStringKey`).
   Tests: `tests/http-test.ts` (its server test needs `--allow-net`),
   `tests/repl-interrupt-pty.py` (Ctrl+C during a slow request).
 
