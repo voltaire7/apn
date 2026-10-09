@@ -106,24 +106,43 @@ export function unknownModule(spec: string, bundled = false): { message: string;
     return { message: `unknown module '${spec}'`, hint: `no ${spec}.apn or ${spec}/ here or in a parent folder of the program, and no standard module '${spec}'` };
 }
 
-// The literal module names a program imports.
-function importsOf(source: string, label: string): string[] {
-    const names: string[] = [];
+/**
+ * The file load "name" reads from code in directory: name.apn relative to it
+ * (or absolute), normalised; a virtual path when reading from a bundle.
+ */
+export function loadPath(name: string, directory: string, bundle?: Record<string, string>): string {
+    const files = bundle ? bundleFiles(bundle) : disk;
+    const path = name.startsWith("/") ? `${name}.apn` : `${absolute(directory, files)}${name}.apn`;
+    return new URL(path, "file:///").pathname;
+}
+/** A loaded file's source, from the disk or a bundle. */
+export function readLoad(path: string, bundle?: Record<string, string>): string | undefined {
+    return (bundle ? bundleFiles(bundle) : disk).read(path);
+}
+
+// The literal module names a program imports, and the literal paths it loads.
+function dependenciesOf(source: string, label: string): { imports: string[]; loads: string[] } {
+    const imports: string[] = [], loads: string[] = [];
+    const isLoad = (f: unknown) => !!f && typeof f === "object" && (f as Record<string, unknown>).t === "var" && (f as { name: string }).name === "load";
     const walk = (node: unknown): void => {
         if (!node || typeof node !== "object") return;
         if (Array.isArray(node)) { node.forEach(walk); return; }
-        const n = node as Record<string, unknown>;
-        if (n.t === "import") names.push(...[n.module as string | string[]].flat());
+        const n = node as Record<string, any>;
+        if (n.t === "import") imports.push(...[n.module as string | string[]].flat());
+        if (n.t === "app" && isLoad(n.f) && n.a?.t === "string") loads.push(n.a.v);
+        if (n.t === "pipe" && isLoad(n.f) && n.x?.t === "string") loads.push(n.x.v);
         Object.values(n).forEach(walk);
     };
     walk(parse(source, label));
-    return names;
+    return { imports, loads };
 }
 
 /**
  * A bundle for a program in directory: the whole standard library under
- * BUNDLE_LIB and every local module the program imports (and they import),
- * under BUNDLE_APP at the same relative paths. Run it from BUNDLE_APP.
+ * BUNDLE_LIB, and every local module the program imports and every file it
+ * loads by a literal path (and, in turn, theirs), under BUNDLE_APP at the same
+ * relative paths. Run it from BUNDLE_APP. Files outside the program's folder,
+ * and loads of computed paths, are not bundled.
  */
 export function bundleProgram(source: string, directory: string): Record<string, string> {
     const bundle: Record<string, string> = {};
@@ -136,17 +155,23 @@ export function bundleProgram(source: string, directory: string): Record<string,
     addLib(STD_DIRECTORY, "");
     const root = absolute(directory, disk);
     const seen = new Set<string>();
+    const add = (path: string, source: string) => {
+        if (seen.has(path) || !path.startsWith(root)) return;
+        seen.add(path);
+        bundle[`${BUNDLE_APP}${path.slice(root.length)}`] = source;
+        visit(source, path, path.slice(0, path.lastIndexOf("/") + 1));
+    };
     const visit = (code: string, label: string, from: string) => {
-        for (const spec of importsOf(code, label)) {
+        let dependencies;
+        try { dependencies = dependenciesOf(code, label); } catch { return; }
+        for (const spec of dependencies.imports) {
             const module = resolveModule(spec, from, undefined, root);
-            if (!module || seen.has(module.key) || module.files.some(file => file.std)) continue;
-            seen.add(module.key);
-            for (const file of module.files) {
-                const path = file.label;
-                if (!path.startsWith(root)) continue;
-                bundle[`${BUNDLE_APP}${path.slice(root.length)}`] = file.source;
-                visit(file.source, path, file.directory);
-            }
+            if (!module || module.files.some(file => file.std)) continue;
+            for (const file of module.files) add(file.label, file.source);
+        }
+        for (const name of dependencies.loads) {
+            const path = loadPath(name, from), source = disk.read(path);
+            if (source !== undefined) add(path, source);
         }
     };
     visit(source, "<app>", root);

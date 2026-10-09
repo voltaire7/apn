@@ -9,10 +9,12 @@ open counter.html
 
 `apn examples/browser/counter.apn` only evaluates its definitions and exits.
 The `--html` command embeds the APN interpreter, source, standard modules, and
-the local modules the program imports (files or folders next to it, and what
-they import in turn) into one HTML file. `load` is not available in the
-browser. Open that file in a browser; no server or runtime download
-is required. Rebuild and refresh after editing the APN source.
+the local modules the program imports and the files it loads by a literal path
+(`load "helpers"`), with what those import and load in turn, into one HTML
+file. Only files inside the program's folder are bundled; a `load` of a
+computed path, or of a file outside that folder, fails with "not bundled".
+Open that file in a browser; no server or runtime download is required.
+Rebuild and refresh after editing the APN source.
 
 ```apn
 import "html"
@@ -65,8 +67,8 @@ unnecessary value resets. Runtime errors appear on the page. Failed APN updates
 or view evaluation retain the last successful model.
 
 This first API supports synchronous sandbox apps. Commands, subscriptions,
-HTTP effects, routing, keyed children, SVG, and arbitrary local file loading
-are not implemented. Deno file, stdin, and process operations are unavailable
+HTTP effects, routing, keyed children, SVG, and loading files the build did not
+bundle are not implemented. Deno file, stdin, and process operations are unavailable
 in the browser. Computation runs on the browser's main thread. Embedded scripts,
 inline JavaScript event attributes, and executable URL attributes are rejected.
 

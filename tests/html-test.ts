@@ -92,3 +92,31 @@ Deno.test("a browser build bundles the local modules a program imports", () => {
         throw new Error("an unbundled local module resolved");
     }
 });
+Deno.test("a browser build bundles the files a program loads", () => {
+    const directory = new URL("./fixtures/bundle-load/", import.meta.url).pathname;
+    const source = 'load "helpers"\nanswer = caption 0 ++ mark';
+    const bundle = bundleProgram(source, directory);
+    const local = Object.keys(bundle).filter(path => path.startsWith("/app/")).sort();
+    // Each load is relative to the loading file; unused files stay out.
+    if (JSON.stringify(local) !== '["/app/helpers.apn","/app/parts/extra.apn","/app/parts/suffix.apn"]') throw new Error(JSON.stringify(local));
+    for (const checked of [false, true]) {
+        const i = new Interpreter();
+        i.moduleSources = bundle;
+        i.sourceDir = "/app/";
+        if (checked) i.enableChecking();
+        i.run(parse(source));
+        if (i.renderString(i.run(parse("answer"))) !== '"clicked 0!"') throw new Error(`checked=${checked}`);
+        try { i.run(parse('Dynamic $ load "unused"')); } catch (error) {
+            if (error instanceof Error && error.message.includes("not bundled")) continue;
+            throw error;
+        }
+        throw new Error("an unbundled file loaded");
+    }
+});
+Deno.test("standard modules that load their own files work from a bundle", () => {
+    const i = new Interpreter();
+    i.moduleSources = bundleProgram('import "meta"', "/tmp");
+    i.sourceDir = "/app/";
+    i.run(parse('import "meta"'));
+    if (i.renderString(i.run(parse('metaEval "1 + 2"'))) !== "3") throw new Error("meta from the bundle");
+});

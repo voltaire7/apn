@@ -8,7 +8,7 @@ import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
 import doSource from "../lib/do.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
-import { type ModuleFile, resolveModule, unknownModule } from "./modules.ts";
+import { loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { parseNumberText, isNumeric, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
@@ -2326,10 +2326,18 @@ export class Interpreter {
                     });
                 }
                 const p = `${pathValue.v}.apn`;
-                const path = this.sourceDir === "." || p.startsWith("/") ? p : `${this.sourceDir}/${p}`;
+                // A browser build reads the bundle (see bundleProgram in modules.ts).
+                const path = this.moduleSources ? loadPath(pathValue.v, this.sourceDir, this.moduleSources)
+                    : this.sourceDir === "." || p.startsWith("/") ? p : `${this.sourceDir}/${p}`;
                 let src: string;
-                try { src = Deno.readTextFileSync(path); }
-                catch (err) { throw new APNError("runtime", `load: can't read '${p}' (looked in '${path}'): ${(err as Error).message}`); }
+                if (this.moduleSources) {
+                    const bundled = readLoad(path, this.moduleSources);
+                    if (bundled === undefined) throw new APNError("runtime", `load: '${p}' is not bundled`, { hint: "a browser build bundles the files the program loads by a literal path inside its folder" });
+                    src = bundled;
+                } else {
+                    try { src = Deno.readTextFileSync(path); }
+                    catch (err) { throw new APNError("runtime", `load: can't read '${p}' (looked in '${path}'): ${(err as Error).message}`); }
+                }
                 let program: TopLevel[];
                 try { program = parse(src, path); }
                 catch (err) { throw new APNError("runtime", `load: parse error in '${path}': ${(err as Error).message}`); }

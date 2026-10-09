@@ -1,6 +1,6 @@
 import { APNError } from "./errors.ts";
 import { parse } from "./parser.ts";
-import { resolveModule, unknownModule } from "./modules.ts";
+import { loadPath, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { type CheckOptions, checkTypes, copyTypeScope, isEnvView, mayMutate, mentionsAny, topNames, type TypeScope } from "./type-checker.ts";
 import type { TopLevel } from "./ast.ts";
 
@@ -16,12 +16,6 @@ function fileName(label: string): string {
     return label.slice(label.lastIndexOf("/") + 1).replace(/\.apn$/, "") + ".apn";
 }
 
-// The file load "name" reads from directory (a trailing / or not).
-function loadUrl(name: string, directory: string): URL {
-    const path = name.startsWith("/") ? `${name}.apn` : `${directory.replace(/\/+$/, "")}/${name}.apn`;
-    return new URL(path, `file://${Deno.cwd()}/`);
-}
-
 export class CheckingSession {
     private scope: TypeScope = new Map();
     private modules = new Map<string, TypeScope>();
@@ -29,8 +23,7 @@ export class CheckingSession {
     private checkedLoads = new Map<string, string>();
 
     verifyLoad(name: string, directory: string, source: string): void {
-        const url = loadUrl(name, directory);
-        if (this.checkedLoads.get(url.href) !== source) throw new APNError("type", `load '${name}' was not checked with this source; resubmit its definition or use Dynamic for runtime loading`);
+        if (this.checkedLoads.get(loadPath(name, directory, this.moduleSources)) !== source) throw new APNError("type", `load '${name}' was not checked with this source; resubmit its definition or use Dynamic for runtime loading`);
     }
     // A bundle (a browser build) to import from instead of the disk: virtual
     // paths to sources (see bundleProgram in modules.ts).
@@ -166,10 +159,10 @@ export class CheckingSession {
 
     /** Every variable name a checked loaded file mentions (see CheckOptions.loadedNames). */
     loadedNames(name: string, directory: string): Set<string> | undefined {
-        const url = loadUrl(name, directory);
-        let source = this.checkedLoads.get(url.href);
+        const path = loadPath(name, directory, this.moduleSources);
         // A statement's static run precedes checking it: read the file it loads.
-        if (source === undefined) try { source = Deno.readTextFileSync(url); } catch { return undefined; }
+        const source = this.checkedLoads.get(path) ?? readLoad(path, this.moduleSources);
+        if (source === undefined) return undefined;
         const names = new Set<string>();
         const walk = (node: unknown): void => {
             if (!node || typeof node !== "object") return;
@@ -178,7 +171,7 @@ export class CheckingSession {
             if (n.t === "var" && typeof n.name === "string") names.add(n.name);
             Object.values(n).forEach(value => value && typeof value === "object" && walk(value));
         };
-        walk(parse(source, url.pathname));
+        walk(parse(source, path));
         return names;
     }
     // A tail load (a program's last statement) may load a file already being
@@ -187,14 +180,17 @@ export class CheckingSession {
     load(name: string, directory: string, caller = this.scope, tail = false): TypeScope {
         const base = name.slice(name.lastIndexOf("/") + 1);
         if (!base || base.includes(".")) throw new APNError("type", "load expects an extensionless file name");
-        const key = loadUrl(name, directory).href;
+        const key = loadPath(name, directory, this.moduleSources);
         if (this.loading.has(key) && tail) return new Map();
         if (this.loading.has(key)) throw new APNError("type", `cyclic load '${name}'; use an explicit Dynamic boundary for runtime loading`);
         this.loading.add(key);
         try {
-            const url = new URL(key);
-            const source = Deno.readTextFileSync(url);
-            const exports = this.check(parse(source, url.pathname), new URL(".", url).pathname, copyTypeScope(caller), false).exports;
+            const source = readLoad(key, this.moduleSources);
+            if (source === undefined) {
+                throw new APNError("type", this.moduleSources ? `load '${name}' is not bundled` : `load: cannot read '${name}' (looked in '${key}')`,
+                    this.moduleSources ? { hint: "a browser build bundles the files the program loads by a literal path inside its folder" } : {});
+            }
+            const exports = this.check(parse(source, key), key.slice(0, key.lastIndexOf("/") + 1), copyTypeScope(caller), false).exports;
             this.checkedLoads.set(key, source);
             return exports;
         } catch (error) {

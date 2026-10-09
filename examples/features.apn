@@ -1101,7 +1101,8 @@ print (rangeFactorial 5)                       # 120
 
 # Browser HTML values are constructed in APN; build the interactive example with:
 # apn --html examples/browser/counter.apn counter.html
-# The build also bundles the local modules (files or folders) the program imports.
+# The build also bundles the local modules (files or folders) the program imports
+# and the files it loads by a literal path.
 # A module in a subfolder imports packages from parent folders up to the program's.
 # examples/packages/main.apn demonstrates file, folder and subfolder packages.
 html = import "html"
