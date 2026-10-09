@@ -465,14 +465,15 @@ export class Interpreter {
 
     // origin names the source of the bindings (a loaded file's path and
     // text): running the same source again may replace what it published,
-    // since its checked definitions are the same.
-    private publishForeignBindings(scope: Env, bindings: Array<[string, Value]>, origin?: string): void {
+    // since its definitions are the same. checked bindings (a load the
+    // static check followed) need no guard: it typed what they replace.
+    private publishForeignBindings(scope: Env, bindings: Array<[string, Value]>, origin?: string, checked = false): void {
         const pending = new Map<string, Value>();
         const published = this.publishedBy.get(scope);
         for (const [key, value] of bindings) {
             const old = pending.get(key) ?? (this.checking && !this.dynamicDepth ? scope.map.get(key) : scope.get(key));
             const own = origin !== undefined && old !== undefined && published?.get(key)?.origin === origin && published.get(key)!.value === old;
-            pending.set(key, this.checkedExecution && old && !own ? this.protectDynamicWrite(old, value, key) : value);
+            pending.set(key, this.checkedExecution && old && !own && !checked ? this.protectDynamicWrite(old, value, key) : value);
         }
         for (const [key, value] of pending) scope.setLocal(key, value);
         if (origin === undefined) { for (const [key] of pending) published?.delete(key); return; }
@@ -2324,7 +2325,7 @@ export class Interpreter {
     // so a tail load never retains a JavaScript evaluator stack frame.
     loadFile(pathValue: Value): Value {
         const caller = this.env, callerDir = this.sourceDir;
-        const frames: Array<{ caller: Env; loaded: Env; origin: string }> = [];
+        const frames: Array<{ caller: Env; loaded: Env; origin: string; checked: boolean }> = [];
         try {
             for (;;) {
                 checkInterrupt();
@@ -2351,9 +2352,10 @@ export class Interpreter {
                 let program: TopLevel[];
                 try { program = parse(src, path); }
                 catch (err) { throw new APNError("runtime", `load: parse error in '${path}': ${(err as Error).message}`); }
-                if (this.checking && !this.dynamicDepth) this.checking.verifyLoad(pathValue.v, this.sourceDir, src);
+                const checked = !!this.checking && !this.dynamicDepth;
+                if (checked) this.checking!.verifyLoad(pathValue.v, this.sourceDir, src);
                 const loaded = new Env(this.env);
-                frames.push({ caller: this.env, loaded, origin: `${path}\0${src}` });
+                frames.push({ caller: this.env, loaded, origin: `${path}\0${src}`, checked });
                 this.env = loaded;
                 this.sourceDir = dirname(path);
                 try {
@@ -2371,7 +2373,7 @@ export class Interpreter {
                     checkInterrupt();
                     const frame = frames.pop()!;
                     const fields: Array<[string, Value]> = [];
-                    this.publishForeignBindings(frame.caller, [...frame.loaded.map], frame.origin);
+                    this.publishForeignBindings(frame.caller, [...frame.loaded.map], frame.origin, frame.checked);
                     for (const [key] of frame.loaded.map) fields.push([key, frame.caller.get(key)!]);
                     result = { kind: "record", v: fields };
                 }

@@ -700,9 +700,11 @@ again. Imports return an export record. A definition such as
 `s = import "sequence"` defers importing until demanded.
 `load` remains uncached file execution relative to the current source file.
 `numbers = load "number"` is a repeatable action like any other, so each use
-of `numbers` loads the file again. Loading the same file (with unchanged
-text) again replaces the definitions it published in the caller's scope; a
-name the program rebound in between keeps the usual write checks.
+of `numbers` loads the file again. A load the static check follows (a literal
+path outside `Dynamic`) rebinds the file's definitions as a definition
+would, even names the program rebound in between. A `Dynamic` load may
+replace only what the same file (with unchanged text) published, plus what
+its usual write checks allow.
 See [the standard library reference](standard-library.md) for APIs and limits.
 
 ## REPL clauses

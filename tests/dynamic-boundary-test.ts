@@ -141,16 +141,21 @@ Deno.test("set on an explicit Dynamic target is checked at runtime", () => {
     if (value !== "3") throw new Error(`expected 3, got ${value}`);
 });
 
-Deno.test('a value binding may load the same file again', () => {
+Deno.test('loading a file again replaces its definitions', () => {
     const fixtures = new URL('./fixtures/', import.meta.url).pathname;
     const i = new Interpreter(); i.enableChecking(); i.sourceDir = fixtures;
     // Each use of h runs the load again; it replaces only what it published.
     i.run(parseDocument('h = load "reload"\nfirst = h.double 1\nsecond = h.double h.limit'));
     if (i.renderString(i.run(parseDocument('[first,second]'))) !== '[2,20]') throw new Error('reload');
+    // A checked load replaces a name rebound in between, as a definition would.
     const j = new Interpreter(); j.enableChecking(); j.sourceDir = fixtures;
-    try { j.run(parseDocument('load "reload"\ndouble n = n + 1\nload "reload"')); } catch (error) {
+    j.run(parseDocument('load "reload"\ndouble n = n + 1\nload "reload"'));
+    if (j.renderString(j.run(parseDocument('double 5'))) !== '10') throw new Error('rebound reload');
+    // An unchecked (Dynamic) load still cannot replace it.
+    const k = new Interpreter(); k.enableChecking(); k.sourceDir = fixtures;
+    try { k.run(parseDocument('load "reload"\ndouble n = n + 1\nDynamic $ load "reload"')); } catch (error) {
         if (String(error).includes("Dynamic write to 'double'")) return;
         throw error;
     }
-    throw new Error('a reload replaced a rebound function');
+    throw new Error('a Dynamic reload replaced a rebound function');
 });
