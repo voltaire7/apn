@@ -22,12 +22,14 @@ function fails(source: string, text: string, kind?: string): void {
 for (const [source, expected] of [
     ['import "json"; toJson [ids: ["jawed"]]', '"{"ids":["jawed"]}"'],
     ['import "json"; toJson [1,2.5,true,"a",\'c\',[]]', '"[1,2.5,true,"a","c",[]]"'],
-    ['import "json"; toJson ["Content-Type": "x", n: 123456789012345678901234567890]', '"{"Content-Type":"x","n":123456789012345678901234567890}"'],
+    ['import "json"; toJson [Content-Type: "x", n: 123456789012345678901234567890]', '"{"Content-Type":"x","n":123456789012345678901234567890}"'],
+    ['import "json"; toJson ["x": 1, x: 2]', '"{"\\"x\\"":1,"x":2}"'],
     ['import "json"; toJson (HashMap [["k",1]])', '"{"k":1}"'],
     ['import "json"; toJson [1..3]', '"[1,2,3]"'],
     ['import "json"; prettyJson [a: [1]]', '"{\n  "a": [\n    1\n  ]\n}"'],
-    ['import "json"; fromJson "{\\"status\\": 1, \\"odd-key\\": [true, null, 2.5]}"', '[status: 1, "odd-key": [true,[],2.5]]'],
-    ['import "json"; (fromJson "{\\"odd-key\\": 3}")."odd-key"', '3'],
+    ['import "json"; fromJson "{\\"status\\": 1, \\"odd-key\\": [true, null, 2.5]}"', '[status: 1, odd-key: [true,[],2.5]]'],
+    ['import "json"; (fromJson "{\\"odd-key\\": 3}") "odd-key"', '3'],
+    ['import "json"; v = [a: [1,2], b c: "x", Content-Type: 1, "q": 2]; fromJson (toJson v) == v', 'true'],
     ['import "json"; fromJson "123456789012345678901234567890"', '123456789012345678901234567890'],
     ['import "json"; fromJson "\\"\\\\u00e9\\""', '"é"'],
     ['import "json"; fromJson "{\\"a\\": 1, \\"a\\": 2}"', '[a: 2]'],
@@ -59,6 +61,8 @@ for (const [source, message, kind] of [
     ['import "http"; fetch "data:text/plain,x" [methd: "GET"]', "unknown option 'methd'", "runtime"],
     ['import "http"; fetch "data:text/plain,x" [headers: [a: 1]]', "a header value must be a string", "runtime"],
     ['import "http"; fetch "data:text/plain,x" [timeout: 0]', "timeout must be a positive Int", "runtime"],
+    ['import "http"; fetch "data:text/plain,x" [headers: ["Content-Type": "x"]]', 'the header "Content-Type" must be a bare key', "runtime"],
+    ['import "http"; fetch "data:text/plain,x" ["method": "GET"]', 'the option "method" must be a bare key', "runtime"],
     ['import "http"; fetch "data:text/plain,x" 5', "options must be a record", "runtime"],
     ['import "http"; r <- fetch "data:text/plain,x" []; r.missing', "missing field", "type"],
     ['import "http"; fetch 5 []', "", "type"],
@@ -87,8 +91,8 @@ Deno.test({ name: "fetch sends method, headers and body to a server", ignore: !n
 response <- fetch "${base}/api/channels" [
     method: "POST",
     headers: [
-        "Authorization": "Basic token",
-        "Content-Type": "application/json"
+        Authorization: "Basic token",
+        Content-Type: "application/json"
     ],
     body: toJson [ids: ["jawed"]]
 ]

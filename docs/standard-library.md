@@ -268,17 +268,18 @@ status, as a record:
 | `body` | the body as text |
 
 `options` is a record whose fields are all optional, or `[]` for none: `method`
-(`"GET"` by default), `headers` (a record or a `HashMap` of strings; quoted keys
-such as `"Content-Type"` name headers that are not plain names), `body` (a
-`String`) and `timeout` (milliseconds). Any other field is an error.
+(`"GET"` by default), `headers` (a record or a `HashMap` of strings), `body`
+(a `String`) and `timeout` (milliseconds). Any other field is an error. Options
+and header names are bare keys (`Content-Type: "application/json"`); a quoted
+key (`"Content-Type": ...`) is a different key and an error here.
 
 ```apn
 import ["http","json"]
 response <- fetch "https://www.youtube-transcript.io/api/channels" [
     method: "POST",
     headers: [
-        "Authorization": "Basic <your-api-token>",
-        "Content-Type": "application/json"
+        Authorization: "Basic <your-api-token>",
+        Content-Type: "application/json"
     ],
     body: toJson [ids: ["jawed"]]
 ]
@@ -302,17 +303,19 @@ spaces, and `fromJson text` is `JSON.parse`:
 
 | APN | JSON |
 | --- | --- |
-| record, `HashMap` with string keys | object (a quoted key loses its quotes) |
+| record, `HashMap` with string keys | object, each key's text as it is |
 | list (also lazy or a range, if finite) | array |
 | `String`, `Char` | string |
 | `Int` (exact, any size), `Float` | number |
 | `Bool` | `true`, `false` |
 
 A fraction, complex number, variant or function has no JSON form and is an
-error; convert it first. `fromJson` returns an object as a record whose keys
-are plain where they are names and quoted otherwise, as a record literal writes
-them (`r.status`, `r."odd-key"`), an integer as an exact `Int`, other numbers
-as `Float`, and `null` as `[]`. Its result is `Dynamic`; give it a type with a
+error; convert it first. A record key's text is the JSON key, so a bare key
+`status` writes `"status"` and a quoted key `"status"` keeps its quotes; they
+never collide. `fromJson` returns an object as a record of bare keys with the
+JSON keys' text (`r.status`, `r "odd-key"`), an integer as an exact `Int`,
+other numbers as `Float`, and `null` as `[]`, so `fromJson (toJson v)` gives
+back `v`. Its result is `Dynamic`; give it a type with a
 pattern or `cast` where the program needs one.
 
 ## Browser modules

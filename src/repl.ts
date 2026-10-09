@@ -365,6 +365,7 @@ function helpText(): string {
         `  [a, b] = value (destructuring binding; records match by field name)`,
         `  Just v = value (declared constructors destructure; capital defs are errors)`,
         `  [x: a, y: b] = value  (rename destructure: pull fields out of a record)`,
+        `  [my value: 1, Content-Type: "json"]  (bare keys may hold spaces and '-'; read with r "my value")`,
         `  [["x", 1]] "x"  (association lookup; first matching string key)`,
         `  nums 0 / nums (-1) / nums [0, 2]   (single or multiple indices)`,
         `  [String, Int].["x", 1] / templates.values / templates.(expr)  (list templates)`,

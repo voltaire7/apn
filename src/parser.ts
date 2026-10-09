@@ -303,7 +303,7 @@ class Parser {
                 if (this.isKeyedEntry()) {
                     if (mode === "bare") throw new Error("Parser: pattern cannot mix bare names and 'key: name' entries");
                     mode = "keyed";
-                    const key = this.parseKey();
+                    const key = this.parseEntryKey();
                     this.keyColon();
                     this.next(); // :
                     const nm = this.next();
@@ -672,9 +672,33 @@ class Parser {
         return this.keyTok(t);
     }
 
+    // A record entry's key: one key as after '.' (x, "x", 1, -1, (expr)), or a
+    // bare key of several names, numbers and '-'s on one line, up to its ':'
+    // ([my value: 1], [Content-Type: "json"]), keeping its source spelling.
+    // A bare key is not a quoted one: Content-Type and "Content-Type" differ.
+    parseEntryKey(): string {
+        const first = this.peek();
+        if (first.k === "ident" || first.k === "int" || first.k === "float") {
+            let j = this.i;
+            for (;;) {
+                const t = this.toks[j];
+                if (t.k === "sym" && t.v === ":") break;
+                if (!(t.k === "ident" || t.k === "int" || t.k === "float" || t.k === "sym" && t.v === "-")) { j = -1; break; }
+                j++;
+            }
+            if (j > this.i + 1) {
+                const key = this.source.slice(first.pos, this.toks[j].pos).trimEnd();
+                this.i = j;
+                this.seen = this.toks[j - 1];
+                return key;
+            }
+        }
+        return this.parseKey();
+    }
+
     isKeyedEntry(): boolean {
         const saved = this.i;
-        try { this.parseKey(); return this.isSym(":"); }
+        try { this.parseEntryKey(); return this.isSym(":"); }
         catch { return false; }
         finally { this.i = saved; }
     }
@@ -846,7 +870,7 @@ class Parser {
                                         throw new Error("Parser: expected ',' or newline after record shorthand");
                                     }
                                 } else {
-                                    const key = this.parseKey();
+                                    const key = this.parseEntryKey();
                                     if (this.isSym(":")) this.keyColon();
                                     this.expectSym(":");
                                     fs.push([key, this.parseDelimitedExpr()]);

@@ -251,6 +251,12 @@ obj = [field: 123, "field": 456, 1: 10, "1": 100]
 | `obj."1"` or `obj "\"1\""` | String containing `"1"`, quotes included | `100` |
 | `obj 1` | Entry at position 1 | `["\"field\"",456]` |
 
+A bare key in a record literal or keyed pattern may be several names, numbers
+and `-`s on one line, up to its `:`, kept as written: `[my value: 123]` and
+`[Content-Type: "json"]` have the keys `my value` and `Content-Type`, which are
+not the quoted keys `"my value"` and `"Content-Type"`. Select them with a
+string, `obj "Content-Type"` (after `.`, `obj.Content-Type` would subtract).
+
 Application evaluates its argument: `key = "field"; obj key` selects a named
 field. Include quote characters in the argument to select a quoted field.
 `pairs`, iteration, and conversion to HashMap preserve the entire key string.

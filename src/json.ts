@@ -1,23 +1,11 @@
 // JSON text and APN values (the json module): toJson and prettyJson encode,
-// fromJson decodes. Integers stay exact both ways; a JSON object becomes a
-// record whose keys are names where they can be (r.status) and quoted keys
-// otherwise (r."Content-Type"), as record literals write them; null becomes [].
+// fromJson decodes. Integers stay exact both ways; null becomes []. A record
+// key is a string, and a JSON object's keys are its text as it is: a JSON key
+// becomes a bare key (r.status, r "Content-Type"), and a quoted key's text
+// keeps its quotes, so x and "x" never collide.
 import { APNError } from "./errors.ts";
 import type { Interpreter } from "./interp.ts";
-import { isStringKey, stringKey } from "./record-keys.ts";
 import { type Value, mkBool, mkList, mkStr } from "./types.ts";
-
-const NAME = /^[A-Za-z_][A-Za-z0-9_']*$/;
-
-/** A record key as JSON text: a quoted key without its quotes. */
-export function jsonKey(key: string): string {
-    return isStringKey(key) ? key.slice(1, -1) : key;
-}
-
-/** A JSON object key as a record key. */
-function recordKey(key: string): string {
-    return NAME.test(key) ? key : stringKey(key);
-}
 
 export function toJson(i: Interpreter, value: Value, indent = 0, name = "toJson"): string {
     const fail = (message: string, hint?: string): never => { throw new APNError("runtime", `${name}: ${message}`, hint ? { hint } : {}); };
@@ -37,7 +25,7 @@ export function toJson(i: Interpreter, value: Value, indent = 0, name = "toJson"
                 return fail(`${i.renderString(v)} has no JSON number`, "convert it with inexact first (a JSON number is an integer or a float)");
             case "record":
                 if (v.scope) fail("cannot encode an environment view");
-                return join(v.v.map(([key, item]) => `${JSON.stringify(jsonKey(key))}:${indent ? " " : ""}${encode(item, depth + 1)}`), "{", "}");
+                return join(v.v.map(([key, item]) => `${JSON.stringify(key)}:${indent ? " " : ""}${encode(item, depth + 1)}`), "{", "}");
             case "hashmap":
                 return join([...v.entries.values()].map(([key, item]) => {
                     const k = i.dataValue(key);
@@ -79,7 +67,7 @@ export function fromJson(text: string, name = "fromJson"): Value {
             for (;;) {
                 space();
                 if (text[pos] !== '"') fail("expected a string key");
-                const key = recordKey(string());
+                const key = string();
                 space(); expect(":");
                 const item = value();
                 // A repeated key keeps its last value, as JSON.parse does.

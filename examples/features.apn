@@ -999,7 +999,7 @@ myTypeOf (Int32 5)  # => Int32
 # A data: URL needs no network; ./apn grants network access for real requests:
 #   fetch "https://www.youtube-transcript.io/api/channels" [
 #       method: "POST",
-#       headers: [Authorization: "Basic <token>", "Content-Type": "application/json"],
+#       headers: [Authorization: "Basic <token>", Content-Type: "application/json"],
 #       body: toJson [ids: ["jawed"]]
 #   ]
 import ["http","json"]
@@ -1007,6 +1007,8 @@ reply <- fetch "data:application/json,{\"ids\":[\"jawed\"]}" [method: "GET"]
 print [reply.status,reply.ok]                # => [200,true]
 print ((fromJson reply.body).ids)            # => ["jawed"]
 print (toJson [ids: ["jawed"], count: 1])    # => {"ids":["jawed"],"count":1}
+header = [Content-Type: "json", my value: 1] # bare keys may hold '-' and spaces
+print (header "Content-Type")                # => json  (not the quoted key "Content-Type")
 print (fetchJson "data:application/json,[1,2.5,null]" [])  # => [1,2.5,[]]
 
 # Standard modules are cached imports, separate from file execution with load.

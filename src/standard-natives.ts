@@ -4,7 +4,8 @@ import type { Interpreter } from "./interp.ts";
 import { type Value, mkBool, mkInt, mkList, mkStr } from "./types.ts";
 import { APNError } from "./errors.ts";
 import { fetchSync, HttpFailure } from "./http.ts";
-import { fromJson, jsonKey, toJson } from "./json.ts";
+import { fromJson, toJson } from "./json.ts";
+import { isStringKey } from "./record-keys.ts";
 
 // Representation, effects and Unicode casing are the stdlib's native boundary.
 export const STANDARD_NATIVES: Array<[string, number]> = [
@@ -64,8 +65,12 @@ function fetchNative(i: Interpreter, url: string, optionsValue: Value): Value {
         fail("options must be a record such as [method: \"POST\"], or [] for none");
     let method = "GET", body: string | undefined, timeout: number | undefined;
     const headers: Array<[string, string]> = [];
+    // Options and header names are bare keys (Content-Type: ...); a quoted key
+    // is another key, not the same name.
+    const bare = (key: string, what: string) => isStringKey(key)
+        ? fail(`${what} ${key} must be a bare key`, `write ${key.slice(1, -1)}: ..., not ${key}: ...`) : key;
     for (const [key, value] of fields) {
-        const option = jsonKey(key);
+        const option = bare(key, "the option");
         if (option === "method") method = text(value, "method").toUpperCase();
         else if (option === "body") body = text(value, "body");
         else if (option === "timeout") {
@@ -74,7 +79,7 @@ function fetchNative(i: Interpreter, url: string, optionsValue: Value): Value {
             timeout = Number((v as { v: bigint }).v);
         } else if (option === "headers") {
             const h = i.dataValue(value);
-            const entries: Array<[Value | string, Value]> = h.kind === "record" ? h.v.map(([k, v]) => [jsonKey(k), v])
+            const entries: Array<[Value | string, Value]> = h.kind === "record" ? h.v.map(([k, v]) => [bare(k, "the header"), v])
                 : h.kind === "hashmap" ? [...h.entries.values()] : fail("headers must be a record or a HashMap of strings");
             for (const [k, v] of entries) headers.push([typeof k === "string" ? k : text(k, "a header name"), text(v, "a header value")]);
         } else fail(`unknown option '${option}'`, "fetch options are method, headers, body and timeout");

@@ -119,6 +119,11 @@ exported by `function`. Tests: `tests/language-cast-test.ts`,
 
 ## Records, keys, and assignment
 
+- `Parser.parseEntryKey` reads a record literal's or keyed pattern's key: a
+  run of names, numbers and `-` up to `:` is one bare key spelled as in the
+  source; elsewhere (`.field`, selections) `parseKey` reads a single token.
+  `isKeyedEntry` uses it, so such an entry starts a record, not a cons.
+
 - `src/record-keys.ts` stores ordinary strings without hidden prefixes.
   `keyText` is identity; `keySource` escapes quoted-field contents for source
   rendering. Pairs, iteration, HashMap conversion, and FFI symbol names
