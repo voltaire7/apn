@@ -44,7 +44,9 @@ export type Value =
     | { kind: "deferred"; compute: () => Value; value?: Value; busy?: boolean; describes?: Value }
     | { kind: "record"; v: Array<[string, Value]>; scope?: Env; guarded?: boolean }
     | { kind: "variant"; tag: string; v: Value[]; family?: VariantFamily; arguments?: Value[] }
-    | { kind: "closure"; params: string[]; body: Expr; env: Env; mutableValue?: Value }
+    // A partly applied closure keeps its whole parameter list and the arguments
+    // applied so far, for showing it: (a b -> a + b) 1.
+    | { kind: "closure"; params: string[]; body: Expr; env: Env; mutableValue?: Value; whole?: string[]; applied?: Value[] }
     | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string; family?: VariantFamily; invoke?: (args: Value[]) => Value }
     // fallback: an overloaded operator's previous meaning, applied when no clause matches.
     | { kind: "clauseFn"; name: string; clauses: DefClause[]; arity: number; env: Env; applied: Value[]; fallback?: Value }
@@ -53,7 +55,8 @@ export type Value =
     | { kind: "nomatch" }
     // An IO action: running it performs its effects and yields its result
     // (or an IOTail, the action to continue with, so loops run in constant stack).
-    | { kind: "io"; run: () => Value | IOTail; label?: string }
+    // result describes the type of what it yields, when known without running it.
+    | { kind: "io"; run: () => Value | IOTail; result?: string | (() => string) }
     // A monadic value whose monad is not decided yet (return 42, or a do-block
     // or bind built from one): realized in a monad by an annotation, a >>=
     // with a concrete value, or as IO when run.
@@ -113,22 +116,41 @@ export function valueToString(v: Value): string {
         case "record":
             if (v.scope) return "env";
             return `[${v.v.map(([k, val]) => `${keySource(k)}: ${valueToString(val)}`).join(", ")}]`;
-        case "variant": {
-            const args = v.v.length ? " " + v.v.map(valueToString).join(" ") : "";
-            return v.tag + args;
-        }
+        case "variant": return v.tag + v.v.map(argumentText).join("");
         case "closure": return functionSource(v);
         case "thunk": return "...";
         case "native": return functionSource(v);
         case "clauseFn": return functionSource(v);
         case "nomatch": return "nomatch";
-        // An action shows the builtin that made it; running it is the only way
-        // to see its result.
-        case "io": return v.label ? `IO ${v.label}` : "IO";
+        // An action shows its type: running it is the only way to see its result.
+        case "io": return ioTypeText(v);
         // An undecided return shows its value; a >>= or do-block cannot be
         // shown without running it.
-        case "pending": return v.step.op === "return" ? `Monad ${valueToString(v.step.value)}` : "Monad";
+        case "pending": return v.step.op === "return" ? "Monad" + argumentText(v.step.value) : "Monad";
     }
+}
+
+// A constructor argument as source writes it: Some (Some 1), Some (-1).
+export function compoundArgument(v: Value): boolean {
+    switch (v.kind) {
+        case "variant": return v.v.length > 0;
+        case "pending": return v.step.op === "return";
+        case "io": case "closure": case "clauseFn": case "contract": case "functionType": return true;
+        case "native": return v.applied.length > 0;
+        case "int": case "float": case "rational": case "complex": return /[\s]|^-/.test(valueToString(v));
+        case "type": return !!v.arguments?.length || /\s/.test(v.description ?? "");
+        default: return false;
+    }
+}
+function argumentText(v: Value): string {
+    const text = valueToString(v);
+    return compoundArgument(v) ? ` (${text})` : ` ${text}`;
+}
+
+// An action's type: IO [] for print 1, IO a when its result is not known.
+export function ioTypeText(v: Extract<Value, { kind: "io" }>): string {
+    const result = typeof v.result === "function" ? v.result() : v.result ?? "a";
+    return `IO ${/\s/.test(result) && !/^[[(]/.test(result) ? `(${result})` : result}`;
 }
 
 // A range in source form: [lo,next..hi], or [lo,next..] when endless.

@@ -408,7 +408,7 @@ print (map (* 10) [1,2,3])              # => [10,20,30]
 print (filter (2 <) [3,1,4,1,5])      # => [3,4,5]
 addOp = (+)                                 # a lone (op) is a 2-arg lambda
 print (addOp 1 2)                           # => 3
-print (addOp 1)                             # a function   (partial, as usual)
+print (addOp 1)                             # => (1 +)   (partial, as usual)
 
 print (map (10 -) [1,2,3])              # => [9,8,7]
 print (foldl (-) 100 [1,2,3])           # => 94   (a lone (-) subtracts)
@@ -900,7 +900,7 @@ runCounter (MkCounter f) s = f s
     [a,s1] = g s
     runCounter (f a) s1
 })
-return (Counter s a) x = MkCounter (s -> [x,s])
+return x = Counter s a { MkCounter (s -> [x,s]) }
 tick = MkCounter (s -> [s,s + 1])
 twoTicks = Counter Int Int {
     a <- tick
@@ -1316,7 +1316,7 @@ print (onlyOne (vowelOrPair (vowelIfShort (take (counterAtFirstUse - 2) [7,8,9])
 # An action kept in a cell runs where a later statement runs it.
 pendingBox = Mutable [set mutableCounter $ 0]
 set pendingBox [set mutableCounter $ 2]
-print pendingBox                              # [IO set] (storing it runs nothing)
+print pendingBox                              # [IO []] (storing it runs nothing)
 head pendingBox                               # runs the stored action
 print (onlyOne (vowelOrPair (vowelIfShort (take (mutableCounter - 1) [7,8,9]))))  # 1
 # map builds a list of actions; do runs them in order.

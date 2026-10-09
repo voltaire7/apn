@@ -87,6 +87,8 @@ interface Known {
     fields?: [string, Known][];
     // action: an IO action, run (statically) where the program runs it.
     action?: () => Known | undefined;
+    // actionResult: the type an action yields as it prints (IO []), when known.
+    actionResult?: string;
 }
 // A function's clauses and defining scope, so a direct call by name can
 // evaluate what its result value is from what is known about the arguments.
@@ -3985,8 +3987,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function renderKnown(k: Known | undefined): string | undefined {
         k = readMutable(k);
         if (!k) return undefined;
-        // An action renders without running (its label is not known here).
-        if (demand(k)?.action) return "IO";
+        // An action renders as its type (IO []), when that is known.
+        const act = demand(k);
+        if (act?.action) return act.actionResult === undefined ? undefined : `IO ${act.actionResult}`;
         const n = numericOf(k);
         if (n !== undefined) return valueToString(n as Value);
         if (k.string !== undefined) return valueToString(mkStr(k.string));
@@ -4475,20 +4478,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "print": case "emit": return { action: () => {
                 if (renderKnown(args[0]()) === undefined) incomplete = true;
                 return known([]);
-            } };
+            }, actionResult: "[]" };
             // use forces its record and binds its fields (lazily): no other effect.
             case "debug": case "assert": case "use": args[0](); return known([]);
-            case "set": return { action: () => { writeMutable(args[0](), args[1]); return known([]); } };
+            case "set": return { action: () => { writeMutable(args[0](), args[1]); return known([]); }, actionResult: "[]" };
             // Input read at check time, from the same snapshot the run uses.
             case "readStdin": return { action: () => {
                 const text = options.inputs?.readStdin?.();
                 return text === undefined ? undefined : { string: text };
-            } };
+            }, actionResult: "String" };
             case "readFile": return { action: () => {
                 const path = args[0]()?.string;
                 const text = path === undefined ? undefined : options.inputs?.readFile(path);
                 return text === undefined ? undefined : { string: text };
-            } };
+            }, actionResult: "String" };
             // Booleans and number literals, as the runtime parses them.
             case "parse": {
                 const text = args[0]()?.string?.trim();

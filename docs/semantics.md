@@ -369,8 +369,10 @@ to do. `print "hi"` builds the action that prints `hi`; nothing is printed
 until the action runs. The effectful builtins all return actions: `print` and
 `emit` (yielding `[]`), `readFile`, `readStdin`, `getArgs`, `fetch`, `exit`,
 `set` (writing a `Mutable` cell), `env`, `bracket`, `withFile` and
-`ffi.withLibrary`. An action prints as `IO` followed by the builtin that made it (`print 1`
-prints as `IO print`), and `typeOf` describes it as `IO`.
+`ffi.withLibrary`. An action prints as its type, since only running it shows its result:
+`print (print 1)` prints `IO []`, an annotated `IO Int { ... }` prints `IO Int`,
+and an action whose result is not known before it runs prints `IO a`.
+`typeOf` gives the same type.
 
 Actions run in exactly two places:
 
@@ -442,8 +444,11 @@ fmap f (Some x) = Some (f x)
 fmap f None = None
 (Some x) >>= f = f x
 None >>= f = None
-return (Option t) x = Some x       # return, keyed by the type it makes
+return x = Option t { Some x }     # return names its monad with an annotation
 ```
+
+`return` takes one argument; the annotation on its body names the monad the
+instance makes, and that is how a context that names a monad finds it.
 
 `fmap` and `<*>` follow from `>>=` and `return` when a type defines no
 instance of its own. A type used where no instance accepts it is an error
@@ -459,7 +464,8 @@ takes the monad of the first context that names one:
 
 Until then it stays undecided, so one `return` value can be used in several
 monads; it prints as `Monad` and its value (`print (return 123)` prints
-`Monad 123`), and an undecided `>>=` or do-block prints as `Monad`. `Monad` and `Functor` are also types for patterns: `(Functor m)`
+`Monad 123`, and its `typeOf` is `Monad Int`), and an undecided `>>=` or
+do-block prints as `Monad`. `Monad` and `Functor` are also types for patterns: `(Functor m)`
 accepts any value `fmap` works on, `(Monad m)` any monadic value.
 
 A do-block is in the monad of its first `<-` (or annotation): a list block
@@ -565,6 +571,10 @@ forces its argument without running a returned action: `a = print 3; debug a`
 prints `a`. `step` retains
 its expression-inspection/evaluation rules demonstrated in `examples/features.apn`.
 `toString` demands its argument and collects its full rendering into a string.
+Values render as source writes them: a constructor argument that is itself
+compound is parenthesized (`Some (Some 1)`, `Distance (-2)`), operators show
+as sections (`(+)`, `(+ 1)`, and `(1 +)` for `(+)` applied to 1), and a partly
+applied function shows the arguments it has (`(a b -> a + b) 1`).
 
 Numbers follow a Scheme-style tower: exact arbitrary-precision integers and
 reduced rational fractions, inexact binary64 reals, and complex numbers whose

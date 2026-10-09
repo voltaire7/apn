@@ -17,7 +17,7 @@ import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { isLoadCall } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
-import { mkInt, mkBool, mkStr, mkList, valueToString, rawString } from "./types.ts";
+import { compoundArgument, mkInt, mkBool, mkStr, mkList, valueToString, rawString } from "./types.ts";
 import { KEYWORDS } from "./lexer.ts";
 import { parse, exprToSource, patternSource, rangeExpr, isOperatorName, PRIMITIVE_OPERATORS } from "./parser.ts";
 
@@ -33,6 +33,10 @@ class TailLoad {
 
 // Natives with effects: applying one builds an IO action; running it performs them.
 export const IO_NATIVES = new Set(["print", "emit", "exit", "set", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary"]);
+// What the actions of IO builtins yield, for showing their types (IO []).
+const IO_RESULTS: Record<string, string> = {
+    print: "[]", emit: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
+};
 
 // Operators whose builtin meaning does not demand both operands first.
 const LAZY_OPERATORS = new Set([":", "++", "&&", "||", "$"]);
@@ -1008,7 +1012,7 @@ export class Interpreter {
                         // env is the action that yields a live view of this scope.
                         if (v.kind === "native" && v.name === "env") {
                             const scope = this.env;
-                            r = { kind: "io", label: "env", run: () => this.environmentValue(scope) };
+                            r = { kind: "io", result: "Record", run: () => this.environmentValue(scope) };
                         } else r = v;
                         break;
                     }
@@ -1563,7 +1567,7 @@ export class Interpreter {
                     this.env = child;
                     try { return this.eval(f.body); } finally { this.env = old; }
                 }
-                return { kind: "closure", params: f.params.slice(1), body: f.body, env: child };
+                return { kind: "closure", params: f.params.slice(1), body: f.body, env: child, whole: f.whole ?? f.params, applied: [...f.applied ?? [], arg] };
             }
             case "native": {
                 if (f.arity === 0) {
@@ -1860,7 +1864,7 @@ export class Interpreter {
         const action = this.realize(value, type);
         if (action.kind !== "io") throw new APNError("runtime", `${valueToString(type)} expects an action, not a ${action.kind}`, { hint: "return x is the action yielding x" });
         const result = type.arguments[0];
-        return { kind: "io", label: action.label, run: () => this.conform(result, this.runIO(action)) };
+        return { kind: "io", result: () => this.renderString(result), run: () => this.conform(result, this.runIO(action)) };
     }
 
     // List T: the type of lists of T; applied to a value, a list of T
@@ -1930,11 +1934,11 @@ export class Interpreter {
         const step = m.step;
         if (step.op === "bind") return this.bind(this.realize(step.m, target), step.f);
         if (step.op === "do") return this.desugarDo(step.block as Extract<Expr, { t: "block" }>, step.env, step.start, target, step.first);
-        if (this.isIOType(target)) { const value = step.value; return { kind: "io", run: () => value }; }
+        if (this.isIOType(target)) { const value = step.value; return { kind: "io", result: () => this.typeText(value), run: () => value }; }
         if (this.isListType(target)) return mkList([step.value]);
         const made = this.instance("return", [target, step.value]);
         if (made) return this.reference(made);
-        throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as return (Option t) x = Some x" });
+        throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as return x = Option t { Some x }" });
     }
 
     // m >>= f: through m's monad. f's results are realized in the same monad.
@@ -2095,19 +2099,25 @@ export class Interpreter {
                 for (const argument of v.arguments ?? []) {
                     emit(" "); this.render(this.inspectType(argument), emit, false, ancestors);
                 }
-            } else if (v.kind === "variant") {
-                emit(v.tag, "variant");
-                for (const arg of v.v) { emit(" "); this.render(arg, emit, false, ancestors); }
-            } else if (v.kind === "pending" && v.step.op === "return") {
+            } else if (v.kind === "variant" || v.kind === "pending" && v.step.op === "return") {
                 // An undecided return shows like a constructor: Monad 123.
-                emit("Monad", "variant");
-                emit(" ");
-                this.render(v.step.value, emit, false, ancestors);
+                // Arguments show as source writes them: Some (Some 1).
+                emit(v.kind === "variant" ? v.tag : "Monad", "variant");
+                for (const arg of v.kind === "variant" ? v.v : [(v.step as Extract<typeof v.step, { op: "return" }>).value]) {
+                    const shown = this.demand(arg);
+                    const wrap = compoundArgument(shown);
+                    emit(wrap ? " (" : " ");
+                    this.render(shown, emit, false, ancestors);
+                    if (wrap) emit(")");
+                }
             } else emit(raw ? rawString(v) : valueToString(v), v.kind);
         } finally {
             ancestors.delete(v);
         }
     }
+
+    // The type of a value as typeOf shows it: Int, [String], Some Int.
+    typeText(v: Value): string { return this.renderString(this.callNative("typeOf", [v])); }
 
     renderString(v: Value, raw = false): string {
         const parts: string[] = [];
@@ -2359,7 +2369,7 @@ export class Interpreter {
         if (name === "Dynamic") {
             const actual = this.reference(value);
             // Dynamic action: the action whose result is Dynamic (Dynamic env).
-            if (actual.kind === "io") return { kind: "io", label: actual.label, run: () => this.constructType("Dynamic", this.runIO(actual)) };
+            if (actual.kind === "io") return { kind: "io", result: "Dynamic", run: () => this.constructType("Dynamic", this.runIO(actual)) };
             return actual.kind === "record" && actual.scope ? this.environmentValue(actual.scope, true) : actual;
         }
         if (name === "Bool") return mkBool(this.truthy(value));
@@ -2414,8 +2424,8 @@ export class Interpreter {
 
     callNative(name: string, argsIn: Value[], tag?: string, perform = false): Value {
         // Host natives (p5 drawing methods) are effects too.
-        if (!perform && (IO_NATIVES.has(name) || this.hostNatives.has(name))) return { kind: "io", label: name, run: () => this.callNative(name, argsIn, tag, true) };
-        if (name === "env") { const scope = this.env; return { kind: "io", label: "env", run: () => this.environmentValue(scope) }; }
+        if (!perform && (IO_NATIVES.has(name) || this.hostNatives.has(name))) return { kind: "io", result: IO_RESULTS[name], run: () => this.callNative(name, argsIn, tag, true) };
+        if (name === "env") { const scope = this.env; return { kind: "io", result: "Record", run: () => this.environmentValue(scope) }; }
         if (name === "assert") {
             const argument = argsIn[0];
             const condition = this.demand(argument);
@@ -2497,6 +2507,11 @@ export class Interpreter {
             if (ref.kind === "functionType") return { kind: "type", inspect: true, name: "Type" };
             if (ref.kind === "contract") return { kind: "functionType", from: ref.from, to: ref.to };
             const value = this.demand(ref);
+            if (value.kind === "io") return { kind: "type", inspect: true, name: "IO", description: valueToString(value) };
+            if (value.kind === "pending") {
+                const held = value.step.op === "return" ? this.typeText(value.step.value) : "a";
+                return { kind: "type", inspect: true, name: "Monad", description: `Monad ${/\s/.test(held) && !/^[[(]/.test(held) ? `(${held})` : held}` };
+            }
             if (value.kind === "variant" && value.family) return { kind: "type", inspect: true, name: value.family.name, family: value.family, arguments: value.arguments };
             if (isNumeric(value)) return { kind: "type", inspect: true, name: numericType(value) };
             if (value.kind === "list" && value.schema) return this.inspectType(value.schema);
@@ -3121,7 +3136,7 @@ export class Interpreter {
                     return input !== null && this.matchPattern(p.args[0], this.conform(type, input), binds);
                 }
                 if (type.kind === "type" && type.family) {
-                    // The type itself, described (return (Option t) x = Some x):
+                    // The type itself, described (the monad of return x = Option t { Some x }):
                     // its arguments bind to the pattern's.
                     const described = this.reference(v);
                     if (described.kind === "type" && described.family === type.family) {

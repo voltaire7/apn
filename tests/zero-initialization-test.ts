@@ -34,7 +34,7 @@ for (const [source, expected] of [
     ['Option a = Some a | None\n[Option,Option Int]', '[Option,Option Int]'],
     ['Option a = Some a | None\n[choice: Option Int] []', '[choice: None]'],
     ['User = | MkUser Int String\n[user: User] []', '[user: MkUser 0 ""]'],
-    ['BoxType a = | MkBox a\n[box: BoxType (BoxType Int)] []', '[box: MkBox MkBox 0]'],
+    ['BoxType a = | MkBox a\n[box: BoxType (BoxType Int)] []', '[box: MkBox (MkBox 0)]'],
     ['Node = Next Node | End\n[node: Node] []', '[node: End]'],
     ['Node = | Next Node\nNode', 'Node'],
     ['[fn: Function] [x -> x]', '[fn: x -> x]'],

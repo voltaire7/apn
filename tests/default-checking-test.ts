@@ -1073,7 +1073,7 @@ for (const [source, expected] of [
     ['import "option"; g (Some (UInt8 x)) = x; h x = g x; h (Some 3)', '3'],
     ['Shape = Circle Float | Sq Float; Circle 2', 'Circle 2.0'],
     ['P = P2 Float Int | P0; P2 1 2', 'P2 1.0 2'],
-    ['B = Byte UInt8 | NoByte; mk x = Byte x; mk 3', 'Byte UInt8 3'],
+    ['B = Byte UInt8 | NoByte; mk x = Byte x; mk 3', 'Byte (UInt8 3)'],
     ['Shape = Circle Float | Sq Float; area (Circle r) = r * r; area (Circle 2)', '4.0'],
     ['M = Named String | Clear; applyTo f = f "a"; applyTo Named', 'Named "a"'],
     ['Pair a b = MkPair a b | NoPair; g (MkPair (Float x) (UInt8 y)) = y; g (MkPair 1 3)', '3'],

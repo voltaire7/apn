@@ -43,7 +43,7 @@ export function withFile(i: Interpreter, path: Value, use: Value): Value {
     try { file = Deno.openSync(path.v, { read: true }); }
     catch (e) { throw new APNError("runtime", `withFile: ${(e as Error).message}`); }
     let open = true;
-    const read: Value = { kind: "native", name: "file.read", arity: 0, applied: [], invoke: () => ({ kind: "io", label: "read", run: () => {
+    const read: Value = { kind: "native", name: "file.read", arity: 0, applied: [], invoke: () => ({ kind: "io", result: "String", run: () => {
         if (!open) throw new APNError("runtime", "file resource is closed");
         const decoder = new TextDecoder(), bytes = new Uint8Array(65536), chunks: string[] = [];
         for (;;) {

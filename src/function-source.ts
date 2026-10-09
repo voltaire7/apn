@@ -2,7 +2,7 @@ import { keySource } from "./record-keys.ts";
 import type { Expr, Pattern } from "./ast.ts";
 import type { Value } from "./types.ts";
 import { exprToSource, fixityOf, functionSpecSource } from "./parser.ts";
-import { valueToString } from "./types.ts";
+import { compoundArgument, valueToString } from "./types.ts";
 
 function pattern(p: Pattern): string {
     switch (p.p) {
@@ -57,18 +57,39 @@ function source(e: Expr, parent = -1): string {
 }
 // Inspect syntax only: never demand bound arguments or walk a captured environment.
 function argument(v: Value): string {
-    if (v.kind === "thunk") return source(v.body);
+    if (v.kind === "thunk") return source(v.body, 11);
     if (v.kind === "deferred") return "...";
-    return valueToString(v);
+    const text = valueToString(v);
+    return compoundArgument(v) ? `(${text})` : text;
+}
+// An operator's lambda as source writes it: (+), (1 +), (+ 1).
+function operatorForm(params: string[], body: Expr, applied: Value[]): string | undefined {
+    if (body.t !== "binop") return undefined;
+    const is = (e: Expr, name: string) => e.t === "var" && e.name === name;
+    if (params.length === 2 && params[0] === "$L" && params[1] === "$R" && is(body.l, "$L") && is(body.r, "$R")) {
+        if (!applied.length) return `(${body.op})`;
+        if (applied.length === 1) return `(${argument(applied[0])} ${body.op})`;
+    }
+    if (params.length === 1 && params[0] === "$S" && !applied.length) {
+        if (is(body.l, "$S")) return `(${body.op} ${source(body.r, 11)})`;
+        if (is(body.r, "$S")) return `(${source(body.l, 11)} ${body.op})`;
+    }
+    return undefined;
 }
 export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" | "native" }>): string {
-    if (v.kind === "closure") return `${v.params.length ? v.params.join(" ") : "()"} -> ${source(v.body)}`;
+    if (v.kind === "closure") {
+        const params = v.whole ?? v.params, applied = v.applied ?? [];
+        const operator = operatorForm(params, v.body, applied);
+        if (operator) return operator;
+        const text = `${params.length ? params.join(" ") : "()"} -> ${source(v.body)}`;
+        return applied.length ? `(${text})${applied.map(a => ` ${argument(a)}`).join("")}` : text;
+    }
     if (v.kind === "native") {
         const name = v.tag ?? v.name;
-        return name + v.applied.map(a => ` (${argument(a)})`).join("");
+        return name + v.applied.map(a => ` ${argument(a)}`).join("");
     }
     const text = v.clauses.length === 1
         ? `${v.clauses[0].params.map(pattern).join(" ")}${v.clauses[0].guard ? " | " + source(v.clauses[0].guard) : ""} -> ${source(v.clauses[0].body)}`
         : v.clauses.map(c => `${v.name} ${c.params.map(pattern).join(" ")} = ${source(c.body)}`).join("\n");
-    return v.applied.length ? `(${text})${v.applied.map(a => ` (${argument(a)})`).join("")}` : text;
+    return v.applied.length ? `(${text})${v.applied.map(a => ` ${argument(a)}`).join("")}` : text;
 }

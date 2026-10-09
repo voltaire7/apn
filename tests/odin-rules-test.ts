@@ -10,7 +10,7 @@ function result(source: string): string {
 for (const [source, expected] of [
     ['UserId = distinct Int\n[UserId,UserId 3,typeOf (UserId 3)]', '[UserId,UserId 3,UserId]'],
     ['Distance = distinct Float\nDistance 2 + Distance 3', 'Distance 5.0'],
-    ['Distance = distinct Int\n-Distance 2', 'Distance -2'],
+    ['Distance = distinct Int\n-Distance 2', 'Distance (-2)'],
     ['Distance = distinct Int\nDistance 2 < Distance 3', 'true'],
     ['UserId = distinct Int\nf (t x) = [t,x]\nf (UserId 3)', '[UserId,3]'],
     ['UserId = distinct Int\nAlias = UserId\n[Alias == UserId,Alias 3 == UserId 3]', '[true,true]'],
