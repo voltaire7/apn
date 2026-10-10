@@ -7,7 +7,7 @@ for (const [code, expected] of [
     ['f x = print (x + 1); f', 'x -> print (x + 1)'],
     ['f x = x * (x + 1); f', 'x -> x * (x + 1)'],
     ['f 0 = 1; f x = x; f', '0 -> 1\nx -> x'],
-    ['g (Int x) y = 1; g (Float x) y = 2; g 1', '((Int x) y -> 1\n(Float x) y -> 2) 1'],
+    ['g (Int x) y = 1; g (Float x) y = 2; g 1', '((Int x) y -> 1) 1\n((Float x) y -> 2) 1'],
     ['f (Int x) = 1; f (Float x) = 2; f', 'Int x -> 1\nFloat x -> 2'],
     ['h (Int x) = x; h', 'Int x -> x'],
     ['f x y = x + y; f missing', '(x y -> x + y) missing'],

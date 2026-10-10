@@ -589,7 +589,8 @@ applied function shows the arguments it has (`(a b -> a + b) 1`). A function
 with several clauses shows each as a pattern lambda on its own line:
 `f (Int x) = 1; f (Float x) = 2` prints `Int x -> 1` and `Float x -> 2`
 (with several parameters, constructor patterns keep their parentheses:
-`(Int x) y -> 1`).
+`(Int x) y -> 1`). Partly applied, each line shows the arguments it has:
+`((Int x) y -> 1) 1`.
 
 Numbers follow a Scheme-style tower: exact arbitrary-precision integers and
 reduced rational fractions, inexact binary64 reals, and complex numbers whose
