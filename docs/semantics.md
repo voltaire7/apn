@@ -584,13 +584,19 @@ its expression-inspection/evaluation rules demonstrated in `examples/features.ap
 `toString` demands its argument and collects its full rendering into a string.
 Values render as source writes them: a constructor argument that is itself
 compound is parenthesized (`Some (Some 1)`, `Distance (-2)`), operators show
-as sections (`(+)`, `(+ 1)`, and `(1 +)` for `(+)` applied to 1), and a partly
-applied function shows the arguments it has (`(a b -> a + b) 1`). A function
+as sections (`(+)`, `(+ 1)`, and `(1 +)` for `(+)` applied to 1). A function
 with several clauses shows each as a pattern lambda on its own line:
 `f (Int x) = 1; f (Float x) = 2` prints `Int x -> 1` and `Float x -> 2`
 (with several parameters, constructor patterns keep their parentheses:
-`(Int x) y -> 1`). Partly applied, each line shows the arguments it has:
-`((Int x) y -> 1) 1`.
+`(Int x) y -> 1`).
+
+A partly applied function shows what is left of it: the clauses its arguments
+match, as a call would choose them, without the matched parameters and with
+the names they bound shown as the arguments. With `g (Int x) y = x + y` and
+`g (Float x) y = 0`, `g 1` prints `y -> 1 + y`; `(a b -> a + b) 1` prints
+`b -> 1 + b`. A clause a call could still reach stays (`h x 0 = x` alongside
+adds the line `0 -> 1`). Printing evaluates an argument only as far as
+matching a pattern needs; one not evaluated yet shows as its source.
 
 Numbers follow a Scheme-style tower: exact arbitrary-precision integers and
 reduced rational fractions, inexact binary64 reals, and complex numbers whose

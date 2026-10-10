@@ -62,7 +62,7 @@ for (const [name, source, expected] of [
     ["constructor arguments print as source writes them", 'import "option"\nprint (return (Some 1))\nprint (Some (Some (-1)))\nprint (Some [1,2])',
         ["Monad (Some 1)", "Some (Some (-1))", "Some [1,2]"]],
     ["partly applied functions show their arguments", "addOp = (+)\nprint (addOp 1)\nprint (+ 1)\nf a b = a + b\nprint (f 1)\ng = x y z -> x * y * z\nprint (g 2 3)",
-        ["(1 +)", "(+ 1)", "(a b -> a + b) 1", "(x y z -> x * y * z) 2 3"]],
+        ["(1 +)", "(+ 1)", "b -> 1 + b", "z -> 2 * 3 * z"]],
 ] as const) Deno.test(`monads: ${name}`, () => {
     for (const checked of [true, false]) {
         const actual = run(source, checked);

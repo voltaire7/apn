@@ -409,6 +409,10 @@ print (filter (2 <) [3,1,4,1,5])      # => [3,4,5]
 addOp = (+)                                 # a lone (op) is a 2-arg lambda
 print (addOp 1 2)                           # => 3
 print (addOp 1)                             # => (1 +)   (partial, as usual)
+# A partly applied function prints what is left of it after matching.
+partialPick (Int x) y = x + y
+partialPick (Float _) _ = 0
+print (partialPick 1)                       # => y -> 1 + y
 
 print (map (10 -) [1,2,3])              # => [9,8,7]
 print (foldl (-) 100 [1,2,3])           # => 94   (a lone (-) subtracts)

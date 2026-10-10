@@ -18,6 +18,7 @@ import { isLoadCall, mergeClauses } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { compoundArgument, mkInt, mkBool, mkStr, mkList, valueToString, rawString } from "./types.ts";
+import { argument, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
 import { parse, exprToSource, patternSource, rangeExpr, isOperatorName, PRIMITIVE_OPERATORS } from "./parser.ts";
 
@@ -1577,17 +1578,8 @@ export class Interpreter {
                 // Patterns demand only the structure they inspect. Shared
                 // argument thunks prevent repeated effects across fallthrough.
                 const hasTypedClauses = f.clauses.some((clause) => clause.params.some((p) => p.p === "constr" && TYPE_NAMES.includes(p.tag)));
-                const ranked = f.clauses.map((clause, index) => ({ clause, index, score: clause.params.reduce((score, pattern, i) => {
-                    if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return score + 40;
-                    if (pattern.p !== "constr" || !TYPE_NAMES.includes(pattern.tag)) return score;
-                    if (pattern.tag === "Vect") return score + (this.isList(this.dataValue(raw[i])) ? 30 : -1000);
-                    const value = pattern.tag === "Mutable" ? this.reference(raw[i]) : pattern.tag === "Type" ? this.demand(raw[i]) : this.dataValue(raw[i]);
-                    if (!NUMERIC_TYPES.includes(pattern.tag)) return score + (this.matchesValueType(pattern.tag, value) ? 30 : -1000);
-                    if (!isNumeric(value)) return score - 1000;
-                    if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(pattern.tag)) return score + (matchesType(pattern.tag, value) ? 10 : -1000);
-                    if (matchesType(pattern.tag, value)) return score + 30;
-                    try { castNumeric(pattern.tag, value); return score + 1; } catch { return score - 1000; }
-                }, 0) })).sort((a, b) => b.score - a.score || a.index - b.index);
+                const ranked = f.clauses.map((clause, index) => ({ clause, index, score: clause.params.reduce((score, pattern, i) => score + this.patternScore(pattern, raw[i]), 0) }))
+                    .sort((a, b) => b.score - a.score || a.index - b.index);
                 for (const { clause } of ranked) {
                     const binds = new Map<string, Value>();
                     // The definition name is the first binding in a named clause.
@@ -2126,6 +2118,8 @@ export class Interpreter {
                     this.render(shown, emit, false, ancestors);
                     if (wrap) emit(")");
                 }
+            } else if (v.kind === "clauseFn" && v.applied.length || v.kind === "closure" && v.applied?.length && !(v.whole ?? v.params)[0].startsWith("$")) {
+                emit(this.residualText(v), v.kind);
             } else emit(raw ? rawString(v) : valueToString(v), v.kind);
         } finally {
             ancestors.delete(v);
@@ -2134,6 +2128,69 @@ export class Interpreter {
 
     // The type of a value as typeOf shows it: Int, [String], Some Int.
     typeText(v: Value): string { return this.renderString(this.callNative("typeOf", [v])); }
+
+    // How specifically a pattern accepts an argument, for choosing among
+    // clauses: literals first, then exact types, then conversions.
+    private patternScore(pattern: Pattern, arg: Value): number {
+        if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
+        if (pattern.p !== "constr" || !TYPE_NAMES.includes(pattern.tag)) return 0;
+        if (pattern.tag === "Vect") return this.isList(this.dataValue(arg)) ? 30 : -1000;
+        const value = pattern.tag === "Mutable" ? this.reference(arg) : pattern.tag === "Type" ? this.demand(arg) : this.dataValue(arg);
+        if (!NUMERIC_TYPES.includes(pattern.tag)) return this.matchesValueType(pattern.tag, value) ? 30 : -1000;
+        if (!isNumeric(value)) return -1000;
+        if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(pattern.tag)) return matchesType(pattern.tag, value) ? 10 : -1000;
+        if (matchesType(pattern.tag, value)) return 30;
+        try { castNumeric(pattern.tag, value); return 1; } catch { return -1000; }
+    }
+    // The most a pattern can score for any argument.
+    private bestPatternScore(pattern: Pattern): number {
+        if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
+        return pattern.p === "constr" && TYPE_NAMES.includes(pattern.tag) ? 30 : 0;
+    }
+
+    // A partly applied function as what is left of it: the clauses its
+    // arguments match, without those parameters, the names they bound shown
+    // as the arguments (g (Int x) y = 1 applied to 1 is y -> 1).
+    private residualText(f: Extract<Value, { kind: "clauseFn" | "closure" }>): string {
+        // An argument not evaluated yet shows as its source: printing
+        // evaluates nothing a call would not.
+        const shown = (x: Value) => () => {
+            if (x.kind === "thunk" && x.value === undefined || x.kind === "deferred") return argument(x);
+            const value = this.demand(x), text = this.renderString(value);
+            return compoundArgument(value) ? `(${text})` : text;
+        };
+        if (f.kind === "closure") {
+            const params = f.whole ?? f.params, applied = f.applied ?? [];
+            const values = new Map(params.slice(0, applied.length).map((name, i) => [name, shown(applied[i])]));
+            return residualSource(params.slice(applied.length), f.body, undefined, values);
+        }
+        // The clauses the arguments match, ranked as a call ranks them by
+        // these arguments. One that matches anything after them, unguarded,
+        // hides those ranked below it, unless the rest of their patterns could
+        // still rank them higher.
+        const k = f.applied.length, caller = this.env;
+        const matched: Array<{ clause: DefClause; index: number; score: number; binds: Map<string, Value> }> = [];
+        this.env = f.env;
+        try {
+            f.clauses.forEach((clause, index) => {
+                const binds = new Map<string, Value>();
+                if (!f.applied.every((x, i) => this.matchPattern(clause.params[i], x, binds))) return;
+                matched.push({ clause, index, binds, score: f.applied.reduce((score: number, x, i) => score + this.patternScore(clause.params[i], x), 0) });
+            });
+        } finally { this.env = caller; }
+        matched.sort((a, b) => b.score - a.score || a.index - b.index);
+        const lines: string[] = [], catchAll: Array<{ score: number; index: number }> = [];
+        for (const m of matched) {
+            const rest = m.clause.params.slice(k);
+            const best = m.score + rest.reduce((score, p) => score + this.bestPatternScore(p), 0);
+            if (catchAll.some(c => c.score > best || c.score === best && c.index < m.index)) continue;
+            lines.push(residualSource(rest, m.clause.body, m.clause.guard, new Map([...m.binds].map(([name, x]) => [name, shown(x)]))));
+            if (!m.clause.guard && rest.every(p => p.p === "var" || p.p === "wildcard")) catchAll.push(m);
+        }
+        if (lines.length) return lines.join("\n");
+        if (f.fallback) return this.renderString(f.applied.reduce((g: Value, x) => this.apply(g, x), f.fallback));
+        throw new APNError("runtime", `no clause of '${f.name}' matches the given arguments`, { hint: "the definition's patterns don't cover this input" });
+    }
 
     renderString(v: Value, raw = false): string {
         const parts: string[] = [];
