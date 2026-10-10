@@ -1,4 +1,3 @@
-import { keySource } from "./record-keys.ts";
 import { lex, type Token } from "./lexer.ts";
 import { parse } from "./parser.ts";
 import { VERSION } from "./cli-options.ts";
@@ -6,7 +5,6 @@ import { APNError } from "./errors.ts";
 import { NATIVES, envNames, dirname, Interpreter, setInterruptFlag, resetInterrupt } from "./interp.ts";
 import type { Value, Env } from "./types.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { valueToString } from "./types.ts";
 
 // ---------------- REPL ----------------
 
@@ -229,29 +227,6 @@ export function renderColored(interp: Interpreter, value: Value, emit: (s: strin
             : kind === "variant" || kind === "type" ? A.cyan : A.gray;
         emit(paint(color, text));
     });
-}
-
-// node-style typed echo: numbers yellow, strings/chars green, bools magenta,
-// values' structure (brackets, colons, commas) gray, functions gray.
-// Variant tags stay cyan (capital constructors are cyan in input too).
-export function showValue(v: Value): string {
-    switch (v.kind) {
-        case "int": case "float": case "rational": case "complex": return colorNumber(valueToString(v));
-        case "string": return paint(A.green, `"${v.v}"`);
-        case "char": return paint(A.green, `'${v.v}'`);
-        case "bool": return paint(A.magenta, String(v.v));
-        case "list":
-            return paint(A.gray, "[") + v.v.map(showValue).join(paint(A.gray, ",")) +
-                paint(A.gray, "]");
-        case "lazyList": return paint(A.gray, "[...]");
-        case "record":
-            return paint(A.gray, "[") +
-                v.v.map(([k, x]) => `${keySource(k)}${paint(A.gray, ": ")}${showValue(x)}`).join(paint(A.gray, ", ")) +
-                paint(A.gray, "]");
-        case "variant":
-            return paint(A.cyan, v.tag) + (v.v.length ? " " + v.v.map(showValue).join(" ") : "");
-        default: return paint(A.gray, valueToString(v));
-    }
 }
 
 const REPL_KEYWORDS = new Set(["import", "load", "use"]);
@@ -1007,10 +982,10 @@ async function replTTY(): Promise<void> {
             await setTtyCooked(savedCooked);
             try {
                 const val = runSourceValue(src, interp, lastIsBinding(src) || lastIsPrintCall(src));
-                if (val !== null && (interp.isList(val) || val.kind === "variant" || val.kind === "record" || val.kind === "hashmap")) {
+                if (val !== null) {
                     renderColored(interp, val, (x) => ed.emit(x));
                     ed.emit("\n");
-                } else if (val !== null) ed.print(showValue(val));
+                }
             } catch (err) {
                 if (err instanceof APNError && err.message === "interrupted") {
                     ed.print(paint(A.dim, "Interrupted."));

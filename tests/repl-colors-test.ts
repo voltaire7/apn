@@ -1,6 +1,13 @@
 import { parse } from "../main.ts";
 import { Interpreter } from "../src/interp.ts";
-import { renderColored, highlightLine, showValue } from "../src/repl.ts";
+import { renderColored, highlightLine } from "../src/repl.ts";
+
+// The REPL echo: every value is colored as the interpreter renders it.
+function echo(interp: Interpreter, value: import("../src/types.ts").Value): string {
+    let output = "";
+    renderColored(interp, value, (text) => { output += text; });
+    return output;
+}
 
 for (const source of ["[1]", "[x: 1]", '[x: [1,"hi",true]]', "take 3 [1..]"]) {
     Deno.test(`streamed REPL colors: ${source}`, () => {
@@ -44,7 +51,7 @@ Deno.test("fraction slashes are peach in scalar and nested echoes", () => {
     const interp = new Interpreter();
     const value = interp.run(parse("1/3"));
     const expected = "\x1b[38;2;229;200;144m1\x1b[0m\x1b[38;2;239;159;118m/\x1b[0m\x1b[38;2;229;200;144m3\x1b[0m";
-    if (showValue(value) !== expected) throw new Error("Wrong scalar fraction colors");
+    if (echo(interp, value) !== expected) throw new Error("Wrong scalar fraction colors");
     for (const source of ["[1/3]", "[x: 1/3]"]) {
         let output = "";
         renderColored(interp, interp.run(parse(source)), (text) => { output += text; });
@@ -58,7 +65,7 @@ Deno.test("complex signs are peach in scalar and nested echoes", () => {
         const value = interp.run(parse(source));
         const sign = source.startsWith("sqrt") ? "+" : "-";
         const expected = `\x1b[38;2;239;159;118m${sign}\x1b[0m`;
-        if (!showValue(value).includes(expected)) throw new Error("Wrong complex sign color");
+        if (!echo(interp, value).includes(expected)) throw new Error("Wrong complex sign color");
         let nested = "";
         renderColored(interp, { kind: "list", v: [value] }, (text) => { nested += text; });
         if (!nested.includes(expected)) throw new Error("Wrong nested complex sign color");
@@ -87,8 +94,14 @@ Deno.test("numeric markers are peach and digits remain yellow", () => {
     if (highlightLine("i") !== "i") throw new Error("Colored standalone variable i");
     const interp = new Interpreter();
     const value = interp.run(parse("2i"));
-    if (!showValue(value).includes(peach + "i\x1b[0m")) throw new Error("Missing echoed imaginary marker color");
+    if (!echo(interp, value).includes(peach + "i\x1b[0m")) throw new Error("Missing echoed imaginary marker color");
     let nested = "";
     renderColored(interp, { kind: "list", v: [value] }, (text) => { nested += text; });
     if (!nested.includes(peach + "i\x1b[0m")) throw new Error("Missing nested imaginary marker color");
+});
+
+Deno.test("functions echo as the interpreter renders them", () => {
+    const interp = new Interpreter();
+    const value = interp.run(parse("f x y = x + y\nf 1"));
+    if (echo(interp, value).replace(/\x1b\[[0-9;]*m/g, "") !== "y -> 1 + y") throw new Error(echo(interp, value));
 });
