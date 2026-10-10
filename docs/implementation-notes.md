@@ -349,7 +349,11 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   variants keep matching as variants. The parser reads a bare `Z` as nullary
   unless the program declared `Z` with fields. Clauses whose types differ
   only in known-versus-unknown list lengths (`toList Z = []`) are separate
-  overload choices, like differing lengths. `tests/natural-numbers-test.ts`.
+  overload choices, like differing lengths. The checker types a numeric
+  constructor pattern's payload untyped (`untypedPayload`), as the runtime
+  binds it, but checks a literal payload against the type; unifying function
+  types converts at a converting parameter (a recursive `f (k - 1)` for an
+  `(UInt k)` clause). `tests/natural-numbers-test.ts`.
 - Binding a variable to a union drops the variable's own occurrences, after
   expanding nested unions: `v = v | t` has the least solution `v = t`. A union
   is not a structural node, so keeping the self-reference never terminates.

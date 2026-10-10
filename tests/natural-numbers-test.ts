@@ -32,6 +32,11 @@ for (const [source, expected] of [
     // with a plain one keeps its type in the checker, as at runtime.
     ["h (UInt 0) = []; h (UInt k) = [k]; [h 0,h 4]", "[[],[4]]"],
     ["toList (UInt k) = k == 0 ? [] : (k - 1) : toList (k - 1); toList 3", "[2,1,0]"],
+    // A numeric type pattern binds the untyped payload, in the checker as at
+    // runtime; S k binds the predecessor, a UInt.
+    ["widen (UInt8 x) = x + 300; widen 5", "305"],
+    ["down (UInt8 x) = x == 0 ? 0 : down (x - 1); down 3", "0"],
+    ["pred (S k) = k; pred 5 - 1", "UInt 3"],
 ] as const) {
     Deno.test(`natural numbers: ${source}`, () => {
         const actual = run(source);

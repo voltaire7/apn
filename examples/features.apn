@@ -1024,6 +1024,8 @@ naturalsBelow (S k) = k : naturalsBelow k
 print (naturalsBelow 3)              # => [UInt 2,UInt 1,UInt 0]
 # naturalFactorial (-1)               # static error: UInt cannot represent a negative integer
 # A literal in a typed pattern is a value of that type: (UInt 0) matches 0.
+# (UInt k) binds the untyped payload, so these are plain integers, while
+# naturalsBelow's S k binds the predecessor, a UInt.
 belowTyped (UInt 0) = []
 belowTyped (UInt k) = (k - 1) : belowTyped (k - 1)
 print (belowTyped 3)                 # => [2,1,0]

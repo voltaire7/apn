@@ -607,6 +607,15 @@ const explicitDynamic: Ty = { k: "dynamic", explicit: true };
 const isExplicit = (t: Ty): boolean => { const value = resolve(t); return value.k === "dynamic" && !!value.explicit; };
 const variable = (): Ty => ({ k: "var" });
 const atom = (name: string): Ty => name === "Dynamic" ? explicitDynamic : { k: "atom", name };
+// The payload a numeric constructor pattern binds: the number without its
+// type annotation (Int for UInt8, Float for Float32); aggregates stay as written.
+function untypedPayload(t: Ty): Ty {
+    if (t.k !== "atom") return t;
+    if (/^U?Int(8|16|32|64|128)?$/.test(t.name)) return atom("Int");
+    if (/^Float(32|64)?$/.test(t.name)) return atom("Float");
+    if (t.name === "ComplexExact") return atom("Complex");
+    return t;
+}
 // A sized or unsigned integer type with a plain integer keeps its type, as at
 // runtime (UInt 5 - 1 is UInt 4; a result it cannot hold is a runtime error).
 function integerResult(a: Ty, b: Ty): Ty | undefined {
@@ -1364,7 +1373,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return;
         }
         if (expected.k === "fn" && actual.k === "fn") {
-            unify(actual.input, expected.input, e, seen);
+            // A parameter that converts its argument ((UInt k)) accepts any
+            // argument that converts, as a call does: toList (k - 1) for an Int k.
+            if (actual.coerce && !expected.coerce && resolve(expected.input).k === "atom" && resolve(actual.input).k === "atom") convert(actual.input, expected.input, e ?? { t: "placeholder" });
+            else unify(actual.input, expected.input, e, seen);
             unify(expected.output, actual.output, e, seen);
             return;
         }
@@ -1791,7 +1803,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (t.k === "type") {
                     const value = t.value.k === "atom" && t.value.name === "List" ? list(variable()) : t.value;
                     unify(value, expected, e);
-                    p.args.forEach((x) => bind(x, value.k === "variant" && value.base ? value.base : value, scope, e, bound));
+                    // A numeric constructor pattern binds the untyped payload, as at
+                    // runtime: (UInt8 x) binds 5 for UInt8 5, a plain integer. A
+                    // literal payload is still a value of the type: (UInt8 300) fails.
+                    const payload = value.k === "variant" && value.base ? value.base : value;
+                    p.args.forEach((x) => bind(x, x.p === "int" || x.p === "range" ? payload : untypedPayload(payload), scope, e, bound));
                     return;
                 }
                 if ((t.k === "record" || t.k === "list") && p.args.length === 1) {

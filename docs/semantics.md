@@ -796,6 +796,8 @@ factorial 20                     # UInt 2432902008176640000
 S (S Z)                          # UInt 2
 ```
 
+`S k` destructures, it does not unwrap: `k` is the predecessor, itself a `UInt`,
+while `(UInt k)` binds the untyped payload like any numeric constructor pattern.
 A bare `Z` in a pattern takes no fields (`plus Z m = m`). A program that declares
 its own constructor named `Z` or `S` gets it in that scope, matched as a variant;
 a number never matches a variant pattern.
