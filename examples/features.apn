@@ -1013,6 +1013,16 @@ print (take 3 ([1..100] * Int))      # => [1,2,3]
 print (100 * Int 0)                  # => 0
 print (Int 123)                      # => 123
 print (UInt32 4294967295)             # => UInt32 4294967295
+# UInt is the natural numbers: Z is UInt 0, S n the next one. The patterns
+# Z and S k take a number apart (k is one less), on plain integers.
+naturalFactorial Z = 1
+naturalFactorial (S k) = (k + 1) * naturalFactorial k
+print (naturalFactorial 20)          # => UInt 2432902008176640000
+print (S (S Z))                      # => UInt 2
+naturalsBelow Z = []
+naturalsBelow (S k) = k : naturalsBelow k
+print (naturalsBelow 3)              # => [UInt 2,UInt 1,UInt 0]
+# naturalFactorial (-1)               # static error: UInt cannot represent a negative integer
 print (Float32 .5)                   # => Float32 0.5
 print (Fraction (1/3))               # => Fraction 1/3
 print (Int $ truncate $ 3.7)         # => 3

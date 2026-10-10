@@ -382,7 +382,8 @@ class Parser {
             this.next();
             const name = t.v;
             if (name === "_") return { p: "wildcard" };
-            if (nullaryCtors.has(name)) return { p: "constr", tag: name, args: [] };
+            // Z, the built-in zero, takes no fields unless the program redeclares it.
+            if (nullaryCtors.has(name) || name === "Z" && !declaredCtors.has(name)) return { p: "constr", tag: name, args: [] };
             // Vect exposes length, element type, and payload in one pattern.
             if (name === "Vect" && this.startsParam(this.peek())) {
                 const size = this.parsePattern();

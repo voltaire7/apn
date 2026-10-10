@@ -344,6 +344,12 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   budget/depth exhaustion is a diagnostic, not a `Dynamic` fallback; an
   evaluation that runs out of budget leaves its value unknown, a runtime
   check. `tests/type-level-evaluation-test.ts`.
+- `Z`/`S k` patterns take a number apart by the value they meet (runtime
+  `matchPattern`, checker `naturalArgument`), so a program's own `Z`/`S`
+  variants keep matching as variants. The parser reads a bare `Z` as nullary
+  unless the program declared `Z` with fields. Clauses whose types differ
+  only in known-versus-unknown list lengths (`toList Z = []`) are separate
+  overload choices, like differing lengths. `tests/natural-numbers-test.ts`.
 - Binding a variable to a union drops the variable's own occurrences, after
   expanding nested unions: `v = v | t` has the least solution `v = t`. A union
   is not a structural node, so keeping the self-reference never terminates.

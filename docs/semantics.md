@@ -782,6 +782,24 @@ variants. `Float` is flexible floating precision, using binary64 by default.
 `ComplexExact` an exact one. Constructors are first-class functions, e.g.
 `map Int [1,2]`. Constructed values print their type: `Int32 123`.
 
+`UInt` is the natural numbers, with built-in constructors `Z` (`UInt 0`) and
+`S` (`S n` is `n + 1`, converting `n` as `UInt n` does). The patterns `Z` and
+`S k` take a number apart: `Z` matches 0, and `S k` matches any number from 1
+up, binding `k` to one less, as a `UInt`. Like a `(UInt n)` pattern, they accept
+a plain integer that converts; a negative one matches neither (a static error
+for a literal).
+
+```apn
+factorial Z = 1
+factorial (S k) = (k + 1) * factorial k
+factorial 20                     # UInt 2432902008176640000
+S (S Z)                          # UInt 2
+```
+
+A bare `Z` in a pattern takes no fields (`plus Z m = m`). A program that declares
+its own `Z` or `S` (`Nat = Z | S Nat`) gets its own variants in that scope,
+matched as variants; a number never matches a variant pattern.
+
 Explicit `Float`, `Float32`, and `Float64` construction rounds to the target
 floating-point precision, for bare or annotated inputs. `Float32 .1` produces
 `Float32 0.1` (the nearest binary32 value, displayed with the shortest

@@ -63,7 +63,10 @@ export const NATIVES: Array<[string, number]> = [
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
     ["primBind", 2], ["primAp", 2], ["primReturn", 1],
+    // Natural numbers are UInt: Z is UInt 0, S n the next one.
+    ["S", 1],
 ];
+const ZERO: Value = { kind: "int", v: 0n, typeName: "UInt" };
 
 export class Interpreter {
     // Enabled by normal CLI/REPL execution. Foreign name installation
@@ -168,6 +171,7 @@ export class Interpreter {
         const callerDir = this.sourceDir;
         const builtins = new Env();
         for (const type of TYPE_NAMES) builtins.setLocal(type, { kind: "type", name: type });
+        builtins.setLocal("Z", ZERO);
         for (const [name, arity] of [...NATIVES, ...STANDARD_NATIVES]) builtins.setLocal(name, { kind: "native", name, arity, applied: [] });
         for (const [name, value] of this.preludeBindings) builtins.setLocal(name, value);
         const scope = new Env(builtins);
@@ -208,6 +212,7 @@ export class Interpreter {
 
     constructor() {
         for (const name of TYPE_NAMES) this.env.setLocal(name, { kind: "type", name });
+        this.env.setLocal("Z", ZERO);
         for (const [name, arity] of NATIVES) {
             this.env.setLocal(name, { kind: "native", name, arity, applied: [] });
         }
@@ -3048,6 +3053,11 @@ export class Interpreter {
                 for (const x of this.elements(args[2])) acc = this.demand(this.apply(this.apply(f, acc), x));
                 return acc;
             }
+            case "S": {
+                if (!isNumeric(a)) throw new APNError("runtime", "S expects a natural number (a UInt)");
+                const n = castNumeric("UInt", a);
+                return { kind: "int", v: (n as { v: bigint }).v + 1n, typeName: "UInt" };
+            }
             case "intToString":
                 if (a.kind !== "int") throw new Error("Runtime: intToString expects int");
                 return mkStr(String(a.v));
@@ -3622,6 +3632,12 @@ export class Interpreter {
                     let converted: Value;
                     try { converted = numericPayload(castNumeric(p.tag, v)); } catch { return false; }
                     return this.matchPattern(p.args[0], converted, binds);
+                }
+                // Z and S k take a natural number apart: 0, or k + 1 (k a UInt).
+                if (isNumeric(v) && (p.tag === "Z" && !p.args.length || p.tag === "S" && p.args.length === 1)) {
+                    let n: bigint;
+                    try { n = (castNumeric("UInt", v) as { v: bigint }).v; } catch { return false; }
+                    return p.tag === "Z" ? n === 0n : n > 0n && this.matchPattern(p.args[0], { kind: "int", v: n - 1n, typeName: "UInt" }, binds);
                 }
                 if (v.kind !== "variant" || v.tag !== p.tag) return false;
                 if (v.v.length !== p.args.length) return false;

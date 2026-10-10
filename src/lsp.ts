@@ -48,6 +48,8 @@ const builtins = new Map<string, string>([
     ["map", "map f m — m with f applied to what it holds: an action, a list, or a type with an instance."],
     ["Monad", "Monad — the type of monadic values (IO, lists, types with >>= instances); return x is undecided until a context names its monad."],
     ["Functor", "Functor — the type of values map works on."],
+    ["Z", "Z — the natural number zero, UInt 0; the pattern Z matches 0."],
+    ["S", "S n — the natural number after n (n + 1, a UInt); the pattern S k matches 1 and up, binding k to one less."],
     ["return", "return x — x in the monad the context decides (an annotation, a >>=, or IO when run)."],
     ["sequence", "sequence actions — action running each, yielding the list of results."],
     ["mapM", "mapM f xs — sequence (map f xs)."],

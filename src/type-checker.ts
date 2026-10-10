@@ -2116,6 +2116,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return union(outputs);
         }
         if (f.k === "factory") {
+            // A length computed as a typed integer (a UInt) is that integer.
+            if (!argument.index && argument.number?.kind === "int" && !f.args.length) argument = { ...argument, index: constant(argument.number.v) };
             const args = [...f.args, argument];
             if (args.length === 1) {
                 convert(atom("Int"), argument.type, e);
@@ -4134,6 +4136,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         } else if (p.p === "list") {
             p.v.forEach((q, n) => { const item = element(value, n); if (item) bindKnown(q, item, env, refutable); });
+        } else if (p.p === "constr" && p.tag === "S" && p.args.length === 1) {
+            const n = naturalArgument(p, value);
+            if (n !== undefined && n > 0n) bindKnown(p.args[0], { number: { kind: "int", v: n - 1n, typeName: "UInt" } }, env, refutable);
         } else if (p.p === "constr" && TYPE_NAMES.includes(p.tag) && p.args.length === 1 && plain(p.args[0])) {
             if (!NUMERIC_TYPES.includes(p.tag)) { env.set(p.args[0].name, value); return; }
             const n = numericOf(value);
@@ -4853,6 +4858,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (n.kind === "float") return { float: n.v };
         return { number: n };
     }
+    // A known number p takes apart as Z or S k: its value as a natural, or -1
+    // when it is none (negative or not an integer). Values are the runtime's
+    // test, so a program's own Z and S variants are unaffected.
+    function naturalArgument(p: Pattern, argument: Known): bigint | undefined {
+        if (p.p !== "constr" || !(p.tag === "Z" && !p.args.length || p.tag === "S" && p.args.length === 1) || argument.tag !== undefined) return undefined;
+        const number = knownNumberOf(argument);
+        if (!number) return undefined;
+        try { return (castNumeric("UInt", number) as { v: bigint }).v; } catch { return -1n; }
+    }
     // Does this argument always match p? Only what the checker knows exactly
     // qualifies (list lengths, literal values, exact types); repeated names never do.
     function definitelyMatches(p: Pattern, argument: Entry, refutable: Set<string>, score: number): boolean {
@@ -4863,6 +4877,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (p.p === "string") return argument.string === p.v;
         if (p.p === "char") return argument.char === p.v;
         if (p.p === "range") return !!argument.index && !argument.index.terms.size && argument.index.constant >= p.lo && argument.index.constant <= p.hi;
+        const n = naturalArgument(p, argument);
+        if (n !== undefined) return p.p === "constr" && (p.tag === "Z" ? n === 0n : n > 0n && irrefutable(p.args[0]));
         // A constructor the argument was visibly built with, its fields bound plainly.
         if (p.p === "constr" && !TYPE_NAMES.includes(p.tag)) return argument.tag === p.tag && p.args.every(irrefutable);
         // A certain exact-type (30) or aggregate (10) match, binding the value whole.
@@ -4892,6 +4908,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (p.p === "char") return argument.char !== undefined && argument.char !== p.v;
         if (p.p === "range") return !!argument.index && !argument.index.terms.size && (argument.index.constant < p.lo || argument.index.constant > p.hi);
         if (p.p === "constr" && TYPE_NAMES.includes(p.tag)) return low === -1000 && high === -1000;
+        const n = naturalArgument(p, argument);
+        if (n !== undefined) return p.p === "constr" && (p.tag === "Z" ? n !== 0n : n <= 0n);
         if (p.p === "constr") return argument.tag !== undefined && argument.tag !== p.tag;
         if (p.p === "list") return listLength(argument, p.v.length) === false;
         if (p.p === "cons") return listLength(argument, 0) === true;
@@ -5012,10 +5030,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Whether a pattern converts the value it matches (Int n, a schema, a
     // contract), in whole or in a part ([UInt8 a,UInt8 b], (Float x):rest).
     // Only real type patterns can project Dynamic arguments.
+    // Z or S k taking apart a natural number (the builtin Z and S, not a variant's).
+    function naturalPattern(p: Pattern, scope: Scope): boolean {
+        return p.p === "constr" && (p.tag === "Z" && !p.args.length || p.tag === "S" && p.args.length === 1) && !!scope.get(p.tag)?.builtin;
+    }
     function patternConverts(p: Pattern, scope: Scope): boolean {
         switch (p.p) {
             case "schema": case "int": return true;
             case "constr": {
+                if (naturalPattern(p, scope)) return true;
                 const constructor = resolve(scope.get(p.tag)?.type ?? dynamic);
                 if (constructor.k === "type" && !variables(constructor.value).size || constructor.k === "record" || constructor.k === "list") return true;
                 // A variant whose payload patterns convert (Some (Float x)).
@@ -5370,12 +5393,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // clause ranking then decides between them at each call. Any other
             // conflict stays an error when the group is merged below.
             if (existing) {
+                // A merge that leaves lengths unresolved (a known length against
+                // an unknown one) does not merge cleanly either.
                 const merges = (a: Ty, b: Ty) => {
-                    try { unify(a, b, c.body); return true; }
+                    const boundaries = dynamicBoundaries;
+                    try { unify(a, b, c.body); return dynamicBoundaries === boundaries; }
                     catch (error) {
                         if (!error || typeof error !== "object" || !("message" in error)) throw error;
                         return false;
-                    }
+                    } finally { dynamicBoundaries = boundaries; }
                 };
                 if (!merges(copy(existing), copy(t)) && merges(withoutLengths(copy(existing)), withoutLengths(copy(t)))) {
                     key = `${key}#${index}`;
@@ -5504,6 +5530,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     for (const name of ["return", "primReturn"]) { const t = variable(); scope.set(name, { type: fn(t, pendingTy(t)) }); }
     for (const name of ["when", "unless"]) { const t = variable(); scope.set(name, { type: fn(variable(), fn(io(t), io(list(variable(), constant(0n))))) }); }
     scope.set("cast", { type: { k: "intrinsic", name: "cast", arity: 2 } });
+    // Natural numbers are UInt: Z is UInt 0, S n the next one (converting n as UInt n does).
+    scope.set("Z", { type: atom("UInt"), number: { kind: "int", v: 0n, typeName: "UInt" } });
+    scope.set("S", { type: fn(atom("UInt"), atom("UInt"), undefined, true) });
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
     scope.set("match", { type: { k: "intrinsic", name: "match", arity: 2 } });
     if (options.library) {

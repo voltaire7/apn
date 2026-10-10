@@ -1,0 +1,49 @@
+import { Interpreter } from "../src/interp.ts";
+import { parse } from "../src/parser.ts";
+
+// Natural numbers are UInt: Z is UInt 0, S n the next one, and the patterns
+// Z and S k take a number apart (k is one less, a UInt).
+function run(source: string): string {
+    const i = new Interpreter();
+    i.enableChecking();
+    return i.renderString(i.run(parse(source)));
+}
+function failure(source: string): { kind?: string; message: string } {
+    try { run(source); } catch (error) { return error as { kind?: string; message: string }; }
+    throw new Error(`accepted: ${source}`);
+}
+const FACTORIAL = "factorial Z = 1; factorial (S k) = (k + 1) * factorial k; ";
+const TO_LIST = "toList Z = []; toList (S k) = k : toList k; ";
+
+for (const [source, expected] of [
+    ["Z", "UInt 0"],
+    ["S (S Z)", "UInt 2"],
+    ["S 5", "UInt 6"],
+    [FACTORIAL + "factorial 20", "UInt 2432902008176640000"],
+    [TO_LIST + "toList 3", "[UInt 2,UInt 1,UInt 0]"],
+    // A bare Z takes no fields, so a second parameter stays a parameter.
+    ["plus Z m = m; plus (S k) m = S (plus k m); plus 2 (UInt 3)", "UInt 5"],
+    ["fib Z = 0; fib (S Z) = 1; fib (S (S k)) = fib (S k) + fib k; fib 20", "6765"],
+    // The checker evaluates them in types.
+    [FACTORIAL + "Vect (factorial 3) Int [1,2,3,4,5,6]", "[1,2,3,4,5,6]"],
+    // A program's own Z and S are its variants.
+    ["Nat = Z | S Nat; plus Z m = m; plus (S k) m = S (plus k m); plus (S Z) (S Z)", "S (S Z)"],
+    ["W = | Z Int; f (Z n) = n; f (Z 3)", "3"],
+] as const) {
+    Deno.test(`natural numbers: ${source}`, () => {
+        const actual = run(source);
+        if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+    });
+}
+
+for (const [source, kind, message] of [
+    [FACTORIAL + "factorial (-1)", "type", "UInt cannot represent a negative integer"],
+    [FACTORIAL + "Vect (factorial 3) Int [1,2]", "type", "length mismatch: expected 6, got 2"],
+    ["S (-1)", "type", "UInt cannot represent a negative integer"],
+    ["pred (S k) = k; pred 0", "runtime", "no clause of 'pred' matches the given arguments"],
+] as const) {
+    Deno.test(`natural numbers reject: ${source}`, () => {
+        const error = failure(source);
+        if (error.kind !== kind || !error.message.includes(message)) throw new Error(`${error.kind}: ${error.message}`);
+    });
+}
