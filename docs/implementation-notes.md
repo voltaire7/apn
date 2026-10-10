@@ -328,7 +328,11 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
 
 Behavior: `docs/gradual-and-dependent-types.md`.
 
-- `src/type-checker.ts` is pure and never executes APN;
+- `src/type-checker.ts` never runs the interpreter or performs effects; its
+  own bounded evaluator (`evaluateKnown`, over partially known values) runs
+  pure code a type needs. Its conditions (`boolean`) fall back to it inside
+  `peek`, so a value reading a top-level cell is decided only in the run's
+  order; a type a condition chooses at runtime is `chosen`;
   `src/checking-session.ts` supplies import/load interfaces and the
   interpreter's runtime names (used to report unbound names). Normal execution
   calls `Interpreter.enableChecking()`.
@@ -336,8 +340,10 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   record matching, overloads, and bounded affine index substitution.
 - Recursive structural types are finite graphs: keep cycles when copying or
   generalizing and compare visited pairs during unification. Do not
-  reintroduce an occurs-check rejection for self-application. Budget/depth
-  exhaustion is a diagnostic, not a `Dynamic` fallback.
+  reintroduce an occurs-check rejection for self-application. Inference
+  budget/depth exhaustion is a diagnostic, not a `Dynamic` fallback; an
+  evaluation that runs out of budget leaves its value unknown, a runtime
+  check. `tests/type-level-evaluation-test.ts`.
 - Binding a variable to a union drops the variable's own occurrences, after
   expanding nested unions: `v = v | t` has the least solution `v = t`. A union
   is not a structural node, so keeping the self-reference never terminates.
@@ -553,7 +559,8 @@ Behavior: `docs/gradual-and-dependent-types.md`.
 
 ## Editor tooling
 
-`src/lint.ts` and `src/lsp.ts` must never evaluate user code; use
+`src/lint.ts` and `src/lsp.ts` must never evaluate user code beyond the
+checker's bounded evaluator (with `--types`); use
 `parseDocument`, which isolates and restores parser declaration registries.
 Lint warns only for recognizable families/literal alternatives, handles scope
 shadowing conservatively, and doesn't treat guarded patterns as total coverage;

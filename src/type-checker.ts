@@ -45,7 +45,8 @@ type Ty =
     | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; summary?: Summary }
     | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number> }
     | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string> }
-    | { k: "type"; value: Ty }
+    // chosen: one of value's choices, picked by a condition known only at runtime.
+    | { k: "type"; value: Ty; chosen?: boolean }
     | { k: "factory"; args: Entry[] }
     | { k: "alias"; params: string[]; body: Expr; scope: Scope; args: Entry[] }
     | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty };
@@ -98,6 +99,8 @@ interface Known {
     action?: () => Known | undefined;
     // actionResult: the type an action yields as it prints (IO []), when known.
     actionResult?: string;
+    // type: a type value (Int, or one a type-level function chose).
+    type?: Ty;
 }
 // A function's clauses and defining scope, so a direct call by name can
 // evaluate what its result value is from what is known about the arguments.
@@ -1436,6 +1439,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (e.t === "var") return scope.get(e.name)?.boolean;
         if (e.t === "block" && e.stmts.length === 1) return boolean(e.stmts[0], scope);
+        // Anything else is evaluated as the program would (isEven 4, a call),
+        // unless it reads a cell, whose contents depend on when it runs.
+        if (e.t === "app" || e.t === "binop" || e.t === "ternary" || e.t === "unop") return peek(() => truth(computed(e, scope)), undefined);
         return undefined;
     }
     function index(e: Expr, scope: Scope): Index | undefined {
@@ -2125,7 +2131,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 element = payload;
             }
             if (element.k !== "type" && element.k !== "dynamic") problem("Vect element must be a type", e);
-            if (!args[0].index) dynamicBoundaries++;
+            // A length evaluation could not decide (it depends on input, or ran
+            // past the evaluation budget) is checked at runtime.
+            if (!args[0].index) runtimeChecks++;
             return { k: "type", value: { k: "list", element: element.k === "type" ? element.value : dynamic, length: args[0].index, contracted: true } };
         }
         if (f.k === "alias") {
@@ -2136,6 +2144,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return infer(f.body, scope);
         }
         if (f.k === "type") {
+            // A type chosen at runtime: the value must fit one of its choices,
+            // and the result is checked when the run applies the chosen one.
+            if (f.chosen) {
+                const t = resolve(f.value), choices = t.k === "union" ? t.choices : [t];
+                if (!choices.some(choice => succeeds(() => application({ k: "type", value: choice }, { ...argument, type: copy(argument.type) }, e)))) {
+                    return problem(`cannot use ${text(argument.type)} where ${choices.map(c => text(c)).join(" or ")} is required`, e);
+                }
+                runtimeChecks++;
+                return explicitDynamic;
+            }
             const t = resolve(f.value), a = resolve(argument.type);
             // List T: the type of lists of T.
             if (t.k === "atom" && t.name === "List" && (a.k === "type" || a.k === "list" && (a.items ?? []).every(x => resolve(x).k === "type"))) {
@@ -2618,7 +2636,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return application(copy(isType.type), { type: variable() }, e);
                 }
                 callees.add(e.f);
-                const callee = infer(e.f, scope), resolved = resolve(callee);
+                let callee = infer(e.f, scope), resolved = resolve(callee);
+                // A type one of several, chosen by code (elemType flag): evaluate
+                // the code to learn which, as the program would.
+                if (resolved.k === "type" && resolved.chosen && e.f.t !== "var") {
+                    const chosen = peek(() => computed(e.f, scope).type, undefined);
+                    if (chosen) { callee = chosen; resolved = resolve(chosen); }
+                }
                 if (resolved.k === "intrinsic" && resolved.name === "load" && a.t === "string" && options.loads) {
                     const loaded = options.loads(a.v, scope, e === tailStatement);
                     for (const [name, entry] of loaded) scope.set(name, entry);
@@ -2835,9 +2859,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const known = boolean(e.cond, scope);
                 if (known !== undefined) return infer(known ? e.then : e.els, scope);
                 const a = infer(e.then, scope), b = infer(e.els, scope, a);
+                // A type chosen by a condition known only when it runs: one of
+                // the two, checked against the value at runtime.
                 if (resolve(a).k === "type" && resolve(b).k === "type" && text(a) !== text(b)) {
-                    dynamicBoundaries++;
-                    return { k: "type", value: dynamic };
+                    runtimeChecks++;
+                    return { k: "type", value: union([(resolve(a) as Extract<Ty, { k: "type" }>).value, (resolve(b) as Extract<Ty, { k: "type" }>).value]), chosen: true };
                 }
                 const left = resolve(a), right = resolve(b);
                 if (left.k === "list" && right.k === "var") { unify(list(left.element), right, e); return list(left.element); }
@@ -4293,7 +4319,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!entry) return undefined;
                 if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
                 if (entry.lazyTop) return forceLazyTop(entry.lazyTop, depth);
-                if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope } };
+                const type = /^[A-Z]/.test(e.name) && resolve(entry.type).k === "type" ? { type: entry.type } : {};
+                if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope }, ...type };
+                if (type.type) return type;
                 if (e.name === "getArgs" && entry.builtin && options.inputs) { const inputs = options.inputs; return { action: () => known(inputs.args().map(string => ({ string }))) }; }
                 const index = entry.index && !entry.index.terms.size ? entry.index : undefined;
                 return { index, size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };

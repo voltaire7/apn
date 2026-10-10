@@ -175,7 +175,7 @@ Deno.test("constant index predicates select a dependent type", () => {
 Deno.test("rebound indices keep lazy aliases dynamic", () => {
     const source = "size = 2; V = Vect size Int; size = 3; V [1,2,3]";
     const result = checkSource(source);
-    if (result.issues.length || !result.dynamicBoundaries) throw new Error(JSON.stringify(result));
+    if (result.issues.length || !result.runtimeChecks) throw new Error(JSON.stringify(result));
     const i = new Interpreter();
     if (i.renderString(i.run(parseDocument(source))) !== "[1,2,3]") throw new Error("lazy alias changed");
 });

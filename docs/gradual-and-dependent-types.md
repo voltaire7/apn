@@ -208,10 +208,45 @@ Choice true 123
 Choice false "hello"
 ```
 
-Known Boolean selections are reduced statically. Unknown selections and other
-arbitrary type computations remain dynamic. Generic variant declarations still
-use their existing type-parameter behavior; value-dependent aliases and Vect
-provide the value-indexed layer.
+Generic variant declarations still use their existing type-parameter
+behavior; value-dependent aliases and Vect provide the value-indexed layer.
+
+### Evaluating code in types
+
+The checker evaluates the pure code a type needs, as the program would: a
+length, a condition choosing a type, or a function returning a type. It runs
+your functions on what is known (literals, earlier definitions, other known
+results), never performs an effect, and stops after a fixed number of steps.
+
+```apn
+SelectedType flag = flag ? Int : String
+sizeFor n = n * 2
+cellType 0 = Int
+cellType _ = String
+SelectedType (isEven 4) 5              # Int: isEven 4 is true
+# SelectedType (isEven 3) 5            # static error: String is required
+# Vect (sizeFor 2) Int [1,2,3]         # static error: expected 4, got 3
+(cellType 1) "text"                    # String
+```
+
+What evaluation cannot decide is checked when the program runs, never
+guessed: a value depending on a parameter or on program input, one that
+reads a `Mutable` cell (its contents depend on when it runs), or one that does
+not finish within the step budget.
+
+- A type chosen by an undecided condition is one of its choices. A value
+  must fit at least one (`SelectedType (n > 3) [1]` is a static error); the
+  result is checked at runtime, like a `Dynamic` one.
+- A `Vect` length evaluation cannot decide is validated when the list is built.
+- An expression a type needs that fails (`Vect (1/0) Int xs`) fails where the
+  program demands it, as any other value does: laziness means a type nothing
+  uses never fails.
+
+```apn
+labelled n = SelectedType (n > 3) "few"
+labelled 2 ++ "!"                      # "few!"
+# labelled 5                           # runtime error: Int expects a number
+```
 
 ## Inferring arguments from a vector pattern
 
@@ -274,7 +309,7 @@ or lists of records. Loaded files are checked with their lexical caller scope;
 a source change between checking and execution is rejected. Resubmit the loading
 definition to check the new source. A file's final `load` of itself (or of a
 file cycling back to it) is a tail load, accepted without checking that file
-again; other cyclic loads and computed loads need an explicit `Dynamic` boundary. The checker never executes APN to discover types.
+again; other cyclic loads and computed loads need an explicit `Dynamic` boundary. The checker never runs a file or performs an action to discover types.
 
 Overloaded arithmetic retains constraints in inferred functions: `f x = x + 1`
 can be called with compatible numeric inputs, and `f "bad"` is rejected. List

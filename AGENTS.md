@@ -43,7 +43,7 @@ Key files:
 - `src/interp.ts` — `Interpreter` (eval/apply/demand), `NATIVES` registry
 - `src/types.ts` — runtime `Value` union, `Env`, `valueToString`
 - `src/numbers.ts`, `src/type-system.ts` — numeric tower and numeric types
-- `src/type-checker.ts`, `src/checking-session.ts` — static checking (never executes APN)
+- `src/type-checker.ts`, `src/checking-session.ts` — static checking (evaluates pure code, never performs effects)
 - `src/errors.ts` — `APNError`, `didYouMean`
 - `src/repl.ts` — REPL editor and drivers
 - `lib/*.apn` — standard library (`import "text"`, `import ["option","map"]`, ...)
@@ -104,8 +104,11 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   only statements, `<-` and running do-blocks run actions (`runIO`, keeping
   recursive actions in constant stack). Operators are prelude functions
   (`lib/prelude.apn`); intrinsics are named functions, not syntax.
-- **Static checking** never evaluates user code or performs effects; neither
-  do lint/LSP features. It reads program input only when the interpreter checks
+- **Static checking** evaluates the pure code a type needs, in its own
+  step-bounded evaluator, and never performs effects; lint/LSP never evaluate
+  user code beyond that checker. What it cannot decide (a parameter, input, a
+  cell's contents out of run order, the budget running out) becomes a runtime
+  check, never a guess. It reads program input only when the interpreter checks
   right before a run, through the snapshot that run uses (stdin only when it is
   not a terminal).
 - **File mode never auto-prints**; the REPL echoes expression results but

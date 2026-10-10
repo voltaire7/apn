@@ -1663,6 +1663,17 @@ print (typeOf (SizedInts 3 [1,2,3]))     # => Vect 3 Int
 SelectedType flag = flag ? Int : String
 print (SelectedType true 123)           # => 123
 print (SelectedType false "hello")      # => hello
+# The checker evaluates the pure code a type needs, as the program would:
+# SelectedType (isEven 3) 5 and Vect (sizeFor 2) Int [1,2,3] are static errors.
+sizeFor n = n * 2
+print (Vect (sizeFor 2) Int [1,2,3,4])  # => [1,2,3,4]
+cellType 0 = Int
+cellType _ = String
+print ((cellType 1) "text")             # => text
+# A type chosen by a parameter is decided at each run: a runtime check.
+labelled n = SelectedType (n > 3) "few"
+print (labelled 2 ++ "!")               # => few!
+# labelled 5 fails when run: Int expects a number.
 # apn --check examples/types/dependent-vectors.apn checks without executing.
 # apn examples/types/dependent-vectors.apn checks, then runs by default.
 
