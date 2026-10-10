@@ -34,6 +34,8 @@ export class CheckingSession {
     nativeArities?: Map<string, number>;
     // Instances of map, >>=, <*> and return the session's programs and modules define.
     instances = new Map<string, unknown[]>();
+    // Clauses' inferred result types, for overloads chosen by result type.
+    resultHeads = new Map<string, string>();
     /** Names the interpreter can resolve, so the checker can tell a typo from a runtime-only builtin. */
     runtimeNames?: () => Iterable<string>;
     /** The program's input when checking right before a run (see CheckOptions.inputs). */
@@ -85,6 +87,7 @@ export class CheckingSession {
             envTopViews: () => this.envTopViews,
             nativeArities: this.nativeArities,
             instances: this.instances,
+            resultHeads: this.resultHeads,
             loadedNames: path => this.loadedNames(path, directory),
             imports: module => {
                 const fields = this.module(module, directory);

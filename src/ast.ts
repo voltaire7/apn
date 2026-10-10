@@ -71,26 +71,34 @@ export type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "
 export interface SourceLocation { source: string; file: string; start: number; end: number; }
 export const sourceLocations = new WeakMap<Expr, SourceLocation>();
 
+// Clauses with equivalent patterns (and guards): parameter names do not
+// matter (f (Int x) and f (Int y) are the same), and _ is a name nothing uses.
+export function clauseKey(name: string, clause: { params: Pattern[]; guard?: Expr }): string {
+    const names = new Map<string, number>([[name, -1]]);
+    let unused = 0;
+    return JSON.stringify([clause.params, clause.guard ?? null], (field, value) => {
+        if (value && typeof value === "object" && value.p === "wildcard") return { p: "var", name: `\0${unused++}` };
+        if (field === "name") { if (!names.has(value)) names.set(value, names.size); return names.get(value); }
+        return typeof value === "bigint" ? `${value}n` : value;
+    });
+}
+
 // A function's clauses after more are defined for it: a clause with an
-// equivalent pattern (and guard) rebinds that clause in place, with
-// parameter names not mattering (f (Int x) and f (Int y) are the same, and
-// _ is a name nothing uses); any other is added after the existing ones.
-export function mergeClauses<C extends { params: Pattern[]; guard?: Expr }>(name: string, existing: C[], added: C[]): C[] {
-    const key = (clause: C): string => {
-        const names = new Map<string, number>([[name, -1]]);
-        let unused = 0;
-        return JSON.stringify([clause.params, clause.guard ?? null], (field, value) => {
-            if (value && typeof value === "object" && value.p === "wildcard") return { p: "var", name: `\0${unused++}` };
-            if (field === "name") { if (!names.has(value)) names.set(value, names.size); return names.get(value); }
-            return typeof value === "bigint" ? `${value}n` : value;
-        });
-    };
-    const result = [...existing], at = new Map(result.map((c, i) => [key(c), i]));
+// equivalent pattern and the same result type rebinds that clause in place;
+// one with another result type overloads it, as does any other clause, added
+// after the existing ones. result gives a clause's result type when known.
+export function mergeClauses<C extends { params: Pattern[]; guard?: Expr }>(name: string, existing: C[], added: C[], result: (clause: C) => string | undefined = () => undefined): C[] {
+    const out = [...existing];
     for (const clause of added) {
-        const k = key(clause), i = at.get(k);
-        if (i === undefined) { at.set(k, result.length); result.push(clause); } else result[i] = clause;
+        const k = clauseKey(name, clause);
+        const same = out.flatMap((c, i) => clauseKey(name, c) === k ? [i] : []);
+        if (!same.length) { out.push(clause); continue; }
+        // Only clauses with equal patterns need their result types.
+        const head = result(clause);
+        const i = same.find(j => head === undefined || result(out[j]) === undefined || result(out[j]) === head);
+        if (i === undefined) out.push(clause); else out[i] = clause;
     }
-    return result;
+    return out;
 }
 
 // A direct load call (load "file", load $ path): <- may bind its exports.

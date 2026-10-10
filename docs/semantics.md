@@ -457,15 +457,16 @@ None >>= _ = None
 return = Some                      # return in Option
 ```
 
-`return` is overloaded on its result: a context that names Option uses the
-newest `return` whose result is an Option, so `return = Some` and
-`return x = MkCounter (s -> [x,s])` each define it for their own type.
+`return` is overloaded on its result type (see "Overloading on the result
+type" below): a context that names Option uses the newest `return` whose
+result is an Option, so `return = Some` and `return x = MkCounter (s -> [x,s])`
+each define it for their own type.
 
 `map` and `<*>` follow from `>>=` and `return` when a type defines no
 instance of its own. A type used where no instance accepts it is an error
 (`no map instance for Tree`).
 
-`return x` is a value in a monad not decided yet (its type is `Monad T`). It
+`return x` is a value in a monad not decided yet (its type is `m T`). It
 takes the monad of the first context that names one:
 
 - an annotation: `Option Int { return 42 }` is `Some 42`, `List Int { return 43 }`
@@ -474,10 +475,33 @@ takes the monad of the first context that names one:
 - running it: a statement or `<-` runs it as IO.
 
 Until then it stays undecided, so one `return` value can be used in several
-monads; it prints as `Monad` and its value (`print (return 123)` prints
-`Monad 123`, and its `typeOf` is `Monad Int`), and an undecided `>>=` or
-do-block prints as `Monad`. `Monad` and `Functor` are also types for patterns: `(Functor m)`
-accepts any value `map` works on, `(Monad m)` any monadic value.
+monads. It prints as each instance applied, one per line (`print (return 123)`
+prints `Some 123` and `Ok 123` with the option module), and an undecided `>>=`
+prints as its source; using one as a plain value is an ambiguity error.
+`Monad` and `Functor` are types for patterns: `(Functor m)` accepts any value
+`map` works on, `(Monad m)` any monadic value.
+
+### Overloading on the result type
+
+Clauses with the same patterns but a different inferred result type overload
+each other; ones with the same result type rebind, as usual. A call that
+reaches such clauses is undecided until a context names the type its result
+should have: a type applied to it (`Int (f 0)`), a typed pattern it is passed
+to (`g (Int n)`), an annotation, or a monad context.
+
+```apn
+blank _ = 0
+blank _ = ""
+Int (blank [])               # 0
+String (blank [])            # ""
+print (blank [])             # 0 and "" (each overload, one per line)
+blank [] + 1                 # error: ambiguous: nothing decides which blank
+```
+
+The result types come from the type checker's inference, which every run
+performs; code run without it uses the runtime's own description of each
+clause (`typeOf`'s). The checker reports the same ambiguity statically, and
+`typeOf (blank [])` is `Int | String`.
 
 A do-block is in the monad of its first `<-` (or annotation): a list block
 tries every combination, an Option block stops at the first `None`; an IO

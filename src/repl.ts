@@ -360,6 +360,7 @@ function helpText(): string {
         `  func ((Int -> Int) f) = Int { f 123 }   (checked function contract)`,
         `  ((a -> a) f), (a -> a).(+ 1), (a -> a) == typeOf f   a lambda read as a function type`,
         `  List Int is a list of any length; [Int] is exactly one Int`,
+        `  f x = 1; f x = "one"   overloads by result type: Int (f 0) is 1, String (f 0) "one"`,
         `  Option a = Some a | None`,
         `  UserId = distinct Int   (nominal identity; UserId x patterns unwrap)`,
         `  assert (condition)   (reports expression and source location)`,

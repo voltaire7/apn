@@ -108,6 +108,8 @@ function clauseSource(c: { params: Pattern[]; body: Expr; guard?: Expr }): strin
 // rendered where its name is used.
 export function residualSource(params: Array<Pattern | string>, body: Expr, guard: Expr | undefined, values: Map<string, () => string>): string {
     const rest = params.map((p): Pattern => typeof p === "string" ? { p: "var", name: p } : p);
+    // Every parameter given: what is left is the body.
+    if (!rest.length) return source(substitute(body, values) as Expr);
     return clauseSource({ params: rest, body: substitute(body, values) as Expr, guard: guard && substitute(guard, values) as Expr });
 }
 function boundNames(p: Pattern): string[] {

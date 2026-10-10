@@ -83,6 +83,8 @@ export function rawString(v: Value): string {
 
 export type PendingStep =
     | { op: "return"; value: Value }
+    // A call of overloads that differ only in result type: the context chooses.
+    | { op: "call"; fn: Extract<Value, { kind: "clauseFn" }>; args: Value[]; choices: DefClause[] }
     | { op: "bind"; m: Value; f: Value }
     | { op: "do"; block: Expr; env: Env; start: number; first?: Value };
 
@@ -128,7 +130,8 @@ export function valueToString(v: Value): string {
         case "io": return ioTypeText(v);
         // An undecided return shows its value; a >>= or do-block cannot be
         // shown without running it.
-        case "pending": return v.step.op === "return" ? "Monad" + argumentText(v.step.value) : "Monad";
+        // Undecided: shown fully by the interpreter, which knows the overloads.
+        case "pending": return v.step.op === "return" ? "return" + argumentText(v.step.value) : v.step.op === "call" ? v.step.fn.name + v.step.args.map(argumentText).join("") : "return";
     }
 }
 

@@ -878,7 +878,7 @@ print "first" >> print "second"            # => first, then second
 doubled <- mapM (x -> return (x * 2)) [1,2,3]
 print doubled                              # => [2,4,6]
 when (length doubled == 3) (print "three") # => three
-print (return 42)                          # => Monad 42 (its monad is not decided yet)
+print (return 42)                          # => Some 42, Ok 42 (undecided: each instance, one per line)
 print (Option Int { return 42 })           # => Some 42
 print (List Int { return 43 })             # => [43]
 fromIO <- IO Int { return 44 }
@@ -923,6 +923,18 @@ Label a = | MkLabel a
 (MkLabel x) >>= f = f x
 return = MkLabel
 print (Label Int { return 9 })             # => MkLabel 9
+
+# Clauses with the same patterns but another result type overload each other;
+# the context of a call names the type, choosing one.
+blank _ = 0
+blank _ = ""
+print (Int (blank []))                     # => 0
+print [String (blank [])]                  # => [""]
+print (blank [])                           # => 0 and "" (undecided: each overload)
+print (typeOf (blank []))                  # => Int | String
+afterBlank (Int n) = n + 1
+print (afterBlank (blank []))              # => 1 (a typed parameter names Int)
+# blank [] + 1 is an error: ambiguous: nothing decides which blank
 
 # Explicit braces end a lambda body, so maps can chain after the closing brace.
 [x: 1, y: 2, z: 3] * [field,value] -> {

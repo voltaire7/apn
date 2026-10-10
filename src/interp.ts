@@ -14,11 +14,11 @@ import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, ca
 import { parseNumberText, isNumeric, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { isLoadCall, mergeClauses } from "./ast.ts";
+import { clauseKey, isLoadCall, mergeClauses } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, typeToString, valueToString, rawString } from "./types.ts";
-import { argument, residualSource } from "./function-source.ts";
+import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
 import { parse, exprToSource, patternSource, rangeExpr, isOperatorName, PRIMITIVE_OPERATORS } from "./parser.ts";
 
@@ -38,6 +38,9 @@ export const IO_NATIVES = new Set(["print", "emit", "exit", "set", "readFile", "
 const IO_RESULTS: Record<string, string> = {
     print: "[]", emit: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
 };
+
+// Builtins that take an undecided value as it is: they show it or pass it on.
+const SHOWS_UNDECIDED = new Set(["print", "emit", "toString", "format", "typeOf", "isType", "debug", "seq", "Dynamic"]);
 
 // Operators whose builtin meaning does not demand both operands first.
 const LAZY_OPERATORS = new Set([":", "++", "&&", "||", "$"]);
@@ -323,7 +326,7 @@ export class Interpreter {
                 this.env = child;
                 try { return this.reference(this.eval(body)); } finally { this.env = caller; }
             });
-            this.registerInstance(name, method);
+            this.registerInstance(name, method, clauses);
             return method;
         }
         // Existing collections interpret the parameter as a key expression;
@@ -350,7 +353,8 @@ export class Interpreter {
             // More clauses for a function of this scope extend it (an
             // equivalent one rebinds its clause), wherever they are defined.
             const extended = previous?.kind === "clauseFn" && previous.arity === arity && this.env.map.get(name) === previous;
-            clauses = mergeClauses(name, extended ? previous.clauses : [], clauses);
+            const scope = this.env;
+            clauses = mergeClauses(name, extended ? previous.clauses : [], clauses, c => this.clauseHead(c, scope));
             // Capture a shared env containing the binding itself, enabling recursion.
             const child = new Env(this.env);
             // Clauses for an operator overload it: the previous meaning still
@@ -1334,6 +1338,8 @@ export class Interpreter {
             return this.arrayArithmetic(op, l, r);
         }
         const bad = (): never => {
+            if (l.kind === "pending") this.ambiguous(l);
+            if (r.kind === "pending") this.ambiguous(r);
             throw new APNError("runtime", `cannot apply '${op}' to ${l.kind} and ${r.kind}`);
         };
         if (isNumeric(l) && isNumeric(r) && ["+", "-", "*", "/", "%"].includes(op)) return typedArithmetic(op, l, r);
@@ -1645,6 +1651,10 @@ export class Interpreter {
                             const guard = this.dataValue(this.eval(clause.guard));
                             if (!this.truthy(guard)) continue;
                         }
+                        // Overloads that differ only in result type: the
+                        // context of the result chooses (Int (read "3")).
+                        const choices = this.resultOverloads(f).get(clause);
+                        if (choices) return { kind: "pending", step: { op: "call", fn: f, args: raw, choices } };
                         if (probe) return this.defer(() => {
                             const caller = this.env;
                             this.env = child;
@@ -1809,6 +1819,7 @@ export class Interpreter {
             if (v.hi !== null && (v.step >= 0 ? v.lo > v.hi : v.lo < v.hi)) return null;
             return { head: mkInt(v.lo), tail: { ...v, lo: v.lo + v.step } };
         }
+        if (v.kind === "pending") this.ambiguous(v);
         throw new APNError("runtime", `expected a list, got ${v.kind}`);
     }
 
@@ -1907,8 +1918,9 @@ export class Interpreter {
     private instanceFamilies = new Map<string, Set<unknown>>();
     private loadingPrelude = true;
 
-    private registerInstance(method: string, fn: Value): void {
+    private registerInstance(method: string, fn: Value, clauses: DefClause[]): void {
         this.instances.set(method, [...this.instances.get(method) ?? [], fn]);
+        this.instanceClauses.set(fn, clauses[0]);
         this.instanceFamilies.delete(method);
     }
     // The variant families a method's instances take, read from their clauses
@@ -1952,12 +1964,66 @@ export class Interpreter {
         if (!family) return undefined;
         const fns = this.instances.get("return") ?? [];
         for (let n = fns.length - 1; n >= 0; n--) {
-            const result = this.apply(fns[n], x, true);
-            if (result.kind === "nomatch") continue;
-            const made = this.demand(result);
-            if (made.kind === "variant" && made.family === family) return made;
+            if (this.instanceHead(fns[n]) === family.name) return this.reference(this.apply(fns[n], x));
         }
         return undefined;
+    }
+    // The clause each instance was defined by, and the result type it makes.
+    private instanceClauses = new WeakMap<Value, DefClause>();
+    private instanceHeads = new WeakMap<Value, string | undefined>();
+    private instanceHead(fn: Value): string | undefined {
+        if (this.instanceHeads.has(fn)) return this.instanceHeads.get(fn);
+        const clause = this.instanceClauses.get(fn);
+        let head = clause && this.checkedHead(clause);
+        if (!head) {
+            const value = this.reference(fn);
+            if (value.kind === "native" && value.family) head = value.family.name;
+            else if (value.kind === "clauseFn" || value.kind === "closure") head = headOfDescription(describeType(value), 1);
+        }
+        this.instanceHeads.set(fn, head);
+        return head;
+    }
+    // A clause's inferred result type (its head: Int, Option): the checker's,
+    // or else described from its source without running it.
+    private checkedHead(clause: DefClause): string | undefined {
+        const at = sourceLocations.get(clause.body);
+        return at ? this.checking?.resultHeads.get(`${at.file}:${at.start}`) : undefined;
+    }
+    clauseHead(clause: DefClause, env: Env): string | undefined {
+        return this.checkedHead(clause) ?? headOfDescription(describeType({ kind: "clauseFn", name: "<clause>", clauses: [clause], arity: clause.params.length, env, applied: [] }), clause.params.length);
+    }
+    // For each clause with overloads differing only in result type, all of them.
+    private overloadGroups = new WeakMap<DefClause[], Map<DefClause, DefClause[]>>();
+    private resultOverloads(f: Extract<Value, { kind: "clauseFn" }>): Map<DefClause, DefClause[]> {
+        let groups = this.overloadGroups.get(f.clauses);
+        if (groups) return groups;
+        groups = new Map();
+        if (f.clauses.length > 1) {
+            const byKey = new Map<string, DefClause[]>();
+            for (const c of f.clauses) { const k = clauseKey(f.name, c); byKey.set(k, [...byKey.get(k) ?? [], c]); }
+            for (const group of byKey.values()) {
+                if (group.length > 1 && new Set(group.map(c => this.clauseHead(c, f.env))).size > 1) for (const c of group) groups.set(c, group);
+            }
+        }
+        this.overloadGroups.set(f.clauses, groups);
+        return groups;
+    }
+    // One clause run on the arguments a call gave it.
+    private runClause(f: Extract<Value, { kind: "clauseFn" }>, clause: DefClause, args: Value[]): Value {
+        const binds = new Map<string, Value>();
+        const caller = this.env;
+        this.env = f.env;
+        try {
+            if (!clause.params.every((p, i) => this.matchPattern(p, args[i], binds))) throw new APNError("runtime", `no clause of '${f.name}' matches the given arguments`);
+        } finally { this.env = caller; }
+        const child = new Env(f.env);
+        for (const [k, v] of binds) child.setLocal(k, v);
+        this.env = child;
+        try { return this.eval(clause.body); } finally { this.env = caller; }
+    }
+    // The type a context names, as an overload's result type is written.
+    private headOf(target: Value): string | undefined {
+        return target.kind === "type" ? target.family?.name ?? target.name : this.isList(target) ? "List" : undefined;
     }
 
     // The monad a concrete monadic value belongs to, as a type: IO, List, or its variant type.
@@ -1980,6 +2046,12 @@ export class Interpreter {
         const step = m.step;
         if (step.op === "bind") return this.bind(this.realize(step.m, target), step.f);
         if (step.op === "do") return this.desugarDo(step.block as Extract<Expr, { t: "block" }>, step.env, step.start, target, step.first);
+        if (step.op === "call") {
+            const head = this.headOf(this.reference(target));
+            const choice = step.choices.find(c => this.clauseHead(c, step.fn.env) === head);
+            if (!choice) throw new APNError("runtime", `no overload of '${step.fn.name}' makes ${head ? `a ${head}` : "this type"}`);
+            return this.reference(this.runClause(step.fn, choice, step.args));
+        }
         if (this.isIOType(target)) { const value = step.value; return { kind: "io", result: () => this.typeText(value), run: () => value }; }
         if (this.isListType(target)) return mkList([step.value]);
         const made = this.returnIn(target, step.value);
@@ -2145,11 +2217,12 @@ export class Interpreter {
                 for (const argument of v.arguments ?? []) {
                     emit(" "); this.render(this.inspectType(argument), emit, false, ancestors);
                 }
-            } else if (v.kind === "variant" || v.kind === "pending" && v.step.op === "return") {
-                // An undecided return shows like a constructor: Monad 123.
+            } else if (v.kind === "pending") {
+                emit(this.undecidedText(v), "pending");
+            } else if (v.kind === "variant") {
                 // Arguments show as source writes them: Some (Some 1).
-                emit(v.kind === "variant" ? v.tag : "Monad", "variant");
-                for (const arg of v.kind === "variant" ? v.v : [(v.step as Extract<typeof v.step, { op: "return" }>).value]) {
+                emit(v.tag, "variant");
+                for (const arg of v.v) {
                     const shown = this.demand(arg);
                     const wrap = compoundArgument(shown);
                     emit(wrap ? " (" : " ");
@@ -2172,6 +2245,9 @@ export class Interpreter {
     private patternScore(pattern: Pattern, arg: Value): number {
         if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
         if (pattern.p !== "constr" || !TYPE_NAMES.includes(pattern.tag)) return 0;
+        // An undecided call fits a typed pattern as an exact type would.
+        const undecided = this.reference(arg);
+        if (undecided.kind === "pending" && undecided.step.op === "call") return 30;
         if (pattern.tag === "Vect") return this.isList(this.dataValue(arg)) ? 30 : -1000;
         const value = pattern.tag === "Mutable" ? this.reference(arg) : pattern.tag === "Type" ? this.demand(arg) : this.dataValue(arg);
         if (!NUMERIC_TYPES.includes(pattern.tag)) return this.matchesValueType(pattern.tag, value) ? 30 : -1000;
@@ -2184,6 +2260,31 @@ export class Interpreter {
     private bestPatternScore(pattern: Pattern): number {
         if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
         return pattern.p === "constr" && TYPE_NAMES.includes(pattern.tag) ? 30 : 0;
+    }
+
+    // Nothing named the type an undecided value should have.
+    ambiguous(v: Extract<Value, { kind: "pending" }>): never {
+        const step = v.step;
+        if (step.op === "bind" || step.op === "do") throw new APNError("runtime", "ambiguous: nothing decides which monad this is", { hint: "name it, as in Option Int { ... } or IO [] { ... }" });
+        const name = step.op === "call" ? step.fn.name : "return";
+        throw new APNError("runtime", `ambiguous: nothing decides which ${name}`, { hint: `name the type it should have, as in Int (${name} ...)` });
+    }
+
+    // An undecided value shows each overload it could become, one per line,
+    // as a partly applied overloaded function does: return 123 is Some 123,
+    // Ok 123, ... for the instances defined.
+    private undecidedText(v: Extract<Value, { kind: "pending" }>): string {
+        const step = v.step;
+        if (step.op === "call") return step.choices.map(c => this.residualText({ ...step.fn, clauses: [c], applied: step.args })).join("\n");
+        if (step.op === "bind") return `${this.renderString(step.m)} >>= ${argument(this.force(step.f))}`;
+        if (step.op === "do") return exprToSource(step.block);
+        const lines = (this.instances.get("return") ?? []).map(instance => {
+            const fn = this.reference(instance);
+            if (fn.kind === "clauseFn") return this.residualText({ ...fn, applied: [...fn.applied, step.value] });
+            if (fn.kind === "native") return functionSource({ ...fn, applied: [...fn.applied, step.value] });
+            return `${valueToString(fn)} ${argument(step.value)}`;
+        });
+        return lines.length ? [...new Set(lines)].join("\n") : `return ${argument(step.value)}`;
     }
 
     // A partly applied function as what is left of it: the clauses its
@@ -2287,7 +2388,7 @@ export class Interpreter {
             if (type.name === "List" && !type.family) return this.listType(type, value);
             let actual = type.name === "Type" ? this.demand(value) : this.dataValue(value);
             // A pending monadic value takes this type's monad (Option Int { return 42 }).
-            if (actual.kind === "pending" && type.family) actual = this.realize(actual, type);
+            if (actual.kind === "pending" && (type.family || actual.step.op === "call")) actual = this.realize(actual, type);
             if (type.family?.base) {
                 if (actual.kind === "variant" && actual.family?.base) {
                     if (actual.family !== type.family) throw new APNError("runtime", `${type.name} requires explicit unwrapping of ${actual.family.name}`);
@@ -2748,9 +2849,13 @@ export class Interpreter {
             if (ref.kind === "contract") return { kind: "functionType", from: ref.from, to: ref.to };
             const value = this.demand(ref);
             if (value.kind === "io") return { kind: "type", inspect: true, name: "IO", description: valueToString(value) };
+            // An undecided value: return x is m T for the monad m the context
+            // decides; a call of result overloads is one of their results.
             if (value.kind === "pending") {
-                const held = value.step.op === "return" ? this.typeText(value.step.value) : "a";
-                return { kind: "type", inspect: true, name: "Monad", description: `Monad ${/\s/.test(held) && !/^[[(]/.test(held) ? `(${held})` : held}` };
+                const step = value.step;
+                if (step.op === "call") return { kind: "type", inspect: true, name: "Undecided", description: [...new Set(step.choices.map(c => this.clauseHead(c, step.fn.env) ?? "a"))].join(" | ") };
+                const held = step.op === "return" ? this.typeText(step.value) : "a";
+                return { kind: "type", inspect: true, name: "Undecided", description: `m ${/\s/.test(held) && !/^[[(]/.test(held) ? `(${held})` : held}` };
             }
             if (value.kind === "variant" && value.family) return { kind: "type", inspect: true, name: value.family.name, family: value.family, arguments: value.arguments };
             if (isNumeric(value)) return { kind: "type", inspect: true, name: numericType(value) };
@@ -2851,6 +2956,8 @@ export class Interpreter {
         }
         const args = argsIn.map((x, index) => ["print", "emit", "toString", "format"].includes(name) || (name === "foldl" && index === 0) ? this.demand(x) : this.dataValue(x));
         const a = args[0];
+        // An undecided value reaching a builtin that needs a plain value.
+        if (!SHOWS_UNDECIDED.has(name)) for (const x of args) if (x.kind === "pending") this.ambiguous(x);
         switch (name) {
             // Output actions yield [] (nothing), as print does in Haskell.
             case "print":
@@ -3359,6 +3466,17 @@ export class Interpreter {
             const captured = this.hasSchemaCapture(type) ? this.captureSchema(type, converted, binds) : converted;
             return captured !== null && this.matchPattern(p.value, captured, binds);
         }
+        // A typed pattern names the type an undecided call should have:
+        // g (Int n) applied to read "3" takes the Int overload.
+        if (p.p === "constr" && p.args.length) {
+            const undecided = this.reference(v);
+            const named = undecided.kind === "pending" && undecided.step.op === "call" ? this.env.get(p.tag) : undefined;
+            const type = named && this.reference(named);
+            if (type && type.kind === "type") {
+                try { v = this.realize(undecided, type); }
+                catch (error) { if (error instanceof APNError) return false; throw error; }
+            }
+        }
         if (p.p === "constr" && (!TYPE_NAMES.includes(p.tag) || p.tag === "Vect")) {
             const binding = this.env.get(p.tag);
             if (binding) {
@@ -3492,6 +3610,24 @@ export function dirname(p: string): string {
 }
 
 
+
+// The head of a described function's result after these parameters:
+// "a -> Option a" after 1 is Option. undefined for a variable or unknown.
+function headOfDescription(description: string, arity: number): string | undefined {
+    let depth = 0, start = 0, seen = 0;
+    for (let i = 0; i < description.length; i++) {
+        const c = description[i];
+        if (c === "(" || c === "[") depth++;
+        else if (c === ")" || c === "]") depth--;
+        else if (depth === 0 && description.startsWith("->", i)) {
+            if (++seen === arity) { start = i + 2; break; }
+        }
+    }
+    if (seen < arity) return undefined;
+    const result = description.slice(start).trim();
+    if (result.startsWith("[")) return "List";
+    return /^[A-Z][A-Za-z0-9_]*/.exec(result)?.[0];
+}
 
 // The lowercase names an expression uses that it does not bind itself: in a
 // type, those not bound elsewhere are type variables.

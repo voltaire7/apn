@@ -1,4 +1,4 @@
-import { type Expr, isLoadCall, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
+import { clauseKey, type Expr, isLoadCall, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numericNative, type Numeric, parseNumberText } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
@@ -22,8 +22,10 @@ function isInstance(name: string, _clauses: { params: Pattern[] }[]): boolean {
 
 type Index = { constant: bigint; terms: Map<string, bigint> };
 type Ty =
-    | { k: "overload"; choices: Ty[] }
-    | { k: "union"; choices: Ty[] }
+    // undecided: overloads differing only in result type, whose calls the
+    // context decides; a union of their results is one of them, not either.
+    | { k: "overload"; choices: Ty[]; undecided?: boolean; name?: string }
+    | { k: "union"; choices: Ty[]; undecided?: boolean; name?: string }
     | { k: "mutable"; value: Ty }
     | { k: "map"; key: Ty; value: Ty }
     | { k: "intrinsic"; name: string; arity?: number; args?: Ty[] }
@@ -176,6 +178,10 @@ export interface CheckOptions {
     nativeArities?: Map<string, number>;
     // Instance types (map, >>=, <*>, return) shared by a session's checks.
     instances?: Map<string, unknown[]>;
+    /** Each clause's inferred result type (its head: Int, Option, ...) by the
+     * source position of its body, for the runtime to choose overloads that
+     * differ only in result type. */
+    resultHeads?: Map<string, string>;
     /** Top-level names whose latest binding in the session is an env view. */
     envTopViews?: () => ReadonlySet<string>;
     /** Whether any code in this session may write a Mutable cell (see mayMutate),
@@ -660,7 +666,9 @@ function text(
                 return `[${[...t.fields].map(([k, v]) => `${k}: ${show(v)}`).join(", ")}]`;
             case "type":
                 return `Type (${show(t.value)})`;
+            // An undecided return: m T, for the monad a context will name.
             case "variant":
+                if (isPending(t)) return `m ${argument(show(t.args[0]))}`;
                 return t.name + t.args.map((x) => " " + show(x)).join("");
             default:
                 return "a type constructor";
@@ -1137,6 +1145,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.op === "require") { if (t.args.some(x => waiting(x))) return t; unify(a, b); return a; }
         if (isExplicit(a) || b && isExplicit(b)) return explicitDynamic;
         if (a.k === "dynamic" || b?.k === "dynamic") return unknown();
+        if (a.k === "union" && a.undecided || b?.k === "union" && b.undecided) return ambiguous((a.k === "union" && a.undecided ? a : b) as Extract<Ty, { k: "union" }>);
         if (a.k === "union") return union(a.choices.map(x => operation(t.op, t.args.length === 1 ? [x] : [x, b])));
         if (b?.k === "union") return union(b.choices.map(x => operation(t.op, [a, x])));
         if (["pairs", "keys", "values", "enumerate", "length"].includes(t.op)) {
@@ -1289,6 +1298,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return;
         }
         if (actual.k === "var") return unify(actual, expected, e, seen);
+        // An undecided call is decided only where a type is named (a
+        // conversion, a typed pattern, an annotation), as at runtime.
+        for (const undecided of [actual, expected]) {
+            if (undecided.k === "union" && undecided.undecided) return ambiguous(undecided, e);
+        }
         if (expected.k === "operation" || actual.k === "operation") {
             if (expected.k === "operation" && actual.k !== "operation") expected.solution = actual.k === "list" ? list(actual.element) : actual;
             if (actual.k === "operation" && expected.k !== "operation") actual.solution = expected.k === "list" ? list(expected.element) : expected;
@@ -1544,6 +1558,40 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         };
         const inputs = e.t === "lambda" ? e.params.map(typeVariable) : e.params.map(pattern);
         return inputs.reduceRight((output: Ty, input) => fn(input, output, undefined, true), read(e.body));
+    }
+    // An undecided call used where no type is named.
+    function ambiguous(t: Extract<Ty, { k: "union" }>, e?: Expr): never {
+        return problem(`ambiguous: nothing decides which ${t.name ?? "overload"}`, e, `name the type it should have, as in Int (${t.name ?? "f"} ...)`);
+    }
+    // Whether a check succeeds, without recording what it would unify.
+    function succeeds(check: () => unknown): boolean {
+        const saved = requirements.length;
+        choosing++;
+        try { check(); return true; }
+        catch (error) {
+            if (error && typeof error === "object" && "message" in error) return false;
+            throw error;
+        } finally { choosing--; requirements.length = saved; }
+    }
+    // A function type with its result after these parameters left open.
+    function withoutResult(t: Ty, arity: number): Ty {
+        const x = resolve(t);
+        if (arity === 0 || x.k !== "fn") return variable();
+        return { ...x, output: withoutResult(x.output, arity - 1) };
+    }
+    // The head of a function's result after these parameters: Int, Option.
+    function resultHead(t: Ty, arity: number): string | undefined {
+        let x = resolve(t);
+        for (let n = 0; n < arity; n++) {
+            if (x.k !== "fn") return undefined;
+            x = resolve(x.output);
+        }
+        if (x.k === "atom") return x.name;
+        if (x.k === "variant") return isPending(x) ? undefined : x.name;
+        if (x.k === "list") return "List";
+        if (x.k === "record") return "Record";
+        if (x.k === "fn") return "Function";
+        return undefined;
     }
     // A lambda written in place, perhaps in parentheses.
     function lambdaLiteral(e: Expr): Extract<Expr, { t: "lambda" | "patternLambda" }> | undefined {
@@ -1871,6 +1919,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         spend(e);
         const t = resolve(target), a = resolve(actual);
         if (isExplicit(a) && (runtimeProjection || explicitFloat)) { runtimeChecks++; return target; }
+        // An undecided call takes the overload this type names.
+        if (a.k === "union" && a.undecided) {
+            const choice = a.choices.find(c => succeeds(() => convert(target, c, e, explicitFloat, new Map(), runtimeProjection)));
+            if (!choice) return problem(`no overload makes ${text(t)}`, e);
+            return convert(target, choice, e, explicitFloat, seen, runtimeProjection);
+        }
         if (t.k === "atom" && t.name === "Bool" && explicitFloat) return t;
         if (
             t.k === "atom" && a.k === "atom" && NUMERIC_TYPES.includes(t.name) &&
@@ -2025,7 +2079,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const sure = ranked.filter(r => r.matches);
                 const before = (a: typeof ranked[number], b: typeof ranked[number]) =>
                     a.low > b.high || a.low >= b.high && a.clause.index < b.clause.index;
-                const runs = (r: typeof ranked[number]) => !r.fails && !sure.some(d => d !== r && before(d, r));
+                // Clauses with the same patterns differ only in result type
+                // (an undecided overload): neither hides the other.
+                const samePatterns = (a: typeof ranked[number], b: typeof ranked[number]) => !!f.undecided && clauseKey("", a.clause) === clauseKey("", b.clause);
+                const runs = (r: typeof ranked[number]) => !r.fails && !sure.some(d => d !== r && before(d, r) && !samePatterns(d, r));
                 outputs = outputs.filter((_, n) => accepted[n].clauses!.some(c => runs(ranked.find(r => r.clause === c)!)));
                 // Still ambiguous, and the arguments depend on an enclosing function's
                 // parameters: decide at that function's calls, where they are known.
@@ -2035,7 +2092,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             if (!outputs.length) return problem(`no overload accepts ${text(argument.type)}`, e);
             if (outputs.length === 1 || outputs.every((x) => text(x) === text(outputs[0]))) return outputs[0];
-            if (outputs.every((x) => resolve(x).k === "fn")) return { k: "overload", choices: outputs };
+            if (outputs.every((x) => resolve(x).k === "fn")) return { k: "overload", choices: outputs, undecided: f.undecided, name: f.name };
+            if (f.undecided) return { k: "union", choices: outputs, undecided: true, name: f.name };
             return union(outputs);
         }
         if (f.k === "factory") {
@@ -2824,6 +2882,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return value;
                 };
                 const [a, b] = operands ?? [constrain(infer(e.l, scope)), constrain(infer(e.r, scope))];
+                // An undecided return is not a value until its monad is named.
+                if (op !== "$" && op !== ":" && op !== ">>=" && op !== ">>" && [a, b].some(x => isPending(resolve(x)))) {
+                    return problem("ambiguous: nothing decides which return", e, "name the type it should have, as in Option Int (return ...)");
+                }
                 // An action is not the value it yields.
                 if (op !== "$" && op !== ":" && [a, b].some(x => isIO(resolve(x)))) {
                     return problem(`operator '${op}' cannot use an action (${text(isIO(resolve(a)) ? a : b)}) as a value`, e, "bind its result first: x <- action");
@@ -5005,6 +5067,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const own: Scope = new Map(scope);
             defineClauses(name, clauses, own, location);
             (forward as Extract<Ty, { k: "var" }>).link = own.get(name)!.type;
+            // return is chosen by its result type: record it for the runtime.
+            if (name === "return") {
+                const head = resultHead(own.get(name)!.type, 1);
+                if (head) for (const c of clauses) recordHead(c.body, head);
+            }
             return;
         }
         defineClauses(name, clauses, scope, location);
@@ -5098,6 +5165,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (const reader of [...entry.capture?.users ?? []]) rederive(reader, user.name, scope);
     }
     const rederiving = new Set<Definition>();
+    // A clause's result type, inferred on its own: its head (Int, Option).
+    function clauseHead(c: { params: Pattern[]; body: Expr }, scope: Scope, name: string): string | undefined {
+        const saved = requirements.length;
+        choosing++;
+        try { return resultHead(functionType(c.params, c.body, scope, name), c.params.length); }
+        catch (error) {
+            if (error && typeof error === "object" && "message" in error) return undefined;
+            throw error;
+        } finally { choosing--; requirements.length = saved; }
+    }
+    function recordHead(body: Expr, head: string): void {
+        const at = sourceLocations.get(body);
+        if (at && options.resultHeads) options.resultHeads.set(`${at.file}:${at.start}`, head);
+    }
     function defineBinding(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr, previous: Entry | undefined): void {
         const collection = previous && resolve(previous.type), c = clauses[0];
         if (collection && (collection.k === "list" || collection.k === "record" || isExplicit(collection)) && c.params.length === 1) {
@@ -5124,11 +5205,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return;
             }
         }
-        // As at runtime: more clauses extend a function of this scope (an
-        // equivalent one rebinds its clause).
+        // As at runtime: more clauses extend a function of this scope. One with
+        // an equivalent pattern rebinds its clause when its result type is the
+        // same, and overloads it when the result type differs.
         if (clauses[0].params.length) {
             const extended = previous?.clauses && !previous.inherited && clauses[0].params.length === previous.clauses[0].params.length && !rederiving.size;
-            clauses = mergeClauses(name, extended ? previous!.clauses! : [], clauses);
+            const earlier = extended ? previous!.clauses! : [];
+            const keys = [...earlier, ...clauses].map(c => clauseKey(name, c));
+            const repeated = new Set(keys.filter((k, i) => keys.indexOf(k) !== i));
+            const heads = new Map<object, string | undefined>();
+            for (const c of [...earlier, ...clauses]) if (repeated.has(clauseKey(name, c))) heads.set(c, clauseHead(c, scope, name));
+            clauses = mergeClauses(name, earlier, clauses, c => heads.get(c));
         }
         if (!clauses[0].params.length) {
             // A fresh lazy definition can refer to itself. Reassignments still
@@ -5206,9 +5293,30 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         };
         const orders = new Map<string, ClauseOrder[]>();
         const definition: Definition = { name, clauses };
+        const firstKey = new Map<string, string>();
         for (const [index, c] of clauses.entries()) {
             const t = inferDefinition(definition, false, () => functionType(c.params, c.body, scope, name));
+            const head = resultHead(t, c.params.length);
+            if (head) recordHead(c.body, head);
             let key = `${c.params.some(bindsSelf) ? "self:" : ""}${domain(t)}`, existing = groups.get(key);
+            // A clause with an earlier one's patterns but another result type
+            // overloads it: the context of each call chooses between them.
+            const patterns = clauseKey(name, c), same = firstKey.get(patterns);
+            if (!same) firstKey.set(patterns, key);
+            else if (groups.has(same)) {
+                const fits = (a: Ty, b: Ty) => {
+                    try { unify(a, b, c.body); return true; }
+                    catch (error) {
+                        if (!error || typeof error !== "object" || !("message" in error)) throw error;
+                        return false;
+                    }
+                };
+                const group = groups.get(same)!;
+                if (!fits(copy(group), copy(t)) && fits(withoutResult(copy(group), c.params.length), withoutResult(copy(t), c.params.length))) {
+                    key = `${key}#result${index}`;
+                    existing = undefined;
+                }
+            }
             // A clause whose type differs from its group's only in list lengths
             // (f (Int n) = [1, 2]; f 0 = [0]) becomes its own overload choice;
             // clause ranking then decides between them at each call. Any other
@@ -5253,7 +5361,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         }
         const alternatives = [...groups.values()];
-        const type: Ty = alternatives.length === 1 ? alternatives[0] : { k: "overload", choices: alternatives };
+        const type: Ty = alternatives.length === 1 ? alternatives[0] : { k: "overload", choices: alternatives, undecided: [...groups.keys()].some(k => k.includes("#result")), name };
         if (alternatives.length === 1) {
             unify(pending, alternatives[0], location);
             // The definition's own type keeps its summary and shape; a recursive

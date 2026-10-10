@@ -46,7 +46,7 @@ const builtins = new Map<string, string>([
     ["set", "set cell value — action replacing a Mutable cell's contents; yields []."],
     ["IO", "IO T — the type of actions yielding T; IO [] action checks an action (return x makes one)."],
     ["map", "map f m — m with f applied to what it holds: an action, a list, or a type with an instance."],
-    ["Monad", "Monad — the type of monadic values (IO, lists, types with >>= instances); return x is a Monad until its monad is known."],
+    ["Monad", "Monad — the type of monadic values (IO, lists, types with >>= instances); return x is undecided until a context names its monad."],
     ["Functor", "Functor — the type of values map works on."],
     ["return", "return x — x in the monad the context decides (an annotation, a >>=, or IO when run)."],
     ["sequence", "sequence actions — action running each, yielding the list of results."],

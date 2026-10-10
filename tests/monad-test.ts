@@ -58,9 +58,13 @@ for (const [name, source, expected] of [
     ["a curried definition overloads like clauses", "describe = Int _ -> \"Int\"\ndescribe = Float _ -> \"Float\"\nprint [describe 1,describe 1.5]\nalso = x -> x + 1\nalso = x -> x + 2\nprint (also 1)",
         ['["Int","Float"]', "3"]],
     ["undecided values and actions print without running", 'print $ return 123\nprint [return "a"]\nprint (return 1 >>= (x -> return x))\nprint (print 1)\nprint (IO Int { return 1 })\nprint (typeOf (print 1))\nprint (typeOf (return 1))',
-        ["Monad 123", '[Monad "a"]', "Monad", "IO []", "IO Int", "IO []", "Monad Int"]],
+        ["return 123", '[return "a"]', "return 1 >>= (x -> return x)", "IO []", "IO Int", "IO []", "m Int"]],
     ["constructor arguments print as source writes them", 'import "option"\nprint (return (Some 1))\nprint (Some (Some (-1)))\nprint (Some [1,2])',
-        ["Monad (Some 1)", "Some (Some (-1))", "Some [1,2]"]],
+        ["Some (Some 1)\nOk (Some 1)", "Some (Some (-1))", "Some [1,2]"]],
+    ["overloads chosen by result type", 'f x = 1\nf x = "one"\nprint (f 0)\nprint (Int (f 0))\nprint (String (f 0))\nprint (typeOf (f 0))\ng (Int n) = n + 1\nprint (g (f 0))',
+        ["1\n\"one\"", "1", "one", "Int | String", "2"]],
+    ["return prints as its overloads applied", 'import "option"\nprint (return 5)\nprint (Option (return 1))',
+        ["Some 5\nOk 5", "Some 1"]],
     ["partly applied functions show their arguments", "addOp = (+)\nprint (addOp 1)\nprint (+ 1)\nf a b = a + b\nprint (f 1)\ng = x y z -> x * y * z\nprint (g 2 3)",
         ["(1 +)", "(+ 1)", "b -> 1 + b", "z -> 2 * 3 * z"]],
 ] as const) Deno.test(`monads: ${name}`, () => {
@@ -76,9 +80,18 @@ for (const [source, message, kind] of [
     ['import "option"\nx = Option Int {\n    a <- Some 1\n    a + 1\n}', "the last statement of a do-block must be an action", "type"],
     ["xs = List Int {\n    a <- [1,2]\n    print a\n    return a\n}", "an IO action cannot run in a List do-block", "type"],
     ["return a b = a", "return takes one argument", "parse"],
+    ['f x = 1\nf x = "one"\nprint (f 0 + 1)', "ambiguous: nothing decides which f", "type"],
+    ["print (return 1 + 1)", "ambiguous: nothing decides which return", "type"],
 ] as const) Deno.test(`monads reject: ${JSON.stringify(source)}`, () => fails(source, message, kind));
 Deno.test("monads: a type without a return instance cannot take return", () => {
     try { run("Tree = Leaf Int | Node Tree Tree\nprint (Tree { return 1 })", false); }
     catch (e) { if (String(e).includes("no return instance for Tree")) return; throw e; }
     throw new Error("accepted");
+});
+
+Deno.test("monads: an undecided value used as a plain one is ambiguous at runtime", () => {
+    for (const source of ['f x = 1\nf x = "one"\nprint (f 0 + 1)', "print (return 1 + 1)"]) {
+        try { run(source, false); } catch (e) { if (String(e).includes("ambiguous: nothing decides which")) continue; throw e; }
+        throw new Error(`accepted: ${source}`);
+    }
 });
