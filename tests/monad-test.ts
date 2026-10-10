@@ -53,8 +53,6 @@ for (const [name, source, expected] of [
         ["[2,4]", "Some 6", "8", "[true,false]"]],
     ["return is overloaded on its result", 'import "option"\nWrap a = | MkWrap a\nreturn = MkWrap\n(MkWrap x) >>= f = f x\nprint (Wrap Int { return 5 })\nprint (Option Int { return 6 })\nprint (Result Int String { return 7 })\nprint (List Int { return 8 })',
         ["MkWrap 5", "Some 6", "Ok 7", "[8]"]],
-    ["return can name its monad on its argument", 'Wrap a = | MkWrap a\nreturn ((Wrap _) x) = MkWrap (x * 2)\nBox a = | MkBox a\nreturn = MkBox\nprint (Wrap Int { return 5 })\nprint (Box Int { return 6 })',
-        ["MkWrap 10", "MkBox 6"]],
     ["any definition of a method is an instance, curried or not", "Tree = Leaf Int | Node Tree Tree\nmapTree f (Leaf x) = Leaf (f x)\nmapTree f (Node l r) = Node (mapTree f l) (mapTree f r)\nmap = mapTree\ndouble (Functor m) = map (* 2) m\nprint (double (Node (Leaf 1) (Leaf 2)))\nprint (double [1])",
         ["Node (Leaf 2) (Leaf 4)", "[2]"]],
     ["a curried definition overloads like clauses", "describe = Int _ -> \"Int\"\ndescribe = Float _ -> \"Float\"\nprint [describe 1,describe 1.5]\nalso = x -> x + 1\nalso = x -> x + 2\nprint (also 1)",
@@ -79,11 +77,6 @@ for (const [source, message, kind] of [
     ["xs = List Int {\n    a <- [1,2]\n    print a\n    return a\n}", "an IO action cannot run in a List do-block", "type"],
     ["return a b = a", "return takes one argument", "parse"],
 ] as const) Deno.test(`monads reject: ${JSON.stringify(source)}`, () => fails(source, message, kind));
-Deno.test("monads: a return naming its monad must make it", () => {
-    try { run("Wrap a = | MkWrap a\nBox a = | MkBox a\nreturn ((Wrap _) x) = MkBox x\nprint (Wrap Int { return 5 })", false); }
-    catch (e) { if (String(e).includes("return for Wrap made MkBox 5, not a Wrap")) return; throw e; }
-    throw new Error("accepted");
-});
 Deno.test("monads: a type without a return instance cannot take return", () => {
     try { run("Tree = Leaf Int | Node Tree Tree\nprint (Tree { return 1 })", false); }
     catch (e) { if (String(e).includes("no return instance for Tree")) return; throw e; }

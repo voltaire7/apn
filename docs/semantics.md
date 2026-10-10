@@ -458,10 +458,8 @@ return = Some                      # return in Option
 ```
 
 `return` is overloaded on its result: a context that names Option uses the
-newest `return` whose result is an Option. A `return` that needs its argument
-can name its monad on it, `return ((Counter _ _) x) = MkCounter (s -> [x,s])`;
-it still takes the one argument `x`, and making anything but a Counter is an
-error.
+newest `return` whose result is an Option, so `return = Some` and
+`return x = MkCounter (s -> [x,s])` each define it for their own type.
 
 `map` and `<*>` follow from `>>=` and `return` when a type defines no
 instance of its own. A type used where no instance accepts it is an error

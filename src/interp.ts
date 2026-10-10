@@ -1916,22 +1916,16 @@ export class Interpreter {
     }
 
     // return x in a monad: return is overloaded on its result, so the newest
-    // return instance whose result is in the target monad makes it. One that
-    // names its monad (return ((Option _) x) = Some x) is only tried for it,
-    // and must make it.
+    // return instance whose result is in the target monad makes it.
     private returnIn(target: Value, x: Value): Value | undefined {
         const family = target.kind === "type" ? target.family : undefined;
         if (!family) return undefined;
         const fns = this.instances.get("return") ?? [];
         for (let n = fns.length - 1; n >= 0; n--) {
-            const fn = fns[n];
-            const monad = fn.kind === "clauseFn" ? fn.clauses[0].monad : undefined;
-            if (monad !== undefined && monad !== family.name) continue;
-            const result = this.apply(fn, x, true);
+            const result = this.apply(fns[n], x, true);
             if (result.kind === "nomatch") continue;
             const made = this.demand(result);
             if (made.kind === "variant" && made.family === family) return made;
-            if (monad !== undefined) throw new APNError("runtime", `return for ${monad} made ${this.renderString(made)}, not a ${monad}`);
         }
         return undefined;
     }

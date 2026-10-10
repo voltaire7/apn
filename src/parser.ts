@@ -1340,7 +1340,7 @@ class Parser {
     }
 
     // Parse  name p1 p2 = body  (isDef() must already have returned true).
-    parseDefStatement(): { name: string; clauses: { params: Pattern[]; body: Expr; guard?: Expr; monad?: string }[] } {
+    parseDefStatement(): { name: string; clauses: { params: Pattern[]; body: Expr; guard?: Expr }[] } {
         const name = (this.next() as { v: string }).v;
         const params: Pattern[] = [];
         // Haskell-style params are PATTERNS:  f [x, y] = ..., f (x:rest) = ...
@@ -1360,7 +1360,6 @@ class Parser {
         }
         if (guard) return { name, clauses: [{ params, body, guard }] };
         if (name === "return" && params.length > 1) throw new APNError("parse", "return takes one argument", { pos: equals.pos, hint: "return = Some" });
-        if (name === "return" && params.length) return { name, clauses: [returnClause(params[0], body)] };
         return { name, clauses: [{ params, body }] };
     }
 
@@ -1676,16 +1675,6 @@ function patternVariables(p: Pattern): string[] {
     }
 }
 
-// A return instance can name its monad on its parameter:
-//     return ((Option _) x) = Some x
-// It takes one parameter, x; the type only says which monad it makes.
-function returnClause(p: Pattern, body: Expr): { params: Pattern[]; body: Expr; monad?: string } {
-    let head: Expr | undefined = p.p === "schema" ? p.type : undefined;
-    if (head?.t === "block" && head.style === "(" && head.stmts.length === 1) head = head.stmts[0];
-    while (head?.t === "app") head = head.f;
-    if (p.p !== "schema" || head?.t !== "var" || !/^[A-Z]/.test(head.name)) return { params: [p], body };
-    return { params: [p.value], body, monad: head.name };
-}
 
 export function exprToSource(e: Expr): string {
     switch (e.t) {

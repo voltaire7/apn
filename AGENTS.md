@@ -67,14 +67,19 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   `force`/pattern/equality switch — they are exhaustive.
 - Every user-facing failure is an `APNError` (parse/lex/runtime/type) with a
   position and optional `hint:`; see `docs/errors.md`.
+- Question questionable decisions. Before implementing a request (the user's
+  or your own idea), check it against the language's existing rules; if it
+  conflicts with them, is inconsistent, or has a simpler or more general
+  alternative, say so plainly and propose the fix instead of silently
+  bending the implementation to make it work.
 - A definition takes exactly the parameters it is written with. Never give one
   a hidden parameter or call it with a different arity internally (no rewriting
-  `return ((Option _) x) = Some x` into a two-parameter clause on the type):
-  carry such information as metadata instead.
+  `return ((Option _) x) = Some x` into a two-parameter clause on the type),
+  and never give a pattern a different meaning in one place.
 - Things that act the same share one implementation: never special-case one
   spelling of a definition (curried or with parameters) for no reason.
 - Favor curried (point-free) definitions when parameters are only passed
-  through or discarded: `return = Some`, not `return ((Option _) x) = Some x`.
+  through or discarded: `return = Some`, not `return x = Some x`.
 - APN style in examples: whole-function `match` uses the same-line form
   (`f x = match x [ ... ]`); a definition's `{` stays on the `=` line, with
   the body exactly +4 and `}` aligned with the opening line.
