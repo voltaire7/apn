@@ -1035,7 +1035,7 @@ numericPayload (source value) = value
 print (numericPayload (Int32 123))   # => 123
 retypedAdd (Int x) (Int y) = Int (x + y)
 print (retypedAdd (Int 2) (Int 3))   # => 5
-print cast                          # => its clauses, as a match list
+print cast                          # => its clauses, one pattern lambda per line
 
 # Container templates apply their existing slots to incoming values.
 namedTemplates = [Int,Float]

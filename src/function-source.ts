@@ -88,10 +88,11 @@ export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" 
         const name = v.tag ?? v.name;
         return name + v.applied.map(a => ` ${argument(a)}`).join("");
     }
-    // One clause is a pattern lambda; several are the list of them, as match
-    // takes: [Int x -> print Int,Float x -> print Float].
-    const text = v.clauses.length === 1 ? clauseSource(v.clauses[0]) : `[${v.clauses.map(clauseSource).join(",")}]`;
-    return v.applied.length ? `${v.clauses.length === 1 ? `(${text})` : text}${v.applied.map(a => ` ${argument(a)}`).join("")}` : text;
+    // Each clause is a pattern lambda, one per line:
+    //     Int x -> print Int
+    //     Float x -> print Float
+    const text = v.clauses.map(clauseSource).join("\n");
+    return v.applied.length ? `(${text})${v.applied.map(a => ` ${argument(a)}`).join("")}` : text;
 }
 // A clause as a pattern lambda. A lone constructor pattern needs no
 // parentheses (Int x -> x); among several parameters it does ((Int x) y -> x).

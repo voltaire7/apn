@@ -586,8 +586,10 @@ Values render as source writes them: a constructor argument that is itself
 compound is parenthesized (`Some (Some 1)`, `Distance (-2)`), operators show
 as sections (`(+)`, `(+ 1)`, and `(1 +)` for `(+)` applied to 1), and a partly
 applied function shows the arguments it has (`(a b -> a + b) 1`). A function
-with several clauses shows them as the list of pattern lambdas `match` takes:
-`f (Int x) = 1; f (Float x) = 2` prints `[Int x -> 1,Float x -> 2]`.
+with several clauses shows each as a pattern lambda on its own line:
+`f (Int x) = 1; f (Float x) = 2` prints `Int x -> 1` and `Float x -> 2`
+(with several parameters, constructor patterns keep their parentheses:
+`(Int x) y -> 1`).
 
 Numbers follow a Scheme-style tower: exact arbitrary-precision integers and
 reduced rational fractions, inexact binary64 reals, and complex numbers whose
