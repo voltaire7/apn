@@ -25,7 +25,7 @@ function rangeSyntax(lo: Expr, second: Expr | null, hi: Expr | null): Expr {
 import { lex, OPERATOR_CHARS } from "./lexer.ts";
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { APNError, tokLen } from "./errors.ts";
-import type { Expr, Pattern, TopLevel, BinOp, FunctionSpec } from "./ast.ts";
+import type { Expr, Pattern, TopLevel, BinOp } from "./ast.ts";
 import type { Type, Value, Env } from "./types.ts";
 import type { Token } from "./lexer.ts";
 
@@ -285,15 +285,8 @@ class Parser {
             this.next();
             if (this.isSym(close)) { this.next(); return { p: "list", v: [] }; }
             const signatureStart = this.i;
-            try {
-                const spec = this.parseFunctionSpec();
-                if (!("name" in spec) && this.peek().k !== "eof" && !this.isSym(close)) {
-                    const value = this.parsePattern();
-                    this.expectSym(close);
-                    return { p: "contract", spec, value };
-                }
-            } catch { /* ordinary grouping or constructor pattern */ }
-            this.i = signatureStart;
+            // A typed pattern: ((Int -> Int) f), ([Int] xs). Its type is any
+            // expression read as a type, a lambda included.
             if (this.isSym("[") || this.isSym("(") || this.isSym("{")) {
                 try {
                     this.noLambda++;
@@ -305,6 +298,20 @@ class Parser {
                         return { p: "schema", type, value };
                     }
                 } catch { /* ordinary grouped pattern */ }
+                this.i = signatureStart;
+            }
+            // A function type with no name, (a -> b), matches a function of
+            // that type without binding it, as Int matches an Int.
+            if (this.arrowBefore(close)) {
+                const noLambda = this.noLambda;
+                this.noLambda = 0;
+                try {
+                    const type = this.parseExpr();
+                    if ((type.t === "lambda" || type.t === "patternLambda") && this.isSym(close)) {
+                        this.next();
+                        return { p: "schema", type, value: { p: "wildcard" } };
+                    }
+                } catch { /* an ordinary grouped pattern */ } finally { this.noLambda = noLambda; }
                 this.i = signatureStart;
             }
             const typeName = this.peek(), valueName = this.peek(1), closing = this.peek(2);
@@ -722,6 +729,20 @@ class Parser {
         }
     }
 
+    // Whether a -> comes before the bracket closing the current group, at
+    // its own level (a cheap look before trying to parse a lambda).
+    arrowBefore(close: string): boolean {
+        for (let j = this.i, depth = 0; j < this.toks.length; j++) {
+            const t = this.toks[j];
+            if (t.k === "eof") return false;
+            if (t.k !== "sym") continue;
+            if (t.v === "(" || t.v === "[" || t.v === "{") depth++;
+            else if (t.v === ")" || t.v === "]" || t.v === "}") { if (depth-- === 0) return false; }
+            else if (t.v === "->" && depth === 0) return true;
+        }
+        return false;
+    }
+
     parsePrimary(): Expr {
         const t = this.peek();
         if (!this.noLambda && this.startsParam(t)) {
@@ -974,20 +995,6 @@ class Parser {
                 this.next();
                 throw new Error(`Parser: unexpected keyword '${t.v}'`);
         }
-    }
-
-    parseFunctionSpec(): FunctionSpec {
-        let left: FunctionSpec;
-        if (this.isSym("(") || this.isSym("{")) {
-            const close = (this.next() as { v: string }).v === "(" ? ")" : "}";
-            left = this.parseFunctionSpec();
-            this.expectSym(close);
-        } else {
-            const token = this.next();
-            if (token.k !== "ident" || !(TYPE_NAMES.includes(token.v) || functionTypeNames.has(token.v))) throw new Error("Parser: expected a type constructor");
-            left = { name: token.v };
-        }
-        return this.eatSym("->") ? { from: left, to: this.parseFunctionSpec() } : left;
     }
 
     // Inside brackets, `:` is cons again even within a ternary branch.
@@ -1489,7 +1496,6 @@ class Parser {
                     declaredCtors.add(tag);
                     if (arity === 0) nullaryCtors.add(tag); else nullaryCtors.delete(tag);
                 }
-                functionTypeNames.add(name);
                 out.push({ t: "type", def: { name, parameters, variants } });
                 continue;
             }
@@ -1525,7 +1531,6 @@ class Parser {
                     if (this.isDef()) {
                         const declaration = this.parseDefStatement();
                         if (TYPE_NAMES.includes(declaration.name)) throw new Error("Parser: built-in type names cannot be reassigned");
-                        functionTypeNames.add(declaration.name);
                         out.push({ t: "def", ...declaration });
                         continue;
                     }
@@ -1573,12 +1578,11 @@ class Parser {
 // (record-constructor) function def. Module-level so declarations persist
 // across REPL lines (each line is re-parsed standalone).
 let declaredCtors = new Set<string>();
-const functionTypeNames = new Set<string>();
 const nullaryCtors = new Set<string>();
 
 // Tooling parses each document independently, without leaking REPL declarations.
 export function parseDocument(src: string): TopLevel[] {
-    const sets = [declaredCtors, functionTypeNames, nullaryCtors];
+    const sets = [declaredCtors, nullaryCtors];
     const saved = sets.map((set) => [...set]);
     sets.forEach((set) => set.clear());
     try { return parse(src); }
@@ -1666,7 +1670,7 @@ function patternVariables(p: Pattern): string[] {
         case "var": return [p.name];
         case "typeBind": return [p.name, ...patternVariables(p.value)];
         case "as": return [...patternVariables(p.left), ...patternVariables(p.right)];
-        case "schema": case "contract": return patternVariables(p.value);
+        case "schema": return patternVariables(p.value);
         case "list": return p.v.flatMap(patternVariables);
         case "cons": return [...patternVariables(p.head), ...patternVariables(p.tail)];
         case "constr": return p.args.flatMap(patternVariables);
@@ -1692,7 +1696,6 @@ export function exprToSource(e: Expr): string {
         case "binop": return `${exprToSource(e.l)} ${e.op} ${exprToSource(e.r)}`;
         case "unop": return `${e.op === "neg" ? "-" : "!"}${exprToSource(e.e)}`;
         case "app": return `${exprToSource(e.f)} ${exprToSource(e.a)}`;
-        case "functionType": return functionSpecSource(e.spec);
         case "patternLambda": return `${e.params.map(patternSource).join(" ")}${e.guard ? " | " + exprToSource(e.guard) : ""} -> ${exprToSource(e.body)}`;
         case "lambda": return `${e.params.join(" ")} -> ${exprToSource(e.body)}`;
         case "list": return `[${e.v.map(exprToSource).join(",")}]`;
@@ -1729,14 +1732,10 @@ export function exprToSource(e: Expr): string {
         default: return "<expr>";
     }
 }
-export function functionSpecSource(spec: FunctionSpec): string {
-    return "name" in spec ? spec.name : `${"name" in spec.from ? functionSpecSource(spec.from) : "(" + functionSpecSource(spec.from) + ")"} -> ${functionSpecSource(spec.to)}`;
-}
 export function patternSource(p: Pattern): string {
     switch (p.p) {
         case "as": return `${patternSource(p.left)}.${patternSource(p.right)}`;
         case "schema": return `(${exprToSource(p.type)} ${patternSource(p.value)})`;
-        case "contract": return `((${functionSpecSource(p.spec)}) ${patternSource(p.value)})`;
         case "wildcard": return "_";
         case "var": return p.name;
         case "int": return String(p.v);

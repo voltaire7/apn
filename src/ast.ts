@@ -9,10 +9,8 @@ export type BinOp = string;
 
 export type UnOp = "neg" | "not";
 
-export type FunctionSpec = { name: string } | { from: FunctionSpec; to: FunctionSpec };
 
 export type Expr =
-    | { t: "functionType"; spec: FunctionSpec }
     | { t: "computedRange"; lo: Expr; second: Expr | null; hi: Expr | null }
     | { t: "import"; module: string | string[] }
     | { t: "numeric"; v: Numeric }
@@ -46,7 +44,6 @@ export type Expr =
 export type Pattern =
     | { p: "as"; left: Pattern; right: Pattern }
     | { p: "schema"; type: Expr; value: Pattern }
-    | { p: "contract"; spec: FunctionSpec; value: Pattern }
     | { p: "wildcard" }
     | { p: "var"; name: string }
     | { p: "int"; v: bigint }

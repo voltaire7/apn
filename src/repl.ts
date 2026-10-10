@@ -358,6 +358,8 @@ function helpText(): string {
         `  match x [ pat -> expr, ... ]   (ordinary function; alternatives are pattern lambdas)`,
         `  literal patterns: 0  1.5  "s"  'c'  true  [1..9]   (tried before other clauses)`,
         `  func ((Int -> Int) f) = Int { f 123 }   (checked function contract)`,
+        `  ((a -> a) f), (a -> a).(+ 1), (a -> a) == typeOf f   a lambda read as a function type`,
+        `  List Int is a list of any length; [Int] is exactly one Int`,
         `  Option a = Some a | None`,
         `  UserId = distinct Int   (nominal identity; UserId x patterns unwrap)`,
         `  assert (condition)   (reports expression and source location)`,

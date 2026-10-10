@@ -898,7 +898,7 @@ noSum = Option Int {
 }
 print noSum                                # => None
 # A monad of your own: a counter threading a number through each step.
-Counter s a = | MkCounter Function
+Counter s a = | MkCounter (s -> [a,s])
 runCounter (MkCounter f) s = f s
 (MkCounter g) >>= f = MkCounter (s -> {
     [a,s1] = g s
@@ -1610,13 +1610,13 @@ print scope.environmentExample        # => 3
 print scope.[environmentExample]      # => [3]
 
 # Rich type descriptions inspect lazy elements and function bodies without running them.
-print (typeOf [1,2,3,4])              # => [Int]
-print (typeOf [1..])                     # => [Int] (no infinite traversal)
+print (typeOf [1,2,3,4])              # => List Int
+print (typeOf [1..])                     # => List Int (no infinite traversal)
 describeIdentity (Int x) = x
 print (typeOf describeIdentity)          # => Int -> Int
 print (typeOf (x -> print x))            # => a -> []
-print (typeOf [1,"hello"])              # => [Int | String]
-print (typeOf (1:["hello"]))            # => [Int | String]  (a ':' list is described the same)
+print (typeOf [1,"hello"])              # => List (Int | String)
+print (typeOf (1:["hello"]))            # => List (Int | String)  (a ':' list is described the same)
 
 # Empty results are lists; conditions use truthiness.
 print ({} == [])                        # => true
@@ -1629,7 +1629,7 @@ print (match 42 [_ | [] -> 0,x | 1 -> x]) # => 42
 # Type variables preserve relationships between inputs and outputs.
 print (typeOf (x _ -> x))                # => a -> b -> a
 print (typeOf (f x -> f x))              # => (a -> b) -> a -> b
-print (typeOf (x -> [x,x]))              # => a -> [a]
+print (typeOf (x -> [x,x]))              # => a -> List a
 
 # Value-dependent types; the same constraints run at dynamic boundaries.
 SizedInts n = Vect n Int
@@ -1733,6 +1733,21 @@ print (inferredIncrement 41)               # => 42
 # Expression arrows always create lambdas; contracts belong in patterns.
 print ((Int value -> value) 123)           # => 123
 # (Int -> Int) checkedIncrement applies a lambda, not a function-type constructor.
+# Where a type is expected, a lambda is read as the function type it spells
+# out, as [Int] is a list and a positional type. A lowercase name not bound to
+# a type is a type variable; [Int] is one Int, List Int a list of any length.
+print ((a -> a) == typeOf (x -> x))        # => true
+print ((b -> b) == typeOf (x -> x))        # => true (variable names don't matter)
+print ((a -> a) == typeOf (x _ -> x))      # => false
+print (List Int == typeOf [1,2,3])         # => true
+print ([Int] == typeOf [1])                # => false ([Int] is positional)
+print (typeOf map)                         # => (a -> b) -> List a -> List b
+print ((a -> a).(+ 1) 41)                  # => 42 (checked: the result is the input's type)
+applyTwice ((a -> a) f) x = f (f x)
+print (applyTwice (* 3) 2)                 # => 18
+print (isType (Int -> Int) (+ 1))          # => true
+print (((a -> b) -> List a -> List b) == typeOf map)  # => true (a function type taking one)
+
 typedLambda = (Int value) -> Int { value + value }
 typedNamed (Int value) = Int { value + value }
 print (typedLambda 21)                    # => 42

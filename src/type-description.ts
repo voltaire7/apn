@@ -1,4 +1,4 @@
-import type { Expr, Pattern, FunctionSpec } from "./ast.ts";
+import type { Expr, Pattern } from "./ast.ts";
 import { type Env, type Value, type VariantFamily, typeToString } from "./types.ts";
 import { numericType, NUMERIC_TYPES } from "./type-system.ts";
 
@@ -50,13 +50,23 @@ export function describeType(value: Value): string {
     const active = new Map<Value, Shape>();
     const join = (ts: Shape[]) => ts.reduce(unify, fresh());
     const sequence = (ts: Shape[]) => list(join(ts));
-    function spec(s: FunctionSpec): Shape {
-        return "name" in s ? named(s.name) : arrow(spec(s.from), spec(s.to));
-    }
+    // A written type: a lowercase name not given is a type variable, the
+    // same wherever it appears; a lambda is the function type it spells out.
     function declared(e: Expr, parameters: Map<string, Shape>): Shape {
-        if (e.t === "var") return parameters.get(e.name) ?? named(e.name);
+        if (e.t === "block" && e.stmts.length === 1) return declared(e.stmts[0], parameters);
+        if (e.t === "var") {
+            if (!parameters.has(e.name) && /^[a-z]/.test(e.name)) parameters.set(e.name, fresh());
+            return parameters.get(e.name) ?? named(e.name);
+        }
         if (e.t === "list") return sequence(e.v.map(x => declared(x, parameters)));
-        if (e.t === "functionType") return spec(e.spec);
+        if (e.t === "lambda" || e.t === "patternLambda") {
+            const written = (p: Pattern): Shape => p.p === "var" ? declared({ t: "var", name: p.name }, parameters)
+                : p.p === "constr" ? named(p.tag, p.args.map(written))
+                : p.p === "list" ? sequence(p.v.map(written))
+                : p.p === "schema" ? declared(p.type, parameters) : fresh();
+            const inputs = e.t === "lambda" ? e.params.map(name => declared({ t: "var", name }, parameters)) : e.params.map(written);
+            return inputs.reduceRight((to: Shape, from) => arrow(from, to), declared(e.body, parameters));
+        }
         if (e.t === "app") {
             const f = declared(e.f, parameters);
             return f.tag === "name" ? named(f.name, [...f.args, declared(e.a, parameters)]) : fresh();
@@ -85,7 +95,6 @@ export function describeType(value: Value): string {
             case "char": result = named("Char"); break;
             case "float": result = named("Float"); break;
             case "schema": result = declared(p.type, new Map()); pattern(p.value, env, locals, result); break;
-            case "contract": result = spec(p.spec); pattern(p.value, env, locals, result); break;
             case "constr": {
                 const ctor = env.get(p.tag);
                 const family = ctor && (ctor.kind === "native" || ctor.kind === "variant" || ctor.kind === "type") ? ctor.family : undefined;
@@ -147,7 +156,6 @@ export function describeType(value: Value): string {
             case "rationalRange": return list(named("Fraction"));
             case "list": return sequence(e.v.map(x => expr(x, env, locals)));
             case "record": return named("Record");
-            case "functionType": return named("Type");
             case "lambda": return fn(e.params.map(name => ({ p: "var", name })), e.body, env, [], locals);
             case "patternLambda": return fn(e.params, e.body, env, [], locals);
             case "app": case "pipe": {
@@ -247,13 +255,17 @@ export function describeType(value: Value): string {
                 if (!names.has(t)) { const n = names.size; names.set(t, String.fromCharCode(97 + n % 26) + (n >= 26 ? Math.floor(n / 26) : "")); }
                 return names.get(t)!;
             }
-            case "list": return `[${show(t.element)}]`;
+            // [Int,Float] is a positional type; a list of any length is List Int.
+            case "list": { const text = `List ${show(t.element, 2)}`; return precedence > 1 ? `(${text})` : text; }
             case "name": {
                 const text = t.name + t.args.map(a => " " + show(a, 2)).join("");
                 return t.args.length && precedence > 1 ? `(${text})` : text;
             }
             case "arrow": { const text = `${show(t.from, 1)} -> ${show(t.to)}`; return precedence > 0 ? `(${text})` : text; }
-            case "union": return [...new Set(t.choices.flatMap(c => resolve(c).tag === "union" ? (resolve(c) as Extract<Shape, { tag: "union" }>).choices.map(x => show(x)) : [show(c)]))].join(" | ");
+            case "union": {
+                const text = [...new Set(t.choices.flatMap(c => resolve(c).tag === "union" ? (resolve(c) as Extract<Shape, { tag: "union" }>).choices.map(x => show(x)) : [show(c)]))].join(" | ");
+                return precedence > 1 ? `(${text})` : text;
+            }
         }
     }
     return show(inspect(value));

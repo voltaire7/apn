@@ -47,7 +47,8 @@ map Int [0..]           # lazy mapping over an infinite list
 Every template length, including one, uses exact positional matching. Output
 heads and tails are deferred; mismatch or conversion errors surface when the
 relevant part is consumed. A singleton never broadcasts. `[Int]` describes
-exactly one position when used as a schema, including through `cast` and `isType`.
+exactly one position when used as a schema, including through `cast` and `isType`;
+a list of any length is `List Int`.
 Nested list templates use the same exact-length rule.
 
 Record inputs supply their values in field order. The result preserves the

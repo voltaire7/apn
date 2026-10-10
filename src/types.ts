@@ -28,9 +28,11 @@ export interface NativePointer {
 export type Value =
     | NativePointer
     | { kind: "functionType"; from: Value; to: Value }
-    | { kind: "contract"; target: Value; from: Value; to: Value }
+    // variables: the type variables decided so far by a curried call.
+    | { kind: "contract"; target: Value; from: Value; to: Value; variables?: Map<string, Value> }
     | { kind: "mutable"; v: Value }
-    | { kind: "type"; name: string; inspect?: boolean; description?: string; family?: VariantFamily; arguments?: Value[]; alias?: { parameters: string[]; body: Expr; env: Env } }
+    // variable: a type variable (the a of a -> a), named by name.
+    | { kind: "type"; name: string; inspect?: boolean; description?: string; family?: VariantFamily; arguments?: Value[]; alias?: { parameters: string[]; body: Expr; env: Env }; variable?: boolean }
     | { kind: "hashmap"; entries: Map<string, [Value, Value]> }
     | Numeric
     | { kind: "rationalRange"; lo: Real; step: Real; hi: Real | null }
@@ -95,7 +97,7 @@ export function valueToString(v: Value): string {
         case "contract": return `((${valueToString({ kind: "functionType", from: v.from, to: v.to })}) (${valueToString(v.target)}))`;
         case "pointer": return `Pointer 0x${v.bits.toString(16)}`;
         case "type": {
-            return (v.description ?? v.name) + (v.arguments?.length ? " " + v.arguments.map(typeToString).join(" ") : "");
+            return (v.description ?? v.name) + (v.arguments?.length ? " " + v.arguments.map(typeArgumentText).join(" ") : "");
         }
         case "hashmap": return `HashMap [${[...v.entries.values()].map(([k, x]) => `[${valueToString(k)},${valueToString(x)}]`).join(",")}]`;
         case "rationalRange": return rangeText(v.lo, arithmetic("+", v.lo, v.step), v.hi);
@@ -195,6 +197,22 @@ export class Env {
 
 
 // Render nested type descriptions without constructing data defaults.
+// A type as another's argument: List (Option Int), List (a -> b).
+function typeArgumentText(v: Value): string {
+    const text = typeToString(v);
+    return /\s/.test(text) && !/^[[(]/.test(text) ? `(${text})` : text;
+}
+
+// A type's text with its variables named in order of appearance, so types
+// differing only in variable names read the same: b -> b is a -> a.
+export function canonicalTypeText(text: string): string {
+    const names = new Map<string, string>();
+    return text.replace(/(?<![A-Za-z0-9_'"$.])([a-z][A-Za-z0-9_']*)(?![A-Za-z0-9_']*\s*:)/g, (name) => {
+        if (!names.has(name)) { const n = names.size; names.set(name, String.fromCharCode(97 + n % 26) + (n >= 26 ? Math.floor(n / 26) : "")); }
+        return names.get(name)!;
+    });
+}
+
 export function typeToString(v: Value): string {
     if (v.kind === "type") return valueToString({ ...v, inspect: true });
     if (v.kind === "list") return `[${v.v.map(typeToString).join(",")}]`;

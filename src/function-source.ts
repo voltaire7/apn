@@ -1,14 +1,13 @@
 import { keySource } from "./record-keys.ts";
 import type { Expr, Pattern } from "./ast.ts";
 import type { Value } from "./types.ts";
-import { exprToSource, fixityOf, functionSpecSource } from "./parser.ts";
+import { exprToSource, fixityOf } from "./parser.ts";
 import { compoundArgument, valueToString } from "./types.ts";
 
 function pattern(p: Pattern): string {
     switch (p.p) {
         case "as": return `${pattern(p.left)}.${pattern(p.right)}`;
         case "schema": return `(${source(p.type)} ${pattern(p.value)})`;
-        case "contract": return `((${functionSpecSource(p.spec)}) ${pattern(p.value)})`;
         case "wildcard": return "_";
         case "var": return p.name;
         case "int": return String(p.v);
@@ -116,7 +115,7 @@ function boundNames(p: Pattern): string[] {
         case "var": return [p.name];
         case "typeBind": return [p.name, ...boundNames(p.value)];
         case "as": return [...boundNames(p.left), ...boundNames(p.right)];
-        case "schema": case "contract": return boundNames(p.value);
+        case "schema": return boundNames(p.value);
         case "list": return p.v.flatMap(boundNames);
         case "cons": return [...boundNames(p.head), ...boundNames(p.tail)];
         case "constr": return p.args.flatMap(boundNames);

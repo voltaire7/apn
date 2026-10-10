@@ -51,6 +51,20 @@ export function unusedDiagnostics(program: TopLevel[], source: string): Diagnost
         if (Array.isArray(node)) { node.forEach(visit); return; }
         if (!node || typeof node !== "object") return;
         const n = node as Record<string, unknown>;
+        // A lambda where a type is expected is a function type, not code: in
+        // a pattern or constructor field, beside ==, as isType's first
+        // argument, or before .( ).
+        if ("p" in n || n.t === "type") return;
+        if (n.t === "binop" && (n.op === "==" || n.op === "!=")) {
+            for (const side of [n.l, n.r]) if (!lambdaIn(side)) visit(side);
+            return;
+        }
+        if (n.t === "app" && (n.f as Expr).t === "app" && ((n.f as Expr & { t: "app" }).f as Expr).t === "var" &&
+            (((n.f as Expr & { t: "app" }).f) as Expr & { t: "var" }).name === "isType" && lambdaIn((n.f as Expr & { t: "app" }).a)) {
+            visit(n.a);
+            return;
+        }
+        if (n.t === "recordAccess" && n.scoped && lambdaIn(n.rec)) { visit(n.argument); return; }
         if (n.t === "block") { statements(n.stmts as unknown[]); return; }
         if (n.t === "lambda") report(n.params as string[], n.body as Expr);
         else if (n.t === "patternLambda") {
@@ -63,6 +77,13 @@ export function unusedDiagnostics(program: TopLevel[], source: string): Diagnost
     return diagnostics;
 }
 
+// A lambda written in place, perhaps in parentheses.
+function lambdaIn(e: unknown): boolean {
+    const x = e as Expr;
+    if (x?.t === "block" && x.stmts.length === 1) return lambdaIn(x.stmts[0]);
+    return x?.t === "lambda" || x?.t === "patternLambda";
+}
+
 // The names a pattern binds; a type's name ((t x) binds t) only when shadowing,
 // since it cannot be discarded with _.
 function bound(p: Pattern, types = true): string[] {
@@ -70,7 +91,7 @@ function bound(p: Pattern, types = true): string[] {
         case "var": return [p.name];
         case "typeBind": return types ? [p.name, ...bound(p.value)] : bound(p.value, false);
         case "as": return [...bound(p.left, types), ...bound(p.right, types)];
-        case "schema": case "contract": return bound(p.value, types);
+        case "schema": return bound(p.value, types);
         case "list": return p.v.flatMap(x => bound(x, types));
         case "cons": return [...bound(p.head, types), ...bound(p.tail, types)];
         case "constr": return p.args.flatMap(x => bound(x, types));
@@ -83,7 +104,7 @@ function bound(p: Pattern, types = true): string[] {
 function types(p: Pattern): Expr[] {
     switch (p.p) {
         case "schema": return [p.type, ...types(p.value)];
-        case "contract": case "typeBind": return types(p.value);
+        case "typeBind": return types(p.value);
         case "as": return [...types(p.left), ...types(p.right)];
         case "list": return p.v.flatMap(types);
         case "cons": return [...types(p.head), ...types(p.tail)];
@@ -116,7 +137,7 @@ function free(e: unknown, shadowed: Set<string>, used: Set<string>): void {
             return;
         case "patDef": free(n.value, shadowed, used); free(n.pattern, shadowed, used); if (n.update) free(n.update, shadowed, used); return;
     }
-    // Patterns hold expressions only in types and contracts.
+    // Patterns hold expressions only in their types.
     if ("p" in n) {
         if (n.p === "schema") free(n.type, shadowed, used);
         for (const value of Object.values(n)) if (value && typeof value === "object" && (Array.isArray(value) || "p" in value)) free(value, shadowed, used);

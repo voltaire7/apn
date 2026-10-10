@@ -25,7 +25,7 @@ function fails(source: string, text: string, kind?: string): void {
     throw new Error(`accepted: ${source}`);
 }
 
-const counter = `Counter s a = | MkCounter Function
+const counter = `Counter s a = | MkCounter (s -> [a,s])
 runCounter (MkCounter f) s = f s
 (MkCounter g) >>= f = MkCounter (s -> {
     [a,s1] = g s

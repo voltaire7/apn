@@ -1067,12 +1067,14 @@ Resource scopes reject environment views as escaping references.
 
 ### Type descriptions
 
-`typeOf [1,2,3]` displays `[Int]`; heterogeneous literal lists display their
-known alternatives, for example `[Int | String]`. A list built with `:` is
-described the same way (`typeOf ([1,2]:[3,4])` is `[[Int] | Int]`, as for
-`[[1,2],3,4]`), reading its unevaluated tail without running it. Empty lists and unresolved
-lazy computations display `[a]`. Integer ranges display `[Int]`, including
-infinite ranges, without traversing them.
+`typeOf [1,2,3]` displays `List Int`, a list of any length (`[Int]` is the
+positional type of exactly one Int); heterogeneous literal lists display their
+known alternatives, for example `List (Int | String)`. A list built with `:` is
+described the same way (`typeOf ([1,2]:[3,4])` is `List (List Int | Int)`, as
+for `[[1,2],3,4]`), reading its unevaluated tail without running it. Empty lists
+and unresolved lazy computations display `List a`. Integer ranges display
+`List Int`, including infinite ranges, without traversing them. Type errors
+use the same notation.
 
 Functions display argument/result descriptions: `f (Int x) = x` gives
 `Int -> Int`; `x -> print x` gives `a -> []`. Clauses contribute to one
@@ -1085,10 +1087,30 @@ list elements. Inspecting an argument expression
 still evaluates it enough to obtain its outer value. Existing nullary action semantics remain: demanding a nullary action runs it,
 so `typeOf` describes its result.
 
-For compatibility, enriched list/function descriptions retain their broad
-`List`/`Function` type identity and constructor behavior: `typeOf [1] == List`
-is true. A displayed `[Int]` is descriptive metadata, not a new enforced
-list schema; use an explicit schema/contract when you need validation.
+A described type compares equal to the type it describes: `List Int == typeOf
+[1,2]` and `(a -> a) == typeOf (x -> x)` are true. Compared with a bare
+constructor it keeps its broad identity: `typeOf [1] == List` and
+`typeOf f == Function` are true. A description is not an enforced schema; use a
+typed pattern or contract when you need validation.
+
+### Function types
+
+Where a type is expected, a lambda is read as the function type it spells out,
+as `[Int]` is both a list and a positional type: in a typed pattern
+(`((a -> a) f)`), a constructor field (`MkCounter (s -> [a,s])`), dotted
+application (`(a -> a).(+ 1)`), `isType`'s first argument, and beside a type in
+`==` or `!=`. Elsewhere it stays a lambda. In the type, a lowercase name bound
+to a type (or to a function, which builds one) is that type; any other is a
+type variable, the same one throughout the signature. `(a -> b) -> List a ->
+List b` is a function type taking a function: a parameter `(a -> b)` with no
+name matches a function of that type without binding it, as `Int` matches an
+Int.
+
+Types differing only in their variables' names are equal: `(b -> b) == typeOf
+(x -> x)`. A function contract checks each call: its arguments decide its type
+variables (with `(a -> a)`, the argument `1` makes `a` Int), and the result
+must then have that type, else the call is an error. Each call decides them
+afresh. The checker checks the same statically.
 
 ### Empty results and truthiness
 
@@ -1114,7 +1136,7 @@ and `(Bool x)` still matches booleans rather than every convertible value.
 
 Type variables preserve relationships: `typeOf (x y -> x)` displays
 `a -> b -> a`, `typeOf (f x -> f x)` displays `(a -> b) -> a -> b`, and
-`typeOf (x -> [x,x])` displays `a -> [a]`. Names are assigned afresh in
+`typeOf (x -> [x,x])` displays `a -> List a`. Names are assigned afresh in
 left-to-right order for each description. Function applications, lexical
 captures, list patterns and generic constructor patterns propagate constraints;
 clauses contribute to one signature. For example, `f (Some x) = x` with

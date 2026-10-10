@@ -17,7 +17,7 @@ import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { isLoadCall, mergeClauses } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
-import { compoundArgument, mkInt, mkBool, mkStr, mkList, valueToString, rawString } from "./types.ts";
+import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
 import { parse, exprToSource, patternSource, rangeExpr, isOperatorName, PRIMITIVE_OPERATORS } from "./parser.ts";
@@ -677,7 +677,6 @@ export class Interpreter {
             case "binop": return mkList([mkStr(e.op), this.sexprOf(e.l), this.sexprOf(e.r)]);
             case "unop": return mkList([mkStr(e.op), this.sexprOf(e.e)]);
             case "app": return mkList([this.sexprOf(e.f), this.sexprOf(e.a)]);
-            case "functionType": return mkStr(exprToSource(e));
             case "patternLambda": return mkList([mkStr("->"), mkStr(e.params.map(patternSource).join(" ")), this.sexprOf(e.body)]);
             case "lambda": return mkList([mkStr("->"), mkStr(e.params.join(" ")), this.sexprOf(e.body)]);
             case "list": return mkList(e.v.map((x) => this.sexprOf(x)));
@@ -973,7 +972,6 @@ export class Interpreter {
                 let r: Value = { kind: "list", v: [] };
                 let next: TailCall | undefined;
                 switch (e.t) {
-                    case "functionType": r = this.resolveFunctionSpec(e.spec); break;
                     case "computedRange": {
                         const real = (expression: Expr): Real => {
                             const value = this.dataValue(this.eval(expression));
@@ -1050,6 +1048,13 @@ export class Interpreter {
                         const rec = this.dataValue(this.eval(e.rec));
                         if (this.isList(rec) && e.argument) {
                             r = this.templateList(rec, this.eval(e.argument));
+                            break;
+                        }
+                        // (a -> a).(+ 1): a function read as a type, like [Int].[1].
+                        if ((rec.kind === "closure" || rec.kind === "clauseFn") && e.scoped && e.argument) {
+                            const type = this.asType(rec);
+                            if (!type) throw new APNError("runtime", "dotted application expects a type");
+                            r = this.conform(type, this.eval(e.argument));
                             break;
                         }
                         if (rec.kind === "io") throw new APNError("runtime", "an action has no fields", { hint: "bind its result first: x <- action (scope <- env; scope.x)" });
@@ -1429,6 +1434,24 @@ export class Interpreter {
 
     equals(a: Value, b: Value): boolean {
         a = this.demand(a); b = this.demand(b);
+        // Against a type, the other side is read as a type too ((a -> a) ==
+        // typeOf (x -> x)); types differing only in variable names are equal.
+        if (a.kind === "type" || a.kind === "functionType" || b.kind === "type" || b.kind === "functionType") {
+            const x = this.asType(a), y = this.asType(b);
+            if (!x || !y) return false;
+            // A bare constructor names a kind of type: typeOf [1] == List.
+            const bare = (t: Value) => t.kind === "type" && !t.arguments?.length && !t.description && !t.variable;
+            const kind = (t: Value) => t.kind === "functionType" ? "Function" : t.kind === "type" ? t.name : undefined;
+            if ((bare(x) || bare(y)) && x.kind !== "list" && y.kind !== "list") {
+                if (x.kind === "type" && y.kind === "type" && x.family && y.family) return x.family === y.family;
+                return kind(x) === kind(y);
+            }
+            // Types with variables, functions or only a description compare by
+            // their text, variables renamed in order; others structurally.
+            const loose = (t: Value) => t.kind === "functionType" || t.kind === "type" && !!t.description || this.hasVariables(t);
+            if (!loose(x) && !loose(y)) return this.sameType(x, y);
+            return canonicalTypeText(this.writtenType(x)) === canonicalTypeText(this.writtenType(y));
+        }
         a = this.dataValue(a); b = this.dataValue(b);
         if ((a.kind === "record" && a.scope) || (b.kind === "record" && b.scope)) {
             return a.kind === "record" && b.kind === "record" && a.scope === b.scope;
@@ -1500,9 +1523,24 @@ export class Interpreter {
         });
         switch (f.kind) {
             case "functionType": return this.conform(f, arg);
+            // Each call decides the contract's type variables from its
+            // arguments: with (a -> a), 1 makes a Int, so the result must be one.
             case "contract": return this.defer(() => {
-                const input = this.conform(f.from, arg);
-                return this.conform(f.to, this.apply(f.target, input));
+                const variables = new Map(f.variables ?? []);
+                const from = this.instantiate(f.from, variables);
+                const input = this.conform(from, arg);
+                if (from.kind === "type" && from.variable && from.name !== "_") {
+                    const actual = this.reference(this.callNative("typeOf", [input]));
+                    if (actual.kind === "type" && !actual.description && !actual.variable) variables.set(from.name, actual);
+                }
+                const to = this.instantiate(f.to, variables);
+                const result = this.apply(f.target, input);
+                if (to.kind === "functionType") return { kind: "contract", target: this.force(result), from: to.from, to: to.to, variables };
+                try { return this.conform(to, result); }
+                catch (error) {
+                    if (!(error instanceof APNError)) throw error;
+                    throw new APNError("runtime", `function contract ${typeToString({ kind: "functionType", from: f.from, to: f.to })}: the result is not ${typeToString(to)} (${error.message})`);
+                }
             });
             case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
@@ -2212,15 +2250,6 @@ export class Interpreter {
         else if (buffer) Deno.stdout.writeSync(enc.encode(buffer));
     }
 
-    resolveFunctionSpec(spec: import("./ast.ts").FunctionSpec): Value {
-        if (!("name" in spec)) return { kind: "functionType", from: this.resolveFunctionSpec(spec.from), to: this.resolveFunctionSpec(spec.to) };
-        const value = this.env.get(spec.name);
-        if (!value) throw new APNError("runtime", `unknown type '${spec.name}'`);
-        const type = this.demand(value);
-        if (type.kind !== "type" && type.kind !== "functionType") throw new APNError("runtime", `${spec.name} is not a type`);
-        return type;
-    }
-
     private vectorParts(type: Extract<Value, { kind: "type" }>): [bigint, Value] {
         const [size, element] = type.arguments ?? [];
         if (type.arguments?.length !== 2 || size.kind !== "int" || size.v < 0n) throw new APNError("runtime", "Vect needs a nonnegative length and an element type");
@@ -2241,7 +2270,11 @@ export class Interpreter {
         return out;
     }
 
-    conform(type: Value, value: Value): Value {
+    conform(typeIn: Value, value: Value): Value {
+        const read = this.reference(typeIn);
+        const type = read.kind === "closure" || read.kind === "clauseFn" ? this.asType(read) ?? read : typeIn;
+        // A type variable not decided by a call takes any value.
+        if (type.kind === "type" && type.variable) return value;
         if (type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) {
             const [size, element] = this.vectorParts(type);
             const values = this.vectorElements(this.dataValue(value), size);
@@ -2275,6 +2308,141 @@ export class Interpreter {
         const target = this.force(value);
         if (!this.matchesValueType("Function", target)) throw new APNError("runtime", "function contract expects a function");
         return { kind: "contract", target, from: type.from, to: type.to };
+    }
+
+    // A type's text, its nested types evaluated: Option [Int], a -> List a.
+    private writtenType(type: Value): string {
+        const t = this.reference(type);
+        const argument = (x: Value) => { const text = this.writtenType(x); return /\s/.test(text) && !/^[[(]/.test(text) ? `(${text})` : text; };
+        if (t.kind === "type") return (t.description ?? t.name) + (t.arguments ?? []).map(x => " " + argument(x)).join("");
+        if (t.kind === "functionType") {
+            const from = this.reference(t.from);
+            return `${from.kind === "functionType" ? `(${this.writtenType(from)})` : this.writtenType(from)} -> ${this.writtenType(t.to)}`;
+        }
+        if (this.isList(t)) return `[${[...this.elements(t)].map(x => this.writtenType(x)).join(",")}]`;
+        if (t.kind === "record") return `[${t.v.map(([key, x]) => `${keySource(key)}: ${this.writtenType(x)}`).join(", ")}]`;
+        return valueToString(t);
+    }
+
+    private hasVariables(type: Value): boolean {
+        const t = this.reference(type);
+        if (t.kind === "type") return !!t.variable || !!t.arguments?.some(x => this.hasVariables(x));
+        if (t.kind === "functionType") return this.hasVariables(t.from) || this.hasVariables(t.to);
+        return t.kind === "list" && t.v.some(x => this.hasVariables(x));
+    }
+
+    // A type with the variables a call has decided replaced by their types.
+    private instantiate(type: Value, variables: Map<string, Value>): Value {
+        const t = this.reference(type);
+        if (!variables.size) return t;
+        if (t.kind === "type" && t.variable) return variables.get(t.name) ?? t;
+        if (t.kind === "type" && t.arguments?.length) return { ...t, arguments: t.arguments.map(x => this.instantiate(x, variables)) };
+        if (t.kind === "functionType") return { kind: "functionType", from: this.instantiate(t.from, variables), to: this.instantiate(t.to, variables) };
+        if (t.kind === "list") return mkList(t.v.map(x => this.instantiate(x, variables)));
+        return t;
+    }
+
+    // A value read as a type, where one is expected. A type is itself; a
+    // function is the function type its source spells out ((Int -> Int),
+    // (a -> a), ((a -> b) -> List a -> List b)), as a list of types is a
+    // positional type. In it a lowercase name is the type it is bound to, or
+    // else a type variable. undefined when the value is not a type.
+    asType(value: Value, variables = new Map<string, Value>()): Value | undefined {
+        const v = this.reference(value);
+        if (v.kind === "type" || v.kind === "functionType") return v;
+        if (v.kind === "closure" || v.kind === "clauseFn") return this.readFunctionType(v, variables);
+        if (this.isList(v)) {
+            const items: Value[] = [];
+            for (let rest: Value = v; ;) {
+                const cell = this.cell(rest);
+                if (!cell) return mkList(items);
+                const item = this.asType(cell.head, variables);
+                if (!item) return undefined;
+                items.push(item);
+                rest = cell.tail;
+            }
+        }
+        if (v.kind === "record") {
+            const fields: Array<[string, Value]> = [];
+            for (const [key, field] of v.v) {
+                const type = this.asType(field, variables);
+                if (!type) return undefined;
+                fields.push([key, type]);
+            }
+            return { kind: "record", v: fields };
+        }
+        return undefined;
+    }
+    private readFunctionType(f: Extract<Value, { kind: "closure" | "clauseFn" }>, variables: Map<string, Value>): Value | undefined {
+        if (f.kind === "closure" ? f.applied?.length : f.applied.length || f.clauses.length !== 1 || f.clauses[0].guard) return undefined;
+        const scope = new Env(f.env);
+        const variable = (name: string): Value => {
+            if (name === "_") return { kind: "type", name: "_", variable: true };
+            const bound = f.env.get(name), value = bound && this.reference(bound);
+            if (value && (value.kind === "type" || value.kind === "functionType")) return value;
+            if (!variables.has(name)) variables.set(name, { kind: "type", name, variable: true });
+            return variables.get(name)!;
+        };
+        const caller = this.env;
+        this.env = scope;
+        try {
+            const pattern = (p: Pattern): Value | undefined => {
+                switch (p.p) {
+                    case "var": { const t = variable(p.name); scope.setLocal(p.name, t); return t; }
+                    case "wildcard": return variable("_");
+                    case "list": {
+                        const items = p.v.map(pattern);
+                        return items.every(x => x) ? mkList(items as Value[]) : undefined;
+                    }
+                    case "constr": {
+                        const bound = scope.get(p.tag);
+                        let type = bound && this.reference(bound);
+                        if (!type || type.kind !== "type") return undefined;
+                        for (const arg of p.args) {
+                            const argument = pattern(arg);
+                            if (!argument) return undefined;
+                            type = this.reference(this.apply(type, argument));
+                        }
+                        return type;
+                    }
+                    case "schema": return this.typeIn(p.type, scope, variables);
+                    default: return undefined;
+                }
+            };
+            const params = f.kind === "closure" ? f.params.map((name): Pattern => ({ p: "var", name })) : f.clauses[0].params;
+            const inputs = params.map(pattern);
+            if (!inputs.every(x => x)) return undefined;
+            const body = f.kind === "closure" ? f.body : f.clauses[0].body;
+            // Any other lowercase name the body uses is a type variable too,
+            // unless it names a type or a function (a type built by one).
+            for (const name of freeTypeNames(body)) if (this.typeVariableName(name, scope)) scope.setLocal(name, variable(name));
+            const output = this.typeIn(body, scope, variables);
+            if (!output) return undefined;
+            return (inputs as Value[]).reduceRight((to: Value, from) => ({ kind: "functionType", from, to }), output);
+        } catch (error) {
+            if (error instanceof APNError) return undefined;
+            throw error;
+        } finally { this.env = caller; }
+    }
+    // Whether a lowercase name in a type is a type variable: it is unless it
+    // names a type, or a function (which builds one).
+    private typeVariableName(name: string, scope: Env): boolean {
+        const bound = scope.get(name);
+        if (!bound) return true;
+        const value = this.reference(bound);
+        return !(value.kind === "type" || value.kind === "functionType" || value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native");
+    }
+    private typeIn(e: Expr, scope: Env, variables: Map<string, Value>): Value | undefined {
+        for (const name of freeTypeNames(e)) {
+            if (!this.typeVariableName(name, scope)) continue;
+            if (!variables.has(name)) variables.set(name, { kind: "type", name, variable: true });
+            scope.setLocal(name, variables.get(name)!);
+        }
+        const caller = this.env;
+        this.env = scope;
+        try { return this.asType(this.eval(e), variables); }
+        catch (error) { if (error instanceof APNError) return undefined; throw error; }
+        finally { this.env = caller; }
     }
 
     sameType(a: Value, b: Value): boolean {
@@ -2331,7 +2499,7 @@ export class Interpreter {
                 type.family.parameters?.forEach((name, index) => scope.setLocal(name, arguments_?.[index] ?? { kind: "type", name: "$any" }));
                 const fields = type.family.fields?.get(value.tag) ?? [];
                 const caller = this.env; this.env = scope;
-                try { return fields.every((field, index) => this.belongsToType(this.eval(field), payloads[index])); }
+                try { return fields.every((field, index) => this.belongsToType(this.asType(this.eval(field)) ?? this.eval(field), payloads[index])); }
                 finally { this.env = caller; }
             }
             return this.matchesValueType(type.name, type.name === "Mutable" ? value : this.demand(value));
@@ -2388,8 +2556,8 @@ export class Interpreter {
                     const caller = this.env;
                     this.env = scope;
                     try {
-                        const type = this.reference(this.eval(spec));
-                        if (!this.isTypeValue(type)) throw new APNError("runtime", `constructor ${tag} field must describe a type`);
+                        const type = this.asType(this.eval(spec));
+                        if (!type) throw new APNError("runtime", `constructor ${tag} field must describe a type`);
                         return this.conform(type, value);
                     } finally { this.env = caller; }
                 });
@@ -2597,8 +2765,8 @@ export class Interpreter {
                 description: ["closure", "clauseFn", "native"].includes(value.kind) ? describeType(value) : undefined };
         }
         if (name === "isType") {
-            const target = this.reference(argsIn[0]);
-            if (!this.isTypeValue(target)) throw new APNError("runtime", "isType expects a type as its first argument");
+            const target = this.asType(argsIn[0]);
+            if (!target || !this.isTypeValue(target)) throw new APNError("runtime", "isType expects a type as its first argument");
             return mkBool(this.belongsToType(target, argsIn[1]));
         }
         if (["insert", "lookup", "has", "remove"].includes(name)) {
@@ -3159,6 +3327,7 @@ export class Interpreter {
             let type: Value;
             this.env = scope;
             try { type = this.schemaPatternType(p.type, true); } finally { this.env = caller; }
+            type = this.asType(type) ?? type;
             if (type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) {
                 return this.matchPattern(p.value, this.conform(type, v), binds);
             }
@@ -3189,11 +3358,6 @@ export class Interpreter {
             const converted = this.conform(type, actual);
             const captured = this.hasSchemaCapture(type) ? this.captureSchema(type, converted, binds) : converted;
             return captured !== null && this.matchPattern(p.value, captured, binds);
-        }
-        if (p.p === "contract") {
-            const f = this.force(v);
-            if (!this.matchesValueType("Function", f)) return false;
-            return this.matchPattern(p.value, this.conform(this.resolveFunctionSpec(p.spec), f), binds);
         }
         if (p.p === "constr" && (!TYPE_NAMES.includes(p.tag) || p.tag === "Vect")) {
             const binding = this.env.get(p.tag);
@@ -3328,6 +3492,23 @@ export function dirname(p: string): string {
 }
 
 
+
+// The lowercase names an expression uses that it does not bind itself: in a
+// type, those not bound elsewhere are type variables.
+function freeTypeNames(e: Expr): string[] {
+    const names = new Set<string>();
+    const walk = (x: unknown, bound: Set<string>): void => {
+        if (Array.isArray(x)) { x.forEach(y => walk(y, bound)); return; }
+        if (!x || typeof x !== "object" || "p" in (x as object)) return;
+        const n = x as Record<string, unknown>;
+        if (n.t === "var" && /^[a-z]/.test(n.name as string) && !bound.has(n.name as string)) { names.add(n.name as string); return; }
+        if (n.t === "lambda") { walk(n.body, new Set([...bound, ...n.params as string[]])); return; }
+        if (n.t === "patternLambda") return;
+        for (const value of Object.values(n)) if (value && typeof value === "object") walk(value, bound);
+    };
+    walk(e, new Set());
+    return [...names];
+}
 
 export function envNames(env: Env): string[] {
     const s = new Set<string>();

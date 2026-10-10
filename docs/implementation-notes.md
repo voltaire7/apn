@@ -185,8 +185,13 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   identity. Ordinary dotted assignment uses `patDef.update` only when its root
   is already visible; otherwise it binds the as-pattern. In inference, keep
   original inputs separate from converted subpattern payloads.
-- Function contracts (`((Int -> Int) f)`) wrap callables and check inputs and
-  outputs on invocation; never execute a function to predict its signature.
+- Function contracts (`((Int -> Int) f)`) are typed patterns whose type is a
+  lambda read by `asType` (runtime) and `lambdaType` (checker); keep the two
+  readings aligned, including which bound names stay bound. They wrap callables
+  and check inputs and outputs on invocation, deciding type variables per call
+  (copy the contract's variable map, never share it between calls); never
+  execute a function to predict its signature. Reading a lambda as a type
+  evaluates its body with its names bound to types, never to values.
 - Keep runtime and checker record projection aligned, including match
   alternatives and standalone bindings. Checker remainder (`_:`) operations
   defer until call-site input shapes are known.

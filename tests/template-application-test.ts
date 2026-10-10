@@ -21,7 +21,7 @@ for (const [source, expected] of [
     ['take 1 ([(c -> c),missing]."hi")', "['h']"],
     ['Characters = [Char,Char]\nCharacters."hi"', "['h','i']"],
     ['cast [Char,Char] "hi"', "['h','i']"],
-    ['typeOf ([Char,Char]."hi")', '[a]'],
+    ['typeOf ([Char,Char]."hi")', 'List a'],
     ['[x: 0] [123]', '[x: 123]'], ['[x: Int 0] [floor .2]', '[x: 0]'], ['[x: Int32 0] [123]', '[x: Int32 123]'],
     ['[x: "old"] ["new"]', '[x: "new"]'], ['[x: false] [true]', '[x: true]'], ["[x: 'a'] ['b']", "[x: 'b']"],
     ['(* 2) * [1,2,3,4]', '[2,4,6,8]'],

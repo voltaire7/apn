@@ -618,6 +618,10 @@ function indexText(n: Index): string {
         String(n.constant),
     ].join("+");
 }
+// A type as an argument of another: List (Option Int), List (a -> b).
+function argument(type: string): string {
+    return /\s/.test(type) && !/^[[(]/.test(type) ? `(${type})` : type;
+}
 function text(
     t: Ty,
     active = new Map<Ty, string>(),
@@ -649,8 +653,9 @@ function text(
                 return t.name;
             case "fn":
                 return `(${show(t.input)} -> ${show(t.output)})`;
+            // [Int,Float] is a positional type; a list of any length is List Int.
             case "list":
-                return t.length ? `Vect ${indexText(t.length)} ${show(t.element)}` : `[${show(t.element)}]`;
+                return t.length ? `Vect ${indexText(t.length)} ${argument(show(t.element))}` : `List ${argument(show(t.element))}`;
             case "record":
                 return `[${[...t.fields].map(([k, v]) => `${k}: ${show(v)}`).join(", ")}]`;
             case "type":
@@ -769,7 +774,7 @@ function patternNames(p: Pattern): string[] {
         case "var": return [p.name];
         case "as": return [...patternNames(p.left), ...patternNames(p.right)];
         case "typeBind": return [p.name, ...patternNames(p.value)];
-        case "schema": case "contract": return patternNames(p.value);
+        case "schema": return patternNames(p.value);
         case "list": return p.v.flatMap(patternNames);
         case "cons": return [...patternNames(p.head), ...patternNames(p.tail)];
         case "constr": return p.args.flatMap(patternNames);
@@ -1465,6 +1470,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return value;
         }
         if (e.t === "block" && e.stmts.length === 1) return typeExpr(e.stmts[0], scope, captures);
+        if (e.t === "lambda" || e.t === "patternLambda") return lambdaType(e, scope, new Map());
         if (e.t === "record") {
             const fields = new Map<string, Ty>(), preserve = new Set<string>();
             for (const [key, value] of e.v) {
@@ -1491,6 +1497,73 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         return schemaValue(infer(e, scope), e);
     }
+    // A lambda read as the function type it spells out, as at runtime:
+    // (Int -> Int), (a -> a), ((a -> b) -> List a -> List b). A lowercase name
+    // is the type it is bound to, or else a type variable, the same one
+    // wherever the name appears in the signature.
+    function lambdaType(e: Extract<Expr, { t: "lambda" | "patternLambda" }>, scope: Scope, variables: Map<string, Ty>): Ty {
+        const local: Scope = new Map(scope);
+        const typeVariable = (name: string): Ty => {
+            if (name === "_") return variable();
+            const bound = scope.get(name), type = bound && resolve(bound.type);
+            if (type?.k === "type" && !variables.has(name)) return type.value;
+            if (variables.has(name)) { const t = variables.get(name)!; local.set(name, { type: { k: "type", value: t }, mono: true }); return t; }
+            if (!variables.has(name)) variables.set(name, variable());
+            const t = variables.get(name)!;
+            local.set(name, { type: { k: "type", value: t }, mono: true });
+            return t;
+        };
+        const read = (x: Expr): Ty => {
+            // A free name is a type variable unless it names a type or a
+            // function (which builds one), as at runtime.
+            for (const name of freeNames(x)) {
+                const bound = local.get(name), type = bound && resolve(bound.type);
+                if (!type || type.k !== "type" && type.k !== "fn" && type.k !== "intrinsic") typeVariable(name);
+            }
+            if (x.t === "block" && x.stmts.length === 1) return read(x.stmts[0]);
+            return x.t === "lambda" || x.t === "patternLambda" ? lambdaType(x, local, variables) : typeExpr(x, local);
+        };
+        const pattern = (p: Pattern): Ty => {
+            switch (p.p) {
+                case "var": return typeVariable(p.name);
+                case "wildcard": return variable();
+                case "schema": return read(p.type);
+                case "list": return { k: "list", items: p.v.map(pattern), element: union(p.v.map(() => variable())), length: constant(BigInt(p.v.length)) };
+                case "constr": {
+                    const args = p.args.map(arg => {
+                        if (arg.p === "var") { typeVariable(arg.name); return { t: "var", name: arg.name } as Expr; }
+                        if (arg.p === "wildcard") return { t: "placeholder" } as Expr;
+                        const name = `$type${local.size}`;
+                        local.set(name, { type: { k: "type", value: pattern(arg) }, mono: true });
+                        return { t: "var", name } as Expr;
+                    });
+                    return typeExpr(args.reduce((f: Expr, a): Expr => ({ t: "app", f, a }), { t: "var", name: p.tag }), local);
+                }
+                default: return problem("expected a type description", e);
+            }
+        };
+        const inputs = e.t === "lambda" ? e.params.map(typeVariable) : e.params.map(pattern);
+        return inputs.reduceRight((output: Ty, input) => fn(input, output, undefined, true), read(e.body));
+    }
+    // A lambda written in place, perhaps in parentheses.
+    function lambdaLiteral(e: Expr): Extract<Expr, { t: "lambda" | "patternLambda" }> | undefined {
+        if (e.t === "block" && e.stmts.length === 1 && e.style === "(") return lambdaLiteral(e.stmts[0]);
+        return e.t === "lambda" || e.t === "patternLambda" ? e : undefined;
+    }
+    // The lowercase names an expression uses without binding them.
+    function freeNames(e: Expr): string[] {
+        const names = new Set<string>();
+        const walk = (x: unknown, bound: Set<string>): void => {
+            if (Array.isArray(x)) { x.forEach(y => walk(y, bound)); return; }
+            if (!x || typeof x !== "object" || "p" in (x as object)) return;
+            const n = x as Record<string, unknown>;
+            if (n.t === "var" && /^[a-z]/.test(n.name as string) && !bound.has(n.name as string)) { names.add(n.name as string); return; }
+            if (n.t === "lambda" || n.t === "patternLambda") return;
+            for (const value of Object.values(n)) if (value && typeof value === "object") walk(value, bound);
+        };
+        walk(e, new Set());
+        return [...names];
+    }
     function schemaWildcard(e: Expr): boolean {
         return e.t === "placeholder" || e.t === "block" && e.stmts.length === 1 && schemaWildcard(e.stmts[0]);
     }
@@ -1516,7 +1589,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 bind(p.right, right, scope, e, bound);
                 const checks = requirements.splice(nestedStart);
                 const constructor = p.right.p === "constr" ? resolve(scope.get(p.right.tag)?.type ?? dynamic) : undefined;
-                const coerce = p.right.p === "schema" || p.right.p === "contract" || constructor?.k === "type";
+                const coerce = p.right.p === "schema" || constructor?.k === "type";
                 const matcher: Ty = { k: "fn", input: right, output: right, pattern: p.right, coerce, checks };
                 operation("pattern", [matcher, expected]);
                 return;
@@ -1549,15 +1622,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const type: Ty = { k: "type", value: expected };
                 bind({ p: "var", name: p.name }, type, scope, e, bound);
                 bind(p.value, expected, scope, e, bound);
-                return;
-            }
-            case "contract": {
-                const spec = (s: typeof p.spec): Ty => "name" in s ? atom(s.name) : fn(spec(s.from), spec(s.to), undefined, true);
-                const t = spec(p.spec);
-                // A contract pattern explicitly installs a runtime wrapper.
-                if (isExplicit(expected)) runtimeChecks++;
-                else unify(t, expected, e);
-                bind(p.value, t, scope, e, bound);
                 return;
             }
             case "list": {
@@ -2418,10 +2482,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 for (const [name, entry] of imported) scope.set(name, entry);
                 return { k: "record", fields: new Map([...imported].map(([name, entry]) => [name, entry.type])) };
             }
-            case "functionType": {
-                const spec = (s: typeof e.spec): Ty => "name" in s ? atom(s.name) : fn(spec(s.from), spec(s.to), undefined, true);
-                return { k: "type", value: spec(e.spec) };
-            }
             case "list": {
                 const items = e.v.map((x) => infer(x, scope));
                 const element: Ty = items.length ? union(items) : variable();
@@ -2472,6 +2532,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return infer(call, scope, expected);
                 }
                 const a = e.t === "app" ? e.a : e.x;
+                // isType's first argument is a type: a lambda there is read as one.
+                const typeArgument = e.t === "app" && e.f.t === "var" && e.f.name === "isType" && scope.get("isType")?.builtin ? lambdaLiteral(a) : undefined;
+                if (typeArgument) {
+                    const isType = scope.get("isType")!;
+                    lambdaType(typeArgument, scope, new Map());
+                    return application(copy(isType.type), { type: variable() }, e);
+                }
                 callees.add(e.f);
                 const callee = infer(e.f, scope), resolved = resolve(callee);
                 if (resolved.k === "intrinsic" && resolved.name === "load" && a.t === "string" && options.loads) {
@@ -2651,11 +2718,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return unknown();
             }
             case "recordAccess": {
+                // (a -> a).(+ 1): a function read as a type converts the value,
+                // like [Int].[1].
+                const lambda = e.rec.t === "block" && e.rec.stmts.length === 1 ? e.rec.stmts[0] : e.rec;
+                if (e.scoped && e.argument && (lambda.t === "lambda" || lambda.t === "patternLambda")) {
+                    const t = lambdaType(lambda, scope, new Map());
+                    return application({ k: "fn", input: t, output: t, coerce: true }, { type: infer(e.argument, scope) }, e);
+                }
                 const rec = resolve(infer(e.rec, scope));
                 if (isExplicit(rec)) { runtimeChecks++; return explicitDynamic; }
                 if (rec.k === "list") return template(rec, infer(e.argument ?? { t: "var", name: e.field }, scope), e.argument ?? e);
                 if (e.scoped && e.argument) {
                     if (rec.k === "dynamic" || rec.k === "var") return unknown();
+                    // A function held in a name, read as a type at runtime.
+                    if (rec.k === "fn") { runtimeChecks++; infer(e.argument, scope); return unknown(); }
                     if (rec.k !== "record") return problem("scoped evaluation requires a record", e);
                     const local = new Map(scope);
                     for (const [name, type] of rec.fields) local.set(name, { type, mono: true });
@@ -2709,6 +2785,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return a;
             }
             case "binop": {
+                // Against a type, a lambda written in place is read as one, as
+                // at runtime: (a -> b) == typeOf f.
+                if (e.op === "==" || e.op === "!=") {
+                    const [l, r] = [lambdaLiteral(e.l), lambdaLiteral(e.r)];
+                    if (l || r) {
+                        const other = l ? infer(e.r, scope) : infer(e.l, scope);
+                        const t = resolve(other);
+                        if (l && r || t.k === "type" || t.k === "atom" && t.name === "Type") {
+                            if (l) lambdaType(l, scope, new Map());
+                            if (r) lambdaType(r, scope, new Map());
+                            return atom("Bool");
+                        }
+                    }
+                }
                 const bound = scope.get(e.op);
                 if (!bound) return problem(`unbound operator '${e.op}'`, e);
                 let op = builtinOperator(bound.type), operands: [Ty, Ty] | undefined;
@@ -4814,7 +4904,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Only real type patterns can project Dynamic arguments.
     function patternConverts(p: Pattern, scope: Scope): boolean {
         switch (p.p) {
-            case "schema": case "contract": case "int": return true;
+            case "schema": case "int": return true;
             case "constr": {
                 const constructor = resolve(scope.get(p.tag)?.type ?? dynamic);
                 if (constructor.k === "type" && !variables(constructor.value).size || constructor.k === "record" || constructor.k === "list") return true;
@@ -5106,7 +5196,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 case "as": return bindsSelf(p.left) || bindsSelf(p.right);
                 case "var": return p.name === name;
                 case "typeBind": return p.name === name || bindsSelf(p.value);
-                case "schema": case "contract": return bindsSelf(p.value);
+                case "schema": return bindsSelf(p.value);
                 case "list": return p.v.some(bindsSelf);
                 case "cons": return bindsSelf(p.head) || bindsSelf(p.tail);
                 case "constr": return p.args.some(bindsSelf);

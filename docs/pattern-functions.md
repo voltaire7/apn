@@ -224,16 +224,20 @@ result. Numeric inputs require lossless conversion, whether bare or explicitly t
 function contract. Consequently a callable can match and later fail its contract;
 that failure is an error, not a reason to try another handler.
 
-`Int { ... }` independently constrains the enclosing function's result. Inside
-contract patterns, arrows associate right: `Int -> Int -> Int` describes a
-curried function.
+`Int { ... }` independently constrains the enclosing function's result. A
+contract is an ordinary typed pattern whose type is a lambda, read as the
+function type it spells out; arrows associate right, so `Int -> Int -> Int`
+describes a curried function. A lowercase name not bound to a type is a type
+variable: `((a -> a) f)` accepts a function whose result has its argument's
+type, checked at each call (`f 1` must return an Int). A function type may take
+functions: `((a -> b) -> List a -> List b)`. See "Function types" in
+[semantics](semantics.md).
 
-In expressions, `->` always creates a lambda, regardless of whether its names
-refer to types. `(Int -> Int) function` therefore applies a pattern-matching
-lambda; it does not construct a function contract. `a -> a` is the identity
-lambda. Write `((Int -> Int) f)` in a parameter or binding pattern to constrain
-`f`. A captured contract's `typeOf` remains a first-class type value, but its
-printed arrow description is not a standalone type expression.
+In expressions, `->` creates a lambda, regardless of whether its names refer to
+types; it is read as a type only where a type is expected (a typed pattern, a
+constructor field, `(a -> a).(+ 1)`, `isType`, or beside a type in `==`).
+`(Int -> Int) function` therefore applies a pattern-matching lambda; it does not
+construct a function contract. `a -> a` is the identity lambda.
 
 Constructor patterns and contracts are the only way to state a type. There are
 no `:` annotations or `::` signatures: `:` always builds a list (`x:rest`) or a
