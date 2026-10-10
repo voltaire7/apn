@@ -11,7 +11,7 @@ import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
-import { parseNumberText, isNumeric, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
+import { parseNumberText, isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { clauseKey, isLoadCall, mergeClauses } from "./ast.ts";
@@ -39,6 +39,9 @@ const IO_RESULTS: Record<string, string> = {
     print: "[]", emit: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
 };
 
+// Scalar types an alias names a subtype of (Money = Float): not aggregates.
+const NAMED_BASES = new Set([...NUMERIC_TYPES.filter(t => !["Number", "Real", "Integer", "Exact", "Inexact"].includes(t)), "String", "Bool", "Char"]);
+
 // Builtins that take an undecided value as it is: they show it or pass it on.
 const SHOWS_UNDECIDED = new Set(["print", "emit", "toString", "format", "typeOf", "isType", "debug", "seq", "Dynamic"]);
 
@@ -51,7 +54,7 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
-    ["env", 0], ["distinct", 1], ["assert", 1], ["match", 2], ["set", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
+    ["env", 0], ["assert", 1], ["match", 2], ["set", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
@@ -305,9 +308,12 @@ export class Interpreter {
                     try {
                         const value = this.reference(this.eval(clauses[0].body));
                         if (!this.isTypeValue(value)) throw new APNError("runtime", `${name} must alias a type; use | to declare constructors`);
-                        if (value.kind === "type" && value.family?.base && value.family.name === "<distinct>") {
-                            value.family.name = name;
-                            return { ...value, name };
+                        // An alias of a scalar type names a subtype: Money = Float.
+                        // A Money is a Float wherever one is accepted, but keeps its
+                        // name, and (Money x) accepts only Money values.
+                        if (value.kind === "type" && NAMED_BASES.has(value.name) && !value.family && !value.alias && !value.arguments?.length && !value.variable) {
+                            const family = { name, base: value };
+                            return { kind: "type", name, family };
                         }
                         return value;
                     } finally { this.env = caller; }
@@ -1315,20 +1321,19 @@ export class Interpreter {
             if (callable(l)) return this.iterate(r, l);
         }
         if (op === "==" || op === "!=") return mkBool(this.equals(l, r) === (op === "=="));
-        if ((l.kind === "variant" && l.family?.base) || (r.kind === "variant" && r.family?.base)) {
-            if (l.kind !== "variant" || r.kind !== "variant" || l.family !== r.family) {
-                throw new APNError("runtime", "distinct arithmetic requires the same distinct type on both sides");
+        // A named subtype keeps its name through arithmetic with itself or a
+        // plain value (Money 1 + 1.0 is a Money); two names do not mix.
+        const named = (v: Value) => v.kind === "variant" && v.family?.base ? v.family : undefined;
+        const ln = named(l), rn = named(r);
+        if (ln || rn) {
+            if (ln && rn && ln !== rn) throw new APNError("runtime", `cannot combine ${ln.name} and ${rn.name}`, { hint: "convert one explicitly, as in Money (amount distance)" });
+            const family = (ln ?? rn)!;
+            const a = this.demand(ln ? (l as Extract<Value, { kind: "variant" }>).v[0] : l), b = this.demand(rn ? (r as Extract<Value, { kind: "variant" }>).v[0] : r);
+            if (["+", "-", "*", "/", "%", "^"].includes(op)) {
+                return this.conform({ kind: "type", name: family.name, family }, this.operate(op, a, b));
             }
-            const a = this.demand(l.v[0]), b = this.demand(r.v[0]);
-            if (isNumeric(a) && isNumeric(b) && ["+", "-", "*", "/", "%", "^"].includes(op)) {
-                const result = op === "^" ? typedPower(a, b) : typedArithmetic(op, a, b);
-                return this.conform({ kind: "type", name: l.family!.name, family: l.family }, result);
-            }
-            if (["<", ">", "<=", ">="].includes(op)) {
-                const order = this.compare(a, b);
-                return mkBool(op === "<" ? order < 0 : op === ">" ? order > 0 : op === "<=" ? order <= 0 : order >= 0);
-            }
-            throw new APNError("runtime", `operator '${op}' requires unwrapping this distinct value`);
+            if (["<", ">", "<=", ">="].includes(op)) return this.operate(op, a, b);
+            throw new APNError("runtime", `operator '${op}' cannot use a ${family.name} here`);
         }
         if (["+", "-", "*", "/", "%", "^"].includes(op)) {
             l = this.arithmeticValue(l); r = this.arithmeticValue(r);
@@ -1480,6 +1485,12 @@ export class Interpreter {
             const fields = new Map(b.v);
             return a.v.length === b.v.length && a.v.every(([key, value]) => fields.has(key) && this.equals(value, fields.get(key)!));
         }
+        // A named subtype equals a plain value of its base by payload
+        // (Money 1.2 == 1.2); two different names are never equal.
+        const named = (v: Value) => v.kind === "variant" && !!v.family?.base;
+        if (named(a) !== named(b) && !(a.kind === "variant" && b.kind === "variant")) {
+            return this.equals(named(a) ? (a as Extract<Value, { kind: "variant" }>).v[0] : a, named(b) ? (b as Extract<Value, { kind: "variant" }>).v[0] : b);
+        }
         if (a.kind !== b.kind) return false;
         switch (a.kind) {
             case "int": return a.v === (b as any).v;
@@ -1583,6 +1594,11 @@ export class Interpreter {
                 if (!f.family && ["Float", "Float32", "Float64"].includes(f.name)) {
                     if (!isNumeric(value)) throw new APNError("runtime", `${f.name} expects a number`);
                     return castNumeric(f.name, value, true);
+                }
+                // Applying a named subtype applies its base, as written:
+                // F .1 with F = Float32 is F (Float32 .1).
+                if (f.family?.base && !(value.kind === "variant" && value.family?.base)) {
+                    return this.conform(f, this.apply(f.family.base, value));
                 }
                 return this.conform(f, value);
             }
@@ -2224,6 +2240,15 @@ export class Interpreter {
                 emit(v.tag, "variant");
                 for (const arg of v.v) {
                     const shown = this.demand(arg);
+                    // A named subtype's payload shows without its base's name:
+                    // F 0.1 for F = Float32, not F (Float32 0.1).
+                    if (v.family?.base && isNumeric(shown) && shown.typeName) {
+                        const text = numberText(shown);
+                        emit(text.startsWith("-") ? " (" : " ");
+                        emit(text, shown.kind);
+                        if (text.startsWith("-")) emit(")");
+                        continue;
+                    }
                     const wrap = compoundArgument(shown);
                     emit(wrap ? " (" : " ");
                     this.render(shown, emit, false, ancestors);
@@ -2244,6 +2269,14 @@ export class Interpreter {
     // clauses: literals first, then exact types, then conversions.
     private patternScore(pattern: Pattern, arg: Value): number {
         if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
+        // A named subtype's own pattern outranks its base's: (Money x) first.
+        // Only a constructor pattern looks at its argument.
+        if (pattern.p !== "constr") return 0;
+        const named = this.reference(arg);
+        if (named.kind === "variant" && named.family?.base) {
+            if (pattern.tag === named.family.name) return 35;
+            if (TYPE_NAMES.includes(pattern.tag)) arg = named.v[0];
+        }
         if (pattern.p !== "constr" || !TYPE_NAMES.includes(pattern.tag)) return 0;
         // An undecided call fits a typed pattern as an exact type would.
         const undecided = this.reference(arg);
@@ -2260,6 +2293,11 @@ export class Interpreter {
     private bestPatternScore(pattern: Pattern): number {
         if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
         return pattern.p === "constr" && TYPE_NAMES.includes(pattern.tag) ? 30 : 0;
+    }
+
+    // A named subtype's value as its base: Money 1.2 is 1.2 to builtins.
+    private baseValue(v: Value): Value {
+        return v.kind === "variant" && v.family?.base ? this.dataValue(v.v[0]) : v;
     }
 
     // Nothing named the type an undecided value should have.
@@ -2783,12 +2821,6 @@ export class Interpreter {
             }
             return { kind: "list", v: [] };
         }
-        if (name === "distinct") {
-            const base = this.reference(argsIn[0]);
-            if (!this.isTypeValue(base)) throw new APNError("runtime", "distinct expects a type");
-            const family = { name: "<distinct>", base };
-            return { kind: "type", name: family.name, family };
-        }
         if (name === "match") {
             // Traverse only as far as the first match. Share the original lazy
             // argument across probes; errors are never treated as mismatches.
@@ -2890,7 +2922,7 @@ export class Interpreter {
             return mkList([...map.entries.values()].map((entry) => entry[name === "keys" ? 0 : 1]));
         }
         if (NUMBER_NATIVES.some(([n]) => n === name)) {
-            let args = argsIn.map((x) => this.dataValue(x));
+            let args = argsIn.map((x) => this.baseValue(this.dataValue(x)));
             if (name === "expt" && isNumeric(args[0]) && isNumeric(args[1])) return typedPower(args[0], args[1]);
             if (args.length === 2 && isNumeric(args[0]) && isNumeric(args[1]) &&
                 ["min", "max", "gcd", "lcm", "quotient", "remainder", "modulo", "makeRectangular"].includes(name)) {
@@ -2958,6 +2990,8 @@ export class Interpreter {
         const a = args[0];
         // An undecided value reaching a builtin that needs a plain value.
         if (!SHOWS_UNDECIDED.has(name)) for (const x of args) if (x.kind === "pending") this.ambiguous(x);
+        // A named subtype is its base to builtins: sqrt (Money 4.0) is 2.0.
+        if (!SHOWS_UNDECIDED.has(name)) args.forEach((x, n) => { args[n] = this.baseValue(x); });
         switch (name) {
             // Output actions yield [] (nothing), as print does in Haskell.
             case "print":
@@ -3511,6 +3545,11 @@ export class Interpreter {
         if (p.p === "constr" && p.tag === "Mutable") {
             const ref = this.reference(v);
             return ref.kind === "mutable" && p.args.length === 1 && this.matchPattern(p.args[0], ref, binds);
+        }
+        // A named subtype matches its base's patterns: (Float x) takes Money 1.2.
+        if (p.p === "constr" && TYPE_NAMES.includes(p.tag) && !["Type", "Mutable", "Dynamic"].includes(p.tag)) {
+            const named = this.reference(v);
+            if (named.kind === "variant" && named.family?.base) v = named.v[0];
         }
         v = p.p === "typeBind" || (p.p === "constr" && p.tag === "Type") ? this.demand(v) : this.dataValue(v);
         switch (p.p) {

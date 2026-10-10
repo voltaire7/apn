@@ -57,7 +57,6 @@ const builtins = new Map<string, string>([
     ["use", "use namespace — open a record or list of records in the current scope; later fields win; returns ()."],
     ["do", "do actions — action running a list of actions in order, yielding the last result; [] for an empty list."],
     ["match", "match value alternatives — try unary pattern functions in order."],
-    ["distinct", "distinct Type — create a fresh nominal type; bind it once to a capitalized name."],
     ["assert", "assert condition — require a truthy value; failures include the expression and source location."],
     ["bracket", "bracket acquire release use — action; finishes returned data before cleanup, even on failure (function)."],
     ["withFile", "withFile path use — action scoping a UTF-8 file reader; the callback receives the action file.read (io)."],

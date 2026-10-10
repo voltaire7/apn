@@ -302,7 +302,10 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
 
 ## Nominal types and resources
 
-- `distinct Type` creates a generative `VariantFamily` with base metadata.
+- A capitalized alias of a scalar type (`NAMED_BASES`, runtime and checker)
+  creates a generative `VariantFamily` with base metadata: a named subtype.
+  Builtins see its base value (`baseValue`); base patterns unwrap it; its own
+  pattern scores above the base's.
   Arithmetic on nullary-family ordinals returns ordinary numbers via
   `arithmeticValue`.
 - `src/resource-scope.ts` implements `bracket` and read-only `withFile`.

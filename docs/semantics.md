@@ -143,7 +143,11 @@ record pattern `[x: a] = record`. A failed match is an error. A bare `[x,y]`
 pattern also matches a record, selecting the fields named `x` and `y` (extra
 fields are ignored), in bindings, function parameters, and `match` alternatives. A new capitalized name on the
 left binds a type alias; see [templates and type aliases](templates-and-types.md)
-for aliases and variant declarations.
+for aliases and variant declarations. An alias of a scalar type (`Money = Float`, `UserId = Int`)
+names a subtype: `Money 1.2` keeps its name, is accepted wherever a Float is,
+and selects a `(Money x)` clause over a `(Float x)` one; arithmetic with plain
+numbers keeps the name, and two different names do not mix. See
+[named subtypes](type-and-resource-rules.md#named-subtypes).
 
 There are no type annotations or signatures: `:` only builds lists and record
 entries. State types with constructors, `x = Int 5` or `f (Int x) = ...`; see

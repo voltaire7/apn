@@ -377,5 +377,5 @@ requests the full record and can stream indefinitely if it contains infinite lis
 `function` exports `bracket acquire release use`; `io` exports
 `withFile path use`. Both are actions; an acquire, use or release that is an
 action runs in turn. Returned data is completed before cleanup.
-`distinct` and `assert` are available without imports.
+`assert` is available without imports.
 See [type and resource rules](type-and-resource-rules.md) for examples and limits.

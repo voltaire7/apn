@@ -430,8 +430,9 @@ A constructor pattern `(Some value)` extracts its field. Explicitly declared
 same-name legacy wrappers remain supported (`Box a = | Box a`), but the shared
 name denotes the value constructor; use distinct names for type specialization.
 
-Nominal wrappers can use single-constructor variants or `distinct Type`;
-see [distinct types](type-and-resource-rules.md#distinct-types). No automatic
+Nominal wrappers can use single-constructor variants, or a named subtype
+(`UserId = Int`), which is also accepted as its base; see
+[named subtypes](type-and-resource-rules.md#named-subtypes). No automatic
 cross-type conversion or zero-cost representation is implied. Class/instance syntax and static type
 inference are not part of this change.
 

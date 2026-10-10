@@ -1,37 +1,38 @@
-# Distinct types, variant indexing, and scoped resources
+# Named subtypes, variant indexing, and scoped resources
 
-These features use ordinary functions. There are no new keywords.
+These features use ordinary definitions. There are no new keywords.
 
-## Distinct types
+## Named subtypes
+
+An alias of a scalar type (a numeric type, `String`, `Bool` or `Char`) names a
+subtype of it:
 
 ```apn
-Count = Int                 # alias
-UserId = distinct Int       # fresh nominal identity
-OrderId = distinct Int
+UserId = Int                # a named subtype of Int
+OrderId = Int
 
 UserId 123                  # UserId 123
 UserId == Int               # false
 extract (UserId value) = value
-extract (UserId 123)         # 123
+extract (UserId 123)        # 123
+UserId 2 + 1                # UserId 3
+UserId 1 + OrderId 1        # error: cannot combine UserId and OrderId
 ```
 
-Constructors check the underlying type. Construction from another distinct type
-requires explicitly extracting its payload first. A `(UserId x)` pattern accepts
-only that identity, and binds the payload to `x`; a generic `(t x)` also exposes
-the type and payload. Ordinary record templates remain structural. Distinct
-record/list types can wrap those templates when identity is wanted.
+A `UserId` is an `Int` wherever an Int is accepted: `(Int x)` patterns, numeric
+builtins (`sqrt`), and arithmetic with plain numbers, which keeps the name. An
+Int is not a `UserId`: a `(UserId x)` pattern accepts only that name, binding the
+payload to `x`, and outranks an `(Int x)` clause for a UserId. Two different
+names never mix: arithmetic between them is an error, and they are not equal
+(`UserId 3 == OrderId 3` is false, though each equals `3`). Constructors check
+the base type; construction from another named type requires extracting its
+payload first. Aliasing a named subtype (`Alias = UserId`) keeps its identity.
+Aliases of other types (records, `Vect n Int`, parameterized aliases) remain
+plain aliases. An omitted record slot initialized from a named type wraps its
+base's default.
 
-Bind the constructor once. Each evaluation of `distinct` creates a new identity;
-ordinary capitalized aliases memoize it. Aliasing an existing distinct type
-preserves its identity. Parameterized factories invoking `distinct` create fresh
-identities per specialization evaluation, rather than interned generic types.
-
-Binary numeric arithmetic requires both operands to have the same distinct type,
-checks the underlying numeric rules, and preserves the wrapper. Ordering and
-unary negation likewise operate on numeric payloads. Equality distinguishes
-nominal identities. Other operations, native numeric functions, and FFI calls
-use explicit payload extraction. An omitted record slot initialized from a
-distinct type wraps its underlying default.
+For a type that is not accepted as its base, declare a single-constructor
+variant (`Meters = | MkMeters Float`) and unwrap it with a pattern.
 
 ## Variant list indexes
 

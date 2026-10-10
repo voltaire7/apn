@@ -1093,7 +1093,7 @@ print ([10] 0)                      # => 10 (integer indexing)
 Count = Int
 Numbers = [Int]
 Point = [x: Float, y: Float]
-print (Count 123)                   # => 123
+print (Count 123)                   # => Count 123 (an alias of Int names a subtype)
 print (Numbers.[1])                # => [1]
 print (Point [x: 1, y: 2])          # => [x: 1.0, y: 2.0]
 firstNumber (Numbers values) = head values
@@ -1556,14 +1556,20 @@ selectedKey = "x"
 indexedObject selectedKey = 3
 print indexedObject                 # => [x: 3]
 
-# Distinct types keep identities separate; aliases keep the same identity.
-AccountId = distinct Int
+# An alias of a scalar type names a subtype: it keeps its name, is accepted
+# wherever its base is, and two names do not mix.
+AccountId = Int
+OtherId = Int
 getAccountId (AccountId n) = n
 print (AccountId 7)                  # => AccountId 7
 print (getAccountId (AccountId 7))   # => 7
 print (AccountId 2 + AccountId 3)    # => AccountId 5
+print (AccountId 1 + 1)              # => AccountId 2 (a plain Int joins it)
 print (AccountId == Int)            # => false
-# AccountId 1 + 1                   # error: explicit unwrapping required
+idKind (AccountId _) = "account"
+idKind (Int _) = "int"
+print [idKind (AccountId 1),idKind (OtherId 1),idKind 1]  # => ["account","int","int"]
+# AccountId 1 + OtherId 1           # error: cannot combine AccountId and OtherId
 
 # Nullary variants index lists in declaration order.
 Compass = Up | Down | Left | Right

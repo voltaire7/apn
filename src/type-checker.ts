@@ -13,6 +13,8 @@ function isIO(t: Ty): boolean { return t.k === "variant" && t.name === "IO" && t
 // type accepts.
 function pendingTy(t: Ty): Ty { return { k: "variant", name: "Monad", args: [t] }; }
 function isPending(t: Ty): boolean { return t.k === "variant" && t.name === "Monad" && t.args.length === 1; }
+// Scalar types an alias names a subtype of (Money = Float), as at runtime.
+const NAMED_BASES = new Set([...NUMERIC_TYPES.filter(t => !["Number", "Real", "Integer", "Exact", "Inexact"].includes(t)), "String", "Bool", "Char"]);
 const METHODS = new Set(["map", ">>=", "<*>", "return"]);
 // A definition that adds an instance instead of binding a name: any
 // definition of a method (map f (Some x) = ..., return = Some).
@@ -247,7 +249,7 @@ const VIEW_PICKING_NATIVES = new Set(["head"]);
 // Natives that may take values holding views (not views themselves) without
 // reading a view's bindings; the higher-order ones call their function
 // arguments with what they are given.
-const VIEW_HOLDING_NATIVES = new Set(["map", "filter", "foldl", "foldr", "zipWith", "iterate", "enumerate", "match", "distinct", "has", "lookup", "remove", "insert", "HashMap"]);
+const VIEW_HOLDING_NATIVES = new Set(["map", "filter", "foldl", "foldr", "zipWith", "iterate", "enumerate", "match", "has", "lookup", "remove", "insert", "HashMap"]);
 // Natives calling a function argument, by its position.
 const HIGHER_ORDER_NATIVES = new Map([["map", 0], ["filter", 0], ["foldl", 0], ["foldr", 0], ["zipWith", 0], ["iterate", 1], ["match", 1]]);
 // Constructors the standard library declares, by module (for import hints).
@@ -1081,10 +1083,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (t.op === "pattern") return application(a, { type: b }, activeExpression ?? { t: "placeholder" });
         if (t.op === "load") return unknown();
-        if (t.op === "distinct") {
-            if (a.k !== "type") return problem("distinct expects a type");
-            return { k: "type", value: { k: "variant", name: `distinct${serial++}`, args: [], base: a.value } };
-        }
         if (t.op === "set") {
             // An explicit Dynamic target (such as an FFI Pointer) is checked at runtime.
             if (isExplicit(a)) { runtimeChecks++; return io(list(variable(), constant(0n))); }
@@ -1164,10 +1162,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             else return problem(`${t.op} requires a collection; got ${text(a)}`);
             return list(t.op === "keys" ? key : t.op === "values" ? value : pair(key, value));
         }
+        // A named subtype keeps its name through arithmetic with itself or a
+        // plain value of its base (Money 1 + 1.0 is a Money); two names do not mix.
         if (a.k === "variant" && a.base || b?.k === "variant" && b.base) {
-            if (a.k !== "variant" || b?.k !== "variant" || a.name !== b.name || !a.base || !b.base) return problem("distinct arithmetic requires the same type on both sides");
-            operation(t.op, [a.base, b.base]);
-            return a;
+            const named = (x: Ty | undefined) => x?.k === "variant" && x.base ? x : undefined;
+            const [x, y] = [named(a), named(b)];
+            if (x && y && x.name !== y.name) return problem(`cannot combine ${x.name} and ${y.name}`);
+            const kept = (x ?? y)!;
+            if (["<", ">", "<=", ">="].includes(t.op)) return operation(t.op, [x ? kept.base! : a, y ? kept.base! : b!]);
+            operation(t.op, [x ? kept.base! : a, y ? kept.base! : b!]);
+            return kept;
         }
         const numeric = (x: Ty) => x.k === "atom" && NUMERIC_TYPES.includes(x.name);
         const callable = (x: Ty) => ["fn", "type", "overload"].includes(x.k);
@@ -1397,6 +1401,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             expected.args.forEach((t, i) => unify(t, actual.args[i], e, seen));
             return;
         }
+        // A named subtype is its base wherever the base is expected.
+        if (actual.k === "variant" && actual.base && expected.k !== "variant") return unify(expected, actual.base, e, seen);
+        if (expected.k === "variant" && expected.base && actual.k !== "variant") return unify(expected.base, actual, e, seen);
         problem(
             `cannot use ${text(actual)} where ${text(expected)} is required`,
             e,
@@ -1572,6 +1579,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (error && typeof error === "object" && "message" in error) return false;
             throw error;
         } finally { choosing--; requirements.length = saved; }
+    }
+    // An alias of a scalar type names a subtype (Money = Float), as at runtime.
+    function namedSubtype(name: string, body: Expr, t: Ty): Ty {
+        const type = resolve(t), base = type.k === "type" ? resolve(type.value) : undefined;
+        if (body.t !== "var" || base?.k !== "atom" || !NAMED_BASES.has(base.name)) return t;
+        return { k: "type", value: { k: "variant", name, args: [], base } };
     }
     // A function type with its result after these parameters left open.
     function withoutResult(t: Ty, arity: number): Ty {
@@ -2143,7 +2156,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 convert((t as Extract<Ty, { k: "variant" }>).args[0], result, e);
                 return t;
             }
-            if (t.k === "variant" && t.base) { convert(t.base, argument.type, e); return t; }
+            // Applying a named subtype applies its base, as at runtime: F .1 with
+            // F = Float32 rounds like Float32 .1. Another name must be unwrapped.
+            if (t.k === "variant" && t.base) {
+                const given = resolve(argument.type);
+                if (given.k === "variant" && given.base) { if (given.name !== t.name) problem(`${t.name} requires explicit unwrapping of ${given.name}`, e); return t; }
+                application({ k: "type", value: t.base }, argument, e);
+                return t;
+            }
             if (t.k === "var") {
                 requirements.push({ k: "operation", op: "construct", args: [f, argument.type] });
                 return t;
@@ -5105,7 +5125,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         scope: new Map(scope),
                         args: [],
                     }
-                    : infer(c.body, scope),
+                    : namedSubtype(name, c.body, infer(c.body, scope)),
             });
             return;
         }
@@ -5398,7 +5418,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("isType", [variable(), variable()], bool);
     native("parse", [str], explicitDynamic);
     native("step", [int, variable()], explicitDynamic);
-    for (const name of ["quote", "debug", "toAST", "use", "distinct", "load"]) scope.set(name, { type: { k: "intrinsic", name } });
+    for (const name of ["quote", "debug", "toAST", "use", "load"]) scope.set(name, { type: { k: "intrinsic", name } });
     native("exit", [int], io(empty));
     native("null", [variable()], bool);
     native("length", [list(variable())], int);
