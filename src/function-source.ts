@@ -88,8 +88,15 @@ export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" 
         const name = v.tag ?? v.name;
         return name + v.applied.map(a => ` ${argument(a)}`).join("");
     }
-    const text = v.clauses.length === 1
-        ? `${v.clauses[0].params.map(pattern).join(" ")}${v.clauses[0].guard ? " | " + source(v.clauses[0].guard) : ""} -> ${source(v.clauses[0].body)}`
-        : v.clauses.map(c => `${v.name} ${c.params.map(pattern).join(" ")} = ${source(c.body)}`).join("\n");
-    return v.applied.length ? `(${text})${v.applied.map(a => ` ${argument(a)}`).join("")}` : text;
+    // One clause is a pattern lambda; several are the list of them, as match
+    // takes: [Int x -> print Int,Float x -> print Float].
+    const text = v.clauses.length === 1 ? clauseSource(v.clauses[0]) : `[${v.clauses.map(clauseSource).join(",")}]`;
+    return v.applied.length ? `${v.clauses.length === 1 ? `(${text})` : text}${v.applied.map(a => ` ${argument(a)}`).join("")}` : text;
+}
+// A clause as a pattern lambda. A lone constructor pattern needs no
+// parentheses (Int x -> x); among several parameters it does ((Int x) y -> x).
+function clauseSource(c: { params: Pattern[]; body: Expr; guard?: Expr }): string {
+    const lone = c.params.length === 1 && c.params[0].p === "constr" && c.params[0].args.length;
+    const params = lone ? pattern(c.params[0]).slice(1, -1) : c.params.map(pattern).join(" ");
+    return `${params}${c.guard ? " | " + source(c.guard) : ""} -> ${source(c.body)}`;
 }
