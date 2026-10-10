@@ -797,8 +797,8 @@ S (S Z)                          # UInt 2
 ```
 
 A bare `Z` in a pattern takes no fields (`plus Z m = m`). A program that declares
-its own `Z` or `S` (`Nat = Z | S Nat`) gets its own variants in that scope,
-matched as variants; a number never matches a variant pattern.
+its own constructor named `Z` or `S` gets it in that scope, matched as a variant;
+a number never matches a variant pattern.
 
 Explicit `Float`, `Float32`, and `Float64` construction rounds to the target
 floating-point precision, for bare or annotated inputs. `Float32 .1` produces

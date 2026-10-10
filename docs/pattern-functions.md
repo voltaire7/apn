@@ -65,6 +65,11 @@ sumPair [x,y] = x + y
 # [3, 3]
 ```
 
+A literal inside a type pattern is a value of that type, compared numerically
+after the argument converts: `h (UInt 0) = []` matches `h 0`, while
+`h (UInt (-1))` and `h (UInt8 300)` are static errors, since no argument could
+match them.
+
 List patterns require the exact length. Their elements may be type
 patterns, which convert as a whole-argument type pattern does:
 `pair [UInt8 a,UInt8 b] = a + b` accepts `pair [3,3]` (and

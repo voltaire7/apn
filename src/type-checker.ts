@@ -607,6 +607,15 @@ const explicitDynamic: Ty = { k: "dynamic", explicit: true };
 const isExplicit = (t: Ty): boolean => { const value = resolve(t); return value.k === "dynamic" && !!value.explicit; };
 const variable = (): Ty => ({ k: "var" });
 const atom = (name: string): Ty => name === "Dynamic" ? explicitDynamic : { k: "atom", name };
+// A sized or unsigned integer type with a plain integer keeps its type, as at
+// runtime (UInt 5 - 1 is UInt 4; a result it cannot hold is a runtime error).
+function integerResult(a: Ty, b: Ty): Ty | undefined {
+    if (a.k !== "atom" || b.k !== "atom") return undefined;
+    const sized = (name: string) => /^U?Int(8|16|32|64|128)?$/.test(name) && name !== "Int";
+    if (a.name === "Int" && sized(b.name)) return b;
+    if (b.name === "Int" && sized(a.name)) return a;
+    return undefined;
+}
 const fn = (input: Ty, output: Ty, binder?: string, coerce = false): Ty => ({ k: "fn", input, output, binder, coerce });
 const list = (element: Ty, length?: Index): Ty => ({ k: "list", element, length });
 const constant = (n: bigint): Index => ({ constant: n, terms: new Map() });
@@ -1242,7 +1251,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (numeric(a) && numeric(b)) {
             if (a.k === "atom" && b.k === "atom" && ["Float32", "Float64"].includes(a.name) && ["Float32", "Float64"].includes(b.name) && a.name !== b.name) return problem("mixed Float32 and Float64 arithmetic requires an explicit cast");
-            return t.op === "/" ? atom("Number") : text(a) === text(b) ? a : atom("Number");
+            return t.op === "/" ? atom("Number") : text(a) === text(b) ? a : integerResult(a, b) ?? atom("Number");
         }
         if (t.op === "+" && a.k === "atom" && b.k === "atom" && a.name === "String" && b.name === "String") return a;
         return problem(`operator '${t.op}' cannot combine ${text(a)} and ${text(b)}`);
@@ -1668,8 +1677,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 else { bound.add(p.name); scope.set(p.name, { type: expected, mono: true }); }
                 return;
             case "int":
-            case "range":
+            case "range": {
+                // Compared numerically, as at runtime: in a typed pattern such as
+                // (UInt 0) the literal is a value of that type, if it can be one.
+                const t = resolve(expected);
+                if (t.k === "atom" && t.name !== "Int" && NUMERIC_TYPES.includes(t.name)) {
+                    for (const v of p.p === "int" ? [p.v] : [p.lo, p.hi]) {
+                        try { castNumeric(t.name, integer(v)); } catch (error) { problem((error as Error).message, e); }
+                    }
+                    return;
+                }
                 return unify(expected, atom("Int"), e);
+            }
             case "bool":
                 return unify(expected, atom("Bool"), e);
             case "string":
@@ -2983,7 +3002,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                             if (x.name !== "Float" && y.name !== "Float" && x.name !== y.name) return problem("mixed Float32 and Float64 arithmetic requires an explicit cast", e);
                             return x.name === "Float" ? y : x;
                         }
-                        return op === "/" ? atom("Number") : x.name === y.name ? x : atom("Number");
+                        return op === "/" ? atom("Number") : x.name === y.name ? x : integerResult(x, y) ?? atom("Number");
                     }
                     if (op === "+" && x.name === "String" && y.name === "String") return atom("String");
                     return problem(`operator '${op}' cannot combine ${text(x)} and ${text(y)}`, e);
