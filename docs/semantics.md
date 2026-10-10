@@ -634,7 +634,8 @@ operand produces an inexact result only when conversion of the exact operand
 is lossless. Otherwise use `inexact` explicitly. Exact `/` returns reduced fractions;
 `quotient` truncates integer division. `%` and `remainder` follow the dividend's
 sign; `modulo` follows the divisor's sign. Exact zero division raises an error;
-inexact division can produce IEEE infinities and NaNs.
+inexact division can produce IEEE infinities and NaNs. `safeDiv` (in `number`)
+returns `None` for any zero divisor and `Some` quotient otherwise.
 
 Integers use `BigInt` throughout lexing, parsing, arithmetic and formatting.
 APN literals include `0xFF`, `0b11010100`, `0o235461`, `.5`, and `1.2e-3`.

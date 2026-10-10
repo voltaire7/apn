@@ -553,7 +553,11 @@ class Parser {
                 sourceLocations.set(left, { source: this.source, file: this.file, start, end: t.pos });
                 sourceLocations.set(right, { source: this.source, file: this.file, start: rightStart, end: this.peek().pos });
                 left = { t: "pipe", f: left, x: right };
-            } else left = { t: "binop", op: t.v, l: left, r: right };
+            } else {
+                // The right operand's place, for diagnostics such as x / 0.
+                if (!sourceLocations.has(right)) sourceLocations.set(right, { source: this.source, file: this.file, start: rightStart, end: this.peek().pos });
+                left = { t: "binop", op: t.v, l: left, r: right };
+            }
             const following = this.peek();
             if (fixity.assoc === "none" && following.k === "sym" && isOperatorName(following.v) && fixityOf(following.v).prec === fixity.prec) {
                 throw new Error(`Parser: '${t.v}' is non-associative (infix ${fixity.prec}); add parentheses`);
@@ -1208,7 +1212,9 @@ class Parser {
                     return { t: "lambda", params: ["$L", "$R"], body: Parser.operatorBody(t.v, { t: "var", name: "$L" }, { t: "var", name: "$R" }) };
                 }
                 this.next(); // op
+                const operandStart = this.peek().pos;
                 const operand = this.parseUnary();
+                if (!sourceLocations.has(operand)) sourceLocations.set(operand, { source: this.source, file: this.file, start: operandStart, end: this.peek().pos });
                 this.expectSym(close);
                 return { t: "lambda", params: ["$S"], body: Parser.operatorBody(t.v, { t: "var", name: "$S" }, operand) };
             } catch {

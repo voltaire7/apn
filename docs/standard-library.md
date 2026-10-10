@@ -127,10 +127,15 @@ Importing `option` also brings the Functor and Monad instances of both types
 | `isSome option`, `isNone option` | Inspect presence |
 | `withDefault fallback option` | Unwrap `Some`; only demand fallback for `None` |
 | `map f option`, `map f result` | Transform `Some`/`Ok`, preserve `None`/`Err` (the `map` instances) |
-| `andThen f option` | Chain a function returning an Option |
+| `option >>= f`, `f =<< option` (and for Result) | Chain a function returning an Option or Result (the `>>=` instances) |
 | `mapError f result` | Transform `Err`, preserve `Ok` |
-| `andThenResult f result` | Chain a function returning a Result |
 | `resultDefault fallback result` | Unwrap `Ok`, use fallback for `Err` |
+| `okOr error option` | `Some x` as `Ok x`; `None` as `Err error` |
+
+A function with one way to fail returns an `Option` (`mean`, `headOption`,
+`safeDiv`, ...): `None` already says what happened. `okOr` turns it into a
+`Result` where a message describes the failure, such as in a chain of steps
+that report errors.
 
 These are ordinary APN variants. `Result` does not catch runtime exceptions.
 
@@ -180,6 +185,7 @@ are skipped without being demanded.
 | --- | --- |
 | `sq x`, `cube x`, `sign x` | Square, cube, sign (-1/0/1) |
 | `clamp lo hi x` | Inclusive bounds; reversed bounds error |
+| `safeDiv x y` | `Some (x / y)`, or `None` when `y` is zero (a Float zero too, rather than an infinity) |
 | `factorial n` | Nonnegative integral argument, exact result |
 | `mean xs`, `median xs` | Optional arithmetic mean and median |
 | `variance xs`, `standardDeviation xs` | Optional population variance and standard deviation |

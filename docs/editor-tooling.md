@@ -67,7 +67,11 @@ first parse/lex error in each file, because the parser does not yet recover afte
 an error. It does not claim to detect undefined variables, runtime
 errors or general type errors. It warns about a parameter its body never uses
 (`f x y = x` warns about `y`; write `_` to discard it). Names starting with `_`
-are exempt, and so is a body that reads `env`, which can use any name. It also issues conservative variant-exhaustiveness
+are exempt, and so is a body that reads `env`, which can use any name. It warns
+about a literal zero divisor (`x / 0`, `x % 0`, `quotient x 0`, `remainder x 0`,
+`modulo x 0`), which fails when demanded; `/` with a Float on either side is IEEE
+division and is not reported. Laziness keeps these warnings rather than errors:
+an expression nothing demands never fails. It also issues conservative variant-exhaustiveness
 warnings for statically recognizable matches; see [type and resource rules](type-and-resource-rules.md). `_` placeholders are valid syntax.
 
 ## Server capabilities

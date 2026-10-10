@@ -27,6 +27,10 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     // A lambda where a type is expected is a function type, not code.
     equal(unused("f ((a -> b) g) = g\nt = ((a -> b) -> List a -> List b) == typeOf map\nu = isType (a -> b) 5\nv = (a -> b).(x -> x)\nC a = | MkC (a -> b)"), []);
     equal(lint("handlers = [\n    Some y -> print y\n    None -> []\n]"), []);
+    // A literal zero divisor warns, except IEEE division with a Float on either side.
+    const zero = (source: string) => lint(source).filter(d => d.code === "zeroDivisor").map(d => [d.range.start.line, d.range.start.character, d.range.end.character]);
+    equal(zero("a = 1 / 0\nb = (/ 0)\nc = quotient 7 (-0)\nd = 7 % 0.0\ne = modulo 7 0"), [[0, 8, 9], [1, 7, 8], [2, 15, 19], [3, 8, 11], [4, 13, 14]]);
+    equal(zero("a = 1.0 / 0\nb = 1 / 0.0\nc = 1 / x\nd = safeDiv 1 0"), []);
 });
 Deno.test("diagnostic positions use UTF-16 and stay within the document", () => {
     equal(position('"😀"\nfoo', 7), { line: 1, character: 2 });
