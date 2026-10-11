@@ -39,7 +39,7 @@ for (const source of ['f x = x + 1; f "bad"', 'f x y = x < y; f 1 "bad"']) {
 for (const [source, module] of [['fail "x"', "function"], ['upper "x"', "text"]]) {
     Deno.test(`standard natives need their module: ${source}`, () => {
         const [issue] = checkSource(source, '<test>', { strict: true, runtimeNames: new Set(["print"]) }).issues;
-        if (issue?.message !== `unbound variable '${source.split(" ")[0]}'` || !issue.hint?.includes(`add import "${module}"`)) throw new Error(JSON.stringify(issue));
+        if (issue?.message !== `unbound variable '${source.split(" ")[0]}'` || issue.hint !== `add \`import "${module}"\` to use \`${source.split(" ")[0]}\``) throw new Error(JSON.stringify(issue));
     });
 }
 Deno.test('fail is available after import "function"', () => {

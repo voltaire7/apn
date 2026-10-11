@@ -1373,7 +1373,7 @@ class Parser {
             body = lambda.body;
         }
         if (guard) return { name, clauses: [{ params, body, guard }] };
-        if (name === "return" && params.length > 1) throw new APNError("parse", "return takes one argument", { pos: equals.pos, hint: "return = Some" });
+        if (name === "return" && params.length > 1) throw new APNError("parse", "return takes one argument", { pos: equals.pos, hint: "`return = Some`" });
         return { name, clauses: [{ params, body }] };
     }
 

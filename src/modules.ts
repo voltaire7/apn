@@ -100,8 +100,8 @@ export function resolveModule(spec: string, directory: string, bundle?: Record<s
 
 /** Why an import could not be resolved, with a hint. */
 export function unknownModule(spec: string, bundled = false): { message: string; hint: string } {
-    if (spec === "std") return { message: "unknown module 'std'", hint: 'import the standard modules you need, such as import "option" or import ["option","text"]' };
-    if (spec.startsWith("std/")) return { message: `unknown module '${spec}'`, hint: `standard modules take no prefix: import "${spec.slice(4)}"` };
+    if (spec === "std") return { message: "unknown module 'std'", hint: `import the standard modules you need, such as \`import "option"\` or \`import ["option","text"]\`` };
+    if (spec.startsWith("std/")) return { message: `unknown module '${spec}'`, hint: `standard modules take no prefix: \`import "${spec.slice(4)}"\`` };
     if (bundled) return { message: `module '${spec}' is not bundled`, hint: "a browser build bundles the standard library and the local modules the program imports" };
     return { message: `unknown module '${spec}'`, hint: `no ${spec}.apn or ${spec}/ here or in a parent folder of the program, and no standard module '${spec}'` };
 }

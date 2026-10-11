@@ -1045,7 +1045,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (op !== "bind" && op !== "then" && instanceFor(">>=", [container])) {
                 return { k: "variant", name: container.name, args: container.args.map(() => variable()) };
             }
-            return problem(`no ${name} instance for ${text(container)}`, undefined, "define one, such as map f (Some x) = Some (f x)");
+            return problem(`no ${name} instance for ${text(container)}`, undefined, "define one, such as `map f (Some x) = Some (f x)`");
         }
         const held = (m: Ty): Ty => isIO(m) ? (m as Extract<Ty, { k: "variant" }>).args[0] : m.k === "list" ? m.element
             : problem(`${name} needs an action, a list or a monadic value, not ${text(m)}`);
@@ -1597,7 +1597,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // An undecided call used where no type is named.
     function ambiguous(t: Extract<Ty, { k: "union" }>, e?: Expr): never {
-        return problem(`ambiguous: nothing decides which ${t.name ?? "overload"}`, e, `name the type it should have, as in Int (${t.name ?? "f"} ...)`);
+        return problem(`ambiguous: nothing decides which ${t.name ?? "overload"}`, e, `name the type it should have, as in \`Int (${t.name ?? "f"} ...)\``);
     }
     // Whether a check succeeds, without recording what it would unify.
     function succeeds(check: () => unknown): boolean {
@@ -1771,7 +1771,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const module = STD_CONSTRUCTORS[p.tag];
                     const near = didYouMean(p.tag, [...scope.keys()].filter(name => /^[A-Z]/.test(name)));
                     firstUnbound = { expr: e, name: p.tag, inPattern: true,
-                        hint: module ? `${p.tag} comes from the ${module} module: add import "${module}"` : near ? `did you mean '${near}'?` : undefined };
+                        hint: module ? `add \`import "${module}"\` to use \`${p.tag}\`` : near ? `did you mean '${near}'?` : undefined };
                 }
                 if (t.k === "factory" && p.args.length === 3) {
                     const [size, element, value] = p.args;
@@ -2203,11 +2203,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (a.k === "type") return { k: "type", value: io(a.value) };
                 if (a.k === "list" && (a.items ?? []).every(x => resolve(x).k === "type")) return { k: "type", value: io(schemaValue(a, e)) };
                 if (a.k === "var") return { k: "type", value: io(variable()) };
-                return problem("IO is a type constructor: IO [] is the type of an action yielding []", e, "return x is the action yielding x");
+                return problem("IO is a type constructor: IO [] is the type of an action yielding []", e, "`return x` is the action yielding `x`");
             }
             // IO T action: the action, its result converted to T.
             if (isIO(t)) {
-                if (!isIO(a) && !isPending(a) && a.k !== "var") return problem(`${text(t)} expects an action, not ${text(a)}`, e, "return x is the action yielding x");
+                if (!isIO(a) && !isPending(a) && a.k !== "var") return problem(`${text(t)} expects an action, not ${text(a)}`, e, "`return x` is the action yielding `x`");
                 const result = variable();
                 unify(io(result), a, e);
                 convert((t as Extract<Ty, { k: "variant" }>).args[0], result, e);
@@ -2473,7 +2473,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return (v as Extract<Ty, { k: "variant" }>).args[0];
         }
         const held = block ? monadHeld(v) : undefined;
-        if (held === undefined) return problem(`<- runs an action, not ${text(v)}`, rhs, "bind a value with =");
+        if (held === undefined) return problem(`<- runs an action, not ${text(v)}`, rhs, "bind a value with `=`");
         if (mixed(v)) return problem(`<- needs a ${text(block!.monad!)} here, not ${text(v)}`, rhs);
         block!.monad ??= v;
         return held ?? variable();
@@ -2594,7 +2594,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!entry && !firstUnbound && options.runtimeNames && !options.runtimeNames.has(e.name)) {
                     const near = didYouMean(e.name, [...scope.keys(), ...options.runtimeNames]);
                     const module = STD_CONSTRUCTORS[e.name] ?? nativeModule(e.name);
-                    firstUnbound = { expr: e, name: e.name, hint: module ? `${e.name} comes from the ${module} module: add import "${module}"` : near ? `did you mean '${near}'?` : undefined };
+                    firstUnbound = { expr: e, name: e.name, hint: module ? `add \`import "${module}"\` to use \`${e.name}\`` : near ? `did you mean '${near}'?` : undefined };
                 }
                 if (!entry) return unknown();
                 if (deferred && defining && entry.capture && defining.name !== e.name) entry.capture.users.add(defining);
@@ -2889,7 +2889,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 if (rec.k === "dynamic") return unknown();
                 if (rec.k === "operation") return operation(`field:${e.field}`, [rec]);
-                if (isIO(rec)) return problem("an action has no fields", e, "bind its result first: x <- action (scope <- env; scope.x)");
+                if (isIO(rec)) return problem("an action has no fields", e, "bind its result first: `x <- action` (`scope <- env; scope.x`)");
                 if (rec.k !== "record") return problem("field access requires a record", e);
                 if (!rec.fields.has(e.field)) {
                     if (rec.open) rec.fields.set(e.field, variable());
@@ -2973,11 +2973,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const [a, b] = operands ?? [constrain(infer(e.l, scope)), constrain(infer(e.r, scope))];
                 // An undecided return is not a value until its monad is named.
                 if (op !== "$" && op !== ":" && op !== ">>=" && op !== ">>" && [a, b].some(x => isPending(resolve(x)))) {
-                    return problem("ambiguous: nothing decides which return", e, "name the type it should have, as in Option Int (return ...)");
+                    return problem("ambiguous: nothing decides which return", e, "name the type it should have, as in `Option Int (return ...)`");
                 }
                 // An action is not the value it yields.
                 if (op !== "$" && op !== ":" && [a, b].some(x => isIO(resolve(x)))) {
-                    return problem(`operator '${op}' cannot use an action (${text(isIO(resolve(a)) ? a : b)}) as a value`, e, "bind its result first: x <- action");
+                    return problem(`operator '${op}' cannot use an action (${text(isIO(resolve(a)) ? a : b)}) as a value`, e, "bind its result first: `x <- action`");
                 }
                 if (isExplicit(a) || isExplicit(b)) {
                     runtimeChecks++;
@@ -3068,10 +3068,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 } finally { doBlocks.pop(); }
                 if (!action) return result;
                 const last = e.stmts[e.stmts.length - 1];
-                if (last.t === "patDef" || last.t === "stmDef") return problem("the last statement of a do-block must be an action, not a binding", last, "end the block with an action, such as return x");
+                if (last.t === "patDef" || last.t === "stmDef") return problem("the last statement of a do-block must be an action, not a binding", last, "end the block with an action, such as `return x`");
                 const final = resolve(result), monad = block.monad && resolve(block.monad);
                 if (isExplicit(final)) return final;
-                const notAction = () => problem(`the last statement of a do-block must be an action, not ${text(final)}`, last, "return x is the action yielding x");
+                const notAction = () => problem(`the last statement of a do-block must be an action, not ${text(final)}`, last, "`return x` is the action yielding `x`");
                 // A list or variant monad: the last value is one, or return.
                 if (monad && !isIO(monad)) {
                     const held = isPending(final) ? (final as Extract<Ty, { k: "variant" }>).args[0] : undefined;

@@ -15,9 +15,10 @@ rendered by `formatError(err, color)`:
   `cannot apply '+' to list and int`.
 - **Type errors** name an unknown name before any boundary count: `unbound
   variable 'x'`, or `unknown constructor 'Some' in a pattern`. A standard
-  library constructor's or native's hint names its module (`add import
-  "option"`, `add import "function"` for `fail`); others get `did you mean
-  '...'?`.
+  library constructor's or native's hint names the import (``add `import
+  "function"` to use `fail` ``); others get `did you mean '...'?`.
+- Code in a hint is in backticks: ``bind a value with `=` ``, ``bind its
+  result first: `x <- action` ``.
 - Messages carry no `Parser:`/`Lexer:`/`Runtime:` prefixes — the headline
   category replaces them. `tokenStr` returns BARE token text (the message
   templates add the quotes; the old version double-quoted).

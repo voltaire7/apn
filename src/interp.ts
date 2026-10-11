@@ -655,7 +655,7 @@ export class Interpreter {
         // an error, except a load (which runs a file and yields its exports).
         if (b.eager && !isLoadCall(b.value) && b.value.t !== "import") {
             const action = this.reference(evaluated);
-            if (action.kind !== "io" && action.kind !== "pending") throw new APNError("runtime", `<- runs an action, not a ${action.kind}`, { hint: "bind a value with =" });
+            if (action.kind !== "io" && action.kind !== "pending") throw new APNError("runtime", `<- runs an action, not a ${action.kind}`, { hint: "bind a value with `=`" });
         }
         // The result's outer value is evaluated now (x <- return (x + 1) reads the old x).
         const v = b.eager ? this.reference(this.runIO(evaluated)) : b.pattern.p === "as" ? evaluated : this.force(evaluated);
@@ -957,11 +957,11 @@ export class Interpreter {
                 else {
                     // The last statement is the action whose result the block yields.
                     const last = this.realize(this.eval(s), { kind: "type", name: "IO" });
-                    if (last.kind !== "io") throw new APNError("runtime", `the last statement of a do-block must be an action, not a ${last.kind}`, { hint: "return x is the action yielding x" });
+                    if (last.kind !== "io") throw new APNError("runtime", `the last statement of a do-block must be an action, not a ${last.kind}`, { hint: "`return x` is the action yielding `x`" });
                     return new IOTail(last);
                 }
             }
-            throw new APNError("runtime", "the last statement of a do-block must be an action, not a binding", { hint: "end the block with an action, such as return x" });
+            throw new APNError("runtime", "the last statement of a do-block must be an action, not a binding", { hint: "end the block with an action, such as `return x`" });
         } finally { this.env = caller; }
     }
 
@@ -1065,7 +1065,7 @@ export class Interpreter {
                             r = this.conform(type, this.eval(e.argument));
                             break;
                         }
-                        if (rec.kind === "io") throw new APNError("runtime", "an action has no fields", { hint: "bind its result first: x <- action (scope <- env; scope.x)" });
+                        if (rec.kind === "io") throw new APNError("runtime", "an action has no fields", { hint: "bind its result first: `x <- action` (`scope <- env; scope.x`)" });
                         if (rec.kind !== "record") throw new Error("record access on non-record");
                         if (e.scoped && e.argument) {
                             const outer = this.env;
@@ -1227,7 +1227,7 @@ export class Interpreter {
                                 }
                                 if (s.t === "patDef") {
                                     const target = this.monadTypeOf(value);
-                                    if (!target) throw new APNError("runtime", `<- runs an action, not a ${value.kind}`, { hint: "bind a value with =" });
+                                    if (!target) throw new APNError("runtime", `<- runs an action, not a ${value.kind}`, { hint: "bind a value with `=`" });
                                     r = this.desugarDo(block, child, start, target, value);
                                     break;
                                 }
@@ -1324,7 +1324,7 @@ export class Interpreter {
         const named = (v: Value) => v.kind === "variant" && v.family?.base ? v.family : undefined;
         const ln = named(l), rn = named(r);
         if (ln || rn) {
-            if (ln && rn && ln !== rn) throw new APNError("runtime", `cannot combine ${ln.name} and ${rn.name}`, { hint: "convert one explicitly, as in Money (amount distance)" });
+            if (ln && rn && ln !== rn) throw new APNError("runtime", `cannot combine ${ln.name} and ${rn.name}`, { hint: "convert one explicitly, as in `Money (amount distance)`" });
             const family = (ln ?? rn)!;
             const a = this.demand(ln ? (l as Extract<Value, { kind: "variant" }>).v[0] : l), b = this.demand(rn ? (r as Extract<Value, { kind: "variant" }>).v[0] : r);
             if (["+", "-", "*", "/", "%", "^"].includes(op)) {
@@ -1531,7 +1531,7 @@ export class Interpreter {
         // A lazy 0-param def used as a function (`f = g; f 1`) is a thunk — run it.
         f = this.force(f);
         if (isNumeric(f)) throw new APNError("runtime", "cannot apply a number", {
-            hint: "use a type constructor such as Int, or replace a default inside a template",
+            hint: "use a type constructor such as `Int`, or replace a default inside a template",
         });
         if (["string", "char", "bool"].includes(f.kind)) throw new APNError("runtime", `cannot apply a ${f.kind}`, {
             hint: "use a type constructor or replace a default inside a template",
@@ -1747,7 +1747,7 @@ export class Interpreter {
                 throw new APNError(
                     "runtime",
                     `cannot call a non-function (${f.kind})`,
-                    { hint: f.kind === "io" ? "an action is not a function; bind its result first: x <- action" : "lists index by integer; container templates apply their slots to supplied values" },
+                    { hint: f.kind === "io" ? "an action is not a function; bind its result first: `x <- action`" : "lists index by integer; container templates apply their slots to supplied values" },
                 );
         }
     }
@@ -1902,12 +1902,12 @@ export class Interpreter {
     private actionType(type: Extract<Value, { kind: "type" }>, value: Value): Value {
         if (!type.arguments?.length) {
             if (!this.isTypeValue(value)) {
-                throw new APNError("runtime", "IO is a type constructor: IO [] is the type of an action yielding []", { hint: "return x is the action yielding x" });
+                throw new APNError("runtime", "IO is a type constructor: IO [] is the type of an action yielding []", { hint: "`return x` is the action yielding `x`" });
             }
             return { kind: "type", name: "IO", arguments: [this.reference(value)] };
         }
         const action = this.realize(value, type);
-        if (action.kind !== "io") throw new APNError("runtime", `${valueToString(type)} expects an action, not a ${action.kind}`, { hint: "return x is the action yielding x" });
+        if (action.kind !== "io") throw new APNError("runtime", `${valueToString(type)} expects an action, not a ${action.kind}`, { hint: "`return x` is the action yielding `x`" });
         const result = type.arguments[0];
         return { kind: "io", result: () => this.renderString(result), run: () => this.conform(result, this.runIO(action)) };
     }
@@ -2089,7 +2089,7 @@ export class Interpreter {
         if (this.isListType(target)) return mkList([step.value]);
         const made = this.returnIn(target, step.value);
         if (made) return made;
-        throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as return = Some" });
+        throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as `return = Some`" });
     }
 
     // m >>= f: through m's monad. f's results are realized in the same monad.
@@ -2103,7 +2103,7 @@ export class Interpreter {
         if (this.isList(m)) return this.concatMapList(m, k);
         const result = this.instance(">>=", [m, k]);
         if (result) return result;
-        throw new APNError("runtime", `no >>= instance for ${valueToString(target)}`, { hint: "define one, such as (Some x) >>= f = f x" });
+        throw new APNError("runtime", `no >>= instance for ${valueToString(target)}`, { hint: "define one, such as `(Some x) >>= f = f x`" });
     }
 
     // map f m: lazily over a list, an instance, or derived from m's monad (m >>= (x -> return (f x))).
@@ -2143,7 +2143,7 @@ export class Interpreter {
     private desugarDo(e: Extract<Expr, { t: "block" }>, env: Env, start: number, target: Value, first?: Value): Value {
         if (this.isIOType(target)) return { kind: "io", run: () => this.runDoBlock(e, env, start, first) };
         const lastAction = (what: string): never => {
-            throw new APNError("runtime", `the last statement of a do-block must be an action, not ${what}`, { hint: "end the block with return x" });
+            throw new APNError("runtime", `the last statement of a do-block must be an action, not ${what}`, { hint: "end the block with `return x`" });
         };
         const go = (scope: Env, from: number, given?: Value): Value => {
             const caller = this.env;
@@ -2322,9 +2322,9 @@ export class Interpreter {
     // Nothing named the type an undecided value should have.
     ambiguous(v: Extract<Value, { kind: "pending" }>): never {
         const step = v.step;
-        if (step.op === "bind" || step.op === "do") throw new APNError("runtime", "ambiguous: nothing decides which monad this is", { hint: "name it, as in Option Int { ... } or IO [] { ... }" });
+        if (step.op === "bind" || step.op === "do") throw new APNError("runtime", "ambiguous: nothing decides which monad this is", { hint: "name it, as in `Option Int { ... }` or `IO [] { ... }`" });
         const name = step.op === "call" ? step.fn.name : "return";
-        throw new APNError("runtime", `ambiguous: nothing decides which ${name}`, { hint: `name the type it should have, as in Int (${name} ...)` });
+        throw new APNError("runtime", `ambiguous: nothing decides which ${name}`, { hint: `name the type it should have, as in \`Int (${name} ...)\`` });
     }
 
     // An undecided value shows each overload it could become, one per line,
@@ -2750,7 +2750,7 @@ export class Interpreter {
     truthy(value: Value): boolean {
         const v = this.dataValue(value);
         if (v.kind === "bool") return v.v;
-        if (v.kind === "io" || v.kind === "pending") throw new APNError("runtime", "an action is not a condition", { hint: "run it first: x <- action" });
+        if (v.kind === "io" || v.kind === "pending") throw new APNError("runtime", "an action is not a condition", { hint: "run it first: `x <- action`" });
         if (isNumeric(v)) {
             if (v.kind === "complex") return this.truthy(v.re) || this.truthy(v.im);
             if (v.kind === "float") return v.v !== 0 && !Number.isNaN(v.v);
@@ -3129,7 +3129,7 @@ export class Interpreter {
                 const filename = pathValue.v.slice(pathValue.v.lastIndexOf("/") + 1);
                 if (!filename || filename.includes(".")) {
                     throw new APNError("runtime", "load expects an extensionless file name", {
-                        hint: 'use load "file", not load "file.apn"; .apn is added automatically',
+                        hint: `use \`load "file"\`, not \`load "file.apn"\`; .apn is added automatically`,
                     });
                 }
                 const p = `${pathValue.v}.apn`;

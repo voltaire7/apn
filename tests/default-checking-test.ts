@@ -907,8 +907,8 @@ Deno.test("a view an earlier REPL input stored reaches what its uses name", () =
 for (const source of ['x:xs = []', 'x:y:z = [1]', 'f n = { x:xs = []; x }']) Deno.test(`a cons binding of a list known too short is rejected: ${source}`, () => rejected(session(), source));
 Deno.test("an unknown constructor in a pattern is named, with the module that declares it", () => {
     for (const [source, message, hint] of [
-        ["func (Some x):xs = print [x,xs]", "unknown constructor 'Some' in a pattern", 'add import "option"'],
-        ["print None", "unbound variable 'None'", 'add import "option"'],
+        ["func (Some x):xs = print [x,xs]", "unknown constructor 'Some' in a pattern", "add `import \"option\"` to use `Some`"],
+        ["print None", "unbound variable 'None'", "add `import \"option\"` to use `None`"],
         ["Option a = Some a | None; k (Smoe x) = x", "unknown constructor 'Smoe' in a pattern", "did you mean 'Some'?"],
     ]) {
         try { run(session(), source); } catch (error) {
