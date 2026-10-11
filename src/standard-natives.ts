@@ -6,6 +6,7 @@ import { APNError } from "./errors.ts";
 import { fetchSync, HttpFailure } from "./http.ts";
 import { fromJson, toJson } from "./json.ts";
 import { isStringKey } from "./record-keys.ts";
+import { textNatives } from "./text-natives.ts";
 
 // Representation, effects and Unicode casing are the stdlib's native boundary.
 export const STANDARD_NATIVES: Array<[string, number]> = [
@@ -41,14 +42,13 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
     }
     if (name === "seq") { i.demand(args[0]); return args[1]; }
     if (name === "fail") throw new APNError("runtime", str(args[0]));
-    if (name === "chars") return mkList([...str(args[0])].map((v): Value => ({ kind: "char", v })));
-    if (name === "fromChars") return mkStr(i.items(args[0]).map((v) => {
+    if (name === "chars") return mkList(textNatives.chars(str(args[0])).map((v): Value => ({ kind: "char", v })));
+    if (name === "fromChars") return mkStr(textNatives.fromChars(i.items(args[0]).map((v) => {
         v = i.dataValue(v);
         if (v.kind !== "char") throw new APNError("runtime", "fromChars expects a list of Char values");
         return v.v;
-    }).join(""));
-    const text = str(args[0]);
-    return mkStr(name === "upper" ? text.toUpperCase() : text.toLowerCase());
+    })));
+    return mkStr(textNatives[name as "upper" | "lower"](str(args[0])));
 }
 
 // fetch url options: options is a record of method, headers, body and timeout

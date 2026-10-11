@@ -1,7 +1,8 @@
 import { clauseKey, type Expr, isLoadCall, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
 import { nativeModule } from "./native-exports.ts";
+import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
-import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numericNative, type Numeric, parseNumberText } from "./numbers.ts";
+import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numericNative, type Numeric } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import { parse, parseDocument, rangeExpr, PRIMITIVE_OPERATORS } from "./parser.ts";
 import { mkStr, type Value, valueToString } from "./types.ts";
@@ -4751,25 +4752,24 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return text === undefined ? undefined : { string: text };
             }, actionResult: "String" };
             // Booleans and number literals, as the runtime parses them.
+            // The runtime's own functions (text-natives.ts), on known text.
             case "parse": {
-                const text = args[0]()?.string?.trim();
-                if (text === undefined) return undefined;
-                if (text === "true" || text === "false") return { boolean: text === "true" };
-                const n = parseNumberText(text);
-                return n === null ? undefined : knownNumber(n);
+                const text = args[0]()?.string;
+                const parsed = text === undefined ? null : parseLiteral(text);
+                return parsed === null ? undefined : typeof parsed === "boolean" ? { boolean: parsed } : knownNumber(parsed);
             }
             case "chars": {
                 const text = args[0]()?.string;
-                return text === undefined ? undefined : known([...text].map(c => ({ char: c })));
+                return text === undefined ? undefined : known(textNatives.chars(text).map(c => ({ char: c })));
             }
             case "fromChars": {
                 const items = elementsOf(args[0]())?.map(demand);
                 if (!items || items.some(c => c?.char === undefined)) return undefined;
-                return { string: items.map(c => c!.char).join("") };
+                return { string: textNatives.fromChars(items.map(c => c!.char!)) };
             }
             case "upper": case "lower": {
                 const text = args[0]()?.string;
-                return text === undefined ? undefined : { string: name === "upper" ? text.toUpperCase() : text.toLowerCase() };
+                return text === undefined ? undefined : { string: textNatives[name](text) };
             }
             case "toString": {
                 const text = renderKnown(args[0]());

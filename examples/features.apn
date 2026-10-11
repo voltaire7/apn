@@ -1186,6 +1186,9 @@ print (cast String $ chars "hello") # => "hello"
 print (head (reverse [1..10000]))   # 10000
 print (reverse [1,2,3])             # [3, 2, 1]
 print (reverse "a😀b")              # b😀a
+# The checker runs the same text functions: chars counts code points here too,
+# so Vect 3 Char (chars "a😀") would be a static length error.
+print (Vect 2 Char (chars "a😀"))     # => ['a','😀']
 print (take 6 primes)                 # [2, 3, 5, 7, 11, 13]
 print (mean [1,2])                    # Some 3/2
 print (frequencies $ words $ "one two one")

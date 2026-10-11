@@ -344,6 +344,9 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   budget/depth exhaustion is a diagnostic, not a `Dynamic` fallback; an
   evaluation that runs out of budget leaves its value unknown, a runtime
   check. `tests/type-level-evaluation-test.ts`.
+- The checker's evaluator calls the runtime's text functions
+  (`text-natives.ts`: `upper`, `lower`, `chars`, `fromChars`, `parse`) on known
+  values; never reimplement a native in `evaluateNative`.
 - `typeOf` of a builtin reads the checker's signature (`builtinSignature`,
   written by `signatureText` and read back as a written type), so the two
   never disagree; only intrinsics the checker types specially (`map`,

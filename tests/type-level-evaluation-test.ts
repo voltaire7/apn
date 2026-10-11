@@ -57,6 +57,19 @@ Deno.test("a length evaluation cannot decide is checked at runtime", () => {
     if (run(endless) !== "1") throw new Error("demanded an unused length");
 });
 
+Deno.test("the checker runs the runtime's text functions", () => {
+    const source = 'import "text"; Vect 3 Char (chars "a😀")';
+    const i = new Interpreter();
+    i.enableChecking();
+    let message = "";
+    try { i.run(parseDocument(source)); } catch (error) { message = String(error); }
+    if (!message.includes("length mismatch: expected 3, got 2")) throw new Error(message);
+    const ok = new Interpreter();
+    ok.enableChecking();
+    const shown = ok.renderString(ok.run(parseDocument('import "text"; [upper "straße",Vect 2 Char (chars "a😀")]')));
+    if (shown !== '["STRASSE",[\'a\',\'😀\']]') throw new Error(shown);
+});
+
 Deno.test("a condition reading a cell is not decided out of order", () => {
     const source = "counter = Mutable 0; set counter 5; " + ELEM + "x = Elem (counter > 3) 5; x";
     const found = issues(source);

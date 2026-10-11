@@ -10,9 +10,10 @@ import doSource from "../lib/do.apn" with { type: "text" };
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { NATIVE_EXPORTS } from "./native-exports.ts";
+import { parseLiteral } from "./text-natives.ts";
 import { loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
-import { parseNumberText, isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
+import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { clauseKey, isLoadCall, mergeClauses } from "./ast.ts";
@@ -3022,12 +3023,9 @@ export class Interpreter {
                 return mkStr(this.renderString(a));
             case "parse": {
                 if (a.kind !== "string") throw new Error("Runtime: parse expects a string");
-                const s = a.v.trim();
-                if (s === "true") return mkBool(true);
-                if (s === "false") return mkBool(false);
-                const numeric = parseNumberText(s);
-                if (numeric !== null) return numeric;
-                throw new APNError("runtime", `parse: can't parse '${s}'`);
+                const parsed = parseLiteral(a.v);
+                if (parsed === null) throw new APNError("runtime", `parse: can't parse '${a.v.trim()}'`);
+                return typeof parsed === "boolean" ? mkBool(parsed) : parsed;
             }
             case "head": {
                 const cell = this.cell(a);
