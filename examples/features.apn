@@ -1696,6 +1696,18 @@ copySized n ((SizedInts n) xs) = xs
 # A typed pattern binds the names its type does not know yet: n and a here.
 appendSized ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys)
 print (typeOf (appendSized [1,2] [3]))   # => Vect 3 Int
+# An indexed family: each constructor says the type it makes.
+Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a
+pairVec = Cons 1 (Cons 2 Nil)
+print (typeOf pairVec)                   # => Vec 2 Int
+joinVec Nil ys = ys
+joinVec (Cons x rest) ys = Cons x (joinVec rest ys)
+print (typeOf (joinVec pairVec pairVec)) # => Vec 4 Int
+vecLength ((Vec n a) _) = n
+print (vecLength pairVec + 1)            # => 3
+firstVec (Cons x _) = x
+print (firstVec pairVec)                 # => 1
+# firstVec Nil and Vec 3 Int pairVec are static errors.
 print (copySized 3 [1,2,3])              # => [1,2,3]
 print (typeOf (SizedInts 3 [1,2,3]))     # => Vect 3 Int
 SelectedType flag = flag ? Int : String

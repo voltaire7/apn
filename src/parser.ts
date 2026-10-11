@@ -1473,7 +1473,7 @@ class Parser {
                 this.expectSym("=");
                 this.skipNL();
                 this.eatSym("|");
-                const variants: { tag: string; arity: number; fields: Expr[] }[] = [];
+                const variants: { tag: string; arity: number; fields: Expr[]; result?: Expr }[] = [];
                 for (;;) {
                     this.skipNL();
                     const vt = this.next();
@@ -1485,7 +1485,16 @@ class Parser {
                         this.noLambda++;
                         try { fields.push(this.parsePrimary()); } finally { this.noLambda--; }
                     }
-                    variants.push({ tag: vt.v, arity: fields.length, fields });
+                    // -> Type: the type this constructor makes (Nil -> Vec Z a).
+                    let result: Expr | undefined;
+                    if (this.eatSym("->")) {
+                        this.noLambda++;
+                        try { result = this.parseApp(); } finally { this.noLambda--; }
+                        let head = result;
+                        while (head.t === "app") head = head.f;
+                        if (head.t !== "var" || head.name !== name) throw new Error(`Parser: ${vt.v} must make a ${name}, as in ${vt.v} -> ${name} ...`);
+                    }
+                    variants.push({ tag: vt.v, arity: fields.length, fields, ...result ? { result } : {} });
                     if (this.eatSym("|")) continue;
                     let ahead = 0;
                     while (["newline", "indent"].includes(this.peek(ahead).k)) ahead++;

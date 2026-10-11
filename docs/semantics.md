@@ -99,7 +99,9 @@ tried before other clauses; numeric literal patterns compare numerically, so
 `2` and `2.0` match each other. Integer ranges (`[1..9]`) are also patterns.
 Otherwise clauses run in source order. When no equation matches, the
 error names the function: `no clause of 'len'
-matches the given arguments`. Guards are not allowed on definition clauses;
+matches the given arguments`. When what is known of the arguments already
+rules out every clause (a literal, a constructor, a list's length: `pred 0`
+for `pred (S k) = k`), it is a static error. Guards are not allowed on definition clauses;
 use `match` with guarded pattern lambdas instead (see
 [pattern functions](pattern-functions.md)).
 

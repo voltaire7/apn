@@ -351,6 +351,12 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   written by `signatureText` and read back as a written type), so the two
   never disagree; only intrinsics the checker types specially (`map`,
   `length`, `fail`) keep a written signature in `type-description.ts`.
+- Indexed families: the runtime computes a value's indices on demand
+  (`indicesOf`, cached per value); the checker types an index position as an
+  open variable (`Index` once written) and checks indices only through
+  evaluation (`knownIndices`, the same rule over known values). A family's
+  arguments fill by position (`applied`), never "the first open variable",
+  which merged `k` and `a` in `Vec k a`. `tests/indexed-family-test.ts`.
 - `Z`/`S k` patterns take a number apart by the value they meet (runtime
   `matchPattern`, checker `naturalArgument`), so a program's own `Z`/`S`
   variants keep matching as variants. The parser reads a bare `Z` as nullary

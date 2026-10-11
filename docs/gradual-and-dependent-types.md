@@ -270,6 +270,44 @@ labelled 2 ++ "!"                      # "few!"
 # labelled 5                           # runtime error: Int expects a number
 ```
 
+## Indexed families
+
+A variant's constructor may say which type it makes, after `->`: its family's
+arguments can then be values, computed from its fields (as Idris writes
+`Nil : Vect Z a` and `(::) : a -> Vect k a -> Vect (S k) a`).
+
+```apn
+Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a
+xs = Cons 1 (Cons 2 Nil)
+typeOf xs                         # Vec 2 Int
+typeOf Nil                        # Vec 0 a
+Vec 2 Int xs                      # checks; Vec 3 Int xs is a static error
+
+append Nil ys = ys
+append (Cons x rest) ys = Cons x (append rest ys)
+typeOf (append xs xs)             # Vec 4 Int
+
+len ((Vec n a) _) = n             # binds the index: len xs is 2
+first (Cons x _) = x              # first Nil is a static error
+```
+
+A constructor without `->` makes the family with its arguments open, as for
+any variant. A value's indices are the constructor's result type with the
+names its fields give: `k` from the tail's own indices, `a` from the
+element; they are computed when asked for (`typeOf`, a typed pattern, a
+conversion). A name nothing gives is any type (`Nil`'s `a`). Applying the
+family to a value of it checks the indices: statically when evaluation knows
+them, otherwise when the program runs. A clause may state its result's
+indices, checked the same way:
+
+```apn
+app ((Vec n a) Nil) ((Vec m a) ys) = Vec (n + m) a ys
+app ((Vec n a) (Cons x r)) ((Vec m a) ys) = Vec (n + m) a (Cons x (app r ys))
+```
+
+The checker does not prove such a claim for every `n` and `m` (Idris does, by
+induction): a claim it cannot evaluate is checked at runtime.
+
 ## Inferring arguments from a vector pattern
 
 ```apn

@@ -5,7 +5,8 @@ import type { Expr, Pattern } from "./ast.ts";
 
 // ---------------- Types & values ----------------
 
-export interface VariantFamily { base?: Value; name: string; parameters?: string[]; fields?: Map<string, Expr[]>; env?: Env; }
+// results: an indexed family's constructors' result types (Cons ... -> Vec (S k) a).
+export interface VariantFamily { base?: Value; name: string; parameters?: string[]; fields?: Map<string, Expr[]>; env?: Env; results?: Map<string, Expr>; }
 
 export type Type = string; // lightweight: we represent types as printable strings
 

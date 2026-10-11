@@ -2,7 +2,7 @@ import { clauseKey, type Expr, isLoadCall, mergeClauses, type Pattern, sourceLoc
 import { nativeModule } from "./native-exports.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
-import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numericNative, type Numeric } from "./numbers.ts";
+import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import { parse, parseDocument, rangeExpr, PRIMITIVE_OPERATORS } from "./parser.ts";
 import { mkStr, type Value, valueToString } from "./types.ts";
@@ -48,10 +48,14 @@ type Ty =
     | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number> }
     | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string> }
     // chosen: one of value's choices, picked by a condition known only at runtime.
-    | { k: "type"; value: Ty; chosen?: boolean }
+    // given: an indexed family's index values written so far, by parameter (Vec 2 Int).
+    // applied: how many of a family's arguments are given (Pair a, Vec 2).
+    | { k: "type"; value: Ty; chosen?: boolean; given?: Map<number, Known>; applied?: number }
     | { k: "factory"; args: Entry[] }
     | { k: "alias"; params: string[]; body: Expr; scope: Scope; args: Entry[] }
-    | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty };
+    // indexed: a family whose constructors say what they make (Vec n a), so
+    // an argument may be a value (Vec 2 Int); values decide those, not types.
+    | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty; indexed?: boolean };
 // A function result's list structure in terms of its parameters, by position:
 // `arg` is that argument itself; otherwise a list whose length is an argument's
 // length or a constant, with an optional shape for each item.
@@ -1548,7 +1552,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const args: Expr[] = [];
             let head: Expr = e;
             while (head.t === "app") { args.unshift(head.a); head = head.f; }
+            // A value position: Vect's length, or an indexed family's index
+            // (a position some constructor's result computes: Z, S k).
             const vector = head.t === "var" && resolve(scope.get(head.name)?.type ?? dynamic).k === "factory";
+            const family = head.t === "var" ? indexedFamilies.get(head.name) : undefined;
+            const valueAt = (n: number) => vector && n === 0 || !!family?.def.variants.some(v => {
+                const args: Expr[] = [];
+                let result = v.result;
+                while (result?.t === "app") { args.unshift(result.a); result = result.f; }
+                return args[n] && !(args[n].t === "var" && /^[a-z]/.test((args[n] as { name: string }).name));
+            });
             args.forEach((arg, n) => {
                 // A name an earlier parameter bound is that value.
                 if (arg.t !== "var" || !/^[a-z]/.test(arg.name) || captures.has(arg.name)) return;
@@ -1556,9 +1569,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // position keeps a name bound to a type or function; any other
                 // name is a type variable, as in a written function type.
                 const bound = scope.get(arg.name), kind = bound && resolve(bound.type).k;
-                if (vector && n === 0 ? bound : kind === "type" || kind === "fn" || kind === "intrinsic" || kind === "factory" || kind === "alias") return;
+                if (valueAt(n) ? bound : kind === "type" || kind === "fn" || kind === "intrinsic" || kind === "factory" || kind === "alias") return;
                 captures.add(arg.name);
                 if (vector && n === 0) scope.set(arg.name, { type: atom("Int"), mono: true, index: { constant: 0n, terms: new Map([[`n${serial++}`, 1n]]) } });
+                else if (valueAt(n)) scope.set(arg.name, { type: variable(), mono: true });
                 else scope.set(arg.name, { type: { k: "type", value: variable() }, mono: true });
             });
         }
@@ -2276,12 +2290,35 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             const measured = measuredList(t, argument);
             if (measured) return application(f, measured, e);
-            if (t.k === "variant" && a.k === "type") {
-                const parameter = t.args.find((x) => resolve(x).k === "var");
-                if (parameter) {
-                    unify(parameter, a.value, e);
-                    return f;
+            // An indexed family takes a value for an index (Vec 2 Int): it fills
+            // the next parameter, which values, not types, decide.
+            if (t.k === "variant" && t.indexed && a.k !== "type" && !(a.k === "variant" && a.name === t.name)) {
+                const position = f.applied ?? 0;
+                if (position < t.args.length) {
+                    unify(t.args[position], atom("Index"), e);
+                    return { ...f, applied: position + 1, given: new Map([...f.given ?? [], [position, argument]]) };
                 }
+            }
+            // A value of an indexed family whose indices evaluation knows must
+            // have the ones written: Vec 3 Int xs for a two-element xs fails.
+            if (t.k === "variant" && t.indexed && f.given?.size && argument.tag !== undefined) {
+                const indices = knownIndices(t.name, argument);
+                const plain = (k: Known | undefined) => { const n = numericOf(k); return n === undefined ? "?" : numberText({ ...n, typeName: undefined } as Numeric); };
+                const written = (pick: (n: number) => string) => [t.name, ...t.args.map((_, n) => { const s = pick(n); return /\s/.test(s) && !/^[[(]/.test(s) ? `(${s})` : s; })].join(" ");
+                for (const [position, wanted] of f.given) {
+                    const want = numericOf(wanted), have = numericOf(indices?.[position]);
+                    if (want !== undefined && have !== undefined && !equalNumbers(want, have)) {
+                        const typeAt = (n: number) => text(t.args[n]) === "Index" ? undefined : text(t.args[n]);
+                        problem(`expected ${written(n => f.given!.has(n) ? plain(f.given!.get(n)) : typeAt(n) ?? "?")}, got ${written(n => indices?.[n] && numericOf(indices[n]) !== undefined ? plain(indices[n]) : typeAt(n) ?? "?")}`, e);
+                    }
+                }
+            }
+            // A type argument fills the next of the family's arguments, by
+            // position (Vec k a: k, then a), even when the one before is a variable.
+            if (t.k === "variant" && a.k === "type" && (f.applied ?? 0) < t.args.length && (f.applied !== undefined || t.args.some((x) => resolve(x).k === "var"))) {
+                const position = f.applied ?? t.args.findIndex((x) => resolve(x).k === "var");
+                unify(t.args[position], a.value, e);
+                return { ...f, applied: position + 1 };
             }
             return convert(f.value, argument.type, e, true);
         }
@@ -2749,6 +2786,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     }
                 }
                 const result = application(callee, { type: argumentType, ...valueEntry(a, scope) }, a);
+                if (!callees.has(e)) noClauseMatches(e, scope);
                 // A partial application that leaves its call chain is an ordinary function value.
                 return callees.has(e) ? result : withoutShapes(result);
             }
@@ -3244,6 +3282,52 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Score range of a clause for a complete call, and whether it definitely
     // matches (every pattern certain to succeed) or definitely fails.
+    // The indices a known value of an indexed family has, as the runtime
+    // computes them: its fields give names (k from the tail's own indices),
+    // and its constructor's result type is evaluated with them.
+    const indexedFamilies = new Map<string, { def: Extract<TopLevel, { t: "type" }>["def"]; scope: Scope }>();
+    function knownIndices(family: string, value: Known, depth = 0): (Known | undefined)[] | undefined {
+        const declared = indexedFamilies.get(family);
+        const variant = declared?.def.variants.find(v => v.tag === value.tag);
+        if (!declared || !variant || depth > 64) return undefined;
+        const env = new Map<string, Known>();
+        (variant.fields ?? []).forEach((spec, n) => {
+            while (spec.t === "block" && spec.stmts.length === 1) spec = spec.stmts[0];
+            const args: Expr[] = [];
+            let head = spec;
+            while (head.t === "app") { args.unshift(head.a); head = head.f; }
+            const field = value.payload?.[n];
+            if (head.t !== "var" || head.name !== family || !field) return;
+            const inner = knownIndices(family, demand(field) ?? {}, depth + 1);
+            args.forEach((arg, i) => { if (arg.t === "var" && /^[a-z]/.test(arg.name) && inner?.[i] && !env.has(arg.name)) env.set(arg.name, inner[i]!); });
+        });
+        if (!variant.result) return (declared.def.parameters ?? []).map(name => env.get(name));
+        const args: Expr[] = [];
+        let head = variant.result;
+        while (head.t === "app") { args.unshift(head.a); head = head.f; }
+        return args.map(arg => arg.t === "var" && /^[a-z]/.test(arg.name) && !env.has(arg.name) ? undefined
+            : peek(() => budgeted(() => evaluateKnown(arg, env, declared.scope, 0)), undefined));
+    }
+    // A complete call of a named function none of whose clauses can match what
+    // is known of its arguments (first Nil for first (Cons x _) = x) fails
+    // whenever it runs: report it now.
+    function noClauseMatches(e: Expr, scope: Scope): void {
+        const args: Expr[] = [];
+        let head: Expr = e;
+        while (head.t === "app") { args.unshift(head.a); head = head.f; }
+        if (head.t !== "var") return;
+        const entry = scope.get(head.name);
+        if (!entry || entry.builtin || !trustsShape(entry)) return;
+        const summary = summaryAt(entry.type, args.length);
+        if (!summary) return;
+        const entries = args.map(a => ({ type: inferred.get(a) ?? dynamic, ...valueEntry(a, scope) }));
+        // Only a value's shape decides it: literals, constructors, list shapes.
+        // A typed pattern (Functor m) is left to its conversion.
+        const certain = (p: Pattern): boolean => p.p === "constr" ? (isConstructor(scope.get(p.tag)) || naturalPattern(p, scope)) && p.args.every(certain)
+            : p.p === "list" ? p.v.every(certain) : p.p === "cons" ? certain(p.head) && certain(p.tail) : p.p !== "schema" && p.p !== "typeBind" && p.p !== "as";
+        const fails = (c: ClauseOrder) => peek(() => c.params.some((p, n) => certain(p) && definitelyFails(p, entries[n], 0, 0)), false);
+        if (summary.clauses.length && summary.clauses.every(fails)) problem(`no clause of '${head.name}' matches these arguments`, e, "the definition's patterns don't cover this input");
+    }
     function rankClause(c: ClauseOrder, args: Entry[]): { low: number; high: number; matches: boolean; fails: boolean } {
         let low = 0, high = 0, matches = true, fails = false;
         c.params.forEach((p, n) => {
@@ -4211,6 +4295,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         } else if (p.p === "list") {
             p.v.forEach((q, n) => { const item = element(value, n); if (item) bindKnown(q, item, env, refutable); });
+        } else if (p.p === "constr" && value.tag === p.tag && value.payload?.length === p.args.length) {
+            // A constructor's fields, as the value was built (rest in Cons x rest).
+            p.args.forEach((q, n) => bindKnown(q, demand(value.payload![n]) ?? {}, env, refutable));
         } else if (p.p === "constr" && p.tag === "S" && p.args.length === 1) {
             const n = naturalArgument(p, value);
             if (n !== undefined && n > 0n) bindKnown(p.args[0], { number: { kind: "int", v: n - 1n, typeName: "UInt" } }, env, refutable);
@@ -4692,6 +4779,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if ((head.name === "return" || head.name === "primReturn") && builtin && args.length === 1) {
             const inner = value(args[0]);
             return { action: () => inner };
+        }
+        // S n: the natural after n, as at runtime.
+        if (head.name === "S" && builtin && args.length === 1) {
+            const n = numericOf(readMutable(value(args[0])));
+            if (n === undefined) return undefined;
+            return attempt(() => { const k = castNumeric("UInt", n) as { v: bigint }; return { kind: "int", v: k.v + 1n, typeName: "UInt" } as Numeric; });
         }
         if (head.name === "Bool" && builtin && args.length === 1) {
             const b = truth(value(args[0]));
@@ -5678,7 +5771,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             else if (statement.t === "type") {
                 const d = statement.def, parameters = new Map((d.parameters ?? []).map((p) => [p, variable()]));
-                const result: Ty = { k: "variant", name: d.name, args: [...parameters.values()], ordinal: d.variants.every(v => !v.fields?.length) };
+                const indexed = d.variants.some(v => v.result);
+                if (indexed) indexedFamilies.set(d.name, { def: d, scope });
+                const result: Ty = { k: "variant", name: d.name, args: [...parameters.values()], ordinal: d.variants.every(v => !v.fields?.length), ...indexed ? { indexed } : {} };
                 scope.set(d.name, { type: { k: "type", value: result } });
                 const fieldsScope = new Map(scope);
                 for (const [name, t] of parameters) {
@@ -5686,10 +5781,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 for (const v of d.variants) {
                     let t = result as Ty;
+                    // An indexed constructor's own names (k in Cons a (Vec k a)) are
+                    // fresh for it; its result keeps the family's parameters it
+                    // names, and leaves a computed index (S k) to values.
+                    const own: Scope = indexed ? new Map(fieldsScope) : fieldsScope, captures = indexed ? new Set<string>() : undefined;
+                    if (v.result) {
+                        const args: Expr[] = [];
+                        let head = v.result;
+                        while (head.t === "app") { args.unshift(head.a); head = head.f; }
+                        t = { k: "variant", name: d.name, indexed, args: (d.parameters ?? []).map((_, n) => {
+                            const arg = args[n];
+                            return arg?.t === "var" && parameters.has(arg.name) ? parameters.get(arg.name)! : variable();
+                        }) };
+                    }
                     // A field of a concrete type converts its value as a typed
                     // parameter does (Circle 2 holds 2.0); a type parameter does not.
                     for (const field of [...v.fields ?? []].reverse()) {
-                        const type = typeExpr(field, fieldsScope);
+                        const type = typeExpr(field, own, captures);
                         t = fn(type, t, undefined, !variables(type).size);
                     }
                     scope.set(v.tag, { type: t });

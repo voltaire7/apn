@@ -58,7 +58,9 @@ export type Pattern =
     | { p: "recPat"; v: Array<[string, string]> }
     | { p: "range"; lo: bigint; hi: bigint };
 
-interface DataDef { name: string; parameters?: string[]; variants: { tag: string; arity: number; fields?: Expr[] }[]; }
+// A variant's result is the type it makes when not the family's own (an
+// indexed family: Cons a (Vec k a) -> Vec (S k) a).
+interface DataDef { name: string; parameters?: string[]; variants: { tag: string; arity: number; fields?: Expr[]; result?: Expr }[]; }
 
 export type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "expr"; value: Expr }
     | { t: "type"; def: DataDef }

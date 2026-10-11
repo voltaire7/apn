@@ -243,7 +243,8 @@ export class Interpreter {
                             throw new APNError("runtime", `cannot redeclare value constructor ${name}; it belongs to ${previous.family?.name}`);
                         }
                     }
-                    const family = { name: tl.def.name, parameters: tl.def.parameters ?? [], fields: new Map(tl.def.variants.map(v => [v.tag, v.fields ?? []])), env: new Env(this.env) };
+                    const results = new Map(tl.def.variants.flatMap(v => v.result ? [[v.tag, v.result] as [string, Expr]] : []));
+                    const family = { name: tl.def.name, parameters: tl.def.parameters ?? [], fields: new Map(tl.def.variants.map(v => [v.tag, v.fields ?? []])), env: new Env(this.env), ...results.size ? { results } : {} };
                     this.env.setLocal(tl.def.name, { kind: "type", name: tl.def.name, family });
                     for (const v of tl.def.variants) {
                         if (v.arity === 0) {
@@ -1573,8 +1574,10 @@ export class Interpreter {
                     return { ...f, arguments: [...args, value] };
                 }
                 const parameters = f.alias?.parameters ?? f.family?.parameters ?? [];
-                if ((f.arguments?.length ?? 0) < parameters.length && (f.alias || this.isTypeValue(value))) {
-                    const arguments_ = [...f.arguments ?? [], value];
+                // An indexed family takes values as arguments too (Vec 2 Int).
+                const indexed = !!f.family?.results && !(value.kind === "variant" && value.family === f.family);
+                if ((f.arguments?.length ?? 0) < parameters.length && (f.alias || indexed || this.isTypeValue(value))) {
+                    const arguments_ = [...f.arguments ?? [], isNumeric(value) ? numericPayload(value) : value];
                     if (f.alias && arguments_.length === parameters.length) {
                         const scope = new Env(f.alias.env);
                         parameters.forEach((name, index) => scope.setLocal(name, arguments_[index]));
@@ -2456,6 +2459,14 @@ export class Interpreter {
             }
             if (type.family) {
                 if (actual.kind !== "variant" || actual.family !== type.family) throw new APNError("runtime", `${type.name} expects a ${type.name} variant`);
+                // An indexed family's value has the arguments its constructors made.
+                if (type.family.results) {
+                    const indices = this.indicesOf(actual)!;
+                    if ((type.arguments ?? []).some((wanted, n) => !this.sameIndex(wanted, indices[n]))) {
+                        throw new APNError("runtime", `expected ${this.renderString(type)}, got ${this.typeText(actual)}`);
+                    }
+                    return actual;
+                }
                 return type.arguments?.length ? this.variantValue(actual.tag, actual.v, type.family, type.arguments) : actual;
             }
             return this.constructType(type.name, actual);
@@ -2710,6 +2721,9 @@ export class Interpreter {
             v: fields.map((value, index) => {
                 const spec = family?.fields?.get(tag)?.[index];
                 if (!spec || (spec.t === "var" && /^[a-z]/.test(spec.name) && !arguments_[family?.parameters?.indexOf(spec.name) ?? -1])) return value;
+                // A field naming an index (Vec k a) takes its value as given:
+                // the constructor's indices come from it (see indicesOf).
+                if (family?.results && freeTypeNames(spec).some(name => !scope.get(name))) return value;
                 return this.defer(() => {
                     const caller = this.env;
                     this.env = scope;
@@ -2720,6 +2734,59 @@ export class Interpreter {
                     } finally { this.env = caller; }
                 });
             }) };
+    }
+
+    // Does an index fit what is wanted? Numbers compare by value; a type the
+    // value's elements did not decide (Nil's a) fits any type.
+    private sameIndex(wanted: Value, actual: Value | undefined): boolean {
+        if (!actual) return false;
+        const a = this.reference(wanted), b = this.reference(actual);
+        if (isNumeric(a) || isNumeric(b)) return isNumeric(a) && isNumeric(b) && equalNumbers(a, b);
+        if (a.kind === "type" && (a.name === "$any" || a.variable) || b.kind === "type" && (b.name === "$any" || b.variable)) return true;
+        return this.isTypeValue(a) && this.isTypeValue(b) ? this.sameType(a, b) : this.equals(a, b);
+    }
+    // An indexed family's value's arguments (Vec 2 Int for Cons 1 (Cons 2 Nil)):
+    // the result type its constructor makes, with each name its fields give
+    // (k from the tail's own indices, a from the element) evaluated. Computed
+    // on demand, once; a name nothing gives is any type.
+    private indexCache = new WeakMap<Value, Value[]>();
+    indicesOf(value: Extract<Value, { kind: "variant" }>): Value[] | undefined {
+        const family = value.family;
+        if (!family?.results) return undefined;
+        const cached = this.indexCache.get(value);
+        if (cached) return cached;
+        const scope = new Env(family.env);
+        const fields = family.fields?.get(value.tag) ?? [];
+        const given = (name: string, found: () => Value) => { if (!scope.map.has(name)) scope.setLocal(name, found()); };
+        fields.forEach((spec, n) => {
+            while (spec.t === "block" && spec.stmts.length === 1) spec = spec.stmts[0];
+            if (spec.t === "var" && /^[a-z]/.test(spec.name)) { given(spec.name, () => this.callNative("typeOf", [value.v[n]])); return; }
+            const args: Expr[] = [];
+            let head = spec;
+            while (head.t === "app") { args.unshift(head.a); head = head.f; }
+            if (head.t !== "var" || head.name !== family.name) return;
+            const inner = this.dataValue(value.v[n]);
+            const indices = inner.kind === "variant" && inner.family === family ? this.indicesOf(inner) : undefined;
+            args.forEach((arg, i) => { if (arg.t === "var" && /^[a-z]/.test(arg.name) && indices?.[i]) given(arg.name, () => indices[i]); });
+        });
+        const result = family.results.get(value.tag);
+        const args: Expr[] = [];
+        let head = result;
+        while (head?.t === "app") { args.unshift(head.a); head = head.f; }
+        const unknown = (n: number): Value => ({ kind: "type", name: family.parameters?.[n] ?? "a", variable: true });
+        const caller = this.env;
+        this.env = scope;
+        try {
+            const indices = result
+                ? args.map((arg, n) => {
+                    if (arg.t === "var" && /^[a-z]/.test(arg.name) && !scope.map.has(arg.name)) return unknown(n);
+                    const v = this.reference(this.eval(arg));
+                    return isNumeric(v) ? numericPayload(v) : v;
+                })
+                : (family.parameters ?? []).map((name, n) => scope.map.get(name) ?? unknown(n));
+            this.indexCache.set(value, indices);
+            return indices;
+        } finally { this.env = caller; }
     }
 
     matchesValueType(name: string, value: Value): boolean {
@@ -2908,7 +2975,7 @@ export class Interpreter {
                 const held = step.op === "return" ? this.typeText(step.value) : "a";
                 return { kind: "type", inspect: true, name: "Undecided", description: `m ${/\s/.test(held) && !/^[[(]/.test(held) ? `(${held})` : held}` };
             }
-            if (value.kind === "variant" && value.family) return { kind: "type", inspect: true, name: value.family.name, family: value.family, arguments: value.arguments };
+            if (value.kind === "variant" && value.family) return { kind: "type", inspect: true, name: value.family.name, family: value.family, arguments: this.indicesOf(value) ?? value.arguments };
             if (isNumeric(value)) return { kind: "type", inspect: true, name: numericType(value) };
             if (value.kind === "list" && value.schema) return this.inspectType(value.schema);
             if (this.isList(value)) return { kind: "type", inspect: true, name: "List", description: describeType(value) };
@@ -3412,6 +3479,7 @@ export class Interpreter {
         while (head.t === "app") { args.unshift(head.a); head = head.f; }
         if (head.t !== "var") return undefined;
         const type = this.env.get(head.name), base = type && this.reference(type);
+        if (base?.kind === "type" && base.family?.results) return this.indexedPattern(base.family, args, p.value, v, binds);
         // A length is a value: a bound name is that value. A type position keeps
         // a name bound to a type or function; any other name binds here.
         const free = (e: Expr, n: number) => e.t === "var" && /^[a-z]/.test(e.name) && !binds.has(e.name) &&
@@ -3440,6 +3508,27 @@ export class Interpreter {
             return this.matchPattern(p.value, list, binds);
         }
         return undefined;
+    }
+    // (Vec n a) v on an indexed family: v's indices bind the free names and
+    // must equal the rest (an earlier parameter's value, a literal, a type).
+    private indexedPattern(family: import("./types.ts").VariantFamily, args: Expr[], value: Pattern, v: Value, binds: Map<string, Value>): boolean {
+        const actual = this.dataValue(v);
+        if (actual.kind !== "variant" || actual.family !== family) return false;
+        const indices = this.indicesOf(actual)!;
+        // An index position (one a constructor's result computes: Z, S k) is a
+        // value; a type position follows the written-function-type rule.
+        const valueAt = (n: number) => [...family.results!.values()].some(result => {
+            const parts: Expr[] = [];
+            while (result.t === "app") { parts.unshift(result.a); result = result.f; }
+            return parts[n] && !(parts[n].t === "var" && /^[a-z]/.test((parts[n] as { name: string }).name));
+        });
+        for (const [n, arg] of args.entries()) {
+            const free = arg.t === "var" && /^[a-z]/.test(arg.name) && !binds.has(arg.name) && (valueAt(n) ? !this.env.get(arg.name) : this.typeVariableName(arg.name, this.env));
+            if (free) { binds.set((arg as { name: string }).name, indices[n]); continue; }
+            const wanted = arg.t === "var" && binds.has(arg.name) ? binds.get(arg.name)! : this.reference(this.eval(arg));
+            if (!this.sameIndex(wanted, indices[n])) return false;
+        }
+        return this.matchPattern(value, actual, binds);
     }
     // The type typeOf describes for a list's elements: Int for [1,2].
     private elementType(list: Value): Value {

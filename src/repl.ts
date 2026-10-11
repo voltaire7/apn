@@ -393,6 +393,7 @@ function helpText(): string {
         `  Function (x -> x); Type Int; Variant (YourConstructor value)`,
         `  Int/UInt, Int8..Int128/UInt8..UInt128, Float/Float32, Fraction, Complex`,
         `  f Z = 1; f (S k) = ... (UInt as naturals: Z is UInt 0, S k matches k + 1)`,
+        `  Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a (indexed family)`,
         `  do [print "hi", return 42] — run actions in order; yield the last result`,
         `  Int32 123; Int (truncate 3.7); typeOf value; Type [x: Float]`,
         `  myTypeOf (t x) = print t   (bind the runtime type and value)`,

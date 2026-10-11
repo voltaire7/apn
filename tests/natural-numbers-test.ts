@@ -50,7 +50,7 @@ for (const [source, kind, message] of [
     ["S (-1)", "type", "UInt cannot represent a negative integer"],
     ["h (UInt (-1)) = 1; h 1", "type", "UInt cannot represent a negative integer"],
     ["h (UInt8 300) = 1; h 1", "type", "value out of range for UInt8"],
-    ["pred (S k) = k; pred 0", "runtime", "no clause of 'pred' matches the given arguments"],
+    ["pred (S k) = k; pred 0", "type", "no clause of 'pred' matches these arguments"],
 ] as const) {
     Deno.test(`natural numbers reject: ${source}`, () => {
         const error = failure(source);
