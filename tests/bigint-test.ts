@@ -31,9 +31,9 @@ example("large division is exact", "100000000000000000000000000001 / 3", "100000
 example("signed remainder follows the dividend", "[(-7) % 3,7 % (-3),(-7) % (-3)]", "[-1,1,-1]");
 example("large comparisons do not subtract into a float", "[9007199254740993 > 9007199254740992,9007199254740993 == 9007199254740992]", "[true,false]");
 example("negative integer literals are exact", "-9007199254740993", "-9007199254740993");
-example("parse retains large integer digits", 'parse "9007199254740993"', "9007199254740993");
+example("from String retains large integer digits", 'from String "9007199254740993"', "9007199254740993");
 example("integer string formatting has no BigInt suffix", 'format "% / %" [9007199254740993,-9007199254740993]', '"9007199254740993 / -9007199254740993"');
-example("intToString uses exact decimal text", "intToString 9007199254740993", '"9007199254740993"');
+example("to String uses exact decimal text", "to String 9007199254740993", '"9007199254740993"');
 example("quoted literals retain exact digits", "quote 9007199254740993", '"9007199254740993"');
 example("toAST retains large numeric leaves", "toAST (9007199254740993 + 1)", '["+",9007199254740993,1]');
 example("large finite ranges advance exactly", "[9007199254740993..9007199254740995]", "[9007199254740993,9007199254740994,9007199254740995]");

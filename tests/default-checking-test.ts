@@ -99,7 +99,7 @@ Deno.test("Dynamic writes cannot invalidate a checked Mutable payload", () => {
     }
     throw new Error('unchecked Mutable write');
 });
-for (const source of ['cast (x -> x) 1', 'intToString "bad"', 'isExact "bad"', 'keys [x: 1]', 'values [x: 1]']) {
+for (const source of ['cast (x -> x) 1', 'isExact "bad"', 'keys [x: 1]', 'values [x: 1]']) {
     Deno.test(`native signatures reject incompatible values: ${source}`, () => rejected(session(), source));
 }
 
@@ -637,8 +637,8 @@ for (const [source, expected] of [
     ['hh s = g (f (q (words s))); hh "x"', '0'],
     ['g (f (q (splitOn "," "a")))', '0'],
     ['g (f (r (trim "  a " == "a")))', '0'],
-    ['g (f (r (toString 12 == "12")))', '0'],
-    ['g (f (r (toString [1,2] == "[1,2]")))', '0'],
+    ['g (f (r (to String 12 == "12")))', '0'],
+    ['g (f (r (to String [1,2] == "[1,2]")))', '0'],
     ['g (f (r (reverse "ab" == "ba")))', '0'],
     ['g (f (r (upper "a" == "A")))', '0'],
     ['g (f (r (contains 2 [1,2])))', '0'],
@@ -667,13 +667,13 @@ for (const source of [
     'g (f (q (head (enumerate [7]))))',
     'g (f (q (sort [3,1])))',
 ]) Deno.test(`builtins and std evaluated stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${textClauses}; ${source}`));
-// parse reads booleans and numbers as at runtime; recursion is evaluated as
+// from String reads booleans and numbers as at runtime; recursion is evaluated as
 // deep as the runtime's own stack allows (non-tail recursion to depth 500).
 const deepClauses = 'count n = n == 0 ? 0 : 1 + count (n - 1); upto n = n == 0 ? [] : n : upto (n - 1)';
 for (const [source, expected] of [
-    ['g (f (r (parse "12" == 12)))','0'],
-    ['g (f (r (parse " true ")))','0'],
-    ['g (f (r (parse "1/2" == 0.5)))','0'],
+    ['g (f (r (from String "12" == 12)))','0'],
+    ['g (f (r (from String " true ")))','0'],
+    ['g (f (r (from String "1/2" == 0.5)))','0'],
     ['g (f (q (integers "4")))','0'],
     ['g (f (r (count 500 == 500)))','0'],
     ['g (f (r (length (upto 450) == 450)))','0'],
@@ -686,7 +686,7 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'g (f (r (parse "x" == 1)))',
+    'g (f (r (from String "x" == 1)))',
     'g (f (q (integers "4 5")))',
     'g (f (r (length (upto 450) == 449)))',
     'g (f (q (takeWhile (< 300) [1..])))',

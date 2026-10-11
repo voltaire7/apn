@@ -32,7 +32,7 @@ update msg model = match msg [
 
 view model = div [] [
     button [onClick Decrement] [text "-"]
-    div [] [text (toString model)]
+    div [] [text (to String model)]
     button [onClick Increment] [text "+"]
 ]
 
@@ -53,7 +53,7 @@ Import `html` explicitly. It exports `text`, `node tag attributes children`,
 Attributes include `attribute name value`, `style property value`, `className`,
 `idAttribute`, `value`, `placeholder`, `typeAttribute`, `href`, and `disabled`.
 Use strings for attribute values, or booleans for boolean HTML attributes.
-Use `toString` before passing numbers to `text`.
+Use `to String` before passing numbers to `text`.
 
 Events are `onClick message`, `onInput toMessage`, and `onSubmit message`.
 `onInput` passes the field's current string to its function or constructor;

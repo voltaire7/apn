@@ -9,7 +9,7 @@ meScope definitions parent = {
 meList scope expressions = null expressions ? [] : meCons (meEval scope (head expressions)) (meList scope (tail expressions))
 meClosure parameter body scope = HashMap [["__closure",true],["parameter",parameter],["body",body],["scope",scope]]
 meZipTemplate functions values = null functions ? (null values ? [] : fail "list template and input must have the same length") : null values ? fail "list template and input must have the same length" : meCons (meTemplateSlot (head functions) (head values)) (meZipTemplate (tail functions) (tail values))
-meTemplateInput value = typeOf value == typeOf "text" ? chars value : value
+meTemplateInput value = typeOf value == typeOf "text" ? to (List Char) value : value
 meTemplate functions values = meZipTemplate functions values
 meTemplateSlot function argument = typeOf function == typeOf [] ? meTemplate function (meTemplateInput argument) : meApply function argument
 meApply function argument = typeOf function == HashMap ? has "__closure" function ? meEval (insert [[lookup "parameter" function,argument]] (lookup "scope" function)) (lookup "body" function) : function argument : function argument

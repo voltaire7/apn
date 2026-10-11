@@ -45,7 +45,7 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
     if (name === "chars") return mkList(textNatives.chars(str(args[0])).map((v): Value => ({ kind: "char", v })));
     if (name === "fromChars") return mkStr(textNatives.fromChars(i.items(args[0]).map((v) => {
         v = i.dataValue(v);
-        if (v.kind !== "char") throw new APNError("runtime", "fromChars expects a list of Char values");
+        if (v.kind !== "char") throw new APNError("runtime", "from (List Char) expects a list of Char values");
         return v.v;
     })));
     return mkStr(textNatives[name as "upper" | "lower"](str(args[0])));

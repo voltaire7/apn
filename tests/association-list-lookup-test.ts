@@ -12,7 +12,7 @@ for (const [source, expected] of [
     ['[["x",[1,2]]] "x"', '[1,2]'],
     ['[["x",(* 2)]] "x" 3', '6'],
     ['entries = [["0",42]]; [entries "0",entries 0,entries [0]]', '[42,["0",42],[["0",42]]]'],
-    ['entries = map (n -> [toString n,n]) [0..]; entries "3"', '3'],
+    ['entries = map (n -> [to String n,n]) [0..]; entries "3"', '3'],
     ['[["",7]] ""', '7'],
 ] as const) Deno.test(`association lookup: ${source}`, () => {
     const i = new Interpreter();

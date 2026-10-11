@@ -19,7 +19,7 @@ for (const [file, solver, expected] of [
 for (const [source, expected] of [
     ['solveSonar ""', '0'], ['solveSonar "7"', '0'],
     ['solveSonar "1\\r\\n2\\r\\n3\\r\\n"', '2'],
-    ['solveSonar (joinWith "\\n" (map toString [1..2000]))', '1999'],
+    ['solveSonar (joinWith "\\n" (map (to String) [1..2000]))', '1999'],
     ['fishPopulation 0 "3,4,3,1,2"', '5'],
     ['fishPopulation 18 "3,4,3,1,2"', '26'],
     ['fishPopulation 256 "3,4,3,1,2"', '26984457539'],

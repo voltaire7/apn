@@ -2,11 +2,11 @@ import ["function","option","sequence","text","map","search"]
 
 # AoC 2022 day 12: scalar cell indexes, a height map, and generic BFS.
 solveHill text = {
-    [rows] = [map chars (nonEmptyLines text)]
+    [rows] = [map (to (List Char)) (nonEmptyLines text)]
     width = length (head rows)
     height = length rows
     [cells] = [HashMap (zipWithIndex (concat rows))]
-    [alphabet] = [HashMap (zip (chars "abcdefghijklmnopqrstuvwxyz") [0..25])]
+    [alphabet] = [HashMap (zip (to (List Char) "abcdefghijklmnopqrstuvwxyz") [0..25])]
     elevation c = c == 'S' ? 0 : c == 'E' ? 25 : lookup c alphabet
     start = withDefault (fail "missing start S") (findIndex (=='S') (concat rows))
     goal = withDefault (fail "missing goal E") (findIndex (=='E') (concat rows))

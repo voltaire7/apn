@@ -10,7 +10,7 @@ update msg model = match msg [
 
 view model = div [] [
     button [onClick Decrement] [text "-"]
-    div [] [text (toString model)]
+    div [] [text (to String model)]
     button [onClick Increment] [text "+"]
 ]
 

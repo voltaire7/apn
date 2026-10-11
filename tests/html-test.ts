@@ -32,7 +32,7 @@ Deno.test("event messages are lazy and failed updates leave the old model usable
 import "browser"
 HtmlTestMsg = GoodEvent | BadEvent
 update msg model = match msg [GoodEvent -> model + 1,BadEvent -> missing]
-view model = div [] [button [onClick GoodEvent] [text (toString model)],button [onClick BadEvent] [text "bad"]]
+view model = div [] [button [onClick GoodEvent] [text (to String model)],button [onClick BadEvent] [text "bad"]]
 main = sandbox [init: 0, update: update, view: view]`);
     if (content(counter.render()) !== '0bad') throw new Error("initial render");
     try { counter.dispatch(1); throw new Error("expected failure"); }
@@ -59,7 +59,7 @@ Deno.test("bundled modules load without filesystem access", () => {
         "/lib/browser.apn": Deno.readTextFileSync(new URL("../lib/browser.apn", import.meta.url)),
     };
     i.sourceDir = "/app/";
-    i.run(parse('import "html"; import "browser"; main = sandbox [init: 1, update: (msg model -> model), view: (n -> text (toString n))]'));
+    i.run(parse('import "html"; import "browser"; main = sandbox [init: 1, update: (msg model -> model), view: (n -> text (to String n))]'));
     if (content(new BrowserSandbox(i, i.env.get("main")!).render()) !== '1') throw new Error("bundled app failed");
     try { i.importStandard('text'); }
     catch (error) { if (error instanceof Error && error.message.includes('not bundled')) return; throw error; }

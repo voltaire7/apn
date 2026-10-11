@@ -67,18 +67,17 @@ Strings supply Unicode code-point characters using the same positional rules:
 [Char,Char]."hi"       # ['h', 'i']
 [Char]."h"              # ['h']
 [].""                  # []
-chars "hello"           # arbitrary-length character conversion
+to (List Char) "hello"  # arbitrary-length character conversion
 ```
 
 A template is an ordinary list value. Use `template.values` for a variable input,
 or `template.(expression)` for a computed input. On records, `record.values`
 still looks up the literal field `values`, while `record.(expression)` evaluates
 with the record fields in scope.
-`String` converts a finite character list back to text, using `fromChars`:
+`String` converts a finite character list back to text, as `from (List Char)` does:
 
 ```apn
-import "text"
-cast String $ chars "hello"          # "hello"
+cast String $ to (List Char) "hello"  # "hello"
 cast String $ cast [Char,Char] $ "hi"  # "hi"
 String ['h','i']                    # "hi"
 String []                            # ""

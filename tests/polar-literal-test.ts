@@ -9,7 +9,7 @@ for (const [literal, constructor] of [
     ["2e1@3e-1", "makePolar 20.0 .3"], ["-2@3", "-(makePolar 2 3)"],
     ["2 @ 3", "makePolar 2 3"], ["2@3 + 1", "(makePolar 2 3) + 1"],
     ["magnitude 2@3", "magnitude (makePolar 2 3)"],
-    ['parse "2@3"', "makePolar 2 3"],
+    ['from String "2@3"', "makePolar 2 3"],
 ]) {
     Deno.test(`polar literal: ${literal}`, () => {
         const interp = new Interpreter();
@@ -33,7 +33,7 @@ for (const [source, expected] of [
     ["2.0@0", "2.0"], ["isExact 2.0@0", "false"],
     ["isExact 2@0.0", "false"],
     ["makePolar 9007199254740993 0", "9007199254740993"],
-    ['parse "2@0"', "2"], ["-2@0", "-2"],
+    ['from String "2@0"', "2"], ["-2@0", "-2"],
 ]) {
     Deno.test(`polar zero angle exactness: ${source}`, () => {
         const interp = new Interpreter();

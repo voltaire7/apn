@@ -9,7 +9,7 @@ import typeSource from "../lib/type.apn" with { type: "text" };
 import doSource from "../lib/do.apn" with { type: "text" };
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
-import { NATIVE_EXPORTS } from "./native-exports.ts";
+import { NATIVE_EXPORTS, RETIRED_NATIVES } from "./native-exports.ts";
 import { parseLiteral } from "./text-natives.ts";
 import { loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
@@ -176,7 +176,7 @@ export class Interpreter {
         const builtins = new Env();
         for (const type of TYPE_NAMES) builtins.setLocal(type, { kind: "type", name: type });
         builtins.setLocal("Z", ZERO);
-        for (const [name, arity] of [...NATIVES, ...STANDARD_NATIVES]) builtins.setLocal(name, { kind: "native", name, arity, applied: [] });
+        for (const [name, arity] of [...NATIVES, ...STANDARD_NATIVES]) if (!(name in RETIRED_NATIVES)) builtins.setLocal(name, { kind: "native", name, arity, applied: [] });
         for (const [name, value] of this.preludeBindings) builtins.setLocal(name, value);
         const scope = new Env(builtins);
         for (const exported of file.std ? NATIVE_EXPORTS[file.std] ?? [] : []) scope.setLocal(exported, builtins.get(exported)!);
@@ -209,7 +209,7 @@ export class Interpreter {
         for (const name of TYPE_NAMES) this.env.setLocal(name, { kind: "type", name });
         this.env.setLocal("Z", ZERO);
         for (const [name, arity] of NATIVES) {
-            this.env.setLocal(name, { kind: "native", name, arity, applied: [] });
+            if (!(name in RETIRED_NATIVES)) this.env.setLocal(name, { kind: "native", name, arity, applied: [] });
         }
         const outer = this.env;
         this.env = new Env(outer);
@@ -1943,7 +1943,7 @@ export class Interpreter {
     static readonly METHOD_NATIVES = new Map([["map", "map"], ["primReturn", "return"], ["primBind", ">>="], ["primAp", "<*>"], ["to", "to"], ["from", "from"]]);
     // to T x and from T x: a program's instances first (newest first), then
     // the builtin ones: String (its text, read back as parse does), JSON
-    // (JSON text) and Chars (a string's characters). to of any other type
+    // (JSON text) and List Char (a string's characters). to of any other type
     // applies it: to Float (Money 1.2) is Float (Money 1.2).
     private convertTo(method: "to" | "from", target: Value, value: Value): Value {
         const own = this.instance(method, [target, value]);
@@ -1954,15 +1954,17 @@ export class Interpreter {
             return name === "String" ? type.kind === "type" && type.name === "String" && !type.family && !type.alias
                 : !!builtin && this.isTypeValue(type) && this.sameType(this.reference(builtin), type);
         };
+        const element = this.isListType(type) && type.kind === "type" && type.arguments?.length === 1 ? this.reference(type.arguments[0]) : undefined;
+        const chars = element?.kind === "type" && element.name === "Char" && !element.family && !element.alias;
         if (method === "to") {
             if (is("String")) return this.callNative("toString", [value]);
             if (is("JSON")) return standardNative(this, "toJson", [value]);
-            if (is("Chars")) return standardNative(this, "chars", [value]);
+            if (chars) return standardNative(this, "chars", [value]);
             if (this.isTypeValue(type)) return this.apply(type, value);
         } else {
             if (is("String")) return this.callNative("parse", [this.demand(value)]);
             if (is("JSON")) return standardNative(this, "fromJson", [value]);
-            if (is("Chars")) return standardNative(this, "fromChars", [value]);
+            if (chars) return standardNative(this, "fromChars", [value]);
         }
         throw new APNError("runtime", `no ${method} instance for ${this.renderString(type)}`, { hint: `define one, such as \`${method} ${this.renderString(type)} x = ...\`` });
     }
@@ -3125,7 +3127,7 @@ export class Interpreter {
             case "parse": {
                 if (a.kind !== "string") throw new Error("Runtime: parse expects a string");
                 const parsed = parseLiteral(a.v);
-                if (parsed === null) throw new APNError("runtime", `parse: can't parse '${a.v.trim()}'`);
+                if (parsed === null) throw new APNError("runtime", `from String: '${a.v.trim()}' is not a Bool or number literal`);
                 return typeof parsed === "boolean" ? mkBool(parsed) : parsed;
             }
             case "head": {

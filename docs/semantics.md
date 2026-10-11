@@ -464,7 +464,7 @@ return = Some                      # return in Option
 ```
 
 `to` and `from` are methods the same way: `to T x` writes `x` as a `T`
-(`to String`, `to JSON`, `to Chars`; another type converts as applying it),
+(`to String`, `to JSON`, `to (List Char)`; another type converts as applying it),
 `from T x` reads one back. A bare type name in a pattern matches that type
 itself (`describe Int = "integer"`), so an instance names its type:
 `to Celsius = (F f) -> C ((f - 32) * 5 / 9)`. See the
@@ -587,7 +587,7 @@ deliberate escape hatches.
 - Finite and infinite ranges use the same incremental consumer interface.
 
 Operations requiring a complete result—such as `length`, negative indexing,
-`foldl`, `toString`, and full-list equality—may never finish on infinite inputs.
+`foldl`, `to String`, and full-list equality—may never finish on infinite inputs.
 Use `take` when a finite result is required. Integers have arbitrary precision, so Fibonacci values remain exact instead
 of rounding or overflowing to `Infinity`. Their growing size still uses memory.
 
@@ -618,7 +618,7 @@ does not evaluate its `halt` action.
 forces its argument without running a returned action: `a = print 3; debug a`
 prints `a`. `step` retains
 its expression-inspection/evaluation rules demonstrated in `examples/features.apn`.
-`toString` demands its argument and collects its full rendering into a string.
+`to String` demands its argument and collects its full rendering into a string.
 Values render as source writes them: a constructor argument that is itself
 compound is parenthesized (`Some (Some 1)`, `Distance (-2)`), operators show
 as sections (`(+)`, `(+ 1)`, and `(1 +)` for `(+)` applied to 1). A function
@@ -651,14 +651,14 @@ APN literals include `0xFF`, `0b11010100`, `0o235461`, `.5`, and `1.2e-3`.
 Scheme `#` prefixes are not used: `#` remains a comment. Fractions use ordinary
 APN division (`1 / 3`); complex values accept an adjacent imaginary suffix (`1i`, `3+4i`, `.5i`),
 or use `makeRectangular 3 4` or
-`makePolar radius angle`. Complex output is `3+4i`. `parse` reads numeric text,
+`makePolar radius angle`. Complex output is `3+4i`. `from String` reads numeric text,
 including fraction and complex output, without evaluating arbitrary APN code.
 
 `exact` converts the actual binary floating-point value to an exact fraction:
 `exact .5` is `1/2`, while `exact .1` is
 `3602879701896397/36028797018963968`. `inexact` rounds an exact number to binary64.
 The printer distinguishes `3` from `3.0` and preserves `-0.0`; infinity/NaN print
-as `+inf.0`, `-inf.0`, and `+nan.0`. `parse` understands these spellings.
+as `+inf.0`, `-inf.0`, and `+nan.0`. `from String` understands these spellings.
 
 Finite numeric comparisons compare exact represented values, including mixed
 exact/inexact inputs, without rounding a large exact operand first. Thus

@@ -18,33 +18,33 @@ function fails(source: string, text: string, kind?: string): void {
     throw new Error(`accepted: ${source}`);
 }
 
-// JSON.stringify and JSON.parse: toJson, prettyJson, fromJson.
+// JSON.stringify and JSON.parse: to JSON, prettyJson, from JSON.
 for (const [source, expected] of [
-    ['import "json"; toJson [ids: ["jawed"]]', '"{"ids":["jawed"]}"'],
-    ['import "json"; toJson [1,2.5,true,"a",\'c\',[]]', '"[1,2.5,true,"a","c",[]]"'],
-    ['import "json"; toJson [Content-Type: "x", n: 123456789012345678901234567890]', '"{"Content-Type":"x","n":123456789012345678901234567890}"'],
-    ['import "json"; toJson ["x": 1, x: 2]', '"{"\\"x\\"":1,"x":2}"'],
-    ['import "json"; toJson (HashMap [["k",1]])', '"{"k":1}"'],
-    ['import "json"; toJson [1..3]', '"[1,2,3]"'],
+    ['import "json"; to JSON [ids: ["jawed"]]', '"{"ids":["jawed"]}"'],
+    ['import "json"; to JSON [1,2.5,true,"a",\'c\',[]]', '"[1,2.5,true,"a","c",[]]"'],
+    ['import "json"; to JSON [Content-Type: "x", n: 123456789012345678901234567890]', '"{"Content-Type":"x","n":123456789012345678901234567890}"'],
+    ['import "json"; to JSON ["x": 1, x: 2]', '"{"\\"x\\"":1,"x":2}"'],
+    ['import "json"; to JSON (HashMap [["k",1]])', '"{"k":1}"'],
+    ['import "json"; to JSON [1..3]', '"[1,2,3]"'],
     ['import "json"; prettyJson [a: [1]]', '"{\n  "a": [\n    1\n  ]\n}"'],
-    ['import "json"; fromJson "{\\"status\\": 1, \\"odd-key\\": [true, null, 2.5]}"', '[status: 1, odd-key: [true,[],2.5]]'],
-    ['import "json"; (fromJson "{\\"odd-key\\": 3}") "odd-key"', '3'],
-    ['import "json"; v = [a: [1,2], b c: "x", Content-Type: 1, "q": 2]; fromJson (toJson v) == v', 'true'],
-    ['import "json"; fromJson "123456789012345678901234567890"', '123456789012345678901234567890'],
-    ['import "json"; fromJson "\\"\\\\u00e9\\""', '"é"'],
-    ['import "json"; fromJson "{\\"a\\": 1, \\"a\\": 2}"', '[a: 2]'],
-    ['import "json"; v = [a: [1,2], "b c": "x"]; fromJson (toJson v) == v', 'true'],
+    ['import "json"; from JSON "{\\"status\\": 1, \\"odd-key\\": [true, null, 2.5]}"', '[status: 1, odd-key: [true,[],2.5]]'],
+    ['import "json"; (from JSON "{\\"odd-key\\": 3}") "odd-key"', '3'],
+    ['import "json"; v = [a: [1,2], b c: "x", Content-Type: 1, "q": 2]; from JSON (to JSON v) == v', 'true'],
+    ['import "json"; from JSON "123456789012345678901234567890"', '123456789012345678901234567890'],
+    ['import "json"; from JSON "\\"\\\\u00e9\\""', '"é"'],
+    ['import "json"; from JSON "{\\"a\\": 1, \\"a\\": 2}"', '[a: 2]'],
+    ['import "json"; v = [a: [1,2], "b c": "x"]; from JSON (to JSON v) == v', 'true'],
 ] as const) Deno.test(`json: ${source}`, () => {
     const actual = run(source);
     if (actual !== expected) throw new Error(`${source}: got ${actual}`);
 });
 for (const [source, message] of [
-    ['import "json"; toJson (1 / 3)', 'has no JSON number'],
-    ['import "json"; toJson (x -> x)', 'cannot encode'],
-    ['import ["json","option"]; toJson (Some 1)', 'cannot encode the variant Some'],
-    ['import "json"; fromJson "[1,"', 'unexpected end of input'],
-    ['import "json"; fromJson "{\\"a\\" 1}"', 'expected ":"'],
-    ['import "json"; fromJson "[1] x"', "unexpected \"x\""],
+    ['import "json"; to JSON (1 / 3)', 'has no JSON number'],
+    ['import "json"; to JSON (x -> x)', 'cannot encode'],
+    ['import ["json","option"]; to JSON (Some 1)', 'cannot encode the variant Some'],
+    ['import "json"; from JSON "[1,"', 'unexpected end of input'],
+    ['import "json"; from JSON "{\\"a\\" 1}"', 'expected ":"'],
+    ['import "json"; from JSON "[1] x"', "unexpected \"x\""],
 ] as const) Deno.test(`json rejects: ${source}`, () => fails(source, message));
 
 // fetch on data: URLs needs no network.
@@ -53,7 +53,7 @@ Deno.test("fetch returns a response record", () => {
     run('import ["http","json"]; response <- fetch "data:application/json,{\\"a\\":[1,2]}" []; []', i);
     if (run("[response.status,response.ok,response.body]", i) !== '[200,true,"{"a":[1,2]}"]') throw new Error(run("response", i));
     if (run('lookup "content-type" response.headers', i) !== '"application/json"') throw new Error("headers");
-    if (run("(fromJson response.body).a", i) !== "[1,2]") throw new Error("json body");
+    if (run("(from JSON response.body).a", i) !== "[1,2]") throw new Error("json body");
     if (run('fetchJson "data:application/json,[true]" []', i) !== "[true]") throw new Error("fetchJson");
     if (run('fetchText "data:text/plain,hi" [method: "GET", timeout: 5000]', i) !== '"hi"') throw new Error("fetchText");
 });
@@ -94,9 +94,9 @@ response <- fetch "${base}/api/channels" [
         Authorization: "Basic token"
         Content-Type: "application/json"
     ]
-    body: toJson [ids: ["jawed"]]
+    body: to JSON [ids: ["jawed"]]
 ]
-data = fromJson response.body
+data = from JSON response.body
 []`, i);
         if (run("[response.status,data.method,data.auth,data.type,data.body]", i) !== '[200,"POST","Basic token","application/json","{"ids":["jawed"]}"]') throw new Error(run("data", i));
         if (run('lookup "x-echo" response.headers', i) !== '"yes"') throw new Error("response headers");

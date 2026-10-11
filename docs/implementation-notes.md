@@ -99,9 +99,10 @@ Behavior: `docs/standard-library.md` (`http`, `json`).
   crosses a fixed shared buffer in chunks. The worker is terminated after each
   request so it never keeps the process alive. In a browser build
   (`typeof Deno === "undefined"`) a synchronous `XMLHttpRequest` replaces it.
-- `fetch`, `toJson`, `prettyJson` and `fromJson` are standard natives exported
-  only through their modules; none is in `EVALUATED_NATIVES`, so static
-  checking never sends a request.
+- `fetch` and `prettyJson` are standard natives exported only through their
+  modules, and `to JSON`/`from JSON` reach `toJson`/`fromJson` only through
+  `convertTo`; none is in `EVALUATED_NATIVES`, so static checking never sends
+  a request. The retired names (`RETIRED_NATIVES`) are bound nowhere.
 - `src/json.ts` parses JSON itself so integers stay exact `bigint`s; record
   keys and JSON keys are the same strings both ways (a quoted key's text keeps
   its quotes), so nothing is renamed and `x`/`"x"` never collide. `fetch`
@@ -345,8 +346,8 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   evaluation that runs out of budget leaves its value unknown, a runtime
   check. `tests/type-level-evaluation-test.ts`.
 - The checker's evaluator calls the runtime's text functions
-  (`text-natives.ts`: `upper`, `lower`, `chars`, `fromChars`, `parse`) on known
-  values; never reimplement a native in `evaluateNative`.
+  (`text-natives.ts`: `upper`, `lower`, `chars`, `fromChars`, `parse`, which
+  `to`/`from` with `String` or `List Char` run) on known values; never reimplement a native in `evaluateNative`.
 - `typeOf` of a builtin reads the checker's signature (`builtinSignature`,
   written by `signatureText` and read back as a written type), so the two
   never disagree; only intrinsics the checker types specially (`map`,

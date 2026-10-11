@@ -114,13 +114,13 @@ See [zero initialization](zero-initialization.md) for type defaults and inspecti
 ## Representations — `to` and `from` (prelude)
 
 `to T x` writes `x` as a `T`; `from T x` reads one back. The prelude declares
-`JSON` (JSON text, a named `String`) and `Chars` (`List Char`).
+`JSON` (JSON text, a named `String`); a string's characters are `List Char`.
 
 | API | Behavior |
 | --- | --- |
 | `to String x`, `from String text` | Display text; read a `Bool` or number literal back (`Dynamic`) |
 | `to JSON x`, `from JSON text` | JSON text; decode it (`Dynamic`) |
-| `to Chars text`, `from Chars chars` | A string's characters (code points); join them |
+| `to (List Char) text`, `from (List Char) chars` | A string's characters (code points); join them |
 | `to T x` for another type | Applies `T`, as a conversion: `to Float (Money 1.2)` |
 
 They are methods, like `map`: a program adds a type by defining an instance,
@@ -226,7 +226,6 @@ operations retain APN's existing overflow checks and lossless conversion rules.
 
 | API | Behavior |
 | --- | --- |
-| `chars text`, `fromChars xs` | Convert between strings and lists of Char |
 | `textLength text`, `reverse text` | Count/reverse Unicode code points |
 | `textTake n text`, `textDrop n text` | Code-point prefixes and suffixes |
 | `splitOn delimiter text`, `joinWith delimiter xs` | Literal splitting/joining; splitting preserves empty fields |
@@ -270,8 +269,8 @@ expression]`, as `Dynamic` data. `metaSelfEval evaluatorSource source` adds anot
 it evaluates the evaluator's source, then runs the program with that evaluator.
 See [the proof, supported subset and primitive boundary](metacircular-evaluator.md).
 
-The standard-library native boundary is `seq`, `fail`, `chars`, `fromChars`,
-`upper`, `lower`, and the I/O primitives `readFile`, `readStdin`, `getArgs`. Sequence search, scans, merge sort, and text splitting,
+The standard-library native boundary is `seq`, `fail`, `to (List Char)`,
+`from (List Char)`, `upper`, `lower`, and the I/O primitives `readFile`, `readStdin`, `getArgs`. Sequence search, scans, merge sort, and text splitting,
 joining, replacement and trimming are implemented in APN.
 
 
@@ -322,9 +321,9 @@ response <- fetch "https://www.youtube-transcript.io/api/channels" [
         Authorization: "Basic <your-api-token>"
         Content-Type: "application/json"
     ]
-    body: toJson [ids: ["jawed"]]
+    body: to JSON [ids: ["jawed"]]
 ]
-channels = fromJson response.body
+channels = from JSON response.body
 ```
 
 `fetchText url options` yields a successful (2xx) response's body and fails
@@ -340,8 +339,8 @@ never sends a request; `data:` URLs need no network. In a browser build,
 
 ## JSON — `json`
 
-`toJson value` is `JSON.stringify`, `prettyJson value` the same indented by two
-spaces, and `fromJson text` is `JSON.parse`:
+`to JSON value` (prelude) is `JSON.stringify`, `prettyJson value` the same
+indented by two spaces, and `from JSON text` (prelude) is `JSON.parse`:
 
 | APN | JSON |
 | --- | --- |
@@ -354,9 +353,9 @@ spaces, and `fromJson text` is `JSON.parse`:
 A fraction, complex number, variant or function has no JSON form and is an
 error; convert it first. A record key's text is the JSON key, so a bare key
 `status` writes `"status"` and a quoted key `"status"` keeps its quotes; they
-never collide. `fromJson` returns an object as a record of bare keys with the
+never collide. `from JSON` returns an object as a record of bare keys with the
 JSON keys' text (`r.status`, `r "odd-key"`), an integer as an exact `Int`,
-other numbers as `Float`, and `null` as `[]`, so `fromJson (toJson v)` gives
+other numbers as `Float`, and `null` as `[]`, so `from JSON (to JSON v)` gives
 back `v`. Its result is `Dynamic`; give it a type with a
 pattern or `cast` where the program needs one.
 

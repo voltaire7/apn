@@ -438,9 +438,9 @@ recursion over `[]` and `(x:xs)` clauses. Where a list's elements are known
 too (literals, integer ranges such as `[1..n]` with `n` known, and lists built
 from them), the pure builtins run on them as at runtime: `filter`, `map`,
 `take`, `drop`, `zipWith` (and `zip`, which stops at the shorter list), `head`,
-`tail`, `null`, `foldl`, `foldr`, `iterate`, `enumerate`, `chars`, `fromChars`,
-`upper`, `lower`, `toString`, `intToString` and `parse` (booleans and number
-literals). So do standard-library functions
+`tail`, `null`, `foldl`, `foldr`, `iterate`, `enumerate`, `upper`, `lower`,
+`to String`, `to (List Char)`, `from (List Char)` and `from String` (booleans
+and number literals); `to T x` for another type is `T x`. So do standard-library functions
 written in APN, such as `takeWhile`, `dropWhile`, `words`, `splitOn`, `trim`,
 `contains`, `all`, `any`, `find`, `sum`, `sort` and `isPrime`, including their
 blocks of local definitions. Lists are lazy here too: `take 1 [0..]` and
@@ -522,7 +522,7 @@ Record-template patterns convert positional lists at runtime and
 are checked against their named field types. Inferred parameters do not silently
 convert arguments; actual constructors and converting patterns provide conversions.
 
-Runtime reflection uses `Dynamic env`. The result of `parse`, syntax inspection
+Runtime reflection uses `Dynamic env`. The result of `from String`, syntax inspection
 with `toAST`, debugger `step`, and native FFI/resource interfaces carries Dynamic
 where its shape cannot be known statically. The metacircular evaluator declares
 its runtime parser/evaluator execution as Dynamic. HTML, browser configuration,

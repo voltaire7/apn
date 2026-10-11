@@ -8,10 +8,10 @@
 # The body of a successful (2xx) response; any other status fails.
 fetchText url options = {
     response <- fetch url options
-    response.ok ? return response.body : fail ("fetch: " ++ response.url ++ " answered " ++ toString response.status ++ " " ++ response.statusText)
+    response.ok ? return response.body : fail ("fetch: " ++ response.url ++ " answered " ++ to String response.status ++ " " ++ response.statusText)
 }
 # A successful response's body, decoded as JSON (see the json module).
 fetchJson url options = {
     text <- fetchText url options
-    return (fromJson text)
+    return (from JSON text)
 }

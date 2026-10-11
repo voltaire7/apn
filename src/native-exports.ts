@@ -4,9 +4,15 @@ export const NATIVE_EXPORTS: Record<string, string[]> = {
     ffi: ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer"],
     io: ["withFile", "readFile", "readStdin", "getArgs"],
     function: ["bracket", "fail", "seq", "do"],
-    text: ["chars", "fromChars", "upper", "lower"],
+    text: ["upper", "lower"],
     http: ["fetch"],
-    json: ["toJson", "prettyJson", "fromJson"],
+    json: ["prettyJson"],
+};
+// Natives that to and from spell now (to String x for toString x): internal,
+// not bound for programs; each with what to write instead.
+export const RETIRED_NATIVES: Record<string, string> = {
+    toString: "to String", intToString: "to String", parse: "from String",
+    chars: "to (List Char)", fromChars: "from (List Char)", toJson: "to JSON", fromJson: "from JSON",
 };
 // The module exporting a standard native, for "add import" hints.
 export function nativeModule(name: string): string | undefined {

@@ -1,5 +1,5 @@
 import { clauseKey, type Expr, isLoadCall, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
-import { nativeModule } from "./native-exports.ts";
+import { nativeModule, RETIRED_NATIVES } from "./native-exports.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric } from "./numbers.ts";
@@ -2690,8 +2690,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 if (!entry && !firstUnbound && options.runtimeNames && !options.runtimeNames.has(e.name)) {
                     const near = didYouMean(e.name, [...scope.keys(), ...options.runtimeNames]);
-                    const module = STD_CONSTRUCTORS[e.name] ?? nativeModule(e.name);
-                    firstUnbound = { expr: e, name: e.name, hint: module ? `add \`import "${module}"\` to use \`${e.name}\`` : near ? `did you mean '${near}'?` : undefined };
+                    const module = STD_CONSTRUCTORS[e.name] ?? nativeModule(e.name), now = RETIRED_NATIVES[e.name];
+                    firstUnbound = { expr: e, name: e.name, hint: now ? `write \`${now} x\`` : module ? `add \`import "${module}"\` to use \`${e.name}\`` : near ? `did you mean '${near}'?` : undefined };
                 }
                 if (!entry) return unknown();
                 if (deferred && defining && entry.capture && defining.name !== e.name) entry.capture.users.add(defining);
@@ -4216,7 +4216,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             while (head.t === "app") { args.unshift(head.a); head = head.f; }
             if (head.t !== "var") return {};
             const entry = scope.get(head.name);
-            if ((NUMERIC_TYPES.includes(head.name) || EVALUATED_NATIVES.has(head.name) || head.name === "Bool" || head.name === "Mutable") && entry?.builtin) return computed(e, scope);
+            if ((NUMERIC_TYPES.includes(head.name) || EVALUATED_NATIVES.has(head.name) || ["Bool", "Mutable", "to", "from", "S"].includes(head.name)) && entry?.builtin) return computed(e, scope);
             if (/^[A-Z]/.test(head.name)) {
                 // A constructor applied to all its fields.
                 let t = resolve(entry?.type ?? dynamic);
@@ -4814,6 +4814,27 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if ((head.name === "return" || head.name === "primReturn") && builtin && args.length === 1) {
             const inner = value(args[0]);
             return { action: () => inner };
+        }
+        // to T x and from T x with a builtin T: the native the runtime runs
+        // (to (List Char) is chars), unless a program defines its own instances.
+        if ((head.name === "to" || head.name === "from") && builtin && args.length === 2) {
+            const target = value(args[0])?.type, t = target && resolve(target);
+            // A program's own instance for this type runs instead.
+            if (t && instanceFor(head.name, [t])) return undefined;
+            const inner = t?.k === "type" ? resolve(t.value) : undefined;
+            const kind = inner?.k === "atom" && inner.name === "String" ? "String"
+                : inner?.k === "list" && !inner.items && resolve(inner.element).k === "atom" && (resolve(inner.element) as { name: string }).name === "Char" ? "List Char" : undefined;
+            const native = kind && ({ to: { String: "toString", "List Char": "chars" }, from: { String: "parse", "List Char": "fromChars" } } as const)[head.name][kind];
+            if (native) return evaluateNative(native, [() => readMutable(value(args[1]))], depth);
+            // to of another type applies it, as at runtime; anything else
+            // (an unknown target, JSON, from) is left to the run.
+            if (head.name === "to" && t?.k === "type" && !(inner?.k === "variant" && inner.name === "JSON")) return value({ t: "app", f: args[0], a: args[1] });
+            return undefined;
+        }
+        // List T: the type of lists of T (to (List Char) names it).
+        if (head.name === "List" && builtin && args.length === 1) {
+            const element = value(args[0])?.type, t = element && resolve(element);
+            return t?.k === "type" ? { type: { k: "type", value: list(t.value) } } : undefined;
         }
         // S n: the natural after n, as at runtime.
         if (head.name === "S" && builtin && args.length === 1) {
@@ -5696,6 +5717,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     if (options.library) scope.set("fail", { type: fn(atom("String"), variable()) });
     const standardOnly = new Set(["seq", "chars", "fromChars", "upper", "lower", "readFile", "readStdin", "fetch", "toJson", "prettyJson", "fromJson"]);
     const native = (name: string, inputs: Ty[], output: Ty) => {
+        if (name in RETIRED_NATIVES) return;
         if (!standardOnly.has(name) || options.library) scope.set(name, { type: inputs.reduceRight((result, input) => fn(input, result), output) });
     };
     const int = atom("Int"), str = atom("String"), bool = atom("Bool"), num = atom("Number");
@@ -5768,10 +5790,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("S", { type: fn(atom("UInt"), atom("UInt"), undefined, true) });
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
     scope.set("match", { type: { k: "intrinsic", name: "match", arity: 2 } });
-    // to T x writes x as a T, from T x reads it back (prelude types JSON, Chars).
+    // to T x writes x as a T, from T x reads it back (to String, to JSON, to (List Char)).
     for (const name of ["to", "from"]) scope.set(name, { type: { k: "intrinsic", name, arity: 2 } });
     scope.set("JSON", { type: { k: "type", value: { k: "variant", name: "JSON", args: [], base: atom("String") } } });
-    scope.set("Chars", { type: { k: "type", value: list(atom("Char")) } });
     if (options.library) {
         const a = variable(), b = variable(), c = variable();
         native("bracket", [a, fn(a, b), fn(a, c)], io(runType(c)));

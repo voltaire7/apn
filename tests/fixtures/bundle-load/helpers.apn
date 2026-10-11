@@ -1,2 +1,2 @@
-caption n = "clicked " ++ toString n
+caption n = "clicked " ++ to String n
 load "parts/extra"

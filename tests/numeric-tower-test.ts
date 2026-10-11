@@ -45,7 +45,7 @@ for (const [source, expected] of [
     ["rationalize .3 (1 / 10)", "0.3333333333333333"],
     ["rationalize (-3 / 10) (1 / 10)", "-1/3"],
     ["f 1 = 7\nf x = 0\nf 1.0", "7"],
-    ['parse "1/3"', "1/3"],
+    ['from String "1/3"', "1/3"],
 ]) {
     Deno.test(`Scheme numeric behavior: ${source}`, () => {
         const interp = new Interpreter();
@@ -66,10 +66,10 @@ for (const [source, expected] of [
     ["-0xFF", "-255"], ["0x20000000000001", "9007199254740993"],
     ["[0xA..0xC]", "[10,11,12]"],
     ["[1e3,.5e2,1.2e-3]", "[1000.0,50.0,0.0012]"],
-    ['parse "11/25+2/25i"', "11/25+2/25i"],
-    ['parse "0xFF"', "255"], ['parse "-0b10"', "-2"],
-    ['parse (toString (makeRectangular 1 .5))', "1.0+0.5i"],
-    ['parse (toString (1.0 / 0.0))', "+inf.0"],
+    ['from String "11/25+2/25i"', "11/25+2/25i"],
+    ['from String "0xFF"', "255"], ['from String "-0b10"', "-2"],
+    ['from String (to String (makeRectangular 1 .5))', "1.0+0.5i"],
+    ['from String (to String (1.0 / 0.0))', "+inf.0"],
     ["inexact (1 / expt 2 1074)", "5e-324"],
     ["inexact (1 / expt 2 1075)", "0.0"],
     ["isExact (0xFF + 0b1)", "true"],

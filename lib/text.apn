@@ -1,38 +1,38 @@
 import "sequence"
-# Unicode code-point operations; chars/fromChars preserve astral characters.
-textLength text = length (chars text)
-textTake n text = fromChars (take n (chars text))
-textDrop n text = fromChars (drop n (chars text))
+# Unicode code-point operations; to (List Char) and from (List Char) preserve astral characters.
+textLength text = length (to (List Char) text)
+textTake n text = from (List Char) (take n (to (List Char) text))
+textDrop n text = from (List Char) (drop n (to (List Char) text))
 isBlank text = trim text == ""
 lines text = splitOn "\n" text
 unlines xs = joinWith "\n" xs
 unwords xs = joinWith " " xs
-startsWith prefix text = take (textLength prefix) (chars text) == chars prefix
+startsWith prefix text = take (textLength prefix) (to (List Char) text) == to (List Char) prefix
 endsWith suffix text = startsWith (reverse suffix) (reverse text)
 
 # Literal splitting scans once, keeping the current field backwards.
-splitOn delimiter text = delimiter == "" ? map (c -> fromChars [c]) (chars text) : {
-    marker = reverse (chars delimiter)
+splitOn delimiter text = delimiter == "" ? map (c -> from (List Char) [c]) (to (List Char) text) : {
+    marker = reverse (to (List Char) delimiter)
     width = 0 + length marker
     step state c = {
         current = c : snd state
-        take width current == marker ? [_prepend (fromChars (reverse (drop width current))) (fst state),[]] : [fst state,current]
+        take width current == marker ? [_prepend (from (List Char) (reverse (drop width current))) (fst state),[]] : [fst state,current]
     }
-    state = foldl step [[],[]] (chars text)
-    reverse (fromChars (reverse (snd state)) : fst state)
+    state = foldl step [[],[]] (to (List Char) text)
+    reverse (from (List Char) (reverse (snd state)) : fst state)
 }
-joinWith delimiter xs = fromChars (concat (intersperse (chars delimiter) (map chars xs)))
+joinWith delimiter xs = from (List Char) (concat (intersperse (to (List Char) delimiter) (map (to (List Char)) xs)))
 replaceAll search replacement text = joinWith replacement (splitOn search text)
 
 # Unicode WhiteSpace plus line terminators (the same set as ECMAScript \s).
-_isSpace c = contains c (chars " \t\n\r\v\f                 　﻿")
-words text = filter (x -> x != "") (splitOn " " (fromChars (map (c -> _isSpace c ? ' ' : c) (chars text))))
-trim text = fromChars (reverse (dropWhile _isSpace (reverse (dropWhile _isSpace (chars text)))))
+_isSpace c = contains c (to (List Char) " \t\n\r\v\f                 　﻿")
+words text = filter (x -> x != "") (splitOn " " (from (List Char) (map (c -> _isSpace c ? ' ' : c) (to (List Char) text))))
+trim text = from (List Char) (reverse (dropWhile _isSpace (reverse (dropWhile _isSpace (to (List Char) text)))))
 
 # Common puzzle-input shapes; CRLF and trailing blank lines are accepted.
 nonEmptyLines text = filter (line -> line != "") (map trim (lines text))
 parseInt (String text) = {
-    [value] = [Dynamic (parse text)]
+    [value] = [Dynamic (from String text)]
     isInteger value ? isExact (Number value) ? Int value : fail "parseInt expects an exact integer" : fail "parseInt expects an exact integer"
 }
 integers text = map parseInt (words text)

@@ -11,7 +11,7 @@ draw p = {
     p.circle (320 + 160 * sin (p.frameCount / 40)) 180 (60 + clicks * 10)
     p.fill "#c6d0f5"
     p.textSize 18
-    p.text ("Clicks: " ++ toString clicks) 20 30
+    p.text ("Clicks: " ++ to String clicks) 20 30
 }
 mousePressed _ = {
     set clicks $ (clicks + 1)

@@ -398,7 +398,7 @@ print (sumXY point)        # => 3
 negate x = -x
 print (negate $ 5)                        # => -5
 print (map (x -> x * 10) $ [1,2,3])     # => [10,20,30]
-print $ toString $ map (x -> x * 10) $ [1,2,3]  # => [10,20,30]
+print $ to String $ map (x -> x * 10) $ [1,2,3]  # => [10,20,30]
 
 # Named functions use ordinary application; backtick infix is invalid.
 print (2 + 3 * 4)                         # => 14
@@ -478,7 +478,7 @@ print 'c'
 print 3.14
 print true
 print false
-print (intToString 42)    # => 42       (strings print as raw text)
+print (to String 42)      # => 42       (strings print as raw text)
 print (true ? "yes" : "no")  # => yes   (the ternary yields a string)
 print (1 == 1)            # => true
 print (1 < 2)             # => true
@@ -619,9 +619,9 @@ print $ quote $ 1 + 1         # => 1 + 1
 print (toAST (1 + 2))         # => ["+",1,2]
 print (toAST (1 + 2 * 3))     # => ["+",1,["*",2,3]]
 
-# toString / parse (string <-> value conversion; toString quotes strings)
-print (toString "hi")         # => "hi"
-print (parse "42")            # => 42
+# to String / from String (string <-> value conversion; to String quotes strings)
+print (to String "hi")       # => "hi"
+print (from String "42")      # => 42
 
 # ---------------------------------------------------------
 # # 16. GROUPS, BLOCKS, INDENTATION & SEMICOLONS
@@ -856,7 +856,7 @@ pureBlock = {
 }
 print (pureBlock + 0)      # => 42 (only bindings: a plain value)
 countdown n = n == 0 ? return "liftoff" : {
-    emit (toString n ++ " ")
+    emit (to String n ++ " ")
     countdown (n - 1)
 }
 launched <- countdown 3    # => 3 2 1 (recursive actions run in constant stack)
@@ -933,7 +933,7 @@ print (Label Int { return 9 })             # => MkLabel 9
 print (to String 1.5 ++ "!")               # => 1.5!
 print (Int (from String "41") + 1)         # => 42
 print (to JSON [n: 1])                     # => {"n":1}
-print (from Chars (to Chars "abc"))        # => abc
+print (from (List Char) (to (List Char) "abc"))        # => abc
 describeType Int = "integer"               # a bare type name matches that type
 describeType String = "text"
 print [describeType Int,describeType String]  # => ["integer","text"]
@@ -1000,7 +1000,7 @@ print [exp 0,log 1,sin 0,cos 0,tan 0,asin 0,acos 1,atan 0] # => [1,0,0,1,0,0,0,0
 print [0,1/2..2]                    # => [0,1/2,1,3/2,2]
 print (expt 2 (-3))                 # => 1/8
 print [1e3,.5e2,1.2e-3]           # => [1000.0,50.0,0.0012]
-print (parse (toString (makeRectangular 1 .5))) # => 1.0+0.5i
+print (from String (to String (makeRectangular 1 .5))) # => 1.0+0.5i
 print [isInfinite (1.0 / 0.0),isNaN (0.0 / 0.0)] # => [true,true]
 
 # Keyword-led expressions parse their trailing operators in the REPL too:
@@ -1176,19 +1176,19 @@ myTypeOf (Int32 5)  # => Int32
 
 # HTTP and JSON. fetch url options returns the response as a record (status,
 # ok, statusText, url, headers, body); fetchText and fetchJson return a
-# successful body. toJson / prettyJson / fromJson are JSON.stringify / JSON.parse.
+# successful body. to JSON / prettyJson / from JSON are JSON.stringify / JSON.parse.
 # Ctrl+C in the REPL interrupts a slow request; a timeout option bounds one.
 # A data: URL needs no network; ./apn grants network access for real requests:
 #   fetch "https://www.youtube-transcript.io/api/channels" [
 #       method: "POST"
 #       headers: [Authorization: "Basic <token>", Content-Type: "application/json"]
-#       body: toJson [ids: ["jawed"]]
+#       body: to JSON [ids: ["jawed"]]
 #   ]
 import ["http","json"]
 reply <- fetch "data:application/json,{\"ids\":[\"jawed\"]}" [method: "GET"]
 print [reply.status,reply.ok]                # => [200,true]
-print ((fromJson reply.body).ids)            # => ["jawed"]
-print (toJson [ids: ["jawed"], count: 1])    # => {"ids":["jawed"],"count":1}
+print ((from JSON reply.body).ids)           # => ["jawed"]
+print (to JSON [ids: ["jawed"], count: 1])   # => {"ids":["jawed"],"count":1}
 header = [Content-Type: "json", my value: 1] # bare keys may hold '-' and spaces
 print (header "Content-Type")                # => json  (not the quoted key "Content-Type")
 decoded <- fetchJson "data:application/json,[1,2.5,null]" []
@@ -1199,14 +1199,14 @@ print decoded                                 # => [1,2.5,[]]
 # Before its import, using fail or upper is a static error whose hint names
 # the import: add `import "function"` to use `fail`.
 import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]
-print (cast String $ chars "hello") # => "hello"
+print (cast String $ to (List Char) "hello") # => "hello"
 # reverse is implemented in APN with a linear-time accumulator fold.
 print (head (reverse [1..10000]))   # 10000
 print (reverse [1,2,3])             # [3, 2, 1]
 print (reverse "a😀b")              # b😀a
-# The checker runs the same text functions: chars counts code points here too,
-# so Vect 3 Char (chars "a😀") would be a static length error.
-print (Vect 2 Char (chars "a😀"))     # => ['a','😀']
+# The checker runs the same text functions: to (List Char) counts code points here too,
+# so Vect 3 Char (to (List Char) "a😀") would be a static length error.
+print (Vect 2 Char (to (List Char) "a😀"))  # => ['a','😀']
 print (take 6 primes)                 # [2, 3, 5, 7, 11, 13]
 print (mean [1,2])                    # Some 3/2
 print (frequencies $ words $ "one two one")
@@ -1319,8 +1319,8 @@ print (true ? (1 : []) : [])                          # [1]
 wordVowel text = onlyOne (vowelOrPair (vowelIfShort (words text)))
 print (wordVowel "hello")                             # 1
 print (onlyOne (vowelOrPair (vowelIfShort (take 1 [0..]))))  # 1
-# parse reads numbers and booleans; recursion runs as deep as the runtime's.
-print (onlyOne (vowelOrPair (vowelIfShort (take (Int (parse "1")) [0..]))))  # 1
+# from String reads numbers and booleans; recursion runs as deep as the runtime's.
+print (onlyOne (vowelOrPair (vowelIfShort (take (Int (from String "1")) [0..]))))  # 1
 countDown n = n == 0 ? [] : n : countDown (n - 1)
 print (onlyOne (vowelOrPair (vowelIfShort (drop 299 (countDown 300)))))  # 1
 # A block's closures see a later rebinding; long ranges are cut arithmetically.

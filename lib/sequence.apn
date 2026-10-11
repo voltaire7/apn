@@ -31,7 +31,7 @@ maximum xs = null xs ? None : Some (foldl max (head xs) (tail xs))
 
 # Prepending into a strict left fold reverses in linear time.
 reverse (List xs) = foldl (acc x -> x : acc) [] xs
-reverse (String text) = fromChars (reverse (chars text))
+reverse (String text) = from (List Char) (reverse (to (List Char) text))
 
 _prepend x xs = x : xs
 

@@ -7,5 +7,5 @@ metaPrimitives = HashMap [
     ["not",not],["head",head],["tail",tail],["null",null]
     ["isNumber",isNumber],["length",length],["take",take],["drop",drop]
     ["HashMap",HashMap],["typeOf",typeOf],["has",has],["lookup",lookup],["insert",insert]
-    ["fail",fail],["seq",seq],["chars",chars],["fromChars",fromChars]
+    ["fail",fail],["seq",seq],["to",to],["from",from],["List",List],["Char",Char]
 ]

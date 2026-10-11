@@ -6,7 +6,7 @@ function result(source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['import "text"\ncast String $ chars "hello"', '"hello"'],
+    ['import "text"\ncast String $ to (List Char) "hello"', '"hello"'],
     ['cast String $ cast [Char,Char,Char] $ "a😀é"', '"a😀é"'],
     ['cast String []', '""'],
     ["String ['h','i']", '"hi"'],
