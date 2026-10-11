@@ -3401,6 +3401,53 @@ export class Interpreter {
         return this.matchPattern(args[2], this.conform(type, value), binds);
     }
 
+    // A typed pattern whose type names what it binds: (Vect n a) xs, the same
+    // as Vect n a xs, binds the length and element type; (List a) xs binds a
+    // to the elements' type, computed only if used. undefined when the type
+    // binds nothing (every name in it is bound).
+    private typeBinding(p: Extract<Pattern, { p: "schema" }>, v: Value, binds: Map<string, Value>): boolean | undefined {
+        const args: Expr[] = [];
+        let head = p.type;
+        while (head.t === "block" && head.stmts.length === 1) head = head.stmts[0];
+        while (head.t === "app") { args.unshift(head.a); head = head.f; }
+        if (head.t !== "var") return undefined;
+        const type = this.env.get(head.name), base = type && this.reference(type);
+        // A length is a value: a bound name is that value. A type position keeps
+        // a name bound to a type or function; any other name binds here.
+        const free = (e: Expr, n: number) => e.t === "var" && /^[a-z]/.test(e.name) && !binds.has(e.name) &&
+            (base?.kind === "type" && base.name === "Vect" && n === 0 ? !this.env.get(e.name) : this.typeVariableName(e.name, this.env));
+        if (!args.some(free)) return undefined;
+        if (base?.kind !== "type" || base.family || base.alias) return undefined;
+        // Each argument as the Vect pattern's part: a free name binds, a bound
+        // one (or a literal) is compared.
+        const asPattern = (e: Expr, n: number): Pattern | undefined => {
+            if (free(e, n) || e.t === "var" && binds.has(e.name)) return { p: "var", name: (e as { name: string }).name };
+            if (e.t === "int") return { p: "int", v: e.v };
+            if (e.t !== "var") return undefined;
+            if (n > 0) return { p: "constr", tag: e.name, args: [] };
+            const value = this.dataValue(this.env.get(e.name)!);
+            return value.kind === "int" ? { p: "int", v: value.v } : undefined;
+        };
+        if (base.name === "Vect" && args.length === 2) {
+            const [size, element] = args.map(asPattern);
+            return !!size && !!element && this.matchVectorPattern([size, element, p.value], v, binds);
+        }
+        if (base.name === "List" && args.length === 1 && args[0].t === "var") {
+            const list = this.dataValue(v);
+            if (!this.isList(list)) return false;
+            const name = args[0].name;
+            binds.set(name, this.defer(() => this.elementType(list)));
+            return this.matchPattern(p.value, list, binds);
+        }
+        return undefined;
+    }
+    // The type typeOf describes for a list's elements: Int for [1,2].
+    private elementType(list: Value): Value {
+        const described = this.reference(this.callNative("typeOf", [list]));
+        const text = described.kind === "type" && described.description ? described.description.replace(/^List /, "").replace(/^\((.*)\)$/, "$1") : "a";
+        const name = /^[A-Z][A-Za-z0-9_]*/.exec(text)?.[0];
+        return name && name === text && TYPE_NAMES.includes(name) ? { kind: "type", name } : { kind: "type", inspect: true, name: name ?? "$any", description: text };
+    }
     private readonly schemaTypeCaptures = new WeakMap<Value, string>();
 
     private schemaPatternType(expression: Expr, capture = false): Value {
@@ -3483,6 +3530,8 @@ export class Interpreter {
             }
         }
         if (p.p === "schema") {
+            const bindsType = this.typeBinding(p, v, binds);
+            if (bindsType !== undefined) return bindsType;
             const scope = new Env(this.env);
             for (const [name, value] of binds) scope.setLocal(name, value);
             const caller = this.env;

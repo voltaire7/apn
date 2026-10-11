@@ -129,6 +129,12 @@ for (const [source, expected] of [
     ['g [[],y] = y; g [(x:xs),y] = x; g [[1,2],3]', '1'],
     ['j xs ys = match [xs,ys] [[[],r] -> r,[(x:m),r] -> x : j m r]; j [1,2] [3]', '[1,2,3]'],
     ['f xs = match xs [[] -> 0,[a] -> 1,_ -> 2]; [f [],f [1],f [1,2]]', '[0,1,2]'],
+    // A free name in a typed pattern binds what the value has there.
+    ['f ((List a) xs) = xs; f [1,2]', '[1,2]'],
+    ['k ((List a) xs) = a; k [1,"x"]', 'Int | String'],
+    ['first ((List a) (x:_)) = x; first [1..]', '1'],
+    ['g ((Vect n a) xs) = [n,a]; g [1,2]', '[2,Int]'],
+    ['app ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys); typeOf (app [1,2] [3])', 'Vect 3 Int'],
     // A length the type leaves open is the one evaluation finds.
     ['g [a,b] = a + b; g (map (x -> x) (tail [1,2,3]))', '5'],
     ['g [a,b] = a + b; g (tail [0,1,2])', '3'],
@@ -145,6 +151,8 @@ for (const source of [
     'import "sequence"; g [a,b] = a + b; g (forceList [1,2,3])',
     'g [a,b] = a + b; g (map (x -> x) [1,2,3])',
     'toList 0 = []; toList k = (k - 1) : toList (k - 1); g [a,b] = a; g (toList 3)',
+    'h ((Vect n a) xs) ((Vect n a) ys) = n; h [1,2] [3]',
+    'f ((List a) xs) = xs; f 5',
     'toList Z = []; toList (S k) = k : toList k; Vect 2 UInt (toList 3)',
     'g [a,b] = tail [0,b,a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1,2]',
 ]) Deno.test(`checker still rejects: ${source}`, () => rejected(session(), source));

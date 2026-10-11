@@ -186,6 +186,22 @@ copy 3 [10,20,30]
 appendOne n ((Ints n) values) (Int value) = Ints (n + 1) (values ++ [value])
 ```
 
+A name a typed pattern's type does not know yet is bound by the value:
+`(Vect n a) xs` binds `n` to the length and `a` to the element type (the same
+as `Vect n a xs`), and `(List a) xs` binds `a` to the elements' type, computed
+only if it is used, so `first ((List a) (x:_)) = x` works on `[1..]`. A name
+bound earlier must agree: `h ((Vect n a) xs) ((Vect n a) ys)` requires equal
+lengths, statically where they are known. Which names a pattern binds follows
+the rule for written function types: a name an earlier parameter bound is
+that value; a name bound to a type or function keeps it; any other lowercase
+name in a type position is bound by the pattern (a length, being a value,
+keeps a bound name's value).
+
+```apn
+app ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys)
+typeOf (app [1,2] [3])            # Vect 3 Int
+```
+
 Later parameter patterns can refer to earlier argument bindings. A dependent
 function application substitutes the supplied index into subsequent parameter
 and result types. The checker normalizes integer constants and affine index

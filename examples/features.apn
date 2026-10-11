@@ -1693,6 +1693,9 @@ print (typeOf (x -> [x,x]))              # => a -> List a
 # Value-dependent types; the same constraints run at dynamic boundaries.
 SizedInts n = Vect n Int
 copySized n ((SizedInts n) xs) = xs
+# A typed pattern binds the names its type does not know yet: n and a here.
+appendSized ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys)
+print (typeOf (appendSized [1,2] [3]))   # => Vect 3 Int
 print (copySized 3 [1,2,3])              # => [1,2,3]
 print (typeOf (SizedInts 3 [1,2,3]))     # => Vect 3 Int
 SelectedType flag = flag ? Int : String

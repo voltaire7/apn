@@ -1541,6 +1541,27 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             return { k: "record", fields, preserve };
         }
+        // A free name in an applied type binds what the value has there:
+        // (Vect n a) xs binds its length n and element type a, (List a) xs
+        // its element type, as at runtime.
+        if (captures && e.t === "app") {
+            const args: Expr[] = [];
+            let head: Expr = e;
+            while (head.t === "app") { args.unshift(head.a); head = head.f; }
+            const vector = head.t === "var" && resolve(scope.get(head.name)?.type ?? dynamic).k === "factory";
+            args.forEach((arg, n) => {
+                // A name an earlier parameter bound is that value.
+                if (arg.t !== "var" || !/^[a-z]/.test(arg.name) || captures.has(arg.name)) return;
+                // A length is a value: a bound name is that value. A type
+                // position keeps a name bound to a type or function; any other
+                // name is a type variable, as in a written function type.
+                const bound = scope.get(arg.name), kind = bound && resolve(bound.type).k;
+                if (vector && n === 0 ? bound : kind === "type" || kind === "fn" || kind === "intrinsic" || kind === "factory" || kind === "alias") return;
+                captures.add(arg.name);
+                if (vector && n === 0) scope.set(arg.name, { type: atom("Int"), mono: true, index: { constant: 0n, terms: new Map([[`n${serial++}`, 1n]]) } });
+                else scope.set(arg.name, { type: { k: "type", value: variable() }, mono: true });
+            });
+        }
         if (e.t === "list") {
             const items = e.v.map(value => typeExpr(value, scope, captures));
             return { k: "list", items, element: items.length ? union(items) : variable(), length: constant(BigInt(items.length)),
@@ -2008,6 +2029,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         seen.get(t)!.add(a);
         if (t.k === "list" && a.k === "list") {
             unify(list(dynamic, t.length), list(dynamic, a.length), e);
+            // An element type still to be found (List a) is the elements' type
+            // together, as at runtime: Int | String for [1,"x"].
+            if (!t.items && resolve(t.element).k === "var" && a.items) { unify(t.element, a.element, e); return target; }
             if (a.items) {
                 a.items.forEach((item, n) =>
                     t.preserve?.has(n) ? unify(t.items?.[n] ?? t.element, item, e) : convert(
