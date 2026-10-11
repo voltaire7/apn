@@ -174,6 +174,11 @@ its body. Once a candidate matches, its result is returned without inspecting
 later alternatives. `_ -> ...` and `x -> ...` remain ordinary unary functions
 and can serve as catch-all alternatives.
 
+A `[]` pattern tests the value it meets; it says nothing about the type of
+what the other alternatives or clauses accept. `match [xs,ys] [[[],r] -> r,
+[(x:m),r] -> ...]` takes an `xs` of any length, and so do clauses `g [[],y]`
+and `g [(x:xs),y]`.
+
 An error while inspecting a pattern, evaluating a guard, or executing a selected
 body propagates; it does not select another branch. Empty/exhausted alternatives
 raise a non-exhaustive-match error. The dispatcher traverses alternatives

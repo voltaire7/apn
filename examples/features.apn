@@ -138,6 +138,12 @@ safeM xs = match xs [
 ]
 print (safeM [3,4])        # => Some 3
 print (safeM [])            # => None
+# A [] inside a pattern tests that part; the value it matches can be any list.
+joinM xs ys = match [xs,ys] [
+    [[],rest] -> rest
+    [(x:more),rest] -> x : joinM more rest
+]
+print (joinM [1,2] [3])     # => [1,2,3]
 
 classM n = match n [
     x | x < 0 -> "negative"

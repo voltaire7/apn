@@ -1152,7 +1152,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     else unify(copy(f.input), copy(a));
                 } catch { continue; }
                 if (f.pattern?.p === "schema" || f.pattern?.p === "recPat") application(f, { type: a }, activeExpression ?? { t: "placeholder" });
-                else unify(f.input, a);
+                // An alternative's [] tests the value, it does not make it empty.
+                else unify(openEmpty(f.input), a);
                 if (!t.solution && f.output.k !== "operation" && f.output.k !== "var") t.solution = f.output;
                 for (const check of f.checks ?? []) resolve(check);
                 const output = resolve(f.output);
@@ -4960,8 +4961,38 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const n = naturalArgument(p, argument);
         if (n !== undefined) return p.p === "constr" && (p.tag === "Z" ? n !== 0n : n <= 0n);
         if (p.p === "constr") return argument.tag !== undefined && argument.tag !== p.tag;
-        if (p.p === "list") return listLength(argument, p.v.length) === false;
-        if (p.p === "cons") return listLength(argument, 0) === true;
+        if (p.p === "list") return listLength(argument, p.v.length) === false || p.v.some((q, n) => itemFails(q, argument, n));
+        if (p.p === "cons") return listLength(argument, 0) === true || itemFails(p.head, argument, 0);
+        return false;
+    }
+    // Can the argument's nth element never match q? ([[],y] for [[1,2],3])
+    function itemFails(q: Pattern, argument: Entry, n: number): boolean {
+        const item = peek(() => element(argument, n), undefined);
+        if (!item) return false;
+        const t = resolve(argument.type), entry: Entry = { type: t.k === "list" ? t.items?.[n] ?? t.element : dynamic, ...item };
+        const [low, high] = patternScore(q, entry);
+        return definitelyFails(q, entry, low, high);
+    }
+    // A pattern's type with each empty-list pattern's list ([]) opened to a list
+    // of any length, sharing everything else.
+    function openEmpty(type: Ty): Ty {
+        const t = resolve(type);
+        if (t.k !== "list") return type;
+        if (t.items?.length === 0) return list(t.element);
+        return t.items ? { ...t, items: t.items.map(openEmpty) } : t;
+    }
+    // Does one type have an empty-list pattern's list ([] in g [[],y]) where
+    // the other has a list of any length? Merging would keep the empty one.
+    function emptyAgainstOpen(a: Ty, b: Ty, seen = new Set<Ty>()): boolean {
+        const x = resolve(a), y = resolve(b);
+        if (seen.has(x)) return false;
+        seen.add(x);
+        if (x.k === "list" && y.k === "list") {
+            if ((x.items?.length === 0) !== (y.items?.length === 0)) return true;
+            if (x.items && y.items && x.items.length === y.items.length) return x.items.some((item, n) => emptyAgainstOpen(item, y.items![n], seen));
+            return emptyAgainstOpen(x.element, y.element, seen);
+        }
+        if (x.k === "fn" && y.k === "fn") return emptyAgainstOpen(x.input, y.input, seen) || emptyAgainstOpen(x.output, y.output, seen);
         return false;
     }
     // Forget every list length in a (freshly copied) type graph.
@@ -5452,7 +5483,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         return false;
                     } finally { dynamicBoundaries = boundaries; }
                 };
-                if (!merges(copy(existing), copy(t)) && merges(withoutLengths(copy(existing)), withoutLengths(copy(t)))) {
+                if ((!merges(copy(existing), copy(t)) || emptyAgainstOpen(existing, t)) && merges(withoutLengths(copy(existing)), withoutLengths(copy(t)))) {
                     key = `${key}#${index}`;
                     existing = undefined;
                 }

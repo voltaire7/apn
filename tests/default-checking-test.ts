@@ -125,6 +125,10 @@ for (const [source, expected] of [
     ['g [a,b] = a + b; g (map (x -> x * 2) [1,2])', '6'],
     ['xs = map (x -> x + 1) [1,2]; ys = map (x -> x * 2) [1,2,3]; g [a,b] = a + b; [g xs,length ys]', '[5,3]'],
     ['x (x:xs) = 42; x [x]', '42'],
+    // A [] inside a pattern tests that part without making the argument empty.
+    ['g [[],y] = y; g [(x:xs),y] = x; g [[1,2],3]', '1'],
+    ['j xs ys = match [xs,ys] [[[],r] -> r,[(x:m),r] -> x : j m r]; j [1,2] [3]', '[1,2,3]'],
+    ['f xs = match xs [[] -> 0,[a] -> 1,_ -> 2]; [f [],f [1],f [1,2]]', '[0,1,2]'],
     // A length the type leaves open is the one evaluation finds.
     ['g [a,b] = a + b; g (map (x -> x) (tail [1,2,3]))', '5'],
     ['g [a,b] = a + b; g (tail [0,1,2])', '3'],
