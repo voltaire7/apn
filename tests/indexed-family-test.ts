@@ -23,8 +23,8 @@ for (const [source, expected] of [
     [VEC + APPEND + "typeOf (append xs xs)", "Vec 4 Int"],
     [VEC + APPEND + "Vec 4 Int (append xs xs)", "Cons 1 (Cons 2 (Cons 1 (Cons 2 Nil)))"],
     // A typed pattern binds the indices: n is a value, a a type.
-    [VEC + "len ((Vec n a) v) = n; len xs + 1", "3"],
-    [VEC + "elem ((Vec n a) v) = a; elem xs", "Int"],
+    [VEC + "len ((Vec n _) _) = n; len xs + 1", "3"],
+    [VEC + "elem ((Vec _ a) _) = a; elem xs", "Int"],
     [VEC + "first (Cons x _) = x; first xs", "1"],
     // Each clause may state its result's indices.
     [VEC + "app ((Vec n a) Nil) ((Vec m a) ys) = Vec (n + m) a ys; app ((Vec n a) (Cons x r)) ((Vec m a) ys) = Vec (n + m) a (Cons x (app r ys)); typeOf (app xs xs)", "Vec 4 Int"],

@@ -189,7 +189,8 @@ appendOne n ((Ints n) values) (Int value) = Ints (n + 1) (values ++ [value])
 A name a typed pattern's type does not know yet is bound by the value:
 `(Vect n a) xs` binds `n` to the length and `a` to the element type (the same
 as `Vect n a xs`), and `(List a) xs` binds `a` to the elements' type, computed
-only if it is used, so `first ((List a) (x:_)) = x` works on `[1..]`. A name
+only if it is used, so `first ((List _) (x:_)) = x` works on `[1..]` (`_` binds
+nothing, as in any pattern; lint warns about a bound name nothing uses). A name
 bound earlier must agree: `h ((Vect n a) xs) ((Vect n a) ys)` requires equal
 lengths, statically where they are known. Which names a pattern binds follows
 the rule for written function types: a name an earlier parameter bound is
@@ -287,7 +288,7 @@ append Nil ys = ys
 append (Cons x rest) ys = Cons x (append rest ys)
 typeOf (append xs xs)             # Vec 4 Int
 
-len ((Vec n a) _) = n             # binds the index: len xs is 2
+len ((Vec n _) _) = n             # binds the index: len xs is 2
 first (Cons x _) = x              # first Nil is a static error
 ```
 

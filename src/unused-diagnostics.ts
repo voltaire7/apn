@@ -30,6 +30,13 @@ export function unusedDiagnostics(program: TopLevel[], source: string): Diagnost
         if (clauses) {
             // A parameter's type may use an earlier one: n ((SizedInts n) xs).
             for (const c of clauses) report(c.params.flatMap(x => bound(x, false)), c.body, [...c.guard ? [c.guard] : [], ...c.params.flatMap(types)]);
+            // A name a typed pattern's type binds (a in (List a) xs) is used if
+            // the body reads it or another parameter's type repeats it.
+            for (const c of clauses) {
+                const typeNames = c.params.flatMap(types).flatMap(namesIn);
+                const repeated = (name: string) => typeNames.filter(n => n === name).length > 1;
+                report(typeBound(c.params, defined).filter(name => !repeated(name)), c.body, c.guard ? [c.guard] : []);
+            }
         }
         if (node.t === "def" || node.t === "stmDef") {
             for (const c of node.clauses as Clause[]) { visit(c.body); if (c.guard) visit(c.guard); }
@@ -61,8 +68,51 @@ export function unusedDiagnostics(program: TopLevel[], source: string): Diagnost
         }
         for (const value of Object.values(n)) if (value && typeof value === "object") visit(value);
     };
+    // Names the document defines anywhere: a type may name them.
+    const defined = new Set<string>();
+    const collect = (node: unknown): void => {
+        if (Array.isArray(node)) { node.forEach(collect); return; }
+        if (!node || typeof node !== "object") return;
+        const n = node as Record<string, unknown>;
+        if ((n.t === "def" || n.t === "stmDef") && typeof n.name === "string") defined.add(n.name);
+        if (n.t === "patDef") for (const name of bound(n.pattern as Pattern)) defined.add(name);
+        for (const value of Object.values(n)) if (value && typeof value === "object") collect(value);
+    };
+    collect(program);
     statements(program.map(node => node.t === "expr" ? node.value : node));
     return diagnostics;
+}
+
+// The names typed patterns' types bind: a lowercase argument (n and a in
+// (Vect n a) xs) that no earlier parameter bound and the document does not define.
+function typeBound(params: Pattern[], defined: Set<string>): string[] {
+    const earlier = new Set<string>(), found: string[] = [];
+    const walk = (p: Pattern): void => {
+        if (p.p === "schema") {
+            const args: Expr[] = [];
+            let head = p.type;
+            while (head.t === "block" && head.stmts.length === 1) head = head.stmts[0];
+            while (head.t === "app") { args.unshift(head.a); head = head.f; }
+            for (const arg of args) {
+                if (arg.t === "var" && /^[a-z]/.test(arg.name) && !earlier.has(arg.name) && !defined.has(arg.name)) { earlier.add(arg.name); found.push(arg.name); }
+            }
+            walk(p.value);
+            return;
+        }
+        for (const value of Object.values(p)) {
+            if (Array.isArray(value)) value.forEach(x => x && typeof x === "object" && "p" in x && walk(x as Pattern));
+            else if (value && typeof value === "object" && "p" in value) walk(value as Pattern);
+        }
+    };
+    for (const p of params) { walk(p); for (const name of bound(p, false)) earlier.add(name); }
+    return found;
+}
+function namesIn(e: unknown): string[] {
+    if (Array.isArray(e)) return e.flatMap(namesIn);
+    if (!e || typeof e !== "object") return [];
+    const n = e as Record<string, unknown>;
+    if (n.t === "var") return [n.name as string];
+    return Object.values(n).flatMap(v => v && typeof v === "object" ? namesIn(v) : []);
 }
 
 type Clause = { params: Pattern[]; body: Expr; guard?: Expr };

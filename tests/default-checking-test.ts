@@ -126,13 +126,14 @@ for (const [source, expected] of [
     ['xs = map (x -> x + 1) [1,2]; ys = map (x -> x * 2) [1,2,3]; g [a,b] = a + b; [g xs,length ys]', '[5,3]'],
     ['x (x:xs) = 42; x [x]', '42'],
     // A [] inside a pattern tests that part without making the argument empty.
-    ['g [[],y] = y; g [(x:xs),y] = x; g [[1,2],3]', '1'],
+    ['g [[],y] = y; g [(x:_),_] = x; g [[1,2],3]', '1'],
     ['j xs ys = match [xs,ys] [[[],r] -> r,[(x:m),r] -> x : j m r]; j [1,2] [3]', '[1,2,3]'],
-    ['f xs = match xs [[] -> 0,[a] -> 1,_ -> 2]; [f [],f [1],f [1,2]]', '[0,1,2]'],
+    ['f xs = match xs [[] -> 0,[_] -> 1,_ -> 2]; [f [],f [1],f [1,2]]', '[0,1,2]'],
     // A free name in a typed pattern binds what the value has there.
-    ['f ((List a) xs) = xs; f [1,2]', '[1,2]'],
+    ['f ((List _) xs) = xs; f [1,2]', '[1,2]'],
     ['k ((List a) xs) = a; k [1,"x"]', 'Int | String'],
-    ['first ((List a) (x:_)) = x; first [1..]', '1'],
+    ['first ((List _) (x:_)) = x; first [1..]', '1'],
+    ['len ((Vect n _) _) = n; len [1,2]', '2'],
     ['g ((Vect n a) xs) = [n,a]; g [1,2]', '[2,Int]'],
     ['app ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys); typeOf (app [1,2] [3])', 'Vect 3 Int'],
     // A length the type leaves open is the one evaluation finds.
@@ -140,7 +141,7 @@ for (const [source, expected] of [
     ['g [a,b] = a + b; g (tail [0,1,2])', '3'],
     ['f xs = foldl (acc x -> x : acc) xs [1,2]; g [a,b,c,d] = a + b; g (f [1,2])', '3'],
     ['f xs = filter (x -> x > 0) xs; g [a,b] = a + b; g (f [1,2])', '3'],
-    ['toList 0 = []; toList k = (k - 1) : toList (k - 1); xs = toList 3; g [a,b,c] = a; g xs', '2'],
+    ['toList 0 = []; toList k = (k - 1) : toList (k - 1); xs = toList 3; g [a,_,_] = a; g xs', '2'],
     ['toList Z = []; toList (S k) = k : toList k; Vect 3 UInt (toList 3)', '[UInt 2,UInt 1,UInt 0]'],
 ] as const) Deno.test(`checker infers recursive steps and list sizes: ${source}`, () => {
     const actual = run(session(), source);
@@ -150,9 +151,9 @@ for (const source of [
     'import "sequence"; g [a,b] = forceList [b,a ++ "x"]; repeatApply 3 g [1,2]',
     'import "sequence"; g [a,b] = a + b; g (forceList [1,2,3])',
     'g [a,b] = a + b; g (map (x -> x) [1,2,3])',
-    'toList 0 = []; toList k = (k - 1) : toList (k - 1); g [a,b] = a; g (toList 3)',
-    'h ((Vect n a) xs) ((Vect n a) ys) = n; h [1,2] [3]',
-    'f ((List a) xs) = xs; f 5',
+    'toList 0 = []; toList k = (k - 1) : toList (k - 1); g [a,_] = a; g (toList 3)',
+    'h ((Vect n a) _) ((Vect n a) _) = n; h [1,2] [3]',
+    'f ((List _) xs) = xs; f 5',
     'toList Z = []; toList (S k) = k : toList k; Vect 2 UInt (toList 3)',
     'g [a,b] = tail [0,b,a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1,2]',
 ]) Deno.test(`checker still rejects: ${source}`, () => rejected(session(), source));

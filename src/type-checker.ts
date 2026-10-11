@@ -1549,9 +1549,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // (Vect n a) xs binds its length n and element type a, (List a) xs
         // its element type, as at runtime.
         if (captures && e.t === "app") {
-            const args: Expr[] = [];
+            let args: Expr[] = [];
             let head: Expr = e;
             while (head.t === "app") { args.unshift(head.a); head = head.f; }
+            // _ takes whatever is there and names nothing: a fresh name no one reads.
+            if (args.some(arg => arg.t === "placeholder")) {
+                args = args.map(arg => arg.t === "placeholder" ? { t: "var", name: `$_${serial++}` } as Expr : arg);
+                e = args.reduce<Expr>((f, a) => ({ t: "app", f, a }), head);
+            }
             // A value position: Vect's length, or an indexed family's index
             // (a position some constructor's result computes: Z, S k).
             const vector = head.t === "var" && resolve(scope.get(head.name)?.type ?? dynamic).k === "factory";
@@ -1564,7 +1569,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             });
             args.forEach((arg, n) => {
                 // A name an earlier parameter bound is that value.
-                if (arg.t !== "var" || !/^[a-z]/.test(arg.name) || captures.has(arg.name)) return;
+                if (arg.t !== "var" || !/^([a-z]|\$_)/.test(arg.name) || captures.has(arg.name)) return;
                 // A length is a value: a bound name is that value. A type
                 // position keeps a name bound to a type or function; any other
                 // name is a type variable, as in a written function type.

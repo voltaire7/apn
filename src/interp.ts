@@ -3482,13 +3482,14 @@ export class Interpreter {
         if (base?.kind === "type" && base.family?.results) return this.indexedPattern(base.family, args, p.value, v, binds);
         // A length is a value: a bound name is that value. A type position keeps
         // a name bound to a type or function; any other name binds here.
-        const free = (e: Expr, n: number) => e.t === "var" && /^[a-z]/.test(e.name) && !binds.has(e.name) &&
+        const free = (e: Expr, n: number) => e.t === "placeholder" || e.t === "var" && /^[a-z]/.test(e.name) && !binds.has(e.name) &&
             (base?.kind === "type" && base.name === "Vect" && n === 0 ? !this.env.get(e.name) : this.typeVariableName(e.name, this.env));
         if (!args.some(free)) return undefined;
         if (base?.kind !== "type" || base.family || base.alias) return undefined;
         // Each argument as the Vect pattern's part: a free name binds, a bound
         // one (or a literal) is compared.
         const asPattern = (e: Expr, n: number): Pattern | undefined => {
+            if (e.t === "placeholder") return { p: "wildcard" };
             if (free(e, n) || e.t === "var" && binds.has(e.name)) return { p: "var", name: (e as { name: string }).name };
             if (e.t === "int") return { p: "int", v: e.v };
             if (e.t !== "var") return undefined;
@@ -3500,11 +3501,13 @@ export class Interpreter {
             const [size, element] = args.map(asPattern);
             return !!size && !!element && this.matchVectorPattern([size, element, p.value], v, binds);
         }
-        if (base.name === "List" && args.length === 1 && args[0].t === "var") {
+        if (base.name === "List" && args.length === 1 && (args[0].t === "var" || args[0].t === "placeholder")) {
             const list = this.dataValue(v);
             if (!this.isList(list)) return false;
-            const name = args[0].name;
-            binds.set(name, this.defer(() => this.elementType(list)));
+            if (args[0].t === "var") {
+                const name = args[0].name;
+                binds.set(name, this.defer(() => this.elementType(list)));
+            }
             return this.matchPattern(p.value, list, binds);
         }
         return undefined;
@@ -3523,6 +3526,7 @@ export class Interpreter {
             return parts[n] && !(parts[n].t === "var" && /^[a-z]/.test((parts[n] as { name: string }).name));
         });
         for (const [n, arg] of args.entries()) {
+            if (arg.t === "placeholder") continue;
             const free = arg.t === "var" && /^[a-z]/.test(arg.name) && !binds.has(arg.name) && (valueAt(n) ? !this.env.get(arg.name) : this.typeVariableName(arg.name, this.env));
             if (free) { binds.set((arg as { name: string }).name, indices[n]); continue; }
             const wanted = arg.t === "var" && binds.has(arg.name) ? binds.get(arg.name)! : this.reference(this.eval(arg));
