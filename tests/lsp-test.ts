@@ -27,6 +27,8 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     // A lambda where a type is expected is a function type, not code.
     equal(unused("f ((a -> b) g) = g\nt = ((a -> b) -> List a -> List b) == typeOf map\nu = isType (a -> b) 5\nv = (a -> b).(x -> x)\nC a = | MkC (a -> b)"), []);
     equal(lint("handlers = [\n    Some y -> print y\n    None -> []\n]"), []);
+    // (t x) binds t as well; (_ x) discards it.
+    equal(unused("f (t x) = x\ng (_ x) = x").map(d => d[2]), ["'t' is never used; write _ to discard it"]);
     // A name a typed pattern's type binds is a parameter too; repeating it is a use.
     equal(unused("first ((List a) (x:_)) = x\ng ((Vect n a) _) = n").map(d => d[2]), ["'a' is never used; write _ to discard it", "'a' is never used; write _ to discard it"]);
     equal(unused("h ((Vect n a) _) ((Vect n a) _) = n\nk ((List _) (x:_)) = x\ncopy n ((Vect n Int) xs) = xs"), []);

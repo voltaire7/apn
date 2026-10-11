@@ -3720,7 +3720,7 @@ export class Interpreter {
         switch (p.p) {
             case "typeBind": {
                 const type = this.callNative("typeOf", [v]);
-                return this.matchPattern({ p: "var", name: p.name }, type, binds) && this.matchPattern(p.value, isNumeric(v) ? numericPayload(v) : v.kind === "variant" && v.family?.base ? v.v[0] : v, binds);
+                return this.matchPattern(p.name === "_" ? { p: "wildcard" } : { p: "var", name: p.name }, type, binds) && this.matchPattern(p.value, isNumeric(v) ? numericPayload(v) : v.kind === "variant" && v.family?.base ? v.v[0] : v, binds);
             }
             case "int": return isNumeric(v) && equalNumbers(v, integer(p.v));
             case "bool": return v.kind === "bool" && v.v === p.v;

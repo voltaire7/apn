@@ -144,12 +144,11 @@ function lambdaIn(e: unknown): boolean {
     return x?.t === "lambda" || x?.t === "patternLambda";
 }
 
-// The names a pattern binds; a type's name ((t x) binds t) only when shadowing,
-// since it cannot be discarded with _.
+// The names a pattern binds, a type's name too ((t x) binds t; (_ x) does not).
 function bound(p: Pattern, types = true): string[] {
     switch (p.p) {
         case "var": return [p.name];
-        case "typeBind": return types ? [p.name, ...bound(p.value)] : bound(p.value, false);
+        case "typeBind": return [p.name, ...bound(p.value, types)];
         case "as": return [...bound(p.left, types), ...bound(p.right, types)];
         case "schema": return bound(p.value, types);
         case "list": return p.v.flatMap(x => bound(x, types));

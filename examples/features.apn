@@ -1075,7 +1075,7 @@ print (Int (floor .2))               # => 0
 print (Int (truncate (Float .2)))    # => 0
 print (Int $ floor $ Float .2)       # => 0
 print (.2 == Float .2)               # => true (numeric equality)
-numericPayload (source value) = value
+numericPayload (_ value) = value      # _ discards the type, keeps the payload
 print (numericPayload (Int32 123))   # => 123
 retypedAdd (Int x) (Int y) = Int (x + y)
 print (retypedAdd (Int 2) (Int 3))   # => 5

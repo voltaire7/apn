@@ -315,7 +315,8 @@ class Parser {
                 this.i = signatureStart;
             }
             const typeName = this.peek(), valueName = this.peek(1), closing = this.peek(2);
-            if (typeName.k === "ident" && /^[a-z]/.test(typeName.v) &&
+            // (t x) binds the value's type and payload; (_ x) only the payload.
+            if (typeName.k === "ident" && (/^[a-z]/.test(typeName.v) || typeName.v === "_") &&
                 valueName.k === "ident" && closing.k === "sym" && closing.v === close) {
                 this.next();
                 const value = this.parsePattern();

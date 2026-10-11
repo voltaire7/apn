@@ -922,8 +922,9 @@ these types too. Use declared constructors to create a particular variant;
 
 A lowercase pair pattern `(t x)` captures the runtime type descriptor in `t`
 and the numeric payload without its explicit type annotation in `x`. Nonnumeric
-values are returned unchanged. For example, `myTypeOf (t x) = print t` still prints
-`Int32` for `Int32 5`, while `payload (t x) = x` returns `5`.
+values are returned unchanged. For example, `myTypeOf (t _) = print t` still prints
+`Int32` for `Int32 5`, while `payload (_ x) = x` returns `5`: `_` discards the
+type, as it discards a value.
 It inspects the outer value without forcing list contents. Repeating the type
 variable, as in `(t x) (t y)`, requires both arguments to have the same type.
 

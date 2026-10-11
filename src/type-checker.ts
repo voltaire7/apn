@@ -1761,7 +1761,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "typeBind": {
                 const type: Ty = { k: "type", value: expected };
-                bind({ p: "var", name: p.name }, type, scope, e, bound);
+                if (p.name !== "_") bind({ p: "var", name: p.name }, type, scope, e, bound);
                 bind(p.value, expected, scope, e, bound);
                 return;
             }
