@@ -16,7 +16,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, ca
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { clauseKey, isLoadCall, mergeClauses } from "./ast.ts";
+import { clauseKey, flatTypedPattern, isLoadCall, mergeClauses } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, typeToString, valueToString, rawString } from "./types.ts";
@@ -3732,6 +3732,12 @@ export class Interpreter {
                     const input = type.kind === "record" ? this.recordPatternInput(type, actual) : this.isList(actual) ? actual : null;
                     return input !== null && this.matchPattern(p.args[0], this.conform(type, input), binds);
                 }
+                // (Vec n a xs) is the typed pattern ((Vec n a) xs).
+                const flat = flatTypedPattern(p, name => {
+                    const bound = this.env.get(name), t = bound && this.reference(bound);
+                    return t?.kind === "type" && t.family && !t.arguments?.length && !t.alias ? t.family.parameters?.length : undefined;
+                });
+                if (flat) return this.matchPattern(flat, v, binds);
                 if (type.kind === "type" && type.family) {
                     // The type itself, described (Option t matching the type Option Int):
                     // its arguments bind to the pattern's.

@@ -306,8 +306,31 @@ app ((Vec n a) Nil) ((Vec m a) ys) = Vec (n + m) a ys
 app ((Vec n a) (Cons x r)) ((Vec m a) ys) = Vec (n + m) a (Cons x (app r ys))
 ```
 
-The checker does not prove such a claim for every `n` and `m` (Idris does, by
-induction): a claim it cannot evaluate is checked at runtime.
+The checker proves such claims by induction, as Idris does. Indices are sums
+over naturals (`Z`, `S k`, literals, `+`, `*` by a literal). A constructor
+pattern refines its parameter's index: `Nil` makes `n` zero, and `Cons x r`
+makes it one more than `r`'s. A recursive call meets the claim of the clause
+it takes, one case per clause, but only where one argument position shrinks
+(a part of the parameter's pattern, like `r`) in every recursive call. A
+function whose clauses are all proven gives its claim to later callers, too.
+A claim that differs from its body by a constant, in a case that can happen,
+is a static error at the definition, whether or not anything calls it:
+
+```apn
+app ((Vec n a) Nil) ((Vec m a) ys) = Vec (n + m) a ys
+app ((Vec n a) (Cons x r)) ((Vec m a) ys) = Vec (n + m + 1) a (Cons x (app r ys))
+# the claim Vec (n + m + 1) a does not hold: when r is Nil, n + m + 1 is
+# m + 2 but the body's index is m + 1
+```
+
+The error names the clause whose claim is wrong, not one that only assumed
+it. What the proof cannot decide (a difference that depends on the indices, a
+recursion that does not shrink, a body it cannot follow) is checked when the
+claim runs, as before.
+
+`(Vec n a xs)` is the typed pattern `((Vec n a) xs)` for any type, as
+`(Vect n a xs)` is: a type applied to its parameters and one more pattern.
+With just the parameters, `(Option t)` still matches a type value.
 
 ## Inferring arguments from a vector pattern
 
@@ -327,7 +350,12 @@ constrains the length. For computed type expressions, the existing form
 `((Vect (n + 1) Int) xs)` remains available.
 
 The checker refines `n` to zero in the empty branch. In the cons branch the
-tail has length `n - 1`. An explicit result constructor supplies a recursive
+tail has length `n - 1`, and so does an `x:xs` alternative of a `match` on the
+vector (`match xs [[] -> 0,(x:rest) -> 1 + count rest]`): an alternative meets
+the scrutinee as a clause meets its parameter. A parameter whose typed pattern
+binds its length takes a list of any length, so a recursive call may pass a
+shorter one. A `match` gives no length to its result, so a claim around one
+(`Vect (n + m) a (match ...)`) needs `Dynamic`; write a clause per case. An explicit result constructor supplies a recursive
 signature before the body is checked; affine arithmetic establishes the sum.
 The example passes strict checking without executing either branch.
 Returning `Vect (n + m + 1) a ys` in the empty branch is a static error.

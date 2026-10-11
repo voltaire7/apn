@@ -69,6 +69,38 @@ export type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "
 // ---------------- Lexer ----------------
 
 
+// A type applied to its parameters and one more pattern is a typed pattern:
+// (Vec n a xs) is ((Vec n a) xs), as (Vect n a xs) is. (Option t), with just
+// the parameters, still matches a type value. parameters gives a type name's
+// parameter count, or undefined for a name that is not a type.
+export function flatTypedPattern(p: Pattern, parameters: (name: string) => number | undefined): Pattern | undefined {
+    if (p.p !== "constr") return undefined;
+    const count = parameters(p.tag);
+    if (!count || p.args.length !== count + 1) return undefined;
+    const typeArg = (q: Pattern): Expr | undefined => {
+        if (q.p === "var") return { t: "var", name: q.name };
+        if (q.p === "wildcard") return { t: "placeholder" };
+        if (q.p === "int") return { t: "int", v: q.v };
+        if (q.p !== "constr") return undefined;
+        const args = q.args.map(typeArg);
+        return args.every(a => a) ? args.reduce<Expr>((f, a) => ({ t: "app", f, a: a! }), { t: "var", name: q.tag }) : undefined;
+    };
+    const args = p.args.slice(0, -1).map(typeArg);
+    if (args.some(a => !a)) return undefined;
+    return { p: "schema", type: args.reduce<Expr>((f, a) => ({ t: "app", f, a: a! }), { t: "var", name: p.tag }), value: p.args[p.args.length - 1] };
+}
+// Rewrite every flat typed pattern in node to its typed form, in place.
+export function flattenTypedPatterns(node: unknown, parameters: (name: string) => number | undefined): void {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) { node.forEach(x => flattenTypedPatterns(x, parameters)); return; }
+    const n = node as Record<string, unknown>;
+    if ("p" in n) {
+        const flat = flatTypedPattern(n as Pattern, parameters);
+        if (flat) { for (const key of Object.keys(n)) delete n[key]; Object.assign(n, flat); }
+    }
+    for (const value of Object.values(n)) if (value && typeof value === "object") flattenTypedPatterns(value, parameters);
+}
+
 // Source metadata is kept out of AST serialization and source round-trips.
 export interface SourceLocation { source: string; file: string; start: number; end: number; }
 export const sourceLocations = new WeakMap<Expr, SourceLocation>();

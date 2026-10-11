@@ -191,6 +191,9 @@ class Parser {
         this.seen = t;
         if (/^\s*(#.*)?$/.test(after)) throw new Error("Parser: a newline already separates items; remove the ',' at the end of the line");
         if (!/\s/.test(this.source[t.pos - 1] ?? " ") && (record ? /^ \S/ : /^\S/).test(after)) return;
+        // x:xs right after '[' read as a field: the item is a cons.
+        const item = this.source.slice(this.source.lastIndexOf("[", t.pos) + 1, t.pos);
+        if (record && /^\s*[\w']+:\S/.test(item)) throw new Error(`Parser: write a list item x:xs in parentheses: [(${item.trim()}),...]`);
         throw new Error(record ? "Parser: separate record fields with ', ' (write [x: 1, y: 2])" : "Parser: separate list items with ',' alone (write [1,2,3])");
     }
 

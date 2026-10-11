@@ -1723,6 +1723,19 @@ print (vecLength pairVec + 1)            # => 3
 firstVec (Cons x _) = x
 print (firstVec pairVec)                 # => 1
 # firstVec Nil and Vec 3 Int pairVec are static errors.
+# A clause may claim its result's index; the checker proves each claim by
+# induction: Nil makes n 0, Cons x r makes it one more than r's, and the
+# recursive call on the smaller r meets its own clause's claim. Claiming
+# n + m + 1 in the second clause is a static error at the definition.
+revVec ((Vec n a) Nil) ((Vec m a) acc) = Vec (n + m) a acc
+revVec ((Vec n a) (Cons x r)) ((Vec m a) acc) = Vec (n + m) a (revVec r (Cons x acc))
+print (revVec pairVec Nil)               # => Cons 2 (Cons 1 Nil)
+# (Vec n a xs) is ((Vec n a) xs), as for Vect. A match alternative's x:xs
+# takes the scrutinee's tail as one shorter, as a clause's does.
+vecSize (Vec n _ _) = n
+print (vecSize pairVec)                  # => 2
+countVect (Vect _ _ xs) = match xs [[] -> 0,(_:rest) -> 1 + countVect rest]
+print (countVect [7,8,9])                # => 3
 print (copySized 3 [1,2,3])              # => [1,2,3]
 print (typeOf (SizedInts 3 [1,2,3]))     # => Vect 3 Int
 SelectedType flag = flag ? Int : String

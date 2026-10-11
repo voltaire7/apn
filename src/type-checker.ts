@@ -1,4 +1,5 @@
-import { clauseKey, type Expr, isLoadCall, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
+import { clauseKey, type Expr, flattenTypedPatterns, isLoadCall, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
+import { proveIndexClaims } from "./index-proofs.ts";
 import { nativeModule, RETIRED_NATIVES } from "./native-exports.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
@@ -144,9 +145,11 @@ interface Entry {
     // lazyTop: a top-level value that touches top-level cells (see forceLazyTop).
     lazyTop?: LazyTop;
     // recursive: the definition being inferred, referred to from its own body;
-    // selfInputs are the current clause's parameter types.
+    // selfInputs are the current clause's parameter types; selfOpen marks
+    // those whose typed pattern binds their length ((Vect n a) xs: any length).
     recursive?: boolean;
     selfInputs?: Ty[];
+    selfOpen?: boolean[];
     nonGeneric?: Set<Ty>;
     // capture: shared by every copy of one binding: the definitions whose
     // deferred code (a function body, a lambda, a lazy value) reads it, so
@@ -647,11 +650,18 @@ function indexAdd(a: Index, b: Index, scale = 1n): Index {
 function indexScale(a: Index, n: bigint): Index {
     return indexAdd(constant(0n), a, n);
 }
+// An index as APN writes it: n0 - 1, 2 * n0 + m1.
 function indexText(n: Index): string {
-    return [
-        ...[...n.terms].sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => `${value}*${key}`),
-        String(n.constant),
-    ].join("+");
+    const parts: string[] = [];
+    for (const [key, value] of [...n.terms].sort(([a], [b]) => a.localeCompare(b))) {
+        const size = value < 0n ? -value : value, term = size === 1n ? key : `${size} * ${key}`;
+        parts.push(parts.length ? `${value < 0n ? "-" : "+"} ${term}` : value < 0n ? `-${term}` : term);
+    }
+    if (n.constant || !parts.length) {
+        const size = n.constant < 0n ? -n.constant : n.constant;
+        parts.push(parts.length ? `${n.constant < 0n ? "-" : "+"} ${size}` : String(n.constant));
+    }
+    return parts.join(" ");
 }
 // A type as an argument of another: List (Option Int), List (a -> b).
 function argument(type: string): string {
@@ -690,7 +700,7 @@ function text(
                 return `(${show(t.input)} -> ${show(t.output)})`;
             // [Int,Float] is a positional type; a list of any length is List Int.
             case "list":
-                return t.length ? `Vect ${indexText(t.length)} ${argument(show(t.element))}` : `List ${argument(show(t.element))}`;
+                return t.length ? `Vect ${argument(indexText(t.length))} ${argument(show(t.element))}` : `List ${argument(show(t.element))}`;
             case "record":
                 return `[${[...t.fields].map(([k, v]) => `${k}: ${show(v)}`).join(", ")}]`;
             case "type":
@@ -912,7 +922,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scan(program);
     let dynamicBoundaries = 0, runtimeChecks = 0, serial = 0, budget = 50000;
     let activeExpression: Expr | undefined, checkingExpression: Expr | undefined;
-    let firstUnknown: Expr | undefined;
+    let firstUnknown: Expr | undefined, unknownLength = false;
     let firstUnbound: { expr: Expr; name: string; hint?: string; inPattern?: boolean } | undefined;
     // Callee positions of application chains, where a function's shape is trusted.
     const callees = new WeakSet<Expr>();
@@ -1295,6 +1305,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return problem(`operator '${t.op}' cannot combine ${text(a)} and ${text(b)}`);
     }
     let lengthFacts = new Map<string, Index>();
+    // match s alternatives: the type of s, and each literal alternative's input.
+    const matchScrutinees = new WeakMap<Expr, Ty>(), alternativeInputs = new WeakMap<Expr, Ty[]>();
     function refinedIndex(value: Index): Index {
         let result = constant(value.constant);
         for (const [name, scale] of value.terms) {
@@ -1431,8 +1443,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         e,
                     );
                 }
-                if (delta.terms.size) dynamicBoundaries++;
-            } else if (expected.length) dynamicBoundaries++;
+                if (delta.terms.size) { if (!firstUnknown) { firstUnknown = e; unknownLength = true; } dynamicBoundaries++; }
+            } else if (expected.length) { if (!firstUnknown) { firstUnknown = e; unknownLength = true; } dynamicBoundaries++; }
             return;
         }
         if (expected.k === "map" && actual.k === "map") { unify(expected.key, actual.key, e, seen); unify(expected.value, actual.value, e, seen); return; }
@@ -1834,7 +1846,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const module = STD_CONSTRUCTORS[p.tag];
                     const near = didYouMean(p.tag, [...scope.keys()].filter(name => /^[A-Z]/.test(name)));
                     firstUnbound = { expr: e, name: p.tag, inPattern: true,
-                        hint: module ? `add \`import "${module}"\` to use \`${p.tag}\`` : near ? `did you mean '${near}'?` : undefined };
+                        hint: module ? `add \`import "${module}"\` to use \`${p.tag}\`` : near ? `did you mean '${near}'?`
+                            : `declare a type with \`${p.tag}\` first${p.tag === "Nil" || p.tag === "Cons" ? "; a list's patterns are `[]` and `(x:xs)`" : ""}` };
                 }
                 if (t.k === "factory" && p.args.length === 3) {
                     const [size, element, value] = p.args;
@@ -2758,7 +2771,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "lambda":
                 return functionType(e.params.map((name) => ({ p: "var", name })), e.body, scope);
             case "patternLambda":
-                return functionType(e.params, e.body, scope, undefined, e.guard);
+                return functionType(e.params, e.body, scope, undefined, e.guard, alternativeInputs.get(e));
             case "app":
             case "pipe": {
                 if (e.t === "pipe" && builtinOperator(scope.get("$")?.type) !== "$") {
@@ -2808,15 +2821,24 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     runtimeChecks++;
                     return explicitDynamic;
                 }
+                // A match's alternatives meet its scrutinee as a clause's patterns
+                // meet its parameters: x:xs takes a length n list's tail as n - 1.
+                const scrutinee = e.f.t === "app" ? matchScrutinees.get(e.f) : undefined;
+                if (scrutinee && a.t === "list") {
+                    for (const alternative of a.v) if (alternative.t === "patternLambda" && alternative.params.length === 1) alternativeInputs.set(alternative, [patternInput(alternative.params[0], scrutinee)]);
+                }
                 let argumentType = infer(a, scope);
+                if (e.f.t === "var" && e.f.name === "match" && scope.get("match")?.builtin) matchScrutinees.set(e, argumentType);
                 // A recursive call does not fix the length of a parameter whose
                 // pattern leaves it open (go xs = ... go [] ...).
                 let head: Expr = e.f, position = 0;
                 while (head.t === "app") { head = head.f; position++; }
                 const self = head.t === "var" ? scope.get(head.name) : undefined;
                 if (self?.selfInputs && position < self.selfInputs.length) {
-                    const parameter = resolve(self.selfInputs[position]);
-                    if (parameter.k !== "list" || !parameter.length && !parameter.items) {
+                    const parameter = resolve(self.selfInputs[position]), argument = resolve(argumentType);
+                    // A parameter whose pattern binds its length takes the argument's.
+                    if (self.selfOpen?.[position] && parameter.k === "list" && argument.k === "list") argumentType = list(argument.element, parameter.length);
+                    else if (parameter.k !== "list" || !parameter.length && !parameter.items) {
                         argumentType = withoutLengths(copy(argumentType, new Map([...variables(argumentType)].map(v => [v, v]))));
                     }
                 }
@@ -3321,6 +3343,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // computes them: its fields give names (k from the tail's own indices),
     // and its constructor's result type is evaluated with them.
     const indexedFamilies = new Map<string, { def: Extract<TopLevel, { t: "type" }>["def"]; scope: Scope }>();
+    const provenClaims = new Map<string, { params: Pattern[]; body: Expr }[]>();
     function knownIndices(family: string, value: Known, depth = 0): (Known | undefined)[] | undefined {
         const declared = indexedFamilies.get(family);
         const variant = declared?.def.variants.find(v => v.tag === value.tag);
@@ -5304,19 +5327,50 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             default: return false;
         }
     }
-    function functionType(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr): Ty {
+    function functionType(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr, given?: Ty[]): Ty {
         const outerFacts = lengthFacts;
         lengthFacts = new Map(outerFacts);
         deferred++;
-        try { return inferFunction(params, body, parent, recursiveName, guard); }
+        try { return inferFunction(params, body, parent, recursiveName, guard, given); }
         finally { lengthFacts = outerFacts; deferred--; }
     }
-    function inferFunction(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr): Ty {
+    // The input a match alternative's pattern starts from: the scrutinee's
+    // length where the pattern takes a cons (so its tail's is one less), its
+    // items where it lists them, and a fresh type elsewhere, as an
+    // alternative's patterns test the value rather than constrain it.
+    function patternInput(p: Pattern, scrutinee: Ty): Ty {
+        const t = resolve(scrutinee);
+        if (p.p === "as") return patternInput(p.right, scrutinee);
+        if (p.p === "typeBind") return patternInput(p.value, scrutinee);
+        if (t.k !== "list") return variable();
+        if (p.p === "cons" && t.length) return list(variable(), t.length);
+        if (p.p === "list" && t.items?.length === p.v.length) {
+            const items = p.v.map((item, n) => patternInput(item, t.items![n]));
+            return { k: "list", element: union(items), items, length: constant(BigInt(items.length)) };
+        }
+        return variable();
+    }
+    // Does a parameter's typed pattern bind its length to a new name (n in
+    // (Vect n a) xs), so that it takes a list of any length?
+    function bindsLength(p: Pattern, scope: Scope): boolean {
+        while (p.p === "typeBind" || p.p === "as") p = p.p === "as" ? p.left : p.value;
+        if (p.p !== "schema") return false;
+        let type = p.type;
+        while (type.t === "block" && type.stmts.length === 1) type = type.stmts[0];
+        const args: Expr[] = [];
+        while (type.t === "app") { args.unshift(type.a); type = type.f; }
+        const length = args[0];
+        return type.t === "var" && resolve(scope.get(type.name)?.type ?? dynamic).k === "factory" &&
+            !!length && (length.t === "placeholder" || length.t === "var" && /^[a-z]/.test(length.name) && !scope.has(length.name));
+    }
+    function inferFunction(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr, given?: Ty[]): Ty {
         const scope = new Map(parent), inputs: { type: Ty; binder?: string; coerce: boolean }[] = [];
         const bound = new Set<string>(recursiveName ? [recursiveName] : []);
         const patternStart = requirements.length;
-        for (const p of params) {
-            const t = variable();
+        const open: boolean[] = [];
+        for (const [n, p] of params.entries()) {
+            const t = given?.[n] ?? variable();
+            open.push(bindsLength(p, scope));
             bind(p, t, scope, body, bound);
             const name = p.p === "var"
                 ? p.name
@@ -5345,7 +5399,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (descriptor.k === "type") declared = descriptor.value;
         }
         const self = recursiveName ? scope.get(recursiveName) : undefined;
-        if (self?.recursive) scope.set(recursiveName!, { ...self, selfInputs: inputs.map(i => i.type) });
+        if (self?.recursive) scope.set(recursiveName!, { ...self, selfInputs: inputs.map(i => i.type), selfOpen: open });
         if (declared && recursiveName) {
             let signature = declared;
             for (let n = inputs.length - 1; n >= 0; n--) signature = fn(inputs[n].type, signature, inputs[n].binder, inputs[n].coerce);
@@ -5383,6 +5437,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return t.k === "variant";
     }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
+        // Index claims (Vec (n + m) a ys) are proven by induction where they
+        // can be; a wrong one is an error here, whether or not it is called.
+        if (indexedFamilies.size) {
+            const proof = proveIndexClaims(name, clauses, new Map([...indexedFamilies].map(([family, { def }]) => [family, def])), provenClaims);
+            if (typeof proof === "object") problem(proof.message, proof.at, "a clause's claim must follow from its patterns and its body; a recursive call meets the claim of the clause it takes");
+            if (proof === true) provenClaims.set(name, clauses); else provenClaims.delete(name);
+        }
         // Definitions of map, >>=, <*> or return define an instance: inferred on
         // their own and recorded for the session; the method stays as it is.
         if (isInstance(name, clauses) && options.instances) {
@@ -5817,6 +5878,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (const child of children(value)) validate(child, seen);
     }
     for (const statement of program) {
+        // (Vec n a xs) is the typed pattern ((Vec n a) xs) for a type with parameters.
+        flattenTypedPatterns(statement, name => {
+            const t = resolve(scope.get(name)?.type ?? dynamic), value = t.k === "type" ? resolve(t.value) : undefined;
+            if (t.k === "factory") return 2;
+            return value?.k === "variant" && !value.base ? value.args.length : undefined;
+        });
         checkingExpression = statement.t === "expr" || statement.t === "patDef" ? statement.value : statement.t === "def" ? statement.clauses[0].body : undefined;
         try {
             statementWrote = false;
@@ -5900,10 +5967,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     if (options.strict && dynamicBoundaries && !issues.length && firstUnbound) {
         // An unknown name is the usual cause; report it rather than the boundary count.
         const loc = sourceLocations.get(firstUnbound.expr);
-        issues.push({ message: firstUnbound.inPattern ? `unknown constructor '${firstUnbound.name}' in a pattern` : `unbound variable '${firstUnbound.name}'`, hint: firstUnbound.hint, pos: loc?.start ?? 0, len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)), source: loc?.source, file: loc?.file });
+        let pos = loc?.start ?? 0, len = Math.max(1, (loc?.end ?? 1) - pos);
+        // A pattern has no location of its own; it comes before the code it
+        // matches, so the constructor is the name's last use before that.
+        if (firstUnbound.inPattern && loc?.source) {
+            const name = firstUnbound.name, word = /[A-Za-z0-9_$']/;
+            for (let at = loc.source.lastIndexOf(name, pos - name.length); at >= 0; at = at ? loc.source.lastIndexOf(name, at - 1) : -1) {
+                if (!word.test(loc.source[at - 1] ?? " ") && !word.test(loc.source[at + name.length] ?? " ")) { pos = at; len = name.length; break; }
+            }
+        }
+        issues.push({ message: firstUnbound.inPattern ? `unknown constructor '${firstUnbound.name}' in a pattern` : `unbound variable '${firstUnbound.name}'`, hint: firstUnbound.hint, pos, len, source: loc?.source, file: loc?.file });
     } else if (options.strict && dynamicBoundaries && !issues.length) {
         const loc = firstUnknown && sourceLocations.get(firstUnknown);
-        issues.push({ message: `cannot establish static types: ${dynamicBoundaries} unresolved dynamic boundaries; mark runtime code with Dynamic`, pos: loc?.start ?? 0, len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)), source: loc?.source, file: loc?.file });
+        issues.push({ message: `cannot establish static types: ${dynamicBoundaries} unresolved dynamic boundaries; mark runtime code with Dynamic`,
+            ...unknownLength ? { hint: "the checker cannot find this list's length: mark it `Dynamic`, or write a clause per pattern so each clause's length follows" } : {}, pos: loc?.start ?? 0, len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)), source: loc?.source, file: loc?.file });
     }
     options.result?.(scope, new Map([...scope].filter(([name, entry]) => originalScope.get(name) !== entry)));
     return { issues, dynamicBoundaries, runtimeChecks, opaqueUse };

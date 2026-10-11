@@ -5,6 +5,9 @@ import { parse } from "../src/parser.ts";
 // (Cons a (Vec k a) -> Vec (S k) a), and a value's indices follow.
 const VEC = "Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a; xs = Cons 1 (Cons 2 Nil); ";
 const APPEND = "append Nil ys = ys; append (Cons x rest) ys = Cons x (append rest ys); ";
+// Each clause claims its result's index; the checker proves the claims by induction.
+const APP = "app ((Vec n a) Nil) ((Vec m a) ys) = Vec (n + m) a ys; app ((Vec n a) (Cons x r)) ((Vec m a) ys) = ";
+const REV = "rev ((Vec n a) Nil) ((Vec m a) acc) = Vec (n + m) a acc; rev ((Vec n a) (Cons x r)) ((Vec m a) acc) = ";
 function run(source: string): string {
     const i = new Interpreter();
     i.enableChecking();
@@ -27,7 +30,13 @@ for (const [source, expected] of [
     [VEC + "elem ((Vec _ a) _) = a; elem xs", "Int"],
     [VEC + "first (Cons x _) = x; first xs", "1"],
     // Each clause may state its result's indices.
-    [VEC + "app ((Vec n a) Nil) ((Vec m a) ys) = Vec (n + m) a ys; app ((Vec n a) (Cons x r)) ((Vec m a) ys) = Vec (n + m) a (Cons x (app r ys)); typeOf (app xs xs)", "Vec 4 Int"],
+    [VEC + APP + "Vec (n + m) a (Cons x (app r ys)); typeOf (app xs xs)", "Vec 4 Int"],
+    // Proven by induction: an accumulator, a doubling, a proven function's claim.
+    [VEC + REV + "Vec (n + m) a (rev r (Cons x acc)); rev xs Nil", "Cons 2 (Cons 1 Nil)"],
+    [VEC + "dbl ((Vec n a) Nil) = Vec (2 * n) a Nil; dbl ((Vec n a) (Cons x r)) = Vec (2 * n) a (Cons x (Cons x (dbl r))); typeOf (dbl xs)", "Vec 4 Int"],
+    [VEC + APP + "Vec (n + m) a (Cons x (app r ys)); twice ((Vec n a) v) = Vec (n + n) a (app v v); typeOf (twice xs)", "Vec 4 Int"],
+    // Recursion that does not shrink proves nothing: its claim is checked when it runs.
+    [VEC + "loop ((Vec n a) v) = Vec (n + 1) a (loop v); 1", "1"],
 ] as const) {
     Deno.test(`indexed families: ${source}`, () => {
         const actual = run(source);
@@ -41,7 +50,15 @@ for (const [source, kind, message] of [
     [VEC + APPEND + "Vec 3 Int (append xs xs)", "type", "expected Vec 3 Int, got Vec 4 Int"],
     [VEC + "first (Cons x _) = x; first Nil", "type", "no clause of 'first' matches these arguments"],
     // Others when the program builds them.
-    [VEC + "app ((Vec n a) Nil) ((Vec m a) ys) = Vec (n + m) a ys; app ((Vec n a) (Cons x r)) ((Vec m a) ys) = Vec (n + m + 1) a (Cons x (app r ys)); app xs xs", "runtime", "expected Vec 4 Int, got Vec 3 Int"],
+    // A wrong claim is an error at its definition, called or not.
+    [VEC + APP + "Vec (n + m + 1) a (Cons x (app r ys))", "type", "the claim Vec (n + m + 1) a does not hold: when r is Nil, n + m + 1 is m + 2 but the body's index is m + 1"],
+    [VEC + "app ((Vec n a) Nil) ((Vec m a) ys) = Vec (n + m + 1) a ys", "type", "n + m + 1 is m + 1 but the body's index is m"],
+    [VEC + REV + "Vec (n + m + 1) a (rev r (Cons x acc))", "type", "when r is Nil, n + m + 1 is m + 2 but the body's index is m + 1"],
+    // The wrong clause is the one reported, not one that assumed its claim.
+    [VEC + "app ((Vec n a) (Cons x r)) ((Vec m a) ys) = Vec (n + m) a (Cons x (app r ys)); app ((Vec n a) Nil) ((Vec m a) ys) = Vec (n + m + 1) a ys", "type", "n + m + 1 is m + 1 but the body's index is m"],
+    [VEC + APP + "Vec (n + m) a (Cons x (app r ys)); twice ((Vec n a) v) = Vec (n + n + 1) a (app v v)", "type", "n + n + 1 is 2 * n + 1 but the body's index is 2 * n"],
+    // What the proof cannot decide is checked when it runs.
+    [VEC + APP + "Vec (n + m) a (Cons x (app r ys)); both ((Vec n a) v) ((Vec m a) w) = Vec (n + m) a (app v v); both xs (Cons 1 Nil)", "runtime", "expected Vec 3 Int, got Vec 4 Int"],
     ["Vec n a = Nil -> List a | Cons a (Vec k a) -> Vec (S k) a", "parse", "Nil must make a Vec"],
 ] as const) {
     Deno.test(`indexed families reject: ${source}`, () => {

@@ -358,6 +358,19 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   evaluation (`knownIndices`, the same rule over known values). A family's
   arguments fill by position (`applied`), never "the first open variable",
   which merged `k` and `a` in `Vec k a`. `tests/indexed-family-test.ts`.
+- Claim proofs (`index-proofs.ts`) read the AST only, never evaluate: affine
+  indices, solved by substitution for the oldest variable (so `n = k + 1`
+  reads in the parts' indices). An error needs a constant difference in a
+  certain case: simple patterns, no guard, a clause no earlier one covers,
+  every equation solved. Anything else proves nothing and is left to the
+  runtime check. `define` runs them; proven functions are `provenClaims`.
+- Flat typed patterns are rewritten in place before a statement is checked
+  (`flattenTypedPatterns`, `ast.ts`), so every checker pass sees one form;
+  the runtime applies the same `flatTypedPattern` when it matches.
+- A `match` alternative's input starts from `patternInput` (the scrutinee's
+  length at cons positions, fresh elsewhere), so its patterns still only test.
+  `selfOpen` lets a recursive call pass any length to a parameter whose typed
+  pattern binds its length. `tests/typed-pattern-forms-test.ts`.
 - `Z`/`S k` patterns take a number apart by the value they meet (runtime
   `matchPattern`, checker `naturalArgument`), so a program's own `Z`/`S`
   variants keep matching as variants. The parser reads a bare `Z` as nullary
