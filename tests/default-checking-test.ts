@@ -125,6 +125,13 @@ for (const [source, expected] of [
     ['g [a,b] = a + b; g (map (x -> x * 2) [1,2])', '6'],
     ['xs = map (x -> x + 1) [1,2]; ys = map (x -> x * 2) [1,2,3]; g [a,b] = a + b; [g xs,length ys]', '[5,3]'],
     ['x (x:xs) = 42; x [x]', '42'],
+    // A length the type leaves open is the one evaluation finds.
+    ['g [a,b] = a + b; g (map (x -> x) (tail [1,2,3]))', '5'],
+    ['g [a,b] = a + b; g (tail [0,1,2])', '3'],
+    ['f xs = foldl (acc x -> x : acc) xs [1,2]; g [a,b,c,d] = a + b; g (f [1,2])', '3'],
+    ['f xs = filter (x -> x > 0) xs; g [a,b] = a + b; g (f [1,2])', '3'],
+    ['toList 0 = []; toList k = (k - 1) : toList (k - 1); xs = toList 3; g [a,b,c] = a; g xs', '2'],
+    ['toList Z = []; toList (S k) = k : toList k; Vect 3 UInt (toList 3)', '[UInt 2,UInt 1,UInt 0]'],
 ] as const) Deno.test(`checker infers recursive steps and list sizes: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -133,8 +140,8 @@ for (const source of [
     'import "sequence"; g [a,b] = forceList [b,a ++ "x"]; repeatApply 3 g [1,2]',
     'import "sequence"; g [a,b] = a + b; g (forceList [1,2,3])',
     'g [a,b] = a + b; g (map (x -> x) [1,2,3])',
-    'g [a,b] = a + b; g (map (x -> x) (tail [1,2,3]))',
-    'g [a,b] = a + b; g (tail [0,1,2])',
+    'toList 0 = []; toList k = (k - 1) : toList (k - 1); g [a,b] = a; g (toList 3)',
+    'toList Z = []; toList (S k) = k : toList k; Vect 2 UInt (toList 3)',
     'g [a,b] = tail [0,b,a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1,2]',
 ]) Deno.test(`checker still rejects: ${source}`, () => rejected(session(), source));
 // Length-preserving builtins carry their input's length, and separate uses of
@@ -180,10 +187,8 @@ for (const [source, expected] of [
 for (const source of [
     'import "sequence"; g [a,b] = a + b; g (reverse [1,2,3])',
     'f xs = foldl (acc x -> x : acc) xs [1,2]; g [a,b] = a + b; g (f [1,2])',
-    'f xs = foldl (acc x -> x : acc) xs [1,2]; g [a,b,c,d] = a + b; g (f [1,2])',
     'f xs = 0 : xs; g [a,b] = a + b; g (f [1,2])',
     'f xs = xs ++ xs; g [a,b] = a + b; g (f [1,2])',
-    'f xs = filter (x -> x > 0) xs; g [a,b] = a + b; g (f [1,2])',
     'f xs = { xs = [1,2,3]; xs }; g [a,b] = a + b; g (f [1,2])',
 ]) Deno.test(`length changes stay unknown: ${source}`, () => rejected(session(), source));
 // Nested lengths: a function's result shape is described in terms of its

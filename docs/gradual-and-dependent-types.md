@@ -190,9 +190,12 @@ Later parameter patterns can refer to earlier argument bindings. A dependent
 function application substitutes the supplied index into subsequent parameter
 and result types. The checker normalizes integer constants and affine index
 expressions (addition, subtraction, multiplication by a known constant).
-Known contradictory lengths are rejected. Unknown lengths and unsupported
-index computations are dynamic boundaries: strict mode requires an explicit `Dynamic` boundary, while
-ordinary execution retains runtime validation. No user code runs to decide them.
+Known contradictory lengths are rejected. A list whose type leaves its length
+open, passed where a length is required (a list pattern `[a,b,c]`, `Vect 3`),
+has the length evaluating it finds (see below): `g (tail [0,1,2])` checks
+for `g [a,b]`. Lengths evaluation cannot find and unsupported index
+computations are dynamic boundaries: strict mode requires an explicit
+`Dynamic` boundary, while ordinary execution retains runtime validation.
 
 Length validation checks the list spine through the expected size plus one
 cell. It rejects an infinite list promptly when the requested size is finite,
@@ -238,6 +241,9 @@ not finish within the step budget.
   must fit at least one (`SelectedType (n > 3) [1]` is a static error); the
   result is checked at runtime, like a `Dynamic` one.
 - A `Vect` length evaluation cannot decide is validated when the list is built.
+- A list a recursive function builds has the length evaluation finds:
+  `Vect 3 UInt (toList 3)` checks, and `Vect 2 UInt (toList 3)` is a static
+  length error.
 - An expression a type needs that fails (`Vect (1/0) Int xs`) fails where the
   program demands it, as any other value does: laziness means a type nothing
   uses never fails.

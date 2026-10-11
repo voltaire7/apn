@@ -2248,6 +2248,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return t;
                 }
             }
+            const measured = measuredList(t, argument);
+            if (measured) return application(f, measured, e);
             if (t.k === "variant" && a.k === "type") {
                 const parameter = t.args.find((x) => resolve(x).k === "var");
                 if (parameter) {
@@ -2267,6 +2269,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const selected = selection ? recordSelection(selection, argument.type, e) : argument.type;
             if (selected !== argument.type) return application({ ...f, pattern: undefined }, { ...argument, type: selected }, e);
             const expected = resolve(f.input), actual = resolve(argument.type);
+            const measured = measuredList(expected, argument);
+            if (measured) return application(f, measured, e);
             if (f.coerce && expected.k === "record" && actual.k === "list") {
                 const fields = [...expected.fields];
                 if (actual.length && !actual.length.terms.size && actual.length.constant !== BigInt(fields.length)) {
@@ -3970,6 +3974,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }) ?? false;
     }
     // The length of a finite known list.
+    // A list argument whose type has no length, where one is required, given
+    // the length its value has when evaluation knows it (toList 3 for a
+    // recursive toList): undefined when nothing changes.
+    function measuredList(required: Ty, argument: Entry): Entry | undefined {
+        const t = resolve(required), a = resolve(argument.type);
+        if (t.k !== "list" || !t.length && !t.items || a.k !== "list" || a.length || a.items) return undefined;
+        const n = peek(() => knownLength(argument), undefined);
+        return n === undefined ? undefined : { ...argument, type: { ...a, length: constant(n) } };
+    }
     function knownLength(k: Known | undefined): bigint | undefined {
         if (k?.size !== undefined || k?.range) return k.size;
         const items = elementsOf(k);
@@ -4050,7 +4063,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (!entry) return {};
             if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
             if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope } };
-            return { size: entry.size, items: entry.items, mutable: entry.mutable, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };
+            return { size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };
         }
         if (e.t === "app") {
             const args: Expr[] = [];

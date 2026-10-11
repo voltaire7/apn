@@ -1025,6 +1025,8 @@ print (S (S Z))                      # => UInt 2
 naturalsBelow Z = []
 naturalsBelow (S k) = k : naturalsBelow k
 print (naturalsBelow 3)              # => [UInt 2,UInt 1,UInt 0]
+# The checker evaluates the list to learn its length: Vect 2 is a static error.
+print (Vect 3 UInt (naturalsBelow 3))  # => [UInt 2,UInt 1,UInt 0]
 # naturalFactorial (-1)               # static error: UInt cannot represent a negative integer
 # A literal in a typed pattern is a value of that type: (UInt 0) matches 0.
 # (UInt k) binds the untyped payload, so these are plain integers, while
