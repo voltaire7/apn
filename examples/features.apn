@@ -1424,6 +1424,8 @@ print (checkedApply (*2))                     # 246 (typed Int)
 # The editor launcher keeps your normal LazyVim config; --clean opts out.
 # It grants Deno read access to the bundled match prelude at startup.
 # APN editor colors match the REPL, including numeric markers and ternary colons.
+# Lint warns about recursion that may never finish (up n = up (n + 1): no
+# smaller argument); a stream such as nats n = n : nats (n + 1) is fine.
 editorDouble x = x * 2
 print (editorDouble 21)                     # => 42
 

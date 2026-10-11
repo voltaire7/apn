@@ -2,6 +2,7 @@ import { checkTypes } from "./type-checker.ts";
 import { matchDiagnostics } from "./match-diagnostics.ts";
 import { unusedDiagnostics } from "./unused-diagnostics.ts";
 import { divisionDiagnostics } from "./division-diagnostics.ts";
+import { terminationDiagnostics } from "./termination-diagnostics.ts";
 import { parseDocument } from "./parser.ts";
 import { APNError } from "./errors.ts";
 
@@ -23,7 +24,7 @@ export function position(source: string, offset: number): Position {
 
 export function lint(source: string, types = false): Diagnostic[] {
     try {
-        const program = parseDocument(source), diagnostics = [...matchDiagnostics(program, source), ...unusedDiagnostics(program, source), ...divisionDiagnostics(program, source)];
+        const program = parseDocument(source), diagnostics = [...matchDiagnostics(program, source), ...unusedDiagnostics(program, source), ...divisionDiagnostics(program, source), ...terminationDiagnostics(program, source)];
         if (types) for (const issue of checkTypes(program).issues) diagnostics.push({
             range: { start: position(source, issue.pos), end: position(source, issue.pos + issue.len) },
             severity: 1, source: "apn", code: "type", message: issue.message,

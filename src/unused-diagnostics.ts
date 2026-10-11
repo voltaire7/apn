@@ -26,27 +26,15 @@ export function unusedDiagnostics(program: TopLevel[], source: string): Diagnost
             });
         }
     };
-    // Statements in order: a name bound to a value earlier makes name k = v an
-    // item assignment, not a function; a capitalized one destructures or
-    // declares a type.
-    const statements = (list: unknown[]): void => {
-        const values = new Set<string>();
-        for (const node of list) {
-            const n = node as Record<string, unknown> | null;
-            if (n && (n.t === "def" || n.t === "stmDef") && Array.isArray(n.clauses)) {
-                const name = n.name as string, clauses = n.clauses as { params: Pattern[]; body: Expr; guard?: Expr }[];
-                if (clauses.every(c => !c.params.length)) { if (!clauses.some(c => c.body.t === "lambda" || c.body.t === "patternLambda")) values.add(name); }
-                else if (!values.has(name) && !/^[A-Z]/.test(name)) {
-                    // A parameter's type may use an earlier one: n ((SizedInts n) xs).
-                    for (const c of clauses) report(c.params.flatMap(x => bound(x, false)), c.body, [...c.guard ? [c.guard] : [], ...c.params.flatMap(types)]);
-                }
-                for (const c of clauses) { visit(c.body); if (c.guard) visit(c.guard); }
-                continue;
-            }
-            if (n && n.t === "patDef") for (const name of bound(n.pattern as Pattern)) values.add(name);
-            visit(node);
+    const statements = (list: unknown[]): void => definitionsInOrder(list, (node, clauses) => {
+        if (clauses) {
+            // A parameter's type may use an earlier one: n ((SizedInts n) xs).
+            for (const c of clauses) report(c.params.flatMap(x => bound(x, false)), c.body, [...c.guard ? [c.guard] : [], ...c.params.flatMap(types)]);
         }
-    };
+        if (node.t === "def" || node.t === "stmDef") {
+            for (const c of node.clauses as Clause[]) { visit(c.body); if (c.guard) visit(c.guard); }
+        } else visit(node);
+    });
     const visit = (node: unknown): void => {
         if (Array.isArray(node)) { node.forEach(visit); return; }
         if (!node || typeof node !== "object") return;
@@ -77,6 +65,28 @@ export function unusedDiagnostics(program: TopLevel[], source: string): Diagnost
     return diagnostics;
 }
 
+type Clause = { params: Pattern[]; body: Expr; guard?: Expr };
+// A block's (or program's) statements in order, each given to each: with its
+// clauses when it defines a function. A name bound to a value earlier makes
+// name k = v an item assignment, not a function; a capitalized one
+// destructures or declares a type.
+export function definitionsInOrder(list: unknown[], each: (node: Record<string, unknown>, clauses?: Clause[]) => void): void {
+    const values = new Set<string>();
+    for (const item of list) {
+        const n = item as Record<string, unknown> | null;
+        if (!n || typeof n !== "object") continue;
+        if ((n.t === "def" || n.t === "stmDef") && Array.isArray(n.clauses)) {
+            const name = n.name as string, clauses = n.clauses as Clause[];
+            if (clauses.every(c => !c.params.length)) {
+                if (!clauses.some(c => c.body.t === "lambda" || c.body.t === "patternLambda")) values.add(name);
+                each(n);
+            } else each(n, !values.has(name) && !/^[A-Z]/.test(name) ? clauses : undefined);
+            continue;
+        }
+        if (n.t === "patDef") for (const name of bound(n.pattern as Pattern)) values.add(name);
+        each(n);
+    }
+}
 // A lambda written in place, perhaps in parentheses.
 function lambdaIn(e: unknown): boolean {
     const x = e as Expr;
