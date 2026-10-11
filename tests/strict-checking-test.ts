@@ -1,4 +1,6 @@
 import { requireChecked, checkSource } from "../src/type-checker.ts";
+import { Interpreter } from "../src/interp.ts";
+import { parse } from "../src/parser.ts";
 for (const source of ['import "function"', 'env', 'missing', 'load "file"']) {
     Deno.test(`checked execution rejects unknowns: ${source}`, () => {
         try { requireChecked(source); } catch (e) {
@@ -34,3 +36,15 @@ for (const source of ['f x = x + 1; f "bad"', 'f x y = x < y; f 1 "bad"']) {
         if (!checkSource(source, '<test>', { strict: true }).issues.length) throw new Error('invalid call escaped checking');
     });
 }
+for (const [source, module] of [['fail "x"', "function"], ['upper "x"', "text"]]) {
+    Deno.test(`standard natives need their module: ${source}`, () => {
+        const [issue] = checkSource(source, '<test>', { strict: true, runtimeNames: new Set(["print"]) }).issues;
+        if (issue?.message !== `unbound variable '${source.split(" ")[0]}'` || !issue.hint?.includes(`add import "${module}"`)) throw new Error(JSON.stringify(issue));
+    });
+}
+Deno.test('fail is available after import "function"', () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    const result = i.renderString(i.run(parse('import "function"; f x = x > 0 ? x : fail "negative"; f 1')));
+    if (result !== "1") throw new Error(result);
+});

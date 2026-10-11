@@ -1172,6 +1172,8 @@ print decoded                                 # => [1,2.5,[]]
 
 # Standard modules are cached imports, separate from file execution with load.
 # Each is imported by name (there is no whole-library module); a list imports several.
+# Before its import, using fail or upper is a static error whose hint names
+# the module: add import "function", add import "text".
 import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]
 print (cast String $ chars "hello") # => "hello"
 # reverse is implemented in APN with a linear-time accumulator fold.

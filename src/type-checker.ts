@@ -1,4 +1,5 @@
 import { clauseKey, type Expr, isLoadCall, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
+import { nativeModule } from "./native-exports.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numericNative, type Numeric, parseNumberText } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
@@ -2587,7 +2588,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 if (!entry && !firstUnbound && options.runtimeNames && !options.runtimeNames.has(e.name)) {
                     const near = didYouMean(e.name, [...scope.keys(), ...options.runtimeNames]);
-                    const module = STD_CONSTRUCTORS[e.name];
+                    const module = STD_CONSTRUCTORS[e.name] ?? nativeModule(e.name);
                     firstUnbound = { expr: e, name: e.name, hint: module ? `${e.name} comes from the ${module} module: add import "${module}"` : near ? `did you mean '${near}'?` : undefined };
                 }
                 if (!entry) return unknown();
@@ -5493,9 +5494,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             length: fn(dynamic, atom("Int")),
             typeOf: fn(a, atom("Type")),
             cast: fn({ k: "type", value: a }, fn(explicitDynamic, a)),
-            fail: fn(atom("String"), variable()),
         })
     ) scope.set(name, { type });
+    // fail, like the other standard natives, reaches programs through import "function".
+    if (options.library) scope.set("fail", { type: fn(atom("String"), variable()) });
     const standardOnly = new Set(["seq", "chars", "fromChars", "upper", "lower", "readFile", "readStdin", "fetch", "toJson", "prettyJson", "fromJson"]);
     const native = (name: string, inputs: Ty[], output: Ty) => {
         if (!standardOnly.has(name) || options.library) scope.set(name, { type: inputs.reduceRight((result, input) => fn(input, result), output) });

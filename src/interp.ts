@@ -9,6 +9,7 @@ import typeSource from "../lib/type.apn" with { type: "text" };
 import doSource from "../lib/do.apn" with { type: "text" };
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
+import { NATIVE_EXPORTS } from "./native-exports.ts";
 import { loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { parseNumberText, isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
@@ -175,16 +176,7 @@ export class Interpreter {
         for (const [name, arity] of [...NATIVES, ...STANDARD_NATIVES]) builtins.setLocal(name, { kind: "native", name, arity, applied: [] });
         for (const [name, value] of this.preludeBindings) builtins.setLocal(name, value);
         const scope = new Env(builtins);
-        const builtinExports: Record<string, string[]> = {
-            ffi: ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer"],
-            io: ["withFile", "readFile", "readStdin", "getArgs"],
-            function: ["bracket", "fail", "seq", "do"],
-            sequence: [],
-            text: ["chars", "fromChars", "upper", "lower"],
-            http: ["fetch"],
-            json: ["toJson", "prettyJson", "fromJson"],
-        };
-        for (const exported of file.std ? builtinExports[file.std] ?? [] : []) scope.setLocal(exported, builtins.get(exported)!);
+        for (const exported of file.std ? NATIVE_EXPORTS[file.std] ?? [] : []) scope.setLocal(exported, builtins.get(exported)!);
         try {
             const program = parse(file.source, file.label);
             this.env = scope;

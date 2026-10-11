@@ -3,15 +3,8 @@ import { parse } from "./parser.ts";
 import { loadPath, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { type CheckOptions, checkTypes, copyTypeScope, isEnvView, mayMutate, mentionsAny, topNames, type TypeScope } from "./type-checker.ts";
 import type { TopLevel } from "./ast.ts";
+import { NATIVE_EXPORTS } from "./native-exports.ts";
 
-const nativeExports: Record<string, string[]> = {
-    ffi: ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer"],
-    io: ["withFile", "readFile", "readStdin", "getArgs"],
-    function: ["bracket", "fail", "seq", "do"],
-    text: ["chars", "fromChars", "upper", "lower"],
-    http: ["fetch"],
-    json: ["toJson", "prettyJson", "fromJson"],
-};
 /** Static state is separate from evaluation: checking never runs an APN action. */
 // A module file's name within its package, for messages.
 function fileName(label: string): string {
@@ -145,7 +138,7 @@ export class CheckingSession {
             const exports: TypeScope = new Map(), from = new Map<string, string>();
             for (const file of resolved.files) {
                 const checked = this.check(parse(file.source, file.label), file.directory, new Map(), true);
-                for (const key of file.std ? nativeExports[file.std] ?? [] : []) {
+                for (const key of file.std ? NATIVE_EXPORTS[file.std] ?? [] : []) {
                     const entry = checked.scope.get(key);
                     if (entry) checked.exports.set(key, entry);
                 }
