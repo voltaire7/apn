@@ -344,6 +344,10 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   budget/depth exhaustion is a diagnostic, not a `Dynamic` fallback; an
   evaluation that runs out of budget leaves its value unknown, a runtime
   check. `tests/type-level-evaluation-test.ts`.
+- `typeOf` of a builtin reads the checker's signature (`builtinSignature`,
+  written by `signatureText` and read back as a written type), so the two
+  never disagree; only intrinsics the checker types specially (`map`,
+  `length`, `fail`) keep a written signature in `type-description.ts`.
 - `Z`/`S k` patterns take a number apart by the value they meet (runtime
   `matchPattern`, checker `naturalArgument`), so a program's own `Z`/`S`
   variants keep matching as variants. The parser reads a bare `Z` as nullary

@@ -5685,6 +5685,58 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     options.result?.(scope, new Map([...scope].filter(([name, entry]) => originalScope.get(name) !== entry)));
     return { issues, dynamicBoundaries, runtimeChecks, opaqueUse };
 }
+// A builtin's type as APN writes one (a -> List a), or undefined when it has
+// parts APN cannot write. Type variables are named a, b, ... in order.
+function signatureText(type: Ty): string | undefined {
+    const names = new Map<Ty, string>();
+    // level: 0 anywhere, 1 left of an arrow (arrows need parentheses), 2 an
+    // argument (applications do too).
+    const write = (x: Ty, level: number): string | undefined => {
+        const t = resolve(x);
+        const wrap = (s: string, needs: number) => level >= needs ? `(${s})` : s;
+        switch (t.k) {
+            case "var": {
+                if (!names.has(t)) names.set(t, String.fromCharCode(97 + names.size));
+                return names.get(t);
+            }
+            case "atom": return t.name;
+            case "dynamic": return "Dynamic";
+            case "fn": {
+                const input = write(t.input, 1), output = write(t.output, 0);
+                return input && output && wrap(`${input} -> ${output}`, 1);
+            }
+            case "list": {
+                if (t.items?.length === 0 || t.length && !t.length.terms.size && t.length.constant === 0n) return "[]";
+                const element = write(t.element, 2);
+                return element && wrap(`List ${element}`, 2);
+            }
+            case "variant": {
+                const args = t.args.map(a => write(a, 2));
+                if (args.some(a => a === undefined)) return undefined;
+                const name = t.name === "Monad" ? "m" : t.name;
+                return args.length ? wrap(`${name} ${args.join(" ")}`, 2) : name;
+            }
+            case "type": return "Type";
+            default: return undefined;
+        }
+    };
+    return write(type, 0);
+}
+// The builtin functions' types as the checker writes them (S is UInt -> UInt),
+// read once from its initial scope: what typeOf shows for them.
+let signatures: Map<string, string> | undefined;
+export function builtinSignature(name: string): string | undefined {
+    if (!signatures) {
+        const found = signatures = new Map<string, string>();
+        checkTypes([], { result: scope => {
+            for (const [key, entry] of scope) {
+                const written = entry.builtin && resolve(entry.type).k === "fn" ? signatureText(entry.type) : undefined;
+                if (written) found.set(key, written);
+            }
+        } });
+    }
+    return signatures.get(name);
+}
 export function checkSource(source: string, file = "<input>", options: CheckOptions = {}): CheckResult {
     return checkTypes(parseDocument(source), options);
 }

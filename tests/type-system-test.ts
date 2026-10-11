@@ -12,7 +12,12 @@ for (const [source, expected] of [
     ["typeOf $ []", "List a"],
     ["typeOf $ [1..]", "List Int"],
     ["typeOf $ [x: 1]", "Record"],
-    ["typeOf $ sqrt", "a -> b"],
+    ["typeOf $ sqrt", "Number -> Number"],
+    // Builtins show the checker's signatures.
+    ["typeOf $ S", "UInt -> UInt"],
+    ["typeOf $ print", "a -> IO []"],
+    ["typeOf $ foldl", "(a -> b -> a) -> a -> List b -> a"],
+    ["typeOf $ take 2", "List a -> List a"],
     ["typeOf $ Int", "Type"],
     ["Bool true", "true"], ['String "hi"', '"hi"'],
     ["Char 'a'", "'a'"], ["[] []", "[]"],

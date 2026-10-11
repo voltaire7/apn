@@ -1,6 +1,18 @@
 import type { Expr, Pattern } from "./ast.ts";
 import { type Env, type Value, type VariantFamily, typeToString } from "./types.ts";
 import { numericType, NUMERIC_TYPES } from "./type-system.ts";
+import { builtinSignature } from "./type-checker.ts";
+import { parse } from "./parser.ts";
+
+// A builtin's signature as the checker writes it, read as a written type.
+const signatureExprs = new Map<string, Expr | undefined>();
+function signatureExpr(name: string): Expr | undefined {
+    if (!signatureExprs.has(name)) {
+        const written = builtinSignature(name), program = written ? parse(written) : [];
+        signatureExprs.set(name, program[0]?.t === "expr" ? program[0].value : undefined);
+    }
+    return signatureExprs.get(name);
+}
 
 // Bounded, non-evaluating inference for display, not an enforced static type system.
 // Variable identity preserves relationships; links accumulate application/pattern constraints.
@@ -58,6 +70,8 @@ export function describeType(value: Value): string {
             if (!parameters.has(e.name) && /^[a-z]/.test(e.name)) parameters.set(e.name, fresh());
             return parameters.get(e.name) ?? named(e.name);
         }
+        // [] written as a type is the empty list's (IO [] yields it).
+        if (e.t === "list" && !e.v.length) return named("[]");
         if (e.t === "list") return sequence(e.v.map(x => declared(x, parameters)));
         if (e.t === "lambda" || e.t === "patternLambda") {
             const written = (p: Pattern): Shape => p.p === "var" ? declared({ t: "var", name: p.name }, parameters)
@@ -231,14 +245,15 @@ export function describeType(value: Value): string {
                     const c = constructor(v.family, v.tag);
                     result = c.fields.reduceRight((result, input) => arrow(input, result), c.result);
                 } else {
-                    const signatures: Record<string, Shape> = {
-                        print: arrow(a, named("IO", [named("[]")])), head: arrow(list(a), a), tail: arrow(list(a), list(a)),
+                    // The checker's signature; the few it types as intrinsics
+                    // (map over any functor, length of anything) are written here.
+                    const written = signatureExpr(v.name);
+                    const intrinsics: Record<string, Shape> = {
                         map: arrow(arrow(a, b), arrow(list(a), list(b))),
-                        filter: arrow(arrow(a, b), arrow(list(a), list(a))),
-                        length: arrow(a, named("Int")), null: arrow(a, named("Bool")),
+                        length: arrow(a, named("Int")),
                         fail: arrow(named("String"), a),
                     };
-                    result = signatures[v.name] ?? Array.from({ length: v.arity }, fresh).reduceRight((result, input) => arrow(input, result), fresh());
+                    result = written ? declared(written, new Map()) : intrinsics[v.name] ?? Array.from({ length: v.arity }, fresh).reduceRight((result, input) => arrow(input, result), fresh());
                 }
                 for (const arg of v.applied) result = apply(result, inspect(arg));
                 return v.arity ? result : arrow(named("[]"), result);

@@ -1192,7 +1192,9 @@ Type variables preserve relationships: `typeOf (x y -> x)` displays
 left-to-right order for each description. Function applications, lexical
 captures, list patterns and generic constructor patterns propagate constraints;
 clauses contribute to one signature. For example, `f (Some x) = x` with
-`f None = 0` describes `Option Int -> Int`.
+`f None = 0` describes `Option Int -> Int`. A builtin function describes the
+signature the checker gives it: `typeOf S` is `UInt -> UInt`, `typeOf print`
+is `a -> IO []`. A `[]` written in a type is the empty list's type.
 
 This remains bounded diagnostic inference, not Haskell's static type checker.
 Unresolved native behavior, overloaded operators and recursive self-application
