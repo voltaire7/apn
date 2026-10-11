@@ -463,6 +463,13 @@ None >>= _ = None
 return = Some                      # return in Option
 ```
 
+`to` and `from` are methods the same way: `to T x` writes `x` as a `T`
+(`to String`, `to JSON`, `to Chars`; another type converts as applying it),
+`from T x` reads one back. A bare type name in a pattern matches that type
+itself (`describe Int = "integer"`), so an instance names its type:
+`to Celsius = (F f) -> C ((f - 32) * 5 / 9)`. See the
+[standard library](standard-library.md).
+
 `return` is overloaded on its result type (see "Overloading on the result
 type" below): a context that names Option uses the newest `return` whose
 result is an Option, so `return = Some` and `return x = MkCounter (s -> [x,s])`
@@ -979,7 +986,7 @@ Function values display source: `func x = print x; print func` prints
 `x -> print x` without running the body. Multiple clauses display their
 equations; partially applied functions include their bound arguments without
 forcing them. Captured environments are not expanded. A method (`map`, `return`,
-`>>=`, `<*>`) displays like an overloaded function: its builtin's name (the IO
+`>>=`, `<*>`, `to`, `from`) displays like an overloaded function: its builtin's name (the IO
 and list instances), then each instance's clauses, one per line. After
 `import "option"`, `print return` shows `return`, `Some` and `Ok`.
 

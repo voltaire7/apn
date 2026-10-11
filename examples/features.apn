@@ -929,6 +929,18 @@ Label a = | MkLabel a
 (MkLabel x) >>= f = f x
 return = MkLabel
 print (Label Int { return 9 })             # => MkLabel 9
+# to T x writes x as a T and from T x reads it back; they are methods too.
+print (to String 1.5 ++ "!")               # => 1.5!
+print (Int (from String "41") + 1)         # => 42
+print (to JSON [n: 1])                     # => {"n":1}
+print (from Chars (to Chars "abc"))        # => abc
+describeType Int = "integer"               # a bare type name matches that type
+describeType String = "text"
+print [describeType Int,describeType String]  # => ["integer","text"]
+TempC = | InC Float
+TempF = | InF Float
+to TempC = (InF f) -> InC ((f - 32) * 5 / 9)
+print (to TempC (InF 212))                 # => InC 100.0
 # A method prints as an overloaded function: its builtin (IO and lists),
 # then each instance, one per line.
 print return                               # => return, Some, Ok, x -> MkCounter (s -> [x,s]), MkLabel

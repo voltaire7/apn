@@ -65,3 +65,8 @@ sequence actions = actions * action -> action
 mapM f xs = sequence (map f xs)
 when condition action = condition ? action >> return [] : return []
 unless condition action = condition ? return [] : action >> return []
+# Representations: to T x writes x as a T, from T x reads it back (to String,
+# to JSON, to Chars; from String parses). They are methods: a program adds a
+# type by defining to or from for it, as for map.
+JSON = String
+Chars = List Char

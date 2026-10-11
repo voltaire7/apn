@@ -111,6 +111,32 @@ See [zero initialization](zero-initialization.md) for type defaults and inspecti
 | `seq value next` | Demand the outer value, then return `next`; does not deeply force lists |
 | `fail message` | Raise a runtime error when demanded |
 
+## Representations — `to` and `from` (prelude)
+
+`to T x` writes `x` as a `T`; `from T x` reads one back. The prelude declares
+`JSON` (JSON text, a named `String`) and `Chars` (`List Char`).
+
+| API | Behavior |
+| --- | --- |
+| `to String x`, `from String text` | Display text; read a `Bool` or number literal back (`Dynamic`) |
+| `to JSON x`, `from JSON text` | JSON text; decode it (`Dynamic`) |
+| `to Chars text`, `from Chars chars` | A string's characters (code points); join them |
+| `to T x` for another type | Applies `T`, as a conversion: `to Float (Money 1.2)` |
+
+They are methods, like `map`: a program adds a type by defining an instance,
+which joins them everywhere. A bare type name in a pattern matches that type,
+so an instance names its type as its first parameter, in curried form:
+
+```apn
+Celsius = | C Float
+Fahrenheit = | F Float
+to Celsius = (F f) -> C ((f - 32) * 5 / 9)
+to Celsius (F 212)              # C 100.0
+```
+
+(`to Celsius (F f) = ...` would read `Celsius (F f)` as one typed pattern, as
+any capitalized name in a parameter list takes the patterns after it.)
+
 ## Absence and errors — `option`
 
 ```apn

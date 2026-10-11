@@ -67,6 +67,8 @@ export const NATIVES: Array<[string, number]> = [
     ["primBind", 2], ["primAp", 2], ["primReturn", 1],
     // Natural numbers are UInt: Z is UInt 0, S n the next one.
     ["S", 1],
+    // to T x writes x as a T; from T x reads it back (methods, like map).
+    ["to", 2], ["from", 2],
 ];
 const ZERO: Value = { kind: "int", v: 0n, typeName: "UInt" };
 
@@ -1931,14 +1933,39 @@ export class Interpreter {
     // ---- Monads: instances of map, >>=, <*> and return ----
     // Clause functions a program defines for these methods, newest last: tried
     // (newest first) before the builtin IO and list instances.
-    static readonly METHODS = new Set(["map", ">>=", "<*>", "return"]);
+    static readonly METHODS = new Set(["map", ">>=", "<*>", "return", "to", "from"]);
     private instances = new Map<string, Value[]>();
     // The variant families each method has an instance for (Monad/Functor patterns).
     private instanceFamilies = new Map<string, Set<unknown>>();
     private loadingPrelude = true;
 
     // The builtin each method starts from (its IO and list instances).
-    static readonly METHOD_NATIVES = new Map([["map", "map"], ["primReturn", "return"], ["primBind", ">>="], ["primAp", "<*>"]]);
+    static readonly METHOD_NATIVES = new Map([["map", "map"], ["primReturn", "return"], ["primBind", ">>="], ["primAp", "<*>"], ["to", "to"], ["from", "from"]]);
+    // to T x and from T x: a program's instances first (newest first), then
+    // the builtin ones: String (its text, read back as parse does), JSON
+    // (JSON text) and Chars (a string's characters). to of any other type
+    // applies it: to Float (Money 1.2) is Float (Money 1.2).
+    private convertTo(method: "to" | "from", target: Value, value: Value): Value {
+        const own = this.instance(method, [target, value]);
+        if (own) return own;
+        const type = this.reference(target);
+        const is = (name: string) => {
+            const builtin = this.preludeBindings.get(name);
+            return name === "String" ? type.kind === "type" && type.name === "String" && !type.family && !type.alias
+                : !!builtin && this.isTypeValue(type) && this.sameType(this.reference(builtin), type);
+        };
+        if (method === "to") {
+            if (is("String")) return this.callNative("toString", [value]);
+            if (is("JSON")) return standardNative(this, "toJson", [value]);
+            if (is("Chars")) return standardNative(this, "chars", [value]);
+            if (this.isTypeValue(type)) return this.apply(type, value);
+        } else {
+            if (is("String")) return this.callNative("parse", [this.demand(value)]);
+            if (is("JSON")) return standardNative(this, "fromJson", [value]);
+            if (is("Chars")) return standardNative(this, "fromChars", [value]);
+        }
+        throw new APNError("runtime", `no ${method} instance for ${this.renderString(type)}`, { hint: `define one, such as \`${method} ${this.renderString(type)} x = ...\`` });
+    }
     // The method a value is: its builtin, or an operator section of it ((>>=)).
     private methodOf(v: Value): string | undefined {
         if (v.kind === "native" && !v.applied.length) return Interpreter.METHOD_NATIVES.get(v.name);
@@ -1986,11 +2013,15 @@ export class Interpreter {
     // The first instance whose clauses accept these arguments.
     private instance(method: string, args: Value[]): Value | undefined {
         const fns = this.instances.get(method) ?? [];
-        for (let n = fns.length - 1; n >= 0; n--) {
+        // Each argument may decide it: a curried instance (to Celsius = ...)
+        // takes the first alone.
+        next: for (let n = fns.length - 1; n >= 0; n--) {
             let f = fns[n];
-            for (let i = 0; i < args.length - 1; i++) f = this.apply(f, args[i]);
-            const result = this.apply(f, args[args.length - 1], true);
-            if (result.kind !== "nomatch") return result;
+            for (let i = 0; i < args.length; i++) {
+                f = this.apply(f, args[i], true);
+                if (f.kind === "nomatch") continue next;
+            }
+            return f;
         }
         return undefined;
     }
@@ -2989,6 +3020,7 @@ export class Interpreter {
             return { kind: "type", inspect: true, name: names[value.kind] ?? value.kind,
                 description: ["closure", "clauseFn", "native"].includes(value.kind) ? describeType(value) : undefined };
         }
+        if (name === "to" || name === "from") return this.convertTo(name, argsIn[0], argsIn[1]);
         if (name === "isType") {
             const target = this.asType(argsIn[0]);
             if (!target || !this.isTypeValue(target)) throw new APNError("runtime", "isType expects a type as its first argument");
@@ -3674,6 +3706,14 @@ export class Interpreter {
             if (type && type.kind === "type") {
                 try { v = this.realize(undecided, type); }
                 catch (error) { if (error instanceof APNError) return false; throw error; }
+            }
+        }
+        // A bare type name matches that type itself, as a value: describe Int.
+        if (p.p === "constr" && !p.args.length) {
+            const bound = this.env.get(p.tag), named = bound && this.reference(bound);
+            if (named && this.isTypeValue(named) && !(named.kind === "type" && named.name === "$any")) {
+                const given = this.reference(v);
+                return this.isTypeValue(given) && this.sameType(named, given);
             }
         }
         if (p.p === "constr" && (!TYPE_NAMES.includes(p.tag) || p.tag === "Vect")) {

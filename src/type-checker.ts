@@ -17,7 +17,7 @@ function pendingTy(t: Ty): Ty { return { k: "variant", name: "Monad", args: [t] 
 function isPending(t: Ty): boolean { return t.k === "variant" && t.name === "Monad" && t.args.length === 1; }
 // Scalar types an alias names a subtype of (Money = Float), as at runtime.
 const NAMED_BASES = new Set([...NUMERIC_TYPES.filter(t => !["Number", "Real", "Integer", "Exact", "Inexact"].includes(t)), "String", "Bool", "Char"]);
-const METHODS = new Set(["map", ">>=", "<*>", "return"]);
+const METHODS = new Set(["map", ">>=", "<*>", "return", "to", "from"]);
 // A definition that adds an instance instead of binding a name: any
 // definition of a method (map f (Some x) = ..., return = Some).
 function isInstance(name: string, _clauses: { params: Pattern[] }[]): boolean {
@@ -1145,6 +1145,28 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (a.k !== "list") return problem("do expects a list of expressions");
             return io(runType(a.items ? a.items[a.items.length - 1] ?? list(variable(), constant(0n)) : a.element));
         }
+        if (t.op === "to" || t.op === "from") {
+            if (a.k === "var") return t;
+            // A program's instance first, as at runtime.
+            const own = instanceFor(t.op, [a, b]);
+            if (own && resolve(own).k !== "var") {
+                const placeholder = { t: "placeholder" } as Expr;
+                return application(application(copy(own), { type: a }, placeholder), { type: b }, placeholder);
+            }
+            if (a.k !== "type") return problem(`${t.op} expects a type, as in ${t.op} String x`);
+            const target = resolve(a.value);
+            const named = (name: string) => target.k === "variant" && target.name === name && !!target.base;
+            const chars = target.k === "list" && !target.items && resolve(target.element).k === "atom" && (resolve(target.element) as { name: string }).name === "Char";
+            const string = target.k === "atom" && target.name === "String";
+            if (t.op === "to") {
+                if (string || named("JSON")) return atom("String");
+                if (chars) { unify(atom("String"), b); return list(atom("Char")); }
+                return application(a, { type: b }, { t: "placeholder" });
+            }
+            if (string || named("JSON")) { unify(atom("String"), b); return explicitDynamic; }
+            if (chars) { unify(list(atom("Char")), b); return atom("String"); }
+            return problem(`no from instance for ${text(target)}`, undefined, `define one, such as \`from ${text(target)} x = ...\``);
+        }
         if (t.op === "match") {
             if (b.k !== "list") return problem("match expects a list of alternatives");
             const outputs: Ty[] = [];
@@ -1841,6 +1863,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const payload: Ty = { k: "type", value: variable() };
                     unify(payload, expected, e);
                     p.args.forEach((x) => bind(x, payload, scope, e, bound));
+                    return;
+                }
+                // A bare type name matches that type itself, as a value: describe Int.
+                if (t.k === "type" && !p.args.length && !naturalPattern(p, scope)) {
+                    unify(expected, { k: "type", value: t.value }, e);
                     return;
                 }
                 if (t.k === "type") {
@@ -5741,6 +5768,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("S", { type: fn(atom("UInt"), atom("UInt"), undefined, true) });
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
     scope.set("match", { type: { k: "intrinsic", name: "match", arity: 2 } });
+    // to T x writes x as a T, from T x reads it back (prelude types JSON, Chars).
+    for (const name of ["to", "from"]) scope.set(name, { type: { k: "intrinsic", name, arity: 2 } });
+    scope.set("JSON", { type: { k: "type", value: { k: "variant", name: "JSON", args: [], base: atom("String") } } });
+    scope.set("Chars", { type: { k: "type", value: list(atom("Char")) } });
     if (options.library) {
         const a = variable(), b = variable(), c = variable();
         native("bracket", [a, fn(a, b), fn(a, c)], io(runType(c)));
