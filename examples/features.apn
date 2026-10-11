@@ -923,6 +923,9 @@ Label a = | MkLabel a
 (MkLabel x) >>= f = f x
 return = MkLabel
 print (Label Int { return 9 })             # => MkLabel 9
+# A method prints as an overloaded function: its builtin (IO and lists),
+# then each instance, one per line.
+print return                               # => return, Some, Ok, x -> MkCounter (s -> [x,s]), MkLabel
 
 # Clauses with the same patterns but another result type overload each other;
 # the context of a call names the type, choosing one.

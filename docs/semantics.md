@@ -975,7 +975,10 @@ force them.
 Function values display source: `func x = print x; print func` prints
 `x -> print x` without running the body. Multiple clauses display their
 equations; partially applied functions include their bound arguments without
-forcing them. Captured environments are not expanded.
+forcing them. Captured environments are not expanded. A method (`map`, `return`,
+`>>=`, `<*>`) displays like an overloaded function: its builtin's name (the IO
+and list instances), then each instance's clauses, one per line. After
+`import "option"`, `print return` shows `return`, `Some` and `Ok`.
 
 ## Pattern functions
 

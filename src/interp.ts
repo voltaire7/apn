@@ -1931,6 +1931,25 @@ export class Interpreter {
     private instanceFamilies = new Map<string, Set<unknown>>();
     private loadingPrelude = true;
 
+    // The builtin each method starts from (its IO and list instances).
+    static readonly METHOD_NATIVES = new Map([["map", "map"], ["primReturn", "return"], ["primBind", ">>="], ["primAp", "<*>"]]);
+    // The method a value is: its builtin, or an operator section of it ((>>=)).
+    private methodOf(v: Value): string | undefined {
+        if (v.kind === "native" && !v.applied.length) return Interpreter.METHOD_NATIVES.get(v.name);
+        if (v.kind !== "closure" || v.applied?.length || v.params.join() !== "$L,$R" || v.body.t !== "binop") return undefined;
+        const op = v.body.op, bound = v.env.get(op), base = bound && this.reference(bound);
+        return base?.kind === "native" && !base.applied.length ? Interpreter.METHOD_NATIVES.get(base.name) : undefined;
+    }
+    // A method as an overloaded function shows itself: its builtin (by name),
+    // then each instance's clauses, one per line, oldest first.
+    private methodText(method: string): string {
+        const lines = [/^[a-z]/.test(method) ? method : `(${method})`];
+        for (const instance of this.instances.get(method) ?? []) {
+            const fn = this.reference(instance);
+            lines.push(fn.kind === "clauseFn" || fn.kind === "closure" || fn.kind === "native" ? functionSource(fn) : valueToString(fn));
+        }
+        return lines.join("\n");
+    }
     private registerInstance(method: string, fn: Value, clauses: DefClause[]): void {
         this.instances.set(method, [...this.instances.get(method) ?? [], fn]);
         this.instanceClauses.set(fn, clauses[0]);
@@ -2253,6 +2272,8 @@ export class Interpreter {
                 }
             } else if (v.kind === "clauseFn" && v.applied.length || v.kind === "closure" && v.applied?.length && !(v.whole ?? v.params)[0].startsWith("$")) {
                 emit(this.residualText(v), v.kind);
+            } else if (this.methodOf(v)) {
+                emit(this.methodText(this.methodOf(v)!), v.kind);
             } else emit(raw ? rawString(v) : valueToString(v), v.kind);
         } finally {
             ancestors.delete(v);
