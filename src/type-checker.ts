@@ -2257,6 +2257,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 convert((t as Extract<Ty, { k: "variant" }>).args[0], result, e);
                 return t;
             }
+            // A base type applied to a named value unwraps it, as at runtime:
+            // Float (Money 1.2), Int (Money 1.0) as Int 1.0 would.
+            if (t.k === "atom" && NAMED_BASES.has(t.name) && a.k === "variant" && a.base) return application(f, { ...argument, type: a.base }, e);
             // Applying a named subtype applies its base, as at runtime: F .1 with
             // F = Float32 rounds like Float32 .1. Another name must be unwrapped.
             if (t.k === "variant" && t.base) {

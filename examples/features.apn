@@ -1611,6 +1611,9 @@ idKind (AccountId _) = "account"
 idKind (Int _) = "int"
 print [idKind (AccountId 1),idKind (OtherId 1),idKind 1]  # => ["account","int","int"]
 # AccountId 1 + OtherId 1           # error: cannot combine AccountId and OtherId
+# Applying a base type unwraps: OtherId (Int (AccountId 4)) moves between names.
+print (Float $ AccountId 4)          # => 4.0
+print (OtherId (Int (AccountId 4)))  # => OtherId 4
 
 # Nullary variants index lists in declaration order.
 Compass = Up | Down | Left | Right

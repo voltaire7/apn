@@ -37,6 +37,9 @@ for (const [source, expected] of [
     ["widen (UInt8 x) = x + 300; widen 5", "305"],
     ["down (UInt8 x) = x == 0 ? 0 : down (x - 1); down 3", "0"],
     ["pred (S k) = k; pred 5 - 1", "UInt 3"],
+    // A base type applied to a named value unwraps it.
+    ["Money = Float; Float $ Money 1.2", "1.2"],
+    ["Money = Float; Cents = Int; Cents (Int (Money 3.0))", "Cents 3"],
 ] as const) {
     Deno.test(`natural numbers: ${source}`, () => {
         const actual = run(source);

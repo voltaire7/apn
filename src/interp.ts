@@ -1566,7 +1566,9 @@ export class Interpreter {
                     try { return this.constructType("Dynamic", this.reference(arg)); }
                     finally { this.dynamicDepth--; }
                 }
-                const value = this.demand(arg);
+                let value = this.demand(arg);
+                // A base type applied to a named value unwraps it: Float (Money 1.2).
+                if (!f.family && !f.alias && NAMED_BASES.has(f.name) && value.kind === "variant" && value.family?.base) value = this.baseValue(value);
                 if (f.name === "Vect" && !f.family && !f.alias && (f.arguments?.length ?? 0) < 2) {
                     const args = [...f.arguments ?? []];
                     if (!args.length && (value.kind !== "int" || value.v < 0n)) throw new APNError("runtime", "Vect length must be a nonnegative Int");

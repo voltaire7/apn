@@ -26,7 +26,9 @@ payload to `x`, and outranks an `(Int x)` clause for a UserId. Two different
 names never mix: arithmetic between them is an error, and they are not equal
 (`UserId 3 == OrderId 3` is false, though each equals `3`). Constructors check
 the base type; construction from another named type requires extracting its
-payload first. Aliasing a named subtype (`Alias = UserId`) keeps its identity.
+payload first. Applying the base type (or another base type) is that
+extraction: `Float (UserId 3)` is `3.0`, `Int (Money 1.0)` is `1`, and
+`OrderId (Int (UserId 3))` is `OrderId 3`. Aliasing a named subtype (`Alias = UserId`) keeps its identity.
 Aliases of other types (records, `Vect n Int`, parameterized aliases) remain
 plain aliases. An omitted record slot initialized from a named type wraps its
 base's default.
