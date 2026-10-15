@@ -76,7 +76,7 @@ for (const [name, source, expected] of [
     ["assert yields true, pure in any block", "xs = {\n    x <- [1,2]\n    assert (x > 0)\n    return x\n}\nprint xs\ndouble n = {\n    assert (n > 0)\n    n * 2\n}\nprint (double 3)\nprint (assert 1)",
         ["[1,2]", "6", "true"]],
     ["guard stops a list, Option or Result block; empty is decided by its context", 'import ["option","number"]\nevens = {\n    x <- [1..6]\n    guard (x % 2 == 0)\n    return x\n}\nprint evens\npositive n = {\n    _ <- Some n\n    guard (n > 0)\n    return n\n}\nprint [positive 3,positive (-1)]\nprint (Option Int empty)\nprint (List Int empty)\nprint empty\ncheck n = {\n    _ <- Ok n\n    guard (n > 0)\n    return n\n}\nprint [check 1,check 0]\nhalf n = Result Int String {\n    guard (n % 2 == 0)\n    return (n / 2)\n}\nprint [half 4,half 3,Option Int { guard false; return 1 }]',
-        ["[2,4,6]", "[Some 3,None]", "None", "[]", '[]\nNone\nErr "guard failed"', '[Ok 1,Err "guard failed"]', '[Ok 2,Err "guard failed",None]']],
+        ["[2,4,6]", "[Some 3,None]", "None", "[]", 'None\nErr "empty"', '[Ok 1,Err "guard failed: n > 0"]', '[Ok 2,Err "guard failed: n % 2 == 0",None]']],
     ["when and unless work in any monad", 'import "option"\nprint (unless false (Err "no"))\nprint (Option (when false (Some 1)))\nwhen true (print "ran")',
         ['Err "no"', "Some []", "ran"]],
 ] as const) Deno.test(`monads: ${name}`, () => {
@@ -96,11 +96,22 @@ for (const [source, message, kind] of [
     ["print (return 1 + 1)", "ambiguous: nothing decides which return", "type"],
     ['import "option"\nmixed n = {\n    Some 1\n    Ok n\n}', "a Result value cannot run in an Option do-block", "type"],
     ['import "option"\nmixed n = {\n    _ <- Some n\n    Ok n\n    return n\n}', "a Result value cannot run in an Option do-block", "type"],
-    ['Tree = Leaf Int | Node Tree Tree\nprint (Tree empty)', "no empty instance for Tree", "runtime"],
-    ['act = {\n    guard false\n    print 1\n}\nact', "empty ran as an action", "runtime"],
+    ['Tree = Leaf Int | Node Tree Tree\nprint (Tree empty)', "no throw instance for Tree", "runtime"],
+    ['act n = {\n    guard (n > 0)\n    print n\n}\nact 0', "guard failed: n > 0", "runtime"],
 ] as const) Deno.test(`monads reject: ${JSON.stringify(source)}`, () => fails(source, message, kind));
 // A block of returns and guards takes the monad its other statements name, as
 // types decide in Haskell: the checker finds it, and the run uses it.
+// throw e is the monad's failure, chosen by the context as return is; a
+// false guard throws its condition as the call wrote it.
+for (const [name, source, expected] of [
+    ["throw in each monad", 'import "option"\nprint [Option Int (throw "x"),Result Int String (throw "x"),List Int (throw "x")]\nprint (throw 1)',
+        ['[None,Err "x",[]]', "None\nErr 1"]],
+    ["guard names the condition its call wrote", 'import "option"\ng x = guard x\nb = false\nprint [Result Int String { g (1 > 2); return 1 },Result Int String { guard b; return 1 },Result Int String { guard $ 1 == 2; return 1 }]',
+        ['[Err "guard failed: x",Err "guard failed: b",Err "guard failed: 1 == 2"]']],
+] as const) Deno.test(`monads: ${name}`, () => {
+    const actual = run(source);
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(JSON.stringify(actual));
+});
 Deno.test("monads: the checker decides an undecided block's monad", () => {
     const source = 'import ["option","number"]\ncheck n = {\n    unless (n > 0) (Err "not positive")\n    return (n * 2)\n}\nprint [check 2,check 0]';
     const actual = run(source);

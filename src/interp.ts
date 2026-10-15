@@ -64,7 +64,7 @@ export const NATIVES: Array<[string, number]> = [
     ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
-    ["primBind", 2], ["primAp", 2], ["primReturn", 1],
+    ["primBind", 2], ["primAp", 2], ["primReturn", 1], ["primThrow", 1], ["primSource", 1],
     // Natural numbers are UInt: Z is UInt 0, S n the next one.
     ["S", 1],
     // to T x writes x as a T; from T x reads it back (methods, like map).
@@ -209,8 +209,6 @@ export class Interpreter {
     constructor() {
         for (const name of TYPE_NAMES) if (name !== "Vect") this.env.setLocal(name, { kind: "type", name });
         this.env.setLocal("Z", ZERO);
-        // empty in a monad not decided yet, as return x is (the prelude's empty).
-        this.env.setLocal("primEmpty", { kind: "pending", step: { op: "empty" } });
         for (const [name, arity] of NATIVES) {
             if (!(name in RETIRED_NATIVES)) this.env.setLocal(name, { kind: "native", name, arity, applied: [] });
         }
@@ -1954,7 +1952,7 @@ export class Interpreter {
     private loadingPrelude = true;
 
     // The builtin each method starts from (its IO and list instances).
-    static readonly METHOD_NATIVES = new Map([["map", "map"], ["primReturn", "return"], ["primBind", ">>="], ["primAp", "<*>"], ["to", "to"], ["from", "from"]]);
+    static readonly METHOD_NATIVES = new Map([["map", "map"], ["primReturn", "return"], ["primThrow", "throw"], ["primBind", ">>="], ["primAp", "<*>"], ["to", "to"], ["from", "from"]]);
     // to T x and from T x: a program's instances first (newest first), then
     // the builtin ones: String (its text, read back as parse does), JSON
     // (JSON text) and List Char (a string's characters). to of any other type
@@ -2044,12 +2042,12 @@ export class Interpreter {
         return undefined;
     }
 
-    // return x in a monad: return is overloaded on its result, so the newest
-    // return instance whose result is in the target monad makes it.
-    private returnIn(target: Value, x: Value): Value | undefined {
+    // return x (or throw e) in a monad: the method is overloaded on its result,
+    // so the newest instance whose result is in the target monad makes it.
+    private instanceIn(method: string, target: Value, x: Value): Value | undefined {
         const family = target.kind === "type" ? target.family : undefined;
         if (!family) return undefined;
-        const fns = this.instances.get("return") ?? [];
+        const fns = this.instances.get(method) ?? [];
         for (let n = fns.length - 1; n >= 0; n--) {
             if (this.instanceHead(fns[n]) === family.name) return this.reference(this.apply(fns[n], x));
         }
@@ -2149,25 +2147,17 @@ export class Interpreter {
             if (!choice) throw new APNError("runtime", `no overload of '${step.fn.name}' makes ${head ? `a ${head}` : "this type"}`);
             return this.reference(this.runClause(step.fn, choice, step.args));
         }
-        if (step.op === "empty") return this.emptyIn(target);
-        if (this.isIOType(target)) { const value = step.value; return { kind: "io", result: () => this.typeText(value), run: () => value }; }
-        if (this.isListType(target)) return mkList([step.value]);
-        const made = this.returnIn(target, step.value);
-        if (made) return made;
-        throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as `return = Some`" });
-    }
-
-    // empty in a monad: [] for a list, an action failing when run for IO (a
-    // failed guard), else the newest empty instance making the target's type.
-    private emptyIn(target: Value): Value {
-        if (this.isListType(target)) return mkList([]);
-        if (this.isIOType(target)) return { kind: "io", result: "a", run: () => { throw new APNError("runtime", "empty ran as an action (a guard failed)"); } };
-        const family = target.kind === "type" ? target.family : undefined;
-        const fns = this.instances.get("empty") ?? [];
-        for (let n = fns.length - 1; family && n >= 0; n--) {
-            if (this.instanceHead(fns[n]) === family.name) return this.reference(fns[n]);
+        // throw e: [] in a list, an action failing with e for IO (as fail does).
+        const value = step.value, method = step.op;
+        if (this.isIOType(target)) {
+            return method === "throw"
+                ? { kind: "io", result: "a", run: () => { throw new APNError("runtime", rawString(this.dataValue(value))); } }
+                : { kind: "io", result: () => this.typeText(value), run: () => value };
         }
-        throw new APNError("runtime", `no empty instance for ${valueToString(target)}`, { hint: "define one, such as `empty = None`" });
+        if (this.isListType(target)) return mkList(method === "throw" ? [] : [value]);
+        const made = this.instanceIn(method, target, value);
+        if (made) return made;
+        throw new APNError("runtime", `no ${method} instance for ${valueToString(target)}`, { hint: method === "throw" ? "define one, such as `throw _ = None`" : "define one, such as `return = Some`" });
     }
 
     // m >>= f: through m's monad. f's results are realized in the same monad.
@@ -2406,7 +2396,7 @@ export class Interpreter {
     ambiguous(v: Extract<Value, { kind: "pending" }>): never {
         const step = v.step;
         if (step.op === "bind" || step.op === "do") throw new APNError("runtime", "ambiguous: nothing decides which monad this is", { hint: "name it, as in `Option Int { ... }` or `IO [] { ... }`" });
-        const name = step.op === "call" ? step.fn.name : step.op === "empty" ? "empty" : "return";
+        const name = step.op === "call" ? step.fn.name : step.op;
         throw new APNError("runtime", `ambiguous: nothing decides which ${name}`, { hint: `name the type it should have, as in \`Int (${name} ...)\`` });
     }
 
@@ -2418,14 +2408,13 @@ export class Interpreter {
         if (step.op === "call") return step.choices.map(c => this.residualText({ ...step.fn, clauses: [c], applied: step.args })).join("\n");
         if (step.op === "bind") return `${this.renderString(step.m)} >>= ${argument(this.force(step.f))}`;
         if (step.op === "do") return exprToSource(step.block);
-        if (step.op === "empty") return ["[]", ...(this.instances.get("empty") ?? []).map(instance => this.renderString(instance))].join("\n");
-        const lines = (this.instances.get("return") ?? []).map(instance => {
+        const lines = (this.instances.get(step.op) ?? []).map(instance => {
             const fn = this.reference(instance);
             if (fn.kind === "clauseFn") return this.residualText({ ...fn, applied: [...fn.applied, step.value] });
             if (fn.kind === "native") return functionSource({ ...fn, applied: [...fn.applied, step.value] });
             return `${valueToString(fn)} ${argument(step.value)}`;
         });
-        return lines.length ? [...new Set(lines)].join("\n") : `return ${argument(step.value)}`;
+        return lines.length ? [...new Set(lines)].join("\n") : `${step.op} ${argument(step.value)}`;
     }
 
     // A partly applied function as what is left of it: the clauses its
@@ -3007,6 +2996,18 @@ export class Interpreter {
         if (name === "primBind") return this.bind(argsIn[0], argsIn[1]);
         if (name === "primAp") return this.apValue(argsIn[0], argsIn[1]);
         if (name === "primReturn") return this.pendingReturn(argsIn[0]);
+        if (name === "primThrow") return { kind: "pending", step: { op: "throw", value: argsIn[0] } };
+        // The source a parameter's argument was written as at the call (guard's
+        // condition), as assert shows its expression.
+        if (name === "primSource") {
+            let argument = argsIn[0];
+            if (argument.kind === "thunk" && argument.body.t === "var") argument = argument.env.get(argument.body.name) ?? argument;
+            let body = argument.kind === "thunk" ? argument.body : undefined;
+            // Without its grouping parentheses: n > 0, not (n > 0).
+            while (body?.t === "block" && body.style === "(" && body.stmts.length === 1) body = body.stmts[0];
+            const at = body && sourceLocations.get(body);
+            return mkStr(at ? at.source.slice(at.start, at.end).trim() : body ? exprToSource(body) : this.renderString(argument));
+        }
         const host = this.hostNatives.get(name);
         if (host) return host(argsIn);
         if (name === "use") {

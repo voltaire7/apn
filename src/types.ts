@@ -83,9 +83,8 @@ export function rawString(v: Value): string {
 }
 
 export type PendingStep =
-    | { op: "return"; value: Value }
-    // The monad's empty value (Alternative's): [] for a list, None for an Option.
-    | { op: "empty" }
+    // return x, and throw e (the monad's failure: [] in a list, None in an Option).
+    | { op: "return" | "throw"; value: Value }
     // A call of overloads that differ only in result type: the context chooses.
     | { op: "call"; fn: Extract<Value, { kind: "clauseFn" }>; args: Value[]; choices: DefClause[] }
     | { op: "bind"; m: Value; f: Value }
@@ -134,7 +133,7 @@ export function valueToString(v: Value): string {
         // An undecided return shows its value; a >>= or do-block cannot be
         // shown without running it.
         // Undecided: shown fully by the interpreter, which knows the overloads.
-        case "pending": return v.step.op === "return" ? "return" + argumentText(v.step.value) : v.step.op === "call" ? v.step.fn.name + v.step.args.map(argumentText).join("") : v.step.op === "empty" ? "empty" : "return";
+        case "pending": return v.step.op === "return" || v.step.op === "throw" ? v.step.op + argumentText(v.step.value) : v.step.op === "call" ? v.step.fn.name + v.step.args.map(argumentText).join("") : "return";
     }
 }
 
@@ -142,7 +141,7 @@ export function valueToString(v: Value): string {
 export function compoundArgument(v: Value): boolean {
     switch (v.kind) {
         case "variant": return v.v.length > 0;
-        case "pending": return v.step.op === "return";
+        case "pending": return v.step.op === "return" || v.step.op === "throw";
         case "io": case "closure": case "clauseFn": case "contract": case "functionType": return true;
         case "native": return v.applied.length > 0;
         case "int": case "float": case "rational": case "complex": return /[\s]|^-/.test(valueToString(v));

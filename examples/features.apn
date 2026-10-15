@@ -875,7 +875,7 @@ print launched             # => liftoff (on the same line)
 
 # ---------------------------------------------------------
 # 17c. FUNCTORS AND MONADS — instances by overloading
-#    map (<$>), <*>, >>=, >>, return, empty, guard, sequence, mapM, when and
+#    map (<$>), <*>, >>=, >>, return, throw, guard, sequence, mapM, when and
 #    unless work in any monad. IO and lists are built in; a type joins by defining
 #    instance clauses for map, >>= and return, which add to the method
 #    everywhere (Option's and Result's live in the option module).
@@ -912,7 +912,7 @@ noSum = Option Int {
 }
 print noSum                                # => None
 # As in Haskell, a discarded statement in a monad is chained, so a false
-# guard (empty: [] in a list, None in an Option) or a discarded Err stops the
+# guard (a throw: [] in a list, None in an Option) or a discarded Err stops the
 # block; a passing assert yields true, which is pure in any block.
 evens = {
     x <- [1..6]
@@ -927,15 +927,17 @@ positive n = {
     return n
 }
 print [positive 3,positive (-1)]           # => [Some 3,None]
-# In a Result block a false guard is Err "guard failed"; unless (or when)
-# names a specific error. check 2 runs only returns; the checker finds the
+# A false guard throws its condition as written: in a Result block that is
+# Err "guard failed: ..."; unless (or when) names a specific error. check 2 runs only returns; the checker finds the
 # block's monad (Result) and the run uses it.
 check n = {
     unless (n > 0) (Err "not positive")
     guard (n < 100)
     return (n * 2)
 }
-print [check 2,check 0,check 200]          # => [Ok 4,Err "not positive",Err "guard failed"]
+print [check 2,check 0,check 200]          # => [Ok 4,Err "not positive",Err "guard failed: n < 100"]
+# throw e is the failure in whatever monad the context names.
+print [Option Int (throw "x"),Result Int String (throw "x")]   # => [None,Err "x"]
 # A monad of your own: a counter threading a number through each step.
 Counter s a = | MkCounter (s -> [a,s])
 runCounter (MkCounter f) s = f s

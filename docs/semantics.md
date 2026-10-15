@@ -552,7 +552,7 @@ pairs = List Int {
 }
 evens = {
     x <- [1..6]
-    guard (x % 2 == 0)   # empty ([]) when odd: that x yields nothing
+    guard (x % 2 == 0)   # [] (a throw in a list) when odd: that x yields nothing
     return x             # [2,4,6]
 }
 check n = {
@@ -560,17 +560,18 @@ check n = {
     return (n * 2)       # check 2 is Ok 4, check 0 is Err "not positive"
 }
 half n = Result Int String {
-    guard (n % 2 == 0)   # empty in a Result is Err "guard failed"
-    return (n / 2)       # half 4 is Ok 2, half 3 is Err "guard failed"
+    guard (n % 2 == 0)   # a false guard throws its condition
+    return (n / 2)       # half 4 is Ok 2, half 3 is Err "guard failed: n % 2 == 0"
 }
 ```
 
 A block whose statements can all be undecided at run time (`check 2` above
 runs only `return` values) takes the monad its code names, as types decide in
 Haskell: the checker finds it (`Result`, from `Err`), and the run uses it.
-`empty` needs an instance for each variant type (`empty = None` for Option;
-a Result's is `Err "guard failed"`, since its failure needs an error);
-`empty` in IO is an action that fails when run.
+`throw e` is the monad's failure, chosen by the context as `return` is: `[]`
+in a list, an action failing with `e` in IO, and an instance for each variant
+type (`throw _ = None`, `throw = Err`). A false guard throws the condition as
+its call wrote it, as `assert` shows its expression (`guard b` names `b`).
 
 | Function | Meaning |
 | --- | --- |
@@ -582,8 +583,9 @@ a Result's is `Err "guard failed"`, since its failure needs an error);
 | `sequence actions` | runs each action, yielding the list of results |
 | `mapM f xs` | `sequence (map f xs)` |
 | `when c m`, `unless c m` | `m >> return []` when `c` is true (false), else `return []`: in any monad (`unless ok (Err e)`) |
-| `empty` | the monad's value holding nothing: `[]` in a list, `None` in an Option, `Err "guard failed"` in a Result (instances: `empty = None`) |
-| `guard c` | `return []` when `c` holds, else `empty`: a false guard stops a list, Option or Result do-block |
+| `throw e` | the monad's failure: `[]` in a list, `None` in an Option, `Err e` in a Result, a failing action in IO (instances: `throw _ = None`) |
+| `empty` | `throw "empty"`: the monad's value holding nothing |
+| `guard c` | `return []` when `c` holds, else `throw "guard failed: c"` (as written): a false guard stops a do-block |
 | `do actions` | runs each action in order, yielding the last result |
 
 `xs * f` iterates: when `f` returns actions it is the single action running

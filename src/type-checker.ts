@@ -5936,7 +5936,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (const name of names) scope.set(name, { type: { k: "intrinsic", name: op, arity } });
     }
     for (const name of ["return", "primReturn"]) { const t = variable(); scope.set(name, { type: fn(t, pendingTy(t)) }); }
-    for (const name of ["empty", "primEmpty"]) scope.set(name, { type: pendingTy(variable()) });
+    scope.set("empty", { type: pendingTy(variable()) });
+    for (const name of ["throw", "primThrow"]) { const t = variable(); scope.set(name, { type: fn(t, pendingTy(variable())) }); }
+    scope.set("primSource", { type: fn(variable(), atom("String")) });
     // when and unless: action >> return [], in the action's monad.
     for (const name of ["when", "unless"]) scope.set(name, { type: { k: "intrinsic", name: "when", arity: 2 } });
     // guard condition: return [] or empty, in the monad the context decides.

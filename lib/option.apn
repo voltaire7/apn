@@ -9,15 +9,13 @@ map _ None = None
 (Some x) >>= f = f x
 None >>= _ = None
 return = Some
-empty = None
+throw _ = None
 map f (Ok x) = Ok (f x)
 map _ (Err error) = Err error
 (Ok x) >>= f = f x
 (Err error) >>= _ = Err error
 return = Ok
-# A failed guard in a Result block: Err needs an error, so it says what
-# happened (unless condition (Err error) names a specific one).
-empty = Err "guard failed"
+throw = Err
 isSome (Some _) = true
 isSome None = false
 isNone value = not (isSome value)
