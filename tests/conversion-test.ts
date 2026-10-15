@@ -30,6 +30,11 @@ for (const [source, expected] of [
     ["describe Int = \"integer\"; describe String = \"text\"; [describe Int,describe String]", '["integer","text"]'],
     [TEMPERATURE + "to Celsius (F 212)", "C 100.0"],
     [TEMPERATURE + "to String 2", '"2"'],
+    // A list template converts position by position, as cast does: [Char] is one Char.
+    ["to [Char] \"h\"", "['h']"],
+    ["to [Char,Char] \"hi\"", "['h','i']"],
+    ["to [Float] [1]", "[1.0]"],
+    ["to [Int,String] [x: 1, y: \"a\"]", '[x: 1, y: "a"]'],
     // The checker evaluates to and from as the run does, beside a program's own instances.
     [TEMPERATURE + "Vect 2 Char (to (List Char) \"a😀\")", "['a','😀']"],
     ["Money = Float; Vect 1 Float [to Float (Money 1.2)]", "[1.2]"],
@@ -44,6 +49,8 @@ for (const [source, kind, message] of [
     ["to (List Char) 5", "type", "cannot use Int where String is required"],
     ["Celsius = | C Float; from Celsius 1", "type", "no from instance for Celsius"],
     ["to 5 1", "type", "to expects a type"],
+    ["to [Char] \"hello\"", "runtime", "list template and input must have the same length"],
+    ["from [Char] \"h\"", "type", "no from instance for a list template"],
     [TEMPERATURE + "Vect 3 Char (to (List Char) \"a😀\")", "type", "length mismatch: expected 3, got 2"],
     // The old names are gone, with a hint to the new spelling.
     ["chars \"hi\"", "type", "to (List Char)"],

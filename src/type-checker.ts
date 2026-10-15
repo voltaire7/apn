@@ -1163,6 +1163,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const placeholder = { t: "placeholder" } as Expr;
                 return application(application(copy(own), { type: a }, placeholder), { type: b }, placeholder);
             }
+            // A list template ([Char], [Int,String]) converts position by position, as cast does.
+            if (a.k === "list" && a.items?.length && a.items.every(item => resolve(item).k === "type")) {
+                if (t.op === "to") return template(a, b, activeExpression ?? { t: "placeholder" });
+                return problem("no from instance for a list template", undefined, "join characters with `from (List Char) cs`; convert with `to`, as in `to [Char,Char] \"hi\"`");
+            }
             if (a.k !== "type") return problem(`${t.op} expects a type, as in ${t.op} String x`);
             const target = resolve(a.value);
             const named = (name: string) => target.k === "variant" && target.name === name && !!target.base;

@@ -1960,6 +1960,8 @@ export class Interpreter {
             if (is("String")) return this.callNative("toString", [value]);
             if (is("JSON")) return standardNative(this, "toJson", [value]);
             if (chars) return standardNative(this, "chars", [value]);
+            // A list template ([Char], [Int,String]) converts position by position, as cast does.
+            if (this.isList(type) && this.isTypeValue(type)) return this.templateList(type, value);
             if (this.isTypeValue(type)) return this.apply(type, value);
         } else {
             if (is("String")) return this.callNative("parse", [this.demand(value)]);

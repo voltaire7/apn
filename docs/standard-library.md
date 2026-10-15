@@ -122,6 +122,7 @@ See [zero initialization](zero-initialization.md) for type defaults and inspecti
 | `to JSON x`, `from JSON text` | JSON text; decode it (`Dynamic`) |
 | `to (List Char) text`, `from (List Char) chars` | A string's characters (code points); join them |
 | `to T x` for another type | Applies `T`, as a conversion: `to Float (Money 1.2)` |
+| `to [T1,T2] x` | A list template converts position by position, as `cast` does: `to [Char,Char] "hi"`; `[Char]` is exactly one `Char` |
 
 They are methods, like `map`: a program adds a type by defining an instance,
 which joins them everywhere. A bare type name in a pattern matches that type,
