@@ -1560,6 +1560,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             for (const [key, value] of t.fields) result.fields.set(key, schemaValue(value, e, seen));
             return result;
         }
+        // A lambda (Handler = a -> IO []) where a type is expected is the
+        // function type it spells: its parameter any type, its result read as one.
+        if (t.k === "fn") return fn(variable(), schemaValue(t.output, e, seen));
         return problem("expected a type description", e);
     }
     function typeExpr(e: Expr, scope: Scope, captures?: Set<string>): Ty {

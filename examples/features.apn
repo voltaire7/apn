@@ -1778,6 +1778,13 @@ print (SelectedType false "hello")      # => hello
 # SelectedType (isEven 3) 5 and Vect (sizeFor 2) Int [1,2,3] are static errors.
 sizeFor n = n * 2
 print (Vect (sizeFor 2) Int [1,2,3,4])  # => [1,2,3,4]
+# A type name bound to a lambda is used as it is used: applied, it runs;
+# where a type is expected, it is the function type it spells.
+SizedFloats = n -> Vect n Float
+print (SizedFloats 2 [1,2])             # => [1.0,2.0]
+IntMaker = _ -> Int
+makeOne ((IntMaker) k) = k []
+print (makeOne (_ -> 7))                # => 7
 cellType 0 = Int
 cellType _ = String
 print ((cellType 1) "text")             # => text

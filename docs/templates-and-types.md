@@ -386,6 +386,13 @@ retains concrete defaults. `isType description value` checks membership
 without conversion and requires described record fields to be present with
 matching values. A complete list membership check consumes the list.
 
+A capitalized name may also be bound to a lambda, as any name may: how it is
+used decides what it is. Applied, it runs, so `Sized = n -> Vect n Int` makes
+`Sized 2` the type `Vect 2 Int`, as `Sized n = Vect n Int` does. Where a type
+is expected, it reads as the function type it spells: after
+`Handler = a -> Int`, `run ((Handler) h) = h 1` accepts functions returning
+an `Int`.
+
 ## Variants, parameters, and distinct wrappers
 
 A `|` distinguishes a constructor declaration from a type alias. On one line,

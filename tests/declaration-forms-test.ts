@@ -41,3 +41,26 @@ for (const [source, message] of [
         if (!actual.includes(message)) throw new Error(actual);
     });
 }
+
+// A capitalized name bound to a lambda is that lambda: applied, it runs
+// (Sized 2 is Vect 2 Int); where a type is expected, it is a function type.
+for (const [source, expected] of [
+    ["Sized = n -> Vect n Int\nSized 2 [1,2]", "[1,2]"],
+    ["Sized = n -> Vect n Int\ntypeOf (Sized 2 [1,2])", "Vect 2 Int"],
+    ["Handler = a -> Int\nrun ((Handler) h) = h 1\nrun (x -> 2)", "2"],
+    ["Handler = a -> Int\nisType Handler (x -> 2)", "true"],
+] as const) {
+    Deno.test(`a lambda-valued type name: ${JSON.stringify(source)}`, () => {
+        const actual = run(source);
+        if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+    });
+}
+for (const [source, message] of [
+    ["Sized = n -> Vect n Int\nSized 2 [1,2,3]", "length mismatch: expected 2, got 3"],
+    ["Handler = a -> Int\nrun ((Handler) h) = h 1\nrun (x -> \"s\")", "cannot use String where Int is required"],
+] as const) {
+    Deno.test(`a lambda-valued type name rejects: ${JSON.stringify(source)}`, () => {
+        const actual = failure(source);
+        if (!actual.includes(message)) throw new Error(actual);
+    });
+}
