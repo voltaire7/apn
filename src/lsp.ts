@@ -111,12 +111,13 @@ function importsOf(text: string): { line: number; start: number; end: number; mo
     return found;
 }
 // The edit importing module: added to the first import, which becomes a list
-// (import ["x","module"]), or a new import "module" on the first line.
+// (import ["x","module"]), or a new import "module" on the first line,
+// a blank line apart from what follows.
 function importEdit(text: string, module: string): { range: Range; newText: string } {
     const first = importsOf(text)[0];
     const target = (modules: string[]) => modules.length === 1 ? JSON.stringify(modules[0]) : `[${modules.map(m => JSON.stringify(m)).join(",")}]`;
     if (first) return { range: { start: { line: first.line, character: first.start }, end: { line: first.line, character: first.end } }, newText: target([...first.modules, module]) };
-    return { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, newText: `import ${target([module])}\n` };
+    return { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, newText: `import ${target([module])}\n${/^\s*(\n|$)/.test(text) ? "" : "\n"}` };
 }
 type CompletionItem = { label: string; detail: string; kind: number; documentation?: string; additionalTextEdits?: { range: Range; newText: string }[] };
 
