@@ -15,6 +15,9 @@ map _ (Err error) = Err error
 (Ok x) >>= f = f x
 (Err error) >>= _ = Err error
 return = Ok
+# A failed guard in a Result block: Err needs an error, so it says what
+# happened (unless condition (Err error) names a specific one).
+empty = Err "guard failed"
 isSome (Some _) = true
 isSome None = false
 isNone value = not (isSome value)

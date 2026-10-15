@@ -2167,7 +2167,7 @@ export class Interpreter {
         for (let n = fns.length - 1; family && n >= 0; n--) {
             if (this.instanceHead(fns[n]) === family.name) return this.reference(fns[n]);
         }
-        throw new APNError("runtime", `no empty instance for ${valueToString(target)}`, { hint: family?.name === "Result" ? "a Result fails with its error: write `unless condition (Err error)`" : "define one, such as `empty = None`" });
+        throw new APNError("runtime", `no empty instance for ${valueToString(target)}`, { hint: "define one, such as `empty = None`" });
     }
 
     // m >>= f: through m's monad. f's results are realized in the same monad.
@@ -2529,7 +2529,7 @@ export class Interpreter {
             if (type.name === "List" && !type.family) return this.listType(type, value);
             let actual = type.name === "Type" ? this.demand(value) : this.dataValue(value);
             // A pending monadic value takes this type's monad (Option Int { return 42 }).
-            if (actual.kind === "pending" && (type.family || actual.step.op === "call")) actual = this.realize(actual, type);
+            if (actual.kind === "pending" && (type.family || actual.step.op === "call")) actual = this.dataValue(this.realize(actual, type));
             if (type.family?.base) {
                 if (actual.kind === "variant" && actual.family?.base) {
                     if (actual.family !== type.family) throw new APNError("runtime", `${type.name} requires explicit unwrapping of ${actual.family.name}`);

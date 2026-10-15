@@ -75,8 +75,8 @@ for (const [name, source, expected] of [
         ['[Err "x"]', '[Ok 2,Err "not positive"]', "None"]],
     ["assert yields true, pure in any block", "xs = {\n    x <- [1,2]\n    assert (x > 0)\n    return x\n}\nprint xs\ndouble n = {\n    assert (n > 0)\n    n * 2\n}\nprint (double 3)\nprint (assert 1)",
         ["[1,2]", "6", "true"]],
-    ["guard stops a list or Option block; empty is decided by its context", 'import ["option","number"]\nevens = {\n    x <- [1..6]\n    guard (x % 2 == 0)\n    return x\n}\nprint evens\npositive n = {\n    _ <- Some n\n    guard (n > 0)\n    return n\n}\nprint [positive 3,positive (-1)]\nprint (Option Int empty)\nprint (List Int empty)\nprint empty',
-        ["[2,4,6]", "[Some 3,None]", "None", "[]", "[]\nNone"]],
+    ["guard stops a list, Option or Result block; empty is decided by its context", 'import ["option","number"]\nevens = {\n    x <- [1..6]\n    guard (x % 2 == 0)\n    return x\n}\nprint evens\npositive n = {\n    _ <- Some n\n    guard (n > 0)\n    return n\n}\nprint [positive 3,positive (-1)]\nprint (Option Int empty)\nprint (List Int empty)\nprint empty\ncheck n = {\n    _ <- Ok n\n    guard (n > 0)\n    return n\n}\nprint [check 1,check 0]\nhalf n = Result Int String {\n    guard (n % 2 == 0)\n    return (n / 2)\n}\nprint [half 4,half 3,Option Int { guard false; return 1 }]',
+        ["[2,4,6]", "[Some 3,None]", "None", "[]", '[]\nNone\nErr "guard failed"', '[Ok 1,Err "guard failed"]', '[Ok 2,Err "guard failed",None]']],
     ["when and unless work in any monad", 'import "option"\nprint (unless false (Err "no"))\nprint (Option (when false (Some 1)))\nwhen true (print "ran")',
         ['Err "no"', "Some []", "ran"]],
 ] as const) Deno.test(`monads: ${name}`, () => {
@@ -96,7 +96,7 @@ for (const [source, message, kind] of [
     ["print (return 1 + 1)", "ambiguous: nothing decides which return", "type"],
     ['import "option"\nmixed n = {\n    Some 1\n    Ok n\n}', "a Result value cannot run in an Option do-block", "type"],
     ['import "option"\nmixed n = {\n    _ <- Some n\n    Ok n\n    return n\n}', "a Result value cannot run in an Option do-block", "type"],
-    ['import "option"\ncheck n = {\n    _ <- Ok n\n    guard (n > 0)\n    return n\n}\nprint (check 0)', "no empty instance for Result", "runtime"],
+    ['Tree = Leaf Int | Node Tree Tree\nprint (Tree empty)', "no empty instance for Tree", "runtime"],
     ['act = {\n    guard false\n    print 1\n}\nact', "empty ran as an action", "runtime"],
 ] as const) Deno.test(`monads reject: ${JSON.stringify(source)}`, () => fails(source, message, kind));
 // A block of returns and guards takes the monad its other statements name, as

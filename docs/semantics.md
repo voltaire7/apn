@@ -556,16 +556,21 @@ evens = {
     return x             # [2,4,6]
 }
 check n = {
-    unless (n > 0) (Err "not positive")   # a Result has no empty: name the error
+    unless (n > 0) (Err "not positive")   # a specific error
     return (n * 2)       # check 2 is Ok 4, check 0 is Err "not positive"
+}
+half n = Result Int String {
+    guard (n % 2 == 0)   # empty in a Result is Err "guard failed"
+    return (n / 2)       # half 4 is Ok 2, half 3 is Err "guard failed"
 }
 ```
 
 A block whose statements can all be undecided at run time (`check 2` above
 runs only `return` values) takes the monad its code names, as types decide in
 Haskell: the checker finds it (`Result`, from `Err`), and the run uses it.
-`empty` in IO is an action that fails when run; a type without an `empty`
-instance (`Result`) cannot take it.
+`empty` needs an instance for each variant type (`empty = None` for Option;
+a Result's is `Err "guard failed"`, since its failure needs an error);
+`empty` in IO is an action that fails when run.
 
 | Function | Meaning |
 | --- | --- |
@@ -577,8 +582,8 @@ instance (`Result`) cannot take it.
 | `sequence actions` | runs each action, yielding the list of results |
 | `mapM f xs` | `sequence (map f xs)` |
 | `when c m`, `unless c m` | `m >> return []` when `c` is true (false), else `return []`: in any monad (`unless ok (Err e)`) |
-| `empty` | the monad's value holding nothing: `[]` in a list, `None` in an Option (an instance: `empty = None`) |
-| `guard c` | `return []` when `c` holds, else `empty`: a false guard stops a list or Option do-block |
+| `empty` | the monad's value holding nothing: `[]` in a list, `None` in an Option, `Err "guard failed"` in a Result (instances: `empty = None`) |
+| `guard c` | `return []` when `c` holds, else `empty`: a false guard stops a list, Option or Result do-block |
 | `do actions` | runs each action in order, yielding the last result |
 
 `xs * f` iterates: when `f` returns actions it is the single action running
