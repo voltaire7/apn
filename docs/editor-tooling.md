@@ -85,14 +85,24 @@ warnings for statically recognizable matches; see [type and resource rules](type
 ## Server capabilities
 
 `apn --lsp` runs the stdio language server. The Neovim integration invokes
-`deno run --allow-read=/path/to/apn/lib/prelude.apn,/path/to/apn/lib/type.apn,/path/to/apn/lib/do.apn /path/to/apn/main.ts --lsp`
-directly. This grants read access only to the bundled text prelude needed during
-startup; it does not grant arbitrary file access or network permissions. Standard output is reserved for LSP messages.
+`deno run --allow-read=/path/to/apn/lib /path/to/apn/main.ts --lsp`
+directly. This grants read access only to the standard library: the prelude
+needed during startup, and the modules completion offers. It does not grant
+arbitrary file access or network permissions; without access to `lib/`,
+completion offers only the standard natives. Standard output is reserved for LSP messages.
 
 - Diagnostics on opening or changing a document; closing clears them.
-- Completion for built-ins, type constructors, keywords, and identifiers in the
-  current document. Document identifiers are lexical suggestions, not validated
-  scope resolution. On invalid source, built-in completion remains available.
+- Completion for built-ins, type constructors, keywords, identifiers in the
+  current document, and the standard library's exports. Accepting a standard
+  name whose module is not imported yet adds the import: into the first
+  one-line import, which becomes a list (`import "io"` becomes
+  `import ["io","sequence"]`), or as `import "sequence"` on the first line.
+  Document identifiers are lexical suggestions, not validated scope
+  resolution. On invalid source, built-in completion remains available.
+- APN applies functions without parentheses, so the Neovim integration adds
+  `apn` to blink.cmp's filetypes that never get `()` after a completed
+  function. With your own setup, set
+  `completion.accept.auto_brackets.blocked_filetypes = { "apn" }` in blink.cmp.
 - Hover shows matching top-level declarations or built-in arity/type information.
   It is a declaration reference, not inferred type information; local shadowing
   and imported definitions are not resolved.

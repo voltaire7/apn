@@ -117,3 +117,23 @@ Deno.test("optional type diagnostics share the checker", () => {
     const result: any = server.handle({method: 'textDocument/didOpen', params: {textDocument: {uri: 'file:///types.apn', version: 1, text: source}}})[0];
     equal(result.params.diagnostics.filter((d: any) => d.code === 'type').length, 1);
 });
+Deno.test("completing a standard name adds its import, as a list beside another", () => {
+    const complete = (text: string, name: string) => {
+        const server = initialized();
+        const uri = "file:///tmp/imports.apn";
+        server.handle({ method: "textDocument/didOpen", params: { textDocument: { uri, version: 1, text } } });
+        const items = (server.handle({ id: 2, method: "textDocument/completion", params: { textDocument: { uri }, position: { line: 0, character: 0 } } })[0] as any).result.items;
+        const item = items.find((x: any) => x.label === name);
+        return item && [item.detail, item.additionalTextEdits?.map((e: any) => [e.range.start.line, e.range.start.character, e.range.end.character, e.newText])];
+    };
+    equal(complete("x = 1", "sum"), ['From import "sequence"', [[0, 0, 0, 'import "sequence"\n']]]);
+    equal(complete('import "io" # files\nx = 1', "upper"), ['From import "text"', [[0, 7, 11, '["io","text"]']]]);
+    equal(complete('import [\n    "io"\n]\nimport ["io","text"]', "sum"), ['From import "sequence"', [[3, 7, 20, '["io","text","sequence"]']]]);
+    // Already imported, defined here, or in the prelude: nothing to add.
+    equal(complete('import ["io","text"]', "readFile"), ['From import "io"', undefined]);
+    equal(complete("sum xs = 0", "sum")?.[1], undefined);
+    equal(complete("x = 1", "print")?.[1], undefined);
+    // Retired natives are not offered; a native needing an import names it.
+    equal(complete("x = 1", "toString"), undefined);
+    equal(complete("x = 1", "withFile")?.[1]?.[0]?.[3], 'import "io"\n');
+});

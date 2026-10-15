@@ -976,6 +976,7 @@ class Parser {
                     while (!this.isSym("]")) {
                         const module = this.next();
                         if (module.k !== "str") throw new Error("Parser: import expects module name strings");
+                        if (modules.includes(module.v)) throw new APNError("parse", `'${module.v}' is imported twice`, { pos: module.pos, hint: `list each module once; remove this '${module.v}'` });
                         modules.push(module.v);
                         if (!this.isSym("]") && !this.isSym(",") && this.peek().k !== "newline" && this.peek().k !== "dedent") {
                             throw new Error("Parser: separate import module names with commas or newlines");

@@ -6,6 +6,8 @@ import { lex, KEYWORDS } from "./lexer.ts";
 import { NATIVES } from "./interp.ts";
 import { semanticTokens, TOKEN_TYPES } from "./highlight.ts";
 import { TYPE_NAMES } from "./type-system.ts";
+import { NATIVE_EXPORTS, RETIRED_NATIVES, nativeModule } from "./native-exports.ts";
+import { STD_DIRECTORY } from "./modules.ts";
 
 type Message = { jsonrpc?: string; id?: number | string | null; method?: string; params?: any };
 type Document = { text: string; version: number };
@@ -67,6 +69,57 @@ const builtins = new Map<string, string>([
     ["withFile", "withFile path use — action scoping a UTF-8 file reader; the callback receives the action file.read (io)."],
 ]);
 
+// The standard library's exports by name, with the modules defining each:
+// top-level names not starting with _, and each module's natives. The
+// prelude needs no import. Without read access to lib/ it is the natives alone.
+let standardIndex: Map<string, string[]> | undefined;
+export function standardExports(): Map<string, string[]> {
+    if (standardIndex) return standardIndex;
+    const index = new Map<string, string[]>();
+    const add = (name: string, module: string) => {
+        if (/^[A-Za-z]/.test(name)) index.set(name, [...new Set([...index.get(name) ?? [], module])]);
+    };
+    for (const [module, names] of Object.entries(NATIVE_EXPORTS)) names.forEach(name => add(name, module));
+    let files: string[] = [];
+    try { files = [...Deno.readDirSync(STD_DIRECTORY)].filter(e => e.isFile && e.name.endsWith(".apn")).map(e => e.name).sort(); } catch { /* natives only */ }
+    for (const file of files) {
+        const module = file.slice(0, -".apn".length);
+        if (["prelude", "type", "do"].includes(module)) continue;
+        try {
+            for (const item of parseDocument(Deno.readTextFileSync(new URL(file, STD_DIRECTORY)))) {
+                if (item.t === "def") add(item.name, module);
+                if (item.t === "patDef" && item.pattern.p === "var") add(item.pattern.name, module);
+                if (item.t === "type") { add(item.def.name, module); item.def.variants.forEach(v => add(v.tag, module)); }
+            }
+        } catch { /* a module that does not parse alone offers nothing */ }
+    }
+    return standardIndex = index;
+}
+
+// The document's one-line imports (import "x", import ["x","y"]), in order.
+function importsOf(text: string): { line: number; start: number; end: number; modules: string[] }[] {
+    const found: { line: number; start: number; end: number; modules: string[] }[] = [];
+    text.split("\n").forEach((line, n) => {
+        const [, keyword, target] = line.match(/^(import\s+)(.+?)\s*(#.*)?$/) ?? [];
+        if (!target) return;
+        try {
+            const value = JSON.parse(target);
+            const modules = Array.isArray(value) ? value : [value];
+            if (modules.every(m => typeof m === "string")) found.push({ line: n, start: keyword.length, end: keyword.length + target.length, modules });
+        } catch { /* not a plain import */ }
+    });
+    return found;
+}
+// The edit importing module: added to the first import, which becomes a list
+// (import ["x","module"]), or a new import "module" on the first line.
+function importEdit(text: string, module: string): { range: Range; newText: string } {
+    const first = importsOf(text)[0];
+    const target = (modules: string[]) => modules.length === 1 ? JSON.stringify(modules[0]) : `[${modules.map(m => JSON.stringify(m)).join(",")}]`;
+    if (first) return { range: { start: { line: first.line, character: first.start }, end: { line: first.line, character: first.end } }, newText: target([...first.modules, module]) };
+    return { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, newText: `import ${target([module])}\n` };
+}
+type CompletionItem = { label: string; detail: string; kind: number; documentation?: string; additionalTextEdits?: { range: Range; newText: string }[] };
+
 export class LanguageServer {
     typeChecking = false;
     documents = new Map<string, Document>();
@@ -121,12 +174,28 @@ export class LanguageServer {
             case "textDocument/documentSymbol": reply(symbols(this.documents.get(p.textDocument.uri)?.text ?? "")); break;
             case "textDocument/completion": {
                 const text = this.documents.get(p.textDocument.uri)?.text ?? "";
-                const entries = new Map([...builtins].map(([label, detail]) => [label, { label, detail, kind: 3 }]));
+                // Natives a standard module exports come with their module, below.
+                const entries = new Map<string, CompletionItem>([...builtins]
+                    .filter(([label]) => !nativeModule(label) && !(label in RETIRED_NATIVES))
+                    .map(([label, detail]) => [label, { label, detail, kind: 3 }]));
                 for (const word of KEYWORDS) entries.set(word, { label: word, detail: "APN keyword", kind: 14 });
                 // Lexical suggestions, including local parameters; not a claim of scope/type resolution.
                 try { for (const t of lex(text)) if (t.k === "ident" && !entries.has(t.v)) {
                     entries.set(t.v, { label: t.v, detail: "Identifier in this document", kind: 6 });
                 } } catch { /* Incomplete source still gets built-in completion. */ }
+                // The standard library's names: accepting one not imported yet
+                // adds its module to the document's imports.
+                const imported = new Set(importsOf(text).flatMap(i => i.modules));
+                const defined = new Set(symbols(text).map(s => s.name));
+                for (const [name, modules] of standardExports()) {
+                    if (defined.has(name) || entries.has(name) && entries.get(name)!.kind !== 6) continue;
+                    const kind = /^[A-Z]/.test(name) ? 4 : 3;
+                    const have = modules.find(m => imported.has(m));
+                    const documentation = builtins.get(name);
+                    const item: CompletionItem = { label: name, detail: `From import "${have ?? modules[0]}"`, kind, ...documentation ? { documentation } : {} };
+                    if (!have) item.additionalTextEdits = [importEdit(text, modules[0])];
+                    entries.set(name, item);
+                }
                 reply({ isIncomplete: false, items: [...entries.values()] }); break;
             }
             case "textDocument/hover": {

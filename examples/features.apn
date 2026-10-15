@@ -1205,7 +1205,9 @@ decoded <- fetchJson "data:application/json,[1,2.5,null]" []
 print decoded                                 # => [1,2.5,[]]
 
 # Standard modules are cached imports, separate from file execution with load.
-# Each is imported by name (there is no whole-library module); a list imports several.
+# Each is imported by name (there is no whole-library module); a list imports
+# several, each once: import ["option","option"] is a parse error. Editors
+# completing a standard name add its import (into the first import, as a list).
 # Before its import, using fail or upper is a static error whose hint names
 # the import: add `import "function"` to use `fail`.
 import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]

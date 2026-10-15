@@ -7,7 +7,6 @@ for (const [source, expected] of [
     ['import ["function","sequence"]\nid (sum [1,2,3])', '6'],
     ['ns = import ["function","sequence"]\nuse ns\nid (sum [1,2,3])', '6'],
     ['import [\n    "function"\n    "sequence"\n]\nid 123', '123'],
-    ['import ["function","function"]\nid 123', '123'],
     ['length (pairs (import []))', '0'],
     ['use [import "function",import "sequence"]\nid (sum [1,2,3])', '6'],
 ]) Deno.test(`list import: ${source}`, () => {
@@ -28,7 +27,7 @@ Deno.test('failed list import does not open earlier modules', () => {
     }
     throw new Error('expected error');
 });
-for (const source of ['import [123]', 'import ["std" "function"]', 'import ["std"', 'import [missing]']) {
+for (const source of ['import ["function","function"]', 'import [123]', 'import ["std" "function"]', 'import ["std"', 'import [missing]']) {
     Deno.test(`invalid list import: ${source}`, () => {
         try { parseDocument(source); } catch { return; }
         throw new Error('expected parse error');
@@ -38,4 +37,14 @@ Deno.test('list import source round-trips', () => {
     const ast = parseDocument('import ["function","number"]')[0];
     if (ast.t !== 'expr') throw new Error('expected expression');
     if (JSON.stringify(parseDocument(exprToSource(ast.value))) !== JSON.stringify([ast])) throw new Error('changed syntax');
+});
+
+Deno.test("a list import names each module once", () => {
+    const source = 'import ["option","text","option"]';
+    try { parseDocument(source); } catch (error) {
+        const e = error as { kind?: string; message: string; pos?: number };
+        if (e.kind !== "parse" || e.message !== "'option' is imported twice" || e.pos !== source.lastIndexOf('"option"')) throw new Error(`${e.kind} ${e.pos}: ${e.message}`);
+        return;
+    }
+    throw new Error("accepted a duplicate import");
 });

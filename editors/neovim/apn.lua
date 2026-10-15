@@ -16,6 +16,12 @@ local function colors()
 end
 colors()
 vim.api.nvim_create_autocmd("ColorScheme", { group = group, callback = colors })
+-- APN applies functions without parentheses: tell blink.cmp (LazyVim's
+-- completion) not to add () after accepting one, as for elm or lisp.
+local ok, brackets = pcall(require, "blink.cmp.completion.brackets.config")
+if ok and type(brackets.blocked_filetypes) == "table" and not vim.tbl_contains(brackets.blocked_filetypes, "apn") then
+    table.insert(brackets.blocked_filetypes, "apn")
+end
 local function attach(buf)
     if vim.bo[buf].filetype ~= "apn" then return end
     vim.bo[buf].shiftwidth = 4
@@ -24,8 +30,9 @@ local function attach(buf)
     vim.bo[buf].commentstring = "# %s"
     local client = vim.lsp.start({
         name = "apn",
-        -- Deno text imports require explicit read access to the embedded prelude.
-        cmd = { "deno", "run", "--allow-read=" .. root .. "/lib/prelude.apn," .. root .. "/lib/type.apn," .. root .. "/lib/do.apn", root .. "/main.ts", "--lsp" },
+        -- Read access to lib/ only: the embedded prelude, and the standard
+        -- library that completion offers (accepting a name adds its import).
+        cmd = { "deno", "run", "--allow-read=" .. root .. "/lib", root .. "/main.ts", "--lsp" },
         root_dir = vim.fs.root(vim.api.nvim_buf_get_name(buf), { ".git" }) or vim.fn.getcwd(),
         on_attach = function(_, b)
             vim.bo[b].omnifunc = "v:lua.vim.lsp.omnifunc"

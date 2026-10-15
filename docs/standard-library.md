@@ -15,7 +15,8 @@ and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
 `import` accepts a literal module name or a list of literal module names.
 For example, `import ["number","text"]` opens both modules and returns
 a merged export record. Later modules win name collisions, and `import []`
-returns an empty record. Commas or newlines separate module names. Standard
+returns an empty record. Commas or newlines separate module names, and a list
+names each module once (`import ["option","option"]` is a parse error). Standard
 modules are imported by name, with no prefix: `import "text"`. There is no
 whole-library module; `import "std"` and `import "std/text"` are errors.
 Dependencies are imported with them. Imports require Deno read permission (the
