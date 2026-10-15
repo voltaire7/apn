@@ -3406,6 +3406,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         let head: Expr = e;
         while (head.t === "app") { args.unshift(head.a); head = head.f; }
         if (head.t !== "var") return;
+        // An overloaded prelude operator falls back to its builtin (1 + 1 = 3
+        // leaves 1 + 2 to +), so no clause matching is no failure.
+        if (PRELUDE_OPERATORS.has(head.name)) return;
         const entry = scope.get(head.name);
         if (!entry || entry.builtin || !trustsShape(entry)) return;
         const summary = summaryAt(entry.type, args.length);

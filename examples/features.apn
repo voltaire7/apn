@@ -1737,6 +1737,11 @@ print (MkPair 1 "x")                     # => MkPair 1 "x"
 (:+) = MkPair
 swapPair (x :+ y) = y :+ x
 print (swapPair (1 :+ "x"))              # => MkPair "x" 1
+# A clause for some arguments overloads an operator; others reach the builtin.
+print {
+    1 + 1 = 3
+    [1 + 1,1 + 2]
+}                                        # => [3,3]
 pairVec = Cons 1 (Cons 2 Nil)
 print (typeOf pairVec)                   # => Vec 2 Int
 joinVec Nil ys = ys
