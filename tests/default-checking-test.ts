@@ -1145,3 +1145,12 @@ for (const source of ['Int = 5', 'Int x y = 5']) Deno.test(`a built-in type name
     try { parse(source); } catch (error) { if (String(error).includes("built-in type names cannot be reassigned")) return; throw error; }
     throw new Error("parsed");
 });
+
+// A binding whose pattern its known value can never match is a static error,
+// as a call no clause matches is.
+for (const source of ["1 = 2", "[a,1] = [5,2]", 'import "option"\nNone = Some 1', '"x" = "y"']) {
+    Deno.test(`a binding that can never match is rejected statically: ${JSON.stringify(source)}`, () => rejected(session(), source));
+}
+for (const source of ["1 = 1", "[a,1] = [5,1]", "f x = { 1 = x; x }"]) {
+    Deno.test(`a binding that can match is accepted: ${JSON.stringify(source)}`, () => { run(session(), source); });
+}

@@ -155,8 +155,10 @@ A range pattern `[lo..hi]` matches any integer from `lo` to `hi` inclusive.
 group is scoped to that group. The left side may be a pattern:
 `[a,b] = [1,2]`, a cons pattern `x::xs = [1,2,3,4]` (or `x :: y :: rest`),
 `Some x = optionValue` (parentheses optional, also for an imported
-constructor), or a keyed
-record pattern `[x: a] = record`. A failed match is an error. A bare `[x,y]`
+constructor), a literal (`1 = n` asserts that `n` is 1), or a keyed
+record pattern `[x: a] = record`. A failed match is an error: before the
+run when the value is known (`1 = 2`, `None = Some 1`), otherwise when the
+binding runs. A bare `[x,y]`
 pattern also matches a record, selecting the fields named `x` and `y` (extra
 fields are ignored), in bindings, function parameters, and `match` alternatives. A new capitalized name on the
 left binds a type alias; see [templates and type aliases](templates-and-types.md)

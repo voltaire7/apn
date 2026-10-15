@@ -1060,6 +1060,9 @@ class Parser {
     startsPatBinding(): boolean {
         const t = this.peek();
         if (t.k === "sym" && t.v === "[") return true;
+        // A literal is a pattern too, as inside one: 1 = 1 matches, 1 = 2 fails.
+        const after = this.peek(1);
+        if ((["int", "float", "char", "str"].includes(t.k) || t.k === "kw" && (t.v === "true" || t.v === "false")) && after.k === "sym" && after.v === "=") return true;
         // A cons pattern: x :: xs = ..., (x :: xs) = ...
         const consAfter = (n: number) => { const c = this.peek(n); return c.k === "sym" && isConstructorOperator(c.v); };
         if (t.k === "sym" && (t.v === "(" || t.v === "{")) {
@@ -1637,6 +1640,7 @@ class Parser {
             }
 
             if (t.k === "kw") {
+                if (this.isPatBinding()) { out.push(this.parsePatBinding() as TopLevel); continue; }
                 // Keyword-led expressions still include trailing operators and pipes.
                 const e = this.parseExpr();
                 out.push({ t: "expr", value: e });
@@ -1693,6 +1697,7 @@ class Parser {
 
             if (t.k === "int" || t.k === "float" || t.k === "bool" ||
                     t.k === "str" || t.k === "char") {
+                if (this.isPatBinding()) { out.push(this.parsePatBinding() as TopLevel); continue; }
                 const e = this.parseExpr();
                 out.push({ t: "expr", value: e });
                 continue;

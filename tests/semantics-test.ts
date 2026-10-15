@@ -423,3 +423,14 @@ f 2.0 = "two"
 f x = "other"
 print [f 'a',f 'b',f 1.5,f 2,f 2.0,f 7]
 print (match 'z' ['a' -> 1,'z' -> 2,_ -> 3])`, ['["letter a","other","one and a half","two","two","other"]', "2"]);
+
+// A literal on the left of '=' is a pattern, as inside one; a failed match
+// is an error (before the run, when checking knows the value).
+example("literal pattern bindings", `
+1 = 1
+"x" = "x"
+[a,1] = [5,1]
+print a`, ["5"]);
+for (const source of ["1 = 2", "[a,1] = [5,2]", 'import "option"\nNone = Some 1']) {
+    failure(`a binding that does not match: ${source}`, source, "binding pattern did not match its value");
+}

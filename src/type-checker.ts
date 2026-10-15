@@ -3259,6 +3259,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // A top-level x <- action knows what the action yields, run statically.
                 const ran = e === eagerResult?.statement ? eagerResult.known
                     ?? (valueType && resolve(valueType).k !== "mutable" ? runLocally(e.value, scope) : undefined) : undefined;
+                // A pattern its known value can never match (1 = 2, None = Some 1)
+                // fails whenever it runs: report it now, as a call no clause matches.
+                if (e.pattern.p !== "var" && !e.eager && decidedByShape(e.pattern, scope)) {
+                    const entry = { type: t, ...valueEntry(e.value, scope) };
+                    if (peek(() => definitelyFails(e.pattern, entry, 0, 0), false)) problem("this pattern can never match its value", e, "a binding's pattern must match the value it is given");
+                }
                 if (e.pattern.p === "var") {
                     const old = scope.get(e.pattern.name);
                     if (old && !old.inherited && e.value.t !== "setFields" && e.value.t !== "setItem") {
@@ -3401,6 +3407,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A complete call of a named function none of whose clauses can match what
     // is known of its arguments (first Nil for first (Cons x _) = x) fails
     // whenever it runs: report it now.
+    // Whether only a value's shape decides a pattern: literals, constructors,
+    // list shapes. A typed pattern (Functor m) is left to its conversion.
+    function decidedByShape(p: Pattern, scope: Scope): boolean {
+        return p.p === "constr" ? (isConstructor(scope.get(p.tag)) || naturalPattern(p, scope)) && p.args.every(q => decidedByShape(q, scope))
+            : p.p === "list" ? p.v.every(q => decidedByShape(q, scope)) : p.p === "cons" ? decidedByShape(p.head, scope) && decidedByShape(p.tail, scope)
+            : p.p !== "schema" && p.p !== "typeBind" && p.p !== "as";
+    }
     function noClauseMatches(e: Expr, scope: Scope): void {
         const args: Expr[] = [];
         let head: Expr = e;
@@ -3414,11 +3427,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const summary = summaryAt(entry.type, args.length);
         if (!summary) return;
         const entries = args.map(a => ({ type: inferred.get(a) ?? dynamic, ...valueEntry(a, scope) }));
-        // Only a value's shape decides it: literals, constructors, list shapes.
-        // A typed pattern (Functor m) is left to its conversion.
-        const certain = (p: Pattern): boolean => p.p === "constr" ? (isConstructor(scope.get(p.tag)) || naturalPattern(p, scope)) && p.args.every(certain)
-            : p.p === "list" ? p.v.every(certain) : p.p === "cons" ? certain(p.head) && certain(p.tail) : p.p !== "schema" && p.p !== "typeBind" && p.p !== "as";
-        const fails = (c: ClauseOrder) => peek(() => c.params.some((p, n) => certain(p) && definitelyFails(p, entries[n], 0, 0)), false);
+        const fails = (c: ClauseOrder) => peek(() => c.params.some((p, n) => decidedByShape(p, scope) && definitelyFails(p, entries[n], 0, 0)), false);
         if (summary.clauses.length && summary.clauses.every(fails)) problem(`no clause of '${head.name}' matches these arguments`, e, "the definition's patterns don't cover this input");
     }
     function rankClause(c: ClauseOrder, args: Entry[]): { low: number; high: number; matches: boolean; fails: boolean } {
