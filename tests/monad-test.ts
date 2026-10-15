@@ -61,13 +61,13 @@ for (const [name, source, expected] of [
     ["a curried definition overloads like clauses", "describe = Int _ -> \"Int\"\ndescribe = Float _ -> \"Float\"\nprint [describe 1,describe 1.5]\nalso = x -> x + 1\nalso = x -> x + 2\nprint (also 1)",
         ['["Int","Float"]', "3"]],
     ["undecided values and actions print without running", 'print $ return 123\nprint [return "a"]\nprint (return 1 >>= (x -> return x))\nprint (print 1)\nprint (IO Int { return 1 })\nprint (typeOf (print 1))\nprint (typeOf (return 1))',
-        ["return 123", '[return "a"]', "return 1 >>= (x -> return x)", "IO []", "IO Int", "IO []", "m Int"]],
+        ["[123]", '[return "a"]', "return 1 >>= (x -> return x)", "IO []", "IO Int", "IO []", "m Int"]],
     ["constructor arguments print as source writes them", 'import "option"\nprint (return (Some 1))\nprint (Some (Some (-1)))\nprint (Some [1,2])',
-        ["Some (Some 1)\nOk (Some 1)", "Some (Some (-1))", "Some [1,2]"]],
+        ["[Some 1]\nSome (Some 1)\nOk (Some 1)", "Some (Some (-1))", "Some [1,2]"]],
     ["overloads chosen by result type", 'f x = 1\nf x = "one"\nprint (f 0)\nprint (Int (f 0))\nprint (String (f 0))\nprint (typeOf (f 0))\ng (Int n) = n + 1\nprint (g (f 0))',
         ["1\n\"one\"", "1", "one", "Int | String", "2"]],
-    ["return prints as its overloads applied", 'import "option"\nprint (return 5)\nprint (Option (return 1))',
-        ["Some 5\nOk 5", "Some 1"]],
+    ["return prints as the list's value, then its overloads applied", 'import "option"\nprint (return 5)\nprint (Option (return 1))',
+        ["[5]\nSome 5\nOk 5", "Some 1"]],
     ["partly applied functions show their arguments", "addOp = (+)\nprint (addOp 1)\nprint (+ 1)\nf a b = a + b\nprint (f 1)\ng = x, y, z -> x * y * z\nprint (g 2 3)",
         ["(1 +)", "(+ 1)", "b -> 1 + b", "z -> 2 * 3 * z"]],
     // As in Haskell, a discarded statement in a monad is chained: Err or None stops the block.
@@ -76,7 +76,7 @@ for (const [name, source, expected] of [
     ["assert yields true, pure in any block", "xs = {\n    x <- [1,2]\n    assert (x > 0)\n    return x\n}\nprint xs\ndouble n = {\n    assert (n > 0)\n    n * 2\n}\nprint (double 3)\nprint (assert 1)",
         ["[1,2]", "6", "true"]],
     ["guard stops a list, Option or Result block; empty is decided by its context", 'import ["option","number"]\nevens = {\n    x <- [1..6]\n    guard (x % 2 == 0)\n    return x\n}\nprint evens\npositive n = {\n    _ <- Some n\n    guard (n > 0)\n    return n\n}\nprint [positive 3,positive (-1)]\nprint (Option Int empty)\nprint (List Int empty)\nprint empty\ncheck n = {\n    _ <- Ok n\n    guard (n > 0)\n    return n\n}\nprint [check 1,check 0]\nhalf n = Result Int String {\n    guard (n % 2 == 0)\n    return (n / 2)\n}\nprint [half 4,half 3,Option Int { guard false; return 1 }]',
-        ["[2,4,6]", "[Some 3,None]", "None", "[]", 'None\nErr "empty"', '[Ok 1,Err "guard failed: n > 0"]', '[Ok 2,Err "guard failed: n % 2 == 0",None]']],
+        ["[2,4,6]", "[Some 3,None]", "None", "[]", '[]\nNone\nErr "empty"', '[Ok 1,Err "guard failed: n > 0"]', '[Ok 2,Err "guard failed: n % 2 == 0",None]']],
     ["when and unless work in any monad", 'import "option"\nprint (unless false (Err "no"))\nprint (Option (when false (Some 1)))\nwhen true (print "ran")',
         ['Err "no"', "Some []", "ran"]],
 ] as const) Deno.test(`monads: ${name}`, () => {
@@ -105,7 +105,7 @@ for (const [source, message, kind] of [
 // false guard throws its condition as the call wrote it.
 for (const [name, source, expected] of [
     ["throw in each monad", 'import "option"\nprint [Option Int (throw "x"),Result Int String (throw "x"),List Int (throw "x")]\nprint (throw 1)',
-        ['[None,Err "x",[]]', "None\nErr 1"]],
+        ['[None,Err "x",[]]', "[]\nNone\nErr 1"]],
     ["guard names the condition its call wrote", 'import "option"\ng x = guard x\nb = false\nprint [Result Int String { g (1 > 2); return 1 },Result Int String { guard b; return 1 },Result Int String { guard $ 1 == 2; return 1 }]',
         ['[Err "guard failed: x",Err "guard failed: b",Err "guard failed: 1 == 2"]']],
 ] as const) Deno.test(`monads: ${name}`, () => {

@@ -892,7 +892,7 @@ print "first" >> print "second"            # => first, then second
 doubled <- mapM (x -> return (x * 2)) [1,2,3]
 print doubled                              # => [2,4,6]
 when (length doubled == 3) (print "three") # => three
-print (return 42)                          # => Some 42, Ok 42 (undecided: each instance, one per line)
+print (return 42)                          # => [42], Some 42, Ok 42 (undecided: the list's, then each instance, one per line)
 print (Option Int { return 42 })           # => Some 42
 print (List Int { return 43 })             # => [43]
 fromIO <- IO Int { return 44 }

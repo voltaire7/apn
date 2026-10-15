@@ -510,8 +510,9 @@ takes the monad of the first context that names one:
 - running it: a statement or `<-` runs it as IO.
 
 Until then it stays undecided, so one `return` value can be used in several
-monads. It prints as each instance applied, one per line (`print (return 123)`
-prints `Some 123` and `Ok 123` with the option module), and an undecided `>>=`
+monads. It prints as each value it can become, one per line: the list's, then
+each instance's (`print (return 123)` prints `[123]`, `Some 123` and `Ok 123`
+with the option module; `print empty` prints `[]`, `None` and `Err "empty"`), and an undecided `>>=`
 prints as its source; using one as a plain value is an ambiguity error.
 `Monad` and `Functor` are types for patterns: `(Functor m)` accepts any value
 `map` works on, `(Monad m)` any monadic value.

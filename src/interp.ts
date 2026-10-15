@@ -2324,7 +2324,8 @@ export class Interpreter {
                     emit(" "); this.render(this.inspectType(argument), emit, false, ancestors);
                 }
             } else if (v.kind === "pending") {
-                emit(this.undecidedText(v), "pending");
+                // Inside another value it shows as its source (return "a").
+                emit(this.undecidedText(v, ancestors.size > 1), "pending");
             } else if (v.kind === "variant") {
                 // Arguments show as source writes them: Some (Some 1).
                 emit(v.tag, "variant");
@@ -2403,18 +2404,23 @@ export class Interpreter {
     // An undecided value shows each overload it could become, one per line,
     // as a partly applied overloaded function does: return 123 is Some 123,
     // Ok 123, ... for the instances defined.
-    private undecidedText(v: Extract<Value, { kind: "pending" }>): string {
+    private undecidedText(v: Extract<Value, { kind: "pending" }>, nested = false): string {
         const step = v.step;
         if (step.op === "call") return step.choices.map(c => this.residualText({ ...step.fn, clauses: [c], applied: step.args })).join("\n");
-        if (step.op === "bind") return `${this.renderString(step.m)} >>= ${argument(this.force(step.f))}`;
+        if (step.op === "bind") {
+            const m = this.reference(step.m);
+            return `${m.kind === "pending" ? this.undecidedText(m, true) : this.renderString(m)} >>= ${argument(this.force(step.f))}`;
+        }
         if (step.op === "do") return exprToSource(step.block);
-        const lines = (this.instances.get(step.op) ?? []).map(instance => {
+        if (nested) return `${step.op} ${argument(step.value)}`;
+        // The list's value first (lists are built in), then each instance's.
+        const lines = [this.renderString(mkList(step.op === "throw" ? [] : [step.value])), ...(this.instances.get(step.op) ?? []).map(instance => {
             const fn = this.reference(instance);
             if (fn.kind === "clauseFn") return this.residualText({ ...fn, applied: [...fn.applied, step.value] });
             if (fn.kind === "native") return functionSource({ ...fn, applied: [...fn.applied, step.value] });
             return `${valueToString(fn)} ${argument(step.value)}`;
-        });
-        return lines.length ? [...new Set(lines)].join("\n") : `${step.op} ${argument(step.value)}`;
+        })];
+        return [...new Set(lines)].join("\n");
     }
 
     // A partly applied function as what is left of it: the clauses its
