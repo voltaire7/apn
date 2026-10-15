@@ -851,13 +851,6 @@ class Parser {
                             } else if (this.isPatBinding()) {
                                 stmts.push(this.parsePatBinding());
                             } else {
-                                const sb = this.peek();
-                                if (sb.k === "ident" && /^[A-Z]/.test(sb.v) && this.isDef()) {
-                                    throw new Error(
-                                        `Parser: '${(sb as { v: string }).v}' is capitalized — capital names ` +
-                                        `are constructors; use a lowercase name here`,
-                                    );
-                                }
                                 stmts.push(this.isDef() ? this.parseBlockDef() : this.tryItemAssign() ?? this.parseDelimitedExpr());
                             }
                         }

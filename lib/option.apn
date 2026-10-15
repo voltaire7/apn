@@ -27,3 +27,13 @@ resultDefault fallback (Err _) = fallback
 # what was missing.
 okOr _ (Some x) = Ok x
 okOr error None = Err error
+# The value inside, or a runtime error when there is none: expect names what
+# was missing (and shows an Err's error); unwrap is for quick scripts.
+expect _ (Some x) = x
+expect message None = fail message
+expect _ (Ok x) = x
+expect message (Err error) = fail (message ++ ": " ++ to String error)
+unwrap (Some x) = x
+unwrap None = fail "unwrap: None"
+unwrap (Ok x) = x
+unwrap (Err error) = fail ("unwrap: " ++ to String (Err error))

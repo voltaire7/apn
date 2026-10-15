@@ -1232,6 +1232,15 @@ print (safeDiv 7 2)                   # Some 7/2
 print (safeDiv 7 0)                   # None
 print (okOr "no samples" $ safeDiv 10 0)  # Err "no samples"
 print (safeDiv 1 4 >>= safeDiv 1)     # Some 4: =<< and >>= chain Option steps
+# unwrap and expect take the value out, as in Rust: None or Err is a runtime
+# error (expect "no samples" None fails with "no samples"). A constructor
+# pattern binding does the same, in a block as at the top level.
+print [unwrap (safeDiv 6 3),expect "no samples" (Ok 5)]   # [2,5]
+half n = {
+    Some h = safeDiv n 2
+    h
+}
+print (half 9)                        # 9/2
 # A deeper line starting with an operator (or a ternary's ? or :) continues
 # its statement, so each step of a chain can take its own line.
 perItem total count = okOr "no items" (safeDiv total count)

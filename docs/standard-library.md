@@ -159,6 +159,8 @@ Importing `option` also brings the Functor and Monad instances of both types
 | `mapError f result` | Transform `Err`, preserve `Ok` |
 | `resultDefault fallback result` | Unwrap `Ok`, use fallback for `Err` |
 | `okOr error option` | `Some x` as `Ok x`; `None` as `Err error` |
+| `expect message m` | The value in `Some`/`Ok`; for `None` a runtime error with the message, for `Err e` the message and `e` |
+| `unwrap m` | The value in `Some`/`Ok`, or a runtime error (`unwrap: None`, `unwrap: Err "oops"`) |
 
 A function with one way to fail returns an `Option` (`mean`, `headOption`,
 `safeDiv`, ...): `None` already says what happened. `okOr` turns it into a

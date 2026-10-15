@@ -20,6 +20,10 @@ const cases: [string, string][] = [
     ['mapError upper (Err "oops")', 'Err "OOPS"'],
     ['okOr "empty" (Some 1)', 'Ok 1'],
     ['okOr "empty" None', 'Err "empty"'],
+    ['[unwrap (Some 1),unwrap (Ok 2),expect "a" (Some 3),expect "b" (Ok 4)]', '[1,2,3,4]'],
+    ['typeOf unwrap', 'Option a | Result a b -> a'],
+    // A constructor pattern binds in a block as at the top level.
+    ['f n = { Some x = safeDiv 6 n; x }; f 2', '3'],
     ['safeDiv 7 2', 'Some 7/2'],
     ['safeDiv 7 0', 'None'],
     ['safeDiv 7.0 0.0', 'None'],
@@ -84,6 +88,23 @@ for (const [source, message] of [
 ]) Deno.test(`std rejects: ${source}`, () => {
     const i = new Interpreter();
     i.run(parse('import ["sequence","number","text"]'));
+    try { i.renderString(i.run(parse(source))); }
+    catch (error) {
+        if (error instanceof Error && error.message.includes(message)) return;
+        throw error;
+    }
+    throw new Error(`Expected ${message}`);
+});
+// unwrap and expect fail with what was missing, showing an Err's error.
+for (const [source, message] of [
+    ['unwrap (safeDiv 1 0)', 'unwrap: None'],
+    ['unwrap (Err "oops")', 'unwrap: Err "oops"'],
+    ['expect "no items" None', 'no items'],
+    ['expect "parsing" (Err "oops")', 'parsing: "oops"'],
+    ['f n = { Some x = safeDiv 6 n; x }; f 0', 'binding pattern did not match'],
+]) Deno.test(`std fails: ${source}`, () => {
+    const i = new Interpreter();
+    i.run(parse('import ["option","number"]'));
     try { i.renderString(i.run(parse(source))); }
     catch (error) {
         if (error instanceof Error && error.message.includes(message)) return;

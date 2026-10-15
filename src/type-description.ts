@@ -49,6 +49,16 @@ function unify(a: Shape, b: Shape): Shape {
         return a;
     }
     if (b.tag === "var") return unify(b, a);
+    // A union takes each choice once: a choice of the same shape unifies with it.
+    if (a.tag === "union" || b.tag === "union") {
+        const choices = a.tag === "union" ? [...a.choices] : [a];
+        for (const choice of b.tag === "union" ? b.choices : [b]) {
+            const c = resolve(choice);
+            const same = choices.findIndex(x => { const y = resolve(x); return y.tag === c.tag && (y.tag !== "name" || c.tag === "name" && y.name === c.name && y.args.length === c.args.length); });
+            if (same >= 0) choices[same] = unify(choices[same], c); else choices.push(c);
+        }
+        return choices.length === 1 ? choices[0] : { tag: "union", choices };
+    }
     if (a.tag === "arrow" && b.tag === "arrow") return arrow(unify(a.from, b.from), unify(a.to, b.to));
     if (a.tag === "list" && b.tag === "list") return list(unify(a.element, b.element));
     if (a.tag === "name" && b.tag === "name" && a.name === b.name && a.args.length === b.args.length) {
