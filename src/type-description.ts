@@ -269,7 +269,9 @@ export function describeType(value: Value): string {
                 return v.arity ? result : arrow(named("[]"), result);
             }
             case "variant": return v.family ? constructor(v.family, v.tag).result : named("Variant");
-            default: return named({ bool: "Bool", string: "String", char: "Char", record: "Record", mutable: "Mutable", pointer: "Pointer", hashmap: "HashMap", nomatch: "a", io: "IO", pending: "Monad" }[v.kind]);
+            // An undecided value (return x, empty) is in whatever monad its context names.
+            case "pending": return fresh();
+            default: return named({ bool: "Bool", string: "String", char: "Char", record: "Record", mutable: "Mutable", pointer: "Pointer", hashmap: "HashMap", nomatch: "a", io: "IO" }[v.kind]);
         }
     }
     const names = new Map<Shape, string>();

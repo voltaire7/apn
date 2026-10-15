@@ -431,10 +431,15 @@ error. `return x` yields `x` in whatever monad the context needs (see below), as
 A block that runs anything is a **do-block**: the block evaluates to an action
 that, when run, executes its statements in order. A block becomes a do-block
 at its first `<-` binding, or at its first discarded statement (one before
-the last) whose value is an action. Its last statement must itself be an
-action, whose result the block yields, as in Haskell: end with `return x` to
-yield a plain value. A block of bindings, or of discarded pure statements such
-as `assert`, stays an ordinary value:
+the last) whose value is in a monad: an action, `return x`, or a value of a
+type with a `>>=` instance (`Err e`, `None`). As in Haskell, a discarded
+statement is chained with `>>`, so a discarded `Err e` or `None` stops the
+block. A discarded list is the exception: `[]` is also the unit value (what
+`print` yields), so a list starts no do-block, though inside a list do-block
+it is chained. Its last statement must itself be an action, whose result the
+block yields: end with `return x` to yield a plain value. A block of
+bindings, or of discarded pure statements such as `assert` (which yields
+`true`), stays an ordinary value:
 
 ```apn
 area w h = {
@@ -545,7 +550,22 @@ pairs = List Int {
     b <- [10,20]
     return (a + b)       # [11,21,12,22]
 }
+evens = {
+    x <- [1..6]
+    guard (x % 2 == 0)   # empty ([]) when odd: that x yields nothing
+    return x             # [2,4,6]
+}
+check n = {
+    unless (n > 0) (Err "not positive")   # a Result has no empty: name the error
+    return (n * 2)       # check 2 is Ok 4, check 0 is Err "not positive"
+}
 ```
+
+A block whose statements can all be undecided at run time (`check 2` above
+runs only `return` values) takes the monad its code names, as types decide in
+Haskell: the checker finds it (`Result`, from `Err`), and the run uses it.
+`empty` in IO is an action that fails when run; a type without an `empty`
+instance (`Result`) cannot take it.
 
 | Function | Meaning |
 | --- | --- |
@@ -556,7 +576,9 @@ pairs = List Int {
 | `m >> k`, `f =<< m` | `m >>= (_ -> k)`; `m >>= f` |
 | `sequence actions` | runs each action, yielding the list of results |
 | `mapM f xs` | `sequence (map f xs)` |
-| `when c action`, `unless c action` | runs the action when `c` is true (false) |
+| `when c m`, `unless c m` | `m >> return []` when `c` is true (false), else `return []`: in any monad (`unless ok (Err e)`) |
+| `empty` | the monad's value holding nothing: `[]` in a list, `None` in an Option (an instance: `empty = None`) |
+| `guard c` | `return []` when `c` holds, else `empty`: a false guard stops a list or Option do-block |
 | `do actions` | runs each action in order, yielding the last result |
 
 `xs * f` iterates: when `f` returns actions it is the single action running

@@ -54,6 +54,11 @@ infixr 9 \
 #     m >> k        m, then k: m >>= (_ -> k)
 (<$>) = map
 return = primReturn
+# empty: the monad's value holding nothing, decided by the context as return
+# is ([] in a list, None in an Option). guard condition is return [] when it
+# holds, else empty: in a do-block, a false guard stops it, as in Haskell.
+empty = primEmpty
+guard condition = condition ? return [] : empty
 (<*>) = primAp
 (>>=) = primBind
 m >> k = m >>= (_ -> k)

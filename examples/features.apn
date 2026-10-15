@@ -875,8 +875,8 @@ print launched             # => liftoff (on the same line)
 
 # ---------------------------------------------------------
 # 17c. FUNCTORS AND MONADS — instances by overloading
-#    map (<$>), <*>, >>=, >>, return, sequence, mapM, when and unless work
-#    in any monad. IO and lists are built in; a type joins by defining
+#    map (<$>), <*>, >>=, >>, return, empty, guard, sequence, mapM, when and
+#    unless work in any monad. IO and lists are built in; a type joins by defining
 #    instance clauses for map, >>= and return, which add to the method
 #    everywhere (Option's and Result's live in the option module).
 #    return x is undecided until its monad is known: an annotation, a >>=
@@ -911,6 +911,29 @@ noSum = Option Int {
     return (a + b)
 }
 print noSum                                # => None
+# As in Haskell, a discarded statement in a monad is chained, so a false
+# guard (empty: [] in a list, None in an Option) or a discarded Err stops the
+# block; a passing assert yields true, which is pure in any block.
+evens = {
+    x <- [1..6]
+    assert (x > 0)
+    guard (x % 2 == 0)
+    return x
+}
+print evens                                # => [2,4,6]
+positive n = {
+    _ <- Some n
+    guard (n > 0)
+    return n
+}
+print [positive 3,positive (-1)]           # => [Some 3,None]
+# A Result has no empty: unless (or when) names the error. check 2 runs only
+# returns; the checker finds the block's monad (Result) and the run uses it.
+check n = {
+    unless (n > 0) (Err "not positive")
+    return (n * 2)
+}
+print [check 2,check 0]                    # => [Ok 4,Err "not positive"]
 # A monad of your own: a counter threading a number through each step.
 Counter s a = | MkCounter (s -> [a,s])
 runCounter (MkCounter f) s = f s

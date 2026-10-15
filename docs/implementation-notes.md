@@ -194,6 +194,12 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   (`mergeClauses`) only asks for heads when patterns collide. A call reaching
   such clauses returns a `pending` `call` step, realized by the head a context
   names; `return`'s instances are chosen the same way, never by running them.
+  A do-block's monad is recorded in `resultHeads` too, keyed by the block's
+  position: a block that is otherwise `pending` at run time is realized in it
+  (`checkedMonad`). `empty` is a `pending` `empty` step: `[]` for a list, a
+  failing action for IO, else the `empty` instance whose head is the target's.
+  In the checker, a union of `pending` values and one monad's value is that
+  monad (`c ? return [] : Err e` is a Result).
 - Function contracts (`((Int -> Int) f)`) are typed patterns whose type is a
   lambda read by `asType` (runtime) and `lambdaType` (checker); keep the two
   readings aligned, including which bound names stay bound. They wrap callables

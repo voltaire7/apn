@@ -1,11 +1,11 @@
-import { clauseKey, countingFamily, type Expr, flattenTypedPatterns, isLoadCall, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
+import { clauseKey, countingFamily, METHODS, type Expr, flattenTypedPatterns, isLoadCall, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric } from "./numbers.ts";
-import { APNError, didYouMean } from "./errors.ts";
+import { APNError, didYouMean, withArticle } from "./errors.ts";
 import { parse, parseDocument, rangeExpr, PRIMITIVE_OPERATORS } from "./parser.ts";
 import { mkStr, type Value, valueToString } from "./types.ts";
 
@@ -19,7 +19,6 @@ function pendingTy(t: Ty): Ty { return { k: "variant", name: "Monad", args: [t] 
 function isPending(t: Ty): boolean { return t.k === "variant" && t.name === "Monad" && t.args.length === 1; }
 // Scalar types an alias names a subtype of (Money = Float), as at runtime.
 const NAMED_BASES = new Set([...NUMERIC_TYPES.filter(t => !["Number", "Real", "Integer", "Exact", "Inexact"].includes(t)), "String", "Bool", "Char"]);
-const METHODS = new Set(["map", ">>=", "<*>", "return", "to", "from"]);
 // A definition that adds an instance instead of binding a name: any
 // definition of a method (map f (Some x) = ..., return = Some).
 function isInstance(name: string, _clauses: { params: Pattern[] }[]): boolean {
@@ -972,6 +971,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const value = resolve(choice);
             if (!unique.some(old => old === choice || value.k === "atom" && resolve(old).k === "atom" && text(old) === text(value))) unique.push(choice);
         }
+        // An undecided value (return x, empty) beside one monad's value is in
+        // that monad: c ? return [] : Err e is a Result.
+        const decided = unique.filter(t => !isPending(resolve(t)));
+        if (decided.length === 1 && unique.length > 1) {
+            const m = resolve(decided[0]);
+            if (isIO(m) || m.k === "list" || m.k === "variant" && instanceFor(">>=", [m])) return decided[0];
+        }
         return unique.length === 1 ? unique[0] : { k: "union", choices: unique };
     }
     // Is this (an operation that is) still waiting for an unknown type?
@@ -1098,6 +1104,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         }
         const [a, b] = operands;
+        // when c action: in the action's monad, whatever c is.
+        if (t.op === "when") return b.k === "var" || b.k === "operation" ? t : monadicType("then", b, pendingTy(list(variable(), constant(0n))));
         if (t.args.some(x => { const v = resolve(x); return v.k === "var" || v.k === "operation"; })) return t;
         if (t.op === "run") return runType(a);
         if (["map", "ap", "bind", "then", "bindFlip", "sequence", "mapM"].includes(t.op)) return monadicType(t.op, a, b);
@@ -3206,23 +3214,35 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 try {
                     for (const [n, s] of e.stmts.entries()) {
                         result = infer(s, child);
-                        // A <- binding, or a discarded statement that is an action,
-                        // makes the block a do-block: its last statement is the action
-                        // whose result it yields, in the block's monad.
+                        // A <- binding, or a discarded statement in a monad, makes the
+                        // block a do-block: its last statement is the action (or the
+                        // Option, ...) whose result it yields, in the block's monad.
+                        // A discarded list is pure ([] is also the unit value) unless
+                        // the block is a list block.
                         const discarded = s.t !== "patDef" && s.t !== "stmDef" && n < e.stmts.length - 1 ? resolve(result) : undefined;
-                        if (s.t === "patDef" ? s.eager : discarded && (isIO(discarded) || isPending(discarded))) action = true;
+                        const monadic = !!discarded && discarded.k === "variant" && !isIO(discarded) && !isPending(discarded) && !!instanceFor(">>=", [discarded]);
+                        if (s.t === "patDef" ? s.eager : discarded && (isIO(discarded) || isPending(discarded) || monadic)) action = true;
                         if (discarded && isIO(discarded)) {
-                            if (block.monad && !isIO(resolve(block.monad))) problem(`an IO action cannot run in a ${monadKind(block.monad)} do-block`, s);
+                            if (block.monad && !isIO(resolve(block.monad))) problem(`an IO action cannot run in ${withArticle(monadKind(block.monad))} do-block`, s);
+                            block.monad ??= discarded;
+                        }
+                        if (monadic) {
+                            if (block.monad && monadKind(block.monad) !== monadKind(discarded)) problem(`${withArticle(monadKind(discarded))} value cannot run in ${withArticle(monadKind(block.monad))} do-block`, s);
                             block.monad ??= discarded;
                         }
                     }
                 } finally { doBlocks.pop(); }
                 if (!action) return result;
+                // The block's monad, for the run: a block of returns and guards
+                // takes it from here, as types decide in Haskell.
+                if (block.monad) recordHead(e, monadKind(block.monad));
                 const last = e.stmts[e.stmts.length - 1];
                 if (last.t === "patDef" || last.t === "stmDef") return problem("the last statement of a do-block must be an action, not a binding", last, "end the block with an action, such as `return x`");
                 const final = resolve(result), monad = block.monad && resolve(block.monad);
                 if (isExplicit(final)) return final;
-                const notAction = () => problem(`the last statement of a do-block must be an action, not ${text(final)}`, last, "`return x` is the action yielding `x`");
+                const notAction = () => final.k === "variant" && monad && (isIO(final) || !!instanceFor(">>=", [final]))
+                    ? problem(`${withArticle(monadKind(final))} value cannot run in ${withArticle(monadKind(monad))} do-block`, last)
+                    : problem(`the last statement of a do-block must be an action, not ${text(final)}`, last, "`return x` is the action yielding `x`");
                 // A list or variant monad: the last value is one, or return.
                 if (monad && !isIO(monad)) {
                     const held = isPending(final) ? (final as Extract<Ty, { k: "variant" }>).args[0] : undefined;
@@ -4974,14 +4994,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "seq": args[0](); return args[1]();
             // Effects are actions, run statically where the program runs them;
-            // print, emit, debug, assert and set yield []. Printing renders,
-            // forcing every element in order.
+            // print, emit, debug and set yield [], assert true. Printing
+            // renders, forcing every element in order.
             case "print": case "emit": return { action: () => {
                 if (renderKnown(args[0]()) === undefined) incomplete = true;
                 return known([]);
             }, actionResult: "[]" };
             // use forces its record and binds its fields (lazily): no other effect.
-            case "debug": case "assert": case "use": args[0](); return known([]);
+            case "assert": args[0](); return { boolean: true };
+            case "debug": case "use": args[0](); return known([]);
             case "set": return { action: () => { writeMutable(args[0](), args[1]); return known([]); }, actionResult: "[]" };
             // Input read at check time, from the same snapshot the run uses.
             case "readStdin": return { action: () => {
@@ -5855,7 +5876,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const int = atom("Int"), str = atom("String"), bool = atom("Bool"), num = atom("Number");
     const empty = list(variable(), constant(0n));
     for (const name of ["print", "emit"]) native(name, [variable()], io(empty));
-    native("assert", [variable()], empty);
+    native("assert", [variable()], bool);
     native("isType", [variable(), variable()], bool);
     native("parse", [str], explicitDynamic);
     native("step", [int, variable()], explicitDynamic);
@@ -5915,7 +5936,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (const name of names) scope.set(name, { type: { k: "intrinsic", name: op, arity } });
     }
     for (const name of ["return", "primReturn"]) { const t = variable(); scope.set(name, { type: fn(t, pendingTy(t)) }); }
-    for (const name of ["when", "unless"]) { const t = variable(); scope.set(name, { type: fn(variable(), fn(io(t), io(list(variable(), constant(0n))))) }); }
+    for (const name of ["empty", "primEmpty"]) scope.set(name, { type: pendingTy(variable()) });
+    // when and unless: action >> return [], in the action's monad.
+    for (const name of ["when", "unless"]) scope.set(name, { type: { k: "intrinsic", name: "when", arity: 2 } });
+    // guard condition: return [] or empty, in the monad the context decides.
+    scope.set("guard", { type: fn(variable(), pendingTy(list(variable(), constant(0n)))) });
     scope.set("cast", { type: { k: "intrinsic", name: "cast", arity: 2 } });
     // Natural numbers are UInt: Z is UInt 0, S n the next one (converting n as UInt n does).
     scope.set("Z", { type: atom("UInt"), number: { kind: "int", v: 0n, typeName: "UInt" } });

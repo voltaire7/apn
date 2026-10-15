@@ -9,6 +9,7 @@ map _ None = None
 (Some x) >>= f = f x
 None >>= _ = None
 return = Some
+empty = None
 map f (Ok x) = Ok (f x)
 map _ (Err error) = Err error
 (Ok x) >>= f = f x

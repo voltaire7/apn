@@ -90,6 +90,10 @@ export function countingFamily(def: DataDef): boolean {
     return isZero && isNext;
 }
 
+// Methods: a definition of one adds an instance (map f (Some x) = ...,
+// return = Some, empty = None) instead of binding the name.
+export const METHODS = new Set(["map", ">>=", "<*>", "return", "empty", "to", "from"]);
+
 export type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "expr"; value: Expr }
     | { t: "type"; def: DataDef }
     | { t: "patDef"; pattern: Pattern; value: Expr; eager?: boolean; update?: { name: string; value: Expr; error?: string } };

@@ -12,6 +12,7 @@
 
 import { parse, parseDocument } from "./parser.ts";
 import { NATIVE_EXPORTS } from "./native-exports.ts";
+import { METHODS } from "./ast.ts";
 
 export const STD_DIRECTORY = new URL("../lib/", import.meta.url);
 export const BUNDLE_LIB = "/lib/";
@@ -205,7 +206,7 @@ export function standardExports(): Map<string, string[]> {
     if (standardIndex) return standardIndex;
     const index = new Map<string, string[]>();
     const add = (name: string, module: string) => {
-        if (/^[A-Za-z]/.test(name)) index.set(name, [...new Set([...index.get(name) ?? [], module])]);
+        if (/^[A-Za-z]/.test(name) && !METHODS.has(name)) index.set(name, [...new Set([...index.get(name) ?? [], module])]);
     };
     for (const [module, names] of Object.entries(NATIVE_EXPORTS)) names.forEach(name => add(name, module));
     let files: string[] = [];

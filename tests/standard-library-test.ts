@@ -1,5 +1,6 @@
 import { Interpreter } from "../src/interp.ts";
 import { parse } from "../main.ts";
+import { METHODS } from "../src/ast.ts";
 
 const cases: [string, string][] = [
     ["takeWhile (x -> 1) [1]", "[1]"],
@@ -179,8 +180,8 @@ Deno.test("no two standard modules define the same name", () => {
         if (!entry.isFile || !entry.name.endsWith(".apn")) continue;
         const module = entry.name.slice(0, -4);
         for (const statement of parse(Deno.readTextFileSync(new URL(`../lib/${entry.name}`, import.meta.url)), module)) {
-            // Instances (any definition of map, >>=, <*> or return) join a method; they bind no name.
-            const instance = statement.t === "def" && ["map", ">>=", "<*>", "return"].includes(statement.name);
+            // Instances (any definition of a method: map, return, empty, ...) join it; they bind no name.
+            const instance = statement.t === "def" && METHODS.has(statement.name);
             const names = instance ? [] : statement.t === "def" ? [statement.name]
                 : statement.t === "type" ? [statement.def.name, ...statement.def.variants.map(v => v.tag)]
                 : statement.t === "patDef" && statement.pattern.p === "var" ? [statement.pattern.name] : [];

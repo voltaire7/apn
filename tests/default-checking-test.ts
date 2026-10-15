@@ -729,7 +729,7 @@ const effectPrelude = `${optionClauses}; ${sizeClauses}; ${textClauses}`;
 for (const [source, expected] of [
     ['v <- print 3; g (f (r (null v)))','0'],
     ['v <- emit 3; g (f (r (null v)))','0'],
-    ['g (f (r (null (assert true))))','0'],
+    ['g (f (r (assert true)))','0'],
     ['g (f (r (null (debug 4))))','0'],
     ['k y = { c = Mutable 5; c + 1 }; g (f (r (k 0 == 6)))','0'],
     ['c = Mutable 5; g (f (r (c + 1 == 6)))','0'],

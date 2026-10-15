@@ -80,3 +80,8 @@ export function formatFileReadError(file: string, error: unknown): string {
         : error instanceof Error ? error.message : String(error);
     return `error: cannot read ${JSON.stringify(file)}: ${reason}`;
 }
+
+// A noun with its indefinite article: an Option, a Result.
+export function withArticle(noun: string): string {
+    return `${/^[AEIOUaeiou]/.test(noun) ? "an" : "a"} ${noun}`;
+}

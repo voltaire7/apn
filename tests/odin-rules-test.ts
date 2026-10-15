@@ -22,7 +22,7 @@ for (const [source, expected] of [
     ['UserId = Int\nOrderId = Int\nf (UserId n) = n\nf _ = 0\nf (OrderId 3)', '0'],
     ['UserId = Int\n[v: UserId] []', '[v: UserId 0]'],
     ['v = [x: Int] [y: 2]\nv', '[x: 0, y: 2]'],
-    ['assert true', '[]'],
+    ['assert true', 'true'],
     ['import "function"\ncount = Mutable 0\nbracket 42 (_ -> set count 1) (x -> x + 1)\ncount', '1'],
     ['import "function"\nbracket 42 (_ -> []) (x -> [x,x+1])', '[42,43]'],
     ['import "function"\ncount = Mutable 0\nv <- bracket 1 (_ -> set count 9) (_ -> [count + 1])\n[v,count]', '[[1],9]'],
@@ -116,5 +116,5 @@ Deno.test('assert reports piped source', () => {
 });
 
 Deno.test("assert accepts a truthy number", () => {
-    if (result("assert 1") !== "[]") throw new Error("expected empty result");
+    if (result("assert 1") !== "true") throw new Error("expected true");
 });

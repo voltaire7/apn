@@ -2,7 +2,7 @@ import { CheckingSession } from "./checking-session.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeType } from "./type-description.ts";
-import { sourceLocations } from "./ast.ts";
+import { METHODS, sourceLocations } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
@@ -14,7 +14,7 @@ import { parseLiteral } from "./text-natives.ts";
 import { loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
-import { APNError, didYouMean } from "./errors.ts";
+import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { clauseKey, countingFamily, flatTypedPattern, isLoadCall, mergeClauses } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
@@ -209,6 +209,8 @@ export class Interpreter {
     constructor() {
         for (const name of TYPE_NAMES) if (name !== "Vect") this.env.setLocal(name, { kind: "type", name });
         this.env.setLocal("Z", ZERO);
+        // empty in a monad not decided yet, as return x is (the prelude's empty).
+        this.env.setLocal("primEmpty", { kind: "pending", step: { op: "empty" } });
         for (const [name, arity] of NATIVES) {
             if (!(name in RETIRED_NATIVES)) this.env.setLocal(name, { kind: "native", name, arity, applied: [] });
         }
@@ -332,7 +334,7 @@ export class Interpreter {
         // A definition of map, >>=, <*> or return defines an instance: it joins
         // the method everywhere instead of shadowing it here. Its clauses are
         // the instance (return x = Some x), or its value is (return = Some).
-        if (Interpreter.METHODS.has(name) && !this.loadingPrelude) {
+        if (METHODS.has(name) && !this.loadingPrelude) {
             const child = new Env(this.env), arity = clauses[0].params.length, body = clauses[0].body;
             const method: Value = arity ? { kind: "clauseFn", name, clauses, arity, env: child, applied: [] } : this.defer(() => {
                 const caller = this.env;
@@ -1219,11 +1221,12 @@ export class Interpreter {
                                     next = new TailCall(s, child);
                                     break;
                                 }
-                                // A <- binding, or a discarded statement whose value is an
-                                // action, makes the rest of the block a do-block: the block
-                                // is the action that runs it.
+                                // A <- binding, or a discarded statement in a monad, makes the
+                                // rest of the block a do-block: the block is the action (or
+                                // the Option, ...) that runs it, as in Haskell.
                                 // Its monad: IO for an action (or a load), undecided for
-                                // return and the like, else the <- value's own (a list, an Option).
+                                // return and the like, else the value's own (a list, an Option).
+                                // A discarded list is pure: [] is also the unit value.
                                 const value = s.t === "patDef" ? (isLoadCall(s.value) || s.value.t === "import" ? undefined : this.reference(this.eval(s.value))) : this.demand(this.eval(s));
                                 const block = e, start = si;
                                 if (!value || value.kind === "io") {
@@ -1231,13 +1234,19 @@ export class Interpreter {
                                     break;
                                 }
                                 if (value.kind === "pending") {
-                                    r = { kind: "pending", step: { op: "do", block, env: child, start, first: value } };
+                                    // Undecided, unless the checker found the block's monad.
+                                    const target = this.checkedMonad(block);
+                                    r = target ? this.desugarDo(block, child, start, target, value) : { kind: "pending", step: { op: "do", block, env: child, start, first: value } };
                                     break;
                                 }
                                 if (s.t === "patDef") {
                                     const target = this.monadTypeOf(value);
                                     if (!target) throw new APNError("runtime", `<- runs an action, not a ${value.kind}`, { hint: "bind a value with `=`" });
                                     r = this.desugarDo(block, child, start, target, value);
+                                    break;
+                                }
+                                if (value.kind === "variant" && value.family && this.familiesOf(">>=").has(value.family)) {
+                                    r = this.desugarDo(block, child, start, this.monadTypeOf(value)!, value);
                                     break;
                                 }
                                 r = value;
@@ -1939,7 +1948,6 @@ export class Interpreter {
     // ---- Monads: instances of map, >>=, <*> and return ----
     // Clause functions a program defines for these methods, newest last: tried
     // (newest first) before the builtin IO and list instances.
-    static readonly METHODS = new Set(["map", ">>=", "<*>", "return", "to", "from"]);
     private instances = new Map<string, Value[]>();
     // The variant families each method has an instance for (Monad/Functor patterns).
     private instanceFamilies = new Map<string, Set<unknown>>();
@@ -2056,7 +2064,7 @@ export class Interpreter {
         let head = clause && this.checkedHead(clause);
         if (!head) {
             const value = this.reference(fn);
-            if (value.kind === "native" && value.family) head = value.family.name;
+            if ((value.kind === "native" || value.kind === "variant") && value.family) head = value.family.name;
             else if (value.kind === "clauseFn" || value.kind === "closure") head = headOfDescription(describeType(value), 1);
         }
         this.instanceHeads.set(fn, head);
@@ -2067,6 +2075,16 @@ export class Interpreter {
     private checkedHead(clause: DefClause): string | undefined {
         const at = sourceLocations.get(clause.body);
         return at ? this.checking?.resultHeads.get(`${at.file}:${at.start}`) : undefined;
+    }
+    // A do-block's monad as the checker inferred it (Result for a block whose
+    // statements name it), as a type: undefined when it did not, or for IO.
+    private checkedMonad(block: Expr): Value | undefined {
+        const at = sourceLocations.get(block);
+        const head = at && this.checking?.resultHeads.get(`${at.file}:${at.start}`);
+        if (!head || head === "IO") return undefined;
+        if (head === "List") return { kind: "type", name: "List" };
+        const type = this.env.get(head), value = type && this.reference(type);
+        return value?.kind === "type" && value.family ? value : undefined;
     }
     clauseHead(clause: DefClause, env: Env): string | undefined {
         return this.checkedHead(clause) ?? headOfDescription(describeType({ kind: "clauseFn", name: "<clause>", clauses: [clause], arity: clause.params.length, env, applied: [] }), clause.params.length);
@@ -2131,11 +2149,25 @@ export class Interpreter {
             if (!choice) throw new APNError("runtime", `no overload of '${step.fn.name}' makes ${head ? `a ${head}` : "this type"}`);
             return this.reference(this.runClause(step.fn, choice, step.args));
         }
+        if (step.op === "empty") return this.emptyIn(target);
         if (this.isIOType(target)) { const value = step.value; return { kind: "io", result: () => this.typeText(value), run: () => value }; }
         if (this.isListType(target)) return mkList([step.value]);
         const made = this.returnIn(target, step.value);
         if (made) return made;
         throw new APNError("runtime", `no return instance for ${valueToString(target)}`, { hint: "define one, such as `return = Some`" });
+    }
+
+    // empty in a monad: [] for a list, an action failing when run for IO (a
+    // failed guard), else the newest empty instance making the target's type.
+    private emptyIn(target: Value): Value {
+        if (this.isListType(target)) return mkList([]);
+        if (this.isIOType(target)) return { kind: "io", result: "a", run: () => { throw new APNError("runtime", "empty ran as an action (a guard failed)"); } };
+        const family = target.kind === "type" ? target.family : undefined;
+        const fns = this.instances.get("empty") ?? [];
+        for (let n = fns.length - 1; family && n >= 0; n--) {
+            if (this.instanceHead(fns[n]) === family.name) return this.reference(fns[n]);
+        }
+        throw new APNError("runtime", `no empty instance for ${valueToString(target)}`, { hint: family?.name === "Result" ? "a Result fails with its error: write `unless condition (Err error)`" : "define one, such as `empty = None`" });
     }
 
     // m >>= f: through m's monad. f's results are realized in the same monad.
@@ -2207,10 +2239,15 @@ export class Interpreter {
                         if (!this.monadTypeOf(value)) lastAction(`a ${value.kind}`);
                         return value;
                     }
-                    // A discarded statement outside the monad (assert ...) is pure;
-                    // an IO action cannot run here.
-                    if (m.kind === "io") throw new APNError("runtime", `an IO action cannot run in a ${valueToString(target)} do-block`);
-                    if (s.t !== "patDef" && m.kind !== "pending" && !this.sameMonad(m, target)) continue;
+                    // A discarded statement outside any monad (assert ...) is pure,
+                    // as is a list outside a list block ([] is also the unit value);
+                    // an action or another monad's value cannot run here.
+                    if (m.kind === "io") throw new APNError("runtime", `an IO action cannot run in ${withArticle(valueToString(target))} do-block`);
+                    if (s.t !== "patDef" && m.kind !== "pending" && !this.sameMonad(m, target)) {
+                        const other = m.kind === "variant" && m.family && this.familiesOf(">>=").has(m.family) ? this.monadTypeOf(m) : undefined;
+                        if (other) throw new APNError("runtime", `${withArticle(valueToString(other))} value cannot run in ${withArticle(valueToString(target))} do-block`);
+                        continue;
+                    }
                     const next = i + 1, binding = s;
                     return this.bind(this.realize(m, target), { kind: "native", name: "<do>", arity: 1, applied: [], invoke: ([x]) => {
                         const child = new Env(scope);
@@ -2369,7 +2406,7 @@ export class Interpreter {
     ambiguous(v: Extract<Value, { kind: "pending" }>): never {
         const step = v.step;
         if (step.op === "bind" || step.op === "do") throw new APNError("runtime", "ambiguous: nothing decides which monad this is", { hint: "name it, as in `Option Int { ... }` or `IO [] { ... }`" });
-        const name = step.op === "call" ? step.fn.name : "return";
+        const name = step.op === "call" ? step.fn.name : step.op === "empty" ? "empty" : "return";
         throw new APNError("runtime", `ambiguous: nothing decides which ${name}`, { hint: `name the type it should have, as in \`Int (${name} ...)\`` });
     }
 
@@ -2381,6 +2418,7 @@ export class Interpreter {
         if (step.op === "call") return step.choices.map(c => this.residualText({ ...step.fn, clauses: [c], applied: step.args })).join("\n");
         if (step.op === "bind") return `${this.renderString(step.m)} >>= ${argument(this.force(step.f))}`;
         if (step.op === "do") return exprToSource(step.block);
+        if (step.op === "empty") return ["[]", ...(this.instances.get("empty") ?? []).map(instance => this.renderString(instance))].join("\n");
         const lines = (this.instances.get("return") ?? []).map(instance => {
             const fn = this.reference(instance);
             if (fn.kind === "clauseFn") return this.residualText({ ...fn, applied: [...fn.applied, step.value] });
@@ -2948,7 +2986,8 @@ export class Interpreter {
                 if (location) error.src = location.source;
                 throw error;
             }
-            return { kind: "list", v: [] };
+            // true, not [] (the empty list): a passing assert is pure in any block.
+            return { kind: "bool", v: true };
         }
         if (name === "match") {
             // Traverse only as far as the first match. Share the original lazy
