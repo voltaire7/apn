@@ -933,6 +933,20 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
     }
     if (run(session(), 'import "option"; func (Some x)::xs = [x,xs]; func [Some 1,None]') !== "[1,[None]]") throw new Error("with the import");
 });
+// An unbound name is reported where it is written, with the standard module
+// exporting it, before any check of what it would have been.
+for (const [source, name, module] of [
+    ["perItem total count =\n    okOr \"no items\" (safeDiv total count)\n        >>= share -> Ok share", "okOr", "option"],
+    ["x = 1\nprint (sum [1,2])", "sum", "sequence"],
+    ["f x = nothere x >>= y -> [y]", "nothere", undefined],
+] as const) Deno.test(`an unbound name is located and named: ${JSON.stringify(source)}`, () => {
+    try { run(session(), source); } catch (error) {
+        const e = error as { message: string; hint?: string; pos?: number };
+        if (e.message !== `unbound variable '${name}'` || e.pos !== source.indexOf(name) || module && e.hint !== `add \`import "${module}"\` to use \`${name}\``) throw new Error(`${e.pos}: ${e.message} (${e.hint})`);
+        return;
+    }
+    throw new Error(`accepted: ${source}`);
+});
 Deno.test("a set from an earlier REPL input keeps later cell reads unknown", () => {
     const i = session();
     run(i, `${effectPrelude}; bump c = set c 9`);

@@ -10,7 +10,8 @@
 // from virtual paths to sources, with the standard library under BUNDLE_LIB
 // and the program's own directory at BUNDLE_APP.
 
-import { parse } from "./parser.ts";
+import { parse, parseDocument } from "./parser.ts";
+import { NATIVE_EXPORTS } from "./native-exports.ts";
 
 export const STD_DIRECTORY = new URL("../lib/", import.meta.url);
 export const BUNDLE_LIB = "/lib/";
@@ -193,4 +194,37 @@ export function bundleProgram(source: string, directory: string): Record<string,
     };
     visit(source, "<app>", root);
     return bundle;
+}
+
+// The standard library's exports by name, with the modules defining each:
+// top-level names not starting with _, and each module's natives, for
+// completion and "add import" hints. The prelude needs no import. Without
+// read access to lib/ it is the natives alone.
+let standardIndex: Map<string, string[]> | undefined;
+export function standardExports(): Map<string, string[]> {
+    if (standardIndex) return standardIndex;
+    const index = new Map<string, string[]>();
+    const add = (name: string, module: string) => {
+        if (/^[A-Za-z]/.test(name)) index.set(name, [...new Set([...index.get(name) ?? [], module])]);
+    };
+    for (const [module, names] of Object.entries(NATIVE_EXPORTS)) names.forEach(name => add(name, module));
+    let files: string[] = [];
+    try { files = [...Deno.readDirSync(STD_DIRECTORY)].filter(e => e.isFile && e.name.endsWith(".apn")).map(e => e.name).sort(); } catch { /* natives only */ }
+    for (const file of files) {
+        const module = file.slice(0, -".apn".length);
+        if (["prelude", "type", "do"].includes(module)) continue;
+        try {
+            for (const item of parseDocument(Deno.readTextFileSync(new URL(file, STD_DIRECTORY)))) {
+                if (item.t === "def") add(item.name, module);
+                if (item.t === "patDef" && item.pattern.p === "var") add(item.pattern.name, module);
+                if (item.t === "type") { add(item.def.name, module); item.def.variants.forEach(v => add(v.tag, module)); }
+            }
+        } catch { /* a module that does not parse alone offers nothing */ }
+    }
+    return standardIndex = index;
+}
+
+// The first standard module exporting name, if any.
+export function standardModule(name: string): string | undefined {
+    return standardExports().get(name)?.[0];
 }

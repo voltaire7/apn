@@ -1208,8 +1208,8 @@ print decoded                                 # => [1,2.5,[]]
 # Each is imported by name (there is no whole-library module); a list imports
 # several, each once: import ["option","option"] is a parse error. Editors
 # completing a standard name add its import (into the first import, as a list).
-# Before its import, using fail or upper is a static error whose hint names
-# the import: add `import "function"` to use `fail`.
+# Before its import, using any standard export (fail, upper, okOr) is a static
+# error at the name, whose hint names the import: add `import "function"` to use `fail`.
 import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]
 print (cast String $ to (List Char) "hello") # => "hello"
 # reverse is implemented in APN with a linear-time accumulator fold.

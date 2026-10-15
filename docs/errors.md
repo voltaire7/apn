@@ -13,10 +13,11 @@ rendered by `formatError(err, color)`:
   and missing record fields (over the record's fields). The non-exhaustive
   function error names the function. Operator type errors are uniform:
   `cannot apply '+' to list and int`.
-- **Type errors** name an unknown name before any boundary count: `unbound
-  variable 'x'`, or `unknown constructor 'Some' in a pattern`. A standard
-  library constructor's or native's hint names the import (``add `import
-  "function"` to use `fail` ``); others get `did you mean '...'?`.
+- **Type errors** name an unknown name, where it is written, before any
+  other error its unknown value leads to: `unbound variable 'x'`, or
+  `unknown constructor 'Some' in a pattern`. A name the standard library
+  exports gets a hint naming the import (``add `import "option"` to use
+  `okOr` ``); others get `did you mean '...'?`.
 - Code in a hint is in backticks: ``bind a value with `=` ``, ``bind its
   result first: `x <- action` ``.
 - Messages carry no `Parser:`/`Lexer:`/`Runtime:` prefixes — the headline

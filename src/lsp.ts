@@ -6,8 +6,8 @@ import { lex, KEYWORDS } from "./lexer.ts";
 import { NATIVES } from "./interp.ts";
 import { semanticTokens, TOKEN_TYPES } from "./highlight.ts";
 import { TYPE_NAMES } from "./type-system.ts";
-import { NATIVE_EXPORTS, RETIRED_NATIVES, nativeModule } from "./native-exports.ts";
-import { STD_DIRECTORY } from "./modules.ts";
+import { RETIRED_NATIVES, nativeModule } from "./native-exports.ts";
+import { standardExports } from "./modules.ts";
 
 type Message = { jsonrpc?: string; id?: number | string | null; method?: string; params?: any };
 type Document = { text: string; version: number };
@@ -68,33 +68,6 @@ const builtins = new Map<string, string>([
     ["bracket", "bracket acquire release use — action; finishes returned data before cleanup, even on failure (function)."],
     ["withFile", "withFile path use — action scoping a UTF-8 file reader; the callback receives the action file.read (io)."],
 ]);
-
-// The standard library's exports by name, with the modules defining each:
-// top-level names not starting with _, and each module's natives. The
-// prelude needs no import. Without read access to lib/ it is the natives alone.
-let standardIndex: Map<string, string[]> | undefined;
-export function standardExports(): Map<string, string[]> {
-    if (standardIndex) return standardIndex;
-    const index = new Map<string, string[]>();
-    const add = (name: string, module: string) => {
-        if (/^[A-Za-z]/.test(name)) index.set(name, [...new Set([...index.get(name) ?? [], module])]);
-    };
-    for (const [module, names] of Object.entries(NATIVE_EXPORTS)) names.forEach(name => add(name, module));
-    let files: string[] = [];
-    try { files = [...Deno.readDirSync(STD_DIRECTORY)].filter(e => e.isFile && e.name.endsWith(".apn")).map(e => e.name).sort(); } catch { /* natives only */ }
-    for (const file of files) {
-        const module = file.slice(0, -".apn".length);
-        if (["prelude", "type", "do"].includes(module)) continue;
-        try {
-            for (const item of parseDocument(Deno.readTextFileSync(new URL(file, STD_DIRECTORY)))) {
-                if (item.t === "def") add(item.name, module);
-                if (item.t === "patDef" && item.pattern.p === "var") add(item.pattern.name, module);
-                if (item.t === "type") { add(item.def.name, module); item.def.variants.forEach(v => add(v.tag, module)); }
-            }
-        } catch { /* a module that does not parse alone offers nothing */ }
-    }
-    return standardIndex = index;
-}
 
 // The document's one-line imports (import "x", import ["x","y"]), in order.
 function importsOf(text: string): { line: number; start: number; end: number; modules: string[] }[] {

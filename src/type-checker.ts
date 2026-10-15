@@ -1,6 +1,7 @@
 import { clauseKey, countingFamily, type Expr, flattenTypedPatterns, isLoadCall, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
-import { nativeModule, RETIRED_NATIVES } from "./native-exports.ts";
+import { RETIRED_NATIVES } from "./native-exports.ts";
+import { standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric } from "./numbers.ts";
@@ -264,12 +265,6 @@ const VIEW_PICKING_NATIVES = new Set(["head"]);
 const VIEW_HOLDING_NATIVES = new Set(["map", "filter", "foldl", "foldr", "zipWith", "iterate", "enumerate", "match", "has", "lookup", "remove", "insert", "HashMap"]);
 // Natives calling a function argument, by its position.
 const HIGHER_ORDER_NATIVES = new Map([["map", 0], ["filter", 0], ["foldl", 0], ["foldr", 0], ["zipWith", 0], ["iterate", 1], ["match", 1]]);
-// Constructors the standard library declares, by module (for import hints).
-const STD_CONSTRUCTORS: Record<string, string> = {
-    Some: "option", None: "option", Ok: "option", Err: "option",
-    HtmlText: "html", HtmlElement: "html", HtmlAttr: "html", HtmlStyle: "html", HtmlClick: "html", HtmlInput: "html", HtmlSubmit: "html",
-    BrowserSandbox: "browser",
-};
 // Code that runs in the top-level scope: statements and top-level values.
 const topLevelCode = new WeakSet<Expr>();
 const isFunctionExpr = (e: Expr): e is Extract<Expr, { t: "lambda" | "patternLambda" }> => e.t === "lambda" || e.t === "patternLambda";
@@ -922,8 +917,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scan(program);
     let dynamicBoundaries = 0, runtimeChecks = 0, serial = 0, budget = 50000;
     let activeExpression: Expr | undefined, checkingExpression: Expr | undefined;
+    // The innermost expression being inferred that has a source location.
+    let locatedExpression: Expr | undefined;
     let firstUnknown: Expr | undefined, unknownLength = false;
-    let firstUnbound: { expr: Expr; name: string; hint?: string; inPattern?: boolean } | undefined;
+    let firstUnbound: { expr: Expr; name: string; hint?: string; inPattern?: boolean; within?: Expr } | undefined;
     // Callee positions of application chains, where a function's shape is trusted.
     const callees = new WeakSet<Expr>();
     const unknown = (): Ty => {
@@ -1040,6 +1037,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         const container = op === "map" ? b : a, other = op === "map" ? a : b;
         if (isExplicit(container) || isExplicit(other)) { runtimeChecks++; return explicitDynamic; }
+        // A monad the checker does not know (an unbound name's) stays unknown.
+        if (resolve(container).k === "dynamic") return unknown();
         const name = op === "map" ? "map" : op === "ap" ? "'<*>'" : op === "then" ? "'>>'" : "'>>='";
         // A monad not decided yet (return x, a Monad or Functor parameter).
         if (isPending(container) || container.k === "atom" && (container.name === "Monad" || container.name === "Functor")) {
@@ -1864,7 +1863,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "constr": {
                 const entry = scope.get(p.tag), t = entry ? copy(entry.type) : dynamic;
                 if (!entry && !firstUnbound && options.runtimeNames && !options.runtimeNames.has(p.tag)) {
-                    const module = STD_CONSTRUCTORS[p.tag];
+                    const module = standardModule(p.tag);
                     const near = didYouMean(p.tag, [...scope.keys()].filter(name => /^[A-Z]/.test(name)));
                     firstUnbound = { expr: e, name: p.tag, inPattern: true,
                         hint: module ? `add \`import "${module}"\` to use \`${p.tag}\`` : near ? `did you mean '${near}'?`
@@ -2688,14 +2687,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 e,
             );
         }
-        const previousExpression = activeExpression;
+        const previousExpression = activeExpression, previousLocated = locatedExpression;
         activeExpression = e;
+        if (sourceLocations.has(e)) locatedExpression = e;
         try {
             const t = inferExpression(e, scope, expected);
             inferred.set(e, t);
             return t;
         } finally {
             activeExpression = previousExpression;
+            locatedExpression = previousLocated;
             inferenceDepth--;
         }
     }
@@ -2724,8 +2725,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 if (!entry && !firstUnbound && options.runtimeNames && !options.runtimeNames.has(e.name)) {
                     const near = didYouMean(e.name, [...scope.keys(), ...options.runtimeNames]);
-                    const module = STD_CONSTRUCTORS[e.name] ?? nativeModule(e.name), now = RETIRED_NATIVES[e.name];
-                    firstUnbound = { expr: e, name: e.name, hint: now ? `write \`${now} x\`` : module ? `add \`import "${module}"\` to use \`${e.name}\`` : near ? `did you mean '${near}'?` : undefined };
+                    const module = standardModule(e.name), now = RETIRED_NATIVES[e.name];
+                    firstUnbound = { expr: e, within: locatedExpression ?? checkingExpression, name: e.name, hint: now ? `write \`${now} x\`` : module ? `add \`import "${module}"\` to use \`${e.name}\`` : near ? `did you mean '${near}'?` : undefined };
                 }
                 if (!entry) return unknown();
                 if (deferred && defining && entry.capture && defining.name !== e.name) entry.capture.users.add(defining);
@@ -6049,14 +6050,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     deciding = false;
     if (options.strict && dynamicBoundaries && !issues.length && firstUnbound) {
         // An unknown name is the usual cause; report it rather than the boundary count.
-        const loc = sourceLocations.get(firstUnbound.expr);
+        const own = sourceLocations.get(firstUnbound.expr);
+        const loc = own ?? (firstUnbound.within && sourceLocations.get(firstUnbound.within));
         let pos = loc?.start ?? 0, len = Math.max(1, (loc?.end ?? 1) - pos);
+        const name = firstUnbound.name, word = /[A-Za-z0-9_$']/;
+        const whole = (at: number) => !word.test(loc!.source![at - 1] ?? " ") && !word.test(loc!.source![at + name.length] ?? " ");
         // A pattern has no location of its own; it comes before the code it
         // matches, so the constructor is the name's last use before that.
         if (firstUnbound.inPattern && loc?.source) {
-            const name = firstUnbound.name, word = /[A-Za-z0-9_$']/;
             for (let at = loc.source.lastIndexOf(name, pos - name.length); at >= 0; at = at ? loc.source.lastIndexOf(name, at - 1) : -1) {
-                if (!word.test(loc.source[at - 1] ?? " ") && !word.test(loc.source[at + name.length] ?? " ")) { pos = at; len = name.length; break; }
+                if (whole(at)) { pos = at; len = name.length; break; }
+            }
+        } else if (!own && loc?.source) {
+            // A name without a location of its own: its first use in the code being checked.
+            for (let at = loc.source.indexOf(name, pos); at >= 0 && at < (loc.end ?? 0); at = loc.source.indexOf(name, at + 1)) {
+                if (whole(at)) { pos = at; len = name.length; break; }
             }
         }
         issues.push({ message: firstUnbound.inPattern ? `unknown constructor '${firstUnbound.name}' in a pattern` : `unbound variable '${firstUnbound.name}'`, hint: firstUnbound.hint, pos, len, source: loc?.source, file: loc?.file });
