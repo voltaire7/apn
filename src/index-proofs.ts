@@ -29,10 +29,14 @@ function plus(a: Affine, b: Affine, scale = 1n): Affine {
 const times = (a: Affine, k: bigint): Affine => plus(constant(0n), a, k);
 
 const unwrap = (e: Expr): Expr => e.t === "block" && e.stmts.length === 1 && e.style !== "{" ? unwrap(e.stmts[0]) : e;
+// Operators a program bound to a constructor ((::) = Cons), for the proof
+// under way: x :: xs applies Cons.
+let operatorTags = new Map<string, string>();
 // An application's head and arguments (f $ x applies f too).
 function spine(e: Expr): [Expr, Expr[]] {
     e = unwrap(e);
     if (e.t === "pipe") { const [head, args] = spine(e.f); return [head, [...args, e.x]]; }
+    if (e.t === "binop" && operatorTags.has(e.op)) return [{ t: "var", name: operatorTags.get(e.op)! }, [e.l, e.r]];
     const args: Expr[] = [];
     while (e.t === "app") { args.unshift(e.a); e = unwrap(e.f); }
     return [e, args];
@@ -108,7 +112,8 @@ class World {
 
 // The first wrong claim, or whether every clause's claim was proven (then a
 // later function may use them as it uses its own).
-export function proveIndexClaims(name: string, clauses: Clause[], families: Map<string, Family>, proven: Map<string, Clause[]>): ClaimFailure | boolean {
+export function proveIndexClaims(name: string, clauses: Clause[], families: Map<string, Family>, proven: Map<string, Clause[]>, operators = new Map<string, string>()): ClaimFailure | boolean {
+    operatorTags = operators;
     // The index positions of each family: where a constructor's result is
     // computed (Z, S k), not a parameter passed through.
     const positions = new Map<string, number[]>();

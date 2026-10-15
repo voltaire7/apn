@@ -52,7 +52,9 @@ export type Pattern =
     | { p: "char"; v: string }
     | { p: "float"; v: number }
     | { p: "list"; v: Pattern[] }
-    | { p: "cons"; head: Pattern; tail: Pattern }
+    // An infix constructor pattern: head :: tail, or head op tail for an operator
+    // starting with ':' (op, when not ::), matching the constructor op names.
+    | { p: "cons"; head: Pattern; tail: Pattern; op?: string }
     | { p: "typeBind"; name: string; value: Pattern }
     | { p: "constr"; tag: string; args: Pattern[] }
     | { p: "recPat"; v: Array<[string, string]> }
@@ -88,6 +90,20 @@ export function flatTypedPattern(p: Pattern, parameters: (name: string) => numbe
     const args = p.args.slice(0, -1).map(typeArg);
     if (args.some(a => !a)) return undefined;
     return { p: "schema", type: args.reduce<Expr>((f, a) => ({ t: "app", f, a: a! }), { t: "var", name: p.tag }), value: p.args[p.args.length - 1] };
+}
+// Rewrite every infix pattern whose operator names a constructor ((::) = Cons)
+// to that constructor's pattern (x :: xs is Cons x xs), in place.
+export function rewriteInfixConstructors(node: unknown, tagOf: (op: string) => string | undefined): void {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) { node.forEach(x => rewriteInfixConstructors(x, tagOf)); return; }
+    const n = node as Record<string, unknown>;
+    for (const value of Object.values(n)) if (value && typeof value === "object") rewriteInfixConstructors(value, tagOf);
+    if (n.p !== "cons") return;
+    const tag = tagOf((n.op as string | undefined) ?? "::");
+    if (!tag) return;
+    const args = [n.head, n.tail];
+    for (const key of Object.keys(n)) delete n[key];
+    Object.assign(n, { p: "constr", tag, args });
 }
 // Rewrite every flat typed pattern in node to its typed form, in place.
 export function flattenTypedPatterns(node: unknown, parameters: (name: string) => number | undefined): void {

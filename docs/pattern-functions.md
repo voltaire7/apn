@@ -59,6 +59,13 @@ mean `add 1 2`. A collection variable works the same way as a literal.
 | `[x: a, y: b]` | Does not match | Binds fields `x` and `y` as `a` and `b` |
 | `(x::xs)` | Binds the head and tail of a nonempty list | Does not match |
 
+`x :: xs` matches the constructor `::` names, as any infix pattern with an
+operator starting with `:` does (as in Haskell). By default that is list cons;
+bound to a two-field constructor, it takes that constructor's values apart:
+after `(::) = Cons`, `x :: xs` builds and matches `Cons x xs`, and after
+`(:+) = MkPair`, `(x :+ y)` matches `MkPair x y`. An operator bound to anything
+else cannot take a value apart, which is an error.
+
 ```apn
 sumPair [x,y] = x + y
 [sumPair [1,2],sumPair [y: 2, x: 1, extra: 99]]

@@ -1,4 +1,4 @@
-import { clauseKey, type Expr, flattenTypedPatterns, isLoadCall, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
+import { clauseKey, type Expr, flattenTypedPatterns, isLoadCall, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { nativeModule, RETIRED_NATIVES } from "./native-exports.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
@@ -1818,6 +1818,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return;
             }
             case "cons": {
+                // An infix pattern's operator names a constructor: list cons, or
+                // one a program bound it to (rewritten to that constructor already).
+                const op = p.op ?? "::";
+                if (p.op || scope.has("::") && builtinOperator(scope.get("::")!.type) !== "::") {
+                    problem(`'${op}' is not a constructor, so it cannot take a value apart`, e, `bind it to a two-field constructor, as in \`(${op}) = Cons\``);
+                }
                 const a = variable(), t = list(a);
                 unify(t, expected, e);
                 const vector = resolve(expected);
@@ -3079,7 +3085,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     // overloads a prelude operator falls back to its builtin
                     // meaning for operands its clauses do not accept.
                     const call = operatorCall(e);
-                    if (!PRELUDE_OPERATORS.has(e.op)) return infer(call, scope, expected);
+                    // (::) = Cons rebinds the operator; it does not overload it.
+                    if (!PRELUDE_OPERATORS.has(e.op) || constructorOperators.has(e.op)) return infer(call, scope, expected);
                     const l = infer(e.l, scope), r = infer(e.r, scope);
                     if (overloadAccepts(bound.type, l, r)) return infer(call, scope, expected);
                     op = e.op;
@@ -3348,6 +3355,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // computes them: its fields give names (k from the tail's own indices),
     // and its constructor's result type is evaluated with them.
     const indexedFamilies = new Map<string, { def: Extract<TopLevel, { t: "type" }>["def"]; scope: Scope }>();
+    // Operators a program bound to a constructor: (::) = Cons.
+    const constructorOperators = new Map<string, string>();
     const provenClaims = new Map<string, { params: Pattern[]; body: Expr }[]>();
     function knownIndices(family: string, value: Known, depth = 0): (Known | undefined)[] | undefined {
         const declared = indexedFamilies.get(family);
@@ -5445,7 +5454,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // Index claims (Vec (n + m) a ys) are proven by induction where they
         // can be; a wrong one is an error here, whether or not it is called.
         if (indexedFamilies.size) {
-            const proof = proveIndexClaims(name, clauses, new Map([...indexedFamilies].map(([family, { def }]) => [family, def])), provenClaims);
+            const proof = proveIndexClaims(name, clauses, new Map([...indexedFamilies].map(([family, { def }]) => [family, def])), provenClaims, constructorOperators);
             if (typeof proof === "object") problem(proof.message, proof.at, "a clause's claim must follow from its patterns and its body; a recursive call meets the claim of the clause it takes");
             if (proof === true) provenClaims.set(name, clauses); else provenClaims.delete(name);
         }
@@ -5883,6 +5892,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (const child of children(value)) validate(child, seen);
     }
     for (const statement of program) {
+        // (::) = Cons names a constructor: from here on, x :: xs is Cons x xs.
+        if (statement.t === "def" && !/^[A-Za-z_]/.test(statement.name) && statement.clauses.length === 1 && !statement.clauses[0].params.length) {
+            const body = statement.clauses[0].body;
+            let t = body.t === "var" && /^[A-Z]/.test(body.name) ? resolve(scope.get(body.name)?.type ?? dynamic) : undefined;
+            while (t?.k === "fn") t = resolve(t.output);
+            if (t?.k === "variant" && body.t === "var") constructorOperators.set(statement.name, body.name);
+            else constructorOperators.delete(statement.name);
+        }
+        rewriteInfixConstructors(statement, op => constructorOperators.get(op));
         // (Vec n a xs) is the typed pattern ((Vec n a) xs) for a type with parameters.
         flattenTypedPatterns(statement, name => {
             const t = resolve(scope.get(name)?.type ?? dynamic), value = t.k === "type" ? resolve(t.value) : undefined;

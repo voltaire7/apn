@@ -51,6 +51,10 @@ export const PRIMITIVE_OPERATORS = new Map<string, string>([
     ["primMod", "%"], ["primPow", "^"], ["primCompose", "\\"],
 ]);
 
+// An operator naming a constructor, usable in patterns: ::, :+, ...
+export function isConstructorOperator(text: string): boolean {
+    return text.length > 1 && text.startsWith(":") && isOperatorName(text);
+}
 export function isOperatorName(text: string): boolean {
     return text.length > 0 && [...text].every((c) => OPERATOR_CHARS.includes(c)) && !RESERVED_OPERATORS.has(text);
 }
@@ -438,13 +442,15 @@ class Parser {
         }
     }
 
-    // cons pattern: x :: xs
+    // An infix constructor pattern: x :: xs, or x op y for any operator
+    // starting with ':' (as in Haskell); it matches the constructor op names.
     parseConsPattern(): Pattern {
-        let p = this.parsePattern();
-        if (this.isSym("::")) {
+        const p = this.parsePattern();
+        const t = this.peek();
+        if (t.k === "sym" && isConstructorOperator(t.v)) {
             this.next();
             const tail = this.parseConsPattern();
-            return { p: "cons", head: p, tail };
+            return { p: "cons", head: p, tail, ...t.v !== "::" ? { op: t.v } : {} };
         }
         return p;
     }
@@ -1055,13 +1061,13 @@ class Parser {
         const t = this.peek();
         if (t.k === "sym" && t.v === "[") return true;
         // A cons pattern: x :: xs = ..., (x :: xs) = ...
-        const consAfter = (n: number) => { const c = this.peek(n); return c.k === "sym" && c.v === "::"; };
+        const consAfter = (n: number) => { const c = this.peek(n); return c.k === "sym" && isConstructorOperator(c.v); };
         if (t.k === "sym" && (t.v === "(" || t.v === "{")) {
             const n1 = this.peek(1);
             return n1.k === "ident" && (/^[A-Z]/.test(n1.v) || consAfter(2));
         }
         const next = this.peek(1);
-        return t.k === "ident" && (/^[A-Z]/.test(t.v) || (next.k === "sym" && (next.v === "." || next.v === "::")));
+        return t.k === "ident" && (/^[A-Z]/.test(t.v) || (next.k === "sym" && (next.v === "." || isConstructorOperator(next.v))));
     }
 
     // Lookahead: is the statement  pattern = expr ? Restores the token index.
@@ -1182,7 +1188,7 @@ class Parser {
         if (!this.startsPatBinding()) return false;
         const t = this.peek();
         // A built-in type name cannot be redefined, so Int x = 1 is a typed binding.
-        if (t.k === "ident" && !declaredCtors.has(t.v) && !TYPE_NAMES.includes(t.v) && !(this.peek(1).k === "sym" && [".", "::"].includes((this.peek(1) as { v: string }).v))) return false;
+        if (t.k === "ident" && !declaredCtors.has(t.v) && !TYPE_NAMES.includes(t.v) && !(this.peek(1).k === "sym" && ((this.peek(1) as { v: string }).v === "." || isConstructorOperator((this.peek(1) as { v: string }).v)))) return false;
         const save = this.i;
         try {
             const p = this.parseConsPattern();
@@ -1276,8 +1282,8 @@ class Parser {
         try {
             const left = this.parsePatternAtom();
             const name = this.peek();
-            // x :: xs = ... binds a cons pattern; it defines no operator.
-            if (name.k === "sym" && isOperatorName(name.v) && name.v !== "::") {
+            // x :: xs = ... binds a constructor pattern; it defines no operator.
+            if (name.k === "sym" && isOperatorName(name.v) && !isConstructorOperator(name.v)) {
                 this.next();
                 const right = this.parsePatternAtom();
                 if (this.isSym("=")) {
@@ -1842,7 +1848,7 @@ export function patternSource(p: Pattern): string {
         case "char": return `'${p.v}'`;
         case "float": return numberText({ kind: "float", v: p.v });
         case "list": return `[${p.v.map(patternSource).join(",")}]`;
-        case "cons": return `(${patternSource(p.head)} :: ${patternSource(p.tail)})`;
+        case "cons": return `(${patternSource(p.head)} ${p.op ?? "::"} ${patternSource(p.tail)})`;
         case "constr": return p.args.length ? `(${p.tag} ${p.args.map(patternSource).join(" ")})` : p.tag;
         case "typeBind": return `(${p.name} ${patternSource(p.value)})`;
         case "recPat": return `[${p.v.map(([k, v]) => `${keySource(k)}: ${v}`).join(", ")}]`;

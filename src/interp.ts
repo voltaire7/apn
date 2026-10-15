@@ -3822,6 +3822,16 @@ export class Interpreter {
                 return true;
             }
             case "cons": {
+                // The constructor the operator names: list cons, or one a program
+                // bound it to ((::) = Cons makes x :: xs match Cons x xs).
+                const op = p.op ?? "::", bound = this.env.get(op), named = bound && this.reference(bound);
+                if (named && !(named.kind === "native" && named.name === "primCons" && !named.applied.length)) {
+                    if (named.kind === "native" && named.name === "__constr" && named.arity === 2 && !named.applied.length) {
+                        return this.matchPattern({ p: "constr", tag: named.tag!, args: [p.head, p.tail] }, v, binds);
+                    }
+                    throw new APNError("runtime", `'${op}' is not a constructor, so it cannot take a value apart`, { hint: `bind it to a two-field constructor, as in \`(${op}) = Cons\`` });
+                }
+                if (!named && op !== "::") throw new APNError("runtime", `unbound operator '${op}'`, { hint: `bind it to a two-field constructor, as in \`(${op}) = Cons\`` });
                 if (!this.isList(v)) return false;
                 const cell = this.cell(v);
                 if (cell === null) return false;

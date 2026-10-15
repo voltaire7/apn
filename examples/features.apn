@@ -1732,6 +1732,11 @@ Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a
 # Its parameters may also be written as a lambda, as f = x -> e is f x = e.
 Pair = a, b -> (MkPair a b | NoPair)
 print (MkPair 1 "x")                     # => MkPair 1 "x"
+# An operator starting with ':' bound to a constructor is an infix pattern
+# too: (::) = Cons would make x :: xs build and match Cons x xs.
+(:+) = MkPair
+swapPair (x :+ y) = y :+ x
+print (swapPair (1 :+ "x"))              # => MkPair "x" 1
 pairVec = Cons 1 (Cons 2 Nil)
 print (typeOf pairVec)                   # => Vec 2 Int
 joinVec Nil ys = ys
