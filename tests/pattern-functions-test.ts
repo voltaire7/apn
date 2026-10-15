@@ -16,7 +16,7 @@ for (const [code, expected] of [
     ['match None [Some x -> missing,_ -> 42]', '42'],
     ['match (Some 3) [Some x -> x]', '3'],
     ['match 0 [x | x > 0 -> x,_ -> 42]', '42'],
-    ['match 3 ((_ -> 42):missing)', '42'],
+    ['match 3 ((_ -> 42)::missing)', '42'],
     ['dispatch = match 3; dispatch [(+ 1)]', '4'],
     ['match [3] [head]', '3'],
     ['f 0 = 9; f 1 = 8; match 1 [f,_ -> 0]', '8'],

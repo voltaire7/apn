@@ -19,8 +19,8 @@ print (Choice false "hello")
 
 # Infer both lengths and the shared element type from the arguments.
 append (Vect n a []) (Vect m a ys) = Vect (n + m) a ys
-append (Vect n a (x:xs)) (Vect m a ys) =
-    Vect (n + m) a (x : append xs ys)
+append (Vect n a (x::xs)) (Vect m a ys) =
+    Vect (n + m) a (x :: append xs ys)
 print (append [1,2] [3,4])
 print (append [] [3,4])
 print (typeOf (append [1,2] [3,4]))

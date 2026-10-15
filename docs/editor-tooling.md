@@ -67,7 +67,7 @@ first parse/lex error in each file, because the parser does not yet recover afte
 an error. It does not claim to detect undefined variables, runtime
 errors or general type errors. It warns about a parameter its body never uses
 (`f x y = x` warns about `y`; write `_` to discard it), including a name a
-typed pattern's type binds (`a` in `first ((List a) (x:_)) = x`; a name
+typed pattern's type binds (`a` in `first ((List a) (x::_)) = x`; a name
 repeated in another parameter's type is a use). Names starting with `_`
 are exempt, and so is a body that reads `env`, which can use any name. It warns
 about a literal zero divisor (`x / 0`, `x % 0`, `quotient x 0`, `remainder x 0`,
@@ -77,8 +77,8 @@ an expression nothing demands never fails. It warns when a function calls
 itself with no smaller argument where the call is certainly evaluated (its
 body, a branch, an arithmetic operand): `up n = up (n + 1)` may never finish.
 An argument is smaller when a parameter's pattern took it apart (`xs` from
-`x:xs`, `k` from `S k`), or it is `n - 1` or `tail xs`. A call under a lazy
-constructor (`nats n = n : nats (n + 1)`), in another function's argument, a
+`x::xs`, `k` from `S k`), or it is `n - 1` or `tail xs`. A call under a lazy
+constructor (`nats n = n :: nats (n + 1)`), in another function's argument, a
 lambda or a block (an action's loop) is not reported. It also issues conservative variant-exhaustiveness
 warnings for statically recognizable matches; see [type and resource rules](type-and-resource-rules.md). `_` placeholders are valid syntax.
 

@@ -62,7 +62,7 @@ example("literals beyond floating-point range stay finite", "1000000000000000000
 
 Deno.test("Fibonacci streams exact values beyond the former Infinity threshold", () => {
     const interp = new Interpreter();
-    const fibs = interp.run(parse("fibs = 0 : 1 : zipWith (+) fibs (tail fibs)\nfibs"));
+    const fibs = interp.run(parse("fibs = 0 :: 1 :: zipWith (+) fibs (tail fibs)\nfibs"));
     let last = "";
     let count = 0;
     for (const value of interp.elements(interp.takeList(1501n, fibs))) {

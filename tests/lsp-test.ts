@@ -30,8 +30,8 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     // (t x) binds t as well; (_ x) discards it.
     equal(unused("f (t x) = x\ng (_ x) = x").map(d => d[2]), ["'t' is never used; write _ to discard it"]);
     // A name a typed pattern's type binds is a parameter too; repeating it is a use.
-    equal(unused("first ((List a) (x:_)) = x\ng ((Vect n a) _) = n").map(d => d[2]), ["'a' is never used; write _ to discard it", "'a' is never used; write _ to discard it"]);
-    equal(unused("h ((Vect n a) _) ((Vect n a) _) = n\nk ((List _) (x:_)) = x\ncopy n ((Vect n Int) xs) = xs"), []);
+    equal(unused("first ((List a) (x::_)) = x\ng ((Vect n a) _) = n").map(d => d[2]), ["'a' is never used; write _ to discard it", "'a' is never used; write _ to discard it"]);
+    equal(unused("h ((Vect n a) _) ((Vect n a) _) = n\nk ((List _) (x::_)) = x\ncopy n ((Vect n Int) xs) = xs"), []);
     // A literal zero divisor warns, except IEEE division with a Float on either side.
     const zero = (source: string) => lint(source).filter(d => d.code === "zeroDivisor").map(d => [d.range.start.line, d.range.start.character, d.range.end.character]);
     equal(zero("a = 1 / 0\nb = (/ 0)\nc = quotient 7 (-0)\nd = 7 % 0.0\ne = modulo 7 0"), [[0, 8, 9], [1, 7, 8], [2, 15, 19], [3, 8, 11], [4, 13, 14]]);
@@ -40,7 +40,7 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     const endless = (source: string) => lint(source).filter(d => d.code === "termination").map(d => d.range.start.line);
     equal(endless("loop x = loop x\nup n = up (n + 1)\nspin n = n > 0 ? spin n : 0\ncount n = 1 + count n"), [0, 1, 2, 3]);
     equal(endless([
-        "down 0 = 0", "down n = down (n - 1)", "len [] = 0", "len (_:xs) = 1 + len xs", "nats n = n : nats (n + 1)",
+        "down 0 = 0", "down n = down (n - 1)", "len [] = 0", "len (_::xs) = 1 + len xs", "nats n = n :: nats (n + 1)",
         "fact Z = 1", "fact (S k) = (k + 1) * fact k", "rest xs = null xs ? 0 : rest (tail xs)",
         "act n = {", "    print n", "    act (n + 1)", "}", "xs = [1,2]", "xs 0 = xs 1", "f g = x -> f g x",
     ].join("\n")), []);

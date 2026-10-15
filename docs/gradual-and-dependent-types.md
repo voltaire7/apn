@@ -189,7 +189,7 @@ appendOne n ((Ints n) values) (Int value) = Ints (n + 1) (values ++ [value])
 A name a typed pattern's type does not know yet is bound by the value:
 `(Vect n a) xs` binds `n` to the length and `a` to the element type (the same
 as `Vect n a xs`), and `(List a) xs` binds `a` to the elements' type, computed
-only if it is used, so `first ((List _) (x:_)) = x` works on `[1..]` (`_` binds
+only if it is used, so `first ((List _) (x::_)) = x` works on `[1..]` (`_` binds
 nothing, as in any pattern; lint warns about a bound name nothing uses). A name
 bound earlier must agree: `h ((Vect n a) xs) ((Vect n a) ys)` requires equal
 lengths, statically where they are known. Which names a pattern binds follows
@@ -336,8 +336,8 @@ With just the parameters, `(Option t)` still matches a type value.
 
 ```apn
 append (Vect n a []) (Vect m a ys) = Vect (n + m) a ys
-append (Vect n a (x:xs)) (Vect m a ys) =
-    Vect (n + m) a (x : append xs ys)
+append (Vect n a (x::xs)) (Vect m a ys) =
+    Vect (n + m) a (x :: append xs ys)
 
 append [1,2] [3,4]                # [1, 2, 3, 4]
 ```
@@ -350,8 +350,8 @@ constrains the length. For computed type expressions, the existing form
 `((Vect (n + 1) Int) xs)` remains available.
 
 The checker refines `n` to zero in the empty branch. In the cons branch the
-tail has length `n - 1`, and so does an `x:xs` alternative of a `match` on the
-vector (`match xs [[] -> 0,(x:rest) -> 1 + count rest]`): an alternative meets
+tail has length `n - 1`, and so does an `x::xs` alternative of a `match` on the
+vector (`match xs [[] -> 0,(x::rest) -> 1 + count rest]`): an alternative meets
 the scrutinee as a clause meets its parameter. A parameter whose typed pattern
 binds its length takes a list of any length, so a recursive call may pass a
 shorter one. A `match` gives no length to its result, so a claim around one
@@ -420,7 +420,7 @@ needs a `Dynamic` boundary to meet a fixed-length pattern. An empty-list pattern
 `[]` is the exception: lists of unknown length may reach it (recursion over
 `tail` needs that), but a list known to be non-empty is a static error. An
 empty-list clause and a cons clause are separate overload choices, so
-`f [] = "e"; f (x:xs) = x` gives `f [5]` the cons clause's type.
+`f [] = "e"; f (x::xs) = x` gives `f [5]` the cons clause's type.
 
 When several clauses could apply, the result must fit each of them, unless one
 definitely matches: then, as at runtime, clauses that come after it cannot run.
@@ -432,7 +432,7 @@ argument types and, where the value is known, from the value: `UInt 3`
 converts losslessly to `Int`, `300` does not fit `Int8`, and `2.5` is not an
 integer. Where only an unknown value decides, it keeps both possibilities. A clause definitely matches when every argument fits
 its pattern for certain: a variable or `_` (not a repeated name), a list
-pattern of variables with a list of that known length, `[]` or `(x:xs)` with a
+pattern of variables with a list of that known length, `[]` or `(x::xs)` with a
 known empty or non-empty list, a literal pattern with that same literal, or a
 typed pattern with its exact type (or a known value that converts losslessly). So with `f [] = [0]` before `f xs = [1,2]`,
 `f []` is a one-element list, and with `f xs = [1,2]` before `f (Int n) = [0]`,
@@ -461,8 +461,8 @@ single precision, and fixed-width integer overflow gives no value. A numeric
 conversion of a parameter (`h v = Float32 v`) is checked at each call, so
 `h 0.25` is accepted while `h "x"` is not. The builtin `length` of a list or String is
 evaluated when its size is known: from a literal, an argument at the call,
-`x : xs`, `xs ++ ys`, builtins that keep a list's length (`map`, `sort`), and
-recursion over `[]` and `(x:xs)` clauses. Where a list's elements are known
+`x :: xs`, `xs ++ ys`, builtins that keep a list's length (`map`, `sort`), and
+recursion over `[]` and `(x::xs)` clauses. Where a list's elements are known
 too (literals, integer ranges such as `[1..n]` with `n` known, and lists built
 from them), the pure builtins run on them as at runtime: `filter`, `map`,
 `take`, `drop`, `zipWith` (and `zip`, which stops at the shorter list), `head`,
@@ -586,7 +586,7 @@ reference. This is inferred metadata, not new APN declaration syntax.
 
 Ordinary recursion, `x = x`, and self-application such as
 `(x -> x x) (x -> x x)` can be checked without executing them. Acceptance does
-not guarantee termination. Recursive lazy values such as `xs = 1 : xs` keep
+not guarantee termination. Recursive lazy values such as `xs = 1 :: xs` keep
 their existing runtime behavior.
 
 The factorial example passes strict checking with no dynamic boundary.

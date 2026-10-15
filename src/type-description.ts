@@ -185,7 +185,7 @@ export function describeType(value: Value): string {
                 if (["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(e.op)) return named("Bool");
                 const l = expr(e.l, env, locals), r = expr(e.r, env, locals);
                 // A different element makes a mixed list, as in a literal.
-                if (e.op === ":") return unify(list(l), r);
+                if (e.op === "::") return unify(list(l), r);
                 if (e.op === "\\") {
                     const input = fresh(); return arrow(input, apply(l, apply(r, input)));
                 }

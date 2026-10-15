@@ -1,7 +1,7 @@
 # Array algorithms are APN functions; arithmetic lifts numeric operators lazily.
 import "sequence"
 dot xs ys = sum (xs * ys)
-transpose rows = null rows ? [] : all null rows ? [] : any null rows ? fail "transpose requires equal row lengths" : map head rows : transpose (map tail rows)
+transpose rows = null rows ? [] : all null rows ? [] : any null rows ? fail "transpose requires equal row lengths" : map head rows :: transpose (map tail rows)
 _arrayWidth rows = null rows ? 0 : {
     width = length (head rows)
     all (row -> length row == width) rows ? width : fail "matrix rows must have equal lengths"
@@ -13,7 +13,7 @@ matmul left right = {
 }
 shape (Number _) = []
 shape [] = [0]
-shape (x:xs) = {
+shape (x::xs) = {
     dimensions = shape x
     all (item -> shape item == dimensions) xs ? ([1 + length xs] ++ dimensions) : fail "shape requires a rectangular numeric array"
 }

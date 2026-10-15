@@ -16,7 +16,7 @@ function pattern(p: Pattern): string {
         case "char": return exprToSource({ t: "char", v: p.v });
         case "float": return exprToSource({ t: "float", v: p.v });
         case "list": return `[${p.v.map(pattern).join(",")}]`;
-        case "cons": return `(${pattern(p.head)} : ${pattern(p.tail)})`;
+        case "cons": return `(${pattern(p.head)} :: ${pattern(p.tail)})`;
         case "constr": return p.args.length ? `(${p.tag} ${p.args.map(pattern).join(" ")})` : p.tag;
         case "typeBind": return `(${p.name} ${pattern(p.value)})`;
         case "recPat": return `[${p.v.map(([k, v]) => `${keySource(k)}: ${v}`).join(", ")}]`;

@@ -13,7 +13,7 @@ function failure(source: string): { kind?: string; message: string } {
     throw new Error(`accepted: ${source}`);
 }
 const FACTORIAL = "factorial Z = 1; factorial (S k) = (k + 1) * factorial k; ";
-const TO_LIST = "toList Z = []; toList (S k) = k : toList k; ";
+const TO_LIST = "toList Z = []; toList (S k) = k :: toList k; ";
 
 for (const [source, expected] of [
     ["Z", "UInt 0"],
@@ -31,7 +31,7 @@ for (const [source, expected] of [
     // A literal in a typed pattern is a value of that type; a sized integer
     // with a plain one keeps its type in the checker, as at runtime.
     ["h (UInt 0) = []; h (UInt k) = [k]; [h 0,h 4]", "[[],[4]]"],
-    ["toList (UInt k) = k == 0 ? [] : (k - 1) : toList (k - 1); toList 3", "[2,1,0]"],
+    ["toList (UInt k) = k == 0 ? [] : (k - 1) :: toList (k - 1); toList 3", "[2,1,0]"],
     // A numeric type pattern binds the untyped payload, in the checker as at
     // runtime; S k binds the predecessor, a UInt.
     ["widen (UInt8 x) = x + 300; widen 5", "305"],

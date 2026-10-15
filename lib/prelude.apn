@@ -18,7 +18,7 @@ infixr 1 =<<
 infixl 2 ||
 infixl 3 &&
 infixl 4 == != < > <= >= <$> <*>
-infixr 5 :
+infixr 5 ::
 infixl 6 + - ++
 infixl 7 * / %
 infixr 8 ^
@@ -33,7 +33,7 @@ infixr 9 \
 (>) = primGt
 (<=) = primLe
 (>=) = primGe
-(:) = primCons
+(::) = primCons
 (+) = primAdd
 (-) = primSub
 (++) = primAppend

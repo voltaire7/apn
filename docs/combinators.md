@@ -73,7 +73,7 @@ fix f = {
     head result
 }
 
-take 5 (fix (xs -> 1 : xs))  # [1, 1, 1, 1, 1]
+take 5 (fix (xs -> 1 :: xs))  # [1, 1, 1, 1, 1]
 ```
 
 A fixed point need not terminate: `fix identity` has no productive outer value.

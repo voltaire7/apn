@@ -3,7 +3,7 @@
 ```apn
 import "meta"
 metaEval "fact n = n == 0 ? 1 : n * fact (n - 1); fact 5"  # 120
-metaEval "x = 1:x; take 6 x"                              # [1, 1, 1, 1, 1, 1]
+metaEval "x = 1 :: x; take 6 x"                          # [1, 1, 1, 1, 1, 1]
 ```
 
 The reader, lexical environments, recursive bindings, closure representation,
@@ -64,7 +64,7 @@ and recursive lists remain productive.
 ## Supported source
 
 - Decimal integers, strings, booleans and finite list literals.
-- Arithmetic, comparisons, `++`, cons `:`, unary `-`/`!`, and right-associative function application `$`.
+- Arithmetic, comparisons, `++`, cons `::`, unary `-`/`!`, and right-associative function application `$`.
 - Grouping, curried application, list indexing, lambdas, and named functions
   with identifier parameters.
 - Ternary conditionals and blocks containing definitions followed by a result.

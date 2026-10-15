@@ -38,10 +38,11 @@ intentional evaluation change.
   `{ t: "stmDef" }` binds into it.
 - The parser detects `f x = ...` definitions by lookahead (`isDef`): it scans
   parameter patterns, then requires `=`.
-- There are no type annotations. `rejectDefinitionAnnotation` (before a
-  statement's `=`/`<-`) and `rejectLambdaAnnotation` (`( ... ) ->`) report a
-  `:` followed by a capitalized type by token shape, before any lookahead runs;
-  a ternary `c ? Int : String` never matches either shape. Application
+- There are no type annotations, and cons is `::`. `checkColons` runs on
+  the tokens before parsing: a `:` must write a record entry (directly inside
+  `[ ]`) or close a ternary (pairing a `?` at the same bracket depth); any
+  other is reported as an annotation (before a capitalized name) or as cons
+  written `:`. Application
   statements such as `print $ head $ [1,2,3]` lack `=`, so they stay
   expressions. `skipContinuation` handles indented definition bodies.
 - `groupClauses` merges consecutive same-name, same-arity definitions into one
@@ -121,7 +122,7 @@ pre-scans every parsed source for fixity declarations, which persist across
 parses (later REPL input). The prelude binds each operator to a `prim*`
 native (`PRIMITIVE_OPERATORS` in `src/parser.ts`), forced at startup so a
 binop finds the native itself: `evalBinop` then runs `operate` directly
-(strict operands evaluated in place, `:`/`++`/`&&`/`||`/`$` over thunks) and
+(strict operands evaluated in place, `::`/`++`/`&&`/`||`/`$` over thunks) and
 applies any other binding as a function. A `clauseFn` defined for an operator
 name keeps the previous binding as `fallback`. The checker gives operator
 names an intrinsic type per builtin; a binop on another binding is inferred as
@@ -421,10 +422,10 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   `Known.size` is a list's constant length: `valueEntry` reads it from the
   type just inferred for the expression (the `inferred` map; read it only
   right after inference, never from another context), `evaluateKnown`
-  derives it from list literals, `:`, `++`, callee shapes (`shapeAt`) and
-  summaries, and `evaluateCall` gives a `(x:xs)` tail one less.
+  derives it from list literals, `::`, `++`, callee shapes (`shapeAt`) and
+  summaries, and `evaluateCall` gives a `(x::xs)` tail one less.
   `Known.items` holds per-element facts when every element is known (list
-  literals, finite integer ranges, `:`, `++`); `evaluateKnown` runs the
+  literals, finite integer ranges, `::`, `++`); `evaluateKnown` runs the
   `LIST_NATIVES` (`filter`, `map`, `take`, `drop`) over them by applying the
   function expression to a synthetic `$item`, and applies lambdas (including
   sections) directly. Finite ranges stop at 10000 elements. `Known.fn` is a
@@ -433,7 +434,7 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   `applyKnown`; a computed value over parameters drops `fn` and `seq`, since
   their closures are only known at the parameters' calls. `Known.cell` is a
   lazy list's memoized first cell (head and tail; `null` when empty) used
-  for `:`, endless ranges, `iterate` and the list builtins, mirroring the
+  for `::`, endless ranges, `iterate` and the list builtins, mirroring the
   runtime's `cell()`. Walk lists iteratively (`element`, `elementsOf`,
   `dropKnown`), never by recursion over indexes, and never materialize one
   eagerly; `elementsOf` and `dropKnown` spend one unit of work per element,

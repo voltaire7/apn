@@ -10,7 +10,7 @@ for (const [source, expected] of [
     ['typeOf (x -> (y -> x))', 'a -> b -> a'],
     ['typeOf (x -> (x -> x))', 'a -> b -> b'],
     ['typeOf (x -> [x,x])', 'a -> List a'],
-    ['f (x:xs) = x; typeOf f', 'List a -> a'],
+    ['f (x::xs) = x; typeOf f', 'List a -> a'],
     ['typeOf (map (x -> x))', 'List a -> List a'],
     ['typeOf (x -> x x)', 'a -> b'],
     ['Option a = Some a | None; f (Some x) = x; f None = None; typeOf f', 'Option (Option a) -> Option a'],
@@ -23,13 +23,13 @@ for (const [source, expected] of [
     ['typeOf [1,"hello"]', 'List (Int | String)'],
     ['typeOf [[1,2],[3]]', 'List (List Int)'],
     // A list built with ':' is described as its literal would be, without forcing its tail.
-    ['typeOf ([1,2]:[3,4])', 'List (List Int | Int)'],
-    ['typeOf (1:["a"])', 'List (Int | String)'],
-    ['typeOf ("a":1:[2])', 'List (String | Int)'],
-    ['typeOf ([1]:[[3,4]])', 'List (List Int)'],
-    ['typeOf (1:[2,3])', 'List Int'],
-    ['xs = 1:xs; typeOf xs', 'List Int'],
-    ['typeOf (1:missing)', 'List Int'],
+    ['typeOf ([1,2]::[3,4])', 'List (List Int | Int)'],
+    ['typeOf (1::["a"])', 'List (Int | String)'],
+    ['typeOf ("a"::1::[2])', 'List (String | Int)'],
+    ['typeOf ([1]::[[3,4]])', 'List (List Int)'],
+    ['typeOf (1::[2,3])', 'List Int'],
+    ['xs = 1::xs; typeOf xs', 'List Int'],
+    ['typeOf (1::missing)', 'List Int'],
     ['typeOf [1,missing]', 'List Int'],
     ['typeOf [1..]', 'List Int'],
     ['typeOf [.1,.2..]', 'List Float'],
@@ -47,7 +47,7 @@ for (const [source, expected] of [
     ['count = Mutable 0; action x = set count 1; typeOf action; count', '0'],
     ['count = Mutable 0; typeOf [set count 1]; count', '0'],
     ['f x = fail "do not call"; typeOf f', 'a -> b'],
-    ['xs = 1:xs; typeOf xs', 'List Int'],
+    ['xs = 1::xs; typeOf xs', 'List Int'],
 ] as const) Deno.test(`type description: ${source}`, () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(source)));

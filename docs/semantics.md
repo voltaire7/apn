@@ -33,13 +33,13 @@ list elements on separate lines remain separate elements.
 
 List literals separate elements with commas or newlines, so a multi-line list
 needs no commas. Juxtaposition on one line is application: `[f 2]` is a
-one-element list. Write a cons expression inside a list literal in parentheses,
-`[(0:[])]`, because `[0: []]` is record syntax.
+one-element list. Cons is `::`, so it needs no parentheses inside a list
+literal: `[0 :: []]` is `[[0]]`, while `[0: []]` is a record.
 
-`:` always adds one element, the mirror of the cons pattern `x:xs`, which binds
+`::` always adds one element, the mirror of the cons pattern `x::xs`, which binds
 one element. Like a list literal, the result may mix element types:
-`[1,2]:[3,4]` is `[[1,2],3,4]` (as `[[1,2],3,4]` is), `1:["a"]` is `[1,"a"]`,
-and `[1]:[[3,4]]` is `[[1],[3,4]]`. It never joins lists; that is `++`
+`[1,2]::[3,4]` is `[[1,2],3,4]` (as `[[1,2],3,4]` is), `1::["a"]` is `[1,"a"]`,
+and `[1]::[[3,4]]` is `[[1],[3,4]]`. It never joins lists; that is `++`
 (`[1,2] ++ [3,4]` is `[1,2,3,4]`).
 
 `( )` and `{ }` are interchangeable statement groups. Their value is the last
@@ -91,7 +91,7 @@ equations, tried in source order:
 
 ```apn
 len [] = 0
-len (x:rest) = 1 + len rest
+len (x::rest) = 1 + len rest
 ```
 
 Literal patterns (integers, floats, strings, characters, `true`, `false`) are
@@ -106,8 +106,8 @@ use `match` with guarded pattern lambdas instead (see
 [pattern functions](pattern-functions.md)).
 
 There is no `if`/`then`/`else`; use the ternary `cond ? a : b`. Only the
-selected branch runs. Inside a branch, `:` belongs to the ternary; bracket a
-cons to use it there: `b ? (x : xs) : []`.
+selected branch runs. The ternary's `:` is not cons (`::`), so a branch may
+cons freely: `b ? x :: xs : []`.
 
 Operator sections: `(+ 2)` is `x -> x + 2`, `(2 +)` is `x -> 2 + x`, and a lone
 operator `(+)` is a two-argument function. `-` works in the same positions,
@@ -138,7 +138,7 @@ A range pattern `[lo..hi]` matches any integer from `lo` to `hi` inclusive.
 
 `name = value` is the only binding form; there is no `let`. A binding inside a
 group is scoped to that group. The left side may be a pattern:
-`[a,b] = [1,2]`, a cons pattern `x:xs = [1,2,3,4]` (or `x:y:rest`),
+`[a,b] = [1,2]`, a cons pattern `x::xs = [1,2,3,4]` (or `x :: y :: rest`),
 `Some x = optionValue` (parentheses optional, also for an imported
 constructor), or a keyed
 record pattern `[x: a] = record`. A failed match is an error. A bare `[x,y]`
@@ -151,8 +151,8 @@ and selects a `(Money x)` clause over a `(Float x)` one; arithmetic with plain
 numbers keeps the name, and two different names do not mix. See
 [named subtypes](type-and-resource-rules.md#named-subtypes).
 
-There are no type annotations or signatures: `:` only builds lists and record
-entries. State types with constructors, `x = Int 5` or `f (Int x) = ...`; see
+There are no type annotations or signatures: `:` only writes record entries
+and a ternary's else; cons is `::`. State types with constructors, `x = Int 5` or `f (Int x) = ...`; see
 [pattern functions](pattern-functions.md). A type pattern is also a binding,
 so `Int x = 1` (or `x <- ...` with `Int x <- ...`) declares a typed name: the
 value converts as an argument converts for `f (Int x)`, so `Float y = 1`
@@ -185,7 +185,7 @@ binding; operators in the same row have equal precedence.
 | Unary `-`, `!` | syntax | Prefix | `-f x` → `-(f x)` |
 | `*`, `/`, `%` | `infixl 7` | Left | `a / b * c` → `(a / b) * c` |
 | `+`, `-`, `++` | `infixl 6` | Left | `a - b - c` → `(a - b) - c` |
-| Cons `:` | `infixr 5` | Right | `a : b : xs` → `a : (b : xs)` |
+| Cons `::` | `infixr 5` | Right | `a :: b :: xs` → `a :: (b :: xs)` |
 | `==`, `!=`, `<`, `>`, `<=`, `>=` | `infixl 4` | Left | `a < b == c` → `(a < b) == c` |
 | Logical `&&` | `infixl 3` | Left | `a && b && c` → `(a && b) && c` |
 | Logical `\|\|` | `infixl 2` | Left | `a \|\| b \|\| c` → `(a \|\| b) \|\| c` |
@@ -281,11 +281,11 @@ expressions without echoing them; use `print x` to stream from a file.
 until interrupted, using bounded memory; Ctrl+C returns control to the REPL.
 Failed or interrupted evaluations leave the interpreter usable.
 
-The right operand of `:` must be a list. When a cons expression is evaluated,
-a visibly non-list tail such as the literal in `x = x:1` raises an APN error
+The right operand of `::` must be a list. When a cons expression is evaluated,
+a visibly non-list tail such as the literal in `x = x::1` raises an APN error
 without evaluating its head. Computed tails are checked when demanded, preserving
-`head (1:missing)`. Displaying a value nested inside itself also raises a clear
-error; ordinary recursive list spines such as `x = 1:x` still stream.
+`head (1::missing)`. Displaying a value nested inside itself also raises a clear
+error; ordinary recursive list spines such as `x = 1::x` still stream.
 
 ## Record fields, string keys, and positions
 
@@ -366,7 +366,7 @@ wildcard in patterns. Both sides of `=` are required: `foo =`, `foo = ;`, and
 | `a = print 3` | An IO action (not run here) |
 | `a = { print 3; 4 }` | An IO action yielding 4 (a do-block) |
 | `b = { x = 2; x + 1 }` | A lazy value (a block of bindings) |
-| `xs = 1:xs` | A memoized cons cell with deferred head and tail |
+| `xs = 1::xs` | A memoized cons cell with deferred head and tail |
 
 More clauses for a function in the same scope extend it, wherever they are
 defined: a clause with a new pattern overloads it, and one with an equivalent
@@ -567,7 +567,7 @@ deliberate escape hatches.
 
 ## Lists and consumers
 
-- `:` defers both head and tail. List literals defer each element.
+- `::` defers both head and tail. List literals defer each element.
 - `head` demands only the first element; `tail` does not demand the discarded
   head. `head [1,missing]` is `1`.
 - `take n xs` produces up to `n` elements; `take 0 missing` is `[]`.
@@ -1131,8 +1131,8 @@ Resource scopes reject environment views as escaping references.
 
 `typeOf [1,2,3]` displays `List Int`, a list of any length (`[Int]` is the
 positional type of exactly one Int); heterogeneous literal lists display their
-known alternatives, for example `List (Int | String)`. A list built with `:` is
-described the same way (`typeOf ([1,2]:[3,4])` is `List (List Int | Int)`, as
+known alternatives, for example `List (Int | String)`. A list built with `::` is
+described the same way (`typeOf ([1,2]::[3,4])` is `List (List Int | Int)`, as
 for `[[1,2],3,4]`), reading its unevaluated tail without running it. Empty lists
 and unresolved lazy computations display `List a`. Integer ranges display
 `List Int`, including infinite ranges, without traversing them. Type errors

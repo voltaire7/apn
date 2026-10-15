@@ -24,4 +24,4 @@ median xs = null xs ? None : {
 }
 isPrime n = n < 2 ? false : all (d -> n % d != 0) (takeWhile (d -> d * d <= n) [2..])
 primes = filter isPrime [2..]
-fibonacci = 0 : 1 : zipWith (+) fibonacci (tail fibonacci)
+fibonacci = 0 :: 1 :: zipWith (+) fibonacci (tail fibonacci)

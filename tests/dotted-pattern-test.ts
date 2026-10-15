@@ -24,7 +24,7 @@ for (const checked of [false, true]) {
                 "[[x: 1, y: 2, z: 3],1,2]",
             ],
             ["f _.[x,y] = [x,y]; f [1,2]", "[1,2]"],
-            ["f whole.(x:xs) = [whole,x]; f [1,2]", "[[1,2],1]"],
+            ["f whole.(x::xs) = [whole,x]; f [1,2]", "[[1,2],1]"],
             [
                 "Option a = Some a | None; f whole.(Some x) = [whole,x]; f (Some 1)",
                 "[Some 1,1]",
@@ -53,7 +53,7 @@ for (const checked of [false, true]) {
             ["v = [x: 1]; { v.x = 2 }; v.x", "1"],
             ["f v.x = 42; f (Dynamic missing)", "42"],
             ["v.x = Dynamic missing; 42", "42"],
-            ["f v.(x:xs) = x; f [1..]", "1"],
+            ["f v.(x::xs) = x; f [1..]", "1"],
             ["v.x <- return (Mutable 1); set x 2; v", "2"],
         ]
     ) {

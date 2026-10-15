@@ -12,7 +12,7 @@ for (
         "loop x = loop x",
         "forever x = forever; forever 1 2",
         "x = x",
-        "xs = 1 : xs",
+        "xs = 1 :: xs",
         "Y f = (x -> f (x x)) (x -> f (x x))",
     "Option a = Some a | None; self f = f f; a = self (x -> Some x); [a,self (x -> Some x)]",
     "self f = f f; a = self (x -> [x]); b = self (x -> [x]); a ++ b",
@@ -35,7 +35,7 @@ for (
         'self f = f f; [self (x -> 1),self (x -> true)]; Int (self (x -> "bad"))',
         'outer x = { self f = f f; self (ignored -> x) }; Int (outer "bad")',
         "loop (Int x) = loop x; loop true",
-        'xs = 1 : xs; map (x -> x + 1) (xs ++ ["bad"])',
+        'xs = 1 :: xs; map (x -> x + 1) (xs ++ ["bad"])',
     ]
 ) {
     Deno.test(`recursive inference preserves contradictions: ${source}`, () => {

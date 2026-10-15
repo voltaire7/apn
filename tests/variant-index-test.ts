@@ -10,7 +10,7 @@ for (const [source, expected] of [
     ['offsets = [[0,-1],[1,0],[0,1],[-1,0]]\n[offsets North,offsets East,offsets South,offsets West]', '[[0,-1],[1,0],[0,1],[-1,0]]'],
     ['xs = [10,20,30,40]\nd = East\nxs d', '20'],
     ['xs = [10..]\nxs West', '13'],
-    ['xs = 10 : 20 : []\nxs East', '20'],
+    ['xs = 10 :: 20 :: []\nxs East', '20'],
     ['xs = [missing,20]\nxs East', '20'],
     ['xs = [10,20]\nold <- return (xs)\nxs East = 30\n[xs,old]', '[[10,30],[10,20]]'],
     ['xs = [[0,-1],[1,0]]\nxs North = [0,0]\nxs North', '[0,0]'],

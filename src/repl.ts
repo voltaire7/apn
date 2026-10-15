@@ -429,7 +429,7 @@ function helpText(): string {
         `               a 0-arg FUNCTION: the bare name at statement level runs it`,
         `               print f also runs it; debug f shows its name without running it`,
         ``,
-        `Types come from constructors; ':' is only cons/record syntax:`,
+        `Types come from constructors; '::' is cons, ':' writes a record field:`,
         `  x = Int 5    Int x = 5    f (Int x) = x + 1    ((Int -> Int) f) <- expr`,
         `Run: deno run --allow-read main.ts examples/features.apn`,
         ``,

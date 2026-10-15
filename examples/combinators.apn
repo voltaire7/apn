@@ -21,5 +21,5 @@ print (combinators.W (+) 21)                  # 42
 print (combinators.M (_ -> 42))               # 42
 
 # Fixed points also describe productive infinite data.
-print (take 5 (fix (xs -> 1 : xs)))           # [1, 1, 1, 1, 1]
+print (take 5 (fix (xs -> 1 :: xs)))           # [1, 1, 1, 1, 1]
 # combinators.M combinators.M is Omega: deliberate divergence; do not run it.

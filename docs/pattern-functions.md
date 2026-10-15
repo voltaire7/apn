@@ -57,7 +57,7 @@ mean `add 1 2`. A collection variable works the same way as a literal.
 | `value` | Binds the entire list | Binds the entire record |
 | `[x,y]` | Binds exactly two elements by position | Binds fields named `x` and `y` |
 | `[x: a, y: b]` | Does not match | Binds fields `x` and `y` as `a` and `b` |
-| `(x:xs)` | Binds the head and tail of a nonempty list | Does not match |
+| `(x::xs)` | Binds the head and tail of a nonempty list | Does not match |
 
 ```apn
 sumPair [x,y] = x + y
@@ -74,7 +74,7 @@ List patterns require the exact length. Their elements may be type
 patterns, which convert as a whole-argument type pattern does:
 `pair [UInt8 a,UInt8 b] = a + b` accepts `pair [3,3]` (and
 `[UInt8 a,UInt8 b] = [3,3]` as a binding), while `pair [3,300]` is a static
-range error; `firstFloat ((Float x):rest) = x` returns `1.0` for `[1,2]`.
+range error; `firstFloat ((Float x)::rest) = x` returns `1.0` for `[1,2]`.
 Variant payloads convert the same way: `g (Some (Float x)) = x` returns `1.0`
 for `g (Some 1)`, and `g (Some 300)` is a static range error for
 `g (Some (UInt8 x))`, also through a variable (`k = Some 300`) or another
@@ -176,8 +176,8 @@ and can serve as catch-all alternatives.
 
 A `[]` pattern tests the value it meets; it says nothing about the type of
 what the other alternatives or clauses accept. `match [xs,ys] [[[],r] -> r,
-[(x:m),r] -> ...]` takes an `xs` of any length, and so do clauses `g [[],y]`
-and `g [(x:xs),y]`.
+[(x::m),r] -> ...]` takes an `xs` of any length, and so do clauses `g [[],y]`
+and `g [(x::xs),y]`.
 
 An error while inspecting a pattern, evaluating a guard, or executing a selected
 body propagates; it does not select another branch. Empty/exhausted alternatives
@@ -250,8 +250,8 @@ constructor field, `(a -> a).(+ 1)`, `isType`, or beside a type in `==`).
 construct a function contract. `a -> a` is the identity lambda.
 
 Constructor patterns and contracts are the only way to state a type. There are
-no `:` annotations or `::` signatures: `:` always builds a list (`x:rest`) or a
-record entry (`[x: 1]`). Because a list tail can never be a type, `f x: Int = x`,
+no type annotations: `:` only writes a record entry (`[x: 1]`) or a ternary's
+else (`c ? a : b`), and cons is `::` (`x :: rest`). So `f x: Int = x`,
 `(x: Int) -> x`, and `x: Int = 5` are syntax errors that point to the
 constructor form (`f (Int x) = x`, `x = Int 5`).
 
@@ -339,7 +339,7 @@ show whole.[x,y] = print [whole,x,y]
 show [x: 1, y: 2, z: 3]           # [[x: 1, y: 2, z: 3], 1, 2]
 show [1,2]                        # [[1, 2], 1, 2]
 
-first whole.(x:xs) = x
+first whole.(x::xs) = x
 unwrap whole.(Some x) = x
 ```
 

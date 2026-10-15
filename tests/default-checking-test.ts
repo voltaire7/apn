@@ -124,25 +124,25 @@ for (const [source, expected] of [
     ['import "sequence"; g [a,b] = a + b; g (forceList [1,2])', '3'],
     ['g [a,b] = a + b; g (map (x -> x * 2) [1,2])', '6'],
     ['xs = map (x -> x + 1) [1,2]; ys = map (x -> x * 2) [1,2,3]; g [a,b] = a + b; [g xs,length ys]', '[5,3]'],
-    ['x (x:xs) = 42; x [x]', '42'],
+    ['x (x::xs) = 42; x [x]', '42'],
     // A [] inside a pattern tests that part without making the argument empty.
-    ['g [[],y] = y; g [(x:_),_] = x; g [[1,2],3]', '1'],
-    ['j xs ys = match [xs,ys] [[[],r] -> r,[(x:m),r] -> x : j m r]; j [1,2] [3]', '[1,2,3]'],
+    ['g [[],y] = y; g [(x::_),_] = x; g [[1,2],3]', '1'],
+    ['j xs ys = match [xs,ys] [[[],r] -> r,[(x::m),r] -> x :: j m r]; j [1,2] [3]', '[1,2,3]'],
     ['f xs = match xs [[] -> 0,[_] -> 1,_ -> 2]; [f [],f [1],f [1,2]]', '[0,1,2]'],
     // A free name in a typed pattern binds what the value has there.
     ['f ((List _) xs) = xs; f [1,2]', '[1,2]'],
     ['k ((List a) xs) = a; k [1,"x"]', 'Int | String'],
-    ['first ((List _) (x:_)) = x; first [1..]', '1'],
+    ['first ((List _) (x::_)) = x; first [1..]', '1'],
     ['len ((Vect n _) _) = n; len [1,2]', '2'],
     ['g ((Vect n a) xs) = [n,a]; g [1,2]', '[2,Int]'],
     ['app ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys); typeOf (app [1,2] [3])', 'Vect 3 Int'],
     // A length the type leaves open is the one evaluation finds.
     ['g [a,b] = a + b; g (map (x -> x) (tail [1,2,3]))', '5'],
     ['g [a,b] = a + b; g (tail [0,1,2])', '3'],
-    ['f xs = foldl (acc x -> x : acc) xs [1,2]; g [a,b,c,d] = a + b; g (f [1,2])', '3'],
+    ['f xs = foldl (acc x -> x :: acc) xs [1,2]; g [a,b,c,d] = a + b; g (f [1,2])', '3'],
     ['f xs = filter (x -> x > 0) xs; g [a,b] = a + b; g (f [1,2])', '3'],
-    ['toList 0 = []; toList k = (k - 1) : toList (k - 1); xs = toList 3; g [a,_,_] = a; g xs', '2'],
-    ['toList Z = []; toList (S k) = k : toList k; Vect 3 UInt (toList 3)', '[UInt 2,UInt 1,UInt 0]'],
+    ['toList 0 = []; toList k = (k - 1) :: toList (k - 1); xs = toList 3; g [a,_,_] = a; g xs', '2'],
+    ['toList Z = []; toList (S k) = k :: toList k; Vect 3 UInt (toList 3)', '[UInt 2,UInt 1,UInt 0]'],
 ] as const) Deno.test(`checker infers recursive steps and list sizes: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -151,10 +151,10 @@ for (const source of [
     'import "sequence"; g [a,b] = forceList [b,a ++ "x"]; repeatApply 3 g [1,2]',
     'import "sequence"; g [a,b] = a + b; g (forceList [1,2,3])',
     'g [a,b] = a + b; g (map (x -> x) [1,2,3])',
-    'toList 0 = []; toList k = (k - 1) : toList (k - 1); g [a,_] = a; g (toList 3)',
+    'toList 0 = []; toList k = (k - 1) :: toList (k - 1); g [a,_] = a; g (toList 3)',
     'h ((Vect n a) _) ((Vect n a) _) = n; h [1,2] [3]',
     'f ((List _) xs) = xs; f 5',
-    'toList Z = []; toList (S k) = k : toList k; Vect 2 UInt (toList 3)',
+    'toList Z = []; toList (S k) = k :: toList k; Vect 2 UInt (toList 3)',
     'g [a,b] = tail [0,b,a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1,2]',
 ]) Deno.test(`checker still rejects: ${source}`, () => rejected(session(), source));
 // Length-preserving builtins carry their input's length, and separate uses of
@@ -199,8 +199,8 @@ for (const [source, expected] of [
 });
 for (const source of [
     'import "sequence"; g [a,b] = a + b; g (reverse [1,2,3])',
-    'f xs = foldl (acc x -> x : acc) xs [1,2]; g [a,b] = a + b; g (f [1,2])',
-    'f xs = 0 : xs; g [a,b] = a + b; g (f [1,2])',
+    'f xs = foldl (acc x -> x :: acc) xs [1,2]; g [a,b] = a + b; g (f [1,2])',
+    'f xs = 0 :: xs; g [a,b] = a + b; g (f [1,2])',
     'f xs = xs ++ xs; g [a,b] = a + b; g (f [1,2])',
     'f xs = { xs = [1,2,3]; xs }; g [a,b] = a + b; g (f [1,2])',
 ]) Deno.test(`length changes stay unknown: ${source}`, () => rejected(session(), source));
@@ -230,11 +230,11 @@ for (const source of [
 for (const [source, expected] of [
     ['g [] = 0; g []', '0'],
     ['g [] = 0; g (tail [1])', '0'],
-    ['len [] = 0; len (x:rest) = 1 + len rest; len [1,2,3]', '3'],
-    ['rev [] = []; rev (x:xs) = rev xs ++ [x]; rev [1,2,3]', '[3,2,1]'],
-    ['f [] = 0; f (x:xs) = x; [f [],f [7,8]]', '[0,7]'],
-    ['f [] = "e"; f (x:xs) = x; f [5] + 1', '6'],
-    ['f [] = "e"; f (x:xs) = x; f [] ++ "!"', '"e!"'],
+    ['len [] = 0; len (x::rest) = 1 + len rest; len [1,2,3]', '3'],
+    ['rev [] = []; rev (x::xs) = rev xs ++ [x]; rev [1,2,3]', '[3,2,1]'],
+    ['f [] = 0; f (x::xs) = x; [f [],f [7,8]]', '[0,7]'],
+    ['f [] = "e"; f (x::xs) = x; f [5] + 1', '6'],
+    ['f [] = "e"; f (x::xs) = x; f [] ++ "!"', '"e!"'],
 ] as const) Deno.test(`empty-list patterns: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -251,7 +251,7 @@ for (const [source, expected] of [
     ['f [] = [0]; f xs = [1,2]; g [a] = a; g (f [])', '0'],
     ['f [] = [0]; f xs = [1,2]; g [a,b] = a; g (f [3])', '1'],
     ['f xs = [1,2]; f [] = [0]; g [a,b] = a; g (f [])', '1'],
-    ['f (x:xs) = [x]; f other = [1,2]; g [a] = a; g (f [7,8])', '7'],
+    ['f (x::xs) = [x]; f other = [1,2]; g [a] = a; g (f [7,8])', '7'],
     ['f [a,b] = [a]; f other = [1,2]; g [x] = x; g (f [7,8])', '7'],
     ['f [] y = [y]; f xs y = [1,2]; g [a] = a; g (f [] 5)', '5'],
     ['f xs 0 = [0]; f [] n = [1,2]; g [a] = a; g (f [] 0)', '0'],
@@ -537,7 +537,7 @@ for (const source of [
 // The builtin length of a list or String is known when its size is: from a
 // literal, a parameter at its calls, cons, append, shaped builtins (map, sort)
 // and recursion over list patterns.
-const sizeClauses = 'import ["option","sequence","number"]; g [a] = a; sm n = n < 2 ? None : Some n; q xs = length xs < 2 ? None : Some 1; len [] = 0; len (x:xs) = 1 + len xs';
+const sizeClauses = 'import ["option","sequence","number"]; g [a] = a; sm n = n < 2 ? None : Some n; q xs = length xs < 2 ? None : Some 1; len [] = 0; len (x::xs) = 1 + len xs';
 for (const [source, expected] of [
     ['g (f (sm (length [1])))', '0'],
     ['k (Int x) = None; k x = Some x; g (f (k (length [1])))', '0'],
@@ -547,7 +547,7 @@ for (const [source, expected] of [
     ['hh xs = g (f (sm (length xs - 1))); hh [5,6]', '0'],
     ['hh s = g (f (sm (length s))); hh "a"', '0'],
     ['hh ys = g (f (q ys)); hh [1]', '0'],
-    ['hh ys = g (f (q (1 : ys))); hh []', '0'],
+    ['hh ys = g (f (q (1 :: ys))); hh []', '0'],
     ['hh ys = g (f (q (map (+ 1) ys))); hh [1]', '0'],
     ['hh ys = g (f (q (sort ys))); hh [1]', '0'],
     ['g (f (sm (len [1])))', '0'],
@@ -562,7 +562,7 @@ for (const source of [
     'g (f (sm (length "ab")))',
     'hh xs = g (f (sm (length xs))); hh [5,6]',
     'hh ys = g (f (q ys)); hh [1,2]',
-    'hh ys = g (f (q (1 : ys))); hh [2]',
+    'hh ys = g (f (q (1 :: ys))); hh [2]',
     'hh ys = g (f (q (ys ++ ys))); hh [2]',
     'hh ys = g (f (q (map (+ 1) ys))); hh [1,2]',
     'g (f (sm (len [1,2])))',
@@ -669,7 +669,7 @@ for (const source of [
 ]) Deno.test(`builtins and std evaluated stay checked: ${source}`, () => rejected(session(), `${optionClauses}; ${sizeClauses}; ${textClauses}; ${source}`));
 // from String reads booleans and numbers as at runtime; recursion is evaluated as
 // deep as the runtime's own stack allows (non-tail recursion to depth 500).
-const deepClauses = 'count n = n == 0 ? 0 : 1 + count (n - 1); upto n = n == 0 ? [] : n : upto (n - 1)';
+const deepClauses = 'count n = n == 0 ? 0 : 1 + count (n - 1); upto n = n == 0 ? [] : n :: upto (n - 1)';
 for (const [source, expected] of [
     ['g (f (r (from String "12" == 12)))','0'],
     ['g (f (r (from String " true ")))','0'],
@@ -704,7 +704,7 @@ for (const [source, expected] of [
     ['k y = { a <- return (1); a <- return (a + 1); return a }; w <- k 0; g (f (r (w == 2)))','0'],
     ['k y = { n = 1; h q = q + n; n = 10; h 1 }; g (f (r (k 0 == 11)))','0'],
     ['k y = { a = 1; b <- return (a); a = 2; return [a,b] }; w <- k 0; g (f (r (w == [2,1])))','0'],
-    ['k y = { xs = 1 : xs; length (take 3 xs) }; g (f (r (k 0 == 3)))','0'],
+    ['k y = { xs = 1 :: xs; length (take 3 xs) }; g (f (r (k 0 == 3)))','0'],
     ['g (f (r (([a,b] -> a) [1,2] == 1)))','0'],
     ['g (f (r (length [1..1000000] == 1000000)))','0'],
     ['g (f (r (head (drop 1000000 [0..]) == 1000000)))','0'],
@@ -917,10 +917,10 @@ Deno.test("a view an earlier REPL input stored reaches what its uses name", () =
     rejected(i, later('((head box) "bumpO") 0'));
     if (run(i, later('((head box) "bumpC") 0').replace("bumpO x", "bumpC x = set counter 1; bumpO x")) !== "0") throw new Error("stored view");
 });
-for (const source of ['x:xs = []', 'x:y:z = [1]', 'f n = { x:xs = []; x }']) Deno.test(`a cons binding of a list known too short is rejected: ${source}`, () => rejected(session(), source));
+for (const source of ['x::xs = []', 'x::y::z = [1]', 'f n = { x::xs = []; x }']) Deno.test(`a cons binding of a list known too short is rejected: ${source}`, () => rejected(session(), source));
 Deno.test("an unknown constructor in a pattern is named, with the module that declares it", () => {
     for (const [source, message, hint] of [
-        ["func (Some x):xs = print [x,xs]", "unknown constructor 'Some' in a pattern", "add `import \"option\"` to use `Some`"],
+        ["func (Some x)::xs = print [x,xs]", "unknown constructor 'Some' in a pattern", "add `import \"option\"` to use `Some`"],
         ["print None", "unbound variable 'None'", "add `import \"option\"` to use `None`"],
         ["Option a = Some a | None; k (Smoe x) = x", "unknown constructor 'Smoe' in a pattern", "did you mean 'Some'?"],
     ]) {
@@ -931,7 +931,7 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
         }
         throw new Error(`accepted: ${source}`);
     }
-    if (run(session(), 'import "option"; func (Some x):xs = [x,xs]; func [Some 1,None]') !== "[1,[None]]") throw new Error("with the import");
+    if (run(session(), 'import "option"; func (Some x)::xs = [x,xs]; func [Some 1,None]') !== "[1,[None]]") throw new Error("with the import");
 });
 Deno.test("a set from an earlier REPL input keeps later cell reads unknown", () => {
     const i = session();
@@ -1018,13 +1018,13 @@ for (const [source, line, column] of [
 // ':' adds one element (the mirror of the x:xs pattern), making a mixed list
 // as a literal would when it differs from the tail's elements; joining is ++.
 Deno.test("':' adds one element, mixed or not", () => {
-    for (const [source, expected] of [['[1,2]:[3,4]', '[[1,2],3,4]'], ['[1,2]:3:[4,5]', '[[1,2],3,4,5]'], ['1:["a"]', '[1,"a"]'],
-            ['x:xs = [1,2]:[3,4]; [x,xs]', '[[1,2],[3,4]]'], ['length ([1,2]:[3,4])', '3'],
-            ['[1]:[[3,4]]', '[[1],[3,4]]'], ['xs = [[3,4]]; [1,2,3]:xs', '[[1,2,3],[3,4]]'], ['[1,2]:[[3,4]]', '[[1,2],[3,4]]'],
-            ['x:xs = [1]:[[3,4]]; x', '[1]'], ['[1,2] ++ [3,4]', '[1,2,3,4]']]) {
+    for (const [source, expected] of [['[1,2]::[3,4]', '[[1,2],3,4]'], ['[1,2]::3::[4,5]', '[[1,2],3,4,5]'], ['1::["a"]', '[1,"a"]'],
+            ['x::xs = [1,2]::[3,4]; [x,xs]', '[[1,2],[3,4]]'], ['length ([1,2]::[3,4])', '3'],
+            ['[1]::[[3,4]]', '[[1],[3,4]]'], ['xs = [[3,4]]; [1,2,3]::xs', '[[1,2,3],[3,4]]'], ['[1,2]::[[3,4]]', '[[1,2],[3,4]]'],
+            ['x::xs = [1]::[[3,4]]; x', '[1]'], ['[1,2] ++ [3,4]', '[1,2,3,4]']]) {
         if (run(session(), source) !== expected) throw new Error(source);
     }
-    rejected(session(), '1:2');
+    rejected(session(), '1::2');
 });
 Deno.test("a broken reader of a broken definition reports the original problem", () => {
     try { run(session(), 'c n = n * 2; a = c 1; b x = a + x; d x = b x; c s = s ++ "?"; d 1'); } catch (error) {
@@ -1077,9 +1077,9 @@ for (const [source, expected] of [
     ['g ((Int -> Int) f) = f 1; h x = g x; h (+ 1)', '2'],
     ['g [UInt8 a,UInt8 b] = a + b; g [3,3]', '6'],
     ['g [Float a,b] = a; g [1,"x"]', '1.0'],
-    ['g ((Float x):rest) = x; g [1,2]', '1.0'],
+    ['g ((Float x)::rest) = x; g [1,2]', '1.0'],
     ['[UInt8 a,UInt8 b] = [3,3]; a + b', '6'],
-    ['(Float x):rest = [1,2]; x', '1.0'],
+    ['(Float x)::rest = [1,2]; x', '1.0'],
     ['g [UInt8 a,UInt8 b] = a; h x = g [x,x * 100]; h 1', '1'],
     ['import "option"; g (Some (UInt8 x)) = x; g (Some 3)', '3'],
     ['import "option"; g (Some (Float x)) = x; g (Some 1)', '1.0'],

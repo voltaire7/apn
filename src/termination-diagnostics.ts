@@ -5,8 +5,8 @@ import { definitionsInOrder } from "./unused-diagnostics.ts";
 // Warnings for a function that calls itself with no smaller argument where
 // the call is certainly evaluated, so it may never finish: f n = f (n + 1).
 // An argument is smaller when it is part of what a parameter's pattern took
-// apart (xs from x:xs, k from S k), the parameter minus a positive number
-// (n - 1), or tail of it. A call under a lazy constructor (n : nats (n + 1)),
+// apart (xs from x :: xs, k from S k), the parameter minus a positive number
+// (n - 1), or tail of it. A call under a lazy constructor (n :: nats (n + 1)),
 // in another function's argument, a lambda or a block (an action's loop) is
 // not evaluated by the call itself, so it is not reported. Like the other
 // lint analyses, this never evaluates APN.

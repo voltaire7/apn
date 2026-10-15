@@ -48,7 +48,7 @@ const NAMED_BASES = new Set([...NUMERIC_TYPES.filter(t => !["Number", "Real", "I
 const SHOWS_UNDECIDED = new Set(["print", "emit", "toString", "format", "typeOf", "isType", "debug", "seq", "Dynamic"]);
 
 // Operators whose builtin meaning does not demand both operands first.
-const LAZY_OPERATORS = new Set([":", "++", "&&", "||", "$"]);
+const LAZY_OPERATORS = new Set(["::", "++", "&&", "||", "$"]);
 
 const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 
@@ -1263,10 +1263,10 @@ export class Interpreter {
     }
 
     evalBinop(e: Extract<Expr, { t: "binop" }>): Value {
-        if (e.op === ":" && ["int", "float", "bool", "string", "char", "record", "lambda"].includes(e.r.t)) {
+        if (e.op === "::" && ["int", "float", "bool", "string", "char", "record", "lambda"].includes(e.r.t)) {
             // Reject a definitely non-list tail without evaluating either side.
             // Unknown tails stay lazy, so head (1:missing) remains productive.
-            const cons = this.env.get(":");
+            const cons = this.env.get("::");
             if (cons?.kind === "native" && cons.name === "primCons" && !cons.applied.length) {
                 throw new APNError("runtime", `cons tail expected a list, got ${e.r.t}`);
             }
@@ -1286,7 +1286,7 @@ export class Interpreter {
     // The builtin meaning of an operator, over lazy operands.
     operate(op: string, lThunk: Value, rThunk: Value): Value {
         if (op === "$") return this.apply(this.demand(lThunk), rThunk);
-        if (op === ":") {
+        if (op === "::") {
             const tail = rThunk;
             return {
                 kind: "cons", head: lThunk,

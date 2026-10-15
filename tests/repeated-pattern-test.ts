@@ -39,7 +39,7 @@ for (const checked of [false, true]) {
         ['x n x = 42; partial = x 1; partial x', '42'],
         ['x [x] = 42; x [x]', '42'],
         ['x [self: x] = 42; x [self: x]', '42'],
-        ['x (x:xs) = 42; x [x]', '42'],
+        ['x (x::xs) = 42; x [x]', '42'],
         ['x x = 1; x other = 2; x x', '1'],
         ['x x = 1; x other = 2; x 0', '2'],
         ['x = 10; f x = x; f 1', '1'],

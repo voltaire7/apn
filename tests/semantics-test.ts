@@ -136,27 +136,27 @@ print value
 `, ["2", "2"]);
 
 example("recursive ones produce a finite prefix", `
-x = 1:x
+x = 1::x
 print (take 5 x)
 print (x 10000)
 `, ["[1,1,1,1,1]", "1"]);
 
 example("the recursive Fibonacci definition is productive", `
-fibs = 0 : 1 : zipWith (+) fibs (tail fibs)
+fibs = 0 :: 1 :: zipWith (+) fibs (tail fibs)
 print (take 12 fibs)
 print (fibs 20)
 `, ["[0,1,1,2,3,5,8,13,21,34,55,89]", "6765"]);
 
 example("mutually recursive lists share productive cells", `
-a = 1:b
-b = 2:a
+a = 1::b
+b = 2::a
 print (take 6 a)
 `, ["[1,2,1,2,1,2]"]);
 
 example("cons does not evaluate unused heads or tails", `
-print (head (1:missing))
-print (head (tail (missing:2:missing)))
-print (take 1 (3:missing))
+print (head (1::missing))
+print (head (tail (missing::2::missing)))
+print (take 1 (3::missing))
 `, ["1", "2", "[3]"]);
 
 example("take zero and an empty map do not demand unused arguments", `
@@ -188,11 +188,11 @@ print (double v)
 `, ["2", "2", "3", "6"]);
 
 example("cons and exact-list patterns inspect only needed structure", `
-first (x:xs) = x
-print (first (8:missing))
+first (x::xs) = x
+print (first (8::missing))
 print (match [1,missing] [[x,y] -> x])
-print (match (1:missing) [[] -> 0,x:xs -> x])
-print (match [1..] [[x] -> 0,x:xs -> x])
+print (match (1::missing) [[] -> 0,x::xs -> x])
+print (match [1..] [[x] -> 0,x::xs -> x])
 `, ["8", "1", "1", "1"]);
 
 example("variant fields are lazy", `
@@ -218,15 +218,15 @@ print ("a" ++ "b")
 example("positive indexing and length do not evaluate unrelated heads", `
 print ([missing,7,missing] 1)
 print (length [missing,missing])
-print (null (missing:missing))
+print (null (missing::missing))
 print ([1,2,3] (-1))
 print (map ([1..]) [0,2,4])
 `, ["7", "2", "false", "3", "[1,3,5]"]);
 
 example("equality compares list representations and stops at a mismatch", `
-print ((1:2:[]) == [1,2])
+print ((1::2::[]) == [1,2])
 print ([1..3] == [1,2,3])
-print ((1:missing) == (2:missing))
+print ((1::missing) == (2::missing))
 `, ["true", "true", "false"]);
 
 example("partial applications do not mutate other uses of a function", `
@@ -247,13 +247,13 @@ print (format "% %" [1 + 2,[4 + 5]])
 `, ["[[0,10],[1,20]]", "[x: 1, y: 2]", "[[2],[3]]", "3 [9]"]);
 
 failure("a demanded invalid tail reports a list error",
-    "print (take 2 (1:2))", "expected a list");
+    "print (take 2 (1::2))", "expected a list");
 example("cons patterns bind at statement level", `
-x:xs = [1,2,3,4]
+x::xs = [1,2,3,4]
 print [x,xs]
-(a:b:rest) = [5,6,7]
+(a::b::rest) = [5,6,7]
 print [a,b,rest]
-h:t <- return ([8,9])
+h::t <- return ([8,9])
 print t
 `, ["[1,[2,3,4]]", "[5,6,[7]]", "[9]"]);
 failure("take rejects negative counts", "print (take (-1) [])", "non-negative int");
@@ -277,8 +277,8 @@ Deno.test("evaluation errors leave the interpreter usable", () => {
 });
 
 for (const [name, source, prefix] of [
-    ["ones", "x = 1:x\nx", "[1,1,1,1"],
-    ["Fibonacci", "fibs = 0 : 1 : zipWith (+) fibs (tail fibs)\nfibs", "[0,1,1,2,3,5,8"],
+    ["ones", "x = 1::x\nx", "[1,1,1,1"],
+    ["Fibonacci", "fibs = 0 :: 1 :: zipWith (+) fibs (tail fibs)\nfibs", "[0,1,1,2,3,5,8"],
     ["infinite range", "[0..]", "[0,1,2,3"],
 ]) {
     Deno.test(`${name} rendering streams and recovers after interruption`, () => {
@@ -320,17 +320,17 @@ print (partials 0 20)
 `, ["11", "12", "21"]);
 
 example("a recursive function can construct an infinite list", `
-numbers n = n : numbers (n + 1)
+numbers n = n :: numbers (n + 1)
 print (take 5 (numbers 10))
 `, ["[10,11,12,13,14]"]);
 
 
 failure("a recursive head cannot hide a literal non-list tail",
-    "x = x:1\nx", "cons tail expected a list, got int");
+    "x = x::1\nx", "cons tail expected a list, got int");
 failure("computed non-list tails are rejected when consumed",
-    "x = 1:(1 + 1)\ntail x", "cons tail expected a list, got int");
+    "x = 1::(1 + 1)\ntail x", "cons tail expected a list, got int");
 failure("nested recursive heads report a rendering error",
-    "x = x:(1 + 1)\nprint x", "cannot display a cyclic nested value");
+    "x = x::(1 + 1)\nprint x", "cannot display a cyclic nested value");
 failure("self-containing list literals report a rendering error",
     "x = [x]\nprint x", "cannot display a cyclic nested value");
 example("sharing a finite list between siblings is not a rendering cycle",
@@ -381,7 +381,7 @@ print (2 + 3 * 4)
 print ((2 + 3) * 4)
 print (10 - 3 - 2)
 print (24 / 4 * 2)
-print (1 : 2 : [])
+print (1 :: 2 :: [])
 print (1 < 2 == true)
 print (false ? 1 : true ? 2 : 3)
 print ((* 2) $ (+ 1) $ 3)
@@ -402,14 +402,14 @@ lam = (Int x) -> x + 1
 v = Int 5
 print [f 1,h (+ 1),lam 5,v]`, ["[2,3,6,5]"]);
 for (const source of ["x: Int = 5", "f x: Int = x", "f (x: Int) = x", "g = (x: Int) -> x", "f x y : Int = x + y", "print { x: Int = 20; x }"]) {
-    failure(`':' is not a type annotation: ${source}`, source, "not a type annotation");
+    failure(`':' is not a type annotation: ${source}`, source, "APN has no type annotations");
 }
-failure("type signatures are not supported", "f :: Int -> Int\nf x = x", "type signatures are not supported");
+failure("':' is not cons", "print (1 : [2])", "cons is '::'");
 example("cons parameters still parse", `
-f x:rest = rest
-g (x:rest) = rest
-one (x:[]) = x
-lam = (x:rest) -> rest
+f x::rest = rest
+g (x::rest) = rest
+one (x::[]) = x
+lam = (x::rest) -> rest
 print [f [1,2],g [3,4],one [5],lam [6,7]]`, ["[[2],[4],5,[7]]"]);
 example("boolean literal patterns", `
 h x = match x [false -> "f",true -> "t"]

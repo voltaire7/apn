@@ -15,11 +15,11 @@ splitOn delimiter text = delimiter == "" ? map (c -> from (List Char) [c]) (to (
     marker = reverse (to (List Char) delimiter)
     width = 0 + length marker
     step state c = {
-        current = c : snd state
+        current = c :: snd state
         take width current == marker ? [_prepend (from (List Char) (reverse (drop width current))) (fst state),[]] : [fst state,current]
     }
     state = foldl step [[],[]] (to (List Char) text)
-    reverse (from (List Char) (reverse (snd state)) : fst state)
+    reverse (from (List Char) (reverse (snd state)) :: fst state)
 }
 joinWith delimiter xs = from (List Char) (concat (intersperse (to (List Char) delimiter) (map (to (List Char)) xs)))
 replaceAll search replacement text = joinWith replacement (splitOn search text)

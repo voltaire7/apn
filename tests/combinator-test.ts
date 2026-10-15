@@ -17,9 +17,9 @@ const cases: [string, string][] = [
     ['combinators.Q (+1) (*2) 20', '42'],
     ['combinators.U (x -> 42)', '42'],
     ['fix (ignored -> 42)', '42'],
-    ['take 4 (fix (xs -> 1 : xs))', '[1,1,1,1]'],
-    ['take 4 (combinators.Y (xs -> 1 : xs))', '[1,1,1,1]'],
-    ['take 4 (combinators.Theta (xs -> 1 : xs))', '[1,1,1,1]'],
+    ['take 4 (fix (xs -> 1 :: xs))', '[1,1,1,1]'],
+    ['take 4 (combinators.Y (xs -> 1 :: xs))', '[1,1,1,1]'],
+    ['take 4 (combinators.Theta (xs -> 1 :: xs))', '[1,1,1,1]'],
     ['(self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1))) 5', '120'],
 ];
 for (const combinator of ['combinators.Y', 'combinators.Z', 'combinators.Theta', 'fix']) {

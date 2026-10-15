@@ -16,7 +16,7 @@ Deno.test("Existing range patterns and list destructuring work on separate submi
     const i = new Interpreter();
     i.run(parse('within [0..10] = true')); i.run(parse('within x = false'));
     if (value(i, 'within 0') !== 'true' || value(i, 'within 10') !== 'true' || value(i, 'within 11') !== 'false') throw new Error("range pattern failed");
-    if (value(i, 'first (x:xs) = x; first [3..]') !== '3') throw new Error("range destructuring failed");
+    if (value(i, 'first (x::xs) = x; first [3..]') !== '3') throw new Error("range destructuring failed");
 });
 for (const [source, expected] of [
     ['n = 5; [1..n]', '[1,2,3,4,5]'],

@@ -18,7 +18,7 @@ for (const [source, expected] of [
     ['((Int -> Int) f) <- return ((x -> x)); f (Dynamic 2)', '2'],
     ['Vect 2 Int (Dynamic [1,2])', '[1,2]'],
     ['xs <- return (Vect 2 Int (Dynamic [1,missing])); head xs', '1'],
-    ['xs = 1:xs; scope <- Dynamic env; scope.xs = Dynamic [2..]; head xs', '2'],
+    ['xs = 1::xs; scope <- Dynamic env; scope.xs = Dynamic [2..]; head xs', '2'],
     ['Vect 2 Int [Dynamic 1,Dynamic 2]', '[1,2]'],
     ['xs <- return (Vect 2 Int [1,2]); scope <- Dynamic env; scope.xs = [3,4]; typeOf xs', 'Vect 2 Int'],
     ['x = 1; scope <- Dynamic env; scope.x = 2; x', '2'],

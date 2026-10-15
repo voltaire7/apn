@@ -40,12 +40,13 @@ export function fixityOf(op: string): Fixity {
     return fixities.get(op) ?? { prec: 9, assoc: "left" };
 }
 // Tokens that are syntax, not operators, though made of operator characters.
-const RESERVED_OPERATORS = new Set(["=", "|", "->", "<-", "!"]);
+// ":" writes a record field and separates a ternary; "::" is cons.
+const RESERVED_OPERATORS = new Set(["=", "|", ":", "->", "<-", "!"]);
 // The intrinsics behind the prelude's operators (lib/prelude.apn binds
 // each symbol to one), keyed by name.
 export const PRIMITIVE_OPERATORS = new Map<string, string>([
     ["primApply", "$"], ["primOr", "||"], ["primAnd", "&&"], ["primEq", "=="], ["primNe", "!="],
-    ["primLt", "<"], ["primGt", ">"], ["primLe", "<="], ["primGe", ">="], ["primCons", ":"],
+    ["primLt", "<"], ["primGt", ">"], ["primLe", "<="], ["primGe", ">="], ["primCons", "::"],
     ["primAdd", "+"], ["primSub", "-"], ["primAppend", "++"], ["primMul", "*"], ["primDiv", "/"],
     ["primMod", "%"], ["primPow", "^"], ["primCompose", "\\"],
 ]);
@@ -191,9 +192,9 @@ class Parser {
         this.seen = t;
         if (/^\s*(#.*)?$/.test(after)) throw new Error("Parser: a newline already separates items; remove the ',' at the end of the line");
         if (!/\s/.test(this.source[t.pos - 1] ?? " ") && (record ? /^ \S/ : /^\S/).test(after)) return;
-        // x:xs right after '[' read as a field: the item is a cons.
+        // x:xs (cons written the old way) right after '[' read as a field: the item is a cons.
         const item = this.source.slice(this.source.lastIndexOf("[", t.pos) + 1, t.pos);
-        if (record && /^\s*[\w']+:\S/.test(item)) throw new Error(`Parser: write a list item x:xs in parentheses: [(${item.trim()}),...]`);
+        if (record && /^\s*[\w']+:\S/.test(item)) throw new Error(`Parser: cons is '::': write [${item.trim().replace(":", " :: ")},...]`);
         throw new Error(record ? "Parser: separate record fields with ', ' (write [x: 1, y: 2])" : "Parser: separate list items with ',' alone (write [1,2,3])");
     }
 
@@ -205,7 +206,7 @@ class Parser {
         const after = this.source.slice(t.pos + 1).split("\n", 1)[0];
         if (!/\s/.test(this.source[t.pos - 1] ?? " ") && (/^ \S/.test(after) || /^\s*(#.*)?$/.test(after))) return;
         this.seen = t;
-        throw new Error("Parser: write a record field as key: value (no space before ':', one after)");
+        throw new Error(/^\S/.test(after) ? "Parser: cons is '::' (x :: xs); a record field is key: value, with one space after ':'" : "Parser: write a record field as key: value (no space before ':', one after)");
     }
 
     lineIndent(token: Token): number {
@@ -412,73 +413,32 @@ class Parser {
         throw new Error(`Parser: bad pattern '${this.tokenStr(t)}'`);
     }
 
-    // ':' only builds lists and record entries; there are no type annotations.
-    // A list tail can never be a type, so `: Int` written where an annotation
-    // would go is reported as one instead of parsing as a meaningless cons.
-    annotationError(type: number): never {
-        this.i = type;
-        const name = (this.peek() as { v: string }).v;
-        throw new Error(`Parser: ':' builds a list (x:rest), not a type annotation; type with the constructor instead: (${name} x) in a pattern, ${name} value in an expression`);
-    }
-
-    // Index of the type after a ':' annotation, scanning tokens [from, to).
-    // Colons directly inside [ ] are record entries and never count.
-    annotationIn(from: number, to: number): number | undefined {
-        const open: string[] = [];
-        for (let j = from; j < to; j++) {
-            const t = this.toks[j];
+    // ':' writes a record field ([x: 1], inside [ ]) or a ternary's else
+    // (c ? a : b); anything else is cons written the old way or a type
+    // annotation, which APN does not have.
+    checkColons(): void {
+        const open: string[] = [], pending = [0];
+        for (const t of this.toks) {
             if (t.k !== "sym") continue;
-            if (["(", "{", "["].includes(t.v)) open.push(t.v);
-            else if ([")", "}", "]"].includes(t.v)) open.pop();
-            else if (t.v === ":" && open[open.length - 1] !== "[") {
-                const type = this.toks[j + 1];
-                if (type?.k === "ident" && /^[A-Z]/.test(type.v)) return j + 1;
+            if (["(", "[", "{"].includes(t.v)) { open.push(t.v); pending.push(0); continue; }
+            if ([")", "]", "}"].includes(t.v)) { open.pop(); if (pending.length > 1) pending.pop(); continue; }
+            if (t.v === "?") { pending[pending.length - 1]++; continue; }
+            if (t.v !== ":") continue;
+            if (open[open.length - 1] === "[") continue;
+            if (pending[pending.length - 1] > 0) { pending[pending.length - 1]--; continue; }
+            const next = this.toks[this.toks.indexOf(t) + 1];
+            this.seen = t;
+            if (next?.k === "ident" && /^[A-Z]/.test(next.v)) {
+                throw new Error(`Parser: APN has no type annotations; type with the constructor instead: (${next.v} x) in a pattern, ${next.v} value in an expression`);
             }
-        }
-        return undefined;
-    }
-
-    // Statement level:  x: Int = 5,  f x: Int = x,  f (x: Int) = x
-    rejectDefinitionAnnotation(): void {
-        let depth = 0;
-        for (let j = this.i; j < this.toks.length; j++) {
-            const t = this.toks[j];
-            if (t.k === "eof" || (depth === 0 && ["newline", "indent", "dedent"].includes(t.k))) return;
-            if (t.k !== "sym") continue;
-            if (["(", "{", "["].includes(t.v)) depth++;
-            else if ([")", "}", "]"].includes(t.v)) { if (--depth < 0) return; }
-            else if (depth === 0 && (t.v === ";" || t.v === "?" || t.v === "->")) return;
-            else if (depth === 0 && (t.v === "=" || t.v === "<-")) {
-                const type = this.annotationIn(this.i, j);
-                if (type !== undefined) this.annotationError(type);
-                return;
-            }
+            throw new Error("Parser: cons is '::' (x :: xs); ':' writes a record field ([x: 1]) or a ternary's else (c ? a : b)");
         }
     }
 
-    // Lambda level:  (x: Int) -> x
-    rejectLambdaAnnotation(): void {
-        if (!this.isSym("(")) return;
-        let depth = 0;
-        for (let j = this.i; j < this.toks.length; j++) {
-            const t = this.toks[j];
-            if (t.k === "eof") return;
-            if (t.k !== "sym") continue;
-            if (["(", "{", "["].includes(t.v)) depth++;
-            else if ([")", "}", "]"].includes(t.v) && --depth === 0) {
-                const after = this.toks[j + 1];
-                if (after?.k !== "sym" || (after.v !== "->" && after.v !== "|")) return;
-                const type = this.annotationIn(this.i + 1, j);
-                if (type !== undefined) this.annotationError(type);
-                return;
-            }
-        }
-    }
-
-    // cons pattern: x:xs
+    // cons pattern: x :: xs
     parseConsPattern(): Pattern {
         let p = this.parsePattern();
-        if (this.isSym(":")) {
+        if (this.isSym("::")) {
             this.next();
             const tail = this.parseConsPattern();
             return { p: "cons", head: p, tail };
@@ -518,7 +478,7 @@ class Parser {
     // Operators by precedence climbing over their fixities (see fixityOf).
     // Below every operator but $ sits the ternary c ? a : b (level 1, right);
     // prefix - and ! take an operand of level 8 (so -2 ^ 2 is -(2 ^ 2), and
-    // 2 ^ -3 works). f $ x is a pipe node, x : xs and the rest binops.
+    // 2 ^ -3 works). f $ x is a pipe node, x :: xs and the rest binops.
     parsePipe(): Expr { return this.parseOperators(0); }
     parseTernary(): Expr { return this.parseOperators(1); }
     parseUnary(): Expr { return this.parseOperators(8); }
@@ -544,7 +504,7 @@ class Parser {
                 left = { t: "ternary", cond: left, then, els };
                 continue;
             }
-            if (!isOperatorName(t.v) || t.v === ":" && this.noCons) break;
+            if (!isOperatorName(t.v)) break;
             // Leave a trailing operator for the operand-front section (2 ^).
             const after = this.peek(1);
             if (after.k === "sym" && (after.v === ")" || after.v === "}")) break;
@@ -755,7 +715,6 @@ class Parser {
     parsePrimary(): Expr {
         const t = this.peek();
         if (!this.noLambda && this.startsParam(t)) {
-            this.rejectLambdaAnnotation();
             const save = this.i;
             let header: { params: Pattern[]; guard?: Expr } | undefined;
             try { header = this.lambdaHeader(); } catch { this.i = save; }
@@ -852,7 +811,6 @@ class Parser {
                             if (this.skipFixityDeclaration()) continue;
                             const operator = this.tryOperatorDefinition();
                             if (operator) { stmts.push({ t: "stmDef", ...operator }); continue; }
-                            this.rejectDefinitionAnnotation();
                             if (this.isEagerBinding()) {
                                 stmts.push(this.parseEagerBinding());
                             } else if (this.isFieldAssignStart()) {
@@ -1042,14 +1000,14 @@ class Parser {
     startsPatBinding(): boolean {
         const t = this.peek();
         if (t.k === "sym" && t.v === "[") return true;
-        // A cons pattern: x:xs = ..., (x:xs) = ...
-        const consAfter = (n: number) => { const c = this.peek(n); return c.k === "sym" && c.v === ":"; };
+        // A cons pattern: x :: xs = ..., (x :: xs) = ...
+        const consAfter = (n: number) => { const c = this.peek(n); return c.k === "sym" && c.v === "::"; };
         if (t.k === "sym" && (t.v === "(" || t.v === "{")) {
             const n1 = this.peek(1);
             return n1.k === "ident" && (/^[A-Z]/.test(n1.v) || consAfter(2));
         }
         const next = this.peek(1);
-        return t.k === "ident" && (/^[A-Z]/.test(t.v) || (next.k === "sym" && (next.v === "." || next.v === ":")));
+        return t.k === "ident" && (/^[A-Z]/.test(t.v) || (next.k === "sym" && (next.v === "." || next.v === "::")));
     }
 
     // Lookahead: is the statement  pattern = expr ? Restores the token index.
@@ -1170,7 +1128,7 @@ class Parser {
         if (!this.startsPatBinding()) return false;
         const t = this.peek();
         // A built-in type name cannot be redefined, so Int x = 1 is a typed binding.
-        if (t.k === "ident" && !declaredCtors.has(t.v) && !TYPE_NAMES.includes(t.v) && !(this.peek(1).k === "sym" && [".", ":"].includes((this.peek(1) as { v: string }).v))) return false;
+        if (t.k === "ident" && !declaredCtors.has(t.v) && !TYPE_NAMES.includes(t.v) && !(this.peek(1).k === "sym" && [".", "::"].includes((this.peek(1) as { v: string }).v))) return false;
         const save = this.i;
         try {
             const p = this.parseConsPattern();
@@ -1264,8 +1222,8 @@ class Parser {
         try {
             const left = this.parsePatternAtom();
             const name = this.peek();
-            // x:xs = ... binds a cons pattern; it defines no operator.
-            if (name.k === "sym" && isOperatorName(name.v) && name.v !== ":") {
+            // x :: xs = ... binds a cons pattern; it defines no operator.
+            if (name.k === "sym" && isOperatorName(name.v) && name.v !== "::") {
                 this.next();
                 const right = this.parsePatternAtom();
                 if (this.isSym("=")) {
@@ -1290,7 +1248,7 @@ class Parser {
     // Lookahead: is the statement starting at the current identifier a binding
     // definition? Recognizes  name = expr  and the Haskell-style
     // name p1 p2 p3 = expr  where each pi is a PATTERN
-    // (in `[x, y]`, `(x:rest)`, `[]`, `(Some x)`, a literal, a bare var, ...).
+    // (in `[x, y]`, `(x :: rest)`, `[]`, `(Some x)`, a literal, a bare var, ...).
     isDef(): boolean {
         const save = this.i;
         try {
@@ -1361,7 +1319,7 @@ class Parser {
     parseDefStatement(): { name: string; clauses: { params: Pattern[]; body: Expr; guard?: Expr }[] } {
         const name = (this.next() as { v: string }).v;
         const params: Pattern[] = [];
-        // Haskell-style params are PATTERNS:  f [x, y] = ..., f (x:rest) = ...
+        // Haskell-style params are PATTERNS:  f [x, y] = ..., f (x :: rest) = ...
         while (this.startsParam(this.peek())) {
             params.push(this.parseConsPattern());
         }
@@ -1463,7 +1421,6 @@ class Parser {
                 out.push({ t: "def", ...operator });
                 continue;
             }
-            if (t.k === "ident") this.rejectDefinitionAnnotation();
             if (this.isEagerBinding()) {
                 out.push(this.parseEagerBinding() as TopLevel);
                 continue;
@@ -1528,10 +1485,6 @@ class Parser {
             }
 
             if (t.k === "ident") {
-                if (this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === "::") {
-                    this.next(); // name
-                    throw new Error("Parser: type signatures are not supported; require types with constructor patterns, e.g. f (Int x) = ...");
-                }
                 // Field/pluck assignment:  vec.x = 10   vec.[x, y] = ...
                 if (this.isFieldAssignStart()) {
                     out.push(this.parseFieldAssign() as TopLevel);
@@ -1629,6 +1582,7 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
     const p = new Parser(toks, src, file);
     try {
         declareFixities(toks);
+        p.checkColons();
         if (!looseSpacing) p.checkBracketSpacing();
         const out = p.parseTopLevel();
         return groupClauses(out);
@@ -1650,7 +1604,7 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
 
 // Merge consecutive Haskell-style clauses of the same function:
 //   len [] = 0
-//   len (x:rest) = 1 + len rest
+//   len (x :: rest) = 1 + len rest
 // becomes one def with two clauses. Only same-name defs that carry parameters
 // (params.length >= 1) with equal arity are grouped; value defs stay separate
 // (consecutive re-bindings still behave as last-wins aliases, as before).
@@ -1764,7 +1718,7 @@ export function patternSource(p: Pattern): string {
         case "char": return `'${p.v}'`;
         case "float": return numberText({ kind: "float", v: p.v });
         case "list": return `[${p.v.map(patternSource).join(",")}]`;
-        case "cons": return `(${patternSource(p.head)} : ${patternSource(p.tail)})`;
+        case "cons": return `(${patternSource(p.head)} :: ${patternSource(p.tail)})`;
         case "constr": return p.args.length ? `(${p.tag} ${p.args.map(patternSource).join(" ")})` : p.tag;
         case "typeBind": return `(${p.name} ${patternSource(p.value)})`;
         case "recPat": return `[${p.v.map(([k, v]) => `${keySource(k)}: ${v}`).join(", ")}]`;

@@ -12,7 +12,7 @@ for (const [source, expected] of [
     ["String ['h','i']", '"hi"'],
     ['String "hi"', '"hi"'],
     ["Text = String\nText ['h','i']", 'Text "hi"'],
-    ["xs = 'a':xs\nString (take 3 xs)", '"aaa"'],
+    ["xs = 'a'::xs\nString (take 3 xs)", '"aaa"'],
     ['Int (Float 2)', '2'],
     ['payload (t x) = [t,x]\npayload (Int32 5)', '[Int32,5]'],
     ['payload (Float x) = x\npayload (Float .2)', '0.2'],

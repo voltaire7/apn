@@ -367,7 +367,7 @@ function viewValue(e: Expr, flow: ViewFlow, ctx: ViewContext, hooks: ViewHooks =
         case "binop":
             if (e.op === "==" || e.op === "!=") return { kind: 0 };
             if (e.op === "++") return { kind: kind(e.l) | kind(e.r) };
-            if (e.op === ":") return { kind: holding(kind(e.l)) | kind(e.r) };
+            if (e.op === "::") return { kind: holding(kind(e.l)) | kind(e.r) };
             return { kind: anything(kind(e.l) | kind(e.r)) };
         case "app": return viewApply(value(e.f), e.a, flow, ctx, hooks);
         case "pipe": return viewApply(value(e.f), e.x, flow, ctx, hooks);
@@ -1852,7 +1852,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const near = didYouMean(p.tag, [...scope.keys()].filter(name => /^[A-Z]/.test(name)));
                     firstUnbound = { expr: e, name: p.tag, inPattern: true,
                         hint: module ? `add \`import "${module}"\` to use \`${p.tag}\`` : near ? `did you mean '${near}'?`
-                            : `declare a type with \`${p.tag}\` first${p.tag === "Nil" || p.tag === "Cons" ? "; a list's patterns are `[]` and `(x:xs)`" : ""}` };
+                            : `declare a type with \`${p.tag}\` first${p.tag === "Nil" || p.tag === "Cons" ? "; a list's patterns are `[]` and `(x :: xs)`" : ""}` };
                 }
                 if (t.k === "factory" && p.args.length === 3) {
                     const [size, element, value] = p.args;
@@ -2170,7 +2170,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (isExplicit(a) || isExplicit(b)) { runtimeChecks++; return ["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(op) ? atom("Bool") : explicitDynamic; }
         if (["==", "!=", "&&", "||"].includes(op)) return atom("Bool");
         if (["<", ">", "<=", ">="].includes(op)) { operation("compare", [a, b]); return atom("Bool"); }
-        if (op === ":") { unify(list(a), b, e); return list(a); }
+        if (op === "::") { unify(list(a), b, e); return list(a); }
         if (op === "$") return application(a, { type: b }, e);
         return operation(op, [a, b]);
     }
@@ -2827,7 +2827,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return explicitDynamic;
                 }
                 // A match's alternatives meet its scrutinee as a clause's patterns
-                // meet its parameters: x:xs takes a length n list's tail as n - 1.
+                // meet its parameters: x :: xs takes a length n list's tail as n - 1.
                 const scrutinee = e.f.t === "app" ? matchScrutinees.get(e.f) : undefined;
                 if (scrutinee && a.t === "list") {
                     for (const alternative of a.v) if (alternative.t === "patternLambda" && alternative.params.length === 1) alternativeInputs.set(alternative, [patternInput(alternative.params[0], scrutinee)]);
@@ -3097,11 +3097,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 };
                 const [a, b] = operands ?? [constrain(infer(e.l, scope)), constrain(infer(e.r, scope))];
                 // An undecided return is not a value until its monad is named.
-                if (op !== "$" && op !== ":" && op !== ">>=" && op !== ">>" && [a, b].some(x => isPending(resolve(x)))) {
+                if (op !== "$" && op !== "::" && op !== ">>=" && op !== ">>" && [a, b].some(x => isPending(resolve(x)))) {
                     return problem("ambiguous: nothing decides which return", e, "name the type it should have, as in `Option Int (return ...)`");
                 }
                 // An action is not the value it yields.
-                if (op !== "$" && op !== ":" && [a, b].some(x => isIO(resolve(x)))) {
+                if (op !== "$" && op !== "::" && [a, b].some(x => isIO(resolve(x)))) {
                     return problem(`operator '${op}' cannot use an action (${text(isIO(resolve(a)) ? a : b)}) as a value`, e, "bind its result first: `x <- action`");
                 }
                 if (isExplicit(a) || isExplicit(b)) {
@@ -3114,7 +3114,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     operation("compare", [a, b]);
                     return atom("Bool");
                 }
-                if (op === ":") {
+                if (op === "::") {
                     // ':' adds one element. One that does not fit the tail's
                     // elements makes a mixed list, as in a literal
                     // ([1,2]:[3,4] is [[1,2],3,4]; [1]:[[3,4]] is [[1],[3,4]]).
@@ -3615,7 +3615,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return;
                 }
                 case "binop":
-                    if (!["==", "!=", "++", ":"].includes(n.op) && (value(n.l, ctx).kind | value(n.r, ctx).kind)) { ok = false; return; }
+                    if (!["==", "!=", "++", "::"].includes(n.op) && (value(n.l, ctx).kind | value(n.r, ctx).kind)) { ok = false; return; }
                     break;
                 case "unop":
                     if (value(n.e, ctx).kind) { ok = false; return; }
@@ -4708,9 +4708,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (!env.has(e.op) && !builtinAt(e, scope)) return evaluateKnown(operatorCall(e), env, scope, depth);
         if (env.has(e.op)) { incomplete = true; return undefined; }
         const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
-        // x : xs; the tail may be endless (repeat x = x : repeat x).
+        // x :: xs; the tail may be endless (repeat x = x :: repeat x).
         // The tail is evaluated only when an element past the head is needed.
-        if (e.op === ":") {
+        if (e.op === "::") {
             const h = lazyValue(() => value(e.l), { exprs: [e.l], env });
             return lazyList(() => ({ head: h, tail: value(e.r) ?? {} }), { exprs: [e.l, e.r], env });
         }

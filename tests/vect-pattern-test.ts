@@ -3,7 +3,7 @@ import { Interpreter } from "../src/interp.ts";
 import { parseDocument, patternSource } from "../src/parser.ts";
 
 const append = `append (Vect n a []) (Vect m a ys) = Vect (n + m) a ys
-append (Vect n a (x:xs)) (Vect m a ys) = Vect (n + m) a (x : append xs ys)`;
+append (Vect n a (x::xs)) (Vect m a ys) = Vect (n + m) a (x :: append xs ys)`;
 function run(source: string): string {
     const interpreter = new Interpreter();
     return interpreter.renderString(interpreter.run(parseDocument(source)));
@@ -56,7 +56,7 @@ for (const source of [
 for (const source of [
     'bad (Vect n a xs) = Vect (n + 1) a xs',
     'bad (Vect n a []) (Vect m a ys) = Vect (n + m + 1) a ys',
-    'bad (Vect n a (x:xs)) = Vect n a xs',
+    'bad (Vect n a (x::xs)) = Vect n a xs',
     'f (Vect n a xs) (Vect m a ys) = xs; f [1] [true]',
     'f (Vect n a xs) (Vect n a ys) = xs; f [1] [2,3]',
     'f x x = x; f 1 true',
@@ -69,7 +69,7 @@ Deno.test('Vect patterns retain annotated element laziness', () => {
     if (run(source) !== '1') throw new Error('forced an element');
 });
 Deno.test('Vect pattern source round-trips', () => {
-    const program = parseDocument('f (Vect n Int (x:xs)) = n');
+    const program = parseDocument('f (Vect n Int (x::xs)) = n');
     const first = program[0];
     if (first.t !== 'def') throw new Error('expected definition');
     const printed = patternSource(first.clauses[0].params[0]);
