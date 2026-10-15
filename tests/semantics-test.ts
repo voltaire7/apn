@@ -358,7 +358,7 @@ Parcel a = | Parcel a
 Parcel contents = Parcel 42
 print contents
 `, ["42"]);
-failure("constructor alternatives require a name", 'InvalidAlternatives = OneAlternative |', "expected a capitalized constructor");
+failure("constructor alternatives require a name", 'InvalidAlternatives = OneAlternative |', "expected a constructor: a capitalized name, [] or x :: rest");
 
 example("multiline constructor declarations allow leading bars", `
 MultiChoice a =

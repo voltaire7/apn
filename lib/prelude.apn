@@ -69,3 +69,6 @@ unless condition action = condition ? return [] : action >> return []
 # to JSON, to (List Char); from String parses). They are methods: a program
 # adds a type by defining to or from for it, as for map.
 JSON = String
+# The length-indexed list: [] has length zero, and x :: xs one more than xs.
+# Any family of lists of this shape is the same type.
+Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a

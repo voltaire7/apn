@@ -1,4 +1,4 @@
-import { sourceLocations } from "./ast.ts";
+import { countingFamily, sourceLocations } from "./ast.ts";
 import { stringKey, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -396,16 +396,16 @@ class Parser {
             if (name === "_") return { p: "wildcard" };
             // Z, the built-in zero, takes no fields unless the program redeclares it.
             if (nullaryCtors.has(name) || name === "Z" && !declaredCtors.has(name)) return { p: "constr", tag: name, args: [] };
-            // Vect exposes length, element type, and payload in one pattern.
-            if (name === "Vect" && this.startsParam(this.peek())) {
-                const size = this.parsePattern();
-                const token = this.peek();
-                let element: Pattern;
-                if (token.k === "ident" && /^[A-Z]/.test(token.v)) {
-                    this.next(); element = { p: "constr", tag: token.v, args: [] };
-                } else element = this.parsePattern();
-                const value = this.parsePattern();
-                return { p: "constr", tag: name, args: [size, element, value] };
+            // A type applied in a pattern (Vect n Int xs): its arguments are
+            // types and indices, so a capitalized one takes nothing after it.
+            if (declaredTypes.has(name) && !declaredCtors.has(name) && this.startsParam(this.peek())) {
+                const args: Pattern[] = [];
+                while (this.startsParam(this.peek())) {
+                    const token = this.peek();
+                    if (token.k === "ident" && /^[A-Z]/.test(token.v) && token.v !== "_") { this.next(); args.push({ p: "constr", tag: token.v, args: [] }); }
+                    else args.push(this.parsePattern());
+                }
+                return { p: "constr", tag: name, args };
             }
             // constructor application: Some x
             if (/^[A-Z]/.test(name)) {
@@ -1442,14 +1442,30 @@ class Parser {
         }
         const variants: { tag: string; arity: number; fields: Expr[]; result?: Expr }[] = [];
         for (;;) {
-            const vt = this.next();
-            if (vt.k !== "ident" || !/^[A-Z]/.test(vt.v)) {
-                throw new Error("Parser: expected a capitalized constructor name");
-            }
-            const fields: Expr[] = [];
-            while (this.peek().k === "ident" || this.isSym("(") || this.isSym("{") || this.isSym("[")) {
+            // A constructor: a name with its fields, or a list's own: [] and
+            // a :: rest (a family of lists: Vect n a = [] -> ... | a :: ...).
+            const vt = this.peek(), fields: Expr[] = [];
+            let tag: string;
+            if (vt.k === "sym" && vt.v === "[" && this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === "]") {
+                this.next(); this.next();
+                tag = "[]";
+            } else if (vt.k === "ident" && /^[A-Z]/.test(vt.v)) {
+                this.next();
+                tag = vt.v;
+                while (this.peek().k === "ident" || this.isSym("(") || this.isSym("{") || this.isSym("[")) {
+                    this.noLambda++;
+                    try { fields.push(this.parsePrimary()); } finally { this.noLambda--; }
+                }
+            } else {
+                if (!(vt.k === "ident" && /^[a-z]/.test(vt.v) || vt.k === "sym" && vt.v === "(")) throw new Error("Parser: expected a constructor: a capitalized name, [] or x :: rest");
                 this.noLambda++;
-                try { fields.push(this.parsePrimary()); } finally { this.noLambda--; }
+                try {
+                    fields.push(this.parsePrimary());
+                    if (!this.isSym("::")) throw new Error("Parser: expected a constructor: a capitalized name, [] or x :: rest");
+                    this.next();
+                    fields.push(this.parseApp());
+                } finally { this.noLambda--; }
+                tag = "::";
             }
             // -> Type: the type this constructor makes (Nil -> Vec Z a).
             let result: Expr | undefined;
@@ -1458,9 +1474,9 @@ class Parser {
                 try { result = this.parseApp(); } finally { this.noLambda--; }
                 let head = result;
                 while (head.t === "app") head = head.f;
-                if (head.t !== "var" || head.name !== name) throw new Error(`Parser: ${vt.v} must make a ${name}, as in ${vt.v} -> ${name} ...`);
+                if (head.t !== "var" || head.name !== name) throw new Error(`Parser: ${tag} must make a ${name}, as in ${tag} -> ${name} ...`);
             }
-            variants.push({ tag: vt.v, arity: fields.length, fields, ...result ? { result } : {} });
+            variants.push({ tag, arity: fields.length, fields, ...result ? { result } : {} });
             if (this.isSym("|") && !breakBefore(this.i)) {
                 if (multiLine) { this.seen = this.peek(); throw new Error("Parser: put each constructor of a multi-line declaration on its own line, after a '|'"); }
                 this.next();
@@ -1479,6 +1495,14 @@ class Parser {
         if (!multiLine && leading && variants.length > 1) {
             this.seen = leading;
             throw new Error(`Parser: a one-line declaration takes no leading '|' (write ${header} = A | B); only a single constructor needs one (${header} = | A)`);
+        }
+        // A family of lists has only the list's constructors, each saying the
+        // index it makes ([] -> Vect Z a): its values are lists.
+        // A list's fields are types, so a family of lists can only count its
+        // elements: it is the length-indexed list, as Vect is.
+        const listed = variants.filter(v => v.tag === "[]" || v.tag === "::");
+        if (listed.length && !countingFamily({ name, parameters: header.split(" ").slice(1), variants })) {
+            throw new Error(`Parser: a family of lists counts its elements, as Vect does: ${name} n a = [] -> ${name} Z a | a :: ${name} k a -> ${name} (S k) a`);
         }
         return variants;
     }
@@ -1521,8 +1545,11 @@ class Parser {
         const leading = this.peek(j);
         if (leading.k === "sym" && leading.v === "|") return true;
         if (j === 2 && this.lambdaDeclarationAt(this.i + j)) return true;
-        const ctor = this.peek(j);
-        if (ctor.k !== "ident" || !/^[A-Z]/.test(ctor.v)) return false;
+        const ctor = this.peek(j), after = this.peek(j + 1);
+        // A family of lists starts with [] or x :: rest.
+        const listed = ctor.k === "sym" && ctor.v === "[" && after.k === "sym" && after.v === "]" ||
+            ctor.k === "ident" && /^[a-z]/.test(ctor.v) && after.k === "sym" && after.v === "::";
+        if (!listed && (ctor.k !== "ident" || !/^[A-Z]/.test(ctor.v))) return false;
         let depth = 0;
         for (;;) {
             const token = this.peek(j++);
@@ -1599,7 +1626,9 @@ class Parser {
                 if (new Set(variants.map(v => v.tag)).size !== variants.length) throw new Error("Parser: duplicate value constructor");
                 if (variants.some(v => TYPE_NAMES.includes(v.tag))) throw new Error("Parser: a value constructor cannot replace a built-in type");
                 // Register only after the entire declaration has parsed successfully.
+                declaredTypes.add(name);
                 for (const { tag, arity } of variants) {
+                    if (tag === "[]" || tag === "::") continue;
                     declaredCtors.add(tag);
                     if (arity === 0) nullaryCtors.add(tag); else nullaryCtors.delete(tag);
                 }
@@ -1682,12 +1711,16 @@ class Parser {
 // across REPL lines (each line is re-parsed standalone).
 let declaredCtors = new Set<string>();
 const nullaryCtors = new Set<string>();
+// Type names (built in or declared): in a pattern their arguments are types
+// and indices, so a capitalized one takes nothing after it (Vect n Int xs).
+const declaredTypes = new Set<string>(TYPE_NAMES);
 
 // Tooling parses each document independently, without leaking REPL declarations.
 export function parseDocument(src: string): TopLevel[] {
-    const sets = [declaredCtors, nullaryCtors];
+    const sets = [declaredCtors, nullaryCtors, declaredTypes];
     const saved = sets.map((set) => [...set]);
     sets.forEach((set) => set.clear());
+    TYPE_NAMES.forEach((name) => declaredTypes.add(name));
     try { return parse(src); }
     finally {
         sets.forEach((set, i) => {

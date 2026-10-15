@@ -16,7 +16,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, ca
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { clauseKey, flatTypedPattern, isLoadCall, mergeClauses } from "./ast.ts";
+import { clauseKey, countingFamily, flatTypedPattern, isLoadCall, mergeClauses } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, typeToString, valueToString, rawString } from "./types.ts";
@@ -174,7 +174,8 @@ export class Interpreter {
         const caller = this.env;
         const callerDir = this.sourceDir;
         const builtins = new Env();
-        for (const type of TYPE_NAMES) builtins.setLocal(type, { kind: "type", name: type });
+        // Vect is the prelude's declaration.
+        for (const type of TYPE_NAMES) if (type !== "Vect") builtins.setLocal(type, { kind: "type", name: type });
         builtins.setLocal("Z", ZERO);
         for (const [name, arity] of [...NATIVES, ...STANDARD_NATIVES]) if (!(name in RETIRED_NATIVES)) builtins.setLocal(name, { kind: "native", name, arity, applied: [] });
         for (const [name, value] of this.preludeBindings) builtins.setLocal(name, value);
@@ -206,7 +207,7 @@ export class Interpreter {
     sourceFile = "<repl>";
 
     constructor() {
-        for (const name of TYPE_NAMES) this.env.setLocal(name, { kind: "type", name });
+        for (const name of TYPE_NAMES) if (name !== "Vect") this.env.setLocal(name, { kind: "type", name });
         this.env.setLocal("Z", ZERO);
         for (const [name, arity] of NATIVES) {
             if (!(name in RETIRED_NATIVES)) this.env.setLocal(name, { kind: "native", name, arity, applied: [] });
@@ -239,6 +240,9 @@ export class Interpreter {
             let last: Value = { kind: "list", v: [] };
             for (const [index, tl] of program.entries()) {
                 if (tl.t === "type") {
+                    // A family of lists counting its elements (Vect n a = [] ->
+                    // Vect Z a | a :: Vect k a -> Vect (S k) a) is the length-indexed list.
+                    if (countingFamily(tl.def)) { this.env.setLocal(tl.def.name, { kind: "type", name: "Vect" }); continue; }
                     for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) {
                         const previous = this.env.map.get(name);
                         if (previous && ((previous.kind === "native" && previous.tag) || previous.kind === "variant") && previous.family?.name !== tl.def.name) {

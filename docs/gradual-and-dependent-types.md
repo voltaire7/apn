@@ -349,7 +349,19 @@ append [1,2] [3,4]                # [1, 2, 3, 4]
 
 The first pattern introduces length `n`, element type `a`, and the contents.
 The second introduces `m` and requires the same `a`. These are ordinary local
-values available in the body. `Vect` is the built-in name; `Vector` was renamed.
+values available in the body. `Vector` was renamed `Vect`, which the prelude
+declares as the family of lists counting their elements:
+
+```apn
+Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a
+```
+
+A family's constructors may be the list's own, `[]` and `x :: rest`; its values
+are then ordinary lists. A list's fields are types, so such a family can only
+count its elements: any family of lists of this shape (`Z` or `0`, `S k` or
+`k + 1`) is the same length-indexed list as `Vect`, and another shape is a
+syntax error. In a typed pattern a type's arguments take nothing after them,
+so `(Vect n Int xs)` and a program's own `(Lst n Int xs)` read alike.
 `(Vect n Int xs)` constrains the element type explicitly, and `(Vect 3 a xs)`
 constrains the length. For computed type expressions, the existing form
 `((Vect (n + 1) Int) xs)` remains available.

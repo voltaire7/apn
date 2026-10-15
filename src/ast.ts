@@ -64,6 +64,32 @@ export type Pattern =
 // indexed family: Cons a (Vec k a) -> Vec (S k) a).
 interface DataDef { name: string; parameters?: string[]; variants: { tag: string; arity: number; fields?: Expr[]; result?: Expr }[]; }
 
+// A family of lists counting its elements, as Vect is in the prelude:
+// F n a = [] -> F Z a | a :: F k a -> F (S k) a (Z or 0, S k or k + 1).
+// Such a family is the length-indexed list.
+export function countingFamily(def: DataDef): boolean {
+    const nil = def.variants.find(v => v.tag === "[]"), cons = def.variants.find(v => v.tag === "::");
+    if (def.variants.length !== 2 || !nil?.result || !cons?.result || def.parameters?.length !== 2) return false;
+    const unwrap = (e: Expr): Expr => e.t === "block" && e.stmts.length === 1 ? unwrap(e.stmts[0]) : e;
+    const spine = (e: Expr): [Expr, Expr[]] => {
+        e = unwrap(e);
+        const args: Expr[] = [];
+        while (e.t === "app") { args.unshift(unwrap(e.a)); e = unwrap(e.f); }
+        return [e, args];
+    };
+    const name = (e: Expr | undefined) => e?.t === "var" && /^[a-z]/.test(e.name) ? e.name : undefined;
+    const family = (e: Expr | undefined, n: number) => { if (!e) return undefined; const [head, args] = spine(e); return head.t === "var" && head.name === def.name && args.length === n ? args : undefined; };
+    const empty = family(nil.result, 2), whole = family(cons.result, 2), tail = family(cons.fields?.[1], 2);
+    const element = name(cons.fields?.[0] && unwrap(cons.fields[0])), k = name(tail?.[0]);
+    if (!empty || !whole || !tail || !element || !k || !name(empty[1]) || name(tail[1]) !== element || name(whole[1]) !== element) return false;
+    const zero = empty[0], next = whole[0];
+    const isZero = zero.t === "var" && zero.name === "Z" || zero.t === "int" && zero.v === 0n;
+    const one = (e: Expr) => e.t === "int" && e.v === 1n;
+    const isNext = next.t === "app" && unwrap(next.f).t === "var" && (unwrap(next.f) as { name: string }).name === "S" && name(unwrap(next.a)) === k ||
+        next.t === "binop" && next.op === "+" && (name(unwrap(next.l)) === k && one(unwrap(next.r)) || one(unwrap(next.l)) && name(unwrap(next.r)) === k);
+    return isZero && isNext;
+}
+
 export type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "expr"; value: Expr }
     | { t: "type"; def: DataDef }
     | { t: "patDef"; pattern: Pattern; value: Expr; eager?: boolean; update?: { name: string; value: Expr; error?: string } };

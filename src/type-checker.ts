@@ -1,4 +1,4 @@
-import { clauseKey, type Expr, flattenTypedPatterns, isLoadCall, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
+import { clauseKey, countingFamily, type Expr, flattenTypedPatterns, isLoadCall, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { nativeModule, RETIRED_NATIVES } from "./native-exports.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
@@ -5818,6 +5818,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
     }
     const scope: Scope = new Map(TYPE_NAMES.map((name) => [name, { type: { k: "type", value: atom(name) } }]));
+    // The prelude declares Vect as the family of lists counting their elements.
     scope.set("Vect", { type: { k: "factory", args: [] } });
     const a = variable(), b = variable();
     for (
@@ -5961,6 +5962,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     try { define(statement.name, statement.clauses, scope, statement.clauses[0].body); }
                     finally { topLevelDefinition = creatingTopLevel = false; }
                 }
+            }
+            else if (statement.t === "type" && countingFamily(statement.def)) {
+                // A family of lists counting its elements is the length-indexed list.
+                scope.set(statement.def.name, { type: { k: "factory", args: [] } });
             }
             else if (statement.t === "type") {
                 const d = statement.def, parameters = new Map((d.parameters ?? []).map((p) => [p, variable()]));
