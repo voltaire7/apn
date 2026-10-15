@@ -31,4 +31,4 @@ print (selfFactorial 5)
 
 same x x = x
 print (same 3 3)
-print ((_ _ -> 1) 2 3)
+print ((_, _ -> 1) 2 3)

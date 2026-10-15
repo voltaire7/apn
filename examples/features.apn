@@ -455,8 +455,8 @@ print ([1] +++ [2] +++ [3])               # => [1,0,2,0,3]
 nums = [1,2,3,4,5]
 print (map (x -> x * x) nums)                 # => [1,4,9,16,25]
 print (filter (x -> x > 2) nums)              # => [3,4,5]
-print (foldl (acc x -> acc + x) 0 nums)       # => 15
-print (foldr (x acc -> x - acc) 0 [1,2,3])  # => 2
+print (foldl (acc, x -> acc + x) 0 nums)       # => 15
+print (foldr (x, acc -> x - acc) 0 [1,2,3])  # => 2
 
 # pattern-lambdas: a lambda param may be a pattern (here, destructuring a pair)
 print (map ([a,b] -> a + b) [[1,2],[3,4]])  # => [3,7]
@@ -510,6 +510,11 @@ print (someFloat (Some 1))          # => 1.0
 Reading = Celsius Float | NoReading # a concrete field converts when constructed
 print (Celsius 21)                  # => Celsius 21.0
 Span = Span2 Int Int | NoSpan       # every payload field converts, by value
+# On several lines, each constructor starts its own line after a '|'.
+Heading =
+    | Northward
+    | Southward
+print [Northward,Southward]         # => [Northward,Southward]
 spanEnd (Span2 _ (UInt8 b)) = b     # spanEnd (Span2 1 300) is a static range error
 print (spanEnd (Span2 1 3))         # => 3
 byteField ([x: UInt8] r) = r.x      # record fields are checked by value too
@@ -767,7 +772,7 @@ print (12345678901234567890 * 12345678901234567890)
 # => 152415787532388367501905199875019052100
 print (take 3 [9007199254740993..])
 # => [9007199254740993,9007199254740994,9007199254740995]
-print (foldl (_ b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
+print (foldl (_, b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 # tests/bigint-test.ts checks F1500 beyond the old floating-point overflow.
 
 # ---------------------------------------------------------
@@ -1235,7 +1240,7 @@ print (length "\r\v\f")                         # 3: whitespace escapes
 selfFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1)))
 print (selfFactorial 5)                         # 120
 print (combinators.S combinators.K combinators.K 42)  # 42
-print (combinators.Y (recur n -> n == 0 ? 1 : n * recur (n - 1)) 5) # 120
+print (combinators.Y (recur, n -> n == 0 ? 1 : n * recur (n - 1)) 5) # 120
 print (take 4 (fix (xs -> 1 :: xs)))              # [1, 1, 1, 1]
 
 # Advent of Code helpers: parsing, strict simulation and graph traversal.
@@ -1704,8 +1709,8 @@ print (filter (x -> x) [0,1,2])        # => [1,2]
 print (match 42 [_ | [] -> 0,x | 1 -> x]) # => 42
 
 # Type variables preserve relationships between inputs and outputs.
-print (typeOf (x _ -> x))                # => a -> b -> a
-print (typeOf (f x -> f x))              # => (a -> b) -> a -> b
+print (typeOf (x, _ -> x))                # => a -> b -> a
+print (typeOf (f, x -> f x))              # => (a -> b) -> a -> b
 print (typeOf (x -> [x,x]))              # => a -> List a
 
 # Value-dependent types; the same constraints run at dynamic boundaries.
@@ -1825,8 +1830,12 @@ print (vectAppend [1,2] [3,4])              # => [1,2,3,4]
 print (typeOf (vectAppend [] [3,4]))        # => Vect 2 Int
 sameArguments x x = x
 print (sameArguments 3 3)                  # => 3
-print ((x x -> x) 4 4)                    # => 4
-print ((_ _ -> 1) 2 3)                    # => 1
+print ((x, x -> x) 4 4)                    # => 4
+# A lambda's parameters are patterns separated by ', '; t x is one pattern
+# binding the argument's type, as in f (t x) = t, match alternatives included.
+print ((t _ -> t) "a")                     # => String
+print (match 1 [t x -> [t,x]])             # => [Int,1]
+print ((_, _ -> 1) 2 3)                    # => 1
 
 # Files and REPL submissions check by default; Dynamic marks runtime boundaries.
 dynamicNumber = Dynamic 41
@@ -1854,7 +1863,7 @@ print ((Int value -> value) 123)           # => 123
 # a type is a type variable; [Int] is one Int, List Int a list of any length.
 print ((a -> a) == typeOf (x -> x))        # => true
 print ((b -> b) == typeOf (x -> x))        # => true (variable names don't matter)
-print ((a -> a) == typeOf (x _ -> x))      # => false
+print ((a -> a) == typeOf (x, _ -> x))      # => false
 print (List Int == typeOf [1,2,3])         # => true
 print ([Int] == typeOf [1])                # => false ([Int] is positional)
 print (typeOf map)                         # => (a -> b) -> List a -> List b

@@ -388,8 +388,16 @@ matching values. A complete list membership check consumes the list.
 
 ## Variants, parameters, and distinct wrappers
 
-A `|` distinguishes a constructor declaration from a type alias. A single
-constructor needs a leading pipe:
+A `|` distinguishes a constructor declaration from a type alias. On one line,
+constructors are separated by `|` with no leading one, except a single
+constructor, which needs a leading pipe to be a declaration. On several lines,
+the constructors start on the line after `=`, each on its own line after a `|`:
+
+```apn
+Shape =
+    | Circle Float
+    | Square Float
+```
 
 ```apn
 Option a = Some a | None

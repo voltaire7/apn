@@ -139,7 +139,7 @@ for (const [source, expected] of [
     // A length the type leaves open is the one evaluation finds.
     ['g [a,b] = a + b; g (map (x -> x) (tail [1,2,3]))', '5'],
     ['g [a,b] = a + b; g (tail [0,1,2])', '3'],
-    ['f xs = foldl (acc x -> x :: acc) xs [1,2]; g [a,b,c,d] = a + b; g (f [1,2])', '3'],
+    ['f xs = foldl (acc, x -> x :: acc) xs [1,2]; g [a,b,c,d] = a + b; g (f [1,2])', '3'],
     ['f xs = filter (x -> x > 0) xs; g [a,b] = a + b; g (f [1,2])', '3'],
     ['toList 0 = []; toList k = (k - 1) :: toList (k - 1); xs = toList 3; g [a,_,_] = a; g xs', '2'],
     ['toList Z = []; toList (S k) = k :: toList k; Vect 3 UInt (toList 3)', '[UInt 2,UInt 1,UInt 0]'],
@@ -199,7 +199,7 @@ for (const [source, expected] of [
 });
 for (const source of [
     'import "sequence"; g [a,b] = a + b; g (reverse [1,2,3])',
-    'f xs = foldl (acc x -> x :: acc) xs [1,2]; g [a,b] = a + b; g (f [1,2])',
+    'f xs = foldl (acc, x -> x :: acc) xs [1,2]; g [a,b] = a + b; g (f [1,2])',
     'f xs = 0 :: xs; g [a,b] = a + b; g (f [1,2])',
     'f xs = xs ++ xs; g [a,b] = a + b; g (f [1,2])',
     'f xs = { xs = [1,2,3]; xs }; g [a,b] = a + b; g (f [1,2])',
@@ -379,7 +379,7 @@ for (const [source, expected] of [
     ['import "option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h None','0'],
     ['import "option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a,b] = a; h (Some 1)','1'],
     ['import "option"; f (Some x) = [x]; f other = [1,2]; h v = g (f v); g [a] = a; h (Some 7)','7'],
-    ['Light = | Off | On; f On = [1]; f x = [0,0]; h l = g (f l); g [a] = a; h On','1'],
+    ['Light = Off | On; f On = [1]; f x = [0,0]; h l = g (f l); g [a] = a; h On','1'],
 ] as const) Deno.test(`more literal kinds select clauses: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -389,7 +389,7 @@ for (const source of [
     'f 1.5 = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h 2.5',
     'f [1..3] = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h 7',
     'import "option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h (Some 1)',
-    'Light = | Off | On; f On = [1]; f x = [0,0]; h l = g (f l); g [a] = a; h Off',
+    'Light = Off | On; f On = [1]; f x = [0,0]; h l = g (f l); g [a] = a; h Off',
 ]) Deno.test(`more literal kinds stay checked: ${source}`, () => rejected(session(), source));
 // A function's result value (a literal or constructor, or one of its
 // arguments) is known at direct calls by name, so clause ranking can use it.
@@ -645,7 +645,7 @@ for (const [source, expected] of [
     ['g (f (r (all (> 0) [1,2])))', '0'],
     ['g (f (r (isSome (find (> 1) [1,2]))))', '0'],
     ['g (f (r (sum [1,2] == 3)))', '0'],
-    ['g (f (r (foldr (x acc -> x + acc) 0 [1,2] == 3)))', '0'],
+    ['g (f (r (foldr (x, acc -> x + acc) 0 [1,2] == 3)))', '0'],
     ['g (f (q (take 1 (repeat 0))))', '0'],
     ['g (f (q (take 1 [0..])))', '0'],
     ['g (f (q (filter (> 3) (take 5 [0..]))))', '0'],

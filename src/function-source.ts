@@ -37,8 +37,8 @@ function source(e: Expr, parent = -1): string {
         }
         // Prefix - and ! bind tighter than * (7) and looser than ^ (8).
         case "unop": level = 7.5; text = `${e.op === "neg" ? "-" : "!"}${source(e.e, 8)}`; break;
-        case "patternLambda": level = -1; text = `${e.params.map(pattern).join(" ")}${e.guard ? " | " + source(e.guard) : ""} -> ${source(e.body)}`; break;
-        case "lambda": level = -1; text = `${e.params.join(" ")} -> ${source(e.body)}`; break;
+        case "patternLambda": level = -1; text = `${e.params.map(pattern).join(", ")}${e.guard ? " | " + source(e.guard) : ""} -> ${source(e.body)}`; break;
+        case "lambda": level = -1; text = `${e.params.join(", ")} -> ${source(e.body)}`; break;
         case "pipe": level = 0; text = `${source(e.f, 1)} $ ${source(e.x, 0)}`; break;
         case "ternary": level = 1; text = `${source(e.cond, 2)} ? ${source(e.then, 6)} : ${source(e.els, 2)}`; break;
         case "list": return `[${e.v.map(x => source(x)).join(",")}]`;
@@ -80,7 +80,7 @@ export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" 
         const params = v.whole ?? v.params, applied = v.applied ?? [];
         const operator = operatorForm(params, v.body, applied);
         if (operator) return operator;
-        const text = `${params.length ? params.join(" ") : "()"} -> ${source(v.body)}`;
+        const text = `${params.length ? params.join(", ") : "()"} -> ${source(v.body)}`;
         return applied.length ? `(${text})${applied.map(a => ` ${argument(a)}`).join("")}` : text;
     }
     if (v.kind === "native") {
@@ -95,10 +95,10 @@ export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" 
     return v.clauses.map(c => args ? `(${clauseSource(c)})${args}` : clauseSource(c)).join("\n");
 }
 // A clause as a pattern lambda. A lone constructor pattern needs no
-// parentheses (Int x -> x); among several parameters it does ((Int x) y -> x).
+// parentheses (Int x -> x); among several parameters it keeps them ((Int x), y -> x).
 function clauseSource(c: { params: Pattern[]; body: Expr; guard?: Expr }): string {
     const lone = c.params.length === 1 && c.params[0].p === "constr" && c.params[0].args.length;
-    const params = lone ? pattern(c.params[0]).slice(1, -1) : c.params.map(pattern).join(" ");
+    const params = lone ? pattern(c.params[0]).slice(1, -1) : c.params.map(pattern).join(", ");
     return `${params}${c.guard ? " | " + source(c.guard) : ""} -> ${source(c.body)}`;
 }
 

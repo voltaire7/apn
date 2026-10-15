@@ -26,7 +26,7 @@ mpText tokens = null tokens ? "<end>" : (head tokens) 1
 mpSkip tokens = dropWhile (token -> token 1 == ";") tokens
 mpRequire wanted tokens = mpText tokens == wanted ? tail tokens : fail ("meta reader: expected " ++ wanted ++ ", got " ++ mpText tokens)
 mpDigit c = withDefault (-1) $ findIndex (==c) (to (List Char) "0123456789")
-mpNumber text = foldl (n c -> mpDigit c < 0 ? fail "meta reader: invalid integer" : n * 10 + mpDigit c) 0 (to (List Char) text)
+mpNumber text = foldl (n, c -> mpDigit c < 0 ? fail "meta reader: invalid integer" : n * 10 + mpDigit c) 0 (to (List Char) text)
 mpNames tokens = takeWhile (token -> head token == "word") tokens
 mpLambda names body = null names ? body : ["lambda",head names,mpLambda (tail names) body]
 mpPrec op = op == "$" ? 1 : op == "?" ? 2 : op == "::" ? 3 : contains op ["==","!=","<",">","<=",">="] ? 4 : op == "++" ? 5 : contains op ["+","-"] ? 6 : contains op ["*","/","%"] ? 7 : op == "^" ? 8 : 0

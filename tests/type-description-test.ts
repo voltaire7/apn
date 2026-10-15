@@ -2,11 +2,11 @@ import { Interpreter } from "../src/interp.ts";
 import { parseDocument } from "../src/parser.ts";
 
 for (const [source, expected] of [
-    ['typeOf (x y -> x)', 'a -> b -> a'],
+    ['typeOf (x, y -> x)', 'a -> b -> a'],
     ['typeOf (x -> x)', 'a -> a'],
-    ['typeOf (x y -> y)', 'a -> b -> b'],
-    ['typeOf (f x -> f x)', '(a -> b) -> a -> b'],
-    ['typeOf (f g x -> f (g x))', '(a -> b) -> (c -> a) -> c -> b'],
+    ['typeOf (x, y -> y)', 'a -> b -> b'],
+    ['typeOf (f, x -> f x)', '(a -> b) -> a -> b'],
+    ['typeOf (f, g, x -> f (g x))', '(a -> b) -> (c -> a) -> c -> b'],
     ['typeOf (x -> (y -> x))', 'a -> b -> a'],
     ['typeOf (x -> (x -> x))', 'a -> b -> b'],
     ['typeOf (x -> [x,x])', 'a -> List a'],

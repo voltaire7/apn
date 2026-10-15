@@ -60,7 +60,7 @@ for (const source of [
     'f (Vect n a xs) (Vect m a ys) = xs; f [1] [true]',
     'f (Vect n a xs) (Vect n a ys) = xs; f [1] [2,3]',
     'f x x = x; f 1 true',
-    '(x x -> x) 1 true',
+    '(x, x -> x) 1 true',
 ]) Deno.test(`Vect and equality patterns have static contradictions: ${source}`, () => {
     if (!checkSource(source, '<test>', { strict: true }).issues.length) throw new Error('expected static error');
 });

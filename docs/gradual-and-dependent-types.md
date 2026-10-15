@@ -379,13 +379,13 @@ same x x = x
 same 3 3                         # 3
 # same 3 4                       # no matching clause
 
-(x x -> x) 3 3                  # 3
+(x, x -> x) 3 3                  # 3
 ```
 
 Within one parameter list, the first occurrence binds and subsequent occurrences
 compare using APN equality. This also applies inside list and record patterns.
 The names shadow outer bindings; separate nested lambdas introduce separate
-scopes. `_` is always an independent wildcard, so `(_ _ -> 1) 2 3` returns 1.
+scopes. `_` is always an independent wildcard, so `(_, _ -> 1) 2 3` returns 1.
 The checker requires compatible types; equal values are still checked at runtime.
 Comparing infinite lists may not terminate. Function equality retains APN's
 existing behavior; repeated patterns do not prove function equivalence.

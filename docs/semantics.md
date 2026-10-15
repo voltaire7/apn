@@ -85,8 +85,13 @@ indented line (`func =` then `    {`, with the `}` aligned under the `{`).
 
 ### Functions and conditionals
 
-`f x y = body` and `f = x y -> body` both define curried functions, so
-`add 2` is a partial application. A function may be written as several
+`f x y = body` and `f = x, y -> body` both define curried functions, so
+`add 2` is a partial application. A lambda's parameters are patterns
+separated by `, ` (as in Idris); juxtaposition is one pattern, as inside a
+definition's parentheses: `t x -> t` takes one argument and binds its type,
+like `f (t x) = t`. This holds everywhere, `match` alternatives included.
+Directly inside `[ ]`, a `,` separates the list's items, so a lambda with
+several parameters there is parenthesized: `[(x, y -> x),f]`. A function may be written as several
 equations, tried in source order:
 
 ```apn
@@ -625,12 +630,12 @@ as sections (`(+)`, `(+ 1)`, and `(1 +)` for `(+)` applied to 1). A function
 with several clauses shows each as a pattern lambda on its own line:
 `f (Int x) = 1; f (Float x) = 2` prints `Int x -> 1` and `Float x -> 2`
 (with several parameters, constructor patterns keep their parentheses:
-`(Int x) y -> 1`).
+`(Int x), y -> 1`).
 
 A partly applied function shows what is left of it: the clauses its arguments
 match, as a call would choose them, without the matched parameters and with
 the names they bound shown as the arguments. With `g (Int x) y = x + y` and
-`g (Float x) y = 0`, `g 1` prints `y -> 1 + y`; `(a b -> a + b) 1` prints
+`g (Float x) y = 0`, `g 1` prints `y -> 1 + y`; `(a, b -> a + b) 1` prints
 `b -> 1 + b`. A clause a call could still reach stays (`h x 0 = x` alongside
 adds the line `0 -> 1`). Printing evaluates an argument only as far as
 matching a pattern needs; one not evaluated yet shows as its source.
@@ -1196,8 +1201,8 @@ Bool and short-circuit: `0 && missing` is false, `1 || missing` is true.
 Truthiness does not change equality or Bool pattern matching: `0 != false`,
 and `(Bool x)` still matches booleans rather than every convertible value.
 
-Type variables preserve relationships: `typeOf (x y -> x)` displays
-`a -> b -> a`, `typeOf (f x -> f x)` displays `(a -> b) -> a -> b`, and
+Type variables preserve relationships: `typeOf (x, y -> x)` displays
+`a -> b -> a`, `typeOf (f, x -> f x)` displays `(a -> b) -> a -> b`, and
 `typeOf (x -> [x,x])` displays `a -> List a`. Names are assigned afresh in
 left-to-right order for each description. Function applications, lexical
 captures, list patterns and generic constructor patterns propagate constraints;

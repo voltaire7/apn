@@ -85,7 +85,7 @@ print n
 
 example("unused variable arguments remain unevaluated", `
 first x y = x
-other = x y -> x
+other = x, y -> x
 print (first 7 missing)
 print (other 8 missing)
 `, ["7", "8"]);

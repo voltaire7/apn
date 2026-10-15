@@ -47,7 +47,7 @@ for (const [view, error] of [
     ['input [] [text "child"]', 'cannot have children'],
     ['42', 'view must return'],
 ]) Deno.test(`HTML rejects invalid nodes: ${view}`, () => {
-    const test = app(`import "html"\nimport "browser"\nmain = sandbox [init: 0, update: (msg model -> model), view: (model -> ${view})]`);
+    const test = app(`import "html"\nimport "browser"\nmain = sandbox [init: 0, update: (msg, model -> model), view: (model -> ${view})]`);
     try { test.render(); }
     catch (e) { if (e instanceof Error && e.message.includes(error)) return; throw e; }
     throw new Error("Expected error");
@@ -59,7 +59,7 @@ Deno.test("bundled modules load without filesystem access", () => {
         "/lib/browser.apn": Deno.readTextFileSync(new URL("../lib/browser.apn", import.meta.url)),
     };
     i.sourceDir = "/app/";
-    i.run(parse('import "html"; import "browser"; main = sandbox [init: 1, update: (msg model -> model), view: (n -> text (to String n))]'));
+    i.run(parse('import "html"; import "browser"; main = sandbox [init: 1, update: (msg, model -> model), view: (n -> text (to String n))]'));
     if (content(new BrowserSandbox(i, i.env.get("main")!).render()) !== '1') throw new Error("bundled app failed");
     try { i.importStandard('text'); }
     catch (error) { if (error instanceof Error && error.message.includes('not bundled')) return; throw error; }

@@ -74,5 +74,5 @@ Deno.test("cast is the APN prelude definition, not a native", () => {
     if (NATIVES.some(([name]) => name === 'cast')) throw new Error('cast is still native');
     if (i.env.get('cast')?.kind !== 'clauseFn') throw new Error('cast is not a pattern function');
     const source = i.renderString(i.run(parseDocument('cast')));
-    if (source !== '(List target) value -> (Type target).(value)\n(Type target) value -> target value') throw new Error(source);
+    if (source !== '(List target), value -> (Type target).(value)\n(Type target), value -> target value') throw new Error(source);
 });

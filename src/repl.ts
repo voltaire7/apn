@@ -229,7 +229,7 @@ export function renderColored(interp: Interpreter, value: Value, emit: (s: strin
     });
 }
 
-const REPL_KEYWORDS = new Set(["import", "load", "use"]);
+const REPL_KEYWORDS = new Set(["import", "load", "use", "match", "return"]);
 const NATIVE_NAMES = new Set(["cast", "do", ...NATIVES.map(([n]) => n)]);
 
 // Syntax-highlight one buffer line (best-effort, purely cosmetic).
@@ -352,7 +352,7 @@ function helpText(): string {
         `  vec.x = 10 / obj.child.x = 10 / vec.[x, y] = [1, 2]  (record update: rebinds a modified`,
         `              copy, scoped like any def — blocks shadow; [] seeds a record)`,
         `  f = { ... }  ({ stays on the = line; body +4 spaces; } aligned)`,
-        `  x -> expr        (lambdas; parameters may be patterns)`,
+        `  x -> expr; x, y -> expr   (lambdas: patterns separated by ', '; t x -> t is one pattern)`,
         `  xs * x -> { expr } * y -> expr   (braces end the first lambda)`,
         `  cond ? a : b   (ternary)`,
         `  match x [ pat -> expr, ... ]   (ordinary function; alternatives are pattern lambdas)`,

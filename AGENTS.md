@@ -78,6 +78,9 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   and never give a pattern a different meaning in one place.
 - Things that act the same share one implementation: never special-case one
   spelling of a definition (curried or with parameters) for no reason.
+- Define as much of the language as possible in APN itself (`lib/prelude.apn`
+  and the standard library): add a native, intrinsic or parser rule only for
+  what APN cannot express, and keep it as small as it can be.
 - Favor curried (point-free) definitions when parameters are only passed
   through or discarded: `return = Some`, not `return x = Some x`.
 - APN style in examples: whole-function `match` uses the same-line form

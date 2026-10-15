@@ -45,7 +45,7 @@ export function highlightTokens(source: string, natives: Set<string>): Highlight
         }
         const word = source.slice(i).match(/^[A-Za-z_][A-Za-z0-9_']*/)?.[0];
         if (word) {
-            take(word.length, ["import", "load", "use", "true", "false"].includes(word) ? "keyword"
+            take(word.length, ["import", "load", "use", "match", "return", "true", "false"].includes(word) ? "keyword"
                 : natives.has(word) ? "function" : /^[A-Z]/.test(word) ? "type" : undefined);
             continue;
         }

@@ -105,3 +105,10 @@ Deno.test("functions echo as the interpreter renders them", () => {
     const value = interp.run(parse("f x y = x + y\nf 1"));
     if (echo(interp, value).replace(/\x1b\[[0-9;]*m/g, "") !== "y -> 1 + y") throw new Error(echo(interp, value));
 });
+
+Deno.test("REPL colors match and return as it colors import, load and use", () => {
+    const color = (word: string) => highlightLine(word).match(/^\x1b\[[0-9;]*m/)?.[0];
+    for (const word of ["match", "return", "load", "use"]) {
+        if (color(word) !== color("import")) throw new Error(`${word}: ${JSON.stringify(highlightLine(word))}`);
+    }
+});

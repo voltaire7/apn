@@ -92,16 +92,17 @@ class Parser {
     // optional comment) or a closing one starting its line is laid out instead.
     checkBracketSpacing(): void {
         const pairs: Record<string, string> = { "{": "}", "(": ")", "[": "]", "}": "{", ")": "(", "]": "[" };
-        // What each open bracket holds: record fields, or list items (and groups).
-        const holds: boolean[] = [];
+        // What each open bracket holds: record fields or list items ([ ]), or
+        // anything else, where a ',' separates lambda parameters.
+        const holds: ("record" | "list" | "params")[] = [];
         for (const [index, t] of this.toks.entries()) {
             if (t.k === "sym" && t.v === "=") this.checkEqualsSpacing(t);
             if (t.k === "sym" && t.v === ",") {
                 this.checkTrailingComma(index);
-                this.checkCommaSpacing(t, holds[holds.length - 1] ?? false);
+                this.checkCommaSpacing(t, holds[holds.length - 1] ?? "params");
             }
             if (t.k === "sym" && t.v === ";") this.checkSemicolon(index);
-            if (t.k === "sym" && "([{".includes(t.v)) holds.push(t.v === "[" && this.opensRecord(index));
+            if (t.k === "sym" && "([{".includes(t.v)) holds.push(t.v !== "[" ? "params" : this.opensRecord(index) ? "record" : "list");
             if (t.k === "sym" && ")]}".includes(t.v)) holds.pop();
             if (t.k !== "sym" || !(t.v in pairs)) continue;
             // Application is juxtaposition with a space: Vector3 [1,2,3],
@@ -187,11 +188,13 @@ class Parser {
     // A ',' follows its item directly. List items take nothing after it
     // ([1,2,3]); record fields take one space ([x: 1, y: 2]). A newline
     // already separates items, so a ',' ending its line is redundant.
-    checkCommaSpacing(t: Token, record: boolean): void {
+    checkCommaSpacing(t: Token, holds: "record" | "list" | "params"): void {
         const after = this.source.slice(t.pos + 1).split("\n", 1)[0];
+        const record = holds !== "list";
         this.seen = t;
         if (/^\s*(#.*)?$/.test(after)) throw new Error("Parser: a newline already separates items; remove the ',' at the end of the line");
         if (!/\s/.test(this.source[t.pos - 1] ?? " ") && (record ? /^ \S/ : /^\S/).test(after)) return;
+        if (holds === "params") throw new Error("Parser: separate lambda parameters with ', ' (write x, y -> x + y)");
         // x:xs (cons written the old way) right after '[' read as a field: the item is a cons.
         const item = this.source.slice(this.source.lastIndexOf("[", t.pos) + 1, t.pos);
         if (record && /^\s*[\w']+:\S/.test(item)) throw new Error(`Parser: cons is '::': write [${item.trim().replace(":", " :: ")},...]`);
@@ -973,10 +976,14 @@ class Parser {
     }
 
     noLambda = 0;
+    // A lambda's parameters are patterns separated by ',' (x, y -> x + y);
+    // juxtaposition is one pattern, as in a definition's parentheses ((t x)
+    // binds a type, Some x a payload). Directly in a list, ',' separates the
+    // list's items instead: write (x, y -> x) there.
     lambdaHeader(): { params: Pattern[]; guard?: Expr } {
-        const params: Pattern[] = [];
-        while (this.startsParam(this.peek())) params.push(this.parseConsPattern());
-        if (!params.length) throw new Error("Parser: expected lambda parameters");
+        if (!this.startsParam(this.peek())) throw new Error("Parser: expected lambda parameters");
+        const params: Pattern[] = [this.lambdaParam()];
+        while (this.isSym(",") && this.enclosing(this.i) !== "[") { this.next(); params.push(this.lambdaParam()); }
         let guard: Expr | undefined;
         if (this.eatSym("|")) {
             this.noLambda++;
@@ -984,6 +991,29 @@ class Parser {
         }
         this.expectSym("->");
         return { params, guard };
+    }
+
+    lambdaParam(): Pattern {
+        const t = this.peek(), next = this.peek(1);
+        if ((t.k === "ident" && /^[a-z]/.test(t.v) || t.k === "sym" && t.v === "_") && this.startsParam(next)) {
+            this.next();
+            return { p: "typeBind", name: t.k === "ident" ? t.v : "_", value: this.parseConsPattern() };
+        }
+        return this.parseConsPattern();
+    }
+    // The innermost bracket open at token index i ("" at statement level).
+    private enclosingCache?: string[];
+    enclosing(i: number): string {
+        if (!this.enclosingCache) {
+            const open: string[] = [];
+            this.enclosingCache = this.toks.map(t => {
+                const here = open[open.length - 1] ?? "";
+                if (t.k === "sym" && "([{".includes(t.v)) open.push(t.v);
+                if (t.k === "sym" && ")]}".includes(t.v)) open.pop();
+                return here;
+            });
+        }
+        return this.enclosingCache[i] ?? "";
     }
 
     freshCounter = 0;
@@ -1432,11 +1462,17 @@ class Parser {
                 while (this.peek().k === "ident") parameters.push((this.next() as { v: string }).v);
                 if (parameters.some(p => !/^[a-z]/.test(p)) || new Set(parameters).size !== parameters.length) throw new Error("Parser: type parameters must be distinct lowercase names");
                 this.expectSym("=");
+                // One line: T = A | B (a single constructor marks itself, T = | A).
+                // More lines: each constructor on its own, after a '|'.
+                const multiLine = ["newline", "indent"].includes(this.peek().k);
                 this.skipNL();
-                this.eatSym("|");
+                const leading = this.isSym("|") ? this.next() : undefined;
+                if (multiLine && !leading) {
+                    this.seen = this.peek();
+                    throw new Error(`Parser: start each constructor's line with '|' (${name} =, then | A and | B on lines of their own)`);
+                }
                 const variants: { tag: string; arity: number; fields: Expr[]; result?: Expr }[] = [];
                 for (;;) {
-                    this.skipNL();
                     const vt = this.next();
                     if (vt.k !== "ident" || !/^[A-Z]/.test(vt.v)) {
                         throw new Error("Parser: expected a capitalized constructor name");
@@ -1456,15 +1492,24 @@ class Parser {
                         if (head.t !== "var" || head.name !== name) throw new Error(`Parser: ${vt.v} must make a ${name}, as in ${vt.v} -> ${name} ...`);
                     }
                     variants.push({ tag: vt.v, arity: fields.length, fields, ...result ? { result } : {} });
-                    if (this.eatSym("|")) continue;
+                    if (this.isSym("|")) {
+                        if (multiLine) { this.seen = this.peek(); throw new Error("Parser: put each constructor of a multi-line declaration on its own line, after a '|'"); }
+                        this.next();
+                        continue;
+                    }
                     let ahead = 0;
                     while (["newline", "indent"].includes(this.peek(ahead).k)) ahead++;
                     const separator = this.peek(ahead);
                     if (separator.k === "sym" && separator.v === "|") {
+                        if (!multiLine) { this.seen = separator; throw new Error(`Parser: a declaration on several lines starts on the line after '=', with each constructor after a '|' (${name} =, then | A and | B on lines of their own)`); }
                         this.i += ahead + 1;
                         continue;
                     }
                     break;
+                }
+                if (!multiLine && leading && variants.length > 1) {
+                    this.seen = leading;
+                    throw new Error(`Parser: a one-line declaration takes no leading '|' (write ${name} = A | B); only a single constructor needs one (${name} = | A)`);
                 }
                 if (new Set(variants.map(v => v.tag)).size !== variants.length) throw new Error("Parser: duplicate value constructor");
                 if (variants.some(v => TYPE_NAMES.includes(v.tag))) throw new Error("Parser: a value constructor cannot replace a built-in type");
@@ -1670,8 +1715,8 @@ export function exprToSource(e: Expr): string {
         case "binop": return `${exprToSource(e.l)} ${e.op} ${exprToSource(e.r)}`;
         case "unop": return `${e.op === "neg" ? "-" : "!"}${exprToSource(e.e)}`;
         case "app": return `${exprToSource(e.f)} ${exprToSource(e.a)}`;
-        case "patternLambda": return `${e.params.map(patternSource).join(" ")}${e.guard ? " | " + exprToSource(e.guard) : ""} -> ${exprToSource(e.body)}`;
-        case "lambda": return `${e.params.join(" ")} -> ${exprToSource(e.body)}`;
+        case "patternLambda": return `${e.params.map(patternSource).join(", ")}${e.guard ? " | " + exprToSource(e.guard) : ""} -> ${exprToSource(e.body)}`;
+        case "lambda": return `${e.params.join(", ")} -> ${exprToSource(e.body)}`;
         case "list": return `[${e.v.map(exprToSource).join(",")}]`;
         case "record": return `[${e.v.map(([k, x]) => `${keySource(k)}: ${exprToSource(x)}`).join(", ")}]`;
     case "floatRange": {
