@@ -1729,6 +1729,9 @@ appendSized ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys)
 print (typeOf (appendSized [1,2] [3]))   # => Vect 3 Int
 # An indexed family: each constructor says the type it makes.
 Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a
+# Its parameters may also be written as a lambda, as f = x -> e is f x = e.
+Pair = a, b -> (MkPair a b | NoPair)
+print (MkPair 1 "x")                     # => MkPair 1 "x"
 pairVec = Cons 1 (Cons 2 Nil)
 print (typeOf pairVec)                   # => Vec 2 Int
 joinVec Nil ys = ys

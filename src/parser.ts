@@ -1418,6 +1418,89 @@ class Parser {
         return this.parseExpr();
     }
 
+    // A declaration's constructors, after its '=' (or inside the ( ) of the
+    // lambda form). One line: T = A | B (a single constructor marks itself,
+    // T = | A). More lines: each constructor on its own, after a '|'.
+    parseConstructors(name: string, header = name): { tag: string; arity: number; fields: Expr[]; result?: Expr }[] {
+        // Line breaks come from the source: inside ( ) there are no layout tokens.
+        const layout = (k: string) => k === "newline" || k === "indent";
+        const breakBefore = (k: number) => k > 0 && /\n/.test(this.source.slice(this.toks[k - 1].pos, this.toks[k].pos));
+        let first = this.i;
+        while (layout(this.toks[first].k)) first++;
+        const multiLine = first > this.i || breakBefore(first);
+        this.skipNL();
+        const leading = this.isSym("|") ? this.next() : undefined;
+        if (multiLine && !leading) {
+            this.seen = this.peek();
+            throw new Error(`Parser: start each constructor's line with '|' (${header} =, then | A and | B on lines of their own)`);
+        }
+        const variants: { tag: string; arity: number; fields: Expr[]; result?: Expr }[] = [];
+        for (;;) {
+            const vt = this.next();
+            if (vt.k !== "ident" || !/^[A-Z]/.test(vt.v)) {
+                throw new Error("Parser: expected a capitalized constructor name");
+            }
+            const fields: Expr[] = [];
+            while (this.peek().k === "ident" || this.isSym("(") || this.isSym("{") || this.isSym("[")) {
+                this.noLambda++;
+                try { fields.push(this.parsePrimary()); } finally { this.noLambda--; }
+            }
+            // -> Type: the type this constructor makes (Nil -> Vec Z a).
+            let result: Expr | undefined;
+            if (this.eatSym("->")) {
+                this.noLambda++;
+                try { result = this.parseApp(); } finally { this.noLambda--; }
+                let head = result;
+                while (head.t === "app") head = head.f;
+                if (head.t !== "var" || head.name !== name) throw new Error(`Parser: ${vt.v} must make a ${name}, as in ${vt.v} -> ${name} ...`);
+            }
+            variants.push({ tag: vt.v, arity: fields.length, fields, ...result ? { result } : {} });
+            if (this.isSym("|") && !breakBefore(this.i)) {
+                if (multiLine) { this.seen = this.peek(); throw new Error("Parser: put each constructor of a multi-line declaration on its own line, after a '|'"); }
+                this.next();
+                continue;
+            }
+            let ahead = 0;
+            while (layout(this.peek(ahead).k)) ahead++;
+            const separator = this.peek(ahead);
+            if (separator.k === "sym" && separator.v === "|") {
+                if (!multiLine) { this.seen = separator; throw new Error(`Parser: a declaration on several lines starts on the line after '=', with each constructor after a '|' (${header} =, then | A and | B on lines of their own)`); }
+                this.i += ahead + 1;
+                continue;
+            }
+            break;
+        }
+        if (!multiLine && leading && variants.length > 1) {
+            this.seen = leading;
+            throw new Error(`Parser: a one-line declaration takes no leading '|' (write ${header} = A | B); only a single constructor needs one (${header} = | A)`);
+        }
+        return variants;
+    }
+
+    // At i, the lambda form of a declaration's parameters: n, a -> ( or
+    // n -> a -> (, with constructors (a '|') directly inside the ( ).
+    lambdaDeclarationAt(i: number): boolean {
+        let j = i;
+        for (;;) {
+            const p = this.toks[j], sep = this.toks[j + 1];
+            if (p?.k !== "ident" || !/^[a-z]/.test(p.v) || sep?.k !== "sym") return false;
+            j += 2;
+            if (sep.v === ",") continue;
+            if (sep.v !== "->") return false;
+            const open = this.toks[j];
+            if (open?.k === "sym" && open.v === "(") break;
+        }
+        let depth = 0;
+        for (let k = j; k < this.toks.length; k++) {
+            const t = this.toks[k];
+            if (t.k !== "sym") continue;
+            if ("([{".includes(t.v)) depth++;
+            else if (")]}".includes(t.v)) { if (--depth === 0) return false; }
+            else if (t.v === "|" && depth === 1) return true;
+        }
+        return false;
+    }
+
     // A top-level pipe marks constructor declarations, including a leading pipe
     // for a single constructor. Without it, fresh capitals are type aliases
     // and existing constructors on the left remain destructuring patterns.
@@ -1431,6 +1514,7 @@ class Parser {
         while (["newline", "indent"].includes(this.peek(j).k)) j++;
         const leading = this.peek(j);
         if (leading.k === "sym" && leading.v === "|") return true;
+        if (j === 2 && this.lambdaDeclarationAt(this.i + j)) return true;
         const ctor = this.peek(j);
         if (ctor.k !== "ident" || !/^[A-Z]/.test(ctor.v)) return false;
         let depth = 0;
@@ -1490,55 +1574,22 @@ class Parser {
                 while (this.peek().k === "ident") parameters.push((this.next() as { v: string }).v);
                 if (parameters.some(p => !/^[a-z]/.test(p)) || new Set(parameters).size !== parameters.length) throw new Error("Parser: type parameters must be distinct lowercase names");
                 this.expectSym("=");
-                // One line: T = A | B (a single constructor marks itself, T = | A).
-                // More lines: each constructor on its own, after a '|'.
-                const multiLine = ["newline", "indent"].includes(this.peek().k);
-                this.skipNL();
-                const leading = this.isSym("|") ? this.next() : undefined;
-                if (multiLine && !leading) {
-                    this.seen = this.peek();
-                    throw new Error(`Parser: start each constructor's line with '|' (${name} =, then | A and | B on lines of their own)`);
-                }
-                const variants: { tag: string; arity: number; fields: Expr[]; result?: Expr }[] = [];
-                for (;;) {
-                    const vt = this.next();
-                    if (vt.k !== "ident" || !/^[A-Z]/.test(vt.v)) {
-                        throw new Error("Parser: expected a capitalized constructor name");
+                // Vec = n, a -> (Nil -> ... | Cons ...) is Vec n a = ..., as
+                // f = x -> e is f x = e: the parameters, then the constructors in ( ).
+                let variants: ReturnType<Parser["parseConstructors"]>;
+                if (!parameters.length && this.lambdaDeclarationAt(this.i)) {
+                    for (;;) {
+                        parameters.push((this.next() as { v: string }).v);
+                        if (this.eatSym(",")) continue;
+                        this.expectSym("->");
+                        if (this.isSym("(")) break;
                     }
-                    const fields: Expr[] = [];
-                    while (this.peek().k === "ident" || this.isSym("(") || this.isSym("{") || this.isSym("[")) {
-                        this.noLambda++;
-                        try { fields.push(this.parsePrimary()); } finally { this.noLambda--; }
-                    }
-                    // -> Type: the type this constructor makes (Nil -> Vec Z a).
-                    let result: Expr | undefined;
-                    if (this.eatSym("->")) {
-                        this.noLambda++;
-                        try { result = this.parseApp(); } finally { this.noLambda--; }
-                        let head = result;
-                        while (head.t === "app") head = head.f;
-                        if (head.t !== "var" || head.name !== name) throw new Error(`Parser: ${vt.v} must make a ${name}, as in ${vt.v} -> ${name} ...`);
-                    }
-                    variants.push({ tag: vt.v, arity: fields.length, fields, ...result ? { result } : {} });
-                    if (this.isSym("|")) {
-                        if (multiLine) { this.seen = this.peek(); throw new Error("Parser: put each constructor of a multi-line declaration on its own line, after a '|'"); }
-                        this.next();
-                        continue;
-                    }
-                    let ahead = 0;
-                    while (["newline", "indent"].includes(this.peek(ahead).k)) ahead++;
-                    const separator = this.peek(ahead);
-                    if (separator.k === "sym" && separator.v === "|") {
-                        if (!multiLine) { this.seen = separator; throw new Error(`Parser: a declaration on several lines starts on the line after '=', with each constructor after a '|' (${name} =, then | A and | B on lines of their own)`); }
-                        this.i += ahead + 1;
-                        continue;
-                    }
-                    break;
-                }
-                if (!multiLine && leading && variants.length > 1) {
-                    this.seen = leading;
-                    throw new Error(`Parser: a one-line declaration takes no leading '|' (write ${name} = A | B); only a single constructor needs one (${name} = | A)`);
-                }
+                    if (new Set(parameters).size !== parameters.length) throw new Error("Parser: type parameters must be distinct lowercase names");
+                    this.expectSym("(");
+                    variants = this.parseConstructors(name, [name, ...parameters].join(" "));
+                    this.skipNL();
+                    this.expectSym(")");
+                } else variants = this.parseConstructors(name, [name, ...parameters].join(" "));
                 if (new Set(variants.map(v => v.tag)).size !== variants.length) throw new Error("Parser: duplicate value constructor");
                 if (variants.some(v => TYPE_NAMES.includes(v.tag))) throw new Error("Parser: a value constructor cannot replace a built-in type");
                 // Register only after the entire declaration has parsed successfully.

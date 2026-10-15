@@ -292,6 +292,11 @@ len ((Vec n _) _) = n             # binds the index: len xs is 2
 first (Cons x _) = x              # first Nil is a static error
 ```
 
+A family's parameters may also be written as a lambda, as `f = x -> e` is
+`f x = e`: `Vec = n, a -> (Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a)`
+(or `n -> a -> (...)`) declares the same `Vec`; the constructors stand in the
+parentheses, on one line or each on its own line after a `|`.
+
 A constructor without `->` makes the family with its arguments open, as for
 any variant. A value's indices are the constructor's result type with the
 names its fields give: `k` from the tail's own indices, `a` from the
