@@ -13,8 +13,18 @@ Indentation is strict: every nested level is exactly four spaces deeper than
 its parent (`+2`, `+8`, and other steps are syntax errors). Blank and
 comment-only lines are ignored for layout. A newline at the same level ends a
 statement, and `;` also separates statements. A definition's body may start on
-the next line indented four spaces; other top-level statements cannot continue
-onto an indented line.
+the next line indented four spaces. A deeper line continues its statement
+when the line before ends with an operator or the deeper line starts with one
+(or with a ternary's `?` or `:`), so a chain can put each step on its own line:
+
+```apn
+perItem total count = okOr "no items" (safeDiv total count)
+    >>= share -> share > 100 ? Err "share too large" : Ok share
+    >>= checked -> Ok (checked * 2)
+```
+
+A line at the statement's own level starts the next statement, and inside
+`[ ]` a line break separates items.
 
 Definition brace layout is mandatory: write `func = {` on one line. In a
 multiline brace block, each statement starts exactly four spaces deeper than

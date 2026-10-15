@@ -1228,6 +1228,14 @@ print (safeDiv 7 2)                   # Some 7/2
 print (safeDiv 7 0)                   # None
 print (okOr "no samples" $ safeDiv 10 0)  # Err "no samples"
 print (safeDiv 1 4 >>= safeDiv 1)     # Some 4: =<< and >>= chain Option steps
+# A deeper line starting with an operator (or a ternary's ? or :) continues
+# its statement, so each step of a chain can take its own line.
+perItem total count = okOr "no items" (safeDiv total count)
+    >>= share -> share > 100
+        ? Err "share too large"
+        : Ok share
+    >>= checked -> Ok (checked * 2)
+print [perItem 300 2,perItem 300 3]   # [Err "share too large",Ok 200]
 
 # The language evaluates source through its APN-written reader and evaluator.
 import "meta"

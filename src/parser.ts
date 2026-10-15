@@ -474,6 +474,23 @@ class Parser {
         return false;
     }
 
+    // The indentation of the line the current statement starts on: a deeper
+    // line continues it, a line at its level starts the next one.
+    statementIndent = 0;
+    // At a line break, step onto the next line when it is deeper than the
+    // statement and starts with what wanted accepts. Items in [ ] are
+    // separated by line breaks instead.
+    continueLine(wanted: (t: Token) => boolean): boolean {
+        const layout = (k: string) => k === "newline" || k === "indent" || k === "dedent";
+        if (!layout(this.peek().k)) return false;
+        let j = this.i;
+        while (this.toks[j] && layout(this.toks[j].k)) j++;
+        const next = this.toks[j];
+        if (!next || !wanted(next) || this.lineIndent(next) <= this.statementIndent || !["", "{"].includes(this.enclosing(j))) return false;
+        this.i = j;
+        return true;
+    }
+
     skipLayout() {
         while (this.peek().k === "newline" || this.peek().k === "indent") this.next();
     }
@@ -492,6 +509,9 @@ class Parser {
         const start = this.peek().pos;
         let left = this.parseOperand();
         for (;;) {
+            // A deeper line starting with an operator (or a ternary's ?)
+            // continues the expression, as a trailing one does.
+            if (this.continueLine(x => x.k === "sym" && (x.v === "?" || isOperatorName(x.v)))) continue;
             const t = this.peek();
             if (t.k !== "sym") break;
             if (t.v === "?") {
@@ -502,6 +522,7 @@ class Parser {
                 this.noCons = 1;
                 const then = this.parseOperators(1);
                 this.noCons = saved;
+                this.continueLine(x => x.k === "sym" && x.v === ":");
                 this.expectSym(":");
                 const els = this.parseOperators(1);
                 left = { t: "ternary", cond: left, then, els };
@@ -790,6 +811,7 @@ class Parser {
                             }
                             this.next(); // the one indent that opens the block body
                         }
+                        const outerIndent = this.statementIndent;
                         for (;;) {
                             if (this.isSym(";")) { this.next(); continue; }
                             while (this.peek().k === "newline") this.next();
@@ -798,9 +820,11 @@ class Parser {
                                 if (multilineBrace && this.lineIndent(this.peek()) !== this.lineIndent(t)) {
                                     throw new Error("Parser: closing } must align with the line containing {");
                                 }
+                                this.statementIndent = outerIndent;
                                 this.next(); return { t: "block", stmts, style: close === ")" ? "(" : "{" };
                             }
                             const tb = this.peek();
+                            this.statementIndent = this.lineIndent(tb);
                             if (tb.k === "eof") throw new Error("Parser: unexpected end of file inside group");
                             if (multilineBrace && this.lineIndent(tb) !== this.lineIndent(t) + 4) {
                                 throw new Error("Parser: block statements must be indented exactly 4 spaces from the opening line");
@@ -1380,7 +1404,10 @@ class Parser {
                     this.i = j + 1;
                     throw new Error(`Parser: a definition's opening { must be on the same line as '${operator}'`);
                 }
-                return this.parseExpr();
+                // A body on the next line is a statement of its own level.
+                const outerIndent = this.statementIndent;
+                this.statementIndent = this.lineIndent(first);
+                try { return this.parseExpr(); } finally { this.statementIndent = outerIndent; }
             }
             throw new Error(`Parser: expected an expression after '${operator}'; use '_' for an unfinished definition`);
         }
@@ -1444,6 +1471,7 @@ class Parser {
             if (this.lineIndent(t) !== 0) {
                 throw new Error("Parser: top-level statements must not be indented");
             }
+            this.statementIndent = 0;
 
             if (this.skipFixityDeclaration()) continue;
             const operator = this.tryOperatorDefinition();
