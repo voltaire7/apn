@@ -64,3 +64,6 @@ for (const [source, message] of [
         if (!actual.includes(message)) throw new Error(actual);
     });
 }
+Deno.test("a type name bound to a pattern lambda is a lambda too", () => {
+    if (run("Maker = _ -> Int\nmake ((Maker) k) = k []\nmake (_ -> 7)") !== "7") throw new Error("Maker");
+});

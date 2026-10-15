@@ -310,7 +310,7 @@ export class Interpreter {
                         const value = this.reference(this.eval(clauses[0].body));
                         // A lambda is a value: applied, it runs (Sized 2 is Vect 2 Int);
                         // where a type is expected, it reads as a function type.
-                        if (!this.isTypeValue(value) && value.kind !== "closure") throw new APNError("runtime", `${name} must alias a type; use | to declare constructors`);
+                        if (!this.isTypeValue(value) && value.kind !== "closure" && value.kind !== "clauseFn") throw new APNError("runtime", `${name} must alias a type; use | to declare constructors`);
                         // An alias of a scalar type names a subtype: Money = Float.
                         // A Money is a Float wherever one is accepted, but keeps its
                         // name, and (Money x) accepts only Money values.
