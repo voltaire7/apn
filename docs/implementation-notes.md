@@ -371,7 +371,10 @@ Behavior: `docs/gradual-and-dependent-types.md`.
 - A `match` alternative's input starts from `patternInput` (the scrutinee's
   length at cons positions, fresh elsewhere), so its patterns still only test.
   `selfOpen` lets a recursive call pass any length to a parameter whose typed
-  pattern binds its length. `tests/typed-pattern-forms-test.ts`.
+  pattern binds its length. A claim around a literal `match`
+  (`alternativeClaims`) is compared inside `functionType`, while the
+  alternative's `lengthFacts` hold; the match keeps a length only when every
+  alternative's equals it. `tests/typed-pattern-forms-test.ts`.
 - `Z`/`S k` patterns take a number apart by the value they meet (runtime
   `matchPattern`, checker `naturalArgument`), so a program's own `Z`/`S`
   variants keep matching as variants. The parser reads a bare `Z` as nullary

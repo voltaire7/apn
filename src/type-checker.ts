@@ -1184,7 +1184,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (t.op === "match") {
             if (b.k !== "list") return problem("match expects a list of alternatives");
-            const outputs: Ty[] = [];
+            const outputs: Ty[] = [], lengths: (Index | undefined)[] = [];
             for (const candidate of b.items ?? [b.element]) {
                 const f = resolve(candidate);
                 if (f.k !== "fn") return problem("match alternatives must be functions");
@@ -1198,9 +1198,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!t.solution && f.output.k !== "operation" && f.output.k !== "var") t.solution = f.output;
                 for (const check of f.checks ?? []) resolve(check);
                 const output = resolve(f.output);
+                lengths.push(output.k === "list" ? output.length : undefined);
                 if (outputs.length) unify(outputs[0], output);
                 else outputs.push(output.k === "list" ? list(output.element) : output);
             }
+            // Alternatives that all have one length (a claim each met) give it.
+            const first = resolve(outputs[0] ?? variable()), length = lengths[0];
+            if (first.k === "list" && length && lengths.every(x => x && indexText(x) === indexText(length))) return list(first.element, length);
             return outputs[0] ?? variable();
         }
         // A requirement on a call that still waits for an unknown argument waits
@@ -1312,6 +1316,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let lengthFacts = new Map<string, Index>();
     // match s alternatives: the type of s, and each literal alternative's input.
     const matchScrutinees = new WeakMap<Expr, Ty>(), alternativeInputs = new WeakMap<Expr, Ty[]>();
+    // The length a claim around a match (Vect (n + m) a (match ...)) asks of
+    // each literal alternative, checked under that alternative's own facts.
+    const alternativeClaims = new WeakMap<Expr, Index>();
     function refinedIndex(value: Index): Index {
         let result = constant(value.constant);
         for (const [name, scale] of value.terms) {
@@ -2782,7 +2789,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "lambda":
                 return functionType(e.params.map((name) => ({ p: "var", name })), e.body, scope);
             case "patternLambda":
-                return functionType(e.params, e.body, scope, undefined, e.guard, alternativeInputs.get(e));
+                return functionType(e.params, e.body, scope, undefined, e.guard, alternativeInputs.get(e), alternativeClaims.get(e));
             case "app":
             case "pipe": {
                 if (e.t === "pipe" && builtinOperator(scope.get("$")?.type) !== "$") {
@@ -2837,6 +2844,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const scrutinee = e.f.t === "app" ? matchScrutinees.get(e.f) : undefined;
                 if (scrutinee && a.t === "list") {
                     for (const alternative of a.v) if (alternative.t === "patternLambda" && alternative.params.length === 1) alternativeInputs.set(alternative, [patternInput(alternative.params[0], scrutinee)]);
+                }
+                // A length claim around a match asks it of each alternative.
+                const claimed = resolved.k === "type" ? resolve(resolved.value) : undefined;
+                if (claimed?.k === "list" && claimed.length) {
+                    let inner: Expr = a;
+                    while (inner.t === "block" && inner.stmts.length === 1) inner = inner.stmts[0];
+                    const alternatives = inner.t === "app" && inner.f.t === "app" && inner.f.f.t === "var" && inner.f.f.name === "match" && inner.a.t === "list" ? inner.a.v : [];
+                    for (const alternative of alternatives) if (alternative.t === "patternLambda") alternativeClaims.set(alternative, claimed.length);
                 }
                 let argumentType = infer(a, scope);
                 if (e.f.t === "var" && e.f.name === "match" && scope.get("match")?.builtin) matchScrutinees.set(e, argumentType);
@@ -5341,11 +5356,32 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             default: return false;
         }
     }
-    function functionType(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr, given?: Ty[]): Ty {
+    // An index written with the names the program bound to its terms (m for
+    // the length a typed pattern bound), as indexText writes the rest.
+    function indexIn(index: Index, scope: Scope): string {
+        const names = new Map<string, string>();
+        for (const [name, entry] of scope) {
+            const i = entry.index;
+            if (/^[a-z]/.test(name) && i && !i.constant && i.terms.size === 1 && [...i.terms.values()][0] === 1n) names.set([...i.terms.keys()][0], name);
+        }
+        return indexText({ constant: index.constant, terms: new Map([...index.terms].map(([term, k]) => [names.get(term) ?? term, k])) });
+    }
+    function functionType(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr, given?: Ty[], claim?: Index): Ty {
         const outerFacts = lengthFacts;
         lengthFacts = new Map(outerFacts);
         deferred++;
-        try { return inferFunction(params, body, parent, recursiveName, guard, given); }
+        try {
+            const t = inferFunction(params, body, parent, recursiveName, guard, given);
+            // A claimed length holds for this alternative when its own facts
+            // ([] makes n zero) make the two equal; then it is its length.
+            const f = resolve(t), out = f.k === "fn" ? resolve(f.output) : undefined;
+            if (claim && f.k === "fn" && out?.k === "list" && out.length) {
+                const delta = indexAdd(refinedIndex(claim), refinedIndex(out.length), -1n);
+                if (!delta.terms.size && delta.constant === 0n) f.output = list(out.element, claim);
+                else if (!delta.terms.size) problem(`length mismatch: expected ${indexIn(refinedIndex(claim), parent)}, got ${indexIn(refinedIndex(out.length), parent)}`, body);
+            }
+            return t;
+        }
         finally { lengthFacts = outerFacts; deferred--; }
     }
     // The input a match alternative's pattern starts from: the scrutinee's
@@ -5356,8 +5392,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const t = resolve(scrutinee);
         if (p.p === "as") return patternInput(p.right, scrutinee);
         if (p.p === "typeBind") return patternInput(p.value, scrutinee);
+        // A name takes anything: it is the scrutinee, length included.
+        if (p.p === "var") return scrutinee;
         if (t.k !== "list") return variable();
         if (p.p === "cons" && t.length) return list(variable(), t.length);
+        // [] tests for empty: within its alternative the length is zero.
+        if (p.p === "list" && !p.v.length && t.length && !t.items) return list(variable(), t.length);
         if (p.p === "list" && t.items?.length === p.v.length) {
             const items = p.v.map((item, n) => patternInput(item, t.items![n]));
             return { k: "list", element: union(items), items, length: constant(BigInt(items.length)) };

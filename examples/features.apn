@@ -1759,6 +1759,15 @@ print (revVec pairVec Nil)               # => Cons 2 (Cons 1 Nil)
 vecSize (Vec n _ _) = n
 print (vecSize pairVec)                  # => 2
 countVect (Vect _ _ xs) = match xs [[] -> 0,(_::rest) -> 1 + countVect rest]
+# A claim around a match is checked in each alternative under its own facts
+# ([] makes n zero); claiming n + m + 1 here would be a static error.
+appendVect (Vect n a xs) (Vect m a ys) = Vect (n + m) a {
+    match xs [
+        [] -> ys
+        x :: rest -> x :: appendVect rest ys
+    ]
+}
+print (typeOf (appendVect [1,2] [3]))   # => Vect 3 Int
 print (countVect [7,8,9])                # => 3
 print (copySized 3 [1,2,3])              # => [1,2,3]
 print (typeOf (SizedInts 3 [1,2,3]))     # => Vect 3 Int

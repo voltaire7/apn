@@ -359,8 +359,20 @@ tail has length `n - 1`, and so does an `x::xs` alternative of a `match` on the
 vector (`match xs [[] -> 0,(x::rest) -> 1 + count rest]`): an alternative meets
 the scrutinee as a clause meets its parameter. A parameter whose typed pattern
 binds its length takes a list of any length, so a recursive call may pass a
-shorter one. A `match` gives no length to its result, so a claim around one
-(`Vect (n + m) a (match ...)`) needs `Dynamic`; write a clause per case. An explicit result constructor supplies a recursive
+shorter one. A claim around a `match` is checked in each alternative under
+that alternative's own facts, as a clause's is: `[]` makes the length zero,
+`x :: rest` gives `rest` one less, and a name takes the scrutinee as it is.
+Every alternative meeting the claim gives the `match` that length; one that
+differs by a constant is a static error:
+
+```apn
+append (Vect n a xs) (Vect m a ys) = Vect (n + m) a {
+    match xs [
+        [] -> ys
+        x :: rest -> x :: append rest ys
+    ]
+}
+``` An explicit result constructor supplies a recursive
 signature before the body is checked; affine arithmetic establishes the sum.
 The example passes strict checking without executing either branch.
 Returning `Vect (n + m + 1) a ys` in the empty branch is a static error.

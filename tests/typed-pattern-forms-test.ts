@@ -48,7 +48,29 @@ Deno.test("x:xs as a list item is cons written the old way, and the error says s
 });
 
 Deno.test("a length the checker cannot find is located and explained", () => {
-    const source = "app (Vect n a xs) (Vect m a ys) = Vect (n + m) a (match [xs,ys] [[[],r] -> r,[(x::rest),r] -> x :: app rest r]); 1";
+    const source = "keep (Vect n a xs) = Vect n a (filter (_ -> true) xs); 1";
     const error = failure(source);
-    if (!error.hint?.includes("write a clause per pattern") || error.pos !== source.indexOf("(match")) throw new Error(`${error.pos}: ${error.message} ${error.hint}`);
+    if (!error.hint?.includes("mark it `Dynamic`") || error.pos !== source.indexOf("(filter")) throw new Error(`${error.pos}: ${error.message} ${error.hint}`);
 });
+
+// A claim around a match is checked in each alternative, under its own facts:
+// [] makes n zero, x :: rest gives rest n - 1.
+const APPEND = "append (Vect n a xs) (Vect m a ys) = Vect (n + m) a {\n    match xs [\n        [] -> ys\n        x :: rest -> x :: append rest ys\n    ]\n}\n";
+for (const [source, expected] of [
+    [APPEND + "typeOf (append [1,2] [3])", "Vect 3 Int"],
+    ["app (Vect n a xs) (Vect m a ys) = Vect (n + m) a (match [xs,ys] [[[],r] -> r,[(x::rest),r] -> x :: app rest r]); typeOf (app [1] [2,3])", "Vect 3 Int"],
+] as const) {
+    Deno.test(`a claim around a match: ${JSON.stringify(source)}`, () => {
+        const actual = run(source);
+        if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+    });
+}
+for (const [source, message] of [
+    [APPEND.replace("Vect (n + m) a", "Vect (n + m + 1) a") + "1", "length mismatch: expected m + 1, got m"],
+    [APPEND.replace("x :: append", "x :: x :: append") + "1", "length mismatch: expected m + n, got m + n + 1"],
+] as const) {
+    Deno.test(`a claim around a match rejects: ${JSON.stringify(source)}`, () => {
+        const error = failure(source);
+        if (!error.message.includes(message)) throw new Error(error.message);
+    });
+}
