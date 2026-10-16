@@ -1,0 +1,41 @@
+# SVG elements and attributes, as in Elm's Svg and Svg.Attributes. An svg
+# element and everything inside it is SVG. Attribute values are strings.
+import "html"
+svg = node "svg"
+circle = node "circle"
+ellipse = node "ellipse"
+rect = node "rect"
+line = node "line"
+polyline = node "polyline"
+polygon = node "polygon"
+path = node "path"
+g = node "g"
+text_ = node "text"
+image = node "image"
+viewBox v = attribute "viewBox" v
+width v = attribute "width" v
+height v = attribute "height" v
+x v = attribute "x" v
+y v = attribute "y" v
+cx v = attribute "cx" v
+cy v = attribute "cy" v
+r v = attribute "r" v
+rx v = attribute "rx" v
+ry v = attribute "ry" v
+x1 v = attribute "x1" v
+y1 v = attribute "y1" v
+x2 v = attribute "x2" v
+y2 v = attribute "y2" v
+points v = attribute "points" v
+d v = attribute "d" v
+fill v = attribute "fill" v
+stroke v = attribute "stroke" v
+strokeWidth v = attribute "stroke-width" v
+strokeLinecap v = attribute "stroke-linecap" v
+strokeDasharray v = attribute "stroke-dasharray" v
+opacity v = attribute "opacity" v
+transform v = attribute "transform" v
+textAnchor v = attribute "text-anchor" v
+dominantBaseline v = attribute "dominant-baseline" v
+fontSize v = attribute "font-size" v
+fontFamily v = attribute "font-family" v

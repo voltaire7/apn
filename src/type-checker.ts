@@ -5,7 +5,7 @@ import { standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric } from "./numbers.ts";
-import { APNError, didYouMean, withArticle } from "./errors.ts";
+import { APNError, didYouMean, formatFileReadError, withArticle } from "./errors.ts";
 import { parse, parseDocument, rangeExpr, PRIMITIVE_OPERATORS } from "./parser.ts";
 import { mkStr, type Value, valueToString } from "./types.ts";
 
@@ -40,7 +40,7 @@ type Ty =
     // possibly symbolic in a parameter), so clause ranking can use it later.
     // written: where a call deferred to its enclosing function's calls was written.
     // within: the top-level definition being checked when it was deferred.
-    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known; written?: Expr; within?: object }
+    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known; written?: Expr; within?: object; decided?: Ty; lossless?: boolean[] }
     | { k: "dynamic"; explicit?: boolean }
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
@@ -802,6 +802,8 @@ const STRICT_NATIVES = new Set([
 const EVALUATION_DEPTH = 5000;
 const EVALUATION_BUDGET = 300000;
 const SYMBOLIC_BUDGET = 200;
+// Inference work (unification steps) per top-level statement.
+const STATEMENT_BUDGET = 250000;
 // Standard-library functions that return a list as long as their final list
 // argument, which the checker cannot derive from their code (they rebuild the
 // list with a fold or a merge sort). tests/stdlib-length-test.ts verifies each
@@ -887,7 +889,7 @@ function copy(
         case "mutable": Object.assign(result, { value: go(t.value) }); break;
         case "map": Object.assign(result, { key: go(t.key), value: go(t.value) }); break;
         case "operation":
-            Object.assign(result, { args: t.args.map(go), solution: t.solution && go(t.solution), known: t.known && substituteKnown(t.known, subst, value) });
+            Object.assign(result, { args: t.args.map(go), solution: t.solution && go(t.solution), decided: t.decided && go(t.decided), known: t.known && substituteKnown(t.known, subst, value) });
             break;
         case "fn":
             Object.assign(result, {
@@ -949,7 +951,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (const child of Object.values(value)) scan(child);
     };
     scan(program);
-    let dynamicBoundaries = 0, runtimeChecks = 0, serial = 0, budget = 50000;
+    let dynamicBoundaries = 0, runtimeChecks = 0, serial = 0, budget = STATEMENT_BUDGET;
     let activeExpression: Expr | undefined, checkingExpression: Expr | undefined;
     // The innermost expression being inferred that has a source location.
     let locatedExpression: Expr | undefined;
@@ -988,11 +990,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.k === "var" && t.link) return resolve(t.link);
         if (t.k === "apply") { const made = appliedType(t); return made === t ? t : resolve(made); }
         if (t.k !== "operation") return t;
+        if (t.decided) return resolve(t.decided);
         if (resolving.has(t)) return t.solution ?? t;
         spend();
         if (resolving.size > 96) return problem("type checking limit exceeded; recursive operator constraints need an explicit type pattern");
         resolving.add(t);
-        try { const result = evaluateOperation(t); return result === t ? t.solution ?? t : result; }
+        try {
+            const result = evaluateOperation(t);
+            if (result === t) return t.solution ?? t;
+            // Decided once: an operation whose operands are known has one value,
+            // which later resolves reuse rather than evaluating it again.
+            if (result.k !== "operation") t.decided = result;
+            return result;
+        }
         finally { resolving.delete(t); }
     }
     // The length of a list derived element-for-element from xs.
@@ -1005,7 +1015,35 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const unique: Ty[] = [];
         for (const choice of choices) {
             const value = resolve(choice);
-            if (!unique.some(old => old === choice || value.k === "atom" && resolve(old).k === "atom" && text(old) === text(value))) unique.push(choice);
+            // The same type twice: an atom, or a closed structure (no type variables) written alike.
+            const closed = value.k === "atom" || value.k === "list" && !variables(value).size;
+            if (unique.some(old => old === choice || closed && resolve(old).k === value.k && !variables(old).size && text(old) === text(value))) continue;
+            // The same constructor where one side does not know an argument
+            // (None's beside Some x's): one type, Option X.
+            const same = value.k === "variant" ? unique.findIndex(old => {
+                const o = resolve(old);
+                return o.k === "variant" && o.name === value.name && o.args.length === value.args.length && o.args.every((x, n) => {
+                    const p = resolve(x), q = resolve(value.args[n]);
+                    return p === q || p.k === "var" || q.k === "var";
+                });
+            }) : -1;
+            if (same >= 0) {
+                const o = resolve(unique[same]) as Extract<Ty, { k: "variant" }>, v = value as Extract<Ty, { k: "variant" }>;
+                unique[same] = { ...o, args: o.args.map((x, n) => resolve(x).k === "var" ? v.args[n] : x) };
+                continue;
+            }
+            // Lists of one known length (c ? [x,y,z] : [0.0,0.0,0.0]): one list
+            // whose items are either side's.
+            const sized = (t: Ty) => t.k === "list" && t.length && !t.length.terms.size ? t.length.constant : undefined;
+            const length = sized(value);
+            const sibling = length === undefined ? -1 : unique.findIndex(old => sized(resolve(old)) === length);
+            if (sibling >= 0) {
+                const o = resolve(unique[sibling]) as Extract<Ty, { k: "list" }>, v = value as Extract<Ty, { k: "list" }>;
+                const items = o.items && v.items && o.items.length === v.items.length ? o.items.map((x, n) => union([x, v.items![n]])) : undefined;
+                unique[sibling] = { k: "list", element: union([o.element, v.element]), length: o.length, ...items ? { items } : {} };
+                continue;
+            }
+            unique.push(choice);
         }
         // An undecided value (return x, empty) beside one monad's value is in
         // that monad: c ? return [] : Err e is a Result.
@@ -1055,8 +1093,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         requirements.push(result);
         return resolve(result);
     }
-    function operation(op: string, args: Ty[]): Ty {
-        const result: Ty = { k: "operation", op, args };
+    function operation(op: string, args: Ty[], lossless?: boolean[]): Ty {
+        const result: Ty = { k: "operation", op, args, ...lossless ? { lossless } : {} };
         requirements.push(result);
         return resolve(result);
     }
@@ -1069,12 +1107,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (op === "bind" && ["list", "variant", "atom", "record", "map"].includes(resolve(b).k)) {
             return problem(`'>>=' needs a function on its right, not ${text(b)}`, undefined, "to run it after the left side, discarding that value, use `>>`");
         }
+        // What the checker cannot decide is checked when it runs.
+        if ((op === "mapM" ? b : a).k === "dynamic") return isExplicit(op === "mapM" ? b : a) ? (runtimeChecks++, explicitDynamic) : unknown();
         if (op === "mapM") {
             if (b.k !== "list") return problem("mapM expects a list");
             return monadicType("sequence", list(application(a, { type: b.element }, at)), b);
         }
         if (op === "sequence") {
-            if (isExplicit(a)) { runtimeChecks++; return explicitDynamic; }
             if (a.k !== "list") return problem("sequence expects a list of actions");
             if (a.items && !a.items.length) return io(list(variable(), constant(0n)));
             const each = variable();
@@ -1157,6 +1196,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.args.some(x => { const v = resolve(x); return v.k === "var" || v.k === "operation"; })) return t;
         if (t.op === "run") return runType(a);
         if (["map", "ap", "bind", "then", "bindFlip", "sequence", "mapM"].includes(t.op)) return monadicType(t.op, a, b);
+        if (["map2", "map3", "map4"].includes(t.op)) return operands.slice(2).reduce((mf: Ty, m) => monadicType("ap", mf, m), monadicType("map", a, b));
         if (t.op === "merge-record") {
             if (isExplicit(a) || isExplicit(b)) return explicitDynamic;
             if (a.k !== "record" || b.k !== "record") return problem("record flattening expects a record");
@@ -1283,6 +1323,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return { k: "list", element: union(items), items, length: constant(BigInt(items.length)) };
             }
             else if (a.k === "list" && t.op === "enumerate") return { k: "list", element: pair(atom("Int"), a.element), ...sameLength(a) };
+            // The pairs of a record not known (Record): its field names and any values.
+            else if (a.k === "atom" && a.name === "Record" && t.op === "pairs") { key = atom("String"); value = variable(); }
             else return problem(`${t.op} requires a collection; got ${text(a)}`);
             return list(t.op === "keys" ? key : t.op === "values" ? value : pair(key, value));
         }
@@ -1363,6 +1405,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (numeric(a) && numeric(b)) {
             if (a.k === "atom" && b.k === "atom" && ["Float32", "Float64"].includes(a.name) && ["Float32", "Float64"].includes(b.name) && a.name !== b.name) return problem("mixed Float32 and Float64 arithmetic requires an explicit cast");
+            if (a.k === "atom" && b.k === "atom") return arithmeticResult(t.op, a, b, t.lossless);
             return t.op === "/" ? atom("Number") : text(a) === text(b) ? a : integerResult(a, b) ?? atom("Number");
         }
         if (t.op === "+" && a.k === "atom" && b.k === "atom" && a.name === "String" && b.name === "String") return a;
@@ -1401,6 +1444,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (isExplicit(actual)) {
             if (expected.k === "var") { expected.link = explicitDynamic; return; }
+            // An undecided place takes it as it is, checked at runtime.
+            if (expected.k === "dynamic") { runtimeChecks++; return; }
             return problem(`Dynamic requires an explicit conversion to ${text(expected)}`, e);
         }
         if (expected.k === "dynamic" || actual.k === "dynamic") {
@@ -1530,10 +1575,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (expected.k === "map" && actual.k === "map") { unify(expected.key, actual.key, e, seen); unify(expected.value, actual.value, e, seen); return; }
         if (expected.k === "record" && actual.k === "record") {
+            // An open record (one known only from the fields code reads, such
+            // as a parameter's) takes the fields it has not seen yet.
             for (const [key, type] of expected.fields) {
-                if (!actual.fields.has(key)) problem(`missing field '${key}'`, e);
+                if (!actual.fields.has(key)) {
+                    if (actual.open) { actual.fields.set(key, type); continue; }
+                    problem(`missing field '${key}'`, e);
+                }
                 unify(type, actual.fields.get(key)!, e, seen);
             }
+            if (expected.open) for (const [key, type] of actual.fields) if (!expected.fields.has(key)) expected.fields.set(key, type);
             return;
         }
         if (expected.k === "type" && actual.k === "type") {
@@ -1586,6 +1637,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // unless it reads a cell, whose contents depend on when it runs.
         if (e.t === "app" || e.t === "binop" || e.t === "ternary" || e.t === "unop") return peek(() => truth(computed(e, scope)), undefined);
         return undefined;
+    }
+    // An Int operand the checker knows, small enough to convert to binary64
+    // losslessly: arithmetic with a Float then gives a Float (dt / 8).
+    function losslessInt(e: Expr, scope: Scope): boolean {
+        const known = index(e, scope);
+        return !!known && !known.terms.size && (known.constant < 0n ? -known.constant : known.constant) <= 2n ** 53n;
+    }
+    // The result of arithmetic on two numeric types: lossless says which
+    // operands are known lossless Ints.
+    function arithmeticResult(op: string, x: Extract<Ty, { k: "atom" }>, y: Extract<Ty, { k: "atom" }>, lossless: boolean[] = []): Ty {
+        const binary64 = (t: Extract<Ty, { k: "atom" }>) => t.name === "Float" || t.name === "Float64";
+        if (binary64(x) && y.name === "Int" && lossless[1]) return x;
+        if (binary64(y) && x.name === "Int" && lossless[0]) return y;
+        return op === "/" ? atom("Number") : x.name === y.name ? x : integerResult(x, y) ?? atom("Number");
     }
     function index(e: Expr, scope: Scope): Index | undefined {
         if (e.t === "int") return constant(e.v);
@@ -2028,7 +2093,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     } else bind(arg, f.input, scope, e, bound);
                     rest = f.output;
                 }
-                unify(rest, expected, e);
+                // Matching a Dynamic value against a constructor checks it at runtime.
+                if (isExplicit(resolve(expected))) runtimeChecks++;
+                else unify(rest, expected, e);
                 return;
             }
         }
@@ -2221,7 +2288,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (t.k === "record" && a.k === "record") {
             for (const [key, type] of t.fields) {
-                if (!a.fields.has(key)) problem(`missing field '${key}'`, e);
+                if (!a.fields.has(key)) {
+                    // An open record takes the fields it has not seen yet, as in unify.
+                    if (a.open) { a.fields.set(key, type); continue; }
+                    problem(`missing field '${key}'`, e);
+                }
                 if (t.preserve?.has(key)) {
                     unify(type, a.fields.get(key)!, e);
                     continue;
@@ -2971,6 +3042,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         argumentType = withoutLengths(copy(argumentType, new Map([...variables(argumentType)].map(v => [v, v]))));
                     }
                 }
+                // Nor does a call to a function known only from its uses: a
+                // parameter (g [1] and g [1,2,3]) or one read from a parameter's
+                // record (p.call).
+                else if (head.t === "var" && self?.mono && !self.selfInputs || head.t === "recordAccess" && (() => {
+                    const holder = resolve(inferred.get(head.rec) ?? dynamic);
+                    return holder.k === "record" && !!holder.open;
+                })()) argumentType = withoutLengths(copy(argumentType, new Map([...variables(argumentType)].map(v => [v, v]))));
                 const result = application(callee, { type: argumentType, ...valueEntry(a, scope) }, a);
                 if (!callees.has(e)) noClauseMatches(e, scope);
                 // A partial application that leaves its call chain is an ordinary function value.
@@ -2981,26 +3059,34 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const value = infer(e.value, scope);
                 let v = resolve(value);
                 if (isExplicit(rec)) { runtimeChecks++; return explicitDynamic; }
-                const parents: Array<[Map<string, Ty>, string]> = [];
+                const parents: Array<[Map<string, Ty>, string, boolean | undefined]> = [];
+                // A parameter's record is known only from the fields code uses.
+                const opened = (t: Ty, key?: string): Ty => {
+                    unify(t, { k: "record", fields: new Map(key === undefined ? [] : [[key, variable()]]), open: true }, e);
+                    return resolve(t);
+                };
                 for (const key of e.path ?? []) {
                     if (rec.k === "dynamic") return unknown();
+                    if (rec.k === "var") rec = opened(rec, key);
                     if (rec.k !== "record") return problem("nested field assignment requires a record", e);
+                    if (!rec.fields.has(key) && rec.open) rec.fields.set(key, variable());
                     const child = rec.fields.get(key);
                     if (!child) return problem(`missing field '${key}'`, e);
-                    parents.push([rec.fields, key]);
+                    parents.push([rec.fields, key, rec.open]);
                     rec = resolve(child);
                 }
                 if (rec.k === "dynamic") return unknown();
                 if (rec.k === "list" && rec.items?.length === 0) rec = { k: "record", fields: new Map() };
+                if (rec.k === "var") rec = opened(rec);
                 if (rec.k !== "record") return problem("field assignment requires a record", e);
                 const fields = new Map(rec.fields);
                 if (e.entries.length === 1 && e.entries[0] === "_") {
                     const spread = resolve(v.k === "list" ? v.items?.[0] ?? v.element : value);
                     if (spread.k !== "record") return problem("record flattening expects a record", e);
-                    let merged: Ty = { k: "record", fields: new Map([...fields, ...spread.fields]) };
+                    let merged: Ty = { k: "record", fields: new Map([...fields, ...spread.fields]), open: rec.open };
                     for (let n = parents.length - 1; n >= 0; n--) {
-                        const [parent, key] = parents[n];
-                        merged = { k: "record", fields: new Map([...parent, [key, merged]]) };
+                        const [parent, key, open] = parents[n];
+                        merged = { k: "record", fields: new Map([...parent, [key, merged]]), open };
                     }
                     return merged;
                 }
@@ -3028,10 +3114,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                             : incoming,
                     );
                 });
-                let result: Ty = { k: "record", fields };
+                // A copy of an open record stays open: the fields it has not seen yet are kept.
+                let result: Ty = { k: "record", fields, open: rec.open };
                 for (let i = parents.length - 1; i >= 0; i--) {
-                    const [parent, key] = parents[i];
-                    result = { k: "record", fields: new Map([...parent, [key, result]]) };
+                    const [parent, key, open] = parents[i];
+                    result = { k: "record", fields: new Map([...parent, [key, result]]), open };
                 }
                 return result;
             }
@@ -3274,7 +3361,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                             if (x.name !== "Float" && y.name !== "Float" && x.name !== y.name) return problem("mixed Float32 and Float64 arithmetic requires an explicit cast", e);
                             return x.name === "Float" ? y : x;
                         }
-                        return op === "/" ? atom("Number") : x.name === y.name ? x : integerResult(x, y) ?? atom("Number");
+                        return arithmeticResult(op, x, y, [losslessInt(e.l, scope), losslessInt(e.r, scope)]);
                     }
                     if (op === "+" && x.name === "String" && y.name === "String") return atom("String");
                     return problem(`operator '${op}' cannot combine ${text(x)} and ${text(y)}`, e);
@@ -3285,11 +3372,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (op === "-") {
                     // Possibly function minus, decided later (h x = g -x): keep
                     // the negated value, known once the enclosing call is.
-                    const result: Ty = { k: "operation", op: "-", args: [a, b], known: valueEntry({ t: "unop", op: "neg", e: e.r }, scope) };
+                    const result: Ty = { k: "operation", op: "-", args: [a, b], known: valueEntry({ t: "unop", op: "neg", e: e.r }, scope), lossless: [losslessInt(e.l, scope), losslessInt(e.r, scope)] };
                     requirements.push(result);
                     return resolve(result);
                 }
-                return operation(op, [a, b]);
+                return operation(op, [a, b], [losslessInt(e.l, scope), losslessInt(e.r, scope)]);
             }
             case "unop": {
                 const operand = infer(e.e, scope);
@@ -5968,7 +6055,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     ) scope.set(name, { type });
     // fail, like the other standard natives, reaches programs through import "function".
     if (options.library) scope.set("fail", { type: fn(atom("String"), variable()) });
-    const standardOnly = new Set(["seq", "chars", "fromChars", "upper", "lower", "readFile", "readStdin", "fetch", "toJson", "prettyJson", "fromJson"]);
+    const standardOnly = new Set(["seq", "chars", "fromChars", "upper", "lower", "readFile", "readStdin", "fetch", "toJson", "prettyJson", "fromJson", "entropy", "currentTime", "zoneOffset"]);
     const native = (name: string, inputs: Ty[], output: Ty) => {
         if (name in RETIRED_NATIVES) return;
         if (!standardOnly.has(name) || options.library) scope.set(name, { type: inputs.reduceRight((result, input) => fn(input, result), output) });
@@ -6005,6 +6092,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     for (const name of ["upper", "lower"]) native(name, [str], str);
     native("readFile", [str], io(str));
     native("readStdin", [empty], io(str));
+    for (const name of ["entropy", "currentTime", "zoneOffset"]) native(name, [empty], io(int));
     // HTTP and JSON (the http and json modules): a response is a record; decoded JSON is Dynamic.
     native("fetch", [str, variable()], io({ k: "record", fields: new Map<string, Ty>([
         ["status", int], ["ok", bool], ["statusText", str], ["url", str], ["headers", { k: "map", key: str, value: str }], ["body", str],
@@ -6039,6 +6127,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("empty", { type: pendingTy(variable()) });
     for (const name of ["throw", "primThrow"]) { const t = variable(); scope.set(name, { type: fn(t, pendingTy(variable())) }); }
     scope.set("primSource", { type: fn(variable(), atom("String")) });
+    // map2 f a b ... map4: map then <*>, in any monad (the prelude's).
+    for (const [name, arity] of [["map2", 3], ["map3", 4], ["map4", 5]] as const) scope.set(name, { type: { k: "intrinsic", name, arity } });
     // when and unless: action >> return [], in the action's monad.
     for (const name of ["when", "unless"]) scope.set(name, { type: { k: "intrinsic", name: "when", arity: 2 } });
     // guard condition: return [] or empty, in the monad the context decides.
@@ -6076,6 +6166,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (const child of children(value)) validate(child, seen);
     }
     for (const statement of program) {
+        // Each top-level statement gets the same bounded work, so a long module
+        // is not limited by its length.
+        budget = STATEMENT_BUDGET;
         // (::) = Cons names a constructor: from here on, x :: xs is Cons x xs.
         if (statement.t === "def" && !/^[A-Za-z_]/.test(statement.name) && statement.clauses.length === 1 && !statement.clauses[0].params.length) {
             const body = statement.clauses[0].body;
@@ -6274,16 +6367,19 @@ export async function runTypeCheck(files: string[]): Promise<number> {
         return 2;
     }
     let failed = false;
+    const { Interpreter } = await import("./interp.ts");
+    const { formatError } = await import("./repl.ts");
     for (const file of files) {
+        let source: string;
+        try { source = await Deno.readTextFile(file); }
+        catch (error) { failed = true; console.error(formatFileReadError(file, error)); continue; }
         try {
-            const source = await Deno.readTextFile(file);
-            const { CheckingSession } = await import("./checking-session.ts");
             const slash = file.lastIndexOf("/");
-            new CheckingSession().prepare(parse(source, file), slash < 0 ? "." : file.slice(0, slash));
+            new Interpreter().checkingSession().prepare(parse(source, file), slash < 0 ? "." : file.slice(0, slash));
             console.log(`${file}: checked`);
         } catch (error) {
             failed = true;
-            console.error(String(error));
+            console.error(formatError(error, Deno.stderr.isTerminal()));
         }
     }
     return failed ? 1 : 0;

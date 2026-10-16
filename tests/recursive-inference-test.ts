@@ -81,8 +81,7 @@ Deno.test("checking depth exhaustion is an error, not Dynamic success", () => {
 });
 
 Deno.test("checking work exhaustion is an error, not Dynamic success", () => {
-    const result = checkTypes(Array.from({ length: 50001 }, () => ({
-        t: "expr" as const, value: { t: "int" as const, v: 1n },
-    })));
+    // The work limit is per top-level statement: one statement does too much.
+    const result = checkTypes([{ t: "expr", value: { t: "list", v: Array.from({ length: 250001 }, () => ({ t: "int" as const, v: 1n })) } }]);
     if (!result.issues.some(x => x.message.includes("limit exceeded"))) throw new Error(JSON.stringify(result));
 });

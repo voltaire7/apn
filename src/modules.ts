@@ -197,6 +197,11 @@ export function bundleProgram(source: string, directory: string): Record<string,
     return bundle;
 }
 
+// Standard modules imported qualified, as their Elm counterparts are
+// (random = import "random"; random.int): their names may repeat other
+// modules' (decode.int, svg.circle), so they offer no "add import" names.
+export const QUALIFIED_MODULES = new Set(["random", "decode", "svg"]);
+
 // The standard library's exports by name, with the modules defining each:
 // top-level names not starting with _, and each module's natives, for
 // completion and "add import" hints. The prelude needs no import. Without
@@ -213,7 +218,7 @@ export function standardExports(): Map<string, string[]> {
     try { files = [...Deno.readDirSync(STD_DIRECTORY)].filter(e => e.isFile && e.name.endsWith(".apn")).map(e => e.name).sort(); } catch { /* natives only */ }
     for (const file of files) {
         const module = file.slice(0, -".apn".length);
-        if (["prelude", "type", "do"].includes(module)) continue;
+        if (["prelude", "type", "do"].includes(module) || QUALIFIED_MODULES.has(module)) continue;
         try {
             for (const item of parseDocument(Deno.readTextFileSync(new URL(file, STD_DIRECTORY)))) {
                 if (item.t === "def") add(item.name, module);

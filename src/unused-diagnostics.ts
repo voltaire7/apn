@@ -186,8 +186,10 @@ function free(e: unknown, shadowed: Set<string>, used: Set<string>): void {
         case "lambda": within(n.params as string[], [n.body]); return;
         case "patternLambda": within((n.params as Pattern[]).flatMap(x => bound(x)), [n.body, n.guard, n.params]); return;
         case "block": {
-            // Definitions in a block are visible to all of its statements.
-            const names = (n.stmts as Expr[]).flatMap(s => s.t === "stmDef" ? [s.name] : s.t === "patDef" ? bound(s.pattern) : []);
+            // Definitions in a block are visible to all of its statements. An
+            // update (model.time = t) binds nothing new: it reads the record
+            // and rebinds it, and its pattern names fields.
+            const names = (n.stmts as Expr[]).flatMap(s => s.t === "stmDef" ? [s.name] : s.t === "patDef" && !s.update ? bound(s.pattern) : []);
             within(names, [n.stmts]);
             return;
         }

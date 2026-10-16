@@ -138,7 +138,7 @@ Read the relevant doc and its tests before changing an area:
 | Error rendering | `docs/errors.md` | `tests/cli-options-test.ts` |
 | Editor tooling (lint, LSP) | `docs/editor-tooling.md` | `tests/lsp-test.ts` |
 | Metacircular evaluator | `docs/metacircular-evaluator.md` | `tests/metacircular-test.ts`; also run `deno run --allow-read examples/metacircular-self.ts` |
-| Browser HTML / p5.js | `docs/browser-html.md`, `docs/p5.md` | `tests/html-test.ts`, `tests/p5-test.ts`; also `deno check src/browser-runtime.ts` |
+| Browser HTML / p5.js | `docs/browser-html.md`, `docs/p5.md` | `tests/html-test.ts`, `tests/p5-test.ts`, `tests/elm-examples-test.ts`; also `deno check src/browser-runtime.ts` |
 | C interop (FFI) | `docs/c-interop.md` | `tests/c-interop-test.ts`; also run `./tests/run-c-interop-tests` |
 
 Per-feature invariants (record keys, eager `<-` binding, tail calls, `use`/

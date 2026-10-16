@@ -41,7 +41,7 @@ if (import.meta.main) {
     } else if (!literalFile && _args[0] === "--lsp") {
         const { runLanguageServer } = await import("./src/lsp.ts");
         try { Deno.exit(await runLanguageServer()); }
-        catch (error) { console.error(String(error)); Deno.exit(1); }
+        catch (error) { console.error(formatError(error, Deno.stderr.isTerminal())); Deno.exit(1); }
     } else if (!literalFile && _args[0] === "--html") {
         const source = _args[1];
         const output = _args[2] ?? "app.html";
@@ -50,7 +50,15 @@ if (import.meta.main) {
             const { buildHtml } = await import("./src/build-html.ts");
             await buildHtml(source, output);
             console.log(`Built ${output}`);
-        } catch (error) { console.error(String(error)); Deno.exit(1); }
+        } catch (error) { console.error(formatError(error, Deno.stderr.isTerminal())); Deno.exit(1); }
+    } else if (!literalFile && _args[0] === "--site") {
+        const [, folder, output] = _args;
+        if (!folder || !output || _args.length > 3) { console.error("usage: apn --site FOLDER OUTPUT"); Deno.exit(1); }
+        try {
+            const { buildSite } = await import("./src/build-html.ts");
+            await buildSite(folder, output);
+            console.log(`Built ${output.replace(/\/?$/, "/")}index.html and editor.html`);
+        } catch (error) { console.error(formatError(error, Deno.stderr.isTerminal())); Deno.exit(1); }
     } else if (_args.length >= 1 && (literalFile || !_args[0]?.startsWith(":"))) {
         const file = _args[0];
         let src: string;

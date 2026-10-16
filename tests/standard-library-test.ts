@@ -1,6 +1,7 @@
 import { Interpreter } from "../src/interp.ts";
 import { parse } from "../main.ts";
 import { METHODS } from "../src/ast.ts";
+import { QUALIFIED_MODULES } from "../src/modules.ts";
 
 const cases: [string, string][] = [
     ["takeWhile (x -> 1) [1]", "[1]"],
@@ -172,6 +173,10 @@ Deno.test('failed selective imports leave the caller scope intact', () => {
     try { i.run(parse('[missingExport] = import "function"')); } catch { failed = true; }
     if (!failed || [...i.env.map.keys()].join(',') !== before) throw new Error('failed import leaked names');
 });
+// Modules imported qualified may repeat names (see QUALIFIED_MODULES), and
+// playground keeps Elm's Playground names: its words draws text, so a program
+// using both imports text qualified.
+const QUALIFIED = new Set([...QUALIFIED_MODULES, "playground"]);
 Deno.test("no two standard modules define the same name", () => {
     // A checked program cannot import two modules that bind one name to
     // different functions (a rebinding must keep its type).
@@ -187,6 +192,7 @@ Deno.test("no two standard modules define the same name", () => {
                 : statement.t === "patDef" && statement.pattern.p === "var" ? [statement.pattern.name] : [];
             for (const name of names) {
                 const owner = owners.get(name);
+                if (QUALIFIED.has(module)) continue;
                 if (owner && owner !== module) throw new Error(`'${name}' is defined by both ${owner} and ${module}`);
                 owners.set(name, module);
             }

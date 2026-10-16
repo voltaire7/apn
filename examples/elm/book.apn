@@ -1,0 +1,25 @@
+# Book, from https://elm-lang.org/examples/book
+# Make a GET request to load a book called "Public Opinion".
+import ["html","option"]
+browser = import "browser"
+http = import "http"
+
+Model = Failure | Loading | Success String
+Msg = | GotText Dynamic
+
+init = [Loading,http.get [url: "https://elm-lang.org/assets/public-opinion.txt", expect: http.expectString GotText]]
+
+update (GotText result) _ = match result [
+    (Ok fullText) -> [Success fullText,browser.none]
+    (Err _) -> [Failure,browser.none]
+]
+
+subscriptions _ = browser.none
+
+view model = match model [
+    Failure -> text "I was unable to load your book."
+    Loading -> text "Loading..."
+    (Success fullText) -> pre [] [text fullText]
+]
+
+main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]

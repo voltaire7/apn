@@ -1,0 +1,8 @@
+# Commands that run an action and send its result, as Elm's Task.perform and
+# Task.attempt. A task is an ordinary action: time.now, time.here, file.toUrl,
+# sequence of several, and so on.
+import "option"
+TaskEffect = TaskPerform Dynamic Dynamic | TaskAttempt Dynamic Dynamic Dynamic
+perform toMessage action = TaskPerform action toMessage
+# attempt sends Ok of the result, or Err of the error's message when it fails.
+attempt toMessage action = TaskAttempt action (result -> toMessage (Ok result)) (error -> toMessage (Err error))

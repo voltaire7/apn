@@ -1,0 +1,34 @@
+# Examples, from https://elm-lang.org/examples
+# The page listing these examples. apn --site examples/elm OUTPUT builds it,
+# with an editor for each example.
+import ["html","text"]
+
+main = div [style "max-width" "600px",style "margin" "0 auto",style "padding" "0 16px",style "font-family" "system-ui, sans-serif"] [
+    h1 [] [text "Examples"]
+    p [] [
+        text "Elm's "
+        a [href "https://elm-lang.org/examples"] [text "examples"]
+        text ", recreated in APN. Each opens in an editor, where you can change it and run it again."
+    ]
+    div [style "display" "flex",style "flex-wrap" "wrap"] [
+        viewExamples "HTML" [example "Hello",example "Groceries",example "Shapes"]
+        viewExamples "User Input" [example "Buttons",example "Text Fields",example "Forms"]
+        viewExamples "Random" [example "Numbers",example "Cards",example "Positions"]
+        viewExamples "HTTP" [example "Book",example "Quotes"]
+        viewExamples "Time" [exampleIn "Time" "local-time",example "Clock"]
+        viewExamples "Files" [example "Upload",example "Drag-and-Drop",example "Image Previews"]
+        viewExamples "WebGL" [example "Triangle",example "Cube",example "Crate",example "Thwomp",example "First Person"]
+        viewExamples "Playground" [example "Picture",example "Animation",example "Mouse",example "Keyboard",example "Turtle",example "Mario"]
+    ]
+]
+
+viewExamples sectionTitle examples = div [style "width" "200px"] [
+    h2 [style "margin-bottom" "0"] [text sectionTitle]
+    ul [style "list-style-type" "none",style "padding-left" "16px",style "margin-top" "8px"] examples
+]
+
+# An example's file is its title in lower case, with - for spaces (Elm's
+# URL), except where a file needs another name: local-time.apn would hide
+# the time module from its neighbors if it were time.apn.
+example title = exampleIn title (replaceAll " " "-" (lower title))
+exampleIn title file = li [] [a [href ("editor.html#" ++ file)] [text title]]

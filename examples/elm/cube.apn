@@ -1,0 +1,61 @@
+# Cube, from https://elm-lang.org/examples/cube
+# Render a spinning cube. Elm draws it with WebGL shaders; here a p5 WEBGL
+# canvas in the view draws its triangles, rotated by the model's angle.
+import ["html","sequence"]
+browser = import "browser"
+p5 = import "p5"
+
+Msg = | TimeDelta Number
+
+init = [0,browser.none]
+
+update (TimeDelta dt) angle = [angle + dt / 5000,browser.none]
+
+subscriptions _ = browser.onAnimationFrameDelta TimeDelta
+
+cubeMesh = {
+    rft = [1,1,1]
+    lft = [-1,1,1]
+    lbt = [-1,-1,1]
+    rbt = [1,-1,1]
+    rbb = [1,-1,-1]
+    rfb = [1,1,-1]
+    lfb = [-1,1,-1]
+    lbb = [-1,-1,-1]
+    concat [
+        face [115,210,22] rft rfb rbb rbt
+        face [52,101,164] rft rfb lfb lft
+        face [237,212,0] rft lft lbt rbt
+        face [204,0,0] rfb lfb lbb rbb
+        face [117,80,123] lft lfb lbb lbt
+        face [245,121,0] rbt rbb lbb lbt
+    ]
+}
+
+view angle = p5.canvas [setup: setup, draw: draw angle]
+
+setup p = p.call "createCanvas" [400,400,p.WEBGL]
+
+# perspective 45° from 5 away; y is up. The shader dims each color to 80%.
+draw angle p = {
+    p.background "white"
+    p.perspective (p.PI / 4) 1 0.01 100
+    p.camera 0 0 5 0 0 0 0 (-1) 0
+    p.rotateY (3 * angle)
+    p.rotateX (2 * angle)
+    p.noStroke []
+    p.call "beginShape" [p.TRIANGLES]
+    mapM (triangle p) cubeMesh
+    p.endShape []
+}
+
+triangle p [color,a,b,c] = {
+    p.fill (map (channel -> 0.8 * channel) color)
+    p.call "vertex" a
+    p.call "vertex" b
+    p.call "vertex" c
+}
+
+face color a b c d = [[color,a,b,c],[color,c,d,a]]
+
+main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]

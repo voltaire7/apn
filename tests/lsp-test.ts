@@ -23,6 +23,8 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     equal(unused("f x _ = x\ng _y = 1\nh x = { scope <- env; return [] }"), []);
     equal(unused("return x = MkCounter (s -> [1,s])").map(d => d[2]), ["'x' is never used; write _ to discard it"]);
     equal(unused("xs = [0,0]\ni = 0\nxs i = 1\nSome v = Some 1"), []);
+    // A field update reads the record and binds no new names.
+    equal(unused("f model t = {\n    model.time = t\n    model.[width,height] = [t,t]\n    model\n}"), []);
     equal(unused("copy n ((Vect n Int) xs) = xs\nk = x, y -> x"), [[1, 7, "'y' is never used; write _ to discard it"]]);
     // A lambda where a type is expected is a function type, not code.
     equal(unused("f ((a -> b) g) = g\nt = ((a -> b) -> List a -> List b) == typeOf map\nu = isType (a -> b) 5\nv = (a -> b).(x -> x)\nC a = | MkC (a -> b)"), []);

@@ -1,0 +1,47 @@
+# Quotes, from https://elm-lang.org/examples/quotes
+# Press a button to send a GET request for random quotes.
+import ["html","option"]
+browser = import "browser"
+http = import "http"
+decode = import "decode"
+
+Model = Failure | Loading | Success Dynamic
+Msg = MorePlease | GotQuote Dynamic
+
+quoteDecoder = map4 (quote, source, author, year -> [quote: quote, source: source, author: author, year: year]) (decode.field "quote" decode.string) (decode.field "source" decode.string) (decode.field "author" decode.string) (decode.field "year" decode.int)
+
+getRandomQuote = http.get [url: "https://elm-lang.org/api/random-quotes", expect: http.expectJson GotQuote quoteDecoder]
+
+init = [Loading,getRandomQuote]
+
+update msg _ = match msg [
+    MorePlease -> [Loading,getRandomQuote]
+    (GotQuote (Ok quote)) -> [Success quote,browser.none]
+    (GotQuote (Err _)) -> [Failure,browser.none]
+]
+
+subscriptions _ = browser.none
+
+view model = div [] [
+    h2 [] [text "Random Quotes"]
+    viewQuote model
+]
+
+viewQuote model = match model [
+    Failure -> div [] [
+        text "I could not load a random quote for some reason. "
+        button [onClick MorePlease] [text "Try Again!"]
+    ]
+    Loading -> text "Loading..."
+    (Success quote) -> div [] [
+        button [onClick MorePlease,style "display" "block"] [text "More Please!"]
+        blockquote [] [text quote.quote]
+        p [style "text-align" "right"] [
+            text "— "
+            cite [] [text quote.source]
+            text (" by " ++ quote.author ++ " (" ++ to String quote.year ++ ")")
+        ]
+    ]
+]
+
+main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]

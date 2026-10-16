@@ -7,6 +7,8 @@ export const NATIVE_EXPORTS: Record<string, string[]> = {
     text: ["upper", "lower"],
     http: ["fetch"],
     json: ["prettyJson"],
+    random: ["entropy"],
+    time: ["currentTime", "zoneOffset"],
 };
 // Natives that to and from spell now (to String x for toString x): internal,
 // not bound for programs; each with what to write instead.

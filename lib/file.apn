@@ -1,0 +1,8 @@
+# Files the user picks or drops, as in Elm's File and File.Select. A file is a
+# record of name, size (bytes), mime and url (an object URL for its contents).
+FileEffect = | FileSelect Dynamic Dynamic Dynamic
+# Commands opening the browser's file picker for these MIME types.
+selectFile mimes toMessage = FileSelect mimes false (files -> toMessage (head files))
+selectFiles mimes toMessage = FileSelect mimes true (files -> toMessage (head files) (tail files))
+# The file's contents as a URL, an action (a task, as Elm's File.toUrl).
+toUrl file = return file.url

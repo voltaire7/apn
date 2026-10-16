@@ -4,6 +4,10 @@ sq x = x * x
 cube x = x * x * x
 clamp lo hi x = lo > hi ? fail "clamp requires lo <= hi" : max lo (min hi x)
 sign x = x < 0 ? -1 : x > 0 ? 1 : 0
+# Angles in radians, as in Elm's Basics: degrees 180 and turns 0.5 are pi.
+pi = 4 * atan 1
+degrees d = d * pi / 180
+turns t = 2 * pi * t
 # Division that cannot fail: None for a zero divisor (a Float zero too,
 # rather than infinity), else Some quotient.
 safeDiv _ 0 = None

@@ -1,0 +1,19 @@
+# Buttons, from https://elm-lang.org/examples/buttons
+# Press buttons to increment and decrement a counter.
+import "html"
+browser = import "browser"
+
+Msg = Increment | Decrement
+
+update msg model = match msg [
+    Increment -> model + 1
+    Decrement -> model - 1
+]
+
+view model = div [] [
+    button [onClick Decrement] [text "-"]
+    div [] [text (to String model)]
+    button [onClick Increment] [text "+"]
+]
+
+main = browser.sandbox [init: 0, update: update, view: view]

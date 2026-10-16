@@ -642,13 +642,21 @@ evaluator source twice in APN). Document subset limits in
 
 ## Browser HTML and p5.js
 
-`src/html.ts` decodes views and dispatches APN messages;
-`src/browser-runtime.ts` patches the DOM; `src/build-html.ts` bundles the
-interpreter and source (`apn --html SOURCE.apn [OUTPUT.html]`). Run
-`deno check src/browser-runtime.ts` as well as `main.ts`. `src/p5.ts` adapts
-callbacks to a p5 instance; the runtime loads pinned p5.js only for a
-`P5Sketch`. Keep host methods scoped per interpreter and sketch; never expose
-arbitrary host object access. Tests: `tests/html-test.ts`, `tests/p5-test.ts`.
+`src/html.ts` (`BrowserApp`) decodes views, applies messages, runs commands
+and lists subscriptions through a `Platform` (deferral, HTTP, file pickers,
+the viewport), so tests drive programs with a fake one;
+`src/browser-runtime.ts` patches the DOM and implements the platform;
+`src/build-html.ts` bundles the interpreter and source (`apn --html`, and
+`apn --site` with `src/editor.html`, whose preview runs each program in a
+sandboxed frame). Commands and subscriptions stay APN data until the host
+reads them; a message from a command is applied after the current update.
+Run `deno check src/browser-runtime.ts` as well as `main.ts`. `src/p5.ts`
+adapts callbacks to a p5 instance; the runtime loads pinned p5.js only for a
+`P5Sketch` or a canvas node, whose sketch persists across renders and takes
+each render's callbacks. Keep host methods scoped per interpreter and sketch;
+never expose arbitrary host object access. Tests: `tests/html-test.ts`,
+`tests/p5-test.ts`, `tests/elm-examples-test.ts`; also build `examples/elm`
+with `apn --site` and run its pages in a browser.
 
 ## C interop
 

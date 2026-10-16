@@ -64,6 +64,10 @@ guard condition = condition ? return [] : throw ("guard failed: " ++ primSource 
 (<*>) = primAp
 (>>=) = primBind
 m >> k = m >>= (_ -> k)
+# f applied to what several values hold, in any monad (Elm's map2 ... map4).
+map2 f a b = map f a <*> b
+map3 f a b c = map f a <*> b <*> c
+map4 f a b c d = map f a <*> b <*> c <*> d
 f =<< m = m >>= f
 # Actions over lists: sequence runs each, yielding their results; mapM f xs
 # runs f on each element; when and unless run an action on a condition.

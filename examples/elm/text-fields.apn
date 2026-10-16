@@ -1,0 +1,15 @@
+# Text Fields, from https://elm-lang.org/examples/text-fields
+# A text input for reversing text. Very useful!
+import ["html","text"]
+browser = import "browser"
+
+Msg = | Change String
+
+update (Change newContent) model = { model.content = newContent; model }
+
+view model = div [] [
+    input [placeholder "Text to reverse",value model.content,onInput Change] []
+    div [] [text (reverse model.content)]
+]
+
+main = browser.sandbox [init: [content: ""], update: update, view: view]

@@ -1481,6 +1481,25 @@ p5 = import "p5"
 print (typeOf (p5.sketch [draw: (p -> p.background "black")])) # P5Program
 # apn --html examples/browser/p5-sketch.apn p5-sketch.html
 
+# Elm-style programs (examples/elm; apn --site examples/elm site builds them
+# with an editor): commands and subscriptions are data the page runs, and
+# generators, decoders, times and shapes are ordinary values.
+print (typeOf (p5.canvas [draw: (p -> p.background "black")]))  # Html (a sketch inside a view)
+random = import "random"
+[roll,_] = random.step (random.int 1 6) (random.initialSeed 42)
+print (roll >= 1 && roll <= 6)                 # true
+print (head (random.step (random.list 3 (random.uniform "a" ["b"])) 7))  # ["a","b","b"]
+decode = import "decode"
+pointDecoder = map2 (x, y -> [x: x, y: y]) (decode.field "x" decode.int) (decode.field "y" decode.int)
+print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1, \"y\": 2}"))  # Ok [x: 1, y: 2]
+print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1}"))          # Err "Expecting an OBJECT with a field named `y`"
+clock = import "time"
+print (clock.toMinute clock.utc (clock.millisToPosix 754000))     # 12
+print (map2 (+) (Some 1) (Some 2))             # Some 3
+print (numbers.degrees 180 == numbers.pi)      # true
+playground = import "playground"
+print (playground.rotate 30 $ playground.moveUp 10 $ playground.square playground.blue 4)  # Placed 0 10 30 1 1 (Rectangle (Rgb 52 101 164) 4 4)
+
 # Functions display their source without running their bodies.
 printFunction x = print x
 print printFunction                          # x -> print x

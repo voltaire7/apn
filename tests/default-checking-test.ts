@@ -31,6 +31,18 @@ for (const [source, expected] of [
     ['f x = x + 1; [f 1,f 2.0]', '[2,3.0]'],
     ['factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1)); factorial 5', '120'],
     ['import "type"; cast Float32 (Float64 .2)', 'Float32 0.2'],
+    // A parameter's record is known from the fields code uses, also when it assigns them.
+    ['f r = { r.a = 5; r }; f [a: 1, b: 2]', '[a: 5, b: 2]'],
+    ['g r = { r.p.q = 3; r }; g [p: [q: 1, z: 0]]', '[p: [q: 3, z: 0]]'],
+    // A function known only from its uses does not fix its list argument's length.
+    ['f g = [g [1],g [1,2,3]]; f length', '[1,3]'],
+    ['f r = [r.g [1],r.g [1,2,3]]; f [g: length]', '[1,3]'],
+    // A known small Int converts to a Float operand losslessly.
+    ['f r = r.y == 0 ? 5.0 : r.vy / 8; f [y: 1.0, vy: 2.0]', '0.25'],
+    // Either branch's three numbers: a list of three numbers.
+    ['f c = c ? [1.0,2.0,3.0] : [0.0,0.0,0.0]; [1.0,1.0,1.0] + f true', '[2.0,3.0,4.0]'],
+    // A constructor pattern on a Dynamic field is checked when it runs.
+    ['import "option"; Msg = More | Got Dynamic; f msg = match msg [More -> 0,(Got (Ok q)) -> q,(Got (Err _)) -> 1]; f (Got (Ok 5))', '5'],
 ] as const) Deno.test(`default checking session: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -44,6 +56,8 @@ for (const source of [
     'Vect 2 Int [1]',
     'xs <- return (Vect 2 Int [1,2]); xs = [3]',
     'env',
+    'f g = [g 1,g "a"]; f (x -> 0)',
+    'f r = r.y == 0 ? 5.0 : r.vy * 9007199254740993; f [y: 1.0, vy: 2.0]',
 ]) Deno.test(`default checking rejects before evaluation: ${source}`, () => rejected(session(), source));
 
 Deno.test("a static error prevents earlier effects and bindings", () => {

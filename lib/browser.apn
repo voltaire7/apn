@@ -1,3 +1,31 @@
-# A sandbox description contains APN values/functions; creating it has no effects.
-BrowserProgram = | BrowserSandbox Dynamic
+# Programs, as in Elm's Browser. A sandbox is [init, update, view]. An element
+# is [init, update, view, subscriptions]: init is [model, command], update msg
+# model returns [model, command], and subscriptions model names the events the
+# program listens to. Creating either has no effects; the browser runs it.
+import "time"
+BrowserProgram = BrowserSandbox Dynamic | BrowserElement Dynamic
 sandbox specification = BrowserSandbox specification
+element specification = BrowserElement specification
+# Commands and subscriptions are data the browser interprets (see also task,
+# time, random, http and file). none and batch serve both, as Elm's Cmd.none
+# and Sub.none do.
+BrowserEffect = EffectNone | EffectBatch Dynamic | ViewportGet Dynamic | FrameSub String Dynamic | KeySub String Dynamic | MouseSub String Dynamic | ResizeSub Dynamic | VisibilitySub Dynamic
+none = EffectNone
+batch effects = EffectBatch effects
+# The viewport's size: toMessage gets [width: ..., height: ...] (Browser.Dom).
+getViewport toMessage = ViewportGet toMessage
+# Browser.Events. A frame message gets the time (a Posix) or the milliseconds
+# since the last frame; a key message gets the key's name ("ArrowUp", " ");
+# a mouse message gets the page's x and y; a resize message the window's
+# width and height; a visibility message Visible or Hidden.
+Visibility = Visible | Hidden
+onAnimationFrame toMessage = FrameSub "time" (ms -> toMessage (millisToPosix ms))
+onAnimationFrameDelta toMessage = FrameSub "delta" toMessage
+onKeyDown toMessage = KeySub "keydown" toMessage
+onKeyUp toMessage = KeySub "keyup" toMessage
+onMouseMove toMessage = MouseSub "mousemove" toMessage
+onMouseDown toMessage = MouseSub "mousedown" toMessage
+onMouseUp toMessage = MouseSub "mouseup" toMessage
+onMouseClick toMessage = MouseSub "click" toMessage
+onResize toMessage = ResizeSub toMessage
+onVisibilityChange toMessage = VisibilitySub (visible -> toMessage (visible ? Visible : Hidden))

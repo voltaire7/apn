@@ -8,6 +8,8 @@ export const CLI_HELP = `Usage:
                                   Lint source without running code
   apn --html SOURCE.apn [OUTPUT.html]
                                   Build a browser app (default: app.html)
+  apn --site FOLDER OUTPUT        Build FOLDER's index.apn as OUTPUT/index.html and
+                                  an editor running its other examples (editor.html)
   apn --lsp                       Start the language server over stdio
   apn --version                   Show the version
   apn --help, -h                   Show this help
@@ -37,7 +39,7 @@ function readMode(input: string[]): { args: string[]; literalFile: boolean; erro
     if (["--help", "-h", "--lsp", "--version"].includes(first)) {
         return args.length === 1 ? result : { ...result, error: `${first} does not accept arguments` };
     }
-    if (["--check", "--lint", "--html"].includes(first)) {
+    if (["--check", "--lint", "--html", "--site"].includes(first)) {
         const invalid = args.slice(1).find(arg => arg.startsWith("-") && !(first === "--lint" && ["--json", "--types"].includes(arg)));
         return invalid ? { ...result, error: `unknown option '${invalid}'` } : result;
     }

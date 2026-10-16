@@ -1,0 +1,19 @@
+# Upload, from https://elm-lang.org/examples/upload
+# File upload with the <input type="file"> node.
+import "html"
+browser = import "browser"
+
+Msg = | GotFiles Dynamic
+
+init = [[],browser.none]
+
+update (GotFiles files) _ = [files,browser.none]
+
+subscriptions _ = browser.none
+
+view model = div [] [
+    input [typeAttribute "file",multiple true,onEvent "change" (event -> GotFiles event.files)] []
+    div [] [text (to String model)]
+]
+
+main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]

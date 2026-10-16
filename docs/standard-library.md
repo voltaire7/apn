@@ -10,7 +10,7 @@ frequencies $ words $ "one two one" # HashMap [["one",2],["two",1]]
 The prelude, `lib/prelude.apn`, needs no import: it defines every binary
 operator (`(+) = primAdd`, ...) and its fixity, and the Functor, Applicative
 and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
-`sequence`, `mapM`, `when`, `unless`, `return`, `throw`, `empty`, `guard`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).
+`sequence`, `mapM`, `map2`–`map4`, `when`, `unless`, `return`, `throw`, `empty`, `guard`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).
 
 `import` accepts a literal module name or a list of literal module names.
 For example, `import ["number","text"]` opens both modules and returns
@@ -221,6 +221,7 @@ are skipped without being demanded.
 | `variance xs`, `standardDeviation xs` | Optional population variance and standard deviation |
 | `isPrime n`, `primes` | Integer primality by trial division; infinite ascending primes |
 | `fibonacci` | Infinite exact sequence starting with 0, 1 |
+| `pi`, `degrees d`, `turns t` | π, and angles in radians as Elm's Basics: `degrees 180` and `turns 0.5` are `pi` |
 
 Empty statistics return `None`. Exact inputs preserve exact arithmetic:
 `variance [1,2,3]` is `Some 2/3`. Irrational square roots are inexact. Typed numeric
@@ -339,7 +340,9 @@ in the REPL interrupts a slow one (abandoning it), and `timeout` bounds one in
 a script. Network access
 needs Deno's `--allow-net` (the `apn` launcher grants it). Static checking
 never sends a request; `data:` URLs need no network. In a browser build,
-`fetch` uses a synchronous request, subject to the page's CORS rules.
+`fetch` uses a synchronous request, subject to the page's CORS rules, and
+`get [url: ..., expect: ...]` is a [command](browser-html.md#elements-commands-and-subscriptions)
+sending one without blocking.
 
 ## JSON — `json`
 
@@ -365,9 +368,24 @@ pattern or `cast` where the program needs one.
 
 ## Browser modules
 
-Explicitly import `html` for HTML constructors and `browser` for
-`sandbox [init: ..., update: ..., view: ...]`. These are not automatically
-imported by `std`. See [browser HTML](browser-html.md) for the API and build command.
+Modules for browser programs, after Elm's packages of the same names. See
+[browser HTML](browser-html.md) for their APIs and the build commands.
+
+| Module | Provides |
+| --- | --- |
+| `html` | HTML elements, attributes and events |
+| `browser` | `sandbox`, `element`, `none`, `batch`, `getViewport`, and the event subscriptions |
+| `svg` | SVG elements and attributes (import it qualified) |
+| `task` | `perform` and `attempt`: commands running an action |
+| `time` | `Posix`, `Zone`, `now`, `here`, `every`, `toHour` ... `toMillis` |
+| `random` | generators and `generate` (import it qualified) |
+| `decode` | JSON decoders (import it qualified) |
+| `file` | file pickers and `toUrl` |
+| `playground` | pictures, animations and games from shapes |
+
+`random`, `decode` and `svg` share names with other modules (`int`, `list`,
+`circle`), so a program imports them qualified (`random = import "random"`;
+`random.int 1 6`); the others may be opened.
 
 ## Process control — `system`
 
@@ -392,7 +410,8 @@ is already in scope, e.g. `Box a = | Box a`.
 
 ## Creative coding — `p5`
 
-`p5 = import "p5"` exposes `p5.sketch callbacks`. See the [p5 reference](p5.md)
+`p5 = import "p5"` exposes `p5.sketch callbacks`, and `p5.canvas callbacks`
+for a sketch inside an HTML view. See the [p5 reference](p5.md)
 for drawing methods, events, the browser build command, and current scope.
 
 ## Matching

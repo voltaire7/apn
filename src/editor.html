@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>APN editor</title>
+<style>
+:root { --bar: #1f2430; --bar-text: #e6e9ef; --accent: #60a5fa; --line: #d5d9e0; --code-bg: #fbfbfc; --gutter: #9aa1ad;
+    --comment: #7c8594; --string: #1a7f37; --number: #b35900; --keyword: #8250df; --constructor: #0b62c4; --operator: #c4325f; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { display: flex; flex-direction: column; font: 14px system-ui, sans-serif; background: #fff; color: #1f2430; }
+header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 16px; background: var(--bar); color: var(--bar-text); }
+header a { color: var(--accent); text-decoration: none; }
+header a:hover { text-decoration: underline; }
+header .brand { font-weight: 600; color: var(--bar-text); }
+header select, header button { font: inherit; border-radius: 6px; padding: 4px 10px; border: 1px solid #485063; background: #2b3242; color: var(--bar-text); }
+header button.run { background: var(--accent); border-color: var(--accent); color: #0b1220; font-weight: 600; }
+header button:hover { filter: brightness(1.1); cursor: pointer; }
+header .spacer { flex: 1; }
+header .hint { color: #9aa3b5; font-size: 12px; }
+main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 0; }
+.code { position: relative; overflow: auto; background: var(--code-bg); border-right: 1px solid var(--line); }
+.code .lines { position: relative; min-height: 100%; display: grid; grid-template-columns: auto 1fr; }
+.gutter { padding: 12px 8px 12px 12px; text-align: right; color: var(--gutter); user-select: none; background: #f3f4f6; border-right: 1px solid var(--line); }
+.layers { position: relative; }
+pre.highlight, textarea { margin: 0; padding: 12px; border: 0; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 4; white-space: pre; overflow: hidden; }
+.gutter { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+pre.highlight { pointer-events: none; min-height: 100%; }
+textarea { position: absolute; inset: 0; width: 100%; height: 100%; resize: none; outline: none; background: transparent; color: transparent; caret-color: #1f2430; }
+textarea::selection { background: #bfdbfe; color: transparent; }
+.c { color: var(--comment); font-style: italic; } .s { color: var(--string); } .n { color: var(--number); }
+.k { color: var(--keyword); font-weight: 600; } .t { color: var(--constructor); } .o { color: var(--operator); }
+iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+@media (max-width: 760px) {
+    main { grid-template-columns: 1fr; grid-template-rows: minmax(240px, 1fr) minmax(320px, 1fr); }
+    .code { border-right: 0; border-bottom: 1px solid var(--line); }
+    header .hint { display: none; }
+}
+</style>
+<body>
+<header>
+    <a class="brand" href="index.html">APN examples</a>
+    <select id="examples" aria-label="Example"></select>
+    <button id="run" class="run" title="Run (Ctrl+Enter)">Run</button>
+    <button id="reset" title="Discard your changes to this example">Reset</button>
+    <span class="hint">Ctrl+Enter runs · Tab indents</span>
+    <span class="spacer"></span>
+    <a id="original" target="_blank" rel="noopener" hidden>Original</a>
+</header>
+<main>
+    <div class="code"><div class="lines"><div class="gutter" id="gutter" aria-hidden="true"></div><div class="layers"><pre class="highlight" id="highlight" aria-hidden="true"></pre><textarea id="source" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="APN source"></textarea></div></div></div>
+    <iframe id="preview" title="Result" sandbox="allow-scripts allow-modals allow-downloads"></iframe>
+</main>
+<script id="apn-site" type="application/json">/*SITE*/</script>
+<script id="apn-runtime" type="text/plain">/*RUNTIME*/</script>
+<script>
+"use strict";
+const site = JSON.parse(document.getElementById("apn-site").textContent);
+const runtime = document.getElementById("apn-runtime").textContent;
+const source = document.getElementById("source"), highlight = document.getElementById("highlight"), gutter = document.getElementById("gutter");
+const picker = document.getElementById("examples"), preview = document.getElementById("preview"), original = document.getElementById("original");
+const names = Object.keys(site.examples).sort();
+// An example's title and source link come from its first comment line:
+// "# Title, from https://...".
+const firstLine = name => /^#\s*(.*)$/m.exec(site.examples[name])?.[1] ?? "";
+const titleOf = name => firstLine(name).split(",")[0] || name;
+for (const name of names) picker.add(new Option(titleOf(name), name));
+
+// Edits are kept for the session, per example.
+const store = { get(key) { try { return sessionStorage.getItem(key); } catch { return null; } }, set(key, value) { try { sessionStorage.setItem(key, value); } catch { /* not kept */ } } };
+let current = names[0];
+
+const escape = text => text.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+const TOKENS = /(#[^\n]*)|("(?:[^"\\\n]|\\.)*"?|'(?:[^'\\\n]|\\.)+')|(\b\d+(?:\.\d+)?\b)|\b(import|match|where|true|false|rec|load|use)\b|\b([A-Z][A-Za-z0-9_']*)\b|([-+*/%^=<>!&|:$?.\\@]+|->|<-)/g;
+function render() {
+    const text = source.value;
+    highlight.innerHTML = escape(text).replace(TOKENS, (all, comment, string, number, keyword, type, operator) =>
+        comment ? `<span class="c">${all}</span>` : string ? `<span class="s">${all}</span>` : number ? `<span class="n">${all}</span>`
+        : keyword ? `<span class="k">${all}</span>` : type ? `<span class="t">${all}</span>` : operator ? `<span class="o">${all}</span>` : all) + "\n";
+    const count = text.split("\n").length;
+    gutter.textContent = Array.from({ length: count }, (_, n) => n + 1).join("\n");
+    // The textarea grows with its text, so the panel scrolls both layers together.
+    source.style.height = "0";
+    source.style.height = `${highlight.scrollHeight}px`;
+    source.style.width = "0";
+    source.style.width = `${Math.max(highlight.scrollWidth, source.parentElement.clientWidth)}px`;
+}
+function open(name) {
+    current = site.examples[name] === undefined ? names[0] : name;
+    picker.value = current;
+    source.value = store.get(`apn:${current}`) ?? site.examples[current];
+    const link = /https?:\/\/\S+/.exec(firstLine(current))?.[0];
+    original.hidden = !link;
+    if (link) original.href = link;
+    document.title = `${titleOf(current)} · APN editor`;
+    render();
+    run();
+}
+function run() {
+    const payload = JSON.stringify({ source: source.value, modules: site.modules }).replace(/</g, "\\u003c");
+    preview.srcdoc = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`
+        + `<style>${site.style}</style><body><div id="app"></div><pre id="apn-error" role="alert" hidden></pre>`
+        + `<script id="apn-program" type="application/json">${payload}<\/script><script type="module">${runtime}<\/script></body></html>`;
+}
+source.addEventListener("input", () => { store.set(`apn:${current}`, source.value); render(); });
+source.addEventListener("keydown", event => {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); run(); return; }
+    const { selectionStart: start, selectionEnd: end, value } = source;
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    if (event.key === "Tab") {
+        event.preventDefault();
+        if (event.shiftKey) {
+            const removed = value.startsWith("    ", lineStart) ? 4 : 0;
+            source.setRangeText("", lineStart, lineStart + removed, "preserve");
+        } else source.setRangeText("    ", start, end, "end");
+    } else if (event.key === "Enter") {
+        // Keep the line's indentation, 4 deeper after an opening { or [.
+        event.preventDefault();
+        const line = value.slice(lineStart, start), indent = /^ */.exec(line)[0];
+        source.setRangeText("\n" + indent + (/[{[]\s*$/.test(line) ? "    " : ""), start, end, "end");
+    } else return;
+    source.dispatchEvent(new Event("input"));
+});
+picker.addEventListener("change", () => { location.hash = picker.value; });
+document.getElementById("run").addEventListener("click", run);
+document.getElementById("reset").addEventListener("click", () => { store.set(`apn:${current}`, site.examples[current]); open(current); });
+addEventListener("hashchange", () => open(decodeURIComponent(location.hash.slice(1))));
+addEventListener("resize", render);
+open(decodeURIComponent(location.hash.slice(1)));
+</script>
+</body>
+</html>

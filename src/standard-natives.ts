@@ -14,6 +14,7 @@ export const STANDARD_NATIVES: Array<[string, number]> = [
     ["bracket", 3], ["withFile", 2], ["readFile", 1], ["readStdin", 1], ["getArgs", 0],
     ["seq", 2], ["fail", 1], ["chars", 1], ["fromChars", 1], ["upper", 1], ["lower", 1],
     ["fetch", 2], ["toJson", 1], ["prettyJson", 1], ["fromJson", 1],
+    ["entropy", 1], ["currentTime", 1], ["zoneOffset", 1],
 ];
 export function standardNative(i: Interpreter, name: string, args: Value[]): Value {
     if (name === "bracket") return bracket(i, args[0], args[1], args[2]);
@@ -25,6 +26,11 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
         return v.v;
     };
     if (name === "getArgs") return mkList(i.programArgs.map(mkStr));
+    // A random 32-bit seed (random), the time in milliseconds since 1970 and
+    // the local offset from UTC in minutes (time).
+    if (name === "entropy") return mkInt(crypto.getRandomValues(new Uint32Array(1))[0]);
+    if (name === "currentTime") return mkInt(Date.now());
+    if (name === "zoneOffset") return mkInt(-new Date().getTimezoneOffset());
     if (name === "toJson" || name === "prettyJson") return mkStr(toJson(i, args[0], name === "prettyJson" ? 2 : 0, name));
     if (name === "fromJson") return fromJson(str(args[0]));
     if (name === "fetch") return fetchNative(i, str(args[0]), args[1]);

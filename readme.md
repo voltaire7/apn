@@ -84,6 +84,15 @@ apn --html examples/browser/p5-sketch.apn p5-sketch.html
 open p5-sketch.html
 ```
 
+All of [Elm's examples](https://elm-lang.org/examples) are recreated in
+`examples/elm`, with commands, subscriptions, SVG, p5 canvases inside views
+and a Playground. Build them as a site with an in-browser editor:
+
+```sh
+apn --site examples/elm site
+open site/index.html
+```
+
 ## Editor support
 
 Run `apn --lint file.apn` to check syntax and layout without executing the file.

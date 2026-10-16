@@ -27,6 +27,20 @@ and dependent list lengths. Inner scopes may shadow names with another type.
 Clauses for the same input domain must share a result type; distinct typed
 input domains remain overloads. No `::` declaration is required.
 
+A parameter is known from what the code does with it. Reading or assigning a
+field makes it a record with that field whose other fields stay open:
+`f r = { r.a = 5; r }` accepts any record with an `a`. A function parameter,
+or a function read from a parameter's record (`p.call`), has one type like any
+parameter (`g 1` and `g "a"` conflict), but its first call does not fix the
+length of a list argument: `g [1]` and `g [1,2,3]` both check. A conditional
+whose branches are lists of one length (`c ? [x,y,z] : [0.0,0.0,0.0]`) is a list
+of that length holding either branch's items. Arithmetic between a `Float` and
+an `Int` the checker knows fits binary64 exactly (the literal in `dt / 8`) is a
+`Float`, as at runtime; with an unknown `Int` it is the general `Number`
+([lossless promotion](semantics.md#inspection-and-numbers)). Matching a constructor
+pattern against a `Dynamic` value (`(Got (Ok q))` for a `Got Dynamic` field) is a
+runtime check, as matching a `Dynamic` scrutinee is.
+
 A function, lambda, or lazy value reads the names it uses when it runs, so
 after a name is rebound (by a definition or a checked `load`) it calls the new
 definition. The checker follows this: code that reads a rebound name is
@@ -591,7 +605,8 @@ Successful checking does not prove termination, exhaustive matching, index bound
 or freedom from all runtime errors. Heterogeneous lists remain legal, but using
 an unknown element in a constrained operation may require additional information.
 Analysis budget/depth exhaustion is a diagnostic, never successful checking or
-a silent Dynamic fallback. Gradual editor diagnostics remain available separately.
+a silent Dynamic fallback. The inference budget is per top-level statement, so
+a long program or module is not limited by its length. Gradual editor diagnostics remain available separately.
 
 ## Recursion and self-application
 

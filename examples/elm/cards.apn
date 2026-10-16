@@ -1,0 +1,42 @@
+# Cards, from https://elm-lang.org/examples/cards
+# Press a button to draw a random card.
+import "html"
+browser = import "browser"
+random = import "random"
+
+Card = Ace | Two | Three | Four | Five | Six | Seven | Eight | Nine | Ten | Jack | Queen | King
+Msg = Draw | NewCard Card
+
+init = [[card: Three],browser.none]
+
+cardGenerator = random.uniform Ace [Two,Three,Four,Five,Six,Seven,Eight,Nine,Ten,Jack,Queen,King]
+
+update msg model = match msg [
+    Draw -> [model,random.generate NewCard cardGenerator]
+    (NewCard newCard) -> [[card: newCard],browser.none]
+]
+
+subscriptions _ = browser.none
+
+view model = div [] [
+    button [onClick Draw] [text "Draw"]
+    div [style "font-size" "12em"] [text (viewCard model.card)]
+]
+
+viewCard card = match card [
+    Ace -> "🂡"
+    Two -> "🂢"
+    Three -> "🂣"
+    Four -> "🂤"
+    Five -> "🂥"
+    Six -> "🂦"
+    Seven -> "🂧"
+    Eight -> "🂨"
+    Nine -> "🂩"
+    Ten -> "🂪"
+    Jack -> "🂫"
+    Queen -> "🂭"
+    King -> "🂮"
+]
+
+main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]

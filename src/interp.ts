@@ -35,10 +35,11 @@ class TailLoad {
 }
 
 // Natives with effects: applying one builds an IO action; running it performs them.
-export const IO_NATIVES = new Set(["print", "emit", "exit", "set", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary"]);
+export const IO_NATIVES = new Set(["print", "emit", "exit", "set", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
 // What the actions of IO builtins yield, for showing their types (IO []).
 const IO_RESULTS: Record<string, string> = {
     print: "[]", emit: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
+    entropy: "Int", currentTime: "Int", zoneOffset: "Int",
 };
 
 // Scalar types an alias names a subtype of (Money = Float): not aggregates.
@@ -80,12 +81,18 @@ export class Interpreter {
     private runDepth = 0;
     private dynamicDepth = 0;
 
+    // A checking session that knows this interpreter's natives and names
+    // (apn --check checks with one, without running or reading input).
+    checkingSession(): CheckingSession {
+        const session = new CheckingSession();
+        session.moduleSources = this.moduleSources;
+        session.nativeArities = new Map([...NATIVES, ...STANDARD_NATIVES]);
+        session.runtimeNames = () => envNames(this.env);
+        return session;
+    }
     enableChecking(): void {
         this.checkedExecution = true;
-        this.checking = new CheckingSession();
-        this.checking.moduleSources = this.moduleSources;
-        this.checking.nativeArities = new Map([...NATIVES, ...STANDARD_NATIVES]);
-        this.checking.runtimeNames = () => envNames(this.env);
+        this.checking = this.checkingSession();
         // Checking right before running may read the program's input; the run
         // then sees the same file contents and arguments.
         this.checking.inputs = {

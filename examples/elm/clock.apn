@@ -1,0 +1,36 @@
+# Clock, from https://elm-lang.org/examples/clock
+# Show an analog clock for your time zone.
+import ["html","time","number"]
+browser = import "browser"
+task = import "task"
+svg = import "svg"
+
+Msg = Tick Posix | AdjustTimeZone Zone
+
+init = [[zone: utc, time: millisToPosix 0],task.perform AdjustTimeZone here]
+
+update msg model = match msg [
+    (Tick newTime) -> { model.time = newTime; [model,browser.none] }
+    (AdjustTimeZone newZone) -> { model.zone = newZone; [model,browser.none] }
+]
+
+subscriptions _ = every 1000 Tick
+
+view model = {
+    hour = toHour model.zone model.time
+    minute = toMinute model.zone model.time
+    second = toSecond model.zone model.time
+    svg.svg [svg.viewBox "0 0 400 400",svg.width "400",svg.height "400"] [
+        svg.circle [svg.cx "200",svg.cy "200",svg.r "120",svg.fill "#1293D8"] []
+        viewHand 6 60 (hour / 12)
+        viewHand 6 90 (minute / 60)
+        viewHand 3 90 (second / 60)
+    ]
+}
+
+viewHand width length turns = {
+    t = 2 * pi * inexact (turns - 1 / 4)
+    svg.line [svg.x1 "200",svg.y1 "200",svg.x2 (to String (200 + length * cos t)),svg.y2 (to String (200 + length * sin t)),svg.stroke "white",svg.strokeWidth (to String width),svg.strokeLinecap "round"] []
+}
+
+main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]

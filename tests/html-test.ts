@@ -1,15 +1,15 @@
 import { bundleProgram } from "../src/modules.ts";
 import { Interpreter } from "../src/interp.ts";
 import { parse } from "../main.ts";
-import { BrowserSandbox, type HtmlNode } from "../src/html.ts";
+import { BrowserApp, type HtmlNode } from "../src/html.ts";
 
-function app(source: string): BrowserSandbox {
+function app(source: string): BrowserApp {
     const i = new Interpreter();
     i.run(parse(source));
-    return new BrowserSandbox(i, i.env.get("main")!);
+    return new BrowserApp(i, i.env.get("main")!);
 }
 function content(node: HtmlNode): string {
-    return "text" in node ? node.text : node.children.map(content).join("");
+    return "text" in node ? node.text : "sketch" in node ? "" : node.children.map(content).join("");
 }
 Deno.test("browser counter uses comma-free nested HTML and distinct nullary messages", () => {
     const counter = app(Deno.readTextFileSync(new URL("../examples/browser/counter.apn", import.meta.url)));
@@ -57,10 +57,11 @@ Deno.test("bundled modules load without filesystem access", () => {
     i.moduleSources = {
         "/lib/html.apn": Deno.readTextFileSync(new URL("../lib/html.apn", import.meta.url)),
         "/lib/browser.apn": Deno.readTextFileSync(new URL("../lib/browser.apn", import.meta.url)),
+        "/lib/time.apn": Deno.readTextFileSync(new URL("../lib/time.apn", import.meta.url)),
     };
     i.sourceDir = "/app/";
     i.run(parse('import "html"; import "browser"; main = sandbox [init: 1, update: (msg, model -> model), view: (n -> text (to String n))]'));
-    if (content(new BrowserSandbox(i, i.env.get("main")!).render()) !== '1') throw new Error("bundled app failed");
+    if (content(new BrowserApp(i, i.env.get("main")!).render()) !== '1') throw new Error("bundled app failed");
     try { i.importStandard('text'); }
     catch (error) { if (error instanceof Error && error.message.includes('not bundled')) return; throw error; }
     throw new Error("missing bundled module silently fell back to filesystem");
