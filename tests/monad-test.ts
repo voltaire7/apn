@@ -92,6 +92,9 @@ for (const [source, message, kind] of [
     ["double m = map (* 2) m\nprint (double 5)", "map needs an action, a list or a monadic value, not Int", "type"],
     ["Point = | P Int Int\ndouble m = map (* 2) m\nprint (double (P 1 2))", "no map instance for Point", "type"],
     ["f (Functor m) = m", "unknown constructor 'Functor' in a pattern", "type"],
+    // m >>= k needs a function k: a value to run after m is m >> k.
+    ['import "option"\nprint (Some 1 >>= 5)', "'>>=' needs a function on its right, not Int", "type"],
+    ['import "option"\ncheck n = unless (n > 0) (Err "x") >>= guard (n < 100) >>= return (n * 2)', "'>>=' needs a function on its right, not m []", "type"],
     ['import "option"\nx = Option Int {\n    a <- Some 1\n    a + 1\n}', "the last statement of a do-block must be an action", "type"],
     ["xs = List Int {\n    a <- [1,2]\n    print a\n    return a\n}", "an IO action cannot run in a List do-block", "type"],
     ["return a b = a", "return takes one argument", "parse"],
@@ -114,6 +117,30 @@ for (const [name, source, expected] of [
 ] as const) Deno.test(`monads: ${name}`, () => {
     const actual = run(source);
     if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(JSON.stringify(actual));
+});
+Deno.test("monads: >>= with no function fails when it would apply it", () => {
+    for (const [source, expected] of [['import "option"\nprint (Some 1 >>= 5)', "'>>=' needs a function on its right, not a number"], ['import "option"\nprint (None >>= missing)', ""]] as const) {
+        try { const out = run(source, false); if (expected || out[0] !== "None") throw new Error(`accepted: ${out}`); }
+        catch (e) { if (!expected || !String(e).includes(expected)) throw e; }
+    }
+});
+// As for a do-block, the checker decides a >>= chain's or a call's monad when
+// the run would leave its value undecided; a generic function's is not decided.
+for (const [name, source, expected] of [
+    ["a >> chain", 'import "option"\ncheck n = unless (n > 0) (Err "not positive") >> guard (n < 100) >> return (n * 2)\nprint [check 2,check 0,check 200]',
+        ['[Ok 4,Err "not positive",Err "guard failed: n < 100"]']],
+    ["a call", 'import "option"\ncheck n = unless (n > 0) (Err "not positive")\nprint [check 1,check 0]', ['[Ok [],Err "not positive"]']],
+    ["a list chain", "evens = [1..6] >>= (x -> guard (x % 2 == 0) >> return x)\nprint evens", ["[2,4,6]"]],
+    ["not a generic function", 'import "option"\nwrap x = return x\nprint [Option Int (wrap 1),List Int (wrap 2)]', ["[Some 1,[2]]"]],
+] as const) Deno.test(`monads: the checker decides ${name}`, () => {
+    const actual = run(source);
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(JSON.stringify(actual));
+});
+Deno.test("monads: an undecided >> chain prints as written", () => {
+    for (const checked of [true, false]) {
+        const actual = run("print (return 1 >> return 2 >> return 3)\nprint (guard true >> return 5)", checked);
+        if (JSON.stringify(actual) !== JSON.stringify(["return 1 >> return 2 >> return 3", "return [] >> return 5"])) throw new Error(JSON.stringify(actual));
+    }
 });
 Deno.test("monads: the checker decides an undecided block's monad", () => {
     const source = 'import ["option","number"]\ncheck n = {\n    unless (n > 0) (Err "not positive")\n    return (n * 2)\n}\nprint [check 2,check 0]';

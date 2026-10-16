@@ -977,6 +977,8 @@ export class Interpreter {
     eval(e: Expr, tailLoad = false): Value {
         const caller = this.env;
         let forceResult = false;
+        // The monad the checker found for an expression a tail call left.
+        let decided: Value | undefined;
         this.stack++;
         try {
             if (this.stack > STACK_LIMIT) {
@@ -1263,9 +1265,19 @@ export class Interpreter {
                         break;
                 }
                 if (next) {
+                    // A tail call leaves this expression: keep the monad the
+                    // checker found for it (the outermost), as below.
+                    if (this.checking?.resultHeads.size) decided ??= this.checkedMonad(e);
                     e = next.body;
                     this.env = next.env;
                     continue;
+                }
+                // An undecided value from code the checker found in a monad
+                // (a >>= chain, a call) is in that monad.
+                const shown = r.kind === "thunk" && r.value ? r.value : r;
+                if (shown.kind === "pending") {
+                    const target = decided ?? this.checkedMonad(e);
+                    if (target) r = this.realize(shown, target);
                 }
                 return forceResult ? this.force(r) : r;
             }
@@ -2163,14 +2175,26 @@ export class Interpreter {
         throw new APNError("runtime", `no ${method} instance for ${valueToString(target)}`, { hint: method === "throw" ? "define one, such as `throw _ = None`" : "define one, such as `return = Some`" });
     }
 
+    // f applied to what m >>= f passes it; a value that is no function is an
+    // error saying so (checked only when applied: None >>= f never is).
+    private continueWith(f: Value, x: Value): Value {
+        const g = this.demand(f);
+        if (["int", "float", "rational", "complex", "string", "bool", "char", "variant", "pending", "io", "record", "hashmap", "list", "lazyList", "cons", "range"].includes(g.kind)) {
+            const what = g.kind === "pending" ? "an undecided value" : isNumeric(g) ? "a number" : g.kind === "variant" && g.family ? withArticle(g.family.name)
+                : g.kind === "io" ? "an action" : this.isList(g) ? "a list" : withArticle(g.kind);
+            throw new APNError("runtime", `'>>=' needs a function on its right, not ${what}`, { hint: "to run it after the left side, discarding that value, use `>>`" });
+        }
+        return this.apply(g, x);
+    }
+
     // m >>= f: through m's monad. f's results are realized in the same monad.
     bind(mIn: Value, f: Value): Value {
         const m = this.dataValue(mIn);
         if (m.kind === "pending") return { kind: "pending", step: { op: "bind", m, f } };
         const target = this.monadTypeOf(m);
         if (!target) throw new APNError("runtime", `'>>=' needs an action, a list or a monadic value, not a ${m.kind}`);
-        if (m.kind === "io") return { kind: "io", run: () => new IOTail(this.realize(this.apply(f, this.runIO(m)), target)) };
-        const k: Value = { kind: "native", name: "<bind>", arity: 1, applied: [], invoke: ([x]) => this.realize(this.apply(f, x), target) };
+        if (m.kind === "io") return { kind: "io", run: () => new IOTail(this.realize(this.continueWith(f, this.runIO(m)), target)) };
+        const k: Value = { kind: "native", name: "<bind>", arity: 1, applied: [], invoke: ([x]) => this.realize(this.continueWith(f, x), target) };
         if (this.isList(m)) return this.concatMapList(m, k);
         const result = this.instance(">>=", [m, k]);
         if (result) return result;
@@ -2411,8 +2435,13 @@ export class Interpreter {
         const step = v.step;
         if (step.op === "call") return step.choices.map(c => this.residualText({ ...step.fn, clauses: [c], applied: step.args })).join("\n");
         if (step.op === "bind") {
-            const m = this.reference(step.m);
-            return `${m.kind === "pending" ? this.undecidedText(m, true) : this.renderString(m)} >>= ${argument(this.force(step.f))}`;
+            const m = this.reference(step.m), f = this.force(step.f);
+            const left = m.kind === "pending" ? this.undecidedText(m, true) : this.renderString(m);
+            // m >>= (_ -> k), as >> makes it, shows as m >> k.
+            const clause = f.kind === "clauseFn" && f.clauses.length === 1 && !f.applied.length ? f.clauses[0] : undefined;
+            const ignored = f.kind === "clauseFn" && clause && clause.params.length === 1 && clause.params[0].p === "wildcard" && !clause.guard && clause.body.t === "var" ? f.env.get(clause.body.name) : undefined;
+            if (ignored) { const k = this.reference(ignored); return `${left} >> ${k.kind === "pending" ? this.undecidedText(k, true) : argument(k)}`; }
+            return `${left} >>= ${argument(f)}`;
         }
         if (step.op === "do") return exprToSource(step.block);
         if (nested) return `${step.op} ${argument(step.value)}`;

@@ -572,7 +572,10 @@ half n = Result Int String {
 
 A block whose statements can all be undecided at run time (`check 2` above
 runs only `return` values) takes the monad its code names, as types decide in
-Haskell: the checker finds it (`Result`, from `Err`), and the run uses it.
+Haskell: the checker finds it (`Result`, from `Err`), and the run uses it. So
+does a `>>=` or `>>` chain, and a call: `unless (n > 0) (Err "x") >> return n`
+is a Result for any `n`. Where inferences disagree (a generic function such as
+`wrap x = return x`, used in several monads), the context decides, as before.
 `throw e` is the monad's failure, chosen by the context as `return` is: `[]`
 in a list, an action failing with `e` in IO, and an instance for each variant
 type (`throw _ = None`, `throw = Err`). A false guard throws the condition as
@@ -583,7 +586,7 @@ its call wrote it, as `assert` shows its expression (`guard b` names `b`).
 | `map f m`, `f <$> m` | `m` with `f` applied to what it holds or yields |
 | `return x` | `x` in the monad the context decides |
 | `mf <*> mx` | the function `mf` holds, applied to what `mx` holds |
-| `m >>= f` | `f` applied to what `m` holds or yields, flattened |
+| `m >>= f` | `f` applied to what `m` holds or yields, flattened (`f` must be a function: to run a value after `m`, use `>>`) |
 | `m >> k`, `f =<< m` | `m >>= (_ -> k)`; `m >>= f` |
 | `sequence actions` | runs each action, yielding the list of results |
 | `mapM f xs` | `sequence (map f xs)` |

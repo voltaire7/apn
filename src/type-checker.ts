@@ -713,6 +713,8 @@ function text(
                 return `(${show(t.input)} -> ${show(t.output)})`;
             // [Int,Float] is a positional type; a list of any length is List Int.
             case "list":
+                // The empty list's type is written []: IO [], m [].
+                if (t.length && !t.length.terms.size && t.length.constant === 0n) return "[]";
                 return t.length ? `Vect ${argument(indexText(t.length))} ${argument(show(t.element))}` : `List ${argument(show(t.element))}`;
             case "record":
                 return `[${[...t.fields].map(([k, v]) => `${k}: ${show(v)}`).join(", ")}]`;
@@ -1063,6 +1065,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function monadicType(op: string, a: Ty, b: Ty): Ty {
         const at = { t: "placeholder" } as Expr;
         if (op === "bindFlip") return monadicType("bind", b, a);
+        // m >>= k needs a function k; a value to run after m is m >> k.
+        if (op === "bind" && ["list", "variant", "atom", "record", "map"].includes(resolve(b).k)) {
+            return problem(`'>>=' needs a function on its right, not ${text(b)}`, undefined, "to run it after the left side, discarding that value, use `>>`");
+        }
         if (op === "mapM") {
             if (b.k !== "list") return problem("mapM expects a list");
             return monadicType("sequence", list(application(a, { type: b.element }, at)), b);
@@ -2780,6 +2786,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try {
             const t = inferExpression(e, scope, expected);
             inferred.set(e, t);
+            // A >>= chain or a call in a monad: its value may be undecided at
+            // run time (unless c (Err e) >> return x when c holds).
+            if (e.t === "binop" || e.t === "app" || e.t === "pipe") {
+                const r = resolve(t);
+                if (r.k === "list" ? e.t !== "binop" || ["=<<", ">>=", ">>"].includes(e.op) : r.k === "variant" && !isIO(r) && !isPending(r) && !!instanceFor(">>=", [r])) recordMonad(e, monadKind(r));
+            }
             return t;
         } finally {
             activeExpression = previousExpression;
@@ -3314,7 +3326,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!action) return result;
                 // The block's monad, for the run: a block of returns and guards
                 // takes it from here, as types decide in Haskell.
-                if (block.monad) recordHead(e, monadKind(block.monad));
+                if (block.monad) recordMonad(e, monadKind(block.monad));
                 const last = e.stmts[e.stmts.length - 1];
                 if (last.t === "patDef" || last.t === "stmDef") return problem("the last statement of a do-block must be an action, not a binding", last, "end the block with an action, such as `return x`");
                 const final = resolve(result), monad = block.monad && resolve(block.monad);
@@ -5733,6 +5745,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function recordHead(body: Expr, head: string): void {
         const at = sourceLocations.get(body);
         if (at && options.resultHeads) options.resultHeads.set(`${at.file}:${at.start}`, head);
+    }
+    // The monad an expression is in (a do-block, a >>= chain, a call), for a
+    // run that would leave its value undecided; "?" when inferences disagree
+    // (a generic function's body at different calls), which decides nothing.
+    function recordMonad(e: Expr, head: string): void {
+        const at = sourceLocations.get(e), key = at && `${at.file}:${at.start}`;
+        if (!key || !options.resultHeads || choosing) return;
+        const known = options.resultHeads.get(key);
+        options.resultHeads.set(key, known === undefined || known === head ? head : "?");
     }
     function defineBinding(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr, previous: Entry | undefined): void {
         const collection = previous && resolve(previous.type), c = clauses[0];

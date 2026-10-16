@@ -936,6 +936,9 @@ check n = {
     return (n * 2)
 }
 print [check 2,check 0,check 200]          # => [Ok 4,Err "not positive",Err "guard failed: n < 100"]
+# The same as a chain: >> runs each in turn (>>= would need a function).
+checkChain n = unless (n > 0) (Err "not positive") >> guard (n < 100) >> return (n * 2)
+print [checkChain 2,checkChain 0,checkChain 200]    # => [Ok 4,Err "not positive",Err "guard failed: n < 100"]
 # throw e is the failure in whatever monad the context names.
 print [Option Int (throw "x"),Result Int String (throw "x")]   # => [None,Err "x"]
 # A monad of your own: a counter threading a number through each step.

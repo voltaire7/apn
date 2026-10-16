@@ -196,7 +196,10 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   names; `return`'s instances are chosen the same way, never by running them.
   A do-block's monad is recorded in `resultHeads` too, keyed by the block's
   position: a block that is otherwise `pending` at run time is realized in it
-  (`checkedMonad`). `throw e` is a `pending` `throw` step, realized as `return`
+  (`checkedMonad`). The same holds for a `>>=`/`>>` binop and a call whose
+  inferred type is a monad (`recordMonad`, which records `?` when inferences
+  disagree); `eval` realizes a `pending` result by the expression it returns
+  from, or the outermost one a tail call left (`decided`). `throw e` is a `pending` `throw` step, realized as `return`
   is (`instanceIn`): `[]` for a list, a failing action for IO, else the
   `throw` instance whose head is the target's. `primSource` reads a
   parameter's argument expression one step back, as `assert` reads its own.
