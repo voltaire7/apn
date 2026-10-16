@@ -203,7 +203,8 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
 - `f a` in a written type: at runtime a variable type with `arguments` (apply
   of a variable type to a type, a `typeBind` parameter, and a `schema`
   parameter `((f a) e)` adding `e`, in `readFunctionType`; the parser reads a
-  lambda parameter `(f a e)` as that schema); in the checker an `apply` type
+  lambda parameter `f a e` or `(f a e)`, three or more lowercase names, as that
+  schema); in the checker an `apply` type
   whose head, once known, is a `ctor` (a type missing its first parameters:
   `List`, `Result _ e` for `f a`, `Result` for `f a e`), and
   `resolve` turns it into that type (`appliedType`); `typeOf` describes it with

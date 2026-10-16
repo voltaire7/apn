@@ -30,9 +30,9 @@ for (const [name, source, expected] of [
         ["true", "false", "false"]],
     ["f a in a contract takes any type holding an a", 'import "option"\napply2 (((a -> b) -> f a -> f b) m) xs = m (* 2) xs\nprint [apply2 map [1,2],apply2 map (Some 3)]\nprint (typeOf apply2)\ntwice ((f a -> f a) h) x = h (h x)\nprint (twice tail [1,2,3])',
         ["[[2,4],Some 6]", "((a -> b) -> c a -> c b) -> c a -> c b", "[3]"]],
-    // f a e: the type's first two parameters ((f a e) as a parameter, as (Vec n a xs)).
-    ["a type variable applied to several types", 'import "option"\nboth (((a -> b) -> (f a e) -> f b e) m) r = m (* 2) r\nprint [both map (Ok 3),both map (Err "no")]\nprint (typeOf both)\nk ((a -> List (f a e)) h) = h\nprint ((k (x -> [Ok x])) 1)\nprint (isType ((f a e) -> f a e) (x -> x))\nprint (isType (((f a) e) -> f a e) (x -> x))',
-        ['[Ok 6,Err "no"]', "((a -> b) -> c a d -> c b d) -> c a d -> c b d", "[Ok 1]", "true", "true"]],
+    // f a e: the type's first two parameters (as a parameter ((f a) e), as (Vec n a xs)).
+    ["a type variable applied to several types", 'import "option"\nboth (((a -> b) -> f a e -> f b e) m) r = m (* 2) r\nprint [both map (Ok 3),both map (Err "no")]\nprint (typeOf both)\nk ((a -> List (f a e)) h) = h\nprint ((k (x -> [Ok x])) 1)\nprint (isType ((f a e) -> f a e) (x -> x))\nprint (isType (((f a) e) -> f a e) (x -> x))\nprint (isType (f a e -> f a e) (x -> x))',
+        ['[Ok 6,Err "no"]', "((a -> b) -> c a d -> c b d) -> c a d -> c b d", "[Ok 1]", "true", "true", "true"]],
     ["[Int] is positional; a list of any length is List Int", "print (List Int == typeOf [1,2,3])\nprint ([Int] == typeOf [1])\nprint (typeOf [1,\"a\"])\nprint (typeOf [1] == List)",
         ["true", "false", "List (Int | String)", "true"]],
     ["a name bound to a type is that type; any other is a variable", "a = 100\nprint ((a -> a) == typeOf (x -> x))\nt = Int\nprint ((t -> t) == typeOf ((Int x) -> x))\nprint ((t -> t) == typeOf (x -> x))",
@@ -53,7 +53,7 @@ for (const [name, source, expected] of [
 for (const [source, message] of [
     ["bad (((a -> b) -> f a -> f b) m) = m (* 2) 5", "cannot use Int where f a is required"],
     ['nope ((f Int -> f Int) h) = h\nprint ((nope (x -> x)) "s")', "cannot use String where f Int is required"],
-    ["two (((f a e) -> f a e) h) = h\nprint ((two (x -> x)) [1])", "where f a b is required"],
+    ["two ((f a e -> f a e) h) = h\nprint ((two (x -> x)) [1])", "where f a b is required"],
     ['import "option"\ntwo (((f a e) -> f a e) h) = h\nprint ((two (x -> x)) (Some 1))', "cannot use Option Int where f a b is required"],
 ] as const) Deno.test(`function types: the checker rejects ${JSON.stringify(source)}`, () => {
     try { run(source, true); }

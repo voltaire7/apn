@@ -99,7 +99,8 @@ indented line (`func =` then `    {`, with the `}` aligned under the `{`).
 `add 2` is a partial application. A lambda's parameters are patterns
 separated by `, ` (as in Idris); juxtaposition is one pattern, as inside a
 definition's parentheses: `t x -> t` takes one argument and binds its type,
-like `f (t x) = t`. This holds everywhere, `match` alternatives included.
+like `f (t x) = t`, and `f a e -> …` is the flat typed pattern `((f a) e)`, as
+`(Vec n a xs)` is `((Vec n a) xs)`. This holds everywhere, `match` alternatives included.
 Directly inside `[ ]`, a `,` separates the list's items, so a lambda with
 several parameters there is parenthesized: `[(x, y -> x),f]`. A function may be written as several
 equations, tried in source order:
@@ -1223,10 +1224,9 @@ A type variable applied to a type, `f a`, is any type holding an `a`: `List a`,
 f a -> f b` is `map`'s type, and a contract `(((a -> b) -> f a -> f b) m)`
 accepts `map` and checks each use: the checker rejects `m (* 2) 5` (cannot use
 Int where f a is required). Applied to more types, it fills the first
-parameters in order: `f a e` is `Result a e` (but not `List a` or `Option a`).
-As a parameter it is written in parentheses, `(f a e) -> f a e`, as a flat
-typed pattern is (`(Vec n a xs)`); `f a e -> …` is `f` applied to the lambda
-`a e -> …`, as everywhere.
+parameters in order: `f a e` is `Result a e` (but not `List a` or `Option a`),
+so `(a -> b) -> f a e -> f b e` maps a Result (`f a e` as a parameter is the
+flat typed pattern `((f a) e)`; parenthesized, `(f a e)`, it reads the same).
 
 Types differing only in their variables' names are equal: `(b -> b) == typeOf
 (x -> x)`. A function contract checks each call: its arguments decide its type
