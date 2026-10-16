@@ -1697,6 +1697,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A lambda (Handler = a -> IO []) where a type is expected is the
         // function type it spells: its parameter any type, its result read as one.
         if (t.k === "fn") return fn(variable(), schemaValue(t.output, e, seen));
+        // An unbound name (missing.File) is the problem to report, not its type.
+        if (firstUnbound) return unknown();
         return problem("expected a type description", e);
     }
     function typeExpr(e: Expr, scope: Scope, captures?: Set<string>): Ty {
@@ -2461,11 +2463,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 runtimeChecks++;
                 return explicitDynamic;
             }
-            const t = resolve(f.value), a = resolve(argument.type);
-            // List T: the type of lists of T.
-            if (t.k === "atom" && t.name === "List" && (a.k === "type" || a.k === "list" && (a.items ?? []).every(x => resolve(x).k === "type"))) {
-                return { k: "type", value: list(a.k === "type" ? a.value : schemaValue(a, e)) };
+            const t = resolve(f.value);
+            let a = resolve(argument.type);
+            // A list or record of types (Point = [x: Float, y: Float]) given as a
+            // type's argument is the type it describes: List Point, Option Point.
+            const describes = a.k === "list" && !!a.items?.length && a.items.every(x => resolve(x).k === "type")
+                || a.k === "record" && a.fields.size > 0 && [...a.fields.values()].every(x => resolve(x).k === "type");
+            if (describes && (t.k === "atom" && t.name === "List" || t.k === "variant" && t.args.length > (f.applied ?? 0))) {
+                a = { k: "type", value: schemaValue(a, e) };
             }
+            // List T: the type of lists of T.
+            if (t.k === "atom" && t.name === "List" && a.k === "type") return { k: "type", value: list(a.value) };
             // IO T: the type of actions yielding T.
             if (t.k === "atom" && t.name === "IO") {
                 if (a.k === "type") return { k: "type", value: io(a.value) };

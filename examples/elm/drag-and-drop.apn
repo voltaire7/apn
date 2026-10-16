@@ -4,7 +4,7 @@ import "html"
 browser = import "browser"
 file = import "file"
 
-Msg = Pick | DragEnter | DragLeave | GotFiles Dynamic Dynamic
+Msg = Pick | DragEnter | DragLeave | GotFiles file.File (List file.File)
 
 init = [[hover: false, files: []],browser.none]
 

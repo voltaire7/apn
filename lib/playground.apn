@@ -179,13 +179,13 @@ _computer = [
 ]
 GameMsg =
     | GameTick Posix
-    | GameViewport Dynamic
+    | GameViewport browser.Viewport
     | GameResized Number Number
     | GameKey Bool String
     | GameMouseMove Number Number
     | GameClick
     | GameButton Bool
-    | GameVisibility Dynamic
+    | GameVisibility browser.Visibility
 _updateKeyboard isDown key keyboard = {
     others = filter (k -> k != key) keyboard.keys
     keyboard.keys = isDown ? key :: others : others

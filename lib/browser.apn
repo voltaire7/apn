@@ -20,7 +20,8 @@ BrowserEffect =
     | VisibilitySub Dynamic
 none = EffectNone
 batch effects = EffectBatch effects
-# The viewport's size: toMessage gets [width: ..., height: ...] (Browser.Dom).
+# The viewport's size: toMessage gets a Viewport (Browser.Dom).
+Viewport = [width: Number, height: Number]
 getViewport toMessage = ViewportGet toMessage
 # Browser.Events. A frame message gets the time (a Posix) or the milliseconds
 # since the last frame; a key message gets the key's name ("ArrowUp", " ");

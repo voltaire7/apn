@@ -1479,9 +1479,10 @@ class Parser {
             } else if (vt.k === "ident" && /^[A-Z]/.test(vt.v)) {
                 this.next();
                 tag = vt.v;
+                // A field is a type: a name (module.Type too), a group or a list.
                 while (this.peek().k === "ident" || this.isSym("(") || this.isSym("{") || this.isSym("[")) {
                     this.noLambda++;
-                    try { fields.push(this.parsePrimary()); } finally { this.noLambda--; }
+                    try { fields.push(this.parsePostfix(this.parsePrimary())); } finally { this.noLambda--; }
                 }
             } else {
                 if (!(vt.k === "ident" && /^[a-z]/.test(vt.v) || vt.k === "sym" && vt.v === "(")) throw new Error("Parser: expected a constructor: a capitalized name, [] or x :: rest");

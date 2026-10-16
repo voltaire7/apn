@@ -41,6 +41,11 @@ for (const [source, expected] of [
     ['f r = r.y == 0 ? 5.0 : r.vy / 8; f [y: 1.0, vy: 2.0]', '0.25'],
     // Either branch's three numbers: a list of three numbers.
     ['f c = c ? [1.0,2.0,3.0] : [0.0,0.0,0.0]; [1.0,1.0,1.0] + f true', '[2.0,3.0,4.0]'],
+    // A record alias is a type argument (List Point, Result Point e); a field
+    // may name another module's type (browser.Viewport).
+    ['import "option"\nPoint = [x: Float, y: Float]\nMsg = | Got (Result Point String)\nGot (Ok [x: 1, y: 2])', 'Got (Ok [x: 1.0, y: 2.0])'],
+    ['Point = [x: Float, y: Float]\nShape = | Path (List Point)\nPath [[x: 1, y: 2]]', 'Path [[x: 1.0, y: 2.0]]'],
+    ['browser = import "browser"\nMsg = Resized browser.Viewport | Other\nResized [width: 1, height: 2]', 'Resized [width: 1, height: 2]'],
     // A constructor pattern on a Dynamic field is checked when it runs.
     ['import "option"\nMsg = More | Got Dynamic\nf msg = match msg [More -> 0,(Got (Ok q)) -> q,(Got (Err _)) -> 1]\nf (Got (Ok 5))', '5'],
 ] as const) Deno.test(`default checking session: ${source}`, () => {
@@ -1183,3 +1188,8 @@ for (const source of ["1 = 2", "[a,1] = [5,2]", 'import "option"\nNone = Some 1'
 for (const source of ["1 = 1", "[a,1] = [5,1]", "f x = { 1 = x; x }"]) {
     Deno.test(`a binding that can match is accepted: ${JSON.stringify(source)}`, () => { run(session(), source); });
 }
+Deno.test("an unknown name in a type is reported as unbound", () => {
+    try { run(session(), 'Msg = | Got (List missing.File)'); }
+    catch (error) { if (error instanceof Error && error.message.includes("unbound variable 'missing'")) return; throw error; }
+    throw new Error("accepted an unknown type");
+});

@@ -13,8 +13,8 @@ Msg =
     | KeyChanged Bool String
     | TimeDelta Number
     | Resized Number Number
-    | GotViewport Dynamic
-    | VisibilityChanged Dynamic
+    | GotViewport browser.Viewport
+    | VisibilityChanged browser.Visibility
 
 init = [[
     keys: noKeys

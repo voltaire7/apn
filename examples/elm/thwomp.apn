@@ -6,7 +6,7 @@ import ["html","number"]
 browser = import "browser"
 p5 = import "p5"
 
-Msg = GotViewport Dynamic | Resized Number Number | MouseMoved Number Number
+Msg = GotViewport browser.Viewport | Resized Number Number | MouseMoved Number Number
 
 init = [[width: 0, height: 0, x: 0, y: 0],browser.getViewport GotViewport]
 

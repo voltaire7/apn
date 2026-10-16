@@ -5,7 +5,12 @@ browser = import "browser"
 file = import "file"
 task = import "task"
 
-Msg = Pick | DragEnter | DragLeave | GotFiles Dynamic Dynamic | GotPreviews Dynamic
+Msg =
+    | Pick
+    | DragEnter
+    | DragLeave
+    | GotFiles file.File (List file.File)
+    | GotPreviews (List String)
 
 init = [[hover: false, previews: []],browser.none]
 

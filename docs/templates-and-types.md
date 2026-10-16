@@ -430,7 +430,10 @@ with `Byte = MkByte UInt8 | NoByte`, `MkByte 300` is a static range error,
 also when the value comes from a variable or from another function's
 parameter (`mk x = MkByte x` rejects `mk 300`). A field that is a type
 parameter (`Some value`) holds its value unchanged. Grouped and structural payload types compose:
-`Tree a = Branch [a] | Leaf a`.
+`Tree a = Branch [a] | Leaf a`. A record alias is a type like any other, also as
+a type's argument (`Path (List Point)`, `Got (Result Point String)` with
+`Point = [x: Float, y: Float]`), and a field may name a module's type
+(`Resized browser.Viewport`).
 
 `func ((Option Int) value) = ...` checks parent membership and applies the
 specialized payload contract. An unrelated outer value falls through to the

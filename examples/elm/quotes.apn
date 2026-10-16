@@ -4,8 +4,9 @@ import ["html","option","decode"]
 browser = import "browser"
 http = import "http"
 
-Model = Failure | Loading | Success Dynamic
-Msg = MorePlease | GotQuote Dynamic
+Quote = [quote: String, source: String, author: String, year: Int]
+Model = Failure | Loading | Success Quote
+Msg = MorePlease | GotQuote (Result Quote http.HttpError)
 
 quoteDecoder = map4 toQuote
     (field "quote" string)

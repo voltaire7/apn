@@ -95,7 +95,7 @@ that returned it, and each resulting message is another update.
 | `random.generate toMsg generator` | a value drawn from a fresh seed |
 | `http.get [url: ..., expect: ...]` | `http.expectString toMsg` sends `toMsg (Ok body)`; `http.expectJson toMsg decoder` decodes the body |
 | `file.selectFile mimes toMsg`, `file.selectFiles mimes toMsg` | the picked file, or the first and the rest |
-| `browser.getViewport toMsg` | `[width: ..., height: ...]` of the window |
+| `browser.getViewport toMsg` | the window's size, a `browser.Viewport` (`[width: Number, height: Number]`) |
 
 A failed request sends `Err` of `NetworkError`, `BadStatus status` or
 `BadBody reason` (`http.HttpError`). Requests are subject to the page's CORS
@@ -134,8 +134,7 @@ the browser's form submission); `onInput toMessage` passes the field's string.
 `onEvent name handler` (Elm's `on`) and `preventDefaultOn name handler` (which
 also prevents the browser's default action, such as a drop opening the file)
 pass the event as a record: `value` and `checked` (the target's), `key`,
-`pageX`, `pageY`, and `files` (the target's or a drop's, each a record of
-`name`, `size`, `mime` and an object `url`).
+`pageX`, `pageY`, and `files` (the target's or a drop's, each a `file.File`).
 
 `svg = import "svg"` gives SVG elements and attributes, as Elm's `Svg` and
 `Svg.Attributes` (`svg.svg`, `svg.circle`, `svg.rect`, `svg.line`, `svg.path`,
@@ -172,6 +171,11 @@ These follow Elm's modules of the same names; the
   `decode.at path d`, `decode.list d`, `decode.succeed x`; decoders are
   monads too (`map4 (a, b, c, d -> ...) d1 d2 d3 d4`).
 - `file`: pickers (above) and `file.toUrl f`, the action yielding a file's URL.
+  A file is a `file.File`: `[name: String, size: Int, mime: String, url: String]`.
+
+Messages carry these types like any others, as Elm's do:
+`Msg = | GotText (Result String http.HttpError)` (APN's `Result` holds its value
+type first), `GotFiles file.File (List file.File)`, `GotViewport browser.Viewport`.
 
 ## Playground
 

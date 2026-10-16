@@ -2,8 +2,9 @@
 # File upload with the <input type="file"> node.
 import "html"
 browser = import "browser"
+file = import "file"
 
-Msg = | GotFiles Dynamic
+Msg = | GotFiles (List file.File)
 
 init = [[],browser.none]
 
