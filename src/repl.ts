@@ -2,9 +2,10 @@ import { lex, type Token } from "./lexer.ts";
 import { parse } from "./parser.ts";
 import { VERSION } from "./cli-options.ts";
 import { APNError } from "./errors.ts";
-import { NATIVES, envNames, dirname, Interpreter, setInterruptFlag, resetInterrupt } from "./interp.ts";
+import { NATIVE_NAMES, NATIVES, envNames, dirname, Interpreter, setInterruptFlag, resetInterrupt } from "./interp.ts";
 import type { Value, Env } from "./types.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
+import { highlightTokens, PALETTES } from "./highlight.ts";
 
 // ---------------- REPL ----------------
 
@@ -193,106 +194,37 @@ function lastSignificant(src: string): string {
 }
 
 // ---- ANSI colors (TTY REPL only; piped output stays plain) ----
-// Catppuccin Frappé palette, truecolor:
-// https://github.com/catppuccin/nvim/blob/main/lua/catppuccin/palettes/frappe.lua
+// Tokens take the shared Frappé palette (src/highlight.ts), in truecolor.
+const ansi = (hex: string) => `\x1b[38;2;${parseInt(hex.slice(1, 3), 16)};${parseInt(hex.slice(3, 5), 16)};${parseInt(hex.slice(5, 7), 16)}m`;
+const T = Object.fromEntries(Object.entries(PALETTES.dark).map(([type, hex]) => [type, ansi(hex)]));
 const A = {
     reset: "\x1b[0m", bold: "\x1b[1m", dim: "\x1b[2m",
     red: "\x1b[38;2;231;130;132m", // #e78284   errors
-    green: "\x1b[38;2;166;209;137m", // #a6d189 strings/chars
-    yellow: "\x1b[38;2;229;200;144m", // #e5c890 numbers
-    blue: "\x1b[38;2;140;170;238m", // #8caaee  natives
-    magenta: "\x1b[38;2;202;158;230m", // #ca9ee6 mauve: match/bools
-    cyan: "\x1b[38;2;153;209;219m", // #99d1db  sky: prompts, capital idents
-    gray: "\x1b[38;2;131;139;167m", // #838ba7  overlay1: punctuation, structure
-    operator: "\x1b[38;2;239;159;118m", // #ef9f76 peach: operators
-    comment: "\x1b[38;2;115;121;148m", // #737994 overlay0: comments
+    green: T.string, yellow: T.number, cyan: T.type, // carets, hints, prompts
 };
 const paint = (code: string, s: string) => code + s + A.reset;
-
-function colorNumber(text: string): string {
-    const typed = text.match(/^([A-Z][A-Za-z0-9]*) (.*)$/);
-    if (typed) return paint(A.cyan, typed[1]) + " " + colorNumber(typed[2]);
-    const radix = text.match(/^(0)([xXbBoO])(.+)$/);
-    if (radix) return paint(A.yellow, radix[1]) + paint(A.operator, radix[2]) + paint(A.yellow, radix[3]);
-    return text.split(/([+\-/]|[eE](?=[+-]?\d)|i$)/).filter(Boolean).map((part) =>
-        paint(/^[+\-/eEi]$/.test(part) ? A.operator : A.yellow, part)).join("");
-}
 
 export function renderColored(interp: Interpreter, value: Value, emit: (s: string) => void): void {
     interp.render(value, (text, kind) => {
         if (kind === "key") { emit(text); return; }
-        if (kind === "int" || kind === "float" || kind === "rational" || kind === "complex") { emit(colorNumber(text)); return; }
-        const color = kind === "string" || kind === "char" ? A.green
-            : kind === "bool" ? A.magenta
-            : kind === "variant" || kind === "type" ? A.cyan : A.gray;
-        emit(paint(color, text));
+        if (kind === "int" || kind === "float" || kind === "rational" || kind === "complex") { emit(highlightLine(text)); return; }
+        const type = kind === "string" || kind === "char" ? "string"
+            : kind === "bool" ? "keyword"
+            : kind === "variant" || kind === "type" ? "type" : "punctuation";
+        emit(paint(T[type], text));
     });
 }
 
-const REPL_KEYWORDS = new Set(["import", "load", "use", "match", "return"]);
-const NATIVE_NAMES = new Set(["cast", "do", ...NATIVES.map(([n]) => n)]);
 
-// Syntax-highlight one buffer line (best-effort, purely cosmetic).
+// Syntax-highlight one buffer line (best-effort, purely cosmetic); ternaries
+// carries open ?: from line to line.
 export function highlightLine(s: string, ternaries: number[] = [0]): string {
-    let out = "", i = 0;
-    const word = (c: string) => /[A-Za-z0-9_]/.test(c);
-    while (i < s.length) {
-        const c = s[i];
-        if (c === "#") { out += paint(A.comment, s.slice(i)); break; }
-        if (c === '"') {
-            let j = i + 1;
-            while (j < s.length && s[j] !== '"') {
-                if (s[j] === "\\") j++;
-                j++;
-            }
-            j = Math.min(j + 1, s.length);
-            out += paint(A.green, s.slice(i, j)); i = j; continue;
-        }
-        if (c === "'") {
-            const j = s[i + 1] === "\\" ? Math.min(i + 4, s.length) : Math.min(i + 3, s.length);
-            out += paint(A.green, s.slice(i, j)); i = j; continue;
-        }
-        if (/\d/.test(c) || (c === "." && /\d/.test(s[i + 1] ?? ""))) {
-            const literal = s.slice(i).match(/^(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|(?:\d+(?:\.(?!\.)\d*)?|\.\d+)(?:[eE][+-]?\d+)?)/)?.[0] ?? c;
-            out += colorNumber(literal); i += literal.length;
-            if (s[i] === "i" && !/[A-Za-z0-9_']/.test(s[i + 1] ?? "")) {
-                out += paint(A.operator, "i"); i++;
-            }
-            continue;
-        }
-        if (word(c)) {
-            let j = i;
-            while (j < s.length && word(s[j])) j++;
-            const w = s.slice(i, j);
-            out += REPL_KEYWORDS.has(w) || w === "true" || w === "false" ? paint(A.magenta, w)
-                : NATIVE_NAMES.has(w) ? paint(A.blue, w)
-                : /^[A-Z]/.test(w) ? paint(A.cyan, w)
-                : w;
-            i = j; continue;
-        }
-        // Track pending ternaries independently inside each bracket scope.
-        if ("([{".includes(c)) ternaries.push(0);
-        if (")]}".includes(c) && ternaries.length > 1) ternaries.pop();
-        if (c === "?") ternaries[ternaries.length - 1]++;
-        if (c === ":" && ternaries[ternaries.length - 1] > 0) {
-            ternaries[ternaries.length - 1]--;
-            out += paint(A.operator, c); i++; continue;
-        }
-        if (c === ";" || c === ",") ternaries[ternaries.length - 1] = 0;
-        // A run of operator characters is one operator (<+>, >>=), as lexed.
-        const run = s.slice(i).match(/^[!$%&*+\-/<=>\\^|~:]+/)?.[0];
-        if (run && run.length > 1) {
-            out += [...run].map((ch) => paint(A.operator, ch)).join("");
-            i += run.length; continue;
-        }
-        // Keep assignment and delimiters gray; operators use peach.
-        if ("+-*/%^!<>$&|?\\`@~".includes(c)) out += paint(A.operator, c);
-        else if ("(){}[];,:.=".includes(c)) out += paint(A.gray, c);
-        else out += c;
-        i++;
-
+    let out = "", at = 0;
+    for (const token of highlightTokens(s, NATIVE_NAMES, ternaries)) {
+        out += s.slice(at, token.start) + paint(T[token.type], s.slice(token.start, token.start + token.length));
+        at = token.start + token.length;
     }
-    return out;
+    return out + s.slice(at);
 }
 
 // ---- history persistence (~/.apn_history, one JSON entry per line) ----

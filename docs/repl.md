@@ -40,7 +40,8 @@ empty result (`print 3` shows only `3`); bindings echo nothing. Interactive feat
   blank lines are kept, without auto-indent or closing-bracket dedent. Enter
   then runs it.
 - **Colors** (Catppuccin Frappé palette, truecolor): input is highlighted as
-  typed (comments overlay0, strings/chars green, numbers yellow,
+  typed, by the tokenizer the language server and the web editor share
+  (`src/highlight.ts`) (comments overlay0, strings/chars green, numbers yellow,
   bools mauve, natives blue, capital idents sky,
   punctuation overlay1, operators peach); echoed values are colored by kind with
   gray structure (brackets, colons, commas; keys plain, variant tags sky);

@@ -210,7 +210,10 @@ examples page), and `OUTPUT/editor.html`, an editor holding the folder's other
 programs, the standard library and the runtime. `editor.html#NAME` opens
 `NAME.apn`; Run (Ctrl+Enter) runs the edited program in a sandboxed frame
 beside it, checking it first. Edits are kept for the browser session; Reset
-restores the example. An example's first comment line gives its title and,
+restores the example. The code is colored as in the REPL and Neovim; the
+Dark/Light button switches between Catppuccin Frappé and Latte (the system's
+choice until you pick one, then remembered). An example's first comment line
+gives its title and,
 when it names a URL, the Original link (`# Cube, from https://...`). Editor
 programs may import the standard library, not other files.
 

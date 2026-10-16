@@ -1,10 +1,18 @@
 // Tolerant lexical colors: keep highlighting while a document is incomplete.
-// Token names form the LSP legend; colors match the REPL's Frappé palette.
+// The REPL, the language server and the web editor all color with these
+// tokens; their names form the LSP legend.
 export const TOKEN_TYPES = ["number", "string", "comment", "keyword", "function", "type", "operator", "punctuation"];
+// Catppuccin's colors for each token type: Frappé on dark backgrounds (the
+// REPL's, and editors/neovim/apn.lua's), Latte on light ones.
+// https://github.com/catppuccin/palette
+export const PALETTES: Record<"dark" | "light", Record<string, string>> = {
+    dark: { number: "#e5c890", string: "#a6d189", comment: "#737994", keyword: "#ca9ee6", function: "#8caaee", type: "#99d1db", operator: "#ef9f76", punctuation: "#838ba7" },
+    light: { number: "#df8e1d", string: "#40a02b", comment: "#9ca0b0", keyword: "#8839ef", function: "#1e66f5", type: "#04a5e5", operator: "#fe640b", punctuation: "#8c8fa1" },
+};
 export interface HighlightToken { line: number; start: number; length: number; type: string; }
-export function highlightTokens(source: string, natives: Set<string>): HighlightToken[] {
+// ternaries carries open ?: across calls, for text given a line at a time.
+export function highlightTokens(source: string, natives: Set<string>, ternaries = [0]): HighlightToken[] {
     const tokens: HighlightToken[] = [];
-    const ternaries = [0];
     let i = 0, line = 0, column = 0;
     const take = (length: number, type?: string) => {
         const text = source.slice(i, i + length);
@@ -59,10 +67,24 @@ export function highlightTokens(source: string, natives: Set<string>): Highlight
         // A run of operator characters is one operator (<+>, >>=), as lexed.
         const run = source.slice(i).match(/^[!$%&*+\-/<=>\\^|~:]+/)?.[0];
         if (run && run.length > 1) { take(run.length, "operator"); continue; }
-        take(1, "+-*/%^!<>$&|?\\@~".includes(c) ? "operator"
+        take(1, "+-*/%^!<>$&|?\\`@~".includes(c) ? "operator"
             : "(){}[];,:.=".includes(c) ? "punctuation" : undefined);
     }
     return tokens;
+}
+
+// Source as HTML, each token a <span class="t-TYPE">: the text is escaped
+// after it is tokenized, so -> stays an arrow.
+export function highlightHtml(source: string, natives: Set<string>): string {
+    const escape = (text: string) => text.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
+    const lines = source.split("\n"), html = lines.map(() => ""), ends = lines.map(() => 0);
+    for (const token of highlightTokens(source, natives)) {
+        const line = lines[token.line];
+        html[token.line] += escape(line.slice(ends[token.line], token.start))
+            + `<span class="t-${token.type}">${escape(line.slice(token.start, token.start + token.length))}</span>`;
+        ends[token.line] = token.start + token.length;
+    }
+    return lines.map((line, n) => html[n] + escape(line.slice(ends[n]))).join("\n");
 }
 
 export function semanticTokens(source: string, natives: Set<string>): number[] {

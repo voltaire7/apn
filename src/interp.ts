@@ -71,6 +71,8 @@ export const NATIVES: Array<[string, number]> = [
     // to T x writes x as a T; from T x reads it back (methods, like map).
     ["to", 2], ["from", 2],
 ];
+// The names editors color as built-in functions (the natives, cast and do).
+export const NATIVE_NAMES = new Set(["cast", "do", ...NATIVES.map(([name]) => name)]);
 const ZERO: Value = { kind: "int", v: 0n, typeName: "UInt" };
 
 export class Interpreter {

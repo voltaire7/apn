@@ -1,6 +1,7 @@
 import { parse } from "../main.ts";
 import { Interpreter } from "../src/interp.ts";
 import { renderColored, highlightLine } from "../src/repl.ts";
+import { highlightHtml } from "../src/highlight.ts";
 
 // The REPL echo: every value is colored as the interpreter renders it.
 function echo(interp: Interpreter, value: import("../src/types.ts").Value): string {
@@ -78,7 +79,7 @@ Deno.test("ternary colons are peach, record colons and assignment are gray", () 
     if (text.split(peach + ":").length - 1 !== 2) throw new Error("Missing ternary color");
     if (!text.includes(gray + ":") || !text.includes(gray + "=")) throw new Error("Wrong punctuation color");
     for (const op of ["==", "!=", "<=", ">="]) {
-        if (!highlightLine(op).includes(peach + "=")) throw new Error("Comparison lost operator color");
+        if (highlightLine(op) !== peach + op + "\x1b[0m") throw new Error("Comparison lost operator color");
     }
     const state = [0];
     highlightLine("true ?", state);
@@ -111,4 +112,10 @@ Deno.test("REPL colors match and return as it colors import, load and use", () =
     for (const word of ["match", "return", "load", "use"]) {
         if (color(word) !== color("import")) throw new Error(`${word}: ${JSON.stringify(highlightLine(word))}`);
     }
+});
+
+Deno.test("the web editor's HTML escapes tokens after coloring them", () => {
+    const html = highlightHtml('f x = match x [\n    1 -> "<b>"\n]', new Set());
+    if (!html.includes('<span class="t-operator">-&gt;</span>') || !html.includes('<span class="t-string">"&lt;b&gt;"</span>')) throw new Error(html);
+    if (!html.includes('<span class="t-keyword">match</span>') || html.split("\n").length !== 3) throw new Error(html);
 });

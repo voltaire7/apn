@@ -1,19 +1,19 @@
-import { Interpreter } from "./interp.ts";
+import { Interpreter, NATIVE_NAMES } from "./interp.ts";
 import { parse } from "./parser.ts";
 import { BUNDLE_APP, BUNDLE_LIB, bundleProgram } from "./modules.ts";
 
 // Text inside a <script> element: nothing in it may close the element.
 const scriptText = (text: string) => text.replace(/<\/script/gi, "<\\/script");
 const scriptJson = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u003c");
-// How a page shows a program's error (apn-error), and its body's margins.
-const PAGE_STYLE = "body{margin:8px}#apn-error{white-space:pre-wrap;color:#b42318;background:#fff4f2;border:1px solid #f4c7c0;border-radius:6px;padding:8px 12px;font:13px/1.45 ui-monospace,monospace}";
+// A program's page: a readable base font, and how it shows an error (apn-error).
+const PAGE_STYLE = "body{margin:0;padding:16px;font:16px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:#1f2430}#apn-error{white-space:pre-wrap;color:#b42318;background:#fff4f2;border:1px solid #f4c7c0;border-radius:8px;padding:10px 14px;font:13px/1.5 ui-monospace,monospace}";
 
-// The browser runtime (src/browser-runtime.ts) as one script.
-async function bundleRuntime(): Promise<string> {
+// A browser script (src/browser-runtime.ts, src/editor.ts) as one script.
+async function bundle(entry: string): Promise<string> {
     const temporary = Deno.makeTempDirSync({ prefix: "apn-html-" });
     try {
-        const output = `${temporary}/runtime.js`;
-        const result = await new Deno.Command(Deno.execPath(), { args: ["bundle", "--platform=browser", "--no-remote", "--no-npm", "--minify", "--output", output, new URL("./browser-runtime.ts", import.meta.url).pathname], stdout: "piped", stderr: "piped" }).output();
+        const output = `${temporary}/bundle.js`;
+        const result = await new Deno.Command(Deno.execPath(), { args: ["bundle", "--platform=browser", "--no-remote", "--no-npm", "--minify", "--output", output, new URL(entry, import.meta.url).pathname], stdout: "piped", stderr: "piped" }).output();
         if (!result.success) throw new Error(new TextDecoder().decode(result.stderr));
         return scriptText(Deno.readTextFileSync(output));
     } finally { Deno.removeSync(temporary, { recursive: true }); }
@@ -36,7 +36,7 @@ function programPage(program: { source: string; modules: Record<string, string> 
 
 export async function buildHtml(sourceFile: string, outputFile: string): Promise<void> {
     const program = checkedProgram(sourceFile);
-    Deno.writeTextFileSync(outputFile, programPage(program, await bundleRuntime()));
+    Deno.writeTextFileSync(outputFile, programPage(program, await bundle("./browser-runtime.ts")));
 }
 
 // A folder of examples as a site: index.html is the folder's index.apn (a
@@ -55,12 +55,13 @@ export async function buildSite(sourceDirectory: string, outputDirectory: string
     }
     // The editor runs each example with the standard library.
     const modules = Object.fromEntries(Object.entries(index.modules).filter(([path]) => path.startsWith(BUNDLE_LIB)));
-    const runtime = await bundleRuntime();
+    const [runtime, editorScript] = await Promise.all([bundle("./browser-runtime.ts"), bundle("./editor.ts")]);
     Deno.mkdirSync(outputDirectory, { recursive: true });
     const output = outputDirectory.replace(/\/?$/, "/");
     Deno.writeTextFileSync(`${output}index.html`, programPage(index, runtime));
     const editor = Deno.readTextFileSync(new URL("./editor.html", import.meta.url))
-        .replace("/*SITE*/", () => scriptJson({ examples, modules, style: PAGE_STYLE }))
-        .replace("/*RUNTIME*/", () => runtime);
+        .replace("/*SITE*/", () => scriptJson({ examples, modules, natives: [...NATIVE_NAMES], style: PAGE_STYLE }))
+        .replace("/*RUNTIME*/", () => runtime)
+        .replace("/*EDITOR*/", () => editorScript);
     Deno.writeTextFileSync(`${output}editor.html`, editor);
 }
