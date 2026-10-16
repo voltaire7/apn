@@ -231,17 +231,17 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   `runKnown`, at statements, `<-` and inside running do-blocks; a top-level
   `x <- action` keeps the run's facts (`runLocally` keeps its cells local).
   Tests: `tests/io-test.ts`.
-- Monads: clauses for `Interpreter.METHODS` (map, >>=, <*>, return) defined
+- Monads: clauses for `METHODS` (`ast.ts`: map, >>=, <*>, return, throw, ...) defined
   after the prelude are registered in `instances` (newest tried first, by a
   probing apply) and bind no name; `instanceFamilies` records the types they
-  cover for `Monad`/`Functor` patterns. `return` builds a `pending` value
+  cover (a discarded value of a type with `>>=` makes a do-block). `return` builds a `pending` value
   (`PendingStep` return/bind/do) that `realize` turns into a concrete monad
   (IO, List, or a `return` instance keyed by a type pattern that matches type
   descriptors). `bind`/`mapValue`/`apValue` dispatch IO and lists natively,
   then instances; map and <*> derive from >>= and return. A block's first
   `<-` value decides its monad: IO keeps `runDoBlock`, others go through
   `desugarDo` (a fresh scope per continuation). The checker types pending as
-  `Monad t` (unifies with any monadic type), records instance types in the
+  `m t` (internally `$monad t`, unifies with any monadic type), records instance types in the
   session's `instances` (`define` infers them on a copy of the scope), tracks
   each do-block's monad in `doBlocks`, and its view analysis and `topNames`
   skip instance clauses. Tests: `tests/monad-test.ts`.

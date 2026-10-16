@@ -20,8 +20,11 @@ function run(source: string, checked: boolean): string[] {
 for (const [name, source, expected] of [
     ["a lambda equals the type it spells out", "print ((a -> a) == typeOf (x -> x))\nprint ((b -> b) == typeOf (x -> x))\nprint ((a -> a) == typeOf (x, y -> x))\nprint ((a -> b -> a) == typeOf (x, y -> x))",
         ["true", "true", "false", "true"]],
-    ["a function type taking a function", "print (((a -> b) -> List a -> List b) == typeOf map)\nprint (typeOf map)",
-        ["true", "(a -> b) -> List a -> List b"]],
+    ["a function type taking a function", "print (((a -> b) -> List a -> List a) == typeOf filter)\nprint (typeOf filter)",
+        ["true", "(a -> b) -> List a -> List a"]],
+    // map works on any type with a map instance: c a is that type holding a.
+    ["map's type maps any functor", "print (typeOf map)\nd m = map (* 2) m\nprint (typeOf d)",
+        ["(a -> b) -> c a -> c b", "a b -> a c"]],
     ["[Int] is positional; a list of any length is List Int", "print (List Int == typeOf [1,2,3])\nprint ([Int] == typeOf [1])\nprint (typeOf [1,\"a\"])\nprint (typeOf [1] == List)",
         ["true", "false", "List (Int | String)", "true"]],
     ["a name bound to a type is that type; any other is a variable", "a = 100\nprint ((a -> a) == typeOf (x -> x))\nt = Int\nprint ((t -> t) == typeOf ((Int x) -> x))\nprint ((t -> t) == typeOf (x -> x))",

@@ -48,8 +48,6 @@ const builtins = new Map<string, string>([
     ["set", "set cell value — action replacing a Mutable cell's contents; yields []."],
     ["IO", "IO T — the type of actions yielding T; IO [] action checks an action (return x makes one)."],
     ["map", "map f m — m with f applied to what it holds: an action, a list, or a type with an instance."],
-    ["Monad", "Monad — the type of monadic values (IO, lists, types with >>= instances); return x is undecided until a context names its monad."],
-    ["Functor", "Functor — the type of values map works on."],
     ["to", "to T x — x written as a T: to String, to JSON, to (List Char); another type converts as applying it. A method: define to T = ... for your types."],
     ["from", "from T x — a T read back: from String parses, from JSON decodes, from (List Char) joins. A method: define from T = ... for your types."],
     ["JSON", "JSON — JSON text, a named String: to JSON x encodes, from JSON text decodes."],

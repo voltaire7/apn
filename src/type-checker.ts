@@ -15,8 +15,10 @@ function io(t: Ty): Ty { return { k: "variant", name: "IO", args: [t] }; }
 function isIO(t: Ty): boolean { return t.k === "variant" && t.name === "IO" && t.args.length === 1; }
 // Monad t: a value in a monad not decided yet (return x), which any monad's
 // type accepts.
-function pendingTy(t: Ty): Ty { return { k: "variant", name: "Monad", args: [t] }; }
-function isPending(t: Ty): boolean { return t.k === "variant" && t.name === "Monad" && t.args.length === 1; }
+// (Its name is no type a program can declare.)
+const PENDING = "$monad";
+function pendingTy(t: Ty): Ty { return { k: "variant", name: PENDING, args: [t] }; }
+function isPending(t: Ty): boolean { return t.k === "variant" && t.name === PENDING && t.args.length === 1; }
 // Scalar types an alias names a subtype of (Money = Float), as at runtime.
 const NAMED_BASES = new Set([...NUMERIC_TYPES.filter(t => !["Number", "Real", "Integer", "Exact", "Inexact"].includes(t)), "String", "Bool", "Char"]);
 // A definition that adds an instance instead of binding a name: any
@@ -1046,9 +1048,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A monad the checker does not know (an unbound name's) stays unknown.
         if (resolve(container).k === "dynamic") return unknown();
         const name = op === "map" ? "map" : op === "ap" ? "'<*>'" : op === "then" ? "'>>'" : "'>>='";
-        // A monad not decided yet (return x, a Monad or Functor parameter).
-        if (isPending(container) || container.k === "atom" && (container.name === "Monad" || container.name === "Functor")) {
-            const value = isPending(container) ? (container as Extract<Ty, { k: "variant" }>).args[0] : variable();
+        // A monad not decided yet (return x).
+        if (isPending(container)) {
+            const value = (container as Extract<Ty, { k: "variant" }>).args[0];
             if (op === "map") return pendingTy(application(other, { type: value }, at));
             if (op === "then") return other;
             if (op === "bind") return application(other, { type: value }, at);
@@ -1418,8 +1420,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         ) return;
         // A Function field or parameter accepts any function.
         if (expected.k === "atom" && expected.name === "Function" && ["fn", "overload", "intrinsic"].includes(actual.k)) return;
-        // A Monad or Functor parameter accepts any monadic value.
-        if (expected.k === "atom" && (expected.name === "Monad" || expected.name === "Functor") && monadHeld(actual) !== undefined) return;
         if (expected.k === "atom" && actual.k === "atom") {
             if (expected.name === actual.name) return;
             if (expected.name === "Number" && NUMERIC_TYPES.includes(actual.name)) {
@@ -2627,7 +2627,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const t = resolve(type);
         if (isIO(t) || isPending(t)) return (t as Extract<Ty, { k: "variant" }>).args[0];
         if (t.k === "list") return t.element;
-        if (t.k === "atom" && (t.name === "Monad" || t.name === "Functor")) return null;
         if (t.k === "variant") return boundType(t);
         return undefined;
     }
@@ -3429,7 +3428,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // is known of its arguments (first Nil for first (Cons x _) = x) fails
     // whenever it runs: report it now.
     // Whether only a value's shape decides a pattern: literals, constructors,
-    // list shapes. A typed pattern (Functor m) is left to its conversion.
+    // list shapes. A typed pattern (Int n) is left to its conversion.
     function decidedByShape(p: Pattern, scope: Scope): boolean {
         return p.p === "constr" ? (isConstructor(scope.get(p.tag)) || naturalPattern(p, scope)) && p.args.every(q => decidedByShape(q, scope))
             : p.p === "list" ? p.v.every(q => decidedByShape(q, scope)) : p.p === "cons" ? decidedByShape(p.head, scope) && decidedByShape(p.tail, scope)
@@ -6131,7 +6130,7 @@ function signatureText(type: Ty): string | undefined {
             case "variant": {
                 const args = t.args.map(a => write(a, 2));
                 if (args.some(a => a === undefined)) return undefined;
-                const name = t.name === "Monad" ? "m" : t.name;
+                const name = t.name === PENDING ? "m" : t.name;
                 return args.length ? wrap(`${name} ${args.join(" ")}`, 2) : name;
             }
             case "type": return "Type";

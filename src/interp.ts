@@ -1947,7 +1947,8 @@ export class Interpreter {
     // Clause functions a program defines for these methods, newest last: tried
     // (newest first) before the builtin IO and list instances.
     private instances = new Map<string, Value[]>();
-    // The variant families each method has an instance for (Monad/Functor patterns).
+    // The variant families each method has an instance for (a discarded
+    // statement of one with >>= makes a do-block).
     private instanceFamilies = new Map<string, Set<unknown>>();
     private loadingPrelude = true;
 
@@ -2867,13 +2868,6 @@ export class Interpreter {
 
     matchesValueType(name: string, value: Value): boolean {
         if (name === "Dynamic") return true;
-        if (name === "Monad" || name === "Functor") {
-            const v = this.dataValue(value);
-            if (v.kind === "io" || v.kind === "pending" || this.isList(v)) return true;
-            if (v.kind !== "variant" || !v.family) return false;
-            const methods = name === "Monad" ? [">>="] : ["map", ">>="];
-            return methods.some(m => this.familiesOf(m).has(v.family));
-        }
         if (name === "Type") return this.isTypeValue(value);
         if (name !== "Function" && name !== "Mutable") value = this.dataValue(value);
         if (name === "Pointer") return value.kind === "pointer";

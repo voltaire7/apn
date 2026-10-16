@@ -514,8 +514,11 @@ monads. It prints as each value it can become, one per line: the list's, then
 each instance's (`print (return 123)` prints `[123]`, `Some 123` and `Ok 123`
 with the option module; `print empty` prints `[]`, `None` and `Err "empty"`), and an undecided `>>=`
 prints as its source; using one as a plain value is an ambiguity error.
-`Monad` and `Functor` are types for patterns: `(Functor m)` accepts any value
-`map` works on, `(Monad m)` any monadic value.
+There are no `Functor` or `Monad` types: a parameter passed to `map` or `>>=`
+accepts whatever has an instance, checked at each call (`double m = map (* 2) m`;
+`double 5` is a static error, as is a type with no `map` instance).
+`typeOf map` is `(a -> b) -> c a -> c b`, `c` being that type (a description:
+a type variable applied to a type cannot be written).
 
 ### Overloading on the result type
 

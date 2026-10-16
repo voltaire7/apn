@@ -21,11 +21,17 @@ type Shape =
     | { tag: "name"; name: string; args: Shape[] }
     | { tag: "arrow"; from: Shape; to: Shape }
     | { tag: "list"; element: Shape }
-    | { tag: "union"; choices: Shape[] };
+    | { tag: "union"; choices: Shape[] }
+    // A type constructor not known yet applied to a type: map's f a. Once
+    // known, f is a name holding the type's other parameters (Result _ e).
+    | { tag: "apply"; head: Shape; arg: Shape };
 const fresh = (): Shape => ({ tag: "var" });
 const named = (name: string, args: Shape[] = []): Shape => ({ tag: "name", name, args });
 const arrow = (from: Shape, to: Shape): Shape => ({ tag: "arrow", from, to });
 const list = (element: Shape): Shape => ({ tag: "list", element });
+// A known constructor applied to the parameter map maps: List x, Result x e.
+const applied = (head: Extract<Shape, { tag: "name" }>, arg: Shape): Shape =>
+    head.name === "List" && !head.args.length ? list(arg) : named(head.name, [arg, ...head.args]);
 function resolve(t: Shape): Shape {
     return t.tag === "var" && t.link ? resolve(t.link) : t;
 }
@@ -37,6 +43,7 @@ function occurs(v: Shape, t: Shape): boolean {
         case "list": return occurs(v, t.element);
         case "name": return t.args.some(a => occurs(v, a));
         case "union": return t.choices.some(a => occurs(v, a));
+        case "apply": return occurs(v, t.head) || occurs(v, t.arg);
         default: return false;
     }
 }
@@ -49,6 +56,17 @@ function unify(a: Shape, b: Shape): Shape {
         return a;
     }
     if (b.tag === "var") return unify(b, a);
+    // f x against a known type maps its first parameter: List x, Option x,
+    // Result x e (f is then Result _ e).
+    if (a.tag !== "apply" && b.tag === "apply") return unify(b, a);
+    if (a.tag === "apply") {
+        if (b.tag === "apply") { unify(a.head, b.head); unify(a.arg, b.arg); return a; }
+        if (b.tag === "list") { unify(a.head, named("List")); unify(a.arg, b.element); return b; }
+        if (b.tag === "name" && b.args.length) { unify(a.head, named(b.name, b.args.slice(1))); unify(a.arg, b.args[0]); return b; }
+        const head = resolve(a.head);
+        if (head.tag === "name") return unify(applied(head, a.arg), b);
+        return { tag: "union", choices: [a, b] };
+    }
     // A union takes each choice once: a choice of the same shape unifies with it.
     if (a.tag === "union" || b.tag === "union") {
         const choices = a.tag === "union" ? [...a.choices] : [a];
@@ -259,7 +277,7 @@ export function describeType(value: Value): string {
                     // (map over any functor, length of anything) are written here.
                     const written = signatureExpr(v.name);
                     const intrinsics: Record<string, Shape> = {
-                        map: arrow(arrow(a, b), arrow(list(a), list(b))),
+                        map: (f => arrow(arrow(a, b), arrow({ tag: "apply", head: f, arg: a }, { tag: "apply", head: f, arg: b })))(fresh()),
                         length: arrow(a, named("Int")),
                         fail: arrow(named("String"), a),
                     };
@@ -289,6 +307,12 @@ export function describeType(value: Value): string {
                 return t.args.length && precedence > 1 ? `(${text})` : text;
             }
             case "arrow": { const text = `${show(t.from, 1)} -> ${show(t.to)}`; return precedence > 0 ? `(${text})` : text; }
+            case "apply": {
+                const head = resolve(t.head);
+                if (head.tag === "name") return show(applied(head, t.arg), precedence);
+                const text = `${show(head, 2)} ${show(t.arg, 2)}`;
+                return precedence > 1 ? `(${text})` : text;
+            }
             case "union": {
                 const text = [...new Set(t.choices.flatMap(c => resolve(c).tag === "union" ? (resolve(c) as Extract<Shape, { tag: "union" }>).choices.map(x => show(x)) : [show(c)]))].join(" | ");
                 return precedence > 1 ? `(${text})` : text;

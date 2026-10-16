@@ -52,11 +52,12 @@ for (const [name, source, expected] of [
         ["[506,7]", "[6,4]"]],
     ["a user instance keeps the others", "Tree = Leaf Int | Node Tree Tree\nmap f (Leaf x) = Leaf (f x)\nmap f (Node l r) = Node (map f l) (map f r)\nprint (map (+ 1) (Node (Leaf 1) (Leaf 2)))\nprint (map (+ 1) [1,2])",
         ["Node (Leaf 2) (Leaf 3)", "[2,3]"]],
-    ["Functor and Monad patterns", 'import "option"\ndouble (Functor m) = map (* 2) m\nprint (double [1,2])\nprint (double (Some 3))\nx <- double (return 4)\nprint x\nisMonad (Monad m) = true\nisMonad x = false\nprint [isMonad [1],isMonad 1]',
-        ["[2,4]", "Some 6", "8", "[true,false]"]],
+    // A parameter passed to map takes whatever map has an instance for.
+    ["map's argument takes any functor", 'import "option"\ndouble m = map (* 2) m\nprint (double [1,2])\nprint (double (Some 3))\nx <- double (return 4)\nprint x',
+        ["[2,4]", "Some 6", "8"]],
     ["return is overloaded on its result", 'import "option"\nWrap a = | MkWrap a\nreturn = MkWrap\n(MkWrap x) >>= f = f x\nprint (Wrap Int { return 5 })\nprint (Option Int { return 6 })\nprint (Result Int String { return 7 })\nprint (List Int { return 8 })',
         ["MkWrap 5", "Some 6", "Ok 7", "[8]"]],
-    ["any definition of a method is an instance, curried or not", "Tree = Leaf Int | Node Tree Tree\nmapTree f (Leaf x) = Leaf (f x)\nmapTree f (Node l r) = Node (mapTree f l) (mapTree f r)\nmap = mapTree\ndouble (Functor m) = map (* 2) m\nprint (double (Node (Leaf 1) (Leaf 2)))\nprint (double [1])",
+    ["any definition of a method is an instance, curried or not", "Tree = Leaf Int | Node Tree Tree\nmapTree f (Leaf x) = Leaf (f x)\nmapTree f (Node l r) = Node (mapTree f l) (mapTree f r)\nmap = mapTree\ndouble m = map (* 2) m\nprint (double (Node (Leaf 1) (Leaf 2)))\nprint (double [1])",
         ["Node (Leaf 2) (Leaf 4)", "[2]"]],
     ["a curried definition overloads like clauses", "describe = Int _ -> \"Int\"\ndescribe = Float _ -> \"Float\"\nprint [describe 1,describe 1.5]\nalso = x -> x + 1\nalso = x -> x + 2\nprint (also 1)",
         ['["Int","Float"]', "3"]],
@@ -88,7 +89,9 @@ for (const [name, source, expected] of [
 
 for (const [source, message, kind] of [
     ["Tree = Leaf Int | Node Tree Tree\nprint (map (+ 1) (Leaf 1))", "no map instance for Tree", "type"],
-    ["double (Functor m) = map (* 2) m\nprint (double 5)", "where Functor is required", "type"],
+    ["double m = map (* 2) m\nprint (double 5)", "map needs an action, a list or a monadic value, not Int", "type"],
+    ["Point = | P Int Int\ndouble m = map (* 2) m\nprint (double (P 1 2))", "no map instance for Point", "type"],
+    ["f (Functor m) = m", "unknown constructor 'Functor' in a pattern", "type"],
     ['import "option"\nx = Option Int {\n    a <- Some 1\n    a + 1\n}', "the last statement of a do-block must be an action", "type"],
     ["xs = List Int {\n    a <- [1,2]\n    print a\n    return a\n}", "an IO action cannot run in a List do-block", "type"],
     ["return a b = a", "return takes one argument", "parse"],
