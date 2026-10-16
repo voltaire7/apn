@@ -78,6 +78,10 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   and never give a pattern a different meaning in one place.
 - Things that act the same share one implementation: never special-case one
   spelling of a definition (curried or with parameters) for no reason.
+- Avoid redundancy everywhere: say each thing once. Reuse an existing
+  definition, helper, doc section or test instead of writing a near-copy;
+  give a module's shared pieces one name and refer to it; state a rule in one
+  doc and link to it from others; remove what a change makes redundant.
 - Define as much of the language as possible in APN itself (`lib/prelude.apn`
   and the standard library): add a native, intrinsic or parser rule only for
   what APN cannot express, and keep it as small as it can be.
