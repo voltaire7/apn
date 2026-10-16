@@ -6,7 +6,7 @@ import { BUNDLE_APP, BUNDLE_LIB, bundleProgram } from "./modules.ts";
 const scriptText = (text: string) => text.replace(/<\/script/gi, "<\\/script");
 const scriptJson = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u003c");
 // A program's page: a readable base font, and how it shows an error (apn-error).
-const PAGE_STYLE = "body{margin:0;padding:16px;font:16px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:#1f2430}#apn-error{white-space:pre-wrap;color:#b42318;background:#fff4f2;border:1px solid #f4c7c0;border-radius:8px;padding:10px 14px;font:13px/1.5 ui-monospace,monospace}";
+const PAGE_STYLE = "body{margin:0;padding:16px;font:16px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:#1f2430}#apn-error{white-space:pre-wrap;color:#b42318;background:#fff4f2;border:1px solid #f4c7c0;border-radius:8px;padding:10px 14px;font:13px/1.5 'SF Mono',SFMono-Regular,ui-monospace,Menlo,Consolas,monospace}";
 
 // A browser script (src/browser-runtime.ts, src/editor.ts) as one script.
 async function bundle(entry: string): Promise<string> {

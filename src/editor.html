@@ -7,6 +7,7 @@
 <style>
 /* Catppuccin Latte (light) and Frappé (dark) surfaces; src/editor.ts sets
    data-theme and adds the token colors from src/highlight.ts. */
+:root { --mono: "SF Mono", SFMono-Regular, ui-monospace, Menlo, Consolas, monospace; }
 :root, :root[data-theme="light"] {
     --base: #eff1f5; --mantle: #e6e9ef; --crust: #dce0e8; --surface0: #ccd0da; --surface1: #bcc0cc;
     --text: #4c4f69; --subtext: #6c6f85; --overlay: #9ca0b0; --accent: #1e66f5; --on-accent: #eff1f5; --selection: rgba(30, 102, 245, .18);
@@ -36,12 +37,12 @@ button:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 button.primary:hover { filter: brightness(1.08); background: var(--accent); }
 .hint { color: var(--subtext); font-size: 12px; margin-left: 4px; }
-kbd { font: 11px ui-monospace, monospace; padding: 1px 5px; border: 1px solid var(--surface0); border-bottom-width: 2px; border-radius: 4px; }
+kbd { font: 11px var(--mono); padding: 1px 5px; border: 1px solid var(--surface0); border-bottom-width: 2px; border-radius: 4px; }
 .spacer { flex: 1; }
 main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 0; }
 .code { overflow: auto; background: var(--base); border-right: 1px solid var(--crust); scrollbar-width: thin; scrollbar-color: var(--surface1) transparent; }
 .lines { position: relative; min-height: 100%; display: grid; grid-template-columns: auto 1fr; }
-.gutter, pre.highlight, textarea { font: 13.5px/1.6 "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 4; }
+.gutter, pre.highlight, textarea { font: 13px/1.6 var(--mono); tab-size: 4; }
 .gutter { position: sticky; left: 0; z-index: 1; padding: 14px 12px 14px 16px; text-align: right; color: var(--overlay); background: var(--mantle); user-select: none; white-space: pre; }
 .layers { position: relative; }
 pre.highlight, textarea { margin: 0; padding: 14px 16px; border: 0; white-space: pre; overflow: hidden; }
