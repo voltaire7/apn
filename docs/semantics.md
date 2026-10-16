@@ -1222,7 +1222,11 @@ A type variable applied to a type, `f a`, is any type holding an `a`: `List a`,
 `Option a`, `Result a e` (the parameter `map` maps, the first). So `(a -> b) ->
 f a -> f b` is `map`'s type, and a contract `(((a -> b) -> f a -> f b) m)`
 accepts `map` and checks each use: the checker rejects `m (* 2) 5` (cannot use
-Int where f a is required). It takes one type: `f a a` is an error.
+Int where f a is required). Applied to more types, it fills the first
+parameters in order: `f a e` is `Result a e` (but not `List a` or `Option a`).
+As a parameter it is written in parentheses, `(f a e) -> f a e`, as a flat
+typed pattern is (`(Vec n a xs)`); `f a e -> …` is `f` applied to the lambda
+`a e -> …`, as everywhere.
 
 Types differing only in their variables' names are equal: `(b -> b) == typeOf
 (x -> x)`. A function contract checks each call: its arguments decide its type

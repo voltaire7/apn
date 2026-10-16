@@ -59,10 +59,11 @@ type Ty =
     // indexed: a family whose constructors say what they make (Vec n a), so
     // an argument may be a value (Vec 2 Int); values decide those, not types.
     | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty; indexed?: boolean }
-    // f a: a type variable applied to a type, as written ((a -> b) -> f a -> f b).
-    // Its head, once known, is a ctor: a type missing its first parameter
-    // (List, Option, Result _ e), so f a maps that parameter, as map does.
-    | { k: "apply"; head: Ty; arg: Ty }
+    // f a: a type variable applied to types, as written ((a -> b) -> f a -> f b).
+    // Its head, once known, is a ctor: a type missing its first parameters
+    // (List, Option, Result _ e for f a; Result for f a e), so f a maps the
+    // first parameter, as map does.
+    | { k: "apply"; head: Ty; args: Ty[] }
     | { k: "ctor"; name: string; args: Ty[] };
 // A function result's list structure in terms of its parameters, by position:
 // `arg` is that argument itself; otherwise a list whose length is an argument's
@@ -646,7 +647,7 @@ function appliedType(t: Extract<Ty, { k: "apply" }>): Ty {
     if (known) return resolve(known);
     const head = resolve(t.head);
     if (head.k !== "ctor") return t;
-    const made: Ty = head.name === "List" && !head.args.length ? { k: "list", element: t.arg } : { k: "variant", name: head.name, args: [t.arg, ...head.args] };
+    const made: Ty = head.name === "List" && !head.args.length && t.args.length === 1 ? { k: "list", element: t.args[0] } : { k: "variant", name: head.name, args: [...t.args, ...head.args] };
     appliedTypes.set(t, made);
     return made;
 }
@@ -721,10 +722,8 @@ function text(
             case "variant":
                 if (isPending(t)) return `m ${argument(show(t.args[0]))}`;
                 return t.name + t.args.map((x) => " " + show(x)).join("");
-            case "apply": {
-                const held = show(t.arg);
-                return held === "an unresolved type" ? "f a" : `f ${argument(held)}`;
-            }
+            case "apply":
+                return `f ${t.args.map((x, n) => { const held = show(x); return held === "an unresolved type" ? "abcde"[n] ?? "a" : argument(held); }).join(" ")}`;
             case "ctor":
                 return t.name + t.args.map((x) => " " + show(x)).join("");
             default:
@@ -755,7 +754,7 @@ function children(t: Ty): Ty[] {
         case "variant":
             return [...t.args, ...t.base ? [t.base] : []];
         case "apply":
-            return [t.head, t.arg];
+            return [t.head, ...t.args];
         case "ctor":
             return t.args;
         default:
@@ -922,7 +921,7 @@ function copy(
             Object.assign(result, { args: t.args.map(go), base: t.base && go(t.base) });
             break;
         case "apply":
-            Object.assign(result, { head: go(t.head), arg: go(t.arg) });
+            Object.assign(result, { head: go(t.head), args: t.args.map(go) });
             break;
         case "ctor":
             Object.assign(result, { args: t.args.map(go) });
@@ -1083,7 +1082,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const name = op === "map" ? "map" : op === "ap" ? "'<*>'" : op === "then" ? "'>>'" : "'>>='";
         // f a with f unknown (a written signature's): map and >>= keep f.
         if (container.k === "apply") {
-            const value = container.arg, holding = (t: Ty): Ty => ({ k: "apply", head: container.head, arg: t });
+            const value = container.args[0], holding = (t: Ty): Ty => ({ k: "apply", head: container.head, args: [t, ...container.args.slice(1)] });
             if (op === "map") return holding(application(other, { type: value }, at));
             if (op === "then") { unify(holding(variable()), other); return other; }
             if (op === "bind") { const result = application(other, { type: value }, at); unify(holding(variable()), result); return result; }
@@ -1437,12 +1436,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             requirements.push({ k: "operation", op: "require", args: [expected, actual] });
             return;
         }
-        // f a against a known type: f is that type missing its first parameter.
+        // f a b against a known type: f is that type missing its first parameters.
         if (expected.k === "apply" || actual.k === "apply") {
             const [app, other] = expected.k === "apply" ? [expected, actual] : [actual as Extract<Ty, { k: "apply" }>, expected];
-            if (other.k === "apply") { unify(app.head, other.head, e, seen); unify(app.arg, other.arg, e, seen); return; }
-            if (other.k === "list") { unify(app.head, { k: "ctor", name: "List", args: [] }, e, seen); unify(app.arg, other.element, e, seen); return; }
-            if (other.k === "variant" && other.args.length) { unify(app.head, { k: "ctor", name: other.name, args: other.args.slice(1) }, e, seen); unify(app.arg, other.args[0], e, seen); return; }
+            const n = app.args.length, both = (heads: [Ty, Ty], args: Ty[]) => { unify(heads[0], heads[1], e, seen); app.args.forEach((x, i) => unify(x, args[i], e, seen)); };
+            if (other.k === "apply" && other.args.length === n) return both([app.head, other.head], other.args);
+            if (other.k === "list" && n === 1) return both([app.head, { k: "ctor", name: "List", args: [] }], [other.element]);
+            if (other.k === "variant" && other.args.length >= n) return both([app.head, { k: "ctor", name: other.name, args: other.args.slice(n) }], other.args);
             return problem(`cannot use ${text(actual)} where ${text(expected)} is required`, e);
         }
         if (expected.k === "ctor" || actual.k === "ctor") {
@@ -1733,9 +1733,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 let head: Expr = x;
                 while (head.t === "app") { args.unshift(head.a); head = head.f; }
                 if (head.t === "var" && variables.has(head.name)) {
-                    if (args.length !== 1) return problem("a type variable takes one type: f a", x);
                     const name = `$type${local.size}`;
-                    local.set(name, { type: { k: "type", value: { k: "apply", head: variables.get(head.name)!, arg: read(args[0]) } }, mono: true });
+                    local.set(name, { type: { k: "type", value: { k: "apply", head: variables.get(head.name)!, args: args.map(read) } }, mono: true });
                     return { t: "var", name };
                 }
                 return { ...x, f: lift(x.f), a: lift(x.a) };
@@ -1748,7 +1747,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             switch (p.p) {
                 case "var": return typeVariable(p.name);
                 case "wildcard": return variable();
-                case "schema": return read(p.type);
+                case "schema": {
+                    // ((f a) e), or (f a e): f a's type applied to e as well.
+                    const type = read(p.type), applied = resolve(type);
+                    return applied.k === "apply" && p.value.p === "var" ? { k: "apply", head: applied.head, args: [...applied.args, typeVariable(p.value.name)] } : type;
+                }
                 case "list": return { k: "list", items: p.v.map(pattern), element: union(p.v.map(() => variable())), length: constant(BigInt(p.v.length)) };
                 case "constr": {
                     const args = p.args.map(arg => {
@@ -1761,7 +1764,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return typeExpr(args.reduce((f: Expr, a): Expr => ({ t: "app", f, a }), { t: "var", name: p.tag }), local);
                 }
                 // f a: a type variable applied to a type.
-                case "typeBind": return { k: "apply", head: typeVariable(p.name), arg: pattern(p.value) };
+                case "typeBind": return { k: "apply", head: typeVariable(p.name), args: [pattern(p.value)] };
                 default: return problem("expected a type description", e);
             }
         };
@@ -2703,7 +2706,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const t = resolve(type);
         if (isIO(t) || isPending(t)) return (t as Extract<Ty, { k: "variant" }>).args[0];
         if (t.k === "list") return t.element;
-        if (t.k === "apply") return t.arg;
+        if (t.k === "apply") return t.args[0];
         if (t.k === "variant") return boundType(t);
         return undefined;
     }

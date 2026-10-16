@@ -24,14 +24,14 @@ type Shape =
     | { tag: "union"; choices: Shape[] }
     // A type constructor not known yet applied to a type: map's f a. Once
     // known, f is a name holding the type's other parameters (Result _ e).
-    | { tag: "apply"; head: Shape; arg: Shape };
+    | { tag: "apply"; head: Shape; args: Shape[] };
 const fresh = (): Shape => ({ tag: "var" });
 const named = (name: string, args: Shape[] = []): Shape => ({ tag: "name", name, args });
 const arrow = (from: Shape, to: Shape): Shape => ({ tag: "arrow", from, to });
 const list = (element: Shape): Shape => ({ tag: "list", element });
-// A known constructor applied to the parameter map maps: List x, Result x e.
-const applied = (head: Extract<Shape, { tag: "name" }>, arg: Shape): Shape =>
-    head.name === "List" && !head.args.length ? list(arg) : named(head.name, [arg, ...head.args]);
+// A known constructor applied to its first parameters: List x, Result x e.
+const applied = (head: Extract<Shape, { tag: "name" }>, args: Shape[]): Shape =>
+    head.name === "List" && !head.args.length && args.length === 1 ? list(args[0]) : named(head.name, [...args, ...head.args]);
 function resolve(t: Shape): Shape {
     return t.tag === "var" && t.link ? resolve(t.link) : t;
 }
@@ -43,7 +43,7 @@ function occurs(v: Shape, t: Shape): boolean {
         case "list": return occurs(v, t.element);
         case "name": return t.args.some(a => occurs(v, a));
         case "union": return t.choices.some(a => occurs(v, a));
-        case "apply": return occurs(v, t.head) || occurs(v, t.arg);
+        case "apply": return occurs(v, t.head) || t.args.some(a => occurs(v, a));
         default: return false;
     }
 }
@@ -60,11 +60,12 @@ function unify(a: Shape, b: Shape): Shape {
     // Result x e (f is then Result _ e).
     if (a.tag !== "apply" && b.tag === "apply") return unify(b, a);
     if (a.tag === "apply") {
-        if (b.tag === "apply") { unify(a.head, b.head); unify(a.arg, b.arg); return a; }
-        if (b.tag === "list") { unify(a.head, named("List")); unify(a.arg, b.element); return b; }
-        if (b.tag === "name" && b.args.length) { unify(a.head, named(b.name, b.args.slice(1))); unify(a.arg, b.args[0]); return b; }
+        const n = a.args.length;
+        if (b.tag === "apply" && b.args.length === n) { unify(a.head, b.head); a.args.forEach((x, i) => unify(x, b.args[i])); return a; }
+        if (b.tag === "list" && n === 1) { unify(a.head, named("List")); unify(a.args[0], b.element); return b; }
+        if (b.tag === "name" && b.args.length >= n) { unify(a.head, named(b.name, b.args.slice(n))); a.args.forEach((x, i) => unify(x, b.args[i])); return b; }
         const head = resolve(a.head);
-        if (head.tag === "name") return unify(applied(head, a.arg), b);
+        if (head.tag === "name") return unify(applied(head, a.args), b);
         return { tag: "union", choices: [a, b] };
     }
     // A union takes each choice once: a choice of the same shape unifies with it.
@@ -105,15 +106,21 @@ export function describeType(value: Value): string {
             const written = (p: Pattern): Shape => p.p === "var" ? declared({ t: "var", name: p.name }, parameters)
                 : p.p === "constr" ? named(p.tag, p.args.map(written))
                 : p.p === "list" ? sequence(p.v.map(written))
-                : p.p === "schema" ? declared(p.type, parameters)
+                : p.p === "schema" ? schema(p)
                 // f a: a type variable applied to a type.
-                : p.p === "typeBind" ? { tag: "apply", head: declared({ t: "var", name: p.name }, parameters), arg: written(p.value) } : fresh();
+                : p.p === "typeBind" ? { tag: "apply", head: declared({ t: "var", name: p.name }, parameters), args: [written(p.value)] } : fresh();
+            // ((f a) e), or (f a e): f a's type applied to e as well.
+            const schema = (p: Extract<Pattern, { p: "schema" }>): Shape => {
+                const type = declared(p.type, parameters);
+                return type.tag === "apply" && p.value.p === "var" ? { tag: "apply", head: type.head, args: [...type.args, written(p.value)] } : type;
+            };
             const inputs = e.t === "lambda" ? e.params.map(name => declared({ t: "var", name }, parameters)) : e.params.map(written);
             return inputs.reduceRight((to: Shape, from) => arrow(from, to), declared(e.body, parameters));
         }
         if (e.t === "app") {
             const f = declared(e.f, parameters);
-            if (f.tag === "var") return { tag: "apply", head: f, arg: declared(e.a, parameters) };
+            if (f.tag === "var") return { tag: "apply", head: f, args: [declared(e.a, parameters)] };
+            if (f.tag === "apply") return { ...f, args: [...f.args, declared(e.a, parameters)] };
             return f.tag === "name" ? named(f.name, [...f.args, declared(e.a, parameters)]) : fresh();
         }
         return fresh();
@@ -280,7 +287,7 @@ export function describeType(value: Value): string {
                     // (map over any functor, length of anything) are written here.
                     const written = signatureExpr(v.name);
                     const intrinsics: Record<string, Shape> = {
-                        map: (f => arrow(arrow(a, b), arrow({ tag: "apply", head: f, arg: a }, { tag: "apply", head: f, arg: b })))(fresh()),
+                        map: (f => arrow(arrow(a, b), arrow({ tag: "apply", head: f, args: [a] }, { tag: "apply", head: f, args: [b] })))(fresh()),
                         length: arrow(a, named("Int")),
                         fail: arrow(named("String"), a),
                     };
@@ -312,8 +319,8 @@ export function describeType(value: Value): string {
             case "arrow": { const text = `${show(t.from, 1)} -> ${show(t.to)}`; return precedence > 0 ? `(${text})` : text; }
             case "apply": {
                 const head = resolve(t.head);
-                if (head.tag === "name") return show(applied(head, t.arg), precedence);
-                const text = `${show(head, 2)} ${show(t.arg, 2)}`;
+                if (head.tag === "name") return show(applied(head, t.args), precedence);
+                const text = `${show(head, 2)} ${t.args.map(x => show(x, 2)).join(" ")}`;
                 return precedence > 1 ? `(${text})` : text;
             }
             case "union": {

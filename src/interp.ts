@@ -2653,7 +2653,14 @@ export class Interpreter {
                         }
                         return type;
                     }
-                    case "schema": return this.typeIn(p.type, scope, variables);
+                    case "schema": {
+                        // ((f a) e), or (f a e): f a's type applied to e as well.
+                        const type = this.typeIn(p.type, scope, variables);
+                        if (type?.kind !== "type" || !type.variable || !type.arguments?.length || p.value.p !== "var") return type;
+                        const argument = variable(p.value.name);
+                        scope.setLocal(p.value.name, argument);
+                        return this.reference(this.apply(type, argument));
+                    }
                     // f a: a type variable applied to a type.
                     case "typeBind": {
                         const head = variable(p.name), argument = pattern(p.value);

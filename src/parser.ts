@@ -1019,6 +1019,19 @@ class Parser {
 
     lambdaParam(): Pattern {
         const t = this.peek(), next = this.peek(1);
+        // (f a e): an e of type f a, as (Vec n a xs) is ((Vec n a) xs); read
+        // as a type, the type variable f applied to a and e.
+        if (t.k === "sym" && t.v === "(") {
+            const names: string[] = [];
+            let n = 1;
+            for (let w = this.peek(n); w.k === "ident" && /^[a-z]/.test(w.v); w = this.peek(++n)) names.push(w.v);
+            const close = this.peek(n);
+            if (names.length >= 3 && close.k === "sym" && close.v === ")") {
+                for (let k = 0; k <= n; k++) this.next();
+                const type = names.slice(1, -1).reduce((f: Expr, name): Expr => ({ t: "app", f, a: { t: "var", name } }), { t: "var", name: names[0] });
+                return { p: "schema", type, value: { p: "var", name: names[names.length - 1] } };
+            }
+        }
         if ((t.k === "ident" && /^[a-z]/.test(t.v) || t.k === "sym" && t.v === "_") && this.startsParam(next)) {
             this.next();
             return { p: "typeBind", name: t.k === "ident" ? t.v : "_", value: this.parseConsPattern() };

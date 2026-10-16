@@ -1962,6 +1962,10 @@ print (((a -> b) -> List a -> List a) == typeOf filter)  # => true (a function t
 print (((a -> b) -> f a -> f b) == typeOf map)        # => true
 twiceMapped (((a -> b) -> f a -> f b) m) xs = m (* 2) (m (+ 1) xs)
 print [twiceMapped map [1,2],twiceMapped map (Some 3)]  # => [[4,6],Some 8]
+# f a e fills a type's first two parameters (Result a e); as a parameter it is
+# written in parentheses, as a flat typed pattern is.
+doubleOk (((a -> b) -> (f a e) -> f b e) m) r = m (* 2) r
+print [doubleOk map (Ok 4),doubleOk map (Err "no")]   # => [Ok 8,Err "no"]
 
 typedLambda = (Int value) -> Int { value + value }
 typedNamed (Int value) = Int { value + value }
