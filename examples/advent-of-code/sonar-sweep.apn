@@ -1,4 +1,4 @@
-import ["function","sequence","text"]
+import ["function", "sequence", "text"]
 
 # AoC 2021 day 1: count increases between adjacent measurements.
 solveSonar text = {

@@ -1,4 +1,4 @@
-import ["function","option","sequence","number","text","map"]
+import ["function", "option", "sequence", "number", "text", "map"]
 
 # Infinite streams, finite answers.
 print (take 12 primes)
@@ -6,7 +6,7 @@ print (take 15 fibonacci)
 print (take 8 (scanl (+) 0 [1..]))
 
 # Statistics preserve exact fractions. Empty samples return None.
-measurements = [2,4,4,4,5,5,7,9]
+measurements = [2, 4, 4, 4, 5, 5, 7, 9]
 print (mean measurements)               # Some 5
 print (variance measurements)           # Some 4
 print (median measurements)             # Some 9/2
@@ -15,8 +15,8 @@ print (mean [])                         # None
 # A word-frequency leaderboard, with stable tie ordering.
 poem = "Time flies like an arrow fruit flies like a banana"
 leaderboard = sortOn (entry -> -(snd entry)) $ pairs $ frequencies $ words $ lower $ poem
-leaderboard * [word,count] -> {
-    print (format "%: %" [word,count])
+leaderboard * [word, count] -> {
+    print (format "%: %" [word, count])
 }
 
 # Persistent grouping: original encounter order survives within every group.

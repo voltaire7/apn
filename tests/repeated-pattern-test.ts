@@ -7,7 +7,7 @@ function run(source: string): string {
 for (const source of [
     'f x x = x; f 1 1',
     '(x, x -> x) 1 1',
-    'f [x,x] = x; f [1,1]',
+    'f [x, x] = x; f [1, 1]',
     'f [a: x, b: x] = x; f [a: 1, b: 1]',
     'f x [x] = x; f 1 [x: 1]',
     '(x -> x -> x) 2 1',
@@ -20,7 +20,7 @@ for (const source of [
 for (const source of [
     'f x x = x; f 1 2',
     '(x, x -> x) 1 2',
-    'f [x,x] = x; f [1,2]',
+    'f [x, x] = x; f [1, 2]',
     'f [a: x, b: x] = x; f [a: 1, b: 2]',
     'f x [x] = x; f 1 [x: 2]',
 ]) Deno.test(`repeated patterns reject: ${source}`, () => {
@@ -72,8 +72,8 @@ Deno.test('REPL extension keeps self-equality and ordinary clauses distinct', ()
    
     i.run(parseDocument('x x = 1'));
     i.run(parseDocument('x other = 2'));
-    const actual = i.renderString(i.run(parseDocument('[x x,x 0]')));
-    if (actual !== '[1,2]') throw new Error(actual);
+    const actual = i.renderString(i.run(parseDocument('[x x, x 0]')));
+    if (actual !== '[1, 2]') throw new Error(actual);
 });
 
 for (const [definition, call, name] of [

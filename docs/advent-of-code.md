@@ -38,7 +38,7 @@ args <- getArgs
 input <- readInput []
 ```
 
-`apn program.apn first second` makes `getArgs` return `["first","second"]`.
+`apn program.apn first second` makes `getArgs` return `["first", "second"]`.
 `readInput []` reads the first argument as a file, or all stdin when there is no
 argument or the first argument is `"-"`. `readStdin` explicitly reads stdin
 to EOF; stdin is read once, and every call returns the same text. File paths resolve against the process working directory. Text input is

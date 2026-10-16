@@ -19,9 +19,9 @@ for (const [name, source, expected] of [
     ['ordinary actions still repeat', 'a = print "a"\nb = { print "b" }\na\na\nb\nb', ['a', 'a', 'b', 'b']],
     ['destructuring stays lazy', '[x] = [print "run"]\nprint "bound"\nx\nx', ['bound', 'run', 'run']],
     ['unused destructuring stays unevaluated', '[x] = [missing]\nprint 42', ['42']],
-    ['eager lists retain lazy elements', 'xs <- return [missing,42]\nprint (xs 1)', ['42']],
-    ['eager ranges remain productive', 'xs <- return [0..]\nprint (take 3 xs)', ['[0,1,2]']],
-    ['destructured eager result retains lazy fields', '[x,y] <- return [missing,42]\nprint y', ['42']],
+    ['eager lists retain lazy elements', 'xs <- return [missing, 42]\nprint (xs 1)', ['42']],
+    ['eager ranges remain productive', 'xs <- return [0..]\nprint (take 3 xs)', ['[0, 1, 2]']],
+    ['destructured eager result retains lazy fields', '[x, y] <- return [missing, 42]\nprint y', ['42']],
     ['wildcard runs action', '_ <- print "run"', ['run']],
     ['scoped binding reads old value', 'x = 1\n{ x <- return (x + 1); print x }\nprint x', ['2', '1']],
     ['mutable capture preserves cell identity', 'm = Mutable 0\nset m $ 42\nprint m', ['42']],
@@ -47,9 +47,9 @@ Deno.test('failed eager binding preserves the previous binding', () => {
 Deno.test('getArgs supports bare capture and existing unit calls', () => {
     const i = new Interpreter();
     i.programArgs = ['first', 'second'];
-    equal(i.renderString(i.run(parseDocument('import "io"\nargs <- getArgs\nargs'))), '["first","second"]');
-    equal(i.renderString(i.run(parseDocument('getArgs []'))), '["first","second"]');
-    equal(i.renderString(i.run(parseDocument('[args] = [getArgs]\nargs'))), '["first","second"]');
+    equal(i.renderString(i.run(parseDocument('import "io"\nargs <- getArgs\nargs'))), '["first", "second"]');
+    equal(i.renderString(i.run(parseDocument('getArgs []'))), '["first", "second"]');
+    equal(i.renderString(i.run(parseDocument('[args] = [getArgs]\nargs'))), '["first", "second"]');
 });
 Deno.test('eager bindings appear in the editor outline', () => {
     equal(symbols('args <- getArgs').map((symbol) => symbol.name), ['args']);

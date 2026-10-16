@@ -8,15 +8,15 @@ p5 = import "p5"
 
 Msg = | TimeDelta Number
 
-init = [0,browser.none]
+init = [0, browser.none]
 
-update (TimeDelta dt) angle = [angle + dt / 5000,browser.none]
+update (TimeDelta dt) angle = [angle + dt / 5000, browser.none]
 
 subscriptions _ = browser.onAnimationFrameDelta TimeDelta
 
 view angle = p5.canvas [setup: setup, draw: draw angle]
 
-setup p = p.call "createCanvas" [400,400,p.WEBGL]
+setup p = p.call "createCanvas" [400, 400, p.WEBGL]
 
 draw angle p = {
     p.background "white"
@@ -32,21 +32,21 @@ draw angle p = {
 
 # Planks inside a frame, with a diagonal brace.
 wood g = {
-    g.background [176,122,62]
-    g.stroke [120,78,36]
+    g.background [176, 122, 62]
+    g.stroke [120, 78, 36]
     g.strokeWeight 3
-    mapM (y -> g.line 0 y 256 y) [64,128,192]
+    mapM (y -> g.line 0 y 256 y) [64, 128, 192]
     g.noStroke []
-    g.fill [140,92,44]
+    g.fill [140, 92, 44]
     g.rect 0 0 256 28
     g.rect 0 228 256 28
     g.rect 0 0 28 256
     g.rect 228 0 28 256
-    g.stroke [140,92,44]
+    g.stroke [140, 92, 44]
     g.strokeWeight 30
     g.line 28 228 228 28
     g.noFill []
-    g.stroke [90,58,26]
+    g.stroke [90, 58, 26]
     g.strokeWeight 4
     g.rect 2 2 252 252
 }

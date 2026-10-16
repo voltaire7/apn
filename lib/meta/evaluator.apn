@@ -3,7 +3,7 @@
 meCons x xs = x :: xs
 meBindings definitions scope = (null definitions
     ? []
-    : meCons [head (head definitions),meEval scope ((head definitions) 1)]
+    : meCons [head (head definitions), meEval scope ((head definitions) 1)]
         (meBindings (tail definitions) scope))
 meScope definitions parent = {
     scope = [insert (meBindings definitions (head scope)) parent]
@@ -12,8 +12,8 @@ meScope definitions parent = {
 meList scope expressions = (null expressions
     ? []
     : meCons (meEval scope (head expressions)) (meList scope (tail expressions)))
-meClosure parameter body scope = (HashMap ([["__closure",true],["parameter",parameter]]
-    ++ [["body",body],["scope",scope]]))
+meClosure parameter body scope = (HashMap ([["__closure", true], ["parameter", parameter]]
+    ++ [["body", body], ["scope", scope]]))
 meZipTemplate functions values = (null functions
     ? (null values ? [] : fail "list template and input must have the same length")
     : null values
@@ -27,7 +27,7 @@ meTemplateSlot function argument = (typeOf function == typeOf []
     : meApply function argument)
 meApply function argument = (typeOf function == HashMap
     ? (has "__closure" function
-        ? meEval (insert [[lookup "parameter" function,argument]] (lookup "scope" function))
+        ? meEval (insert [[lookup "parameter" function, argument]] (lookup "scope" function))
             (lookup "body" function)
         : function argument)
     : function argument)
@@ -36,12 +36,12 @@ meTemplateOf scope expression = (meTemplate (meEval scope (expression 1))
 meIf scope expression = (meEval scope (expression 1)
     ? meEval scope (expression 2)
     : meEval scope (expression 3))
-meEval scope expression = (lookup (head expression) (HashMap ([["literal",expression 1]]
-    ++ [["variable",lookup (expression 1) scope]]
-    ++ [["lambda",meClosure (expression 1) (expression 2) scope]]
-    ++ [["template",meTemplateOf scope expression]]
-    ++ [["apply",meApply (meEval scope (expression 1)) (meEval scope (expression 2))]]
-    ++ [["if",meIf scope expression]]
-    ++ [["list",meList scope (expression 1)]]
-    ++ [["scope",meEval (meScope (expression 1) scope) (expression 2)]])))
+meEval scope expression = (lookup (head expression) (HashMap ([["literal", expression 1]]
+    ++ [["variable", lookup (expression 1) scope]]
+    ++ [["lambda", meClosure (expression 1) (expression 2) scope]]
+    ++ [["template", meTemplateOf scope expression]]
+    ++ [["apply", meApply (meEval scope (expression 1)) (meEval scope (expression 2))]]
+    ++ [["if", meIf scope expression]]
+    ++ [["list", meList scope (expression 1)]]
+    ++ [["scope", meEval (meScope (expression 1) scope) (expression 2)]])))
 meRun definitions expression primitives = meEval (meScope definitions primitives) expression

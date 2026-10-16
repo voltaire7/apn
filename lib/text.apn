@@ -20,10 +20,10 @@ _splitOn delimiter text = {
     step state c = {
         current = c :: snd state
         take width current == marker
-            ? [_prepend (from (List Char) (reverse (drop width current))) (fst state),[]]
-            : [fst state,current]
+            ? [_prepend (from (List Char) (reverse (drop width current))) (fst state), []]
+            : [fst state, current]
     }
-    state = foldl step [[],[]] (to (List Char) text)
+    state = foldl step [[], []] (to (List Char) text)
     reverse (from (List Char) (reverse (snd state)) :: fst state)
 }
 joinWith delimiter xs = from (List Char)

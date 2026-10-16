@@ -19,35 +19,35 @@ function rejected(i: Interpreter, source: string): void {
     throw new Error(`accepted: ${source}`);
 }
 for (const [source, expected] of [
-    ['import "sequence"; sum [1,2,3]', '6'],
-    ['seqs = import "sequence"; seqs.sum (Int * [1,2,3])', '6'],
-    ['import ["function","number"]; id (sq 3)', '9'],
+    ['import "sequence"; sum [1, 2, 3]', '6'],
+    ['seqs = import "sequence"; seqs.sum (Int * [1, 2, 3])', '6'],
+    ['import ["function", "number"]; id (sq 3)', '9'],
     ['ns = [double: (x -> x * 2)]; use ns; double 3', '6'],
-    ['use [[one: 1],[two: 2]]; one + two', '3'],
+    ['use [[one: 1], [two: 2]]; one + two', '3'],
     ['x = Mutable 1; set x 2; x + 1', '3'],
-    ['Direction = North | South; [10,20] South', '20'],
-    ['templates = [String,Int]; values = ["x",1]; templates.values', '["x",1]'],
-    ['xs = [1]; xs = [2,3]; xs', '[2,3]'],
-    ['f x = x + 1; [f 1,f 2.0]', '[2,3.0]'],
+    ['Direction = North | South; [10, 20] South', '20'],
+    ['templates = [String, Int]; values = ["x", 1]; templates.values', '["x", 1]'],
+    ['xs = [1]; xs = [2, 3]; xs', '[2, 3]'],
+    ['f x = x + 1; [f 1, f 2.0]', '[2, 3.0]'],
     ['factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))\nfactorial 5', '120'],
     ['import "type"; cast Float32 (Float64 .2)', 'Float32 0.2'],
     // A parameter's record is known from the fields code uses, also when it assigns them.
     ['f r = { r.a = 5; r }; f [a: 1, b: 2]', '[a: 5, b: 2]'],
     ['g r = { r.p.q = 3; r }; g [p: [q: 1, z: 0]]', '[p: [q: 3, z: 0]]'],
     // A function known only from its uses does not fix its list argument's length.
-    ['f g = [g [1],g [1,2,3]]; f length', '[1,3]'],
-    ['f r = [r.g [1],r.g [1,2,3]]; f [g: length]', '[1,3]'],
+    ['f g = [g [1], g [1, 2, 3]]; f length', '[1, 3]'],
+    ['f r = [r.g [1], r.g [1, 2, 3]]; f [g: length]', '[1, 3]'],
     // A known small Int converts to a Float operand losslessly.
     ['f r = r.y == 0 ? 5.0 : r.vy / 8; f [y: 1.0, vy: 2.0]', '0.25'],
     // Either branch's three numbers: a list of three numbers.
-    ['f c = c ? [1.0,2.0,3.0] : [0.0,0.0,0.0]; [1.0,1.0,1.0] + f true', '[2.0,3.0,4.0]'],
+    ['f c = c ? [1.0, 2.0, 3.0] : [0.0, 0.0, 0.0]; [1.0, 1.0, 1.0] + f true', '[2.0, 3.0, 4.0]'],
     // A record alias is a type argument (List Point, Result Point e); a field
     // may name another module's type (browser.Viewport).
     ['import "option"\nPoint = [x: Float, y: Float]\nMsg = | Got (Result Point String)\nGot (Ok [x: 1, y: 2])', 'Got (Ok [x: 1.0, y: 2.0])'],
     ['Point = [x: Float, y: Float]\nShape = | Path (List Point)\nPath [[x: 1, y: 2]]', 'Path [[x: 1.0, y: 2.0]]'],
     ['browser = import "browser"\nMsg = Resized browser.Viewport | Other\nResized [width: 1, height: 2]', 'Resized [width: 1, height: 2]'],
     // A constructor pattern on a Dynamic field is checked when it runs.
-    ['import "option"\nMsg = More | Got Dynamic\nf msg = match msg [More -> 0,(Got (Ok q)) -> q,(Got (Err _)) -> 1]\nf (Got (Ok 5))', '5'],
+    ['import "option"\nMsg = More | Got Dynamic\nf msg = match msg [More -> 0, (Got (Ok q)) -> q, (Got (Err _)) -> 1]\nf (Got (Ok 5))', '5'],
 ] as const) Deno.test(`default checking session: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -59,9 +59,9 @@ for (const source of [
     'x | missingGuard -> x',
     'f x = x == 0 ? 1 : x * x; f (Dynamic 2)',
     'Vect 2 Int [1]',
-    'xs <- return (Vect 2 Int [1,2]); xs = [3]',
+    'xs <- return (Vect 2 Int [1, 2]); xs = [3]',
     'env',
-    'f g = [g 1,g "a"]; f (x -> 0)',
+    'f g = [g 1, g "a"]; f (x -> 0)',
     'f r = r.y == 0 ? 5.0 : r.vy * 9007199254740993; f [y: 1.0, vy: 2.0]',
 ]) Deno.test(`default checking rejects before evaluation: ${source}`, () => rejected(session(), source));
 
@@ -75,9 +75,9 @@ Deno.test("a static error prevents earlier effects and bindings", () => {
 Deno.test("REPL clauses and polymorphism survive separate submissions", () => {
     const i = session();
     run(i, 'func 0 = 1'); run(i, 'func 1 = 0');
-    if (run(i, '[func 0,func 1]') !== '[1,0]') throw new Error('lost clause');
+    if (run(i, '[func 0, func 1]') !== '[1, 0]') throw new Error('lost clause');
     run(i, 'func 0 = 2');
-    if (run(i, '[func 0,func 1]') !== '[2,0]') throw new Error('replacement lost clause');
+    if (run(i, '[func 0, func 1]') !== '[2, 0]') throw new Error('replacement lost clause');
     rejected(i, 'func 2 = "bad"');
     run(i, 'id x = x');
     if (run(i, 'id 1') !== '1' || run(i, 'id true') !== 'true') throw new Error('lost polymorphism');
@@ -123,8 +123,8 @@ for (const source of ['cast (x -> x) 1', 'isExact "bad"', 'keys [x: 1]', 'values
 }
 
 Deno.test("unary collection constraints distribute over heterogeneous list shapes", () => {
-    const actual = run(session(), 'map length [[1],[2,3]]');
-    if (actual !== '[1,2]') throw new Error(actual);
+    const actual = run(session(), 'map length [[1], [2, 3]]');
+    if (actual !== '[1, 2]') throw new Error(actual);
 });
 Deno.test("default checking reports an unbound name with a suggestion", () => {
     try { run(session(), "y = 3; yy + 1"); } catch (error) {
@@ -137,111 +137,111 @@ Deno.test("default checking reports an unbound name with a suggestion", () => {
 // A variable bound to a union containing itself (v = v | t) resolves to t,
 // and functions that return their list parameter preserve its length.
 for (const [source, expected] of [
-    ['import "sequence"; g [a,b] = forceList [b,a + b]; repeatApply 3 g [1,2]', '[5,8]'],
-    ['import "sequence"\ntick [a,b,c,d,e,f,g,h,i] = forceList [b,c,d,e,f,g,h + a,i,a]\nsum (repeatApply 80 tick [0,1,1,2,1,0,0,0,0])', '5934'],
-    ['f (List xs) = xs; g [a,b] = f [b,a + b]; g (g [1,2])', '[3,5]'],
-    ['import "sequence"; g [a,b] = a + b; g (forceList [1,2])', '3'],
-    ['g [a,b] = a + b; g (map (x -> x * 2) [1,2])', '6'],
-    ['xs = map (x -> x + 1) [1,2]\nys = map (x -> x * 2) [1,2,3]\ng [a,b] = a + b\n[g xs,length ys]', '[5,3]'],
+    ['import "sequence"; g [a, b] = forceList [b, a + b]; repeatApply 3 g [1, 2]', '[5, 8]'],
+    ['import "sequence"\ntick [a, b, c, d, e, f, g, h, i] = forceList [b, c, d, e, f, g, h + a, i, a]\nsum (repeatApply 80 tick [0, 1, 1, 2, 1, 0, 0, 0, 0])', '5934'],
+    ['f (List xs) = xs; g [a, b] = f [b, a + b]; g (g [1, 2])', '[3, 5]'],
+    ['import "sequence"; g [a, b] = a + b; g (forceList [1, 2])', '3'],
+    ['g [a, b] = a + b; g (map (x -> x * 2) [1, 2])', '6'],
+    ['xs = map (x -> x + 1) [1, 2]\nys = map (x -> x * 2) [1, 2, 3]\ng [a, b] = a + b\n[g xs, length ys]', '[5, 3]'],
     ['x (x::xs) = 42; x [x]', '42'],
     // A [] inside a pattern tests that part without making the argument empty.
-    ['g [[],y] = y; g [(x::_),_] = x; g [[1,2],3]', '1'],
-    ['j xs ys = match [xs,ys] [[[],r] -> r,[(x::m),r] -> x :: j m r]; j [1,2] [3]', '[1,2,3]'],
-    ['f xs = match xs [[] -> 0,[_] -> 1,_ -> 2]; [f [],f [1],f [1,2]]', '[0,1,2]'],
+    ['g [[], y] = y; g [(x::_), _] = x; g [[1, 2], 3]', '1'],
+    ['j xs ys = match [xs, ys] [[[], r] -> r, [(x::m), r] -> x :: j m r]; j [1, 2] [3]', '[1, 2, 3]'],
+    ['f xs = match xs [[] -> 0, [_] -> 1, _ -> 2]; [f [], f [1], f [1, 2]]', '[0, 1, 2]'],
     // A free name in a typed pattern binds what the value has there.
-    ['f ((List _) xs) = xs; f [1,2]', '[1,2]'],
-    ['k ((List a) xs) = a; k [1,"x"]', 'Int | String'],
+    ['f ((List _) xs) = xs; f [1, 2]', '[1, 2]'],
+    ['k ((List a) xs) = a; k [1, "x"]', 'Int | String'],
     ['first ((List _) (x::_)) = x; first [1..]', '1'],
-    ['len ((Vect n _) _) = n; len [1,2]', '2'],
-    ['g ((Vect n a) xs) = [n,a]; g [1,2]', '[2,Int]'],
-    ['app ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys); typeOf (app [1,2] [3])', 'Vect 3 Int'],
+    ['len ((Vect n _) _) = n; len [1, 2]', '2'],
+    ['g ((Vect n a) xs) = [n, a]; g [1, 2]', '[2, Int]'],
+    ['app ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys); typeOf (app [1, 2] [3])', 'Vect 3 Int'],
     // A length the type leaves open is the one evaluation finds.
-    ['g [a,b] = a + b; g (map (x -> x) (tail [1,2,3]))', '5'],
-    ['g [a,b] = a + b; g (tail [0,1,2])', '3'],
-    ['f xs = foldl (acc, x -> x :: acc) xs [1,2]; g [a,b,c,d] = a + b; g (f [1,2])', '3'],
-    ['f xs = filter (x -> x > 0) xs; g [a,b] = a + b; g (f [1,2])', '3'],
-    ['toList 0 = []; toList k = (k - 1) :: toList (k - 1); xs = toList 3; g [a,_,_] = a; g xs', '2'],
-    ['toList Z = []; toList (S k) = k :: toList k; Vect 3 UInt (toList 3)', '[UInt 2,UInt 1,UInt 0]'],
+    ['g [a, b] = a + b; g (map (x -> x) (tail [1, 2, 3]))', '5'],
+    ['g [a, b] = a + b; g (tail [0, 1, 2])', '3'],
+    ['f xs = foldl (acc, x -> x :: acc) xs [1, 2]; g [a, b, c, d] = a + b; g (f [1, 2])', '3'],
+    ['f xs = filter (x -> x > 0) xs; g [a, b] = a + b; g (f [1, 2])', '3'],
+    ['toList 0 = []; toList k = (k - 1) :: toList (k - 1); xs = toList 3; g [a, _, _] = a; g xs', '2'],
+    ['toList Z = []; toList (S k) = k :: toList k; Vect 3 UInt (toList 3)', '[UInt 2, UInt 1, UInt 0]'],
 ] as const) Deno.test(`checker infers recursive steps and list sizes: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "sequence"; g [a,b] = forceList [b,a ++ "x"]; repeatApply 3 g [1,2]',
-    'import "sequence"; g [a,b] = a + b; g (forceList [1,2,3])',
-    'g [a,b] = a + b; g (map (x -> x) [1,2,3])',
-    'toList 0 = []; toList k = (k - 1) :: toList (k - 1); g [a,_] = a; g (toList 3)',
-    'h ((Vect n a) _) ((Vect n a) _) = n; h [1,2] [3]',
+    'import "sequence"; g [a, b] = forceList [b, a ++ "x"]; repeatApply 3 g [1, 2]',
+    'import "sequence"; g [a, b] = a + b; g (forceList [1, 2, 3])',
+    'g [a, b] = a + b; g (map (x -> x) [1, 2, 3])',
+    'toList 0 = []; toList k = (k - 1) :: toList (k - 1); g [a, _] = a; g (toList 3)',
+    'h ((Vect n a) _) ((Vect n a) _) = n; h [1, 2] [3]',
     'f ((List _) xs) = xs; f 5',
     'toList Z = []; toList (S k) = k :: toList k; Vect 2 UInt (toList 3)',
-    'g [a,b] = tail [0,b,a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1,2]',
+    'g [a, b] = tail [0, b, a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1, 2]',
 ]) Deno.test(`checker still rejects: ${source}`, () => rejected(session(), source));
 // Length-preserving builtins carry their input's length, and separate uses of
 // one generic function keep independent lengths.
 for (const [source, expected] of [
-    ['g [p,q] = p; g (enumerate [10,20])','[0,10]'],
-    ['g [p,q] = p + q; g ([1,2] * (x -> x * 10))','30'],
-    ['g [p,q] = p + q; g ((x -> x * 10) * [1,2])','30'],
-    ['g [p,q] = p + q; g (-[1,2])','-3'],
-    ['g [p,q] = p + q; g ([1,2] + [3,4])','10'],
-    ['g [p,q] = p + q; g ([1,2] * 3)','9'],
-    ['g [[k,v],[k2,w]] = w ++ "!"; g (pairs [x: 1, y: "s"])','"s!"'],
-    ['twice xs = xs * (x -> x * 2); g [p,q] = p + q; g (twice [1,2])','6'],
-    ['number xs = enumerate xs; g [p,q] = p; [g (number [1,2]),length (number [1,2,3])]','[[0,1],3]'],
-    ['h a b = [map (x -> x) a,map (x -> x) b]; h [1] [1,2]','[[1],[1,2]]'],
-    ['f (List xs) = xs; h a b = [f a,f b]; h [1] [1,2]','[[1],[1,2]]'],
+    ['g [p, q] = p; g (enumerate [10, 20])','[0, 10]'],
+    ['g [p, q] = p + q; g ([1, 2] * (x -> x * 10))','30'],
+    ['g [p, q] = p + q; g ((x -> x * 10) * [1, 2])','30'],
+    ['g [p, q] = p + q; g (-[1, 2])','-3'],
+    ['g [p, q] = p + q; g ([1, 2] + [3, 4])','10'],
+    ['g [p, q] = p + q; g ([1, 2] * 3)','9'],
+    ['g [[k, v], [k2, w]] = w ++ "!"; g (pairs [x: 1, y: "s"])','"s!"'],
+    ['twice xs = xs * (x -> x * 2); g [p, q] = p + q; g (twice [1, 2])','6'],
+    ['number xs = enumerate xs; g [p, q] = p; [g (number [1, 2]), length (number [1, 2, 3])]','[[0, 1], 3]'],
+    ['h a b = [map (x -> x) a, map (x -> x) b]; h [1] [1, 2]','[[1], [1, 2]]'],
+    ['f (List xs) = xs; h a b = [f a, f b]; h [1] [1, 2]','[[1], [1, 2]]'],
 ] as const) Deno.test(`checker keeps builtin list lengths: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'g [p,q] = p; g (enumerate [10,20,30])',
-    'g [p,q] = p + q; g ([1,2,3] * (x -> x * 10))',
-    '[1,2] + [3,4,5]',
-    'g [p,q] = p; g (pairs [x: 1])',
-    'h a b = [map (x -> x) a,map (x -> x) b]; g [[x],[y,z]] = x + y + z; g (h [1,2] [1])',
-    'g [p,q] = p + q; g (tail [1,2,3] * (x -> x))',
+    'g [p, q] = p; g (enumerate [10, 20, 30])',
+    'g [p, q] = p + q; g ([1, 2, 3] * (x -> x * 10))',
+    '[1, 2] + [3, 4, 5]',
+    'g [p, q] = p; g (pairs [x: 1])',
+    'h a b = [map (x -> x) a, map (x -> x) b]; g [[x], [y, z]] = x + y + z; g (h [1, 2] [1])',
+    'g [p, q] = p + q; g (tail [1, 2, 3] * (x -> x))',
 ]) Deno.test(`checker rejects mismatched builtin list lengths: ${source}`, () => rejected(session(), source));
 // Standard-library list functions keep their argument's length; functions that
 // change a list's length (folds, cons, append, filter) stay unknown, even when
 // their result has the same type as their input.
 for (const [source, expected] of [
-    ['import "sequence"; g [a,b] = a + b; g (reverse [1,2])','3'],
-    ['import "sequence"; g [a,b] = a - b; g (sort [2,1])','-1'],
-    ['import "sequence"; g [a,b] = a - b; g (sortBy compare [2,1])','-1'],
-    ['import "sequence"; g [a,b] = a - b; g (sortOn (x -> -x) [1,2])','1'],
-    ['import "sequence"; g [p,q] = p; g (zipWithIndex [5,6])','[0,5]'],
+    ['import "sequence"; g [a, b] = a + b; g (reverse [1, 2])','3'],
+    ['import "sequence"; g [a, b] = a - b; g (sort [2, 1])','-1'],
+    ['import "sequence"; g [a, b] = a - b; g (sortBy compare [2, 1])','-1'],
+    ['import "sequence"; g [a, b] = a - b; g (sortOn (x -> -x) [1, 2])','1'],
+    ['import "sequence"; g [p, q] = p; g (zipWithIndex [5, 6])','[0, 5]'],
     ['import "sequence"; reverse "abc" ++ "!"','"cba!"'],
 ] as const) Deno.test(`stdlib keeps list lengths: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "sequence"; g [a,b] = a + b; g (reverse [1,2,3])',
-    'f xs = foldl (acc, x -> x :: acc) xs [1,2]; g [a,b] = a + b; g (f [1,2])',
-    'f xs = 0 :: xs; g [a,b] = a + b; g (f [1,2])',
-    'f xs = xs ++ xs; g [a,b] = a + b; g (f [1,2])',
-    'f xs = { xs = [1,2,3]; xs }; g [a,b] = a + b; g (f [1,2])',
+    'import "sequence"; g [a, b] = a + b; g (reverse [1, 2, 3])',
+    'f xs = foldl (acc, x -> x :: acc) xs [1, 2]; g [a, b] = a + b; g (f [1, 2])',
+    'f xs = 0 :: xs; g [a, b] = a + b; g (f [1, 2])',
+    'f xs = xs ++ xs; g [a, b] = a + b; g (f [1, 2])',
+    'f xs = { xs = [1, 2, 3]; xs }; g [a, b] = a + b; g (f [1, 2])',
 ]) Deno.test(`length changes stay unknown: ${source}`, () => rejected(session(), source));
 // Nested lengths: a function's result shape is described in terms of its
 // arguments, and is trusted only where the function is called directly by name.
 for (const [source, expected] of [
-    ['h a b = [map (x -> x) a,map (x -> x) b]; g [[x],[y,z]] = x + y + z; g (h [1] [1,2])', '4'],
-    ['pairUp a b = [a,b]; g [[x],[y,z]] = x + y + z; g (pairUp [1] [2,3])', '6'],
-    ['h a b = [map (x -> x) a,map (x -> x) b]\nh2 a b = h b a\ng [[x,y],[z]] = x + y + z\ng (h2 [1] [1,2])', '4'],
-    ['import "sequence"; both xs = [sort xs,reverse xs]; g [[a,b],[c,d]] = a + d; g (both [2,1])', '3'],
+    ['h a b = [map (x -> x) a, map (x -> x) b]; g [[x], [y, z]] = x + y + z; g (h [1] [1, 2])', '4'],
+    ['pairUp a b = [a, b]; g [[x], [y, z]] = x + y + z; g (pairUp [1] [2, 3])', '6'],
+    ['h a b = [map (x -> x) a, map (x -> x) b]\nh2 a b = h b a\ng [[x, y], [z]] = x + y + z\ng (h2 [1] [1, 2])', '4'],
+    ['import "sequence"; both xs = [sort xs, reverse xs]; g [[a, b], [c, d]] = a + d; g (both [2, 1])', '3'],
 ] as const) Deno.test(`checker tracks nested list lengths: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'h a b = [map (x -> x) a,map (x -> x) b]; g [[x],[y,z]] = x + y + z; g (h [1,2] [1])',
+    'h a b = [map (x -> x) a, map (x -> x) b]; g [[x], [y, z]] = x + y + z; g (h [1, 2] [1])',
     // A function value that flows through a ternary, list, variable, or partial
     // application shares its type with other functions: no length is assumed.
-    'keep xs = xs * (x -> x)\ndrop1 xs = tail xs\npick b = b ? keep : drop1\ng [a,b,c] = a\ng ((pick false) [1,2,3])',
-    'keep xs = xs * (x -> x)\ndrop1 xs = tail xs\nh = false ? keep : drop1\ng [a,b,c] = a\ng (h [1,2,3])',
-    'keep xs = xs * (x -> x)\ndrop1 xs = tail xs\nfs = [keep,drop1]\ng [a,b,c] = a\ng ((fs 1) [1,2,3])',
-    'import "sequence"; p = sortBy compare; g [a,b] = a; g (p [2,1])',
+    'keep xs = xs * (x -> x)\ndrop1 xs = tail xs\npick b = b ? keep : drop1\ng [a, b, c] = a\ng ((pick false) [1, 2, 3])',
+    'keep xs = xs * (x -> x)\ndrop1 xs = tail xs\nh = false ? keep : drop1\ng [a, b, c] = a\ng (h [1, 2, 3])',
+    'keep xs = xs * (x -> x)\ndrop1 xs = tail xs\nfs = [keep, drop1]\ng [a, b, c] = a\ng ((fs 1) [1, 2, 3])',
+    'import "sequence"; p = sortBy compare; g [a, b] = a; g (p [2, 1])',
 ]) Deno.test(`checker does not assume lengths: ${source}`, () => rejected(session(), source));
 // An empty-list pattern rejects a list known to be non-empty (it would fail at
 // runtime), while lists of unknown length still reach it, as recursion needs.
@@ -249,9 +249,9 @@ for (const source of [
 for (const [source, expected] of [
     ['g [] = 0; g []', '0'],
     ['g [] = 0; g (tail [1])', '0'],
-    ['len [] = 0; len (x::rest) = 1 + len rest; len [1,2,3]', '3'],
-    ['rev [] = []; rev (x::xs) = rev xs ++ [x]; rev [1,2,3]', '[3,2,1]'],
-    ['f [] = 0; f (x::xs) = x; [f [],f [7,8]]', '[0,7]'],
+    ['len [] = 0; len (x::rest) = 1 + len rest; len [1, 2, 3]', '3'],
+    ['rev [] = []; rev (x::xs) = rev xs ++ [x]; rev [1, 2, 3]', '[3, 2, 1]'],
+    ['f [] = 0; f (x::xs) = x; [f [], f [7, 8]]', '[0, 7]'],
     ['f [] = "e"; f (x::xs) = x; f [5] + 1', '6'],
     ['f [] = "e"; f (x::xs) = x; f [] ++ "!"', '"e!"'],
 ] as const) Deno.test(`empty-list patterns: ${source}`, () => {
@@ -261,224 +261,224 @@ for (const [source, expected] of [
 for (const source of [
     'g [] = 0; g [1]',
     'g [] = 0; g (map (x -> x) [1])',
-    'f [] = [0]; f xs = [1,2]; g [] = 0; g (f [])',
+    'f [] = [0]; f xs = [1, 2]; g [] = 0; g (f [])',
 ]) Deno.test(`empty-list pattern rejects a non-empty list: ${source}`, () => rejected(session(), source));
 // The runtime tries clauses by literal score, then source order. When a clause
 // definitely matches, overload choices made only of later clauses are dropped;
 // choices whose clauses all definitely fail are dropped too.
 for (const [source, expected] of [
-    ['f [] = [0]; f xs = [1,2]; g [a] = a; g (f [])', '0'],
-    ['f [] = [0]; f xs = [1,2]; g [a,b] = a; g (f [3])', '1'],
-    ['f xs = [1,2]; f [] = [0]; g [a,b] = a; g (f [])', '1'],
-    ['f (x::xs) = [x]; f other = [1,2]; g [a] = a; g (f [7,8])', '7'],
-    ['f [a,b] = [a]; f other = [1,2]; g [x] = x; g (f [7,8])', '7'],
-    ['f [] y = [y]; f xs y = [1,2]; g [a] = a; g (f [] 5)', '5'],
-    ['f xs 0 = [0]; f [] n = [1,2]; g [a] = a; g (f [] 0)', '0'],
-    ['f xs 0 = [0]; f [] n = [1,2]; g [a,b] = a; g (f [] 1)', '1'],
-    ['f n = [1,2]; f 0 = [0]; g [a] = a; g (f 0)', '0'],
-    ['f "x" = [0]; f s = [1,2]; g [a] = a; g (f "x")', '0'],
-    ['f true = [0]; f b = [1,2]; g [a] = a; g (f true)', '0'],
+    ['f [] = [0]; f xs = [1, 2]; g [a] = a; g (f [])', '0'],
+    ['f [] = [0]; f xs = [1, 2]; g [a, b] = a; g (f [3])', '1'],
+    ['f xs = [1, 2]; f [] = [0]; g [a, b] = a; g (f [])', '1'],
+    ['f (x::xs) = [x]; f other = [1, 2]; g [a] = a; g (f [7, 8])', '7'],
+    ['f [a, b] = [a]; f other = [1, 2]; g [x] = x; g (f [7, 8])', '7'],
+    ['f [] y = [y]; f xs y = [1, 2]; g [a] = a; g (f [] 5)', '5'],
+    ['f xs 0 = [0]; f [] n = [1, 2]; g [a] = a; g (f [] 0)', '0'],
+    ['f xs 0 = [0]; f [] n = [1, 2]; g [a, b] = a; g (f [] 1)', '1'],
+    ['f n = [1, 2]; f 0 = [0]; g [a] = a; g (f 0)', '0'],
+    ['f "x" = [0]; f s = [1, 2]; g [a] = a; g (f "x")', '0'],
+    ['f true = [0]; f b = [1, 2]; g [a] = a; g (f true)', '0'],
 ] as const) Deno.test(`first matching clause wins: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'f [] = [0]; f xs = [1,2]; g [a,b] = a; g (f [])',
-    'f xs = [1,2]; f [] = [0]; g [a] = a; g (f [])',
-    'f [a,b] = [a]; f other = [1,2]; g [x] = x; g (f [7,8,9])',
-    'f x x = [0]; f x y = [1,2]; g [a] = a; g (f 1 2)',
-    'f xs 0 = [0]; f [] n = [1,2]; g [a] = a; g (f [] 1)',
-    'f n = [1,2]; f 0 = [0]; g [a,b] = a; g (f 0)',
-    'f true = [0]; f b = [1,2]; g [a] = a; g (f false)',
+    'f [] = [0]; f xs = [1, 2]; g [a, b] = a; g (f [])',
+    'f xs = [1, 2]; f [] = [0]; g [a] = a; g (f [])',
+    'f [a, b] = [a]; f other = [1, 2]; g [x] = x; g (f [7, 8, 9])',
+    'f x x = [0]; f x y = [1, 2]; g [a] = a; g (f 1 2)',
+    'f xs 0 = [0]; f [] n = [1, 2]; g [a] = a; g (f [] 1)',
+    'f n = [1, 2]; f 0 = [0]; g [a, b] = a; g (f 0)',
+    'f true = [0]; f b = [1, 2]; g [a] = a; g (f false)',
     // Unknown lengths keep every possible clause.
     // (Static evaluation is bounded in work: this filter scans a million elements.)
-    'f [] = [0]; f xs = [1,2]; g [a] = a; g (f (tail (take 1 (filter (> 999999) [0..]))))',
+    'f [] = [0]; f xs = [1, 2]; g [a] = a; g (f (tail (take 1 (filter (> 999999) [0..]))))',
 ]) Deno.test(`later clauses still count unless a match is definite: ${source}`, () => rejected(session(), source));
 // Typed clauses are ranked as the runtime ranks them: an exact type (30)
 // before a numeric aggregate (10) before a lossless conversion (1) before other
 // patterns (0); literals (40) first. Value-dependent cases keep both clauses.
 for (const [source, expected] of [
-    ['f (Int n) = [0]; f xs = [1,2]; g [a] = a; g (f 3)', '0'],
-    ['f xs = [1,2]; f (Int n) = [0]; g [a] = a; g (f 3)', '0'],
-    ['f (Int n) = [0]; f xs = [1,2]; g [a,b] = a; g (f "s")', '1'],
-    ['f (Int n) = [0]; f (String s) = [1,2]; g [a] = a; g (f 3)', '0'],
-    ['f (Int n) = [0]; f (String s) = [1,2]; g [a,b] = a; g (f "x")', '1'],
-    ['f (Number n) = [0]; f xs = [1,2]; g [a] = a; g (f 2.5)', '0'],
-    ['f (Exact n) = [0]; f xs = [1,2]; g [a,b] = a; g (f 2.5)', '1'],
-    ['f (List xs) = [0]; f other = [1,2]; g [a] = a; g (f [5,6])', '0'],
-    ['f (Int n) = [0]; f xs = [1,2]; h x = g (f x); g [a] = a; h 3', '0'],
+    ['f (Int n) = [0]; f xs = [1, 2]; g [a] = a; g (f 3)', '0'],
+    ['f xs = [1, 2]; f (Int n) = [0]; g [a] = a; g (f 3)', '0'],
+    ['f (Int n) = [0]; f xs = [1, 2]; g [a, b] = a; g (f "s")', '1'],
+    ['f (Int n) = [0]; f (String s) = [1, 2]; g [a] = a; g (f 3)', '0'],
+    ['f (Int n) = [0]; f (String s) = [1, 2]; g [a, b] = a; g (f "x")', '1'],
+    ['f (Number n) = [0]; f xs = [1, 2]; g [a] = a; g (f 2.5)', '0'],
+    ['f (Exact n) = [0]; f xs = [1, 2]; g [a, b] = a; g (f 2.5)', '1'],
+    ['f (List xs) = [0]; f other = [1, 2]; g [a] = a; g (f [5, 6])', '0'],
+    ['f (Int n) = [0]; f xs = [1, 2]; h x = g (f x); g [a] = a; h 3', '0'],
 ] as const) Deno.test(`typed clauses rank like the runtime: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'f xs = [1,2]; f (Int n) = [0]; g [a,b] = a; g (f 3)',
-    'f (Int n) = [0]; f xs = [1,2]; g [a] = a; g (f "s")',
-    'f (Int n) = [0]; f xs = [1,2]; h x = g (f x); g [a] = a; h "s"',
+    'f xs = [1, 2]; f (Int n) = [0]; g [a, b] = a; g (f 3)',
+    'f (Int n) = [0]; f xs = [1, 2]; g [a] = a; g (f "s")',
+    'f (Int n) = [0]; f xs = [1, 2]; h x = g (f x); g [a] = a; h "s"',
     // Whether a Float converts to Int8 depends on its value: 2.5 does not.
-    'f (Int8 n) = [0]; f xs = [1,2]; g [a] = a; h x = g (f (x * 1.0)); h 2.5',
+    'f (Int8 n) = [0]; f xs = [1, 2]; g [a] = a; h x = g (f (x * 1.0)); h 2.5',
 ]) Deno.test(`typed clauses keep possible clauses: ${source}`, () => rejected(session(), source));
 // Clauses of the same input type whose results differ only in list lengths
 // become separate overload choices instead of a definition error; any other
 // result conflict is still rejected.
 for (const [source, expected] of [
-    ['f (Int n) = [1,2]; f 0 = [0]; g [a] = a; g (f 0)', '0'],
-    ['f (Int n) = [1,2]; f 0 = [0]; g [a,b] = a; g (f 3)', '1'],
-    ['f (Int n) = [[1],[2,3]]; f 0 = [[0]]; g [[a]] = a; g (f 0)', '0'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; g [a] = a; g (f 0)', '0'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; g [a, b] = a; g (f 3)', '1'],
+    ['f (Int n) = [[1], [2, 3]]; f 0 = [[0]]; g [[a]] = a; g (f 0)', '0'],
 ] as const) Deno.test(`clauses with different result lengths: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'f (Int n) = [1,2]; f 0 = [0]; g [a,b] = a; g (f 0)',
-    'f (Int n) = [1,2]; f 0 = [0]; g [a] = a; g (f 3)',
+    'f (Int n) = [1, 2]; f 0 = [0]; g [a, b] = a; g (f 0)',
+    'f (Int n) = [1, 2]; f 0 = [0]; g [a] = a; g (f 3)',
     'f (Int n) = "a"; f 0 = 1',
-    'f (Int n) = ["a","b"]; f 0 = [1]',
+    'f (Int n) = ["a", "b"]; f 0 = [1]',
 ]) Deno.test(`clauses with different results stay checked: ${source}`, () => rejected(session(), source));
 // A literal passed through function parameters still selects clauses: a
 // deferred call keeps its argument's (symbolic) value, and each call
 // substitutes the actual one, through any number of levels.
 for (const [source, expected] of [
-    ['f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); g [a] = a; h 0','0'],
-    ['f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); g [a,b] = a; h 3','1'],
-    ['f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); g [a] = a; [h 0,h 0]','[0,0]'],
-    ['f (Int n) = [1,2]; f 0 = [0]; h x = g (f (x - 1)); g [a] = a; h 1','0'],
-    ['f (Int n) = [1,2]; f 0 = [0]; h s x = g (f x); g [a] = a; h "s" 0','0'],
-    ['f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); k y = h y; g [a] = a; k 0','0'],
-    ['f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); k y = h y; m z = k z; g [a] = a; m 0','0'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); g [a] = a; h 0','0'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); g [a, b] = a; h 3','1'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); g [a] = a; [h 0, h 0]','[0, 0]'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; h x = g (f (x - 1)); g [a] = a; h 1','0'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; h s x = g (f x); g [a] = a; h "s" 0','0'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); k y = h y; g [a] = a; k 0','0'],
+    ['f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); k y = h y; m z = k z; g [a] = a; m 0','0'],
     ['f (Int n) = [0]; f (String s) = [1]; h x = g (f x); k y = h y; g [a] = a; k 0','0'],
 ] as const) Deno.test(`literals through parameters: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); g [a] = a; h 3',
-    'f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); g [a,b] = a; h 0',
-    'f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); g [a] = a; [h 0,h 5]',
-    'f (Int n) = [1,2]; f 0 = [0]; h x = g (f (x - 1)); g [a] = a; h 2',
-    'f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); k y = h y; g [a] = a; k 4',
-    'f (Int n) = [0]; f (String s) = [1,2]; h x = g (f x); k y = h y; g [a] = a; k "s"',
+    'f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); g [a] = a; h 3',
+    'f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); g [a, b] = a; h 0',
+    'f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); g [a] = a; [h 0, h 5]',
+    'f (Int n) = [1, 2]; f 0 = [0]; h x = g (f (x - 1)); g [a] = a; h 2',
+    'f (Int n) = [1, 2]; f 0 = [0]; h x = g (f x); k y = h y; g [a] = a; k 4',
+    'f (Int n) = [0]; f (String s) = [1, 2]; h x = g (f x); k y = h y; g [a] = a; k "s"',
     'f (Int n) = 1; h x = (f x) + 1; k y = h y; k "s"',
 ]) Deno.test(`literals through parameters stay checked: ${source}`, () => rejected(session(), source));
 // Boolean and string literals reach clauses through parameters too.
 for (const [source, expected] of [
-    ['f true = [0]; f b = [1,2]; h x = g (f x); g [a] = a; h true','0'],
-    ['f true = [0]; f b = [1,2]; h x = g (f x); g [a,b] = a; h false','1'],
-    ['f "x" = [0]; f s = [1,2]; h x = g (f x); g [a] = a; h "x"','0'],
-    ['f "x" = [0]; f s = [1,2]; h x = g (f x); g [a,b] = a; h "y"','1'],
-    ['f true = [0]; f b = [1,2]; h x = g (f x); k y = h y; g [a] = a; k true','0'],
-    ['f "x" = [0]; f s = [1,2]; h x = g (f x); k y = h y; m z = k z; g [a] = a; m "x"','0'],
-    ['f "x" = [0]; f s = [1,2]; h n s = g (f s); g [a] = a; h 1 "x"','0'],
-    ['f "x" = [0]; f s = [1,2]; h x = { x = "y"; g (f x) }; g [a,b] = a; h "x"','1'],
+    ['f true = [0]; f b = [1, 2]; h x = g (f x); g [a] = a; h true','0'],
+    ['f true = [0]; f b = [1, 2]; h x = g (f x); g [a, b] = a; h false','1'],
+    ['f "x" = [0]; f s = [1, 2]; h x = g (f x); g [a] = a; h "x"','0'],
+    ['f "x" = [0]; f s = [1, 2]; h x = g (f x); g [a, b] = a; h "y"','1'],
+    ['f true = [0]; f b = [1, 2]; h x = g (f x); k y = h y; g [a] = a; k true','0'],
+    ['f "x" = [0]; f s = [1, 2]; h x = g (f x); k y = h y; m z = k z; g [a] = a; m "x"','0'],
+    ['f "x" = [0]; f s = [1, 2]; h n s = g (f s); g [a] = a; h 1 "x"','0'],
+    ['f "x" = [0]; f s = [1, 2]; h x = { x = "y"; g (f x) }; g [a, b] = a; h "x"','1'],
 ] as const) Deno.test(`boolean and string literals through parameters: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'f true = [0]; f b = [1,2]; h x = g (f x); g [a] = a; h false',
-    'f true = [0]; f b = [1,2]; h x = g (f x); g [a,b] = a; h true',
-    'f "x" = [0]; f s = [1,2]; h x = g (f x); g [a] = a; h "y"',
-    'f true = [0]; f b = [1,2]; h x = g (f x); k y = h y; g [a] = a; k false',
-    'f true = [0]; f b = [1,2]; h x = g (f x); g [a] = a; [h true,h false]',
-    'f "x" = [0]; f s = [1,2]; h x = { x = "y"; g (f x) }; g [a] = a; h "x"',
+    'f true = [0]; f b = [1, 2]; h x = g (f x); g [a] = a; h false',
+    'f true = [0]; f b = [1, 2]; h x = g (f x); g [a, b] = a; h true',
+    'f "x" = [0]; f s = [1, 2]; h x = g (f x); g [a] = a; h "y"',
+    'f true = [0]; f b = [1, 2]; h x = g (f x); k y = h y; g [a] = a; k false',
+    'f true = [0]; f b = [1, 2]; h x = g (f x); g [a] = a; [h true, h false]',
+    'f "x" = [0]; f s = [1, 2]; h x = { x = "y"; g (f x) }; g [a] = a; h "x"',
 ]) Deno.test(`boolean and string literals through parameters stay checked: ${source}`, () => rejected(session(), source));
 // Characters, floats, integer ranges and constructors select clauses too,
 // directly and through parameters.
 for (const [source, expected] of [
-    ["f 'a' = [0]; f c = [1,2]; h x = g (f x); g [a] = a; h 'a'", '0'],
-    ["f 'a' = [0]; f c = [1,2]; h x = g (f x); g [a,b] = a; h 'b'", '1'],
-    ["f 'a' = [0]; f c = [1,2]; h x = g (f x); k y = h y; g [a] = a; k 'a'", '0'],
-    ["c = 'a'; f 'a' = [0]; f x = [1,2]; g [a] = a; g (f c)", '0'],
-    ['f 1.5 = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h 1.5','0'],
-    ['f 1.5 = [0]; f x = [1,2]; h x = g (f x); g [a,b] = a; h 2.5','1'],
-    ['f 2 = [0]; f x = [1,2]; g [a] = a; g (f 2.0)','0'],
-    ['f 2.0 = [0]; f x = [1,2]; g [a] = a; g (f 2)','0'],
-    ['f [1..3] = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h 2','0'],
-    ['f [1..3] = [0]; f x = [1,2]; h x = g (f x); g [a,b] = a; h 7','1'],
-    ['import "option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h None','0'],
-    ['import "option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a,b] = a; h (Some 1)','1'],
-    ['import "option"; f (Some x) = [x]; f other = [1,2]; h v = g (f v); g [a] = a; h (Some 7)','7'],
-    ['Light = Off | On; f On = [1]; f x = [0,0]; h l = g (f l); g [a] = a; h On','1'],
+    ["f 'a' = [0]; f c = [1, 2]; h x = g (f x); g [a] = a; h 'a'", '0'],
+    ["f 'a' = [0]; f c = [1, 2]; h x = g (f x); g [a, b] = a; h 'b'", '1'],
+    ["f 'a' = [0]; f c = [1, 2]; h x = g (f x); k y = h y; g [a] = a; k 'a'", '0'],
+    ["c = 'a'; f 'a' = [0]; f x = [1, 2]; g [a] = a; g (f c)", '0'],
+    ['f 1.5 = [0]; f x = [1, 2]; h x = g (f x); g [a] = a; h 1.5','0'],
+    ['f 1.5 = [0]; f x = [1, 2]; h x = g (f x); g [a, b] = a; h 2.5','1'],
+    ['f 2 = [0]; f x = [1, 2]; g [a] = a; g (f 2.0)','0'],
+    ['f 2.0 = [0]; f x = [1, 2]; g [a] = a; g (f 2)','0'],
+    ['f [1..3] = [0]; f x = [1, 2]; h x = g (f x); g [a] = a; h 2','0'],
+    ['f [1..3] = [0]; f x = [1, 2]; h x = g (f x); g [a, b] = a; h 7','1'],
+    ['import "option"; f None = [0]; f x = [1, 2]; h x = g (f x); g [a] = a; h None','0'],
+    ['import "option"; f None = [0]; f x = [1, 2]; h x = g (f x); g [a, b] = a; h (Some 1)','1'],
+    ['import "option"; f (Some x) = [x]; f other = [1, 2]; h v = g (f v); g [a] = a; h (Some 7)','7'],
+    ['Light = Off | On; f On = [1]; f x = [0, 0]; h l = g (f l); g [a] = a; h On','1'],
 ] as const) Deno.test(`more literal kinds select clauses: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    "f 'a' = [0]; f c = [1,2]; h x = g (f x); g [a] = a; h 'b'",
-    'f 1.5 = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h 2.5',
-    'f [1..3] = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h 7',
-    'import "option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h (Some 1)',
-    'Light = Off | On; f On = [1]; f x = [0,0]; h l = g (f l); g [a] = a; h Off',
+    "f 'a' = [0]; f c = [1, 2]; h x = g (f x); g [a] = a; h 'b'",
+    'f 1.5 = [0]; f x = [1, 2]; h x = g (f x); g [a] = a; h 2.5',
+    'f [1..3] = [0]; f x = [1, 2]; h x = g (f x); g [a] = a; h 7',
+    'import "option"; f None = [0]; f x = [1, 2]; h x = g (f x); g [a] = a; h (Some 1)',
+    'Light = Off | On; f On = [1]; f x = [0, 0]; h l = g (f l); g [a] = a; h Off',
 ]) Deno.test(`more literal kinds stay checked: ${source}`, () => rejected(session(), source));
 // A function's result value (a literal or constructor, or one of its
 // arguments) is known at direct calls by name, so clause ranking can use it.
 for (const [source, expected] of [
-    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; g (f (mk 1))', '0'],
-    ['import "option"; f None = [0]; f x = [1,2]; g [a,b] = a; mk x = Some x; g (f (mk 1))', '1'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nh v = g (f v)\nh (mk 3)', '0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nh v = g (f (mk v))\nh 3', '0'],
-    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; pass v = v; g (f (pass None))', '0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nmk2 y = mk y\ng (f (mk2 1))', '0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : None\ng (f (pick true))', '0'],
-    ['f 0 = [0]; f x = [1,2]; g [a] = a; zero x = 0; g (f (zero 9))', '0'],
-    ['f "x" = [0]; f s = [1,2]; g [a] = a; named x = "x"; g (f (named 1))', '0'],
-    ["f 'a' = [0]; f s = [1,2]; g [a] = a; letter x = 'a'; g (f (letter 1))", '0'],
+    ['import "option"; f None = [0]; f x = [1, 2]; g [a] = a; mk x = None; g (f (mk 1))', '0'],
+    ['import "option"; f None = [0]; f x = [1, 2]; g [a, b] = a; mk x = Some x; g (f (mk 1))', '1'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nmk x = None\nh v = g (f v)\nh (mk 3)', '0'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nmk x = None\nh v = g (f (mk v))\nh 3', '0'],
+    ['import "option"; f None = [0]; f x = [1, 2]; g [a] = a; pass v = v; g (f (pass None))', '0'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nmk x = None\nmk2 y = mk y\ng (f (mk2 1))', '0'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\npick b = b ? None : None\ng (f (pick true))', '0'],
+    ['f 0 = [0]; f x = [1, 2]; g [a] = a; zero x = 0; g (f (zero 9))', '0'],
+    ['f "x" = [0]; f s = [1, 2]; g [a] = a; named x = "x"; g (f (named 1))', '0'],
+    ["f 'a' = [0]; f s = [1, 2]; g [a] = a; letter x = 'a'; g (f (letter 1))", '0'],
 ] as const) Deno.test(`function results select clauses: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = Some x; g (f (mk 1))',
-    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; pass v = v; g (f (pass (Some 2)))',
+    'import "option"; f None = [0]; f x = [1, 2]; g [a] = a; mk x = Some x; g (f (mk 1))',
+    'import "option"; f None = [0]; f x = [1, 2]; g [a] = a; pass v = v; g (f (pass (Some 2)))',
     // Results that depend on a value, or calls through a variable, stay unknown.
-    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nmk2 x = Some x\nmkv = false ? mk : mk2\ng (f (mkv 1))',
-    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; mkv = mk; g (f (mkv 1))',
+    'import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nmk x = None\nmk2 x = Some x\nmkv = false ? mk : mk2\ng (f (mkv 1))',
+    'import "option"; f None = [0]; f x = [1, 2]; g [a] = a; mk x = None; mkv = mk; g (f (mkv 1))',
     // A rebound variable can change under a closure that captured it.
-    "f 'a' = [0]; f x = [1,2]; g [a] = a; c = 'a'; h u = g (f c); c = 'b'; h 0",
+    "f 'a' = [0]; f x = [1, 2]; g [a] = a; c = 'a'; h u = g (f c); c = 'b'; h 0",
 ]) Deno.test(`function results stay checked: ${source}`, () => rejected(session(), source));
 // Results that depend on argument values: the checker evaluates a directly
 // called function's clauses and conditions with what is known about the
 // arguments, and decides calls through parameters at the enclosing calls.
 for (const [source, expected] of [
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : Some 1\ng (f (pick true))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a,b] = a\npick b = b ? None : Some 1\ng (f (pick false))','1'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 0))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a,b] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 5))','1'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\ng (f (safe (-3)))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a,b] = a\nsafe n = n > 0 ? Some n : None\ng (f (safe 4))','1'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n - 1 > 0 ? Some n : None\ng (f (safe 1))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nboth p q = p && q ? Some 1 : None\ng (f (both true false))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nz n = !n ? None : Some 1\ng (f (z 0))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nis s = s == "x" ? None : Some 1\ng (f (is "x"))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\ncount 0 = None\ncount n = count (n - 1)\ng (f (count 5))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 0','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a,b] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 5','1'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nk w = h w\nk (-1)','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh (Int v) = g (f (safe v))\nh 0','0'],
-    ['fib 0 = 0\nfib 1 = 1\nfib n = fib (n - 1) + fib (n - 2)\nf 6765 = [0]\nf x = [1,2]\ng [a] = a\ng (f (fib 20))','0'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\npick b = b ? None : Some 1\ng (f (pick true))','0'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a, b] = a\npick b = b ? None : Some 1\ng (f (pick false))','1'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 0))','0'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a, b] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 5))','1'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\ng (f (safe (-3)))','0'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a, b] = a\nsafe n = n > 0 ? Some n : None\ng (f (safe 4))','1'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nsafe n = n - 1 > 0 ? Some n : None\ng (f (safe 1))','0'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nboth p q = p && q ? Some 1 : None\ng (f (both true false))','0'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nz n = !n ? None : Some 1\ng (f (z 0))','0'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nis s = s == "x" ? None : Some 1\ng (f (is "x"))','0'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\ncount 0 = None\ncount n = count (n - 1)\ng (f (count 5))','0'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 0','0'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a, b] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 5','1'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nk w = h w\nk (-1)','0'],
+    ['import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh (Int v) = g (f (safe v))\nh 0','0'],
+    ['fib 0 = 0\nfib 1 = 1\nfib n = fib (n - 1) + fib (n - 2)\nf 6765 = [0]\nf x = [1, 2]\ng [a] = a\ng (f (fib 20))','0'],
 ] as const) Deno.test(`value-dependent results: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : Some 1\ng (f (pick false))',
-    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 5))',
-    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 3',
-    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nk w = h w\nk 9',
-    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\n[h 0,h 1]',
+    'import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\npick b = b ? None : Some 1\ng (f (pick false))',
+    'import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 5))',
+    'import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 3',
+    'import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nk w = h w\nk 9',
+    'import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\n[h 0, h 1]',
 ]) Deno.test(`value-dependent results stay checked: ${source}`, () => rejected(session(), source));
 // Floating-point and exact rational conditions are evaluated with the
 // runtime's own arithmetic and comparison, including NaN and lossy-mix rules.
-const optionClauses = 'import "option"; f None = [0]; f x = [1,2]';
+const optionClauses = 'import "option"; f None = [0]; f x = [1, 2]';
 for (const [source, expected] of [
     ['g [a] = a; small x = x < 0.5 ? None : Some x; g (f (small 0.25))', '0'],
-    ['g [a,b] = a; small x = x < 0.5 ? None : Some x; g (f (small 0.75))', '1'],
+    ['g [a, b] = a; small x = x < 0.5 ? None : Some x; g (f (small 0.75))', '1'],
     ['g [a] = a; small x = x * 2.0 - 0.5 < 0.0 ? None : Some x; g (f (small 0.1))', '0'],
-    ['g [a,b] = a; e3 x = x + 0.2 == 0.3 ? None : Some x; g (f (e3 0.1))', '1'],
+    ['g [a, b] = a; e3 x = x + 0.2 == 0.3 ? None : Some x; g (f (e3 0.1))', '1'],
     ['g [a] = a; half x = x / 2 == 1 / 2 ? None : Some x; g (f (half 1))', '0'],
     ['g [a] = a; third x = x < 1 / 3 ? None : Some x; g (f (third (1 / 4)))', '0'],
     ['g [a] = a; m x = x == 0.5 ? None : Some x; g (f (m (1 / 2)))', '0'],
-    ['g [a,b] = a; n x = x < 1.0 ? None : Some x; g (f (n (0.0 / 0.0)))', '1'],
+    ['g [a, b] = a; n x = x < 1.0 ? None : Some x; g (f (n (0.0 / 0.0)))', '1'],
     ['g [a] = a; r x = floor x == 2 ? None : Some x; g (f (r 2.7))', '0'],
     ['g [a] = a; r x y = min (abs x) y < 1 ? None : Some x; g (f (r (-0.5) 4))', '0'],
     ['g [a] = a; r x = x ^ 2 == 1 / 4 ? None : Some x; g (f (r (1 / 2)))', '0'],
@@ -489,8 +489,8 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const [source, expected] of [
-    ['f 0.5 = [0]; f x = [1,2]; g [a] = a; g (f (1 / 2))', '0'],
-    ['f 2 = [0]; f x = [1,2]; g [a] = a; g (f (6 / 3))', '0'],
+    ['f 0.5 = [0]; f x = [1, 2]; g [a] = a; g (f (1 / 2))', '0'],
+    ['f 2 = [0]; f x = [1, 2]; g [a] = a; g (f (6 / 3))', '0'],
 ] as const) Deno.test(`number patterns match computed values: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -513,7 +513,7 @@ for (const [source, expected] of [
     ['g [a] = a; s x = Float32 x < Float32 0.5 ? None : Some x; g (f (s 0.25))', '0'],
     ['g [a] = a; e3 x = Float32 x + Float32 0.2 == Float32 0.3 ? None : Some x; g (f (e3 0.1))', '0'],
     ['g [a] = a; b x = Int8 x + Int8 100 > Int8 0 ? None : Some x; g (f (b 20))', '0'],
-    ['g [a,b] = a; b x = -(Int8 x) < Int8 0 ? Some x : None; g (f (b 5))', '1'],
+    ['g [a, b] = a; b x = -(Int8 x) < Int8 0 ? Some x : None; g (f (b 5))', '1'],
     ['g [a] = a; s x = Float32 x < Float32 0.5 ? None : Some x; h v = g (f (s v)); h 0.25', '0'],
     ['g [a] = a; k (Float32 x) = None; k x = Some x; h v = g (f (k (Float32 v))); h 0.5', '0'],
     ['g [a] = a; z = Int32 7; s x = x == Int32 7 ? None : Some x; g (f (s z))', '0'],
@@ -556,7 +556,7 @@ for (const source of [
 // The builtin length of a list or String is known when its size is: from a
 // literal, a parameter at its calls, cons, append, shaped builtins (map, sort)
 // and recursion over list patterns.
-const sizeClauses = 'import ["option","sequence","number"]; g [a] = a; sm n = n < 2 ? None : Some n\n'
+const sizeClauses = 'import ["option", "sequence", "number"]; g [a] = a; sm n = n < 2 ? None : Some n\n'
     + 'q xs = length xs < 2 ? None : Some 1; len [] = 0; len (x::xs) = 1 + len xs';
 for (const [source, expected] of [
     ['g (f (sm (length [1])))', '0'],
@@ -564,7 +564,7 @@ for (const [source, expected] of [
     ['n = [1]; g (f (sm (length n)))', '0'],
     ['g (f (sm (length "a")))', '0'],
     ['hh xs = g (f (sm (length xs))); hh [5]', '0'],
-    ['hh xs = g (f (sm (length xs - 1))); hh [5,6]', '0'],
+    ['hh xs = g (f (sm (length xs - 1))); hh [5, 6]', '0'],
     ['hh s = g (f (sm (length s))); hh "a"', '0'],
     ['hh ys = g (f (q ys)); hh [1]', '0'],
     ['hh ys = g (f (q (1 :: ys))); hh []', '0'],
@@ -577,30 +577,30 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'g (f (sm (length [1,2,3])))',
+    'g (f (sm (length [1, 2, 3])))',
     'g (f (sm (length [1] + 1)))',
     'g (f (sm (length "ab")))',
-    'hh xs = g (f (sm (length xs))); hh [5,6]',
-    'hh ys = g (f (q ys)); hh [1,2]',
+    'hh xs = g (f (sm (length xs))); hh [5, 6]',
+    'hh ys = g (f (q ys)); hh [1, 2]',
     'hh ys = g (f (q (1 :: ys))); hh [2]',
     'hh ys = g (f (q (ys ++ ys))); hh [2]',
-    'hh ys = g (f (q (map (+ 1) ys))); hh [1,2]',
-    'g (f (sm (len [1,2])))',
+    'hh ys = g (f (q (map (+ 1) ys))); hh [1, 2]',
+    'g (f (sm (len [1, 2])))',
     // A predicate whose value stays unknown decides nothing: both clauses count.
-    'g (f (q (filter (x -> x > sum [1..1000000]) [1,2])))',
+    'g (f (q (filter (x -> x > sum [1..1000000]) [1, 2])))',
 ]) Deno.test(`length calls stay checked: ${source}`, () => rejected(session(), `${optionClauses}\n${sizeClauses}\n${source}`));
 // filter, map, take and drop over lists whose elements are known run as at
 // runtime, as do integer ranges.
 for (const [source, expected] of [
-    ['g (f (q (filter (> 1) [1,2])))', '0'],
-    ['g (f (q (filter (> 2) (map (* 2) [1,2]))))', '0'],
-    ['big x = x > 1; g (f (q (filter big [1,2])))', '0'],
+    ['g (f (q (filter (> 1) [1, 2])))', '0'],
+    ['g (f (q (filter (> 2) (map (* 2) [1, 2]))))', '0'],
+    ['big x = x > 1; g (f (q (filter big [1, 2])))', '0'],
     ['g (f (q (filter (x -> x % 2 == 0) [1..3])))', '0'],
-    ['hh ys = g (f (q (filter (> 1) ys))); hh [1,5]', '0'],
-    ['hh n = g (f (q (filter (> n) [1,2,3]))); hh 2', '0'],
-    ['g (f (q (take 1 [1,2,3])))', '0'],
-    ['hh n = g (f (q (take n [5,6]))); hh 1', '0'],
-    ['hh n = g (f (q (drop n [5,6]))); hh 1', '0'],
+    ['hh ys = g (f (q (filter (> 1) ys))); hh [1, 5]', '0'],
+    ['hh n = g (f (q (filter (> n) [1, 2, 3]))); hh 2', '0'],
+    ['g (f (q (take 1 [1, 2, 3])))', '0'],
+    ['hh n = g (f (q (take n [5, 6]))); hh 1', '0'],
+    ['hh n = g (f (q (drop n [5, 6]))); hh 1', '0'],
     ['hh n = g (f (q [1..n])); hh 1', '0'],
     ['g (f (q [3..3]))', '0'],
 ] as const) Deno.test(`list builtin lengths: ${source}`, () => {
@@ -608,64 +608,64 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'g (f (q (filter (> 1) [1,2,3])))',
+    'g (f (q (filter (> 1) [1, 2, 3])))',
     'g (f (q (filter (x -> x % 2 == 0) [1..5])))',
-    'hh ys = g (f (q (filter (> 1) ys))); hh [3,5]',
-    'hh n = g (f (q (filter (> n) [1,2,3]))); hh 1',
-    'g (f (q (take 2 [1,2,3])))',
-    'hh n = g (f (q (drop n [5,6]))); hh 0',
+    'hh ys = g (f (q (filter (> 1) ys))); hh [3, 5]',
+    'hh n = g (f (q (filter (> n) [1, 2, 3]))); hh 1',
+    'g (f (q (take 2 [1, 2, 3])))',
+    'hh n = g (f (q (drop n [5, 6]))); hh 0',
     'hh n = g (f (q [1..n])); hh 0',
     'g (f (q (take (-1) [1])))',
 ]) Deno.test(`list builtin lengths stay checked: ${source}`, () => rejected(session(), `${optionClauses}\n${sizeClauses}\n${source}`));
 // zip, zipWith and takeWhile; functions passed as arguments are applied too.
 for (const [source, expected] of [
-    ['g (f (q (zip [1] [2,3])))', '0'],
-    ['g (f (q (zipWith (+) [1] [2,3])))', '0'],
-    ['hh xs = g (f (q (zip xs [7,8]))); hh [1]', '0'],
-    ['g (f (q (takeWhile (< 2) [1,2,3])))', '0'],
+    ['g (f (q (zip [1] [2, 3])))', '0'],
+    ['g (f (q (zipWith (+) [1] [2, 3])))', '0'],
+    ['hh xs = g (f (q (zip xs [7, 8]))); hh [1]', '0'],
+    ['g (f (q (takeWhile (< 2) [1, 2, 3])))', '0'],
     ['g (f (q (takeWhile (> 5) [1..20])))', '0'],
-    ['hh n = g (f (q (takeWhile (< n) [1,2,3]))); hh 2', '0'],
-    ['hh xs = g (f (q (takeWhile (< 2) xs))); hh [1,5,0]', '0'],
-    ['g (f (q (takeUntil (> 1) [1,2])))', '0'],
-    ['hh p = g (f (q (filter p [1,2]))); hh (> 1)', '0'],
-    ['big x = x > 1; hh p = g (f (q (filter p [1,2]))); hh big', '0'],
-    ['hh p = g (f (q (takeWhile p [1,2,3]))); hh (< 2)', '0'],
-    ['g (f (q (filter (x -> head x > 1) [[1],[2]])))', '0'],
-    ['g (f (q (tail [1,2])))', '0'],
-    ['f2 [] = [0]; f2 xs = [1,2]; g (f2 (tail [1]))', '0'],
+    ['hh n = g (f (q (takeWhile (< n) [1, 2, 3]))); hh 2', '0'],
+    ['hh xs = g (f (q (takeWhile (< 2) xs))); hh [1, 5, 0]', '0'],
+    ['g (f (q (takeUntil (> 1) [1, 2])))', '0'],
+    ['hh p = g (f (q (filter p [1, 2]))); hh (> 1)', '0'],
+    ['big x = x > 1; hh p = g (f (q (filter p [1, 2]))); hh big', '0'],
+    ['hh p = g (f (q (takeWhile p [1, 2, 3]))); hh (< 2)', '0'],
+    ['g (f (q (filter (x -> head x > 1) [[1], [2]])))', '0'],
+    ['g (f (q (tail [1, 2])))', '0'],
+    ['f2 [] = [0]; f2 xs = [1, 2]; g (f2 (tail [1]))', '0'],
     // A recursive call with a literal list does not fix an open parameter length.
-    ['tw xs = null xs ? [] : tw []; length (tw [1,2])', '0'],
+    ['tw xs = null xs ? [] : tw []; length (tw [1, 2])', '0'],
 ] as const) Deno.test(`zip and takeWhile lengths: ${source}`, () => {
     const actual = run(session(), `${optionClauses}\n${sizeClauses}\n${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'g (f (q (zip [1,2] [2,3])))',
-    'g (f (q (takeWhile (< 3) [1,2,3])))',
+    'g (f (q (zip [1, 2] [2, 3])))',
+    'g (f (q (takeWhile (< 3) [1, 2, 3])))',
     'g (f (q (takeWhile (> 0) [1..20])))',
-    'hh n = g (f (q (takeWhile (< n) [1,2,3]))); hh 3',
-    'hh p = g (f (q (filter p [1,2]))); hh (> 0)',
+    'hh n = g (f (q (takeWhile (< n) [1, 2, 3]))); hh 3',
+    'hh p = g (f (q (filter p [1, 2]))); hh (> 0)',
     // A recursive call still has to fit a parameter whose pattern fixes a length.
-    'h [a] = h [a,a]; h [1]',
+    'h [a] = h [a, a]; h [1]',
 ]) Deno.test(`zip and takeWhile lengths stay checked: ${source}`, () => rejected(session(), `${optionClauses}\n${sizeClauses}\n${source}`));
 // The pure builtins and the standard library written in APN (folds, endless
 // lists, text, local definitions) are evaluated on known values too.
 const textClauses = 'import "text"; r b = b ? None : Some 1';
 for (const [source, expected] of [
-    ['g (f (q (dropWhile (< 2) [1,2])))', '0'],
+    ['g (f (q (dropWhile (< 2) [1, 2])))', '0'],
     ['g (f (q (words "a")))', '0'],
     ['hh s = g (f (q (words s))); hh "x"', '0'],
     ['g (f (q (splitOn "," "a")))', '0'],
     ['g (f (r (trim "  a " == "a")))', '0'],
     ['g (f (r (to String 12 == "12")))', '0'],
-    ['g (f (r (to String [1,2] == "[1,2]")))', '0'],
+    ['g (f (r (to String [1, 2] == "[1, 2]")))', '0'],
     ['g (f (r (reverse "ab" == "ba")))', '0'],
     ['g (f (r (upper "a" == "A")))', '0'],
-    ['g (f (r (contains 2 [1,2])))', '0'],
-    ['g (f (r (all (> 0) [1,2])))', '0'],
-    ['g (f (r (isSome (find (> 1) [1,2]))))', '0'],
-    ['g (f (r (sum [1,2] == 3)))', '0'],
-    ['g (f (r (foldr (x, acc -> x + acc) 0 [1,2] == 3)))', '0'],
+    ['g (f (r (contains 2 [1, 2])))', '0'],
+    ['g (f (r (all (> 0) [1, 2])))', '0'],
+    ['g (f (r (isSome (find (> 1) [1, 2]))))', '0'],
+    ['g (f (r (sum [1, 2] == 3)))', '0'],
+    ['g (f (r (foldr (x, acc -> x + acc) 0 [1, 2] == 3)))', '0'],
     ['g (f (q (take 1 (repeat 0))))', '0'],
     ['g (f (q (take 1 [0..])))', '0'],
     ['g (f (q (filter (> 3) (take 5 [0..]))))', '0'],
@@ -677,15 +677,15 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'g (f (q (dropWhile (< 2) [1,2,3])))',
+    'g (f (q (dropWhile (< 2) [1, 2, 3])))',
     'g (f (q (words "a b")))',
     'hh s = g (f (q (words s))); hh "x y"',
     'g (f (r (trim "  a " == "b")))',
-    'g (f (r (any (> 5) [1,2])))',
+    'g (f (r (any (> 5) [1, 2])))',
     'g (f (r (isPrime 8)))',
     // enumerate pairs each element with its index: [0, 7] has two elements.
     'g (f (q (head (enumerate [7]))))',
-    'g (f (q (sort [3,1])))',
+    'g (f (q (sort [3, 1])))',
 ]) Deno.test(`builtins and std evaluated stay checked: ${source}`, () => rejected(session(), `${optionClauses}\n${sizeClauses}\n${textClauses}\n${source}`));
 // from String reads booleans and numbers as at runtime; recursion is evaluated as
 // deep as the runtime's own stack allows (non-tail recursion to depth 500).
@@ -723,15 +723,15 @@ for (const [source, expected] of [
     ['k y = { a <- return (1); b <- return (a + 1); a <- return (5); return b }\nw <- k 0\ng (f (r (w == 2)))','0'],
     ['k y = { a <- return (1); a <- return (a + 1); return a }; w <- k 0; g (f (r (w == 2)))','0'],
     ['k y = { n = 1; h q = q + n; n = 10; h 1 }; g (f (r (k 0 == 11)))','0'],
-    ['k y = { a = 1; b <- return (a); a = 2; return [a,b] }; w <- k 0; g (f (r (w == [2,1])))','0'],
+    ['k y = { a = 1; b <- return (a); a = 2; return [a, b] }; w <- k 0; g (f (r (w == [2, 1])))','0'],
     ['k y = { xs = 1 :: xs; length (take 3 xs) }; g (f (r (k 0 == 3)))','0'],
-    ['g (f (r (([a,b] -> a) [1,2] == 1)))','0'],
+    ['g (f (r (([a, b] -> a) [1, 2] == 1)))','0'],
     ['g (f (r (length [1..1000000] == 1000000)))','0'],
     ['g (f (r (head (drop 1000000 [0..]) == 1000000)))','0'],
     ['g (f (q (tail (take 1 (drop 20000 [0..])))))','0'],
     ['g (f (r (sum [1..20000] == 200010000)))','0'],
     ['g (f (r (length (filter (> 15000) [1..20000]) == 5000)))','0'],
-    ['g (f (r ([5,3..0] == [5,3,1])))','0'],
+    ['g (f (r ([5, 3..0] == [5, 3, 1])))','0'],
 ] as const) Deno.test(`rebinding blocks and long lists: ${source}`, () => {
     const actual = run(session(), `${optionClauses}\n${sizeClauses}\n${textClauses}\n${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -786,50 +786,50 @@ for (const [source, expected] of [
     ['counter = Mutable 0\nk y = { set counter 4; return (counter + 0) }\nw <- k 0\ng (f (r (w == 4)))', '0'],
     ['counter = Mutable 0\nbump x = { set counter (counter + 1); return (counter + 0) }\na <- return (counter + 0)\nb <- bump 0\ng (f (r (a + b == 1)))', '0'],
     ['counter = Mutable 0\nbump x = { set counter (counter + 1); return (counter + 0) }\nb <- bump 0\ng (f (r (b + (counter + 0) == 2)))', '0'],
-    ['counter = Mutable 0\nbump x = { set counter (counter + 1); return (counter + 0) }\nb <- bump 0\nprint [b,counter + 0]\ng (f (r (counter + 0 == 1)))', '0'],
+    ['counter = Mutable 0\nbump x = { set counter (counter + 1); return (counter + 0) }\nb <- bump 0\nprint [b, counter + 0]\ng (f (r (counter + 0 == 1)))', '0'],
     ['counter = Mutable 0\nbump x = { set counter (counter + 1); return (counter + 0) }\nseq (bump 0) []\ng (f (r (counter + 0 == 0)))', '0'],
     // Values a statement leaves unforced are harmless unless kept; a kept one
     // is forced (once) where a later statement forces it. An uncertain
     // statement only affects the cells and values it can reach.
-    ['counter = Mutable 0; [set counter 9,1]; g (f (r (counter + 0 == 0)))', '0'],
+    ['counter = Mutable 0; [set counter 9, 1]; g (f (r (counter + 0 == 0)))', '0'],
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nprint box\ng (f (r (counter + 0 == 0)))', '0'],
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nhead box\ng (f (r (counter + 0 == 3)))', '0'],
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nhead box\nset counter 8\nhead box\ng (f (r (counter + 0 == 3)))', '0'],
-    ['counter = Mutable 0\nother = Mutable 7\nm = HashMap [["a",1]]\nhas "a" m ? set counter 5 : return []\ng (f (r (other + 0 == 7)))', '0'],
+    ['counter = Mutable 0\nother = Mutable 7\nm = HashMap [["a", 1]]\nhas "a" m ? set counter 5 : return []\ng (f (r (other + 0 == 7)))', '0'],
     // Lazily computed elements run where the program forces them: map's
     // elements when used, filter's predicate as its cells are reached.
-    ['counter = Mutable 0; print (map (x -> set counter x) [1,2]); g (f (r (counter + 0 == 0)))', '0'],
-    ['counter = Mutable 0; do (map (x -> set counter x) [1,2]); g (f (r (counter + 0 == 2)))', '0'],
-    ['counter = Mutable 0\nbump x = set counter (counter + 1)\nxs = map (x -> bump x) [1,2]\nprint (length xs)\ng (f (r (counter + 0 == 0)))', '0'],
-    ['counter = Mutable 0\nbump x = set counter (counter + 1)\nhead (map (x -> bump x) [1,2])\ng (f (r (counter + 0 == 1)))', '0'],
+    ['counter = Mutable 0; print (map (x -> set counter x) [1, 2]); g (f (r (counter + 0 == 0)))', '0'],
+    ['counter = Mutable 0; do (map (x -> set counter x) [1, 2]); g (f (r (counter + 0 == 2)))', '0'],
+    ['counter = Mutable 0\nbump x = set counter (counter + 1)\nxs = map (x -> bump x) [1, 2]\nprint (length xs)\ng (f (r (counter + 0 == 0)))', '0'],
+    ['counter = Mutable 0\nbump x = set counter (counter + 1)\nhead (map (x -> bump x) [1, 2])\ng (f (r (counter + 0 == 1)))', '0'],
     ['counter = Mutable 0\nbump x = set counter (counter + 1)\ndo (take 1 (map (x -> bump x) [1..]))\ng (f (r (counter + 0 == 1)))', '0'],
     // A top-level action builds its list afresh at each use; a value keeps it.
-    ['counter = Mutable 0\nbump x = set counter (counter + 1)\nxs = map (x -> bump x) [1,2]\ndo xs\ndo xs\ng (f (r (counter + 0 == 4)))', '0'],
-    ['counter = Mutable 0\nbump x = set counter (counter + 1)\nys = [bump 0,bump 0]\ndo ys\ng (f (r (counter + 0 == 2)))', '0'],
+    ['counter = Mutable 0\nbump x = set counter (counter + 1)\nxs = map (x -> bump x) [1, 2]\ndo xs\ndo xs\ng (f (r (counter + 0 == 4)))', '0'],
+    ['counter = Mutable 0\nbump x = set counter (counter + 1)\nys = [bump 0, bump 0]\ndo ys\ng (f (r (counter + 0 == 2)))', '0'],
     // An uncertain statement reaching a lazily computed list follows what it is computed from.
-    ['counter = Mutable 0\nother = Mutable 7\nys = map (x -> x * 2) [1,2]\nm = HashMap [["a",1]]\nhas "a" m ? set counter (head ys) : return []\ng (f (r (other + 0 == 7)))', '0'],
+    ['counter = Mutable 0\nother = Mutable 7\nys = map (x -> x * 2) [1, 2]\nm = HashMap [["a", 1]]\nhas "a" m ? set counter (head ys) : return []\ng (f (r (other + 0 == 7)))', '0'],
     // A load reaches only what the loaded file's source names.
     ['counter = Mutable 0\nother = Mutable 7\nset other 8\nload "examples/advent-of-code/lanternfish"\ng (f (r (other + 0 == 8)))','0'],
     // An env view reaches the bindings it names; use, the fields it opened.
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter (counter + 1)\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? scope.bumpC 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nns = [bump: (x -> set counter 3)]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter (counter + 1)\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nhas "a" m ? scope.bumpC 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nns = [bump: (x -> set counter 3)]\nuse ns\nm = HashMap [["a", 1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))','0'],
     // A computed key the checker knows names its binding.
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nscope <- Dynamic env\nkey = "bumpC"\nm = HashMap [["a",1]]\nhas "a" m ? (scope key) 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nscope <- Dynamic env\nkey = "bumpC"\nm = HashMap [["a", 1]]\nhas "a" m ? (scope key) 0 : return []\ng (f (r (other + 0 == 7)))','0'],
     ['counter = Mutable 0\nbumpC x = set counter 1\nscope <- Dynamic env\nkey = "bumpC"\n(scope key) 0\ng (f (r (counter + 0 == 1)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nscope <- Dynamic env\nkey = "bumpC"\ncall x = (scope key) x\nm = HashMap [["a",1]]\nhas "a" m ? call 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nscope <- Dynamic env\nkey = "bumpC"\ncall x = (scope key) x\nm = HashMap [["a", 1]]\nhas "a" m ? call 0 : return []\ng (f (r (other + 0 == 7)))','0'],
     ['counter = Mutable 0\nother = Mutable 7\nhb <- return ((x -> 0))\nhb 0\ng (f (r (other + 0 == 7)))','0'],
     // Keys bound locally, and views stored in records, lists and cells or
     // passed to functions, reach the bindings their uses name.
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? { k = "bumpC"; (scope k) 0 } : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? { k <- return ("bump"); j = k ++ "C"; (scope j) 0 } : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\ncall y = { k = "bumpC"; (scope k) y }\nhas "a" m ? call 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nrr <- return ([s: scope, t: 5])\nhas "a" m ? (rr.s "bumpC") rr.t : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nk = "bumpC"\nrr <- return ([s: scope])\nhas "a" m ? (rr.s k) 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nbox = Mutable [scope]\nhas "a" m ? ((head box) "bumpC") 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhold = Mutable [scope]\nset hold [scope]\nhas "a" m ? ((head hold) "bumpC") 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\npick = (v -> v)\nhas "a" m ? ((pick scope) "bumpC") 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\ngetV y = scope\nhas "a" m ? ((getV 0) "bumpC") 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nvia v = ((Dynamic v) "bumpC") 0\nhas "a" m ? via scope : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nhas "a" m ? { k = "bumpC"; (scope k) 0 } : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nhas "a" m ? { k <- return ("bump"); j = k ++ "C"; (scope j) 0 } : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\ncall y = { k = "bumpC"; (scope k) y }\nhas "a" m ? call 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nrr <- return ([s: scope, t: 5])\nhas "a" m ? (rr.s "bumpC") rr.t : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nk = "bumpC"\nrr <- return ([s: scope])\nhas "a" m ? (rr.s k) 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nbox = Mutable [scope]\nhas "a" m ? ((head box) "bumpC") 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nhold = Mutable [scope]\nset hold [scope]\nhas "a" m ? ((head hold) "bumpC") 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\npick = (v -> v)\nhas "a" m ? ((pick scope) "bumpC") 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\ngetV y = scope\nhas "a" m ? ((getV 0) "bumpC") 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nvia v = ((Dynamic v) "bumpC") 0\nhas "a" m ? via scope : return []\ng (f (r (other + 0 == 7)))','0'],
     // A top-level value is computed when first used and kept; a top-level
     // action (block, application or pipe body) runs at each use.
     ['counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 4)))','0'],
@@ -853,53 +853,53 @@ for (const source of [
     'counter = Mutable 0; set counter 4; g (f (r (counter + 0 == 0)))',
     'counter = Mutable 0\nbump x = set counter (counter + 1)\nbump []\nbump []\ng (f (r (counter + 0 == 1)))',
     'counter = Mutable 0\nbump x = { set counter (counter + 1); return (counter + 0) }\na <- return (counter + 0)\nb <- bump 0\ng (f (r (a + b == 2)))',
-    'counter = Mutable 0\nbump x = { set counter (counter + 1); return (counter + 0) }\nb <- bump 0\nprint [b,counter + 0]\ng (f (r (counter + 0 == 0)))',
-    'counter = Mutable 0; do (map (x -> set counter x) [1,2]); g (f (r (counter + 0 == 1)))',
-    'counter = Mutable 0\nbump x = set counter (counter + 1)\nxs = map (x -> bump x) [1,2]\ndo xs\ndo xs\ng (f (r (counter + 0 == 2)))',
+    'counter = Mutable 0\nbump x = { set counter (counter + 1); return (counter + 0) }\nb <- bump 0\nprint [b, counter + 0]\ng (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0; do (map (x -> set counter x) [1, 2]); g (f (r (counter + 0 == 1)))',
+    'counter = Mutable 0\nbump x = set counter (counter + 1)\nxs = map (x -> bump x) [1, 2]\ndo xs\ndo xs\ng (f (r (counter + 0 == 2)))',
     'k y = { c = Mutable 1; xs = [c + 0]; set c 7; return (head xs) }\nw <- k 0\ng (f (r (w == 1)))',
     'counter = Mutable 0\nk y = { set counter 4; return (counter + 0) }\nw <- k 0\ng (f (r (w == 0)))',
-    'counter = Mutable 0; [set counter 9,1]; g (f (r (counter + 0 == 9)))',
+    'counter = Mutable 0; [set counter 9, 1]; g (f (r (counter + 0 == 9)))',
     // A statement whose run is uncertain leaves what it can reach unknown.
-    'counter = Mutable 0\nm = HashMap [["a",1]]\nhas "a" m ? set counter 5 : return []\ng (f (r (counter + 0 == 5)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter (counter + 1)\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? scope.bumpC 0 : return []\ng (f (r (counter + 0 == 1)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? scope.bumpO 0 : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nm = HashMap [["a", 1]]\nhas "a" m ? set counter 5 : return []\ng (f (r (counter + 0 == 5)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter (counter + 1)\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nhas "a" m ? scope.bumpC 0 : return []\ng (f (r (counter + 0 == 1)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nhas "a" m ? scope.bumpO 0 : return []\ng (f (r (other + 0 == 7)))',
     // A key names the binding it is, wherever the view is used; one the
     // checker does not know (a parameter, a local, a rebound name, a cell's
     // contents) can name any binding.
-    'counter = Mutable 0\nother = Mutable 7\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpO"\nm = HashMap [["a",1]]\nhas "a" m ? (scope key) 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpC"\ncall key = (scope key) 0\nm = HashMap [["a",1]]\nhas "a" m ? call "bumpO" : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpC"\nm = HashMap [["a",1]]\nhas "a" m ? (key -> (scope key) 0) "bumpO" : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpC"\nm = HashMap [["a",1]]\nhas "a" m ? { key = "bumpO"; (scope key) 0 } : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpC"\nkey = "bumpO"\nm = HashMap [["a",1]]\nhas "a" m ? (scope key) 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpO x = set other 1\nscope <- Dynamic env\npick = Mutable "bumpC"\nset pick "bumpO"\nm = HashMap [["a",1]]\nhas "a" m ? (scope (pick + "")) 0 : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpO"\nm = HashMap [["a", 1]]\nhas "a" m ? (scope key) 0 : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpC"\ncall key = (scope key) 0\nm = HashMap [["a", 1]]\nhas "a" m ? call "bumpO" : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpC"\nm = HashMap [["a", 1]]\nhas "a" m ? (key -> (scope key) 0) "bumpO" : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpC"\nm = HashMap [["a", 1]]\nhas "a" m ? { key = "bumpO"; (scope key) 0 } : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpC"\nkey = "bumpO"\nm = HashMap [["a", 1]]\nhas "a" m ? (scope key) 0 : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpO x = set other 1\nscope <- Dynamic env\npick = Mutable "bumpC"\nset pick "bumpO"\nm = HashMap [["a", 1]]\nhas "a" m ? (scope (pick + "")) 0 : return []\ng (f (r (other + 0 == 7)))',
     // A function held by a pattern binding runs its body where it is called.
     'counter = Mutable 0\nother = Mutable 7\nhb <- return (x -> { set other 1; return 0 })\nhb 0\ng (f (r (other + 0 == 7)))',
     'counter = Mutable 0\nother = Mutable 7\nhs <- return [x -> { set other 1; return 0 }]\n(head hs) 0\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\npick n = n > 0 ? (x -> { set other 1; 0 }) : (x -> 0)\nhb <- return (pick 1)\nm = HashMap [["a",1]]\nhas "a" m ? hb 0 : 0\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\n[ha,hb] <- return [(x -> return 0),(x -> { set other 1; return 0 })]\nhb 0\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\npick n = n > 0 ? (x -> { set other 1; 0 }) : (x -> 0)\nhb <- return (pick 1)\nm = HashMap [["a", 1]]\nhas "a" m ? hb 0 : 0\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\n[ha, hb] <- return [(x -> return 0), (x -> { set other 1; return 0 })]\nhb 0\ng (f (r (other + 0 == 7)))',
     // Through local keys and stored or passed views alike; a use the checker
     // cannot follow (a parameter key, computing with or taking apart a value
     // that may be a view, an unknown function given one, a local scope's view
     // used elsewhere) reaches everything.
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? { k = "bumpO"; (scope k) 0 } : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? { k <- return ("bump"); j = k ++ "O"; (scope j) 0 } : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nk = "bumpO"\nhas "a" m ? { (scope k) 0; k = "bumpC" } : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? { k = "bumpC"; k = "bumpO"; (scope k) 0 } : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? { [k] = ["bumpO"]; (scope k) 0 } : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nrr <- return ([s: scope])\nhas "a" m ? (rr.s "bumpO") 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nbox = Mutable [scope]\nhas "a" m ? ((head box) "bumpO") 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\npick = (v -> v)\nhas "a" m ? ((pick scope) "bumpO") 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nfs = [(x -> (scope "bumpO") x)]\nhas "a" m ? (head fs) 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nvia v = ((Dynamic v) "bumpO") 0\nhas "a" m ? via scope : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nvia2 v k = ((Dynamic v) k) 0\nhas "a" m ? via2 scope "bumpC" : return []\ng (f (r (counter + 0 == 0)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nadd1 v = v + 1\nhas "a" m ? add1 scope : return []\ng (f (r (counter + 0 == 0)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nm2 v = match v [[bumpO: h] -> h 0]\nhas "a" m ? m2 scope : return []\ng (f (r (counter + 0 == 0)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nrr2 <- return ([_: scope])\nhas "a" m ? rr2.bumpC 0 : return []\ng (f (r (counter + 0 == 0)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\napply2 h = h scope\nhas "a" m ? apply2 (v -> ((Dynamic v) "bumpC") 0) : return []\ng (f (r (counter + 0 == 0)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nmk y = { bumpL = (x -> set other 1); Dynamic env }\nlv <- mk 0\nhas "a" m ? (lv "bumpL") 0 : return []\ng (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nhas "a" m ? { k = "bumpO"; (scope k) 0 } : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nhas "a" m ? { k <- return ("bump"); j = k ++ "O"; (scope j) 0 } : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nk = "bumpO"\nhas "a" m ? { (scope k) 0; k = "bumpC" } : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nhas "a" m ? { k = "bumpC"; k = "bumpO"; (scope k) 0 } : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nhas "a" m ? { [k] = ["bumpO"]; (scope k) 0 } : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nrr <- return ([s: scope])\nhas "a" m ? (rr.s "bumpO") 0 : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nbox = Mutable [scope]\nhas "a" m ? ((head box) "bumpO") 0 : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\npick = (v -> v)\nhas "a" m ? ((pick scope) "bumpO") 0 : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nfs = [(x -> (scope "bumpO") x)]\nhas "a" m ? (head fs) 0 : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nvia v = ((Dynamic v) "bumpO") 0\nhas "a" m ? via scope : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nvia2 v k = ((Dynamic v) k) 0\nhas "a" m ? via2 scope "bumpC" : return []\ng (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nadd1 v = v + 1\nhas "a" m ? add1 scope : return []\ng (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nm2 v = match v [[bumpO: h] -> h 0]\nhas "a" m ? m2 scope : return []\ng (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nrr2 <- return ([_: scope])\nhas "a" m ? rr2.bumpC 0 : return []\ng (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\napply2 h = h scope\nhas "a" m ? apply2 (v -> ((Dynamic v) "bumpC") 0) : return []\ng (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nmk y = { bumpL = (x -> set other 1); Dynamic env }\nlv <- mk 0\nhas "a" m ? (lv "bumpL") 0 : return []\ng (f (r (counter + 0 == 0)))',
     'counter = Mutable 0\nother = Mutable 7\nscope <- Dynamic env\nscope.other = Mutable 1\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nns = [bump: (x -> set other 3)]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nns = [bump: (x -> set counter 3)]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0\nother = Mutable 7\nns = [bump: (x -> set other 3)]\nuse ns\nm = HashMap [["a", 1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nns = [bump: (x -> set counter 3)]\nuse ns\nm = HashMap [["a", 1]]\nhas "a" m ? bump 0 : return []\ng (f (r (counter + 0 == 0)))',
     'counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 0)))',
     'counter = Mutable 0\nsnap = counter + 0\nset counter 4\nprint snap\nset counter 9\ng (f (r (snap + 0 == 9)))',
     'counter = Mutable 0\ninit = set counter 5\ninit\nset counter 1\ninit\ng (f (r (counter + 0 == 1)))',
@@ -908,7 +908,7 @@ for (const source of [
 Deno.test("an env view from an earlier REPL input reaches the bindings it names", () => {
     const i = session();
     run(i, `${effectPrelude}\nscope <- Dynamic env; key = "bumpO"; call x = (scope key) x; []`);
-    const later = (call: string) => `counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nm = HashMap [["a",1]]\nhas "a" m ? ${call} : return []\ng (f (r (other + 0 == 7)))`;
+    const later = (call: string) => `counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nm = HashMap [["a", 1]]\nhas "a" m ? ${call} : return []\ng (f (r (other + 0 == 7)))`;
     if (run(i, later("return []")) !== "0") throw new Error("unrelated statement");
     if (run(i, later("scope.bumpC 0")) !== "0") throw new Error("literal field");
     if (run(i, later('(scope "bumpC") 0')) !== "0") throw new Error("literal key");
@@ -932,7 +932,7 @@ Deno.test("a view an earlier REPL input stored reaches what its uses name", () =
     const i = session();
     run(i, `${effectPrelude}\nscope <- Dynamic env; []`);
     run(i, "box = Mutable [scope]; []");
-    const later = (call: string) => `counter = Mutable 0\nother = Mutable 7\nbumpO x = set other 1\nm = HashMap [["a",1]]\nhas "a" m ? ${call} : return []\ng (f (r (other + 0 == 7)))`;
+    const later = (call: string) => `counter = Mutable 0\nother = Mutable 7\nbumpO x = set other 1\nm = HashMap [["a", 1]]\nhas "a" m ? ${call} : return []\ng (f (r (other + 0 == 7)))`;
     if (run(i, later("return []")) !== "0") throw new Error("unrelated statement");
     rejected(i, later('((head box) "bumpO") 0'));
     if (run(i, later('((head box) "bumpC") 0').replace("bumpO x", "bumpC x = set counter 1; bumpO x")) !== "0") throw new Error("stored view");
@@ -940,7 +940,7 @@ Deno.test("a view an earlier REPL input stored reaches what its uses name", () =
 for (const source of ['x::xs = []', 'x::y::z = [1]', 'f n = { x::xs = []; x }']) Deno.test(`a cons binding of a list known too short is rejected: ${source}`, () => rejected(session(), source));
 Deno.test("an unknown constructor in a pattern is named, with the module that declares it", () => {
     for (const [source, message, hint] of [
-        ["func (Some x)::xs = print [x,xs]", "unknown constructor 'Some' in a pattern", "add `import \"option\"` to use `Some`"],
+        ["func (Some x)::xs = print [x, xs]", "unknown constructor 'Some' in a pattern", "add `import \"option\"` to use `Some`"],
         ["print None", "unbound variable 'None'", "add `import \"option\"` to use `None`"],
         ["Option a = Some a | None; k (Smoe x) = x", "unknown constructor 'Smoe' in a pattern", "did you mean 'Some'?"],
     ]) {
@@ -951,13 +951,13 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
         }
         throw new Error(`accepted: ${source}`);
     }
-    if (run(session(), 'import "option"; func (Some x)::xs = [x,xs]; func [Some 1,None]') !== "[1,[None]]") throw new Error("with the import");
+    if (run(session(), 'import "option"; func (Some x)::xs = [x, xs]; func [Some 1, None]') !== "[1, [None]]") throw new Error("with the import");
 });
 // An unbound name is reported where it is written, with the standard module
 // exporting it, before any check of what it would have been.
 for (const [source, name, module] of [
     ["perItem total count =\n    okOr \"no items\" (safeDiv total count)\n        >>= share -> Ok share", "okOr", "option"],
-    ["x = 1\nprint (sum [1,2])", "sum", "sequence"],
+    ["x = 1\nprint (sum [1, 2])", "sum", "sequence"],
     ["f x = nothere x >>= y -> [y]", "nothere", undefined],
 ] as const) Deno.test(`an unbound name is located and named: ${JSON.stringify(source)}`, () => {
     try { run(session(), source); } catch (error) {
@@ -1052,10 +1052,10 @@ for (const [source, line, column] of [
 // ':' adds one element (the mirror of the x:xs pattern), making a mixed list
 // as a literal would when it differs from the tail's elements; joining is ++.
 Deno.test("':' adds one element, mixed or not", () => {
-    for (const [source, expected] of [['[1,2]::[3,4]', '[[1,2],3,4]'], ['[1,2]::3::[4,5]', '[[1,2],3,4,5]'], ['1::["a"]', '[1,"a"]'],
-            ['x::xs = [1,2]::[3,4]; [x,xs]', '[[1,2],[3,4]]'], ['length ([1,2]::[3,4])', '3'],
-            ['[1]::[[3,4]]', '[[1],[3,4]]'], ['xs = [[3,4]]; [1,2,3]::xs', '[[1,2,3],[3,4]]'], ['[1,2]::[[3,4]]', '[[1,2],[3,4]]'],
-            ['x::xs = [1]::[[3,4]]; x', '[1]'], ['[1,2] ++ [3,4]', '[1,2,3,4]']]) {
+    for (const [source, expected] of [['[1, 2]::[3, 4]', '[[1, 2], 3, 4]'], ['[1, 2]::3::[4, 5]', '[[1, 2], 3, 4, 5]'], ['1::["a"]', '[1, "a"]'],
+            ['x::xs = [1, 2]::[3, 4]; [x, xs]', '[[1, 2], [3, 4]]'], ['length ([1, 2]::[3, 4])', '3'],
+            ['[1]::[[3, 4]]', '[[1], [3, 4]]'], ['xs = [[3, 4]]; [1, 2, 3]::xs', '[[1, 2, 3], [3, 4]]'], ['[1, 2]::[[3, 4]]', '[[1, 2], [3, 4]]'],
+            ['x::xs = [1]::[[3, 4]]; x', '[1]'], ['[1, 2] ++ [3, 4]', '[1, 2, 3, 4]']]) {
         if (run(session(), source) !== expected) throw new Error(source);
     }
     rejected(session(), '1::2');
@@ -1105,21 +1105,21 @@ for (const [source, expected] of [
     ['g (Int n) = n; h x = g x + 1; h 2', '3'],
     ['g (Float n) = n; h x = g x; h 1', '1.0'],
     ['g (UInt n) = n; h x = g (-x); d y = h y; 1', '1'],
-    ['Pt = [x: Float, y: Float]; g (Pt p) = p.x; h x = g x; h [1,2]', '1.0'],
-    ['Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g [x,-x]; h 0', 'UInt 0'],
-    ['Pt = [x: Float, y: Float]; g (Pt p) = p.y; h x = g [x,x]; h 2', '2.0'],
+    ['Pt = [x: Float, y: Float]; g (Pt p) = p.x; h x = g x; h [1, 2]', '1.0'],
+    ['Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g [x, -x]; h 0', 'UInt 0'],
+    ['Pt = [x: Float, y: Float]; g (Pt p) = p.y; h x = g [x, x]; h 2', '2.0'],
     ['g ((Int -> Int) f) = f 1; h x = g x; h (+ 1)', '2'],
-    ['g [UInt8 a,UInt8 b] = a + b; g [3,3]', '6'],
-    ['g [Float a,b] = a; g [1,"x"]', '1.0'],
-    ['g ((Float x)::rest) = x; g [1,2]', '1.0'],
-    ['[UInt8 a,UInt8 b] = [3,3]; a + b', '6'],
-    ['(Float x)::rest = [1,2]; x', '1.0'],
-    ['g [UInt8 a,UInt8 b] = a; h x = g [x,x * 100]; h 1', '1'],
+    ['g [UInt8 a, UInt8 b] = a + b; g [3, 3]', '6'],
+    ['g [Float a, b] = a; g [1, "x"]', '1.0'],
+    ['g ((Float x)::rest) = x; g [1, 2]', '1.0'],
+    ['[UInt8 a, UInt8 b] = [3, 3]; a + b', '6'],
+    ['(Float x)::rest = [1, 2]; x', '1.0'],
+    ['g [UInt8 a, UInt8 b] = a; h x = g [x, x * 100]; h 1', '1'],
     ['import "option"; g (Some (UInt8 x)) = x; g (Some 3)', '3'],
     ['import "option"; g (Some (Float x)) = x; g (Some 1)', '1.0'],
     ['import "option"; (Some (Float x)) = Some 1; x', '1.0'],
     // An imported constructor destructures without parentheses, as a declared one does.
-    ['import "option"; Some v = Some 123; f (Some (Float x)) = x; [v,f (Some 1)]', '[123,1.0]'],
+    ['import "option"; Some v = Some 123; f (Some (Float x)) = x; [v, f (Some 1)]', '[123, 1.0]'],
     ['import "option"; g (Some (UInt8 x)) = x; k = Some 3; g k', '3'],
     ['import "option"; g (Some (UInt8 x)) = x; h x = g (Some x); h 3', '3'],
     ['import "option"; g (Some (UInt8 x)) = x; h x = g x; h (Some 3)', '3'],
@@ -1154,10 +1154,10 @@ for (const source of ['Int x = "a"', 'Int x = 2.5', 'Int8 x = 300', 'Int x = 1; 
     'g (Int n) = n; h x = g x; h 2.5', 'g (UInt n) = n; h x = g (-x); d y = h (y * 2); d 1',
     'g (UInt n) = n; h x = g (-x); d y = h 2; 1', 'g (UInt n) = n; h x = g x; d y = h "a"; 1',
     'import "text"; g (UInt n) = n; h x = { y = g x; z = upper x; y }; 1',
-    'Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g [x,-x]; h 2', 'Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g x; h [2,-2]',
+    'Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g [x, -x]; h 2', 'Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g x; h [2, -2]',
     'Pt = [x: Float, y: Float]; g (Pt p) = p.x; h x = g x; h [1]', 'g ((Int -> Int) f) = f 1; h x = g x; h 5', 'g (String s) = s; h x = g x; h 1',
-    'g [UInt8 a,UInt8 b] = a; g [3,300]', 'g [UInt8 a,UInt8 b] = a; g [3,-1]', 'g [UInt8 a,UInt8 b] = a; h x = g [x,x * 100]; h 3',
-    '[UInt8 a,UInt8 b] = [3,300]', 'g [String s,Int n] = s; g [1,2]',
+    'g [UInt8 a, UInt8 b] = a; g [3, 300]', 'g [UInt8 a, UInt8 b] = a; g [3, -1]', 'g [UInt8 a, UInt8 b] = a; h x = g [x, x * 100]; h 3',
+    '[UInt8 a, UInt8 b] = [3, 300]', 'g [String s, Int n] = s; g [1, 2]',
     'import "option"; g (Some (UInt8 x)) = x; g (Some 300)', 'import "option"; g (Some (UInt8 x)) = x; g (Some (-1))',
     'import "option"; g (Some (Int x)) = x; g (Some 2.5)', 'import "option"; (Some (UInt8 x)) = Some 300',
     'import "option"; g (Some (String x)) = x; g (Some 1)', 'import "option"; g (Some (UInt8 x)) = x; k = Some 300; g k',
@@ -1182,10 +1182,10 @@ for (const source of ['Int = 5', 'Int x y = 5']) Deno.test(`a built-in type name
 
 // A binding whose pattern its known value can never match is a static error,
 // as a call no clause matches is.
-for (const source of ["1 = 2", "[a,1] = [5,2]", 'import "option"\nNone = Some 1', '"x" = "y"']) {
+for (const source of ["1 = 2", "[a, 1] = [5, 2]", 'import "option"\nNone = Some 1', '"x" = "y"']) {
     Deno.test(`a binding that can never match is rejected statically: ${JSON.stringify(source)}`, () => rejected(session(), source));
 }
-for (const source of ["1 = 1", "[a,1] = [5,1]", "f x = { 1 = x; x }"]) {
+for (const source of ["1 = 1", "[a, 1] = [5, 1]", "f x = { 1 = x; x }"]) {
     Deno.test(`a binding that can match is accepted: ${JSON.stringify(source)}`, () => { run(session(), source); });
 }
 Deno.test("an unknown name in a type is reported as unbound", () => {

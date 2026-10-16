@@ -31,7 +31,7 @@ Deno.test("event messages are lazy and failed updates leave the old model usable
     const counter = app(`import "html"
 import "browser"
 HtmlTestMsg = GoodEvent | BadEvent
-update msg model = match msg [GoodEvent -> model + 1,BadEvent -> missing]
+update msg model = match msg [GoodEvent -> model + 1, BadEvent -> missing]
 view model = div [] [
     button [onClick GoodEvent] [text (to String model)]
     button [onClick BadEvent] [text "bad"]
@@ -76,7 +76,7 @@ Deno.test("nullary constructor function clauses do not consume the next paramete
 });
 Deno.test("a browser build bundles the local modules a program imports", () => {
     const directory = new URL("./fixtures/packages/", import.meta.url).pathname;
-    const source = 'import ["uses-hello","shapes"]\nanswer = [exported,square 3]';
+    const source = 'import ["uses-hello", "shapes"]\nanswer = [exported, square 3]';
     const bundle = bundleProgram(source, directory);
     const local = Object.keys(bundle).filter(path => path.startsWith("/app/")).sort();
     // The imported files and what they import, not the rest of the folder.
@@ -88,7 +88,7 @@ Deno.test("a browser build bundles the local modules a program imports", () => {
         i.sourceDir = "/app/";
         if (checked) i.enableChecking();
         i.run(parse(source));
-        if (i.renderString(i.run(parse("answer"))) !== '["hi pkg",9]') throw new Error(`checked=${checked}`);
+        if (i.renderString(i.run(parse("answer"))) !== '["hi pkg", 9]') throw new Error(`checked=${checked}`);
         try { i.run(parse('import "both"')); } catch (error) {
             if (error instanceof Error && error.message.includes("not bundled")) continue;
             throw error;

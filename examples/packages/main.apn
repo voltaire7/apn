@@ -8,13 +8,13 @@ import "units"
 import "report"
 
 print (greet "packages")                         # Hello, packages!
-print [squareArea 3,rectangleArea 2 5]           # [9,10]
+print [squareArea 3, rectangleArea 2 5]          # [9, 10]
 print (cubicMetres (boxVolume 2 3 4))            # 24 m³
 
 # Imported as a value, a package is a record of its definitions.
 shapes = import "shapes"
 print (shapes.squareArea 4)                      # 16
 
-print (report [["square",squareArea 3],["rectangle",rectangleArea 2 5]])
+print (report [["square", squareArea 3], ["rectangle", rectangleArea 2 5]])
 # square: 9 m²
 # rectangle: 10 m²

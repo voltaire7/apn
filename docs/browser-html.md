@@ -59,17 +59,17 @@ model` returns `[model, command]`, and `subscriptions model` names the events
 the program listens to:
 
 ```apn
-import ["html","time"]
+import ["html", "time"]
 browser = import "browser"
 task = import "task"
 
 Msg = Tick Posix | AdjustTimeZone Zone
 
-init = [[zone: utc, time: millisToPosix 0],task.perform AdjustTimeZone here]
+init = [[zone: utc, time: millisToPosix 0], task.perform AdjustTimeZone here]
 
 update msg model = match msg [
-    (Tick newTime) -> { model.time = newTime; [model,browser.none] }
-    (AdjustTimeZone newZone) -> { model.zone = newZone; [model,browser.none] }
+    (Tick newTime) -> { model.time = newTime; [model, browser.none] }
+    (AdjustTimeZone newZone) -> { model.zone = newZone; [model, browser.none] }
 ]
 
 subscriptions _ = every 1000 Tick
@@ -193,7 +193,7 @@ main = picture [
 ```
 
 Shapes are `circle`, `oval`, `square`, `rectangle`, `triangle`, `pentagon`,
-`hexagon`, `octagon`, `polygon color [[x,y],...]`, `image w h url`, `words
+`hexagon`, `octagon`, `polygon color [[x, y], ...]`, `image w h url`, `words
 color text` and `group shapes`; `move`, `moveUp`/`Down`/`Left`/`Right`,
 `moveX`, `moveY`, `rotate`, `scale` and `fade` place them. Colors are the
 Tango palette (`red`, `lightBlue`, `darkCharcoal`, ...) or `rgb r g b`.

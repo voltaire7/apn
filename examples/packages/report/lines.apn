@@ -1,4 +1,4 @@
 # From report/, import "units" and "shapes" find the packages beside report.apn.
-import ["text","units","shapes"]
-describe [name,area] = name ++ ": " ++ squareMetres area
+import ["text", "units", "shapes"]
+describe [name, area] = name ++ ": " ++ squareMetres area
 joinLines xs = joinWith "\n" xs

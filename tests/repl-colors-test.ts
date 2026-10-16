@@ -10,7 +10,7 @@ function echo(interp: Interpreter, value: import("../src/types.ts").Value): stri
     return output;
 }
 
-for (const source of ["[1]", "[x: 1]", '[x: [1,"hi",true]]', "take 3 [1..]"]) {
+for (const source of ["[1]", "[x: 1]", '[x: [1, "hi", true]]', "take 3 [1..]"]) {
     Deno.test(`streamed REPL colors: ${source}`, () => {
         const interp = new Interpreter();
         const value = interp.run(parse(source));
@@ -31,7 +31,7 @@ Deno.test("colored infinite lists stream without buffering", () => {
             if (output.includes("144m3\x1b[0m")) throw stop;
         });
     } catch (error) { if (error !== stop) throw error; }
-    if (output.replace(/\x1b\[[0-9;]*m/g, "") !== "[1,2,3") throw new Error("Not streaming");
+    if (output.replace(/\x1b\[[0-9;]*m/g, "") !== "[1, 2, 3") throw new Error("Not streaming");
 });
 
 Deno.test("operators use peach while structural punctuation stays gray", () => {

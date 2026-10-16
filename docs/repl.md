@@ -28,7 +28,7 @@ empty result (`print 3` shows only `3`); bindings echo nothing. Interactive feat
   an opening `(`, `{`, or `[`, or a trailing `=`, `<-` or `->` that still
   awaits its body (allowing whitespace and a comment), where it inserts an
   indented newline. Enter also continues inside a bracket opened on an earlier
-  line, preserving indentation. An unfinished single-line `[1,2,3` submits
+  line, preserving indentation. An unfinished single-line `[1, 2, 3` submits
   and reports a syntax error.
   Shift+Enter reverses this behavior. Strings and comments do not count as
   brackets. Option+Left/Right navigate words (including across lines).

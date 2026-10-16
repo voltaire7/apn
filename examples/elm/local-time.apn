@@ -1,16 +1,16 @@
 # Time, from https://elm-lang.org/examples/time
 # Show the current time in your time zone.
-import ["html","time"]
+import ["html", "time"]
 browser = import "browser"
 task = import "task"
 
 Msg = Tick Posix | AdjustTimeZone Zone
 
-init = [[zone: utc, time: millisToPosix 0],task.perform AdjustTimeZone here]
+init = [[zone: utc, time: millisToPosix 0], task.perform AdjustTimeZone here]
 
 update msg model = match msg [
-    Tick newTime -> { model.time = newTime; [model,browser.none] }
-    AdjustTimeZone newZone -> { model.zone = newZone; [model,browser.none] }
+    Tick newTime -> { model.time = newTime; [model, browser.none] }
+    AdjustTimeZone newZone -> { model.zone = newZone; [model, browser.none] }
 ]
 
 subscriptions _ = every 1000 Tick

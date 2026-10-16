@@ -4,7 +4,7 @@
 import "html"
 svg = import "svg"
 
-main = svg.svg [svg.viewBox "0 0 400 400",svg.width "400",svg.height "400"] [
+main = svg.svg [svg.viewBox "0 0 400 400", svg.width "400", svg.height "400"] [
     svg.circle [
         svg.cx "50"
         svg.cy "50"

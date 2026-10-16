@@ -1,6 +1,6 @@
 # Quotes, from https://elm-lang.org/examples/quotes
 # Press a button to send a GET request for random quotes.
-import ["html","option","decode"]
+import ["html", "option", "decode"]
 browser = import "browser"
 http = import "http"
 
@@ -21,12 +21,12 @@ getRandomQuote = http.get [
     expect: http.expectJson GotQuote quoteDecoder
 ]
 
-init = [Loading,getRandomQuote]
+init = [Loading, getRandomQuote]
 
 update msg _ = match msg [
-    MorePlease -> [Loading,getRandomQuote]
-    GotQuote (Ok quote) -> [Success quote,browser.none]
-    GotQuote (Err _) -> [Failure,browser.none]
+    MorePlease -> [Loading, getRandomQuote]
+    GotQuote (Ok quote) -> [Success quote, browser.none]
+    GotQuote (Err _) -> [Failure, browser.none]
 ]
 
 subscriptions _ = browser.none
@@ -43,7 +43,7 @@ viewQuote model = match model [
     ]
     Loading -> text "Loading..."
     Success quote -> div [] [
-        button [onClick MorePlease,style "display" "block"] [text "More Please!"]
+        button [onClick MorePlease, style "display" "block"] [text "More Please!"]
         blockquote [] [text quote.quote]
         p [style "text-align" "right"] [
             text "— "

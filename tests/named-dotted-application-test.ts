@@ -3,9 +3,9 @@ import { parseDocument } from "../src/parser.ts";
 import { checkSource } from "../src/type-checker.ts";
 
 for (const [source, expected] of [
-    ['templates = [Int,Float]; values = [1,2]; templates.values', '[1,2.0]'],
+    ['templates = [Int, Float]; values = [1, 2]; templates.values', '[1, 2.0]'],
     ['templates = [(* 2)]; values = [3]; templates.values', '[6]'],
-    ['templates = [Char,Char]; values = "hi"; templates.values', "['h','i']"],
+    ['templates = [Char, Char]; values = "hi"; templates.values', "['h', 'i']"],
     ['templates = [Int]; values = [42]; { values = [7]; templates.values }', '[7]'],
     ['values = missing; obj = [values: 42]; obj.values', '42'],
     ['obj = [unbound: 42]; obj.unbound', '42'],
@@ -18,7 +18,7 @@ for (const [source, expected] of [
 });
 
 for (const source of [
-    'templates = [Int]; values = [1,2]; templates.values',
+    'templates = [Int]; values = [1, 2]; templates.values',
     'templates = [0]; values = [1]; templates.values',
     'templates = [Int]; templates.missing',
 ]) Deno.test(`named dot rejects invalid input: ${source}`, () => {

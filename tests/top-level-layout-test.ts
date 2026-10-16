@@ -4,7 +4,7 @@ import type { APNError } from "../src/errors.ts";
 import { lint } from "../src/lint.ts";
 
 for (const source of [
-    'func = {\n    print "hi"\n}\n    print $ [1,2,3]',
+    'func = {\n    print "hi"\n}\n    print $ [1, 2, 3]',
     'func = { print "hi" }\n    print "outside"',
     'x = 1\n    y = 2',
     '    x = 1',
@@ -46,9 +46,9 @@ Deno.test("a line over 99 characters is a parse error", () => {
 for (const [source, expected] of [
     ['f a b c = a + b + c\nf 1\n    2\n    3', '6'],
     ['f a b c = a + b + c\n{\n    x = f 1\n        2 3\n    x\n}', '6'],
-    ['f a b = a * b\n[\n    f 2\n        3\n    4\n]', '[6,4]'],
+    ['f a b = a * b\n[\n    f 2\n        3\n    4\n]', '[6, 4]'],
     ['f a b = a * b\n[\n    x: f 2\n        3\n    y: 4\n]', '[x: 6, y: 4]'],
-    ['xs = map (n -> n + 1)\n    [1,2]\nxs', '[2,3]'],
+    ['xs = map (n -> n + 1)\n    [1, 2]\nxs', '[2, 3]'],
 ]) Deno.test(`a deeper line continues an application: ${source}`, () => {
     const interpreter = new Interpreter();
     const actual = interpreter.renderString(interpreter.run(parseDocument(source)));

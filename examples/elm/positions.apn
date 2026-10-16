@@ -6,13 +6,13 @@ random = import "random"
 
 Msg = Clicked | NewPosition Int Int
 
-init = [[x: 100, y: 100],browser.none]
+init = [[x: 100, y: 100], browser.none]
 
-positionGenerator = map2 (x, y -> [x,y]) (random.int 50 350) (random.int 50 350)
+positionGenerator = map2 (x, y -> [x, y]) (random.int 50 350) (random.int 50 350)
 
 update msg model = match msg [
-    Clicked -> [model,random.generate ([x,y] -> NewPosition x y) positionGenerator]
-    NewPosition x y -> [[x: x, y: y],browser.none]
+    Clicked -> [model, random.generate ([x, y] -> NewPosition x y) positionGenerator]
+    NewPosition x y -> [[x: x, y: y], browser.none]
 ]
 
 subscriptions _ = browser.none

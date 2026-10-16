@@ -1261,7 +1261,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // A list template ([Char], [Int,String]) converts position by position, as cast does.
             if (a.k === "list" && a.items?.length && a.items.every(item => resolve(item).k === "type")) {
                 if (t.op === "to") return template(a, b, activeExpression ?? { t: "placeholder" });
-                return problem("no from instance for a list template", undefined, "join characters with `from (List Char) cs`; convert with `to`, as in `to [Char,Char] \"hi\"`");
+                return problem("no from instance for a list template", undefined, "join characters with `from (List Char) cs`; convert with `to`, as in `to [Char, Char] \"hi\"`");
             }
             if (a.k !== "type") return problem(`${t.op} expects a type, as in ${t.op} String x`);
             const target = resolve(a.value);
@@ -4681,14 +4681,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (part === undefined) return undefined;
                 shown.push(part);
             }
-            return `[${shown.join(",")}]`;
+            return `[${shown.join(", ")}]`;
         }
         // Cell by cell, rendering each element as it is reached.
         const parts: string[] = [];
         for (let rest: Known | undefined = k; spendEvaluation(0);) {
             const cell = cellOf(rest);
             if (cell === undefined) return undefined;
-            if (cell === null) return `[${parts.join(",")}]`;
+            if (cell === null) return `[${parts.join(", ")}]`;
             const part = renderKnown(cell.head);
             if (part === undefined) return undefined;
             parts.push(part);

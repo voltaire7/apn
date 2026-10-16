@@ -7,13 +7,14 @@ random = import "random"
 Card = Ace | Two | Three | Four | Five | Six | Seven | Eight | Nine | Ten | Jack | Queen | King
 Msg = Draw | NewCard Card
 
-init = [[card: Three],browser.none]
+init = [[card: Three], browser.none]
 
-cardGenerator = random.uniform Ace [Two,Three,Four,Five,Six,Seven,Eight,Nine,Ten,Jack,Queen,King]
+cardGenerator = random.uniform Ace
+    [Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King]
 
 update msg model = match msg [
-    Draw -> [model,random.generate NewCard cardGenerator]
-    NewCard newCard -> [[card: newCard],browser.none]
+    Draw -> [model, random.generate NewCard cardGenerator]
+    NewCard newCard -> [[card: newCard], browser.none]
 ]
 
 subscriptions _ = browser.none

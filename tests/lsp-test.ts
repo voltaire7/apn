@@ -21,10 +21,10 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     const unused = (source: string) => lint(source).filter(d => d.code === "unused").map(d => [d.range.start.line, d.range.start.character, d.message]);
     equal(unused("f x y = x"), [[0, 4, "'y' is never used; write _ to discard it"]]);
     equal(unused("f x _ = x\ng _y = 1\nh x = { scope <- env; return [] }"), []);
-    equal(unused("return x = MkCounter (s -> [1,s])").map(d => d[2]), ["'x' is never used; write _ to discard it"]);
-    equal(unused("xs = [0,0]\ni = 0\nxs i = 1\nSome v = Some 1"), []);
+    equal(unused("return x = MkCounter (s -> [1, s])").map(d => d[2]), ["'x' is never used; write _ to discard it"]);
+    equal(unused("xs = [0, 0]\ni = 0\nxs i = 1\nSome v = Some 1"), []);
     // A field update reads the record and binds no new names.
-    equal(unused("f model t = {\n    model.time = t\n    model.[width,height] = [t,t]\n    model\n}"), []);
+    equal(unused("f model t = {\n    model.time = t\n    model.[width, height] = [t, t]\n    model\n}"), []);
     equal(unused("copy n ((Vect n Int) xs) = xs\nk = x, y -> x"), [[1, 7, "'y' is never used; write _ to discard it"]]);
     // A lambda where a type is expected is a function type, not code.
     equal(unused("f ((a -> b) g) = g\nt = ((a -> b) -> List a -> List b) == typeOf map\nu = isType (a -> b) 5\nv = (a -> b).(x -> x)\nC a = | MkC (a -> b)"), []);
@@ -44,7 +44,7 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     equal(endless([
         "down 0 = 0", "down n = down (n - 1)", "len [] = 0", "len (_::xs) = 1 + len xs", "nats n = n :: nats (n + 1)",
         "fact Z = 1", "fact (S k) = (k + 1) * fact k", "rest xs = null xs ? 0 : rest (tail xs)",
-        "act n = {", "    print n", "    act (n + 1)", "}", "xs = [1,2]", "xs 0 = xs 1", "f g = x -> f g x",
+        "act n = {", "    print n", "    act (n + 1)", "}", "xs = [1, 2]", "xs 0 = xs 1", "f g = x -> f g x",
     ].join("\n")), []);
 });
 Deno.test("diagnostic positions use UTF-16 and stay within the document", () => {
@@ -130,10 +130,10 @@ Deno.test("completing a standard name adds its import, as a list beside another"
     };
     equal(complete("x = 1", "sum"), ['From import "sequence"', [[0, 0, 0, 'import "sequence"\n\n']]]);
     equal(complete("\nx = 1", "sum")?.[1], [[0, 0, 0, 'import "sequence"\n']]);
-    equal(complete('import "io" # files\nx = 1', "upper"), ['From import "text"', [[0, 7, 11, '["io","text"]']]]);
-    equal(complete('import [\n    "io"\n]\nimport ["io","text"]', "sum"), ['From import "sequence"', [[3, 7, 20, '["io","text","sequence"]']]]);
+    equal(complete('import "io" # files\nx = 1', "upper"), ['From import "text"', [[0, 7, 11, '["io", "text"]']]]);
+    equal(complete('import [\n    "io"\n]\nimport ["io", "text"]', "sum"), ['From import "sequence"', [[3, 7, 21, '["io", "text", "sequence"]']]]);
     // Already imported, defined here, or in the prelude: nothing to add.
-    equal(complete('import ["io","text"]', "readFile"), ['From import "io"', undefined]);
+    equal(complete('import ["io", "text"]', "readFile"), ['From import "io"', undefined]);
     equal(complete("sum xs = 0", "sum")?.[1], undefined);
     equal(complete("x = 1", "print")?.[1], undefined);
     // Retired natives are not offered; a native needing an import names it.

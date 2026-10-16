@@ -15,12 +15,12 @@ function failure(source: string): string {
 }
 const LST = "Lst n a = [] -> Lst 0 a | a :: Lst k a -> Lst (k + 1) a\n";
 for (const [source, expected] of [
-    ["typeOf (Vect 2 Int [1,2])", "Vect 2 Int"],
-    [LST + "Lst 2 Int [1,2]", "[1,2]"],
-    [LST + "typeOf (Lst 2 Int [1,2])", "Vect 2 Int"],
-    [LST + "len (Lst n _ _) = n\nlen [7,8,9]", "3"],
-    [LST + "f (Lst n Int xs) = [n,xs]\nf [1,2]", "[2,[1,2]]"],
-    [LST + "app (Lst n a []) (Lst m a ys) = Lst (n + m) a ys\napp (Lst n a (x :: r)) (Lst m a ys) = Lst (n + m) a (x :: app r ys)\ntypeOf (app [1] [2,3])", "Vect 3 Int"],
+    ["typeOf (Vect 2 Int [1, 2])", "Vect 2 Int"],
+    [LST + "Lst 2 Int [1, 2]", "[1, 2]"],
+    [LST + "typeOf (Lst 2 Int [1, 2])", "Vect 2 Int"],
+    [LST + "len (Lst n _ _) = n\nlen [7, 8, 9]", "3"],
+    [LST + "f (Lst n Int xs) = [n, xs]\nf [1, 2]", "[2, [1, 2]]"],
+    [LST + "app (Lst n a []) (Lst m a ys) = Lst (n + m) a ys\napp (Lst n a (x :: r)) (Lst m a ys) = Lst (n + m) a (x :: app r ys)\ntypeOf (app [1] [2, 3])", "Vect 3 Int"],
 ] as const) {
     Deno.test(`families of lists: ${JSON.stringify(source)}`, () => {
         const actual = run(source);
@@ -28,7 +28,7 @@ for (const [source, expected] of [
     });
 }
 for (const [source, message] of [
-    [LST + "Lst 3 Int [1,2]", "length mismatch: expected 3, got 2"],
+    [LST + "Lst 3 Int [1, 2]", "length mismatch: expected 3, got 2"],
     // A list's fields are types: a family of lists can only count its elements.
     ["Even n = [] -> Even Z | a :: Even k -> Even (S (S k))", "a family of lists counts its elements, as Vect does"],
     ["Mixed n a = [] -> Mixed Z a | Other -> Mixed Z a", "a family of lists counts its elements"],

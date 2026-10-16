@@ -21,22 +21,22 @@ for (const [source, expected] of [
     ["to String 1.5 ++ \"!\"", '"1.5!"'],
     ["Int (from String \"42\") + 1", "43"],
     ["to JSON [a: 1, b: [true]]", '"{"a":1,"b":[true]}"'],
-    ["from JSON \"[1,2]\"", "[1,2]"],
-    ["to (List Char) \"a😀\"", "['a','😀']"],
-    ["from (List Char) ['h','i']", '"hi"'],
+    ["from JSON \"[1,2]\"", "[1, 2]"],
+    ["to (List Char) \"a😀\"", "['a', '😀']"],
+    ["from (List Char) ['h', 'i']", '"hi"'],
     // Any other type converts as applying it does.
     ["Money = Float\nto Float (Money 1.2)", "1.2"],
     // A bare type name in a pattern matches that type, as a value.
-    ["describe Int = \"integer\"\ndescribe String = \"text\"\n[describe Int,describe String]", '["integer","text"]'],
+    ["describe Int = \"integer\"\ndescribe String = \"text\"\n[describe Int, describe String]", '["integer", "text"]'],
     [TEMPERATURE + "to Celsius (F 212)", "C 100.0"],
     [TEMPERATURE + "to String 2", '"2"'],
     // A list template converts position by position, as cast does: [Char] is one Char.
     ["to [Char] \"h\"", "['h']"],
-    ["to [Char,Char] \"hi\"", "['h','i']"],
+    ["to [Char, Char] \"hi\"", "['h', 'i']"],
     ["to [Float] [1]", "[1.0]"],
-    ["to [Int,String] [x: 1, y: \"a\"]", '[x: 1, y: "a"]'],
+    ["to [Int, String] [x: 1, y: \"a\"]", '[x: 1, y: "a"]'],
     // The checker evaluates to and from as the run does, beside a program's own instances.
-    [TEMPERATURE + "Vect 2 Char (to (List Char) \"a😀\")", "['a','😀']"],
+    [TEMPERATURE + "Vect 2 Char (to (List Char) \"a😀\")", "['a', '😀']"],
     ["Money = Float\nVect 1 Float [to Float (Money 1.2)]", "[1.2]"],
 ] as const) {
     Deno.test(`conversions: ${source}`, () => {

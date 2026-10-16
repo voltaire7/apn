@@ -11,7 +11,7 @@ for (const [code, expected] of [
     ['f (Int x) = 1; f (Float x) = 2; f', 'Int x -> 1\nFloat x -> 2'],
     ['h (Int x) = x; h', 'Int x -> x'],
     ['f x y = x + y; f missing', 'y -> missing + y'],
-    ['f x = match x [0 -> "zero",n -> "nonzero"]; f', 'x -> match x [0 -> "zero",n -> "nonzero"]'],
+    ['f x = match x [0 -> "zero", n -> "nonzero"]; f', 'x -> match x [0 -> "zero", n -> "nonzero"]'],
     ['print', 'print'],
     ['(+)', '(+)'],
     ['addOp = (+); addOp 1', '(1 +)'],

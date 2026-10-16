@@ -3,7 +3,7 @@ import { parseDocument } from "../src/parser.ts";
 
 const library = Deno.args[0];
 const signatures = `[
-    add: ffi.function [Int32,Int32] Int32
+    add: ffi.function [Int32, Int32] Int32
     echo_u64: ffi.function [UInt64] UInt64
     half: ffi.function [Float] Float
     half_f32: ffi.function [Float32] Float32
@@ -100,7 +100,7 @@ Deno.test({ name: 'escaped lazy nullary C action rejects use after library closu
 
 Deno.test({ name: "C interop: quote characters are part of the symbol name", ignore: !library, fn() {
     try {
-        run(`ffi.withLibrary library ["add": ffi.function [Int32,Int32] Int32] c -> c."add" 20 22`);
+        run(`ffi.withLibrary library ["add": ffi.function [Int32, Int32] Int32] c -> c."add" 20 22`);
     } catch (error) {
         if (String(error).includes("cannot open") && String(error).includes("add")) return;
         throw error;

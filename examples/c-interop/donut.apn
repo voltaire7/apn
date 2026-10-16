@@ -1,12 +1,12 @@
 # Run ./examples/c-interop/run-donut [frame-count]. Ctrl+C ends the animation.
-import ["function","sequence","text","io"]
+import ["function", "sequence", "text", "io"]
 ffi = import "ffi"
 args <- getArgs
 path = head args
 frames = null (tail args) ? [0..] : take (parseInt (head (tail args))) [0..]
 ffi.withLibrary path [
-    donut_start: ffi.function [Int32,Int32] Bool
-    donut_frame: ffi.function [Float,Float] Bool
+    donut_start: ffi.function [Int32, Int32] Bool
+    donut_frame: ffi.function [Float, Float] Bool
     donut_finish: ffi.function [] []
 ] c -> {
     c.donut_start 80 40 ? [] : fail "could not initialize terminal donut"

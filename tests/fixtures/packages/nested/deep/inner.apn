@@ -1,2 +1,2 @@
-import ["hello","greeting"]
-inner = [greet "deep",greeting]
+import ["hello", "greeting"]
+inner = [greet "deep", greeting]

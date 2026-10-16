@@ -103,21 +103,21 @@ export function valueToString(v: Value): string {
         case "type": {
             return (v.description ?? v.name) + (v.arguments?.length ? " " + v.arguments.map(typeArgumentText).join(" ") : "");
         }
-        case "hashmap": return `HashMap [${[...v.entries.values()].map(([k, x]) => `[${valueToString(k)},${valueToString(x)}]`).join(",")}]`;
+        case "hashmap": return `HashMap [${[...v.entries.values()].map(([k, x]) => `[${valueToString(k)}, ${valueToString(x)}]`).join(", ")}]`;
         case "rationalRange": return rangeText(v.lo, arithmetic("+", v.lo, v.step), v.hi);
         case "bool": return String(v.v);
         case "string": return `"${v.v}"`;
         case "char": return `'${v.v === "\0" ? "\\0" : v.v}'`;
-        case "list": return `[${v.v.map(valueToString).join(",")}]`;
+        case "list": return `[${v.v.map(valueToString).join(", ")}]`;
         case "lazyList":
         case "cons": return "[...]";
         case "deferred": return "...";
         case "floatRange": return rangeText({ kind: "float", v: v.lo }, { kind: "float", v: v.lo + v.step }, v.hi === null ? null : { kind: "float", v: v.hi });
         case "range": {
-            if (v.hi === null) return `[${v.lo}${v.step !== 1n ? `,${v.lo + v.step}` : ""}..]`;
+            if (v.hi === null) return `[${v.lo}${v.step !== 1n ? `, ${v.lo + v.step}` : ""}..]`;
             const out: Value[] = [];
             for (let i = v.lo; v.step > 0 ? i <= v.hi : i >= v.hi; i += v.step) out.push(mkInt(i));
-            return `[${out.map(valueToString).join(",")}]`;
+            return `[${out.map(valueToString).join(", ")}]`;
         }
         case "record":
             if (v.scope) return "env";
@@ -162,7 +162,7 @@ export function ioTypeText(v: Extract<Value, { kind: "io" }>): string {
 
 // A range in source form: [lo,next..hi], or [lo,next..] when endless.
 function rangeText(lo: Numeric, next: Numeric, hi: Numeric | null): string {
-    return `[${numberText(lo)},${numberText(next)}..${hi === null ? "" : numberText(hi)}]`;
+    return `[${numberText(lo)}, ${numberText(next)}..${hi === null ? "" : numberText(hi)}]`;
 }
 
 // Environment: a chain of hash maps. Shared mutable object per scope.
@@ -220,7 +220,7 @@ export function canonicalTypeText(text: string): string {
 
 export function typeToString(v: Value): string {
     if (v.kind === "type") return valueToString({ ...v, inspect: true });
-    if (v.kind === "list") return `[${v.v.map(typeToString).join(",")}]`;
+    if (v.kind === "list") return `[${v.v.map(typeToString).join(", ")}]`;
     if (v.kind === "record") return `[${v.v.map(([k, x]) => `${keySource(k)}: ${typeToString(x)}`).join(", ")}]`;
     return valueToString(v);
 }

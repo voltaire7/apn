@@ -15,7 +15,7 @@ function pattern(p: Pattern): string {
         case "string": return JSON.stringify(p.v);
         case "char": return exprToSource({ t: "char", v: p.v });
         case "float": return exprToSource({ t: "float", v: p.v });
-        case "list": return `[${p.v.map(pattern).join(",")}]`;
+        case "list": return `[${p.v.map(pattern).join(", ")}]`;
         case "cons": return `(${pattern(p.head)} ${p.op ?? "::"} ${pattern(p.tail)})`;
         case "constr": return p.args.length ? `(${p.tag} ${p.args.map(pattern).join(" ")})` : p.tag;
         case "typeBind": return `(${p.name} ${pattern(p.value)})`;
@@ -41,7 +41,7 @@ function source(e: Expr, parent = -1): string {
         case "lambda": level = -1; text = `${e.params.join(", ")} -> ${source(e.body)}`; break;
         case "pipe": level = 0; text = `${source(e.f, 1)} $ ${source(e.x, 0)}`; break;
         case "ternary": level = 1; text = `${source(e.cond, 2)} ? ${source(e.then, 6)} : ${source(e.els, 2)}`; break;
-        case "list": return `[${e.v.map(x => source(x)).join(",")}]`;
+        case "list": return `[${e.v.map(x => source(x)).join(", ")}]`;
         case "record": return `[${e.v.map(([k, v]) => `${keySource(k)}: ${source(v)}`).join(", ")}]`;
         case "block": {
             if (e.style === "(" && e.stmts.length === 1) return `(${source(e.stmts[0])})`;

@@ -15,8 +15,8 @@ function result(i: Interpreter, source: string): string {
 for (const checked of [false, true]) {
     Deno.test(`import finds files and folders next to the code (checked=${checked})`, () => {
         const i = interpreter(checked);
-        const actual = result(i, 'import ["hello","shapes","shapes/solid"]; [greet "you",square 3,cube 2,volume 2]');
-        if (actual !== '["hi you",9,8,8]') throw new Error(actual);
+        const actual = result(i, 'import ["hello", "shapes", "shapes/solid"]; [greet "you", square 3, cube 2, volume 2]');
+        if (actual !== '["hi you", 9, 8, 8]') throw new Error(actual);
         if (result(i, 'sh = import "shapes"; sh.square 4') !== "16") throw new Error("namespaced");
         // A folder's subfolders are not part of it.
         let excluded = false;
@@ -56,7 +56,7 @@ for (const checked of [false, true]) Deno.test(`a module imports packages from p
     // nested/deep/inner.apn imports hello (two folders up) and greeting,
     // of which nested/greeting.apn is nearer than the program's.
     const actual = result(interpreter(checked), 'import "nested/deep/inner"; inner');
-    if (actual !== '["hi deep","near"]') throw new Error(actual);
+    if (actual !== '["hi deep", "near"]') throw new Error(actual);
 });
 Deno.test("imports never search above the program's folder", () => {
     // From nested/ as the program's folder, the outer hello.apn is out of reach.
@@ -74,6 +74,6 @@ Deno.test("the package example runs", () => {
     const log = console.log;
     console.log = (...args: unknown[]) => { printed.push(args.join(" ")); };
     try { i.run(parseDocument(Deno.readTextFileSync(file))); } finally { console.log = log; }
-    const expected = ["Hello, packages!", "[9,10]", "24 m³", "16", "square: 9 m²\nrectangle: 10 m²"];
+    const expected = ["Hello, packages!", "[9, 10]", "24 m³", "16", "square: 9 m²\nrectangle: 10 m²"];
     if (JSON.stringify(printed) !== JSON.stringify(expected)) throw new Error(JSON.stringify(printed));
 });

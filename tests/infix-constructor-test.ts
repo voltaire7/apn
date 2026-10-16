@@ -15,7 +15,7 @@ function failure(source: string): string {
 const VEC = "Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a\n(::) = Cons\n";
 const APP = "app ((Vec n a) Nil) ((Vec m a) ys) = Vec (n + m) a ys\napp ((Vec n a) (x :: r)) ((Vec m a) ys) = ";
 for (const [source, expected] of [
-    ["f (x :: _) = x; f [1,2]", "1"],
+    ["f (x :: _) = x; f [1, 2]", "1"],
     [VEC + "first (x :: _) = x\nfirst (1 :: 2 :: Nil)", "1"],
     [VEC + "typeOf (1 :: 2 :: Nil)", "Vec 2 Int"],
     [VEC + APP + "Vec (n + m) a (x :: app r ys)\ntypeOf (app (1 :: Nil) (2 :: Nil))", "Vec 2 Int"],

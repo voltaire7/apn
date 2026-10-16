@@ -38,21 +38,21 @@ for (const [name, source, expected] of [
     ["pure statements in a block stay pure", "f n = { assert (n > 0); n * 2 }\nprint (f 3)", ["6"]],
     ["a <- binding makes a block an action", "f n = { m <- return (n + 1); return (m * 2) }\ny <- f 3\nprint y", ["8"]],
     ["each run of an action repeats it", 'a = { print "run"; return 1 }\nx <- a\ny <- a\nprint (x + y)', ["run", "run", "2"]],
-    ["iterating an action runs each in turn", "[1,2] * n -> print n", ["1", "2"]],
-    ["iteration yields the results", "xs <- [1,2] * n -> return (n * 10)\nprint xs", ["[10,20]"]],
+    ["iterating an action runs each in turn", "[1, 2] * n -> print n", ["1", "2"]],
+    ["iteration yields the results", "xs <- [1, 2] * n -> return (n * 10)\nprint xs", ["[10, 20]"]],
     ["recursive actions run in constant stack", 'loop n = n == 0 ? return "done" : { emit ""; loop (n - 1) }\nr <- loop 5000\nprint r', ["done"]],
     ["set is an action", "c = Mutable 0\nbump = set c (c + 1)\nprint (c + 0)\nbump\nbump\nprint (c + 0)", ["0", "2"]],
     ["env yields a live view", "x = 1\nscope <- Dynamic env\nscope.x = 2\nprint x", ["2"]],
-    ["do runs a list of actions", 'r <- do [print "a",print "b",return 3]\nprint r', ["a", "b", "3"]],
-    ["map over an action, list and Option", 'import "option"\nn <- map (+ 1) (return 1)\nprint [n]\nprint (map (* 2) [1,2])\nprint (map (* 2) (Some 4))\nprint (map (* 2) None)',
-        ["[2]", "[2,4]", "Some 8", "None"]],
-    ["<$> and <*>", 'import "option"\nprint ((+ 1) <$> [1,2])\nprint (Some (+ 1) <*> Some 41)\nprint ([(+ 1),(* 2)] <*> [10,20])\nr <- return (+ 1) <*> return 1\nprint r',
-        ["[2,3]", "Some 42", "[11,21,20,40]", "2"]],
+    ["do runs a list of actions", 'r <- do [print "a", print "b", return 3]\nprint r', ["a", "b", "3"]],
+    ["map over an action, list and Option", 'import "option"\nn <- map (+ 1) (return 1)\nprint [n]\nprint (map (* 2) [1, 2])\nprint (map (* 2) (Some 4))\nprint (map (* 2) None)',
+        ["[2]", "[2, 4]", "Some 8", "None"]],
+    ["<$> and <*>", 'import "option"\nprint ((+ 1) <$> [1, 2])\nprint (Some (+ 1) <*> Some 41)\nprint ([(+ 1), (* 2)] <*> [10, 20])\nr <- return (+ 1) <*> return 1\nprint r',
+        ["[2, 3]", "Some 42", "[11, 21, 20, 40]", "2"]],
     [">>= and >> chain actions", 'return 5 >>= print\nprint "a" >> print "b"\nprint =<< return 6', ["5", "a", "b", "6"]],
-    [">>= on lists and Result", 'import "option"\nprint ([1,2] >>= (x -> [x,x * 10]))\nprint (Ok 3 >>= (x -> Ok (x + 1)))\nprint (Err "e" >>= (x -> Ok (x + 1)))',
-        ["[1,10,2,20]", "Ok 4", 'Err "e"']],
-    ["sequence, mapM, when and unless", 'xs <- sequence [return 1,return 2]\nprint xs\nys <- mapM (x -> { print x; return (x * 2) }) [3,4]\nprint ys\nwhen true (print "yes")\nunless true (print "no")',
-        ["[1,2]", "3", "4", "[6,8]", "yes"]],
+    [">>= on lists and Result", 'import "option"\nprint ([1, 2] >>= (x -> [x, x * 10]))\nprint (Ok 3 >>= (x -> Ok (x + 1)))\nprint (Err "e" >>= (x -> Ok (x + 1)))',
+        ["[1, 10, 2, 20]", "Ok 4", 'Err "e"']],
+    ["sequence, mapM, when and unless", 'xs <- sequence [return 1, return 2]\nprint xs\nys <- mapM (x -> { print x; return (x * 2) }) [3, 4]\nprint ys\nwhen true (print "yes")\nunless true (print "no")',
+        ["[1, 2]", "3", "4", "[6, 8]", "yes"]],
 ] as const) Deno.test(`IO: ${name}`, () => {
     for (const checked of [true, false]) {
         const actual = run(source, checked);
@@ -93,6 +93,6 @@ Deno.test("IO: iterating an infinite list streams each action until interrupted"
     }
 });
 Deno.test("IO: an iteration action reruns from the start", () => {
-    const shown = run("a = [1,2] * print\na\na");
+    const shown = run("a = [1, 2] * print\na\na");
     if (JSON.stringify(shown) !== '["1","2","1","2"]') throw new Error(JSON.stringify(shown));
 });

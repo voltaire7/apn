@@ -5,9 +5,9 @@ Ints n = Vect n Int
 copy n ((Ints n) values) = values
 appendOne n ((Ints n) values) (Int value) = Ints (n + 1) (values ++ [value])
 
-print (copy 3 [10,20,30])
-print (appendOne 3 [10,20,30] 40)
-print (typeOf (Ints 3 [10,20,30]))
+print (copy 3 [10, 20, 30])
+print (appendOne 3 [10, 20, 30] 40)
+print (typeOf (Ints 3 [10, 20, 30]))
 
 # A type can depend on a Boolean value too.
 Choice flag = flag ? Int : String
@@ -21,9 +21,9 @@ print (Choice false "hello")
 append (Vect n a []) (Vect m a ys) = Vect (n + m) a ys
 append (Vect n a (x::xs)) (Vect m a ys) =
     Vect (n + m) a (x :: append xs ys)
-print (append [1,2] [3,4])
-print (append [] [3,4])
-print (typeOf (append [1,2] [3,4]))
+print (append [1, 2] [3, 4])
+print (append [] [3, 4])
+print (typeOf (append [1, 2] [3, 4]))
 
 # Self-application needs neither Dynamic nor explicit recursive wrappers.
 selfFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1)))

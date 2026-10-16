@@ -19,7 +19,7 @@ view model = div [] [
 ]
 
 viewInput kind hint content toMsg =
-    input [typeAttribute kind,placeholder hint,value content,onInput toMsg] []
+    input [typeAttribute kind, placeholder hint, value content, onInput toMsg] []
 
 viewValidation model = model.password == model.passwordAgain
     ? div [style "color" "green"] [text "OK"]

@@ -20,24 +20,24 @@ init = [[
     keys: noKeys
     width: 400
     height: 400
-    person: [position: [0.0,inexact eyeLevel,-10.0], velocity: [0.0,0.0,0.0]]
-],browser.getViewport GotViewport]
+    person: [position: [0.0, inexact eyeLevel, -10.0], velocity: [0.0, 0.0, 0.0]]
+], browser.getViewport GotViewport]
 
 update msg model = match msg [
     KeyChanged isDown key -> {
         model.keys = updateKeys isDown key model.keys
-        [model,browser.none]
+        [model, browser.none]
     }
     TimeDelta dt -> {
         model.person = updatePerson dt model.keys model.person
-        [model,browser.none]
+        [model, browser.none]
     }
-    Resized width height -> { model.[width,height] = [width,height]; [model,browser.none] }
+    Resized width height -> { model.[width, height] = [width, height]; [model, browser.none] }
     GotViewport viewport -> {
-        model.[width,height] = [viewport.width,viewport.height]
-        [model,browser.none]
+        model.[width, height] = [viewport.width, viewport.height]
+        [model, browser.none]
     }
-    VisibilityChanged _ -> { model.keys = noKeys; [model,browser.none] }
+    VisibilityChanged _ -> { model.keys = noKeys; [model, browser.none] }
 ]
 
 updateKeys isDown key keys = match key [
@@ -51,20 +51,20 @@ updateKeys isDown key keys = match key [
 
 updatePerson dt keys person = {
     velocity = stepVelocity dt keys person
-    [vx,_,vz] = velocity
-    [x,y,z] = person.position + velocity * (dt / 500)
+    [vx, _, vz] = velocity
+    [x, y, z] = person.position + velocity * (dt / 500)
     y < eyeLevel
-        ? [position: [x,inexact eyeLevel,z], velocity: [vx,0.0,vz]]
-        : [position: [x,y,z], velocity: velocity]
+        ? [position: [x, inexact eyeLevel, z], velocity: [vx, 0.0, vz]]
+        : [position: [x, y, z], velocity: velocity]
 }
 
 stepVelocity dt keys person = {
-    [vx,vy,vz] = person.velocity
-    [_,y,_] = person.position
+    [vx, vy, vz] = person.velocity
+    [_, y, _] = person.position
     toV positive negative = (positive ? 1.0 : 0.0) - (negative ? 1.0 : 0.0)
     y > eyeLevel
-        ? [vx,vy - dt / 250,vz]
-        : [toV keys.left keys.right,keys.space ? 2.0 : 0.0,toV keys.up keys.down]
+        ? [vx, vy - dt / 250, vz]
+        : [toV keys.left keys.right, keys.space ? 2.0 : 0.0, toV keys.up keys.down]
 }
 
 subscriptions _ = browser.batch [
@@ -86,13 +86,13 @@ view model = div [
     keyboardInstructions model.keys
 ]
 
-setup p = p.call "createCanvas" [400,400,p.WEBGL]
+setup p = p.call "createCanvas" [400, 400, p.WEBGL]
 
 # The eye looks along z from the person's position (p5's y grows downward).
 draw model p = {
     when (p.width != model.width || p.height != model.height)
         (p.resizeCanvas model.width model.height)
-    [x,y,z] = model.person.position
+    [x, y, z] = model.person.position
     p.background "white"
     p.perspective (p.PI / 4) (model.width / model.height) 0.01 100
     p.camera x (0 - y) z x (0 - y) (z + 1) 0 1 0
@@ -116,21 +116,21 @@ keyboardInstructions _ = div [
 
 # Planks inside a frame, with a diagonal brace.
 wood g = {
-    g.background [176,122,62]
-    g.stroke [120,78,36]
+    g.background [176, 122, 62]
+    g.stroke [120, 78, 36]
     g.strokeWeight 3
-    mapM (y -> g.line 0 y 256 y) [64,128,192]
+    mapM (y -> g.line 0 y 256 y) [64, 128, 192]
     g.noStroke []
-    g.fill [140,92,44]
+    g.fill [140, 92, 44]
     g.rect 0 0 256 28
     g.rect 0 228 256 28
     g.rect 0 0 28 256
     g.rect 228 0 28 256
-    g.stroke [140,92,44]
+    g.stroke [140, 92, 44]
     g.strokeWeight 30
     g.line 28 228 228 28
     g.noFill []
-    g.stroke [90,58,26]
+    g.stroke [90, 58, 26]
     g.strokeWeight 4
     g.rect 2 2 252 252
 }

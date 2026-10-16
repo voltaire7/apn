@@ -1,7 +1,7 @@
 # Examples, from https://elm-lang.org/examples
 # The page listing these examples. apn --site examples/elm OUTPUT builds it,
 # with an editor for each example.
-import ["html","text"]
+import ["html", "text"]
 
 # The editor's colors: Catppuccin Latte, or Frappé in a dark system theme.
 stylesheet = unlines [
@@ -43,19 +43,19 @@ main = div [className "page"] [
         ]
     ]
     div [className "sections"] [
-        viewExamples "HTML" [example "Hello",example "Groceries",example "Shapes"]
-        viewExamples "User Input" [example "Buttons",example "Text Fields",example "Forms"]
-        viewExamples "Random" [example "Numbers",example "Cards",example "Positions"]
-        viewExamples "HTTP" [example "Book",example "Quotes"]
-        viewExamples "Time" [exampleIn "Time" "local-time",example "Clock"]
-        viewExamples "Files" [example "Upload",example "Drag-and-Drop",example "Image Previews"]
-        viewExamples "WebGL" (map example ["Triangle","Cube","Crate","Thwomp","First Person"])
+        viewExamples "HTML" [example "Hello", example "Groceries", example "Shapes"]
+        viewExamples "User Input" [example "Buttons", example "Text Fields", example "Forms"]
+        viewExamples "Random" [example "Numbers", example "Cards", example "Positions"]
+        viewExamples "HTTP" [example "Book", example "Quotes"]
+        viewExamples "Time" [exampleIn "Time" "local-time", example "Clock"]
+        viewExamples "Files" [example "Upload", example "Drag-and-Drop", example "Image Previews"]
+        viewExamples "WebGL" (map example ["Triangle", "Cube", "Crate", "Thwomp", "First Person"])
         viewExamples "Playground"
-            (map example ["Picture","Animation","Mouse","Keyboard","Turtle","Mario"])
+            (map example ["Picture", "Animation", "Mouse", "Keyboard", "Turtle", "Mario"])
     ]
 ]
 
-viewExamples sectionTitle examples = section [] [h2 [] [text sectionTitle],ul [] examples]
+viewExamples sectionTitle examples = section [] [h2 [] [text sectionTitle], ul [] examples]
 
 # An example's file is its title in lower case, with - for spaces (Elm's
 # URL), except where a file needs another name: local-time.apn would hide

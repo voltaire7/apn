@@ -91,7 +91,7 @@ class Parser {
 
     // Spacing: around a binding's = and at ',' (see checkEqualsSpacing and
     // checkCommaSpacing), and inside brackets on one line: a { } block keeps exactly one space
-    // inside each brace ({ 123 }), while ( ) and [ ] keep none ((123), [1,2]);
+    // inside each brace ({ 123 }), while ( ) and [ ] keep none ((123), [1, 2]);
     // empty ones are {}, () and []. A bracket ending its line (before an
     // optional comment) or a closing one starting its line is laid out instead.
     checkBracketSpacing(): void {
@@ -113,7 +113,7 @@ class Parser {
             // func (123) and run { x }, not Vector3[1,2,3], func(123) or run{ x }.
             if ("([{".includes(t.v) && /[A-Za-z0-9_'")\]}]/.test(this.source[t.pos - 1] ?? "")) {
                 this.seen = t;
-                const example = { "[": "f [1,2], not f[1,2]", "(": "f (x), not f(x)", "{": "f { x }, not f{ x }" }[t.v];
+                const example = { "[": "f [1, 2], not f[1, 2]", "(": "f (x), not f(x)", "{": "f { x }, not f{ x }" }[t.v];
                 throw new Error(`Parser: put a space before '${t.v}' to apply to it (write ${example})`);
             }
             const open = "{([".includes(t.v), brace = t.v === "{" || t.v === "}";
@@ -197,12 +197,12 @@ class Parser {
         const record = holds !== "list";
         this.seen = t;
         if (/^\s*(#.*)?$/.test(after)) throw new Error("Parser: a newline already separates items; remove the ',' at the end of the line");
-        if (!/\s/.test(this.source[t.pos - 1] ?? " ") && (record ? /^ \S/ : /^\S/).test(after)) return;
+        if (!/\s/.test(this.source[t.pos - 1] ?? " ") && /^ \S/.test(after)) return;
         if (holds === "params") throw new Error("Parser: separate lambda parameters with ', ' (write x, y -> x + y)");
         // x:xs (cons written the old way) right after '[' read as a field: the item is a cons.
         const item = this.source.slice(this.source.lastIndexOf("[", t.pos) + 1, t.pos);
-        if (record && /^\s*[\w']+:\S/.test(item)) throw new Error(`Parser: cons is '::': write [${item.trim().replace(":", " :: ")},...]`);
-        throw new Error(record ? "Parser: separate record fields with ', ' (write [x: 1, y: 2])" : "Parser: separate list items with ',' alone (write [1,2,3])");
+        if (record && /^\s*[\w']+:\S/.test(item)) throw new Error(`Parser: cons is '::': write [${item.trim().replace(":", " :: ")}, ...]`);
+        throw new Error(record ? "Parser: separate record fields with ', ' (write [x: 1, y: 2])" : "Parser: separate list items with ', ' (write [1, 2, 3])");
     }
 
     // A record key's ':' follows the key directly, with one space after it
@@ -1868,10 +1868,10 @@ function patternVariables(p: Pattern): string[] {
 
 export function exprToSource(e: Expr): string {
     switch (e.t) {
-        case "computedRange": return `[${exprToSource(e.lo)}${e.second === null ? "" : "," + exprToSource(e.second)}..${e.hi === null ? "" : exprToSource(e.hi)}]`;
-        case "import": return `import ${Array.isArray(e.module) ? `[${e.module.map(m => JSON.stringify(m)).join(",")}]` : JSON.stringify(e.module)}`;
+        case "computedRange": return `[${exprToSource(e.lo)}${e.second === null ? "" : ", " + exprToSource(e.second)}..${e.hi === null ? "" : exprToSource(e.hi)}]`;
+        case "import": return `import ${Array.isArray(e.module) ? `[${e.module.map(m => JSON.stringify(m)).join(", ")}]` : JSON.stringify(e.module)}`;
         case "numeric": return numberText(e.v);
-        case "rationalRange": return `[${numberText(e.lo)},${numberText(arithmetic("+", e.lo, e.step))}..${e.hi === null ? "" : numberText(e.hi)}]`;
+        case "rationalRange": return `[${numberText(e.lo)}, ${numberText(arithmetic("+", e.lo, e.step))}..${e.hi === null ? "" : numberText(e.hi)}]`;
         case "int": return String(e.v);
         case "float": return numberText({ kind: "float", v: e.v });
         case "bool": return e.v ? "true" : "false";
@@ -1884,26 +1884,26 @@ export function exprToSource(e: Expr): string {
         case "app": return `${exprToSource(e.f)} ${exprToSource(e.a)}`;
         case "patternLambda": return `${e.params.map(patternSource).join(", ")}${e.guard ? " | " + exprToSource(e.guard) : ""} -> ${exprToSource(e.body)}`;
         case "lambda": return `${e.params.join(", ")} -> ${exprToSource(e.body)}`;
-        case "list": return `[${e.v.map(exprToSource).join(",")}]`;
+        case "list": return `[${e.v.map(exprToSource).join(", ")}]`;
         case "record": return `[${e.v.map(([k, x]) => `${keySource(k)}: ${exprToSource(x)}`).join(", ")}]`;
     case "floatRange": {
         const decimal = (v: number) => Number.isInteger(v) ? `${v}.0` : String(v);
-        return `[${decimal(e.lo)}${e.step !== 1 ? `,${decimal(e.lo + e.step)}` : ""}..${e.hi === null ? "" : decimal(e.hi)}]`;
+        return `[${decimal(e.lo)}${e.step !== 1 ? `, ${decimal(e.lo + e.step)}` : ""}..${e.hi === null ? "" : decimal(e.hi)}]`;
     }
     case "range":
       return e.hi === null
-        ? `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..]`
-        : `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..${e.hi}]`;
+        ? `[${e.lo}${e.step !== 1n ? `, ${e.lo + e.step}` : ""}..]`
+        : `[${e.lo}${e.step !== 1n ? `, ${e.lo + e.step}` : ""}..${e.hi}]`;
         case "ternary": return `${exprToSource(e.cond)} ? ${exprToSource(e.then)} : ${exprToSource(e.els)}`;
         case "pipe": return `${exprToSource(e.f)} $ ${exprToSource(e.x)}`;
         case "recordAccess":
             return `${exprToSource(e.rec)}.${e.scoped && e.argument ? exprToSource(e.argument) : keySource(e.field)}`;
         case "pluck":
             if (e.values) return `${exprToSource(e.rec)}.${exprToSource(e.values)}`;
-            return `${exprToSource(e.rec)}.[${e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`).join(e.entries.some(x => typeof x !== "string") ? ", " : ",")}]`;
+            return `${exprToSource(e.rec)}.[${e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`).join(", ")}]`;
         case "setItem": return `${exprToSource(e.rec)} (${exprToSource(e.index)}) = ${exprToSource(e.value)}`;
         case "setFields":
-            return `${exprToSource(e.rec)}.${(e.path ?? []).map(keySource).map(key => key + ".").join("")}[${e.entries.map((key, n) => keySource(key) + (e.aliases ? ": " + keySource(e.aliases[n]) : "")).join(e.aliases ? ", " : ",")}] = ${exprToSource(e.value)}`;
+            return `${exprToSource(e.rec)}.${(e.path ?? []).map(keySource).map(key => key + ".").join("")}[${e.entries.map((key, n) => keySource(key) + (e.aliases ? ": " + keySource(e.aliases[n]) : "")).join(", ")}] = ${exprToSource(e.value)}`;
         case "block": {
             const one = e.stmts.length === 1 && e.stmts[0].t !== "stmDef" && e.stmts[0].t !== "patDef";
             if (one && e.style === "(") return exprToSource(e.stmts[0]);
@@ -1929,7 +1929,7 @@ export function patternSource(p: Pattern): string {
         case "string": return JSON.stringify(p.v);
         case "char": return `'${p.v}'`;
         case "float": return numberText({ kind: "float", v: p.v });
-        case "list": return `[${p.v.map(patternSource).join(",")}]`;
+        case "list": return `[${p.v.map(patternSource).join(", ")}]`;
         case "cons": return `(${patternSource(p.head)} ${p.op ?? "::"} ${patternSource(p.tail)})`;
         case "constr": return p.args.length ? `(${p.tag} ${p.args.map(patternSource).join(" ")})` : p.tag;
         case "typeBind": return `(${p.name} ${patternSource(p.value)})`;

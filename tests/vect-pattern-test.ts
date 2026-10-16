@@ -9,31 +9,31 @@ function run(source: string): string {
     return interpreter.renderString(interpreter.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['inspect (Vect n a xs) = [n,a,xs]; inspect [1,2]', '[2,Int,[1,2]]'],
-    ['inspect (Vect n a xs) = [n,a,xs]; inspect (Vect 2 Float [1,2])', '[2,Float,[1.0,2.0]]'],
-    ['inspect (Vect n a xs) = [n,a,xs]; inspect (Vect 0 Int [])', '[0,Int,[]]'],
-    ['inspect (Vect n a xs) = [n,a,xs]; inspect []', '[0,a,[]]'],
-    ['inspect (Vect n a xs) (Vect m a ys) = [n,m,a]; inspect [] [1,2]', '[0,2,Int]'],
-    ['inspect (Vect n a xs) (Vect m a ys) = [n,m,a]; inspect [true] []', '[1,0,Bool]'],
-    ['f (Vect n Int xs) = xs; f [1,2]', '[1,2]'],
-    ['f (Vect 2 a xs) = xs; f [true,false]', '[true,false]'],
-    [append + '\nappend [1,2] [3,4]', '[1,2,3,4]'],
-    [append + '\nappend [] [3,4]', '[3,4]'],
-    [append + '\nappend [1,2] []', '[1,2]'],
+    ['inspect (Vect n a xs) = [n, a, xs]; inspect [1, 2]', '[2, Int, [1, 2]]'],
+    ['inspect (Vect n a xs) = [n, a, xs]; inspect (Vect 2 Float [1, 2])', '[2, Float, [1.0, 2.0]]'],
+    ['inspect (Vect n a xs) = [n, a, xs]; inspect (Vect 0 Int [])', '[0, Int, []]'],
+    ['inspect (Vect n a xs) = [n, a, xs]; inspect []', '[0, a, []]'],
+    ['inspect (Vect n a xs) (Vect m a ys) = [n, m, a]; inspect [] [1, 2]', '[0, 2, Int]'],
+    ['inspect (Vect n a xs) (Vect m a ys) = [n, m, a]; inspect [true] []', '[1, 0, Bool]'],
+    ['f (Vect n Int xs) = xs; f [1, 2]', '[1, 2]'],
+    ['f (Vect 2 a xs) = xs; f [true, false]', '[true, false]'],
+    [append + '\nappend [1, 2] [3, 4]', '[1, 2, 3, 4]'],
+    [append + '\nappend [] [3, 4]', '[3, 4]'],
+    [append + '\nappend [1, 2] []', '[1, 2]'],
     [append + '\nappend [] []', '[]'],
-    [append + '\ntypeOf (append [1,2] [3,4])', 'Vect 4 Int'],
+    [append + '\ntypeOf (append [1, 2] [3, 4])', 'Vect 4 Int'],
     ['f (Vect n a xs) (Vect m a ys) = a; f (Vect 0 Int []) []', 'Int'],
-    ['VectAlias = Vect; f (VectAlias n a xs) = n; f [1,2]', '2'],
-    ['f (Vect n a xs) = n; f _ = 123; f [1,2]', '2'],
+    ['VectAlias = Vect; f (VectAlias n a xs) = n; f [1, 2]', '2'],
+    ['f (Vect n a xs) = n; f _ = 123; f [1, 2]', '2'],
 ] as const) Deno.test(`Vect pattern runtime: ${source}`, () => {
     const actual = run(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'f (Vect n a xs) = xs; f [1,true]',
+    'f (Vect n a xs) = xs; f [1, true]',
     'f (Vect n Int xs) = xs; f [true]',
     'f (Vect n a xs) (Vect m a ys) = xs; f [1] [true]',
-    'f (Vect n a xs) (Vect n a ys) = xs; f [1] [2,3]',
+    'f (Vect n a xs) (Vect n a ys) = xs; f [1] [2, 3]',
     'f (Vect 2 a xs) = xs; f [1]',
     'f (Vect n a xs) = xs; f 1',
 ]) Deno.test(`Vect pattern rejects mismatch: ${source}`, () => {
@@ -44,9 +44,9 @@ for (const source of [
     throw new Error('expected pattern mismatch');
 });
 for (const source of [
-    append + '\nappend [1,2] [3,4]',
+    append + '\nappend [1, 2] [3, 4]',
     append + '\nappend [] []',
-    'f (Vect n a xs) = Vect n a xs; f [1,2]',
+    'f (Vect n a xs) = Vect n a xs; f [1, 2]',
     'f (Vect n a xs) (Vect n a ys) = xs; f [1] [2]',
     'f x x = x; f 1 1',
 ]) Deno.test(`Vect and equality patterns check statically: ${source}`, () => {
@@ -58,7 +58,7 @@ for (const source of [
     'bad (Vect n a []) (Vect m a ys) = Vect (n + m + 1) a ys',
     'bad (Vect n a (x::xs)) = Vect n a xs',
     'f (Vect n a xs) (Vect m a ys) = xs; f [1] [true]',
-    'f (Vect n a xs) (Vect n a ys) = xs; f [1] [2,3]',
+    'f (Vect n a xs) (Vect n a ys) = xs; f [1] [2, 3]',
     'f x x = x; f 1 true',
     '(x, x -> x) 1 true',
 ]) Deno.test(`Vect and equality patterns have static contradictions: ${source}`, () => {
@@ -73,7 +73,7 @@ Deno.test('Vect pattern source round-trips', () => {
     const first = program[0];
     if (first.t !== 'def') throw new Error('expected definition');
     const printed = patternSource(first.clauses[0].params[0]);
-    if (run(`f ${printed} = n; f [1,2]`) !== '2') throw new Error(printed);
+    if (run(`f ${printed} = n; f [1, 2]`) !== '2') throw new Error(printed);
 });
 
 Deno.test('a fixed Vect pattern rejects an infinite list without consuming it', () => {

@@ -7,14 +7,14 @@ const cases: [string, string][] = [
     ["takeWhile (x -> 1) [1]", "[1]"],
     ['head (reverse [1..10000])', '10000'],
     ['length (reverse [1..10000])', '10000'],
-    ['reverse (reverse [1,2,3])', '[1,2,3]'],
-    ['reverse [1,2,3]', '[3,2,1]'],
+    ['reverse (reverse [1, 2, 3])', '[1, 2, 3]'],
+    ['reverse [1, 2, 3]', '[3, 2, 1]'],
     ['reverse []', '[]'],
     ['reverse ""', '""'],
-    ['head (reverse [missing,2])', '2'],
+    ['head (reverse [missing, 2])', '2'],
     ['lookup 1 (frequencies (replicate 1000 1))', '1000'],
     ['compose (*2) (+1) 4', '10'],
-    ['uncurry (+) [2,3]', '5'],
+    ['uncurry (+) [2, 3]', '5'],
     ['withDefault missing (Some 42)', '42'],
     ['map (*2) (Some 3)', 'Some 6'],
     ['map missing None', 'None'],
@@ -22,7 +22,7 @@ const cases: [string, string][] = [
     ['mapError upper (Err "oops")', 'Err "OOPS"'],
     ['okOr "empty" (Some 1)', 'Ok 1'],
     ['okOr "empty" None', 'Err "empty"'],
-    ['[unwrap (Some 1),unwrap (Ok 2),expect "a" (Some 3),expect "b" (Ok 4)]', '[1,2,3,4]'],
+    ['[unwrap (Some 1), unwrap (Ok 2), expect "a" (Some 3), expect "b" (Ok 4)]', '[1, 2, 3, 4]'],
     ['typeOf unwrap', 'Option a | Result a b -> a'],
     // A constructor pattern binds in a block as at the top level.
     ['f n = { Some x = safeDiv 6 n; x }; f 2', '3'],
@@ -30,66 +30,66 @@ const cases: [string, string][] = [
     ['safeDiv 7 0', 'None'],
     ['safeDiv 7.0 0.0', 'None'],
     ['safeDiv 7 0 == None', 'true'],
-    ['take 5 (repeat 7)', '[7,7,7,7,7]'],
-    ['take 7 (cycle [1,2,3])', '[1,2,3,1,2,3,1]'],
+    ['take 5 (repeat 7)', '[7, 7, 7, 7, 7]'],
+    ['take 7 (cycle [1, 2, 3])', '[1, 2, 3, 1, 2, 3, 1]'],
     ['cycle []', '[]'],
-    ['take 5 (concatMap (x -> [x,x]) [1..])', '[1,1,2,2,3]'],
-    ['take 5 (scanl (+) 0 [1..])', '[0,1,3,6,10]'],
+    ['take 5 (concatMap (x -> [x, x]) [1..])', '[1, 1, 2, 2, 3]'],
+    ['take 5 (scanl (+) 0 [1..])', '[0, 1, 3, 6, 10]'],
     ['all (x -> x < 10000) [0..9999]', 'true'],
     ['any (==3) [1..]', 'true'],
     ['find (==9999) [0..]', 'Some 9999'],
-    ['find (==9) [1,2]', 'None'],
-    ['findIndex (==8) [4,8,9]', 'Some 1'],
+    ['find (==9) [1, 2]', 'None'],
+    ['findIndex (==8) [4, 8, 9]', 'Some 1'],
     ['headOption []', 'None'],
-    ['lastOption [1,2,3]', 'Some 3'],
+    ['lastOption [1, 2, 3]', 'Some 3'],
     ['atOption 4 [1]', 'None'],
-    ['takeWhile (<4) [1..]', '[1,2,3]'],
+    ['takeWhile (<4) [1..]', '[1, 2, 3]'],
     ['head (dropWhile (<10000) [0..])', '10000'],
-    ['chunksOf 2 [1..5]', '[[1,2],[3,4],[5]]'],
-    ['intersperse 0 [1,2,3]', '[1,0,2,0,3]'],
-    ['partition isEven [1..5]', '[[2,4],[1,3,5]]'],
-    ['unique [3,1,3,2,1]', '[3,1,2]'],
-    ['sortOn fst [[2,"b"],[1,"a"],[2,"c"]]', '[[1,"a"],[2,"b"],[2,"c"]]'],
+    ['chunksOf 2 [1..5]', '[[1, 2], [3, 4], [5]]'],
+    ['intersperse 0 [1, 2, 3]', '[1, 0, 2, 0, 3]'],
+    ['partition isEven [1..5]', '[[2, 4], [1, 3, 5]]'],
+    ['unique [3, 1, 3, 2, 1]', '[3, 1, 2]'],
+    ['sortOn fst [[2, "b"], [1, "a"], [2, "c"]]', '[[1, "a"], [2, "b"], [2, "c"]]'],
     ['minimum []', 'None'],
     ['factorial 20', '2432902008176640000'],
     ['factorial 3.0', '6'],
-    ['mean [1,2]', 'Some 3/2'],
-    ['variance [1,2,3]', 'Some 2/3'],
-    ['median [9,1,2,8]', 'Some 5'],
+    ['mean [1, 2]', 'Some 3/2'],
+    ['variance [1, 2, 3]', 'Some 2/3'],
+    ['median [9, 1, 2, 8]', 'Some 5'],
     ['mean []', 'None'],
-    ['take 10 fibonacci', '[0,1,1,2,3,5,8,13,21,34]'],
-    ['take 10 primes', '[2,3,5,7,11,13,17,19,23,29]'],
+    ['take 10 fibonacci', '[0, 1, 1, 2, 3, 5, 8, 13, 21, 34]'],
+    ['take 10 primes', '[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]'],
     ['reverse "a😀b"', '"b😀a"'],
     ['textLength "a😀b"', '3'],
     ['textTake 2 "a😀b"', '"a😀"'],
-    ['words " a\t b\r\n c "', '["a","b","c"]'],
-    ['joinWith "/" ["a","b"]', '"a/b"'],
+    ['words " a\t b\r\n c "', '["a", "b", "c"]'],
+    ['joinWith "/" ["a", "b"]', '"a/b"'],
     ['startsWith "ab" "abc"', 'true'],
     ['endsWith "😀" "a😀"', 'true'],
     ['getOr 9 "x" (HashMap [])', '9'],
     ['getOption "x" (HashMap [])', 'None'],
     ['getOr missing "x" (HashMap [x: 2])', '2'],
-    ['lookup "a" (frequencies ["a","b","a"])', '2'],
+    ['lookup "a" (frequencies ["a", "b", "a"])', '2'],
     ['lookup "a" (mergeWith (+) (HashMap [a: 2]) (HashMap [a: 3]))', '5'],
-    ['lookup 1 (groupBy (x -> x % 2) [1..5])', '[1,3,5]'],
-    ['pairs (filterMap (key, value -> value > 2) (HashMap [a: 1, b: 3]))', '[["b",3]]'],
+    ['lookup 1 (groupBy (x -> x % 2) [1..5])', '[1, 3, 5]'],
+    ['pairs (filterMap (key, value -> value > 2) (HashMap [a: 1, b: 3]))', '[["b", 3]]'],
 ];
 for (const [source, expected] of cases) Deno.test(`std: ${source}`, () => {
     const i = new Interpreter();
-    i.run(parse('import ["function","option","sequence","number","text","map"]'));
+    i.run(parse('import ["function", "option", "sequence", "number", "text", "map"]'));
     const actual = i.renderString(i.run(parse(source)));
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
 });
 for (const [source, message] of [
     ['chunksOf 0 [1]', 'positive size'],
-    ['sortBy (x, y -> true) [2,1]', 'integer'],
+    ['sortBy (x, y -> true) [2, 1]', 'integer'],
     ['from (List Char) [1]', 'Char'],
     ['factorial (-1)', 'non-negative'],
     ['import "missing"', 'unknown module'],
     ['import 123', 'string'],
 ]) Deno.test(`std rejects: ${source}`, () => {
     const i = new Interpreter();
-    i.run(parse('import ["sequence","number","text"]'));
+    i.run(parse('import ["sequence", "number", "text"]'));
     try { i.renderString(i.run(parse(source))); }
     catch (error) {
         if (error instanceof Error && error.message.includes(message)) return;
@@ -106,7 +106,7 @@ for (const [source, message] of [
     ['f n = { Some x = safeDiv 6 n; x }; f 0', 'binding pattern did not match'],
 ]) Deno.test(`std fails: ${source}`, () => {
     const i = new Interpreter();
-    i.run(parse('import ["option","number"]'));
+    i.run(parse('import ["option", "number"]'));
     try { i.renderString(i.run(parse(source))); }
     catch (error) {
         if (error instanceof Error && error.message.includes(message)) return;
@@ -118,11 +118,11 @@ Deno.test("imports are cached, isolated from caller bindings, and independent of
     const i = new Interpreter();
     i.sourceDir = "/unrelated/directory";
     i.run(parse('sum xs = 999\nimport "number"'));
-    if (i.renderString(i.run(parse('mean [1,2]'))) !== 'Some 3/2') throw new Error("caller leaked into module");
+    if (i.renderString(i.run(parse('mean [1, 2]'))) !== 'Some 3/2') throw new Error("caller leaked into module");
     const first = i.importStandard("sequence");
     if (i.importStandard("sequence") !== first) throw new Error("import did not reuse module");
     i.run(parse('s = import "sequence"'));
-    if (i.renderString(i.run(parse('s.takeWhile (<3) [1..]'))) !== '[1,2]') throw new Error("native export missing");
+    if (i.renderString(i.run(parse('s.takeWhile (<3) [1..]'))) !== '[1, 2]') throw new Error("native export missing");
 });
 
 Deno.test("a bare import does not echo an infinite export record", () => {
@@ -133,7 +133,7 @@ Deno.test("standard natives require importing their module", () => {
     const i = new Interpreter();
     if (i.env.get("words") !== undefined) throw new Error("stdlib leaked into builtins");
     i.run(parse('import "text"'));
-    if (i.renderString(i.run(parse('words "a b"'))) !== '["a","b"]') throw new Error("missing export");
+    if (i.renderString(i.run(parse('words "a b"'))) !== '["a", "b"]') throw new Error("missing export");
 });
 
 Deno.test("reverse uses APN typed clauses and is available from either module", () => {
@@ -204,6 +204,6 @@ Deno.test("html and text import together, in either order", () => {
         const i = new Interpreter();
         i.enableChecking();
         i.run(parse(source));
-        if (i.renderString(i.run(parse('[splitWhile (< 3) [1,2,3],upper "a"]'))) !== '[[[1,2],[3]],"A"]') throw new Error(source);
+        if (i.renderString(i.run(parse('[splitWhile (< 3) [1, 2, 3], upper "a"]'))) !== '[[[1, 2], [3]], "A"]') throw new Error(source);
     }
 });

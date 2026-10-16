@@ -2336,7 +2336,7 @@ export class Interpreter {
                 emit("[");
                 let first = true;
                 for (const item of this.elements(v)) {
-                    if (!first) emit(",");
+                    if (!first) emit(", ");
                     first = false;
                     this.render(item, emit, false, ancestors);
                 }
@@ -2605,7 +2605,7 @@ export class Interpreter {
             const from = this.reference(t.from);
             return `${from.kind === "functionType" ? `(${this.writtenType(from)})` : this.writtenType(from)} -> ${this.writtenType(t.to)}`;
         }
-        if (this.isList(t)) return `[${[...this.elements(t)].map(x => this.writtenType(x)).join(",")}]`;
+        if (this.isList(t)) return `[${[...this.elements(t)].map(x => this.writtenType(x)).join(", ")}]`;
         if (t.kind === "record") return `[${t.v.map(([key, x]) => `${keySource(key)}: ${this.writtenType(x)}`).join(", ")}]`;
         return valueToString(t);
     }
