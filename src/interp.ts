@@ -1582,6 +1582,8 @@ export class Interpreter {
                     finally { this.dynamicDepth--; }
                 }
                 let value = this.demand(arg);
+                // A type variable applied to a type: f a, any type holding a.
+                if (f.variable && f.name !== "_" && this.isTypeValue(value)) return { ...f, arguments: [...f.arguments ?? [], value] };
                 // A base type applied to a named value unwraps it: Float (Money 1.2).
                 if (!f.family && !f.alias && NAMED_BASES.has(f.name) && value.kind === "variant" && value.family?.base) value = this.baseValue(value);
                 if (f.name === "Vect" && !f.family && !f.alias && (f.arguments?.length ?? 0) < 2) {
@@ -2652,6 +2654,12 @@ export class Interpreter {
                         return type;
                     }
                     case "schema": return this.typeIn(p.type, scope, variables);
+                    // f a: a type variable applied to a type.
+                    case "typeBind": {
+                        const head = variable(p.name), argument = pattern(p.value);
+                        scope.setLocal(p.name, head);
+                        return argument && this.reference(this.apply(head, argument));
+                    }
                     default: return undefined;
                 }
             };

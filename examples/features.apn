@@ -957,6 +957,7 @@ print (runCounter (map (* 2) tick) 3)     # => [6,4] (map from >>= and return)
 # A parameter passed to map accepts whatever map has an instance for; the
 # checker checks each call (doubleAll 5: map needs an action, a list or a
 # monadic value). typeOf map is (a -> b) -> c a -> c b: c is that type.
+# (Written signatures use it too: f a, below with function types.)
 doubleAll m = map (* 2) m
 print [doubleAll [1,2],doubleAll [3]]      # => [[2,4],[6]]
 print (doubleAll (Some 4))                 # => Some 8
@@ -1956,6 +1957,11 @@ applyTwice ((a -> a) f) x = f (f x)
 print (applyTwice (* 3) 2)                 # => 18
 print (isType (Int -> Int) (+ 1))          # => true
 print (((a -> b) -> List a -> List a) == typeOf filter)  # => true (a function type taking one)
+# f a is a type variable applied to a type: any type holding an a (List a,
+# Option a). As a contract it accepts map and checks each use.
+print (((a -> b) -> f a -> f b) == typeOf map)        # => true
+twiceMapped (((a -> b) -> f a -> f b) m) xs = m (* 2) (m (+ 1) xs)
+print [twiceMapped map [1,2],twiceMapped map (Some 3)]  # => [[4,6],Some 8]
 
 typedLambda = (Int value) -> Int { value + value }
 typedNamed (Int value) = Int { value + value }

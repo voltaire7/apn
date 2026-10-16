@@ -105,12 +105,15 @@ export function describeType(value: Value): string {
             const written = (p: Pattern): Shape => p.p === "var" ? declared({ t: "var", name: p.name }, parameters)
                 : p.p === "constr" ? named(p.tag, p.args.map(written))
                 : p.p === "list" ? sequence(p.v.map(written))
-                : p.p === "schema" ? declared(p.type, parameters) : fresh();
+                : p.p === "schema" ? declared(p.type, parameters)
+                // f a: a type variable applied to a type.
+                : p.p === "typeBind" ? { tag: "apply", head: declared({ t: "var", name: p.name }, parameters), arg: written(p.value) } : fresh();
             const inputs = e.t === "lambda" ? e.params.map(name => declared({ t: "var", name }, parameters)) : e.params.map(written);
             return inputs.reduceRight((to: Shape, from) => arrow(from, to), declared(e.body, parameters));
         }
         if (e.t === "app") {
             const f = declared(e.f, parameters);
+            if (f.tag === "var") return { tag: "apply", head: f, arg: declared(e.a, parameters) };
             return f.tag === "name" ? named(f.name, [...f.args, declared(e.a, parameters)]) : fresh();
         }
         return fresh();

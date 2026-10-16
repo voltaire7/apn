@@ -25,6 +25,11 @@ for (const [name, source, expected] of [
     // map works on any type with a map instance: c a is that type holding a.
     ["map's type maps any functor", "print (typeOf map)\nd m = map (* 2) m\nprint (typeOf d)",
         ["(a -> b) -> c a -> c b", "a b -> a c"]],
+    // f a: a type variable applied to a type, any type holding an a.
+    ["a type variable applied to a type", 'print (((a -> b) -> f a -> f b) == typeOf map)\nprint (((a -> b) -> g x -> g y) == typeOf map)\nprint (((a -> b) -> List a -> List b) == typeOf map)',
+        ["true", "false", "false"]],
+    ["f a in a contract takes any type holding an a", 'import "option"\napply2 (((a -> b) -> f a -> f b) m) xs = m (* 2) xs\nprint [apply2 map [1,2],apply2 map (Some 3)]\nprint (typeOf apply2)\ntwice ((f a -> f a) h) x = h (h x)\nprint (twice tail [1,2,3])',
+        ["[[2,4],Some 6]", "((a -> b) -> c a -> c b) -> c a -> c b", "[3]"]],
     ["[Int] is positional; a list of any length is List Int", "print (List Int == typeOf [1,2,3])\nprint ([Int] == typeOf [1])\nprint (typeOf [1,\"a\"])\nprint (typeOf [1] == List)",
         ["true", "false", "List (Int | String)", "true"]],
     ["a name bound to a type is that type; any other is a variable", "a = 100\nprint ((a -> a) == typeOf (x -> x))\nt = Int\nprint ((t -> t) == typeOf ((Int x) -> x))\nprint ((t -> t) == typeOf (x -> x))",
@@ -42,6 +47,15 @@ for (const [name, source, expected] of [
     }
 });
 
+for (const [source, message] of [
+    ["bad (((a -> b) -> f a -> f b) m) = m (* 2) 5", "cannot use Int where f a is required"],
+    ['nope ((f Int -> f Int) h) = h\nprint ((nope (x -> x)) "s")', "cannot use String where f Int is required"],
+    ["p ((a -> f a a) h) = h", "a type variable takes one type: f a"],
+] as const) Deno.test(`function types: the checker rejects ${JSON.stringify(source)}`, () => {
+    try { run(source, true); }
+    catch (e) { if ((e as { kind?: string }).kind === "type" && String((e as Error).message).includes(message)) return; throw e; }
+    throw new Error("accepted");
+});
 Deno.test("function types: a contract checks each call's result", () => {
     try { run('print ((a -> a).(x -> "s") 1)', false); }
     catch (e) { if (String(e).includes("function contract a -> a: the result is not Int")) return; throw e; }

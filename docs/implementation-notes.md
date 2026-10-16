@@ -200,6 +200,12 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   is (`instanceIn`): `[]` for a list, a failing action for IO, else the
   `throw` instance whose head is the target's. `primSource` reads a
   parameter's argument expression one step back, as `assert` reads its own.
+- `f a` in a written type: at runtime a variable type with `arguments` (apply
+  of a variable type to a type, and a `typeBind` parameter in
+  `readFunctionType`); in the checker an `apply` type whose head, once known,
+  is a `ctor` (a type missing its first parameter: `List`, `Result _ e`), and
+  `resolve` turns it into that type (`appliedType`); `typeOf` describes it with
+  the `apply` shape. Tests: `tests/function-types-test.ts`.
   In the checker, a union of `pending` values and one monad's value is that
   monad (`c ? return [] : Err e` is a Result).
 - Function contracts (`((Int -> Int) f)`) are typed patterns whose type is a

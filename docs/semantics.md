@@ -517,8 +517,8 @@ prints as its source; using one as a plain value is an ambiguity error.
 There are no `Functor` or `Monad` types: a parameter passed to `map` or `>>=`
 accepts whatever has an instance, checked at each call (`double m = map (* 2) m`;
 `double 5` is a static error, as is a type with no `map` instance).
-`typeOf map` is `(a -> b) -> c a -> c b`, `c` being that type (a description:
-a type variable applied to a type cannot be written).
+`typeOf map` is `(a -> b) -> c a -> c b`, `c` being that type (see "Function
+types": `((a -> b) -> f a -> f b) == typeOf map`).
 
 ### Overloading on the result type
 
@@ -1217,6 +1217,12 @@ type variable, the same one throughout the signature. `(a -> b) -> List a ->
 List b` is a function type taking a function: a parameter `(a -> b)` with no
 name matches a function of that type without binding it, as `Int` matches an
 Int.
+
+A type variable applied to a type, `f a`, is any type holding an `a`: `List a`,
+`Option a`, `Result a e` (the parameter `map` maps, the first). So `(a -> b) ->
+f a -> f b` is `map`'s type, and a contract `(((a -> b) -> f a -> f b) m)`
+accepts `map` and checks each use: the checker rejects `m (* 2) 5` (cannot use
+Int where f a is required). It takes one type: `f a a` is an error.
 
 Types differing only in their variables' names are equal: `(b -> b) == typeOf
 (x -> x)`. A function contract checks each call: its arguments decide its type
