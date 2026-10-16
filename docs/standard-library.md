@@ -291,8 +291,8 @@ Haskell's type distinction](combinators.md).
 
 `readFile path` is the action reading UTF-8 text, `readStdin` reads to EOF
 (once: every run yields the same text), and `getArgs` yields the script
-arguments. `readInput []` chooses the first file argument or stdin (absent
-argument or `"-"`). Run one with `<-`: `input <- readInput []`.
+arguments. `readInput` chooses the first file argument or stdin (absent
+argument or `"-"`). Run one with `<-`: `input <- readInput`.
 
 `bfsDistances neighbors starts` returns shortest unweighted distances for all
 reachable scalar-key nodes. Sequence helpers include `count predicate xs`,

@@ -1,4 +1,4 @@
 import "io"
 load "lanternfish"
-input <- readInput []
+input <- readInput
 print (solveFish input)

@@ -35,17 +35,17 @@ files supply the input and print the answer. Unreachable hill paths return None.
 import "io"
 text <- readFile "input.input"
 args <- getArgs
-input <- readInput []
+input <- readInput
 ```
 
 `apn program.apn first second` makes `getArgs` return `["first", "second"]`.
-`readInput []` reads the first argument as a file, or all stdin when there is no
+`readInput` reads the first argument as a file, or all stdin when there is no
 argument or the first argument is `"-"`. `readStdin` explicitly reads stdin
-to EOF; stdin is read once, and every call returns the same text. File paths resolve against the process working directory. Text input is
+to EOF; stdin is read once, and every run of it yields the same text. File paths resolve against the process working directory. Text input is
 UTF-8; stdin decoding handles multibyte characters spanning read buffers.
 
 Input calls are IO actions: `x <- action` runs one and binds what it read,
-once; `input = readInput []` only names the action. Stdin helpers are
+once; `input = readInput` only names the action. Stdin helpers are
 intended for script execution, not simultaneous use with the interactive REPL
 editor. `load` still executes APN source and is distinct from `readFile`.
 

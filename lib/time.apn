@@ -7,8 +7,8 @@ Zone = | ZoneOffset Int
 utc = ZoneOffset 0
 millisToPosix ms = PosixMillis ms
 posixToMillis (PosixMillis ms) = ms
-now = map PosixMillis (currentTime [])
-here = map ZoneOffset (zoneOffset [])
+now = map PosixMillis currentTime
+here = map ZoneOffset zoneOffset
 TimeEffect = | TimeEvery Dynamic Dynamic
 every interval toMessage = TimeEvery interval (ms -> toMessage (PosixMillis ms))
 # Milliseconds since midnight... in a zone: the parts of the time of day.

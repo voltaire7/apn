@@ -43,5 +43,5 @@ weighted first others = {
 }
 list n generator = n <= 0 ? return [] : map2 (x, xs -> x :: xs) generator (list (n - 1) generator)
 # A command sending toMessage of a value drawn from a fresh seed.
-sample generator = map (s -> head (step generator s)) (entropy [])
+sample generator = map (s -> head (step generator s)) entropy
 generate toMessage generator = perform toMessage (sample generator)

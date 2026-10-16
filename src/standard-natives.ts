@@ -11,10 +11,10 @@ import { textNatives } from "./text-natives.ts";
 // Representation, effects and Unicode casing are the stdlib's native boundary.
 export const STANDARD_NATIVES: Array<[string, number]> = [
     ...FFI_NATIVES,
-    ["bracket", 3], ["withFile", 2], ["readFile", 1], ["readStdin", 1], ["getArgs", 0],
+    ["bracket", 3], ["withFile", 2], ["readFile", 1], ["readStdin", 0], ["getArgs", 0],
     ["seq", 2], ["fail", 1], ["chars", 1], ["fromChars", 1], ["upper", 1], ["lower", 1],
     ["fetch", 2], ["toJson", 1], ["prettyJson", 1], ["fromJson", 1],
-    ["entropy", 1], ["currentTime", 1], ["zoneOffset", 1],
+    ["entropy", 0], ["currentTime", 0], ["zoneOffset", 0],
 ];
 export function standardNative(i: Interpreter, name: string, args: Value[]): Value {
     if (name === "bracket") return bracket(i, args[0], args[1], args[2]);

@@ -46,7 +46,7 @@ Deno.test("readInput uses program arguments and reads UTF-8 from cwd-relative or
     const i = new Interpreter(); i.run(parse('import "io"'));
     const file = new URL("../examples/advent-of-code/samples/sonar.input", import.meta.url).pathname;
     i.programArgs = [file];
-    const actual = i.demand(i.run(parse('readInput []')));
+    const actual = i.demand(i.run(parse('readInput')));
     if (actual.kind !== "string" || actual.v !== Deno.readTextFileSync(file)) throw new Error("readInput failed");
 });
 Deno.test("file read failures identify the operation", () => {

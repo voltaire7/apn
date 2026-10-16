@@ -322,7 +322,7 @@ function helpText(): string {
         `  recursion, higher-order fns, records, variants`,
         `  import "option"; import ["function", "number"] (multiple modules; a file or a folder)`,
         `  use namespace (or a list of namespace records) opens fields in this scope`,
-        `  text <- readFile "input.input"; input <- readInput []; args <- getArgs (script I/O)`,
+        `  text <- readFile "input.input"; input <- readInput; args <- getArgs (script I/O)`,
         `  Bool true; String "hi"; Char 'a'; List [1, 2]; Record [x: 1]`,
         `  Function (x -> x); Type Int; Variant (YourConstructor value)`,
         `  Int/UInt, Int8..Int128/UInt8..UInt128, Float/Float32, Fraction, Complex`,

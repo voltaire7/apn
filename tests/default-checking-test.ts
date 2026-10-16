@@ -985,7 +985,7 @@ Deno.test("getArgs and readInput see the program's arguments", () => {
     const one = session();
     one.programArgs = [fish];
     if (run(one, `${inputPrelude}\nargs <- getArgs; g (f (q args))`) !== "0") throw new Error("getArgs");
-    if (run(one, `${inputPrelude}\ntext <- readInput []; g (f (q (words text)))`) !== "0") throw new Error("readInput");
+    if (run(one, `${inputPrelude}\ntext <- readInput; g (f (q (words text)))`) !== "0") throw new Error("readInput");
     const two = session();
     two.programArgs = [hill, "x"];
     rejected(two, `${inputPrelude}\nargs <- getArgs; g (f (q args))`);
@@ -994,7 +994,7 @@ Deno.test("readStdin is read when the run's stdin is not interactive", () => {
     const check = (stdin: string | undefined) => {
         const c = new CheckingSession();
         c.inputs = { readFile: () => undefined, args: () => [], readStdin: () => stdin };
-        try { c.prepare(parse(`${inputPrelude}\ntext <- readStdin []; g (f (q (words text)))`), "."); return true; }
+        try { c.prepare(parse(`${inputPrelude}\ntext <- readStdin; g (f (q (words text)))`), "."); return true; }
         catch { return false; }
     };
     if (!check("one\n")) throw new Error("one word rejected");

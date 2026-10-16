@@ -140,6 +140,8 @@ interface Entry {
     payload?: Known[];
     fields?: [string, Known][];
     expr?: Known["expr"];
+    // A value that is an action (a do-block): run by the check that uses it.
+    actionBody?: { body: Expr; scope: Scope };
     clauses?: { params: Pattern[]; body: Expr }[];
     mono?: boolean;
     // inherited: visible from an enclosing scope (blocks mark every outer entry).
@@ -791,12 +793,12 @@ const LIST_NATIVES = ["filter", "map", "take", "drop", "zipWith"];
 const EVALUATED_NATIVES = new Set([
     ...LIST_NATIVES, "length", "head", "tail", "null", "foldl", "foldr", "iterate", "enumerate",
     "chars", "fromChars", "upper", "lower", "toString", "intToString", "seq", "parse",
-    "print", "emit", "debug", "assert", "set", "readFile", "readStdin", "use",
+    "print", "emit", "debug", "assert", "set", "readFile", "use",
 ]);
 // Builtins that demand their arguments when called.
 const STRICT_NATIVES = new Set([
     "head", "tail", "null", "length", "chars", "fromChars", "upper", "lower", "toString", "intToString",
-    "parse", "print", "emit", "debug", "assert", "set", "seq", "readFile", "readStdin", "use",
+    "parse", "print", "emit", "debug", "assert", "set", "seq", "readFile", "use",
 ]);
 // Static evaluation limits: nesting (recursion) depth, and work per root value.
 const EVALUATION_DEPTH = 5000;
@@ -4798,7 +4800,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const type = /^[A-Z]/.test(e.name) && resolve(entry.type).k === "type" ? { type: entry.type } : {};
                 if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope }, ...type };
                 if (type.type) return type;
-                if (e.name === "getArgs" && entry.builtin && options.inputs) { const inputs = options.inputs; return { action: () => known(inputs.args().map(string => ({ string }))) }; }
+                if (entry.actionBody) return evaluateKnown(entry.actionBody.body, new Map(), entry.actionBody.scope, depth + 1);
+                // Input read at check time, from the same snapshot the run uses.
+                if (entry.builtin && options.inputs) {
+                    const inputs = options.inputs;
+                    if (e.name === "getArgs") return { action: () => known(inputs.args().map(string => ({ string }))) };
+                    if (e.name === "readStdin") return { action: () => {
+                        const text = inputs.readStdin?.();
+                        return text === undefined ? undefined : { string: text };
+                    } };
+                }
                 const index = entry.index && !entry.index.terms.size ? entry.index : undefined;
                 return { index, size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };
             }
@@ -5191,10 +5202,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "debug": case "use": args[0](); return known([]);
             case "set": return { action: () => { writeMutable(args[0](), args[1]); return known([]); }, actionResult: "[]" };
             // Input read at check time, from the same snapshot the run uses.
-            case "readStdin": return { action: () => {
-                const text = options.inputs?.readStdin?.();
-                return text === undefined ? undefined : { string: text };
-            }, actionResult: "String" };
             case "readFile": return { action: () => {
                 const path = args[0]()?.string;
                 const text = path === undefined ? undefined : options.inputs?.readFile(path);
@@ -5903,7 +5910,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (old.k === "list" && next.k === "list" && !old.contracted) unify(old.element, next.element, location);
                 else unify(previous.type, t, location);
             }
-            const facts = (writes.get(name) ?? 0) > 1 ? {} : valueEntry(body, scope);
+            const value = (writes.get(name) ?? 0) > 1 ? {} : valueEntry(body, scope);
+            // An action (readInput = { ... }) is run where it is used, with that check's inputs.
+            const facts: Partial<Entry> = value.action ? { actionBody: { body, scope } } : value;
             // A top-level value touching top-level cells keeps its body instead,
             // to be used where the program uses it (see forceLazyTop).
             // (Also one that can write a cell: its effects run where it is used.)
@@ -6063,7 +6072,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     ) scope.set(name, { type });
     // fail, like the other standard natives, reaches programs through import "function".
     if (options.library) scope.set("fail", { type: fn(atom("String"), variable()) });
-    const standardOnly = new Set(["seq", "chars", "fromChars", "upper", "lower", "readFile", "readStdin", "fetch", "toJson", "prettyJson", "fromJson", "entropy", "currentTime", "zoneOffset"]);
+    const standardOnly = new Set(["seq", "chars", "fromChars", "upper", "lower", "readFile", "readStdin", "getArgs", "fetch", "toJson", "prettyJson", "fromJson", "entropy", "currentTime", "zoneOffset"]);
     const native = (name: string, inputs: Ty[], output: Ty) => {
         if (name in RETIRED_NATIVES) return;
         if (!standardOnly.has(name) || options.library) scope.set(name, { type: inputs.reduceRight((result, input) => fn(input, result), output) });
@@ -6099,15 +6108,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("fromChars", [list(atom("Char"))], str);
     for (const name of ["upper", "lower"]) native(name, [str], str);
     native("readFile", [str], io(str));
-    native("readStdin", [empty], io(str));
-    for (const name of ["entropy", "currentTime", "zoneOffset"]) native(name, [empty], io(int));
+    native("readStdin", [], io(str));
+    native("getArgs", [], io(list(str)));
+    for (const name of ["entropy", "currentTime", "zoneOffset"]) native(name, [], io(int));
     // HTTP and JSON (the http and json modules): a response is a record; decoded JSON is Dynamic.
     native("fetch", [str, variable()], io({ k: "record", fields: new Map<string, Ty>([
         ["status", int], ["ok", bool], ["statusText", str], ["url", str], ["headers", { k: "map", key: str, value: str }], ["body", str],
     ]) }));
     for (const name of ["toJson", "prettyJson"]) native(name, [variable()], str);
     native("fromJson", [str], explicitDynamic);
-    if (options.library) scope.set("getArgs", { type: io(list(str)) });
     for (const name of ["isInteger", "isExact", "isInexact", "isReal", "isComplex", "isRational", "isNumber", "isFinite", "isNaN", "isEven", "isOdd", "isInfinite", "isZero", "isPositive", "isNegative"]) native(name, [["isNumber", "isComplex", "isReal", "isRational", "isInteger"].includes(name) ? variable() : num], bool);
     for (const name of ["sqrt", "sin", "cos", "tan", "asin", "acos", "atan", "exp", "log", "abs", "exact", "inexact", "realPart", "imagPart", "magnitude", "angle", "conjugate"]) native(name, [num], num);
     for (const name of ["floor", "ceiling", "truncate", "round", "numerator", "denominator"]) native(name, [num], num);
