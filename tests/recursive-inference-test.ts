@@ -46,7 +46,7 @@ for (
 
 Deno.test("the original self-application factorial still checks and runs", () => {
     const source =
-        "factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1))); factorial 5";
+        "factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1)))\nfactorial 5";
     const checked = checkSource(source, "<test>", { strict: true });
     if (checked.issues.length || checked.dynamicBoundaries) throw new Error(JSON.stringify(checked));
     const interpreter = new Interpreter();

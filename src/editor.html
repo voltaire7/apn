@@ -47,6 +47,9 @@ main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1
 .layers { position: relative; }
 pre.highlight, textarea { margin: 0; padding: 14px 16px; border: 0; white-space: pre; overflow: hidden; }
 pre.highlight { pointer-events: none; min-height: 100%; color: var(--text); }
+/* A guide after column 99: longer lines are syntax errors. */
+pre.highlight { background: linear-gradient(to right, transparent calc(16px + 99ch), var(--surface0) 0,
+    var(--surface0) calc(16px + 99ch + 1px), transparent 0) no-repeat; }
 textarea { position: absolute; inset: 0; width: 100%; height: 100%; resize: none; outline: none; background: transparent; color: transparent; caret-color: var(--text); }
 textarea::selection { background: var(--selection); color: transparent; }
 .result { display: flex; flex-direction: column; min-height: 0; background: var(--mantle); }

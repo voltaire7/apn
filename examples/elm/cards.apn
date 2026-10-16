@@ -13,7 +13,7 @@ cardGenerator = random.uniform Ace [Two,Three,Four,Five,Six,Seven,Eight,Nine,Ten
 
 update msg model = match msg [
     Draw -> [model,random.generate NewCard cardGenerator]
-    (NewCard newCard) -> [[card: newCard],browser.none]
+    NewCard newCard -> [[card: newCard],browser.none]
 ]
 
 subscriptions _ = browser.none

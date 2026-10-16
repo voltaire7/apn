@@ -8,7 +8,8 @@
 # The body of a successful (2xx) response; any other status fails.
 fetchText url options = {
     response <- fetch url options
-    response.ok ? return response.body : fail ("fetch: " ++ response.url ++ " answered " ++ to String response.status ++ " " ++ response.statusText)
+    response.ok ? return response.body : fail ("fetch: " ++ response.url ++ " answered "
+        ++ to String response.status ++ " " ++ response.statusText)
 }
 # A successful response's body, decoded as JSON (see the json module).
 fetchJson url options = {
@@ -25,6 +26,15 @@ HttpEffect = | HttpGet Dynamic Dynamic
 get request = HttpGet request.url request.expect
 # An expectation: json says whether the body is parsed (as from JSON) first;
 # success gets the body, failure the status (0: no answer, -1: not JSON) and why.
-failure toMessage status reason = toMessage (Err (status == 0 ? NetworkError : status == -1 ? BadBody reason : BadStatus status))
-expectString toMessage = [json: false, success: (body -> toMessage (Ok body)), failure: failure toMessage]
-expectJson toMessage decoder = [json: true, success: (value -> toMessage (mapError BadBody (_decode.decodeValue decoder value))), failure: failure toMessage]
+failure toMessage status reason = toMessage
+    (Err (status == 0 ? NetworkError : status == -1 ? BadBody reason : BadStatus status))
+expectString toMessage = [
+    json: false
+    success: (body -> toMessage (Ok body))
+    failure: failure toMessage
+]
+expectJson toMessage decoder = [
+    json: true
+    success: (value -> toMessage (mapError BadBody (_decode.decodeValue decoder value)))
+    failure: failure toMessage
+]

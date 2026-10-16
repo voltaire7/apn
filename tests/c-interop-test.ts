@@ -21,10 +21,12 @@ const signatures = `[
 ]`;
 function run(source: string): string {
     const interpreter = new Interpreter();
-    return interpreter.renderString(interpreter.run(parseDocument('ffi = import "ffi"\n' + source)));
+    // The library's path on a line of its own: a temporary directory's may be long.
+    const prelude = `ffi = import "ffi"\nlibrary = ${JSON.stringify(library ?? "")}\n`;
+    return interpreter.renderString(interpreter.run(parseDocument(prelude + source)));
 }
 function call(body: string): string {
-    return `ffi.withLibrary ${JSON.stringify(library)} ${signatures} c -> {\n${body.split('\n').map((s) => '    ' + s).join('\n')}\n}`;
+    return `ffi.withLibrary library ${signatures} c -> {\n${body.split('\n').map((s) => '    ' + s).join('\n')}\n}`;
 }
 for (const [name, body, expected] of [
     ['signed integers', 'c.add 12 30', 'Int32 42'],
@@ -98,7 +100,7 @@ Deno.test({ name: 'escaped lazy nullary C action rejects use after library closu
 
 Deno.test({ name: "C interop: quote characters are part of the symbol name", ignore: !library, fn() {
     try {
-        run(`ffi.withLibrary ${JSON.stringify(library)} ["add": ffi.function [Int32,Int32] Int32] c -> c."add" 20 22`);
+        run(`ffi.withLibrary library ["add": ffi.function [Int32,Int32] Int32] c -> c."add" 20 22`);
     } catch (error) {
         if (String(error).includes("cannot open") && String(error).includes("add")) return;
         throw error;

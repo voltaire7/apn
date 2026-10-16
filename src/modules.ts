@@ -197,9 +197,9 @@ export function bundleProgram(source: string, directory: string): Record<string,
     return bundle;
 }
 
-// Standard modules imported qualified, as their Elm counterparts are
-// (random = import "random"; random.int): their names may repeat other
-// modules' (decode.int, svg.circle), so they offer no "add import" names.
+// Standard modules whose names repeat other modules' (decode.int and
+// random.int, svg.circle and playground's circle): a program using both of a
+// pair imports one qualified, so they offer no "add import" names.
 export const QUALIFIED_MODULES = new Set(["random", "decode", "svg"]);
 
 // The standard library's exports by name, with the modules defining each:

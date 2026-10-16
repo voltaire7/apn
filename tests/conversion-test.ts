@@ -15,7 +15,7 @@ function failure(source: string): { kind?: string; message: string } {
     }
     throw new Error(`accepted: ${source}`);
 }
-const TEMPERATURE = "Celsius = | C Float; Fahrenheit = | F Float; to Celsius = (F f) -> C ((f - 32) * 5 / 9); ";
+const TEMPERATURE = "Celsius = | C Float\nFahrenheit = | F Float\nto Celsius = (F f) -> C ((f - 32) * 5 / 9)\n";
 
 for (const [source, expected] of [
     ["to String 1.5 ++ \"!\"", '"1.5!"'],
@@ -25,9 +25,9 @@ for (const [source, expected] of [
     ["to (List Char) \"a😀\"", "['a','😀']"],
     ["from (List Char) ['h','i']", '"hi"'],
     // Any other type converts as applying it does.
-    ["Money = Float; to Float (Money 1.2)", "1.2"],
+    ["Money = Float\nto Float (Money 1.2)", "1.2"],
     // A bare type name in a pattern matches that type, as a value.
-    ["describe Int = \"integer\"; describe String = \"text\"; [describe Int,describe String]", '["integer","text"]'],
+    ["describe Int = \"integer\"\ndescribe String = \"text\"\n[describe Int,describe String]", '["integer","text"]'],
     [TEMPERATURE + "to Celsius (F 212)", "C 100.0"],
     [TEMPERATURE + "to String 2", '"2"'],
     // A list template converts position by position, as cast does: [Char] is one Char.
@@ -37,7 +37,7 @@ for (const [source, expected] of [
     ["to [Int,String] [x: 1, y: \"a\"]", '[x: 1, y: "a"]'],
     // The checker evaluates to and from as the run does, beside a program's own instances.
     [TEMPERATURE + "Vect 2 Char (to (List Char) \"a😀\")", "['a','😀']"],
-    ["Money = Float; Vect 1 Float [to Float (Money 1.2)]", "[1.2]"],
+    ["Money = Float\nVect 1 Float [to Float (Money 1.2)]", "[1.2]"],
 ] as const) {
     Deno.test(`conversions: ${source}`, () => {
         const actual = run(source);
@@ -47,7 +47,7 @@ for (const [source, expected] of [
 
 for (const [source, kind, message] of [
     ["to (List Char) 5", "type", "cannot use Int where String is required"],
-    ["Celsius = | C Float; from Celsius 1", "type", "no from instance for Celsius"],
+    ["Celsius = | C Float\nfrom Celsius 1", "type", "no from instance for Celsius"],
     ["to 5 1", "type", "to expects a type"],
     ["to [Char] \"hello\"", "runtime", "list template and input must have the same length"],
     ["from [Char] \"h\"", "type", "no from instance for a list template"],

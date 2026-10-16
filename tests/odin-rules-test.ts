@@ -96,7 +96,7 @@ Deno.test('bracket releases in reverse order on interruption', () => {
         return { kind: 'list', v: [] };
     } });
     try {
-        i.run(parseDocument('bracket 1 (_ -> set order (order ++ "outer")) (_ -> bracket 2 (_ -> set order (order ++ "inner")) interruptNow)'));
+        i.run(parseDocument('bracket 1 (_ -> set order (order ++ "outer"))\n    (_ -> bracket 2 (_ -> set order (order ++ "inner")) interruptNow)'));
         throw new Error('expected interruption');
     } catch (e) { if (!String(e).includes('interrupted')) throw e; }
     finally { setInterruptFlag(null); }

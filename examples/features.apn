@@ -892,7 +892,8 @@ print "first" >> print "second"            # => first, then second
 doubled <- mapM (x -> return (x * 2)) [1,2,3]
 print doubled                              # => [2,4,6]
 when (length doubled == 3) (print "three") # => three
-print (return 42)                          # => [42], Some 42, Ok 42 (undecided: the list's, then each instance, one per line)
+# => [42], Some 42, Ok 42 (undecided: the list's, then each instance, one per line)
+print (return 42)
 print (Option Int { return 42 })           # => Some 42
 print (List Int { return 43 })             # => [43]
 fromIO <- IO Int { return 44 }
@@ -928,17 +929,19 @@ positive n = {
 }
 print [positive 3,positive (-1)]           # => [Some 3,None]
 # A false guard throws its condition as written: in a Result block that is
-# Err "guard failed: ..."; unless (or when) names a specific error. check 2 runs only returns; the checker finds the
-# block's monad (Result) and the run uses it.
+# Err "guard failed: ..."; unless (or when) names a specific error. check 2 runs only
+# returns; the checker finds the block's monad (Result) and the run uses it.
 check n = {
     unless (n > 0) (Err "not positive")
     guard (n < 100)
     return (n * 2)
 }
-print [check 2,check 0,check 200]          # => [Ok 4,Err "not positive",Err "guard failed: n < 100"]
+# => [Ok 4,Err "not positive",Err "guard failed: n < 100"]
+print [check 2,check 0,check 200]
 # The same as a chain: >> runs each in turn (>>= would need a function).
 checkChain n = unless (n > 0) (Err "not positive") >> guard (n < 100) >> return (n * 2)
-print [checkChain 2,checkChain 0,checkChain 200]    # => [Ok 4,Err "not positive",Err "guard failed: n < 100"]
+# => [Ok 4,Err "not positive",Err "guard failed: n < 100"]
+print [checkChain 2,checkChain 0,checkChain 200]
 # throw e is the failure in whatever monad the context names.
 print [Option Int (throw "x"),Result Int String (throw "x")]   # => [None,Err "x"]
 # A monad of your own: a counter threading a number through each step.
@@ -986,7 +989,8 @@ to TempC = (InF f) -> InC ((f - 32) * 5 / 9)
 print (to TempC (InF 212))                 # => InC 100.0
 # A method prints as an overloaded function: its builtin (IO and lists),
 # then each instance, one per line.
-print return                               # => return, Some, Ok, x -> MkCounter (s -> [x,s]), MkLabel
+print return                               # => return, Some, Ok, x -> MkCounter (s -> [x,s]),
+                                           #    MkLabel
 
 # Clauses with the same patterns but another result type overload each other;
 # the context of a call names the type, choosing one.
@@ -1031,7 +1035,8 @@ print [quotient (-7) 3,remainder (-7) 3,modulo (-7) 3] # => [-2,-1,2]
 print [sqrt 4,sqrt (9 / 16),sqrt (-1)] # => [2,3/4,0+1i]
 print (sqrt 2)                      # => 1.4142135623730951
 print (makeRectangular 1 2 * makeRectangular 3 4) # => -5+10i
-print [realPart (makeRectangular 3 4),imagPart (makeRectangular 3 4),magnitude (makeRectangular 3 4)] # => [3,4,5]
+rectangular = makeRectangular 3 4
+print [realPart rectangular,imagPart rectangular,magnitude rectangular]  # => [3,4,5]
 print [isInteger 3.0,isExact 3.0,isExact (1 / 3)] # => [true,false,true]
 print [exact .5,inexact (1 / 2)]    # => [1/2,0.5]
 print [round 2.5,round 3.5]         # => [2.0,4.0]
@@ -1062,7 +1067,8 @@ print (sqrt - 1)      # => 0+1i (spacing makes no difference)
 #                     negated x = natural -x; negated 2   # and at the call that supplies it
 #                     negated x = natural (-x); negated 2 # likewise; negated (-2) is natural 2
 #                     unused y = negated 2                # an error even if unused is never called
-# Schemas too: with Pt = [x: Float, y: Float] and g (Pt p), h x = g x accepts h [1,2] as g [1,2] does.
+# Schemas too: with Pt = [x: Float, y: Float] and g (Pt p), h x = g x accepts h [1,2] as
+# g [1,2] does.
 print (10 - 1)        # => 9
 print ((x -> x * 2) -3) # => -6
 
@@ -1243,7 +1249,10 @@ print decoded                                 # => [1,2.5,[]]
 # completing a standard name add its import (into the first import, as a list).
 # Before its import, using any standard export (fail, upper, okOr) is a static
 # error at the name, whose hint names the import: add `import "function"` to use `fail`.
-import ["type","function","option","sequence","array","number","text","map","combinator","io","system","search"]
+import [
+    "type","function","option","sequence","array","number","text","map","combinator","io","system"
+    "search"
+]
 print (cast String $ to (List Char) "hello") # => "hello"
 # reverse is implemented in APN with a linear-time accumulator fold.
 print (head (reverse [1..10000]))   # 10000
@@ -1339,7 +1348,8 @@ print (onlyFlag true)                         # 1
 describeLiteral 'a' = "letter a"
 describeLiteral 1.5 = "one and a half"
 describeLiteral _ = "other"
-print [describeLiteral 'a',describeLiteral 1.5,describeLiteral 'b']  # ["letter a", "one and a half", "other"]
+# ["letter a", "one and a half", "other"]
+print [describeLiteral 'a',describeLiteral 1.5,describeLiteral 'b']
 vowelOrPair 'a' = [1]
 vowelOrPair _ = [0,0]
 onlyVowel c = onlyOne (vowelOrPair c)
@@ -1490,15 +1500,19 @@ random = import "random"
 print (roll >= 1 && roll <= 6)                 # true
 print (head (random.step (random.list 3 (random.uniform "a" ["b"])) 7))  # ["a","b","b"]
 decode = import "decode"
-pointDecoder = map2 (x, y -> [x: x, y: y]) (decode.field "x" decode.int) (decode.field "y" decode.int)
+pointDecoder = map2 (x, y -> [x: x, y: y])
+    (decode.field "x" decode.int)
+    (decode.field "y" decode.int)
 print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1, \"y\": 2}"))  # Ok [x: 1, y: 2]
-print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1}"))          # Err "Expecting an OBJECT with a field named `y`"
+# Err "Expecting an OBJECT with a field named `y`"
+print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1}"))
 clock = import "time"
 print (clock.toMinute clock.utc (clock.millisToPosix 754000))     # 12
 print (map2 (+) (Some 1) (Some 2))             # Some 3
 print (numbers.degrees 180 == numbers.pi)      # true
 playground = import "playground"
-print (playground.rotate 30 $ playground.moveUp 10 $ playground.square playground.blue 4)  # Placed 0 10 30 1 1 (Rectangle (Rgb 52 101 164) 4 4)
+# Placed 0 10 30 1 1 (Rectangle (Rgb 52 101 164) 4 4)
+print (playground.rotate 30 $ playground.moveUp 10 $ playground.square playground.blue 4)
 
 # Functions display their source without running their bodies.
 printFunction x = print x
@@ -1634,7 +1648,8 @@ print (-[1,2,3])                         # => [-1,-2,-3]
 print (take 3 ([0..] + [10..]))           # => [10,12,14]
 print ([x: 1, y: 2] + [y: 20, x: 10])   # => [x: 11, y: 22]
 ArrayVector = [x: Float, y: Float, z: Float]
-print (ArrayVector [1,2,3] * 2)           # => [x: 2.0, y: 4.0, z: 6.0]  (ArrayVector[1,2,3], without the space, is an error)
+# (ArrayVector[1,2,3], without the space, is an error)
+print (ArrayVector [1,2,3] * 2)           # => [x: 2.0, y: 4.0, z: 6.0]
 print ([1,2] ++ [3,4])                   # => [1,2,3,4]
 import "array"
 print (shape [[1,2],[3,4]])               # => [2,2]
@@ -1771,7 +1786,8 @@ describeIdentity (Int x) = x
 print (typeOf describeIdentity)          # => Int -> Int
 print (typeOf (x -> print x))            # => a -> []
 print (typeOf [1,"hello"])              # => List (Int | String)
-print (typeOf (1 :: ["hello"]))         # => List (Int | String)  (a '::' list is described the same)
+# (a '::' list is described the same)
+print (typeOf (1 :: ["hello"]))         # => List (Int | String)
 
 # Empty results are lists; conditions use truthiness.
 print ({} == [])                        # => true
@@ -2006,7 +2022,7 @@ print [shortY,shortX]                    # => [2,1]
 # A named definition also binds its name for repeated-name equality.
 selfOnly selfOnly = selfOnly
 print (selfOnly selfOnly == selfOnly)     # => true
-# selfOnly 1                              # argument 'selfOnly' must equal the function 'selfOnly'; got Int
+# selfOnly 1                  # argument 'selfOnly' must equal the function 'selfOnly'; got Int
 
 # Wildcard schema fields accept any value without conversion.
 showField ([x: _] v) = print v.x
@@ -2073,8 +2089,9 @@ halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
 # (the lexer stamps every token with a position). Unbound variables are
 # caught by the static checker before the program runs (`print yy`
 # after `y = 3` reports "unbound variable 'yy'" with "did you mean
-# 'y'?"); missing record fields get the same suggestions at runtime, operator type errors read "cannot apply '+' to list and
-# int", and unterminated strings are real errors now (they used to
+# 'y'?"); missing record fields get the same suggestions at runtime,
+# operator type errors read "cannot apply '+' to list and int", and
+# unterminated strings are real errors now (they used to
 # silently swallow the rest of the file). Errors exit non-zero, so they
 # cannot appear in this showcase's expected output — try `x = 1 + ]`
 # or `prynt 1` in the REPL.

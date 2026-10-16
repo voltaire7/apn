@@ -19,8 +19,10 @@ atOption n xs = n < 0 ? None : headOption (drop n xs)
 takeUntil predicate xs = takeWhile (x -> not (predicate x)) xs
 splitAt n xs = [take n xs,drop n xs]
 splitWhile predicate xs = [takeWhile predicate xs,dropWhile predicate xs]
-chunksOf n xs = n <= 0 ? fail "chunksOf expects a positive size" : null xs ? [] : take n xs :: chunksOf n (drop n xs)
-intersperse separator xs = null xs ? [] : head xs :: foldr (x, rest -> separator :: x :: rest) [] (tail xs)
+chunksOf n xs = n <= 0 ? fail "chunksOf expects a positive size"
+    : null xs ? [] : take n xs :: chunksOf n (drop n xs)
+intersperse separator xs = null xs ? []
+    : head xs :: foldr (x, rest -> separator :: x :: rest) [] (tail xs)
 partition predicate xs = [filter predicate xs,filter (x -> not (predicate x)) xs]
 unique xs = null xs ? [] : head xs :: unique (filter (x -> x != head xs) (tail xs))
 compare x y = x < y ? -1 : x > y ? 1 : 0
@@ -37,8 +39,10 @@ _prepend x xs = x :: xs
 
 # Predicate consumers keep their skipping loop in the primitive lazy filter.
 _predicate value = Bool value
-dropWhile predicate xs = head (filter (rest -> null rest ? true : not (_predicate (predicate (head rest)))) (iterate tail xs))
-takeWhile predicate xs = null xs ? [] : _predicate (predicate (head xs)) ? _prepend (head xs) (takeWhile predicate (tail xs)) : []
+dropWhile predicate xs = head
+    (filter (rest -> null rest || not (_predicate (predicate (head rest)))) (iterate tail xs))
+takeWhile predicate xs = null xs ? []
+    : _predicate (predicate (head xs)) ? _prepend (head xs) (takeWhile predicate (tail xs)) : []
 all predicate xs = null (dropWhile predicate xs)
 any predicate xs = not (all (x -> not (_predicate (predicate x))) xs)
 find predicate xs = headOption (dropWhile (x -> not (_predicate (predicate x))) xs)
@@ -47,7 +51,10 @@ scanl f seed xs = seed :: (null xs ? [] : scanl f (f seed (head xs)) (tail xs))
 # Stable merge sort; equal keys always take the earlier (left) element.
 _order (Integer value) = value
 _order _ = fail "sortBy comparator must return an integer"
-_mergeSorted compare left right = null left ? right : null right ? left : _order (compare (head left) (head right)) <= 0 ? _prepend (head left) (_mergeSorted compare (tail left) right) : _prepend (head right) (_mergeSorted compare left (tail right))
+_mergeSorted compare left right = null left ? right : null right ? left
+    : _order (compare (head left) (head right)) <= 0
+    ? _prepend (head left) (_mergeSorted compare (tail left) right)
+    : _prepend (head right) (_mergeSorted compare left (tail right))
 sortBy compare xs = {
     n = 0 + length xs
     mid = quotient n 2

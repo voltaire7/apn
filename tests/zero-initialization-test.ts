@@ -11,7 +11,7 @@ for (const [source, expected] of [
     ['[Int == 0,Float == 0,Int == Float,Int == Int]', '[false,false,false,true]'],
     ['[isType Int Int,isType Bool Bool,isType Type Int]', '[false,false,true]'],
     ['[typeOf Int,typeOf (Int 1),typeOf (Float 1),typeOf (Int32 1)]', '[Type,Int,Float,Int32]'],
-    ['((Int -> Float) identity) <- return ((x -> x)); [Type Int,Type [Int],Type [x: Float],typeOf identity]', '[Int,[Int],[x: Float],Int -> Float]'],
+    ['((Int -> Float) identity) <- return ((x -> x))\n[Type Int,Type [Int],Type [x: Float],typeOf identity]', '[Int,[Int],[x: Float],Int -> Float]'],
     ['Count = Int\n[Count,Count 3]', '[Count,Count 3]'],
     ['f (Type t) = t 123\nf Int', '123'],
     ['f (t x) = [t,x]\nf (Int32 7)', '[Int32,7]'],

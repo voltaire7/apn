@@ -10,7 +10,16 @@ browser = import "browser"
 # (Placed, whose shape is never itself Placed). A color is its red, green and
 # blue, each 0 to 255.
 Color = | Rgb Number Number Number
-Shape = Circle Color Number | Oval Color Number Number | Rectangle Color Number Number | Ngon Color Int Number | Polygon Color String | Image Number Number String | Words Color String | Group (List Shape) | Placed Number Number Number Number Number Shape
+Shape =
+    | Circle Color Number
+    | Oval Color Number Number
+    | Rectangle Color Number Number
+    | Ngon Color Int Number
+    | Polygon Color String
+    | Image Number Number String
+    | Words Color String
+    | Group (List Shape)
+    | Placed Number Number Number Number Number Shape
 circle color radius = Circle color radius
 oval color width height = Oval color width height
 square color n = Rectangle color n n
@@ -19,7 +28,7 @@ triangle color radius = Ngon color 3 radius
 pentagon color radius = Ngon color 5 radius
 hexagon color radius = Ngon color 6 radius
 octagon color radius = Ngon color 8 radius
-polygon color points = Polygon color (strings.unwords (map ([px,py] -> _number px ++ "," ++ _number (0 - py)) points))
+polygon color points = Polygon color (strings.unwords (map ([x,y] -> _point x (0 - y)) points))
 image width height source = Image width height source
 words color text = Words color text
 group shapes = Group shapes
@@ -77,7 +86,8 @@ black = Rgb 0 0 0
 
 # Time, in milliseconds: spin turns once per period (in seconds), wave and
 # zigzag go between lo and hi and back once per period.
-_fraction period time = inexact (modulo (Int (round time)) (Int (round (period * 1000))) / (period * 1000))
+_fraction period time = inexact
+    (modulo (Int (round time)) (Int (round (period * 1000))) / (period * 1000))
 spin period time = 360 * _fraction period time
 wave lo hi period time = lo + (hi - lo) * (1 + cos (turns (_fraction period time))) / 2
 zigzag lo hi period time = lo + (hi - lo) * abs (2 * _fraction period time - 1)
@@ -86,35 +96,99 @@ zigzag lo hi period time = lo + (hi - lo) * abs (2 * _fraction period time - 1)
 toX keyboard = (keyboard.right ? 1 : 0) - (keyboard.left ? 1 : 0)
 toY keyboard = (keyboard.up ? 1 : 0) - (keyboard.down ? 1 : 0)
 toXY keyboard = {
-    x = (keyboard.right ? 1 : 0) - (keyboard.left ? 1 : 0)
-    y = (keyboard.up ? 1 : 0) - (keyboard.down ? 1 : 0)
+    x = toX keyboard
+    y = toY keyboard
     x != 0 && y != 0 ? [x / sqrt 2,y / sqrt 2] : [x,y]
 }
 
 # Shapes as SVG, as Elm's Playground draws them.
 _number x = isInteger x ? to String (Int (round x)) : to String (inexact x)
-_colorText (Rgb r g b) = "rgb(" ++ to String r ++ "," ++ to String g ++ "," ++ to String b ++ ")"
-_ngonPoints n radius = strings.unwords (map (corner -> _number (radius * cos (turns (corner / n - 1 / 4))) ++ "," ++ _number (radius * sin (turns (corner / n - 1 / 4)))) [0..n - 1])
-_centered width height = svg.transform ("translate(" ++ _number (0 - width / 2) ++ "," ++ _number (0 - height / 2) ++ ")")
+_point x y = _number x ++ "," ++ _number y
+_colorText (Rgb r g b) = "rgb(" ++ strings.joinWith "," (map (to String) [r,g,b]) ++ ")"
+_corner radius angle = _point (radius * cos angle) (radius * sin angle)
+_ngonPoints n radius = strings.unwords
+    (map (k -> _corner radius (turns (k / n - 1 / 4))) [0..n - 1])
+_translate x y = "translate(" ++ _point x y ++ ")"
+_centered width height = svg.transform (_translate (0 - width / 2) (0 - height / 2))
+_placing x y angle size = _translate x (0 - y)
+    ++ " rotate(" ++ _number (0 - angle) ++ ") scale(" ++ _number size ++ ")"
 _render shape = match shape [
-    (Placed x y angle size alpha inner) -> svg.g [svg.transform ("translate(" ++ _number x ++ "," ++ _number (0 - y) ++ ") rotate(" ++ _number (0 - angle) ++ ") scale(" ++ _number size ++ ")"),svg.opacity (_number (clamp 0 1 alpha))] [_render inner]
-    (Circle color radius) -> svg.circle [svg.r (_number radius),svg.fill (_colorText color)] []
-    (Oval color width height) -> svg.ellipse [svg.rx (_number (width / 2)),svg.ry (_number (height / 2)),svg.fill (_colorText color)] []
-    (Rectangle color width height) -> svg.rect [svg.width (_number width),svg.height (_number height),svg.fill (_colorText color),_centered width height] []
-    (Ngon color n radius) -> svg.polygon [svg.points (_ngonPoints n radius),svg.fill (_colorText color)] []
-    (Polygon color points) -> svg.polygon [svg.points points,svg.fill (_colorText color)] []
-    (Image width height source) -> svg.image [href source,svg.width (_number width),svg.height (_number height),_centered width height] []
-    (Words color string) -> svg.text_ [svg.textAnchor "middle",svg.dominantBaseline "central",svg.fill (_colorText color)] [text string]
-    (Group shapes) -> svg.g [] (map _render shapes)
+    Placed x y angle size alpha inner -> svg.g [
+        svg.transform (_placing x y angle size)
+        svg.opacity (_number (clamp 0 1 alpha))
+    ] [_render inner]
+    Circle color radius -> svg.circle [svg.r (_number radius),svg.fill (_colorText color)] []
+    Oval color width height -> svg.ellipse [
+        svg.rx (_number (width / 2))
+        svg.ry (_number (height / 2))
+        svg.fill (_colorText color)
+    ] []
+    Rectangle color width height -> svg.rect [
+        svg.width (_number width)
+        svg.height (_number height)
+        svg.fill (_colorText color)
+        _centered width height
+    ] []
+    Ngon color n radius -> svg.polygon [
+        svg.points (_ngonPoints n radius)
+        svg.fill (_colorText color)
+    ] []
+    Polygon color points -> svg.polygon [svg.points points,svg.fill (_colorText color)] []
+    Image width height source -> svg.image [
+        href source
+        svg.width (_number width)
+        svg.height (_number height)
+        _centered width height
+    ] []
+    Words color string -> svg.text_ [
+        svg.textAnchor "middle"
+        svg.dominantBaseline "central"
+        svg.fill (_colorText color)
+    ] [text string]
+    Group shapes -> svg.g [] (map _render shapes)
 ]
-_view screen shapes = svg.svg [svg.viewBox (_number screen.left ++ " " ++ _number screen.bottom ++ " " ++ _number screen.width ++ " " ++ _number screen.height),style "position" "fixed",style "top" "0",style "left" "0",svg.width "100%",svg.height "100%"] (map _render shapes)
+_view screen shapes = svg.svg [
+    svg.viewBox (strings.unwords
+        (map _number [screen.left,screen.bottom,screen.width,screen.height]))
+    style "position" "fixed"
+    style "top" "0"
+    style "left" "0"
+    svg.width "100%"
+    svg.height "100%"
+] (map _render shapes)
 
 # The computer: the mouse, the keyboard, the screen and the time (milliseconds).
-_toScreen width height = [width: width, height: height, top: height / 2, left: 0 - width / 2, right: width / 2, bottom: 0 - height / 2]
-_noKeys = [up: false, down: false, left: false, right: false, space: false, enter: false, shift: false, backspace: false, keys: List String []]
-GameMsg = GameTick Posix | GameViewport Dynamic | GameResized Number Number | GameKey Bool String | GameMouseMove Number Number | GameClick | GameButton Bool | GameVisibility Dynamic
+_toScreen width height = [
+    width: width
+    height: height
+    top: height / 2
+    left: 0 - width / 2
+    right: width / 2
+    bottom: 0 - height / 2
+]
+_noKeys = [
+    up: false, down: false, left: false, right: false
+    space: false, enter: false, shift: false, backspace: false
+    keys: List String []
+]
+_computer = [
+    mouse: [x: 0, y: 0, down: false, click: false]
+    keyboard: _noKeys
+    screen: _toScreen 600 600
+    time: 0
+]
+GameMsg =
+    | GameTick Posix
+    | GameViewport Dynamic
+    | GameResized Number Number
+    | GameKey Bool String
+    | GameMouseMove Number Number
+    | GameClick
+    | GameButton Bool
+    | GameVisibility Dynamic
 _updateKeyboard isDown key keyboard = {
-    keyboard.keys = isDown ? key :: filter (k -> k != key) keyboard.keys : filter (k -> k != key) keyboard.keys
+    others = filter (k -> k != key) keyboard.keys
+    keyboard.keys = isDown ? key :: others : others
     match key [
         " " -> { keyboard.space = isDown; keyboard }
         "Enter" -> { keyboard.enter = isDown; keyboard }
@@ -130,35 +204,58 @@ _updateKeyboard isDown key keyboard = {
 _advance updateMemory msg game = {
     computer = game.computer
     match msg [
-        (GameTick time) -> {
+        GameTick time -> {
             game.memory = updateMemory computer game.memory
             computer.time = posixToMillis time
             computer.mouse.click = false
             game.computer = computer
             [game,browser.none]
         }
-        (GameViewport viewport) -> { game.computer.screen = _toScreen viewport.width viewport.height; [game,browser.none] }
-        (GameResized width height) -> { game.computer.screen = _toScreen width height; [game,browser.none] }
-        (GameKey isDown key) -> { game.computer.keyboard = _updateKeyboard isDown key computer.keyboard; [game,browser.none] }
-        (GameMouseMove pageX pageY) -> { game.computer.mouse.[x,y] = [computer.screen.left + pageX,computer.screen.top - pageY]; [game,browser.none] }
+        GameViewport viewport -> {
+            game.computer.screen = _toScreen viewport.width viewport.height
+            [game,browser.none]
+        }
+        GameResized width height -> {
+            game.computer.screen = _toScreen width height
+            [game,browser.none]
+        }
+        GameKey isDown key -> {
+            game.computer.keyboard = _updateKeyboard isDown key computer.keyboard
+            [game,browser.none]
+        }
+        GameMouseMove pageX pageY -> {
+            game.computer.mouse.[x,y] = [computer.screen.left + pageX,computer.screen.top - pageY]
+            [game,browser.none]
+        }
         GameClick -> { game.computer.mouse.click = true; [game,browser.none] }
-        (GameButton isDown) -> { game.computer.mouse.down = isDown; [game,browser.none] }
-        (GameVisibility _) -> {
+        GameButton isDown -> { game.computer.mouse.down = isDown; [game,browser.none] }
+        GameVisibility _ -> {
             game.computer.keyboard = _noKeys
             game.computer.mouse.[down,click] = [false,false]
             [game,browser.none]
         }
     ]
 }
+_subscriptions = browser.batch [
+    browser.onAnimationFrame GameTick
+    browser.onVisibilityChange GameVisibility
+    browser.onKeyUp (GameKey false)
+    browser.onKeyDown (GameKey true)
+    browser.onResize GameResized
+    browser.onMouseMove GameMouseMove
+    browser.onMouseClick (_, _ -> GameClick)
+    browser.onMouseDown (_, _ -> GameButton true)
+    browser.onMouseUp (_, _ -> GameButton false)
+]
 
-# A game: _view computer memory gives the shapes, update computer memory the
-# next memory, every frame. A picture never changes; an animation is a _view
+# A game: view computer memory gives the shapes, update computer memory the
+# next memory, every frame. A picture never changes; an animation is a view
 # of the time.
 game viewMemory updateMemory memory = browser.element [
-    init: [[memory: memory, computer: [mouse: [x: 0, y: 0, down: false, click: false], keyboard: _noKeys, screen: _toScreen 600 600, time: 0]],browser.getViewport GameViewport]
+    init: [[memory: memory, computer: _computer],browser.getViewport GameViewport]
     update: _advance updateMemory
     view: (g -> _view g.computer.screen (viewMemory g.computer g.memory))
-    subscriptions: (_ -> browser.batch [browser.onAnimationFrame GameTick,browser.onVisibilityChange GameVisibility,browser.onKeyUp (GameKey false),browser.onKeyDown (GameKey true),browser.onResize GameResized,browser.onMouseMove GameMouseMove,browser.onMouseClick (_, _ -> GameClick),browser.onMouseDown (_, _ -> GameButton true),browser.onMouseUp (_, _ -> GameButton false)])
+    subscriptions: (_ -> _subscriptions)
 ]
 picture shapes = game (_, _ -> shapes) (_, memory -> memory) []
 animation viewTime = game (computer, _ -> viewTime computer.time) (_, memory -> memory) []

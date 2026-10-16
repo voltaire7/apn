@@ -23,8 +23,26 @@ perItem total count = okOr "no items" (safeDiv total count)
     >>= checked -> Ok (checked * 2)
 ```
 
+A deeper line starting an argument (a name, a literal, `(` or `[`) continues an
+application, so a long call puts its arguments on lines of their own:
+
+```apn
+quoteDecoder = map4 toQuote
+    (field "quote" string)
+    (field "author" string)
+    (field "year" int)
+```
+
 A line at the statement's own level starts the next statement, and inside
-`[ ]` a line break separates items.
+`[ ]` a line break separates items; a line deeper than an item or a record
+field continues it, by the same rules. A line that only closes a multi-line
+bracket, or one ending with `}`, ends its statement: a deeper line after it
+is an error, not an argument.
+
+A line holds at most 99 characters (code points, comments included); a longer
+one is a syntax error. Break it as above: arguments, operator chains, list
+items and record fields continue on deeper lines, and a long string joins
+parts with `++`.
 
 Definition brace layout is mandatory: write `func = {` on one line. In a
 multiline brace block, each statement starts exactly four spaces deeper than
@@ -87,6 +105,7 @@ Spacing is part of the syntax (a parse error otherwise):
   at the end of a line, at the start of one, doubled (`;;`), or next to a
   bracket's inside (`{ print 1; }`) is an error. `--loose` lifts all of
   these, so `{ print 1;print 2 }` and a `;` at a line's end are accepted there.
+  It lifts the 99-character line limit too.
 
 Lists print the same way: `print [1,2,[3]]` shows `[1,2,[3]]` and records show
 `[x: 1, y: 2]`. `apn --loose` (or the language server's `looseSpacing` option)

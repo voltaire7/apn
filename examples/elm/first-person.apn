@@ -9,16 +9,35 @@ p5 = import "p5"
 eyeLevel = 2
 noKeys = [up: false, left: false, down: false, right: false, space: false]
 
-Msg = KeyChanged Bool String | TimeDelta Number | Resized Number Number | GotViewport Dynamic | VisibilityChanged Dynamic
+Msg =
+    | KeyChanged Bool String
+    | TimeDelta Number
+    | Resized Number Number
+    | GotViewport Dynamic
+    | VisibilityChanged Dynamic
 
-init = [[keys: noKeys, width: 400, height: 400, person: [position: [0.0,inexact eyeLevel,-10.0], velocity: [0.0,0.0,0.0]]],browser.getViewport GotViewport]
+init = [[
+    keys: noKeys
+    width: 400
+    height: 400
+    person: [position: [0.0,inexact eyeLevel,-10.0], velocity: [0.0,0.0,0.0]]
+],browser.getViewport GotViewport]
 
 update msg model = match msg [
-    (KeyChanged isDown key) -> { model.keys = updateKeys isDown key model.keys; [model,browser.none] }
-    (TimeDelta dt) -> { model.person = updatePerson dt model.keys model.person; [model,browser.none] }
-    (Resized width height) -> { model.[width,height] = [width,height]; [model,browser.none] }
-    (GotViewport viewport) -> { model.[width,height] = [viewport.width,viewport.height]; [model,browser.none] }
-    (VisibilityChanged _) -> { model.keys = noKeys; [model,browser.none] }
+    KeyChanged isDown key -> {
+        model.keys = updateKeys isDown key model.keys
+        [model,browser.none]
+    }
+    TimeDelta dt -> {
+        model.person = updatePerson dt model.keys model.person
+        [model,browser.none]
+    }
+    Resized width height -> { model.[width,height] = [width,height]; [model,browser.none] }
+    GotViewport viewport -> {
+        model.[width,height] = [viewport.width,viewport.height]
+        [model,browser.none]
+    }
+    VisibilityChanged _ -> { model.keys = noKeys; [model,browser.none] }
 ]
 
 updateKeys isDown key keys = match key [
@@ -34,19 +53,35 @@ updatePerson dt keys person = {
     velocity = stepVelocity dt keys person
     [vx,_,vz] = velocity
     [x,y,z] = person.position + velocity * (dt / 500)
-    y < eyeLevel ? [position: [x,inexact eyeLevel,z], velocity: [vx,0.0,vz]] : [position: [x,y,z], velocity: velocity]
+    y < eyeLevel
+        ? [position: [x,inexact eyeLevel,z], velocity: [vx,0.0,vz]]
+        : [position: [x,y,z], velocity: velocity]
 }
 
 stepVelocity dt keys person = {
     [vx,vy,vz] = person.velocity
     [_,y,_] = person.position
     toV positive negative = (positive ? 1.0 : 0.0) - (negative ? 1.0 : 0.0)
-    y > eyeLevel ? [vx,vy - dt / 250,vz] : [toV keys.left keys.right,keys.space ? 2.0 : 0.0,toV keys.up keys.down]
+    y > eyeLevel
+        ? [vx,vy - dt / 250,vz]
+        : [toV keys.left keys.right,keys.space ? 2.0 : 0.0,toV keys.up keys.down]
 }
 
-subscriptions _ = browser.batch [browser.onResize Resized,browser.onKeyUp (KeyChanged false),browser.onKeyDown (KeyChanged true),browser.onAnimationFrameDelta TimeDelta,browser.onVisibilityChange VisibilityChanged]
+subscriptions _ = browser.batch [
+    browser.onResize Resized
+    browser.onKeyUp (KeyChanged false)
+    browser.onKeyDown (KeyChanged true)
+    browser.onAnimationFrameDelta TimeDelta
+    browser.onVisibilityChange VisibilityChanged
+]
 
-view model = div [style "position" "absolute",style "left" "0",style "top" "0",style "width" (to String model.width ++ "px"),style "height" (to String model.height ++ "px")] [
+view model = div [
+    style "position" "absolute"
+    style "left" "0"
+    style "top" "0"
+    style "width" (to String model.width ++ "px")
+    style "height" (to String model.height ++ "px")
+] [
     p5.canvas [setup: setup, draw: draw model]
     keyboardInstructions model.keys
 ]
@@ -55,7 +90,8 @@ setup p = p.call "createCanvas" [400,400,p.WEBGL]
 
 # The eye looks along z from the person's position (p5's y grows downward).
 draw model p = {
-    when (p.width != model.width || p.height != model.height) (p.resizeCanvas model.width model.height)
+    when (p.width != model.width || p.height != model.height)
+        (p.resizeCanvas model.width model.height)
     [x,y,z] = model.person.position
     p.background "white"
     p.perspective (p.PI / 4) (model.width / model.height) 0.01 100
@@ -66,7 +102,14 @@ draw model p = {
     p.box 2 2 2
 }
 
-keyboardInstructions _ = div [style "position" "absolute",style "font-family" "monospace",style "text-align" "center",style "left" "20px",style "right" "20px",style "top" "20px"] [
+keyboardInstructions _ = div [
+    style "position" "absolute"
+    style "font-family" "monospace"
+    style "text-align" "center"
+    style "left" "20px"
+    style "right" "20px"
+    style "top" "20px"
+] [
     p [] [text "Walk around with a first person perspective."]
     p [] [text "Arrows keys to move, space bar to jump."]
 ]

@@ -3,12 +3,18 @@
 # with an editor for each example.
 import ["html","text"]
 
-main = div [style "max-width" "600px",style "margin" "0 auto",style "padding" "0 16px",style "font-family" "system-ui, sans-serif"] [
+main = div [
+    style "max-width" "600px"
+    style "margin" "0 auto"
+    style "padding" "0 16px"
+    style "font-family" "system-ui, sans-serif"
+] [
     h1 [] [text "Examples"]
     p [] [
         text "Elm's "
         a [href "https://elm-lang.org/examples"] [text "examples"]
-        text ", recreated in APN. Each opens in an editor, where you can change it and run it again."
+        text (", recreated in APN. Each opens in an editor, "
+            ++ "where you can change it and run it again.")
     ]
     div [style "display" "flex",style "flex-wrap" "wrap"] [
         viewExamples "HTML" [example "Hello",example "Groceries",example "Shapes"]
@@ -17,14 +23,16 @@ main = div [style "max-width" "600px",style "margin" "0 auto",style "padding" "0
         viewExamples "HTTP" [example "Book",example "Quotes"]
         viewExamples "Time" [exampleIn "Time" "local-time",example "Clock"]
         viewExamples "Files" [example "Upload",example "Drag-and-Drop",example "Image Previews"]
-        viewExamples "WebGL" [example "Triangle",example "Cube",example "Crate",example "Thwomp",example "First Person"]
-        viewExamples "Playground" [example "Picture",example "Animation",example "Mouse",example "Keyboard",example "Turtle",example "Mario"]
+        viewExamples "WebGL" (map example ["Triangle","Cube","Crate","Thwomp","First Person"])
+        viewExamples "Playground"
+            (map example ["Picture","Animation","Mouse","Keyboard","Turtle","Mario"])
     ]
 ]
 
 viewExamples sectionTitle examples = div [style "width" "200px"] [
     h2 [style "margin-bottom" "0"] [text sectionTitle]
-    ul [style "list-style-type" "none",style "padding-left" "16px",style "margin-top" "8px"] examples
+    ul [style "list-style-type" "none",style "padding-left" "16px",style "margin-top" "8px"]
+        examples
 ]
 
 # An example's file is its title in lower case, with - for spaces (Elm's

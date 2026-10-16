@@ -20,7 +20,7 @@ for (const argument of ["[]", "[1,2]", "[1,2,3,4]", '[1,"bad",3]', "[x: 1, y: 2]
         const interpreter = new Interpreter();
         interpreter.enableChecking();
         try {
-            interpreter.run(parse(`${schema}; ${definition}; func ${argument}`));
+            interpreter.run(parse(`${schema}\n${definition}\nfunc ${argument}`));
         } catch (error) {
             if ((error as { kind?: string }).kind === "type") return;
             throw error;

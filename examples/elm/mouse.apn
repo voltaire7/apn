@@ -2,7 +2,10 @@
 # Draw a circle around the mouse. Change its color by pressing down.
 import "playground"
 
-view computer _ = [fade (computer.mouse.down ? 0.2 : 1.0) $ moveY computer.mouse.y $ moveX computer.mouse.x $ circle lightPurple 30]
+view computer _ = [
+    fade (computer.mouse.down ? 0.2 : 1.0) $ moveY computer.mouse.y $ moveX computer.mouse.x $
+        circle lightPurple 30
+]
 
 update _ memory = memory
 

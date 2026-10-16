@@ -5,7 +5,7 @@ function result(source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['Vector3 = [x: Float, y: Float, z: Float]; CustomVector = Vector3; CustomVector.x = 123; CustomVector []', '[x: 123, y: 0.0, z: 0.0]'],
+    ['Vector3 = [x: Float, y: Float, z: Float]\nCustomVector = Vector3\nCustomVector.x = 123\nCustomVector []', '[x: 123, y: 0.0, z: 0.0]'],
     ['v = [x: Float]; v.x = Int; v []', '[x: 0]'],
     ['v = [x: Float]; v.x = 123; v.x = 456.0; v.x', '456'],
     ['v = [x: Float]; v.x = Float 123; v.x = 456; v', '[x: 456.0]'],

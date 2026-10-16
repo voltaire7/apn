@@ -96,7 +96,8 @@ open site/index.html
 ## Editor support
 
 Run `apn --lint file.apn` to check syntax and layout without executing the file.
-Spacing is strict (`x = 1`, `[1,2,3]`, `[x: 1, y: 2]`, `{ x }`); put `--loose`
+Spacing is strict (`x = 1`, `[1,2,3]`, `[x: 1, y: 2]`, `{ x }`) and lines hold at most 99
+characters; put `--loose`
 first (`apn --loose file.apn`) to relax it. `apn --version` prints the version.
 Try live diagnostics, completion, hover, and an outline in a temporary Neovim
 session with `./editors/neovim/try-apn examples/editor-playground.apn`.

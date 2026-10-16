@@ -14,7 +14,7 @@ for (const [source, expected] of [
     ['loop n = n == 0 ? 42 : { next = n - 1; loop $ next }; loop 10000', '42'],
     ['loop n ignored = n == 0 ? 42 : loop (n - 1) missing; loop 10000 missing', '42'],
     ['loop n = n == 0 ? [42,missing] : loop (n - 1); head (loop 10000)', '42'],
-    ['sum n total = n == 0 ? return total : { next <- return (total + n); sum (n - 1) next }; s <- sum 10000 0; s', '50005000'],
+    ['sum n total = n == 0 ? return total : { next <- return (total + n); sum (n - 1) next }\ns <- sum 10000 0\ns', '50005000'],
 ] as const) Deno.test(`tail call: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -26,7 +26,7 @@ for (const [file, expected] of [['repeat', '[0,42]'], ['outer', '[0,10,20]']] as
         const directory = new URL('./fixtures/tail-load/', import.meta.url).pathname;
         i.sourceDir = directory;
         const expression = file === 'repeat' ? '[counter,module.exported]' : '[counter,module.outerValue,module.innerValue]';
-        const actual = i.renderString(i.run(parseDocument(`counter = Mutable 1500; module <- load "${file}"; ${expression}`)));
+        const actual = i.renderString(i.run(parseDocument(`counter = Mutable 1500\nmodule <- load "${file}"\n${expression}`)));
         if (actual !== expected) throw new Error(actual);
         if (i.env !== scope || i.sourceDir !== directory || i.stack !== 0) throw new Error('execution context leaked');
     });

@@ -74,7 +74,10 @@ update msg model = match msg [
 
 subscriptions _ = every 1000 Tick
 
-view model = h1 [] [text (to String (toHour model.zone model.time) ++ ":" ++ to String (toMinute model.zone model.time))]
+view model = h1 [] [
+    text (to String (toHour model.zone model.time)
+        ++ ":" ++ to String (toMinute model.zone model.time))
+]
 
 main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]
 ```
@@ -138,7 +141,8 @@ pass the event as a record: `value` and `checked` (the target's), `key`,
 `Svg.Attributes` (`svg.svg`, `svg.circle`, `svg.rect`, `svg.line`, `svg.path`,
 `svg.text_`, `svg.viewBox`, `svg.fill`, `svg.strokeWidth`, ...). An `svg`
 element and everything inside it is SVG; attribute names keep their case.
-Import it qualified: its names (`circle`, `image`) are other modules' too.
+Its names (`circle`, `image`) are also playground's, so it is usually imported
+qualified.
 
 `p5.canvas callbacks` is a [p5](p5.md) sketch inside a view: it keeps drawing
 across renders with the newest callbacks, which may read the model.
@@ -156,12 +160,13 @@ These follow Elm's modules of the same names; the
 - `time`: a `Posix` (milliseconds since 1970, `millisToPosix`,
   `posixToMillis`) and a `Zone` (`utc`, the action `here`); `now` is an action;
   `toHour`, `toMinute`, `toSecond` and `toMillis zone time`.
-- `random` (import it qualified): a `Generator` turns a seed into a value and
+- `random`: a `Generator` turns a seed into a value and
   the next seed. `random.int lo hi`, `random.float lo hi`, `random.uniform x
   xs`, `random.weighted [w,x] pairs`, `random.list n g`; generators are
   monads (`map`, `>>=`, `return`, `map2`, ...). `random.step generator seed`
   runs one without a page; `random.initialSeed n` makes a seed.
-- `decode` (import it qualified): JSON decoders, as `Json.Decode`.
+- `decode`: JSON decoders, as `Json.Decode` (open it, `import "decode"`, as Quotes
+  does, unless the program also uses `random`, which shares `int`, `float` and `list`).
   `decode.decodeValue decoder value` is `Ok` or `Err`; `decode.string`,
   `decode.int`, `decode.float`, `decode.bool`, `decode.field name d`,
   `decode.at path d`, `decode.list d`, `decode.succeed x`; decoders are

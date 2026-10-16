@@ -5,9 +5,47 @@ import "html"
 svg = import "svg"
 
 main = svg.svg [svg.viewBox "0 0 400 400",svg.width "400",svg.height "400"] [
-    svg.circle [svg.cx "50",svg.cy "50",svg.r "40",svg.fill "red",svg.stroke "black",svg.strokeWidth "3"] []
-    svg.rect [svg.x "100",svg.y "10",svg.width "40",svg.height "40",svg.fill "green",svg.stroke "black",svg.strokeWidth "2"] []
-    svg.line [svg.x1 "20",svg.y1 "200",svg.x2 "200",svg.y2 "20",svg.stroke "blue",svg.strokeWidth "10",svg.strokeLinecap "round"] []
-    svg.polyline [svg.points "200,40 240,40 240,80 280,80 280,120 320,120 320,160",svg.fill "none",svg.stroke "red",svg.strokeWidth "4",svg.strokeDasharray "20,2"] []
-    svg.text_ [svg.x "130",svg.y "130",svg.fill "black",svg.textAnchor "middle",svg.dominantBaseline "central",svg.transform "rotate(-45 130,130)"] [text "Welcome to Shapes Club"]
+    svg.circle [
+        svg.cx "50"
+        svg.cy "50"
+        svg.r "40"
+        svg.fill "red"
+        svg.stroke "black"
+        svg.strokeWidth "3"
+    ] []
+    svg.rect [
+        svg.x "100"
+        svg.y "10"
+        svg.width "40"
+        svg.height "40"
+        svg.fill "green"
+        svg.stroke "black"
+        svg.strokeWidth "2"
+    ] []
+    svg.line [
+        svg.x1 "20"
+        svg.y1 "200"
+        svg.x2 "200"
+        svg.y2 "20"
+        svg.stroke "blue"
+        svg.strokeWidth "10"
+        svg.strokeLinecap "round"
+    ] []
+    svg.polyline [
+        svg.points "200,40 240,40 240,80 280,80 280,120 320,120 320,160"
+        svg.fill "none"
+        svg.stroke "red"
+        svg.strokeWidth "4"
+        svg.strokeDasharray "20,2"
+    ] []
+    svg.text_ [
+        svg.x "130"
+        svg.y "130"
+        svg.fill "black"
+        svg.textAnchor "middle"
+        svg.dominantBaseline "central"
+        svg.transform "rotate(-45 130,130)"
+    ] [
+        text "Welcome to Shapes Club"
+    ]
 ]

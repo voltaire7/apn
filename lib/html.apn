@@ -3,7 +3,13 @@
 Html = HtmlText Dynamic | HtmlElement String Dynamic Dynamic | HtmlSketch Dynamic
 # HtmlOn name handler prevent: handler takes the event record; prevent stops
 # the browser's default action (a drop opening the file).
-HtmlAttribute = HtmlAttr String Dynamic | HtmlStyle String Dynamic | HtmlClick Dynamic | HtmlInput Dynamic | HtmlSubmit Dynamic | HtmlOn String Dynamic Bool
+HtmlAttribute =
+    | HtmlAttr String Dynamic
+    | HtmlStyle String Dynamic
+    | HtmlClick Dynamic
+    | HtmlInput Dynamic
+    | HtmlSubmit Dynamic
+    | HtmlOn String Dynamic Bool
 text value = HtmlText value
 node tag attributes children = HtmlElement tag attributes children
 div = node "div"

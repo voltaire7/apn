@@ -102,7 +102,8 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   silently, never allow integer wraparound or imaginary-part loss; indexes
   and counts require exact integers.
 - **Layout:** strict 4-space indentation across the whole language; newlines
-  at the same level end statements, +4 continues them.
+  at the same level end statements, +4 continues them. Lines are at most 99
+  characters, in every APN source (lib, examples, docs, test programs).
 - **Bindings:** `name = value` rebinds in scope (`f = x -> ...` is a clause
   of `f`, like `f x = ...`); records and lists are never
   mutated in place (updates bind a modified copy). Only `Mutable` cells and

@@ -11,28 +11,38 @@ startsWith prefix text = take (textLength prefix) (to (List Char) text) == to (L
 endsWith suffix text = startsWith (reverse suffix) (reverse text)
 
 # Literal splitting scans once, keeping the current field backwards.
-splitOn delimiter text = delimiter == "" ? map (c -> from (List Char) [c]) (to (List Char) text) : {
+splitOn delimiter text = delimiter == ""
+    ? map (c -> from (List Char) [c]) (to (List Char) text)
+    : _splitOn delimiter text
+_splitOn delimiter text = {
     marker = reverse (to (List Char) delimiter)
     width = 0 + length marker
     step state c = {
         current = c :: snd state
-        take width current == marker ? [_prepend (from (List Char) (reverse (drop width current))) (fst state),[]] : [fst state,current]
+        take width current == marker
+            ? [_prepend (from (List Char) (reverse (drop width current))) (fst state),[]]
+            : [fst state,current]
     }
     state = foldl step [[],[]] (to (List Char) text)
     reverse (from (List Char) (reverse (snd state)) :: fst state)
 }
-joinWith delimiter xs = from (List Char) (concat (intersperse (to (List Char) delimiter) (map (to (List Char)) xs)))
+joinWith delimiter xs = from (List Char)
+    (concat (intersperse (to (List Char) delimiter) (map (to (List Char)) xs)))
 replaceAll search replacement text = joinWith replacement (splitOn search text)
 
 # Unicode WhiteSpace plus line terminators (the same set as ECMAScript \s).
 _isSpace c = contains c (to (List Char) " \t\n\r\v\f                 　﻿")
-words text = filter (x -> x != "") (splitOn " " (from (List Char) (map (c -> _isSpace c ? ' ' : c) (to (List Char) text))))
-trim text = from (List Char) (reverse (dropWhile _isSpace (reverse (dropWhile _isSpace (to (List Char) text)))))
+words text = filter (x -> x != "")
+    (splitOn " " (from (List Char) (map (c -> _isSpace c ? ' ' : c) (to (List Char) text))))
+trim text = from (List Char)
+    (reverse (dropWhile _isSpace (reverse (dropWhile _isSpace (to (List Char) text)))))
 
 # Common puzzle-input shapes; CRLF and trailing blank lines are accepted.
 nonEmptyLines text = filter (line -> line != "") (map trim (lines text))
 parseInt (String text) = {
     [value] = [Dynamic (from String text)]
-    isInteger value ? isExact (Number value) ? Int value : fail "parseInt expects an exact integer" : fail "parseInt expects an exact integer"
+    isInteger value && isExact (Number value)
+        ? Int value
+        : fail "parseInt expects an exact integer"
 }
 integers text = map parseInt (words text)

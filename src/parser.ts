@@ -492,7 +492,7 @@ class Parser {
         let j = this.i;
         while (this.toks[j] && layout(this.toks[j].k)) j++;
         const next = this.toks[j];
-        if (!next || !wanted(next) || this.lineIndent(next) <= this.statementIndent || !["", "{"].includes(this.enclosing(j))) return false;
+        if (!next || !wanted(next) || this.lineIndent(next) <= this.statementIndent || !["", "{", "["].includes(this.enclosing(j))) return false;
         this.i = j;
         return true;
     }
@@ -570,8 +570,18 @@ class Parser {
     parseApp(): Expr {
         const start = this.peek().pos;
         let f = this.parsePostfix(this.parsePrimary());
-        // application: f x y  (does NOT cross newline at layout level, nor a `;`)
+        // application: f x y  (does not cross a newline at the statement's level,
+        // nor a `;`). A deeper line starting an argument continues it, as one
+        // starting with an operator does (never with `{`: braces stay on the line),
+        // unless the line ends a block or is the closing line of a bracket: a
+        // stray indented statement after one stays an error.
+        const argument = (t: Token) => t.k === "ident" || t.k === "int" || t.k === "float" || t.k === "bool" ||
+            (t.k === "kw" && (t.v === "true" || t.v === "false")) || t.k === "str" || t.k === "char" ||
+            (t.k === "sym" && (t.v === "(" || t.v === "["));
+        const closed = (t: Token | undefined) => t?.k === "sym" && (t.v === "}" ||
+            (t.v === "]" || t.v === ")") && !this.source.slice(this.source.lastIndexOf("\n", t.pos - 1) + 1, t.pos).trim());
         for (;;) {
+            if (!closed(this.toks[this.i - 1])) this.continueLine(argument);
             const t = this.peek();
             if (t.k === "newline" || t.k === "dedent" || t.k === "indent" || t.k === "eof") break;
             if (t.k === "sym" && t.v === ";") break;
@@ -879,10 +889,11 @@ class Parser {
                                         throw new Error("Parser: expected ',' or newline after record shorthand");
                                     }
                                 } else {
+                                    const keyToken = this.peek();
                                     const key = this.parseEntryKey();
                                     if (this.isSym(":")) this.keyColon();
                                     this.expectSym(":");
-                                    fs.push([key, this.parseDelimitedExpr()]);
+                                    fs.push([key, this.item(keyToken, () => this.parseDelimitedExpr())]);
                                 }
                                 this.skipListSeparators();
                                 if (this.isSym("]")) { this.next(); return { t: "record", v: fs }; }
@@ -944,7 +955,7 @@ class Parser {
                         }
                         const es = [] as Expr[];
                         for (;;) {
-                            es.push(this.parseDelimitedExpr());
+                            es.push(this.item(this.peek(), () => this.parseDelimitedExpr()));
                             this.skipListSeparators();
                             if (this.isSym("]")) { this.next(); return { t: "list", v: es }; }
                             if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside list literal");
@@ -992,6 +1003,14 @@ class Parser {
     }
 
     // Inside brackets, `:` is cons again even within a ternary branch.
+    // A list item or record field starting at token first: a deeper line
+    // continues it, a line at its level starts the next one.
+    item<T>(first: Token, parse: () => T): T {
+        const outer = this.statementIndent;
+        this.statementIndent = this.lineIndent(first);
+        try { return parse(); } finally { this.statementIndent = outer; }
+    }
+
     parseDelimitedExpr(): Expr {
         const saved = this.noLambda, savedCons = this.noCons;
         this.noLambda = 0;
@@ -1744,7 +1763,26 @@ export function parseDocument(src: string): TopLevel[] {
 let looseSpacing = false;
 export function setLooseSpacing(loose: boolean): void { looseSpacing = loose; }
 
+// A line has at most this many characters (code points), comments included.
+export const MAX_LINE_LENGTH = 99;
+function checkLineLengths(src: string): void {
+    let start = 0;
+    for (const line of src.split("\n")) {
+        const characters = [...line.replace(/\r$/, "")];
+        if (characters.length > MAX_LINE_LENGTH) {
+            const e = new APNError("parse", `line is ${characters.length} characters long; the limit is ${MAX_LINE_LENGTH}`, {
+                pos: start + characters.slice(0, MAX_LINE_LENGTH).join("").length, len: 1,
+                hint: "break it: a deeper line continues an application's arguments, an operator chain, a list item or a record field",
+            });
+            e.src = src;
+            throw e;
+        }
+        start += line.length + 1;
+    }
+}
+
 export function parse(src: string, file = "<repl>"): TopLevel[] {
+    if (!looseSpacing) checkLineLengths(src);
     let toks: Token[];
     try {
         toks = lex(src);

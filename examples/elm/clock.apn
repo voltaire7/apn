@@ -10,8 +10,8 @@ Msg = Tick Posix | AdjustTimeZone Zone
 init = [[zone: utc, time: millisToPosix 0],task.perform AdjustTimeZone here]
 
 update msg model = match msg [
-    (Tick newTime) -> { model.time = newTime; [model,browser.none] }
-    (AdjustTimeZone newZone) -> { model.zone = newZone; [model,browser.none] }
+    Tick newTime -> { model.time = newTime; [model,browser.none] }
+    AdjustTimeZone newZone -> { model.zone = newZone; [model,browser.none] }
 ]
 
 subscriptions _ = every 1000 Tick
@@ -30,7 +30,15 @@ view model = {
 
 viewHand width length turns = {
     t = 2 * pi * inexact (turns - 1 / 4)
-    svg.line [svg.x1 "200",svg.y1 "200",svg.x2 (to String (200 + length * cos t)),svg.y2 (to String (200 + length * sin t)),svg.stroke "white",svg.strokeWidth (to String width),svg.strokeLinecap "round"] []
+    svg.line [
+        svg.x1 "200"
+        svg.y1 "200"
+        svg.x2 (to String (200 + length * cos t))
+        svg.y2 (to String (200 + length * sin t))
+        svg.stroke "white"
+        svg.strokeWidth (to String width)
+        svg.strokeLinecap "round"
+    ] []
 }
 
 main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]

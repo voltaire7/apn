@@ -112,7 +112,7 @@ for (const [source, message, kind] of [
 for (const [name, source, expected] of [
     ["throw in each monad", 'import "option"\nprint [Option Int (throw "x"),Result Int String (throw "x"),List Int (throw "x")]\nprint (throw 1)',
         ['[None,Err "x",[]]', "[]\nNone\nErr 1"]],
-    ["guard names the condition its call wrote", 'import "option"\ng x = guard x\nb = false\nprint [Result Int String { g (1 > 2); return 1 },Result Int String { guard b; return 1 },Result Int String { guard $ 1 == 2; return 1 }]',
+    ["guard names the condition its call wrote", 'import "option"\ng x = guard x\nb = false\nprint [\n    Result Int String { g (1 > 2); return 1 }\n    Result Int String { guard b; return 1 }\n    Result Int String { guard $ 1 == 2; return 1 }\n]',
         ['[Err "guard failed: x",Err "guard failed: b",Err "guard failed: 1 == 2"]']],
 ] as const) Deno.test(`monads: ${name}`, () => {
     const actual = run(source);

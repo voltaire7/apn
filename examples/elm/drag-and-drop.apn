@@ -12,7 +12,10 @@ update msg model = match msg [
     Pick -> [model,file.selectFiles ["image/*"] GotFiles]
     DragEnter -> { model.hover = true; [model,browser.none] }
     DragLeave -> { model.hover = false; [model,browser.none] }
-    (GotFiles first others) -> { model.[files,hover] = [first :: others,false]; [model,browser.none] }
+    GotFiles first others -> {
+        model.[files,hover] = [first :: others,false]
+        [model,browser.none]
+    }
 ]
 
 subscriptions _ = browser.none

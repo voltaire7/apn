@@ -9,7 +9,15 @@ element specification = BrowserElement specification
 # Commands and subscriptions are data the browser interprets (see also task,
 # time, random, http and file). none and batch serve both, as Elm's Cmd.none
 # and Sub.none do.
-BrowserEffect = EffectNone | EffectBatch Dynamic | ViewportGet Dynamic | FrameSub String Dynamic | KeySub String Dynamic | MouseSub String Dynamic | ResizeSub Dynamic | VisibilitySub Dynamic
+BrowserEffect =
+    | EffectNone
+    | EffectBatch Dynamic
+    | ViewportGet Dynamic
+    | FrameSub String Dynamic
+    | KeySub String Dynamic
+    | MouseSub String Dynamic
+    | ResizeSub Dynamic
+    | VisibilitySub Dynamic
 none = EffectNone
 batch effects = EffectBatch effects
 # The viewport's size: toMessage gets [width: ..., height: ...] (Browser.Dom).

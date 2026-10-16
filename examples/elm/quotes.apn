@@ -1,23 +1,31 @@
 # Quotes, from https://elm-lang.org/examples/quotes
 # Press a button to send a GET request for random quotes.
-import ["html","option"]
+import ["html","option","decode"]
 browser = import "browser"
 http = import "http"
-decode = import "decode"
 
 Model = Failure | Loading | Success Dynamic
 Msg = MorePlease | GotQuote Dynamic
 
-quoteDecoder = map4 (quote, source, author, year -> [quote: quote, source: source, author: author, year: year]) (decode.field "quote" decode.string) (decode.field "source" decode.string) (decode.field "author" decode.string) (decode.field "year" decode.int)
+quoteDecoder = map4 toQuote
+    (field "quote" string)
+    (field "source" string)
+    (field "author" string)
+    (field "year" int)
 
-getRandomQuote = http.get [url: "https://elm-lang.org/api/random-quotes", expect: http.expectJson GotQuote quoteDecoder]
+toQuote quote source author year = [.quote, .source, .author, .year]
+
+getRandomQuote = http.get [
+    url: "https://elm-lang.org/api/random-quotes"
+    expect: http.expectJson GotQuote quoteDecoder
+]
 
 init = [Loading,getRandomQuote]
 
 update msg _ = match msg [
     MorePlease -> [Loading,getRandomQuote]
-    (GotQuote (Ok quote)) -> [Success quote,browser.none]
-    (GotQuote (Err _)) -> [Failure,browser.none]
+    GotQuote (Ok quote) -> [Success quote,browser.none]
+    GotQuote (Err _) -> [Failure,browser.none]
 ]
 
 subscriptions _ = browser.none
@@ -33,7 +41,7 @@ viewQuote model = match model [
         button [onClick MorePlease] [text "Try Again!"]
     ]
     Loading -> text "Loading..."
-    (Success quote) -> div [] [
+    Success quote -> div [] [
         button [onClick MorePlease,style "display" "block"] [text "More Please!"]
         blockquote [] [text quote.quote]
         p [style "text-align" "right"] [

@@ -1,19 +1,19 @@
 # Decoding JSON values, as in Elm's Json.Decode. A decoder turns a value (as
 # from JSON gives it: records, lists, numbers, strings, Bool, []) into Ok of
-# the result or Err of what went wrong. Import it qualified (decode = import
-# "decode"): int, float and list are also random's names.
+# the result or Err of what went wrong. int, float and list are also random's
+# names: a program using both imports one qualified (decode = import "decode").
 import "option"
 Decoder a = | Decoder (value -> Result a String)
 decodeValue (Decoder decoder) value = decoder value
 # Decoders are monads: map f d, d >>= f (Elm's andThen), return x (Elm's
 # succeed); map2 ... map4 come from the prelude.
 map f (Decoder decoder) = Decoder (value -> match (decoder value) [
-    (Ok x) -> Ok (f x)
-    (Err error) -> Err error
+    Ok x -> Ok (f x)
+    Err error -> Err error
 ])
 (Decoder decoder) >>= f = Decoder (value -> match (decoder value) [
-    (Ok x) -> decodeValue (f x) value
-    (Err error) -> Err error
+    Ok x -> decodeValue (f x) value
+    Err error -> Err error
 ])
 return x = Decoder (_ -> Ok x)
 succeed x = Decoder (_ -> Ok x)
@@ -24,16 +24,18 @@ float = map inexact (expecting "a FLOAT" isNumber)
 bool = expecting "a BOOL" (isType Bool)
 field name decoder = Decoder (value -> {
     fields = isType Record value ? HashMap (pairs (Record value)) : HashMap []
-    has name fields ? decodeValue decoder (lookup name fields) : Err ("Expecting an OBJECT with a field named `" ++ name ++ "`")
+    has name fields
+        ? decodeValue decoder (lookup name fields)
+        : Err ("Expecting an OBJECT with a field named `" ++ name ++ "`")
 })
 at path decoder = match path [
     [] -> decoder
-    (name :: rest) -> field name (at rest decoder)
+    name :: rest -> field name (at rest decoder)
 ]
 list decoder = Decoder (value -> {
     each items = match items [
         [] -> Ok []
-        (item :: rest) -> map2 (x, xs -> x :: xs) (decodeValue decoder item) (each rest)
+        item :: rest -> map2 (x, xs -> x :: xs) (decodeValue decoder item) (each rest)
     ]
     isType List value ? each value : Err "Expecting a LIST"
 })

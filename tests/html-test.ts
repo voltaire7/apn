@@ -32,7 +32,10 @@ Deno.test("event messages are lazy and failed updates leave the old model usable
 import "browser"
 HtmlTestMsg = GoodEvent | BadEvent
 update msg model = match msg [GoodEvent -> model + 1,BadEvent -> missing]
-view model = div [] [button [onClick GoodEvent] [text (to String model)],button [onClick BadEvent] [text "bad"]]
+view model = div [] [
+    button [onClick GoodEvent] [text (to String model)]
+    button [onClick BadEvent] [text "bad"]
+]
 main = sandbox [init: 0, update: update, view: view]`);
     if (content(counter.render()) !== '0bad') throw new Error("initial render");
     try { counter.dispatch(1); throw new Error("expected failure"); }
@@ -47,7 +50,7 @@ for (const [view, error] of [
     ['input [] [text "child"]', 'cannot have children'],
     ['42', 'view must return'],
 ]) Deno.test(`HTML rejects invalid nodes: ${view}`, () => {
-    const test = app(`import "html"\nimport "browser"\nmain = sandbox [init: 0, update: (msg, model -> model), view: (model -> ${view})]`);
+    const test = app(`import "html"\nimport "browser"\nmain = sandbox [\n    init: 0\n    update: (msg, model -> model)\n    view: (model -> ${view})\n]`);
     try { test.render(); }
     catch (e) { if (e instanceof Error && e.message.includes(error)) return; throw e; }
     throw new Error("Expected error");
@@ -60,7 +63,7 @@ Deno.test("bundled modules load without filesystem access", () => {
         "/lib/time.apn": Deno.readTextFileSync(new URL("../lib/time.apn", import.meta.url)),
     };
     i.sourceDir = "/app/";
-    i.run(parse('import "html"; import "browser"; main = sandbox [init: 1, update: (msg, model -> model), view: (n -> text (to String n))]'));
+    i.run(parse('import "html"\nimport "browser"\nmain = sandbox [init: 1, update: (msg, model -> model), view: (n -> text (to String n))]'));
     if (content(new BrowserApp(i, i.env.get("main")!).render()) !== '1') throw new Error("bundled app failed");
     try { i.importStandard('text'); }
     catch (error) { if (error instanceof Error && error.message.includes('not bundled')) return; throw error; }
@@ -68,7 +71,7 @@ Deno.test("bundled modules load without filesystem access", () => {
 });
 Deno.test("nullary constructor function clauses do not consume the next parameter", () => {
     const i = new Interpreter();
-    const source = 'Choice = FirstChoice | SecondChoice; choose FirstChoice x = x; choose SecondChoice x = x + 1; choose SecondChoice 41';
+    const source = 'Choice = FirstChoice | SecondChoice\nchoose FirstChoice x = x\nchoose SecondChoice x = x + 1\nchoose SecondChoice 41';
     if (i.renderString(i.run(parse(source))) !== '42') throw new Error("nullary constructor pattern failed");
 });
 Deno.test("a browser build bundles the local modules a program imports", () => {

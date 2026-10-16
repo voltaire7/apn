@@ -375,17 +375,18 @@ Modules for browser programs, after Elm's packages of the same names. See
 | --- | --- |
 | `html` | HTML elements, attributes and events |
 | `browser` | `sandbox`, `element`, `none`, `batch`, `getViewport`, and the event subscriptions |
-| `svg` | SVG elements and attributes (import it qualified) |
+| `svg` | SVG elements and attributes |
 | `task` | `perform` and `attempt`: commands running an action |
 | `time` | `Posix`, `Zone`, `now`, `here`, `every`, `toHour` ... `toMillis` |
-| `random` | generators and `generate` (import it qualified) |
-| `decode` | JSON decoders (import it qualified) |
+| `random` | generators and `generate` |
+| `decode` | JSON decoders |
 | `file` | file pickers and `toUrl` |
 | `playground` | pictures, animations and games from shapes |
 
-`random`, `decode` and `svg` share names with other modules (`int`, `list`,
-`circle`), so a program imports them qualified (`random = import "random"`;
-`random.int 1 6`); the others may be opened.
+`random` and `decode` share names (`int`, `float`, `list`), as do `svg` and
+`playground` (`circle`, `image`): a program using both of a pair imports one
+qualified (`random = import "random"`; `random.int 1 6`). Each alone may be
+opened, as Elm's examples open `Json.Decode`.
 
 ## Process control — `system`
 

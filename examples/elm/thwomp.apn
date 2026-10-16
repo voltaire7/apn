@@ -11,20 +11,26 @@ Msg = GotViewport Dynamic | Resized Number Number | MouseMoved Number Number
 init = [[width: 0, height: 0, x: 0, y: 0],browser.getViewport GotViewport]
 
 update msg model = match msg [
-    (GotViewport viewport) -> { model.[width,height] = [viewport.width,viewport.height]; [model,browser.none] }
-    (Resized width height) -> { model.[width,height] = [width,height]; [model,browser.none] }
-    (MouseMoved x y) -> { model.[x,y] = [x,y]; [model,browser.none] }
+    GotViewport viewport -> {
+        model.[width,height] = [viewport.width,viewport.height]
+        [model,browser.none]
+    }
+    Resized width height -> { model.[width,height] = [width,height]; [model,browser.none] }
+    MouseMoved x y -> { model.[x,y] = [x,y]; [model,browser.none] }
 ]
 
 subscriptions _ = browser.batch [browser.onResize Resized,browser.onMouseMove MouseMoved]
 
-view model = div [style "position" "absolute",style "left" "0",style "top" "0"] [p5.canvas [setup: setup, draw: draw model]]
+view model = div [style "position" "absolute",style "left" "0",style "top" "0"] [
+    p5.canvas [setup: setup, draw: draw model]
+]
 
 setup p = p.call "createCanvas" [p.windowWidth,p.windowHeight,p.WEBGL]
 
 # The eye is 6 away, in the mouse's direction (p5's y grows downward).
 draw model p = {
-    when (model.width > 0 && (p.width != model.width || p.height != model.height)) (p.resizeCanvas model.width model.height)
+    when (model.width > 0 && (p.width != model.width || p.height != model.height))
+        (p.resizeCanvas model.width model.height)
     [ex,ey,ez] = normalize [0.5 - model.x / model.width,0.5 - model.y / model.height,1]
     p.background "white"
     p.perspective (p.PI / 4) (model.width / model.height) 0.01 100

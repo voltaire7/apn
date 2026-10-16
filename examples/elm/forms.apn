@@ -6,9 +6,9 @@ browser = import "browser"
 Msg = Name String | Password String | PasswordAgain String
 
 update msg model = match msg [
-    (Name name) -> { model.name = name; model }
-    (Password password) -> { model.password = password; model }
-    (PasswordAgain password) -> { model.passwordAgain = password; model }
+    Name name -> { model.name = name; model }
+    Password password -> { model.password = password; model }
+    PasswordAgain password -> { model.passwordAgain = password; model }
 ]
 
 view model = div [] [
@@ -18,10 +18,15 @@ view model = div [] [
     viewValidation model
 ]
 
-viewInput kind hint content toMsg = input [typeAttribute kind,placeholder hint,value content,onInput toMsg] []
+viewInput kind hint content toMsg =
+    input [typeAttribute kind,placeholder hint,value content,onInput toMsg] []
 
 viewValidation model = model.password == model.passwordAgain
     ? div [style "color" "green"] [text "OK"]
     : div [style "color" "red"] [text "Passwords do not match!"]
 
-main = browser.sandbox [init: [name: "", password: "", passwordAgain: ""], update: update, view: view]
+main = browser.sandbox [
+    init: [name: "", password: "", passwordAgain: ""]
+    update: update
+    view: view
+]

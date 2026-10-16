@@ -7,9 +7,12 @@ bfsDistances neighbors starts = {
     step state = {
         depth = state.depth + 1
         seq depth []
-        visit acc node = has node (fst acc) ? acc : [insert [[node,depth]] (fst acc),_prepend node (snd acc)]
+        visit acc node = has node (fst acc)
+            ? acc
+            : [insert [[node,depth]] (fst acc),_prepend node (snd acc)]
         [next] = [foldl visit [state.distances,[]] (concatMap neighbors state.frontier)]
-        seq (fst next) (seq (snd next) [frontier: reverse (snd next), distances: fst next, depth: depth])
+        seq (fst next)
+            (seq (snd next) [frontier: reverse (snd next), distances: fst next, depth: depth])
     }
     [finished] = [head (filter (state -> null state.frontier) (iterate step initial))]
     finished.distances
