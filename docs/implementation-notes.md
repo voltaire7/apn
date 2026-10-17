@@ -672,11 +672,13 @@ and lists subscriptions through a `Platform` (deferral, HTTP, file pickers,
 the viewport), so tests drive programs with a fake one;
 `src/browser-runtime.ts` patches the DOM (writing only the attributes and
 styles that changed, with one listener per event that reads the newest
-handler: rewriting unchanged ones makes Firefox lay the page out again) and
-implements the platform;
+handler: rewriting unchanged ones makes Firefox lay the page out again),
+installs subscriptions as passive listeners (as Elm does) and implements the
+platform;
 `src/build-html.ts` bundles the interpreter and source (`apn --html`, and
 `apn --site` with `src/editor.html` and its script `src/editor.ts`, whose
-preview runs each program in a sandboxed frame). The editor, the REPL and the
+preview runs each program in a sandboxed frame of the editor's origin, as
+Elm's editor does, so Firefox keeps it in the page's process). The editor, the REPL and the
 language server color with one tokenizer and palette, `src/highlight.ts`;
 keep it free of interpreter imports, since the editor bundles it. Commands and subscriptions stay APN data until the host
 reads them; a message from a command is applied after the current update.

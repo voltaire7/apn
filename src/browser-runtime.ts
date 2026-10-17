@@ -164,12 +164,16 @@ const subscriptions = (() => {
             frame = requestAnimationFrame(tick);
             return () => cancelAnimationFrame(frame);
         }
-        if (s.kind === "key") { const f = (e: KeyboardEvent) => fire(key, e.key); document.addEventListener(s.event, f as EventListener); return () => document.removeEventListener(s.event, f as EventListener); }
-        if (s.kind === "mouse") { const f = (e: MouseEvent) => fire(key, e.pageX, e.pageY); document.addEventListener(s.event, f as EventListener); return () => document.removeEventListener(s.event, f as EventListener); }
-        if (s.kind === "resize") { const f = () => fire(key, innerWidth, innerHeight); addEventListener("resize", f); return () => removeEventListener("resize", f); }
-        const f = () => fire(key, document.visibilityState === "visible");
-        document.addEventListener("visibilitychange", f);
-        return () => document.removeEventListener("visibilitychange", f);
+        if (s.kind === "key") return listen(document, s.event, e => fire(key, (e as KeyboardEvent).key));
+        if (s.kind === "mouse") return listen(document, s.event, e => fire(key, (e as MouseEvent).pageX, (e as MouseEvent).pageY));
+        if (s.kind === "resize") return listen(window, "resize", () => fire(key, innerWidth, innerHeight));
+        return listen(document, "visibilitychange", () => fire(key, document.visibilityState === "visible"));
+    };
+    // Passive, as Elm's are: a subscription never cancels what the browser
+    // does, so the browser need not wait for it on each of a held key's repeats.
+    const listen = (target: EventTarget, event: string, f: (e: Event) => void) => {
+        target.addEventListener(event, f, { passive: true });
+        return () => target.removeEventListener(event, f);
     };
     return {
         update(wanted: Subscription[]): void {
@@ -216,8 +220,8 @@ try {
         if (urls.has(path)) return urls.get(path);
         const file = bundledFile(payload.modules, path);
         if (!file) return undefined;
-        // A font loads through CSS, which takes no blob URL from a sandboxed
-        // (opaque-origin) page, such as the editor's preview.
+        // A font loads through CSS, which takes no blob URL from an
+        // opaque-origin page (a sandboxed frame).
         if (file.mime.startsWith("font/") && file.dataUrl) return file.dataUrl;
         const blob = file.text !== undefined ? new Blob([file.text], { type: file.mime })
             : new Blob([Uint8Array.from(atob(file.dataUrl!.slice(file.dataUrl!.indexOf(",") + 1)), c => c.charCodeAt(0))], { type: file.mime });

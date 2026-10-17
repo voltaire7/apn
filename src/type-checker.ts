@@ -584,12 +584,77 @@ export function mentionsAny(program: unknown, names: ReadonlySet<string>): boole
     };
     return walk(program);
 }
+// Each name's types are copied when first read: a module's scope is large and
+// a program uses few of its names. One map of variables and nodes makes names
+// that share a variable share its copy, in whatever order they are read.
 export function copyTypeScope(scope: TypeScope): TypeScope {
     const nodes = new Map<Ty, Ty>(), vars = new Map<Ty, Ty>();
-    return new Map([...scope].map(([name, entry]) => [name, {
-        ...entry, type: copy(entry.type, vars, undefined, nodes),
-        nonGeneric: entry.nonGeneric && new Set([...entry.nonGeneric].map(t => copy(t, vars, undefined, nodes))),
-    }]));
+    const copied = (t: Ty) => copy(t, vars, undefined, nodes);
+    return new Map([...scope].map(([name, entry]) => {
+        const lazy: Entry = { ...entry };
+        let type: Ty | undefined, nonGeneric: Set<Ty> | undefined, done = false;
+        Object.defineProperties(lazy, {
+            type: { enumerable: true, get: () => type ??= copied(entry.type), set: (t: Ty) => { type = t; } },
+            nonGeneric: {
+                enumerable: true,
+                get: () => done ? nonGeneric : (done = true, nonGeneric = entry.nonGeneric && new Set([...entry.nonGeneric].map(copied))),
+                set: (set: Set<Ty> | undefined) => { done = true; nonGeneric = set; },
+            },
+        });
+        return [name, lazy];
+    }));
+}
+// A block's scope: what it binds, over the enclosing scope's names marked
+// inherited, each marked when first read (a scope holds every builtin and
+// import, so copying it for each block would cost more than the block).
+// It iterates as the copy would: enclosing names first, in their order.
+class BlockScope extends Map<string, Entry> {
+    private readonly marked = new Map<string, Entry>();
+    private readonly removed = new Set<string>();
+    constructor(private readonly outer: Scope) { super(); }
+    private inherited(name: string): Entry | undefined {
+        if (this.removed.has(name)) return undefined;
+        let entry = this.marked.get(name);
+        if (!entry) {
+            const outer = this.outer.get(name);
+            if (!outer) return undefined;
+            this.marked.set(name, entry = { ...outer, inherited: true });
+        }
+        return entry;
+    }
+    override get size() { let n = 0; for (const _ of this.keys()) n++; return n; }
+    override get(name: string) { return super.has(name) ? super.get(name) : this.inherited(name); }
+    override has(name: string) { return super.has(name) || !this.removed.has(name) && this.outer.has(name); }
+    override set(name: string, entry: Entry): this { this.removed.delete(name); return super.set(name, entry); }
+    override delete(name: string): boolean {
+        const had = this.has(name);
+        super.delete(name);
+        if (this.outer.has(name)) this.removed.add(name);
+        return had;
+    }
+    override clear(): void { super.clear(); for (const name of this.outer.keys()) this.removed.add(name); }
+    override *keys(): MapIterator<string> {
+        for (const name of this.outer.keys()) if (super.has(name) || !this.removed.has(name)) yield name;
+        for (const name of super.keys()) if (!this.outer.has(name)) yield name;
+    }
+    override *entries(): MapIterator<[string, Entry]> { for (const name of this.keys()) yield [name, this.get(name)!]; }
+    override *values(): MapIterator<Entry> { for (const name of this.keys()) yield this.get(name)!; }
+    override [Symbol.iterator]() { return this.entries(); }
+    override forEach(f: (value: Entry, key: string, map: Map<string, Entry>) => void) { for (const [k, v] of this.entries()) f(v, k, this); }
+}
+// A module's record: each field's type is its scope entry's, read when needed.
+class ModuleFields extends Map<string, Ty> {
+    constructor(private readonly scope: TypeScope) { super(); }
+    override get size() { return this.scope.size; }
+    override get(name: string) { return this.scope.get(name)?.type; }
+    override has(name: string) { return this.scope.has(name); }
+    override set(): this { throw new Error("a module's record is closed"); }
+    override delete(): boolean { throw new Error("a module's record is closed"); }
+    override *entries(): MapIterator<[string, Ty]> { for (const [name, entry] of this.scope) yield [name, entry.type]; }
+    override *keys(): MapIterator<string> { yield* this.scope.keys(); }
+    override *values(): MapIterator<Ty> { for (const entry of this.scope.values()) yield entry.type; }
+    override [Symbol.iterator]() { return this.entries(); }
+    override forEach(f: (value: Ty, key: string, map: Map<string, Ty>) => void) { for (const [k, v] of this.entries()) f(v, k, this); }
 }
 export interface TypeIssue {
     message: string;
@@ -2983,7 +3048,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!options.imports) return unknown();
                 const imported = copyTypeScope(options.imports(e.module));
                 for (const [name, entry] of imported) scope.set(name, entry);
-                return { k: "record", fields: new Map([...imported].map(([name, entry]) => [name, entry.type])) };
+                return { k: "record", fields: new ModuleFields(imported) };
             }
             case "list": {
                 const items = e.v.map((x) => infer(x, scope));
@@ -3452,7 +3517,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return operation("negate", [operand]);
             }
             case "block": {
-                const child: Scope = new Map([...scope].map(([name, entry]) => [name, { ...entry, inherited: true }]));
+                const child: Scope = new BlockScope(scope);
                 let result: Ty = list(dynamic, constant(0n)), action = false;
                 const block: { monad?: Ty } = {};
                 doBlocks.push(block);

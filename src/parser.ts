@@ -752,9 +752,24 @@ class Parser {
         return false;
     }
 
+    // Whether a -> follows on this line at this level: a lambda's header never
+    // spans lines, so most names need no attempt to parse one (a failed
+    // attempt throws, which costs a stack trace).
+    arrowOnLine(): boolean {
+        for (let j = this.i, depth = 0; j < this.toks.length; j++) {
+            const t = this.toks[j];
+            if (t.k === "eof" || depth === 0 && (t.k === "newline" || t.k === "indent" || t.k === "dedent")) return false;
+            if (t.k !== "sym") continue;
+            if (t.v === "(" || t.v === "[" || t.v === "{") depth++;
+            else if (t.v === ")" || t.v === "]" || t.v === "}") { if (depth-- === 0) return false; }
+            else if (t.v === "->" && depth === 0) return true;
+        }
+        return false;
+    }
+
     parsePrimary(): Expr {
         const t = this.peek();
-        if (!this.noLambda && this.startsParam(t)) {
+        if (!this.noLambda && this.startsParam(t) && this.arrowOnLine()) {
             const save = this.i;
             let header: { params: Pattern[]; guard?: Expr } | undefined;
             try { header = this.lambdaHeader(); } catch { this.i = save; }
