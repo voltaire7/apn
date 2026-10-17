@@ -10,7 +10,10 @@ empty result (`print 3` shows only `3`); bindings echo nothing. Interactive feat
   arrows navigate history; in a multi-line buffer (continuation or a recalled
   multi-line entry) they move between lines. Up on the first line browses older
   history; Down on the last line browses newer history, restoring the draft
-  after the newest entry. Persisted across
+  after the newest entry, as if the entries were one text: Up lands on an
+  older entry's last line, Down on a newer one's first. The cursor keeps its
+  column, as in Vim (clamped to each line, remembered across shorter ones
+  until another key moves it). Persisted across
   sessions in `~/.apn_history` (one JSON string per line, capped at 500 on
   load; needs `--allow-write` and `--allow-env=HOME`, else in-session only
   with a one-time hint).
@@ -31,7 +34,8 @@ empty result (`print 3` shows only `3`); bindings echo nothing. Interactive feat
   line, preserving indentation. An unfinished single-line `[1, 2, 3` submits
   and reports a syntax error.
   Shift+Enter reverses this behavior. Strings and comments do not count as
-  brackets. Option+Left/Right navigate words (including across lines).
+  brackets. Option+Left/Right (or Alt+B/F) move by word, Shift or
+  Ctrl+Left/Right by whitespace-separated word (all across lines).
   Modified Enter requires a terminal that sends a distinct key sequence;
   the editor requests Kitty keyboard disambiguation and also accepts xterm
   modifyOtherKeys Shift+Enter. Auto-indentation still applies to newlines.
@@ -46,9 +50,15 @@ empty result (`print 3` shows only `3`); bindings echo nothing. Interactive feat
   punctuation overlay1, operators peach); echoed values are colored by kind with
   gray structure (brackets, colons, commas; keys plain, variant tags sky);
   errors red.
-- **Keys**: Ctrl+C clear input (empty buffer = quit), Ctrl+D quit,
-  Ctrl+L clear screen, Ctrl+A/E home/end, Ctrl+U/K kill to line start/end,
-  Ctrl+W delete word back, arrows + Home/End/Delete.
+- **Keys** are fish's: Ctrl+C clear input (empty buffer = quit), Ctrl+D
+  quit, Ctrl+L clear screen, Ctrl+A/E home/end, Ctrl+U/K kill to line
+  start/end, Ctrl+W kill back to the start of a path component (`/ = { , }
+  ' " : @ #` and whitespace separate them), Option+Backspace / Option+D kill a
+  word back / on, Ctrl+Y yank what was killed (consecutive kills join), arrows
+  + Home/End/Delete (Left and Right stay on their line, as in Vim). Words
+  and their stops are fish's (`src/word-motion.ts`,
+  tested with fish's own cases): `_` and other punctuation separate words.
+  Caps Lock and Num Lock change no binding.
 - While the terminal is raw, `print`/`debug` output is routed through the
   editor so newlines are CRLF-correct (`console.log` is patched in TTY mode).
 - `:help`/`:h` and `:quit`/`:q` work in both modes (`helpText()`).

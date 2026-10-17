@@ -6,6 +6,7 @@ import { NATIVE_NAMES, NATIVES, envNames, dirname, Interpreter, setInterruptFlag
 import type { Value, Env } from "./types.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { highlightTokens, PALETTES } from "./highlight.ts";
+import { forwardWordEnd, moveWord, type Style } from "./word-motion.ts";
 
 // ---------------- REPL ----------------
 
@@ -377,11 +378,12 @@ function helpText(): string {
         `  Enter      continues after an opener or inside a multiline bracket block`,
         `             on the next line ("... " prompt, auto-indent);`,
         `             cursor position decides, regardless of syntax validity`,
-        `  Shift+Enter reverses Enter; Option+Left/Right moves by word`,
+        `  Shift+Enter reverses Enter; Option+Left/Right moves by word, as fish does`,
         `  paste      multi-line text is inserted, not run; Enter then runs it`,
         `  editor     editors/neovim/try-apn FILE opens your usual Neovim with APN LSP`,
         `  Ctrl+C     clear input (empty: quit)  Ctrl+D quit  Ctrl+L clear screen`,
-        `  Ctrl+A/E   line start/end  Ctrl+U/K kill to line start/end  Ctrl+W delete word`,
+        `  Ctrl+A/E   line start/end  Ctrl+U/K kill to line start/end  Ctrl+Y yank`,
+        `  Ctrl+W     kill a path component (foo/bar loses bar)  Option+Backspace/D a word`,
     ].join("\n");
 }
 
@@ -389,6 +391,34 @@ function helpText(): string {
 
 type KeyAction = "cont" | "submit" | "quit";
 const ENC = new TextEncoder();
+
+// Key modifiers as terminals encode them (one less than the number sent);
+// Caps Lock (64) and Num Lock (128) are not modifiers of a binding.
+const SHIFT = 1, ALT = 2, CTRL = 4, SUPER = 8, META = 32;
+const KEY_NAMES: Record<string, string> = {
+    A: "up", B: "down", C: "right", D: "left", H: "home", F: "end",
+    "1~": "home", "7~": "home", "4~": "end", "8~": "end", "3~": "delete", "200~": "paste",
+    13: "enter", 9: "tab", 127: "backspace", 8: "backspace", 27: "escape",
+};
+// A key from the bytes after ESC [ (or ESC O): legacy and modified cursor
+// keys (A, 1;5D), editing keys (3~, 3;3~), the Kitty protocol (119;5u) and
+// xterm's modifyOtherKeys (27;5;119~). Undefined for a key release.
+export function decodeKey(rest: string): { name: string; modifiers: number } | undefined {
+    const modifiers = (n: string | undefined) => (Number(n ?? 1) - 1) & ~(64 | 128);
+    let m = /^(\d+)(?::\d+)*(?:;(\d+)(?::(\d))?)?u$/.exec(rest);
+    if (m) {
+        if (m[3] === "3") return undefined;
+        const code = Number(m[1]);
+        return { name: KEY_NAMES[code] ?? String.fromCodePoint(code).toLowerCase(), modifiers: modifiers(m[2]) };
+    }
+    m = /^27;(\d+);(\d+)~$/.exec(rest);
+    if (m) return { name: KEY_NAMES[m[2]] ?? String.fromCodePoint(Number(m[2])).toLowerCase(), modifiers: modifiers(m[1]) };
+    m = /^(?:1)?(?:;(\d+))?([A-DHF])$/.exec(rest);
+    if (m) return { name: KEY_NAMES[m[2]], modifiers: modifiers(m[1]) };
+    m = /^(\d+)(?:;(\d+))?~$/.exec(rest);
+    if (m) return { name: KEY_NAMES[`${m[1]}~`] ?? "unknown", modifiers: modifiers(m[2]) };
+    return { name: "unknown", modifiers: 0 };
+}
 
 export class ReplEditor {
     lines: string[] = [""];
@@ -546,47 +576,50 @@ export class ReplEditor {
         }
     }
 
+    // Left and Right stay on their line, as in Vim (Up and Down change lines).
     left(): void {
         if (this.col > 0) this.col--;
-        else if (this.row > 0) { this.row--; this.col = this.lines[this.row].length; }
     }
 
-    // Ctrl+W: delete back to the start of the previous word (whitespace-
-    // delimited); at column 0 it falls back to joining with the line above.
-    deleteWordBack(): void {
-        if (this.col === 0) { this.backspace(); return; }
-        const line = this.lines[this.row];
-        let i = this.col;
-        while (i > 0 && line[i - 1] === " ") i--;
-        while (i > 0 && line[i - 1] !== " ") i--;
-        this.lines[this.row] = line.slice(0, i) + line.slice(this.col);
-        this.col = i;
+    // The cursor as an offset into the whole chunk, and back.
+    offset(): number {
+        return this.lines.slice(0, this.row).reduce((n, line) => n + line.length + 1, 0) + this.col;
     }
+    place(offset: number): void {
+        const before = this.src().slice(0, offset).split("\n");
+        this.row = before.length - 1;
+        this.col = before[this.row].length;
+    }
+
+    // Kills, as fish's: the text goes to the kill ring (Ctrl+Y yanks it), and
+    // consecutive kills join into one entry, in the order the text had.
+    killed = "";
+    killing = false;
+    kill(to: number): void {
+        const from = this.offset(), src = this.src(), [a, b] = from < to ? [from, to] : [to, from];
+        if (a === b) return;
+        const text = src.slice(a, b);
+        this.killed = !this.killing ? text : to < from ? text + this.killed : this.killed + text;
+        this.killing = true;
+        this.lines = (src.slice(0, a) + src.slice(b)).split("\n");
+        this.place(a);
+    }
+    yank(): void {
+        const at = this.offset(), src = this.src();
+        this.lines = (src.slice(0, at) + this.killed + src.slice(at)).split("\n");
+        this.place(at + this.killed.length);
+    }
+    // Fish's word motions: back to a word's start, on past its end.
+    backWord(style: Style): number { return moveWord(this.src(), this.offset(), -1, style); }
+    forwardWord(style: Style): number { return forwardWordEnd(this.src(), this.offset(), style); }
 
     right(): void {
         if (this.col < this.lines[this.row].length) this.col++;
-        else if (this.row < this.lines.length - 1) { this.row++; this.col = 0; }
     }
 
     // Trailing whitespace-only lines never reach the parser.
     trimmedSrc(): string {
         return this.src().replace(/(?:\n[ \t]*)+$/, "");
-    }
-
-    word(direction: -1 | 1): void {
-        const src = this.src();
-        let offset = this.lines.slice(0, this.row).reduce((n, line) => n + line.length + 1, 0) + this.col;
-        const isWord = (ch: string) => /[\p{L}\p{N}_]/u.test(ch);
-        if (direction < 0) {
-            while (offset > 0 && !isWord(src[offset - 1])) offset--;
-            while (offset > 0 && isWord(src[offset - 1])) offset--;
-        } else {
-            while (offset < src.length && !isWord(src[offset])) offset++;
-            while (offset < src.length && isWord(src[offset])) offset++;
-        }
-        const before = src.slice(0, offset).split("\n");
-        this.row = before.length - 1;
-        this.col = before[this.row].length;
     }
 
     enter(shift = false): KeyAction {
@@ -597,43 +630,36 @@ export class ReplEditor {
         return "cont";
     }
 
-    // Move within multiline buffers; at the first/last line, browse history.
-    // This also lets recalled multiline entries reach their history neighbors.
+    // Up and Down move a line within the buffer and, from its first or last
+    // line, through history: an older entry's last line, a newer one's first,
+    // as if the entries were one text. As in Vim, the column is kept (clamped
+    // to each line), remembered across shorter lines until another key moves.
+    goal: number | null = null;
+    vertical(row: number): KeyAction {
+        this.goal ??= this.col;
+        this.row = row;
+        this.col = Math.min(this.goal, this.lines[row].length);
+        return "cont";
+    }
     up(): KeyAction {
-        if (this.row > 0) {
-            this.row--;
-            this.col = Math.min(this.col, this.lines[this.row].length);
-            return "cont";
-        }
+        if (this.row > 0) return this.vertical(this.row - 1);
         if (this.hist.length === 0) return "cont";
         if (this.histIdx === null) {
             this.draft = this.src();
             this.histIdx = this.hist.length - 1;
         } else if (this.histIdx > 0) this.histIdx--;
         else return "cont";
-        this.recall(this.hist[this.histIdx]);
-        return "cont";
+        this.lines = this.hist[this.histIdx].split("\n");
+        return this.vertical(this.lines.length - 1);
     }
 
     down(): KeyAction {
-        if (this.row < this.lines.length - 1) {
-            this.row++;
-            this.col = Math.min(this.col, this.lines[this.row].length);
-            return "cont";
-        }
+        if (this.row < this.lines.length - 1) return this.vertical(this.row + 1);
         if (this.histIdx === null) return "cont";
         this.histIdx++;
-        if (this.histIdx >= this.hist.length) {
-            this.histIdx = null;
-            this.recall(this.draft);
-        } else this.recall(this.hist[this.histIdx]);
-        return "cont";
-    }
-
-    recall(entry: string): void {
-        this.lines = entry.split("\n");
-        this.row = this.lines.length - 1;
-        this.col = this.lines[this.row].length;
+        if (this.histIdx >= this.hist.length) this.histIdx = null;
+        this.lines = (this.histIdx === null ? this.draft : this.hist[this.histIdx]).split("\n");
+        return this.vertical(0);
     }
 
     completionCands(): string[] {
@@ -711,70 +737,82 @@ export class ReplEditor {
         if (this.esc !== "") {
             this.esc += ch;
             const e = this.esc;
+            // ESC then a key: that key with Alt (Option), as legacy terminals send it.
             if (e.length === 2 && e[1] !== "[" && e[1] !== "O") {
                 this.esc = "";
-                if (ch === "b") this.word(-1);
-                if (ch === "f") this.word(1);
-                return "cont";
+                return this.key(ch === "\x7f" || ch === "\b" ? "backspace" : ch, ALT);
             }
             const last = e[e.length - 1];
             const done = (e[1] === "O" && e.length >= 3) ||
                 (e[1] === "[" && e.length >= 3 && (last === "~" || /[A-Za-z]/.test(last)));
             if (!done) return "cont";
             this.esc = "";
-            const rest = e[1] === "O" ? e[2] : e.slice(2);
-            // Enhanced keyboard protocols encode Ctrl letters as CSI sequences.
-            // Translate them to the same control bytes used by legacy terminals.
-            const kitty = rest.match(/^(\d+)(?::\d+)*;(\d+)(?::([123]))?u$/);
-            const xterm = rest.match(/^27;(\d+);(\d+)~$/);
-            if (kitty || xterm) {
-                const code = Number(kitty ? kitty[1] : xterm![2]);
-                const modifiers = Number(kitty ? kitty[2] : xterm![1]);
-                if (kitty?.[3] === "3") return "cont"; // key release
-                if (modifiers === 5 && code >= 65 && code <= 122) {
-                    const letter = String.fromCharCode(code).toLowerCase();
-                    if (/^[a-z]$/.test(letter)) return this.feed(String.fromCharCode(letter.charCodeAt(0) - 96));
-                }
-            }
-            if (rest === "13;2u" || rest === "27;2;13~") return this.enter(true);
-            if (rest === "13u" || rest === "13;1u") return this.enter();
-            if (rest === "1;3D" || rest === "1;9D") { this.word(-1); return "cont"; }
-            if (rest === "1;3C" || rest === "1;9C") { this.word(1); return "cont"; }
-            if (rest === "A") return this.up();
-            if (rest === "B") return this.down();
-            if (rest === "C") { this.right(); return "cont"; }
-            if (rest === "D") { this.left(); return "cont"; }
-            if (rest === "H" || rest === "1~" || rest === "7~") { this.col = 0; return "cont"; }
-            if (rest === "F" || rest === "4~" || rest === "8~") {
-                this.col = this.lines[this.row].length;
-                return "cont";
-            }
-            if (rest === "3~") { this.deleteFwd(); return "cont"; }
-            if (rest === "200~") { this.pastePending = true; } // bracketed paste start
+            const key = decodeKey(e[1] === "O" ? e[2] : e.slice(2));
+            return key ? this.key(key.name, key.modifiers) : "cont";
+        }
+        if (ch === "\x1b") { this.esc = "\x1b"; return "cont"; }
+        const code = ch.charCodeAt(0);
+        // Control bytes are their letter with Ctrl (\x17 is Ctrl+W).
+        if (ch === "\r" || ch === "\n") return this.key("enter", 0);
+        if (ch === "\t") return this.key("tab", 0);
+        if (ch === "\x7f") return this.key("backspace", 0);
+        if (code < 32) return this.key(String.fromCharCode(code + 96), CTRL);
+        this.killing = false;
+        this.goal = null;
+        this.insertText(ch);
+        return "cont";
+    }
+
+    // A key with its modifiers (lock keys already left out), bound as fish binds it.
+    key(name: string, modifiers: number): KeyAction {
+        const alt = (modifiers & (ALT | SUPER | META)) !== 0, ctrl = (modifiers & CTRL) !== 0, shift = (modifiers & SHIFT) !== 0;
+        const wasKilling = this.killing;
+        this.killing = false;
+        if (name !== "up" && name !== "down") this.goal = null;
+        if (ctrl && !alt) switch (name) {
+            case "c": return this.ctrlC();
+            case "d": return this.ctrlD();
+            case "l": return this.ctrlL();
+            case "a": this.col = 0; return "cont";
+            case "e": this.col = this.lines[this.row].length; return "cont";
+            case "b": this.left(); return "cont";
+            case "f": this.right(); return "cont";
+            case "y": this.yank(); return "cont";
+            case "j": case "m": return this.enter();
+            case "i": return this.tab();
+            case "h": this.backspace(); return "cont";
+        }
+        // Kills (fish's ctrl-u, ctrl-k, ctrl-w, alt-backspace, alt-d).
+        this.killing = wasKilling;
+        if (ctrl && !alt && name === "u") { this.kill(Math.max(0, this.offset() - (this.col || 1))); return "cont"; }
+        if (ctrl && !alt && name === "k") {
+            const rest = this.lines[this.row].length - this.col;
+            this.kill(this.offset() + (rest || (this.row < this.lines.length - 1 ? 1 : 0)));
             return "cont";
         }
-        switch (ch) {
-            case "\x1b": this.esc = "\x1b"; return "cont";
-            case "\r": case "\n": return this.enter();
-            case "\t": return this.tab();
-            case "\x7f": this.backspace(); return "cont";
-            case "\x03": return this.ctrlC();
-            case "\x04": return this.ctrlD();
-            case "\x0c": return this.ctrlL();
-            case "\x01": this.col = 0; return "cont";
-            case "\x05": this.col = this.lines[this.row].length; return "cont";
-            case "\x15":
-                this.lines[this.row] = this.lines[this.row].slice(this.col);
-                this.col = 0;
-                return "cont";
-            case "\x17": this.deleteWordBack(); return "cont";
-            case "\x0b":
-                this.lines[this.row] = this.lines[this.row].slice(0, this.col);
-                return "cont";
-            default:
-                if (ch >= " " && ch !== "\x7f") this.insertText(ch);
-                return "cont";
+        if (ctrl && !alt && name === "w") { this.kill(this.backWord("pathComponents")); return "cont"; }
+        if (alt && (name === "backspace" || ctrl && name === "h")) { this.kill(this.backWord("punctuation")); return "cont"; }
+        if (ctrl && name === "backspace") { this.kill(this.backWord("whitespace")); return "cont"; }
+        if (alt && (name === "d" || name === "delete")) { this.kill(this.forwardWord("punctuation")); return "cont"; }
+        if (ctrl && name === "delete") { this.kill(this.forwardWord("whitespace")); return "cont"; }
+        this.killing = false;
+        switch (name) {
+            case "enter": return this.enter(shift);
+            case "tab": return this.tab();
+            case "backspace": this.backspace(); return "cont";
+            case "delete": this.deleteFwd(); return "cont";
+            case "up": return this.up();
+            case "down": return this.down();
+            case "home": this.col = 0; return "cont";
+            case "end": this.col = this.lines[this.row].length; return "cont";
+            case "paste": this.pastePending = true; return "cont"; // bracketed paste start
         }
+        // Option+Left/Right and Alt+B/F by word, Shift or Ctrl by
+        // whitespace-separated word, plain arrows by character.
+        const style: Style | undefined = alt ? "punctuation" : shift || ctrl ? "whitespace" : undefined;
+        if (name === "left" || alt && name === "b") { if (style) this.place(this.backWord(style)); else this.left(); return "cont"; }
+        if (name === "right" || alt && name === "f") { if (style) this.place(this.forwardWord(style)); else this.right(); return "cont"; }
+        return "cont";
     }
 
     // Read one chunk until a submit key action. null = user quit.
@@ -787,7 +825,7 @@ export class ReplEditor {
 
     async readChunk(): Promise<string | null> {
         this.lines = [""]; this.row = 0; this.col = 0;
-        this.histIdx = null; this.esc = ""; this.tabPrefix = ""; this.visRow = 0;
+        this.histIdx = null; this.goal = null; this.esc = ""; this.tabPrefix = ""; this.visRow = 0;
         this.render();
         const buf = new Uint8Array(4096);
         const dec = new TextDecoder();

@@ -54,17 +54,83 @@ Deno.test("escaped quotes and comments do not create brackets", () => {
     equal(insideBrackets("# {\n[]"), false);
 });
 
-for (const sequence of ["\x17", "\x1b[119;5u", "\x1b[119;5:2u", "\x1b[27;5;119~"]) {
+// Caps Lock (+64) and Num Lock (+128) ride along in the modifiers.
+for (const sequence of ["\x17", "\x1b[119;5u", "\x1b[119;5:2u", "\x1b[27;5;119~", "\x1b[119;69u", "\x1b[119;197u"]) {
     Deno.test(`Ctrl+W deletes a word: ${JSON.stringify(sequence)}`, () => {
         const ed = editor("one two");
         for (const ch of sequence) ed.feed(ch);
         equal(ed.src(), "one ");
         equal(ed.col, 4);
+        // As fish does, a line break before the cursor goes with the word before it.
         ed.lines = ["one", "two"]; ed.row = 1; ed.col = 0;
         for (const ch of sequence) ed.feed(ch);
-        equal(ed.src(), "onetwo");
+        equal(ed.src(), "two");
     });
 }
+Deno.test("arrows move with Caps Lock or Num Lock on", () => {
+    const ed = editor("ab\ncd");
+    for (const sequence of ["\x1b[1;65D", "\x1b[1;129D"]) for (const ch of sequence) ed.feed(ch);
+    equal(ed.col, 0);
+    for (const ch of "\x1b[1;65A") ed.feed(ch);
+    equal(ed.row, 0);
+    for (const ch of "\x1b[1;65C") ed.feed(ch);
+    equal(ed.col, 1);
+    for (const ch of "\x1b[1;67D") ed.feed(ch); // Option+Left
+    equal(ed.col, 0);
+});
+const keys = (ed: ReplEditor, sequence: string) => { for (const ch of sequence) ed.feed(ch); };
+Deno.test("browsing history keeps the column, as Vim moves between lines", () => {
+    const ed = new ReplEditor(new Interpreter(), ["f x = {\n    x + 1\n}", "1 + 2"]);
+    ed.lines = ["12345678"]; ed.row = 0; ed.col = 6;
+    keys(ed, "\x1b[A");
+    equal(ed.src(), "1 + 2"); equal(ed.col, 5);
+    keys(ed, "\x1b[A"); // an older entry: its last line
+    equal(ed.row, 2); equal(ed.col, 1);
+    keys(ed, "\x1b[A");
+    equal(ed.row, 1); equal(ed.col, 6); // the column remembered past a short line
+    keys(ed, "\x1b[B\x1b[B"); // a newer entry: its first line
+    equal(ed.src(), "1 + 2"); equal(ed.row, 0); equal(ed.col, 5);
+    keys(ed, "\x1b[B"); // the draft
+    equal(ed.src(), "12345678"); equal(ed.col, 6);
+    keys(ed, "\x1b[D\x1b[A"); // moving sideways sets a new column
+    equal(ed.col, 5);
+});
+Deno.test("Left and Right stay on their line, as in Vim", () => {
+    const ed = editor("ab\ncd", 2);
+    keys(ed, "\x1b[C");
+    equal(ed.row, 0); equal(ed.col, 2);
+    ed.row = 1; ed.col = 0;
+    keys(ed, "\x1b[D");
+    equal(ed.row, 1); equal(ed.col, 0);
+});
+Deno.test("Ctrl+W kills back to a path component, as fish's", () => {
+    const ed = editor('load "lib/sub/file"');
+    keys(ed, "\x17");
+    equal(ed.src(), 'load "lib/sub/'); // the quote goes with the name it ends
+    keys(ed, "\x17");
+    equal(ed.src(), 'load "lib/');
+    keys(ed, "\x17");
+    equal(ed.src(), 'load "');
+});
+Deno.test("Option+Backspace and Option+D kill a word; _ separates words", () => {
+    const ed = editor("x_value + 1", 7);
+    keys(ed, "\x1b\x7f");
+    equal(ed.src(), "x_ + 1");
+    keys(ed, "\x1b[127;3u");
+    equal(ed.src(), "x + 1");
+    const forward = editor("map f xs", 0);
+    keys(forward, "\x1bd");
+    equal(forward.src(), " f xs");
+});
+Deno.test("Ctrl+Y yanks what consecutive kills took, in order", () => {
+    const ed = editor("one two three");
+    keys(ed, "\x17\x17");
+    equal(ed.src(), "one ");
+    keys(ed, "\x19");
+    equal(ed.src(), "one two three");
+    keys(ed, "\x01\x0b\x19\x19");
+    equal(ed.src(), "one two threeone two three");
+});
 Deno.test("encoded Ctrl shortcuts retain legacy behavior", () => {
     for (const code of [1, 3, 4, 5, 11, 21, 23]) {
         const legacy = editor("one two", 4), enhanced = editor("one two", 4);
