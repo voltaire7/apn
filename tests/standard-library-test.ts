@@ -4,7 +4,16 @@ import { MATH_FUNCTIONS, METHODS } from "../src/ast.ts";
 import { isOperatorName } from "../src/parser.ts";
 import { QUALIFIED_MODULES } from "../src/modules.ts";
 
+const fromType = (type: string, json: string) =>
+    `import ["option", "decode"]\njson = from JSON ${JSON.stringify(json)}\ndecodeValue (fromType ${type}) json`;
 const cases: [string, string][] = [
+    // decode.fromType reads each field by name, as its type says.
+    [fromType("[quote: String, year: Int]", '{"year": 1843, "quote": "q", "x": 0}'), 'Ok [quote: "q", year: 1843]'],
+    [fromType("[quote: String, year: Int]", '{"quote": "q"}'), 'Err "Expecting an OBJECT with a field named `year`"'],
+    [fromType("[quote: String, year: Int]", '{"quote": "q", "year": "1843"}'), 'Err "Expecting an INT"'],
+    [fromType("[at: [x: Float, y: Float], tags: list string]", '{"at": {"x": 1, "y": 2.5}, "tags": ["a"]}'), 'Ok [at: [x: 1.0, y: 2.5], tags: ["a"]]'],
+    [fromType("[tags: list string]", '{"tags": ["a", 1]}'), 'Err "Expecting a STRING"'],
+    [fromType("Bool", "true"), "Ok true"],
     ["takeWhile (x -> 1) [1]", "[1]"],
     ['head (reverse [1..10000])', '10000'],
     ['length (reverse [1..10000])', '10000'],

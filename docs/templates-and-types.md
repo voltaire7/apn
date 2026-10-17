@@ -166,6 +166,7 @@ and extra fields are appended unchanged. An omitted `Int` becomes typed zero;
 omitted concrete values and functions retain their defaults. See [zero initialization](zero-initialization.md).
 A nonempty list argument must supply exactly one value per record field.
 The empty list `[]` explicitly initializes all fields from their defaults. Record results defer field transformations until demanded.
+A schema's result keeps its fields; see [record fields](semantics.md#record-fields-string-keys-and-positions).
 
 Keys retain their full string contents, including any quote characters, through application.
 `[x: Int, "x": Int] ["x": 1]` produces `[x: 0, "x": 1]`.

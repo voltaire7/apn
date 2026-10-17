@@ -380,6 +380,14 @@ It does not invoke an ordinary function stored in the old slot. A new field is
 inserted unchanged. On an unbound name or an existing function, `f "x" = value`
 remains a string-pattern function clause.
 
+A record a record schema made (`Quote [...]` or `Quote []` for
+`Quote = [quote: String, year: Int]`, a `(Quote q)` parameter, a nested
+schema's field) keeps the schema's fields: adding one, by `.`, a string key or
+`_`, is an error (`[quote: String, year: Int] has no field 'yaer'`), before
+the run when the checker knows the record, otherwise when the assignment runs.
+An update's copy keeps the type; a literal copy (`[_: q, extra: 1]`) is an
+ordinary record, open to new fields.
+
 An empty list `[]` becomes a record on its first field assignment.
 `obj.[x] = [10]` requires a one-element RHS list; `obj.[x] = 10` errors.
 `obj.child.x = 10` and `obj.child.[x, y] = [10, 20]` rebuild nested parent records.

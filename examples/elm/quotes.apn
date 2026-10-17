@@ -8,13 +8,7 @@ Quote = [quote: String, source: String, author: String, year: Int]
 Model = Failure | Loading | Success Quote
 Msg = MorePlease | GotQuote (Result Quote http.HttpError)
 
-quoteDecoder = map4 toQuote
-    (field "quote" string)
-    (field "source" string)
-    (field "author" string)
-    (field "year" int)
-
-toQuote quote source author year = [.quote, .source, .author, .year]
+quoteDecoder = fromType Quote
 
 getRandomQuote = http.get [
     url: "https://elm-lang.org/api/random-quotes"

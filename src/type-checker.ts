@@ -50,7 +50,7 @@ type Ty =
     // function's code, so they are trusted only at a direct call by name.
     | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; summary?: Summary }
     | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number> }
-    | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string> }
+    | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string>; closed?: boolean }
     // chosen: one of value's choices, picked by a condition known only at runtime.
     // given: an indexed family's index values written so far, by parameter (Vec 2 Int).
     // applied: how many of a family's arguments are given (Pair a, Vec 2).
@@ -1257,6 +1257,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return application(a, { type: b }, { t: "placeholder" });
         }
         if (t.op === "construct") {
+            // A record schema converts the value once it is known.
+            if (a.k === "record") return waiting(b) ? t : application(a, { type: b }, { t: "placeholder" });
             if (a.k !== "type") return problem("expected a type constructor");
             if (resolve(a.value).k === "var") return t;
             return application(a, { type: b }, { t: "placeholder" });
@@ -1710,7 +1712,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return result;
         }
         if (t.k === "record") {
-            const result: Ty = { k: "record", fields: new Map() };
+            const result: Ty = { k: "record", fields: new Map(), closed: true };
             seen.set(t, result);
             for (const [key, value] of t.fields) result.fields.set(key, schemaValue(value, e, seen));
             return result;
@@ -2502,9 +2504,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // A list or record of types (Point = [x: Float, y: Float]) given as a
             // type's argument is the type it describes: List Point, Option Point.
             // (Nested ones too: [x: Float, color: [Float, Float]].)
-            const describing = (x: Ty): boolean => x.k === "type"
-                || x.k === "list" && !!x.items?.length && x.items.every(item => describing(resolve(item)))
-                || x.k === "record" && x.fields.size > 0 && [...x.fields.values()].every(field => describing(resolve(field)));
             const describes = a.k !== "type" && describing(a);
             if (describes && (t.k === "atom" && t.name === "List" || t.k === "variant" && t.args.length > (f.applied ?? 0))) {
                 a = { k: "type", value: schemaValue(a, e) };
@@ -2743,9 +2742,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 return union([...f.fields.values()]);
             }
-            if (a.k === "record" || a.k === "list") {
-                const supplied = a.k === "record"
-                    ? a.fields
+            // A value not known yet (a parameter, Dynamic, a computed one) is
+            // converted at runtime; it is the record the schema describes.
+            const unknownValue = a.k === "var" || a.k === "operation" || isExplicit(a);
+            if (unknownValue && a.k !== "dynamic") requirements.push({ k: "operation", op: "construct", args: [f, argument.type] });
+            else if (unknownValue) runtimeChecks++;
+            if (a.k === "record" || a.k === "list" || unknownValue) {
+                const supplied = a.k === "record" ? a.fields : a.k !== "list" ? new Map<string, Ty>()
                     : new Map(a.items?.length === 0 ? [] : [...f.fields.keys()].map((k, i) => [k, a.items?.[i] ?? a.element]));
                 if (a.k === "list" && a.items && a.items.length && a.items.length !== f.fields.size) {
                     problem(`record needs ${f.fields.size} positional values, got ${a.items.length}`, e);
@@ -2756,7 +2759,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     fields.set(key, t.k === "type" ? value ? convert(t.value, value, e) : t.value : value ?? t);
                 }
                 for (const [key, value] of supplied) if (!fields.has(key)) fields.set(key, value);
-                return { k: "record", fields };
+                // A record schema's value keeps its fields (see newField).
+                return { k: "record", fields, ...describing(f) ? { closed: true } : {} };
             }
         }
         // Numeric defaults are only replaceable inside container templates.
@@ -2766,8 +2770,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         // A value known only as some Function (a Function field): any argument,
         // a result of its own (unknown) type.
-        if (f.k === "atom" && f.name === "Function") return variable();
+        // So is a record known only as some Record (a schema a parameter holds),
+        // applied as a template at runtime.
+        if (f.k === "atom" && (f.name === "Function" || f.name === "Record")) return variable();
         return problem(`cannot apply ${text(f)}`, e);
+    }
+    // A list or record of types (Point = [x: Float, y: Float]) describes a type.
+    function describing(x: Ty): boolean {
+        return x.k === "type"
+            || x.k === "list" && !!x.items?.length && x.items.every(item => describing(resolve(item)))
+            || x.k === "record" && x.fields.size > 0 && [...x.fields.values()].every(field => describing(resolve(field)));
+    }
+    // A record a record schema made keeps its fields, as at runtime.
+    function newField(rec: Extract<Ty, { k: "record" }>, key: string, e: Expr): void {
+        if (!rec.closed) return;
+        const near = didYouMean(key, [...rec.fields.keys()]);
+        problem(`${text(rec)} has no field '${key}'`, e, near ? `did you mean '${near}'?`
+            : `a record its type made keeps its fields; copy it to add one: [_: record, ${key}: value]`);
     }
     let inferenceDepth = 0;
     // The type each expression was last inferred with, for facts read right after.
@@ -3131,7 +3150,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (e.entries.length === 1 && e.entries[0] === "_") {
                     const spread = resolve(v.k === "list" ? v.items?.[0] ?? v.element : value);
                     if (spread.k !== "record") return problem("record flattening expects a record", e);
-                    let merged: Ty = { k: "record", fields: new Map([...fields, ...spread.fields]), open: rec.open };
+                    for (const key of spread.fields.keys()) if (!fields.has(key)) newField(rec, key, e);
+                    let merged: Ty = { k: "record", fields: new Map([...fields, ...spread.fields]), open: rec.open, closed: rec.closed };
                     for (let n = parents.length - 1; n >= 0; n--) {
                         const [parent, key, open] = parents[n];
                         merged = { k: "record", fields: new Map([...parent, [key, merged]]), open };
@@ -3153,6 +3173,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     problem("field assignment length mismatch", e);
                 }
                 e.entries.forEach((key, n) => {
+                    if (!fields.has(key)) newField(rec as Extract<Ty, { k: "record" }>, key, e);
                     const incoming = v.k === "list" ? v.items?.[n] ?? v.element : dynamic;
                     const previous = fields.get(key), old = previous && resolve(previous);
                     fields.set(
@@ -3163,7 +3184,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     );
                 });
                 // A copy of an open record stays open: the fields it has not seen yet are kept.
-                let result: Ty = { k: "record", fields, open: rec.open };
+                let result: Ty = { k: "record", fields, open: rec.open, closed: rec.closed };
                 for (let i = parents.length - 1; i >= 0; i--) {
                     const [parent, key, open] = parents[i];
                     result = { k: "record", fields: new Map([...parent, [key, result]]), open };
@@ -3225,8 +3246,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const field = e.index.t === "string" ? e.index.v : e.index.t === "var" ? scope.get(e.index.name)?.string : undefined;
                 if (rec.k === "record" && field !== undefined) {
                     const fields = new Map(rec.fields), old = fields.get(field);
+                    if (!old) newField(rec, field, e);
                     fields.set(field, old && resolve(old).k !== "type" ? convert(old, value, e.value) : value);
-                    return { k: "record", fields };
+                    return { k: "record", fields, closed: rec.closed };
                 }
                 return unknown();
             }

@@ -664,9 +664,9 @@ export class Interpreter {
             if (collection.scope) return this.updateEnvironment(collection, [[key.v, value]]);
             const fields = collection.v.slice();
             const index = fields.findIndex(([field]) => field === key.v);
-            if (index < 0) fields.push([key.v, value]);
+            if (index < 0) fields.push([this.newField(collection, key.v), value]);
             else fields[index] = [key.v, this.assignSlot(collection.v[index][1], value)];
-            return { kind: "record", v: fields };
+            return this.keepType(collection, { kind: "record", v: fields });
         }
         throw new APNError("runtime", "indexed assignment expects an existing list or record");
     }
@@ -942,7 +942,11 @@ export class Interpreter {
         v = this.force(v);
         if (v.kind === "type") v = this.zeroValue(v, path);
         if (v.kind === "type" || v.kind === "functionType") throw new APNError("runtime", "this type needs an explicit default value");
-        if (v.kind === "record") return { kind: "record", v: v.v.map(([k, x]) => [k, this.defer(() => this.defaultField(x, path))]) };
+        if (v.kind === "record") {
+            const result: Value = { kind: "record", v: v.v.map(([k, x]) => [k, this.defer(() => this.defaultField(x, path))]) };
+            if (this.isTypeValue(v)) this.declaredTypes.set(result, v);
+            return result;
+        }
         if (this.isList(v)) {
             const cell = this.cell(v);
             return cell ? { kind: "cons", head: this.defer(() => this.defaultField(cell.head, path)), tail: this.defer(() => this.defaultField(cell.tail, path)) } : mkList([]);
@@ -1174,10 +1178,11 @@ export class Interpreter {
                             const expression = e.value.t === "list" ? e.value.v[0] : e.value;
                             const spread = this.dataValue(this.eval(expression));
                             if (spread.kind !== "record") throw new APNError("runtime", "record flattening expects a record");
-                            let merged: Value = { kind: "record", v: [...new Map([...base!, ...spread.v])] };
+                            if (rec.kind === "record") for (const [key] of spread.v) if (!base.some(([k]) => k === key)) this.newField(rec, key);
+                            let merged: Value = this.keepType(rec, { kind: "record", v: [...new Map([...base!, ...spread.v])] });
                             for (let n = parents.length - 1; n >= 0; n--) {
                                 const [parent, key] = parents[n];
-                                merged = { kind: "record", v: parent.v.map(([k, v]) => [k, k === key ? merged : v]) };
+                                merged = this.keepType(parent, { kind: "record", v: parent.v.map(([k, v]) => [k, k === key ? merged : v]) });
                             }
                             r = merged;
                             break;
@@ -1207,16 +1212,16 @@ export class Interpreter {
                             for (let i = 0; i < e.entries.length; i++) {
                                 const key = e.entries[i];
                                 const idx = out.findIndex(([k]) => k === key);
-                                if (idx === -1) out.push([e.entries[i], rhs.v[i]]);
+                                if (idx === -1) out.push([rec.kind === "record" ? this.newField(rec, key) : key, rhs.v[i]]);
                                 else out[idx] = [e.entries[i], this.assignSlot(base[idx][1], rhs.v[i])];
                             }
-                            r = { kind: "record", v: out };
+                            r = this.keepType(rec, { kind: "record", v: out });
                         }
                         for (let i = parents.length - 1; i >= 0; i--) {
                             const [parent, key] = parents[i];
                             r = parent.scope
                                 ? this.updateEnvironment(parent, [[key, r]])
-                                : { kind: "record", v: parent.v.map(([name, value]) => [name, name === key ? r : value]) };
+                                : this.keepType(parent, { kind: "record", v: parent.v.map(([name, value]) => [name, name === key ? r : value]) });
                         }
                         break;
                     }
@@ -1481,6 +1486,21 @@ export class Interpreter {
         throw new APNError("runtime", `array arithmetic '${op}' expects numeric leaves and matching shapes (got ${l.kind} and ${r.kind})`);
     }
 
+    // A record a record type made keeps that type's fields: a new one is an
+    // error. (A copy made by an update keeps the type.)
+    private newField(rec: Extract<Value, { kind: "record" }>, key: string): string {
+        const type = this.declaredTypes.get(rec);
+        if (type?.kind !== "record") return key;
+        const near = didYouMean(keyText(key), rec.v.map(([k]) => keyText(k)));
+        throw new APNError("runtime", `${valueToString(type)} has no field '${keyText(key)}'`, {
+            hint: near ? `did you mean '${near}'?` : `a record its type made keeps its fields; copy it to add one: [_: record, ${keyText(key)}: value]`,
+        });
+    }
+    private keepType(from: Value, to: Value): Value {
+        const type = this.declaredTypes.get(from);
+        if (type) this.declaredTypes.set(to, type);
+        return to;
+    }
     private missingField(rec: Extract<Value, { kind: "record" }>, key: string): never {
         const near = didYouMean(keyText(key), rec.v.map(([k]) => keyText(k)));
         throw new APNError("runtime", `record has no field '${keyText(key)}'`, {
@@ -1774,7 +1794,9 @@ export class Interpreter {
                     if (carg.v.length !== 0 && carg.v.length !== f.v.length) {
                         throw new Error(`Runtime: field count (${f.v.length}) does not match list size (${carg.v.length})`);
                     }
-                    return { kind: "record", v: f.v.map(([k, template], i) => [k, this.defer(() => i < carg.v.length ? this.applyTemplateSlot(template, carg.v[i]) : this.defaultField(template, []))] as [string, Value]) };
+                    const result: Value = { kind: "record", v: f.v.map(([k, template], i) => [k, this.defer(() => i < carg.v.length ? this.applyTemplateSlot(template, carg.v[i]) : this.defaultField(template, []))] as [string, Value]) };
+                    if (this.isTypeValue(f)) this.declaredTypes.set(result, f);
+                    return result;
                 }
                 if (carg.kind === "record") {
                     const supplied = new Set(carg.v.map(([key]) => key));

@@ -32,10 +32,23 @@ at path decoder = match path [
     [] -> decoder
     name :: rest -> field name (at rest decoder)
 ]
-list decoder = Decoder (value -> {
-    each items = match items [
-        [] -> Ok []
-        item :: rest -> map2 (x, xs -> x :: xs) (decodeValue decoder item) (each rest)
-    ]
-    isType List value ? each value : Err "Expecting a LIST"
-})
+list decoder = Decoder (value ->
+    isType List value ? _all (map (decodeValue decoder) value) : Err "Expecting a LIST")
+# The values of a list of Results, or the first error.
+_all results = match results [
+    [] -> Ok []
+    result :: rest -> map2 (x, xs -> x :: xs) result (_all rest)
+]
+# A decoder from a type: a record schema decodes an object field by field
+# (fromType [quote: String, year: Int]), String, Int, Float and Bool decode as
+# string, int, float and bool, a decoder decodes as itself (tags: list string),
+# and any other type takes the values isType accepts.
+fromType t = Decoder (_decodeAs t)
+# Each kind of value as Dynamic, so one function decodes them all; a record's
+# values take the schema's keys (a dotted template keeps its input's keys).
+_decodeAs (Record schema) value = map (values -> (map (v -> _ -> v) values).schema)
+    (_all (map ([name, t] -> decodeValue (field name (fromType t)) value) (pairs schema)))
+_decodeAs (Decoder decoder) value = map Dynamic (decoder value)
+_decodeAs t value = map Dynamic (decodeValue (_basic t) value)
+_basic t = t == String ? string : t == Int ? int : t == Float ? float : t == Bool ? bool
+    : expecting (to String t) (isType t)

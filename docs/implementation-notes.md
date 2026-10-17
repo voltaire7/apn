@@ -330,6 +330,11 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   zero-argument definition like a cell, and a checked write replaces it with
   another shared record of the same fields as itself. Tests:
   `tests/default-checking-test.ts` (p5.js-example cases).
+- A record schema's value is marked in `declaredTypes` by every path that
+  makes one (a record or list argument, `[]`, a nested default), and each
+  update's copy keeps the mark (`keepType`), so `newField` can refuse a field
+  its schema lacks; the checker's record type carries the same fact as
+  `closed`. Tests: `tests/semantics-test.ts`, `tests/default-checking-test.ts`.
 
 ## Numeric arrays
 

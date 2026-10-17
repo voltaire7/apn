@@ -48,6 +48,11 @@ for (const [source, expected] of [
     ['browser = import "browser"\nMsg = Resized browser.Viewport | Other\nResized [width: 1, height: 2]', 'Resized [width: 1, height: 2]'],
     // A constructor pattern on a Dynamic field is checked when it runs.
     ['import "option"\nMsg = More | Got Dynamic\nf msg = match msg [More -> 0, (Got (Ok q)) -> q, (Got (Err _)) -> 1]\nf (Got (Ok 5))', '5'],
+    // A record schema applied to a value not known yet converts it at runtime.
+    ['Quote = [quote: String, year: Int]\nconv r = Quote r\n(conv [year: 2]).year', '2'],
+    ['Quote = [quote: String, year: Int]\n(Quote (Dynamic [quote: "q", year: 1])).quote', '"q"'],
+    // A record its type made takes updates to its fields, and a literal copy new ones.
+    ['Quote = [quote: String, year: Int]\nq = Quote []\nq.year = 3\nq "quote" = "x"\n[_: q, more: 1]', '[quote: "x", year: 3, more: 1]'],
 ] as const) Deno.test(`default checking session: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -63,6 +68,11 @@ for (const source of [
     'env',
     'f g = [g 1, g "a"]; f (x -> 0)',
     'f r = r.y == 0 ? 5.0 : r.vy * 9007199254740993; f [y: 1.0, vy: 2.0]',
+    // A record its type made keeps its fields.
+    'Quote = [quote: String, year: Int]; q = Quote []; q.yaer = 1',
+    'Quote = [quote: String, year: Int]; q = Quote []; q "yaer" = 1',
+    'Quote = [quote: String, year: Int]; f (Quote q) = { q.x = 1; q }',
+    'Quote = [quote: String, year: Int]; conv r = Quote r; (conv [year: "x"]).year',
 ]) Deno.test(`default checking rejects before evaluation: ${source}`, () => rejected(session(), source));
 
 Deno.test("a static error prevents earlier effects and bindings", () => {

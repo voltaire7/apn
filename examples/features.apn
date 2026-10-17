@@ -1523,6 +1523,16 @@ pointDecoder = map2 (x, y -> [x: x, y: y])
 print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1, \"y\": 2}"))  # Ok [x: 1, y: 2]
 # Err "Expecting an OBJECT with a field named `y`"
 print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1}"))
+# fromType decodes as a type says, each field by name; a record type made the
+# result, so it keeps its fields (lamp.lti = true is an error).
+Pixel = [x: Int, y: Int, lit: Bool]
+pixelJson = from JSON "{\"y\": 2, \"x\": 1, \"lit\": true}"
+print (decode.decodeValue (decode.fromType Pixel) pixelJson)  # Ok [x: 1, y: 2, lit: true]
+lamp = Pixel []
+lamp.lit = true
+print [_: lamp, size: 2]                       # [x: 0, y: 0, lit: true, size: 2] (a copy)
+asPixel value = Pixel value                    # converted when it runs
+print (asPixel [lit: true]).lit                # true
 clock = import "time"
 print (clock.toMinute clock.utc (clock.millisToPosix 754000))     # 12
 print (map2 (+) (Some 1) (Some 2))             # Some 3
