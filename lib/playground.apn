@@ -219,9 +219,14 @@ _advance updateMemory msg game = {
             game.computer.screen = _toScreen width height
             [game, browser.none]
         }
+        # Compared, the keyboard is computed now, as Elm computes it, so no
+        # chain of pending updates builds up; a held key's repeats change nothing.
         GameKey isDown key -> {
-            game.computer.keyboard = _updateKeyboard isDown key computer.keyboard
-            [game, browser.none]
+            keyboard = _updateKeyboard isDown key computer.keyboard
+            keyboard == computer.keyboard ? [game, browser.none] : {
+                game.computer.keyboard = keyboard
+                [game, browser.none]
+            }
         }
         GameMouseMove pageX pageY -> {
             game.computer.mouse.[x, y] = [

@@ -265,7 +265,7 @@ export function describeType(value: Value): string {
         switch (v.kind) {
             case "int": case "float": case "rational": case "complex": return named(numericType(v));
             case "type": case "functionType": return named("Type");
-            case "thunk": return v.value ? inspect(v.value) : expr(v.body, v.env);
+            case "thunk": return v.value ? inspect(v.value) : expr(v.body, v.env!);
             case "deferred": return v.value ? inspect(v.value) : v.describes ? inspect(v.describes) : fresh();
             case "lazyList": return v.value ? inspect(v.value) : sequence(v.exprs.map(e => expr(e, v.env)));
             case "list": return sequence(v.v.map(inspect));

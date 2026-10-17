@@ -1920,15 +1920,19 @@ export class Interpreter {
                     }
                     v.busy = true;
                     pending.push(v);
-                    if (v.kind === "deferred") v = v.compute();
+                    if (v.kind === "deferred") v = v.compute!();
                     else {
                         const old = this.env;
-                        this.env = v.env;
+                        this.env = v.env!;
                         try { v = this.eval(v.body); } finally { this.env = old; }
                     }
                 } else break;
             }
-            for (const thunk of pending) thunk.value = v;
+            for (const thunk of pending) {
+                thunk.value = v;
+                if (thunk.kind === "thunk") thunk.env = undefined;
+                else thunk.compute = thunk.describes = undefined;
+            }
             return v;
         } finally {
             for (const thunk of pending) thunk.busy = false;
@@ -3170,7 +3174,7 @@ export class Interpreter {
         // condition), as assert shows its expression.
         if (name === "primSource") {
             let argument = argsIn[0];
-            if (argument.kind === "thunk" && argument.body.t === "var") argument = argument.env.get(argument.body.name) ?? argument;
+            if (argument.kind === "thunk" && argument.body.t === "var") argument = argument.env?.get(argument.body.name) ?? argument;
             let body = argument.kind === "thunk" ? argument.body : undefined;
             // Without its grouping parentheses: n > 0, not (n > 0).
             while (body?.t === "block" && body.style === "(" && body.stmts.length === 1) body = body.stmts[0];

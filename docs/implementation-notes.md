@@ -31,7 +31,10 @@ intentional evaluation change.
 - `force()` reveals only the outer value and memoizes every thunk it traverses.
   It must never force a list recursively. Consume spines with `cell()` /
   `elements()` and demand needed elements with `demand()`. Failed or
-  interrupted thunks must release their busy flags.
+  interrupted thunks must release their busy flags. A thunk or deferred value
+  drops what computes it (`env`, `compute`, `describes`) once it has its value,
+  so a long-lived value never keeps the scope that made it alive (a game's
+  model would otherwise keep every earlier frame; `tests/elm-examples-test.ts`).
 - Deferred values and arguments share their memoized outer result, including
   through alias chains; actions stay repeatable.
 - Blocks are `{ t: "block" }` nodes that evaluate in a child `Env`;

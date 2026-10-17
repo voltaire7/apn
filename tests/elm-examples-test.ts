@@ -155,6 +155,36 @@ Deno.test("playground games read the keyboard, mouse and screen", async () => {
     const moved = (mouse.render() as { children: HtmlNode[] }).children[0];
     if (!("tag" in moved) || moved.attributes.transform !== "translate(100.5,-99.75) rotate(0) scale(1)") throw new Error(JSON.stringify(moved));
 });
+// What a value keeps alive: the objects reachable from it.
+function reachable(root: unknown): number {
+    const seen = new Set<object>(), stack = [root];
+    while (stack.length) {
+        const x = stack.pop();
+        if (x === null || typeof x !== "object" || seen.has(x)) continue;
+        seen.add(x);
+        if (x instanceof Map) stack.push(...x.values());
+        else if (!(x instanceof WeakMap)) stack.push(...Object.values(x));
+    }
+    return seen.size;
+}
+Deno.test("a held key keeps no earlier frames alive", async () => {
+    // A field nobody reads (the keys) once chained every repeat's pending
+    // update, and an evaluated value kept the scope that made it.
+    const { platform, flush } = fake();
+    const keyboard = run("keyboard", platform);
+    await flush();
+    const subscriptions = keyboard.subscriptions();
+    const hold = (frames: number) => {
+        for (let n = 0; n < frames; n++) {
+            keyboard.notify(find(subscriptions, "key", "keydown"), "ArrowRight");
+            keyboard.notify(find(subscriptions, "frame"), 1000 + n);
+            keyboard.render();
+        }
+        return reachable(keyboard.model);
+    };
+    const early = hold(300), late = hold(300);
+    if (late > early) throw new Error(`the model grew from ${early} to ${late} objects`);
+});
 Deno.test("p5 canvases in views draw the model", () => {
     const calls: string[] = [];
     const p: Record<string, unknown> = { PI: Math.PI, WEBGL: "webgl", TRIANGLES: 4, width: 400, height: 400, windowWidth: 400, windowHeight: 400 };

@@ -45,7 +45,9 @@ export type Value =
     | { kind: "lazyList"; exprs: Expr[]; env: Env; value?: Value }
     | { kind: "cons"; head: Value; tail: Value }
     // describes: an unevaluated value it will be (a cons tail's thunk), for typeOf.
-    | { kind: "deferred"; compute: () => Value; value?: Value; busy?: boolean; describes?: Value }
+    // A deferred value or thunk drops what computes it once it has its value,
+    // so a value never keeps the scope that made it alive.
+    | { kind: "deferred"; compute?: () => Value; value?: Value; busy?: boolean; describes?: Value }
     // shared: a stateful object (a p5 object), which a definition allocates once, as a Mutable.
     | { kind: "record"; v: Array<[string, Value]>; scope?: Env; guarded?: boolean; shared?: boolean }
     | { kind: "variant"; tag: string; v: Value[]; family?: VariantFamily; arguments?: Value[] }
@@ -66,7 +68,7 @@ export type Value =
     // or bind built from one): realized in a monad by an annotation, a >>=
     // with a concrete value, or as IO when run.
     | { kind: "pending"; step: PendingStep }
-    | { kind: "thunk"; body: Expr; env: Env; value?: Value; busy?: boolean };
+    | { kind: "thunk"; body: Expr; env?: Env; value?: Value; busy?: boolean };
 
 // Numbers are accepted only for bounded host counters such as array lengths.
 export function mkInt(v: bigint | number): Value {
