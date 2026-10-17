@@ -1891,6 +1891,14 @@ appendVect (Vect n a xs) (Vect m a ys) = Vect (n + m) a {
     ]
 }
 print (typeOf (appendVect [1, 2] [3]))  # => Vect 3 Int
+# Written with lambdas it is the same function, checked the same way.
+appendLambda = Vect n a xs -> Vect m a ys -> Vect (n + m) a {
+    match xs [
+        [] -> ys
+        x :: rest -> x :: appendLambda rest ys
+    ]
+}
+print (appendLambda [] [3])              # => [3]
 print (countVect [7, 8, 9])              # => 3
 print (copySized 3 [1, 2, 3])            # => [1, 2, 3]
 print (typeOf (SizedInts 3 [1, 2, 3]))   # => Vect 3 Int

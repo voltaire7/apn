@@ -37,6 +37,9 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     // A name a typed pattern's type binds is a parameter too; repeating it is a use.
     equal(unused("first ((List a) (x::_)) = x\ng ((Vect n a) _) = n").map(d => d[2]), ["'a' is never used; write _ to discard it", "'a' is never used; write _ to discard it"]);
     equal(unused("h ((Vect n a) _) ((Vect n a) _) = n\nk ((List _) (x::_)) = x\ncopy n ((Vect n Int) xs) = xs"), []);
+    // So in the shorthand Vect n a xs, also when a lambda's pattern repeats it.
+    equal(unused("f (Vect n a xs) (Vect m a ys) = [n, m, xs, ys]\ng = Vect n a xs -> Vect m a ys -> [n, m, xs, ys]"), []);
+    equal(unused("f (Vect n a xs) = [n, xs]").map(d => d[2]), ["'a' is never used; write _ to discard it"]);
     // A literal zero divisor warns, except IEEE division with a Float on either side.
     const zero = (source: string) => lint(source).filter(d => d.code === "zeroDivisor").map(d => [d.range.start.line, d.range.start.character, d.range.end.character]);
     equal(zero("a = 1 / 0\nb = (/ 0)\nc = quotient 7 (-0)\nd = 7 % 0.0\ne = modulo 7 0"), [[0, 8, 9], [1, 7, 8], [2, 15, 19], [3, 8, 11], [4, 13, 14]]);

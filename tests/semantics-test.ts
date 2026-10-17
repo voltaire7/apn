@@ -453,3 +453,8 @@ for (const source of [
     "f (Quote q) = { q.yaer = 1; q }\nprint (f [quote: \"a\", year: 1])",
     "Line = [from: Quote, to: Quote]\nl = Line []\nl.from.yaer = 1",
 ]) failure(`a new field on a record its type made: ${source}`, `Quote = [quote: String, year: Int]\n${source}`, "has no field 'yaer'");
+
+example("an empty vector's open element type is bound by an inner lambda's pattern", `
+f = Vect n a xs -> Vect m a ys -> [n, m, a]
+print (f [] [3])
+print (f [] [])`, ["[0, 1, Int]", "[0, 0, a]"]);

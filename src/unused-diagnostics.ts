@@ -86,15 +86,28 @@ export function unusedDiagnostics(program: TopLevel[], source: string): Diagnost
         for (const value of Object.values(n)) if (value && typeof value === "object") collect(value);
     };
     collect(program);
+    typeNames = new Set(["Vect", "List", ...[...defined].filter(name => /^[A-Z]/.test(name))]);
     statements(program.map(node => node.t === "expr" ? node.value : node));
     return diagnostics;
+}
+
+// The types a typed pattern may name, as Vect n a xs: the prelude's, and the
+// document's (set for each document checked).
+let typeNames = new Set<string>();
+// Vect n a xs is the typed pattern ((Vect n a) xs): its type's arguments are
+// expressions, compared when bound, and only its last part binds a value.
+function typed(p: Pattern): Pattern {
+    if (p.p !== "constr" || !typeNames.has(p.tag) || p.args.length < 2) return p;
+    const parts = p.args.slice(0, -1).map((x): Expr => x.p === "var" ? { t: "var", name: x.name } : x.p === "int" ? { t: "int", v: x.v } : { t: "placeholder" } as Expr);
+    return { p: "schema", type: parts.reduce((f, a): Expr => ({ t: "app", f, a }), { t: "var", name: p.tag } as Expr), value: p.args.at(-1)! };
 }
 
 // The names typed patterns' types bind: a lowercase argument (n and a in
 // (Vect n a) xs) that no earlier parameter bound and the document does not define.
 function typeBound(params: Pattern[], defined: Set<string>): string[] {
     const earlier = new Set<string>(), found: string[] = [];
-    const walk = (p: Pattern): void => {
+    const walk = (pattern: Pattern): void => {
+        const p = typed(pattern);
         if (p.p === "schema") {
             const args: Expr[] = [];
             let head = p.type;
@@ -152,7 +165,8 @@ function lambdaIn(e: unknown): boolean {
 }
 
 // The names a pattern binds, a type's name too ((t x) binds t; (_ x) does not).
-function bound(p: Pattern, types = true): string[] {
+function bound(pattern: Pattern, types = true): string[] {
+    const p = typed(pattern);
     switch (p.p) {
         case "var": return [p.name];
         case "typeBind": return [p.name, ...bound(p.value, types)];
@@ -167,7 +181,8 @@ function bound(p: Pattern, types = true): string[] {
 }
 
 // The type expressions in a pattern, which may use other parameters.
-function types(p: Pattern): Expr[] {
+function types(pattern: Pattern): Expr[] {
+    const p = typed(pattern);
     switch (p.p) {
         case "schema": return [p.type, ...types(p.value)];
         case "typeBind": return types(p.value);
@@ -217,6 +232,8 @@ function free(e: unknown, shadowed: Set<string>, used: Set<string>, values = new
     }
     // Patterns hold expressions only in their types.
     if ("p" in n) {
+        const p = typed(n as Pattern);
+        if (p !== n) { free(p, shadowed, used, values); return; }
         if (n.p === "schema") free(n.type, shadowed, used, values);
         for (const value of Object.values(n)) if (value && typeof value === "object" && (Array.isArray(value) || "p" in value)) free(value, shadowed, used, values);
         return;

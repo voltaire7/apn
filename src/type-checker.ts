@@ -5732,6 +5732,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             !!length && (length.t === "placeholder" || length.t === "var" && /^[a-z]/.test(length.name) && !scope.has(length.name));
     }
     function inferFunction(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr, given?: Ty[]): Ty {
+        // A body that is a lambda (f = x -> y -> e is the clause f x = y -> e)
+        // is checked with the clause's parameters, as f x y = e is: the same
+        // curried function, so a result constructor around e is its signature too.
+        const inner = params.length ? functionExpr(body) : undefined;
+        if (inner && !(guard && inner.t === "patternLambda" && inner.guard)) {
+            const more: Pattern[] = inner.t === "lambda" ? inner.params.map(name => ({ p: "var", name })) : inner.params;
+            const names = new Set(params.flatMap(patternNames));
+            if (more.length && !more.flatMap(patternNames).some(name => names.has(name))) {
+                return inferFunction([...params, ...more], inner.body, parent, recursiveName, guard ?? (inner.t === "patternLambda" ? inner.guard : undefined), given);
+            }
+        }
         const scope = new Map(parent), inputs: { type: Ty; binder?: string; coerce: boolean }[] = [];
         const bound = new Set<string>(recursiveName ? [recursiveName] : []);
         const patternStart = requirements.length;

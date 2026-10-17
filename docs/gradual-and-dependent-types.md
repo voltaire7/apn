@@ -402,6 +402,9 @@ append (Vect n a xs) (Vect m a ys) = Vect (n + m) a {
 signature before the body is checked; affine arithmetic establishes the sum.
 The example passes strict checking without executing either branch.
 Returning `Vect (n + m + 1) a ys` in the empty branch is a static error.
+Written with lambdas, `append = Vect n a xs -> Vect m a ys -> Vect (n + m) a
+{...}`, it is checked the same way, and an empty first list leaves `a` for the
+second pattern to bind.
 
 At runtime an annotated vector supplies its descriptor without forcing its
 elements. An ordinary finite list must be traversed to infer its length and

@@ -48,6 +48,8 @@ for (const [source, expected] of [
     ['browser = import "browser"\nMsg = Resized browser.Viewport | Other\nResized [width: 1, height: 2]', 'Resized [width: 1, height: 2]'],
     // A constructor pattern on a Dynamic field is checked when it runs.
     ['import "option"\nMsg = More | Got Dynamic\nf msg = match msg [More -> 0, (Got (Ok q)) -> q, (Got (Err _)) -> 1]\nf (Got (Ok 5))', '5'],
+    // A definition written with lambdas is checked as the clause with those parameters.
+    ['append = Vect n a xs -> Vect m a ys -> Vect (n + m) a {\n    match xs [\n        [] -> ys\n        x::xs -> x :: append xs ys\n    ]\n}\ntypeOf (append [] [3])', 'Vect 1 Int'],
     // A record schema applied to a value not known yet converts it at runtime.
     ['Quote = [quote: String, year: Int]\nconv r = Quote r\n(conv [year: 2]).year', '2'],
     ['Quote = [quote: String, year: Int]\n(Quote (Dynamic [quote: "q", year: 1])).quote', '"q"'],
@@ -68,6 +70,7 @@ for (const source of [
     'env',
     'f g = [g 1, g "a"]; f (x -> 0)',
     'f r = r.y == 0 ? 5.0 : r.vy * 9007199254740993; f [y: 1.0, vy: 2.0]',
+    'bad = Vect n a xs -> Vect m a ys -> Vect (n + m + 1) a {\n    match xs [\n        [] -> ys\n        x::xs -> x :: bad xs ys\n    ]\n}',
     // A record its type made keeps its fields.
     'Quote = [quote: String, year: Int]; q = Quote []; q.yaer = 1',
     'Quote = [quote: String, year: Int]; q = Quote []; q "yaer" = 1',

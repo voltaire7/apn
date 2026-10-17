@@ -3675,9 +3675,12 @@ export class Interpreter {
         const type = this.env.get(head.name), base = type && this.reference(type);
         if (base?.kind === "type" && base.family?.results) return this.indexedPattern(base.family, args, p.value, v, binds);
         // A length is a value: a bound name is that value. A type position keeps
-        // a name bound to a type or function; any other name binds here.
+        // a name bound to a type or function; any other name binds here, as
+        // does one an empty vector left open (f = Vect n a xs -> Vect m a ys -> ...
+        // given [] first binds a from ys, as the clause f (Vect n a xs) (Vect m a ys) does).
+        const open = (name: string) => { const bound = this.env.get(name), t = bound && this.reference(bound); return t?.kind === "type" && t.name === "$any" && !!t.description; };
         const free = (e: Expr, n: number) => e.t === "placeholder" || e.t === "var" && /^[a-z]/.test(e.name) && !binds.has(e.name) &&
-            (base?.kind === "type" && base.name === "Vect" && n === 0 ? !this.env.get(e.name) : this.typeVariableName(e.name, this.env));
+            (base?.kind === "type" && base.name === "Vect" && n === 0 ? !this.env.get(e.name) : this.typeVariableName(e.name, this.env) || open(e.name));
         if (!args.some(free)) return undefined;
         if (base?.kind !== "type" || base.family || base.alias) return undefined;
         // Each argument as the Vect pattern's part: a free name binds, a bound
