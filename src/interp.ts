@@ -812,10 +812,12 @@ export class Interpreter {
 
 
     // `*` iteration: seq * fn or fn * seq — applies fn over the sequence and returns the
-    // results. seq is a list (elements), a record (entries as [field, value]
-    // lists), or an int n (0..n-1; a negative n counts 0, -1, ... n+1).
+    // results. seq is a list (elements), a string (characters), a record (entries
+    // as [field, value] lists), or an int n (0..n-1; a negative n counts 0, -1, ... n+1).
     iterate(seq: Value, f: Value): Value {
         seq = this.dataValue(seq);
+        // A string supplies its characters, as to (List Char) gives them.
+        if (seq.kind === "string") seq = this.dataValue(standardNative(this, "chars", [seq]));
         const out: Value[] = [];
         if (this.isList(seq)) {
             const items = this.elements(seq);
@@ -844,7 +846,7 @@ export class Interpreter {
             }
         } else {
             throw new APNError("runtime", `cannot iterate a ${seq.kind}`, {
-                hint: "expected a list, a record, or an int count",
+                hint: "expected a list, a string, a record, or an int count",
             });
         }
         // Iterating an action (xs * print) is one action running each in turn.

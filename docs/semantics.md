@@ -152,9 +152,9 @@ are negative numbers rather than sections; write `x -> x - 2` for that.
 ### Iteration and ranges
 
 `*` with a function operand iterates and returns the list of results. A list
-supplies its elements, a record its `[key, value]` pairs, and an integer `n`
-the indexes `0` to `n - 1` (a negative `n` counts down: `-3 * f` passes
-`0, -1, -2`).
+supplies its elements, a string its characters (`"hi" * print`), a record its
+`[key, value]` pairs, and an integer `n` the indexes `0` to `n - 1` (a negative
+`n` counts down: `-3 * f` passes `0, -1, -2`).
 Function iteration accepts either operand order: `print * [1, 2, 3]` is equivalent
 to `[1, 2, 3] * print`. Records pass `[key, value]` pairs and integer counts pass
 indexes. Numeric operands still multiply (including numeric arrays); two
@@ -522,7 +522,8 @@ return = Some                      # return in Option
 ```
 
 `to` and `from` are methods the same way: `to T x` writes `x` as a `T`
-(`to String`, `to JSON`, `to (List Char)`; another type converts as applying it),
+(`to String`, `to JSON`, `to (List Char)`; another type, a record type too,
+converts as applying it: `to Quote x` is `Quote x`),
 `from T x` reads one back. A bare type name in a pattern matches that type
 itself (`describe Int = "integer"`), so an instance names its type:
 `to Celsius = (F f) -> C ((f - 32) * 5 / 9)`. See the

@@ -1281,6 +1281,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (t.op === "to") return template(a, b, activeExpression ?? { t: "placeholder" });
                 return problem("no from instance for a list template", undefined, "join characters with `from (List Char) cs`; convert with `to`, as in `to [Char, Char] \"hi\"`");
             }
+            // So does a record schema ([quote: String, year: Int]), a type too.
+            if (a.k === "record" && describing(a)) {
+                if (t.op === "to") return application(a, { type: b }, activeExpression ?? { t: "placeholder" });
+                const shown = text(schemaValue(a, { t: "placeholder" }));
+                return problem(`no from instance for ${shown}`, undefined, `define one, such as \`from ${shown} x = ...\``);
+            }
             if (a.k !== "type") return problem(`${t.op} expects a type, as in ${t.op} String x`);
             const target = resolve(a.value);
             const named = (name: string) => target.k === "variant" && target.name === name && !!target.base;
@@ -1385,12 +1391,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // Iterating an action (xs * print) is one action yielding the results.
             const action = (each: Ty) => isIO(resolve(each)) || isPending(resolve(each));
             const results = (each: Ty, list: Ty): Ty => action(each) ? io(list) : list;
+            // A string supplies its characters.
+            if (input.k === "atom" && input.name === "String") {
+                const each = application(f, { type: atom("Char") }, { t: "placeholder" });
+                return results(each, list(action(each) ? runType(each) : each));
+            }
             if (input.k === "list") {
                 const each = application(f, { type: input.element }, { t: "placeholder" });
                 return results(each, { k: "list", element: action(each) ? runType(each) : each, ...sameLength(input) });
             } else if (input.k === "record") element = { k: "list", element: union([atom("String"), ...input.fields.values()]), items: [atom("String"), union([...input.fields.values()])], length: constant(2n) };
             else if (input.k === "atom" && input.name === "Int") element = input;
-            else return problem(`iteration needs a list, record, or Int; got ${text(input)}`);
+            else return problem(`iteration needs a list, string, record, or Int; got ${text(input)}`);
             const each = application(f, { type: element }, { t: "placeholder" });
             return results(each, list(action(each) ? runType(each) : each));
         }
@@ -1544,8 +1555,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
 
         if (
-            expected.k === "atom" && expected.name === "Type" && actual.k === "type"
+            expected.k === "atom" && expected.name === "Type" && (actual.k === "type" || describing(actual))
         ) return;
+        // A list or record of types ([quote: String, year: Int]) is a type, as at runtime.
+        if (expected.k === "type" && (actual.k === "record" || actual.k === "list") && describing(actual)) {
+            return unify(expected.value, schemaValue(actual, e ?? { t: "placeholder" }), e, seen);
+        }
         // A Function field or parameter accepts any function.
         if (expected.k === "atom" && expected.name === "Function" && ["fn", "overload", "intrinsic"].includes(actual.k)) return;
         if (expected.k === "atom" && actual.k === "atom") {

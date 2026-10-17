@@ -1,10 +1,44 @@
 # Decoding JSON values, as in Elm's Json.Decode. A decoder turns a value (as
 # from JSON gives it: records, lists, numbers, strings, Bool, []) into Ok of
-# the result or Err of what went wrong. int, float and list are also random's
-# names: a program using both imports one qualified (decode = import "decode").
+# the result or Err of what went wrong. A type decodes as fromType reads it, so
+# one stands wherever a decoder goes (field "year" Int, list Quote). int, float
+# and list are also random's names: a program using both imports one qualified
+# (decode = import "decode").
 import "option"
 Decoder a = | Decoder (value -> Result a String)
+expecting what test = Decoder (value -> test value ? Ok value : Err ("Expecting " ++ what))
+string = expecting "a STRING" (isType String)
+int = expecting "an INT" isInteger
+float = Decoder (value -> isNumber value ? Ok (inexact value) : Err "Expecting a FLOAT")
+bool = expecting "a BOOL" (isType Bool)
+# The value an object holds under name, or the error saying it has none.
+_field name value = {
+    fields = isType Record value ? HashMap (pairs (Record value)) : HashMap []
+    has name fields
+        ? Ok (lookup name fields)
+        : Err ("Expecting an OBJECT with a field named `" ++ name ++ "`")
+}
+# The values of a list of Results, or the first error.
+_all results = match results [
+    [] -> Ok []
+    result :: rest -> map2 (x, xs -> x :: xs) result (_all rest)
+]
+# A value as a type describes it, as Dynamic so one function decodes them all:
+# a record schema field by field (its values take the schema's keys, as a
+# dotted template keeps its input's keys), a decoder as itself (tags: list
+# string), String, Int, Float and Bool as string, int, float and bool, and
+# any other type the values isType accepts.
+_decodeAs (Record schema) value = map (values -> (map (v -> _ -> v) values).schema)
+    (_all (map ([name, t] -> _field name value >>= _decodeAs t) (pairs schema)))
+_decodeAs (Decoder decoder) value = map Dynamic (decoder value)
+_decodeAs t value = _decodeAs (_basic t) value
+_basic t = t == String ? string : t == Int ? int : t == Float ? float : t == Bool ? bool
+    : expecting (to String t) (isType t)
 decodeValue (Decoder decoder) value = decoder value
+decodeValue (Type t) value = _decodeAs t value
+# A type's decoder, for what takes only a decoder (map f (fromType Quote)), or
+# a record's whose fields may be decoders ([name: String, tags: list string]).
+fromType t = Decoder (_decodeAs t)
 # Decoders are monads: map f d, d >>= f (Elm's andThen), return x (Elm's
 # succeed); map2 ... map4 come from the prelude.
 map f (Decoder decoder) = Decoder (value -> match (decoder value) [
@@ -17,38 +51,10 @@ map f (Decoder decoder) = Decoder (value -> match (decoder value) [
 ])
 return x = Decoder (_ -> Ok x)
 succeed x = Decoder (_ -> Ok x)
-expecting what test = Decoder (value -> test value ? Ok value : Err ("Expecting " ++ what))
-string = expecting "a STRING" (isType String)
-int = expecting "an INT" isInteger
-float = map inexact (expecting "a FLOAT" isNumber)
-bool = expecting "a BOOL" (isType Bool)
-field name decoder = Decoder (value -> {
-    fields = isType Record value ? HashMap (pairs (Record value)) : HashMap []
-    has name fields
-        ? decodeValue decoder (lookup name fields)
-        : Err ("Expecting an OBJECT with a field named `" ++ name ++ "`")
-})
+field name decoder = Decoder (value -> _field name value >>= decodeValue decoder)
 at path decoder = match path [
-    [] -> decoder
+    [] -> Decoder (decodeValue decoder)
     name :: rest -> field name (at rest decoder)
 ]
 list decoder = Decoder (value ->
     isType List value ? _all (map (decodeValue decoder) value) : Err "Expecting a LIST")
-# The values of a list of Results, or the first error.
-_all results = match results [
-    [] -> Ok []
-    result :: rest -> map2 (x, xs -> x :: xs) result (_all rest)
-]
-# A decoder from a type: a record schema decodes an object field by field
-# (fromType [quote: String, year: Int]), String, Int, Float and Bool decode as
-# string, int, float and bool, a decoder decodes as itself (tags: list string),
-# and any other type takes the values isType accepts.
-fromType t = Decoder (_decodeAs t)
-# Each kind of value as Dynamic, so one function decodes them all; a record's
-# values take the schema's keys (a dotted template keeps its input's keys).
-_decodeAs (Record schema) value = map (values -> (map (v -> _ -> v) values).schema)
-    (_all (map ([name, t] -> decodeValue (field name (fromType t)) value) (pairs schema)))
-_decodeAs (Decoder decoder) value = map Dynamic (decoder value)
-_decodeAs t value = map Dynamic (decodeValue (_basic t) value)
-_basic t = t == String ? string : t == Int ? int : t == Float ? float : t == Bool ? bool
-    : expecting (to String t) (isType t)

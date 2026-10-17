@@ -53,6 +53,11 @@ for (const [source, expected] of [
     // A record schema applied to a value not known yet converts it at runtime.
     ['Quote = [quote: String, year: Int]\nconv r = Quote r\n(conv [year: 2]).year', '2'],
     ['Quote = [quote: String, year: Int]\n(Quote (Dynamic [quote: "q", year: 1])).quote', '"q"'],
+    // A record type is a type: to applies it, and a Type parameter takes it.
+    ['Quote = [quote: String, year: Int]\n(to Quote [year: 1]).year', '1'],
+    ['f (Type t) = t\nisType (f [a: Int]) [a: 3]', 'true'],
+    // A string iterates its characters.
+    ['"ab" * (c -> to String c)', '["\'a\'", "\'b\'"]'],
     // A record its type made takes updates to its fields, and a literal copy new ones.
     ['Quote = [quote: String, year: Int]\nq = Quote []\nq.year = 3\nq "quote" = "x"\n[_: q, more: 1]', '[quote: "x", year: 3, more: 1]'],
 ] as const) Deno.test(`default checking session: ${source}`, () => {
@@ -71,6 +76,9 @@ for (const source of [
     'f g = [g 1, g "a"]; f (x -> 0)',
     'f r = r.y == 0 ? 5.0 : r.vy * 9007199254740993; f [y: 1.0, vy: 2.0]',
     'bad = Vect n a xs -> Vect m a ys -> Vect (n + m + 1) a {\n    match xs [\n        [] -> ys\n        x::xs -> x :: bad xs ys\n    ]\n}',
+    'Quote = [quote: String, year: Int]; from Quote [quote: "q", year: 1]',
+    'Quote = [quote: String, year: Int]; to Quote [year: "x"]',
+    '"ab" * (c -> c + 1)',
     // A record its type made keeps its fields.
     'Quote = [quote: String, year: Int]; q = Quote []; q.yaer = 1',
     'Quote = [quote: String, year: Int]; q = Quote []; q "yaer" = 1',

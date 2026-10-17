@@ -175,14 +175,16 @@ These follow Elm's modules of the same names; the
   `decode.decodeValue decoder value` is `Ok` or `Err`; `decode.string`,
   `decode.int`, `decode.float`, `decode.bool`, `decode.field name d`,
   `decode.at path d`, `decode.list d`, `decode.succeed x`; decoders are
-  monads too (`map4 (a, b, c, d -> ...) d1 d2 d3 d4`). `decode.fromType t`
-  decodes as a type says: Quotes's `fromType Quote` reads each field of
-  `Quote = [quote: String, ...]` by name, and fails, as `field` does, on a
-  missing or mistyped one. `String`, `Int`, `Float` and `Bool` decode as
-  `string`, `int`, `float` and `bool`; a record schema field by field; a field
-  may be a decoder (`[name: String, tags: list string]`); other types take what
-  `isType` accepts, which checks a list's shape, not its elements (`list int`
-  checks those).
+  monads too (`map4 (a, b, c, d -> ...) d1 d2 d3 d4`). A type decodes as it
+  says, wherever a decoder goes: Quotes's `http.expectJson GotQuote Quote`
+  reads each field of `Quote = [quote: String, ...]` by name, and fails, as
+  `field` does, on a missing or mistyped one (also `field "year" Int`,
+  `list Quote`). `String`, `Int`, `Float` and `Bool` decode as `string`, `int`,
+  `float` and `bool`; a record type field by field; other types take what
+  `isType` accepts, which checks a list's shape, not its elements (`list Int`
+  checks those). `decode.fromType t` is a type's decoder, for `map` and `>>=`,
+  and takes a record whose fields may also be decoders, which is not a type:
+  `fromType [name: String, tags: list string]`.
 - `file`: pickers and downloads (above), and `file.toUrl f`, the action
   yielding a file's URL (`http.get` reads its text from there).
   A file is a `file.File`: `[name: String, size: Int, mime: String, url: String]`.

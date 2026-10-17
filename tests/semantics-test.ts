@@ -458,3 +458,7 @@ example("an empty vector's open element type is bound by an inner lambda's patte
 f = Vect n a xs -> Vect m a ys -> [n, m, a]
 print (f [] [3])
 print (f [] [])`, ["[0, 1, Int]", "[0, 0, a]"]);
+
+example("iterating a string passes its characters", `
+"hé" * print
+print (print * "")`, ["'h'", "'é'", "[]"]);

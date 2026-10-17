@@ -4,16 +4,20 @@ import { MATH_FUNCTIONS, METHODS } from "../src/ast.ts";
 import { isOperatorName } from "../src/parser.ts";
 import { QUALIFIED_MODULES } from "../src/modules.ts";
 
-const fromType = (type: string, json: string) =>
-    `import ["option", "decode"]\njson = from JSON ${JSON.stringify(json)}\ndecodeValue (fromType ${type}) json`;
+const decoded = (type: string, json: string) =>
+    `import ["option", "decode"]\njson = from JSON ${JSON.stringify(json)}\ndecodeValue ${type} json`;
 const cases: [string, string][] = [
-    // decode.fromType reads each field by name, as its type says.
-    [fromType("[quote: String, year: Int]", '{"year": 1843, "quote": "q", "x": 0}'), 'Ok [quote: "q", year: 1843]'],
-    [fromType("[quote: String, year: Int]", '{"quote": "q"}'), 'Err "Expecting an OBJECT with a field named `year`"'],
-    [fromType("[quote: String, year: Int]", '{"quote": "q", "year": "1843"}'), 'Err "Expecting an INT"'],
-    [fromType("[at: [x: Float, y: Float], tags: list string]", '{"at": {"x": 1, "y": 2.5}, "tags": ["a"]}'), 'Ok [at: [x: 1.0, y: 2.5], tags: ["a"]]'],
-    [fromType("[tags: list string]", '{"tags": ["a", 1]}'), 'Err "Expecting a STRING"'],
-    [fromType("Bool", "true"), "Ok true"],
+    // A type decodes each field by name, as it says, wherever a decoder goes.
+    [decoded("(list [n: Int])", '[{"n": 1}, {"n": 2}]'), "Ok [[n: 1], [n: 2]]"],
+    [decoded('(field "n" Int)', '{"n": "x"}'), 'Err "Expecting an INT"'],
+    [decoded('(at ["a", "b"] String)', '{"a": {"b": "x"}}'), 'Ok "x"'],
+    [decoded("(map (r -> r.n) (fromType [n: Int]))", '{"n": 7}'), "Ok 7"],
+    [decoded("[quote: String, year: Int]", '{"year": 1843, "quote": "q", "x": 0}'), 'Ok [quote: "q", year: 1843]'],
+    [decoded("[quote: String, year: Int]", '{"quote": "q"}'), 'Err "Expecting an OBJECT with a field named `year`"'],
+    [decoded("[quote: String, year: Int]", '{"quote": "q", "year": "1843"}'), 'Err "Expecting an INT"'],
+    [decoded("(fromType [at: [x: Float, y: Float], tags: list string])", '{"at": {"x": 1, "y": 2.5}, "tags": ["a"]}'), 'Ok [at: [x: 1.0, y: 2.5], tags: ["a"]]'],
+    [decoded("(fromType [tags: list string])", '{"tags": ["a", 1]}'), 'Err "Expecting a STRING"'],
+    [decoded("Bool", "true"), "Ok true"],
     ["takeWhile (x -> 1) [1]", "[1]"],
     ['head (reverse [1..10000])', '10000'],
     ['length (reverse [1..10000])', '10000'],
