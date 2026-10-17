@@ -48,3 +48,28 @@ Deno.test('do streams an infinite sequence until interrupted', () => {
     finally { setInterruptFlag(null); console.log = log; }
     if (!interrupted || count !== 1000) throw new Error('did not stream');
 });
+// do statements is their block: the same result, effects or error, checked or not.
+for (const [form, block] of [
+    ['do []', '{}'],
+    ['do [1, 2]', '{ 1; 2 }'],
+    ['do [print "hi", return 42]', '{ print "hi"; return 42 }'],
+    ['x <- do []', 'x <- {}'],
+    ['x = do [print 1, 2]', 'x = { print 1; 2 }'],
+    ['import "option"; do [Some 1, Some 2]', 'import "option"; { Some 1; Some 2 }'],
+    ['import "option"; do [Some 1, None, Some 2]', 'import "option"; { Some 1; None; Some 2 }'],
+    ['do [[1, 2], [3]]', '{ [1, 2]; [3] }'],
+] as const) Deno.test(`do is its block: ${form}`, () => {
+    const outcome = (source: string, checked: boolean) => {
+        const i = new Interpreter();
+        if (checked) i.enableChecking();
+        const log = console.log, output: string[] = [];
+        console.log = (...args: unknown[]) => output.push(args.join(' '));
+        try { return `${i.renderString(i.run(parseDocument(source)))} ${output.join('|')}`; }
+        catch (e) { return `error: ${e instanceof Error ? e.message : e}`; }
+        finally { console.log = log; }
+    };
+    for (const checked of [true, false]) {
+        const a = outcome(form, checked), b = outcome(block, checked);
+        if (a !== b) throw new Error(`${checked ? 'checked' : 'unchecked'}: ${a} vs ${b}`);
+    }
+});

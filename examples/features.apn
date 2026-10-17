@@ -755,6 +755,8 @@ print editable               # => [10, 11, 30]
 # ---------------------------------------------------------
 evaluationValue = 2 + 1
 print evaluationValue       # => 3 (computed when first used, then kept)
+appliedValue = abs (0 - 3)  # an application with a plain value: kept too
+print appliedValue          # => 3
 actionValue = { print "action"; return 4 }  # an IO action: defining it runs nothing
 actionResult <- actionValue # => action (<- runs it and binds its result)
 print actionResult          # => 4
@@ -1634,12 +1636,12 @@ tailCountdown n = tailCountdown (n - 1)
 print (tailCountdown 10000)          # => 42
 # A file ending in load "itself" likewise repeats until Ctrl+C.
 
-# do runs a list of actions in order: an action yielding the last result.
+# do statements is the block with those statements: do [a, b] is { a; b }.
 do [print "hi", print "there"]      # => hi, then there
-lastOne <- do [return 1, return 2, return 42]  # each element is an action
+lastOne <- do [print "first", return 42]  # { print "first"; return 42 }
 print lastOne                       # => 42
-noneRun <- do []
-print noneRun                       # => []
+print [do [1, 2], { 1; 2 }]         # => [2, 2]: no action, so the last value
+print [do [], {}]                   # => [[], []]: no statements
 
 # A new top-level statement after a closed block must start at column one.
 # f = { print "hi" }

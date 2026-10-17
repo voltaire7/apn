@@ -41,6 +41,14 @@ action = print "unexpected"
 print 42
 `, ["42"]);
 
+example("an application's plain value is kept, as any value is", `
+c = Mutable 1
+y = abs c
+z = c + 0
+print [y, z]
+set c $ 5
+print [y, z]
+`, ["[1, 1]", "[1, 1]"]);
 example("an action runs only where a statement or <- runs it", `
 value = { print 2; return 2 }
 print "defined"

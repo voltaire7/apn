@@ -274,7 +274,7 @@ export function describeType(value: Value): string {
             case "rationalRange": return list(named("Fraction"));
             case "cons": return unify(list(inspect(v.head)), inspect(v.tail));
             case "contract": return arrow(named(typeToString(v.from)), named(typeToString(v.to)));
-            case "closure": return fn(v.params.map(name => ({ p: "var", name })), v.body, v.env);
+            case "closure": return v.env ? fn(v.params.map(name => ({ p: "var", name })), v.body, v.env) : inspect(v.mutableValue!);
             case "clauseFn": return join(v.clauses.map(c => fn(c.params, c.body, v.env, v.applied)));
             case "native": {
                 const a = fresh(), b = fresh();

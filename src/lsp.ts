@@ -63,7 +63,7 @@ const builtins = new Map<string, string>([
     ["throw", "throw e — the monad's failure, decided by the context: [] in a list, None in an Option, Err e in a Result, a failing action in IO."],
     ["cast", "cast Type value — APN prelude compatibility wrapper for lossless Type application."],
     ["use", "use namespace — open a record or list of records in the current scope; later fields win; returns ()."],
-    ["do", "do actions — action running a list of actions in order, yielding the last result; [] for an empty list."],
+    ["do", "do statements — the block with those statements: do [a, b] is { a; b }; do [] is {}."],
     ["match", "match value alternatives — try unary pattern functions in order."],
     ["assert", "assert condition — require a truthy value; failures include the expression and source location."],
     ["bracket", "bracket acquire release use — action; finishes returned data before cleanup, even on failure (function)."],

@@ -330,7 +330,7 @@ function helpText(): string {
         `  Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a (indexed family)`,
         `  to String x; from String "42"; to JSON x; from JSON text; to (List Char) s; from (List Char) cs`,
         `  describe Int = ...  (a bare type name in a pattern matches that type)`,
-        `  do [print "hi", return 42] — run actions in order; yield the last result`,
+        `  do [print "hi", return 42] — the block { print "hi"; return 42 }`,
         `  Int32 123; Int (truncate 3.7); typeOf value; Type [x: Float]`,
         `  myTypeOf (t x) = print t   (bind the runtime type and value)`,
         `  f (Int x) = ...; f (Number x) = ... (typed overloads)`,

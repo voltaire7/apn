@@ -72,6 +72,8 @@ export const NATIVES: Array<[string, number]> = [
     ["to", 2], ["from", 2],
 ];
 // The names editors color as built-in functions (the natives, cast and do).
+// Values that hold nothing else (so no action): numbers, strings, characters, Bools.
+const PLAIN_KINDS = new Set(["int", "float", "rational", "complex", "string", "char", "bool"]);
 export const NATIVE_NAMES = new Set(["cast", "do", ...NATIVES.map(([name]) => name)]);
 const ZERO: Value = { kind: "int", v: 0n, typeName: "UInt" };
 
@@ -913,11 +915,16 @@ export class Interpreter {
         if (v.kind !== "closure" || v.params.length !== 0) return v;
         if (v.mutableValue) return v.mutableValue;
         const old = this.env;
-        this.env = v.env;
+        this.env = v.env!;
         try {
             const result = this.force(this.eval(v.body, tailLoad));
             // A stateful object (a cell, an allocation, a p5 object) is allocated once and shared.
             if (result.kind === "mutable" || result.kind === "pointer" || result.kind === "record" && result.shared) v.mutableValue = result;
+            // An application yielding a plain value, which can hold no action to
+            // repeat, keeps it as any value is kept (v = 1 + 2) and lets go of
+            // its scope: a game's model holding one (vx = toX keys) would keep
+            // every earlier frame otherwise.
+            else if (v.body.t !== "block" && PLAIN_KINDS.has(result.kind)) { v.mutableValue = result; v.env = undefined; }
             return result;
         } finally {
             this.env = old;
@@ -2122,7 +2129,7 @@ export class Interpreter {
     private methodOf(v: Value): string | undefined {
         if (v.kind === "native" && !v.applied.length) return Interpreter.METHOD_NATIVES.get(v.name);
         if (v.kind !== "closure" || v.applied?.length || v.params.join() !== "$L,$R" || v.body.t !== "binop") return undefined;
-        const op = v.body.op, bound = v.env.get(op), base = bound && this.reference(bound);
+        const op = v.body.op, bound = v.env?.get(op), base = bound && this.reference(bound);
         return base?.kind === "native" && !base.applied.length ? Interpreter.METHOD_NATIVES.get(base.name) : undefined;
     }
     // A method as an overloaded function shows itself: its builtin (by name),
@@ -2782,7 +2789,7 @@ export class Interpreter {
         const scope = new Env(f.env);
         const variable = (name: string): Value => {
             if (name === "_") return { kind: "type", name: "_", variable: true };
-            const bound = f.env.get(name), value = bound && this.reference(bound);
+            const bound = f.env?.get(name), value = bound && this.reference(bound);
             if (value && (value.kind === "type" || value.kind === "functionType")) return value;
             if (!variables.has(name)) variables.set(name, { kind: "type", name, variable: true });
             return variables.get(name)!;

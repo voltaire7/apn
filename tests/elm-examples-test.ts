@@ -167,20 +167,21 @@ function reachable(root: unknown): number {
     }
     return seen.size;
 }
-Deno.test("a held key keeps no earlier frames alive", async () => {
-    // A field nobody reads (the keys) once chained every repeat's pending
-    // update, and an evaluated value kept the scope that made it.
+// A field nobody reads (the keys) once chained every repeat's pending update,
+// an evaluated value kept the scope that made it, and so did a definition
+// (Mario's vx = toX computer.keyboard) its model held.
+for (const [name, key] of [["keyboard", "ArrowRight"], ["mario", "ArrowUp"]]) Deno.test(`a held key keeps no earlier frames alive: ${name}`, async () => {
     const { platform, flush } = fake();
-    const keyboard = run("keyboard", platform);
+    const game = run(name, platform);
     await flush();
-    const subscriptions = keyboard.subscriptions();
+    const subscriptions = game.subscriptions();
     const hold = (frames: number) => {
         for (let n = 0; n < frames; n++) {
-            keyboard.notify(find(subscriptions, "key", "keydown"), "ArrowRight");
-            keyboard.notify(find(subscriptions, "frame"), 1000 + n);
-            keyboard.render();
+            game.notify(find(subscriptions, "key", "keydown"), key);
+            game.notify(find(subscriptions, "frame"), 1000 + n);
+            game.render();
         }
-        return reachable(keyboard.model);
+        return reachable(game.model);
     };
     const early = hold(300), late = hold(300);
     if (late > early) throw new Error(`the model grew from ${early} to ${late} objects`);

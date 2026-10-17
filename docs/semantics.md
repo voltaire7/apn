@@ -650,7 +650,7 @@ its call wrote it, as `assert` shows its expression (`guard b` names `b`).
 | `throw e` | the monad's failure: `[]` in a list, `None` in an Option, `Err e` in a Result, a failing action in IO (instances: `throw _ = None`) |
 | `empty` | `throw "empty"`: the monad's value holding nothing |
 | `guard c` | `return []` when `c` holds, else `throw "guard failed: c"` (as written): a false guard stops a do-block |
-| `do actions` | runs each action in order, yielding the last result |
+| `do statements` | the block with those statements: `do [a, b]` is `{ a; b }` |
 
 `xs * f` iterates: when `f` returns actions it is the single action running
 each in turn (`[1, 2, 3] * x -> print x`), yielding the results. It runs each
@@ -670,7 +670,11 @@ interrupted.
 
 All thunks traversed in an alias chain share the resulting outer value. Repeated
 uses of a deferred value, including bare statements, reuse that value:
-`value = 2 + 1` computes 3 once. List elements and arguments likewise share
+`value = 2 + 1` computes 3 once, and so does a definition whose body is an
+application when its value is plain, a number, string, character or Bool
+(`n = abs x`). One yielding anything else (an action, a list, a record) is
+evaluated again at each use, so running it repeats it, reading cells as they
+are then (`bump = set c (c + 1)`). List elements and arguments likewise share
 demanded results. Values are return, so sharing is never observable except
 through `debug` (which prints the source it is given) and FFI calls, the two
 deliberate escape hatches.
@@ -1155,10 +1159,12 @@ do [print "hi", print "there"]
 answer <- do [print "calculating", return 42]  # prints, binds 42
 ```
 
-`do actions` is the action running each element in order, yielding the last
-result; `do []` yields []. Each element must be an action (`return x` for a value).
-An error stops the sequence. It accepts computed lists too, and processes the
-spine incrementally. Each run of the action runs the elements again.
+`do statements` is the [block](#blocks-are-do-blocks) with those statements:
+`do [a, b, c]` is `{ a; b; c }` in every way, so `do []` is `{}` (the empty
+list), `do [1, 2]` is 2, and with an action among them it is a do-block
+whose last element must be an action. It accepts computed lists too, and
+processes the spine incrementally. Each run of the action runs the elements
+again; an error stops the sequence.
 
 Numeric lists and records support elementwise arithmetic and scalar broadcasting;
 `++` remains concatenation, and `*` with a function remains iteration.

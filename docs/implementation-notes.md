@@ -35,6 +35,10 @@ intentional evaluation change.
   drops what computes it (`env`, `compute`, `describes`) once it has its value,
   so a long-lived value never keeps the scope that made it alive (a game's
   model would otherwise keep every earlier frame; `tests/elm-examples-test.ts`).
+- A definition with an application body is a 0-parameter closure, run at
+  each use; when its result is plain (`PLAIN_KINDS`) the closure keeps it and
+  drops its `env` (Mario's model keeps `vx = toX ...`; the leak tests in
+  `tests/elm-examples-test.ts`).
 - Deferred values and arguments share their memoized outer result, including
   through alias chains; actions stay repeatable.
 - Blocks are `{ t: "block" }` nodes that evaluate in a child `Env`;

@@ -1320,9 +1320,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return application(a, { type: b }, { t: "placeholder" });
         }
         if (t.op === "template") return template(a, b, { t: "placeholder" });
+        // do xs is the block whose statements are the elements, so its type is
+        // the last one's ([] for none); a literal list is checked as that block.
         if (t.op === "do") {
-            if (a.k !== "list") return problem("do expects a list of expressions");
-            return io(runType(a.items ? a.items[a.items.length - 1] ?? list(variable(), constant(0n)) : a.element));
+            if (a.k !== "list") return problem("do expects a list of statements");
+            return a.items ? a.items.at(-1) ?? list(dynamic, constant(0n)) : a.element;
         }
         if (t.op === "to" || t.op === "from") {
             if (a.k === "var") return t;
@@ -3119,6 +3121,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const loaded = options.loads(a.v, scope, e === tailStatement);
                     for (const [name, entry] of loaded) scope.set(name, entry);
                     return { k: "record", fields: new Map([...loaded].map(([name, entry]) => [name, entry.type])) };
+                }
+                if (resolved.k === "intrinsic" && resolved.name === "do" && a.t === "list") {
+                    return infer({ t: "block", stmts: a.v, style: "{" }, scope);
                 }
                 if (resolved.k === "intrinsic" && ["quote", "debug", "toAST"].includes(resolved.name)) {
                     return resolved.name === "quote" ? atom("String") : resolved.name === "debug" ? list(variable(), constant(0n)) : explicitDynamic;
@@ -5216,19 +5221,26 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (cell.program) programCells.add(cell);
             return { mutable: cell };
         }
-        // do xs: the action running each element in order, yielding the last.
+        // do xs: the block whose statements are the elements. With an action
+        // among them it is one, running each in order and yielding the last's
+        // result; otherwise it is the last value ([] for none).
         if (head.name === "do" && builtin && args.length === 1) {
-            const list = value(args[0]);
+            const statements: Known[] = [];
+            for (let rest: Known | undefined = value(args[0]); ;) {
+                if (!spendEvaluation(depth)) return undefined;
+                const cell = cellOf(rest);
+                if (cell === undefined) { incomplete = true; return undefined; }
+                if (cell === null) break;
+                if (cell.head === undefined) return undefined;
+                statements.push(cell.head);
+                rest = cell.tail;
+            }
+            if (!statements.some(k => k.action)) return statements.at(-1) ?? known([]);
+            const last = statements.at(-1)!;
+            if (!last.action) return undefined;
             return { action: () => {
-                let result: Known | undefined = known([]);
-                for (let rest: Known | undefined = list; spendEvaluation(depth);) {
-                    const cell = cellOf(rest);
-                    if (cell === undefined) { incomplete = true; return undefined; }
-                    if (cell === null) return result;
-                    result = runKnown(cell.head);
-                    rest = cell.tail;
-                }
-                return undefined;
+                for (const k of statements.slice(0, -1)) if (k.action && runKnown(k) === undefined) return undefined;
+                return runKnown(last);
             } };
         }
         // return x: the action yielding x.
