@@ -147,6 +147,40 @@ function send(message: Value): void {
 
 // The subscriptions the model asks for: installed once, given the newest
 // message functions after each update, removed when no longer asked for.
+// A page opened with #stats shows, each second, what it did: animation frames
+// and the slowest one's work, input events with the slowest handler and the
+// longest an event waited to be handled, and the keys the browser reports
+// held. It tells a slow or throttled browser from lost or queued input.
+const stats = location.hash === "#stats" ? (() => {
+    const box = document.createElement("pre");
+    box.style.cssText = "position:fixed;top:0;right:0;margin:0;padding:6px 8px;z-index:9;font:12px/1.4 monospace;"
+        + "background:rgba(0,0,0,.75);color:#fff;pointer-events:none";
+    document.body.appendChild(box);
+    let frames = 0, work = 0, events = 0, handled = 0, waited = 0, last = "none";
+    const held = new Set<string>(), watch = { capture: true, passive: true };
+    addEventListener("keydown", e => { held.add(e.key); last = `keydown ${e.key}${e.repeat ? " (repeat)" : ""}`; }, watch);
+    addEventListener("keyup", e => { held.delete(e.key); last = `keyup ${e.key}`; }, watch);
+    addEventListener("blur", () => { last = "the page lost focus"; });
+    setInterval(() => {
+        box.textContent = [
+            `frames/s       ${frames}   slowest ${work.toFixed(1)} ms`,
+            `input events/s ${events}   slowest ${handled.toFixed(1)} ms`,
+            `longest wait   ${waited.toFixed(0)} ms`,
+            `keys held      ${[...held].join(" ") || "none"}`,
+            `last key event ${last}`,
+        ].join("\n");
+        frames = work = events = handled = waited = 0;
+    }, 1000);
+    return {
+        frame(ms: number) { frames++; work = Math.max(work, ms); },
+        event(e: Event, start: number) {
+            events++;
+            handled = Math.max(handled, performance.now() - start);
+            waited = Math.max(waited, start - e.timeStamp);
+        },
+    };
+})() : undefined;
+
 const subscriptions = (() => {
     const active = new Map<string, { current: Subscription; stop: () => void }>();
     const fire = (key: string, ...args: (number | string | boolean)[]) => {
@@ -160,7 +194,14 @@ const subscriptions = (() => {
         if (s.kind === "frame") {
             let frame = 0, last = performance.now();
             // A frame's update draws in that frame.
-            const tick = (now: number) => { const delta = now - last; last = now; fire(key, s.delta ? delta : Date.now()); draw(); frame = requestAnimationFrame(tick); };
+            const tick = (now: number) => {
+                const start = performance.now(), delta = now - last;
+                last = now;
+                fire(key, s.delta ? delta : Date.now());
+                draw();
+                stats?.frame(performance.now() - start);
+                frame = requestAnimationFrame(tick);
+            };
             frame = requestAnimationFrame(tick);
             return () => cancelAnimationFrame(frame);
         }
@@ -172,8 +213,9 @@ const subscriptions = (() => {
     // Passive, as Elm's are: a subscription never cancels what the browser
     // does, so the browser need not wait for it on each of a held key's repeats.
     const listen = (target: EventTarget, event: string, f: (e: Event) => void) => {
-        target.addEventListener(event, f, { passive: true });
-        return () => target.removeEventListener(event, f);
+        const handle = (e: Event) => { const start = performance.now(); f(e); stats?.event(e, start); };
+        target.addEventListener(event, handle, { passive: true });
+        return () => target.removeEventListener(event, handle);
     };
     return {
         update(wanted: Subscription[]): void {

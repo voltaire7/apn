@@ -21,7 +21,11 @@ an image or a font) that exists in its folder is bundled too: text as text,
 which `readFile` reads in the browser, and anything else as a data URL;
 [p5](p5.md)'s loaders take either by that path.
 Open that file in a browser; no server or runtime download is required.
-Rebuild and refresh after editing the APN source.
+Rebuild and refresh after editing the APN source. Opened with `#stats`
+(`counter.html#stats`), a page shows each second what it did: animation
+frames and the slowest one's work, input events with the slowest handler and
+the longest an event waited, the keys the browser reports held, and the last
+key event. That tells a slow or throttled browser from queued or lost input.
 
 The programs follow [the Elm architecture](https://guide.elm-lang.org/architecture/).
 `examples/elm` recreates all of [Elm's examples](https://elm-lang.org/examples)
