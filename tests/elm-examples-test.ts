@@ -137,6 +137,13 @@ Deno.test("playground games read the keyboard, mouse and screen", async () => {
     if (!("tag" in svg) || svg.tag !== "svg" || svg.attributes.viewBox !== "-400 -300 800 600") throw new Error(JSON.stringify(svg).slice(0, 300));
     const placed = svg.children[0];
     if (!("tag" in placed) || placed.attributes.transform !== "translate(3,0) rotate(0) scale(1)") throw new Error(JSON.stringify(placed));
+    // A held key repeats; releasing it stops the square (the update once read
+    // its own new keys and never finished, so the key stayed down).
+    keyboard.notify(find(subscriptions, "key", "keydown"), "ArrowRight");
+    keyboard.notify(find(subscriptions, "key", "keyup"), "ArrowRight");
+    for (let n = 3; n < 6; n++) keyboard.notify(find(subscriptions, "frame"), 1000 + n);
+    const stopped = (keyboard.render() as { children: HtmlNode[] }).children[0];
+    if (!("tag" in stopped) || stopped.attributes.transform !== "translate(3,0) rotate(0) scale(1)") throw new Error(JSON.stringify(stopped));
     const mouse = run("mouse", platform);
     await flush();
     mouse.notify(find(mouse.subscriptions(), "mouse", "mousemove"), 500, 200);

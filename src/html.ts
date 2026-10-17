@@ -103,13 +103,16 @@ export class BrowserApp {
         this.handlers = handlers;
         return tree;
     }
-    // A page event on handler id: its message, applied; the new view.
-    dispatch(id: number, input: string | EventInfo = ""): HtmlNode {
+    // A page event on handler id: its message.
+    message(id: number, input: string | EventInfo = ""): Value {
         const handler = this.handlers[id] ?? fail("unknown event handler");
         const i = this.interpreter, info = typeof input === "string" ? { value: input } : input;
-        const message = "message" in handler ? handler.message
+        return "message" in handler ? handler.message
             : "input" in handler ? i.apply(handler.input, mkStr(info.value ?? "")) : i.apply(handler.event, eventValue(info));
-        this.send(message);
+    }
+    // Its message, applied; the new view.
+    dispatch(id: number, input: string | EventInfo = ""): HtmlNode {
+        this.send(this.message(id, input));
         return this.render();
     }
     // Apply a message. A failed update keeps the model it had.

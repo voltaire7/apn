@@ -9,8 +9,8 @@ import type { Value } from "./types.ts";
 const SVG = "http://www.w3.org/2000/svg";
 const root = document.getElementById("app")!;
 const errors = document.getElementById("apn-error")!;
-// An error shows until a later render succeeds, if it came from a render or
-// an update; a sketch's error (which stops its drawing) stays.
+// A view's error shows until a later render succeeds; an update's (whose
+// message is lost) and a sketch's (which stops its drawing) stay.
 let viewError = false;
 const report = (error: unknown, fromView = false) => { errors.textContent = String(error); errors.hidden = false; viewError = fromView; };
 const recovered = () => { if (viewError) errors.hidden = true; };
@@ -111,12 +111,9 @@ function patch(parent: Node, dom: Node | undefined, before: HtmlNode | undefined
         const prevent = after.prevented.includes(event);
         const listener: EventListener = e => {
             if (prevent) e.preventDefault();
-            try {
-                const next = app.dispatch(id, event === "input" ? (e.target as HTMLInputElement).value ?? "" : eventInfo(e));
-                patch(root, root.firstChild ?? undefined, current, next, false); current = next;
-                subscriptions.update(app.subscriptions());
-                recovered();
-            } catch (error) { report(error, true); }
+            try { app.send(app.message(id, event === "input" ? (e.target as HTMLInputElement).value ?? "" : eventInfo(e))); }
+            catch (error) { report(error); return; }
+            rerender();
         };
         const previous = listeners.get(event);
         if (previous) element.removeEventListener(event, previous);
@@ -129,7 +126,7 @@ function patch(parent: Node, dom: Node | undefined, before: HtmlNode | undefined
 }
 // A message from a command, a subscription or a sketch: update, then render.
 function send(message: Value): void {
-    try { app.send(message); } catch (error) { report(error, true); return; }
+    try { app.send(message); } catch (error) { report(error); return; }
     rerender();
 }
 
@@ -140,7 +137,7 @@ const subscriptions = (() => {
     const fire = (key: string, ...args: (number | string | boolean)[]) => {
         const entry = active.get(key);
         if (!entry) return;
-        try { app.notify(entry.current, ...args); } catch (error) { report(error, true); return; }
+        try { app.notify(entry.current, ...args); } catch (error) { report(error); return; }
         rerender();
     };
     const start = (s: Subscription, key: string): () => void => {

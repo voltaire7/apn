@@ -153,9 +153,10 @@ qualified.
 across renders with the newest callbacks, which may read the model.
 
 Updates patch elements in place by position, preserving input focus and avoiding
-unnecessary value resets. Runtime errors appear on the page; failed APN updates
-or view evaluation retain the last successful model, and the error stays until
-a later render succeeds (a sketch's error stays, as the sketch stops).
+unnecessary value resets. Runtime errors appear on the page; a failed APN
+update or view evaluation retains the last successful model. A view's error
+stays until a later render succeeds; an update's stays, as its message is lost
+(so does a sketch's, as the sketch stops).
 
 ## Companion modules
 
