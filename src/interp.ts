@@ -1857,9 +1857,12 @@ export class Interpreter {
                     if (this.isTypeValue(f)) this.declaredTypes.set(result, f);
                     return result;
                 }
-                // A record of values given fields is updated, exactly as by field
-                // assignment; one holding a type is a template.
-                if (carg.kind === "record" && !this.holdsType(f)) return this.assignFields(f, carg.v.map(([key, value]) => [key, this.demand(value)]));
+                // Given fields, a record is updated exactly as by field assignment:
+                // a record of values (model [name: n]), or a type given types
+                // (Vector3 [x: Int] is Vector3.x = Int). A type given values builds one.
+                if (carg.kind === "record" && (!this.holdsType(f) || this.holdsType(carg))) {
+                    return this.assignFields(f, carg.v.map(([key, value]) => [key, this.demand(value)]));
+                }
                 if (carg.kind === "record") {
                     const supplied = new Set(carg.v.map(([key]) => key));
                     const declared = this.isTypeValue(f);

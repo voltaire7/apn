@@ -2832,9 +2832,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 return union([...f.fields.values()]);
             }
-            // A record of values given fields is updated, exactly as by field
-            // assignment; one holding a type is a template.
-            if (a.k === "record" && ![...f.fields.values()].some(field => { const t = resolve(field); return t.k === "type" || describing(t); })) {
+            // Given fields, a record is updated exactly as by field assignment:
+            // a record of values (model [name: n]), or a type given types
+            // (Vector3 [x: Int] is Vector3.x = Int). A type given values builds one.
+            const holdsType = (r: Extract<Ty, { k: "record" }>) => [...r.fields.values()].some(field => { const t = resolve(field); return t.k === "type" || describing(t); });
+            if (a.k === "record" && (!holdsType(f) || holdsType(a))) {
                 return assignFields(f, [...a.fields].map(([key, type]) => [key, type, fieldExpr(e, key)]), e);
             }
             // A value not known yet (a parameter, Dynamic, a computed one) is

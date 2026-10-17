@@ -125,3 +125,21 @@ for (const assignment of ['v.x = Float .2', 'v "x" = Float .2', 'v.[x, y] = [2, 
         if (!failed || actual !== '[x: 1, y: 2]') throw new Error(actual);
     });
 }
+// r [f: v] is { r.f = v; r } for a record of values, and for a type given
+// types; a type given values builds one. Checked and not, the same.
+for (const [application, block, expected] of [
+    ['model = [name: "a", n: 1]\nmodel [name: "b"]', 'model = [name: "a", n: 1]\n{ model.name = "b"; model }', '[name: "b", n: 1]'],
+    ['r = [f: (* 2)]\n(r [f: (+ 1)]).f 1', 'r = [f: (* 2)]\n{ r.f = (+ 1); r }.f 1', '2'],
+    ['Vector3 = [x: Float, y: Float, z: Float]\nVector3 [x: Int]', 'Vector3 = [x: Float, y: Float, z: Float]\n{ Vector3.x = Int; Vector3 }', '[x: Int, y: Float, z: Float]'],
+    ['Vector3 = [x: Float, y: Float, z: Float]\nV2 = Vector3 [z: Int]\nV2 [x: 1, z: 2]', 'Vector3 = [x: Float, y: Float, z: Float]\nV2 = { Vector3.z = Int; Vector3 }\nV2 [x: 1, z: 2]', '[x: 1.0, y: 0.0, z: 2]'],
+] as const) Deno.test(`record application is field assignment: ${application}`, () => {
+    for (const checked of [false, true]) {
+        const run = (source: string) => {
+            const i = new Interpreter();
+            if (checked) i.enableChecking();
+            return i.renderString(i.run(parseDocument(source)));
+        };
+        const a = run(application), b = run(block);
+        if (a !== b || a !== expected) throw new Error(`${checked ? "checked" : "unchecked"}: ${a} vs ${b}`);
+    }
+});

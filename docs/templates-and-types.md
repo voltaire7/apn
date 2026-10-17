@@ -1,6 +1,8 @@
 # Templates and type aliases
 
-Record construction applies callable slots and overrides concrete defaults.
+Record construction (a record holding a type, given values) applies its type
+slots and overrides concrete defaults; any other record given fields is
+updated, exactly as by field assignment (see [slot assignment](#slot-assignment)).
 Dotted list application applies its slots and rejects scalar slots.
 Concrete scalars (numbers, strings, characters, and booleans) are not callable.
 
@@ -235,16 +237,20 @@ v.f = 3                    # stores 3; does not call (* 2)
 v.child = [y: 2]           # replaces the whole child
 ```
 
-A record holding a type is a template, filled as above. A record of values
-applied to a record is field assignment instead: `r [f: v, g: w]` is
-`{ r.f = v; r.g = w; r }` in every way (a field keeps its number type or
+A record applied to a record of fields is field assignment, `r [f: v, g: w]`
+being `{ r.f = v; r.g = w; r }` in every way (a field keeps its number type or
 variant family, a schema's record takes no new field, nothing else is
-evaluated), so `[f: (* 2)] [f: (+ 1)]` is `[f: (+ 1)]`, `[x: 1] [y: 2]` is
-`[x: 1, y: 2]`, and a model is updated as Elm's `{ model | name = n }`:
-`update (Name n) model = model [name: n]`. Whether a record holds a type is
-told from what it was built with, without evaluating its fields. A parameter
-given a record literal may be a function or such a record; the checker decides
-once its type is known.
+evaluated), when the record holds values or the fields hold types. So
+`[f: (* 2)] [f: (+ 1)]` is `[f: (+ 1)]`, `[x: 1] [y: 2]` is `[x: 1, y: 2]`, a
+model is updated as Elm's `{ model | name = n }` (`model [name: n]`), and a
+type is edited as `Vector3.x = Int` edits it: `Vector3 [x: Int]` is
+`[x: Int, y: Float, z: Float]`. A record holding a type given values is a
+template, filled as above: `Vector3 [x: 1]` is `[x: 1.0, y: 0.0, z: 0.0]`.
+(Assigning a value into a type's field sets that field's default instead:
+`Vector3.x = 1` is the template `[x: 1, y: Float, z: Float]`, as above.)
+Whether a record holds a type is told from what it was built with, without
+evaluating its fields. A parameter given a record literal may be a function or
+such a record; the checker decides once its type is known.
 
 ### Computed keys and multiple indices
 

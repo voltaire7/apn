@@ -315,6 +315,10 @@ print vec                        # => [x: 7, y: 8, z: 3, w: 99]
 # vec [x: 1, y: 2] is { vec.x = 1; vec.y = 2; vec }.
 print (vec [x: 1, y: 2])         # => [x: 1, y: 2, z: 3, w: 99]
 print [vec [z: 0] == { vec.z = 0; vec }]  # => [true]
+# A type given types is edited the same way; given values, it builds one.
+Vec3 = [x: Float, y: Float, z: Float]
+print (Vec3 [x: Int])            # => [x: Int, y: Float, z: Float]   as Vec3.x = Int
+print (Vec3 [x: 1])              # => [x: 1.0, y: 0.0, z: 0.0]
 
 # block scope: the update shadows obj only INSIDE the { }  (a bare block
 # statement runs eagerly — a 0-arg DEF like  w = { ... } declares a
