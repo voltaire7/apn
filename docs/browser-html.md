@@ -110,7 +110,7 @@ rules.
 | Subscription | Message |
 | --- | --- |
 | `every ms toMsg` (`time`) | the time, a `Posix`, every `ms` milliseconds |
-| `browser.onAnimationFrame toMsg`, `browser.onAnimationFrameDelta toMsg` | each frame: the time, or the milliseconds since the last frame |
+| `browser.onAnimationFrame toMsg`, `browser.onAnimationFrameDelta toMsg` | each frame: the time, or the milliseconds since the last frame (a `Float`) |
 | `browser.onKeyDown toMsg`, `browser.onKeyUp toMsg` | the key's name (`"ArrowUp"`, `" "`) |
 | `browser.onMouseMove`, `onMouseDown`, `onMouseUp`, `onMouseClick` | the page's x and y |
 | `browser.onResize toMsg` | the window's width and height |
@@ -153,7 +153,10 @@ qualified.
 across renders with the newest callbacks, which may read the model.
 
 Updates patch elements in place by position, preserving input focus and avoiding
-unnecessary value resets. Runtime errors appear on the page; a failed APN
+unnecessary value resets. Each message updates the model as it arrives, and
+the view is drawn at most once per animation frame, as Elm draws it, so events
+between frames (a held key's repeats) cost no drawing; a frame subscription's
+update is drawn in its frame. Runtime errors appear on the page; a failed APN
 update or view evaluation retains the last successful model. A view's error
 stays until a later render succeeds; an update's stays, as its message is lost
 (so does a sketch's, as the sketch stops).

@@ -62,12 +62,22 @@ function eventInfo(e: Event): EventInfo {
     const files = [...(transfer?.files ?? target?.files ?? [])].map(file => ({ name: file.name, size: file.size, mime: file.type, url: URL.createObjectURL(file) }));
     return { value: target?.value ?? "", checked: target?.checked ?? false, key: (e as KeyboardEvent).key ?? "", pageX: (e as MouseEvent).pageX ?? 0, pageY: (e as MouseEvent).pageY ?? 0, files };
 }
-function rerender(): void {
+// After an update: the subscriptions it asks for at once, and the view at the
+// next animation frame. The view is drawn at most once a frame, as Elm draws
+// it, so events between frames (a held key's repeats) cost no drawing.
+let stale = false, drawing = false;
+function changed(): void {
+    try { subscriptions.update(app.subscriptions()); } catch (error) { report(error, true); }
+    stale = true;
+    if (!drawing) { drawing = true; requestAnimationFrame(() => { drawing = false; draw(); }); }
+}
+function draw(): void {
+    if (!stale) return;
+    stale = false;
     try {
         const next = app.render();
         patch(root, root.firstChild ?? undefined, current, next, false);
         current = next;
-        subscriptions.update(app.subscriptions());
         recovered();
     } catch (error) { report(error, true); }
 }
@@ -113,7 +123,7 @@ function patch(parent: Node, dom: Node | undefined, before: HtmlNode | undefined
             if (prevent) e.preventDefault();
             try { app.send(app.message(id, event === "input" ? (e.target as HTMLInputElement).value ?? "" : eventInfo(e))); }
             catch (error) { report(error); return; }
-            rerender();
+            changed();
         };
         const previous = listeners.get(event);
         if (previous) element.removeEventListener(event, previous);
@@ -124,10 +134,10 @@ function patch(parent: Node, dom: Node | undefined, before: HtmlNode | undefined
     while (element.childNodes.length > after.children.length) element.lastChild!.remove();
     return element;
 }
-// A message from a command, a subscription or a sketch: update, then render.
+// A message from a command, a subscription or a sketch: update, then draw.
 function send(message: Value): void {
     try { app.send(message); } catch (error) { report(error); return; }
-    rerender();
+    changed();
 }
 
 // The subscriptions the model asks for: installed once, given the newest
@@ -138,13 +148,14 @@ const subscriptions = (() => {
         const entry = active.get(key);
         if (!entry) return;
         try { app.notify(entry.current, ...args); } catch (error) { report(error); return; }
-        rerender();
+        changed();
     };
     const start = (s: Subscription, key: string): () => void => {
         if (s.kind === "every") { const timer = setInterval(() => fire(key, Date.now()), s.ms); return () => clearInterval(timer); }
         if (s.kind === "frame") {
             let frame = 0, last = performance.now();
-            const tick = (now: number) => { const delta = now - last; last = now; fire(key, s.delta ? delta : Date.now()); frame = requestAnimationFrame(tick); };
+            // A frame's update draws in that frame.
+            const tick = (now: number) => { const delta = now - last; last = now; fire(key, s.delta ? delta : Date.now()); draw(); frame = requestAnimationFrame(tick); };
             frame = requestAnimationFrame(tick);
             return () => cancelAnimationFrame(frame);
         }
@@ -218,9 +229,10 @@ try {
     if (value.kind === "variant" && value.tag === "P5Sketch") startSketch(root, value);
     else {
         app = new BrowserApp(interpreter, value, platform);
-        app.onChange = rerender;
+        app.onChange = changed;
         app.onError = report;
-        rerender();
+        changed();
+        draw();
     }
 }
 catch (error) { report(error); }

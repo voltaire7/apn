@@ -212,7 +212,12 @@ export class BrowserApp {
     // A subscription's message from what the page saw.
     notify(subscription: Subscription, ...args: (number | string | boolean)[]): void {
         const i = this.interpreter;
-        const value = (x: number | string | boolean): Value => typeof x === "number" ? number(x) : typeof x === "string" ? mkStr(x) : { kind: "bool", v: x };
+        // A frame's delta is a measured duration: a Float, as Elm's, even when
+        // the browser rounds it to whole milliseconds (an exact 17 would make
+        // the sums it feeds exact fractions, which a later 16.7 cannot join).
+        const delta = subscription.kind === "frame" && subscription.delta;
+        const value = (x: number | string | boolean): Value => typeof x === "number" ? (delta ? { kind: "float", v: x } : number(x))
+            : typeof x === "string" ? mkStr(x) : { kind: "bool", v: x };
         this.send(args.reduce((f: Value, x) => i.apply(f, value(x)), subscription.toMessage));
     }
     private node(value: Value, handlers: Handler[]): HtmlNode {

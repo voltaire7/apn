@@ -172,3 +172,10 @@ Deno.test("p5 canvases in views draw the model", () => {
     // The texture is drawn once, in setup, then used each frame.
     if (calls.filter(c => c === "g.background").length !== 1 || calls.filter(c => c.startsWith("box")).length !== 2) throw new Error(calls.join("\n"));
 });
+Deno.test("a frame's delta is a Float, also when the browser rounds it to whole milliseconds", () => {
+    const cube = run("cube");
+    const frame = find(cube.subscriptions(), "frame");
+    // An exact 17 would make the angle an exact fraction that 16.7 cannot join.
+    for (const delta of [17, 16, 16.7, 17]) cube.notify(frame, delta);
+    cube.render();
+});
