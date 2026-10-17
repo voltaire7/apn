@@ -1,0 +1,138 @@
+# Snake, from https://p5js.org/examples/games-snake/
+# Make a game based on Snake arcade games.
+import ["p5", "sequence"]
+
+[gridWidth, gridHeight, startingSegments] = [30, 30, 10]
+# The snake's cells from its head (a list of any length), its direction, the
+# fruit, the scores and whether a game is on.
+segments = Mutable ((List [Int, Int]) [])
+direction = Mutable "right"
+fruit = Mutable [0, 0]
+score = Mutable 0
+highScore = Mutable 0
+playing = Mutable false
+
+setup (Sketch p) = {
+    p.createCanvas 500 500
+    p.frameRate 10
+    p.call "textAlign" [p.CENTER, p.CENTER]
+    p.textSize 2
+    stored <- p.getItem "high score"
+    set highScore (stored == [] ? 0 : Int stored)
+    p.describe ("A reproduction of the arcade game Snake, in which a snake, represented by a "
+        ++ "green line on a black background, is controlled by the arrow keys. Users move the "
+        ++ "snake toward a fruit, represented by a red dot, but the snake must not hit the "
+        ++ "sides of the window or itself.")
+}
+
+# A new head a cell ahead, and the tail's last cell gone.
+updateSegments = set segments (advance segments)
+
+# A typed (List cells) parameter reads the cell's contents when called, so the
+# new snake is built from the old one.
+advance (List cells) = {
+    step = match direction [
+        "right" -> [1, 0]
+        "up" -> [0, -1]
+        "left" -> [-1, 0]
+        "down" -> [0, 1]
+    ]
+    head cells + step :: take (length cells - 1) cells
+}
+grow (List cells) = cells ++ [cells (length cells - 1)]
+
+draw (Sketch p) = {
+    p.background 0
+    # A grid of cells, one unit each.
+    p.call "scale" [p.width / gridWidth, p.height / gridHeight]
+    playing ? {
+        p.translate 0.5 0.5
+        showFruit p
+        showSegments p
+        updateSegments
+        checkForCollision p
+        checkForFruit p
+    } : showStartScreen p
+}
+
+showStartScreen (Sketch p) = {
+    p.noStroke
+    p.fill 32
+    p.call "rect" [2, gridHeight / 2 - 5, gridWidth - 4, 10, 2]
+    p.fill 255
+    p.text "Click to play.\nUse arrow keys to move." (gridWidth / 2) (gridHeight / 2)
+    p.noLoop
+}
+
+mousePressed (Sketch p) = unless playing (startGame p)
+
+startGame (Sketch p) = {
+    updateFruitCoordinates p
+    # Ten cells along row 15, the head at the right.
+    set segments (map (n -> [startingSegments - 1 - n, 15]) [0..startingSegments - 1])
+    set direction "right"
+    set score 0
+    set playing true
+    p.loop
+}
+
+showFruit (Sketch p) = {
+    p.stroke [255, 64, 32]
+    [x, y] = fruit
+    p.point x y
+}
+
+showSegments (Sketch p) = {
+    p.noFill
+    p.stroke [96, 255, 64]
+    p.beginShape
+    mapM ([x, y] -> p.vertex x y) segments
+    p.endShape
+}
+
+# Off the grid, or into itself, ends the game.
+checkForCollision (Sketch p) = {
+    [x, y] = head segments
+    when (x >= gridWidth || x < 0 || y >= gridHeight || y < 0 || contains [x, y] (tail segments))
+        (gameOver p)
+}
+
+gameOver (Sketch p) = {
+    p.noStroke
+    p.fill 32
+    p.call "rect" [2, gridHeight / 2 - 5, gridWidth - 4, 12, 2]
+    p.fill 255
+    set highScore (max score highScore)
+    p.storeItem "high score" highScore
+    p.text ("Game over!\nYour score: " ++ to String score ++ "\nHigh score: "
+        ++ to String highScore ++ "\nClick to play again.") (gridWidth / 2) (gridHeight / 2)
+    set playing false
+    p.noLoop
+}
+
+# Eating the fruit scores and grows the tail by a cell.
+checkForFruit (Sketch p) = when (head segments == fruit) {
+    set score (score + 1)
+    set segments (grow segments)
+    updateFruitCoordinates p
+}
+
+updateFruitCoordinates (Sketch p) = {
+    x <- p.random 0 gridWidth
+    y <- p.random 0 gridHeight
+    set fruit [floor (Number x), floor (Number y)]
+}
+
+# The arrow keys turn the snake, but not back on itself.
+keyPressed (Sketch p) = {
+    turn = [
+        [p.LEFT_ARROW, "left", "right"]
+        [p.RIGHT_ARROW, "right", "left"]
+        [p.UP_ARROW, "up", "down"]
+        [p.DOWN_ARROW, "down", "up"]
+    ]
+    mapM ([code, way, opposite] -> when (p.code == code && direction != opposite)
+        (set direction way)) turn
+}
+
+main = sketch [setup: setup, draw: draw, mousePressed: mousePressed, keyPressed: keyPressed]

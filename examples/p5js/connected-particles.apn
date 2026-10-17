@@ -1,0 +1,77 @@
+# Connected Particles, from https://p5js.org/examples/classes-and-objects-connected-particles/
+# Draw paths of particles that fade away.
+import ["p5", "sequence"]
+
+# A particle: where it is, its velocity, its hue and the frames until it is gone.
+Particle = [position: [Float, Float], velocity: [Float, Float], hue: Int, frames: Int]
+# Paths of particles, the newest last, each drawn by one drag of the mouse.
+paths = Mutable ((List (List Particle)) [])
+# The frame the next particle may come in, and where the last one came in.
+nextParticleFrame = Mutable 0
+previous = Mutable [0.0, 0.0]
+[framesBetweenParticles, particleFadeFrames] = [5, 300]
+
+setup (Sketch p) = {
+    p.createCanvas 720 400
+    p.colorMode p.HSB
+    p.describe ("When the cursor drags along the black background, it draws a pattern of "
+        ++ "multicolored circles outlined in white and connected by white lines. The circles "
+        ++ "and lines fade out over time.")
+}
+
+draw (Sketch p) = {
+    p.background 0
+    set paths (map (path -> filter (particle -> particle.frames > 0) (map move path)) paths)
+    mapM (display p) paths
+}
+
+# Each particle, and a line to the next, both fading; drawn last to first.
+display (Sketch p) (List path) = mapM (n -> {
+    particle = path n
+    opacity = particle.frames / particleFadeFrames
+    [x, y] = particle.position
+    p.noStroke
+    p.fill [particle.hue, 80, 90, opacity]
+    p.circle x y 24
+    when (n < length path - 1) {
+        [nextX, nextY] = (path (n + 1)).position
+        p.stroke [255, opacity]
+        p.line x y nextX nextY
+    }
+}) [length path - 1, length path - 2..0]
+
+move particle = {
+    particle.position = particle.position + particle.velocity
+    particle.velocity = particle.velocity * 0.95
+    particle.frames = particle.frames - 1
+    particle
+}
+
+# A press starts a path.
+mousePressed (Sketch p) = {
+    set nextParticleFrame p.frameCount
+    set paths (paths ++ [[]])
+    set previous [Float p.mouseX, Float p.mouseY]
+    createParticle p
+}
+
+mouseDragged (Sketch p) = when (p.frameCount >= nextParticleFrame) (createParticle p)
+
+# A particle where the mouse is, moving the way it went.
+createParticle (Sketch p) = {
+    mouse = [Float p.mouseX, Float p.mouseY]
+    set paths (addParticle mouse ((mouse - previous) * 0.05) paths)
+    set nextParticleFrame (p.frameCount + framesBetweenParticles)
+    set previous mouse
+}
+
+addParticle position velocity (List paths) = {
+    path = paths (length paths - 1)
+    particle = [
+        position: position, velocity: velocity, hue: length path * 30 % 360
+        frames: particleFadeFrames
+    ]
+    take (length paths - 1) paths ++ [path ++ [particle]]
+}
+
+main = sketch [setup: setup, draw: draw, mousePressed: mousePressed, mouseDragged: mouseDragged]

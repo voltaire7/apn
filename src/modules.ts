@@ -122,10 +122,43 @@ export function readLoad(path: string, bundle?: Record<string, string>): string 
     return (bundle ? bundleFiles(bundle) : disk).read(path);
 }
 
-// The literal module names a program imports, the literal paths it loads, and
-// whether it mentions load any other way (a computed path).
-function dependenciesOf(source: string, label: string): { imports: string[]; loads: string[]; computed: boolean } {
-    const imports: string[] = [], loads: string[] = [];
+// A bundled data file, by the path a program names: relative to the program's
+// folder (or absolute in the bundle). Text files hold their text; others a data URL.
+const bundledPath = (path: string) => new URL(path.startsWith("/") ? path : `${BUNDLE_APP}${path}`, "file:///").pathname;
+export function bundledText(bundle: Record<string, string>, path: string): string | undefined {
+    const text = bundle[bundledPath(path)];
+    return text === undefined || text.startsWith(DATA_URL) ? undefined : text;
+}
+export function bundledFile(bundle: Record<string, string>, path: string): { text?: string; dataUrl?: string; mime: string } | undefined {
+    const key = bundledPath(path), content = bundle[key];
+    if (content === undefined || key.endsWith(".apn")) return undefined;
+    return content.startsWith(DATA_URL) ? { dataUrl: content, mime: content.slice(5, content.indexOf(";")) } : { text: content, mime: mimeOf(key) };
+}
+const DATA_URL = "data:";
+const MIME: Record<string, string> = {
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+    mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", mp3: "audio/mpeg", ogg: "audio/ogg", wav: "audio/wav",
+    otf: "font/otf", ttf: "font/ttf", woff: "font/woff", woff2: "font/woff2",
+    json: "application/json", csv: "text/csv", txt: "text/plain",
+};
+const mimeOf = (path: string) => MIME[path.slice(path.lastIndexOf(".") + 1).toLowerCase()] ?? "application/octet-stream";
+// A data file's bundle entry: its text when it is UTF-8 text, else a data URL.
+function dataEntry(path: string): string {
+    const bytes = Deno.readFileSync(path);
+    try {
+        const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        if (!text.includes("\0") && !/^(image|video|audio|font)\//.test(mimeOf(path))) return text;
+    } catch { /* binary */ }
+    let binary = "";
+    for (let n = 0; n < bytes.length; n += 0x8000) binary += String.fromCharCode(...bytes.subarray(n, n + 0x8000));
+    return `${DATA_URL}${mimeOf(path)};base64,${btoa(binary)}`;
+}
+
+// The literal module names a program imports, the literal paths it loads, the
+// string literals it uses (any may name a data file), and whether it mentions
+// load any other way (a computed path).
+function dependenciesOf(source: string, label: string): { imports: string[]; loads: string[]; strings: string[]; computed: boolean } {
+    const imports: string[] = [], loads: string[] = [], strings: string[] = [];
     let mentions = 0;
     const isLoad = (f: unknown) => !!f && typeof f === "object" && (f as Record<string, unknown>).t === "var" && (f as { name: string }).name === "load";
     const walk = (node: unknown): void => {
@@ -136,10 +169,11 @@ function dependenciesOf(source: string, label: string): { imports: string[]; loa
         if (n.t === "import") imports.push(...[n.module as string | string[]].flat());
         if (n.t === "app" && isLoad(n.f) && n.a?.t === "string") loads.push(n.a.v);
         if (n.t === "pipe" && isLoad(n.f) && n.x?.t === "string") loads.push(n.x.v);
+        if (n.t === "string" && typeof n.v === "string" && n.v && !n.v.includes("\n")) strings.push(n.v);
         Object.values(n).forEach(walk);
     };
     walk(parse(source, label));
-    return { imports, loads, computed: mentions > loads.length };
+    return { imports, loads, strings, computed: mentions > loads.length };
 }
 
 /**
@@ -148,8 +182,9 @@ function dependenciesOf(source: string, label: string): { imports: string[]; loa
  * loads by a literal path (and, in turn, theirs), under BUNDLE_APP at the same
  * relative paths. A load of a computed path may read any file, so once one
  * appears every .apn file in the program's folder and its subfolders (except
- * hidden ones) is bundled. Run it from BUNDLE_APP. Files outside the
- * program's folder are not bundled.
+ * hidden ones) is bundled. A string literal naming another file there (an
+ * image, a font, CSV or JSON data) bundles it too, as data (see bundledFile).
+ * Run it from BUNDLE_APP. Files outside the program's folder are not bundled.
  */
 export function bundleProgram(source: string, directory: string): Record<string, string> {
     const bundle: Record<string, string> = {};
@@ -190,6 +225,13 @@ export function bundleProgram(source: string, directory: string): Record<string,
         for (const name of dependencies.loads) {
             const path = loadPath(name, from), source = disk.read(path);
             if (source !== undefined) add(path, source);
+        }
+        for (const name of dependencies.strings) {
+            if (name.endsWith(".apn")) continue;
+            const path = new URL(name, `file://${from}`).pathname;
+            if (!path.startsWith(root) || bundle[`${BUNDLE_APP}${path.slice(root.length)}`] !== undefined) continue;
+            try { if (!Deno.statSync(path).isFile) continue; } catch { continue; }
+            bundle[`${BUNDLE_APP}${path.slice(root.length)}`] = dataEntry(path);
         }
         if (dependencies.computed && !everything) { everything = true; addAll(root); }
     };

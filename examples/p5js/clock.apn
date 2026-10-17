@@ -1,0 +1,49 @@
+# Clock, from https://p5js.org/examples/calculating-values-clock/
+# Get the current time.
+import "p5"
+
+setup (Sketch p) = {
+    p.createCanvas 710 400
+    p.stroke 255
+    p.angleMode p.DEGREES
+    p.describe "Functioning pink clock on a grey background."
+}
+
+draw (Sketch p) = {
+    # The hands' lengths and the face's size, from the canvas's (the sketch's
+    # values are Dynamic: Number converts them for min).
+    radius = min (Number p.width) (Number p.height) / 2
+    [secondsRadius, minutesRadius, hoursRadius] = [radius * 0.71, radius * 0.6, radius * 0.5]
+    clockDiameter = radius * 1.7
+    p.background 230
+    p.translate (p.width / 2) (p.height / 2)
+    # The face.
+    p.noStroke
+    p.fill [244, 122, 158]
+    p.ellipse 0 0 (clockDiameter + 25) (clockDiameter + 25)
+    p.fill [237, 34, 93]
+    p.ellipse 0 0 clockDiameter clockDiameter
+    # The hands, by the time.
+    second <- p.second
+    minute <- p.minute
+    hour <- p.hour
+    p.stroke 255
+    hand p (remap second 0 60 0 360) 1 secondsRadius
+    hand p (remap minute 0 60 0 360) 2 minutesRadius
+    hand p (remap hour 0 12 0 360) 4 hoursRadius
+    # The minute ticks.
+    p.push
+    p.strokeWeight 2
+    mapM (_ -> { p.point 0 (0 - secondsRadius); p.rotate 6 }) [1..60]
+    p.pop
+}
+
+hand (Sketch p) angle weight length = {
+    p.push
+    p.strokeWeight weight
+    p.rotate angle
+    p.line 0 0 0 (0 - length)
+    p.pop
+}
+
+main = sketch [setup: setup, draw: draw]

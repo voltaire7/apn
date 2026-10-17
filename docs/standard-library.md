@@ -380,8 +380,9 @@ Modules for browser programs, after Elm's packages of the same names. See
 | `time` | `Posix`, `Zone`, `now`, `here`, `every`, `toHour` ... `toMillis` |
 | `random` | generators and `generate` |
 | `decode` | JSON decoders |
-| `file` | file pickers and `toUrl` |
+| `file` | file pickers, `download` and `toUrl` |
 | `playground` | pictures, animations and games from shapes |
+| `gallery` | an examples site's index page: `page`, `examples` (a section) and `link` |
 
 `random` and `decode` share names (`int`, `float`, `list`), as do `svg` and
 `playground` (`circle`, `image`): a program using both of a pair imports one
@@ -409,11 +410,17 @@ Option a =
 Use a leading `|` to explicitly declare a single constructor when its name
 is already in scope, e.g. `Box a = | Box a`.
 
-## Creative coding — `p5`
+## Creative coding — `p5`, `glsl`
 
-`p5 = import "p5"` exposes `p5.sketch callbacks`, and `p5.canvas callbacks`
-for a sketch inside an HTML view. See the [p5 reference](p5.md)
-for drawing methods, events, the browser build command, and current scope.
+`import "p5"` exposes `sketch callbacks`, `canvas callbacks` for a sketch
+inside an HTML view, the `Sketch` type of a callback's `p`, the objects
+(`loadImage`, `createGraphics`, `buildGeometry`, ...), shaders with hooks in
+APN (`buildFilterShader`, `buildColorShader`, `buildMaterialShader`), and
+p5's calculations (`remap`, `lerp`, `constrain`, `dist`, and vectors: `mag`,
+`normalize`, `setMag`, `limit`, `heading`, `fromAngle`). `glsl` makes GLSL
+expressions APN values: arithmetic and the math functions on a `Glsl` write
+GLSL, with `vec`, `swizzle`, `fract`, `distance`, `mix`, `getTexture` and
+`call name args` for any other function. See the [p5 reference](p5.md).
 
 ## Matching
 

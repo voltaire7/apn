@@ -1,0 +1,50 @@
+# Conditions, from https://p5js.org/examples/animation-and-variables-conditions/
+# Use if and else statements to make decisions while your sketch runs.
+import "p5"
+
+# The circle's position, speed and hue; its radius.
+position = Mutable [200, 200]
+speed = Mutable [2, 3]
+hue = Mutable 0
+radius = 25
+
+setup (Sketch p) = {
+    p.createCanvas 400 400
+    p.background 255
+    # Ellipses are drawn by their radius.
+    p.ellipseMode p.RADIUS
+    # Gray rectangles on either side.
+    p.noStroke
+    p.fill 128
+    p.rect 0 0 100 p.height
+    p.rect 300 0 100 p.height
+    # The trail's colors are hue, saturation and brightness.
+    p.colorMode p.HSB
+    p.strokeWeight 4
+    p.describe ("A circle starts in the center of the canvas. When the user holds the mouse "
+        ++ "down, the circle bounces around the canvas, its inside switches between black and "
+        ++ "white, and its outline fades between colors, leaving a rainbow trail.")
+}
+
+draw (Sketch p) = {
+    [x, y] = position
+    p.stroke [hue, 80, 90]
+    # Black between the rectangles, white over them.
+    p.fill (x >= 100 && x <= 300 ? 0 : 255)
+    p.circle x y radius
+    # While the mouse is down, move and shift the hue.
+    when p.mouseIsPressed {
+        set position (position + speed)
+        set hue (hue + 1)
+    }
+    when (hue >= 360) (set hue 0)
+    # Turn back at the edges.
+    [nx, ny] = position
+    [dx, dy] = speed
+    set speed [
+        nx < radius || nx > p.width - radius ? -dx : dx
+        ny < radius || ny > p.height - radius ? -dy : dy
+    ]
+}
+
+main = sketch [setup: setup, draw: draw]

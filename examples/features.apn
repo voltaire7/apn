@@ -445,6 +445,15 @@ Cents = | Cents Int
 (Cents a) + (Cents b) = Cents (a + b)
 print (Cents 150 + Cents 75)              # => Cents 225
 print (1 + 2)                             # => 3
+# a function using + on its parameters takes either meaning
+addBoth x y = x + y
+print [addBoth (Cents 1) (Cents 2), addBoth 1 2]  # => [Cents 3, 3]
+
+# the math functions overload the same way (sin, cos, sqrt, floor, max, ...)
+Dual = | Dual Float Float
+sin (Dual a b) = Dual (sin a) (b * cos a)
+print (sin (Dual 0.0 1.0))                # => Dual 0.0 1.0
+print (sin 0.0)                           # => 0.0
 
 # a new operator with a fixity (possible, but not recommended)
 infixr 5 +++
@@ -1441,6 +1450,13 @@ browserPreview = html.div [] [
     html.button [] [html.text "+"]
 ]
 print browserPreview
+
+# A cell made from a schema's value holds that type: List fields take any
+# length. Field access reads its contents.
+Trail = [head: [Float, Float], points: List [Float, Float]]
+trail = Mutable (Trail [head: [0.0, 0.0], points: []])
+set trail [head: [1.0, 2.0], points: [[0.0, 0.0], [1.0, 2.0]]]
+print trail.points                            # [[0.0, 0.0], [1.0, 2.0]]
 
 # Mutable references retain identity across scopes and aliases.
 mutableCounter = Mutable 0

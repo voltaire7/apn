@@ -1,0 +1,86 @@
+# Sine and Cosine, from https://p5js.org/examples/angles-and-motion-sine-cosine/
+# Animate circular, back and forth, and wave motion.
+import ["number", "p5"]
+
+[circleX, circleY, circleRadius] = [200, 150, 75]
+[graphX, graphY, graphAmplitude, graphPeriod] = [50, 300, 50, 300]
+
+setup (Sketch p) = {
+    p.createCanvas 400 400
+    p.describe ("Animated demonstration of a point moving around the unit circle, together "
+        ++ "with the corresponding sine and cosine values moving along their graphs.")
+}
+
+# A graph's y for an angle in degrees.
+wave f t = graphY - graphAmplitude * f (degrees t)
+# A graph's x for an angle.
+along t = remap t 0 360 graphX (graphX + graphPeriod)
+
+draw (Sketch p) = {
+    p.background 0
+    # The angle, a degree further each frame.
+    angle = Int (p.frameCount % 360)
+    p.fill 255
+    p.textSize 20
+    p.call "textAlign" [p.LEFT, p.CENTER]
+    p.text ("angle: " ++ to String angle) 25 25
+    # The unit circle and its axes, and the radius to the point at the angle.
+    p.noFill
+    p.stroke 128
+    p.strokeWeight 3
+    p.circle circleX circleY (2 * circleRadius)
+    p.line circleX (circleY - circleRadius) circleX (circleY + circleRadius)
+    p.line (circleX - circleRadius) circleY (circleX + circleRadius) circleY
+    pointX = circleX + circleRadius * cos (degrees angle)
+    pointY = circleY - circleRadius * sin (degrees angle)
+    p.line circleX circleY pointX pointY
+    # The point, and its cosine and sine on the axes.
+    p.noStroke
+    p.fill "white"
+    p.circle pointX pointY 10
+    p.fill "orange"
+    p.circle pointX circleY 10
+    p.fill "red"
+    p.circle circleX pointY 10
+    # The graphs' axes and labels.
+    p.stroke "grey"
+    p.strokeWeight 3
+    p.line graphX graphY (graphX + 300) graphY
+    p.line graphX (graphY - graphAmplitude) graphX (graphY + graphAmplitude)
+    p.line (graphX + graphPeriod) (graphY - graphAmplitude) (graphX + graphPeriod)
+        (graphY + graphAmplitude)
+    p.fill "grey"
+    p.strokeWeight 1
+    p.call "textAlign" [p.CENTER, p.CENTER]
+    p.text "0" graphX (graphY + graphAmplitude + 20)
+    p.text "360" (graphX + graphPeriod) (graphY + graphAmplitude + 20)
+    p.text "1" (graphX / 2) (graphY - graphAmplitude)
+    p.text "0" (graphX / 2) graphY
+    p.text "-1" (graphX / 2) (graphY + graphAmplitude)
+    p.fill "orange"
+    p.text "cos" (graphX + graphPeriod + graphX / 2) (graphY - graphAmplitude)
+    p.fill "red"
+    p.text "sin" (graphX + graphPeriod + graphX / 2) graphY
+    # The cosine and sine curves.
+    curve p "orange" cos
+    curve p "red" sin
+    # A line at the angle, and the curves' values there.
+    lineX = along angle
+    p.stroke "grey"
+    p.line lineX (graphY - graphAmplitude) lineX (graphY + graphAmplitude)
+    p.noStroke
+    p.fill "orange"
+    p.circle lineX (wave cos angle) 10
+    p.fill "red"
+    p.circle lineX (wave sin angle) 10
+}
+
+curve (Sketch p) color f = {
+    p.noFill
+    p.stroke color
+    p.beginShape
+    mapM (t -> p.vertex (along t) (wave f t)) [0..360]
+    p.endShape
+}
+
+main = sketch [setup: setup, draw: draw]

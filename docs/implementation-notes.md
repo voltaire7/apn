@@ -66,6 +66,10 @@ intentional evaluation change.
 `src/numbers.ts` owns the numeric tower; `src/type-system.ts` defines numeric
 constructors, lossless conversions, and arithmetic promotion.
 
+- `compareNumbers` compares two floats, or a float and an integer a double
+  holds exactly (within 2^53), as numbers, and anything else as exact
+  fractions; never compare an unsafe integer with a float as a double.
+
 - `mkInt(number)` accepts only safe host counters. Integer ranges stay exact;
   fractional exact ranges use `rationalRange`, mixed ranges `floatRange`.
   Float-range cells use origin + index × step, a bounded endpoint tolerance,
@@ -124,11 +128,16 @@ native (`PRIMITIVE_OPERATORS` in `src/parser.ts`), forced at startup so a
 binop finds the native itself: `evalBinop` then runs `operate` directly
 (strict operands evaluated in place, `::`/`++`/`&&`/`||`/`$` over thunks) and
 applies any other binding as a function. A `clauseFn` defined for an operator
-name keeps the previous binding as `fallback`. The checker gives operator
-names an intrinsic type per builtin; a binop on another binding is inferred as
-the call `(op l) r`, and an overload of a prelude operator falls back to the
-builtin rule when its clauses do not accept known operand types. Tests:
-`tests/operators-test.ts`. `cast` is a `clauseFn`, not a native:
+or a math function (`MATH_FUNCTIONS`) name keeps the previous binding as
+`fallback`; a checked write accepts an imported one over the binding it
+extends. The checker gives operator names an intrinsic type per builtin; a
+binop on another binding is inferred as the call `(op l) r`, and an overload
+of a prelude operator falls back to the builtin rule when its clauses do not
+accept known operand types; operands not known yet make an `overloaded:op`
+operation that chooses once they are. A math function's clauses get an
+`overload` type of themselves and the previous meaning (also for their own
+recursive calls). Tests: `tests/operators-test.ts`,
+`tests/default-checking-test.ts`. `cast` is a `clauseFn`, not a native:
 its clauses validate list templates with `Type` and dispatch to
 `(Type target).(value)`, other types to `target value`. Expose `type`
 through module loading and browser bundles. `do` is an ordinary function
@@ -315,6 +324,12 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   `Dynamic` of an action converts its result. Never enumerate by forcing
   values. Writes use `Env.set` (nearest owner, else local) and must not rebind
   the view's name. Tests: `tests/environment-test.ts`.
+- A cell keeps the type a conversion declared for its first contents
+  (`declaredTypes`: `List T x`, a record schema's value) as `schema`, and `set`
+  conforms to it. A record marked `shared` (a p5 object) is cached by its
+  zero-argument definition like a cell, and a checked write replaces it with
+  another shared record of the same fields as itself. Tests:
+  `tests/default-checking-test.ts` (p5.js-example cases).
 
 ## Numeric arrays
 
@@ -550,11 +565,14 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   needs itself as unknown) and eager ones a value, so earlier closures see
   later rebindings as at runtime.
   A recursive self-reference is marked `recursive` with the clause's
-  `selfInputs`, and a recursive call strips the lengths of an argument whose
-  parameter type has none. A single-group definition's entry keeps
-  `alternatives[0]` as its type, which carries the summary. A numeric
-  constructor applied to a type variable defers its conversion as a
-  `construct` requirement instead of unifying. Compound arguments over
+  `selfInputs`, and a recursive call strips the lengths of an argument's data
+  that its parameter type leaves open (`withoutOpenLengths`), never those in
+  a function's or an action's type (a record of methods keeps `IO []`). A
+  single-group definition's entry keeps `alternatives[0]` as its type, which
+  carries the summary. A numeric constructor applied to a type variable, or a
+  numeric or schema conversion of an undecided operation, defers its
+  conversion as a `construct` requirement instead of unifying; so does a list
+  indexed by a value not known yet. Compound arguments over
   enclosing parameters become a pending `expr`, re-evaluated after
   substitution. `substituteKnown` substitutes parameters inside pending calls
   and `callArgs`. An overload call that stays ambiguous because its arguments
@@ -656,9 +674,17 @@ Run `deno check src/browser-runtime.ts src/editor.ts` as well as `main.ts`. `src
 adapts callbacks to a p5 instance; the runtime loads pinned p5.js only for a
 `P5Sketch` or a canvas node, whose sketch persists across renders and takes
 each render's callbacks. Keep host methods scoped per interpreter and sketch;
-never expose arbitrary host object access. Tests: `tests/html-test.ts`,
-`tests/p5-test.ts`, `tests/elm-examples-test.ts`; also build `examples/elm`
-with `apn --site` and run its pages in a browser.
+never expose arbitrary host object access. A p5 object is a record with a
+description (`p5Object`) that each `P5Sketch` makes on first use; its methods
+act on the running sketch (`running`). The method tables (`P5_METHODS`,
+`RESULTS`) give both the runtime record and the checker's `Sketch` type, so
+add a method there once. Bundled data files reach p5 as blob URLs
+(`assetUrl`), fonts as their data URL (CSS takes no blob URL in the editor's
+sandboxed frame); the site build gives the editor every example's data files
+and each run those its source names. Tests: `tests/html-test.ts`,
+`tests/p5-test.ts`, `tests/elm-examples-test.ts`,
+`tests/p5js-examples-test.ts`; also build `examples/elm` and `examples/p5js`
+with `apn --site` and run their pages in a browser.
 
 ## C interop
 

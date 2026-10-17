@@ -1,0 +1,104 @@
+# Flocking, from https://p5js.org/examples/classes-and-objects-flocking/
+# Simulate birds flocking: each keeps apart from, heads with and stays near
+# its neighbors.
+import ["html", "number", "p5"]
+
+# A boid: where it is, its velocity and its hue.
+Boid = [position: [Float, Float], velocity: [Float, Float], hue: Float]
+boids = Mutable ((List Boid) [])
+# A boid's size, and its greatest speed and steering force.
+size = 3.0
+maxSpeed = 3.0
+maxForce = 0.05
+
+setup (Sketch p) = {
+    p.createCanvas 640 360
+    p.colorMode p.HSB
+    # 30 boids to start, where p5's has 100: each boid looks at every other each
+    # frame, which an interpreter does more slowly than JavaScript.
+    flock <- mapM (_ -> newBoid p (p.width / 2) (p.height / 2)) [1..30]
+    set boids flock
+    p.describe ("A group of bird-like objects, represented by triangles, moving across the "
+        ++ "canvas, modeling flocking behavior.")
+}
+
+newBoid (Sketch p) x y = {
+    dx <- p.random (-1) 1
+    dy <- p.random (-1) 1
+    hue <- p.random 0 256
+    return [position: [Float x, Float y], velocity: [Float dx, Float dy], hue: Float hue]
+}
+
+draw (Sketch p) = {
+    p.background 0
+    set boids (flyAll (Float p.width) (Float p.height) boids)
+    mapM (render p) boids
+}
+
+mouseDragged (Sketch p) = {
+    boid <- newBoid p p.mouseX p.mouseY
+    set boids (boids ++ [boid])
+}
+
+# Each boid flies, among the boids as they were (a typed (List flock) parameter
+# reads the cell's contents when called, before set replaces them).
+flyAll width height (List flock) = map (fly width height flock) flock
+
+# A boid steered by its neighbors, then moved, wrapping around the edges.
+fly width height flock boid = {
+    # The boids within 50, each as its distance, the way from it, and itself.
+    [x, y] = boid.position
+    neighbor other = {
+        [otherX, otherY] = other.position
+        [dx, dy] = [x - otherX, y - otherY]
+        [sqrt (dx * dx + dy * dy), [dx, dy], other]
+    }
+    near = filter ([d, _, _] -> d > 0 && d < 50) (map neighbor flock)
+    acceleration = separate boid near * 1.5 + align boid near + cohere boid near
+    velocity = limit maxSpeed (boid.velocity + acceleration)
+    [nextX, nextY] = boid.position + velocity
+    boid.velocity = velocity
+    boid.position = [wrap nextX width, wrap nextY height]
+    boid
+}
+
+# Past an edge, a boid comes in at the opposite one.
+wrap at edge = at < -size ? edge + size : at > edge + size ? -size : at
+
+total vectors = foldl (+) [0.0, 0.0] vectors
+
+# A force toward a velocity: as fast as may be, the way it points.
+steer boid toward = limit maxForce (setMag maxSpeed toward - boid.velocity)
+
+# Away from those within 25, the nearer the more.
+separate boid near = {
+    away = total (map ([d, way, _] -> normalize way / d) (filter ([d, _, _] -> d < 25) near))
+    mag away == 0 ? [0.0, 0.0] : steer boid away
+}
+
+# The way the neighbors head.
+align boid near =
+    near == [] ? [0.0, 0.0] : steer boid (total (map ([_, _, other] -> other.velocity) near))
+
+# Toward the neighbors' center.
+cohere boid near = {
+    center = total (map ([_, _, other] -> other.position) near) / Float (length near)
+    near == [] ? [0.0, 0.0] : steer boid (center - boid.position)
+}
+
+# A triangle pointing the way the boid flies.
+render (Sketch p) boid = {
+    [x, y] = boid.position
+    p.fill [boid.hue, 255, 255]
+    p.stroke 255
+    p.push
+    p.translate x y
+    p.rotate (heading boid.velocity + pi / 2)
+    p.triangle 0 (-size * 2) (-size) (size * 2) size (size * 2)
+    p.pop
+}
+
+main = div [] [
+    canvas [setup: setup, draw: draw, mouseDragged: mouseDragged]
+    p [] [text "Drag the mouse to generate new boids."]
+]

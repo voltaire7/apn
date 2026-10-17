@@ -1,0 +1,46 @@
+# Recursive Tree, from https://p5js.org/examples/repetition-recursive-tree/
+# Draw a tree using a function that calls itself.
+import "p5"
+
+setup (Sketch p) = {
+    p.createCanvas 710 400
+    p.colorMode p.HSB
+    p.angleMode p.DEGREES
+}
+
+draw (Sketch p) = {
+    p.background 0
+    # The branches' angle, from the mouse's x: up to 90 degrees.
+    angle = min (Number (p.mouseX / p.width * 90)) 90
+    # The trunk, then the branches from its top.
+    p.translate (p.width / 2) p.height
+    p.stroke [0, 255, 255]
+    p.line 0 0 0 (-120)
+    p.translate 0 (-120)
+    branch p angle 120 0
+    p.describe ("A tree drawn by recursively drawing branches, with angle determined by the "
+        ++ "user mouse position.")
+}
+
+# Two branches, 2/3 as long as this one, turned each way, each with its own
+# two branches, until they are 2 pixels long.
+branch (Sketch p) angle size level = {
+    p.stroke [level * 25, 255, 255]
+    h = size * 0.66
+    when (h > 2) {
+        limb p angle h level angle
+        limb p angle h level (-angle)
+    }
+}
+
+# A branch turned by turn, with its own branches.
+limb (Sketch p) angle h level turn = {
+    p.push
+    p.rotate turn
+    p.line 0 0 0 (-h)
+    p.translate 0 (-h)
+    branch p angle h (level + 1)
+    p.pop
+}
+
+main = sketch [setup: setup, draw: draw]

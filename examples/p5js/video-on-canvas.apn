@@ -1,0 +1,31 @@
+# Video on Canvas, from https://p5js.org/examples/imported-media-video-canvas/
+# Display and stylize a video on the canvas.
+import "p5"
+
+video = createVideo ["assets/fingers.mov", "assets/fingers.webm"]
+playing = Mutable false
+
+setup (Sketch p) = {
+    p.createCanvas 710 400
+    # The video draws on the canvas, not as its own element.
+    video.hide
+}
+
+draw (Sketch p) = {
+    p.describe ("Two videos in the top right and bottom center of the canvas, with the text "
+        ++ "\"Click the canvas to start and pause the video feed.\" in the top left corner.")
+    p.background 240
+    p.textSize 16
+    p.text "Click the canvas to start and pause the video feed." 345 50
+    p.image video 10 10
+    # Everything drawn so far, in gray; then the video in color on top.
+    p.filter p.GRAY
+    p.image video 150 150
+}
+
+mousePressed _ = {
+    playing ? video.pause : video.loop
+    set playing (!playing)
+}
+
+main = sketch [setup: setup, draw: draw, mousePressed: mousePressed]

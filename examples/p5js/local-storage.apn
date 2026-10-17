@@ -1,0 +1,76 @@
+# Local Storage, from https://p5js.org/examples/loading-and-saving-data-local-storage/
+# Save data in the browser, so it is there when the page opens again.
+import "p5"
+
+# Bubbles, each a circle with a name; and the press a new one starts from.
+Bubble = [x: Float, y: Float, radius: Float, name: String]
+bubbles = Mutable ((List Bubble) [])
+pressed = Mutable [0.0, 0.0]
+creating = Mutable false
+
+setup (Sketch p) = {
+    p.createCanvas 640 360
+    # The bubbles kept from an earlier visit ([] if none).
+    saved <- p.getItem "bubbles"
+    set bubbles ((List Bubble) saved)
+    p.ellipseMode p.RADIUS
+    p.textSize 20
+    p.describe ("When the cursor clicks on the canvas, drags, and releases, a black outline "
+        ++ "circle representing a bubble appears on the white background. A prompt asks to "
+        ++ "name the bubble, and this name appears under the circle when the cursor hovers "
+        ++ "over it.")
+}
+
+draw (Sketch p) = {
+    p.background 255
+    mapM (display p) bubbles
+    # The bubble being made, as large as the drag.
+    when creating {
+        [x, y] = pressed
+        p.noFill
+        p.stroke 0
+        p.strokeWeight 4
+        p.circle x y (dist x y p.mouseX p.mouseY)
+    }
+    p.call "textAlign" [p.LEFT, p.BOTTOM]
+    p.fill 0
+    p.noStroke
+    p.text "Click and drag to add bubbles." 10 (p.height - 10)
+}
+
+# A bubble, and its name while the mouse is over it.
+display (Sketch p) bubble = {
+    p.stroke 0
+    p.noFill
+    p.strokeWeight 4
+    p.circle bubble.x bubble.y bubble.radius
+    when (dist p.mouseX p.mouseY bubble.x bubble.y < bubble.radius) {
+        p.fill 0
+        p.noStroke
+        p.textAlign p.CENTER
+        p.text bubble.name bubble.x (bubble.y + bubble.radius + 30)
+    }
+}
+
+mousePressed (Sketch p) = {
+    set pressed [Float p.mouseX, Float p.mouseY]
+    set creating true
+}
+
+mouseReleased (Sketch p) = when creating {
+    addBubble p
+    set creating false
+}
+
+# A bubble with the name asked for (none if it is cancelled), kept.
+addBubble (Sketch p) = {
+    [x, y] = pressed
+    radius = Float (dist x y p.mouseX p.mouseY)
+    name <- p.prompt "Enter a name for the new bubble"
+    when (name != "") {
+        set bubbles (bubbles ++ [[x: x, y: y, radius: radius, name: String name]])
+        p.storeItem "bubbles" bubbles
+    }
+}
+
+main = sketch [setup: setup, draw: draw, mousePressed: mousePressed, mouseReleased: mouseReleased]

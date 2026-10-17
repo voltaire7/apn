@@ -1,6 +1,7 @@
-import { clauseKey, countingFamily, METHODS, type Expr, flattenTypedPatterns, isLoadCall, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
+import { clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flattenTypedPatterns, isLoadCall, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
+import { objectFields, type P5Field, sketchFields } from "./p5.ts";
 import { standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
@@ -961,8 +962,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let firstUnbound: { expr: Expr; name: string; hint?: string; inPattern?: boolean; within?: Expr } | undefined;
     // Callee positions of application chains, where a function's shape is trusted.
     const callees = new WeakSet<Expr>();
+    // An expression to report at: this one, or the innermost with a location.
+    const located = (e?: Expr) => e && sourceLocations.has(e) ? e : locatedExpression;
     const unknown = (): Ty => {
-        firstUnknown ??= activeExpression ?? checkingExpression;
+        firstUnknown ??= located(activeExpression ?? checkingExpression);
         dynamicBoundaries++;
         return dynamic;
     };
@@ -1104,6 +1107,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // an Option-like variant (mapping its first type parameter).
     function monadicType(op: string, a: Ty, b: Ty): Ty {
         const at = { t: "placeholder" } as Expr;
+        // A Mutable cell is read for its contents, as everywhere a value is used.
+        if (a.k === "mutable") a = resolve(a.value);
+        if (b?.k === "mutable") b = resolve(b.value);
         if (op === "bindFlip") return monadicType("bind", b, a);
         // m >>= k needs a function k; a value to run after m is m >> k.
         if (op === "bind" && ["list", "variant", "atom", "record", "map"].includes(resolve(b).k)) {
@@ -1186,7 +1192,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     function evaluateOperation(t: Extract<Ty, { k: "operation" }>): Ty {
         const operands = t.args.map(resolve);
-        if (["+", "-", "*", "/", "%", "^", "compare", "negate"].includes(t.op)) {
+        // A Mutable cell is read for its contents, as at runtime.
+        if (["+", "-", "*", "/", "%", "^", "++", "compare", "negate", "length", "pairs", "keys", "values", "enumerate"].includes(t.op)) {
             for (let n = 0; n < operands.length; n++) {
                 while (operands[n].k === "mutable") operands[n] = resolve((operands[n] as Extract<Ty, { k: "mutable" }>).value);
                 if (operands[n].k === "variant" && (operands[n] as Extract<Ty, { k: "variant" }>).ordinal) operands[n] = atom("Int");
@@ -1209,6 +1216,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (a.k !== "record" || b.k !== "record") return problem("record remainder requires a record");
             unify(b, a);
             return { k: "record", fields: new Map([...a.fields].filter(([key]) => !b.fields.has(key))) };
+        }
+        // An overloaded operator's operands, once known, choose its clauses or
+        // its builtin meaning.
+        if (t.op.startsWith("overloaded:")) {
+            const at: Expr = { t: "placeholder" }, [f, l, r] = t.args;
+            if (overloadAccepts(f, l, r)) return application(application(f, { type: l }, at), { type: r }, at);
+            return operatorApplication(t.op.slice("overloaded:".length), l, r, at);
         }
         if (t.op.startsWith("field:")) {
             const name = t.op.slice(6);
@@ -1325,6 +1339,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return { k: "list", element: union(items), items, length: constant(BigInt(items.length)) };
             }
             else if (a.k === "list" && t.op === "enumerate") return { k: "list", element: pair(atom("Int"), a.element), ...sameLength(a) };
+            // [] is the empty record too.
+            else if (a.k === "list" && a.items?.length === 0 && t.op === "pairs") return list(variable(), constant(0n));
             // The pairs of a record not known (Record): its field names and any values.
             else if (a.k === "atom" && a.name === "Record" && t.op === "pairs") { key = atom("String"); value = variable(); }
             else return problem(`${t.op} requires a collection; got ${text(a)}`);
@@ -1451,6 +1467,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return problem(`Dynamic requires an explicit conversion to ${text(expected)}`, e);
         }
         if (expected.k === "dynamic" || actual.k === "dynamic") {
+            firstUnknown ??= located(e);
             dynamicBoundaries++;
             return;
         }
@@ -1571,8 +1588,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         e,
                     );
                 }
-                if (delta.terms.size) { if (!firstUnknown) { firstUnknown = e; unknownLength = true; } dynamicBoundaries++; }
-            } else if (expected.length) { if (!firstUnknown) { firstUnknown = e; unknownLength = true; } dynamicBoundaries++; }
+                if (delta.terms.size) { if (!firstUnknown) { firstUnknown = located(e); unknownLength = true; } dynamicBoundaries++; }
+            } else if (expected.length) { if (!firstUnknown) { firstUnknown = located(e); unknownLength = true; } dynamicBoundaries++; }
             return;
         }
         if (expected.k === "map" && actual.k === "map") { unify(expected.key, actual.key, e, seen); unify(expected.value, actual.value, e, seen); return; }
@@ -1652,7 +1669,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const binary64 = (t: Extract<Ty, { k: "atom" }>) => t.name === "Float" || t.name === "Float64";
         if (binary64(x) && y.name === "Int" && lossless[1]) return x;
         if (binary64(y) && x.name === "Int" && lossless[0]) return y;
-        return op === "/" ? atom("Number") : x.name === y.name ? x : integerResult(x, y) ?? atom("Number");
+        // Floats divide to the same float; other quotients may be exact fractions.
+        if (op === "/") return x.name === y.name && ["Float", "Float32", "Float64"].includes(x.name) ? x : atom("Number");
+        return x.name === y.name ? x : integerResult(x, y) ?? atom("Number");
     }
     function index(e: Expr, scope: Scope): Index | undefined {
         if (e.t === "int") return constant(e.v);
@@ -2239,12 +2258,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     ): Ty {
         spend(e);
         const t = resolve(target), a = resolve(actual);
+        // Anything converts to Dynamic, without deciding its own type.
+        if (isExplicit(t)) return target;
         if (isExplicit(a) && (runtimeProjection || explicitFloat)) { runtimeChecks++; return target; }
         // An undecided call takes the overload this type names.
         if (a.k === "union" && a.undecided) {
             const choice = a.choices.find(c => succeeds(() => convert(target, c, e, explicitFloat, new Map(), runtimeProjection)));
             if (!choice) return problem(`no overload makes ${text(t)}`, e);
             return convert(target, choice, e, explicitFloat, seen, runtimeProjection);
+        }
+        // A value of one of several types converts when each of them does.
+        if (a.k === "union") {
+            for (const choice of a.choices) convert(target, choice, e, explicitFloat, seen, runtimeProjection);
+            return target;
         }
         if (t.k === "atom" && t.name === "Bool" && explicitFloat) return t;
         if (
@@ -2360,10 +2386,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function application(f: Ty, argument: Entry, e: Expr): Ty {
         spend(e);
         f = resolve(f);
+        // A Mutable cell applies as its contents (an index into a list cell).
+        while (f.k === "mutable") f = resolve(f.value);
         if (f.k === "intrinsic") {
             const args = [...f.args ?? [], argument.type];
             if (args.length < (f.arity ?? 1)) return { ...f, args };
             if (PRELUDE_OPERATORS.has(f.name)) return operatorApplication(f.name, args[0], args[1], e);
+            // set is an action whatever it writes: its target and value are
+            // checked (a requirement) once their types are known.
+            if (f.name === "set") { operation(f.name, args); return io(list(variable(), constant(0n))); }
             return operation(f.name, args);
         }
         if (f.k === "operation") return deferredCall(f, argument);
@@ -2372,7 +2403,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // given a value that depends on an enclosing function's parameter
         // (h x = g (-x)): convert it at that function's calls, where the
         // value is known, as for an overload.
-        if (f.k === "fn" && f.coerce && !deciding && !choosing && symbolicArgument(argument) &&
+        // (A Dynamic parameter takes anything: there is nothing to wait for.)
+        if (f.k === "fn" && f.coerce && resolve(f.input).k !== "dynamic" && !deciding && !choosing && symbolicArgument(argument) &&
             (waiting(argument.type) || ["list", "record", "variant"].includes(resolve(f.input).k) && waitingWithin(argument.type))) {
             const deferred = evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument);
             if (deferred.k === "operation" && e.t !== "placeholder" && !deferred.written) { deferred.written = e; deferred.within = outermost; }
@@ -2469,8 +2501,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             let a = resolve(argument.type);
             // A list or record of types (Point = [x: Float, y: Float]) given as a
             // type's argument is the type it describes: List Point, Option Point.
-            const describes = a.k === "list" && !!a.items?.length && a.items.every(x => resolve(x).k === "type")
-                || a.k === "record" && a.fields.size > 0 && [...a.fields.values()].every(x => resolve(x).k === "type");
+            // (Nested ones too: [x: Float, color: [Float, Float]].)
+            const describing = (x: Ty): boolean => x.k === "type"
+                || x.k === "list" && !!x.items?.length && x.items.every(item => describing(resolve(item)))
+                || x.k === "record" && x.fields.size > 0 && [...x.fields.values()].every(field => describing(resolve(field)));
+            const describes = a.k !== "type" && describing(a);
             if (describes && (t.k === "atom" && t.name === "List" || t.k === "variant" && t.args.length > (f.applied ?? 0))) {
                 a = { k: "type", value: schemaValue(a, e) };
             }
@@ -2506,9 +2541,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 requirements.push({ k: "operation", op: "construct", args: [f, argument.type] });
                 return t;
             }
-            // A numeric conversion of an unknown value (such as a parameter) is
-            // checked once the value's type is known, not forced to the target.
-            if (t.k === "atom" && NUMERIC_TYPES.includes(t.name) && a.k === "var") {
+            // A numeric conversion of an unknown value (such as a parameter, or
+            // arithmetic on one) is checked once the value's type is known, not
+            // forced to the target.
+            // So is a schema's ((List P) x) of a value still to be decided.
+            if (t.k === "atom" && NUMERIC_TYPES.includes(t.name) && (a.k === "var" || a.k === "operation")
+                || (t.k === "list" || t.k === "record") && a.k === "operation") {
                 requirements.push({ k: "operation", op: "construct", args: [f, argument.type] });
                 return t;
             }
@@ -2653,6 +2691,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (f.k === "list") {
             const a = resolve(argument.type);
+            // An index not known yet (a lambda's parameter) waits until it is.
+            if (a.k === "var" || a.k === "operation") return deferredCall(f, argument);
             if (a.k === "atom" && a.name === "Int" || a.k === "variant" && a.ordinal) {
                 if (f.items && argument.index && !argument.index.terms.size) {
                     const n = Number(argument.index.constant), at = n < 0 ? f.items.length + n : n;
@@ -3048,9 +3088,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const parameter = resolve(self.selfInputs[position]), argument = resolve(argumentType);
                     // A parameter whose pattern binds its length takes the argument's.
                     if (self.selfOpen?.[position] && parameter.k === "list" && argument.k === "list") argumentType = list(argument.element, parameter.length);
-                    else if (parameter.k !== "list" || !parameter.length && !parameter.items) {
-                        argumentType = withoutLengths(copy(argumentType, new Map([...variables(argumentType)].map(v => [v, v]))));
-                    }
+                    else argumentType = withoutOpenLengths(copy(argumentType, new Map([...variables(argumentType)].map(v => [v, v]))), parameter);
                 }
                 // Nor does a call to a function known only from its uses: a
                 // parameter (g [1] and g [1,2,3]) or one read from a parameter's
@@ -3058,7 +3096,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 else if (head.t === "var" && self?.mono && !self.selfInputs || head.t === "recordAccess" && (() => {
                     const holder = resolve(inferred.get(head.rec) ?? dynamic);
                     return holder.k === "record" && !!holder.open;
-                })()) argumentType = withoutLengths(copy(argumentType, new Map([...variables(argumentType)].map(v => [v, v]))));
+                })()) argumentType = withoutLengths(copy(argumentType, new Map([...variables(argumentType)].map(v => [v, v]))), true);
                 const result = application(callee, { type: argumentType, ...valueEntry(a, scope) }, a);
                 if (!callees.has(e)) noClauseMatches(e, scope);
                 // A partial application that leaves its call chain is an ordinary function value.
@@ -3165,7 +3203,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     }
                     if (keys.k === "list") {
                         const incoming = resolve(value);
-                        if (incoming.k !== "list") { dynamicBoundaries++;  return rec; }
+                        if (incoming.k !== "list") { firstUnknown ??= located(e); dynamicBoundaries++; return rec; }
                         if (keys.items && incoming.items && keys.items.length !== incoming.items.length) problem("index count does not match value count", e);
                         const slots = e.index.t === "list" ? e.index.v : [];
                         slots.forEach((slot, n) => {
@@ -3174,7 +3212,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                                 (k.constant >= rec.length.constant || k.constant < -rec.length.constant)) problem("list index out of range", slot);
                             convert(rec.element, incoming.items?.[n] ?? incoming.element, e.value.t === "list" ? e.value.v[n] ?? e.value : e.value);
                         });
-                        if (!slots.length) dynamicBoundaries++;
+                        if (!slots.length) { firstUnknown ??= located(e); dynamicBoundaries++; }
                         return rec;
                     }
                     if (
@@ -3216,7 +3254,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const t = lambdaType(lambda, scope, new Map());
                     return application({ k: "fn", input: t, output: t, coerce: true }, { type: infer(e.argument, scope) }, e);
                 }
-                const rec = resolve(infer(e.rec, scope));
+                let rec = resolve(infer(e.rec, scope));
+                // A Mutable cell's fields are its contents' (as it applies as them).
+                while (rec.k === "mutable") rec = resolve(rec.value);
                 if (isExplicit(rec)) { runtimeChecks++; return explicitDynamic; }
                 if (rec.k === "list") return template(rec, infer(e.argument ?? { t: "var", name: e.field }, scope), e.argument ?? e);
                 if (e.scoped && e.argument) {
@@ -3303,6 +3343,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     // (::) = Cons rebinds the operator; it does not overload it.
                     if (!PRELUDE_OPERATORS.has(e.op) || constructorOperators.has(e.op)) return infer(call, scope, expected);
                     const l = infer(e.l, scope), r = infer(e.r, scope);
+                    // Operands not known yet (a parameter's) choose when they are.
+                    if ([l, r].some(x => ["var", "operation"].includes(resolve(x).k))) return operation(`overloaded:${e.op}`, [bound.type, l, r]);
                     if (overloadAccepts(bound.type, l, r)) return infer(call, scope, expected);
                     op = e.op;
                     operands = [l, r];
@@ -5450,13 +5492,33 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (x.k === "fn" && y.k === "fn") return emptyAgainstOpen(x.input, y.input, seen) || emptyAgainstOpen(x.output, y.output, seen);
         return false;
     }
-    // Forget every list length in a (freshly copied) type graph.
-    function withoutLengths(type: Ty, seen = new Set<Ty>()): Ty {
+    // Forget every list length in a (freshly copied) type graph. An
+    // argument's data forgets only its own: a function's or an action's (an
+    // action's [] result) is its contract, and stays.
+    function withoutLengths(type: Ty, data = false, seen = new Set<Ty>()): Ty {
         const t = resolve(type);
-        if (seen.has(t)) return type;
+        if (seen.has(t) || data && (t.k === "fn" || t.k === "variant" && t.name === "IO")) return type;
         seen.add(t);
         if (t.k === "list") { t.length = undefined; t.items = undefined; }
-        children(t).forEach(child => withoutLengths(child, seen));
+        children(t).forEach(child => withoutLengths(child, data, seen));
+        return type;
+    }
+    // Forget the list lengths in a parameter's data that its type leaves open
+    // (all of them where it says nothing, as a type variable).
+    function withoutOpenLengths(type: Ty, parameter: Ty, seen = new Set<Ty>()): Ty {
+        const t = resolve(type), p = resolve(parameter);
+        if (seen.has(t)) return type;
+        seen.add(t);
+        if (t.k === "list" && p.k === "list") {
+            if (p.length || p.items) return type;
+            t.length = undefined;
+            t.items = undefined;
+            withoutOpenLengths(t.element, p.element, seen);
+        } else if (t.k === "record" && p.k === "record") {
+            for (const [key, field] of t.fields) withoutOpenLengths(field, p.fields.get(key) ?? variable(), seen);
+        } else if (t.k === "variant" && p.k === "variant" && t.name === p.name && t.args.length === p.args.length) {
+            t.args.forEach((arg, n) => withoutOpenLengths(arg, p.args[n], seen));
+        } else withoutLengths(type, true);
         return type;
     }
     function lengthOf(shape: Shape | undefined): LengthRef | undefined {
@@ -5743,8 +5805,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             return;
         }
+        // Clauses for a math function overload it: arguments they do not take
+        // keep its previous meaning.
+        const previous = MATH_FUNCTIONS.has(name) && clauses[0].params.length ? scope.get(name) : undefined;
         defineClauses(name, clauses, scope, location);
         const entry = scope.get(name);
+        if (previous && entry) scope.set(name, { ...entry, type: { k: "overload", choices: [entry.type, previous.type], name } });
         if (options.library && entry && DECLARED_KEEPS_LENGTH.has(name)) declareKeepsLength(entry.type);
     }
     // The result is a list as long as the final argument, for each overload
@@ -5937,7 +6003,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         forward.delete(name);
         // Mutually recursive definitions read it while it is being inferred.
         const capture = carried(previous);
-        scope.set(name, { type: pending, mono: true, recursive: true, capture });
+        // Its clauses' own calls of an overloaded math function may take the
+        // previous meaning too (sin (Dual a b) = Dual (sin a) ...).
+        const fallback = MATH_FUNCTIONS.has(name) && previous && !previous.recursive ? previous.type : undefined;
+        scope.set(name, { type: fallback ? { k: "overload", choices: [pending, fallback], name } : pending, mono: true, recursive: true, capture });
         const groups = new Map<string, Ty>();
         const domain = (t: Ty, seen = new Set<Ty>()): string => {
             t = resolve(t);
@@ -6072,7 +6141,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     ) scope.set(name, { type });
     // fail, like the other standard natives, reaches programs through import "function".
     if (options.library) scope.set("fail", { type: fn(atom("String"), variable()) });
-    const standardOnly = new Set(["seq", "chars", "fromChars", "upper", "lower", "readFile", "readStdin", "getArgs", "fetch", "toJson", "prettyJson", "fromJson", "entropy", "currentTime", "zoneOffset"]);
+    const standardOnly = new Set(["seq", "chars", "fromChars", "upper", "lower", "readFile", "readStdin", "getArgs", "fetch", "toJson", "prettyJson", "fromJson", "entropy", "currentTime", "zoneOffset", "p5Object", "p5SketchType"]);
     const native = (name: string, inputs: Ty[], output: Ty) => {
         if (name in RETIRED_NATIVES) return;
         if (!standardOnly.has(name) || options.library) scope.set(name, { type: inputs.reduceRight((result, input) => fn(input, result), output) });
@@ -6111,6 +6180,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("readStdin", [], io(str));
     native("getArgs", [], io(list(str)));
     for (const name of ["entropy", "currentTime", "zoneOffset"]) native(name, [], io(int));
+    // p5's Sketch (a callback's p) and its objects: records whose methods are
+    // Dynamic (their arguments are checked as they run).
+    // A method's Dynamic parameters convert their arguments (as a (Dynamic x) parameter does).
+    const p5Field = (field: P5Field): Ty => typeof field === "object"
+        ? Array.from({ length: field.arity }).reduce<Ty>(output => fn(explicitDynamic, output, undefined, true), io(field.result ? explicitDynamic : unitList))
+        : field === "Number" ? num : field === "Bool" ? bool : field === "String" ? str : field === "action" ? io(explicitDynamic) : explicitDynamic;
+    // The [] a method without a result yields: one type, so the record converts to itself.
+    const unitList: Ty = { k: "list", element: explicitDynamic, length: constant(0n), items: [] };
+    const p5Record = (fields: Array<[string, P5Field]>): Ty => ({ k: "record", fields: new Map(fields.map(([name, field]) => [name, p5Field(field)])) });
+    native("p5Object", [str, list(variable())], p5Record(objectFields()));
+    native("p5SketchType", [], { k: "type", value: p5Record(sketchFields()) });
     // HTTP and JSON (the http and json modules): a response is a record; decoded JSON is Dynamic.
     native("fetch", [str, variable()], io({ k: "record", fields: new Map<string, Ty>([
         ["status", int], ["ok", bool], ["statusText", str], ["url", str], ["headers", { k: "map", key: str, value: str }], ["body", str],

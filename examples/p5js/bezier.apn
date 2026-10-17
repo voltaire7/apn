@@ -1,0 +1,23 @@
+# Bezier, from https://p5js.org/examples/repetition-bezier/
+# Draw a set of curves.
+import "p5"
+
+setup (Sketch p) = {
+    p.createCanvas 720 400
+    p.noFill
+    p.strokeWeight 2
+    p.colorMode p.HSB
+}
+
+draw (Sketch p) = {
+    p.describe ("Ten rainbow-colored lines in a bezier curve formation. The top anchors of the "
+        ++ "curves move with the cursor as it hovers over the black canvas.")
+    p.background 5
+    # Ten curves, each anchored further down, its first anchor following the mouse.
+    mapM (i -> {
+        p.stroke [i + 10, 50, 60]
+        p.bezier (p.mouseX - i / 2) i 410 20 440 300 (240 - i / 16) (300 + i / 8)
+    }) [0, 20..180]
+}
+
+main = sketch [setup: setup, draw: draw]

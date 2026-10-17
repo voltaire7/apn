@@ -1,0 +1,56 @@
+# Triangle Strip, from https://p5js.org/examples/angles-and-motion-triangle-strip/
+# Split a ring into triangles.
+import ["html", "number", "p5"]
+browser = import "browser"
+
+Msg = | Counted Int
+
+[insideRadius, outsideRadius] = [100, 150]
+
+init = [0, browser.none]
+
+update (Counted count) _ = [count, browser.none]
+
+# The canvas, and a label showing how many points the ring has.
+view count = div [style "position" "relative"] [
+    canvas [setup: setup, draw: draw count]
+    div [
+        style "position" "absolute"
+        style "left" "20px"
+        style "top" "10px"
+        style "color" "white"
+    ] [text ("pointCount: " ++ to String count)]
+]
+
+setup (Sketch p) = {
+    p.call "createCanvas" [720, 400, p.WEBGL]
+    p.angleMode p.DEGREES
+    p.colorMode p.HSB
+    p.describe ("Rainbow ring made up of triangles whose vertices lie on two concentric "
+        ++ "circles.")
+}
+
+# A strip of triangles between two circles, more of them further right.
+draw shown (Sketch p) = {
+    p.background 0
+    [centerX, centerY] = [p.width / 2, p.height / 2]
+    p.translate (-centerX) (-centerY)
+    # The sketch's values are Dynamic: Number converts one for round.
+    count = Int (round (Number (remap p.mouseX 0 p.width 6 60)))
+    when (count != shown) (p.send (Counted count))
+    step = 180 / count
+    p.call "beginShape" [p.TRIANGLE_STRIP]
+    mapM (i -> {
+        corner p (2 * i * step) outsideRadius centerX centerY
+        corner p ((2 * i + 1) * step) insideRadius centerX centerY
+    }) [0..count]
+    p.endShape
+}
+
+# A vertex on the circle of this radius, at this angle, colored by it.
+corner (Sketch p) angle radius centerX centerY = {
+    p.fill [angle, 255, 255]
+    p.vertex (centerX + cos (degrees angle) * radius) (centerY + sin (degrees angle) * radius)
+}
+
+main = browser.element [init: init, update: update, subscriptions: (_ -> browser.none), view: view]

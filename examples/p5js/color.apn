@@ -1,0 +1,46 @@
+# Color, from https://p5js.org/examples/shapes-and-color-color/
+# Add color to your sketch.
+import "p5"
+
+setup (Sketch p) = {
+    p.textOutput
+    p.createCanvas 720 400
+    p.angleMode p.DEGREES
+    # A CSS color name.
+    p.background "steelblue"
+    p.strokeWeight 4
+    # By default a color is red, green and blue, each 0 to 255.
+    p.fill [200, 200, 255]
+    p.stroke [20, 20, 100]
+    p.square 20 20 100
+    # The rectangle keeps the light blue fill.
+    p.stroke [100, 20, 20]
+    p.rect 100 40 200 100
+    # Hue (0 to 360), saturation and brightness (0 to 100).
+    p.colorMode p.HSB
+    p.fill [120, 70, 90]
+    p.stroke [120, 60, 30]
+    p.ellipse 540 100 300 100
+    p.fill [300, 90, 30]
+    p.noStroke
+    p.circle 560 100 100
+    # Hue, saturation and lightness: 100% lightness is always white.
+    p.colorMode p.HSL
+    p.fill [120, 70, 90]
+    p.stroke [120, 60, 30]
+    p.call "arc" [540, 100, 300, 100, 180, 360, p.CHORD]
+    # push saves the settings and pop restores them, so the triangle keeps
+    # the arc's colors.
+    p.push
+    p.colorMode p.RGB
+    p.stroke [20, 10, 80]
+    p.line 20 200 200 350
+    p.pop
+    p.triangle 250 350 350 200 450 350
+    # A hex color, as its red, green and blue: #EFD8D8.
+    p.stroke [239, 216, 216]
+    p.noFill
+    p.quad 500 250 550 200 700 300 650 350
+}
+
+main = sketch [setup: setup]

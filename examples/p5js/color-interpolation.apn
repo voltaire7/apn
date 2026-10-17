@@ -1,0 +1,38 @@
+# Color Interpolation, from https://p5js.org/examples/repetition-color-interpolation/
+# Fade between two colors.
+import "p5"
+
+stripeCount = 12
+
+setup (Sketch p) = {
+    p.createCanvas 400 400
+    p.colorMode p.HSB
+    p.noStroke
+    p.describe ("Horizontal stripes fading between light green at the top and dark blue at "
+        ++ "the bottom. The top stripe is labeled Color A, and the bottom stripe is labeled "
+        ++ "Color B.")
+    colorA <- p.color [100, 90, 100]
+    colorB <- p.color [250, 80, 20]
+    stripeHeight = p.height / stripeCount
+    # Each stripe a step further from color A toward color B.
+    mapM (n -> {
+        between <- p.lerpColor colorA colorB (n / stripeCount)
+        p.fill between
+        p.rect 0 (n * stripeHeight) p.width stripeHeight
+    }) [0..stripeCount - 1]
+    # The two labels, in white boxes with rounded corners.
+    p.call "textAlign" [p.CENTER, p.CENTER]
+    label p "Color A" 5
+    label p "Color B" (p.height - stripeHeight + 5)
+}
+
+label (Sketch p) name y = {
+    [margin, boxWidth, cornerRadius] = [5, 60, 5]
+    boxHeight = p.height / stripeCount - margin * 2
+    p.fill 255
+    p.call "rect" [margin, y, boxWidth, boxHeight, cornerRadius]
+    p.fill 0
+    p.call "text" [name, margin, y, boxWidth, boxHeight]
+}
+
+main = sketch [setup: setup]

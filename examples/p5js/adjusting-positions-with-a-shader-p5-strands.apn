@@ -1,0 +1,45 @@
+# Adjusting Positions with a Shader (p5.strands), from
+# https://p5js.org/examples/3d-adjusting-positions-with-a-shader-p5strands/
+# Move a model's vertices with a shader written in APN.
+import ["glsl", "p5"]
+
+# Each vertex moved up and down over time, a little later along the ribbon.
+wiggle inputs = {
+    [x, y, z] = map (axis -> swizzle axis inputs.position) ["x", "y", "z"]
+    [position: vec [x, y + 20 * sin (Glsl "time" * 0.01 + y * 0.1), z]]
+}
+
+# time is the sketch's milliseconds, set each frame.
+wiggleShader = buildColorShader [time: ["float", (Sketch p -> p.millis)]] [objectInputs: wiggle]
+
+# A ribbon of vertices, red to blue along its length.
+ribbon = buildGeometry (Sketch p -> {
+    startColor <- p.color "#F55"
+    endColor <- p.color "#55F"
+    p.noStroke
+    p.call "beginShape" [p.QUAD_STRIP]
+    points = 50
+    mapM (point -> {
+        x = remap point 0 (points - 1) (-p.width / 3) (p.width / 3)
+        y = remap point 0 (points - 1) (-p.height / 3) (p.height / 3)
+        color <- p.lerpColor startColor endColor (point / (points - 1))
+        p.fill color
+        mapM (z -> p.call "vertex" [x, y, z]) [-50, 50]
+    }) [0..points - 1]
+    p.endShape
+})
+
+setup (Sketch p) = {
+    p.call "createCanvas" [700, 400, p.WEBGL]
+    p.describe "A red-to-blue ribbon that waves over time"
+}
+
+draw (Sketch p) = {
+    p.background 255
+    p.noStroke
+    p.rotateX (p.PI * 0.1)
+    p.shader wiggleShader
+    p.model ribbon
+}
+
+main = sketch [setup: setup, draw: draw]

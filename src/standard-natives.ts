@@ -7,6 +7,7 @@ import { fetchSync, HttpFailure } from "./http.ts";
 import { fromJson, toJson } from "./json.ts";
 import { isStringKey } from "./record-keys.ts";
 import { textNatives } from "./text-natives.ts";
+import { p5Object, p5SketchType } from "./p5.ts";
 
 // Representation, effects and Unicode casing are the stdlib's native boundary.
 export const STANDARD_NATIVES: Array<[string, number]> = [
@@ -14,7 +15,7 @@ export const STANDARD_NATIVES: Array<[string, number]> = [
     ["bracket", 3], ["withFile", 2], ["readFile", 1], ["readStdin", 0], ["getArgs", 0],
     ["seq", 2], ["fail", 1], ["chars", 1], ["fromChars", 1], ["upper", 1], ["lower", 1],
     ["fetch", 2], ["toJson", 1], ["prettyJson", 1], ["fromJson", 1],
-    ["entropy", 0], ["currentTime", 0], ["zoneOffset", 0],
+    ["entropy", 0], ["currentTime", 0], ["zoneOffset", 0], ["p5Object", 2], ["p5SketchType", 0],
 ];
 export function standardNative(i: Interpreter, name: string, args: Value[]): Value {
     if (name === "bracket") return bracket(i, args[0], args[1], args[2]);
@@ -26,6 +27,8 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
         return v.v;
     };
     if (name === "getArgs") return mkList(i.programArgs.map(mkStr));
+    if (name === "p5Object") return p5Object(str(args[0]), i.items(args[1]));
+    if (name === "p5SketchType") return p5SketchType();
     // A random 32-bit seed (random), the time in milliseconds since 1970 and
     // the local offset from UTC in minutes (time).
     if (name === "entropy") return mkInt(crypto.getRandomValues(new Uint32Array(1))[0]);

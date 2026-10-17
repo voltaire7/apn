@@ -1,0 +1,33 @@
+# Words, from https://p5js.org/examples/imported-media-words/
+# Load fonts and draw text.
+import "p5"
+
+font = loadFont "assets/SourceSansPro-Regular.otf"
+
+setup (Sketch p) = {
+    p.describe ("Three columns of the words “ichi,” “ni,” “san,” and “shi” on a white "
+        ++ "background. The first column is right aligned, the middle column is center "
+        ++ "aligned, and the left column is left aligned.")
+    p.createCanvas 710 400
+    p.background 250
+    p.textFont font
+    p.textSize 40
+    # The same words in three columns, aligned right, centered and left.
+    p.call "textAlign" [p.RIGHT, p.CENTER]
+    drawWords p (p.width * 0.25)
+    p.call "textAlign" [p.CENTER, p.CENTER]
+    drawWords p (p.width * 0.5)
+    p.call "textAlign" [p.LEFT, p.CENTER]
+    drawWords p (p.width * 0.75)
+}
+
+drawWords (Sketch p) x = {
+    p.fill 80
+    p.text "ichi" x 80
+    p.text "ni" x 150
+    p.text "san" x 220
+    p.text "shi" x 290
+}
+
+# The font loads before setup.
+main = sketch [preload: [font], setup: setup]

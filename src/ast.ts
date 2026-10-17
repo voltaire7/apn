@@ -93,6 +93,10 @@ export function countingFamily(def: DataDef): boolean {
 // Methods: a definition of one adds an instance (map f (Some x) = ...,
 // return = Some, throw _ = None) instead of binding the name.
 export const METHODS = new Set(["map", ">>=", "<*>", "return", "throw", "to", "from"]);
+// The math functions: clauses for one overload it, as clauses for an operator
+// do (sin (Dual a b) = ...); other arguments keep its previous meaning.
+export const MATH_FUNCTIONS = new Set(["sqrt", "exp", "log", "sin", "cos", "tan", "asin", "acos", "atan",
+    "atan2", "abs", "floor", "ceiling", "truncate", "round", "min", "max"]);
 
 export type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "expr"; value: Expr }
     | { t: "type"; def: DataDef }

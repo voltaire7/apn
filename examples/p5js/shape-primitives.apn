@@ -1,0 +1,29 @@
+# Shape Primitives, from https://p5js.org/examples/shapes-and-color-shape-primitives/
+# Draw 2D shapes.
+import "p5"
+
+setup (Sketch p) = {
+    # A description of the canvas for screen readers.
+    p.textOutput
+    p.createCanvas 720 400
+    # Angles in degrees: arc takes angles.
+    p.angleMode p.DEGREES
+    # A light gray background.
+    p.background 220
+    # A square: x, y, size.
+    p.square 20 20 100
+    # A rectangle, drawn after the square and so in front of it: x, y, width, height.
+    p.rect 100 40 200 100
+    # An eye: an ellipse for its outline, a circle for the pupil and an arc
+    # (start and stop angles, and a mode) for the eyelid.
+    p.ellipse 540 100 300 100
+    p.circle 560 100 100
+    p.call "arc" [540, 100, 300, 100, 180, 360, p.CHORD]
+    # A line: x1, y1, x2, y2.
+    p.line 20 200 200 350
+    # A triangle, then a quadrilateral, by their corners.
+    p.triangle 250 350 350 200 450 350
+    p.quad 500 250 550 200 700 300 650 350
+}
+
+main = sketch [setup: setup]

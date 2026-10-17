@@ -45,7 +45,8 @@ export function castNumeric(name: string, value: Numeric, explicit = false): Num
     } else if (name === "Float" || name === "Float32") {
         const real = toReal(value), v = asFloat(real);
         result = floating(name === "Float32" ? Math.fround(v) : v);
-        if (!explicit && !equalNumbers(real, result) && !(real.kind === "float" && Number.isNaN(real.v) && Number.isNaN((result as { v: number }).v))) {
+        // A Float is a Float; anything else must convert without loss.
+        if (!explicit && !(name === "Float" && real.kind === "float") && !equalNumbers(real, result) && !(real.kind === "float" && Number.isNaN(real.v) && Number.isNaN((result as { v: number }).v))) {
             throw new APNError("runtime", `lossy conversion to ${name}; round explicitly before applying the type`);
         }
     } else if (name === "Fraction") result = toExact(toReal(value));

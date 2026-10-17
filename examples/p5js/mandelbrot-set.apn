@@ -1,0 +1,50 @@
+# Mandelbrot Set, from https://p5js.org/examples/math-and-physics-mandelbrot/
+# Color each point by how quickly it escapes as z² + c repeats from 0.
+import "p5"
+
+maxIterations = 100
+# The view: 4 wide, centered on 0, as tall as the canvas's proportions.
+viewWidth = 4.0
+# Squares of size pixels, each the color of its corner (p5 colors each pixel;
+# an interpreter computes fewer points in good time), a row of them a frame.
+size = 2
+row = Mutable 0
+
+setup (Sketch p) = {
+    p.createCanvas 710 400
+    p.describe "Colorful rendering of the Mandelbrot set."
+    p.background 0
+    p.noStroke
+}
+
+draw (Sketch p) = {
+    viewHeight = viewWidth * p.height / p.width
+    y = Float (-viewHeight / 2 + viewHeight * row * size / p.height)
+    mapM (column -> {
+        x = Float (-viewWidth / 2 + viewWidth * column * size / p.width)
+        p.fill (color (escape x y))
+        p.rect (column * size) (row * size) size size
+    }) [0..Int (p.width / size)]
+    set row (row + 1)
+    when (row * size >= p.height) p.noLoop
+}
+
+# How many times z² + c repeats, from z = 0 with c = x + yi, before z escapes
+# (at most maxIterations). Points in the two largest parts of the set (the
+# main cardioid and the circle left of it) never escape, so they are skipped.
+escape x y = {
+    q = (x - 0.25) * (x - 0.25) + y * y
+    inside = q * (q + x - 0.25) <= y * y / 4 || (x + 1) * (x + 1) + y * y <= 0.0625
+    repeat a b n = {
+        [aa, bb] = [a * a, b * b]
+        n == maxIterations || aa * aa + bb * bb > 256.0
+            ? n : repeat (aa - bb + x) (2.0 * a * b + y) (n + 1)
+    }
+    inside ? maxIterations : repeat 0.0 0.0 0
+}
+
+# Black for the set; outside it, blue to yellow the longer a point stays.
+color iterations = iterations == maxIterations ? [0.0, 0.0, 0.0]
+    : lerp [47.0, 68.0, 159.0] [255.0, 255.0, 128.0] (Float (sqrt (iterations / maxIterations)))
+
+main = sketch [setup: setup, draw: draw]

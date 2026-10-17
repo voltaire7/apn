@@ -1,0 +1,57 @@
+# Form Elements, from https://p5js.org/examples/input-elements-dom-form-elements/
+# Create a form and respond to the results.
+import ["html", "p5"]
+browser = import "browser"
+
+# The name typed, the food chosen (its color) and the form's font.
+Model = [name: String, food: String, font: String]
+Msg = Named String | Picked String | Font String
+
+foods = [["#F7F5BC", "Cranberries"], ["#B8E3FF", "Almonds"], ["#C79A9A", "Gouda"]]
+fonts = ["Sans-serif", "Serif", "Cursive"]
+
+init = [[name: "", food: "white", font: "Sans-serif"], browser.none]
+
+update msg model = match msg [
+    Named name -> { model.name = name; [model, browser.none] }
+    Picked food -> { model.food = food; [model, browser.none] }
+    Font font -> { model.font = font; [model, browser.none] }
+]
+
+view model = div [style "position" "relative"] [
+    canvas [setup: setup, draw: draw model]
+    input (onInput Named :: at 25 115) []
+    div (at 25 215) (map ([color, food] -> label [] [
+        input [typeAttribute "radio", attribute "name" "food", onClick (Picked color)] []
+        text food
+    ]) foods)
+    select (onInput Font :: at 25 300) (map (font -> option [value font] [text font]) fonts)
+]
+
+# Attributes placing an element at x, y over the canvas.
+at x y = [
+    style "position" "absolute"
+    style "left" (to String x ++ "px")
+    style "top" (to String y ++ "px")
+]
+
+setup (Sketch p) = p.createCanvas 720 400
+
+# The food's color is the background, and the font the text's.
+draw model (Sketch p) = {
+    p.describe ("A form with \"Welcome to p5.js!\" for a header, a text input with the label "
+        ++ "\"What is your name?\", and a set of radio buttons with the label \"What is your "
+        ++ "favorite food?\", with the options of \"Cranberries,\" \"Almonds,\" or \"Gouda.\" "
+        ++ "The text submitted through the input appears next to its label. The radio button "
+        ++ "selection changes the canvas background color. The select element changes the "
+        ++ "form font.")
+    p.background model.food
+    p.textFont model.font
+    p.textSize 25
+    p.text "Welcome to p5.js!" 25 50
+    p.textSize 20
+    p.text ("What is your name? " ++ model.name) 25 100
+    p.text "What is your favorite food?" 25 200
+}
+
+main = browser.element [init: init, update: update, subscriptions: (_ -> browser.none), view: view]

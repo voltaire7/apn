@@ -1,0 +1,31 @@
+# Video Player, from https://p5js.org/examples/imported-media-video/
+# Create a player for a video file.
+import "html"
+browser = import "browser"
+import "p5"
+
+# The video, from its sources: the first one the browser plays.
+video = createVideo ["assets/fingers.mov", "assets/fingers.webm"]
+
+Msg = | Toggle
+
+init = [false, browser.none]
+
+update Toggle playing = [!playing, browser.none]
+
+# The sketch shows the video and keeps it playing or paused, as the button says.
+view playing = div [] [
+    canvas [setup: setup, draw: draw playing]
+    button [onClick Toggle] [text (playing ? "pause" : "play")]
+]
+
+setup (Sketch p) = p.noCanvas
+
+draw playing _ = playing ? video.loop : video.pause
+
+main = browser.element [
+    init: init
+    update: update
+    subscriptions: (_ -> browser.none)
+    view: view
+]

@@ -23,12 +23,12 @@ draw t p = {
     p.background "white"
     p.perspective (p.PI / 4) 1 0.01 100
     p.camera (4 * cos t) 0 (4 * sin t) 0 0 0 0 (-1) 0
-    p.noStroke []
+    p.noStroke
     p.call "beginShape" [p.TRIANGLES]
     vertex p [255, 0, 0] [0, 0, 0]
     vertex p [0, 255, 0] [1, 1, 0]
     vertex p [0, 0, 255] [1, -1, 0]
-    p.endShape []
+    p.endShape
 }
 
 vertex p color [x, y, z] = {

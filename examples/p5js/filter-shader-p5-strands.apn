@@ -1,0 +1,38 @@
+# Filter Shader (p5.strands), from https://p5js.org/examples/3d-filter-shader-p5strands/
+# Manipulate imagery with a shader written in APN.
+import ["glsl", "p5"]
+
+video = createVideo "assets/DiagonalCrosswalkYongeDundas.mp4"
+
+# A pixel's color: each channel from the image zoomed by a different amount,
+# so that the colors move apart the further they are from the center.
+displace inputs = {
+    zoom coord amount = (coord - 0.5) / amount + 0.5
+    uv = inputs.texCoord
+    channel name at = swizzle name (getTexture inputs.canvasContent at)
+    [channel "r" uv, channel "g" (zoom uv 1.05), channel "b" (zoom uv 1.1), channel "a" uv]
+}
+
+displaceColors = buildFilterShader [] displace
+
+setup (Sketch p) = {
+    p.call "createCanvas" [700, 400, p.WEBGL]
+    video.volume 0
+    video.hide
+    video.loop
+    p.describe ("A video of a city crosswalk, with colors getting more offset the further from "
+        ++ "the center they are")
+}
+
+draw (Sketch p) = {
+    p.background 255
+    p.push
+    p.imageMode p.CENTER
+    videoWidth <- video.width
+    videoHeight <- video.height
+    p.call "image" [video, 0, 0, p.width, p.height, 0, 0, videoWidth, videoHeight, p.COVER]
+    p.pop
+    p.filter displaceColors
+}
+
+main = sketch [setup: setup, draw: draw]

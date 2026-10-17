@@ -288,6 +288,13 @@ Money 3 + Money 4                       # Money 7
 1 + 2                                   # 3
 ```
 
+The math functions (`sqrt`, `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`,
+`atan`, `atan2`, `abs`, `floor`, `ceiling`, `truncate`, `round`, `min`, `max`)
+overload the same way, so a type can give them meaning too:
+`sin (Dual a b) = Dual (sin a) (b * cos a)` leaves `sin 0.5` as it was (the
+`glsl` module writes GLSL this way). Clauses for any other function define it
+afresh.
+
 **Creating new operators is possible but not recommended.** A named function
 is easier to read, to search for and to explain; reach for a new symbol only
 where it is already conventional. Rebinding a prelude operator to something
@@ -349,7 +356,8 @@ string, `obj "Content-Type"` (after `.`, `obj.Content-Type` would subtract).
 
 Application evaluates its argument: `key = "field"; obj key` selects a named
 field. Include quote characters in the argument to select a quoted field.
-`pairs`, iteration, and conversion to HashMap preserve the entire key string.
+`pairs`, iteration, and conversion to HashMap preserve the entire key string;
+`pairs []` is `[]`, as `[]` is the empty record too.
 `obj.(expression)` evaluates with the record fields in scope; use `obj key` for computed lookup. Missing keys
 raise an error. Numeric field names retain their existing normalized spelling.
 List indexing accepts integers or variants from families with only nullary constructors.
@@ -1045,15 +1053,28 @@ loading retains its existing definition behavior.
 ## Mutable references
 
 `x = Mutable 0` allocates a shared cell when first used (an IORef); functions
-taking arguments can create independent cells. Writing is an action:
-`set cell value` (or `set cell $ value`) builds the action that, when run,
+taking arguments can create independent cells. A cell holds values of its
+first contents' type (`Mutable [0, 0]` holds pairs); one made from a
+conversion holds that type's values, so `Mutable ((List [Int, Int]) [])`, or a
+record schema's value (`Mutable (Body [...])`), holds lists of any length where
+the type says `List`. Like a cell, a stateful object a definition makes (a
+[p5](p5.md) object such as `loadImage "a.png"`) is made once, where the
+definition is first used, and a cell holding one takes another as itself.
+
+Writing is an action: `set cell value` (or `set cell $ value`) builds the
+action that, when run,
 evaluates the new outer value, replaces the old contents and yields []. A
 failed update leaves the cell unchanged. Aliases and inner scopes share the
-cell. Arithmetic and printing read its contents as they are when evaluated;
+cell. Arithmetic, printing, application and field access (`cell.x`) read its
+contents as they are when evaluated;
 `typeOf x` reports `Mutable`. Existing lazy calculations still memoize: a
 previously forced calculation is not recomputed after mutation. Compound
 contents retain ordinary lazy semantics; `set` does not deep-copy or deeply
-force them.
+force them. So a part of the new contents computed later (an element of
+`map f cell`) reads the cell as it is then, the new contents: a typed
+parameter reads the old ones when its function is called (`step (List xs) =
+map f xs`, then `set cell (step cell)`). A value that depends on itself never
+finishes; in a browser page, which cannot wait, it is an error.
 
 Function values display source: `func x = print x; print func` prints
 `x -> print x` without running the body. Multiple clauses display their

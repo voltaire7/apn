@@ -31,6 +31,9 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     equal(lint("handlers = [\n    Some y -> print y\n    None -> []\n]"), []);
     // (t x) binds t as well; (_ x) discards it.
     equal(unused("f (t x) = x\ng (_ x) = x").map(d => d[2]), ["'t' is never used; write _ to discard it"]);
+    // name k = v on a parameter assigns an item; on another name it defines a function.
+    equal(unused("put k v xs = { xs k = v; xs }"), []);
+    equal(unused("f x = { g k = 1; x }").map(d => d[2]), ["'k' is never used; write _ to discard it"]);
     // A name a typed pattern's type binds is a parameter too; repeating it is a use.
     equal(unused("first ((List a) (x::_)) = x\ng ((Vect n a) _) = n").map(d => d[2]), ["'a' is never used; write _ to discard it", "'a' is never used; write _ to discard it"]);
     equal(unused("h ((Vect n a) _) ((Vect n a) _) = n\nk ((List _) (x::_)) = x\ncopy n ((Vect n Int) xs) = xs"), []);

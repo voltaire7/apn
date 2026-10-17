@@ -1,0 +1,29 @@
+# Create Graphics, from https://p5js.org/examples/advanced-canvas-rendering-create-graphics/
+# Draw on a graphic, a canvas of its own, then draw it on the canvas.
+import "p5"
+
+# The graphic, drawn into the canvas's middle.
+graphic = createGraphics 405 250
+
+setup (Sketch p) = {
+    p.describe ("Black canvas with a very dark grey rectangle in the middle. When the cursor is "
+        ++ "hovered over the canvas, a white circle follows the cursor in the black areas of the "
+        ++ "canvas, but not over the dark grey rectangle.")
+    p.createCanvas 720 400
+}
+
+draw (Sketch p) = {
+    # A see-through black, so the circle following the cursor slowly fades.
+    p.background [0, 12]
+    p.fill 255
+    p.noStroke
+    p.ellipse p.mouseX p.mouseY 60 60
+    # In the graphic, the same circle's outline, on dark grey.
+    graphic.background 51
+    graphic.noFill
+    graphic.stroke 255
+    graphic.ellipse (p.mouseX - 150) (p.mouseY - 75) 60 60
+    p.image graphic 150 75
+}
+
+main = sketch [setup: setup, draw: draw]

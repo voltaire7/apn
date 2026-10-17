@@ -1,0 +1,31 @@
+# Color Wheel, from https://p5js.org/examples/repetition-color-wheel/
+# Create a visualization of the color spectrum.
+import "p5"
+
+setup (Sketch p) = {
+    p.createCanvas 400 400
+    p.background 255
+    p.colorMode p.HSB
+    p.noStroke
+    p.angleMode p.DEGREES
+    p.describe ("Small circles, each with a different color, arranged in a circular path, "
+        ++ "displaying hues across the color spectrum.")
+    p.call "textAlign" [p.CENTER, p.CENTER]
+    # A circle of each hue around the center, labeled inside the ring.
+    mapM (angle -> {
+        p.push
+        p.translate (p.width / 2) (p.height / 2)
+        p.rotate angle
+        p.translate 150 0
+        p.fill [angle, 85, 90]
+        p.circle 0 0 50
+        # The label upright, nearer the center.
+        p.translate (-50) 0
+        p.rotate (-angle)
+        p.fill 0
+        p.text (to String angle ++ "°") 0 0
+        p.pop
+    }) [0, 30..330]
+}
+
+main = sketch [setup: setup]

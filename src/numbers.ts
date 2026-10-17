@@ -108,8 +108,16 @@ export function arithmetic(op: string, a: Numeric, b: Numeric): Numeric {
     return op === "+" ? rational(n * e + m * d, d * e) : op === "-" ? rational(n * e - m * d, d * e)
         : op === "*" ? rational(n * m, d * e) : rational(n * e, d * m);
 }
+const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 export function compareNumbers(a: Numeric, b: Numeric): number {
     const x = toReal(a), y = toReal(b);
+    // Exactly, without fractions: two floats, or a float and an integer a
+    // double holds exactly (NaN compares as NaN).
+    const plain = (v: Real) => v.kind === "float" ? v.v : v.kind === "int" && v.v >= -MAX_SAFE && v.v <= MAX_SAFE ? Number(v.v) : undefined;
+    if (x.kind === "float" || y.kind === "float") {
+        const l = plain(x), r = plain(y);
+        if (l !== undefined && r !== undefined) return Number.isNaN(l) || Number.isNaN(r) ? NaN : l === r ? 0 : l < r ? -1 : 1;
+    } else if (x.kind === "int" && y.kind === "int") return x.v < y.v ? -1 : x.v > y.v ? 1 : 0;
     if ((x.kind === "float" && !Number.isFinite(x.v)) || (y.kind === "float" && !Number.isFinite(y.v))) {
         const l = asFloat(x), r = asFloat(y);
         return Number.isNaN(l) || Number.isNaN(r) ? NaN : l === r ? 0 : l < r ? -1 : 1;

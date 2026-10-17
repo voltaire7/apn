@@ -1,0 +1,59 @@
+# Shader as a Texture (p5.strands), from
+# https://p5js.org/examples/advanced-canvas-rendering-shader-as-a-texture-p5strands/
+# Paint shapes with a shader written in APN, as a texture.
+import ["glsl", "number", "p5"]
+
+# Rotated tiles of concentric circles, which turn with the time and the mouse:
+# a pixel's color, from its inputs.
+tiles inputs = {
+    [size, mouse, time] = map Glsl ["size", "mouse", "time"]
+    rotate2D st angle = {
+        [c, s] = [cos angle, sin angle]
+        [x, y] = [swizzle "x" st - 0.5, swizzle "y" st - 0.5]
+        vec [c * x - s * y + 0.5, s * x + c * y + 0.5]
+    }
+    tile st zoom = fract (st * zoom)
+    concentricCircles st radius res scale = floor (distance st radius * res) / scale
+    # The pixel's place over the mouse's, measured from the bottom.
+    safeMouse = vec [max (swizzle "x" mouse) 1, max (swizzle "y" size - swizzle "y" mouse) 1]
+    mdist = distance [1, 1] (Glsl "gl_FragCoord.xy" / safeMouse)
+    st = inputs.texCoord
+    toCenter = distance st [sin (time / 10000), cos (time / 10000)]
+    tiled = rotate2D (tile st 10) (toCenter / (mdist / 5) * pi * 2)
+    [color: vec [
+        concentricCircles tiled [0, 0] 5 5
+        concentricCircles tiled [0, 0] 10 10
+        concentricCircles tiled [0, 0] 20 10
+        1
+    ]]
+}
+
+# The canvas's size, the mouse and the time are set each frame.
+theShader = buildMaterialShader [
+    size: ["vec2", (Sketch p -> return [p.width, p.height])]
+    mouse: ["vec2", (Sketch p -> return [p.mouseX, p.mouseY])]
+    time: ["float", (Sketch p -> p.millis)]
+] [pixelInputs: tiles]
+
+setup (Sketch p) = {
+    p.call "createCanvas" [710, 400, p.WEBGL]
+    p.noStroke
+    p.angleMode p.DEGREES
+    p.describe "Sphere broken up into a square grid with a gradient in each grid."
+}
+
+draw (Sketch p) = {
+    p.background 255
+    p.shader theShader
+    # A sphere and a circle, painted by the shader.
+    p.translate (-150) 0
+    p.push
+    p.rotateX (-p.mouseY)
+    p.rotateY (-p.mouseX)
+    p.sphere 125
+    p.pop
+    # A fifth argument smooths the circle's edge in 3D.
+    p.call "ellipse" [260, 0, 200, 200, 100]
+}
+
+main = sketch [setup: setup, draw: draw]

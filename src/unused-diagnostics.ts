@@ -13,7 +13,7 @@ export function unusedDiagnostics(program: TopLevel[], source: string): Diagnost
     };
     const report = (names: string[], body: Expr, extra: Expr[] = []) => {
         const used = new Set<string>();
-        for (const e of [body, ...extra]) free(e, new Set(), used);
+        for (const e of [body, ...extra]) free(e, new Set(), used, new Set(names));
         if (used.has("env")) return;
         const start = firstOffset(body);
         for (const name of names) {
@@ -26,6 +26,8 @@ export function unusedDiagnostics(program: TopLevel[], source: string): Diagnost
             });
         }
     };
+    // The parameters in scope, innermost last: name k = v on one assigns an item.
+    const parameters: string[][] = [];
     const statements = (list: unknown[]): void => definitionsInOrder(list, (node, clauses) => {
         if (clauses) {
             // A parameter's type may use an earlier one: n ((SizedInts n) xs).
@@ -39,9 +41,14 @@ export function unusedDiagnostics(program: TopLevel[], source: string): Diagnost
             }
         }
         if (node.t === "def" || node.t === "stmDef") {
-            for (const c of node.clauses as Clause[]) { visit(c.body); if (c.guard) visit(c.guard); }
+            for (const c of node.clauses as Clause[]) {
+                parameters.push(clauses ? c.params.flatMap(x => bound(x, false)) : []);
+                visit(c.body);
+                if (c.guard) visit(c.guard);
+                parameters.pop();
+            }
         } else visit(node);
-    });
+    }, new Set(parameters.flat()));
     const visit = (node: unknown): void => {
         if (Array.isArray(node)) { node.forEach(visit); return; }
         if (!node || typeof node !== "object") return;
@@ -120,8 +127,8 @@ type Clause = { params: Pattern[]; body: Expr; guard?: Expr };
 // clauses when it defines a function. A name bound to a value earlier makes
 // name k = v an item assignment, not a function; a capitalized one
 // destructures or declares a type.
-export function definitionsInOrder(list: unknown[], each: (node: Record<string, unknown>, clauses?: Clause[]) => void): void {
-    const values = new Set<string>();
+export function definitionsInOrder(list: unknown[], each: (node: Record<string, unknown>, clauses?: Clause[]) => void, outer = new Set<string>()): void {
+    const values = new Set(outer);
     for (const item of list) {
         const n = item as Record<string, unknown> | null;
         if (!n || typeof n !== "object") continue;
@@ -172,15 +179,19 @@ function types(p: Pattern): Expr[] {
     }
 }
 
-// Collect the names e uses that the binders inside it do not shadow.
-function free(e: unknown, shadowed: Set<string>, used: Set<string>): void {
-    if (Array.isArray(e)) { for (const x of e) free(x, shadowed, used); return; }
+// Collect the names e uses that the binders inside it do not shadow. values
+// are the parameters being checked: name k = v on one assigns an item (as at
+// runtime, where it is bound to a value), using the name and k.
+function free(e: unknown, shadowed: Set<string>, used: Set<string>, values = new Set<string>()): void {
+    if (Array.isArray(e)) { for (const x of e) free(x, shadowed, used, values); return; }
     if (!e || typeof e !== "object") return;
     const n = e as Record<string, unknown>;
     const within = (names: string[], parts: unknown[]) => {
         const inner = new Set([...shadowed, ...names]);
-        for (const part of parts) free(part, inner, used);
+        const outer = new Set([...values].filter(name => !names.includes(name)));
+        for (const part of parts) free(part, inner, used, outer);
     };
+    const assigns = (s: Expr) => s.t === "stmDef" && values.has(s.name) && !shadowed.has(s.name) && s.clauses.every(c => c.params.length);
     switch (n.t) {
         case "var": if (!shadowed.has(n.name as string)) used.add(n.name as string); return;
         case "lambda": within(n.params as string[], [n.body]); return;
@@ -189,22 +200,28 @@ function free(e: unknown, shadowed: Set<string>, used: Set<string>): void {
             // Definitions in a block are visible to all of its statements. An
             // update (model.time = t) binds nothing new: it reads the record
             // and rebinds it, and its pattern names fields.
-            const names = (n.stmts as Expr[]).flatMap(s => s.t === "stmDef" ? [s.name] : s.t === "patDef" && !s.update ? bound(s.pattern) : []);
-            within(names, [n.stmts]);
+            const statements = n.stmts as Expr[];
+            for (const s of statements) {
+                if (!assigns(s)) continue;
+                used.add((s as Expr & { t: "stmDef" }).name);
+                for (const c of (s as Expr & { t: "stmDef" }).clauses) for (const name of c.params.flatMap(x => bound(x))) if (!shadowed.has(name)) used.add(name);
+            }
+            const names = statements.flatMap(s => s.t === "stmDef" && !assigns(s) ? [s.name] : s.t === "patDef" && !s.update ? bound(s.pattern) : []);
+            within(names, [statements.map(s => assigns(s) ? (s as Expr & { t: "stmDef" }).clauses.map(c => c.body) : s)]);
             return;
         }
         case "stmDef": case "def":
             for (const c of n.clauses as { params: Pattern[]; body: Expr; guard?: Expr }[]) within(c.params.flatMap(x => bound(x)), [c.body, c.guard, c.params]);
             return;
-        case "patDef": free(n.value, shadowed, used); free(n.pattern, shadowed, used); if (n.update) free(n.update, shadowed, used); return;
+        case "patDef": free(n.value, shadowed, used, values); free(n.pattern, shadowed, used, values); if (n.update) free(n.update, shadowed, used, values); return;
     }
     // Patterns hold expressions only in their types.
     if ("p" in n) {
-        if (n.p === "schema") free(n.type, shadowed, used);
-        for (const value of Object.values(n)) if (value && typeof value === "object" && (Array.isArray(value) || "p" in value)) free(value, shadowed, used);
+        if (n.p === "schema") free(n.type, shadowed, used, values);
+        for (const value of Object.values(n)) if (value && typeof value === "object" && (Array.isArray(value) || "p" in value)) free(value, shadowed, used, values);
         return;
     }
-    for (const value of Object.values(n)) if (value && typeof value === "object") free(value, shadowed, used);
+    for (const value of Object.values(n)) if (value && typeof value === "object") free(value, shadowed, used, values);
 }
 
 // Where an expression's source starts: its own location or its earliest part's.

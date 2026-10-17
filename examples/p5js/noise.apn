@@ -1,0 +1,51 @@
+# Noise, from https://p5js.org/examples/repetition-noise/
+# Generate naturalistic textures using Perlin noise.
+import ["html", "text", "p5"]
+browser = import "browser"
+
+# The dots' spacing and the noise's offset, from the sliders.
+Model = [gap: Int, offset: Int]
+# The canvas's width and height.
+size = 400
+Msg = Gap String | Offset String
+
+init = [[gap: 20, offset: 0], browser.none]
+
+update msg model = match msg [
+    Gap gap -> { model.gap = parseInt gap; [model, browser.none] }
+    Offset offset -> { model.offset = parseInt offset; [model, browser.none] }
+]
+
+view model = div [] [
+    canvas [setup: setup, draw: draw model]
+    slider 2 40 model.gap Gap
+    slider 0 1000 model.offset Offset
+]
+
+slider low high current toMessage = input [
+    typeAttribute "range"
+    attribute "min" (to String low)
+    attribute "max" (to String high)
+    value (to String current)
+    onInput toMessage
+] []
+
+# The canvas draws once each time the sliders change.
+setup (Sketch p) = {
+    p.createCanvas size size
+    p.noLoop
+}
+
+# A grid of dots, each as big as the noise at its place.
+draw model (Sketch p) = {
+    p.background 255
+    p.noStroke
+    p.fill 0
+    gap = model.gap
+    mapM (x -> mapM (y -> {
+        n <- p.call "noise" [(x + model.offset) * 0.015, (y + model.offset) * 0.02]
+        p.circle x y (n * gap)
+    }) [gap / 2, gap * 3 / 2..size]) [gap / 2, gap * 3 / 2..size]
+}
+
+main = browser.element [init: init, update: update, subscriptions: (_ -> browser.none), view: view]

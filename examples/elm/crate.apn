@@ -14,9 +14,15 @@ update (TimeDelta dt) angle = [angle + dt / 5000, browser.none]
 
 subscriptions _ = browser.onAnimationFrameDelta TimeDelta
 
+# The wood, drawn once into a graphic when the canvas starts.
+crate = p5.createGraphics 256 256
+
 view angle = p5.canvas [setup: setup, draw: draw angle]
 
-setup p = p.call "createCanvas" [400, 400, p.WEBGL]
+setup p = {
+    p.call "createCanvas" [400, 400, p.WEBGL]
+    wood crate
+}
 
 draw angle p = {
     p.background "white"
@@ -24,8 +30,7 @@ draw angle p = {
     p.camera 0 0 5 0 0 0 0 (-1) 0
     p.rotateY (3 * angle)
     p.rotateX (2 * angle)
-    p.noStroke []
-    crate <- p.graphic "crate" 256 256 wood
+    p.noStroke
     p.texture crate
     p.box 2 2 2
 }
@@ -36,7 +41,7 @@ wood g = {
     g.stroke [120, 78, 36]
     g.strokeWeight 3
     mapM (y -> g.line 0 y 256 y) [64, 128, 192]
-    g.noStroke []
+    g.noStroke
     g.fill [140, 92, 44]
     g.rect 0 0 256 28
     g.rect 0 228 256 28
@@ -45,7 +50,7 @@ wood g = {
     g.stroke [140, 92, 44]
     g.strokeWeight 30
     g.line 28 228 228 28
-    g.noFill []
+    g.noFill
     g.stroke [90, 58, 26]
     g.strokeWeight 4
     g.rect 2 2 252 252

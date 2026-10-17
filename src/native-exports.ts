@@ -9,6 +9,7 @@ export const NATIVE_EXPORTS: Record<string, string[]> = {
     json: ["prettyJson"],
     random: ["entropy"],
     time: ["currentTime", "zoneOffset"],
+    p5: ["p5Object", "p5SketchType"],
 };
 // Natives that to and from spell now (to String x for toString x): internal,
 // not bound for programs; each with what to write instead.

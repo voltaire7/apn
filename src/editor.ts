@@ -2,8 +2,10 @@
 // The examples editor (apn --site): edits a program, colors it as the REPL and
 // the language server do, and runs it in a sandboxed frame beside it.
 import { highlightHtml, PALETTES, TOKEN_TYPES } from "./highlight.ts";
+import { BUNDLE_APP } from "./modules.ts";
 
-type Site = { examples: Record<string, string>; modules: Record<string, string>; natives: string[]; style: string };
+// data: the examples' data files, by the path a program names them with.
+type Site = { examples: Record<string, string>; modules: Record<string, string>; data: Record<string, string>; natives: string[]; style: string };
 const site: Site = JSON.parse(document.getElementById("apn-site")!.textContent!);
 const runtime = document.getElementById("apn-runtime")!.textContent!;
 const natives = new Set(site.natives);
@@ -41,6 +43,8 @@ const names = Object.keys(site.examples);
 // An example's title and source link come from its first comment line:
 // "# Title, from https://...".
 const firstLine = (name: string) => /^#\s*(.*)$/m.exec(site.examples[name])?.[1] ?? "";
+// The comment an example starts with, which names its title and original.
+const leadingComment = (name: string) => /^(?:#.*\n?)*/.exec(site.examples[name])?.[0] ?? "";
 const titleOf = (name: string) => firstLine(name).split(",")[0] || name;
 names.sort((a, b) => titleOf(a).localeCompare(titleOf(b)));
 for (const name of names) picker.add(new Option(titleOf(name), name));
@@ -59,7 +63,7 @@ function open(name: string): void {
     current = site.examples[name] === undefined ? names[0] : name;
     picker.value = current;
     source.value = session.get(`apn:${current}`) ?? site.examples[current];
-    const link = /https?:\/\/\S+/.exec(firstLine(current))?.[0];
+    const link = /https?:\/\/\S+/.exec(leadingComment(current))?.[0];
     original.hidden = !link;
     if (link) original.href = link;
     document.title = `${titleOf(current)} · APN`;
@@ -67,7 +71,10 @@ function open(name: string): void {
     run();
 }
 function run(): void {
-    const payload = JSON.stringify({ source: source.value, modules: site.modules }).replace(/</g, "\\u003c");
+    // The data files the source names (as a string literal), as the build bundles them.
+    const named = Object.entries(site.data).filter(([path]) => source.value.includes(JSON.stringify(path)));
+    const modules = { ...site.modules, ...Object.fromEntries(named.map(([path, entry]) => [BUNDLE_APP + path, entry])) };
+    const payload = JSON.stringify({ source: source.value, modules }).replace(/</g, "\\u003c");
     preview.srcdoc = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`
         + `<style>${site.style}</style><body><div id="app"></div><pre id="apn-error" role="alert" hidden></pre>`
         + `<script id="apn-program" type="application/json">${payload}<\/script><script type="module">${runtime}<\/script></body></html>`;

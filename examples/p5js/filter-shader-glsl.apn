@@ -1,0 +1,51 @@
+# Filter Shader (GLSL), from https://p5js.org/examples/3d-filter-shader/
+# Manipulate imagery with a shader.
+import "p5"
+
+video = createVideo "assets/DiagonalCrosswalkYongeDundas.mp4"
+
+# Each color channel from the image zoomed by a different amount, so that the
+# colors move apart the further they are from the center.
+displaceColors = createFilterShader "
+    precision highp float;
+
+    uniform sampler2D tex0;
+    varying vec2 vTexCoord;
+
+    vec2 zoom(vec2 coord, float amount) {
+        vec2 relativeToCenter = coord - 0.5;
+        relativeToCenter /= amount; // Zoom in
+        return relativeToCenter + 0.5; // Put back into absolute coordinates
+    }
+
+    void main() {
+        gl_FragColor = vec4(
+            texture2D(tex0, vTexCoord).r,
+            texture2D(tex0, zoom(vTexCoord, 1.05)).g,
+            texture2D(tex0, zoom(vTexCoord, 1.1)).b,
+            texture2D(tex0, vTexCoord).a
+        );
+    }
+"
+
+setup (Sketch p) = {
+    p.call "createCanvas" [700, 400, p.WEBGL]
+    video.volume 0
+    video.hide
+    video.loop
+    p.describe ("A video of a city crosswalk, with colors getting more offset the further from "
+        ++ "the center they are")
+}
+
+draw (Sketch p) = {
+    p.background 255
+    p.push
+    p.imageMode p.CENTER
+    videoWidth <- video.width
+    videoHeight <- video.height
+    p.call "image" [video, 0, 0, p.width, p.height, 0, 0, videoWidth, videoHeight, p.COVER]
+    p.pop
+    p.filter displaceColors
+}
+
+main = sketch [setup: setup, draw: draw]

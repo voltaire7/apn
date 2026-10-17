@@ -31,7 +31,8 @@ export type Value =
     | { kind: "functionType"; from: Value; to: Value }
     // variables: the type variables decided so far by a curried call.
     | { kind: "contract"; target: Value; from: Value; to: Value; variables?: Map<string, Value> }
-    | { kind: "mutable"; v: Value }
+    // schema: a cell holding a List T (Mutable ((List T) xs)) holds lists of any length.
+    | { kind: "mutable"; v: Value; schema?: Value }
     // variable: a type variable (the a of a -> a), named by name.
     | { kind: "type"; name: string; inspect?: boolean; description?: string; family?: VariantFamily; arguments?: Value[]; alias?: { parameters: string[]; body: Expr; env: Env }; variable?: boolean }
     | { kind: "hashmap"; entries: Map<string, [Value, Value]> }
@@ -45,7 +46,8 @@ export type Value =
     | { kind: "cons"; head: Value; tail: Value }
     // describes: an unevaluated value it will be (a cons tail's thunk), for typeOf.
     | { kind: "deferred"; compute: () => Value; value?: Value; busy?: boolean; describes?: Value }
-    | { kind: "record"; v: Array<[string, Value]>; scope?: Env; guarded?: boolean }
+    // shared: a stateful object (a p5 object), which a definition allocates once, as a Mutable.
+    | { kind: "record"; v: Array<[string, Value]>; scope?: Env; guarded?: boolean; shared?: boolean }
     | { kind: "variant"; tag: string; v: Value[]; family?: VariantFamily; arguments?: Value[] }
     // A partly applied closure keeps its whole parameter list and the arguments
     // applied so far, for showing it: (a b -> a + b) 1.

@@ -1,0 +1,51 @@
+# Snowflakes, from https://p5js.org/examples/classes-and-objects-snowflakes/
+# Simulate falling snow with a list of records.
+import ["number", "p5"]
+
+# A snowflake: its height, its starting angle about the middle (it swings
+# from side to side as the angle turns), its size and its color.
+Flake = [y: Float, angle: Float, size: Float, radius: Float, color: [Float, Float, Float]]
+flakes = Mutable ((List Flake) [])
+
+setup (Sketch p) = {
+    p.createCanvas 400 600
+    made <- mapM (_ -> newFlake p) [1..300]
+    set flakes made
+    p.describe "Snowflakes falling on a black background."
+}
+
+newFlake (Sketch p) = {
+    y <- p.random (-p.height) 0
+    angle <- p.random 0 360
+    size <- p.random 2 5
+    spread <- p.random 0 ((p.width / 2) ^ 2)
+    red <- p.random 200 256
+    green <- p.random 200 256
+    blue <- p.random 200 256
+    return [
+        y: Float y, angle: Float angle, size: Float size, radius: sqrt (Number spread)
+        color: [Float red, Float green, Float blue]
+    ]
+}
+
+draw (Sketch p) = {
+    p.background 0
+    set flakes (fall p.height flakes)
+    # The angle turns 35 degrees a second.
+    time = p.frameCount / 60.0
+    mapM (flake -> {
+        x = p.width / 2 + flake.radius * sin (degrees (flake.angle + 35 * time))
+        p.fill flake.color
+        p.noStroke
+        p.circle x flake.y flake.size
+    }) flakes
+}
+
+# Small flakes fall faster; one past the bottom starts again at the top.
+fall height (List flakes) = map (flake -> {
+    y = flake.y + 8 / flake.size
+    flake.y = y > height ? -50.0 : y
+    flake
+}) flakes
+
+main = sketch [setup: setup, draw: draw]

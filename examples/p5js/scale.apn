@@ -1,0 +1,29 @@
+# Scale, from https://p5js.org/examples/transformation-scale/
+# Modify the coordinate system scale.
+import "p5"
+
+setup (Sketch p) = {
+    p.createCanvas 720 400
+    p.textOutput
+}
+
+draw (Sketch p) = {
+    p.background 0
+    # A blue square twice the size.
+    p.push
+    p.scale 2
+    p.fill [33, 89, 194]
+    p.square 0 0 200
+    p.pop
+    # A white square at its own size.
+    p.fill 255
+    p.square 0 0 200
+    # A green square, half as wide and three quarters as tall.
+    p.push
+    p.call "scale" [0.5, 0.75]
+    p.fill [42, 150, 60]
+    p.square 0 0 200
+    p.pop
+}
+
+main = sketch [setup: setup, draw: draw]

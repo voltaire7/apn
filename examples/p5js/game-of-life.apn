@@ -1,0 +1,51 @@
+# Game of Life, from https://p5js.org/examples/math-and-physics-game-of-life/
+# Play John Conway's Game of Life: click to start from a random board.
+import ["p5", "sequence"]
+
+cellSize = 20
+# The board, a row of 0s (dead) and 1s (alive) each, wrapping around its edges.
+board = Mutable ((List (List Int)) [])
+
+setup (Sketch p) = {
+    p.frameRate 10
+    p.createCanvas 720 400
+    set board (replicate (Int (p.height / cellSize)) (replicate (Int (p.width / cellSize)) 0))
+    p.noLoop
+    p.describe ("Grid of squares that switch between white and black, demonstrating a "
+        ++ "simulation of John Conway's Game of Life. When clicked, the simulation resets.")
+}
+
+draw (Sketch p) = {
+    set board (generate board)
+    mapM ([y, row] -> mapM ([x, cell] -> {
+        p.fill ((1 - cell) * 255)
+        p.stroke 0
+        p.rect (x * cellSize) (y * cellSize) cellSize cellSize
+    }) (enumerate row)) (enumerate board)
+}
+
+mousePressed (Sketch p) = {
+    cells <- mapM (row -> mapM (_ -> p.call "random" [[0, 1]]) row) board
+    set board (map (map Int) cells)
+    p.loop
+}
+
+# The next generation: a cell with 3 living neighbors lives, and a living one
+# with 2 stays alive. The neighbors are counted all at once, adding the
+# board's 8 shifts (+ adds lists element by element).
+generate (List cells) = {
+    shift [dx, dy] = map (rotate dx) (rotate dy cells)
+    offsets = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]
+    neighbors = foldl (+) (map (map (_ -> 0)) cells) (map shift offsets)
+    live cell count = count == 3 || cell == 1 && count == 2 ? 1 : 0
+    map ([row, counts] -> map ([cell, count] -> live cell count) (zip row counts))
+        (zip cells neighbors)
+}
+
+# A list turned by n places (the item n later comes first), around its end.
+rotate n xs = {
+    k = (n + length xs) % length xs
+    drop k xs ++ take k xs
+}
+
+main = sketch [setup: setup, draw: draw, mousePressed: mousePressed]

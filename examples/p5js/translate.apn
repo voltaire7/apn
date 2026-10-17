@@ -1,0 +1,33 @@
+# Translate, from https://p5js.org/examples/transformation-translate/
+# Move the coordinate system origin.
+import "p5"
+
+setup (Sketch p) = {
+    p.createCanvas 720 400
+    p.textOutput
+}
+
+draw (Sketch p) = {
+    p.background 0
+    # A green rectangle and circle at the origin.
+    p.fill [90, 189, 60]
+    shapes p
+    # The origin moved to the center: the same shapes, in blue.
+    p.push
+    p.translate (p.width / 2) (p.height / 2)
+    p.fill [57, 102, 191]
+    shapes p
+    p.pop
+    # The origin moved to the mouse.
+    p.push
+    p.translate p.mouseX p.mouseY
+    shapes p
+    p.pop
+}
+
+shapes (Sketch p) = {
+    p.rect 0 0 200 50
+    p.circle 225 25 50
+}
+
+main = sketch [setup: setup, draw: draw]

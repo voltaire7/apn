@@ -1,0 +1,21 @@
+# Copy Image Data, from https://p5js.org/examples/imported-media-copy-image-data/
+# Paint from an image file onto the canvas.
+import "p5"
+
+colorImage = loadImage "assets/parrot-color.png"
+grayImage = loadImage "assets/parrot-bw.png"
+
+setup (Sketch p) = {
+    p.describe ("Black-and-white photograph of a parrot. The cursor, when dragged across "
+        ++ "the canvas, adds color to the photograph.")
+    p.createCanvas 720 400
+    # A brush for the cursor, its point 20 across and 10 above its corner.
+    p.call "cursor" ["assets/brush.png", 20, -10]
+    p.image grayImage 0 0
+}
+
+# Copy a 20 by 20 square of the color image under the mouse.
+mouseDragged (Sketch p) =
+    p.copy colorImage p.mouseX p.mouseY 20 20 p.mouseX p.mouseY 20 20
+
+main = sketch [preload: [colorImage, grayImage], setup: setup, mouseDragged: mouseDragged]

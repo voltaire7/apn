@@ -1,0 +1,68 @@
+# Smoke Particles, from https://p5js.org/examples/math-and-physics-smoke-particle-system/
+# Simulate smoke with a system of particles that the wind blows.
+import "p5"
+
+texture = loadImage "assets/particle_texture.png"
+# A particle: where it is, its velocity, its life left and its hue.
+Particle = [position: [Float, Float], velocity: [Float, Float], life: Float, hue: Int]
+particles = Mutable ((List Particle) [])
+
+setup (Sketch p) = {
+    p.createCanvas 720 400
+    p.colorMode p.HSB
+    p.describe ("White circle gives off smoke in the middle of the canvas, with wind force "
+        ++ "determined by the cursor position.")
+}
+
+draw (Sketch p) = {
+    p.background 20
+    # The wind, from the mouse's x.
+    wind = [Float (remap p.mouseX 0 p.width (-0.2) 0.2), 0.0]
+    set particles (filter (particle -> particle.life > 0) (map (blow wind) particles))
+    mapM (render p) particles
+    # Two new particles a frame.
+    added <- mapM (_ -> newParticle p) [1, 2]
+    set particles (particles ++ added)
+    drawVector p wind [p.width / 2, 50] 500
+}
+
+newParticle (Sketch p) = {
+    xSpeed <- p.randomGaussian
+    ySpeed <- p.randomGaussian
+    return [
+        position: [Float (p.width / 2), Float (p.height - 60)]
+        velocity: [Float (xSpeed * 0.3), Float (ySpeed * 0.3 - 1)], life: 100.0
+        hue: p.frameCount % 256
+    ]
+}
+
+blow wind particle = {
+    particle.velocity = particle.velocity + wind
+    particle.position = particle.position + particle.velocity
+    particle.life = particle.life - 2.5
+    particle
+}
+
+# The texture, tinted with the particle's hue, fading as its life runs out.
+render (Sketch p) particle = {
+    [x, y] = particle.position
+    p.imageMode p.CENTER
+    p.call "tint" [particle.hue, 255, 255, particle.life]
+    p.image texture x y
+}
+
+# An arrow showing a vector, from a point, scaled.
+drawVector (Sketch p) vector [x, y] scale = {
+    p.push
+    p.translate x y
+    p.stroke 255
+    p.strokeWeight 3
+    p.rotate (heading vector)
+    length = mag vector * scale
+    p.line 0 0 length 0
+    p.line length 0 (length - 4) 2
+    p.line length 0 (length - 4) (-2)
+    p.pop
+}
+
+main = sketch [preload: [texture], setup: setup, draw: draw]

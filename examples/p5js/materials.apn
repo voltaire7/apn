@@ -1,0 +1,117 @@
+# Materials, from https://p5js.org/examples/3d-materials/
+# Set the look of a model's surface with a material.
+import ["html", "sequence", "p5"]
+browser = import "browser"
+
+astronaut = loadModel "assets/astronaut.obj"
+venus = loadImage "assets/venus.jpg"
+
+# The colors a material may use, each with a checkbox (but the emissive one,
+# always used) and a picker.
+Selector = Fill | Stroke | Ambient | Specular | Emissive
+Msg = Chose String | Toggled Selector | Picked Selector String
+
+materials = ["color", "emissive", "normal", "texture"]
+
+# The material chosen, and, by selector, whether each color applies and which it is.
+init = [[
+    material: "color"
+    on: [true, true, false, false, true]
+    colors: ["#ffffff", "#000000", "#ffffff", "#ffffff", "#ffffff"]
+], browser.none]
+
+update msg model = match msg [
+    Chose material -> { model.material = material; [model, browser.none] }
+    Toggled which -> { model.on = toggle which model.on; [model, browser.none] }
+    Picked which color -> { model.colors = put which color model.colors; [model, browser.none] }
+]
+
+# A list with its item at index replaced, or (a list of flags) flipped.
+put index item items = { items index = item; items }
+toggle index flags = put index (not (flags index)) flags
+
+# The canvas, the material's radio buttons, and the color selectors it uses.
+view model = div [style "width" "400px", style "font-family" "sans-serif"] [
+    canvas [preload: [astronaut, venus], setup: setup, draw: draw model]
+    div [style "background" "#f0f0f0"] [
+        label [] (text "Material type" :: map (material -> label [] [
+            input [
+                typeAttribute "radio"
+                attribute "name" "material"
+                checked (material == model.material)
+                onClick (Chose material)
+            ] []
+            text material
+        ]) materials)
+        selectors model ["color"] [[Fill, "fill"], [Stroke, "stroke"]]
+        selectors model ["color", "texture"] [[Ambient, "ambient"], [Specular, "specular"]]
+        selectors model ["emissive"] [[Emissive, "emissive"]]
+    ]
+]
+
+# The selectors these materials use, shown while one of them is chosen.
+selectors model shownFor named =
+    div [shown (contains model.material shownFor)] (map (selector model) named)
+
+# A selector's checkbox, and its picker while its color applies.
+selector model [which, name] = span [] [
+    label [shown (which != Emissive)] [
+        input [typeAttribute "checkbox", checked (model.on which), onClick (Toggled which)] []
+        text name
+    ]
+    input [
+        typeAttribute "color"
+        value (model.colors which)
+        onInput (Picked which)
+        shown (model.on which)
+    ] []
+]
+
+shown visible = style "display" (visible ? "" : "none")
+
+setup (Sketch p) = {
+    p.call "createCanvas" [400, 400, p.WEBGL]
+    p.angleMode p.DEGREES
+    p.describe ("Astronaut 3D model displayed with a user-selected material using the "
+        ++ "selectors below the canvas.")
+}
+
+draw model (Sketch p) = {
+    p.background 0
+    p.push
+    material model p
+    p.ambientLight 128
+    p.call "spotLight" [255, 255, 255, 0, -p.height / 2, 200, 0, 0.5, -1, 30]
+    p.translate 0 (-25)
+    p.scale 4
+    p.rotateZ 180
+    p.model astronaut
+    # Only this frame's choices apply to the next.
+    p.pop
+}
+
+# The chosen material, in the chosen colors.
+material model (Sketch p) = match model.material [
+    "color" -> {
+        ambientSpecular model p
+        model.on Fill ? p.fill (model.colors Fill) : p.noFill
+        model.on Stroke ? p.stroke (model.colors Stroke) : p.noStroke
+    }
+    "emissive" -> {
+        p.noStroke
+        p.emissiveMaterial (model.colors Emissive)
+    }
+    "normal" -> p.normalMaterial
+    _ -> {
+        ambientSpecular model p
+        p.noStroke
+        p.texture venus
+    }
+]
+
+ambientSpecular model (Sketch p) = {
+    when (model.on Ambient) (p.ambientMaterial (model.colors Ambient))
+    when (model.on Specular) (p.specularMaterial (model.colors Specular))
+}
+
+main = browser.element [init: init, update: update, subscriptions: (_ -> browser.none), view: view]

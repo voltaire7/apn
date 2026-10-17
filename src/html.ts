@@ -31,6 +31,7 @@ export interface Platform {
     defer(run: () => void): void;
     http(url: string): Promise<{ status: number; body: string }>;
     selectFiles(mimes: string[], multiple: boolean): Promise<FileInfo[]>;
+    download(name: string, mime: string, content: string): void;
     viewport(): { width: number; height: number };
 }
 
@@ -131,7 +132,8 @@ export class BrowserApp {
             catch (error) { this.onError(error); }
         });
     }
-    // Run a command: none, batch, a task, an HTTP request, a file picker, the viewport.
+    // Run a command: none, batch, a task, an HTTP request, a file picker or
+    // download, the viewport.
     run(command: Value): void {
         const i = this.interpreter, c = variant(i, command);
         switch (c.tag) {
@@ -164,6 +166,10 @@ export class BrowserApp {
                     if (files.length) this.later(() => i.apply(c.v[2], mkList(files.map(fileValue))));
                 }, error => this.onError(error));
                 return;
+            }
+            case "FileDownload": {
+                const platform = this.platform ?? fail("downloads need a browser");
+                return platform.download(string(i, c.v[0]), string(i, c.v[1]), string(i, c.v[2]));
             }
             case "ViewportGet": {
                 const platform = this.platform ?? fail("the viewport needs a browser");

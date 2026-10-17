@@ -1,0 +1,57 @@
+# Examples, from https://p5js.org/examples/
+# The page listing these examples. apn --site examples/p5js OUTPUT builds it,
+# with an editor for each example.
+import ["html", "text"]
+gallery = import "gallery"
+
+main = gallery.page "p5.js Examples" [
+    text "The "
+    a [href "https://p5js.org/examples/"] [text "p5.js examples"]
+    text ", recreated in APN. Each opens in an editor, where you can change it and run it again."
+] [
+    gallery.examples "Shapes and Color" (map example ["Shape Primitives", "Color"])
+    gallery.examples "Animation and Variables" (map example [
+        "Drawing Lines", "Animation with Events", "Mobile Device Movement", "Conditions"
+    ])
+    gallery.examples "Imported Media" (map example [
+        "Words", "Copy Image Data", "Alpha Mask", "Image Transparency", "Audio Player"
+        "Video Player", "Video on Canvas", "Video Capture"
+    ])
+    gallery.examples "Input Elements" (map example [
+        "Image Drop", "Input and Button", "Form Elements"
+    ])
+    gallery.examples "Transformation" (map example ["Translate", "Rotate", "Scale"])
+    gallery.examples "Calculating Values" (map example [
+        "Linear Interpolation", "Map", "Random", "Constrain", "Clock"
+    ])
+    gallery.examples "Repetition" (map example [
+        "Color Interpolation", "Color Wheel", "Bezier", "Kaleidoscope", "Noise", "Recursive Tree"
+    ])
+    gallery.examples "Listing Data with Arrays" (map example ["Random Poetry"])
+    gallery.examples "Angles and Motion" (map example ["Sine and Cosine", "Aim", "Triangle Strip"])
+    gallery.examples "Games" (map example ["Circle Clicker", "Ping Pong", "Snake"])
+    gallery.examples "3D" (map example [
+        "Geometries", "Custom Geometry", "Materials", "Orbit Control", "Filter Shader (GLSL)"
+        "Adjusting Positions with a Shader (GLSL)", "Framebuffer Blur"
+        "Filter Shader (p5.strands)", "Adjusting Positions with a Shader (p5.strands)"
+    ])
+    gallery.examples "Advanced Canvas Rendering" (map example [
+        "Create Graphics", "Multiple Canvases", "Shader as a Texture (GLSL)"
+        "Shader as a Texture (p5.strands)"
+    ])
+    gallery.examples "Classes and Objects" (map example [
+        "Snowflakes", "Shake Ball Bounce", "Connected Particles", "Flocking"
+    ])
+    gallery.examples "Loading and Saving Data" (map example [
+        "Local Storage", "JSON", "Table", "Load Multiple Images with Promise.all"
+    ])
+    gallery.examples "Math and Physics" (map example [
+        "Non-Orthogonal Reflection", "Soft Body", "Forces", "Smoke Particles", "Game of Life"
+        "Mandelbrot Set"
+    ])
+]
+
+# An example's file is its title in lower case, with - for spaces and dots,
+# and without parentheses.
+example title = gallery.link title
+    (replaceAll " " "-" (replaceAll "." "-" (replaceAll "(" "" (replaceAll ")" "" (lower title)))))

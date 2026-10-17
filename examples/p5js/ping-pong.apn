@@ -1,0 +1,87 @@
+# Ping Pong, from https://p5js.org/examples/games-ping-pong/
+# Make a game inspired by Atari's Pong.
+import "p5"
+
+[paddleSpeed, paddleHeight, paddleWidth, ballSize] = [2, 80, 10, 10]
+# The paddles' heights (their x is fixed), the scores, the ball and its speed.
+paddles = Mutable [200.0, 200.0]
+scores = Mutable [0, 0]
+ball = Mutable [200.0, 200.0]
+speed = Mutable [0.0, 0.0]
+[leftX, rightX] = [20, 380]
+
+setup (Sketch p) = {
+    p.createCanvas 400 400
+    p.rectMode p.CENTER
+    p.fill 255
+    p.noStroke
+    p.textSize 40
+    p.textAlign p.CENTER
+    # Wait for a click to start.
+    p.noLoop
+    p.describe ("Two narrow white rectangles and a white square representing the paddles and "
+        ++ "ball in a game of ping pong. The player scores are displayed in the upper corners, "
+        ++ "and initially text reads \"Click to start\"")
+}
+
+draw (Sketch p) = {
+    p.background 0
+    [leftY, rightY] = paddles
+    [ballX, ballY] = ball
+    p.rect leftX leftY paddleWidth paddleHeight
+    p.rect rightX rightY paddleWidth paddleHeight
+    p.square ballX ballY ballSize
+    [leftScore, rightScore] = scores
+    p.text (to String leftScore) (p.width * 0.25) (p.height * 0.1)
+    p.text (to String rightScore) (p.width * 0.75) (p.height * 0.1)
+    set ball (ball + speed)
+    # A paddle the ball touches sends it back, steeper further from the middle.
+    bounce leftX leftY
+    bounce rightX rightY
+    # Past an edge, the other player scores; the top and bottom bounce.
+    [x, y] = ball
+    x < 0 ? { set scores [leftScore, rightScore + 1]; resetBall p }
+        : x > p.width ? { set scores [leftScore + 1, rightScore]; resetBall p }
+        : when (y < 0 || y > p.height) (set speed (speed * [1, -1]))
+    # W and S move the left paddle, the arrow keys the right one.
+    left <- move p "w" "s" leftY
+    right <- move p p.UP_ARROW p.DOWN_ARROW rightY
+    set paddles [left, right]
+    looping <- p.isLooping
+    unless looping (p.text "Click to start" (p.width / 2) (p.height / 2 - 20))
+}
+
+# Turn the ball back off a paddle at x, y when it touches it.
+bounce paddleX paddleY = {
+    [x, y] = ball
+    [dx, _] = speed
+    when (abs (x - paddleX) <= (paddleWidth + ballSize) / 2
+            && abs (y - paddleY) <= (paddleHeight + ballSize) / 2)
+        (set speed [-dx, (y - paddleY) / 20])
+}
+
+# A paddle's next height, moved by the keys held, kept on the canvas.
+move (Sketch p) up down y = {
+    downHeld <- p.keyIsDown down
+    upHeld <- p.keyIsDown up
+    step = (downHeld ? paddleSpeed : 0) - (upHeld ? paddleSpeed : 0)
+    return (Float (constrain (y + step) (paddleHeight / 2) (p.height - paddleHeight / 2)))
+}
+
+# The ball at the center, moving a random way.
+resetBall (Sketch p) = {
+    set ball [Float (p.width / 2), Float (p.height / 2)]
+    dx <- p.call "random" [[-3, 3]]
+    dy <- p.call "random" [[-1, 1]]
+    set speed [Float dx, Float dy]
+}
+
+mousePressed (Sketch p) = {
+    looping <- p.isLooping
+    unless looping {
+        resetBall p
+        p.loop
+    }
+}
+
+main = sketch [setup: setup, draw: draw, mousePressed: mousePressed]

@@ -1,0 +1,37 @@
+# Rotate, from https://p5js.org/examples/transformation-rotate/
+# Rotate the coordinate system.
+import "p5"
+
+setup (Sketch p) = {
+    p.createCanvas 720 400
+    p.angleMode p.DEGREES
+    p.fill 255
+    p.textSize 20
+    p.call "textAlign" [p.CENTER, p.CENTER]
+    p.colorMode p.HSB
+    p.describe "line segments rotated around center of canvas"
+}
+
+draw (Sketch p) = {
+    p.background 0
+    # Lines at 0, 30, 60 and 90 degrees from the center, each labeled.
+    mapM (angle -> {
+        p.push
+        p.translate (p.width / 2) (p.height / 2)
+        p.rotate angle
+        p.stroke [angle + 100, 100, 100]
+        p.strokeWeight 5
+        p.line 0 0 150 0
+        p.strokeWeight 1
+        p.text (to String angle) 170 0
+        p.pop
+    }) [0, 30..90]
+    # A white line turning a degree each frame.
+    p.translate (p.width / 2) (p.height / 2)
+    p.rotate p.frameCount
+    p.stroke 255
+    p.strokeWeight 5
+    p.line 0 0 150 0
+}
+
+main = sketch [setup: setup, draw: draw]

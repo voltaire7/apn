@@ -1,0 +1,22 @@
+# Video Capture, from https://p5js.org/examples/imported-media-video-capture/
+# Display a live video feed from a camera.
+import "p5"
+
+# The camera (the browser asks first).
+capture = createCapture
+
+setup (Sketch p) = {
+    p.describe "Video capture from the device webcam."
+    p.createCanvas 720 400
+    capture.size 360 200
+    capture.hide
+}
+
+draw (Sketch p) = {
+    p.background 51
+    p.call "image" [capture, 0, 0, 360, 400]
+    # Invert the colors of everything drawn.
+    p.filter p.INVERT
+}
+
+main = sketch [setup: setup, draw: draw]

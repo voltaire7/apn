@@ -1,0 +1,30 @@
+# Aim, from https://p5js.org/examples/angles-and-motion-aim/
+# Rotate toward a point.
+import "p5"
+
+setup (Sketch p) = {
+    p.createCanvas 400 400
+    p.colorMode p.HSB
+    p.describe "Two eyes that follow the cursor."
+}
+
+draw (Sketch p) = {
+    p.background 0
+    eye p 150 200
+    eye p 250 200
+}
+
+# An eye at x, y whose pupil turns toward the mouse.
+eye (Sketch p) x y = {
+    angle = atan2 (Number (p.mouseY - y)) (Number (p.mouseX - x))
+    p.push
+    p.translate x y
+    p.fill 255
+    p.ellipse 0 0 50 50
+    p.rotate angle
+    p.fill 0
+    p.ellipse 12.5 0 25 25
+    p.pop
+}
+
+main = sketch [setup: setup, draw: draw]

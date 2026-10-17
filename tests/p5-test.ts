@@ -37,3 +37,38 @@ Deno.test("p5 call supports overload arguments and rejects unsafe integer conver
     }
     throw new Error('lossy integer accepted');
 });
+Deno.test("p5 objects are made once per sketch, and preload waits for them", async () => {
+    const i = new Interpreter();
+    i.run(parse('import "p5"\nimg = loadImage "a.png"\nmain = sketch [preload: [img], setup: (Sketch p -> p.image img 1 2)]'));
+    let loads = 0, drawn: unknown;
+    const image = { width: 5 };
+    const sketch = new P5Sketch(i, i.env.get("main")!, {
+        loadImage: () => { loads++; return Promise.resolve(image); },
+        image: (x: unknown) => { drawn = x; },
+    });
+    await sketch.loaded();
+    sketch.dispatch("setup");
+    sketch.dispatch("setup");
+    if (loads !== 1 || drawn !== image) throw new Error(`${loads} loads`);
+});
+Deno.test("p5 call yields p5's result; a callback without arguments gets the sketch's p", () => {
+    const i = new Interpreter();
+    i.run(parse('import "p5"\nshape = buildGeometry (Sketch p -> p.sphere 3)\nmain = sketch [setup: (Sketch p -> {\n    rate <- p.call "frameRate" []\n    p.model shape\n    p.text (to String rate) 0 0\n})]'));
+    const calls: unknown[][] = [];
+    const sketch = new P5Sketch(i, i.env.get("main")!, {
+        frameRate: () => 60,
+        buildGeometry: (draw: () => unknown) => { draw(); return "geometry"; },
+        sphere: (r: unknown) => { calls.push(["sphere", r]); },
+        model: (m: unknown) => { calls.push(["model", m]); },
+        text: (t: unknown) => { calls.push(["text", t]); },
+    });
+    sketch.dispatch("setup");
+    if (JSON.stringify(calls) !== '[["sphere",3],["model","geometry"],["text","60"]]') throw new Error(JSON.stringify(calls));
+});
+Deno.test("p5 takes a HashMap (keys a program computes) as an object", () => {
+    const i = new Interpreter();
+    i.run(parse('import "p5"\nmain = sketch [setup: (Sketch p -> p.call "fill" [HashMap [["a b", 1]]])]'));
+    let given: unknown;
+    new P5Sketch(i, i.env.get("main")!, { fill: (x: unknown) => { given = x; } }).dispatch("setup");
+    if (JSON.stringify(given) !== '{"a b":1}') throw new Error(JSON.stringify(given));
+});

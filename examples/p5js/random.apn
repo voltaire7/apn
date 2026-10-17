@@ -1,0 +1,33 @@
+# Random, from https://p5js.org/examples/calculating-values-random/
+# Get random numbers.
+import "p5"
+
+# The circle's position and color, chosen at random.
+position = Mutable [0.0, 0.0]
+color = Mutable [0.0, 0.0, 0.0]
+
+setup (Sketch p) = {
+    p.createCanvas 710 400
+    choose p
+    p.describe "A circle whose position and color change randomly when the user clicks the canvas."
+}
+
+choose (Sketch p) = {
+    x <- p.random 0 p.width
+    y <- p.random 0 p.height
+    r <- p.random 100 256
+    g <- p.random 100 256
+    b <- p.random 100 256
+    # The sketch's values are Dynamic: Float converts them for the cells.
+    set position [Float x, Float y]
+    set color [Float r, Float g, Float b]
+}
+
+draw (Sketch p) = {
+    p.background 10
+    [x, y] = position
+    p.fill color
+    p.circle x y 100
+}
+
+main = sketch [setup: setup, draw: draw, mousePressed: choose]

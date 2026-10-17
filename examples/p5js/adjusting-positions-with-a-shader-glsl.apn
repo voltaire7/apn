@@ -1,0 +1,82 @@
+# Adjusting Positions with a Shader (GLSL), from
+# https://p5js.org/examples/3d-adjusting-positions-with-a-shader/
+# Move a model's vertices with a vertex shader.
+import "p5"
+
+# Each vertex moved up and down over time, a little later along the ribbon.
+wiggleShader = createShader "
+    precision highp float;
+
+    attribute vec3 aPosition;
+    attribute vec4 aVertexColor;
+
+    uniform mat4 uModelViewMatrix;
+    uniform mat4 uProjectionMatrix;
+
+    varying vec4 vVertexColor;
+
+    uniform float time;
+
+    void main() {
+        vec3 position = aPosition;
+
+        // Add an offset per vertex. There will be a time delay based
+        // on the texture coordinates.
+        position.y += 20.0 * sin(time * 0.01 + position.y * 0.1);
+
+        // Apply the transformations that have been set in p5
+        vec4 viewModelPosition = uModelViewMatrix * vec4(position, 1.0);
+
+        // Tell WebGL where the vertex should be drawn
+        gl_Position = uProjectionMatrix * viewModelPosition;
+
+        // Pass along the color of the vertex to the fragment shader
+        vVertexColor = aVertexColor;
+    }
+" "
+    precision highp float;
+
+    // Receive the vertex color from the vertex shader
+    varying vec4 vVertexColor;
+
+    void main() {
+        // Color the pixel with the vertex color
+        gl_FragColor = vVertexColor;
+    }
+"
+
+# A ribbon of vertices, red to blue along its length.
+ribbon = buildGeometry (Sketch p -> {
+    startColor <- p.color "#F55"
+    endColor <- p.color "#55F"
+    p.noStroke
+    p.call "beginShape" [p.QUAD_STRIP]
+    points = 50
+    mapM (point -> {
+        x = remap point 0 (points - 1) (-p.width / 3) (p.width / 3)
+        y = remap point 0 (points - 1) (-p.height / 3) (p.height / 3)
+        color <- p.lerpColor startColor endColor (point / (points - 1))
+        p.fill color
+        mapM (z -> p.call "vertex" [x, y, z]) [-50, 50]
+    }) [0..points - 1]
+    p.endShape
+})
+
+setup (Sketch p) = {
+    p.call "createCanvas" [700, 400, p.WEBGL]
+    p.describe "A red-to-blue ribbon that waves over time"
+}
+
+draw (Sketch p) = {
+    p.background 255
+    p.noStroke
+    p.rotateX (p.PI * 0.1)
+    # Without the shader, the ribbon stays still.
+    p.shader wiggleShader
+    # The time, which the shader animates by.
+    time <- p.millis
+    wiggleShader.setUniform "time" time
+    p.model ribbon
+}
+
+main = sketch [setup: setup, draw: draw]

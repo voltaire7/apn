@@ -16,12 +16,17 @@ name any file, so once the program or a file it uses has one, the build
 bundles every `.apn` file in the program's folder and its subfolders (hidden
 folders excepted). Only files inside the program's folder are bundled; a
 `load` of a file outside it fails with "not bundled".
+A data file the program names by a string literal (`"assets/bubbles.json"`,
+an image or a font) that exists in its folder is bundled too: text as text,
+which `readFile` reads in the browser, and anything else as a data URL;
+[p5](p5.md)'s loaders take either by that path.
 Open that file in a browser; no server or runtime download is required.
 Rebuild and refresh after editing the APN source.
 
 The programs follow [the Elm architecture](https://guide.elm-lang.org/architecture/).
 `examples/elm` recreates all of [Elm's examples](https://elm-lang.org/examples)
-this way (see [the examples site](#examples-site-and-editor)).
+this way, and `examples/p5js` [p5.js's](https://p5js.org/examples/) (see
+[the examples site](#examples-site-and-editor)).
 
 ## Sandboxes
 
@@ -95,6 +100,7 @@ that returned it, and each resulting message is another update.
 | `random.generate toMsg generator` | a value drawn from a fresh seed |
 | `http.get [url: ..., expect: ...]` | `http.expectString toMsg` sends `toMsg (Ok body)`; `http.expectJson toMsg decoder` decodes the body |
 | `file.selectFile mimes toMsg`, `file.selectFiles mimes toMsg` | the picked file, or the first and the rest |
+| `file.download name mime text` | nothing: the browser saves `text` as a file (Elm's `File.Download.string`) |
 | `browser.getViewport toMsg` | the window's size, a `browser.Viewport` (`[width: Number, height: Number]`) |
 
 A failed request sends `Err` of `NetworkError`, `BadStatus status` or
@@ -170,7 +176,8 @@ These follow Elm's modules of the same names; the
   `decode.int`, `decode.float`, `decode.bool`, `decode.field name d`,
   `decode.at path d`, `decode.list d`, `decode.succeed x`; decoders are
   monads too (`map4 (a, b, c, d -> ...) d1 d2 d3 d4`).
-- `file`: pickers (above) and `file.toUrl f`, the action yielding a file's URL.
+- `file`: pickers and downloads (above), and `file.toUrl f`, the action
+  yielding a file's URL (`http.get` reads its text from there).
   A file is a `file.File`: `[name: String, size: Int, mime: String, url: String]`.
 
 Messages carry these types like any others, as Elm's do:
@@ -215,16 +222,17 @@ open site/index.html
 
 `apn --site FOLDER OUTPUT` checks every `.apn` file in `FOLDER`, then writes
 `OUTPUT/index.html`, the folder's `index.apn` (for `examples/elm`, the
-examples page), and `OUTPUT/editor.html`, an editor holding the folder's other
-programs, the standard library and the runtime. `editor.html#NAME` opens
+examples page, made with the `gallery` module), and `OUTPUT/editor.html`, an
+editor holding the folder's other programs, the data files they name, the
+standard library and the runtime. `editor.html#NAME` opens
 `NAME.apn`; Run (Ctrl+Enter) runs the edited program in a sandboxed frame
 beside it, checking it first. Edits are kept for the browser session; Reset
 restores the example. The code is colored as in the REPL and Neovim; the
 Dark/Light button switches between Catppuccin Frappé and Latte (the system's
 choice until you pick one, then remembered). An example's first comment line
-gives its title and,
-when it names a URL, the Original link (`# Cube, from https://...`). Editor
-programs may import the standard library, not other files.
+gives its title, and the first URL in its leading comment lines the Original
+link (`# Cube, from https://...`). Editor programs may import the standard
+library, not other files, and read the data files the examples name.
 
 ## Limits
 

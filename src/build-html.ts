@@ -41,17 +41,21 @@ export async function buildHtml(sourceFile: string, outputFile: string): Promise
 
 // A folder of examples as a site: index.html is the folder's index.apn (a
 // page linking to editor.html#NAME), and editor.html edits and runs each
-// other NAME.apn there, with the standard library. Every example is checked.
+// other NAME.apn there, with the standard library and the data files the
+// examples name (each run gets those its source names). Every example is checked.
 export async function buildSite(sourceDirectory: string, outputDirectory: string): Promise<void> {
     const folder = sourceDirectory.replace(/\/?$/, "/");
     const files = [...Deno.readDirSync(folder)].filter(e => e.isFile && e.name.endsWith(".apn")).map(e => e.name).sort();
     if (!files.includes("index.apn")) throw new Error(`${folder}index.apn is missing: it is the site's front page`);
-    const examples: Record<string, string> = {};
+    const examples: Record<string, string> = {}, data: Record<string, string> = {};
     let index = { source: "", modules: {} as Record<string, string> };
     for (const file of files) {
         const program = checkedProgram(folder + file);
         if (file === "index.apn") index = program;
         else examples[file.slice(0, -".apn".length)] = program.source;
+        for (const [path, entry] of Object.entries(program.modules)) {
+            if (path.startsWith(BUNDLE_APP) && !path.endsWith(".apn")) data[path.slice(BUNDLE_APP.length)] = entry;
+        }
     }
     // The editor runs each example with the standard library.
     const modules = Object.fromEntries(Object.entries(index.modules).filter(([path]) => path.startsWith(BUNDLE_LIB)));
@@ -60,7 +64,7 @@ export async function buildSite(sourceDirectory: string, outputDirectory: string
     const output = outputDirectory.replace(/\/?$/, "/");
     Deno.writeTextFileSync(`${output}index.html`, programPage(index, runtime));
     const editor = Deno.readTextFileSync(new URL("./editor.html", import.meta.url))
-        .replace("/*SITE*/", () => scriptJson({ examples, modules, natives: [...NATIVE_NAMES], style: PAGE_STYLE }))
+        .replace("/*SITE*/", () => scriptJson({ examples, modules, data, natives: [...NATIVE_NAMES], style: PAGE_STYLE }))
         .replace("/*RUNTIME*/", () => runtime)
         .replace("/*EDITOR*/", () => editorScript);
     Deno.writeTextFileSync(`${output}editor.html`, editor);

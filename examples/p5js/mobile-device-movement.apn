@@ -1,0 +1,25 @@
+# Mobile Device Movement, from
+# https://p5js.org/examples/animation-and-variables-mobile-device-movement/
+# Animate based on device motion.
+import "p5"
+
+setup (Sketch p) = {
+    p.describe ("Available on mobile devices only: a white circle on a black background "
+        ++ "that moves and changes size based on the movement of the device.")
+    # The canvas fills the device's screen.
+    p.createCanvas p.displayWidth p.displayHeight
+    p.background 0
+}
+
+# When the device moves, a circle whose position and size follow its
+# acceleration along each axis; earlier circles fade.
+deviceMoved (Sketch p) = {
+    x = remap p.accelerationX (-10) 10 0 p.width
+    y = remap p.accelerationY (-10) 10 0 p.height
+    diameter = remap p.accelerationZ (-10) 10 10 100
+    p.background [0, 64]
+    p.noStroke
+    p.circle x y diameter
+}
+
+main = sketch [setup: setup, deviceMoved: deviceMoved]

@@ -2,63 +2,25 @@
 # The page listing these examples. apn --site examples/elm OUTPUT builds it,
 # with an editor for each example.
 import ["html", "text"]
+gallery = import "gallery"
 
-# The editor's colors: Catppuccin Latte, or Frappé in a dark system theme.
-stylesheet = unlines [
-    ":root { --base: #eff1f5; --mantle: #e6e9ef; --crust: #dce0e8; --surface: #ccd0da;"
-    "    --text: #4c4f69; --subtext: #6c6f85; --accent: #1e66f5; color-scheme: light dark; }"
-    "@media (prefers-color-scheme: dark) { :root { --base: #303446; --mantle: #292c3c;"
-    "    --crust: #232634; --surface: #414559; --text: #c6d0f5; --subtext: #a5adce;"
-    "    --accent: #8caaee; } }"
-    "body { background: var(--base); color: var(--text); }"
-    ".page { max-width: 880px; margin: 0 auto; padding: 40px 8px 64px; }"
-    "header { margin-bottom: 32px; }"
-    "h1 { font-size: 36px; letter-spacing: -.02em; margin: 0 0 8px; }"
-    "header p { margin: 0; max-width: 560px; color: var(--subtext); font-size: 17px; }"
-    "a { color: var(--accent); }"
-    ".sections { display: grid; gap: 16px;"
-    "    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }"
-    "section { background: var(--mantle); border: 1px solid var(--crust);"
-    "    border-radius: 12px; padding: 16px 8px 8px; }"
-    "h2 { margin: 0 12px 8px; font-size: 12px; font-weight: 600; letter-spacing: .06em;"
-    "    text-transform: uppercase; color: var(--subtext); }"
-    "ul { list-style: none; margin: 0; padding: 0; }"
-    "li a { display: flex; justify-content: space-between; padding: 6px 12px;"
-    "    border-radius: 8px; color: var(--text); text-decoration: none; }"
-    "li a::after { content: '→'; color: var(--accent); opacity: 0; transition: opacity .15s; }"
-    "li a:hover, li a:focus-visible { background: var(--surface); color: var(--accent);"
-    "    outline: none; }"
-    "li a:hover::after, li a:focus-visible::after { opacity: 1; }"
+main = gallery.page "Examples" [
+    text "Elm's "
+    a [href "https://elm-lang.org/examples"] [text "examples"]
+    text ", recreated in APN. Each opens in an editor, where you can change it and run it again."
+] [
+    gallery.examples "HTML" [example "Hello", example "Groceries", example "Shapes"]
+    gallery.examples "User Input" [example "Buttons", example "Text Fields", example "Forms"]
+    gallery.examples "Random" [example "Numbers", example "Cards", example "Positions"]
+    gallery.examples "HTTP" [example "Book", example "Quotes"]
+    gallery.examples "Time" [gallery.link "Time" "local-time", example "Clock"]
+    gallery.examples "Files" [example "Upload", example "Drag-and-Drop", example "Image Previews"]
+    gallery.examples "WebGL" (map example ["Triangle", "Cube", "Crate", "Thwomp", "First Person"])
+    gallery.examples "Playground"
+        (map example ["Picture", "Animation", "Mouse", "Keyboard", "Turtle", "Mario"])
 ]
-
-main = div [className "page"] [
-    node "style" [] [text stylesheet]
-    header [] [
-        h1 [] [text "Examples"]
-        p [] [
-            text "Elm's "
-            a [href "https://elm-lang.org/examples"] [text "examples"]
-            text (", recreated in APN. Each opens in an editor, "
-                ++ "where you can change it and run it again.")
-        ]
-    ]
-    div [className "sections"] [
-        viewExamples "HTML" [example "Hello", example "Groceries", example "Shapes"]
-        viewExamples "User Input" [example "Buttons", example "Text Fields", example "Forms"]
-        viewExamples "Random" [example "Numbers", example "Cards", example "Positions"]
-        viewExamples "HTTP" [example "Book", example "Quotes"]
-        viewExamples "Time" [exampleIn "Time" "local-time", example "Clock"]
-        viewExamples "Files" [example "Upload", example "Drag-and-Drop", example "Image Previews"]
-        viewExamples "WebGL" (map example ["Triangle", "Cube", "Crate", "Thwomp", "First Person"])
-        viewExamples "Playground"
-            (map example ["Picture", "Animation", "Mouse", "Keyboard", "Turtle", "Mario"])
-    ]
-]
-
-viewExamples sectionTitle examples = section [] [h2 [] [text sectionTitle], ul [] examples]
 
 # An example's file is its title in lower case, with - for spaces (Elm's
 # URL), except where a file needs another name: local-time.apn would hide
 # the time module from its neighbors if it were time.apn.
-example title = exampleIn title (replaceAll " " "-" (lower title))
-exampleIn title file = li [] [a [href ("editor.html#" ++ file)] [text title]]
+example title = gallery.link title (replaceAll " " "-" (lower title))

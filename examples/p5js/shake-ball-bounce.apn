@@ -1,0 +1,81 @@
+# Shake Ball Bounce, from https://p5js.org/examples/classes-and-objects-shake-ball-bounce/
+# Bounce balls around when a mobile device is shaken.
+import ["p5", "sequence"]
+
+# A ball: where it is, its size, its speed and direction along the way, and
+# its speed at rest.
+Ball = [
+    x: Float, y: Float, diameter: Float, xspeed: Float, yspeed: Float, direction: Float
+    restX: Float, restY: Float
+]
+balls = Mutable ((List Ball) [])
+# How much the device's acceleration must change to shake the balls.
+threshold = 30
+
+setup (Sketch p) = {
+    p.describe ("Twenty circles that bounce around in the canvas whenever the mobile device is "
+        ++ "tilted.")
+    # The whole screen.
+    p.createCanvas p.displayWidth p.displayHeight
+    made <- mapM (_ -> newBall p) [1..20]
+    set balls made
+}
+
+newBall (Sketch p) = {
+    x <- p.random 0 p.width
+    y <- p.random 0 p.height
+    diameter <- p.random 10 30
+    xspeed <- p.random (-2) 2
+    yspeed <- p.random (-2) 2
+    return [
+        x: Float x, y: Float y, diameter: Float diameter, xspeed: Float xspeed
+        yspeed: Float yspeed, direction: 0.7, restX: Float xspeed, restY: Float yspeed
+    ]
+}
+
+draw (Sketch p) = {
+    p.background 0
+    set balls (map move balls)
+    mapM (ball -> p.ellipse ball.x ball.y ball.diameter ball.diameter) balls
+    checkForShake p
+}
+
+# A shake speeds the balls up; otherwise they slow down to their resting speed.
+checkForShake (Sketch p) = {
+    change = abs (p.accelerationX - p.pAccelerationX)
+    total = change + abs (p.accelerationY - p.pAccelerationY)
+    shaken <- total >= threshold ? mapM (shake p change) balls
+        : return (map (ball -> move (slowDown ball)) balls)
+    set balls (map (turn p.width p.height) shaken)
+}
+
+move ball = {
+    ball.x = ball.x + ball.xspeed * ball.direction
+    ball.y = ball.y + ball.yspeed * ball.direction
+    ball
+}
+
+# Off an edge, a ball comes back to it and turns around.
+turn width height ball = {
+    edge = ball.x < 0 || ball.y < 0 || ball.x > width - 20 || ball.y > height - 20
+    ball.x = constrain ball.x 0.0 (Float (width - 20))
+    ball.y = constrain ball.y 0.0 (Float (height - 20))
+    ball.direction = edge ? -ball.direction : ball.direction
+    ball
+}
+
+shake (Sketch p) change ball = {
+    dx <- p.random 5 (change / 3)
+    dy <- p.random 5 (change / 3)
+    ball.xspeed = ball.xspeed + Float dx
+    ball.yspeed = ball.yspeed + Float dy
+    return ball
+}
+
+slowDown ball = {
+    ball.xspeed = ball.xspeed > ball.restX ? ball.xspeed - 0.6 : ball.restX
+    ball.yspeed = ball.yspeed > ball.restY ? ball.yspeed - 0.6 : ball.restY
+    ball
+}
+
+main = sketch [setup: setup, draw: draw]

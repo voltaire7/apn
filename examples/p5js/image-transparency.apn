@@ -1,0 +1,28 @@
+# Image Transparency, from https://p5js.org/examples/imported-media-image-transparency/
+# Make an image translucent on the canvas.
+import "p5"
+
+photo = loadImage "assets/moonwalk.jpg"
+# The top image's position, eased toward the mouse.
+offset = Mutable 0.0
+easing = 0.05
+
+setup (Sketch p) = {
+    p.describe ("An astronaut on a planet as the background with a slightly transparent "
+        ++ "version of this image on top that moves with the horizontal direction of the "
+        ++ "user's mouse.")
+    p.createCanvas 720 400
+}
+
+draw (Sketch p) = {
+    # The image opaque, then half transparent on top, following the mouse.
+    p.tint [255, 255]
+    p.image photo 0 0
+    width <- photo.width
+    # The sketch's values are dynamic: Float converts the new offset to the cell's type.
+    set offset (Float (offset + (p.mouseX - width / 2 - offset) * easing))
+    p.tint [255, 127]
+    p.image photo offset 0
+}
+
+main = sketch [preload: [photo], setup: setup, draw: draw]

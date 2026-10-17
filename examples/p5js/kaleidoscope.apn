@@ -1,0 +1,37 @@
+# Kaleidoscope, from https://p5js.org/examples/repetition-kaleidoscope/
+# Draw mirrored designs with the mouse.
+import "p5"
+
+symmetry = 6
+angle = 360 / symmetry
+
+setup (Sketch p) = {
+    p.describe ("Dark grey canvas that reflects the lines drawn within it in "
+        ++ to String symmetry ++ " sections.")
+    p.createCanvas 720 400
+    p.angleMode p.DEGREES
+    p.background 50
+}
+
+draw (Sketch p) = {
+    p.translate (p.width / 2) (p.height / 2)
+    inside = p.mouseX > 0 && p.mouseX < p.width && p.mouseY > 0 && p.mouseY < p.height
+    # While the mouse is pressed on the canvas, the stroke from its last
+    # position, in each section and mirrored.
+    when (inside && p.mouseIsPressed) {
+        [x1, y1] = [p.mouseX - p.width / 2, p.mouseY - p.height / 2]
+        [x2, y2] = [p.pmouseX - p.width / 2, p.pmouseY - p.height / 2]
+        mapM (_ -> {
+            p.rotate angle
+            p.stroke 255
+            p.strokeWeight 3
+            p.line x1 y1 x2 y2
+            p.push
+            p.call "scale" [1, -1]
+            p.line x1 y1 x2 y2
+            p.pop
+        }) [1..symmetry]
+    }
+}
+
+main = sketch [setup: setup, draw: draw]

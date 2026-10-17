@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import { BUNDLE_APP } from "./modules.ts";
+import { BUNDLE_APP, bundledFile } from "./modules.ts";
 import { Interpreter } from "./interp.ts";
 import { P5Sketch, P5_EVENTS, type P5Instance } from "./p5.ts";
 import { parse } from "./parser.ts";
@@ -19,12 +19,13 @@ let interpreter: Interpreter;
 let current: HtmlNode | undefined;
 
 // p5.js, loaded once, when a page first draws a sketch.
+const P5_URL = "https://cdn.jsdelivr.net/npm/p5@2.3.3/lib/p5.min.js";
 type P5Constructor = new (setup: (p: P5Instance) => void, root: HTMLElement) => P5Instance;
 let p5Loading: Promise<P5Constructor> | undefined;
 function loadP5(): Promise<P5Constructor> {
     return p5Loading ??= new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = "https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/p5.min.js";
+        script.src = P5_URL;
         script.onload = () => resolve((globalThis as unknown as { p5: P5Constructor }).p5);
         script.onerror = () => reject(new Error("Could not load p5.js; check your network connection"));
         document.head.appendChild(script);
@@ -35,12 +36,19 @@ function startSketch(container: HTMLElement, callbacks: Value, send?: (message: 
     const state: { sketch?: P5Sketch; pending: Value } = { pending: callbacks };
     loadP5().then(P5 => new P5(p => {
         const sketch = state.sketch = new P5Sketch(interpreter, state.pending, p, send);
-        for (const event of P5_EVENTS) p[event] = () => {
+        const run = (event: string) => {
             if (!sketch.has(event)) return;
             try {
                 const result = sketch.dispatch(event);
                 return result.kind === "bool" ? result.v : undefined;
             } catch (error) { (p.noLoop as () => void)(); report(error); }
+        };
+        for (const event of P5_EVENTS) if (event !== "preload") p[event] = () => run(event);
+        // preload starts loads; setup runs once they have finished (p5 waits for it).
+        p.setup = async () => {
+            run("preload");
+            await sketch.loaded();
+            run("setup");
         };
     }, container), report);
     return state;
@@ -80,7 +88,7 @@ function patch(parent: Node, dom: Node | undefined, before: HtmlNode | undefined
     if ("sketch" in after) {
         const state = sketches.get(dom)!;
         state.pending = after.sketch;
-        state.sketch?.setCallbacks(after.sketch);
+        state.sketch?.update(after.sketch);
         return dom;
     }
     const element = dom as HTMLElement;
@@ -175,6 +183,13 @@ const platform: Platform = {
         input.onchange = () => resolve([...input.files ?? []].map(file => ({ name: file.name, size: file.size, mime: file.type, url: URL.createObjectURL(file) })));
         input.click();
     }),
+    download: (name, mime, content) => {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(new Blob([content], { type: mime }));
+        link.download = name;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 0);
+    },
     viewport: () => ({ width: innerWidth, height: innerHeight }),
 };
 
@@ -182,6 +197,21 @@ try {
     const payload = JSON.parse(document.getElementById("apn-program")!.textContent!);
     interpreter = new Interpreter();
     interpreter.moduleSources = payload.modules;
+    // Bundled data files, as blob URLs made once.
+    const urls = new Map<string, string>();
+    interpreter.assetUrl = path => {
+        if (urls.has(path)) return urls.get(path);
+        const file = bundledFile(payload.modules, path);
+        if (!file) return undefined;
+        // A font loads through CSS, which takes no blob URL from a sandboxed
+        // (opaque-origin) page, such as the editor's preview.
+        if (file.mime.startsWith("font/") && file.dataUrl) return file.dataUrl;
+        const blob = file.text !== undefined ? new Blob([file.text], { type: file.mime })
+            : new Blob([Uint8Array.from(atob(file.dataUrl!.slice(file.dataUrl!.indexOf(",") + 1)), c => c.charCodeAt(0))], { type: file.mime });
+        const url = URL.createObjectURL(blob);
+        urls.set(path, url);
+        return url;
+    };
     interpreter.sourceDir = BUNDLE_APP;
     interpreter.enableChecking();
     interpreter.run(parse(payload.source));

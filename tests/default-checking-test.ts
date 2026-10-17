@@ -1193,3 +1193,44 @@ Deno.test("an unknown name in a type is reported as unbound", () => {
     catch (error) { if (error instanceof Error && error.message.includes("unbound variable 'missing'")) return; throw error; }
     throw new Error("accepted an unknown type");
 });
+
+// What the p5.js examples rely on, checked and run.
+for (const [source, expected] of [
+    // A record schema's List fields hold any length, in a list cell or a record cell.
+    ['Pt = [x: Float, c: [Float, Float]]\nps = Mutable ((List Pt) [])\nset ps [[x: 1.0, c: [1.0, 2.0]]]\nlength ps', '1'],
+    ['B = [ns: List Int]\nb = Mutable (B [ns: []])\nset b [ns: [1, 2]]\nb.ns', '[1, 2]'],
+    // A conversion of arithmetic on a parameter waits for its value.
+    ['f w = Float (w - 20)\nf (Number 3)', '-17.0'],
+    ['f r = (List Int) (from JSON r)\nf "[1, 2]"', '[1, 2]'],
+    // A list indexed by a lambda's parameter.
+    ['f (List xs) = map (n -> xs n) [0..1]\nf [5, 6]', '[5, 6]'],
+    // An overloaded operator in a function whose operands are parameters.
+    ['Money = | Money Int\n(Money a) + (Money b) = Money (a + b)\nf x y = x + y\nf (Money 1) (Money 2)', 'Money 3'],
+    ['Money = | Money Int\n(Money a) + (Money b) = Money (a + b)\nf x y = x + y\nf 1 2', '3'],
+    // Clauses for a math function overload it, as for an operator.
+    ['Dual = | Dual Float Float\nsin (Dual a b) = Dual (sin a) (b * cos a)\nsin (Dual 0.0 1.0)', 'Dual 0.0 1.0'],
+    ['Dual = | Dual Float Float\nsin (Dual a b) = Dual (sin a) (b * cos a)\nsin 0.0', '0.0'],
+    // Floats divide to a Float; a value of either of two types converts.
+    ['x = 1.0 / 4.0\nr = [v: 0.5]\n{ r.v = x; r }', '[v: 0.25]'],
+    ['b = true\nFloat (b ? 1 : 2.5)', '1.0'],
+    // A recursive function of a sketch, whose methods yield [].
+    ['import "p5"\nb (Sketch p) n = when (n > 2) (b p (n / 2))\nmain = sketch [draw: (Sketch p -> b p 120)]\ntypeOf main', 'P5Program'],
+    ['pairs []', '[]'],
+    // A block may start with a comment line.
+    ['f = {\n    # first a comment\n    1\n}\nf', '1'],
+    // Comparisons stay exact (a float against an integer beyond 2^53 too).
+    ['[2 ^ 53 + 1 > 9007199254740992.0, 0.5 < 1, 0.1 + 0.2 > 0.3]', '[true, true, true]'],
+    // A cell holding a p5 object takes another, as itself.
+    ['import "p5"\nc = Mutable (loadImage "a.png")\nset c (loadImage "b.png")\ntypeOf c', 'Mutable'],
+    ['import "glsl"\nglsl (vec [Glsl "a", 1] * sin (Glsl "t"))', '"(vec2(a, 1.0) * sin(t))"'],
+]) {
+    Deno.test(`p5.js-example typing: ${source}`, () => {
+        const actual = run(session(), source);
+        if (actual !== expected) throw new Error(`${source}: ${actual}`);
+    });
+}
+for (const source of [
+    'f w = Float (w - 20)\nf "a"',
+    'f (List xs) = map (n -> xs n) ["a"]\nf [1]',
+    'f b = Int (b ? 1 : "a")\nf true',
+]) Deno.test(`p5.js-example typing rejects: ${source}`, () => rejected(session(), source));

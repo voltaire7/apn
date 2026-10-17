@@ -66,15 +66,10 @@ export function lex(src: string): Token[] {
             // blank / comment-only line: reset and keep going
             if (pos >= src.length) break;
             if (src[pos] === '\n') { continue; }
+            // A comment-only line: its newline (handled below) starts the next
+            // line, whose indentation is the one that counts.
             if (src.startsWith("#", pos) || src.startsWith("{-", pos)) {
-                const cStart = pos;
                 skipComment();
-                // After a comment, move to next line and re-detect indentation.
-                if (pos < src.length && src[pos] === '\n') {
-                    pos++;
-                    toks.push({ k: "newline", pos: pos - 1 });
-                    continue;
-                }
                 continue;
             }
 

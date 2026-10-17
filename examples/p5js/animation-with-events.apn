@@ -1,0 +1,34 @@
+# Animation with Events, from
+# https://p5js.org/examples/animation-and-variables-animation-with-events/
+# Pause and resume animation.
+import "p5"
+
+# The circle's horizontal position.
+x = Mutable 25
+
+setup (Sketch p) = {
+    p.createCanvas 720 400
+    p.colorMode p.HSB
+    p.textSize 20
+    # No animation to start.
+    p.noLoop
+}
+
+draw (Sketch p) = {
+    p.background 0
+    # A circle whose hue follows its position.
+    p.fill [x / 3, 90, 90]
+    p.circle x (p.height / 2) 50
+    # Move right, starting over once off the right side.
+    set x (x + 5 > p.width + 25 ? -25 : x + 5)
+    p.describe "circle moving to the right"
+}
+
+# A click starts or stops the animation; a key draws one frame.
+mousePressed (Sketch p) = {
+    looping <- p.isLooping
+    looping ? p.noLoop : p.loop
+}
+keyPressed (Sketch p) = p.redraw
+
+main = sketch [setup: setup, draw: draw, mousePressed: mousePressed, keyPressed: keyPressed]

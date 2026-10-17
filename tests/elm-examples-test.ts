@@ -12,15 +12,16 @@ const content = (n: HtmlNode): string => "text" in n ? n.text : "sketch" in n ? 
 
 // Commands' messages wait in queue until flushed, as the page defers them.
 function fake(answers: Record<string, { status: number; body: string }> = {}) {
-    const queue: (() => void)[] = [];
+    const queue: (() => void)[] = [], downloads: string[][] = [];
     const platform: Platform = {
         defer: run => queue.push(run),
         http: url => Promise.resolve(answers[url] ?? { status: 0, body: "" }),
         selectFiles: () => Promise.resolve([{ name: "a.png", size: 3, mime: "image/png", url: "blob:a" }, { name: "b.png", size: 4, mime: "image/png", url: "blob:b" }]),
+        download: (name, mime, content) => { downloads.push([name, mime, content]); },
         viewport: () => ({ width: 800, height: 600 }),
     };
     const flush = async () => { for (let n = 0; n < 3; n++) { await new Promise(r => setTimeout(r, 0)); while (queue.length) queue.shift()!(); } };
-    return { platform, flush };
+    return { platform, flush, downloads };
 }
 function run(name: string, platform?: Platform): BrowserApp {
     const i = new Interpreter();
@@ -158,8 +159,9 @@ Deno.test("p5 canvases in views draw the model", () => {
     calls.length = 0;
     const crate = run("crate");
     const crateSketch = new P5Sketch(crate.interpreter, sketchIn(crate.render()) as never, p);
+    crateSketch.dispatch("setup");
     crateSketch.dispatch("draw");
     crateSketch.dispatch("draw");
-    // The texture is drawn once, then reused by name.
+    // The texture is drawn once, in setup, then used each frame.
     if (calls.filter(c => c === "g.background").length !== 1 || calls.filter(c => c.startsWith("box")).length !== 2) throw new Error(calls.join("\n"));
 });

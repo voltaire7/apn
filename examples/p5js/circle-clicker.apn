@@ -1,0 +1,88 @@
+# Circle Clicker, from https://p5js.org/examples/games-circle-clicker/
+# Make a game about clicking a circle quickly and save the high score.
+import "p5"
+
+# The circle (a radius of 0 shows the start screen), its largest radius now,
+# the score and the high score.
+center = Mutable [0.0, 0.0]
+radius = Mutable 0.0
+color = Mutable [0.0, 0.0, 0.0]
+largest = Mutable 0.0
+score = Mutable 0
+highScore = Mutable 0
+
+setup (Sketch p) = {
+    p.createCanvas 720 400
+    p.colorMode p.HSB
+    p.noStroke
+    p.ellipseMode p.RADIUS
+    p.textSize 36
+    # The high score kept from an earlier visit (where the page may keep one).
+    stored <- p.getItem "high score"
+    set highScore (stored == [] ? 0 : Int stored)
+}
+
+draw (Sketch p) = {
+    p.background 20
+    radius > 0 ? {
+        # The circle, shrinking, and the score.
+        [x, y] = center
+        p.fill color
+        p.circle x y radius
+        p.describeElement "Circle" "Randomly colored shrinking circle"
+        set radius (radius - 1)
+        p.call "textAlign" [p.RIGHT, p.TOP]
+        p.fill 220
+        p.text (to String score) (p.width - 20) 20
+        p.describeElement "Score" ("Text with current score: " ++ to String score)
+    } : endGame p
+}
+
+startGame (Sketch p) = {
+    set score 0
+    set largest (Float (min (Number p.height) (Number p.width) / 2))
+    resetCircle p
+}
+
+endGame (Sketch p) = {
+    p.noLoop
+    set highScore (max highScore score)
+    p.storeItem "high score" highScore
+    p.call "textAlign" [p.CENTER, p.CENTER]
+    p.fill 220
+    startText = "Circle Clicker\nClick the circle before it gets too small\nScore: "
+        ++ to String score ++ "\nHigh score: " ++ to String highScore ++ "\nClick to play"
+    p.call "text" [startText, 0, 0, p.width, p.height]
+    p.describeElement "Start text" ("Text reading, \"" ++ startText ++ "\"")
+}
+
+# A new circle, as large as it may be now, somewhere it fits, in a random color.
+resetCircle (Sketch p) = {
+    set radius largest
+    x <- p.random radius (p.width - radius)
+    y <- p.random radius (p.height - radius)
+    h <- p.random 240 360
+    s <- p.random 40 80
+    b <- p.random 50 90
+    set center [Float x, Float y]
+    set color [Float h, Float s, Float b]
+}
+
+# A click on the circle scores, and the next circle starts smaller; a click
+# on the start screen starts a game.
+mousePressed (Sketch p) = {
+    Bool looping <- p.isLooping
+    looping ? {
+        [x, y] = center
+        when (dist p.mouseX p.mouseY x y < radius) {
+            set largest (max (largest - 1) 15.0)
+            resetCircle p
+            set score (score + 1)
+        }
+    } : {
+        startGame p
+        p.loop
+    }
+}
+
+main = sketch [setup: setup, draw: draw, mousePressed: mousePressed]

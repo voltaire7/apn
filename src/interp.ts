@@ -2,7 +2,7 @@ import { CheckingSession } from "./checking-session.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeType } from "./type-description.ts";
-import { METHODS, sourceLocations } from "./ast.ts";
+import { MATH_FUNCTIONS, METHODS, sourceLocations } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
@@ -11,7 +11,7 @@ import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { NATIVE_EXPORTS, RETIRED_NATIVES } from "./native-exports.ts";
 import { parseLiteral } from "./text-natives.ts";
-import { loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
+import { bundledText, loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, withArticle } from "./errors.ts";
@@ -123,6 +123,8 @@ export class Interpreter {
     private inputFiles = new Map<string, string>();
     inputFile(path: string): string | undefined {
         if (this.inputFiles.has(path)) return this.inputFiles.get(path);
+        // A browser build reads the text files it bundled, by the path the program names.
+        if (this.moduleSources) return bundledText(this.moduleSources, path);
         try {
             const text = Deno.readTextFileSync(path);
             this.inputFiles.set(path, text);
@@ -135,7 +137,8 @@ export class Interpreter {
     // Whether the last top-level statement run was an action (the REPL does
     // not echo an action's empty result, as GHCi does not echo ()).
     ranAction = false;
-    hostNatives = new Map<string, (args: Value[]) => Value>();
+    // A file the build bundled, by the path the program names, as a URL the page can load.
+    assetUrl?: (path: string) => string | undefined;
     programArgs: string[] = [];
     // A bundle (a browser build) to import from instead of the disk: virtual
     // paths to sources (see bundleProgram in modules.ts).
@@ -379,10 +382,10 @@ export class Interpreter {
             clauses = mergeClauses(name, extended ? previous.clauses : [], clauses, c => this.clauseHead(c, scope));
             // Capture a shared env containing the binding itself, enabling recursion.
             const child = new Env(this.env);
-            // Clauses for an operator overload it: the previous meaning still
-            // applies to arguments no clause matches.
+            // Clauses for an operator (or a math function) overload it: the
+            // previous meaning still applies to arguments no clause matches.
             // Redefining the clauses in the same scope keeps that fallback.
-            const overloaded = !isOperatorName(name) || previous === undefined ? undefined
+            const overloaded = !isOperatorName(name) && !MATH_FUNCTIONS.has(name) || previous === undefined ? undefined
                 : previous.kind === "clauseFn" && this.env.map.get(name) === previous ? previous.fallback : previous;
             const fn: Value = {
                 kind: "clauseFn", name, clauses, arity, env: child, applied: [], ...overloaded ? { fallback: overloaded } : {},
@@ -476,12 +479,23 @@ export class Interpreter {
         if (old.kind === "native" && value.kind === "native" && old.name === value.name &&
             old.arity === value.arity && old.invoke === value.invoke && old.family === value.family &&
             old.tag === value.tag && !old.applied.length && !value.applied.length) return value;
+        // An overload of the function (an imported operator's clauses) extends it.
+        const base = value.kind === "clauseFn" && value.fallback ? this.force(value.fallback) : undefined;
+        if (base && (base === old || base.kind === "native" && old.kind === "native" && base.name === old.name &&
+            !base.applied.length && !old.applied.length)) return value;
         if (["closure", "clauseFn", "native"].includes(old.kind)) {
             return reject("replacing a function requires an existing explicit function contract");
         }
         if (old.kind === "record") {
             if (value.kind !== "record") return reject("expected a Record");
             if (old.scope || value.scope) return reject("cannot replace an environment reference");
+            // A shared stateful object (a p5 object) is a reference: another
+            // with the same fields replaces it as itself.
+            if (old.shared || value.shared) {
+                const keys = (r: Extract<Value, { kind: "record" }>) => r.v.map(([key]) => key).join("\n");
+                if (!old.shared || !value.shared || keys(old) !== keys(value)) reject("cannot replace a shared object with another value");
+                return value;
+            }
             const fields = new Map(value.v);
             for (const [key, item] of old.v) {
                 if (!fields.has(key)) reject(`missing field '${key}'`);
@@ -850,7 +864,8 @@ export class Interpreter {
         this.env = v.env;
         try {
             const result = this.force(this.eval(v.body, tailLoad));
-            if (result.kind === "mutable" || result.kind === "pointer") v.mutableValue = result;
+            // A stateful object (a cell, an allocation, a p5 object) is allocated once and shared.
+            if (result.kind === "mutable" || result.kind === "pointer" || result.kind === "record" && result.shared) v.mutableValue = result;
             return result;
         } finally {
             this.env = old;
@@ -1763,6 +1778,7 @@ export class Interpreter {
                 }
                 if (carg.kind === "record") {
                     const supplied = new Set(carg.v.map(([key]) => key));
+                    const declared = this.isTypeValue(f);
                     for (const [key, slot] of f.v) {
                         if (slot.kind === "type" && slot.name === "$any" && !supplied.has(key)) {
                             throw new APNError("runtime", `missing field '${key}'`);
@@ -1774,7 +1790,10 @@ export class Interpreter {
                         const i = idx.get(k);
                         if (i !== undefined) out[i] = [k, this.defer(() => this.applyTemplateSlot(f.v[i][1], v))]; else out.push([k, v]);
                     }
-                    return { kind: "record", v: out };
+                    const result: Value = { kind: "record", v: out };
+                    // A schema's value (Body [...]) is declared its type, as List T's.
+                    if (declared) this.declaredTypes.set(result, f);
+                    return result;
                 }
                 if (carg.kind === "int") {
                     let i = carg.v;
@@ -1817,7 +1836,9 @@ export class Interpreter {
                 } else if (v.kind === "thunk" || v.kind === "deferred") {
                     if (v.value !== undefined) { v = v.value; continue; }
                     if (v.busy) {
-                        // An unproductive fixed point diverges, but remains interruptible.
+                        // An unproductive fixed point diverges, but remains interruptible
+                        // (a browser page, which cannot wait, reports it).
+                        if (typeof SharedArrayBuffer === "undefined") throw new APNError("runtime", "a value depends on itself", { hint: "a cell's new contents read the cell after set replaced them: read it first, through a typed (List xs) parameter" });
                         const sleep = new Int32Array(new SharedArrayBuffer(4));
                         for (;;) { checkInterrupt(); Atomics.wait(sleep, 0, 0, 20); }
                     }
@@ -1963,8 +1984,19 @@ export class Interpreter {
         if (!this.isList(list)) throw new APNError("runtime", `List constructor expects a List value`);
         const element = type.arguments?.[0];
         if (!element) return list;
-        return this.mapList({ kind: "native", name: "<List>", arity: 1, applied: [], invoke: ([x]) => this.conform(element, x) }, list);
+        const mapped = this.mapList({ kind: "native", name: "<List>", arity: 1, applied: [], invoke: ([x]) => this.conform(element, x) }, list);
+        // Marked once forced too (its outer cell is what a Mutable is given).
+        const result = this.defer(() => {
+            const outer = this.force(mapped);
+            this.declaredTypes.set(outer, type);
+            return outer;
+        });
+        this.declaredTypes.set(result, type);
+        return result;
     }
+    // The type a conversion's result has (List T, a record schema), for a
+    // Mutable made from one.
+    private declaredTypes = new WeakMap<Value, Value>();
 
     // ---- Monads: instances of map, >>=, <*> and return ----
     // Clause functions a program defines for these methods, newest last: tried
@@ -2966,8 +2998,11 @@ export class Interpreter {
             if (!this.isTypeValue(value)) throw new APNError("runtime", "Type constructor expects a Type value");
             return this.inspectType(value);
         }
+        // A cell made from a List T conversion or a record schema's keeps that
+        // type: it holds lists of any length.
+        const declared = name === "Mutable" ? this.declaredTypes.get(value) ?? this.declaredTypes.get(this.reference(value)) : undefined;
         value = this.dataValue(value);
-        if (name === "Mutable") return { kind: "mutable", v: value };
+        if (name === "Mutable") return declared ? { kind: "mutable", v: value, schema: declared } : { kind: "mutable", v: value };
         if (name === "HashMap") return this.makeHashMap(value);
         if (name === "String" && this.isList(value)) return this.callNative("fromChars", [value]);
         if (NUMERIC_TYPES.includes(name)) {
@@ -3012,8 +3047,7 @@ export class Interpreter {
     }
 
     callNative(name: string, argsIn: Value[], tag?: string, perform = false): Value {
-        // Host natives (p5 drawing methods) are effects too.
-        if (!perform && (IO_NATIVES.has(name) || this.hostNatives.has(name))) return { kind: "io", result: IO_RESULTS[name], run: () => this.callNative(name, argsIn, tag, true) };
+        if (!perform && IO_NATIVES.has(name)) return { kind: "io", result: IO_RESULTS[name], run: () => this.callNative(name, argsIn, tag, true) };
         if (name === "env") { const scope = this.env; return { kind: "io", result: "Record", run: () => this.environmentValue(scope) }; }
         if (name === "assert") {
             const argument = argsIn[0];
@@ -3061,8 +3095,6 @@ export class Interpreter {
             const at = body && sourceLocations.get(body);
             return mkStr(at ? at.source.slice(at.start, at.end).trim() : body ? exprToSource(body) : this.renderString(argument));
         }
-        const host = this.hostNatives.get(name);
-        if (host) return host(argsIn);
         if (name === "use") {
             const value = this.dataValue(argsIn[0]);
             const records = this.isList(value) ? this.items(value).map(v => this.dataValue(v)) : [value];
@@ -3089,7 +3121,8 @@ export class Interpreter {
             if (target.kind !== "mutable") throw new APNError("runtime", "set expects a Mutable target");
             // Evaluate against the old contents before changing the shared cell.
             const value = this.demand(argsIn[1]);
-            target.v = this.checkedExecution ? this.protectDynamicWrite(target.v, value, "Mutable") : value;
+            target.v = target.schema ? this.conform(target.schema, value)
+                : this.checkedExecution ? this.protectDynamicWrite(target.v, value, "Mutable") : value;
             return { kind: "list", v: [] };
         }
         if (STANDARD_NATIVES.some(([n]) => n === name)) return standardNative(this, name, argsIn);
@@ -3278,7 +3311,9 @@ export class Interpreter {
                 return mkStr(String(a.v));
             case "pairs":
                 if (a.kind === "hashmap") return mkList([...a.entries.values()].map(([key, value]) => mkList([key, value])));
-                if (a.kind !== "record") throw new Error("Runtime: pairs expects a record");
+                // [] is the empty record too (it becomes one when a field is assigned).
+                if (this.isList(a) && !this.cell(a)) return mkList([]);
+                if (a.kind !== "record") throw new APNError("runtime", "pairs expects a record");
                 return mkList(a.v.map(([k, v]) => mkList([mkStr(keyText(k)), v])));
             case "format": {
                 const fmt = this.dataValue(args[0]);

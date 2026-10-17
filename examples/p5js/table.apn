@@ -1,0 +1,123 @@
+# Table, from https://p5js.org/examples/loading-and-saving-data-table/
+# Load data from a CSV file, and save it to one.
+import ["html", "io", "option", "p5", "text"]
+browser = import "browser"
+file = import "file"
+http = import "http"
+task = import "task"
+
+# Bubbles, each a circle with a name; and the press a new one starts from,
+# while one is being made.
+Bubble = [x: Float, y: Float, radius: Float, name: String]
+Msg =
+    | Loaded String
+    | Picked (List file.File)
+    | Read (Result String http.HttpError)
+    | Download
+    | Pressed Float Float
+    | Released String Float
+
+init = [
+    [bubbles: (List Bubble) [], pressed: [0.0, 0.0], creating: false]
+    task.perform Loaded (readFile "assets/bubbles.csv")
+]
+
+# The bubbles a CSV file lists: a header naming the columns, then a row each.
+load text model = {
+    [header, rows] = splitAt 1 (map (splitOn ",") (nonEmptyLines text))
+    bubble row = {
+        # The row's cells, by column (an association list).
+        cells = zip (head header) row
+        number column = Float (from String (cells column))
+        [x: number "x", y: number "y", radius: number "radius", name: cells "name"]
+    }
+    model.bubbles = map bubble rows
+    model
+}
+toCsv bubbles = unlines ("x,y,radius,name" :: map (b -> joinWith ","
+    [to String b.x, to String b.y, to String b.radius, b.name]) bubbles)
+
+update msg model = match msg [
+    Loaded text -> [load text model, browser.none]
+    # A file the visitor picked, read as text.
+    Picked (picked :: _) -> [model, http.get [url: picked.url, expect: http.expectString Read]]
+    Picked [] -> [model, browser.none]
+    Read (Ok text) -> [load text model, browser.none]
+    Read (Err _) -> [model, browser.none]
+    Download -> [model, file.download "bubbles.csv" "text/csv" (toCsv model.bubbles)]
+    Pressed x y -> { model.pressed = [x, y]; model.creating = true; [model, browser.none] }
+    # A bubble with the name asked for (none if it was cancelled).
+    Released name radius -> {
+        [x, y] = model.pressed
+        model.creating = false
+        model.bubbles = model.bubbles ++ (name == ""
+            ? [] : [[x: x, y: y, radius: radius, name: name]])
+        [model, browser.none]
+    }
+]
+
+view model = div [] [
+    canvas [
+        setup: setup, draw: draw model
+        mousePressed: mousePressed, mouseReleased: mouseReleased model
+    ]
+    div [] [
+        button [onClick Download] [text "Download bubble data"]
+        input [
+            typeAttribute "file"
+            accept ".csv"
+            onEvent "change" (event -> Picked event.files)
+        ] []
+    ]
+]
+
+setup (Sketch p) = {
+    p.createCanvas 640 360
+    p.ellipseMode p.RADIUS
+    p.textSize 20
+    p.describe ("When the cursor clicks on the canvas, drags, and releases, a black outline "
+        ++ "circle representing a bubble appears on the white background. A prompt asks to "
+        ++ "name the bubble, and this name appears under the circle when the cursor hovers "
+        ++ "over it.")
+}
+
+draw model (Sketch p) = {
+    p.background 255
+    mapM (display p) model.bubbles
+    # The bubble being made, as large as the drag.
+    when model.creating {
+        [x, y] = model.pressed
+        p.noFill
+        p.stroke 0
+        p.strokeWeight 4
+        p.circle x y (dist x y p.mouseX p.mouseY)
+    }
+    p.call "textAlign" [p.LEFT, p.BOTTOM]
+    p.fill 0
+    p.noStroke
+    p.text "Click to add bubbles." 10 (p.height - 10)
+}
+
+# A bubble, and its name while the mouse is over it.
+display (Sketch p) bubble = {
+    p.stroke 0
+    p.noFill
+    p.strokeWeight 4
+    p.circle bubble.x bubble.y bubble.radius
+    when (dist p.mouseX p.mouseY bubble.x bubble.y < bubble.radius) {
+        p.fill 0
+        p.noStroke
+        p.textAlign p.CENTER
+        p.text bubble.name bubble.x (bubble.y + bubble.radius + 30)
+    }
+}
+
+mousePressed (Sketch p) = p.send (Pressed (Float p.mouseX) (Float p.mouseY))
+
+mouseReleased model (Sketch p) = when model.creating {
+    [x, y] = model.pressed
+    name <- p.prompt "Enter a name for the new bubble"
+    p.send (Released (String name) (Float (dist x y p.mouseX p.mouseY)))
+}
+
+main = browser.element [init: init, update: update, subscriptions: (_ -> browser.none), view: view]

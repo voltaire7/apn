@@ -43,10 +43,10 @@ draw angle p = {
     p.camera 0 0 5 0 0 0 0 (-1) 0
     p.rotateY (3 * angle)
     p.rotateX (2 * angle)
-    p.noStroke []
+    p.noStroke
     p.call "beginShape" [p.TRIANGLES]
     mapM (triangle p) cubeMesh
-    p.endShape []
+    p.endShape
 }
 
 triangle p [color, a, b, c] = {
