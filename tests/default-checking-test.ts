@@ -48,6 +48,15 @@ for (const [source, expected] of [
     ['browser = import "browser"\nMsg = Resized browser.Viewport | Other\nResized [width: 1, height: 2]', 'Resized [width: 1, height: 2]'],
     // A constructor pattern on a Dynamic field is checked when it runs.
     ['import "option"\nMsg = More | Got Dynamic\nf msg = match msg [More -> 0, (Got (Ok q)) -> q, (Got (Err _)) -> 1]\nf (Got (Ok 5))', '5'],
+    // Clauses split by code that does not use the function, and a clause
+    // that redefines one, are fine.
+    ['describe 0 = "zero"; other = 5; describe 1 = "one"; describe 1', '"one"'],
+    // h keeps the c it was written with; a later c is another version.
+    ["f 'a' = [0]; f x = [1, 2]; g [a] = a; c = 'a'; h u = g (f c); c = 'b'; h 0", '0'],
+    // A rebinding is a new version, of any type: what was written before keeps the old.
+    ['xs <- return (Vect 2 Int [1, 2]); xs = [3]; xs', '[3]'],
+    ['Int x = 1; x = "a"; x', '"a"'],
+    ['x = 1; y = x + 1; x = "a"; [x, y]', '["a", 2]'],
     // A definition written with lambdas is checked as the clause with those parameters.
     ['append = Vect n a xs -> Vect m a ys -> Vect (n + m) a {\n    match xs [\n        [] -> ys\n        x::xs -> x :: append xs ys\n    ]\n}\ntypeOf (append [] [3])', 'Vect 1 Int'],
     // A record schema applied to a value not known yet converts it at runtime.
@@ -71,7 +80,6 @@ for (const source of [
     'x | missingGuard -> x',
     'f x = x == 0 ? 1 : x * x; f (Dynamic 2)',
     'Vect 2 Int [1]',
-    'xs <- return (Vect 2 Int [1, 2]); xs = [3]',
     'env',
     'f g = [g 1, g "a"]; f (x -> 0)',
     'f r = r.y == 0 ? 5.0 : r.vy * 9007199254740993; f [y: 1.0, vy: 2.0]',
@@ -79,6 +87,9 @@ for (const source of [
     'Quote = [quote: String, year: Int]; from Quote [quote: "q", year: 1]',
     'Quote = [quote: String, year: Int]; to Quote [year: "x"]',
     '"ab" * (c -> c + 1)',
+    // A function's clauses are not split by a definition that uses it.
+    'describe 0 = "zero"; label x = describe x; describe 1 = "one"',
+    'h = { describe 0 = "zero"; label x = describe x; describe 1 = "one"; label 1 }',
     // A record its type made keeps its fields.
     'Quote = [quote: String, year: Int]; q = Quote []; q.yaer = 1',
     'Quote = [quote: String, year: Int]; q = Quote []; q "yaer" = 1',
@@ -108,7 +119,7 @@ Deno.test("runtime failure restores bindings and their checking state", () => {
     try { run(i, 'existing = 2; transient = 3; fail "stop"'); } catch { /* intended */ }
     if (run(i, 'existing') !== '1' || i.env.get('transient')) throw new Error('partial bindings survived');
     rejected(i, 'transient');
-    rejected(i, 'existing = "bad"');
+    rejected(i, 'existing ++ "bad"');
 });
 Deno.test("namespaced import does not open conflicting exports", () => {
     const i = session(); run(i, 'span = 123; html = import "html"');
@@ -454,8 +465,8 @@ for (const source of [
     // Results that depend on a value, or calls through a variable, stay unknown.
     'import "option"\nf None = [0]\nf x = [1, 2]\ng [a] = a\nmk x = None\nmk2 x = Some x\nmkv = false ? mk : mk2\ng (f (mkv 1))',
     'import "option"; f None = [0]; f x = [1, 2]; g [a] = a; mk x = None; mkv = mk; g (f (mkv 1))',
-    // A rebound variable can change under a closure that captured it.
-    "f 'a' = [0]; f x = [1, 2]; g [a] = a; c = 'a'; h u = g (f c); c = 'b'; h 0",
+    // Code after a rebinding reads the new version.
+    "f 'a' = [0]; f x = [1, 2]; g [a] = a; c = 'a'; h u = g (f c); c = 'b'; g (f c)",
 ]) Deno.test(`function results stay checked: ${source}`, () => rejected(session(), source));
 // Results that depend on argument values: the checker evaluates a directly
 // called function's clauses and conditions with what is known about the
@@ -738,12 +749,12 @@ for (const source of [
 // are walked within the work budget; ranges are cut arithmetically.
 for (const [source, expected] of [
     ['local n = { k = n; k = 5; k }; g (f (r (local 1 == 5)))','0'],
-    ['k y = { x = 1; h = () -> x; x = 5; h [] }; g (f (r (k 0 == 5)))','0'],
-    ['x = 10; k y = { z = x + 1; x = 2; z }; g (f (r (k 0 == 3)))','0'],
-    ['k y = { a = 1; b = a; a = 2; b }; g (f (r (k 0 == 2)))','0'],
+    ['k y = { x = 1; h = () -> x; x = 5; h [] }; g (f (r (k 0 == 1)))','0'],
+    ['x = 10; k y = { z = x + 1; x = 2; z }; g (f (r (k 0 == 11)))','0'],
+    ['k y = { a = 1; b = a; a = 2; b }; g (f (r (k 0 == 1)))','0'],
     ['k y = { a <- return (1); b <- return (a + 1); a <- return (5); return b }\nw <- k 0\ng (f (r (w == 2)))','0'],
     ['k y = { a <- return (1); a <- return (a + 1); return a }; w <- k 0; g (f (r (w == 2)))','0'],
-    ['k y = { n = 1; h q = q + n; n = 10; h 1 }; g (f (r (k 0 == 11)))','0'],
+    ['k y = { n = 1; h q = q + n; n = 10; h 1 }; g (f (r (k 0 == 2)))','0'],
     ['k y = { a = 1; b <- return (a); a = 2; return [a, b] }; w <- k 0; g (f (r (w == [2, 1])))','0'],
     ['k y = { xs = 1 :: xs; length (take 3 xs) }; g (f (r (k 0 == 3)))','0'],
     ['g (f (r (([a, b] -> a) [1, 2] == 1)))','0'],
@@ -758,8 +769,8 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'k y = { x = 1; h = () -> x; x = 5; h [] }; g (f (r (k 0 == 1)))',
-    'k y = { a = 1; b = a; a = 2; b }; g (f (r (k 0 == 1)))',
+    'k y = { x = 1; h = () -> x; x = 5; h [] }; g (f (r (k 0 == 5)))',
+    'k y = { a = 1; b = a; a = 2; b }; g (f (r (k 0 == 2)))',
     'k y = { a <- return (1); b <- return (a + 1); a <- return (5); return b }\nw <- k 0\ng (f (r (w == 6)))',
     'g (f (r (length [1..1000000] == 999999)))',
     'g (f (r (sum [1..20000] == 0)))',
@@ -936,9 +947,10 @@ Deno.test("an env view from an earlier REPL input reaches the bindings it names"
     rejected(i, later("(scope key) 0"));
     rejected(i, later("call 0"));
     if (run(i, 'counter = Mutable 0; bumpC x = set counter 1; scope.bumpC 0; g (f (r (counter + 0 == 1)))') !== "0") throw new Error("followed");
-    // The key as rebound by the later input.
+    // call keeps the key it was written with, which a later input's rebinding
+    // does not change (and the checker cannot tell, so it assumes any).
     run(i, 'key = "bumpC"');
-    if (run(i, later("call 0")) !== "0") throw new Error("rebound key");
+    rejected(i, later("call 0"));
     run(i, 'key = "bumpO"');
     rejected(i, later("call 0"));
     // Through a name a later input bound using the view.
@@ -1036,25 +1048,25 @@ Deno.test("the run reads the file contents the checker saw", () => {
     // One snapshot per run: the checker's read is the one the run used.
     if (i.inputFile(fish) !== text) throw new Error("snapshot");
 });
-// Code reads names when it runs, so the checker re-derives it after a rebinding.
+// A rebinding is a new version: code written before it keeps the one it saw.
 for (const [source, expected] of [
-    ['c n = n * 2; f x = c x; c s = s ++ "?"; f "a"', '"a?"'],
-    ['c s = s ++ "?"; f x = c x; c n = n * 2; f 1', '2'],
-    ['c n = n * 2; f x = c x; c s = s ++ "?"; c n = n + 1; f 1', '2'],
-    ['c n = n * 2; g = x -> c x; c s = s ++ "?"; g "a"', '"a?"'],
-    ['c n = n * 2; f x = c x; c s = s ++ "?"; 1', '1'],
+    ['c n = n * 2; f x = c x; c s = s ++ "?"; f 1', '2'],
+    ['c s = s ++ "?"; f x = c x; c n = n * 2; f "a"', '"a?"'],
+    ['c n = n * 2; f x = c x; c s = s ++ "?"; c n = n + 1; [f 1, c 1]', '[2, 2]'],
+    ['c n = n * 2; g = x -> c x; c s = s ++ "?"; [g 1, c "a"]', '[2, "a?"]'],
+    ['c n = n * 2; f x = c x; g y = f y + 1; c s = s ++ "?"; g 1', '3'],
+    ['c n = n * 2; y = c 1; c s = s ++ "?"; y', '2'],
     ['c n = n * 2; y <- return (c 1); c s = s ++ "?"; y', '2'],
-    ['h = { c n = n * 2; f x = c x; c s = s ++ "?"; f "a" }; h', '"a?"'],
-] as const) Deno.test(`a reader follows a rebound name: ${source}`, () => {
+    ['c n = n * 2; ev 0 = c 0; ev n = od (n - 1); od 0 = 1; od n = ev (n - 1); c s = s ++ "?"; od 3', '0'],
+    ['h = { c n = n * 2; f x = c x; c s = s ++ "?"; f 1 }; h', '2'],
+] as const) Deno.test(`a reader keeps the version it saw: ${source}`, () => {
     if (run(session(), source) !== expected) throw new Error(source);
 });
 for (const source of [
-    'c n = n * 2; f x = c x; c s = s ++ "?"; f 1',
-    'c n = n * 2; f x = c x; g y = f y + 1; c s = s ++ "?"; g 1',
-    'c n = n * 2; y = c 1; c s = s ++ "?"; y',
-    'c n = n * 2; ev 0 = c 0; ev n = od (n - 1); od 0 = 1; od n = ev (n - 1); c s = s ++ "?"; od 3',
-    'h = { c n = n * 2; f x = c x; c s = s ++ "?"; f 1 }; h',
-]) Deno.test(`a reader of a rebound name is checked against it: ${source}`, () => rejected(session(), source));
+    'c n = n * 2; f x = c x; c s = s ++ "?"; f "a"',
+    'c n = n * 2; g = x -> c x; c s = s ++ "?"; g "a"',
+    'h = { c n = n * 2; f x = c x; c s = s ++ "?"; f "a" }; h',
+]) Deno.test(`a reader is checked against the version it saw: ${source}`, () => rejected(session(), source));
 // A deferred typed numeric call reports at the call that supplies the value,
 // or where it was written when its own definition decides it.
 for (const [source, line, column] of [
@@ -1081,27 +1093,24 @@ Deno.test("':' adds one element, mixed or not", () => {
     }
     rejected(session(), '1::2');
 });
-Deno.test("a broken reader of a broken definition reports the original problem", () => {
-    try { run(session(), 'c n = n * 2; a = c 1; b x = a + x; d x = b x; c s = s ++ "?"; d 1'); } catch (error) {
-        const { message, hint } = error as { message: string; hint?: string };
-        if (!message.startsWith("'d' no longer type-checks: cannot append Int and String")) throw error;
-        if (hint !== "'d' reads 'b', which reads 'a', which reads 'c', which was rebound after 'd' was defined") throw new Error(hint);
-        return;
-    }
-    throw new Error("accepted");
-});
-Deno.test("a reader follows a name rebound by a later REPL input or a load", () => {
+Deno.test("a later REPL input or load rebinds a name for what comes after it", () => {
+    // A later input may add clauses to a function earlier inputs use.
+    const repl = session();
+    run(repl, 'describe 0 = "zero"; []');
+    run(repl, 'label x = describe x; []');
+    run(repl, 'describe 1 = "one"; []');
+    if (run(repl, 'describe 1') !== '"one"' || run(repl, 'label 0') !== '"zero"') throw new Error("clauses");
     const i = session();
     run(i, 'c n = n * 2; f x = c x; []');
     run(i, 'c s = s ++ "?"; []');
-    if (run(i, 'f "a"') !== '"a?"') throw new Error("later input");
-    rejected(i, 'f 1');
+    if (run(i, 'f 1') !== '2' || run(i, 'c "a"') !== '"a?"') throw new Error("later input");
+    rejected(i, 'f "a"');
     const j = session();
     j.sourceDir = new URL("./fixtures/", import.meta.url).pathname;
     run(j, 'load "reload"; twice x = double x; []');
     run(j, 'load "reload-text"; []');
-    if (run(j, 'twice "a"') !== '"aa"') throw new Error("load");
-    rejected(j, 'twice 1');
+    if (run(j, 'twice 2') !== '4' || run(j, 'double "a"') !== '"aa"') throw new Error("load");
+    rejected(j, 'twice "a"');
 });
 // A built-in type name on the left declares a typed binding.
 for (const [source, expected] of [
@@ -1166,7 +1175,7 @@ for (const [source, expected] of [
 ] as const) Deno.test(`typed binding: ${source}`, () => {
     if (run(session(), source) !== expected) throw new Error(source);
 });
-for (const source of ['Int x = "a"', 'Int x = 2.5', 'Int8 x = 300', 'Int x = 1; x = "a"', 'Int x = 1; x = 2.5',
+for (const source of ['Int x = "a"', 'Int x = 2.5', 'Int8 x = 300',
     'UInt n = -1', 'UInt n = (-1)', 'Int n = -2.5', 'UInt n = 0 - 1', 'k = 100; UInt8 n = k * 3', 'g (UInt n) = n; g (-1)',
     'g (UInt n) = n; g -1', 'g (UInt n) = n; g - 1', 'g (Int n) = n; g -2.5',
     'g (UInt8 n) = n; k = 1; g -k', 'g (UInt n) = n; k = 1; g (-k)', 'g (UInt n) = n; g (0 - 1)', 'g (UInt8 n) = n; k = 100; g (k * 3)',

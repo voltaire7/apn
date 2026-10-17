@@ -172,7 +172,25 @@ A range pattern `[lo..hi]` matches any integer from `lo` to `hi` inclusive.
 ### Bindings and output
 
 `name = value` is the only binding form; there is no `let`. A binding inside a
-group is scoped to that group. The left side may be a pattern:
+group is scoped to that group. A value never changes once written, so when
+something is computed never changes what it is. A name not visible here is
+defined for its whole scope: code above may use it (functions may call each
+other in any order), and its value may refer to itself (`ones = 1 :: ones`).
+A name already visible, here or in an enclosing scope (the prelude's too), is
+rebound: a new version from that line on, whose right side reads the one
+before (`count = count + 1` is 2 after `count = 1`), while what was written
+before keeps the version it saw:
+
+```apn
+n = 1
+m = n + 1
+n = 10
+print m           # 2
+```
+
+The top level and every block follow this rule, as do updates (`r.x = v`,
+`xs i = v`), more clauses for a function, imports, loads and `use`; a
+rebinding may have another type. The left side may be a pattern:
 `[a, b] = [1, 2]`, a cons pattern `x::xs = [1, 2, 3, 4]` (or `x :: y :: rest`),
 `Some x = optionValue` (parentheses optional, also for an imported
 constructor), a literal (`1 = n` asserts that `n` is 1), or a keyed
@@ -421,8 +439,10 @@ wildcard in patterns. Both sides of `=` are required: `foo =`, `foo = ;`, and
 | `b = { x = 2; x + 1 }` | A lazy value (a block of bindings) |
 | `xs = 1::xs` | A memoized cons cell with deferred head and tail |
 
-More clauses for a function in the same scope extend it, wherever they are
-defined: a clause with a new pattern overloads it, and one with an equivalent
+More clauses for a function in the same scope extend it, as a rebinding: code
+written before them keeps the clauses it saw, so in one program a definition
+that uses a function cannot come between its clauses (an error); a later REPL
+input may add clauses. A clause with a new pattern overloads it, and one with an equivalent
 pattern rebinds that clause in place (`f (Int x) = 1` then `f (Int y) = 2`
 rebinds; parameter names do not matter, and `_` is a name nothing uses).
 `f = Int x -> ...` is the curried spelling of `f (Int x) = ...`: the same
@@ -693,9 +713,9 @@ fallthrough shares argument thunks, preventing duplicate evaluation of an
 already demanded argument. Variant construction defers its fields.
 
 Destructuring definitions immediately perform the pattern match, but bound
-variables remain deferred. Blocks create child scopes. Environments are lexical
-and shared: an unforced binding can observe later rebinding, while a memoized
-value retains its result after rebinding. Only the selected ternary branch runs.
+variables remain deferred. Blocks create child scopes. Environments are
+lexical, and a rebinding never changes what was written before it (see
+[bindings](#bindings-and-output)). Only the selected ternary branch runs.
 
 Record literals retain their existing field-expression evaluation behavior;
 records do not become uniformly lazy. Rendering resolves ordinary data fields
@@ -1055,7 +1075,8 @@ The interactive editor (Enter/Shift+Enter, paste, history, completion) is
 described in [the REPL guide](repl.md).
 
 Separate REPL submissions extend existing function clauses of the same arity,
-as later clauses do anywhere (see "Definitions and actions").
+as later clauses do anywhere (see "Definitions and actions"): code entered
+before keeps the clauses it saw, as in GHCi.
 Numeric literal/type dispatch retains its normal specificity rules. Module
 loading retains its existing definition behavior.
 

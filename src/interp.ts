@@ -201,8 +201,8 @@ export class Interpreter {
             try { this.run(program); } finally { this.runDepth--; }
             // The bundled cast is already installed from this exact source.
             // Reuse its identity when type reexports it.
-            if (file.std === "type" && file.source === typeSource) scope.setLocal("cast", this.preludeBindings.get("cast")!);
-            return [...scope.map.entries()];
+            if (file.std === "type" && file.source === typeSource) this.env.setLocal("cast", this.preludeBindings.get("cast")!);
+            return [...this.env.bindings().entries()];
         } finally {
             this.env = caller;
             this.sourceDir = callerDir;
@@ -229,7 +229,7 @@ export class Interpreter {
         this.env.setLocal("fail", { kind: "native", name: "fail", arity: 1, applied: [] });
         this.run(parse(preludeSource));
         // Bind each operator to its value itself, so evaluation finds the intrinsic.
-        for (const [name, value] of this.env.map) if (name !== "fail") this.preludeBindings.set(name, this.reference(value));
+        for (const [name, value] of this.env.bindings()) if (name !== "fail") this.preludeBindings.set(name, this.reference(value));
         this.run(parse(typeSource));
         this.run(parse(doSource));
         for (const name of ["cast", "do"]) this.preludeBindings.set(name, this.env.get(name)!);
@@ -245,7 +245,8 @@ export class Interpreter {
         if (this.checking && !this.runDepth && !this.dynamicDepth) this.inputFiles.clear();
         const candidate = this.checking && !this.runDepth && !this.dynamicDepth
             ? this.checking.prepare(program, this.sourceDir) : undefined;
-        const saved = candidate ? new Map(this.env.map) : undefined;
+        // A failed run leaves the scope as it was: its definitions and versions.
+        const savedEnv = this.env, root = this.env.root(), saved = candidate ? new Map(root.map) : undefined;
         let succeeded = false;
         this.runDepth++;
         try {
@@ -254,22 +255,23 @@ export class Interpreter {
                 if (tl.t === "type") {
                     // A family of lists counting its elements (Vect n a = [] ->
                     // Vect Z a | a :: Vect k a -> Vect (S k) a) is the length-indexed list.
-                    if (countingFamily(tl.def)) { this.env.setLocal(tl.def.name, { kind: "type", name: "Vect" }); continue; }
+                    // A type is declared for its whole scope, as a new name is.
+                    if (countingFamily(tl.def)) { this.env.root().setLocal(tl.def.name, { kind: "type", name: "Vect" }); continue; }
                     for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) {
-                        const previous = this.env.map.get(name);
+                        const previous = this.scopeBinding(name);
                         if (previous && ((previous.kind === "native" && previous.tag) || previous.kind === "variant") && previous.family?.name !== tl.def.name) {
                             throw new APNError("runtime", `cannot redeclare value constructor ${name}; it belongs to ${previous.family?.name}`);
                         }
                     }
                     const results = new Map(tl.def.variants.flatMap(v => v.result ? [[v.tag, v.result] as [string, Expr]] : []));
                     const family = { name: tl.def.name, parameters: tl.def.parameters ?? [], fields: new Map(tl.def.variants.map(v => [v.tag, v.fields ?? []])), env: new Env(this.env), ...results.size ? { results } : {} };
-                    this.env.setLocal(tl.def.name, { kind: "type", name: tl.def.name, family });
+                    this.env.root().setLocal(tl.def.name, { kind: "type", name: tl.def.name, family });
                     for (const v of tl.def.variants) {
                         if (v.arity === 0) {
                             // Nullary constructors are themselves the value.
-                            this.env.setLocal(v.tag, { kind: "variant", tag: v.tag, v: [], family });
+                            this.env.root().setLocal(v.tag, { kind: "variant", tag: v.tag, v: [], family });
                         } else {
-                            this.env.setLocal(v.tag, {
+                            this.env.root().setLocal(v.tag, {
                                 kind: "native", name: "__constr", arity: v.arity, applied: [], tag: v.tag, family,
                             });
                         }
@@ -290,14 +292,16 @@ export class Interpreter {
                 const value = this.eval(tl.value, tail);
                 this.ranAction = false;
                 last = tl.value.t === "import" ? { kind: "list", v: [] } : this.runStmt(value, tail);
+                this.adoptPublished();
             }
             succeeded = true;
             return last;
         } finally {
             this.runDepth--;
             if (!succeeded && saved) {
-                this.env.map.clear();
-                for (const [name, value] of saved) this.env.map.set(name, value);
+                this.env = savedEnv;
+                root.map.clear();
+                for (const [name, value] of saved) root.map.set(name, value);
             }
             if (candidate && succeeded) {
                 const visible = new Set<string>();
@@ -305,6 +309,32 @@ export class Interpreter {
                 this.checking!.commit(candidate, visible);
             }
         }
+    }
+
+    // Bind names as Haskell's values are bound: a value never changes. A name
+    // not visible here is defined for its whole scope (code above may use it;
+    // its definition may use itself). One visible here is rebound: a new
+    // version from here on, so what was written before keeps the one it saw.
+    private bindNames(bindings: Iterable<[string, Value]>): void {
+        const rebound: [string, Value][] = [];
+        for (const [name, value] of bindings) {
+            if (this.env.get(name) === undefined) this.env.root().setLocal(name, value);
+            else rebound.push([name, value]);
+        }
+        if (!rebound.length) return;
+        const next = new Env(this.env, true);
+        for (const [name, value] of rebound) next.setLocal(name, value);
+        this.env.root().newest = next;
+        this.env = next;
+    }
+    // A scope as an env view sees it: its newest version, and its outer
+    // scopes' newest, so the view stays live.
+    private live(scope: Env): Env {
+        return scope.root().newest ?? scope;
+    }
+    // The binding name has in this scope (any of its versions), if any.
+    private scopeBinding(name: string): Value | undefined {
+        return this.env.bindings().get(name);
     }
 
     evalDef(name: string, clauses: DefClause[]): Value {
@@ -338,7 +368,7 @@ export class Interpreter {
                     } finally { this.env = caller; }
                 });
             scope.setLocal(name, alias);
-            this.env.setLocal(name, alias);
+            this.bindNames([[name, alias]]);
             return alias;
         }
         // A definition of map, >>=, <*> or return defines an instance: it joins
@@ -367,7 +397,7 @@ export class Interpreter {
                     if (clause.params.length !== 1) throw new APNError("runtime", "collection assignment needs one index or field name");
                     const key = this.dataValue(this.eval(this.assignmentKey(clause.params[0])));
                     collection = this.assignItem(collection, key, clause.body);
-                    if (!(collection.kind === "record" && collection.scope)) this.env.setLocal(name, collection);
+                    if (!(collection.kind === "record" && collection.scope)) this.bindNames([[name, collection]]);
                 }
                 return collection;
             }
@@ -377,7 +407,7 @@ export class Interpreter {
             const arity = clauses[0].params.length;
             // More clauses for a function of this scope extend it (an
             // equivalent one rebinds its clause), wherever they are defined.
-            const extended = previous?.kind === "clauseFn" && previous.arity === arity && this.env.map.get(name) === previous;
+            const extended = previous?.kind === "clauseFn" && previous.arity === arity && this.scopeBinding(name) === previous;
             const scope = this.env;
             clauses = mergeClauses(name, extended ? previous.clauses : [], clauses, c => this.clauseHead(c, scope));
             // Capture a shared env containing the binding itself, enabling recursion.
@@ -386,19 +416,19 @@ export class Interpreter {
             // previous meaning still applies to arguments no clause matches.
             // Redefining the clauses in the same scope keeps that fallback.
             const overloaded = !isOperatorName(name) && !MATH_FUNCTIONS.has(name) || previous === undefined ? undefined
-                : previous.kind === "clauseFn" && this.env.map.get(name) === previous ? previous.fallback : previous;
+                : previous.kind === "clauseFn" && this.scopeBinding(name) === previous ? previous.fallback : previous;
             const fn: Value = {
                 kind: "clauseFn", name, clauses, arity, env: child, applied: [], ...overloaded ? { fallback: overloaded } : {},
             };
             child.setLocal(name, fn);
-            this.env.setLocal(name, fn);
+            this.bindNames([[name, fn]]);
             return fn;
         }
         // Value-style def: single clause, no params.
         const value = clauses[0].body;
         if (value.t === "import") {
             const imported = this.defer(() => this.importStandard(value.module, false));
-            this.env.setLocal(name, imported);
+            this.bindNames([[name, imported]]);
             return imported;
         }
         // Lambda bodies become closures (with recursion via shared env), like before.
@@ -406,7 +436,7 @@ export class Interpreter {
             const child = new Env(this.env);
             const clo: Value = { kind: "closure", params: value.params, body: value.body, env: child };
             child.setLocal(name, clo);
-            this.env.setLocal(name, clo);
+            this.bindNames([[name, clo]]);
             return clo;
         }
         // An ACTION body (a block, an application, or a pipe — with or without
@@ -417,14 +447,17 @@ export class Interpreter {
             const child = new Env(this.env);
             const clo: Value = { kind: "closure", params: [], body: value, env: child };
             child.setLocal(name, clo);
-            this.env.setLocal(name, clo);
+            this.bindNames([[name, clo]]);
             return clo;
         }
         // Otherwise it's a lazy value binding: a THUNK. The body is not run at
         // definition time. Forcing memoizes the outer value across aliases and
         // arguments; lazy container components retain their own thunks.
+        // A rebinding's right side reads the version before it (count = count + 1);
+        // a new name's reads itself (ones = 1 :: ones).
         const thunk: Value = { kind: "thunk", body: value, env: this.env, value: undefined };
-        this.env.setLocal(name, thunk);
+        if (this.env.get(name) === undefined) this.env.root().setLocal(name, thunk);
+        else this.bindNames([[name, thunk]]);
         return thunk;
     }
 
@@ -535,19 +568,32 @@ export class Interpreter {
     // text): running the same source again may replace what it published,
     // since its definitions are the same. checked bindings (a load the
     // static check followed) need no guard: it typed what they replace.
-    private publishForeignBindings(scope: Env, bindings: Array<[string, Value]>, origin?: string, checked = false): void {
+    // Bindings an import, load or use publishes into scope, as definitions
+    // there would be (see bindNames): the statement that published them goes
+    // on in the scope they leave (adoptPublished). The scope they leave.
+    private publishForeignBindings(scope: Env, bindings: Array<[string, Value]>, origin?: string, checked = false): Env {
         const pending = new Map<string, Value>();
-        const published = this.publishedBy.get(scope);
+        const published = this.publishedBy.get(scope.root()), own = scope.bindings();
         for (const [key, value] of bindings) {
-            const old = pending.get(key) ?? (this.checking && !this.dynamicDepth ? scope.map.get(key) : scope.get(key));
-            const own = origin !== undefined && old !== undefined && published?.get(key)?.origin === origin && published.get(key)!.value === old;
-            pending.set(key, this.checkedExecution && old && !own && !checked ? this.protectDynamicWrite(old, value, key) : value);
+            const old = pending.get(key) ?? (this.checking && !this.dynamicDepth ? own.get(key) : scope.get(key));
+            const same = origin !== undefined && old !== undefined && published?.get(key)?.origin === origin && published.get(key)!.value === old;
+            pending.set(key, this.checkedExecution && old && !same && !checked ? this.protectDynamicWrite(old, value, key) : value);
         }
-        for (const [key, value] of pending) scope.setLocal(key, value);
-        if (origin === undefined) { for (const [key] of pending) published?.delete(key); return; }
+        const caller = this.env, into = scope;
+        this.env = scope;
+        try { this.bindNames(pending); scope = this.env; } finally { this.env = caller; }
+        if (scope !== into) this.published = { from: into, to: scope };
+        if (origin === undefined) { for (const [key] of pending) published?.delete(key); return scope; }
         const record = published ?? new Map<string, { origin: string; value: Value }>();
         for (const [key, value] of pending) record.set(key, { origin, value });
-        this.publishedBy.set(scope, record);
+        this.publishedBy.set(scope.root(), record);
+        return scope;
+    }
+    // A statement that published bindings goes on in the scope they leave.
+    private published?: { from: Env; to: Env };
+    private adoptPublished(): void {
+        if (this.published?.from === this.env) this.env = this.published.to;
+        this.published = undefined;
     }
     private publishedBy = new WeakMap<Env, Map<string, { origin: string; value: Value }>>();
 
@@ -567,11 +613,12 @@ export class Interpreter {
     }
 
     private environmentValue(scope = this.env, guarded = false): Extract<Value, { kind: "record" }> {
+        const live = (s: Env) => this.live(s);
         return {
             kind: "record", scope, guarded,
             get v() {
                 const names = new Map<string, Value>();
-                for (let current: Env | null = scope; current; current = current.parent) {
+                for (let current: Env | null = live(scope); current; current = current.version ? current.parent : current.parent && live(current.parent)) {
                     for (const [name, value] of current.map) if (!names.has(name)) names.set(name, value);
                 }
                 return [...names.entries()];
@@ -580,7 +627,7 @@ export class Interpreter {
     }
 
     private updateEnvironment(record: Extract<Value, { kind: "record" }>, entries: Array<[string, Value]>): Value {
-        const scope = record.scope!;
+        const scope = this.live(record.scope!);
         const updates = entries.map(([name, value]): [string, Value] => {
             if (!/^[A-Za-z_][A-Za-z0-9_']*$/.test(name) || name === "_" || KEYWORDS.has(name)) throw new APNError("runtime", `invalid binding name '${name}'`);
             const old = scope.get(name);
@@ -692,11 +739,12 @@ export class Interpreter {
         // The result's outer value is evaluated now (x <- return (x + 1) reads the old x).
         const v = b.eager ? this.reference(this.runIO(evaluated)) : b.pattern.p === "as" ? evaluated : this.force(evaluated);
         if ((b.value.t === "setFields" || b.value.t === "setItem") && v.kind === "record" && v.scope) return v;
+        this.adoptPublished();
         const binds = new Map<string, Value>();
         if (!this.matchPattern(b.pattern, v, binds)) {
             throw new Error("Runtime: binding pattern did not match its value");
         }
-        for (const [k, bv] of binds) this.env.setLocal(k, bv);
+        this.bindNames(binds);
         return v;
     }
 
@@ -992,7 +1040,7 @@ export class Interpreter {
                 if (i === start && first) { const result = this.runIO(first); r = s.t === "patDef" ? this.bindResult(s, result) : result; }
                 else if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
                 else if (s.t === "patDef") r = this.evalPatBinding(s);
-                else if (i < e.stmts.length - 1) this.runStmt(this.eval(s));
+                else if (i < e.stmts.length - 1) { this.runStmt(this.eval(s)); this.adoptPublished(); }
                 else {
                     // The last statement is the action whose result the block yields.
                     const last = this.realize(this.eval(s), { kind: "type", name: "IO" });
@@ -1249,7 +1297,7 @@ export class Interpreter {
                                 if (s.t === "patDef" && !(s.eager && s.value.t !== "import" && !(s.update && this.env.get(s.update.name)))) { r = this.evalPatBinding(s); continue; }
                                 if (s.t !== "patDef" && si === e.stmts.length - 1) {
                                     forceResult = true;
-                                    next = new TailCall(s, child);
+                                    next = new TailCall(s, this.env);
                                     break;
                                 }
                                 // A <- binding, or a discarded statement in a monad, makes the
@@ -1259,28 +1307,30 @@ export class Interpreter {
                                 // return and the like, else the value's own (a list, an Option).
                                 // A discarded list is pure: [] is also the unit value.
                                 const value = s.t === "patDef" ? (isLoadCall(s.value) || s.value.t === "import" ? undefined : this.reference(this.eval(s.value))) : this.demand(this.eval(s));
-                                const block = e, start = si;
+                                // The rest of the block runs in the scope as it is here.
+                                const block = e, start = si, here = this.env;
                                 if (!value || value.kind === "io") {
-                                    r = { kind: "io", run: () => this.runDoBlock(block, child, start, value) };
+                                    r = { kind: "io", run: () => this.runDoBlock(block, here, start, value) };
                                     break;
                                 }
                                 if (value.kind === "pending") {
                                     // Undecided, unless the checker found the block's monad.
                                     const target = this.checkedMonad(block);
-                                    r = target ? this.desugarDo(block, child, start, target, value) : { kind: "pending", step: { op: "do", block, env: child, start, first: value } };
+                                    r = target ? this.desugarDo(block, here, start, target, value) : { kind: "pending", step: { op: "do", block, env: here, start, first: value } };
                                     break;
                                 }
                                 if (s.t === "patDef") {
                                     const target = this.monadTypeOf(value);
                                     if (!target) throw new APNError("runtime", `<- runs an action, not a ${value.kind}`, { hint: "bind a value with `=`" });
-                                    r = this.desugarDo(block, child, start, target, value);
+                                    r = this.desugarDo(block, here, start, target, value);
                                     break;
                                 }
                                 if (value.kind === "variant" && value.family && this.familiesOf(">>=").has(value.family)) {
-                                    r = this.desugarDo(block, child, start, this.monadTypeOf(value)!, value);
+                                    r = this.desugarDo(block, here, start, this.monadTypeOf(value)!, value);
                                     break;
                                 }
                                 r = value;
+                                this.adoptPublished();
                             }
                             // Reveal the last value without traversing a returned list.
                             if (!next && r.kind !== "io") r = this.force(r);
@@ -1537,7 +1587,7 @@ export class Interpreter {
         }
         a = this.dataValue(a); b = this.dataValue(b);
         if ((a.kind === "record" && a.scope) || (b.kind === "record" && b.scope)) {
-            return a.kind === "record" && b.kind === "record" && a.scope === b.scope;
+            return a.kind === "record" && b.kind === "record" && !!a.scope && !!b.scope && a.scope.root() === b.scope.root();
         }
         if (this.isList(a) && this.isList(b)) {
             for (;;) {
@@ -2330,13 +2380,13 @@ export class Interpreter {
                         if (other) throw new APNError("runtime", `${withArticle(valueToString(other))} value cannot run in ${withArticle(valueToString(target))} do-block`);
                         continue;
                     }
-                    const next = i + 1, binding = s;
+                    const next = i + 1, binding = s, here = this.env;
                     return this.bind(this.realize(m, target), { kind: "native", name: "<do>", arity: 1, applied: [], invoke: ([x]) => {
-                        const child = new Env(scope);
+                        let child = new Env(here);
                         if (binding.t === "patDef") {
                             const old = this.env;
                             this.env = child;
-                            try { this.bindResult(binding, x); } finally { this.env = old; }
+                            try { this.bindResult(binding, x); child = this.env; } finally { this.env = old; }
                         }
                         return go(child, next);
                     } });
@@ -2355,7 +2405,7 @@ export class Interpreter {
         const v = this.reference(result);
         const binds = new Map<string, Value>();
         if (!this.matchPattern(b.pattern, v, binds)) throw new APNError("runtime", "binding pattern did not match its value");
-        for (const [k, bv] of binds) this.env.setLocal(k, bv);
+        this.bindNames(binds);
         return v;
     }
 
@@ -3384,7 +3434,13 @@ export class Interpreter {
     // so a tail load never retains a JavaScript evaluator stack frame.
     loadFile(pathValue: Value): Value {
         const caller = this.env, callerDir = this.sourceDir;
-        const frames: Array<{ caller: Env; loaded: Env; origin: string; checked: boolean }> = [];
+        // Each file's scope, and its newest version once it has run (a tail
+        // load from a block leaves the block's; the file's is below it).
+        const frames: Array<{ caller: Env; loaded: Env; latest?: Env; origin: string; checked: boolean }> = [];
+        const latest = (env: Env, scope: Env): Env => {
+            for (let e: Env | null = env; e; e = e.parent) if (e.root() === scope) return e;
+            return scope;
+        };
         try {
             for (;;) {
                 checkInterrupt();
@@ -3425,16 +3481,20 @@ export class Interpreter {
                     if (!(step instanceof TailLoad)) throw step;
                     pathValue = step.path;
                     this.env = step.env;
+                    frames[frames.length - 1].latest = latest(step.env, frames[frames.length - 1].loaded);
                     continue;
                 }
+                // Each file's exports are its scope's bindings as its newest
+                // version has them; a file a tail load ran publishes into its loader's.
+                frames[frames.length - 1].latest = latest(this.env, frames[frames.length - 1].loaded);
                 let result: Value = { kind: "record", v: [] };
                 while (frames.length) {
                     checkInterrupt();
-                    const frame = frames.pop()!;
-                    const fields: Array<[string, Value]> = [];
-                    this.publishForeignBindings(frame.caller, [...frame.loaded.map], frame.origin, frame.checked);
-                    for (const [key] of frame.loaded.map) fields.push([key, frame.caller.get(key)!]);
-                    result = { kind: "record", v: fields };
+                    const frame = frames.pop()!, bindings = frame.latest!.bindings();
+                    const published = this.publishForeignBindings(frame.caller, [...bindings], frame.origin, frame.checked);
+                    result = { kind: "record", v: [...bindings.keys()].map((key): [string, Value] => [key, published.get(key)!]) };
+                    const loader = frames[frames.length - 1];
+                    if (loader) loader.latest = latest(published, loader.loaded);
                 }
                 return result;
             }

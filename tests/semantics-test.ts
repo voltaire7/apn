@@ -69,12 +69,15 @@ twice x = { assert (x > 0); x * 2 }
 print (twice 3 + 1)
 `, ["7"]);
 
-example("unforced values see later bindings in their lexical environment", `
+example("a rebinding is a new version: unforced values keep the one they saw", `
 n = 1
 value = n + 1
 n = 10
 print value
-`, ["11"]);
+count = 1
+count = count + 1
+print count
+`, ["2", "2"]);
 
 example("block bindings shadow their parent scope", `
 n = 1

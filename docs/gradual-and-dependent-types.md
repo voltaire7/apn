@@ -22,7 +22,7 @@ performed I/O and mutations of reference contents are not undone.
 known contradictions without requiring every operation to be established.
 
 The checker infers polymorphic functions, propagates application constraints,
-checks structural record fields, constructor patterns, same-scope assignments,
+checks structural record fields, constructor patterns,
 and dependent list lengths. Inner scopes may shadow names with another type.
 Clauses for the same input domain must share a result type; distinct typed
 input domains remain overloads. No `::` declaration is required.

@@ -162,20 +162,13 @@ interface Entry {
     selfInputs?: Ty[];
     selfOpen?: boolean[];
     nonGeneric?: Set<Ty>;
-    // capture: shared by every copy of one binding: the definitions whose
-    // deferred code (a function body, a lambda, a lazy value) reads it, so
-    // see a later rebinding when they run (see rederive).
-    capture?: { users: Set<Definition> };
+    // readers: for a function's clauses bound in this program, the definitions
+    // since that read them (more clauses after one is split; see defineBinding).
+    readers?: Set<string>;
     // definition: the value expression of a value binding (its identity).
     definition?: Expr;
-    // broken: why the definition no longer checks after a name it reads was
-    // rebound; using it is an error.
-    // through: the broken definitions it reads on the way to the rebound name.
-    broken?: Broken;
 }
 export type TypeScope = Map<string, Entry>;
-/** Why a definition no longer checks: the original problem, the rebound name, and the broken readers between. */
-interface Broken { message: string; rebound: string; through: string[] }
 /** A definition, by name and its clauses (a function) or body (a value). */
 interface Definition { name: string; clauses?: { params: Pattern[]; body: Expr }[]; body?: Expr }
 type Scope = TypeScope;
@@ -596,8 +589,9 @@ export function mentionsAny(program: unknown, names: ReadonlySet<string>): boole
 }
 export function copyTypeScope(scope: TypeScope): TypeScope {
     const nodes = new Map<Ty, Ty>(), vars = new Map<Ty, Ty>();
+    // Readers are a program's own: a later input may add clauses (see defineBinding).
     return new Map([...scope].map(([name, entry]) => [name, {
-        ...entry, type: copy(entry.type, vars, undefined, nodes),
+        ...entry, type: copy(entry.type, vars, undefined, nodes), readers: undefined,
         nonGeneric: entry.nonGeneric && new Set([...entry.nonGeneric].map(t => copy(t, vars, undefined, nodes))),
     }]));
 }
@@ -941,16 +935,17 @@ function copy(
 // interfaces; unsupported operations require an explicit Dynamic boundary.
 export function checkTypes(program: TopLevel[], options: CheckOptions = {}): CheckResult {
     const issues: TypeIssue[] = [];
-    // Rebound value indices are dynamic: a lazy type alias can observe a later
-    // binding, so freezing its first literal value would reject valid APN.
-    const writes = new Map<string, number>();
+    // How often each name is bound: a top-level value bound once can keep its
+    // body to run where it is used (see LazyTop). A field assignment may write
+    // a binding through an env view, in place: such a name keeps no facts.
+    const writes = new Map<string, number>(), viewWritten = new Set<string>();
     const note = (name: string) => writes.set(name, (writes.get(name) ?? 0) + 1);
     const scan = (node: unknown): void => {
         if (!node || typeof node !== "object") return;
         const value = node as Record<string, any>;
         if ((value.t === "def" || value.t === "stmDef") && value.clauses?.[0]?.params.length === 0) note(value.name);
         if (value.t === "patDef" && value.pattern?.p === "var") note(value.pattern.name);
-        if (value.t === "setFields") { for (const key of value.entries) note(key); }
+        if (value.t === "setFields") { for (const key of value.entries) { note(key); viewWritten.add(key); } }
         for (const child of Object.values(value)) scan(child);
     };
     scan(program);
@@ -986,7 +981,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
     }
     let requirements: Ty[] = [];
-    // Inside deferred code (see Entry.capture), and the definition being checked.
+    // Inside deferred code, and the definition being checked.
     let deferred = 0, defining: Definition | undefined;
     // The top-level definition being checked (see the operation's within).
     let outermost: Definition | undefined;
@@ -2983,19 +2978,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     firstUnbound = { expr: e, within: locatedExpression ?? checkingExpression, name: e.name, hint: now ? `write \`${now} x\`` : module ? `add \`import "${module}"\` to use \`${e.name}\`` : near ? `did you mean '${near}'?` : undefined };
                 }
                 if (!entry) return unknown();
-                if (deferred && defining && entry.capture && defining.name !== e.name) entry.capture.users.add(defining);
-                if (entry.broken) {
-                    const loc = sourceLocations.get(e), { message, rebound, through } = entry.broken;
-                    const chain = [...through, rebound].map(name => `'${name}'`).join(", which reads ");
-                    const issue: TypeIssue & { broken: Broken } = {
-                        message: `'${e.name}' no longer type-checks: ${message}`,
-                        hint: `'${e.name}' reads ${chain}, which was rebound after '${e.name}' was defined`,
-                        pos: loc?.start ?? 0, len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)), source: loc?.source, file: loc?.file,
-                        // A reader of this definition reports the original problem.
-                        broken: { message, rebound, through: [e.name, ...through] },
-                    };
-                    throw issue;
-                }
+                if (defining && defining.name !== e.name) entry.readers?.add(defining.name);
                 const type = instantiate(entry);
                 return callees.has(e) && trustsShape(entry) ? type : withoutShapes(type);
             }
@@ -3554,25 +3537,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     if (peek(() => definitelyFails(e.pattern, entry, 0, 0), false)) problem("this pattern can never match its value", e, "a binding's pattern must match the value it is given");
                 }
                 if (e.pattern.p === "var") {
-                    const old = scope.get(e.pattern.name);
-                    if (old && !old.inherited && e.value.t !== "setFields" && e.value.t !== "setItem") {
-                        unify(old.type, t, e);
-                    }
                     scope.set(e.pattern.name, {
                         type: t,
-                        index: (writes.get(e.pattern.name) ?? 0) > 1 ? undefined : index(e.value, scope),
-                        boolean: (writes.get(e.pattern.name) ?? 0) > 1 ? undefined : boolean(e.value, scope),
+                        // Each binding is a version of its own: what it is known to
+                        // hold stays true, whatever later rebinds the name.
+                        index: viewWritten.has(e.pattern.name) ? undefined : index(e.value, scope),
+                        boolean: viewWritten.has(e.pattern.name) ? undefined : boolean(e.value, scope),
                         // An eager binding of a cell (counter <- Mutable 0) keeps the cell.
-                        mutable: e.eager && (writes.get(e.pattern.name) ?? 0) <= 1 && e.value.t !== "setFields" && e.value.t !== "setItem"
+                        mutable: e.eager && !viewWritten.has(e.pattern.name) && e.value.t !== "setFields" && e.value.t !== "setItem"
                             ? valueEntry(e.value, scope).mutable : undefined,
                         nonGeneric: captured(scope),
                         bound: e.value,
                         // An eager binding's value is fixed where it runs: never re-derived.
                         definition: e.eager ? undefined : e.value,
-                        capture: carried(old),
-                        ...ran && (writes.get(e.pattern.name) ?? 0) <= 1 ? factsOf(ran) : {},
+                        ...ran && !viewWritten.has(e.pattern.name) ? factsOf(ran) : {},
                     });
-                    rederiveUsers(e.pattern.name, old, scope);
                 } else if (e.pattern.p === "constr" && resolve(scope.get(e.pattern.tag)?.type ?? dynamic).k === "type" ||
                     ["list", "cons", "constr"].includes(e.pattern.p) && patternConverts(e.pattern, scope)) {
                     // A type pattern (Int x = 1, Float y = 1, [UInt8 a,UInt8 b] = ...)
@@ -3978,6 +3957,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // name x binds to a simple local value may be each such value (or its
     // top-level value, where the key is outside it). Unknown when it names a
     // parameter or other binder, reads a cell, or has too many combinations.
+    // Whether the session's programs bind name at the top level more than once.
+    function reboundInSession(name: string): boolean {
+        const programs = options.viewPrograms?.() ?? [];
+        return [...programs.includes(program) ? programs : [...programs, program]].flatMap(topNames).filter(x => x === name).length > 1;
+    }
     function keyStrings(key: Expr, x: Expr, env: Map<string, Known> | undefined, scope: Scope, depth = 0): string[] | undefined {
         if (key.t === "string") return [key.v];
         if (depth > 8) return undefined;
@@ -3985,7 +3969,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         let combinations: Map<string, Known>[] = [new Map(env ?? [])];
         for (const name of mentionedNames(key)) {
             if (env?.has(name)) continue;
-            if (opaque.has(name)) return undefined;
+            // Code written before a rebinding keeps the version it saw, which
+            // this scope no longer tells: such a key is unknown.
+            if (opaque.has(name) || reboundInSession(name)) return undefined;
             const local = values.get(name);
             if (!local) continue;
             const options = new Set<string>();
@@ -4954,20 +4940,29 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // A block: its local definitions, then its last expression.
     function evaluateBlock(e: Extract<Expr, { t: "block" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
-        // Each name a block defines is one local binding for the whole block,
-        // as at runtime: a lazy definition (=) is read when used, so earlier
-        // definitions and closures see a later rebinding, and its value may
-        // refer to itself; an eager one (<-) is evaluated where it stands.
-        const local = new Map(env), slots = new Map<string, { value: () => Known | undefined }>();
+        // As at runtime (bindNames): a name new here is one binding for the
+        // whole block, which earlier definitions may read and its value may
+        // refer to itself; a name already visible is rebound: a new version
+        // from there on, whose value reads the one before. A lazy definition
+        // (=) is read when used; an eager one (<-) is evaluated where it stands.
+        let local = new Map(env);
+        const fresh = new Map<string, { value: () => Known | undefined; bound: boolean }>();
         for (const st of e.stmts) {
             const names = st.t === "patDef" ? patternNames(st.pattern) : st.t === "stmDef" ? [st.name] : [];
-            for (const name of names) if (!slots.has(name)) {
-                const slot = { value: (): Known | undefined => undefined };
-                slots.set(name, slot);
+            for (const name of names) if (!local.has(name) && !scope.has(name)) {
+                const slot = { value: (): Known | undefined => undefined, bound: false };
+                fresh.set(name, slot);
                 // What the binding can hold: any of the block's statements, over its scope.
                 local.set(name, { slot: () => slot.value(), origin: { exprs: e.stmts, env: local } });
             }
         }
+        // Bind name to a value: a new name's slot, or a new version.
+        const bind = (name: string, value: () => Known | undefined) => {
+            const slot = fresh.get(name);
+            if (slot && !slot.bound) { slot.bound = true; slot.value = value; return; }
+            local = new Map(local);
+            local.set(name, { slot: value });
+        };
         // A pattern's names take their parts of one shared value.
         const assign = (pattern: Pattern, whole: () => Known | undefined) => {
             const parts = once(() => {
@@ -4975,35 +4970,37 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 bindKnown(pattern, whole() ?? {}, bound, new Set());
                 return bound;
             });
-            for (const name of patternNames(pattern)) slots.get(name)!.value = () => parts()?.get(name);
+            for (const name of patternNames(pattern)) bind(name, () => parts()?.get(name));
         };
         // A <- binding, or a discarded statement that is an action, makes the
         // rest of the block an action, run where the program runs it.
         const steps = (from: number, running: boolean): Known | undefined => {
             for (let n = from; n < e.stmts.length; n++) {
-                const st = e.stmts[n], last = n === e.stmts.length - 1;
+                const st = e.stmts[n], last = n === e.stmts.length - 1, before = local;
                 if (st.t === "patDef") {
                     if (last || st.update || st.value.t === "setItem" || st.value.t === "setFields") { incomplete = true; return undefined; }
                     if (st.eager) {
                         if (!running) return { action: () => steps(n, true) };
-                        const known = evaluateKnown(st.value, local, scope, depth);
+                        const known = evaluateKnown(st.value, before, scope, depth);
                         // Only IO is followed: a list or Option do-block is not.
                         if (!demand(known)?.action) { incomplete = true; return undefined; }
                         const v = runKnown(known);
                         assign(st.pattern, () => v);
-                    } else assign(st.pattern, once(() => evaluateKnown(st.value, local, scope, depth)));
+                    } else assign(st.pattern, once(() => evaluateKnown(st.value, before, scope, depth)));
                 } else if (st.t === "stmDef") {
                     if (last) { incomplete = true; return undefined; }
                     if (!st.clauses[0].params.length) {
-                        slots.get(st.name)!.value = once(() => evaluateKnown(st.clauses[0].body, local, scope, depth));
+                        bind(st.name, once(() => evaluateKnown(st.clauses[0].body, before, scope, depth)));
                         continue;
                     }
                     const summary: Summary = { scope, clauses: st.clauses.map((c, index) => {
                         const names = c.params.flatMap(patternNames);
                         return { index, params: c.params, body: c.body, refutable: new Set([st.name, ...names.filter((x, i) => names.indexOf(x) !== i)]) };
                     }) };
-                    const fn: Known = { fn: { summary, env: [...local], applied: [] } };
-                    slots.get(st.name)!.value = () => fn;
+                    // A function reads itself, the version it defines.
+                    const fn: Known = { fn: { summary, env: [], applied: [] } };
+                    bind(st.name, () => fn);
+                    fn.fn!.env = [...local];
                 } else if (last) {
                     const v = evaluateKnown(st, local, scope, depth);
                     return running ? runKnown(v) : v;
@@ -5892,9 +5889,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             });
             return;
         }
-        const previous = scope.get(name);
-        defineBinding(name, clauses, scope, location, previous);
-        rederiveUsers(name, previous, scope);
+        defineBinding(name, clauses, scope, location, scope.get(name));
     }
     // A definition's code, inferred as that definition (deferred when lazy).
     function inferDefinition<T>(definition: Definition | undefined, lazy: boolean, run: () => T): T {
@@ -5903,51 +5898,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (lazy) deferred++;
         try { return run(); } finally { defining = outer; outermost = top; if (lazy) deferred--; }
     }
-    // A rebinding keeps the readers of a binding that reads its earlier self
-    // (x = x + 1); a fresh binding starts with none.
-    function carried(previous: Entry | undefined): { users: Set<Definition> } {
-        return { users: new Set(previous?.inherited ? [] : previous?.capture?.users ?? []) };
-    }
-    // Deferred code reads a name when it runs, so after a rebinding it calls
-    // the new definition: check each definition that reads it again, as it
-    // now stands in scope, and so on for those that read it in turn.
-    function rederiveUsers(name: string, previous: Entry | undefined, scope: Scope): void {
-        if (!previous || previous.inherited || !previous.capture?.users.size) return;
-        const current = scope.get(name);
-        if (!current || current === previous || current.type === previous.type) return;
-        for (const user of [...previous.capture.users]) rederive(user, name, scope);
-    }
-    function rederive(user: Definition, rebound: string, scope: Scope): void {
-        const entry = scope.get(user.name);
-        // A reader rebound since, or not visible here, is not this definition.
-        if (!entry || entry.inherited || (user.clauses ? entry.clauses !== user.clauses : entry.definition !== user.body)) return;
-        if (rederiving.has(user)) return;
-        rederiving.add(user);
-        try { rederiveNow(user, entry, rebound, scope); } finally { rederiving.delete(user); }
-    }
-    function rederiveNow(user: Definition, entry: Entry, rebound: string, scope: Scope): void {
-        // A definition that no longer checks is an error only where it is used.
-        // define passes a change on to its own readers; otherwise do it here.
-        try {
-            if (user.clauses) { define(user.name, user.clauses, scope, user.clauses[0].body); return; }
-            // A closure, or an action run at each use, reads the name each
-            // time: it takes the new type. Another value may have been
-            // computed already, so it must fit both.
-            const body = user.body!, t = inferDefinition(user, true, () => infer(body, new Map(scope)));
-            if (["lambda", "patternLambda", "app", "pipe", "block"].includes(body.t)) {
-                scope.set(user.name, { type: t, definition: body, capture: entry.capture, nonGeneric: entry.nonGeneric, bound: entry.bound });
-            } else {
-                unify(entry.type, t, body);
-                if (entry.broken) scope.set(user.name, { ...entry, broken: undefined });
-            }
-        } catch (error) {
-            if (!error || typeof error !== "object" || !("message" in error) || !("pos" in error)) throw error;
-            const cause = (error as { broken?: Broken }).broken;
-            scope.set(user.name, { ...entry, broken: cause ?? { message: (error as TypeIssue).message, rebound, through: [] } });
-        }
-        for (const reader of [...entry.capture?.users ?? []]) rederive(reader, user.name, scope);
-    }
-    const rederiving = new Set<Definition>();
     // A clause's result type, inferred on its own: its head (Int, Option).
     function clauseHead(c: { params: Pattern[]; body: Expr }, scope: Scope, name: string): string | undefined {
         const saved = requirements.length;
@@ -6001,8 +5951,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // an equivalent pattern rebinds its clause when its result type is the
         // same, and overloads it when the result type differs.
         if (clauses[0].params.length) {
-            const extended = previous?.clauses && !previous.inherited && clauses[0].params.length === previous.clauses[0].params.length && !rederiving.size;
+            const extended = previous?.clauses && !previous.inherited && clauses[0].params.length === previous.clauses[0].params.length;
             const earlier = extended ? previous!.clauses! : [];
+            // Clauses that add cases make a new version: a definition between
+            // them that uses the function keeps the clauses before, so its
+            // clauses must be together, as Haskell's are.
+            const known = new Set(earlier.map(c => clauseKey(name, c)));
+            const reader = extended && clauses.some(c => !known.has(clauseKey(name, c))) ? [...previous!.readers ?? []][0] : undefined;
+            if (reader) problem(`the clauses of '${name}' are split by '${reader}', which uses it`, location, `put the clauses of '${name}' together, before '${reader}'`);
             const keys = [...earlier, ...clauses].map(c => clauseKey(name, c));
             const repeated = new Set(keys.filter((k, i) => keys.indexOf(k) !== i));
             const heads = new Map<object, string | undefined>();
@@ -6019,12 +5975,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // A value definition is lazy: it reads its names when first used.
             const t = inferDefinition({ name, body }, true, () => infer(body, ["import", "app", "pipe"].includes(body.t) ? new Map(scope) : scope));
             if (pending) unify(pending, t, location);
-            if (previous && !previous.inherited) {
-                const old = resolve(previous.type), next = resolve(t);
-                if (old.k === "list" && next.k === "list" && !old.contracted) unify(old.element, next.element, location);
-                else unify(previous.type, t, location);
-            }
-            const value = (writes.get(name) ?? 0) > 1 ? {} : valueEntry(body, scope);
+            const value = viewWritten.has(name) ? {} : valueEntry(body, scope);
             // An action (readInput = { ... }) is run where it is used, with that check's inputs.
             const facts: Partial<Entry> = value.action ? { actionBody: { body, scope } } : value;
             // A top-level value touching top-level cells keeps its body instead,
@@ -6041,7 +5992,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 ...lazyTop ? { lazyTop } : facts,
                 nonGeneric: captured(new Map([...scope].filter(([key]) => key !== name))),
                 definition: body,
-                capture: carried(previous),
             });
             return;
         }
@@ -6049,12 +5999,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const nonGeneric = captured(scope);
         const pending = forward.get(name) ?? variable();
         forward.delete(name);
-        // Mutually recursive definitions read it while it is being inferred.
-        const capture = carried(previous);
         // Its clauses' own calls of an overloaded math function may take the
         // previous meaning too (sin (Dual a b) = Dual (sin a) ...).
         const fallback = MATH_FUNCTIONS.has(name) && previous && !previous.recursive ? previous.type : undefined;
-        scope.set(name, { type: fallback ? { k: "overload", choices: [pending, fallback], name } : pending, mono: true, recursive: true, capture });
+        scope.set(name, { type: fallback ? { k: "overload", choices: [pending, fallback], name } : pending, mono: true, recursive: true });
         const groups = new Map<string, Ty>();
         const domain = (t: Ty, seen = new Set<Ty>()): string => {
             t = resolve(t);
@@ -6166,10 +6114,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             unify(pending, alternatives[0], location);
             // The definition's own type keeps its summary and shape; a recursive
             // call may have resolved pending to the call site's function node.
-            scope.set(name, { type, nonGeneric, clauses, capture });
+            scope.set(name, { type, nonGeneric, clauses, readers: new Set() });
         } else {
             if (pending.k === "var" && !pending.link) pending.link = type;
-            scope.set(name, { type, nonGeneric, clauses, capture });
+            scope.set(name, { type, nonGeneric, clauses, readers: new Set() });
         }
     }
     const scope: Scope = new Map(TYPE_NAMES.map((name) => [name, { type: { k: "type", value: atom(name) } }]));

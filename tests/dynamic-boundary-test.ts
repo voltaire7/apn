@@ -42,7 +42,6 @@ for (const source of [
     'x = env',
     'x = Dynamic 1; missing',
     'f x = x == 0 ? 1 : x * x; f (Dynamic 2)',
-    'x = 1; x = Dynamic "bad"',
     'f (Dynamic x) = missing x',
     'Option a = Some a | None; f (Some x) = x == 0 ? 0 : x * x; f (Dynamic (Some "bad"))',
 ]) Deno.test(`Dynamic does not silence unrelated static checks: ${source}`, () => {

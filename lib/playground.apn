@@ -186,22 +186,19 @@ GameMsg =
     | GameClick
     | GameButton Bool
     | GameVisibility browser.Visibility
-# next is updated, never keyboard: others, still lazy, reads keyboard, and
-# would read a rebound one (whose keys hold others itself) and never finish.
 _updateKeyboard isDown key keyboard = {
     others = filter (k -> k != key) keyboard.keys
-    next = keyboard
-    next.keys = isDown ? key :: others : others
+    keyboard.keys = isDown ? key :: others : others
     match key [
-        " " -> { next.space = isDown; next }
-        "Enter" -> { next.enter = isDown; next }
-        "Shift" -> { next.shift = isDown; next }
-        "Backspace" -> { next.backspace = isDown; next }
-        "ArrowUp" -> { next.up = isDown; next }
-        "ArrowDown" -> { next.down = isDown; next }
-        "ArrowLeft" -> { next.left = isDown; next }
-        "ArrowRight" -> { next.right = isDown; next }
-        _ -> next
+        " " -> { keyboard.space = isDown; keyboard }
+        "Enter" -> { keyboard.enter = isDown; keyboard }
+        "Shift" -> { keyboard.shift = isDown; keyboard }
+        "Backspace" -> { keyboard.backspace = isDown; keyboard }
+        "ArrowUp" -> { keyboard.up = isDown; keyboard }
+        "ArrowDown" -> { keyboard.down = isDown; keyboard }
+        "ArrowLeft" -> { keyboard.left = isDown; keyboard }
+        "ArrowRight" -> { keyboard.right = isDown; keyboard }
+        _ -> keyboard
     ]
 }
 _advance updateMemory msg game = {

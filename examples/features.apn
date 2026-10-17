@@ -821,14 +821,21 @@ print (numbers.cube 2)         # => 8; each use loads the file again, replacing 
     load "../lib/number"           # ... does not stop a later load from replacing it
     print (sq 3)                   # => 9
 }
-# Functions read names when they run, so they call a rebound definition;
-# the checker checks later calls against it (cube 2 would be a type error).
+# A value never changes: a rebinding is a new version from there on, and
+# what was written before keeps the one it saw, at the top level as in a block.
 {
     shout s = s ++ "!"
     loud x = shout x
     shout s = s ++ "!!"
-    print (loud "hi")              # => hi!!
+    print [loud "hi", shout "hi"]  # => ["hi!", "hi!!"]
+    count = 1
+    count = count + 1              # the right side reads the version before
+    print count                    # => 2
+    ones = 1 :: ones               # a new name's value may refer to itself
+    print (take 3 ones)            # => [1, 1, 1]
 }
+# A function's clauses stay together where a definition uses it in between
+# (describe 0 = ...; label x = describe x; describe 1 = ... is an error).
 
 # step into the imported halt (an action whose body is exit 0):
 debug $ step 1 halt          # => exit 0
@@ -1405,11 +1412,12 @@ print (onlyOne (vowelOrPair (vowelIfShort (take 1 [0..]))))  # 1
 print (onlyOne (vowelOrPair (vowelIfShort (take (Int (from String "1")) [0..]))))  # 1
 countDown n = n == 0 ? [] : n :: countDown (n - 1)
 print (onlyOne (vowelOrPair (vowelIfShort (drop 299 (countDown 300)))))  # 1
-# A block's closures see a later rebinding; long ranges are cut arithmetically.
+# A closure keeps the version of a name it saw, whatever later rebinds it;
+# long ranges are cut arithmetically.
 latest xs = {
-    limit = 5
-    firsts = () -> take limit xs
     limit = 1
+    firsts = () -> take limit xs
+    limit = 5
     firsts []
 }
 print (onlyOne (vowelOrPair (vowelIfShort (latest [7, 8, 9]))))  # 1

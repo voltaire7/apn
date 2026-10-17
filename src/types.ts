@@ -167,14 +167,37 @@ function rangeText(lo: Numeric, next: Numeric, hi: Numeric | null): string {
     return `[${numberText(lo)}, ${numberText(next)}..${hi === null ? "" : numberText(hi)}]`;
 }
 
-// Environment: a chain of hash maps. Shared mutable object per scope.
+// Environment: a chain of hash maps. Shared mutable object per scope. A
+// version continues its parent's scope: a rebinding starts one, so what was
+// written before it keeps the scope as it was (see Interpreter.bindNames).
 export class Env {
     parent: Env | null;
     map: Map<string, Value>;
+    version: boolean;
+    // A scope's newest version, for env views, which stay live.
+    newest?: Env;
 
-    constructor(parent: Env | null = null) {
+    constructor(parent: Env | null = null, version = false) {
         this.parent = parent;
         this.map = new Map();
+        this.version = version;
+    }
+
+    // The scope a version continues: where new names are defined.
+    root(): Env {
+        let e: Env = this;
+        while (e.version && e.parent) e = e.parent;
+        return e;
+    }
+
+    // The scope's own bindings, each as its latest version has it.
+    bindings(): Map<string, Value> {
+        const out = new Map<string, Value>();
+        for (let e: Env | null = this; e; e = e.parent) {
+            for (const [name, value] of e.map) if (!out.has(name)) out.set(name, value);
+            if (!e.version) break;
+        }
+        return out;
     }
 
     get(name: string): Value | undefined {

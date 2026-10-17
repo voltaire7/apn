@@ -27,7 +27,6 @@ for (
     const [source, message] of [
         ['f (Int x) = x; f "bad"', "cannot use String"],
         ['f 0 = 1; f 1 = "bad"', "cannot use String"],
-        ['x = 1; x = "bad"', "cannot use String"],
         ["f x = x.x; f [y: 2]", "missing field"],
         ["Vect 3 Int [1, 2]", "length mismatch"],
         ["Vect 2 Int [1, 2, 3]", "length mismatch"],
@@ -173,11 +172,12 @@ Deno.test("constant index predicates select a dependent type", () => {
     if (!checkSource(definition + 'Choice 0 "bad"').issues.length) throw new Error("selection ignored");
 });
 Deno.test("rebound indices keep lazy aliases dynamic", () => {
-    const source = "size = 2; V = Vect size Int; size = 3; V [1, 2, 3]";
+    // V keeps the size it was written with.
+    const source = "size = 2; V = Vect size Int; size = 3; V [1, 2]";
     const result = checkSource(source);
-    if (result.issues.length || !result.runtimeChecks) throw new Error(JSON.stringify(result));
+    if (result.issues.length) throw new Error(JSON.stringify(result));
     const i = new Interpreter();
-    if (i.renderString(i.run(parseDocument(source))) !== "[1, 2, 3]") throw new Error("lazy alias changed");
+    if (i.renderString(i.run(parseDocument(source))) !== "[1, 2]") throw new Error("lazy alias changed");
 });
 
 Deno.test('gradual checking accepts list selection and atomic swaps', () => {

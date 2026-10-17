@@ -104,10 +104,12 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
 - **Layout:** strict 4-space indentation across the whole language; newlines
   at the same level end statements, +4 continues them. Lines are at most 99
   characters, in every APN source (lib, examples, docs, test programs).
-- **Bindings:** `name = value` rebinds in scope (`f = x -> ...` is a clause
-  of `f`, like `f x = ...`); records and lists are never
-  mutated in place (updates bind a modified copy). Only `Mutable` cells and
-  `env` views mutate, and only through IO actions.
+- **Bindings:** a value never changes: `name = value` defines a new name for
+  its whole scope or starts a new version of a visible one, which code written
+  before keeps not seeing (`f = x -> ...` is a clause of `f`, like
+  `f x = ...`); records and lists are never mutated in place (updates bind a
+  modified copy). Only `Mutable` cells and `env` views mutate, and only
+  through IO actions.
 - **Purity:** effectful builtins return IO actions and never act when applied;
   only statements, `<-` and running do-blocks run actions (`runIO`, keeping
   recursive actions in constant stack). Operators are prelude functions

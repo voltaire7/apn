@@ -279,16 +279,16 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   success, error, or interruption. Non-tail calls keep the depth guard
   (`STACK_LIMIT`). Tests: `tests/tail-call-test.ts`, `tests/repl-interrupt-pty.py`.
 - `load` rejects explicit extensions before any file access.
-- Late binding in the checker: each binding's `Entry.capture` (shared by
-  its copies, carried over by rebindings) lists the definitions whose
-  deferred code read it (`defining`/`deferred`: function clauses, lambdas,
-  lazy values). `define` and lazy `patDef` call `rederiveUsers` after a
-  rebinding: each reader still bound to the same clauses or `definition`
-  is re-derived in the current scope (closures and actions take the new
-  type, other values must unify with the old). Failures set `Entry.broken`,
-  reported at the next use (a reader broken by reading a broken definition
-  keeps its original problem and adds to `through`); `rederiving` guards cycles. Tests:
-  `tests/default-checking-test.ts`.
+- Versions: `Interpreter.bindNames` defines a name new to the scope in its
+  root (`Env.root`) and gives a rebound one a version (`new Env(env, true)`),
+  which the statement loops (top level, blocks, do-blocks) go on in;
+  `Env.bindings` reads a scope through its versions (module and load
+  exports), and `newest` keeps env views live. An import, load or `use`
+  publishes the same way, and its statement adopts the version
+  (`adoptPublished`). The checker never re-checks a reader: a reader's types
+  are its version's. Its static block evaluation (`evaluateBlock`) and a
+  function's clause extension (`Entry.readers`, one program's own) follow the
+  same rule. Tests: `tests/semantics-test.ts`, `tests/default-checking-test.ts`.
 - A statically checked load (`verifyLoad` ran) publishes without
   `protectDynamicWrite`. For other loads, `publishForeignBindings` records,
   per caller scope, which origin (path plus source text) published each
@@ -565,10 +565,10 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   cleared at each top-level checked run and shared with the runtime
   `readFile`; `readStdin` reads `Interpreter.inputStdin` (all of stdin, once,
   also for the runtime) unless stdin is a terminal. A block gives each
-  name it defines one slot (`Known.slot`, read through `lookup`): lazy
+  name new to it one slot (`Known.slot`, read through `lookup`), and a
+  rebinding a new version of its known values, as at runtime: lazy
   definitions store a memoized thunk (`once`, which reports a value that
-  needs itself as unknown) and eager ones a value, so earlier closures see
-  later rebindings as at runtime.
+  needs itself as unknown) and eager ones a value.
   A recursive self-reference is marked `recursive` with the clause's
   `selfInputs`, and a recursive call strips the lengths of an argument's data
   that its parameter type leaves open (`withoutOpenLengths`), never those in
