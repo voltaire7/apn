@@ -172,7 +172,7 @@ _noKeys = [
     keys: List String []
 ]
 _computer = [
-    mouse: [x: 0, y: 0, down: false, click: false]
+    mouse: [x: 0.0, y: 0.0, down: false, click: false]
     keyboard: _noKeys
     screen: _toScreen 600 600
     time: 0

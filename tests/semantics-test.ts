@@ -465,3 +465,9 @@ print (f [] [])`, ["[0, 1, Int]", "[0, 0, a]"]);
 example("iterating a string passes its characters", `
 "hé" * print
 print (print * "")`, ["'h'", "'é'", "[]"]);
+
+// More clauses are a new version: label keeps the clauses of describe it saw.
+for (const source of [
+    'describe 0 = "zero"\nlabel x = describe x\ndescribe 1 = "one"\nprint (label 1)',
+    'h = {\n    describe 0 = "zero"\n    label x = describe x\n    describe 1 = "one"\n    label 1\n}\nprint h',
+]) failure(`a function keeps the clauses it saw: ${source}`, source, "no clause of 'describe' matches");

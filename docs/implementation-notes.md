@@ -286,9 +286,8 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   exports), and `newest` keeps env views live. An import, load or `use`
   publishes the same way, and its statement adopts the version
   (`adoptPublished`). The checker never re-checks a reader: a reader's types
-  are its version's. Its static block evaluation (`evaluateBlock`) and a
-  function's clause extension (`Entry.readers`, one program's own) follow the
-  same rule. Tests: `tests/semantics-test.ts`, `tests/default-checking-test.ts`.
+  are its version's. Its static block evaluation (`evaluateBlock`) follows
+  the same rule. Tests: `tests/semantics-test.ts`, `tests/default-checking-test.ts`.
 - A statically checked load (`verifyLoad` ran) publishes without
   `protectDynamicWrite`. For other loads, `publishForeignBindings` records,
   per caller scope, which origin (path plus source text) published each
@@ -668,7 +667,10 @@ evaluator source twice in APN). Document subset limits in
 `src/html.ts` (`BrowserApp`) decodes views, applies messages, runs commands
 and lists subscriptions through a `Platform` (deferral, HTTP, file pickers,
 the viewport), so tests drive programs with a fake one;
-`src/browser-runtime.ts` patches the DOM and implements the platform;
+`src/browser-runtime.ts` patches the DOM (writing only the attributes and
+styles that changed, with one listener per event that reads the newest
+handler: rewriting unchanged ones makes Firefox lay the page out again) and
+implements the platform;
 `src/build-html.ts` bundles the interpreter and source (`apn --html`, and
 `apn --site` with `src/editor.html` and its script `src/editor.ts`, whose
 preview runs each program in a sandboxed frame). The editor, the REPL and the

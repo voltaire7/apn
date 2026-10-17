@@ -108,27 +108,32 @@ function patch(parent: Node, dom: Node | undefined, before: HtmlNode | undefined
         if (name === "value") (element as HTMLInputElement).value = "";
         if (name === "checked") (element as HTMLInputElement).checked = false;
     }
+    // Only what changed is written: rewriting an unchanged attribute or style
+    // (an SVG's viewBox every frame) can make a browser lay the page out again.
     for (const [name, value] of Object.entries(after.attributes)) {
-        if (value === false) element.removeAttribute(name); else element.setAttribute(name, value === true ? "" : value);
+        if (old?.attributes[name] !== value) {
+            if (value === false) element.removeAttribute(name); else element.setAttribute(name, value === true ? "" : value);
+        }
+        // What the visitor typed or ticked is the element's, not its attribute's.
         if (name === "value" && (element as HTMLInputElement).value !== String(value)) (element as HTMLInputElement).value = String(value);
         if (name === "checked") (element as HTMLInputElement).checked = value === true;
     }
     for (const name of Object.keys(old?.styles ?? {})) if (!(name in after.styles)) element.style.removeProperty(name);
-    for (const [name, value] of Object.entries(after.styles)) element.style.setProperty(name, value);
-    const listeners = (element as unknown as { apnListeners?: Map<string, EventListener> }).apnListeners ??= new Map();
-    for (const [event, listener] of listeners) if (!(event in after.events)) { element.removeEventListener(event, listener); listeners.delete(event); }
+    for (const [name, value] of Object.entries(after.styles)) if (old?.styles[name] !== value) element.style.setProperty(name, value);
+    // One listener per event, reading the newest handler when it fires.
+    const listeners = (element as unknown as { apnListeners?: Map<string, { listener: EventListener; id: number; prevent: boolean }> }).apnListeners ??= new Map();
+    for (const [event, entry] of listeners) if (!(event in after.events)) { element.removeEventListener(event, entry.listener); listeners.delete(event); }
     for (const [event, id] of Object.entries(after.events)) {
-        const prevent = after.prevented.includes(event);
-        const listener: EventListener = e => {
-            if (prevent) e.preventDefault();
-            try { app.send(app.message(id, event === "input" ? (e.target as HTMLInputElement).value ?? "" : eventInfo(e))); }
+        const prevent = after.prevented.includes(event), entry = listeners.get(event);
+        if (entry) { entry.id = id; entry.prevent = prevent; continue; }
+        const fresh = { id, prevent, listener: (e: Event) => {
+            if (fresh.prevent) e.preventDefault();
+            try { app.send(app.message(fresh.id, event === "input" ? (e.target as HTMLInputElement).value ?? "" : eventInfo(e))); }
             catch (error) { report(error); return; }
             changed();
-        };
-        const previous = listeners.get(event);
-        if (previous) element.removeEventListener(event, previous);
-        element.addEventListener(event, listener);
-        listeners.set(event, listener);
+        } };
+        element.addEventListener(event, fresh.listener);
+        listeners.set(event, fresh);
     }
     after.children.forEach((child, index) => patch(element, element.childNodes[index], old?.children[index], child, inSvg && after.tag !== "foreignObject"));
     while (element.childNodes.length > after.children.length) element.lastChild!.remove();

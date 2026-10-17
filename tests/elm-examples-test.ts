@@ -150,6 +150,10 @@ Deno.test("playground games read the keyboard, mouse and screen", async () => {
     mouse.notify(find(mouse.subscriptions(), "mouse", "mousedown"), 500, 200);
     const circle = mouse.render();
     if (!("tag" in circle) || !("tag" in circle.children[0]) || circle.children[0].attributes.transform !== "translate(100,-100) rotate(0) scale(1)" || circle.children[0].attributes.opacity !== "0.2") throw new Error(JSON.stringify(circle));
+    // A HiDPI screen's pointer is between pixels: positions are Floats.
+    mouse.notify(find(mouse.subscriptions(), "mouse", "mousemove"), 500.5, 200.25);
+    const moved = (mouse.render() as { children: HtmlNode[] }).children[0];
+    if (!("tag" in moved) || moved.attributes.transform !== "translate(100.5,-99.75) rotate(0) scale(1)") throw new Error(JSON.stringify(moved));
 });
 Deno.test("p5 canvases in views draw the model", () => {
     const calls: string[] = [];

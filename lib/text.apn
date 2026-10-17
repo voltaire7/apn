@@ -26,8 +26,13 @@ _splitOn delimiter text = {
     state = foldl step [[], []] (to (List Char) text)
     reverse (from (List Char) (reverse (snd state)) :: fst state)
 }
-joinWith delimiter xs = from (List Char)
-    (concat (intersperse (to (List Char) delimiter) (map (to (List Char)) xs)))
+# Joined as strings, not characters: a string's ++ is one step.
+joinWith delimiter xs = String {
+    match xs [
+        [] -> ""
+        first :: rest -> foldl (joined, x -> joined ++ delimiter ++ x) first rest
+    ]
+}
 replaceAll search replacement text = joinWith replacement (splitOn search text)
 
 # Unicode WhiteSpace plus line terminators (the same set as ECMAScript \s).

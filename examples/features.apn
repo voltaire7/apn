@@ -834,8 +834,12 @@ print (numbers.cube 2)         # => 8; each use loads the file again, replacing 
     ones = 1 :: ones               # a new name's value may refer to itself
     print (take 3 ones)            # => [1, 1, 1]
 }
-# A function's clauses stay together where a definition uses it in between
-# (describe 0 = ...; label x = describe x; describe 1 = ... is an error).
+# More clauses are a new version too: a function written between them keeps
+# the clauses before (label 1 below would match no clause of describe).
+describe0 0 = "zero"
+label0 x = "it is " ++ describe0 x
+describe0 1 = "one"
+print [label0 0, describe0 1]    # => ["it is zero", "one"]
 
 # step into the imported halt (an action whose body is exit 0):
 debug $ step 1 halt          # => exit 0

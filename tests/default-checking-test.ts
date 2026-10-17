@@ -48,9 +48,8 @@ for (const [source, expected] of [
     ['browser = import "browser"\nMsg = Resized browser.Viewport | Other\nResized [width: 1, height: 2]', 'Resized [width: 1, height: 2]'],
     // A constructor pattern on a Dynamic field is checked when it runs.
     ['import "option"\nMsg = More | Got Dynamic\nf msg = match msg [More -> 0, (Got (Ok q)) -> q, (Got (Err _)) -> 1]\nf (Got (Ok 5))', '5'],
-    // Clauses split by code that does not use the function, and a clause
-    // that redefines one, are fine.
-    ['describe 0 = "zero"; other = 5; describe 1 = "one"; describe 1', '"one"'],
+    // More clauses are a new version: label keeps the clauses it saw.
+    ['describe 0 = "zero"; label x = describe x; describe 1 = "one"; [describe 1, label 0]', '["one", "zero"]'],
     // h keeps the c it was written with; a later c is another version.
     ["f 'a' = [0]; f x = [1, 2]; g [a] = a; c = 'a'; h u = g (f c); c = 'b'; h 0", '0'],
     // A rebinding is a new version, of any type: what was written before keeps the old.
@@ -87,9 +86,6 @@ for (const source of [
     'Quote = [quote: String, year: Int]; from Quote [quote: "q", year: 1]',
     'Quote = [quote: String, year: Int]; to Quote [year: "x"]',
     '"ab" * (c -> c + 1)',
-    // A function's clauses are not split by a definition that uses it.
-    'describe 0 = "zero"; label x = describe x; describe 1 = "one"',
-    'h = { describe 0 = "zero"; label x = describe x; describe 1 = "one"; label 1 }',
     // A record its type made keeps its fields.
     'Quote = [quote: String, year: Int]; q = Quote []; q.yaer = 1',
     'Quote = [quote: String, year: Int]; q = Quote []; q "yaer" = 1',

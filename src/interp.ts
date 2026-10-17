@@ -245,6 +245,8 @@ export class Interpreter {
         if (this.checking && !this.runDepth && !this.dynamicDepth) this.inputFiles.clear();
         const candidate = this.checking && !this.runDepth && !this.dynamicDepth
             ? this.checking.prepare(program, this.sourceDir) : undefined;
+        // A check may decide more expressions' monads (see checkedMonad).
+        if (candidate) this.checkedHeads = new WeakMap();
         // A failed run leaves the scope as it was: its definitions and versions.
         const savedEnv = this.env, root = this.env.root(), saved = candidate ? new Map(root.map) : undefined;
         let succeeded = false;
@@ -2207,13 +2209,19 @@ export class Interpreter {
     // A do-block's monad as the checker inferred it (Result for a block whose
     // statements name it), as a type: undefined when it did not, or for IO.
     private checkedMonad(block: Expr): Value | undefined {
-        const at = sourceLocations.get(block);
-        const head = at && this.checking?.resultHeads.get(`${at.file}:${at.start}`);
+        // Looked up once per expression: most have none, and a loop asks often.
+        let head = this.checkedHeads.get(block);
+        if (head === undefined) {
+            const at = sourceLocations.get(block);
+            head = (at && this.checking?.resultHeads.get(`${at.file}:${at.start}`)) || "";
+            this.checkedHeads.set(block, head);
+        }
         if (!head || head === "IO") return undefined;
         if (head === "List") return { kind: "type", name: "List" };
         const type = this.env.get(head), value = type && this.reference(type);
         return value?.kind === "type" && value.family ? value : undefined;
     }
+    private checkedHeads = new WeakMap<Expr, string>();
     clauseHead(clause: DefClause, env: Env): string | undefined {
         return this.checkedHead(clause) ?? headOfDescription(describeType({ kind: "clauseFn", name: "<clause>", clauses: [clause], arity: clause.params.length, env, applied: [] }), clause.params.length);
     }

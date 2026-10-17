@@ -162,9 +162,6 @@ interface Entry {
     selfInputs?: Ty[];
     selfOpen?: boolean[];
     nonGeneric?: Set<Ty>;
-    // readers: for a function's clauses bound in this program, the definitions
-    // since that read them (more clauses after one is split; see defineBinding).
-    readers?: Set<string>;
     // definition: the value expression of a value binding (its identity).
     definition?: Expr;
 }
@@ -589,9 +586,8 @@ export function mentionsAny(program: unknown, names: ReadonlySet<string>): boole
 }
 export function copyTypeScope(scope: TypeScope): TypeScope {
     const nodes = new Map<Ty, Ty>(), vars = new Map<Ty, Ty>();
-    // Readers are a program's own: a later input may add clauses (see defineBinding).
     return new Map([...scope].map(([name, entry]) => [name, {
-        ...entry, type: copy(entry.type, vars, undefined, nodes), readers: undefined,
+        ...entry, type: copy(entry.type, vars, undefined, nodes),
         nonGeneric: entry.nonGeneric && new Set([...entry.nonGeneric].map(t => copy(t, vars, undefined, nodes))),
     }]));
 }
@@ -2978,7 +2974,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     firstUnbound = { expr: e, within: locatedExpression ?? checkingExpression, name: e.name, hint: now ? `write \`${now} x\`` : module ? `add \`import "${module}"\` to use \`${e.name}\`` : near ? `did you mean '${near}'?` : undefined };
                 }
                 if (!entry) return unknown();
-                if (defining && defining.name !== e.name) entry.readers?.add(defining.name);
                 const type = instantiate(entry);
                 return callees.has(e) && trustsShape(entry) ? type : withoutShapes(type);
             }
@@ -5953,12 +5948,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (clauses[0].params.length) {
             const extended = previous?.clauses && !previous.inherited && clauses[0].params.length === previous.clauses[0].params.length;
             const earlier = extended ? previous!.clauses! : [];
-            // Clauses that add cases make a new version: a definition between
-            // them that uses the function keeps the clauses before, so its
-            // clauses must be together, as Haskell's are.
-            const known = new Set(earlier.map(c => clauseKey(name, c)));
-            const reader = extended && clauses.some(c => !known.has(clauseKey(name, c))) ? [...previous!.readers ?? []][0] : undefined;
-            if (reader) problem(`the clauses of '${name}' are split by '${reader}', which uses it`, location, `put the clauses of '${name}' together, before '${reader}'`);
             const keys = [...earlier, ...clauses].map(c => clauseKey(name, c));
             const repeated = new Set(keys.filter((k, i) => keys.indexOf(k) !== i));
             const heads = new Map<object, string | undefined>();
@@ -6114,10 +6103,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             unify(pending, alternatives[0], location);
             // The definition's own type keeps its summary and shape; a recursive
             // call may have resolved pending to the call site's function node.
-            scope.set(name, { type, nonGeneric, clauses, readers: new Set() });
+            scope.set(name, { type, nonGeneric, clauses });
         } else {
             if (pending.k === "var" && !pending.link) pending.link = type;
-            scope.set(name, { type, nonGeneric, clauses, readers: new Set() });
+            scope.set(name, { type, nonGeneric, clauses });
         }
     }
     const scope: Scope = new Map(TYPE_NAMES.map((name) => [name, { type: { k: "type", value: atom(name) } }]));

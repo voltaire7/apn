@@ -112,7 +112,7 @@ rules.
 | `every ms toMsg` (`time`) | the time, a `Posix`, every `ms` milliseconds |
 | `browser.onAnimationFrame toMsg`, `browser.onAnimationFrameDelta toMsg` | each frame: the time, or the milliseconds since the last frame (a `Float`) |
 | `browser.onKeyDown toMsg`, `browser.onKeyUp toMsg` | the key's name (`"ArrowUp"`, `" "`) |
-| `browser.onMouseMove`, `onMouseDown`, `onMouseUp`, `onMouseClick` | the page's x and y |
+| `browser.onMouseMove`, `onMouseDown`, `onMouseUp`, `onMouseClick` | the page's x and y (`Float`s) |
 | `browser.onResize toMsg` | the window's width and height |
 | `browser.onVisibilityChange toMsg` | `Visible` or `Hidden` |
 
@@ -140,7 +140,8 @@ the browser's form submission); `onInput toMessage` passes the field's string.
 `onEvent name handler` (Elm's `on`) and `preventDefaultOn name handler` (which
 also prevents the browser's default action, such as a drop opening the file)
 pass the event as a record: `value` and `checked` (the target's), `key`,
-`pageX`, `pageY`, and `files` (the target's or a drop's, each a `file.File`).
+`pageX` and `pageY` (`Float`s, as Elm's), and `files` (the target's or a
+drop's, each a `file.File`).
 
 `svg = import "svg"` gives SVG elements and attributes, as Elm's `Svg` and
 `Svg.Attributes` (`svg.svg`, `svg.circle`, `svg.rect`, `svg.line`, `svg.path`,

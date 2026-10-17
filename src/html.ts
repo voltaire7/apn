@@ -46,11 +46,15 @@ function variant(i: Interpreter, value: Value): Extract<Value, { kind: "variant"
 }
 const record = (fields: Array<[string, Value]>): Value => ({ kind: "record", v: fields });
 const number = (n: number): Value => Number.isSafeInteger(n) ? mkInt(n) : { kind: "float", v: n };
+// What the browser measures (a frame's delta, a pointer's position) is a Float,
+// as Elm's, even when it happens to be whole: an exact 17 or 512 would make
+// what it feeds exact, which a later 16.7 or 512.5 cannot join.
+const measured = (n: number): Value => ({ kind: "float", v: n });
 export const fileValue = (file: FileInfo): Value => record([["name", mkStr(file.name)], ["size", number(file.size)], ["mime", mkStr(file.mime)], ["url", mkStr(file.url)]]);
 function eventValue(info: EventInfo): Value {
     return record([
         ["value", mkStr(info.value ?? "")], ["checked", { kind: "bool", v: info.checked ?? false }], ["key", mkStr(info.key ?? "")],
-        ["pageX", number(info.pageX ?? 0)], ["pageY", number(info.pageY ?? 0)], ["files", mkList((info.files ?? []).map(fileValue))],
+        ["pageX", measured(info.pageX ?? 0)], ["pageY", measured(info.pageY ?? 0)], ["files", mkList((info.files ?? []).map(fileValue))],
     ]);
 }
 const UNSAFE_TAGS = ["script", "iframe", "object", "embed", "base", "meta", "link", "foreignobject"];
@@ -212,11 +216,8 @@ export class BrowserApp {
     // A subscription's message from what the page saw.
     notify(subscription: Subscription, ...args: (number | string | boolean)[]): void {
         const i = this.interpreter;
-        // A frame's delta is a measured duration: a Float, as Elm's, even when
-        // the browser rounds it to whole milliseconds (an exact 17 would make
-        // the sums it feeds exact fractions, which a later 16.7 cannot join).
-        const delta = subscription.kind === "frame" && subscription.delta;
-        const value = (x: number | string | boolean): Value => typeof x === "number" ? (delta ? { kind: "float", v: x } : number(x))
+        const measures = subscription.kind === "frame" && subscription.delta || subscription.kind === "mouse";
+        const value = (x: number | string | boolean): Value => typeof x === "number" ? (measures ? measured(x) : number(x))
             : typeof x === "string" ? mkStr(x) : { kind: "bool", v: x };
         this.send(args.reduce((f: Value, x) => i.apply(f, value(x)), subscription.toMessage));
     }

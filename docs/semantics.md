@@ -440,9 +440,9 @@ wildcard in patterns. Both sides of `=` are required: `foo =`, `foo = ;`, and
 | `xs = 1::xs` | A memoized cons cell with deferred head and tail |
 
 More clauses for a function in the same scope extend it, as a rebinding: code
-written before them keeps the clauses it saw, so in one program a definition
-that uses a function cannot come between its clauses (an error); a later REPL
-input may add clauses. A clause with a new pattern overloads it, and one with an equivalent
+written before them keeps the clauses it saw (after `describe 0 = "hi"`,
+`label x = describe x` and `describe 1 = "hello"`, `label 1` matches no
+clause). A clause with a new pattern overloads it, and one with an equivalent
 pattern rebinds that clause in place (`f (Int x) = 1` then `f (Int y) = 2`
 rebinds; parameter names do not matter, and `_` is a name nothing uses).
 `f = Int x -> ...` is the curried spelling of `f (Int x) = ...`: the same
