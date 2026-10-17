@@ -41,6 +41,13 @@ action = print "unexpected"
 print 42
 `, ["42"]);
 
+example("an application's value is kept, as any value is", `
+c = Mutable 1
+xs = map (x -> x + c) [0]
+print xs
+set c 5
+print xs
+`, ["[1]", "[1]"]);
 example("an application's plain value is kept, as any value is", `
 c = Mutable 1
 y = abs c

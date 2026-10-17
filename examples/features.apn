@@ -755,7 +755,7 @@ print editable               # => [10, 11, 30]
 # ---------------------------------------------------------
 evaluationValue = 2 + 1
 print evaluationValue       # => 3 (computed when first used, then kept)
-appliedValue = abs (0 - 3)  # an application with a plain value: kept too
+appliedValue = abs (0 - 3)  # an application that is not an action: kept too
 print appliedValue          # => 3
 actionValue = { print "action"; return 4 }  # an IO action: defining it runs nothing
 actionResult <- actionValue # => action (<- runs it and binds its result)

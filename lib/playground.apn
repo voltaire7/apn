@@ -190,14 +190,14 @@ _updateKeyboard isDown key keyboard = {
     others = filter (k -> k != key) keyboard.keys
     keyboard.keys = isDown ? key :: others : others
     match key [
-        " " -> { keyboard.space = isDown; keyboard }
-        "Enter" -> { keyboard.enter = isDown; keyboard }
-        "Shift" -> { keyboard.shift = isDown; keyboard }
-        "Backspace" -> { keyboard.backspace = isDown; keyboard }
-        "ArrowUp" -> { keyboard.up = isDown; keyboard }
-        "ArrowDown" -> { keyboard.down = isDown; keyboard }
-        "ArrowLeft" -> { keyboard.left = isDown; keyboard }
-        "ArrowRight" -> { keyboard.right = isDown; keyboard }
+        " " -> keyboard [space: isDown]
+        "Enter" -> keyboard [enter: isDown]
+        "Shift" -> keyboard [shift: isDown]
+        "Backspace" -> keyboard [backspace: isDown]
+        "ArrowUp" -> keyboard [up: isDown]
+        "ArrowDown" -> keyboard [down: isDown]
+        "ArrowLeft" -> keyboard [left: isDown]
+        "ArrowRight" -> keyboard [right: isDown]
         _ -> keyboard
     ]
 }

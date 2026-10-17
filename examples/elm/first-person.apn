@@ -41,11 +41,11 @@ update msg model = match msg [
 ]
 
 updateKeys isDown key keys = match key [
-    " " -> { keys.space = isDown; keys }
-    "ArrowUp" -> { keys.up = isDown; keys }
-    "ArrowLeft" -> { keys.left = isDown; keys }
-    "ArrowDown" -> { keys.down = isDown; keys }
-    "ArrowRight" -> { keys.right = isDown; keys }
+    " " -> keys [space: isDown]
+    "ArrowUp" -> keys [up: isDown]
+    "ArrowLeft" -> keys [left: isDown]
+    "ArrowDown" -> keys [down: isDown]
+    "ArrowRight" -> keys [right: isDown]
     _ -> keys
 ]
 

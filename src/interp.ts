@@ -72,8 +72,6 @@ export const NATIVES: Array<[string, number]> = [
     ["to", 2], ["from", 2],
 ];
 // The names editors color as built-in functions (the natives, cast and do).
-// Values that hold nothing else (so no action): numbers, strings, characters, Bools.
-const PLAIN_KINDS = new Set(["int", "float", "rational", "complex", "string", "char", "bool"]);
 export const NATIVE_NAMES = new Set(["cast", "do", ...NATIVES.map(([name]) => name)]);
 const ZERO: Value = { kind: "int", v: 0n, typeName: "UInt" };
 
@@ -920,11 +918,12 @@ export class Interpreter {
             const result = this.force(this.eval(v.body, tailLoad));
             // A stateful object (a cell, an allocation, a p5 object) is allocated once and shared.
             if (result.kind === "mutable" || result.kind === "pointer" || result.kind === "record" && result.shared) v.mutableValue = result;
-            // An application yielding a plain value, which can hold no action to
-            // repeat, keeps it as any value is kept (v = 1 + 2) and lets go of
-            // its scope: a game's model holding one (vx = toX keys) would keep
-            // every earlier frame otherwise.
-            else if (v.body.t !== "block" && PLAIN_KINDS.has(result.kind)) { v.mutableValue = result; v.env = undefined; }
+            // An application that is not an action is a value, kept as any value
+            // is (v = 1 + 2), and lets go of its scope; only an action is
+            // evaluated again at each run (bump = set c (c + 1)). A game's model
+            // holding one (velocity = step dt keys person) would otherwise
+            // recompute, and keep, every earlier frame.
+            else if (v.body.t !== "block" && result.kind !== "io" && result.kind !== "pending") { v.mutableValue = result; v.env = undefined; }
             return result;
         } finally {
             this.env = old;
@@ -3140,7 +3139,13 @@ export class Interpreter {
     }
 
     callNative(name: string, argsIn: Value[], tag?: string, perform = false): Value {
-        if (!perform && IO_NATIVES.has(name)) return { kind: "io", result: IO_RESULTS[name], run: () => this.callNative(name, argsIn, tag, true) };
+        // Each run evaluates the expressions written in the call again, as a
+        // do-block's statements are (set c (c + 1) run twice adds 2); a value
+        // passed in (a name, a parameter) is the one it is.
+        if (!perform && IO_NATIVES.has(name)) {
+            const fresh = (v: Value): Value => v.kind === "thunk" && v.env ? { kind: "thunk", body: v.body, env: v.env } : v;
+            return { kind: "io", result: IO_RESULTS[name], run: () => this.callNative(name, argsIn.map(fresh), tag, true) };
+        }
         if (name === "env") { const scope = this.env; return { kind: "io", result: "Record", run: () => this.environmentValue(scope) }; }
         if (name === "assert") {
             const argument = argsIn[0];

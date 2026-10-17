@@ -671,10 +671,12 @@ interrupted.
 All thunks traversed in an alias chain share the resulting outer value. Repeated
 uses of a deferred value, including bare statements, reuse that value:
 `value = 2 + 1` computes 3 once, and so does a definition whose body is an
-application when its value is plain, a number, string, character or Bool
-(`n = abs x`). One yielding anything else (an action, a list, a record) is
-evaluated again at each use, so running it repeats it, reading cells as they
-are then (`bump = set c (c + 1)`). List elements and arguments likewise share
+application that is not an action (`n = abs x`, `xs = map f ys`). One that is
+an action is evaluated again at each use (`bump = set c (c + 1)`), and each run
+of an action evaluates the expressions written in it again, reading cells as
+they are then, as a do-block's statements are: `xs = [set c (c + 1)]` run twice
+(`head xs; head xs`) adds 2. A value passed in (a name, a parameter) is the one
+it is. List elements and arguments likewise share
 demanded results. Values are return, so sharing is never observable except
 through `debug` (which prints the source it is given) and FFI calls, the two
 deliberate escape hatches.

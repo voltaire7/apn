@@ -5,7 +5,7 @@ browser = import "browser"
 
 Msg = | Change String
 
-update (Change newContent) model = { model.content = newContent; model }
+update (Change newContent) model = model [content: newContent]
 
 view model = div [] [
     input [placeholder "Text to reverse", value model.content, onInput Change] []

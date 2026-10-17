@@ -2675,6 +2675,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return convert(f.value, argument.type, e, true);
         }
         if (f.k === "var") {
+            // Given a record literal, the unknown value may be a function or a
+            // record it updates (model [name: n]): decided once its type is known.
+            // (Any other argument keeps a function being defined inferable.)
+            if (e.t === "record") return deferredCall(f, argument);
             const result = variable();
             unify(f, fn(argument.type, result), e);
             return result;
@@ -2832,8 +2836,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     fields.set(key, t.k === "type" ? value ? convert(t.value, value, e) : t.value : value ?? t);
                 }
                 for (const [key, value] of supplied) if (!fields.has(key)) fields.set(key, value);
-                // A record schema's value keeps its fields (see newField).
-                return { k: "record", fields, ...describing(f) ? { closed: true } : {} };
+                // A record schema's value keeps its fields (see newField); an open
+                // record's stays open, keeping the fields it has not seen yet.
+                return { k: "record", fields, ...describing(f) ? { closed: true } : f.open ? { open: true } : {} };
             }
         }
         // Numeric defaults are only replaceable inside container templates.
@@ -6048,8 +6053,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // to be used where the program uses it (see forceLazyTop).
             // (Also one that can write a cell: its effects run where it is used.)
             const writer = topLevelDefinition && programCells.size > 0 && !!(programMutates ?? options.mutation!()) && mayWrite(body, scope).write;
-            const lazyTop: LazyTop | undefined = topLevelDefinition && (touchedTopLevel || writer) && (writes.get(name) ?? 0) <= 1
-                ? { body, scope, action: ["block", "app", "pipe"].includes(body.t), forced: false } : undefined;
+            // A block is an action, run at each use; so is an application or
+            // pipe whose value is one (an action's type), while another is a
+            // value, kept. One whose type is not known yet cannot be followed.
+            const result = resolve(t), applied = ["app", "pipe"].includes(body.t);
+            const lazyTop: LazyTop | undefined = topLevelDefinition && (touchedTopLevel || writer) && (writes.get(name) ?? 0) <= 1 ? {
+                body, scope, forced: false,
+                action: body.t === "block" || applied && (isIO(result) || isPending(result)),
+                invalid: applied && ["var", "operation", "dynamic"].includes(result.k),
+            } : undefined;
             if (lazyTop) lazyTops.add(lazyTop);
             touchedTopLevel = false;
             scope.set(name, {

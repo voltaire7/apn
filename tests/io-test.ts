@@ -38,6 +38,7 @@ for (const [name, source, expected] of [
     ["pure statements in a block stay pure", "f n = { assert (n > 0); n * 2 }\nprint (f 3)", ["6"]],
     ["a <- binding makes a block an action", "f n = { m <- return (n + 1); return (m * 2) }\ny <- f 3\nprint y", ["8"]],
     ["each run of an action repeats it", 'a = { print "run"; return 1 }\nx <- a\ny <- a\nprint (x + y)', ["run", "run", "2"]],
+    ["a stored action reads cells again at each run", 'c = Mutable 0\nxs = [set c (c + 1)]\nhead xs\nhead xs\nprint (c + 0)', ["2"]],
     ["an action from an application repeats too", 'f n = { print n; return n }\na = f 1\nx <- a\ny <- a\nprint (x + y)', ["1", "1", "2"]],
     ["iterating an action runs each in turn", "[1, 2] * n -> print n", ["1", "2"]],
     ["iteration yields the results", "xs <- [1, 2] * n -> return (n * 10)\nprint xs", ["[10, 20]"]],

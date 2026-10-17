@@ -167,6 +167,26 @@ function reachable(root: unknown): number {
     }
     return seen.size;
 }
+// Each frame's velocity (velocity = stepVelocity dt keys person) was a
+// definition run at each use, from the frame before's: after a few hundred
+// frames every update overflowed the stack and the keys stopped working.
+Deno.test("First Person keeps walking for a thousand frames", async () => {
+    const { platform, flush } = fake();
+    const game = run("first-person", platform);
+    await flush();
+    const subscriptions = game.subscriptions();
+    for (const key of ["ArrowUp", "ArrowRight", "ArrowDown", "ArrowLeft"]) {
+        for (let n = 0; n < 250; n++) {
+            game.notify(find(subscriptions, "key", "keydown"), key);
+            game.notify(find(subscriptions, "frame"), 16.7);
+        }
+        game.notify(find(subscriptions, "key", "keyup"), key);
+    }
+    // Each update ran (a failed one throws), and walked back where it began.
+    const shown = game.interpreter.renderString(game.model);
+    const [x, y, z] = /position: \[([^\]]*)\]/.exec(shown)![1].split(", ").map(Number);
+    if (Math.abs(x) > 1e-9 || y !== 2 || Math.abs(z + 10) > 1e-9) throw new Error(shown);
+});
 // A field nobody reads (the keys) once chained every repeat's pending update,
 // an evaluated value kept the scope that made it, and so did a definition
 // (Mario's vx = toX computer.keyboard) its model held.

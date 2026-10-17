@@ -858,8 +858,9 @@ for (const [source, expected] of [
     ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\npick = (v -> v)\nhas "a" m ? ((pick scope) "bumpC") 0 : return []\ng (f (r (other + 0 == 7)))','0'],
     ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\ngetV y = scope\nhas "a" m ? ((getV 0) "bumpC") 0 : return []\ng (f (r (other + 0 == 7)))','0'],
     ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a", 1]]\nvia v = ((Dynamic v) "bumpC") 0\nhas "a" m ? via scope : return []\ng (f (r (other + 0 == 7)))','0'],
-    // A top-level value is computed when first used and kept; a top-level
-    // action (block, application or pipe body) runs at each use.
+    // A top-level value (an application or pipe that is not an action too:
+    // xs = map ... is a list, kept) is computed when first used and kept; a
+    // top-level action (a block, or an application yielding one) runs at each use.
     ['counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 4)))','0'],
     ['counter = Mutable 0\nsnap = counter + 0\nset counter 4\nprint snap\nset counter 9\ng (f (r (snap + 0 == 4)))','0'],
     ['counter = Mutable 0\nsnap = counter + 0\nset counter 4\nh x = snap + x\nset counter 9\ng (f (r (h 0 == 9)))','0'],

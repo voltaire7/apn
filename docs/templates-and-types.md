@@ -236,7 +236,10 @@ v.child = [y: 2]           # replaces the whole child
 ```
 
 Record application remains a separate operation: `[f: (* 2)] [f: 3]` produces
-`[f: 6]`, and `[x: 1] [y: 2]` produces `[x: 1, y: 2]`.
+`[f: 6]`, and `[x: 1] [y: 2]` produces `[x: 1, y: 2]`. So a record of plain
+fields is updated by applying it to the new ones, as Elm's `{ model | name = n }`:
+`update (Name n) model = model [name: n]`. A parameter given a record literal
+may be a function or such a record; the checker decides once its type is known.
 
 ### Computed keys and multiple indices
 
