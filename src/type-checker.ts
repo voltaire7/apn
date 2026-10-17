@@ -2458,6 +2458,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (op === "$") return application(a, { type: b }, e);
         return operation(op, [a, b]);
     }
+    // The record with these fields set: r.f = v, r.[f, g] = [v, w], and
+    // r [f: v, g: w], which is the same update. A field it has converts its new
+    // value as its old one requires; a new one is added unless a record type
+    // made the record. A copy of an open record stays open.
+    function assignFields(rec: Extract<Ty, { k: "record" }>, entries: Array<[string, Ty, Expr]>, e: Expr): Ty {
+        const fields = new Map(rec.fields);
+        for (const [key, incoming, at] of entries) {
+            if (!fields.has(key)) newField(rec, key, e);
+            const previous = fields.get(key), old = previous && resolve(previous);
+            fields.set(key, old && ["atom", "variant", "fn"].includes(old.k) ? convert(old, incoming, at) : incoming);
+        }
+        return { k: "record", fields, open: rec.open, closed: rec.closed };
+    }
     function application(f: Ty, argument: Entry, e: Expr): Ty {
         spend(e);
         f = resolve(f);
@@ -2818,6 +2831,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return field;
                 }
                 return union([...f.fields.values()]);
+            }
+            // A record of values given fields is updated, exactly as by field
+            // assignment; one holding a type is a template.
+            if (a.k === "record" && ![...f.fields.values()].some(field => { const t = resolve(field); return t.k === "type" || describing(t); })) {
+                return assignFields(f, [...a.fields].map(([key, type]) => [key, type, fieldExpr(e, key)]), e);
             }
             // A value not known yet (a parameter, Dynamic, a computed one) is
             // converted at runtime; it is the record the schema describes.
@@ -3240,19 +3258,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (v.k === "list" && v.items && v.items.length !== e.entries.length) {
                     problem("field assignment length mismatch", e);
                 }
-                e.entries.forEach((key, n) => {
-                    if (!fields.has(key)) newField(rec as Extract<Ty, { k: "record" }>, key, e);
-                    const incoming = v.k === "list" ? v.items?.[n] ?? v.element : dynamic;
-                    const previous = fields.get(key), old = previous && resolve(previous);
-                    fields.set(
-                        key,
-                        old && ["atom", "variant", "fn"].includes(old.k)
-                            ? convert(old, incoming, e.value.t === "list" ? e.value.v[n] ?? e.value : e.value)
-                            : incoming,
-                    );
-                });
-                // A copy of an open record stays open: the fields it has not seen yet are kept.
-                let result: Ty = { k: "record", fields, open: rec.open, closed: rec.closed };
+                let result = assignFields(rec, e.entries.map((key, n) => [key, v.k === "list" ? v.items?.[n] ?? v.element : dynamic,
+                    e.value.t === "list" ? e.value.v[n] ?? e.value : e.value]), e);
                 for (let i = parents.length - 1; i >= 0; i--) {
                     const [parent, key, open] = parents[i];
                     result = { k: "record", fields: new Map([...parent, [key, result]]), open };

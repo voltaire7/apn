@@ -45,7 +45,8 @@ for (const [source, expected] of [
     ['take 4 (map Int [0..])', '[0, 1, 2, 3]'],
     ['take 2 ([Int, Int, Int].[1, 2, missing])', '[1, 2]'],
     ['head ([x -> 42].[missing])', '42'],
-    ['([x: (value -> 42)] [x: [missing]]).x', '42'],
+    // A record of values is updated as by field assignment: its function is replaced.
+    ['length ([x: (value -> 42)] [x: [missing]]).x', '1'],
     ['xs = [0, missing]\nxs 0 = 1\nxs 0', '1'],
     ['xs = [0..]\nxs 2 = 99\ntake 4 xs', '[0, 1, 99, 3]'],
     ['[] []', '[]'], ['[].[]', '[]'], ['[Int].[0]', '[0]'], ['[10] 0', '10'],

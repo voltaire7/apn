@@ -406,6 +406,11 @@ the run when the checker knows the record, otherwise when the assignment runs.
 An update's copy keeps the type; a literal copy (`[_: q, extra: 1]`) is an
 ordinary record, open to new fields.
 
+A record of values applied to a record is the same update: `r [f: v, g: w]`
+is `{ r.f = v; r.g = w; r }` in every way, as Elm's `{ r | f = v, g = w }`
+(a record holding a type is a template instead; see
+[templates](templates-and-types.md)).
+
 An empty list `[]` becomes a record on its first field assignment.
 `obj.[x] = [10]` requires a one-element RHS list; `obj.[x] = 10` errors.
 `obj.child.x = 10` and `obj.child.[x, y] = [10, 20]` rebuild nested parent records.

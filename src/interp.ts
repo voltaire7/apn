@@ -709,13 +709,7 @@ export class Interpreter {
         }
         if (collection.kind === "record") {
             if (key.kind !== "string") throw new APNError("runtime", "record assignment needs a string field name");
-            const value = this.demand(this.eval(expression));
-            if (collection.scope) return this.updateEnvironment(collection, [[key.v, value]]);
-            const fields = collection.v.slice();
-            const index = fields.findIndex(([field]) => field === key.v);
-            if (index < 0) fields.push([this.newField(collection, key.v), value]);
-            else fields[index] = [key.v, this.assignSlot(collection.v[index][1], value)];
-            return this.keepType(collection, { kind: "record", v: fields });
+            return this.assignFields(collection, [[key.v, this.demand(this.eval(expression))]]);
         }
         throw new APNError("runtime", "indexed assignment expects an existing list or record");
     }
@@ -1263,18 +1257,8 @@ export class Interpreter {
                                 `${e.entries.length} field${e.entries.length === 1 ? "" : "s"} need ${e.entries.length} value${e.entries.length === 1 ? "" : "s"} (got ${rhs.v.length})`,
                             );
                         }
-                        if (rec.kind === "record" && rec.scope) {
-                            r = this.updateEnvironment(rec, e.entries.map((key, index) => [key, rhs.v[index]]));
-                        } else {
-                            const out = base.map(([k, v]) => [k, v] as [string, Value]);
-                            for (let i = 0; i < e.entries.length; i++) {
-                                const key = e.entries[i];
-                                const idx = out.findIndex(([k]) => k === key);
-                                if (idx === -1) out.push([rec.kind === "record" ? this.newField(rec, key) : key, rhs.v[i]]);
-                                else out[idx] = [e.entries[i], this.assignSlot(base[idx][1], rhs.v[i])];
-                            }
-                            r = this.keepType(rec, { kind: "record", v: out });
-                        }
+                        const values = rhs.v;
+                        r = this.assignFields(rec.kind === "record" ? rec : { kind: "record", v: base }, e.entries.map((key, i) => [key, values[i]]));
                         for (let i = parents.length - 1; i >= 0; i--) {
                             const [parent, key] = parents[i];
                             r = parent.scope
@@ -1544,6 +1528,21 @@ export class Interpreter {
             if (collection.kind === "record") return { kind: "record", v: collection.v.map(([key, field]) => [key, this.defer(() => apply(field))]) };
         }
         throw new APNError("runtime", `array arithmetic '${op}' expects numeric leaves and matching shapes (got ${l.kind} and ${r.kind})`);
+    }
+
+    // The record with these fields set: r.f = v, r.[f, g] = [v, w], and
+    // r [f: v, g: w], which is the same update. A field it has keeps what its
+    // old value requires (a number's type, a variant's family); a new one is
+    // added, unless a record type made the record; an env view is written.
+    private assignFields(rec: Extract<Value, { kind: "record" }>, fields: Array<[string, Value]>): Value {
+        if (rec.scope) return this.updateEnvironment(rec, fields);
+        const out = rec.v.slice();
+        for (const [key, value] of fields) {
+            const index = out.findIndex(([field]) => field === key);
+            if (index < 0) out.push([this.newField(rec, key), value]);
+            else out[index] = [key, this.assignSlot(out[index][1], value)];
+        }
+        return this.keepType(rec, { kind: "record", v: out });
     }
 
     // A record a record type made keeps that type's fields: a new one is an
@@ -1858,6 +1857,9 @@ export class Interpreter {
                     if (this.isTypeValue(f)) this.declaredTypes.set(result, f);
                     return result;
                 }
+                // A record of values given fields is updated, exactly as by field
+                // assignment; one holding a type is a template.
+                if (carg.kind === "record" && !this.holdsType(f)) return this.assignFields(f, carg.v.map(([key, value]) => [key, this.demand(value)]));
                 if (carg.kind === "record") {
                     const supplied = new Set(carg.v.map(([key]) => key));
                     const declared = this.isTypeValue(f);
@@ -2942,6 +2944,23 @@ export class Interpreter {
                 if (!this.belongsToType(field.head, element.head)) return false;
                 type = field.tail; value = element.tail;
             }
+        }
+        return false;
+    }
+
+    // Whether a value holds a type (a template: [x: Int, y: 0], [xs: [Int]]),
+    // told without evaluating anything, so a record of values is never forced
+    // to tell: only what is evaluated, and what a list literal is written with.
+    private holdsType(value: Value, depth = 0): boolean {
+        while ((value.kind === "thunk" || value.kind === "deferred") && value.value) value = value.value;
+        if (value.kind === "type" || value.kind === "functionType") return true;
+        if (depth > 3) return false;
+        if (value.kind === "record") return value.v.some(([, field]) => this.holdsType(field, depth + 1));
+        if (value.kind === "list") return value.v.length > 0 && this.holdsType(value.v[0], depth + 1);
+        if (value.kind === "lazyList") {
+            if (value.value) return this.holdsType(value.value, depth);
+            const first = value.exprs[0], bound = first?.t === "var" ? value.env.get(first.name) : undefined;
+            return bound !== undefined && this.holdsType(bound, depth + 1);
         }
         return false;
     }

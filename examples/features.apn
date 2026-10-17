@@ -311,6 +311,10 @@ vec.[x, y] = vec.[y, x]
 print vec                        # => [x: 2, y: 10, z: 3, w: 99]  swap!
 vec.[x, y] = [7, 8]
 print vec                        # => [x: 7, y: 8, z: 3, w: 99]
+# Applying a record of values to fields is the same update, as an expression:
+# vec [x: 1, y: 2] is { vec.x = 1; vec.y = 2; vec }.
+print (vec [x: 1, y: 2])         # => [x: 1, y: 2, z: 3, w: 99]
+print [vec [z: 0] == { vec.z = 0; vec }]  # => [true]
 
 # block scope: the update shadows obj only INSIDE the { }  (a bare block
 # statement runs eagerly — a 0-arg DEF like  w = { ... } declares a

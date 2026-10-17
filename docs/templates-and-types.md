@@ -235,11 +235,16 @@ v.f = 3                    # stores 3; does not call (* 2)
 v.child = [y: 2]           # replaces the whole child
 ```
 
-Record application remains a separate operation: `[f: (* 2)] [f: 3]` produces
-`[f: 6]`, and `[x: 1] [y: 2]` produces `[x: 1, y: 2]`. So a record of plain
-fields is updated by applying it to the new ones, as Elm's `{ model | name = n }`:
-`update (Name n) model = model [name: n]`. A parameter given a record literal
-may be a function or such a record; the checker decides once its type is known.
+A record holding a type is a template, filled as above. A record of values
+applied to a record is field assignment instead: `r [f: v, g: w]` is
+`{ r.f = v; r.g = w; r }` in every way (a field keeps its number type or
+variant family, a schema's record takes no new field, nothing else is
+evaluated), so `[f: (* 2)] [f: (+ 1)]` is `[f: (+ 1)]`, `[x: 1] [y: 2]` is
+`[x: 1, y: 2]`, and a model is updated as Elm's `{ model | name = n }`:
+`update (Name n) model = model [name: n]`. Whether a record holds a type is
+told from what it was built with, without evaluating its fields. A parameter
+given a record literal may be a function or such a record; the checker decides
+once its type is known.
 
 ### Computed keys and multiple indices
 
