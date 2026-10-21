@@ -738,10 +738,14 @@ function indexText(n: Index): string {
 function argument(type: string): string {
     return /\s/.test(type) && !/^[[(]/.test(type) ? `(${type})` : type;
 }
+// Unresolved types are named a, b, ... in order of appearance, as typeOf names
+// them (an unsolved operation's result, x * 2 of an unknown x, is one too);
+// an applied one is named f, g, ...: f a.
 function text(
     t: Ty,
     active = new Map<Ty, string>(),
     recursive = new Set<Ty>(),
+    names = new Map<Ty, string>(),
 ): string {
     if (active.size > 96) return "a deeply nested type";
     t = resolve(t);
@@ -751,41 +755,51 @@ function text(
     }
     const nested = new Map(active);
     nested.set(t, `rec${active.size}`);
-    const show = (x: Ty) => text(x, nested, recursive);
+    const show = (x: Ty) => text(x, nested, recursive, names);
+    // A function inside another type is parenthesized: (a -> b) -> c, List (a -> b).
+    const operand = (x: Ty) => { const shown = show(x); return resolve(x).k === "fn" ? `(${shown})` : shown; };
+    const name = (x: Ty, letters = "abcdeijklnopqrstuvwxyz") => {
+        if (!names.has(x)) {
+            const used = new Set(names.values());
+            names.set(x, [...letters].find(l => !used.has(l)) ?? `t${names.size}`);
+        }
+        return names.get(x)!;
+    };
     const render = (): string => {
         switch (t.k) {
             case "overload":
             case "union":
-                return t.choices.map(show).join(" | ");
-            case "map": return `HashMap ${show(t.key)} ${show(t.value)}`;
+                return t.choices.map(operand).join(" | ");
+            case "map": return `HashMap ${argument(show(t.key))} ${argument(show(t.value))}`;
             case "intrinsic": return t.name;
             case "operation":
-                return `${t.op}(${t.args.map(show).join(", ")})`;
+                return name(t);
             case "dynamic":
                 return "Dynamic";
             case "var":
-                return "an unresolved type";
+                return name(t);
             case "atom":
                 return t.name;
             case "fn":
-                return `(${show(t.input)} -> ${show(t.output)})`;
+                return `${operand(t.input)} -> ${show(t.output)}`;
             // [Int,Float] is a positional type; a list of any length is List Int.
             case "list":
                 // The empty list's type is written []: IO [], m [].
                 if (t.length && !t.length.terms.size && t.length.constant === 0n) return "[]";
                 return t.length ? `Vect ${argument(indexText(t.length))} ${argument(show(t.element))}` : `List ${argument(show(t.element))}`;
             case "record":
-                return `[${[...t.fields].map(([k, v]) => `${k}: ${show(v)}`).join(", ")}]`;
+                return `[${[...t.fields].map(([k, v]) => `${k}: ${operand(v)}`).join(", ")}]`;
             case "type":
                 return `Type (${show(t.value)})`;
             // An undecided return: m T, for the monad a context will name.
             case "variant":
                 if (isPending(t)) return `m ${argument(show(t.args[0]))}`;
-                return t.name + t.args.map((x) => " " + show(x)).join("");
+                return t.name + t.args.map((x) => " " + argument(show(x))).join("");
             case "apply":
-                return `f ${t.args.map((x, n) => { const held = show(x); return held === "an unresolved type" ? "abcde"[n] ?? "a" : argument(held); }).join(" ")}`;
+                return [resolve(t.head).k === "var" ? name(resolve(t.head), "fghm") : argument(show(t.head)),
+                    ...t.args.map(x => argument(show(x)))].join(" ");
             case "ctor":
-                return t.name + t.args.map((x) => " " + show(x)).join("");
+                return t.name + t.args.map((x) => " " + argument(show(x))).join("");
             default:
                 return "a type constructor";
         }

@@ -323,6 +323,7 @@ print (Vec3 [x: 1])              # => [x: 1.0, y: 0.0, z: 0.0]
 # A value given to it converts losslessly; Type fields take types as values.
 print ([x: 1.1] [10])            # => [x: 10.0]
 # [x: 1] [2.5] and [x: false] [1] are errors
+# [f: (* 2)] [1]               # type error: cannot use Int where a -> b is required
 print ([type: Type] [Int])       # => [type: Int]
 
 # block scope: the update shadows obj only INSIDE the { }  (a bare block
