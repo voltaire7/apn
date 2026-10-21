@@ -1,15 +1,15 @@
 # Soft Body, from https://p5js.org/examples/math-and-physics-soft-body/
 # Make a shape that springs toward the mouse and wobbles as it moves.
-import ["number", "p5"]
+import ["number","p5"]
 
 # Around the center, five nodes, each wobbling at its own frequency (degrees a
 # frame) as the body accelerates; organic is how loosely the curve bends.
 Body = [
-    center: [Float, Float], acceleration: [Float, Float], nodes: List [Float, Float]
+    center: [Float,Float], acceleration: [Float,Float], nodes: List [Float,Float]
     angles: List Float, frequencies: List Float, organic: Float
 ]
 body = Mutable (Body [
-    center: [0.0, 0.0], acceleration: [0.0, 0.0], nodes: [], angles: [], frequencies: []
+    center: [0.0,0.0], acceleration: [0.0,0.0], nodes: [], angles: [], frequencies: []
     organic: 1.0
 ])
 radius = 45
@@ -21,15 +21,15 @@ setup (Sketch p) = {
     p.createCanvas 710 400
     frequencies <- mapM (_ -> p.random 5 12) [1..nodeCount]
     set body (Body [
-        center: [Float (p.width / 2), Float (p.height / 2)], acceleration: [0.0, 0.0]
-        nodes: replicate nodeCount [0.0, 0.0], angles: replicate nodeCount 0.0
+        center: [Float (p.width / 2), Float (p.height / 2)], acceleration: [0.0,0.0]
+        nodes: replicate nodeCount [0.0,0.0], angles: replicate nodeCount 0.0
         frequencies: map Float frequencies, organic: 1.0
     ])
     p.noStroke
 }
 
 draw (Sketch p) = {
-    p.background [0, 50]
+    p.background [0,50]
     drawShape p
     set body (move [Float p.mouseX, Float p.mouseY] body)
 }
@@ -42,7 +42,7 @@ drawShape (Sketch p) = {
     color <- p.lerpColor red yellow body.organic
     p.fill color
     p.beginShape
-    mapM ([x, y] -> p.splineVertex x y) body.nodes
+    mapM ([x,y] -> p.splineVertex x y) body.nodes
     p.call "endShape" [p.CLOSE]
 }
 
@@ -51,14 +51,14 @@ drawShape (Sketch p) = {
 move mouse (Body body) = {
     acceleration = body.acceleration + (mouse - body.center) * springing
     damped = acceleration * damping
-    [ax, ay] = damped
+    [ax,ay] = damped
     angle n = degrees (-90 + 360 * n / nodeCount)
     resting n = body.center + [cos (angle n), sin (angle n)] * radius
     wobble n turn = resting n + [sin (degrees turn), sin (degrees turn)] * damped * 2
     body.center = body.center + acceleration
     body.acceleration = damped
     body.organic = 1 - (abs ax + abs ay) * 0.1
-    body.nodes = map ([n, turn] -> wobble n turn) (zip [0..nodeCount - 1] body.angles)
+    body.nodes = map ([n,turn] -> wobble n turn) (zip [0..nodeCount - 1] body.angles)
     body.angles = body.angles + body.frequencies
     body
 }

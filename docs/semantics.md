@@ -66,36 +66,41 @@ literal: `[0 :: []]` is `[[0]]`, while `[0: []]` is a record.
 
 `::` always adds one element, the mirror of the cons pattern `x::xs`, which binds
 one element. Like a list literal, the result may mix element types:
-`[1, 2]::[3, 4]` is `[[1, 2], 3, 4]` (as `[[1, 2], 3, 4]` is), `1::["a"]` is `[1, "a"]`,
-and `[1]::[[3, 4]]` is `[[1], [3, 4]]`. It never joins lists; that is `++`
-(`[1, 2] ++ [3, 4]` is `[1, 2, 3, 4]`).
+`[1,2]::[3,4]` is `[[1,2],3,4]` (as `[[1,2],3,4]` is), `1::["a"]` is `[1,"a"]`,
+and `[1]::[[3,4]]` is `[[1],[3,4]]`. It never joins lists; that is `++`
+(`[1,2] ++ [3,4]` is `[1,2,3,4]`).
 
 `( )` and `{ }` are interchangeable statement groups. Their value is the last
 statement's value (`(4 * 3)` and `{ 4 * 3 }` are both `12`), and an empty group is
 `[]`. Definitions inside a group are local to it:
 `x = 1; y = { x = 40; x + 2 }` leaves `x` as `1` and `y` as `42`.
 There are no tuples: `(1, 2)` is a syntax error; use a list such as
-`[213, "hello"]` for mixed values.
+`[213,"hello"]` for mixed values.
 
 Spacing is part of the syntax (a parse error otherwise):
 
 - A binding's `=` has one space on each side: `x = 1`, not `x=1` or `x  = 1`.
-- A `,` takes one space after it and none before: `[1, 2, 3, 4]`, not
-  `[1,2]` or `[1 ,2]`. This covers list items and patterns, record fields
-  (`[x: 1, y: 2]`), bare selections (`v.[x, y]`), ranges (`[1, 3..9]`),
-  `match` clause lists, import lists and lambda parameters (`x, y -> x + y`).
+- A `,` follows its item directly. When no item it separates has a space in
+  it (outside string and character literals), it takes nothing after it:
+  `[1,2,3]`, `[0,-1,1/2,v.x]`, `["a b","c"]`, `x,y -> x + y`; otherwise it takes
+  one space: `[1 + 1, 2]`, `[Some 1, None]`, `[x: 1, y: 2]`, `(Int x), y -> x`.
+  The items are a line's in one bracket, or one lambda's parameters, so
+  `[[1,2],[3]]` but `[[1 + 1], [3]]`, and `[1, 2]` or `[1 + 1,2]` is an error.
+  This covers list items and patterns, record fields, bare selections
+  (`v.[x,y]`), ranges (`[1,3..9]`), `match` clause lists, import lists and
+  lambda parameters.
 - A `,` separates two items on one line. A newline already separates items,
-  so a `,` ending a line is an error, as is a trailing one (`[1, 2,]`); a
+  so a `,` ending a line is an error, as is a trailing one (`[1,2,]`); a
   multi-line list or record puts one item per line without commas (or several
-  per line, `1, 2`, separated by commas).
+  per line, `1,2`, separated by commas).
 - Application is juxtaposition with a space, also before a list, a group or a
-  block: `Vector3 [1, 2, 3]`, `func (123)` and `run { x }`, not `Vector3[1, 2, 3]`,
+  block: `Vector3 [1,2,3]`, `func (123)` and `run { x }`, not `Vector3[1,2,3]`,
   `func(123)` or `run{ x }` (a `[`, `(` or `{` directly after a name, literal
-  or closing bracket is an error). Selections keep their dot: `v.[x, y]`,
+  or closing bracket is an error). Selections keep their dot: `v.[x,y]`,
   `v.(key)`, `obj.{ x + 1 }`.
 - A record field is `key: value`, not `key:value`: `[x: 1]`, not `[x:1]`;
   likewise keyed patterns and selections (`[x: a, y: b]`).
-- `( )` and `[ ]` take no space inside (`(123)`, `[1, 2]`); a `{ }` block on one
+- `( )` and `[ ]` take no space inside (`(123)`, `[1,2]`); a `{ }` block on one
   line takes exactly one (`{ 123 }`, not `{123}` or `{ 123  }`). Empty groups
   are `()`, `[]` and `{}`.
 - Across lines, a bracket ending its line (before an optional comment) and a
@@ -107,21 +112,23 @@ Spacing is part of the syntax (a parse error otherwise):
   these, so `{ print 1;print 2 }` and a `;` at a line's end are accepted there.
   It lifts the 99-character line limit too.
 
-Lists print the same way: `print [1, 2, [3]]` shows `[1, 2, [3]]` and records show
-`[x: 1, y: 2]`. `apn --loose` (or the language server's `looseSpacing` option)
+Lists print the same way: `print [1,2,[3]]` shows `[1,2,[3]]` and records show
+`[x: 1, y: 2]`. A list prints its items once its `,` is decided: when an item
+has a space, the list ends, or sixteen items are held, so an infinite one
+streams after its first sixteen (whose spacing it then keeps). `apn --loose` (or the language server's `looseSpacing` option)
 turns every spacing rule off, and lets a definition's `{` start on the next,
 indented line (`func =` then `    {`, with the `}` aligned under the `{`).
 
 ### Functions and conditionals
 
-`f x y = body` and `f = x, y -> body` both define curried functions, so
+`f x y = body` and `f = x,y -> body` both define curried functions, so
 `add 2` is a partial application. A lambda's parameters are patterns
 separated by `, ` (as in Idris); juxtaposition is one pattern, as inside a
 definition's parentheses: `t x -> t` takes one argument and binds its type,
 like `f (t x) = t`, and `f a e -> …` is the flat typed pattern `((f a) e)`, as
 `(Vec n a xs)` is `((Vec n a) xs)`. This holds everywhere, `match` alternatives included.
 Directly inside `[ ]`, a `,` separates the list's items, so a lambda with
-several parameters there is parenthesized: `[(x, y -> x), f]`. A function may be written as several
+several parameters there is parenthesized: `[(x,y -> x), f]`. A function may be written as several
 equations, tried in source order:
 
 ```apn
@@ -153,20 +160,20 @@ are negative numbers rather than sections; write `x -> x - 2` for that.
 
 `*` with a function operand iterates and returns the list of results. A list
 supplies its elements, a string its characters (`"hi" * print`), a record its
-`[key, value]` pairs, and an integer `n` the indexes `0` to `n - 1` (a negative
+`[key,value]` pairs, and an integer `n` the indexes `0` to `n - 1` (a negative
 `n` counts down: `-3 * f` passes `0, -1, -2`).
-Function iteration accepts either operand order: `print * [1, 2, 3]` is equivalent
-to `[1, 2, 3] * print`. Records pass `[key, value]` pairs and integer counts pass
+Function iteration accepts either operand order: `print * [1,2,3]` is equivalent
+to `[1,2,3] * print`. Records pass `[key,value]` pairs and integer counts pass
 indexes. Numeric operands still multiply (including numeric arrays); two
 functions are not composed by `*`—use `\` for composition.
 
 `[a..b]` is an inclusive range whose step follows the direction of the bounds
-(`[5..3]` is `[5, 4, 3]`). `[a, b..c]` uses the step `b - a`; an explicit step
-pointing away from the end produces `[]` (`[0, 1..-100]`). `[a..]` and
-`[a, b..]` are infinite lazy ranges.
-Range expression bounds may now be runtime expressions: `[1..n]`, `[a, b..end]`,
+(`[5..3]` is `[5,4,3]`). `[a,b..c]` uses the step `b - a`; an explicit step
+pointing away from the end produces `[]` (`[0,1..-100]`). `[a..]` and
+`[a,b..]` are infinite lazy ranges.
+Range expression bounds may now be runtime expressions: `[1..n]`, `[a,b..end]`,
 `[start..]`. They must evaluate to real numbers. Existing automatic descending
-steps are preserved, so `[1..0]` is `[1, 0]`; std factorial handles zero separately.
+steps are preserved, so `[1..0]` is `[1,0]`; std factorial handles zero separately.
 A range pattern `[lo..hi]` matches any integer from `lo` to `hi` inclusive.
 
 ### Bindings and output
@@ -191,12 +198,12 @@ print m           # 2
 The top level and every block follow this rule, as do updates (`r.x = v`,
 `xs i = v`), more clauses for a function, imports, loads and `use`; a
 rebinding may have another type. The left side may be a pattern:
-`[a, b] = [1, 2]`, a cons pattern `x::xs = [1, 2, 3, 4]` (or `x :: y :: rest`),
+`[a,b] = [1,2]`, a cons pattern `x::xs = [1,2,3,4]` (or `x :: y :: rest`),
 `Some x = optionValue` (parentheses optional, also for an imported
 constructor), a literal (`1 = n` asserts that `n` is 1), or a keyed
 record pattern `[x: a] = record`. A failed match is an error: before the
 run when the value is known (`1 = 2`, `None = Some 1`), otherwise when the
-binding runs. A bare `[x, y]`
+binding runs. A bare `[x,y]`
 pattern also matches a record, selecting the fields named `x` and `y` (extra
 fields are ignored), in bindings, function parameters, and `match` alternatives. A new capitalized name on the
 left binds a type alias; see [templates and type aliases](templates-and-types.md)
@@ -285,7 +292,7 @@ function named by its symbol:
 (+)                          # the function behind +: (+) 1 2 is 3
 infixr 5 +++                 # a fixity declaration: infixl, infixr or infix, 0..9
 xs +++ ys = xs ++ [0] ++ ys  # an infix definition; (+++) = f binds a function
-[1] +++ [2] +++ [3]          # [1, 0, 2, 0, 3]
+[1] +++ [2] +++ [3]          # [1,0,2,0,3]
 ```
 
 A fixity declaration stands on its own line, anywhere at the top level of the
@@ -329,10 +336,10 @@ recursive tail is needed:
 
 ```text
 x = 1:x
-print (take 5 x)       # [1, 1, 1, 1, 1]
+print (take 5 x)       # [1,1,1,1,1]
 
 fibs = 0 : 1 : zipWith (+) fibs (tail fibs)
-print (take 12 fibs)   # [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89]
+print (take 12 fibs)   # [0,1,1,2,3,5,8,13,21,34,55,89]
 ```
 
 Entering `x` or `fibs` in the REPL streams elements until Ctrl+C. `print` and
@@ -364,7 +371,7 @@ obj = [field: 123, "field": 456, 1: 10, "1": 100]
 | `obj."field"` or `obj "\"field\""` | String containing `"field"`, quotes included | `456` |
 | `obj.1` or `obj "1"` | Numeric-named field `1` | `10` |
 | `obj."1"` or `obj "\"1\""` | String containing `"1"`, quotes included | `100` |
-| `obj 1` | Entry at position 1 | `["\"field\"", 456]` |
+| `obj 1` | Entry at position 1 | `["\"field\"",456]` |
 
 A bare key in a record literal or keyed pattern may be several names, numbers
 and `-`s on one line, up to its `:`, kept as written: `[my value: 123]` and
@@ -381,12 +388,12 @@ raise an error. Numeric field names retain their existing normalized spelling.
 List indexing accepts integers or variants from families with only nullary constructors.
 Variants select by zero-based declaration order. A string argument performs
 [association-list lookup](templates-and-types.md#association-list-lookup):
-`[["0", 42]] "0"` returns `42`; it never coerces `"0"` to positional index zero.
-Ordinary scalar lists such as `[10, 20]` are not association lists and reject string lookup.
+`[["0",42]] "0"` returns `42`; it never coerces `"0"` to positional index zero.
+Ordinary scalar lists such as `[10,20]` are not association lists and reject string lookup.
 HashMap application likewise keeps numeric `0` and string `"0"` distinct keys.
 
 Printing preserves key quotation. Field updates (`obj.field = value`,
-`obj."field" = value`), record cloning, and plucks (`obj.[field, "field"]`)
+`obj."field" = value`), record cloning, and plucks (`obj.[field,"field"]`)
 preserve both identities. On an existing record, `obj "field" = value` updates
 or adds the key string `field`, just like `obj.field = value`. Strings containing
 quotes likewise update the corresponding quoted field. The key may be a string
@@ -414,7 +421,7 @@ see [templates](templates-and-types.md)).
 
 An empty list `[]` becomes a record on its first field assignment.
 `obj.[x] = [10]` requires a one-element RHS list; `obj.[x] = 10` errors.
-`obj.child.x = 10` and `obj.child.[x, y] = [10, 20]` rebuild nested parent records.
+`obj.child.x = 10` and `obj.child.[x,y] = [10,20]` rebuild nested parent records.
 See the [access and assignment reference](templates-and-types.md#access-and-assignment-reference)
 for forms, conversion rules, scoping, and failure behavior.
 
@@ -524,11 +531,11 @@ says so: `(print 1) + 1`, `env.x`, `action ? a : b`. Bind the result first.
 operator. `f x <- ...`, `x <- y <- ...`, and missing right-hand sides are invalid.
 An indented continuation is allowed; opening braces follow the same layout rule
 as definitions: put `{` on the line containing `<-`. It supports the same
-patterns as destructuring (`[a, b] <- action`, `_ <- action`); names are bound
+patterns as destructuring (`[a,b] <- action`, `_ <- action`); names are bound
 after the action and pattern succeed, so `x <- return (x + 1)` reads the previous
 `x`. The result's outer value is evaluated as it is bound, which makes
 `x <- return v` the strict form of `x = v`; only the outer value is:
-`xs <- return [missing, 42]` does not evaluate `missing`.
+`xs <- return [missing,42]` does not evaluate `missing`.
 
 ### Monads and instances
 
@@ -557,7 +564,7 @@ itself (`describe Int = "integer"`), so an instance names its type:
 
 `return` is overloaded on its result type (see "Overloading on the result
 type" below): a context that names Option uses the newest `return` whose
-result is an Option, so `return = Some` and `return x = MkCounter (s -> [x, s])`
+result is an Option, so `return = Some` and `return x = MkCounter (s -> [x,s])`
 each define it for their own type.
 
 `map` and `<*>` follow from `>>=` and `return` when a type defines no
@@ -613,14 +620,14 @@ chained with `>>=`, and its last statement must be a value in the same monad
 
 ```apn
 pairs = List Int {
-    a <- [1, 2]
-    b <- [10, 20]
-    return (a + b)       # [11, 21, 12, 22]
+    a <- [1,2]
+    b <- [10,20]
+    return (a + b)       # [11,21,12,22]
 }
 evens = {
     x <- [1..6]
     guard (x % 2 == 0)   # [] (a throw in a list) when odd: that x yields nothing
-    return x             # [2, 4, 6]
+    return x             # [2,4,6]
 }
 check n = {
     unless (n > 0) (Err "not positive")   # a specific error
@@ -656,10 +663,10 @@ its call wrote it, as `assert` shows its expression (`guard b` names `b`).
 | `throw e` | the monad's failure: `[]` in a list, `None` in an Option, `Err e` in a Result, a failing action in IO (instances: `throw _ = None`) |
 | `empty` | `throw "empty"`: the monad's value holding nothing |
 | `guard c` | `return []` when `c` holds, else `throw "guard failed: c"` (as written): a false guard stops a do-block |
-| `do statements` | the block with those statements: `do [a, b]` is `{ a; b }` |
+| `do statements` | the block with those statements: `do [a,b]` is `{ a; b }` |
 
 `xs * f` iterates: when `f` returns actions it is the single action running
-each in turn (`[1, 2, 3] * x -> print x`), yielding the results. It runs each
+each in turn (`[1,2,3] * x -> print x`), yielding the results. It runs each
 element's action as it reaches it, so `[0..] * print` streams until Ctrl+C.
 
 ### Where laziness ends
@@ -691,7 +698,7 @@ deliberate escape hatches.
 
 - `::` defers both head and tail. List literals defer each element.
 - `head` demands only the first element; `tail` does not demand the discarded
-  head. `head [1, missing]` is `1`.
+  head. `head [1,missing]` is `1`.
 - `take n xs` produces up to `n` elements; `take 0 missing` is `[]`.
   `drop n xs` skips cells without evaluating their heads. Counts must be
   non-negative integers.
@@ -752,7 +759,7 @@ with several clauses shows each as a pattern lambda on its own line:
 A partly applied function shows what is left of it: the clauses its arguments
 match, as a call would choose them, without the matched parameters and with
 the names they bound shown as the arguments. With `g (Int x) y = x + y` and
-`g (Float x) y = 0`, `g 1` prints `y -> 1 + y`; `(a, b -> a + b) 1` prints
+`g (Float x) y = 0`, `g 1` prints `y -> 1 + y`; `(a,b -> a + b) 1` prints
 `b -> 1 + b`. A clause a call could still reach stays (`h x 0 = x` alongside
 adds the line `0 -> 1`). Printing evaluates an argument only as far as
 matching a pattern needs; one not evaluated yet shows as its source.
@@ -790,8 +797,8 @@ complex numbers support equality but not ordering. Integer literal patterns
 use numeric equality, so a pattern `1` also matches `1.0`.
 
 All-exact ranges use exact arithmetic, including fractional bounds and steps:
-`[0, 1/2..2]` yields `[0, 1/2, 1, 3/2, 2]`. A float anywhere in the bounds or
-step promotes the whole range to binary64, including `[0, 1/2.0..2]`.
+`[0,1/2..2]` yields `[0,1/2,1,3/2,2]`. A float anywhere in the bounds or
+step promotes the whole range to binary64, including `[0,1/2.0..2]`.
 
 The numeric API uses APN camelCase names and fixed arities. Unary predicates:
 `isNumber`, `isComplex`, `isReal`, `isRational`, `isInteger`, `isExact`,
@@ -834,7 +841,7 @@ like record field assignment, converting the value to the element's type:
 errors, as `arr = [Int 0]; arr 0 = .2` does. `arr (-1) = 10` updates its final element.
 A single index must evaluate to an integer or a variant from a nullary-only family
 (using zero-based declaration order); a finite list of these indices selects multiple
-slots. `arr [1, 2] = arr [2, 1]` swaps the old values. Multi-index assignment requires
+slots. `arr [1,2] = arr [2,1]` swaps the old values. Multi-index assignment requires
 one replacement per index; duplicate indices use the last value. Negative indices
 require a finite source list. See [slot assignment](templates-and-types.md#slot-assignment).
 Positive updates traverse only as far as the selected cell, leaving unused
@@ -850,8 +857,8 @@ floats, `.1 + .2` yields `0.30000000000000004` under binary floating-point
 arithmetic. An attached numeric field access (`rec.1`) stays record access;
 whitespace allows a float argument (`print .1`). Range dots (`[1..3]`) are unchanged.
 
-Float ranges support finite and infinite forms, including `[0, 0.5..100]` and
-`[0, .5..]`. Each value is calculated from the origin and an index to avoid
+Float ranges support finite and infinite forms, including `[0,0.5..100]` and
+`[0,.5..]`. Each value is calculated from the origin and an index to avoid
 accumulating rounding error. A small endpoint tolerance includes bounds affected
 by floating-point rounding; it is capped at half a step. Integer ranges remain
 exact, while mixed ranges inherit float precision. A floating range that can no
@@ -882,8 +889,8 @@ The checker checks the negated argument as a call would, so `g -1` (or
 the call. A typed parameter (a numeric type, a schema, a contract) given a
 value that depends on an enclosing function's parameter is checked at that
 function's calls, by value, as a direct call would be: with
-`Pt = [x: Float, y: Float]` and `g (Pt p)`, `h x = g x` accepts `h [1, 2]` as
-`g [1, 2]` does, and `h x = g [x, -x]` rejects `h 2` for `[x: UInt, y: UInt]`
+`Pt = [x: Float, y: Float]` and `g (Pt p)`, `h x = g x` accepts `h [1,2]` as
+`g [1,2]` does, and `h x = g [x,-x]` rejects `h 2` for `[x: UInt, y: UInt]`
 but accepts `h 0`. For numbers: `h (-2)` passes `2` to `g`, and `h x = g x` accepts `h 2` and rejects
 `h (-2)` and `h "a"`. Such calls are checked even if `h` is never called: a
 call of `h` inside another, uncalled function (`d y = h 2`) is checked with
@@ -911,7 +918,7 @@ variants. `Float` is flexible floating precision, using binary64 by default.
 `Float32` and `Float64` commit to binary32 and binary64 respectively.
 `Fraction` holds an exact rational, `Complex` any numeric complex value, and
 `ComplexExact` an exact one. Constructors are first-class functions, e.g.
-`map Int [1, 2]`. Constructed values print their type: `Int32 123`.
+`map Int [1,2]`. Constructed values print their type: `Int32 123`.
 
 `UInt` is the natural numbers, with built-in constructors `Z` (`UInt 0`) and
 `S` (`S n` is `n + 1`, converting `n` as `UInt n` does). The patterns `Z` and
@@ -1021,7 +1028,7 @@ and `Int 3 * Int 2` returns `6`, both still typed Int.
 
 ## HashMap
 
-`HashMap [["x", 123]]` constructs from an association list; `HashMap [x: 123]`
+`HashMap [["x",123]]` constructs from an association list; `HashMap [x: 123]`
 constructs from a record. Empty construction is `HashMap []`. Keys may be finite
 numbers, strings, chars, or booleans. Numerically equal keys share an entry
 regardless of exactness or numeric type; distinct strings/chars stay distinct.
@@ -1096,8 +1103,8 @@ loading retains its existing definition behavior.
 
 `x = Mutable 0` allocates a shared cell when first used (an IORef); functions
 taking arguments can create independent cells. A cell holds values of its
-first contents' type (`Mutable [0, 0]` holds pairs); one made from a
-conversion holds that type's values, so `Mutable ((List [Int, Int]) [])`, or a
+first contents' type (`Mutable [0,0]` holds pairs); one made from a
+conversion holds that type's values, so `Mutable ((List [Int,Int]) [])`, or a
 record schema's value (`Mutable (Body [...])`), holds lists of any length where
 the type says `List`. Like a cell, a stateful object a definition makes (a
 [p5](p5.md) object such as `loadImage "a.png"`) is made once, where the
@@ -1168,8 +1175,8 @@ answer <- do [print "calculating", return 42]  # prints, binds 42
 ```
 
 `do statements` is the [block](#blocks-are-do-blocks) with those statements:
-`do [a, b, c]` is `{ a; b; c }` in every way, so `do []` is `{}` (the empty
-list), `do [1, 2]` is 2, and with an action among them it is a do-block
+`do [a,b,c]` is `{ a; b; c }` in every way, so `do []` is `{}` (the empty
+list), `do [1,2]` is 2, and with an action among them it is a do-block
 whose last element must be an action. It accepts computed lists too, and
 processes the spine incrementally. Each run of the action runs the elements
 again; an error stops the sequence.
@@ -1200,8 +1207,8 @@ patterns: `[(x): 2]`, `obj.[(x)]`, and `obj.[(x)] = [3]`. Use `obj "(x)"`
 for direct lookup. Parentheses immediately after a record dot now evaluate an
 expression in the record's scope; they no longer quote a field name.
 
-`enumerate xs` returns a lazy list of `[index, value]` pairs. Indices are exact
-integers starting at zero, so `enumerate [10, 20]` is `[[0, 10], [1, 20]]`. It supports
+`enumerate xs` returns a lazy list of `[index,value]` pairs. Indices are exact
+integers starting at zero, so `enumerate [10,20]` is `[[0,10],[1,20]]`. It supports
 infinite lists, and enumerating an element does not force its value.
 
 ## Record-scoped expressions
@@ -1213,7 +1220,7 @@ lexical scope, including functions such as `sqrt`.
 ```apn
 point = [x: 3, y: 4]
 point.(x + y)                # 7
-point.([x, y])              # [3, 4]
+point.([x,y])              # [3,4]
 point.(x = 10; x + y)        # 14
 point.x                     # 3
 point.{
@@ -1240,8 +1247,8 @@ record-construction evaluation rules still apply.
 
 `record.(expression) = value` is not an assignment target. To update a literal
 field named `(x)`, use `record "(x)" = value` or `record.[(x)] = [value]`.
-List operands retain dotted template application: `[Int, Float].([1] ++ [2])`
-returns `[1, 2.0]`, evaluating the input expression in the surrounding scope.
+List operands retain dotted template application: `[Int,Float].([1] ++ [2])`
+returns `[1,2.0]`, evaluating the input expression in the surrounding scope.
 
 ## Live environment
 
@@ -1268,11 +1275,11 @@ Resource scopes reject environment views as escaping references.
 
 ### Type descriptions
 
-`typeOf [1, 2, 3]` displays `List Int`, a list of any length (`[Int]` is the
+`typeOf [1,2,3]` displays `List Int`, a list of any length (`[Int]` is the
 positional type of exactly one Int); heterogeneous literal lists display their
 known alternatives, for example `List (Int | String)`. A list built with `::` is
-described the same way (`typeOf ([1, 2]::[3, 4])` is `List (List Int | Int)`, as
-for `[[1, 2], 3, 4]`), reading its unevaluated tail without running it. Empty lists
+described the same way (`typeOf ([1,2]::[3,4])` is `List (List Int | Int)`, as
+for `[[1,2],3,4]`), reading its unevaluated tail without running it. Empty lists
 and unresolved lazy computations display `List a`. Integer ranges display
 `List Int`, including infinite ranges, without traversing them. Type errors
 use the same notation.
@@ -1298,7 +1305,7 @@ typed pattern or contract when you need validation.
 
 Where a type is expected, a lambda is read as the function type it spells out,
 as `[Int]` is both a list and a positional type: in a typed pattern
-(`((a -> a) f)`), a constructor field (`MkCounter (s -> [a, s])`), dotted
+(`((a -> a) f)`), a constructor field (`MkCounter (s -> [a,s])`), dotted
 application (`(a -> a).(+ 1)`), `isType`'s first argument, and beside a type in
 `==` or `!=`. Elsewhere it stays a lambda. In the type, a lowercase name bound
 to a type (or to a function, which builds one) is that type; any other is a
@@ -1344,9 +1351,9 @@ Bool and short-circuit: `0 && missing` is false, `1 || missing` is true.
 Truthiness does not change equality or Bool pattern matching: `0 != false`,
 and `(Bool x)` still matches booleans rather than every convertible value.
 
-Type variables preserve relationships: `typeOf (x, y -> x)` displays
-`a -> b -> a`, `typeOf (f, x -> f x)` displays `(a -> b) -> a -> b`, and
-`typeOf (x -> [x, x])` displays `a -> List a`. Names are assigned afresh in
+Type variables preserve relationships: `typeOf (x,y -> x)` displays
+`a -> b -> a`, `typeOf (f,x -> f x)` displays `(a -> b) -> a -> b`, and
+`typeOf (x -> [x,x])` displays `a -> List a`. Names are assigned afresh in
 left-to-right order for each description. Function applications, lexical
 captures, list patterns and generic constructor patterns propagate constraints;
 clauses contribute to one signature. For example, `f (Some x) = x` with
@@ -1367,6 +1374,6 @@ boundaries. `--check` performs the same analysis without executing effects.
 
 Exact exponentiation, integer square-root and GCD loops check the REPL interrupt
 flag. Large integer/rational decimal formatting is split into checked steps.
-Ctrl+C can cancel large powers such as `[1, 2] ^ 100000000` and return to the
+Ctrl+C can cancel large powers such as `[1,2] ^ 100000000` and return to the
 prompt. Cancellation is cooperative: a single host BigInt operation must finish
 before its next check; it is not a hard real-time latency guarantee.

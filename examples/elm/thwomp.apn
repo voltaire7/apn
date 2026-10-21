@@ -2,7 +2,7 @@
 # Thwomp looks at your mouse. What is it up to? Elm textures its block with
 # images from elm-lang.org, which WebGL cannot use from another site, so this
 # stone block's face and sides are drawn into p5 graphics.
-import ["html", "number"]
+import ["html","number"]
 browser = import "browser"
 p5 = import "p5"
 
@@ -12,11 +12,11 @@ init = [[width: 0, height: 0, x: 0, y: 0], browser.getViewport GotViewport]
 
 update msg model = match msg [
     GotViewport viewport -> {
-        model.[width, height] = [viewport.width, viewport.height]
-        [model, browser.none]
+        model.[width,height] = [viewport.width,viewport.height]
+        [model,browser.none]
     }
-    Resized width height -> { model.[width, height] = [width, height]; [model, browser.none] }
-    MouseMoved x y -> { model.[x, y] = [x, y]; [model, browser.none] }
+    Resized width height -> { model.[width,height] = [width,height]; [model,browser.none] }
+    MouseMoved x y -> { model.[x,y] = [x,y]; [model,browser.none] }
 ]
 
 subscriptions _ = browser.batch [browser.onResize Resized, browser.onMouseMove MouseMoved]
@@ -30,7 +30,7 @@ view model = div [style "position" "absolute", style "left" "0", style "top" "0"
 ]
 
 setup p = {
-    p.call "createCanvas" [p.windowWidth, p.windowHeight, p.WEBGL]
+    p.call "createCanvas" [p.windowWidth,p.windowHeight,p.WEBGL]
     drawFace face
     drawSide side
 }
@@ -39,42 +39,42 @@ setup p = {
 draw model p = {
     when (model.width > 0 && (p.width != model.width || p.height != model.height))
         (p.resizeCanvas model.width model.height)
-    [ex, ey, ez] = normalize [0.5 - model.x / model.width, 0.5 - model.y / model.height, 1]
+    [ex,ey,ez] = normalize [0.5 - model.x / model.width, 0.5 - model.y / model.height, 1]
     p.background "white"
     p.perspective (p.PI / 4) (model.width / model.height) 0.01 100
     p.camera (6 * ex) (6 * ey) (6 * ez) 0 0 0 0 1 0
     p.noStroke
-    square p face [0, 0]
-    mapM (square p side) [[90, 0], [180, 0], [270, 0], [0, 90], [0, 270]]
+    square p face [0,0]
+    mapM (square p side) [[90,0],[180,0],[270,0],[0,90],[0,270]]
 }
 
-normalize [x, y, z] = {
+normalize [x,y,z] = {
     length = sqrt (x * x + y * y + z * z)
     [x / length, y / length, z / length]
 }
 
 # A 2×2 face of the block: the front one turned by angleXZ about y, then
 # angleYZ about x, as Elm's rotatedSquare.
-square p texture [angleXZ, angleYZ] = {
+square p texture [angleXZ,angleYZ] = {
     p.push
     p.rotateY (degrees angleXZ)
     p.rotateX (degrees angleYZ)
-    p.call "translate" [0, 0, 1]
+    p.call "translate" [0,0,1]
     p.texture texture
     p.plane 2 2
     p.pop
 }
 
 stone g = {
-    g.background [150, 150, 160]
+    g.background [150,150,160]
     g.noStroke
-    g.fill [120, 120, 132]
-    mapM ([x, y] -> g.circle x y 10) [[14, 14], [114, 14], [14, 114], [114, 114]]
+    g.fill [120,120,132]
+    mapM ([x,y] -> g.circle x y 10) [[14,14],[114,14],[14,114],[114,114]]
 }
 
 drawSide g = {
     stone g
-    g.stroke [110, 110, 120]
+    g.stroke [110,110,120]
     g.strokeWeight 3
     g.line 30 40 60 70
     g.line 60 70 50 100
@@ -83,20 +83,20 @@ drawSide g = {
 # Angry eyes under heavy brows, and a row of teeth.
 drawFace g = {
     stone g
-    g.fill [255, 255, 255]
+    g.fill [255,255,255]
     g.rect 30 40 22 26
     g.rect 76 40 22 26
-    g.fill [0, 0, 0]
+    g.fill [0,0,0]
     g.rect 40 50 8 12
     g.rect 80 50 8 12
-    g.fill [90, 90, 100]
+    g.fill [90,90,100]
     g.quad 24 30 58 40 58 46 24 38
     g.quad 104 30 70 40 70 46 104 38
-    g.fill [255, 255, 255]
+    g.fill [255,255,255]
     g.rect 30 84 68 20
-    g.stroke [90, 90, 100]
+    g.stroke [90,90,100]
     g.strokeWeight 2
-    mapM (x -> g.line x 84 x 104) [47, 64, 81]
+    mapM (x -> g.line x 84 x 104) [47,64,81]
 }
 
 main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]

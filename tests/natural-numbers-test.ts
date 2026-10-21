@@ -25,13 +25,13 @@ for (const [source, expected] of [
     ["plus Z m = m; plus (S k) m = S (plus k m); plus 2 (UInt 3)", "UInt 5"],
     ["fib Z = 0; fib (S Z) = 1; fib (S (S k)) = fib (S k) + fib k; fib 20", "6765"],
     // The checker evaluates them in types.
-    [FACTORIAL + "Vect (factorial 3) Int [1, 2, 3, 4, 5, 6]", "[1, 2, 3, 4, 5, 6]"],
+    [FACTORIAL + "Vect (factorial 3) Int [1,2,3,4,5,6]", "[1,2,3,4,5,6]"],
     // A program's own constructor named Z is its variant.
     ["W = | Z Int; f (Z n) = n; f (Z 3)", "3"],
     // A literal in a typed pattern is a value of that type; a sized integer
     // with a plain one keeps its type in the checker, as at runtime.
-    ["h (UInt 0) = []; h (UInt k) = [k]; [h 0, h 4]", "[[], [4]]"],
-    ["toList (UInt k) = k == 0 ? [] : (k - 1) :: toList (k - 1); toList 3", "[2, 1, 0]"],
+    ["h (UInt 0) = []; h (UInt k) = [k]; [h 0, h 4]", "[[],[4]]"],
+    ["toList (UInt k) = k == 0 ? [] : (k - 1) :: toList (k - 1); toList 3", "[2,1,0]"],
     // A numeric type pattern binds the untyped payload, in the checker as at
     // runtime; S k binds the predecessor, a UInt.
     ["widen (UInt8 x) = x + 300; widen 5", "305"],
@@ -51,7 +51,7 @@ for (const [source, expected] of [
 
 for (const [source, kind, message] of [
     [FACTORIAL + "factorial (-1)", "type", "UInt cannot represent a negative integer"],
-    [FACTORIAL + "Vect (factorial 3) Int [1, 2]", "type", "length mismatch: expected 6, got 2"],
+    [FACTORIAL + "Vect (factorial 3) Int [1,2]", "type", "length mismatch: expected 6, got 2"],
     ["S (-1)", "type", "UInt cannot represent a negative integer"],
     ["h (UInt (-1)) = 1; h 1", "type", "UInt cannot represent a negative integer"],
     ["h (UInt8 300) = 1; h 1", "type", "value out of range for UInt8"],

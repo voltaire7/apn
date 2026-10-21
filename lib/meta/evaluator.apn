@@ -1,5 +1,5 @@
 # Metacircular core. No host eval, parse, toAST, or interpreter callback.
-# Syntax is data: [tag, ...]. Environments are persistent maps of lazy values.
+# Syntax is data: [tag,...]. Environments are persistent maps of lazy values.
 meCons x xs = x :: xs
 meBindings definitions scope = (null definitions
     ? []
@@ -12,8 +12,8 @@ meScope definitions parent = {
 meList scope expressions = (null expressions
     ? []
     : meCons (meEval scope (head expressions)) (meList scope (tail expressions)))
-meClosure parameter body scope = (HashMap ([["__closure", true], ["parameter", parameter]]
-    ++ [["body", body], ["scope", scope]]))
+meClosure parameter body scope = (HashMap ([["__closure",true],["parameter",parameter]]
+    ++ [["body",body],["scope",scope]]))
 meZipTemplate functions values = (null functions
     ? (null values ? [] : fail "list template and input must have the same length")
     : null values

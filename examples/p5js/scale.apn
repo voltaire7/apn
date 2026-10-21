@@ -12,7 +12,7 @@ draw (Sketch p) = {
     # A blue square twice the size.
     p.push
     p.scale 2
-    p.fill [33, 89, 194]
+    p.fill [33,89,194]
     p.square 0 0 200
     p.pop
     # A white square at its own size.
@@ -20,8 +20,8 @@ draw (Sketch p) = {
     p.square 0 0 200
     # A green square, half as wide and three quarters as tall.
     p.push
-    p.call "scale" [0.5, 0.75]
-    p.fill [42, 150, 60]
+    p.call "scale" [0.5,0.75]
+    p.fill [42,150,60]
     p.square 0 0 200
     p.pop
 }

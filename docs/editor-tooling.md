@@ -96,7 +96,7 @@ completion offers only the standard natives. Standard output is reserved for LSP
   current document, and the standard library's exports. Accepting a standard
   name whose module is not imported yet adds the import: into the first
   one-line import, which becomes a list (`import "io"` becomes
-  `import ["io", "sequence"]`), or as `import "sequence"` on the first line,
+  `import ["io","sequence"]`), or as `import "sequence"` on the first line,
   followed by a blank line.
   Document identifiers are lexical suggestions, not validated scope
   resolution. On invalid source, built-in completion remains available.

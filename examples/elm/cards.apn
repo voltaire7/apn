@@ -10,7 +10,7 @@ Msg = Draw | NewCard Card
 init = [[card: Three], browser.none]
 
 cardGenerator = random.uniform Ace
-    [Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King]
+    [Two,Three,Four,Five,Six,Seven,Eight,Nine,Ten,Jack,Queen,King]
 
 update msg model = match msg [
     Draw -> [model, random.generate NewCard cardGenerator]

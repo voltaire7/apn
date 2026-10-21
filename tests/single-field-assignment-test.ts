@@ -8,14 +8,14 @@ for (const [source, expected] of [
     ['obj = [x: []]; obj.[x] = [[10]]; obj', '[x: [10]]'],
     ['obj = [x: []]; obj.x = [10]; obj', '[x: [10]]'],
     ['obj = [x: 1]; obj.[] = []; obj', '[x: 1]'],
-    ['obj = [x: 1, y: 2]; obj.[x, y] = obj.[y, x]; obj', '[x: 2, y: 1]'],
+    ['obj = [x: 1, y: 2]; obj.[x,y] = obj.[y,x]; obj', '[x: 2, y: 1]'],
 ] as const) Deno.test(`field assignment shape: ${source}`, () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(source)));
     if (actual !== expected) throw new Error(actual);
 });
 
-for (const rhs of ['10', '[]', '[10, 20]']) Deno.test(`invalid single pluck preserves record: ${rhs}`, () => {
+for (const rhs of ['10', '[]', '[10,20]']) Deno.test(`invalid single pluck preserves record: ${rhs}`, () => {
     const i = new Interpreter();
     i.run(parseDocument('obj = [x: 1]'));
     let error = '';
@@ -26,7 +26,7 @@ for (const rhs of ['10', '[]', '[10, 20]']) Deno.test(`invalid single pluck pres
 });
 
 Deno.test('checker rejects scalar and wrong-length single pluck assignments', () => {
-    for (const rhs of ['10', '[]', '[10, 20]']) {
+    for (const rhs of ['10', '[]', '[10,20]']) {
         if (!checkSource(`obj = [x: 1]; obj.[x] = ${rhs}`).issues.length) throw new Error(rhs);
     }
     for (const statement of ['obj.[x] = [10]', 'obj.x = 10']) {

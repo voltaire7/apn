@@ -57,13 +57,13 @@ ribbon = buildGeometry (Sketch p -> {
         y = remap point 0 (points - 1) (-p.height / 3) (p.height / 3)
         color <- p.lerpColor startColor endColor (point / (points - 1))
         p.fill color
-        mapM (z -> p.call "vertex" [x, y, z]) [-50, 50]
+        mapM (z -> p.call "vertex" [x,y,z]) [-50,50]
     }) [0..points - 1]
     p.endShape
 })
 
 setup (Sketch p) = {
-    p.call "createCanvas" [700, 400, p.WEBGL]
+    p.call "createCanvas" [700,400,p.WEBGL]
     p.describe "A red-to-blue ribbon that waves over time"
 }
 

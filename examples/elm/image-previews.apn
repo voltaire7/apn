@@ -16,13 +16,13 @@ init = [[hover: false, previews: []], browser.none]
 
 update msg model = match msg [
     Pick -> [model, file.selectFiles ["image/*"] GotFiles]
-    DragEnter -> { model.hover = true; [model, browser.none] }
-    DragLeave -> { model.hover = false; [model, browser.none] }
+    DragEnter -> { model.hover = true; [model,browser.none] }
+    DragLeave -> { model.hover = false; [model,browser.none] }
     GotFiles first others -> {
         model.hover = false
         [model, task.perform GotPreviews (sequence (map file.toUrl (first :: others)))]
     }
-    GotPreviews urls -> { model.previews = urls; [model, browser.none] }
+    GotPreviews urls -> { model.previews = urls; [model,browser.none] }
 ]
 
 subscriptions _ = browser.none

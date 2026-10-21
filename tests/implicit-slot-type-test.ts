@@ -1,10 +1,10 @@
 import { Interpreter } from "../src/interp.ts";
 import { parseDocument } from "../src/parser.ts";
 for (const [source, expected] of [
-    ['v = [x: 1]; v.x = 1.0; [v.x, typeOf v.x]', '[1, Int]'],
-    ['v = [x: 1.0]; v.x = 2; [v.x, typeOf v.x]', '[2.0, Float]'],
+    ['v = [x: 1]; v.x = 1.0; [v.x, typeOf v.x]', '[1,Int]'],
+    ['v = [x: 1.0]; v.x = 2; [v.x, typeOf v.x]', '[2.0,Float]'],
     ['v = [x: 1]; v "x" = 2.0; v.x', '2'],
-    ['v = [x: 1, y: 2.0]; v.[x, y] = [3.0, 4]; v', '[x: 3, y: 4.0]'],
+    ['v = [x: 1, y: 2.0]; v.[x,y] = [3.0,4]; v', '[x: 3, y: 4.0]'],
     ['xs = [1]; i = 0; xs i = 2.0; xs', '[2]'],
     ['v = [x: Float]; v.x = 123; v.x = 456.0; v.x', '456.0'],
     ['v = [x: 1/3]; v.x = 2; typeOf v.x', 'Fraction'],

@@ -52,7 +52,7 @@ intentional evaluation change.
   `[ ]`) or close a ternary (pairing a `?` at the same bracket depth); any
   other is reported as an annotation (before a capitalized name) or as cons
   written `:`. Application
-  statements such as `print $ head $ [1, 2, 3]` lack `=`, so they stay
+  statements such as `print $ head $ [1,2,3]` lack `=`, so they stay
   expressions. `skipContinuation` handles indented definition bodies.
 - `groupClauses` merges consecutive same-name, same-arity definitions into one
   `clauseFn`. It accumulates applied arguments as lazy thunks (supporting
@@ -64,7 +64,7 @@ intentional evaluation change.
   propagate.
 - Field/pluck assignment desugars to an eager pattern binding
   `vec = setFields(vec, entries, rhs)` that reads the old record and the RHS
-  before rebinding (so `vec.[x, y] = vec.[y, x]` swaps).
+  before rebinding (so `vec.[x,y] = vec.[y,x]` swaps).
 - `(-2)` is negation because the lexer has no whitespace information.
 - The REPL echo is gated by `lastIsBinding`, which keeps assignments silent.
 - Inside `{ }`, statements sit at one flat level; an `indent` token directly

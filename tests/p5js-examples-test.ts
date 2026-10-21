@@ -64,12 +64,12 @@ Deno.test("a recursive sketch draws its tree", () => {
 });
 Deno.test("Game of Life counts neighbors with shifted boards", () => {
     const i = load("game-of-life", "\nblinker = generate [\n" + ["00000", "00100", "00100", "00100", "00000"]
-        .map(row => `    [${[...row].join(", ")}]`).join("\n") + "\n]\n");
-    if (value(i, "blinker") !== "[[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 1, 1, 1, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]") throw new Error(value(i, "blinker"));
+        .map(row => `    [${[...row].join(",")}]`).join("\n") + "\n]\n");
+    if (value(i, "blinker") !== "[[0,0,0,0,0],[0,0,0,0,0],[0,1,1,1,0],[0,0,0,0,0],[0,0,0,0,0]]") throw new Error(value(i, "blinker"));
 });
 Deno.test("Mandelbrot escapes count iterations", () => {
     const i = load("mandelbrot-set", "\ncounts = [escape 0.0 0.0, escape (-0.75) 0.1, escape 1.0 1.0]\n");
-    if (value(i, "counts") !== "[100, 34, 3]") throw new Error(value(i, "counts"));
+    if (value(i, "counts") !== "[100,34,3]") throw new Error(value(i, "counts"));
 });
 Deno.test("a p5.strands shader's hook is written as GLSL", () => {
     const i = load("filter-shader-p5-strands", '\ncode = glsl (displace [texCoord: Glsl "uv", canvasContent: Glsl "tex"])\n');

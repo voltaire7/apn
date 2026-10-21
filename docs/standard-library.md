@@ -1,10 +1,10 @@
 # Standard library
 
 ```apn
-import ["sequence", "number", "text", "map"]
+import ["sequence","number","text","map"]
 take 10 primes
-mean [1, 2]                         # Some 3/2
-frequencies $ words $ "one two one" # HashMap [["one", 2], ["two", 1]]
+mean [1,2]                         # Some 3/2
+frequencies $ words $ "one two one" # HashMap [["one",2],["two",1]]
 ```
 
 The prelude, `lib/prelude.apn`, needs no import: it defines every binary
@@ -13,10 +13,10 @@ and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
 `sequence`, `mapM`, `map2`–`map4`, `when`, `unless`, `return`, `throw`, `empty`, `guard`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).
 
 `import` accepts a literal module name or a list of literal module names.
-For example, `import ["number", "text"]` opens both modules and returns
+For example, `import ["number","text"]` opens both modules and returns
 a merged export record. Later modules win name collisions, and `import []`
 returns an empty record. Commas or newlines separate module names, and a list
-names each module once (`import ["option", "option"]` is a parse error). Standard
+names each module once (`import ["option","option"]` is a parse error). Standard
 modules are imported by name, with no prefix: `import "text"`. There is no
 whole-library module; `import "std"` and `import "std/text"` are errors.
 Dependencies are imported with them. Imports require Deno read permission (the
@@ -57,7 +57,7 @@ imported names. A bare import statement is silent. In an expression, imports ret
 Like other lazy definitions, this form takes effect when `s` is demanded.
 
 `use record` brings its fields into the current scope without forcing their
-values. `use [recordA, recordB]` opens a finite list of records in order; later
+values. `use [recordA,recordB]` opens a finite list of records in order; later
 fields replace earlier bindings. It returns `()`. Fields must be valid binding
 identifiers (not quoted keys, numeric keys, `_`, or keywords). Invalid input is
 rejected before any fields are installed. Bindings inside a block stay local.
@@ -74,7 +74,7 @@ first + second                         # 30
 `use` is an ordinary builtin function, so aliases and pipelines work too.
 An APN wrapper function opens the record in its own scope, not its caller's.
 
-List imports support the same selection: `[id, sum] = import ["function", "sequence"]`.
+List imports support the same selection: `[id,sum] = import ["function","sequence"]`.
 
 Destructuring imports select only the requested exports: `[halt] = import "system"`
 binds `halt` without introducing the module's other names.
@@ -123,7 +123,7 @@ See [zero initialization](zero-initialization.md) for type defaults and inspecti
 | `to JSON x`, `from JSON text` | JSON text; decode it (`Dynamic`) |
 | `to (List Char) text`, `from (List Char) chars` | A string's characters (code points); join them |
 | `to T x` for another type | Applies `T`, as a conversion: `to Float (Money 1.2)`, `to Quote [year: 1]` |
-| `to [T1, T2] x` | A list template converts position by position, as `cast` does: `to [Char, Char] "hi"`; `[Char]` is exactly one `Char` |
+| `to [T1,T2] x` | A list template converts position by position, as `cast` does: `to [Char,Char] "hi"`; `[Char]` is exactly one `Char` |
 
 They are methods, like `map`: a program adds a type by defining an instance,
 which joins them everywhere. A bare type name in a pattern matches that type,
@@ -183,7 +183,7 @@ Existing `map`, `filter`, `take`, `drop`, `zipWith`, `iterate`, `foldl`, and
 | API | Behavior |
 | --- | --- |
 | `repeat x`, `replicate n x`, `cycle xs` | Infinite repetition, bounded repetition, repeated list (`cycle []` is empty) |
-| `zip xs ys`, `zipWithIndex xs` | Pair corresponding values; zero-based `[index, value]` pairs |
+| `zip xs ys`, `zipWithIndex xs` | Pair corresponding values; zero-based `[index,value]` pairs |
 | `concat xss`, `flatten xss`, `concatMap f xs` | Flatten one level, optionally mapping first |
 | `scanl f seed xs` | Lazy running accumulators, including the seed |
 | `sum xs`, `product xs` | Strict left folds with identities 0 and 1 |
@@ -192,10 +192,10 @@ Existing `map`, `filter`, `take`, `drop`, `zipWith`, `iterate`, `foldl`, and
 | `headOption xs`, `lastOption xs`, `atOption n xs` | Optional access; `atOption` is zero-based and returns None for negative/out-of-range indexes |
 | `takeWhile predicate xs`, `dropWhile predicate xs` | Consume a matching prefix |
 | `takeUntil predicate xs` | Prefix before the first match |
-| `splitAt n xs`, `splitWhile predicate xs` | `[prefix, remainder]` |
+| `splitAt n xs`, `splitWhile predicate xs` | `[prefix,remainder]` |
 | `chunksOf n xs` | Positive-sized chunks; final chunk may be shorter |
 | `intersperse separator xs` | Insert separators between elements |
-| `partition predicate xs` | `[matching, nonmatching]` |
+| `partition predicate xs` | `[matching,nonmatching]` |
 | `unique xs` | Preserve the first occurrence of each value |
 | `reverse value` | Overloaded for List and String; reverses finite lists or Unicode code points |
 | `compare x y` | Negative, zero, or positive integer |
@@ -224,7 +224,7 @@ are skipped without being demanded.
 | `pi`, `degrees d`, `turns t` | π, and angles in radians as Elm's Basics: `degrees 180` and `turns 0.5` are `pi` |
 
 Empty statistics return `None`. Exact inputs preserve exact arithmetic:
-`variance [1, 2, 3]` is `Some 2/3`. Irrational square roots are inexact. Typed numeric
+`variance [1,2,3]` is `Some 2/3`. Irrational square roots are inexact. Typed numeric
 operations retain APN's existing overflow checks and lossless conversion rules.
 
 ## Text — `text`
@@ -319,7 +319,7 @@ and header names are bare keys (`Content-Type: "application/json"`); a quoted
 key (`"Content-Type": ...`) is a different key and an error here.
 
 ```apn
-import ["http", "json"]
+import ["http","json"]
 response <- fetch "https://www.youtube-transcript.io/api/channels" [
     method: "POST"
     headers: [

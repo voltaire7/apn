@@ -50,7 +50,7 @@ for (const [view, error] of [
     ['input [] [text "child"]', 'cannot have children'],
     ['42', 'view must return'],
 ]) Deno.test(`HTML rejects invalid nodes: ${view}`, () => {
-    const test = app(`import "html"\nimport "browser"\nmain = sandbox [\n    init: 0\n    update: (msg, model -> model)\n    view: (model -> ${view})\n]`);
+    const test = app(`import "html"\nimport "browser"\nmain = sandbox [\n    init: 0\n    update: (msg,model -> model)\n    view: (model -> ${view})\n]`);
     try { test.render(); }
     catch (e) { if (e instanceof Error && e.message.includes(error)) return; throw e; }
     throw new Error("Expected error");
@@ -63,7 +63,7 @@ Deno.test("bundled modules load without filesystem access", () => {
         "/lib/time.apn": Deno.readTextFileSync(new URL("../lib/time.apn", import.meta.url)),
     };
     i.sourceDir = "/app/";
-    i.run(parse('import "html"\nimport "browser"\nmain = sandbox [init: 1, update: (msg, model -> model), view: (n -> text (to String n))]'));
+    i.run(parse('import "html"\nimport "browser"\nmain = sandbox [init: 1, update: (msg,model -> model), view: (n -> text (to String n))]'));
     if (content(new BrowserApp(i, i.env.get("main")!).render()) !== '1') throw new Error("bundled app failed");
     try { i.importStandard('text'); }
     catch (error) { if (error instanceof Error && error.message.includes('not bundled')) return; throw error; }
@@ -76,7 +76,7 @@ Deno.test("nullary constructor function clauses do not consume the next paramete
 });
 Deno.test("a browser build bundles the local modules a program imports", () => {
     const directory = new URL("./fixtures/packages/", import.meta.url).pathname;
-    const source = 'import ["uses-hello", "shapes"]\nanswer = [exported, square 3]';
+    const source = 'import ["uses-hello","shapes"]\nanswer = [exported, square 3]';
     const bundle = bundleProgram(source, directory);
     const local = Object.keys(bundle).filter(path => path.startsWith("/app/")).sort();
     // The imported files and what they import, not the rest of the folder.
@@ -88,7 +88,7 @@ Deno.test("a browser build bundles the local modules a program imports", () => {
         i.sourceDir = "/app/";
         if (checked) i.enableChecking();
         i.run(parse(source));
-        if (i.renderString(i.run(parse("answer"))) !== '["hi pkg", 9]') throw new Error(`checked=${checked}`);
+        if (i.renderString(i.run(parse("answer"))) !== '["hi pkg",9]') throw new Error(`checked=${checked}`);
         try { i.run(parse('import "both"')); } catch (error) {
             if (error instanceof Error && error.message.includes("not bundled")) continue;
             throw error;

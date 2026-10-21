@@ -16,7 +16,7 @@ for (
         "Y f = (x -> f (x x)) (x -> f (x x))",
     "Option a = Some a | None; self f = f f; a = self (x -> Some x); [a, self (x -> Some x)]",
     "self f = f f; a = self (x -> [x]); b = self (x -> [x]); a ++ b",
-    "self f = f f; a = self (x -> [next: x]); b = self (x -> [next: x]); [a, b]",
+    "self f = f f; a = self (x -> [next: x]); b = self (x -> [next: x]); [a,b]",
     ]
 ) {
     Deno.test(`recursive inference terminates without Dynamic: ${source}`, () => {
@@ -57,7 +57,7 @@ Deno.test("the original self-application factorial still checks and runs", () =>
 });
 
 Deno.test("a copied recursive function keeps its result relationship", () => {
-    const source = 'self f = f f; a = self (x -> 123); b = self (x -> "hello"); [a, b]';
+    const source = 'self f = f f; a = self (x -> 123); b = self (x -> "hello"); [a,b]';
     const checked = checkSource(source);
     if (checked.issues.length || checked.dynamicBoundaries) {
         throw new Error(JSON.stringify(checked));
@@ -66,7 +66,7 @@ Deno.test("a copied recursive function keeps its result relationship", () => {
     const actual = interpreter.renderString(
         interpreter.run(parseDocument(source)),
     );
-    if (actual !== '[123, "hello"]') throw new Error(actual);
+    if (actual !== '[123,"hello"]') throw new Error(actual);
 });
 
 Deno.test("checking depth exhaustion is an error, not Dynamic success", () => {

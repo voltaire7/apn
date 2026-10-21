@@ -19,12 +19,12 @@ Deno.test("Existing range patterns and list destructuring work on separate submi
     if (value(i, 'first (x::xs) = x; first [3..]') !== '3') throw new Error("range destructuring failed");
 });
 for (const [source, expected] of [
-    ['n = 5; [1..n]', '[1, 2, 3, 4, 5]'],
-    ['a = 2; b = 6; [a..b]', '[2, 3, 4, 5, 6]'],
-    ['n = 5; step = 2; [0, step..n]', '[0, 2, 4]'],
-    ['n = 3; [n..1]', '[3, 2, 1]'],
-    ['end = 1; [0, 0.5..end]', '[0.0, 0.5, 1.0]'],
-    ['n = 4; take 3 [n..]', '[4, 5, 6]'],
+    ['n = 5; [1..n]', '[1,2,3,4,5]'],
+    ['a = 2; b = 6; [a..b]', '[2,3,4,5,6]'],
+    ['n = 5; step = 2; [0,step..n]', '[0,2,4]'],
+    ['n = 3; [n..1]', '[3,2,1]'],
+    ['end = 1; [0,0.5..end]', '[0.0,0.5,1.0]'],
+    ['n = 4; take 3 [n..]', '[4,5,6]'],
     ['import "number"; factorial 0', '1'],
     ['import "sequence"; factorial n = product [1..n]; factorial 5', '120'],
 ]) Deno.test(`range regression: ${source}`, () => {

@@ -29,9 +29,9 @@ Import standard modules by name from any directory (and your own files or
 folders the same way, see [the standard library](docs/standard-library.md)):
 
 ```apn
-import ["sequence", "number", "text", "map"]
+import ["sequence","number","text","map"]
 take 10 primes
-mean [1, 2]                        # Some 3/2
+mean [1,2]                        # Some 3/2
 frequencies $ words $ "one two one"
 ```
 
@@ -96,7 +96,7 @@ open site/index.html
 ## Editor support
 
 Run `apn --lint file.apn` to check syntax and layout without executing the file.
-Spacing is strict (`x = 1`, `[1, 2, 3]`, `[x: 1, y: 2]`, `{ x }`) and lines hold at most 99
+Spacing is strict (`x = 1`, `[1,2,3]`, `[x: 1, y: 2]`, `{ x }`) and lines hold at most 99
 characters; put `--loose`
 first (`apn --loose file.apn`) to relax it. `apn --version` prints the version.
 Try live diagnostics, completion, hover, and an outline in a temporary Neovim

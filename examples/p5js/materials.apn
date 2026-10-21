@@ -1,6 +1,6 @@
 # Materials, from https://p5js.org/examples/3d-materials/
 # Set the look of a model's surface with a material.
-import ["html", "sequence", "p5"]
+import ["html","sequence","p5"]
 browser = import "browser"
 
 astronaut = loadModel "assets/astronaut.obj"
@@ -11,19 +11,19 @@ venus = loadImage "assets/venus.jpg"
 Selector = Fill | Stroke | Ambient | Specular | Emissive
 Msg = Chose String | Toggled Selector | Picked Selector String
 
-materials = ["color", "emissive", "normal", "texture"]
+materials = ["color","emissive","normal","texture"]
 
 # The material chosen, and, by selector, whether each color applies and which it is.
 init = [[
     material: "color"
-    on: [true, true, false, false, true]
-    colors: ["#ffffff", "#000000", "#ffffff", "#ffffff", "#ffffff"]
+    on: [true,true,false,false,true]
+    colors: ["#ffffff","#000000","#ffffff","#ffffff","#ffffff"]
 ], browser.none]
 
 update msg model = match msg [
-    Chose material -> { model.material = material; [model, browser.none] }
-    Toggled which -> { model.on = toggle which model.on; [model, browser.none] }
-    Picked which color -> { model.colors = put which color model.colors; [model, browser.none] }
+    Chose material -> { model.material = material; [model,browser.none] }
+    Toggled which -> { model.on = toggle which model.on; [model,browser.none] }
+    Picked which color -> { model.colors = put which color model.colors; [model,browser.none] }
 ]
 
 # A list with its item at index replaced, or (a list of flags) flipped.
@@ -32,7 +32,7 @@ toggle index flags = put index (not (flags index)) flags
 
 # The canvas, the material's radio buttons, and the color selectors it uses.
 view model = div [style "width" "400px", style "font-family" "sans-serif"] [
-    canvas [preload: [astronaut, venus], setup: setup, draw: draw model]
+    canvas [preload: [astronaut,venus], setup: setup, draw: draw model]
     div [style "background" "#f0f0f0"] [
         label [] (text "Material type" :: map (material -> label [] [
             input [
@@ -43,9 +43,9 @@ view model = div [style "width" "400px", style "font-family" "sans-serif"] [
             ] []
             text material
         ]) materials)
-        selectors model ["color"] [[Fill, "fill"], [Stroke, "stroke"]]
-        selectors model ["color", "texture"] [[Ambient, "ambient"], [Specular, "specular"]]
-        selectors model ["emissive"] [[Emissive, "emissive"]]
+        selectors model ["color"] [[Fill,"fill"],[Stroke,"stroke"]]
+        selectors model ["color","texture"] [[Ambient,"ambient"],[Specular,"specular"]]
+        selectors model ["emissive"] [[Emissive,"emissive"]]
     ]
 ]
 
@@ -54,7 +54,7 @@ selectors model shownFor named =
     div [shown (contains model.material shownFor)] (map (selector model) named)
 
 # A selector's checkbox, and its picker while its color applies.
-selector model [which, name] = span [] [
+selector model [which,name] = span [] [
     label [shown (which != Emissive)] [
         input [typeAttribute "checkbox", checked (model.on which), onClick (Toggled which)] []
         text name
@@ -70,7 +70,7 @@ selector model [which, name] = span [] [
 shown visible = style "display" (visible ? "" : "none")
 
 setup (Sketch p) = {
-    p.call "createCanvas" [400, 400, p.WEBGL]
+    p.call "createCanvas" [400,400,p.WEBGL]
     p.angleMode p.DEGREES
     p.describe ("Astronaut 3D model displayed with a user-selected material using the "
         ++ "selectors below the canvas.")

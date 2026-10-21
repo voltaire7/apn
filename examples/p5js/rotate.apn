@@ -7,7 +7,7 @@ setup (Sketch p) = {
     p.angleMode p.DEGREES
     p.fill 255
     p.textSize 20
-    p.call "textAlign" [p.CENTER, p.CENTER]
+    p.call "textAlign" [p.CENTER,p.CENTER]
     p.colorMode p.HSB
     p.describe "line segments rotated around center of canvas"
 }
@@ -25,7 +25,7 @@ draw (Sketch p) = {
         p.strokeWeight 1
         p.text (to String angle) 170 0
         p.pop
-    }) [0, 30..90]
+    }) [0,30..90]
     # A white line turning a degree each frame.
     p.translate (p.width / 2) (p.height / 2)
     p.rotate p.frameCount

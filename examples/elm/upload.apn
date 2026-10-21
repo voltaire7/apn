@@ -6,9 +6,9 @@ file = import "file"
 
 Msg = | GotFiles (List file.File)
 
-init = [[], browser.none]
+init = [[],browser.none]
 
-update (GotFiles files) _ = [files, browser.none]
+update (GotFiles files) _ = [files,browser.none]
 
 subscriptions _ = browser.none
 

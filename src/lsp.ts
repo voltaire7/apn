@@ -8,6 +8,7 @@ import { semanticTokens, TOKEN_TYPES } from "./highlight.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { RETIRED_NATIVES, nativeModule } from "./native-exports.ts";
 import { standardExports } from "./modules.ts";
+import { itemsText } from "./separators.ts";
 
 type Message = { jsonrpc?: string; id?: number | string | null; method?: string; params?: any };
 type Document = { text: string; version: number };
@@ -89,7 +90,7 @@ function importsOf(text: string): { line: number; start: number; end: number; mo
 // a blank line apart from what follows.
 function importEdit(text: string, module: string): { range: Range; newText: string } {
     const first = importsOf(text)[0];
-    const target = (modules: string[]) => modules.length === 1 ? JSON.stringify(modules[0]) : `[${modules.map(m => JSON.stringify(m)).join(", ")}]`;
+    const target = (modules: string[]) => modules.length === 1 ? JSON.stringify(modules[0]) : `[${itemsText(modules.map(m => JSON.stringify(m)))}]`;
     if (first) return { range: { start: { line: first.line, character: first.start }, end: { line: first.line, character: first.end } }, newText: target([...first.modules, module]) };
     return { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, newText: `import ${target([module])}\n${/^\s*(\n|$)/.test(text) ? "" : "\n"}` };
 }

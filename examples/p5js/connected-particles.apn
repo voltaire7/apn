@@ -1,15 +1,15 @@
 # Connected Particles, from https://p5js.org/examples/classes-and-objects-connected-particles/
 # Draw paths of particles that fade away.
-import ["p5", "sequence"]
+import ["p5","sequence"]
 
 # A particle: where it is, its velocity, its hue and the frames until it is gone.
-Particle = [position: [Float, Float], velocity: [Float, Float], hue: Int, frames: Int]
+Particle = [position: [Float,Float], velocity: [Float,Float], hue: Int, frames: Int]
 # Paths of particles, the newest last, each drawn by one drag of the mouse.
 paths = Mutable ((List (List Particle)) [])
 # The frame the next particle may come in, and where the last one came in.
 nextParticleFrame = Mutable 0
-previous = Mutable [0.0, 0.0]
-[framesBetweenParticles, particleFadeFrames] = [5, 300]
+previous = Mutable [0.0,0.0]
+[framesBetweenParticles,particleFadeFrames] = [5,300]
 
 setup (Sketch p) = {
     p.createCanvas 720 400
@@ -29,13 +29,13 @@ draw (Sketch p) = {
 display (Sketch p) (List path) = mapM (n -> {
     particle = path n
     opacity = particle.frames / particleFadeFrames
-    [x, y] = particle.position
+    [x,y] = particle.position
     p.noStroke
-    p.fill [particle.hue, 80, 90, opacity]
+    p.fill [particle.hue,80,90,opacity]
     p.circle x y 24
     when (n < length path - 1) {
-        [nextX, nextY] = (path (n + 1)).position
-        p.stroke [255, opacity]
+        [nextX,nextY] = (path (n + 1)).position
+        p.stroke [255,opacity]
         p.line x y nextX nextY
     }
 }) [length path - 1, length path - 2..0]

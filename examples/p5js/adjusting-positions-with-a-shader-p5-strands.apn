@@ -1,11 +1,11 @@
 # Adjusting Positions with a Shader (p5.strands), from
 # https://p5js.org/examples/3d-adjusting-positions-with-a-shader-p5strands/
 # Move a model's vertices with a shader written in APN.
-import ["glsl", "p5"]
+import ["glsl","p5"]
 
 # Each vertex moved up and down over time, a little later along the ribbon.
 wiggle inputs = {
-    [x, y, z] = map (axis -> swizzle axis inputs.position) ["x", "y", "z"]
+    [x,y,z] = map (axis -> swizzle axis inputs.position) ["x","y","z"]
     [position: vec [x, y + 20 * sin (Glsl "time" * 0.01 + y * 0.1), z]]
 }
 
@@ -24,13 +24,13 @@ ribbon = buildGeometry (Sketch p -> {
         y = remap point 0 (points - 1) (-p.height / 3) (p.height / 3)
         color <- p.lerpColor startColor endColor (point / (points - 1))
         p.fill color
-        mapM (z -> p.call "vertex" [x, y, z]) [-50, 50]
+        mapM (z -> p.call "vertex" [x,y,z]) [-50,50]
     }) [0..points - 1]
     p.endShape
 })
 
 setup (Sketch p) = {
-    p.call "createCanvas" [700, 400, p.WEBGL]
+    p.call "createCanvas" [700,400,p.WEBGL]
     p.describe "A red-to-blue ribbon that waves over time"
 }
 

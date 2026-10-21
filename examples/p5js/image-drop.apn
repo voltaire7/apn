@@ -1,6 +1,6 @@
 # Image Drop, from https://p5js.org/examples/input-elements-image-drop/
 # Display an image that the page visitor dragged and dropped.
-import ["html", "text", "p5"]
+import ["html","text","p5"]
 browser = import "browser"
 file = import "file"
 
@@ -15,7 +15,7 @@ update msg shown = match msg [
         startsWith "image/" f.mime ? Dropped f.url : Message "Not an image file!"
         browser.none
     ]
-    Hover -> [shown, browser.none]
+    Hover -> [shown,browser.none]
 ]
 
 # The canvas's box takes the drop (and the page does not open the file).
@@ -28,7 +28,7 @@ view shown = div [
 setup (Sketch p) = p.createCanvas 710 400
 
 draw shown (Sketch p) = match shown [
-    Dropped url -> p.call "image" [url, 0, 0, p.width, p.height]
+    Dropped url -> p.call "image" [url,0,0,p.width,p.height]
     Message message -> {
         p.background 100
         p.fill 255

@@ -5,13 +5,13 @@ browser = import "browser"
 import "p5"
 
 # The video, from its sources: the first one the browser plays.
-video = createVideo ["assets/fingers.mov", "assets/fingers.webm"]
+video = createVideo ["assets/fingers.mov","assets/fingers.webm"]
 
 Msg = | Toggle
 
-init = [false, browser.none]
+init = [false,browser.none]
 
-update Toggle playing = [!playing, browser.none]
+update Toggle playing = [!playing,browser.none]
 
 # The sketch shows the video and keeps it playing or paused, as the button says.
 view playing = div [] [

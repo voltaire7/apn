@@ -71,7 +71,7 @@ blur = createShader "
 "
 
 setup (Sketch p) = {
-    p.call "createCanvas" [p.windowWidth, p.windowHeight, p.WEBGL]
+    p.call "createCanvas" [p.windowWidth,p.windowHeight,p.WEBGL]
     p.angleMode p.DEGREES
     p.noStroke
     p.describe ("A row of five spheres rotating in front of the camera. The closest and "
@@ -83,9 +83,9 @@ draw (Sketch p) = {
     layer.begin
     p.background 255
     p.ambientLight 100
-    p.directionalLight [255, 255, 255] (-1) 1 (-1)
-    p.ambientMaterial [255, 0, 0]
-    p.fill [255, 255, 100]
+    p.directionalLight [255,255,255] (-1) 1 (-1)
+    p.ambientMaterial [255,0,0]
+    p.fill [255,255,100]
     p.specularMaterial 255
     p.shininess 150
     # A degree a frame.

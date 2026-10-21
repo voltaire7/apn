@@ -3,7 +3,7 @@
 # names: a program using both imports one qualified (random = import "random").
 import "task"
 # A seed is a 32-bit Int: initialSeed n makes one from any Int.
-Generator a = | Generator (Int -> [a, Int])
+Generator a = | Generator (Int -> [a,Int])
 initialSeed n = modulo n 4294967296
 # The next seed (a linear congruential step); values use its high bits.
 next s = modulo (s * 1664525 + 1013904223) 4294967296
@@ -11,14 +11,14 @@ step (Generator f) seed = f seed
 # Generators are monads: map f g, g >>= f (Elm's andThen), return x (Elm's
 # constant); map2 and the like come from the prelude.
 map f (Generator g) = Generator (seed -> {
-    [value, rest] = g seed
+    [value,rest] = g seed
     [f value, rest]
 })
 (Generator g) >>= f = Generator (seed -> {
-    [value, rest] = g seed
+    [value,rest] = g seed
     step (f value) rest
 })
-return x = Generator (seed -> [x, seed])
+return x = Generator (seed -> [x,seed])
 int lo hi = Generator (seed -> {
     s = next seed
     [lo + quotient (s * (hi - lo + 1)) 4294967296, s]
@@ -27,11 +27,11 @@ float lo hi = Generator (seed -> {
     s = next seed
     [lo + (hi - lo) * inexact (s / 4294967296), s]
 })
-# One of the values, each as likely; weighted takes [weight, value] pairs.
+# One of the values, each as likely; weighted takes [weight,value] pairs.
 uniform first others = map (Int index -> (first :: others) index) (int 0 (length others))
 weighted first others = {
     choices = first :: others
-    # A pair's parts may differ in type ([1, "rare"]): its weight is a Number.
+    # A pair's parts may differ in type ([1,"rare"]): its weight is a Number.
     weight choice = Number (Dynamic (head choice))
     pick options roll = {
         choice = head options
@@ -39,9 +39,9 @@ weighted first others = {
             ? head (tail choice)
             : pick (tail options) (roll - weight choice)
     }
-    map (pick choices) (float 0 (foldl (total, choice -> total + weight choice) 0 choices))
+    map (pick choices) (float 0 (foldl (total,choice -> total + weight choice) 0 choices))
 }
-list n generator = n <= 0 ? return [] : map2 (x, xs -> x :: xs) generator (list (n - 1) generator)
+list n generator = n <= 0 ? return [] : map2 (x,xs -> x :: xs) generator (list (n - 1) generator)
 # A command sending toMessage of a value drawn from a fresh seed.
 sample generator = map (s -> head (step generator s)) entropy
 generate toMessage generator = perform toMessage (sample generator)

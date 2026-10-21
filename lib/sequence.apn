@@ -14,7 +14,7 @@ product xs = foldl (*) (Number 1) xs
 contains x xs = any (y -> x == y) xs
 findIndex predicate xs = map fst (find (entry -> predicate (snd entry)) (zipWithIndex xs))
 headOption xs = null xs ? None : Some (head xs)
-lastOption xs = foldl (_, x -> Some x) None xs
+lastOption xs = foldl (_,x -> Some x) None xs
 atOption n xs = n < 0 ? None : headOption (drop n xs)
 takeUntil predicate xs = takeWhile (x -> not (predicate x)) xs
 splitAt n xs = [take n xs, drop n xs]
@@ -22,7 +22,7 @@ splitWhile predicate xs = [takeWhile predicate xs, dropWhile predicate xs]
 chunksOf n xs = n <= 0 ? fail "chunksOf expects a positive size"
     : null xs ? [] : take n xs :: chunksOf n (drop n xs)
 intersperse separator xs = null xs ? []
-    : head xs :: foldr (x, rest -> separator :: x :: rest) [] (tail xs)
+    : head xs :: foldr (x,rest -> separator :: x :: rest) [] (tail xs)
 partition predicate xs = [filter predicate xs, filter (x -> not (predicate x)) xs]
 unique xs = null xs ? [] : head xs :: unique (filter (x -> x != head xs) (tail xs))
 compare x y = x < y ? -1 : x > y ? 1 : 0
@@ -32,7 +32,7 @@ minimum xs = null xs ? None : Some (foldl min (head xs) (tail xs))
 maximum xs = null xs ? None : Some (foldl max (head xs) (tail xs))
 
 # Prepending into a strict left fold reverses in linear time.
-reverse (List xs) = foldl (acc, x -> x :: acc) [] xs
+reverse (List xs) = foldl (acc,x -> x :: acc) [] xs
 reverse (String text) = from (List Char) (reverse (to (List Char) text))
 
 _prepend x xs = x :: xs
@@ -62,6 +62,6 @@ sortBy compare xs = {
 }
 
 # Force finite accumulator elements between simulation steps, not whole trees.
-forceList xs = seq (foldl (_, x -> seq x []) [] xs) xs
-repeatApply n f seed = foldl (value, _ -> f value) seed (take n [0..])
-count predicate xs = foldl (n, x -> predicate x ? n + 1 : n) 0 xs
+forceList xs = seq (foldl (_,x -> seq x []) [] xs) xs
+repeatApply n f seed = foldl (value,_ -> f value) seed (take n [0..])
+count predicate xs = foldl (n,x -> predicate x ? n + 1 : n) 0 xs

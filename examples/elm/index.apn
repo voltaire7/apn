@@ -1,7 +1,7 @@
 # Examples, from https://elm-lang.org/examples
 # The page listing these examples. apn --site examples/elm OUTPUT builds it,
 # with an editor for each example.
-import ["html", "text"]
+import ["html","text"]
 gallery = import "gallery"
 
 main = gallery.page "Examples" [
@@ -15,9 +15,9 @@ main = gallery.page "Examples" [
     gallery.examples "HTTP" [example "Book", example "Quotes"]
     gallery.examples "Time" [gallery.link "Time" "local-time", example "Clock"]
     gallery.examples "Files" [example "Upload", example "Drag-and-Drop", example "Image Previews"]
-    gallery.examples "WebGL" (map example ["Triangle", "Cube", "Crate", "Thwomp", "First Person"])
+    gallery.examples "WebGL" (map example ["Triangle","Cube","Crate","Thwomp","First Person"])
     gallery.examples "Playground"
-        (map example ["Picture", "Animation", "Mouse", "Keyboard", "Turtle", "Mario"])
+        (map example ["Picture","Animation","Mouse","Keyboard","Turtle","Mario"])
 ]
 
 # An example's file is its title in lower case, with - for spaces (Elm's

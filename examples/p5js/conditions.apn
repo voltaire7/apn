@@ -3,8 +3,8 @@
 import "p5"
 
 # The circle's position, speed and hue; its radius.
-position = Mutable [200, 200]
-speed = Mutable [2, 3]
+position = Mutable [200,200]
+speed = Mutable [2,3]
 hue = Mutable 0
 radius = 25
 
@@ -27,8 +27,8 @@ setup (Sketch p) = {
 }
 
 draw (Sketch p) = {
-    [x, y] = position
-    p.stroke [hue, 80, 90]
+    [x,y] = position
+    p.stroke [hue,80,90]
     # Black between the rectangles, white over them.
     p.fill (x >= 100 && x <= 300 ? 0 : 255)
     p.circle x y radius
@@ -39,8 +39,8 @@ draw (Sketch p) = {
     }
     when (hue >= 360) (set hue 0)
     # Turn back at the edges.
-    [nx, ny] = position
-    [dx, dy] = speed
+    [nx,ny] = position
+    [dx,dy] = speed
     set speed [
         nx < radius || nx > p.width - radius ? -dx : dx
         ny < radius || ny > p.height - radius ? -dy : dy

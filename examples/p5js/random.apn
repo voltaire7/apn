@@ -3,8 +3,8 @@
 import "p5"
 
 # The circle's position and color, chosen at random.
-position = Mutable [0.0, 0.0]
-color = Mutable [0.0, 0.0, 0.0]
+position = Mutable [0.0,0.0]
+color = Mutable [0.0,0.0,0.0]
 
 setup (Sketch p) = {
     p.createCanvas 710 400
@@ -25,7 +25,7 @@ choose (Sketch p) = {
 
 draw (Sketch p) = {
     p.background 10
-    [x, y] = position
+    [x,y] = position
     p.fill color
     p.circle x y 100
 }

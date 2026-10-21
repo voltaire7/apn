@@ -13,11 +13,11 @@ setup (Sketch p) = {
     p.textFont font
     p.textSize 40
     # The same words in three columns, aligned right, centered and left.
-    p.call "textAlign" [p.RIGHT, p.CENTER]
+    p.call "textAlign" [p.RIGHT,p.CENTER]
     drawWords p (p.width * 0.25)
-    p.call "textAlign" [p.CENTER, p.CENTER]
+    p.call "textAlign" [p.CENTER,p.CENTER]
     drawWords p (p.width * 0.5)
-    p.call "textAlign" [p.LEFT, p.CENTER]
+    p.call "textAlign" [p.LEFT,p.CENTER]
     drawWords p (p.width * 0.75)
 }
 

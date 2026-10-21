@@ -14,7 +14,7 @@ setup (Sketch p) = {
 
 draw (Sketch p) = {
     # A see-through black, so the circle following the cursor slowly fades.
-    p.background [0, 12]
+    p.background [0,12]
     p.fill 255
     p.noStroke
     p.ellipse p.mouseX p.mouseY 60 60

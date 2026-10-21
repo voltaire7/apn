@@ -1,6 +1,6 @@
 # Text Fields, from https://elm-lang.org/examples/text-fields
 # A text input for reversing text. Very useful!
-import ["html", "text"]
+import ["html","text"]
 browser = import "browser"
 
 Msg = | Change String

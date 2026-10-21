@@ -46,7 +46,7 @@ Key files:
 - `src/type-checker.ts`, `src/checking-session.ts` — static checking (evaluates pure code, never performs effects)
 - `src/errors.ts` — `APNError`, `didYouMean`
 - `src/repl.ts` — REPL editor and drivers
-- `lib/*.apn` — standard library (`import "text"`, `import ["option", "map"]`, ...)
+- `lib/*.apn` — standard library (`import "text"`, `import ["option","map"]`, ...)
 - `examples/features.apn` — showcase of every feature; `tests/semantics-test.ts`
   asserts observable evaluation rules
 

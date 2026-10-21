@@ -1,4 +1,4 @@
-# do statements is the block with those statements: do [a, b] is { a; b }.
+# do statements is the block with those statements: do [a,b] is { a; b }.
 do [] = {}
 do [statement] = statement
 do (statement :: rest) = { statement; do rest }

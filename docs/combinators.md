@@ -56,7 +56,7 @@ argument unevaluated.
 ```apn
 yCombinator f = (x -> f (x x)) (x -> f (x x))
 zCombinator f = (x -> f (v -> x x v)) (x -> f (v -> x x v))
-thetaCombinator f = (x, y -> y (x x y)) (x, y -> y (x x y)) f
+thetaCombinator f = (x,y -> y (x x y)) (x,y -> y (x x y)) f
 ```
 
 These use self-application, not named recursive calls. APN's laziness lets Y
@@ -73,7 +73,7 @@ fix f = {
     head result
 }
 
-take 5 (fix (xs -> 1 :: xs))  # [1, 1, 1, 1, 1]
+take 5 (fix (xs -> 1 :: xs))  # [1,1,1,1,1]
 ```
 
 A fixed point need not terminate: `fix identity` has no productive outer value.

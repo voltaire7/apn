@@ -98,7 +98,7 @@ export class BrowserApp {
     // An element's [model, command].
     private pair(value: Value, what: string): [Value, Value] {
         const items = this.interpreter.items(value);
-        if (items.length !== 2) fail(`${what} must give [model, command]`);
+        if (items.length !== 2) fail(`${what} must give [model,command]`);
         return [this.interpreter.demand(items[0]), items[1]];
     }
     render(): HtmlNode {

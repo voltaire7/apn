@@ -1,6 +1,6 @@
 # Noise, from https://p5js.org/examples/repetition-noise/
 # Generate naturalistic textures using Perlin noise.
-import ["html", "text", "p5"]
+import ["html","text","p5"]
 browser = import "browser"
 
 # The dots' spacing and the noise's offset, from the sliders.
@@ -12,8 +12,8 @@ Msg = Gap String | Offset String
 init = [[gap: 20, offset: 0], browser.none]
 
 update msg model = match msg [
-    Gap gap -> { model.gap = parseInt gap; [model, browser.none] }
-    Offset offset -> { model.offset = parseInt offset; [model, browser.none] }
+    Gap gap -> { model.gap = parseInt gap; [model,browser.none] }
+    Offset offset -> { model.offset = parseInt offset; [model,browser.none] }
 ]
 
 view model = div [] [

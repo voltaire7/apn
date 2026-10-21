@@ -18,8 +18,8 @@ for (const declaration of [
     "Vec n a = Nil -> Vec 0 a | Cons a (Vec k a) -> Vec (k + 1) a",
     "Vec n a =\n    | Nil -> Vec 0 a\n    | Cons a (Vec k a) -> Vec (k + 1) a",
     "Vec = n -> a -> (Nil -> Vec 0 a | Cons a (Vec k a) -> Vec (k + 1) a)",
-    "Vec = n, a -> (Nil -> Vec 0 a | Cons a (Vec k a) -> Vec (k + 1) a)",
-    "Vec = n, a -> (\n    | Nil -> Vec 0 a\n    | Cons a (Vec k a) -> Vec (k + 1) a\n)",
+    "Vec = n,a -> (Nil -> Vec 0 a | Cons a (Vec k a) -> Vec (k + 1) a)",
+    "Vec = n,a -> (\n    | Nil -> Vec 0 a\n    | Cons a (Vec k a) -> Vec (k + 1) a\n)",
 ]) {
     Deno.test(`one family, however declared: ${JSON.stringify(declaration)}`, () => {
         const actual = run(declaration + USE);
@@ -45,8 +45,8 @@ for (const [source, message] of [
 // A capitalized name bound to a lambda is that lambda: applied, it runs
 // (Sized 2 is Vect 2 Int); where a type is expected, it is a function type.
 for (const [source, expected] of [
-    ["Sized = n -> Vect n Int\nSized 2 [1, 2]", "[1, 2]"],
-    ["Sized = n -> Vect n Int\ntypeOf (Sized 2 [1, 2])", "Vect 2 Int"],
+    ["Sized = n -> Vect n Int\nSized 2 [1,2]", "[1,2]"],
+    ["Sized = n -> Vect n Int\ntypeOf (Sized 2 [1,2])", "Vect 2 Int"],
     ["Handler = a -> Int\nrun ((Handler) h) = h 1\nrun (x -> 2)", "2"],
     ["Handler = a -> Int\nisType Handler (x -> 2)", "true"],
 ] as const) {
@@ -56,7 +56,7 @@ for (const [source, expected] of [
     });
 }
 for (const [source, message] of [
-    ["Sized = n -> Vect n Int\nSized 2 [1, 2, 3]", "length mismatch: expected 2, got 3"],
+    ["Sized = n -> Vect n Int\nSized 2 [1,2,3]", "length mismatch: expected 2, got 3"],
     ["Handler = a -> Int\nrun ((Handler) h) = h 1\nrun (x -> \"s\")", "cannot use String where Int is required"],
 ] as const) {
     Deno.test(`a lambda-valued type name rejects: ${JSON.stringify(source)}`, () => {

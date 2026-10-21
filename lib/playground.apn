@@ -1,7 +1,7 @@
 # Pictures, animations and games from shapes, as in Elm's Playground: an
 # element program drawing SVG that fills the window. The origin is the
 # screen's center, y grows upward, and angles are in degrees, counterclockwise.
-import ["number", "html", "time"]
+import ["number","html","time"]
 strings = import "text"
 svg = import "svg"
 browser = import "browser"
@@ -28,7 +28,7 @@ triangle color radius = Ngon color 3 radius
 pentagon color radius = Ngon color 5 radius
 hexagon color radius = Ngon color 6 radius
 octagon color radius = Ngon color 8 radius
-polygon color points = Polygon color (strings.unwords (map ([x, y] -> _point x (0 - y)) points))
+polygon color points = Polygon color (strings.unwords (map ([x,y] -> _point x (0 - y)) points))
 image width height source = Image width height source
 words color text = Words color text
 group shapes = Group shapes
@@ -98,13 +98,13 @@ toY keyboard = (keyboard.up ? 1 : 0) - (keyboard.down ? 1 : 0)
 toXY keyboard = {
     x = toX keyboard
     y = toY keyboard
-    x != 0 && y != 0 ? [x / sqrt 2, y / sqrt 2] : [x, y]
+    x != 0 && y != 0 ? [x / sqrt 2, y / sqrt 2] : [x,y]
 }
 
 # Shapes as SVG, as Elm's Playground draws them.
 _number x = isInteger x ? to String (Int (round x)) : to String (inexact x)
 _point x y = _number x ++ "," ++ _number y
-_colorText (Rgb r g b) = "rgb(" ++ strings.joinWith "," (map (to String) [r, g, b]) ++ ")"
+_colorText (Rgb r g b) = "rgb(" ++ strings.joinWith "," (map (to String) [r,g,b]) ++ ")"
 _corner radius angle = _point (radius * cos angle) (radius * sin angle)
 _ngonPoints n radius = strings.unwords
     (map (k -> _corner radius (turns (k / n - 1 / 4))) [0..n - 1])
@@ -149,7 +149,7 @@ _render shape = match shape [
 ]
 _view screen shapes = svg.svg [
     svg.viewBox (strings.unwords
-        (map _number [screen.left, screen.bottom, screen.width, screen.height]))
+        (map _number [screen.left,screen.bottom,screen.width,screen.height]))
     style "position" "fixed"
     style "top" "0"
     style "left" "0"
@@ -209,38 +209,38 @@ _advance updateMemory msg game = {
             computer.time = posixToMillis time
             computer.mouse.click = false
             game.computer = computer
-            [game, browser.none]
+            [game,browser.none]
         }
         GameViewport viewport -> {
             game.computer.screen = _toScreen viewport.width viewport.height
-            [game, browser.none]
+            [game,browser.none]
         }
         GameResized width height -> {
             game.computer.screen = _toScreen width height
-            [game, browser.none]
+            [game,browser.none]
         }
         # Compared, the keyboard is computed now, as Elm computes it, so no
         # chain of pending updates builds up; a held key's repeats change nothing.
         GameKey isDown key -> {
             keyboard = _updateKeyboard isDown key computer.keyboard
-            keyboard == computer.keyboard ? [game, browser.none] : {
+            keyboard == computer.keyboard ? [game,browser.none] : {
                 game.computer.keyboard = keyboard
-                [game, browser.none]
+                [game,browser.none]
             }
         }
         GameMouseMove pageX pageY -> {
-            game.computer.mouse.[x, y] = [
+            game.computer.mouse.[x,y] = [
                 computer.screen.left + pageX
                 computer.screen.top - pageY
             ]
-            [game, browser.none]
+            [game,browser.none]
         }
-        GameClick -> { game.computer.mouse.click = true; [game, browser.none] }
-        GameButton isDown -> { game.computer.mouse.down = isDown; [game, browser.none] }
+        GameClick -> { game.computer.mouse.click = true; [game,browser.none] }
+        GameButton isDown -> { game.computer.mouse.down = isDown; [game,browser.none] }
         GameVisibility _ -> {
             game.computer.keyboard = _noKeys
-            game.computer.mouse.[down, click] = [false, false]
-            [game, browser.none]
+            game.computer.mouse.[down,click] = [false,false]
+            [game,browser.none]
         }
     ]
 }
@@ -251,9 +251,9 @@ _subscriptions = browser.batch [
     browser.onKeyDown (GameKey true)
     browser.onResize GameResized
     browser.onMouseMove GameMouseMove
-    browser.onMouseClick (_, _ -> GameClick)
-    browser.onMouseDown (_, _ -> GameButton true)
-    browser.onMouseUp (_, _ -> GameButton false)
+    browser.onMouseClick (_,_ -> GameClick)
+    browser.onMouseDown (_,_ -> GameButton true)
+    browser.onMouseUp (_,_ -> GameButton false)
 ]
 
 # A game: view computer memory gives the shapes, update computer memory the
@@ -265,5 +265,5 @@ game viewMemory updateMemory memory = browser.element [
     view: (g -> _view g.computer.screen (viewMemory g.computer g.memory))
     subscriptions: (_ -> _subscriptions)
 ]
-picture shapes = game (_, _ -> shapes) (_, memory -> memory) []
-animation viewTime = game (computer, _ -> viewTime computer.time) (_, memory -> memory) []
+picture shapes = game (_,_ -> shapes) (_,memory -> memory) []
+animation viewTime = game (computer,_ -> viewTime computer.time) (_,memory -> memory) []

@@ -32,8 +32,8 @@ field makes it a record with that field whose other fields stay open:
 `f r = { r.a = 5; r }` accepts any record with an `a`. A function parameter,
 or a function read from a parameter's record (`p.call`), has one type like any
 parameter (`g 1` and `g "a"` conflict), but its first call does not fix the
-length of a list argument: `g [1]` and `g [1, 2, 3]` both check. A conditional
-whose branches are lists of one length (`c ? [x, y, z] : [0.0, 0.0, 0.0]`) is a list
+length of a list argument: `g [1]` and `g [1,2,3]` both check. A conditional
+whose branches are lists of one length (`c ? [x,y,z] : [0.0,0.0,0.0]`) is a list
 of that length holding either branch's items. Arithmetic between a `Float` and
 an `Int` the checker knows fits binary64 exactly (the literal in `dt / 8`) is a
 `Float`, as at runtime; with an unknown `Int` it is the general `Number`
@@ -189,13 +189,13 @@ conversion rules.
 
 ```apn
 Ints n = Vect n Int
-xs = Ints 3 [10, 20, 30]
+xs = Ints 3 [10,20,30]
 print (typeOf xs)                 # Vect 3 Int
 xs 0 = 40                        # still Int, still length 3
 
 copy n ((Ints n) values) = values
-copy 3 [10, 20, 30]
-# copy 3 [10, 20]                 # static length error in checked mode
+copy 3 [10,20,30]
+# copy 3 [10,20]                 # static length error in checked mode
 
 appendOne n ((Ints n) values) (Int value) = Ints (n + 1) (values ++ [value])
 ```
@@ -214,7 +214,7 @@ keeps a bound name's value).
 
 ```apn
 app ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys)
-typeOf (app [1, 2] [3])           # Vect 3 Int
+typeOf (app [1,2] [3])           # Vect 3 Int
 ```
 
 Later parameter patterns can refer to earlier argument bindings. A dependent
@@ -222,9 +222,9 @@ function application substitutes the supplied index into subsequent parameter
 and result types. The checker normalizes integer constants and affine index
 expressions (addition, subtraction, multiplication by a known constant).
 Known contradictory lengths are rejected. A list whose type leaves its length
-open, passed where a length is required (a list pattern `[a, b, c]`, `Vect 3`),
-has the length evaluating it finds (see below): `g (tail [0, 1, 2])` checks
-for `g [a, b]`. Lengths evaluation cannot find and unsupported index
+open, passed where a length is required (a list pattern `[a,b,c]`, `Vect 3`),
+has the length evaluating it finds (see below): `g (tail [0,1,2])` checks
+for `g [a,b]`. Lengths evaluation cannot find and unsupported index
 computations are dynamic boundaries: strict mode requires an explicit
 `Dynamic` boundary, while ordinary execution retains runtime validation.
 
@@ -259,7 +259,7 @@ cellType 0 = Int
 cellType _ = String
 SelectedType (isEven 4) 5              # Int: isEven 4 is true
 # SelectedType (isEven 3) 5            # static error: String is required
-# Vect (sizeFor 2) Int [1, 2, 3]         # static error: expected 4, got 3
+# Vect (sizeFor 2) Int [1,2,3]         # static error: expected 4, got 3
 (cellType 1) "text"                    # String
 ```
 
@@ -307,7 +307,7 @@ first (Cons x _) = x              # first Nil is a static error
 ```
 
 A family's parameters may also be written as a lambda, as `f = x -> e` is
-`f x = e`: `Vec = n, a -> (Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a)`
+`f x = e`: `Vec = n,a -> (Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a)`
 (or `n -> a -> (...)`) declares the same `Vec`; the constructors stand in the
 parentheses, on one line or each on its own line after a `|`.
 
@@ -358,7 +358,7 @@ append (Vect n a []) (Vect m a ys) = Vect (n + m) a ys
 append (Vect n a (x::xs)) (Vect m a ys) =
     Vect (n + m) a (x :: append xs ys)
 
-append [1, 2] [3, 4]              # [1, 2, 3, 4]
+append [1,2] [3,4]              # [1,2,3,4]
 ```
 
 The first pattern introduces length `n`, element type `a`, and the contents.
@@ -425,13 +425,13 @@ same x x = x
 same 3 3                         # 3
 # same 3 4                       # no matching clause
 
-(x, x -> x) 3 3                  # 3
+(x,x -> x) 3 3                  # 3
 ```
 
 Within one parameter list, the first occurrence binds and subsequent occurrences
 compare using APN equality. This also applies inside list and record patterns.
 The names shadow outer bindings; separate nested lambdas introduce separate
-scopes. `_` is always an independent wildcard, so `(_, _ -> 1) 2 3` returns 1.
+scopes. `_` is always an independent wildcard, so `(_,_ -> 1) 2 3` returns 1.
 The checker requires compatible types; equal values are still checked at runtime.
 Comparing infinite lists may not terminate. Function equality retains APN's
 existing behavior; repeated patterns do not prove function equivalence.
@@ -457,8 +457,8 @@ functions carry lengths through too, including nested ones: a result that is an
 argument, a list literal of such results, or an argument passed through those
 operations (`twice xs = xs * (x -> x * 2)`, `h a b = [map f a, map f b]`). A
 fold, cons, append, or filter makes the length unknown. So
-`g [a, b] = ...; g (sort [2, 1])` checks, `g (map f [1, 2, 3])` is a length
-error, and `[1, 2] + [3, 4, 5]` is rejected before running. Lengths follow a
+`g [a,b] = ...; g (sort [2,1])` checks, `g (map f [1,2,3])` is a length
+error, and `[1,2] + [3,4,5]` is rejected before running. Lengths follow a
 function only where it is called directly by name; a function value passed
 through a variable, ternary, list, or argument (`pick b = b ? sort : tail`)
 gives an unknown length. A list of unknown length (`tail`, `filter`) still
@@ -480,12 +480,12 @@ integer. Where only an unknown value decides, it keeps both possibilities. A cla
 its pattern for certain: a variable or `_` (not a repeated name), a list
 pattern of variables with a list of that known length, `[]` or `(x::xs)` with a
 known empty or non-empty list, a literal pattern with that same literal, or a
-typed pattern with its exact type (or a known value that converts losslessly). So with `f [] = [0]` before `f xs = [1, 2]`,
-`f []` is a one-element list, and with `f xs = [1, 2]` before `f (Int n) = [0]`,
+typed pattern with its exact type (or a known value that converts losslessly). So with `f [] = [0]` before `f xs = [1,2]`,
+`f []` is a one-element list, and with `f xs = [1,2]` before `f (Int n) = [0]`,
 `f 3` is too. A clause whose literal, length, or type definitely differs from
 the argument is skipped. Clauses for the same kind of input must agree on their
 result type, but may return lists of different lengths: with
-`f (Int n) = [1, 2]` and `f 0 = [0]`, `f 0` is a one-element list and `f 3` a
+`f (Int n) = [1,2]` and `f 0 = [0]`, `f 0` is a one-element list and `f 3` a
 two-element one. This also works through function parameters, at any depth:
 with `h x = g (f x)`, the checker decides `f x` at each call of `h`, so `h 0`
 uses the literal clause (as does `h 1` for `f (x - 1)`). Every literal kind
@@ -554,7 +554,7 @@ they name, refer to, including what its lazily computed values are computed
 from and what a file it loads (by a literal path) names. An `env` view
 (`scope <- Dynamic env`, also one bound by an earlier REPL input) reaches the
 bindings it names: literal fields (`scope.bump`, `scope "bump"`,
-`scope.[a, b]`, `scope.x = v`) and keys whose string the checker knows where
+`scope.[a,b]`, `scope.x = v`) and keys whose string the checker knows where
 the view is used (`key = "bump"; (scope key) 0`, with `key` read as bound
 then; a key bound locally, `{ k = "bump"; (scope k) 0 }`, may be each value
 it is bound to). This holds wherever the view goes: stored in a record, list
@@ -570,7 +570,7 @@ record of unknown fields reaches everything. A function held by a pattern
 binding (`h <- (x -> ...)`) runs its body where it is called. Lazily computed list elements run where the program forces
 them, as at runtime: `map`'s elements when used, `filter`'s predicate as its
 cells are reached, printing and `==` cell by cell, so after
-`print (map (x -> set counter x) [1, 2])`, `counter` is 2, and a top-level
+`print (map (x -> set counter x) [1,2])`, `counter` is 2, and a top-level
 action such as `xs = map f ys` builds its list afresh at each use. A value a statement leaves unforced matters only if it is
 kept, in a top-level cell or a kept top-level value; a later statement that can
 reach it runs statically too, so it is forced, once, where the program forces
@@ -581,8 +581,8 @@ reads the same text the checker saw. Stdin is read ahead only when it is not a
 terminal (a pipe or a redirected file), so interactive programs are unaffected;
 at a terminal it stays unknown. Lint and editor checks never read input. A function
 argument may be a lambda, an operator section, a named function, or a partial
-application, also when passed through a parameter: `filter (> 1) [1, 2]` and
-`hh (> 1)` with `hh p = filter p [1, 2]` both have one element. A recursive call
+application, also when passed through a parameter: `filter (> 1) [1,2]` and
+`hh (> 1)` with `hh p = filter p [1,2]` both have one element. A recursive call
 does not fix the length of a parameter whose pattern leaves it open, so
 `go xs = null xs ? [] : go []` accepts lists of any length. So with
 `safe n = n > 0 ? Some n : None`, `f (safe 4)` uses the `Some` clause and
@@ -591,7 +591,7 @@ the decision waits for `h`'s calls, where `v` is known. Where a value stays
 unknown, every possible result counts. Evaluation is bounded in work, so very
 long computations fall back to that. Calls through a variable that holds a function are not
 evaluated. A step function used with `repeatApply` may feed its own
-results back through arithmetic (`g [a, b] = forceList [b, a + b]`).
+results back through arithmetic (`g [a,b] = forceList [b, a + b]`).
 Record-template patterns convert positional lists at runtime and
 are checked against their named field types. Inferred parameters do not silently
 convert arguments; actual constructors and converting patterns provide conversions.

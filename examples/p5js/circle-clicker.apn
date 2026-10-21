@@ -4,9 +4,9 @@ import "p5"
 
 # The circle (a radius of 0 shows the start screen), its largest radius now,
 # the score and the high score.
-center = Mutable [0.0, 0.0]
+center = Mutable [0.0,0.0]
 radius = Mutable 0.0
-color = Mutable [0.0, 0.0, 0.0]
+color = Mutable [0.0,0.0,0.0]
 largest = Mutable 0.0
 score = Mutable 0
 highScore = Mutable 0
@@ -26,12 +26,12 @@ draw (Sketch p) = {
     p.background 20
     radius > 0 ? {
         # The circle, shrinking, and the score.
-        [x, y] = center
+        [x,y] = center
         p.fill color
         p.circle x y radius
         p.describeElement "Circle" "Randomly colored shrinking circle"
         set radius (radius - 1)
-        p.call "textAlign" [p.RIGHT, p.TOP]
+        p.call "textAlign" [p.RIGHT,p.TOP]
         p.fill 220
         p.text (to String score) (p.width - 20) 20
         p.describeElement "Score" ("Text with current score: " ++ to String score)
@@ -48,11 +48,11 @@ endGame (Sketch p) = {
     p.noLoop
     set highScore (max highScore score)
     p.storeItem "high score" highScore
-    p.call "textAlign" [p.CENTER, p.CENTER]
+    p.call "textAlign" [p.CENTER,p.CENTER]
     p.fill 220
     startText = "Circle Clicker\nClick the circle before it gets too small\nScore: "
         ++ to String score ++ "\nHigh score: " ++ to String highScore ++ "\nClick to play"
-    p.call "text" [startText, 0, 0, p.width, p.height]
+    p.call "text" [startText,0,0,p.width,p.height]
     p.describeElement "Start text" ("Text reading, \"" ++ startText ++ "\"")
 }
 
@@ -73,7 +73,7 @@ resetCircle (Sketch p) = {
 mousePressed (Sketch p) = {
     Bool looping <- p.isLooping
     looping ? {
-        [x, y] = center
+        [x,y] = center
         when (dist p.mouseX p.mouseY x y < radius) {
             set largest (max (largest - 1) 15.0)
             resetCircle p

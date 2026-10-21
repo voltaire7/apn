@@ -12,11 +12,11 @@ for (const [source, expected] of [
     ['Distance = Float\nDistance 2 + Distance 3', 'Distance 5.0'],
     ['Distance = Int\n-Distance 2', 'Distance (-2)'],
     ['Distance = Int\nDistance 2 < Distance 3', 'true'],
-    ['UserId = Int\nf (t x) = [t, x]\nf (UserId 3)', '[UserId, 3]'],
-    ['UserId = Int\nAlias = UserId\n[Alias == UserId, Alias 3 == UserId 3]', '[true, true]'],
-    ['UserId = Int\nOrderId = Int\n[UserId == OrderId, UserId 3 == OrderId 3, UserId 3 == 3]', '[false, false, true]'],
+    ['UserId = Int\nf (t x) = [t,x]\nf (UserId 3)', '[UserId,3]'],
+    ['UserId = Int\nAlias = UserId\n[Alias == UserId, Alias 3 == UserId 3]', '[true,true]'],
+    ['UserId = Int\nOrderId = Int\n[UserId == OrderId, UserId 3 == OrderId 3, UserId 3 == 3]', '[false,false,true]'],
     ['Distance = Int\nDistance 2 + 3', 'Distance 5'],
-    ['Money = Float\nf (Float x) = "Float"\nf (Money x) = "Money"\n[f 1.2, f (Money 1.2)]', '["Float", "Money"]'],
+    ['Money = Float\nf (Float x) = "Float"\nf (Money x) = "Money"\n[f 1.2, f (Money 1.2)]', '["Float","Money"]'],
     ['Money = Float\nsqrt (Money 4.0)', '2.0'],
     ['UserId = Int\nunpack (UserId n) = n\nunpack (UserId 123)', '123'],
     ['UserId = Int\nOrderId = Int\nf (UserId n) = n\nf _ = 0\nf (OrderId 3)', '0'],
@@ -24,8 +24,8 @@ for (const [source, expected] of [
     ['v = [x: Int] [y: 2]\nv', '[x: 0, y: 2]'],
     ['assert true', 'true'],
     ['import "function"\ncount = Mutable 0\nbracket 42 (_ -> set count 1) (x -> x + 1)\ncount', '1'],
-    ['import "function"\nbracket 42 (_ -> []) (x -> [x, x+1])', '[42, 43]'],
-    ['import "function"\ncount = Mutable 0\nv <- bracket 1 (_ -> set count 9) (_ -> [count + 1])\n[v, count]', '[[1], 9]'],
+    ['import "function"\nbracket 42 (_ -> []) (x -> [x,x+1])', '[42,43]'],
+    ['import "function"\ncount = Mutable 0\nv <- bracket 1 (_ -> set count 9) (_ -> [count + 1])\n[v,count]', '[[1],9]'],
 ]) Deno.test(`Odin-inspired rule: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -38,7 +38,7 @@ for (const [source, error] of [
     ['assert (1 == 2)', 'assertion failed: (1 == 2)'],
     ['check = assert\ncheck false', 'assertion failed: false'],
     ['import "function"\nbracket 1 (_ -> []) (x -> (y -> x))', 'must return data'],
-    ['import "function"\nbracket 1 (x, y -> []) (x -> x)', 'release must take one remaining argument'],
+    ['import "function"\nbracket 1 (x,y -> []) (x -> x)', 'release must take one remaining argument'],
     ['import "io"\nwithFile "lib/io.apn" 123', 'callback must take one remaining argument'],
 ]) Deno.test(`Odin-inspired rejection: ${source}`, () => {
     try { result(source); } catch (e) { if (String(e).includes(error)) return; throw e; }

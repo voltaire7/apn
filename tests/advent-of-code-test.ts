@@ -26,10 +26,10 @@ for (const [source, expected] of [
     ['solveHill "SE"', 'None'],
     ['solveHill "SabcdefghijklmnopqrstuvwxyzE"', 'Some 27'],
     ['lookup 1000 (bfsDistances (n -> n < 1000 ? [n+1] : []) [0])', '1000'],
-    ['pairs (bfsDistances (n -> [n, n]) [0, 0])', '[[0, 0]]'],
-    ['pairs (bfsDistances (n -> [1-n]) [0, 1])', '[[0, 0], [1, 0]]'],
+    ['pairs (bfsDistances (n -> [n,n]) [0,0])', '[[0,0]]'],
+    ['pairs (bfsDistances (n -> [1-n]) [0,1])', '[[0,0],[1,0]]'],
     ['pairs (bfsDistances missing [])', '[]'],
-    ['integers "-4 +2 0 100"', '[-4, 2, 0, 100]'],
+    ['integers "-4 +2 0 100"', '[-4,2,0,100]'],
     ['length (splitOn "," (joinWith "" (replicate 2000 "a")))', '1'],
 ]) Deno.test(`AoC helper/stress: ${source}`, () => {
     const actual = result(interpreter(), source);

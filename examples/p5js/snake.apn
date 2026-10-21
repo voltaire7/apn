@@ -1,13 +1,13 @@
 # Snake, from https://p5js.org/examples/games-snake/
 # Make a game based on Snake arcade games.
-import ["p5", "sequence"]
+import ["p5","sequence"]
 
-[gridWidth, gridHeight, startingSegments] = [30, 30, 10]
+[gridWidth,gridHeight,startingSegments] = [30,30,10]
 # The snake's cells from its head (a list of any length), its direction, the
 # fruit, the scores and whether a game is on.
-segments = Mutable ((List [Int, Int]) [])
+segments = Mutable ((List [Int,Int]) [])
 direction = Mutable "right"
-fruit = Mutable [0, 0]
+fruit = Mutable [0,0]
 score = Mutable 0
 highScore = Mutable 0
 playing = Mutable false
@@ -15,7 +15,7 @@ playing = Mutable false
 setup (Sketch p) = {
     p.createCanvas 500 500
     p.frameRate 10
-    p.call "textAlign" [p.CENTER, p.CENTER]
+    p.call "textAlign" [p.CENTER,p.CENTER]
     p.textSize 2
     stored <- p.getItem "high score"
     set highScore (stored == [] ? 0 : Int stored)
@@ -32,10 +32,10 @@ updateSegments = set segments (advance segments)
 # new snake is built from the old one.
 advance (List cells) = {
     step = match direction [
-        "right" -> [1, 0]
-        "up" -> [0, -1]
-        "left" -> [-1, 0]
-        "down" -> [0, 1]
+        "right" -> [1,0]
+        "up" -> [0,-1]
+        "left" -> [-1,0]
+        "down" -> [0,1]
     ]
     head cells + step :: take (length cells - 1) cells
 }
@@ -77,23 +77,23 @@ startGame (Sketch p) = {
 }
 
 showFruit (Sketch p) = {
-    p.stroke [255, 64, 32]
-    [x, y] = fruit
+    p.stroke [255,64,32]
+    [x,y] = fruit
     p.point x y
 }
 
 showSegments (Sketch p) = {
     p.noFill
-    p.stroke [96, 255, 64]
+    p.stroke [96,255,64]
     p.beginShape
-    mapM ([x, y] -> p.vertex x y) segments
+    mapM ([x,y] -> p.vertex x y) segments
     p.endShape
 }
 
 # Off the grid, or into itself, ends the game.
 checkForCollision (Sketch p) = {
-    [x, y] = head segments
-    when (x >= gridWidth || x < 0 || y >= gridHeight || y < 0 || contains [x, y] (tail segments))
+    [x,y] = head segments
+    when (x >= gridWidth || x < 0 || y >= gridHeight || y < 0 || contains [x,y] (tail segments))
         (gameOver p)
 }
 
@@ -126,12 +126,12 @@ updateFruitCoordinates (Sketch p) = {
 # The arrow keys turn the snake, but not back on itself.
 keyPressed (Sketch p) = {
     turn = [
-        [p.LEFT_ARROW, "left", "right"]
-        [p.RIGHT_ARROW, "right", "left"]
-        [p.UP_ARROW, "up", "down"]
-        [p.DOWN_ARROW, "down", "up"]
+        [p.LEFT_ARROW,"left","right"]
+        [p.RIGHT_ARROW,"right","left"]
+        [p.UP_ARROW,"up","down"]
+        [p.DOWN_ARROW,"down","up"]
     ]
-    mapM ([code, way, opposite] -> when (p.code == code && direction != opposite)
+    mapM ([code,way,opposite] -> when (p.code == code && direction != opposite)
         (set direction way)) turn
 }
 

@@ -1,6 +1,6 @@
 # Input and Button, from https://p5js.org/examples/input-elements-input-button/
 # Use text input from the page visitor.
-import ["html", "p5"]
+import ["html","p5"]
 browser = import "browser"
 
 # The name being typed, and the one submitted last.
@@ -10,7 +10,7 @@ Msg = Typed String | Greet
 init = [[typing: "", name: ""], browser.none]
 
 update msg model = match msg [
-    Typed typing -> { model.typing = typing; [model, browser.none] }
+    Typed typing -> { model.typing = typing; [model,browser.none] }
     Greet -> [[typing: "", name: model.typing], browser.none]
 ]
 
@@ -37,7 +37,7 @@ setup (Sketch p) = p.createCanvas 710 400
 draw name (Sketch p) = {
     p.background 255
     p.textSize 100
-    p.call "textAlign" [p.CENTER, p.CENTER]
+    p.call "textAlign" [p.CENTER,p.CENTER]
     p.text name (p.width / 2) (p.height / 2)
     p.describe ("The name " ++ name ++ " in large black text on a white background.")
 }

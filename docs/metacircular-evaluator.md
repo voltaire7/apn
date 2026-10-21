@@ -3,7 +3,7 @@
 ```apn
 import "meta"
 metaEval "fact n = n == 0 ? 1 : n * fact (n - 1); fact 5"  # 120
-metaEval "x = 1 :: x; take 6 x"                          # [1, 1, 1, 1, 1, 1]
+metaEval "x = 1 :: x; take 6 x"                          # [1,1,1,1,1,1]
 ```
 
 The reader, lexical environments, recursive bindings, closure representation,
@@ -45,10 +45,10 @@ the live evaluator source, so the proof cannot silently drift from the code.
 | `lib/meta/evaluator.apn` | Environments, closures, recursive scope, application, dispatch |
 | `lib/meta/primitives.apn` | Explicit object-language primitive environment |
 
-Syntax is data: `["literal", 42]`, `["variable", "x"]`,
-`["lambda", "x", body]`, `["apply", function, argument]`,
-`["if", condition, yes, no]`, `["list", expressions]`, and
-`["scope", definitions, body]`. `metaParse` returns `[definitions, expression]`.
+Syntax is data: `["literal",42]`, `["variable","x"]`,
+`["lambda","x",body]`, `["apply",function,argument]`,
+`["if",condition,yes,no]`, `["list",expressions]`, and
+`["scope",definitions,body]`. `metaParse` returns `[definitions,expression]`.
 
 Environments are persistent HashMaps. A closure is a map containing its
 parameter, body and lexical environment. Applying a closure extends that

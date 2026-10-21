@@ -4,7 +4,7 @@ import "p5"
 
 texture = loadImage "assets/particle_texture.png"
 # A particle: where it is, its velocity, its life left and its hue.
-Particle = [position: [Float, Float], velocity: [Float, Float], life: Float, hue: Int]
+Particle = [position: [Float,Float], velocity: [Float,Float], life: Float, hue: Int]
 particles = Mutable ((List Particle) [])
 
 setup (Sketch p) = {
@@ -21,7 +21,7 @@ draw (Sketch p) = {
     set particles (filter (particle -> particle.life > 0) (map (blow wind) particles))
     mapM (render p) particles
     # Two new particles a frame.
-    added <- mapM (_ -> newParticle p) [1, 2]
+    added <- mapM (_ -> newParticle p) [1,2]
     set particles (particles ++ added)
     drawVector p wind [p.width / 2, 50] 500
 }
@@ -45,14 +45,14 @@ blow wind particle = {
 
 # The texture, tinted with the particle's hue, fading as its life runs out.
 render (Sketch p) particle = {
-    [x, y] = particle.position
+    [x,y] = particle.position
     p.imageMode p.CENTER
-    p.call "tint" [particle.hue, 255, 255, particle.life]
+    p.call "tint" [particle.hue,255,255,particle.life]
     p.image texture x y
 }
 
 # An arrow showing a vector, from a point, scaled.
-drawVector (Sketch p) vector [x, y] scale = {
+drawVector (Sketch p) vector [x,y] scale = {
     p.push
     p.translate x y
     p.stroke 255

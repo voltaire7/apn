@@ -23,6 +23,7 @@ import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, type
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
 import { parse, exprToSource, patternSource, rangeExpr, isOperatorName, PRIMITIVE_OPERATORS } from "./parser.ts";
+import { itemsText, spacedItem } from "./separators.ts";
 
 // ---------------- Evaluator ----------------
 
@@ -661,9 +662,9 @@ export class Interpreter {
                     const entry = this.cell(rest);
                     if (!entry) throw new APNError("runtime", `association key '${key.v}' not found`);
                     const pair = this.dataValue(entry.head);
-                    if (!this.isList(pair)) throw new APNError("runtime", "association assignment expects [string, value] pairs");
+                    if (!this.isList(pair)) throw new APNError("runtime", "association assignment expects [string,value] pairs");
                     const first = this.cell(pair), second = first && this.cell(first.tail);
-                    if (!first || !second || this.cell(second.tail)) throw new APNError("runtime", "association lookup expects [string, value] pairs");
+                    if (!first || !second || this.cell(second.tail)) throw new APNError("runtime", "association lookup expects [string,value] pairs");
                     const name = this.dataValue(first.head);
                     if (name.kind !== "string") throw new APNError("runtime", "association lookup expects string keys");
                     if (name.v === key.v) {
@@ -2471,13 +2472,30 @@ export class Interpreter {
                 emit("HashMap", "type"); emit(" ");
                 this.render(mkList([...v.entries.values()].map(([key, value]) => mkList([key, value]))), emit, false, ancestors);
             } else if (this.isList(v)) {
+                // Its ',' takes a space when an item has one (itemsText), so the
+                // items are held until one does, the list ends, or sixteen
+                // (or 4096 characters) are held: a list streams after that.
                 emit("[");
-                let first = true;
-                for (const item of this.elements(v)) {
-                    if (!first) emit(", ");
-                    first = false;
-                    this.render(item, emit, false, ancestors);
+                type Part = [string, Parameters<typeof emit>[1]] | null;
+                let separator: string | undefined, item = "", held: Part[] = [], heldLength = 0, count = 0;
+                const decide = (spaced: boolean) => {
+                    separator = spaced ? ", " : ",";
+                    for (const part of held) part ? emit(...part) : emit(separator);
+                    held = [];
+                };
+                const out = (text: string, kind?: Parameters<typeof emit>[1]) => {
+                    if (separator !== undefined) return emit(text, kind);
+                    held.push([text, kind]);
+                    item += text;
+                    if ((heldLength += text.length) > 4096) decide(spacedItem(item));
+                };
+                for (const element of this.elements(v)) {
+                    if (count++) separator === undefined ? held.push(null) : emit(separator);
+                    item = "";
+                    this.render(element, out, false, ancestors);
+                    if (separator === undefined && (spacedItem(item) || count >= 16)) decide(spacedItem(item));
                 }
+                if (separator === undefined) decide(false);
                 emit("]");
             } else if (v.kind === "record") {
                 emit("[");
@@ -2743,7 +2761,7 @@ export class Interpreter {
             const from = this.reference(t.from);
             return `${from.kind === "functionType" ? `(${this.writtenType(from)})` : this.writtenType(from)} -> ${this.writtenType(t.to)}`;
         }
-        if (this.isList(t)) return `[${[...this.elements(t)].map(x => this.writtenType(x)).join(", ")}]`;
+        if (this.isList(t)) return `[${itemsText([...this.elements(t)].map(x => this.writtenType(x)))}]`;
         if (t.kind === "record") return `[${t.v.map(([key, x]) => `${keySource(key)}: ${this.writtenType(x)}`).join(", ")}]`;
         return valueToString(t);
     }
@@ -3156,7 +3174,7 @@ export class Interpreter {
         const items = this.items(value);
         return items.map((item) => {
             const pair = this.demand(item);
-            if (!this.isList(pair)) throw new APNError("runtime", "association entries must be [key, value] pairs");
+            if (!this.isList(pair)) throw new APNError("runtime", "association entries must be [key,value] pairs");
             const cells = this.items(pair);
             if (cells.length !== 2) throw new APNError("runtime", "association entries must have exactly two elements");
             return [this.demand(cells[0]), cells[1]];
@@ -3579,11 +3597,11 @@ export class Interpreter {
             const entry = this.cell(rest);
             if (entry === null) throw new APNError("runtime", `association list has no key ${JSON.stringify(key)}`);
             const pair = this.dataValue(entry.head);
-            if (!this.isList(pair)) throw new APNError("runtime", "association lookup expects [string, value] pairs");
+            if (!this.isList(pair)) throw new APNError("runtime", "association lookup expects [string,value] pairs");
             const first = this.cell(pair);
             const second = first && this.cell(first.tail);
             if (!first || !second || this.cell(second.tail) !== null) {
-                throw new APNError("runtime", "association lookup expects [string, value] pairs");
+                throw new APNError("runtime", "association lookup expects [string,value] pairs");
             }
             const candidate = this.dataValue(first.head);
             if (candidate.kind !== "string") throw new APNError("runtime", "association lookup expects string keys");

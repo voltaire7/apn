@@ -5,11 +5,11 @@ function result(source: string): string {
     return interpreter.renderString(interpreter.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['Option x = Some x | None\nf (Option x) = match x [Some y -> y, None -> 0]\n[f (Some 123), f None]', '[123, 0]'],
-    ['Option x = Some x | None\nf (Option x) = true\nf _ = false\n[f (Some missing), f None, f 123]', '[true, true, false]'],
+    ['Option x = Some x | None\nf (Option x) = match x [Some y -> y, None -> 0]\n[f (Some 123), f None]', '[123,0]'],
+    ['Option x = Some x | None\nf (Option x) = true\nf _ = false\n[f (Some missing), f None, f 123]', '[true,true,false]'],
     ['Option x = Some x | None\nOther x = | Else x\nf (Option x) = true\nf _ = false\nf (Else 1)', 'false'],
     ['Option x = Some x | None\nmatch (Some 3) [Option x -> x]', 'Some 3'],
-    ['Option x = Some x | None\n[match None [Option x -> 1, _ -> 0], match 2 [Option x -> 1, _ -> 0]]', '[1, 0]'],
+    ['Option x = Some x | None\n[match None [Option x -> 1, _ -> 0], match 2 [Option x -> 1, _ -> 0]]', '[1,0]'],
     ['Option x = Some x | None\n[Option (Some 1), cast Option None, isType Option (Some missing), isType Option 1, typeOf (Some 1)]', '[Some 1, None, true, false, Option]'],
     ['Option x = Some x | None\nf (Some x) = x\nf (Some 123)', '123'],
     ['Box x = | Box x\nf (Box x) = x\nf (Box 123)', '123'],

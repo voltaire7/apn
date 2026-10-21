@@ -1,6 +1,6 @@
 # JSON, from https://p5js.org/examples/loading-and-saving-data-json/
 # Load data from a JSON file, and save it to one.
-import ["html", "io", "option", "p5"]
+import ["html","io","option","p5"]
 browser = import "browser"
 file = import "file"
 http = import "http"
@@ -18,7 +18,7 @@ Msg =
     | Released String Float
 
 init = [
-    [bubbles: (List Bubble) [], pressed: [0.0, 0.0], creating: false]
+    [bubbles: (List Bubble) [], pressed: [0.0,0.0], creating: false]
     task.perform Loaded (readFile "assets/bubbles.json")
 ]
 
@@ -29,18 +29,18 @@ update msg model = match msg [
     Loaded text -> [load text model, browser.none]
     # A file the visitor picked, read as text.
     Picked (picked :: _) -> [model, http.get [url: picked.url, expect: http.expectString Read]]
-    Picked [] -> [model, browser.none]
+    Picked [] -> [model,browser.none]
     Read (Ok text) -> [load text model, browser.none]
-    Read (Err _) -> [model, browser.none]
+    Read (Err _) -> [model,browser.none]
     Download -> [model, file.download "bubbles.json" "application/json" (to JSON model.bubbles)]
-    Pressed x y -> { model.pressed = [x, y]; model.creating = true; [model, browser.none] }
+    Pressed x y -> { model.pressed = [x,y]; model.creating = true; [model,browser.none] }
     # A bubble with the name asked for (none if it was cancelled).
     Released name radius -> {
-        [x, y] = model.pressed
+        [x,y] = model.pressed
         model.creating = false
         model.bubbles = model.bubbles ++ (name == ""
             ? [] : [[x: x, y: y, radius: radius, name: name]])
-        [model, browser.none]
+        [model,browser.none]
     }
 ]
 
@@ -74,13 +74,13 @@ draw model (Sketch p) = {
     mapM (display p) model.bubbles
     # The bubble being made, as large as the drag.
     when model.creating {
-        [x, y] = model.pressed
+        [x,y] = model.pressed
         p.noFill
         p.stroke 0
         p.strokeWeight 4
         p.circle x y (dist x y p.mouseX p.mouseY)
     }
-    p.call "textAlign" [p.LEFT, p.BOTTOM]
+    p.call "textAlign" [p.LEFT,p.BOTTOM]
     p.fill 0
     p.noStroke
     p.text "Click and drag to add bubbles." 10 (p.height - 10)
@@ -103,7 +103,7 @@ display (Sketch p) bubble = {
 mousePressed (Sketch p) = p.send (Pressed (Float p.mouseX) (Float p.mouseY))
 
 mouseReleased model (Sketch p) = when model.creating {
-    [x, y] = model.pressed
+    [x,y] = model.pressed
     name <- p.prompt "Enter a name for the new bubble"
     p.send (Released (String name) (Float (dist x y p.mouseX p.mouseY)))
 }

@@ -42,11 +42,11 @@ for (const [n, definition] of PER_ITEM.entries()) {
 for (const [source, expected] of [
     ["x = 1\n    + 2\nx", "3"],
     ["f a = a\n    * 10\n    + 1\nf 2", "21"],
-    ["g n = n > 1\n    ? \"big\"\n    : \"small\"\n[g 1, g 2]", '["small", "big"]'],
+    ["g n = n > 1\n    ? \"big\"\n    : \"small\"\n[g 1, g 2]", '["small","big"]'],
     // A line at the statement's own level starts the next statement.
     ["h = {\n    x = 1\n    -x\n}\nh", "-1"],
     // In a list, a line break separates items.
-    ["[\n    1\n    -2\n]", "[1, -2]"],
+    ["[\n    1\n    -2\n]", "[1,-2]"],
 ] as const) {
     Deno.test(`continuation lines: ${JSON.stringify(source)}`, () => {
         const actual = run(source);

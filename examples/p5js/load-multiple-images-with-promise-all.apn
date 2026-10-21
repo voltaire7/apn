@@ -13,7 +13,7 @@ setup (Sketch p) = {
     p.textOutput
     p.createCanvas 600 400
     p.background 220
-    p.call "textAlign" [p.CENTER, p.CENTER]
+    p.call "textAlign" [p.CENTER,p.CENTER]
     p.textSize 18
     p.image image1 100 150
     p.image image2 250 150
@@ -22,4 +22,4 @@ setup (Sketch p) = {
     p.text "All images loaded!" (p.width / 2) 50
 }
 
-main = sketch [preload: [image1, image2, image3], setup: setup]
+main = sketch [preload: [image1,image2,image3], setup: setup]

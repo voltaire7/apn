@@ -27,19 +27,19 @@ function fails(source: string, text: string, kind?: string): void {
 
 for (const [name, source, expected] of [
     ["operators are functions", "print ((+) 1 2)\nprint (foldl (*) 1 [1..5])\nprint (primAdd 1 2)", ["3", "120", "3"]],
-    ["sections of any operator", "print (map (2 ^) [1, 2, 3])\nprint (map (++ [0]) [[1], [2]])\nprint (filter (>= 2) [1, 2, 3])", ["[2, 4, 8]", "[[1, 0], [2, 0]]", "[2, 3]"]],
-    ["prelude fixities", "print (1 + 2 * 3)\nprint (2 ^ 3 ^ 2)\nprint (10 - 3 - 2)\nprint (1 :: 2 :: [3])\nprint (-2 ^ 2)", ["7", "512", "5", "[1, 2, 3]", "-4"]],
-    ["cons stays lazy", "ones = 1::ones\nprint (take 3 ones)", ["[1, 1, 1]"]],
+    ["sections of any operator", "print (map (2 ^) [1,2,3])\nprint (map (++ [0]) [[1],[2]])\nprint (filter (>= 2) [1,2,3])", ["[2,4,8]", "[[1,0],[2,0]]", "[2,3]"]],
+    ["prelude fixities", "print (1 + 2 * 3)\nprint (2 ^ 3 ^ 2)\nprint (10 - 3 - 2)\nprint (1 :: 2 :: [3])\nprint (-2 ^ 2)", ["7", "512", "5", "[1,2,3]", "-4"]],
+    ["cons stays lazy", "ones = 1::ones\nprint (take 3 ones)", ["[1,1,1]"]],
     ["&& and || short-circuit", "print (false && head [])\nprint (true || head [])", ["false", "true"]],
     ["an overload falls back to the builtin", "Money = | Money Int\n(Money a) + (Money b) = Money (a + b)\nprint (Money 3 + Money 4)\nprint (1 + 2)\nprint (\"a\" + \"b\")",
         ["Money 7", "3", "ab"]],
     ["a literal clause falls back to the builtin for other arguments", "1 + 1 = 3\nprint (1 + 1)\nprint (1 + 2)\nprint (2 + 2)", ["3", "3", "4"]],
-    ["a new operator with a fixity", "infixr 5 +|+\nxs +|+ ys = xs ++ [0] ++ ys\nprint ([1] +|+ [2] +|+ [3])", ["[1, 0, 2, 0, 3]"]],
+    ["a new operator with a fixity", "infixr 5 +|+\nxs +|+ ys = xs ++ [0] ++ ys\nprint ([1] +|+ [2] +|+ [3])", ["[1,0,2,0,3]"]],
     ["an undeclared operator is infixl 9", "a <-> b = a - b\nprint (10 <-> 3 <-> 2)\nprint (2 * 5 <-> 1)", ["5", "8"]],
     ["an operator bound to a function", "(<||>) = max\nprint (3 <||> 7)\nprint ((<||>) 9 1)", ["7", "9"]],
     ["a local operator definition", "f x = {\n    (+) = max\n    x + 1\n}\nprint (f 5)\nprint (5 + 1)", ["5", "6"]],
     ["a local infix definition", "f x = {\n    a <+> b = a * 10 + b\n    x <+> 1 <+> 2\n}\nprint (f 5)", ["512"]],
-    ["$ is an operator", "print (head $ tail [1, 2, 3])\nprint ((+ 1) \\ (* 2) $ 3)", ["2", "7"]],
+    ["$ is an operator", "print (head $ tail [1,2,3])\nprint ((+ 1) \\ (* 2) $ 3)", ["2", "7"]],
 ] as const) Deno.test(`operators: ${name}`, () => {
     for (const checked of [true, false]) {
         const actual = run(source, checked);

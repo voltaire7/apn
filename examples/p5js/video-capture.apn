@@ -14,7 +14,7 @@ setup (Sketch p) = {
 
 draw (Sketch p) = {
     p.background 51
-    p.call "image" [capture, 0, 0, 360, 400]
+    p.call "image" [capture,0,0,360,400]
     # Invert the colors of everything drawn.
     p.filter p.INVERT
 }

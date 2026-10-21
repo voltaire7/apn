@@ -29,7 +29,7 @@ displaceColors = createFilterShader "
 "
 
 setup (Sketch p) = {
-    p.call "createCanvas" [700, 400, p.WEBGL]
+    p.call "createCanvas" [700,400,p.WEBGL]
     video.volume 0
     video.hide
     video.loop
@@ -43,7 +43,7 @@ draw (Sketch p) = {
     p.imageMode p.CENTER
     videoWidth <- video.width
     videoHeight <- video.height
-    p.call "image" [video, 0, 0, p.width, p.height, 0, 0, videoWidth, videoHeight, p.COVER]
+    p.call "image" [video,0,0,p.width,p.height,0,0,videoWidth,videoHeight,p.COVER]
     p.pop
     p.filter displaceColors
 }

@@ -3,17 +3,17 @@
 import "p5"
 
 setup (Sketch p) = {
-    p.call "createCanvas" [710, 400, p.WEBGL]
+    p.call "createCanvas" [710,400,p.WEBGL]
     p.angleMode p.DEGREES
     p.strokeWeight 5
     p.noFill
-    p.stroke [32, 8, 64]
+    p.stroke [32,8,64]
     p.describe ("Users can click on the screen and drag to adjust their perspective in 3D space. "
         ++ "The space contains a sphere of dark purple cubes on a light pink background.")
 }
 
 draw (Sketch p) = {
-    p.background [250, 180, 200]
+    p.background [250,180,200]
     # The camera follows the mouse (or touch) every frame.
     p.orbitControl
     # Rings of cubes, turned through half a circle: a sphere of cubes.
@@ -25,7 +25,7 @@ draw (Sketch p) = {
         p.translate 0 400
         p.call "box" []
         p.pop
-    }) [0, 30..330]) [0, 30..150]
+    }) [0,30..330]) [0,30..150]
 }
 
 main = sketch [setup: setup, draw: draw]

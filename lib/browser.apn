@@ -1,6 +1,6 @@
-# Programs, as in Elm's Browser. A sandbox is [init, update, view]. An element
-# is [init, update, view, subscriptions]: init is [model, command], update msg
-# model returns [model, command], and subscriptions model names the events the
+# Programs, as in Elm's Browser. A sandbox is [init,update,view]. An element
+# is [init,update,view,subscriptions]: init is [model,command], update msg
+# model returns [model,command], and subscriptions model names the events the
 # program listens to. Creating either has no effects; the browser runs it.
 import "time"
 BrowserProgram = BrowserSandbox Dynamic | BrowserElement Dynamic

@@ -7,10 +7,10 @@ for (const [source, expected, effects] of [
     ['do [print "hi", print "there", return 42]', '42', ['hi', 'there']],
     ['greet = do [print "hi"]; greet; greet', '[]', ['hi', 'hi']],
     ['xs = [print "hi"]; do xs; do xs', '[]', ['hi', 'hi']],
-    ['say = print "hi"; do [say, say]', '[]', ['hi', 'hi']],
-    ['do (map (n -> print n) [1, 2, 3])', '[]', ['1', '2', '3']],
+    ['say = print "hi"; do [say,say]', '[]', ['hi', 'hi']],
+    ['do (map (n -> print n) [1,2,3])', '[]', ['1', '2', '3']],
     ['do (map return [1..10000])', '10000', []],
-    ['v <- do [print "hi", return [42, missing]]; head v', '42', ['hi']],
+    ['v <- do [print "hi", return [42,missing]]; head v', '42', ['hi']],
     ['f = import "function"; f.do [return 1, return 42]', '42', []],
     ['import "function"; do [return 42]', '42', []],
     ['apply f x = f x; apply do [return 42]', '42', []],
@@ -51,13 +51,13 @@ Deno.test('do streams an infinite sequence until interrupted', () => {
 // do statements is their block: the same result, effects or error, checked or not.
 for (const [form, block] of [
     ['do []', '{}'],
-    ['do [1, 2]', '{ 1; 2 }'],
+    ['do [1,2]', '{ 1; 2 }'],
     ['do [print "hi", return 42]', '{ print "hi"; return 42 }'],
     ['x <- do []', 'x <- {}'],
     ['x = do [print 1, 2]', 'x = { print 1; 2 }'],
     ['import "option"; do [Some 1, Some 2]', 'import "option"; { Some 1; Some 2 }'],
     ['import "option"; do [Some 1, None, Some 2]', 'import "option"; { Some 1; None; Some 2 }'],
-    ['do [[1, 2], [3]]', '{ [1, 2]; [3] }'],
+    ['do [[1,2],[3]]', '{ [1,2]; [3] }'],
 ] as const) Deno.test(`do is its block: ${form}`, () => {
     const outcome = (source: string, checked: boolean) => {
         const i = new Interpreter();

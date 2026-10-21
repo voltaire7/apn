@@ -23,14 +23,14 @@ _splitOn delimiter text = {
             ? [_prepend (from (List Char) (reverse (drop width current))) (fst state), []]
             : [fst state, current]
     }
-    state = foldl step [[], []] (to (List Char) text)
+    state = foldl step [[],[]] (to (List Char) text)
     reverse (from (List Char) (reverse (snd state)) :: fst state)
 }
 # Joined as strings, not characters: a string's ++ is one step.
 joinWith delimiter xs = String {
     match xs [
         [] -> ""
-        first :: rest -> foldl (joined, x -> joined ++ delimiter ++ x) first rest
+        first :: rest -> foldl (joined,x -> joined ++ delimiter ++ x) first rest
     ]
 }
 replaceAll search replacement text = joinWith replacement (splitOn search text)

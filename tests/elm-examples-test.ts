@@ -184,7 +184,7 @@ Deno.test("First Person keeps walking for a thousand frames", async () => {
     }
     // Each update ran (a failed one throws), and walked back where it began.
     const shown = game.interpreter.renderString(game.model);
-    const [x, y, z] = /position: \[([^\]]*)\]/.exec(shown)![1].split(", ").map(Number);
+    const [x, y, z] = /position: \[([^\]]*)\]/.exec(shown)![1].split(",").map(Number);
     if (Math.abs(x) > 1e-9 || y !== 2 || Math.abs(z + 10) > 1e-9) throw new Error(shown);
 });
 // A field nobody reads (the keys) once chained every repeat's pending update,

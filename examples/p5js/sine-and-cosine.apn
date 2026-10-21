@@ -1,9 +1,9 @@
 # Sine and Cosine, from https://p5js.org/examples/angles-and-motion-sine-cosine/
 # Animate circular, back and forth, and wave motion.
-import ["number", "p5"]
+import ["number","p5"]
 
-[circleX, circleY, circleRadius] = [200, 150, 75]
-[graphX, graphY, graphAmplitude, graphPeriod] = [50, 300, 50, 300]
+[circleX,circleY,circleRadius] = [200,150,75]
+[graphX,graphY,graphAmplitude,graphPeriod] = [50,300,50,300]
 
 setup (Sketch p) = {
     p.createCanvas 400 400
@@ -22,7 +22,7 @@ draw (Sketch p) = {
     angle = Int (p.frameCount % 360)
     p.fill 255
     p.textSize 20
-    p.call "textAlign" [p.LEFT, p.CENTER]
+    p.call "textAlign" [p.LEFT,p.CENTER]
     p.text ("angle: " ++ to String angle) 25 25
     # The unit circle and its axes, and the radius to the point at the angle.
     p.noFill
@@ -51,7 +51,7 @@ draw (Sketch p) = {
         (graphY + graphAmplitude)
     p.fill "grey"
     p.strokeWeight 1
-    p.call "textAlign" [p.CENTER, p.CENTER]
+    p.call "textAlign" [p.CENTER,p.CENTER]
     p.text "0" graphX (graphY + graphAmplitude + 20)
     p.text "360" (graphX + graphPeriod) (graphY + graphAmplitude + 20)
     p.text "1" (graphX / 2) (graphY - graphAmplitude)

@@ -8,7 +8,7 @@ p5 = import "p5"
 
 Msg = | TimeDelta Number
 
-init = [0, browser.none]
+init = [0,browser.none]
 
 update (TimeDelta delta) currentTime = [delta + currentTime, browser.none]
 
@@ -16,7 +16,7 @@ subscriptions _ = browser.onAnimationFrameDelta TimeDelta
 
 view t = p5.canvas [setup: setup, draw: draw (t / 1000)]
 
-setup p = p.call "createCanvas" [400, 400, p.WEBGL]
+setup p = p.call "createCanvas" [400,400,p.WEBGL]
 
 # The camera circles the origin, 4 away, looking at it; y is up.
 draw t p = {
@@ -25,15 +25,15 @@ draw t p = {
     p.camera (4 * cos t) 0 (4 * sin t) 0 0 0 0 (-1) 0
     p.noStroke
     p.call "beginShape" [p.TRIANGLES]
-    vertex p [255, 0, 0] [0, 0, 0]
-    vertex p [0, 255, 0] [1, 1, 0]
-    vertex p [0, 0, 255] [1, -1, 0]
+    vertex p [255,0,0] [0,0,0]
+    vertex p [0,255,0] [1,1,0]
+    vertex p [0,0,255] [1,-1,0]
     p.endShape
 }
 
-vertex p color [x, y, z] = {
+vertex p color [x,y,z] = {
     p.fill color
-    p.call "vertex" [x, y, z]
+    p.call "vertex" [x,y,z]
 }
 
 main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]

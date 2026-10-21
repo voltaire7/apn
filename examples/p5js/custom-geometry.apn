@@ -3,37 +3,37 @@
 import "p5"
 
 drawSnake (Sketch p) = {
-    p.call "colorMode" [p.HSB, 100]
+    p.call "colorMode" [p.HSB,100]
     hue <- p.random 0 100
-    p.fill [hue, 50, 100]
+    p.fill [hue,50,100]
     # The head.
     p.push
-    p.call "scale" [1, 0.5, 1.4]
+    p.call "scale" [1,0.5,1.4]
     p.sphere 50
     p.pop
     # The eyes, one each side.
     mapM (side -> {
         p.push
-        p.call "scale" [side, 1, 1]
+        p.call "scale" [side,1,1]
         p.fill "black"
-        p.call "translate" [20, -20, 10]
+        p.call "translate" [20,-20,10]
         p.sphere 10
         p.pop
-    }) [-1, 1]
-    p.call "translate" [0, 0, 50]
+    }) [-1,1]
+    p.call "translate" [0,0,50]
     # The body, a segment at a time, each turned a little.
     length <- p.random 10 30
     segments = Int (ceiling (Number length))
     mapM (segment -> {
         turn <- p.random (-60) 60
         p.rotateY turn
-        p.call "translate" [0, 0, 50]
+        p.call "translate" [0,0,50]
         p.push
         p.rotateX 90
-        p.call "scale" [1, 1, 0.5]
+        p.call "scale" [1,1,0.5]
         p.cylinder (constrain (remap segment (segments - 5) segments 50 0) 0 50) 100
         p.pop
-        p.call "translate" [0, 0, 50]
+        p.call "translate" [0,0,50]
     }) [0..segments - 1]
 }
 
@@ -47,7 +47,7 @@ newSnake = {
 }
 
 setup (Sketch p) = {
-    p.call "createCanvas" [700, 400, p.WEBGL]
+    p.call "createCanvas" [700,400,p.WEBGL]
     p.angleMode p.DEGREES
     p.describe "A tiled plane of snake models"
     newSnake

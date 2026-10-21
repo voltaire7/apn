@@ -18,7 +18,7 @@ setup (Sketch p) = {
     # (start and stop angles, and a mode) for the eyelid.
     p.ellipse 540 100 300 100
     p.circle 560 100 100
-    p.call "arc" [540, 100, 300, 100, 180, 360, p.CHORD]
+    p.call "arc" [540,100,300,100,180,360,p.CHORD]
     # A line: x1, y1, x2, y2.
     p.line 20 200 200 350
     # A triangle, then a quadrilateral, by their corners.

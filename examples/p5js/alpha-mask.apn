@@ -11,19 +11,19 @@ setup (Sketch p) = {
     p.createCanvas 710 400
     # The mask's transparent parts make the photo's transparent.
     photo.mask cutout
-    p.call "textAlign" [p.LEFT, p.TOP]
+    p.call "textAlign" [p.LEFT,p.TOP]
 }
 
 draw (Sketch p) = {
     p.background 255
     p.describeElement "Masked Image" "A photo of yellow flowers masked by a photo of two leaves."
-    p.call "image" [photo, 0, 0, 350, 350]
+    p.call "image" [photo,0,0,350,350]
     p.describeElement "Mask" "The photo of two leaves used to mask the previous photo."
-    p.call "image" [cutout, 350, 0, 350, 350]
+    p.call "image" [cutout,350,0,350,350]
     p.textSize 24
     p.fill 0
     p.text "Masked Image" 10 10
     p.text "Mask" 360 10
 }
 
-main = sketch [preload: [photo, cutout], setup: setup, draw: draw]
+main = sketch [preload: [photo,cutout], setup: setup, draw: draw]

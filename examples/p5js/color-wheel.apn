@@ -10,14 +10,14 @@ setup (Sketch p) = {
     p.angleMode p.DEGREES
     p.describe ("Small circles, each with a different color, arranged in a circular path, "
         ++ "displaying hues across the color spectrum.")
-    p.call "textAlign" [p.CENTER, p.CENTER]
+    p.call "textAlign" [p.CENTER,p.CENTER]
     # A circle of each hue around the center, labeled inside the ring.
     mapM (angle -> {
         p.push
         p.translate (p.width / 2) (p.height / 2)
         p.rotate angle
         p.translate 150 0
-        p.fill [angle, 85, 90]
+        p.fill [angle,85,90]
         p.circle 0 0 50
         # The label upright, nearer the center.
         p.translate (-50) 0
@@ -25,7 +25,7 @@ setup (Sketch p) = {
         p.fill 0
         p.text (to String angle ++ "°") 0 0
         p.pop
-    }) [0, 30..330]
+    }) [0,30..330]
 }
 
 main = sketch [setup: setup]

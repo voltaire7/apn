@@ -1,22 +1,22 @@
 # Non-Orthogonal Reflection, from
 # https://p5js.org/examples/math-and-physics-non-orthogonal-reflection/
 # Bounce a ball off a slanted surface.
-import ["array", "number", "p5"]
+import ["array","number","p5"]
 
 # The ball's size and speed.
 radius = 6
 speed = 3.5
 # The slanted base's two top corners, the ball's place and velocity, and colors.
-baseLeft = Mutable [0.0, 0.0]
-baseRight = Mutable [0.0, 0.0]
-position = Mutable [0.0, 0.0]
-velocity = Mutable [0.0, 0.0]
-baseColor = Mutable [0.0, 70.0, 70.0]
-circleColor = Mutable [0.0, 90.0, 90.0]
+baseLeft = Mutable [0.0,0.0]
+baseRight = Mutable [0.0,0.0]
+position = Mutable [0.0,0.0]
+velocity = Mutable [0.0,0.0]
+baseColor = Mutable [0.0,70.0,70.0]
+circleColor = Mutable [0.0,90.0,90.0]
 
 setup (Sketch p) = {
     p.createCanvas 710 400
-    p.call "colorMode" [p.HSB, 360, 100, 100]
+    p.call "colorMode" [p.HSB,360,100,100]
     set baseLeft [0.0, Float (p.height - 150)]
     set baseRight [Float p.width, Float p.height]
     setColors p
@@ -35,17 +35,17 @@ setColors (Sketch p) = {
 }
 
 draw (Sketch p) = {
-    p.background [30, 50]
+    p.background [30,50]
     p.frameRate 30
     # The base.
     p.fill baseColor
     p.noStroke
-    [leftX, leftY] = baseLeft
-    [rightX, rightY] = baseRight
+    [leftX,leftY] = baseLeft
+    [rightX,rightY] = baseRight
     p.quad leftX leftY rightX rightY p.width p.height 0 p.height
     # The ball.
     p.fill circleColor
-    [x, y] = position
+    [x,y] = position
     p.circle x y (2 * radius)
     set position (position + velocity)
     handleBaseCollision p
@@ -55,24 +55,24 @@ draw (Sketch p) = {
 # Below the base's top, the ball turns back about the base's normal (and a
 # line shows the normal).
 handleBaseCollision (Sketch p) = {
-    [dx, dy] = normalize (baseRight - baseLeft)
-    normal = [dy, -dx]
+    [dx,dy] = normalize (baseRight - baseLeft)
+    normal = [dy,-dx]
     when (dot position normal < dot baseLeft normal) {
         set velocity (velocity - normal * Float (2 * dot velocity normal))
         p.stroke 255
         p.strokeWeight 5
-        [x, y] = position
-        [normalX, normalY] = normal * 100
+        [x,y] = position
+        [normalX,normalY] = normal * 100
         p.line x y (x + normalX) (y + normalY)
     }
 }
 
 # Off a side, the ball turns back; off the top too, and the base and colors change.
 handleBoundaryCollision (Sketch p) = {
-    [x, y] = position
-    when (x < radius || x > p.width - radius) (set velocity (velocity * [-1.0, 1.0]))
+    [x,y] = position
+    when (x < radius || x > p.width - radius) (set velocity (velocity * [-1.0,1.0]))
     when (y < radius) {
-        set velocity (velocity * [1.0, -1.0])
+        set velocity (velocity * [1.0,-1.0])
         left <- p.random (p.height - 100) p.height
         right <- p.random (p.height - 100) p.height
         set baseLeft [0.0, Float left]

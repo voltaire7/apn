@@ -3,7 +3,7 @@ import { parse } from "../src/parser.ts";
 
 function result(code: string): string {
     const i = new Interpreter();
-    return i.renderString(i.run(parse('import ["option", "sequence"]; ' + code)));
+    return i.renderString(i.run(parse('import ["option","sequence"]; ' + code)));
 }
 for (const [code, expected] of [
     ['(Some x -> x) (Some 123)', '123'],
@@ -24,10 +24,10 @@ for (const [code, expected] of [
     ['((Int -> Int) identity) <- return ((x -> x))\nTransform = typeOf identity\nfunc (Transform f) = Int { f 123 }\nfunc (*2)', '246'],
     ['func ((Int -> Int) f) = 42; func (x -> missing)', '42'],
     ['func ((Int -> Int) f) = f 2.0; func (*2)', '4'],
-    ['func ((Int -> Int -> Int) f) = f 2 3; func (x, y -> x + y)', '5'],
+    ['func ((Int -> Int -> Int) f) = f 2 3; func (x,y -> x + y)', '5'],
     ['match 1 [((Int -> Int) f) -> f 0, x -> x]', '1'],
     // An alternative's parameter is one pattern, as everywhere: t x binds the type.
-    ['match 1 [t x -> [t, x]]', '[Int, 1]'],
+    ['match 1 [t x -> [t,x]]', '[Int,1]'],
     ['(t x -> t) "a"', 'String'],
 ]) Deno.test(`pattern functions: ${code}`, () => {
     const actual = result(code);
@@ -41,7 +41,7 @@ for (const [code, error] of [
     ['match 1 [_ -> _, _ -> 42]', 'not implemented'],
     ['match 1 [42]', 'one remaining argument'],
     // A two-parameter lambda needs parentheses in a list; match gives it one argument.
-    ['match 1 [(x, y -> x)]', 'one remaining argument'],
+    ['match 1 [(x,y -> x)]', 'one remaining argument'],
     ['match missing []', 'non-exhaustive match'],
     ['match 1 42', 'expected a list'],
     ['func ((Int -> Int) f) = f (Float .5); func (*2)', 'lossy conversion'],
@@ -62,11 +62,11 @@ Deno.test("pattern functions parse independently of prior constructor imports", 
 Deno.test("constructor lambdas accept nested patterns", () => {
     if (result('match (Some 3) [Some (Int x) -> x]') !== '3') throw new Error('nested type pattern');
     if (result('match (Some "no") [Some (Int x) -> x, _ -> 42]') !== '42') throw new Error('nested mismatch');
-    if (result('(Some [a, b] -> a + b) (Some [1, 2])') !== '3') throw new Error('nested list pattern');
+    if (result('(Some [a,b] -> a + b) (Some [1,2])') !== '3') throw new Error('nested list pattern');
 });
 
 Deno.test("guards can use nested lambda arguments", () => {
-    if (result('match [1, 2] [xs | all (n -> n > 0) xs -> 42, _ -> 0]') !== '42') throw new Error('nested lambda in guard');
+    if (result('match [1,2] [xs | all (n -> n > 0) xs -> 42, _ -> 0]') !== '42') throw new Error('nested lambda in guard');
 });
 
 Deno.test("match is intrinsic and has no public attempt protocol", () => {

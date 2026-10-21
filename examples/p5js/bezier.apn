@@ -17,7 +17,7 @@ draw (Sketch p) = {
     mapM (i -> {
         p.stroke [i + 10, 50, 60]
         p.bezier (p.mouseX - i / 2) i 410 20 440 300 (240 - i / 16) (300 + i / 8)
-    }) [0, 20..180]
+    }) [0,20..180]
 }
 
 main = sketch [setup: setup, draw: draw]

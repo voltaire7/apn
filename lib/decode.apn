@@ -21,7 +21,7 @@ _field name value = {
 # The values of a list of Results, or the first error.
 _all results = match results [
     [] -> Ok []
-    result :: rest -> map2 (x, xs -> x :: xs) result (_all rest)
+    result :: rest -> map2 (x,xs -> x :: xs) result (_all rest)
 ]
 # A value as a type describes it, as Dynamic so one function decodes them all:
 # a record schema field by field (its values take the schema's keys, as a
@@ -29,7 +29,7 @@ _all results = match results [
 # string), String, Int, Float and Bool as string, int, float and bool, and
 # any other type the values isType accepts.
 _decodeAs (Record schema) value = map (values -> (map (v -> _ -> v) values).schema)
-    (_all (map ([name, t] -> _field name value >>= _decodeAs t) (pairs schema)))
+    (_all (map ([name,t] -> _field name value >>= _decodeAs t) (pairs schema)))
 _decodeAs (Decoder decoder) value = map Dynamic (decoder value)
 _decodeAs t value = _decodeAs (_basic t) value
 _basic t = t == String ? string : t == Int ? int : t == Float ? float : t == Bool ? bool

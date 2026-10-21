@@ -2,7 +2,7 @@
 # Display and stylize a video on the canvas.
 import "p5"
 
-video = createVideo ["assets/fingers.mov", "assets/fingers.webm"]
+video = createVideo ["assets/fingers.mov","assets/fingers.webm"]
 playing = Mutable false
 
 setup (Sketch p) = {

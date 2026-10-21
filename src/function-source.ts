@@ -3,6 +3,7 @@ import type { Expr, Pattern } from "./ast.ts";
 import type { Value } from "./types.ts";
 import { exprToSource, fixityOf } from "./parser.ts";
 import { compoundArgument, valueToString } from "./types.ts";
+import { itemsText } from "./separators.ts";
 
 function pattern(p: Pattern): string {
     switch (p.p) {
@@ -15,7 +16,7 @@ function pattern(p: Pattern): string {
         case "string": return JSON.stringify(p.v);
         case "char": return exprToSource({ t: "char", v: p.v });
         case "float": return exprToSource({ t: "float", v: p.v });
-        case "list": return `[${p.v.map(pattern).join(", ")}]`;
+        case "list": return `[${itemsText(p.v.map(pattern))}]`;
         case "cons": return `(${pattern(p.head)} ${p.op ?? "::"} ${pattern(p.tail)})`;
         case "constr": return p.args.length ? `(${p.tag} ${p.args.map(pattern).join(" ")})` : p.tag;
         case "typeBind": return `(${p.name} ${pattern(p.value)})`;
@@ -37,11 +38,11 @@ function source(e: Expr, parent = -1): string {
         }
         // Prefix - and ! bind tighter than * (7) and looser than ^ (8).
         case "unop": level = 7.5; text = `${e.op === "neg" ? "-" : "!"}${source(e.e, 8)}`; break;
-        case "patternLambda": level = -1; text = `${e.params.map(pattern).join(", ")}${e.guard ? " | " + source(e.guard) : ""} -> ${source(e.body)}`; break;
-        case "lambda": level = -1; text = `${e.params.join(", ")} -> ${source(e.body)}`; break;
+        case "patternLambda": level = -1; text = `${itemsText(e.params.map(pattern))}${e.guard ? " | " + source(e.guard) : ""} -> ${source(e.body)}`; break;
+        case "lambda": level = -1; text = `${itemsText(e.params)} -> ${source(e.body)}`; break;
         case "pipe": level = 0; text = `${source(e.f, 1)} $ ${source(e.x, 0)}`; break;
         case "ternary": level = 1; text = `${source(e.cond, 2)} ? ${source(e.then, 6)} : ${source(e.els, 2)}`; break;
-        case "list": return `[${e.v.map(x => source(x)).join(", ")}]`;
+        case "list": return `[${itemsText(e.v.map(x => source(x)))}]`;
         case "record": return `[${e.v.map(([k, v]) => `${keySource(k)}: ${source(v)}`).join(", ")}]`;
         case "block": {
             if (e.style === "(" && e.stmts.length === 1) return `(${source(e.stmts[0])})`;
@@ -80,7 +81,7 @@ export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" 
         const params = v.whole ?? v.params, applied = v.applied ?? [];
         const operator = operatorForm(params, v.body, applied);
         if (operator) return operator;
-        const text = `${params.length ? params.join(", ") : "()"} -> ${source(v.body)}`;
+        const text = `${params.length ? itemsText(params) : "()"} -> ${source(v.body)}`;
         return applied.length ? `(${text})${applied.map(a => ` ${argument(a)}`).join("")}` : text;
     }
     if (v.kind === "native") {
@@ -98,7 +99,7 @@ export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" 
 // parentheses (Int x -> x); among several parameters it keeps them ((Int x), y -> x).
 function clauseSource(c: { params: Pattern[]; body: Expr; guard?: Expr }): string {
     const lone = c.params.length === 1 && c.params[0].p === "constr" && c.params[0].args.length;
-    const params = lone ? pattern(c.params[0]).slice(1, -1) : c.params.map(pattern).join(", ");
+    const params = lone ? pattern(c.params[0]).slice(1, -1) : itemsText(c.params.map(pattern));
     return `${params}${c.guard ? " | " + source(c.guard) : ""} -> ${source(c.body)}`;
 }
 

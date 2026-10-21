@@ -3,14 +3,14 @@
 import "p5"
 
 # A ball: its mass, where it is, its velocity and its hue.
-Mover = [mass: Float, position: [Float, Float], velocity: [Float, Float], hue: Int]
+Mover = [mass: Float, position: [Float,Float], velocity: [Float,Float], hue: Int]
 movers = Mutable ((List Mover) [])
 # The liquid fills the canvas's lower half, and drags by this coefficient.
 drag = 0.1
 
 setup (Sketch p) = {
     p.createCanvas 720 400
-    p.call "colorMode" [p.HSB, 9, 100, 100]
+    p.call "colorMode" [p.HSB,9,100,100]
     initializeMovers p
     p.describe ("Nine grey balls drop from the top of the canvas and slow down as they reach "
         ++ "the bottom half of the canvas.")
@@ -23,7 +23,7 @@ initializeMovers (Sketch p) = {
         mass <- p.random 0.5 3
         return [
             mass: Float mass, position: [Float (spacing * n + spacing / 2), 0.0]
-            velocity: [0.0, 0.0], hue: n
+            velocity: [0.0,0.0], hue: n
         ]
     }) [0..8]
     set movers made
@@ -42,27 +42,27 @@ draw (Sketch p) = {
 # Gravity, and in the liquid its drag (against the velocity, growing with
 # speed squared), move a ball.
 fall height mover = {
-    [_, y] = mover.position
+    [_,y] = mover.position
     speed = mag mover.velocity
-    resistance = y > height / 2 ? setMag (drag * speed * speed) (-mover.velocity) : [0.0, 0.0]
-    mover.velocity = mover.velocity + resistance / mover.mass + [0.0, 0.1]
+    resistance = y > height / 2 ? setMag (drag * speed * speed) (-mover.velocity) : [0.0,0.0]
+    mover.velocity = mover.velocity + resistance / mover.mass + [0.0,0.1]
     mover.position = mover.position + mover.velocity
     mover
 }
 
 # A ball at the bottom bounces back up, losing some speed.
 bounce height mover = {
-    [x, y] = mover.position
-    [vx, vy] = mover.velocity
+    [x,y] = mover.position
+    [vx,vy] = mover.velocity
     floor = height - mover.mass * 8
-    y > floor ? { mover.velocity = [vx, vy * -0.9]; mover.position = [x, floor]; mover } : mover
+    y > floor ? { mover.velocity = [vx, vy * -0.9]; mover.position = [x,floor]; mover } : mover
 }
 
 display (Sketch p) mover = {
-    [x, y] = mover.position
+    [x,y] = mover.position
     p.stroke 0
     p.strokeWeight 2
-    p.fill [mover.hue, 100, 100]
+    p.fill [mover.hue,100,100]
     p.ellipse x y (mover.mass * 16) (mover.mass * 16)
 }
 

@@ -43,10 +43,10 @@ zero in declaration order:
 
 ```apn
 Direction = North | East | South | West
-offsets = [[0, -1], [1, 0], [0, 1], [-1, 0]]
-offsets North               # [0, -1]
-offsets North = [0, 0]
-offsets North               # [0, 0]
+offsets = [[0,-1],[1,0],[0,1],[-1,0]]
+offsets North               # [0,-1]
+offsets North = [0,0]
+offsets North               # [0,0]
 ```
 
 This uses ordinary list indexing and assignment, including bounds checks and
@@ -77,7 +77,7 @@ of exhaustiveness for arbitrary programs. Runtime `match` semantics are unchange
 ## Assertions
 
 ```apn
-assert (length [1, 2] == 3)
+assert (length [1,2] == 3)
 ```
 
 `assert` requires a truthy value and returns [] on success. On failure it reports the
@@ -101,7 +101,7 @@ other process-level effects, forced process termination cannot run APN cleanup.
 import "function"
 released = Mutable false
 answer <- bracket 42 (_ -> set released true) (n -> [n, n + 1])
-# answer is [42, 43]; released is true
+# answer is [42,43]; released is true
 ```
 
 The returned value must be finite data: lists, records, variants and HashMaps are

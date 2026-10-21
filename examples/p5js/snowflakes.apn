@@ -1,10 +1,10 @@
 # Snowflakes, from https://p5js.org/examples/classes-and-objects-snowflakes/
 # Simulate falling snow with a list of records.
-import ["number", "p5"]
+import ["number","p5"]
 
 # A snowflake: its height, its starting angle about the middle (it swings
 # from side to side as the angle turns), its size and its color.
-Flake = [y: Float, angle: Float, size: Float, radius: Float, color: [Float, Float, Float]]
+Flake = [y: Float, angle: Float, size: Float, radius: Float, color: [Float,Float,Float]]
 flakes = Mutable ((List Flake) [])
 
 setup (Sketch p) = {

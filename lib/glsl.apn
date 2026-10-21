@@ -10,9 +10,9 @@ glsl (List items) = "vec" ++ to String (length items) ++ "(" ++ joinWith ", " (m
     ++ ")"
 glsl (Number n) = to String (Float n)
 
-# A list as one GLSL vector, for arithmetic as a whole: vec [x, y] * 0.5.
+# A list as one GLSL vector, for arithmetic as a whole: vec [x,y] * 0.5.
 vec items = Glsl (glsl items)
-# A GLSL function applied to its arguments: call "mix" [a, b, 0.5].
+# A GLSL function applied to its arguments: call "mix" [a,b,0.5].
 call name arguments = Glsl (name ++ "(" ++ joinWith ", " (map glsl arguments) ++ ")")
 _binary operator a b = Glsl ("(" ++ glsl a ++ " " ++ operator ++ " " ++ glsl b ++ ")")
 (Glsl a) + b = _binary "+" (Glsl a) b
@@ -32,9 +32,9 @@ min (Glsl a) b = call "min" [Glsl a, b]
 max (Glsl a) b = call "max" [Glsl a, b]
 # GLSL's own functions.
 fract x = call "fract" [x]
-distance a b = call "distance" [a, b]
-mix a b amount = call "mix" [a, b, amount]
+distance a b = call "distance" [a,b]
+mix a b amount = call "mix" [a,b,amount]
 # Some of a vector's components: swizzle "r" color, swizzle "xy" position.
 swizzle components vector = Glsl (glsl vector ++ "." ++ components)
 # A texture's color at a point (sampler is a texture's name).
-getTexture sampler point = call "TEXTURE" [sampler, point]
+getTexture sampler point = call "TEXTURE" [sampler,point]

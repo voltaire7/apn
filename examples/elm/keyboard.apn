@@ -3,8 +3,8 @@
 # Try making it move around more quickly!
 import "playground"
 
-view _ [x, y] = [move x y $ square blue 40]
+view _ [x,y] = [move x y $ square blue 40]
 
-update computer [x, y] = [x + toX computer.keyboard, y + toY computer.keyboard]
+update computer [x,y] = [x + toX computer.keyboard, y + toY computer.keyboard]
 
-main = game view update [0, 0]
+main = game view update [0,0]

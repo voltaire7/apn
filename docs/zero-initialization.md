@@ -8,8 +8,8 @@ record template to a list or record of supplied fields:
 Vector3 = [x: Float, y: Float, z: Float]
 vec = Vector3 []        # [x: 0.0, y: 0.0, z: 0.0]
 vec.x = 1              # [x: 1.0, y: 0.0, z: 0.0]
-Vector3 [1, 2, 3]    # [x: 1.0, y: 2.0, z: 3.0]
-# Vector3 [1, 2]       # error: positional fields must be complete
+Vector3 [1,2,3]    # [x: 1.0, y: 2.0, z: 3.0]
+# Vector3 [1,2]       # error: positional fields must be complete
 Vector3 [z: 3]         # [x: 0.0, y: 0.0, z: 3.0]
 Vector3                # [x: Float, y: Float, z: Float]
 ```
@@ -59,7 +59,7 @@ A constructed Float field keeps its type: assigning `Int` to it fails with
 
 These are construction defaults, not alternate meanings of bare type names.
 `[Int]` remains a one-element list. `[Int].[1]` constructs one value;
-`[Int].[1, 2, 3]` and `[Int].[]` are length errors. Use `Int * [1, 2, 3]` to map.
+`[Int].[1,2,3]` and `[Int].[]` are length errors. Use `Int * [1,2,3]` to map.
 
 Int and Float values omit their type labels in output. Specialized numeric types
 retain their labels. All annotations participate in checked arithmetic.
@@ -74,8 +74,8 @@ isType Int Int         # false
 isType Type Int        # true
 Int == Float           # false
 Type Vector3           # [x: Float, y: Float, z: Float]
-3 * Int                # [0, 1, 2]
-Int * 3                # [0, 1, 2]
+3 * Int                # [0,1,2]
+Int * 3                # [0,1,2]
 3 * Int 0              # 0
 ```
 

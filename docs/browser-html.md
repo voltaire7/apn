@@ -62,13 +62,13 @@ newlines; use commas there or bind the view separately, as above.
 
 ## Elements: commands and subscriptions
 
-`browser.element [init, update, view, subscriptions]` is a program with
-effects, as Elm's `Browser.element`. `init` is `[model, command]`, `update msg
+`browser.element [init,update,view,subscriptions]` is a program with
+effects, as Elm's `Browser.element`. `init` is `[model,command]`, `update msg
 model` returns `[model, command]`, and `subscriptions model` names the events
 the program listens to:
 
 ```apn
-import ["html", "time"]
+import ["html","time"]
 browser = import "browser"
 task = import "task"
 
@@ -77,8 +77,8 @@ Msg = Tick Posix | AdjustTimeZone Zone
 init = [[zone: utc, time: millisToPosix 0], task.perform AdjustTimeZone here]
 
 update msg model = match msg [
-    (Tick newTime) -> { model.time = newTime; [model, browser.none] }
-    (AdjustTimeZone newZone) -> { model.zone = newZone; [model, browser.none] }
+    (Tick newTime) -> { model.time = newTime; [model,browser.none] }
+    (AdjustTimeZone newZone) -> { model.zone = newZone; [model,browser.none] }
 ]
 
 subscriptions _ = every 1000 Tick
@@ -184,7 +184,7 @@ These follow Elm's modules of the same names; the
   `decode.decodeValue decoder value` is `Ok` or `Err`; `decode.string`,
   `decode.int`, `decode.float`, `decode.bool`, `decode.field name d`,
   `decode.at path d`, `decode.list d`, `decode.succeed x`; decoders are
-  monads too (`map4 (a, b, c, d -> ...) d1 d2 d3 d4`). A type decodes as it
+  monads too (`map4 (a,b,c,d -> ...) d1 d2 d3 d4`). A type decodes as it
   says, wherever a decoder goes: Quotes's `http.expectJson GotQuote Quote`
   reads each field of `Quote = [quote: String, ...]` by name, and fails, as
   `field` does, on a missing or mistyped one (also `field "year" Int`,
@@ -218,7 +218,7 @@ main = picture [
 ```
 
 Shapes are `circle`, `oval`, `square`, `rectangle`, `triangle`, `pentagon`,
-`hexagon`, `octagon`, `polygon color [[x, y], ...]`, `image w h url`, `words
+`hexagon`, `octagon`, `polygon color [[x,y],...]`, `image w h url`, `words
 color text` and `group shapes`; `move`, `moveUp`/`Down`/`Left`/`Right`,
 `moveX`, `moveY`, `rotate`, `scale` and `fade` place them. Colors are the
 Tango palette (`red`, `lightBlue`, `darkCharcoal`, ...) or `rgb r g b`.

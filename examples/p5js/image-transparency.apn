@@ -16,12 +16,12 @@ setup (Sketch p) = {
 
 draw (Sketch p) = {
     # The image opaque, then half transparent on top, following the mouse.
-    p.tint [255, 255]
+    p.tint [255,255]
     p.image photo 0 0
     width <- photo.width
     # The sketch's values are dynamic: Float converts the new offset to the cell's type.
     set offset (Float (offset + (p.mouseX - width / 2 - offset) * easing))
-    p.tint [255, 127]
+    p.tint [255,127]
     p.image photo offset 0
 }
 

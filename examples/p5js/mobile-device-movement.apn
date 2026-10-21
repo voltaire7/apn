@@ -17,7 +17,7 @@ deviceMoved (Sketch p) = {
     x = remap p.accelerationX (-10) 10 0 p.width
     y = remap p.accelerationY (-10) 10 0 p.height
     diameter = remap p.accelerationZ (-10) 10 10 100
-    p.background [0, 64]
+    p.background [0,64]
     p.noStroke
     p.circle x y diameter
 }

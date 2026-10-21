@@ -6,7 +6,7 @@ import "p5"
 astronaut = loadModel "assets/astronaut.obj"
 
 setup (Sketch p) = {
-    p.call "createCanvas" [710, 400, p.WEBGL]
+    p.call "createCanvas" [710,400,p.WEBGL]
     p.angleMode p.DEGREES
     # Colors that show which way each face of a shape points.
     p.normalMaterial
@@ -31,7 +31,7 @@ shapes = [
 
 draw (Sketch p) = {
     p.background 250
-    mapM ([x, y, shape] -> {
+    mapM ([x,y,shape] -> {
         p.push
         p.translate x y
         rotateWithFrameCount p

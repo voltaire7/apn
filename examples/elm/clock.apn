@@ -1,6 +1,6 @@
 # Clock, from https://elm-lang.org/examples/clock
 # Show an analog clock for your time zone.
-import ["html", "time", "number"]
+import ["html","time","number"]
 browser = import "browser"
 task = import "task"
 svg = import "svg"
@@ -10,8 +10,8 @@ Msg = Tick Posix | AdjustTimeZone Zone
 init = [[zone: utc, time: millisToPosix 0], task.perform AdjustTimeZone here]
 
 update msg model = match msg [
-    Tick newTime -> { model.time = newTime; [model, browser.none] }
-    AdjustTimeZone newZone -> { model.zone = newZone; [model, browser.none] }
+    Tick newTime -> { model.time = newTime; [model,browser.none] }
+    AdjustTimeZone newZone -> { model.zone = newZone; [model,browser.none] }
 ]
 
 subscriptions _ = every 1000 Tick
