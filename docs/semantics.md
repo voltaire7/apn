@@ -187,7 +187,11 @@ A range pattern `[lo..hi]` matches any integer from `lo` to `hi` inclusive.
 ### Bindings and output
 
 `name = value` is the only binding form; there is no `let`. A binding inside a
-group is scoped to that group. A value never changes once written, so when
+group is scoped to that group. Bindings are statements, not expressions, but a
+group's value is its last statement's, and a binding's is the value it binds:
+`print (x = 1)` prints 1, and `x` is unbound after it. A list item may be a
+binding too, as a group's statement may: its value is the item, and it is in
+scope for the items after it (`[x = 1, x + 1]` is `[1,2]`); `<-` stays a block's. A value never changes once written, so when
 something is computed never changes what it is. A name not visible here is
 defined for its whole scope: code above may use it (functions may call each
 other in any order), and its value may refer to itself (`ones = 1 :: ones`).
@@ -751,7 +755,9 @@ does not evaluate its `halt` action.
 
 ## Inspection and numbers
 
-`quote` and `toAST` inspect syntax without evaluating their arguments. `debug`
+`quote` and `toAST` inspect syntax without evaluating their arguments: `quote`
+gives the source text, `toAST` nested lists, head first (`toAST (1 + 2)` is
+`["+",1,2]`, a binding `["=","x",1]`). `debug`
 forces its argument without running a returned action: `a = print 3; debug a`
 prints `a`. `step` retains
 its expression-inspection/evaluation rules demonstrated in `examples/features.apn`.
@@ -1179,7 +1185,7 @@ answer <- do [print "calculating", return 42]  # prints, binds 42
 
 `do statements` is the [block](#blocks-are-do-blocks) with those statements:
 `do [a,b,c]` is `{ a; b; c }` in every way, so `do []` is `{}` (the empty
-list), `do [1,2]` is 2, and with an action among them it is a do-block
+list), `do [1,2]` is 2, `do [x = 1, x + 1]` is 2, and with an action among them it is a do-block
 whose last element must be an action. It accepts computed lists too, and
 processes the spine incrementally. Each run of the action runs the elements
 again; an error stops the sequence.

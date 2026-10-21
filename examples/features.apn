@@ -1663,6 +1663,9 @@ lastOne <- do [print "first", return 42]  # { print "first"; return 42 }
 print lastOne                       # => 42
 print [do [1,2], { 1; 2 }]         # => [2,2]: no action, so the last value
 print [do [], {}]                   # => [[],[]]: no statements
+print [x = 1, x + 1]                # => [1,2]: a list item may be a binding
+print [do [x = 1, x + 1], { x = 1; x + 1 }]  # => [2,2]
+print (toAST [x = 1, x + 1])        # => [["=","x",1],["+","x",1]]
 
 # A new top-level statement after a closed block must start at column one.
 # f = { print "hi" }

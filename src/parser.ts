@@ -1077,9 +1077,12 @@ class Parser {
                             }
                             this.i = save; // not a range at all
                         }
+                        // An item may be a binding, as a block's statement may: its
+                        // value is what it binds, in scope for the items after it.
                         const es = [] as Expr[];
                         for (;;) {
-                            es.push(this.item(this.peek(), () => this.parseDelimitedExpr()));
+                            if (this.isEagerBinding()) throw new Error("Parser: a list item cannot run an action (x <- ...); use a block { x <- ...; ... }");
+                            es.push(this.item(this.peek(), () => this.isPatBinding() ? this.parsePatBinding() : this.isDef() ? this.parseBlockDef() : this.parseDelimitedExpr()));
                             this.skipListSeparators();
                             if (this.isSym("]")) { this.next(); return { t: "list", v: es }; }
                             if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside list literal");
@@ -2024,10 +2027,13 @@ function patternVariables(p: Pattern): string[] {
 
 export function exprToSource(e: Expr): string {
     switch (e.t) {
-        case "computedRange": return `[${exprToSource(e.lo)}${e.second === null ? "" : ", " + exprToSource(e.second)}..${e.hi === null ? "" : exprToSource(e.hi)}]`;
+        case "computedRange": {
+            const end = `..${e.hi === null ? "" : exprToSource(e.hi)}`;
+            return `[${itemsText(e.second === null ? [exprToSource(e.lo) + end] : [exprToSource(e.lo), exprToSource(e.second) + end])}]`;
+        }
         case "import": return `import ${Array.isArray(e.module) ? `[${itemsText(e.module.map(m => JSON.stringify(m)))}]` : JSON.stringify(e.module)}`;
         case "numeric": return numberText(e.v);
-        case "rationalRange": return `[${numberText(e.lo)}, ${numberText(arithmetic("+", e.lo, e.step))}..${e.hi === null ? "" : numberText(e.hi)}]`;
+        case "rationalRange": return `[${itemsText([numberText(e.lo), `${numberText(arithmetic("+", e.lo, e.step))}..${e.hi === null ? "" : numberText(e.hi)}`])}]`;
         case "int": return String(e.v);
         case "float": return numberText({ kind: "float", v: e.v });
         case "bool": return e.v ? "true" : "false";
@@ -2044,12 +2050,12 @@ export function exprToSource(e: Expr): string {
         case "record": return `[${e.v.map(([k, x]) => `${keySource(k)}: ${exprToSource(x)}`).join(", ")}]`;
     case "floatRange": {
         const decimal = (v: number) => Number.isInteger(v) ? `${v}.0` : String(v);
-        return `[${decimal(e.lo)}${e.step !== 1 ? `, ${decimal(e.lo + e.step)}` : ""}..${e.hi === null ? "" : decimal(e.hi)}]`;
+        return `[${decimal(e.lo)}${e.step !== 1 ? `,${decimal(e.lo + e.step)}` : ""}..${e.hi === null ? "" : decimal(e.hi)}]`;
     }
     case "range":
       return e.hi === null
-        ? `[${e.lo}${e.step !== 1n ? `, ${e.lo + e.step}` : ""}..]`
-        : `[${e.lo}${e.step !== 1n ? `, ${e.lo + e.step}` : ""}..${e.hi}]`;
+        ? `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..]`
+        : `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..${e.hi}]`;
         case "ternary": return `${exprToSource(e.cond)} ? ${exprToSource(e.then)} : ${exprToSource(e.els)}`;
         case "pipe": return `${exprToSource(e.f)} $ ${exprToSource(e.x)}`;
         case "recordAccess":
@@ -2063,14 +2069,14 @@ export function exprToSource(e: Expr): string {
         case "block": {
             const one = e.stmts.length === 1 && e.stmts[0].t !== "stmDef" && e.stmts[0].t !== "patDef";
             if (one && e.style === "(") return exprToSource(e.stmts[0]);
-            const body = e.stmts.map((st) => {
-                if (st.t === "stmDef") return `${st.name} = ${exprToSource(st.clauses[0].body)}`;
-                if (st.t === "patDef" && (st.value.t === "setItem" || st.value.t === "setFields")) return exprToSource(st.value);
-                if (st.t === "patDef") return `${patternSource(st.pattern)} ${st.eager ? "<-" : "="} ${exprToSource(st.value)}`;
-                return exprToSource(st);
-            }).join("; ");
+            const body = e.stmts.map(exprToSource).join("; ");
             return e.style === "(" ? `(${body})` : `{ ${body} }`;
         }
+        // A binding (a block's statement or a list's item): f n = ..., [a,b] = xs.
+        case "stmDef": return e.clauses.map(c => [e.name, ...c.params.map(patternSource)].join(" ") + ` = ${exprToSource(c.body)}`).join("; ");
+        case "patDef":
+            if (e.value.t === "setItem" || e.value.t === "setFields") return exprToSource(e.value);
+            return `${patternSource(e.pattern)} ${e.eager ? "<-" : "="} ${exprToSource(e.value)}`;
         default: return "<expr>";
     }
 }

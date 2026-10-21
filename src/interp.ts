@@ -780,12 +780,18 @@ export class Interpreter {
                 return mkList(e.v.map(([k, x]) => mkList([mkStr(keySource(k)), this.sexprOf(x)])));
             case "ternary":
                 return mkList([mkStr("?:") as Value, this.sexprOf(e.cond), this.sexprOf(e.then), this.sexprOf(e.els)]);
-            case "block": {
+            case "block":
                 // a single-statement ( ) group is transparent — toAST (1 + 2) => [+, 1, 2]
-                const one = e.stmts.length === 1 && e.style === "(" && e.stmts[0].t !== "stmDef" && e.stmts[0].t !== "patDef";
-                if (one) return this.sexprOf(e.stmts[0]);
-                return mkList(e.stmts.map((st) => this.sexprOf(st.t === "stmDef" ? st.clauses[0].body : st.t === "patDef" ? st.value : st)));
+                if (e.stmts.length === 1 && e.style === "(") return this.sexprOf(e.stmts[0]);
+                return mkList(e.stmts.map((st) => this.sexprOf(st)));
+            // A binding: [=, x, value], [=, [f, n], body] per clause, [<-, x, action].
+            case "stmDef": {
+                const clauses = e.clauses.map(c => mkList([mkStr("="), c.params.length ? mkList([mkStr(e.name), ...c.params.map(p => mkStr(patternSource(p)))]) : mkStr(e.name), this.sexprOf(c.body)]));
+                return clauses.length === 1 ? clauses[0] : mkList(clauses);
             }
+            case "patDef":
+                if (e.value.t === "setItem" || e.value.t === "setFields") return this.sexprOf(e.value);
+                return mkList([mkStr(e.eager ? "<-" : "="), mkStr(patternSource(e.pattern)), this.sexprOf(e.value)]);
             case "pipe": return mkList([mkStr("$"), this.sexprOf(e.f), this.sexprOf(e.x)]);
             case "setItem": return mkList([mkStr("setItem"), this.sexprOf(e.rec), this.sexprOf(e.index), this.sexprOf(e.value)]);
             case "recordAccess":
@@ -1142,7 +1148,18 @@ export class Interpreter {
                     }
                     case "range": r = { kind: "range", lo: e.lo, step: e.step, hi: e.hi }; break;
                     case "floatRange": r = { kind: "floatRange", lo: e.lo, step: e.step, hi: e.hi }; break;
-                    case "list": r = { kind: "lazyList", exprs: e.v, env: this.env }; break;
+                    case "list": {
+                        if (!e.v.some(x => x.t === "stmDef" || x.t === "patDef")) { r = { kind: "lazyList", exprs: e.v, env: this.env }; break; }
+                        // Items with bindings, as a block's statements: each binding's
+                        // value is its item, and is in scope for the items after it.
+                        const old = this.env;
+                        this.env = new Env(old);
+                        try {
+                            r = mkList(e.v.map(x => x.t === "stmDef" ? this.evalDef(x.name, x.clauses)
+                                : x.t === "patDef" ? this.evalPatBinding(x) : this.delay(x)));
+                        } finally { this.env = old; }
+                        break;
+                    }
                     case "record": {
                         const fields = new Map<string, Value>();
                         for (const [key, expression] of e.v) {
@@ -3344,9 +3361,10 @@ export class Interpreter {
             if (name === "quote") {
                 // quote: the expression's SOURCE TEXT as a string (parens kept for
                 // ( ) groups); the expression is never evaluated
-                const inner = exprToSource(t.body);
-                const text = t.body.t === "block" && t.body.style === "(" ? `(${inner})` : inner;
-                return mkStr(text);
+                // A one-expression group drops its parentheses in exprToSource.
+                const body = t.body, inner = exprToSource(body);
+                const group = body.t === "block" && body.style === "(" && body.stmts.length === 1 && !["stmDef", "patDef"].includes(body.stmts[0].t);
+                return mkStr(group ? `(${inner})` : inner);
             }
             return this.sexprOf(t.body);
         }

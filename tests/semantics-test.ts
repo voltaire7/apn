@@ -405,6 +405,21 @@ print (false ? 1 : true ? 2 : 3)
 print ((* 2) $ (+ 1) $ 3)
 print (-head [2,3])
 `, ["14", "20", "5", "12", "[1,2]", "true", "2", "8", "-2"]);
+example("a list item may be a binding, in scope for the items after it", `
+print [x = 1]
+print [x = 1, x + 1]
+print (do [x = 1, x + 1])
+print [f n = n * 2, f 3]
+print [[a,b] = [1,2], a + b]
+x = 7
+print [x + 1, x = 1, x]
+print x
+print (quote [x = 1, x + 1])
+print (quote (x = 1))
+print (toAST (x = 1))
+print (toAST [x = 1, x + 1])`, ["[1]", "[1,2]", "2", "[n -> n * 2, 6]", "[[1,2],3]", "[8,1,1]", "7",
+    "[x = 1, x + 1]", "(x = 1)", '["=","x",1]', '[["=","x",1],["+","x",1]]']);
+failure("a list item cannot run an action", "print [x <- return 1, x]", "cannot run an action");
 example("minus sections: (10 -), (- 2) and (-) are sections, (-2) a negation", `
 print ((10 -) 3)
 print ((-) 10 3)
