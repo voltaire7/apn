@@ -36,7 +36,7 @@ example("from String retains large integer digits", 'from String "90071992547409
 example("integer string formatting has no BigInt suffix", 'format "% / %" [9007199254740993,-9007199254740993]', '"9007199254740993 / -9007199254740993"');
 example("to String uses exact decimal text", "to String 9007199254740993", '"9007199254740993"');
 example("quoted literals retain exact digits", "quote 9007199254740993", '"9007199254740993"');
-example("toAST retains large numeric leaves", "toAST (9007199254740993 + 1)", '["+",9007199254740993,1]');
+example("toAST retains large numeric leaves", 'import "syntax"\ntoAST (9007199254740993 + 1)', 'Apply (Apply (Name "+") (Numeral 9007199254740993)) (Numeral 1)');
 example("large finite ranges advance exactly", "[9007199254740993..9007199254740995]", "[9007199254740993,9007199254740994,9007199254740995]");
 example("large stepped ranges advance exactly", "[9007199254740993,9007199254740995..9007199254740997]", "[9007199254740993,9007199254740995,9007199254740997]");
 example("descending ranges retain exact endpoints", "[9007199254740995..9007199254740993]", "[9007199254740995,9007199254740994,9007199254740993]");

@@ -31,8 +31,8 @@ for (const [name, source, expected] of [
     ["positional clone", 'obj = [x: 1, "x": 2]\nobj [3,4]', '[x: 3, "x": 4]'],
     ["nested access", 'obj = [child: ["x": 2], "child": [x: 3]]\n[obj.child."x", obj."child" "x"]', '[2,3]'],
     ["unused values stay deferred", 'unused = missing + 1\nobj = [x: 1, "x": unused]\nobj "x"', '1'],
-    ["pairs expose plain key text", 'pairs [x: 1, "x": 2]', '[["x",1],[""x"",2]]'],
-    ["iteration exposes plain key text", '[x: 1, "x": 2] * [k,v] -> k', '["x",""x""]'],
+    ["pairs expose plain key text", 'pairs [x: 1, "x": 2]', '[["x",1],["\\"x\\"",2]]'],
+    ["iteration exposes plain key text", '[x: 1, "x": 2] * [k,v] -> k', '["x","\\"x\\""]'],
     ["string key to HashMap", String.raw`m = HashMap ["x": 2]
 m "\"x\""`, '2'],
     ["named key to HashMap", 'm = HashMap [x: 1]\nm "x"', '1'],

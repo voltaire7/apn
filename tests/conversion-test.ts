@@ -20,7 +20,7 @@ const TEMPERATURE = "Celsius = | C Float\nFahrenheit = | F Float\nto Celsius = (
 for (const [source, expected] of [
     ["to String 1.5 ++ \"!\"", '"1.5!"'],
     ["Int (from String \"42\") + 1", "43"],
-    ["to JSON [a: 1, b: [true]]", '"{"a":1,"b":[true]}"'],
+    ["to JSON [a: 1, b: [true]]", '"{\\"a\\":1,\\"b\\":[true]}"'],
     ["from JSON \"[1,2]\"", "[1,2]"],
     ["to (List Char) \"a😀\"", "['a','😀']"],
     ["from (List Char) ['h','i']", '"hi"'],

@@ -28,7 +28,7 @@ import { APNError, tokLen } from "./errors.ts";
 import type { Expr, Pattern, TopLevel, BinOp } from "./ast.ts";
 import type { Type, Value, Env } from "./types.ts";
 import type { Token } from "./lexer.ts";
-import { itemsText } from "./separators.ts";
+import { charLiteral, itemsText, stringLiteral } from "./separators.ts";
 
 // ---------------- Fixity ----------------
 
@@ -491,11 +491,14 @@ class Parser {
                 }
                 return { p: "constr", tag: name, args };
             }
-            // constructor application: Some x
+            // constructor application: Some x. A capitalized argument takes
+            // nothing after it (R low None high): one with fields is parenthesized.
             if (/^[A-Z]/.test(name)) {
                 const args = [] as Pattern[];
                 while (this.startsParam(this.peek())) {
-                    args.push(this.parsePattern());
+                    const token = this.peek();
+                    if (token.k === "ident" && /^[A-Z]/.test(token.v)) { this.next(); args.push({ p: "constr", tag: token.v, args: [] }); }
+                    else args.push(this.parsePattern());
                 }
                 return { p: "constr", tag: name, args };
             }
@@ -1901,6 +1904,7 @@ function literalEnd(source: string, pos: number): number {
 // Loose spacing (apn --loose): none of the spacing rules apply.
 let looseSpacing = false;
 export function setLooseSpacing(loose: boolean): void { looseSpacing = loose; }
+export function getLooseSpacing(): boolean { return looseSpacing; }
 
 // A line has at most this many characters (code points), each string,
 // character or number literal on it, and its comment, counting as one: a line
@@ -2037,8 +2041,8 @@ export function exprToSource(e: Expr): string {
         case "int": return String(e.v);
         case "float": return numberText({ kind: "float", v: e.v });
         case "bool": return e.v ? "true" : "false";
-        case "string": return `"${e.v}"`;
-        case "char": return `'${e.v}'`;
+        case "string": return stringLiteral(e.v);
+        case "char": return charLiteral(e.v);
         case "placeholder": return "_";
         case "var": return e.name;
         case "binop": return `${exprToSource(e.l)} ${e.op} ${exprToSource(e.r)}`;
@@ -2063,12 +2067,13 @@ export function exprToSource(e: Expr): string {
         case "pluck":
             if (e.values) return `${exprToSource(e.rec)}.${exprToSource(e.values)}`;
             return `${exprToSource(e.rec)}.[${itemsText(e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`))}]`;
-        case "setItem": return `${exprToSource(e.rec)} (${exprToSource(e.index)}) = ${exprToSource(e.value)}`;
+        case "setItem": {
+            const index = exprToSource(e.index);
+            return `${exprToSource(e.rec)} ${e.index.t === "block" ? index : `(${index})`} = ${exprToSource(e.value)}`;
+        }
         case "setFields":
             return `${exprToSource(e.rec)}.${(e.path ?? []).map(keySource).map(key => key + ".").join("")}[${itemsText(e.entries.map((key, n) => keySource(key) + (e.aliases ? ": " + keySource(e.aliases[n]) : "")))}] = ${exprToSource(e.value)}`;
         case "block": {
-            const one = e.stmts.length === 1 && e.stmts[0].t !== "stmDef" && e.stmts[0].t !== "patDef";
-            if (one && e.style === "(") return exprToSource(e.stmts[0]);
             const body = e.stmts.map(exprToSource).join("; ");
             return e.style === "(" ? `(${body})` : `{ ${body} }`;
         }
@@ -2088,8 +2093,8 @@ export function patternSource(p: Pattern): string {
         case "var": return p.name;
         case "int": return String(p.v);
         case "bool": return String(p.v);
-        case "string": return JSON.stringify(p.v);
-        case "char": return `'${p.v}'`;
+        case "string": return stringLiteral(p.v);
+        case "char": return charLiteral(p.v);
         case "float": return numberText({ kind: "float", v: p.v });
         case "list": return `[${itemsText(p.v.map(patternSource))}]`;
         case "cons": return `(${patternSource(p.head)} ${p.op ?? "::"} ${patternSource(p.tail)})`;

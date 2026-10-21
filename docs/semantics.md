@@ -741,7 +741,9 @@ Variable and wildcard patterns leave their arguments deferred. Other patterns
 force only the structure they inspect. A cons pattern binds a lazy head and
 lazy tail; an exact-length list pattern checks the spine length. Pattern-clause
 fallthrough shares argument thunks, preventing duplicate evaluation of an
-already demanded argument. Variant construction defers its fields.
+already demanded argument. Variant construction defers its fields. In a
+constructor pattern, a bare capitalized argument takes no fields of its own
+(`R low None high`); one with fields is parenthesized (`R (Some x) y`).
 
 Destructuring definitions immediately perform the pattern match, but bound
 variables remain deferred. Blocks create child scopes. Environments are
@@ -755,14 +757,14 @@ does not evaluate its `halt` action.
 
 ## Inspection and numbers
 
-`quote` and `toAST` inspect syntax without evaluating their arguments: `quote`
-gives the source text, `toAST` nested lists, head first (`toAST (1 + 2)` is
-`["+",1,2]`, a binding `["=","x",1]`). `debug`
+`quote` gives its argument's source text without evaluating it, groups' parentheses
+included; [`toAST`](standard-library.md#code-as-data--syntax) gives it as data. `debug`
 forces its argument without running a returned action: `a = print 3; debug a`
 prints `a`. `step` retains
 its expression-inspection/evaluation rules demonstrated in `examples/features.apn`.
 `to String` demands its argument and collects its full rendering into a string.
-Values render as source writes them: a constructor argument that is itself
+Values render as source writes them: strings and characters escaped
+(`"a\"b"`), a constructor argument that is itself
 compound is parenthesized (`Some (Some 1)`, `Distance (-2)`), operators show
 as sections (`(+)`, `(+ 1)`, and `(1 +)` for `(+)` applied to 1). A function
 with several clauses shows each as a pattern lambda on its own line:

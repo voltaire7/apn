@@ -660,6 +660,18 @@ reserved for JSON-RPC; keep UTF-16 positions and byte-counted Content-Length
 framing. `editors/neovim/apn.lua` is opt-in and session-only; don't edit user
 configuration. Tests: `tests/lsp-test.ts`.
 
+## Code as data
+
+`lib/syntax.apn` declares `Expr` and passes its constructors to `primToAST`
+as a record, so the type is written once; `astOf` builds from the parser's
+nodes (operator sections become `Name`, a partial application or `Section`).
+`primToAST` takes its expression argument unevaluated, so `toAST` must stay
+point-free. `eval` parses `fromAST`'s text with the parser itself, spacing
+rules and line limit off, rather than converting an Expr back to nodes, so
+evaluated code cannot drift from written code. The checker types `toAST`'s
+result as the record's `hole` field type and never checks its argument.
+Tests: `tests/syntax-test.ts`.
+
 ## Metacircular evaluator
 
 `lib/meta.apn` exposes `meta`; the implementation lives in `lib/meta/`. It

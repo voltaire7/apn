@@ -3188,8 +3188,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (resolved.k === "intrinsic" && resolved.name === "do" && a.t === "list") {
                     return infer({ t: "block", stmts: a.v, style: "{" }, scope);
                 }
-                if (resolved.k === "intrinsic" && ["quote", "debug", "toAST"].includes(resolved.name)) {
-                    return resolved.name === "quote" ? atom("String") : resolved.name === "debug" ? list(variable(), constant(0n)) : explicitDynamic;
+                if (resolved.k === "intrinsic" && ["quote", "debug"].includes(resolved.name)) {
+                    return resolved.name === "quote" ? atom("String") : list(variable(), constant(0n));
+                }
+                // syntax.apn's toAST = primToAST [hole: Hole, ...]: an Expr, its
+                // argument unevaluated (unchecked); eval's result is Dynamic.
+                if (resolved.k === "intrinsic" && resolved.name === "primToAST") {
+                    const constructors = resolve(infer(a, scope));
+                    const expr = constructors.k === "record" ? constructors.fields.get("hole") : undefined;
+                    return { k: "intrinsic", name: "toAST", args: expr ? [expr] : [] };
+                }
+                if (resolved.k === "intrinsic" && resolved.name === "toAST") return resolved.args?.[0] ?? explicitDynamic;
+                if (resolved.k === "intrinsic" && resolved.name === "primEval") {
+                    infer(a, scope);
+                    runtimeChecks++;
+                    return explicitDynamic;
                 }
                 if (resolved.k === "intrinsic" && resolved.name === "use") {
                     const open = (type: Ty): void => {
@@ -6268,7 +6281,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("isType", [variable(), variable()], bool);
     native("parse", [str], explicitDynamic);
     native("step", [int, variable()], explicitDynamic);
-    for (const name of ["quote", "debug", "toAST", "use", "load"]) scope.set(name, { type: { k: "intrinsic", name } });
+    for (const name of ["quote", "debug", "primToAST", "primEval", "use", "load"]) scope.set(name, { type: { k: "intrinsic", name } });
     native("exit", [int], io(empty));
     native("null", [variable()], bool);
     native("length", [list(variable())], int);
@@ -6295,6 +6308,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("readStdin", [], io(str));
     native("getArgs", [], io(list(str)));
     for (const name of ["entropy", "currentTime", "zoneOffset"]) native(name, [], io(int));
+    // An operator's [precedence,associativity] (lib/syntax.apn's fromAST).
+    native("primFixity", [str], { k: "list", element: { k: "union", choices: [int, str] }, items: [int, str], length: constant(2n) });
     // p5's Sketch (a callback's p) and its objects: records whose methods are
     // Dynamic (their arguments are checked as they run).
     // A method's Dynamic parameters convert their arguments (as a (Dynamic x) parameter does).

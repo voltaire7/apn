@@ -266,6 +266,38 @@ order is preserved. Keys follow the existing HashMap scalar-key rules.
 Run `apn examples/standard-library.apn` for a complete example.
 
 
+## Code as data — `syntax`
+
+```apn
+import "syntax"
+toAST (f x + 1)    # Apply (Apply (Name "+") (Apply (Name "f") (Name "x"))) (Numeral 1)
+fromAST (toAST (n -> n * 2 + 1))               # "n -> n * 2 + 1"
+eval (Apply (Name "sqrt") (Numeral 16))         # 4
+```
+
+`Expr` is APN's syntax as data: `Name`, `Hole` (`_`), `Numeral`, `Text`,
+`Character`, `Boolean`, `Apply`, `Section` (`(+ 1)`), `Negate`, `Not`, `If`,
+`Lambda` (parameters, optional guard, body), `Items` (a list), `Range`,
+`Fields` (a record), `Field` (`r.x`), `Select` (`r.[x,y]`, `r.(e)`), `Block`,
+`Bind` (`=`), `Run` (`<-`) and `Import`. It records an expression as written,
+with no second form for what reads the same:
+
+- an operator is an application of its name: `a + b` is
+  `Apply (Apply (Name "+") a) b`, `(2 +)` is `Apply (Name "+") (Numeral 2)`
+  and `(+)` is `Name "+"`;
+- a pattern is the expression it is written as: `Some x`, `x :: xs`, `[a,b]`
+  and `_` are `Apply`, `Items` and `Hole`;
+- every binding is a `Bind` of its left side to its right: `x = 1`, `f n = ...`
+  (one per clause), `Some v = m`, `r.x = 1` and `xs 0 = 1` alike; what a
+  left side means is decided where it runs, as for written code.
+
+`toAST e` is `e`'s Expr; `e` is neither evaluated nor checked. `fromAST`
+writes an Expr as source, which reads back as the same Expr, parenthesized
+only where precedence needs it. `eval` runs an Expr as written source runs, at
+the program's top level (as Lisp's `eval` uses the global environment): its
+bindings stay inside it, an action it makes is returned, not run, and its
+result is `Dynamic`. Source positions and comments are not part of an Expr.
+
 ## Metacircular evaluator — `meta`
 
 `metaEval source` runs the supported APN core through an APN-written reader and

@@ -8,3 +8,12 @@ export function spacedItem(text: string): boolean {
 export function itemsText(items: string[]): string {
     return items.join(items.some(spacedItem) ? ", " : ",");
 }
+
+// A string or character as source writes it, escaped as the lexer reads it.
+const ESCAPES: Record<string, string> = { "\\": "\\\\", "\n": "\\n", "\t": "\\t", "\r": "\\r", "\v": "\\v", "\f": "\\f", "\0": "\\0" };
+export function stringLiteral(text: string): string {
+    return `"${text.replace(/[\\\n\t\r\v\f\0"]/g, c => ESCAPES[c] ?? "\\" + c)}"`;
+}
+export function charLiteral(c: string): string {
+    return `'${c.replace(/[\\\n\t\r\v\f\0']/g, x => ESCAPES[x] ?? "\\" + x)}'`;
+}

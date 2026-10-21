@@ -121,10 +121,9 @@ print (true ? 7 : missing)
 print (false ? missing : 8)
 `, ["7", "8"]);
 
-example("quote and toAST do not evaluate their arguments", `
+example("quote does not evaluate its argument", `
 print (quote missing)
-print (toAST (1 + missing))
-`, ["missing", '["+",1,"missing"]']);
+`, ["missing"]);
 
 example("debug inspects an action without calling its body", `
 action = print "unexpected"
@@ -415,10 +414,8 @@ x = 7
 print [x + 1, x = 1, x]
 print x
 print (quote [x = 1, x + 1])
-print (quote (x = 1))
-print (toAST (x = 1))
-print (toAST [x = 1, x + 1])`, ["[1]", "[1,2]", "2", "[n -> n * 2, 6]", "[[1,2],3]", "[8,1,1]", "7",
-    "[x = 1, x + 1]", "(x = 1)", '["=","x",1]', '[["=","x",1],["+","x",1]]']);
+print (quote (x = 1))`, ["[1]", "[1,2]", "2", "[n -> n * 2, 6]", "[[1,2],3]", "[8,1,1]", "7",
+    "[x = 1, x + 1]", "(x = 1)"]);
 failure("a list item cannot run an action", "print [x <- return 1, x]", "cannot run an action");
 example("minus sections: (10 -), (- 2) and (-) are sections, (-2) a negation", `
 print ((10 -) 3)

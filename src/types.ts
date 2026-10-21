@@ -2,7 +2,7 @@ import { keySource } from "./record-keys.ts";
 import { functionSource } from "./function-source.ts";
 import { type Numeric, type Real, arithmetic, numberText } from "./numbers.ts";
 import type { Expr, Pattern } from "./ast.ts";
-import { itemsText } from "./separators.ts";
+import { charLiteral, itemsText, stringLiteral } from "./separators.ts";
 
 // ---------------- Types & values ----------------
 
@@ -111,8 +111,8 @@ export function valueToString(v: Value): string {
         case "hashmap": return `HashMap [${itemsText([...v.entries.values()].map(([k, x]) => `[${itemsText([valueToString(k), valueToString(x)])}]`))}]`;
         case "rationalRange": return rangeText(v.lo, arithmetic("+", v.lo, v.step), v.hi);
         case "bool": return String(v.v);
-        case "string": return `"${v.v}"`;
-        case "char": return `'${v.v === "\0" ? "\\0" : v.v}'`;
+        case "string": return stringLiteral(v.v);
+        case "char": return charLiteral(v.v);
         case "list": return `[${itemsText(v.v.map(valueToString))}]`;
         case "lazyList":
         case "cons": return "[...]";
