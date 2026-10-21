@@ -308,6 +308,7 @@ function helpText(): string {
         `  xs +++ ys = ...; (<+>) = f   new operators work but are not recommended`,
         `  ( ) and { } are groups/blocks: [] when empty, value = last stmt`,
         `  spacing: x = 1, lists [1,2,3] and [1 + 1, 2], records [x: 1, y: 2], (x), { x } (--loose: none)`,
+        `  operators spaced on both sides or neither: 1 + 2, 1+2 (not 1 +2); f -1 is f - 1`,
         `  ; or newline       statement separators (blocks & top level)`,
         `  print, readFile, fetch, set, env ... are IO actions: statements and <- run them`,
         `  x <- action        run it now and bind its result (outer value only); x <- return v is strict`,

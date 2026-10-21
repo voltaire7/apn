@@ -673,8 +673,9 @@ print { 4 * 3 }              # => 12
 # Spacing is syntax: x = 1, [1,2,3], [x: 1, y: 2], (x), { x }. A comma takes a
 # space after it only when an item it separates has one: [1,2], x,y -> x, but
 # [1 + 1, 2] and (Int x), y -> x. So x=1, [1, 2], [1 + 1,2], [x:1] and ( 1 ) are
-# parse errors, as are f(x), f[1] and f{ x } (application needs a space) and a
-# ',' ending a line (newlines separate items):
+# parse errors, as are f(x), f[1] and f{ x } (application needs a space), a
+# ',' ending a line (newlines separate items), and an operator spaced on one
+# side only (1 +2, 1+ 2; 1+2 and 1 + 2 are fine, and sqrt -1 is sqrt - 1):
 layoutItems = [
     1,2
     3

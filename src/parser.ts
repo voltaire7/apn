@@ -108,6 +108,7 @@ class Parser {
                 this.checkCommaSpacing(t, holds[holds.length - 1] ?? "params", tight.has(index));
             }
             if (t.k === "sym" && t.v === ";") this.checkSemicolon(index);
+            this.checkOperatorSpacing(index);
             if (t.k === "sym" && "([{".includes(t.v)) holds.push(t.v !== "[" ? "params" : this.opensRecord(index) ? "record" : "list");
             if (t.k === "sym" && ")]}".includes(t.v)) holds.pop();
             if (t.k !== "sym" || !(t.v in pairs)) continue;
@@ -141,6 +142,23 @@ class Parser {
             const side = open ? `after '${t.v}'` : `before '${t.v}'`;
             throw new Error(brace ? `Parser: put exactly one space ${side} (write { x }, or {} when empty)` : `Parser: remove the space ${side} (write ${open ? t.v : pairs[t.v]}x${open ? pairs[t.v] : t.v})`);
         }
+    }
+
+    // A binary operator has a space on both sides or neither (1 + 2, 1+2):
+    // 1 +2 and 1+ 2 are errors. Where it can be prefix (-, !), a space
+    // before alone writes an argument (f -1, the function-minus overload);
+    // after an opening bracket, a ',' or another operator it is prefix, and
+    // before a closing bracket it ends a section ((1 +)).
+    checkOperatorSpacing(index: number): void {
+        const t = this.toks[index], previous = this.toks[index - 1], next = this.toks[index + 1];
+        if (t.k !== "sym" || ![...t.v].every(c => OPERATOR_CHARS.includes(c)) || ["=", ":", "->", "<-", "|"].includes(t.v)) return;
+        const prefixPlace = !previous || ["newline", "indent", "dedent"].includes(previous.k)
+            || previous.k === "sym" && ("([{,;".includes(previous.v) || [...previous.v].every(c => OPERATOR_CHARS.includes(c)));
+        if (prefixPlace || next?.k === "sym" && ")]}".includes(next.v)) return;
+        const before = /\s/.test(this.source[t.pos - 1] ?? " "), after = /\s/.test(this.source[t.pos + t.v.length] ?? " ");
+        if (before === after || before && ["-", "!"].includes(t.v)) return;
+        this.seen = t;
+        throw new Error(`Parser: put a space on both sides of '${t.v}' or neither (write 1 ${t.v} 2 or 1${t.v}2)`);
     }
 
     // A binding's = has exactly one space on each side (x = 1), or ends its line.

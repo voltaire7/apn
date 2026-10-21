@@ -98,6 +98,12 @@ Spacing is part of the syntax (a parse error otherwise):
   `func(123)` or `run{ x }` (a `[`, `(` or `{` directly after a name, literal
   or closing bracket is an error). Selections keep their dot: `v.[x,y]`,
   `v.(key)`, `obj.{ x + 1 }`.
+- A binary operator has a space on both sides or neither: `1 + 2` or `1+2`,
+  not `1 +2` or `1+ 2`, except that a space before `-` or `!` alone is allowed:
+  `f -1` is `f - 1` (the [function-minus overload](#inspection-and-numbers)) and
+  `f !b` applies `f` to `!b`. After an opening bracket, a `,` or another
+  operator one is prefix (`[-1]`, `a == -1`); before a closing bracket it ends
+  a section (`(1 +)`).
 - A record field is `key: value`, not `key:value`: `[x: 1]`, not `[x:1]`;
   likewise keyed patterns and selections (`[x: a, y: b]`).
 - `( )` and `[ ]` take no space inside (`(123)`, `[1,2]`); a `{ }` block on one

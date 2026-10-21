@@ -97,7 +97,7 @@ Deno.test('one-line brackets: exactly one space inside braces, none inside ( ) a
 });
 Deno.test('spacing at =, commas and record colons', () => {
     for (const source of ['x=1', 'x =1', 'x= 1', 'x  = 1', 'x =  1', '[1, 2]', '[1 ,2]', '[1 , 2]', '[1,  2]', '[x: 1,y: 2]', '[x: 1 , y: 2]', '[x: 1,  y: 2]',
-            '[1 + 1,2]', '[[1, 2],[3]]', '[1,2, 3]', '["a", "b c"]', 'x, y -> x', '(Int x),y -> x', 'v = [x: 1, y: 2]; v.[x, y]',
+            '[1 + 1,2]', '[[1, 2],[3]]', '1 +2', '1+ 2', 'x = 5; x- 1', 'f $x', '2^ .5', '[1,2, 3]', '["a", "b c"]', 'x, y -> x', '(Int x),y -> x', 'v = [x: 1, y: 2]; v.[x, y]',
             '[x:1]', '[x : 1]', '[x:  1]', 'f [x:a] = a', 'v = [x: 1]; v.[x:a] = [a: 2]', 'print [ [1,2] ]',
             '[1,2,]', '[x: 1, y: 2,]', 'xs = [\n    1,\n    2,\n]', 'r = [\n    a: 1,  # note\n]', 'xs = [\n    1,\n    2\n]',
             'r = [\n    a: 1,\n    b: 2\n]', 'func x = x; func(123)', 'f x y = x; f(1) 2', 'f x = x; f{ 1 }', 'v = [x: 1]; print v{ x }',
@@ -112,7 +112,7 @@ Deno.test('spacing at =, commas and record colons', () => {
             'f [x: a, y: b] = a', 'f (x::xs) = x', 'xs = [\n    1\n    2\n]', 'r = [\n    a: 1\n    b: 2\n]', 'xs = [\n    1,2\n    3\n]',
             'func x = x; func (123)', 'f x = x; f { 1 }', 'obj = [x: 1]; obj.{ x + 1 }', 'v = [x: 1, y: 2]; v.[x,y]', 'v = [x: 1, y: 2]; v.[x: a, y: b]',
             'V = [x: Int, y: Int]; v = V [1,2]', 'x = 1::[2]', '[[1],[2]]', '[1 + 1, 2]', '[[1 + 1, 2], [3]]', '["a b","c"]', '[0,-1,1/2,v.x]',
-            'x,y -> x', '(Int x), y -> x', 'xs = [\n    1,2\n    3 + 1, 4\n]']) parseDocument(source);
+            'x,y -> x', '(Int x), y -> x', '1+2', 'f x = x; f -1', '(1 +)', '(+ 1)', 'a = 1; a == -1', 'xs = [\n    1,2\n    3 + 1, 4\n]']) parseDocument(source);
 });
 Deno.test("a ';' separates two statements on one line", () => {
     for (const source of ['{\n    print 123;\n    print 321;\n}', '{\n    print 123;print 321;\n}', '{ print 1; }', '{ ; print 1 }', 'print 1;; print 2',
