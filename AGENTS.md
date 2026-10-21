@@ -103,7 +103,8 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   and counts require exact integers.
 - **Layout:** strict 4-space indentation across the whole language; newlines
   at the same level end statements, +4 continues them. Lines are at most 99
-  characters, in every APN source (lib, examples, docs, test programs).
+  characters, each literal and comment counting as one, in every
+  APN source (lib, examples, docs, test programs).
 - **Bindings:** a value never changes: `name = value` defines a new name for
   its whole scope or starts a new version of a visible one, which code written
   before keeps not seeing (`f = x -> ...` is a clause of `f`, like

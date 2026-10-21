@@ -29,17 +29,24 @@ Deno.test('editor flags the stray indented statement', () => {
     if (diagnostics.length !== 1 || diagnostics[0].range.start.line !== 3) throw new Error(JSON.stringify(diagnostics));
 });
 
-// Lines are at most 99 characters (code points), comments included; --loose lifts it.
+// Lines are at most 99 characters (code points), each literal and comment
+// counting as one; --loose lifts it.
 Deno.test("a line over 99 characters is a parse error", () => {
-    parseDocument(`x = "${"a".repeat(93)}"`);
-    parseDocument(`x = "${"😀".repeat(93)}"`);
-    try { parseDocument(`x = 1\n# ${"a".repeat(98)}`); throw new Error("accepted a 100-character line"); }
+    parseDocument(`x = [${"1,".repeat(46)}1]`);
+    parseDocument(`x = "${"😀".repeat(300)}"`);
+    parseDocument(`x = ${"9".repeat(300)}`);
+    parseDocument(`x = 1  # ${"a".repeat(300)}`);
+    parseDocument(`# ${"a".repeat(300)}`);
+    parseDocument(`x = "${"a".repeat(200)}" ++ "${"#".repeat(80)}"`);
+    parseDocument(`x = ${"9".repeat(200)} + ${"8".repeat(200)}  # ${"c".repeat(200)}`);
+    const source = `x = [${"1,".repeat(47)}1]`;
+    try { parseDocument(source); throw new Error(`accepted: ${source}`); }
     catch (error) {
         const e = error as APNError;
-        if (!e.message.includes("line is 100 characters long; the limit is 99") || e.pos !== 6 + 99) throw error;
+        if (!e.message.includes("line is 101 characters long, counting each literal and comment as one; the limit is 99") || e.pos !== 99) throw error;
     }
     setLooseSpacing(true);
-    try { parseDocument(`x = "${"a".repeat(200)}"`); } finally { setLooseSpacing(false); }
+    try { parseDocument(`x = [${"1,".repeat(100)}1]`); } finally { setLooseSpacing(false); }
 });
 // A deeper line starting an argument continues an application: at the top
 // level, in a block, in a list item and in a record field.

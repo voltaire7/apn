@@ -1889,26 +1889,46 @@ function literalEnd(source: string, pos: number): number {
 let looseSpacing = false;
 export function setLooseSpacing(loose: boolean): void { looseSpacing = loose; }
 
-// A line has at most this many characters (code points), comments included.
+// A line has at most this many characters (code points), each string,
+// character or number literal on it, and its comment, counting as one: a line
+// may overflow only by what cannot be broken.
 export const MAX_LINE_LENGTH = 99;
-function checkLineLengths(src: string): void {
-    let start = 0;
-    for (const line of src.split("\n")) {
-        const characters = [...line.replace(/\r$/, "")];
-        if (characters.length > MAX_LINE_LENGTH) {
-            const e = new APNError("parse", `line is ${characters.length} characters long; the limit is ${MAX_LINE_LENGTH}`, {
-                pos: start + characters.slice(0, MAX_LINE_LENGTH).join("").length, len: 1,
-                hint: "break it: a deeper line continues an application's arguments, an operator chain, a list item or a record field",
-            });
-            e.src = src;
-            throw e;
+function checkLineLengths(src: string, toks: Token[]): void {
+    const width = (from: number, to: number) => [...src.slice(from, to)].length;
+    // Each literal's source span, from where it starts to where it ends.
+    const literals: Array<[number, number]> = [];
+    toks.forEach((t, n) => {
+        if (t.k === "str" || t.k === "char") literals.push([t.pos, literalEnd(src, t.pos)]);
+        else if (t.k === "int" || t.k === "float") literals.push([t.pos, t.pos + src.slice(t.pos, toks[n + 1]?.pos ?? src.length).split("#")[0].trimEnd().length]);
+    });
+    let start = 0, next = 0;
+    for (const raw of src.split("\n")) {
+        const line = raw.replace(/\r$/, ""), end = start + line.length;
+        const spans: Array<[number, number]> = [];
+        while (next < literals.length && literals[next][0] < end) spans.push(literals[next++]);
+        const length = width(start, end);
+        if (length > MAX_LINE_LENGTH) {
+            // The comment: a '#' outside the literals, to the end of the line.
+            let comment = start;
+            for (; comment < end; comment++) {
+                if (src[comment] === "#" && !spans.some(([a, b]) => a <= comment && comment < b)) break;
+            }
+            const parts = [[comment, end], ...spans.map(([a, b]) => [a, Math.min(b, end)])].filter(([a, b]) => a < b);
+            const counted = length - parts.reduce((sum, [a, b]) => sum + width(a, b) - 1, 0);
+            if (counted > MAX_LINE_LENGTH) {
+                const e = new APNError("parse", `line is ${counted} characters long, counting each literal and comment as one; the limit is ${MAX_LINE_LENGTH}`, {
+                    pos: start + [...line].slice(0, MAX_LINE_LENGTH).join("").length, len: 1,
+                    hint: "break it: a deeper line continues an application's arguments, an operator chain, a list item or a record field",
+                });
+                e.src = src;
+                throw e;
+            }
         }
-        start += line.length + 1;
+        start = end + raw.length - line.length + 1;
     }
 }
 
 export function parse(src: string, file = "<repl>"): TopLevel[] {
-    if (!looseSpacing) checkLineLengths(src);
     let toks: Token[];
     try {
         toks = lex(src);
@@ -1916,6 +1936,7 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
         if (err instanceof APNError) err.src = src;
         throw err;
     }
+    if (!looseSpacing) checkLineLengths(src, toks);
     const p = new Parser(toks, src, file);
     try {
         declareFixities(toks);

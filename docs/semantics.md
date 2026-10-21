@@ -39,10 +39,11 @@ field continues it, by the same rules. A line that only closes a multi-line
 bracket, or one ending with `}`, ends its statement: a deeper line after it
 is an error, not an argument.
 
-A line holds at most 99 characters (code points, comments included); a longer
-one is a syntax error. Break it as above: arguments, operator chains, list
-items and record fields continue on deeper lines, and a long string joins
-parts with `++`.
+A line holds at most 99 characters (code points), each string, character or
+number literal on it, and its comment, counting as one: a line may overflow
+only by what cannot be broken. A longer one is a syntax error. Break it as above:
+arguments, operator chains, list items and record fields continue on deeper
+lines.
 
 Definition brace layout is mandatory: write `func = {` on one line. In a
 multiline brace block, each statement starts exactly four spaces deeper than

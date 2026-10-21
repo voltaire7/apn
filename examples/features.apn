@@ -683,6 +683,8 @@ layoutItems = [
 print layoutItems            # => [1,2,3]
 print [1 + 1, 2]             # => [2,2]       (values print by the same rule)
 print [[x: 1], [y: 2]]       # => [[x: 1], [y: 2]]
+# A line is at most 99 characters, each literal and comment counting as one:
+print (123456789012345678901234567890123456789012345678901234567890 + 987654321098765432109876543210987654321098765432109876543210)  # => 1111111110111111111011111111101111111110111111111011111111100
 # apn --loose FILE relaxes every spacing rule.
 
 group = { 1; 2; 3 }          # a 0-arg function: its body is the block
