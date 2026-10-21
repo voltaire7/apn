@@ -634,8 +634,8 @@ export class ReplEditor {
     // line, through history: an older entry's last line, a newer one's first,
     // as if the entries were one text. They keep the column, as in Vim
     // (clamped to each line, remembered across shorter lines until another key
-    // moves); browsing history starts at the end of each line, until a move
-    // sideways sets a column.
+    // moves); changing entries puts the cursor at the end of each line, until
+    // a move sideways sets a column.
     goal: number | null = null;
     vertical(row: number): KeyAction {
         this.goal ??= this.col;
@@ -649,10 +649,10 @@ export class ReplEditor {
         if (this.histIdx === null) {
             this.draft = this.src();
             this.histIdx = this.hist.length - 1;
-            this.goal = Infinity;
         } else if (this.histIdx > 0) this.histIdx--;
         else return "cont";
         this.lines = this.hist[this.histIdx].split("\n");
+        this.goal = Infinity;
         return this.vertical(this.lines.length - 1);
     }
 
@@ -662,6 +662,7 @@ export class ReplEditor {
         this.histIdx++;
         if (this.histIdx >= this.hist.length) this.histIdx = null;
         this.lines = (this.histIdx === null ? this.draft : this.hist[this.histIdx]).split("\n");
+        this.goal = Infinity;
         return this.vertical(0);
     }
 

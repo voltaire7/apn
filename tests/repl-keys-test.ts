@@ -79,7 +79,7 @@ Deno.test("arrows move with Caps Lock or Num Lock on", () => {
     equal(ed.col, 0);
 });
 const keys = (ed: ReplEditor, sequence: string) => { for (const ch of sequence) ed.feed(ch); };
-Deno.test("browsing history starts at the end of every line, until a move sideways", () => {
+Deno.test("changing history entries puts the cursor at the end of each line, until a move sideways", () => {
     const ed = new ReplEditor(new Interpreter(), ["f x = {\n    x + 1\n}", "1 + 2"]);
     ed.lines = ["12345678"]; ed.row = 0; ed.col = 6;
     keys(ed, "\x1b[A");
@@ -98,10 +98,10 @@ Deno.test("browsing history starts at the end of every line, until a move sidewa
     equal(ed.row, 1); equal(ed.col, 6);
     keys(ed, "\x1b[A"); // ...that the next moves keep
     equal(ed.row, 0); equal(ed.col, 6);
-    keys(ed, "\x1b[B\x1b[B\x1b[B");
-    equal(ed.src(), "1 + 2"); equal(ed.col, 5);
-    keys(ed, "\x1b[B");
-    equal(ed.src(), "12345678"); equal(ed.col, 6);
+    keys(ed, "\x1b[B\x1b[B"); // within the entry
+    equal(ed.row, 2); equal(ed.col, 1);
+    keys(ed, "\x1b[B\x1b[D\x1b[D\x1b[B"); // another entry: the end again
+    equal(ed.src(), "12345678"); equal(ed.col, 8);
 });
 Deno.test("Up and Down in a new entry keep the column, as in Vim", () => {
     const ed = editor("12345678\nab\n12345678", 6);

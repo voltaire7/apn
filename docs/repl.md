@@ -13,8 +13,8 @@ empty result (`print 3` shows only `3`); bindings echo nothing. Interactive feat
   after the newest entry, as if the entries were one text: Up lands on an
   older entry's last line, Down on a newer one's first. The cursor keeps its
   column, as in Vim (clamped to each line, remembered across shorter ones
-  until another key moves it); browsing history starts at the end of every
-  line, until a move sideways sets a column. Persisted across
+  until another key moves it); changing entries puts the cursor at the end
+  of each line, until a move sideways sets a column. Persisted across
   sessions in `~/.apn_history` (one JSON string per line, capped at 500 on
   load; needs `--allow-write` and `--allow-env=HOME`, else in-session only
   with a one-time hint).
