@@ -11,9 +11,10 @@ empty result (`print 3` shows only `3`); bindings echo nothing. Interactive feat
   multi-line entry) they move between lines. Up on the first line browses older
   history; Down on the last line browses newer history, restoring the draft
   after the newest entry, as if the entries were one text: Up lands on an
-  older entry's last line, Down on a newer one's first. The cursor keeps its
-  column, as in Vim (clamped to each line, remembered across shorter ones
-  until another key moves it). Persisted across
+  older entry's last line, Down on a newer one's first. Browsing history puts
+  the cursor at the end of every line it lands on; in a new entry the arrows
+  keep the column, as in Vim (clamped to each line, remembered across shorter
+  ones until another key moves it). Persisted across
   sessions in `~/.apn_history` (one JSON string per line, capped at 500 on
   load; needs `--allow-write` and `--allow-env=HOME`, else in-session only
   with a one-time hint).
@@ -46,7 +47,8 @@ empty result (`print 3` shows only `3`); bindings echo nothing. Interactive feat
 - **Colors** (Catppuccin Frappé palette, truecolor): input is highlighted as
   typed, by the tokenizer the language server and the web editor share
   (`src/highlight.ts`) (comments overlay0, strings/chars green, numbers yellow,
-  bools mauve, natives blue, capital idents sky,
+  keywords (`import`, `load`, `use`, `match`, `do`, `return`) and bools mauve,
+  natives blue, capital idents sky,
   punctuation overlay1, operators peach); echoed values are colored by kind with
   gray structure (brackets, colons, commas; keys plain, variant tags sky);
   errors red.

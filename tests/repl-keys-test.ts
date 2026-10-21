@@ -79,21 +79,30 @@ Deno.test("arrows move with Caps Lock or Num Lock on", () => {
     equal(ed.col, 0);
 });
 const keys = (ed: ReplEditor, sequence: string) => { for (const ch of sequence) ed.feed(ch); };
-Deno.test("browsing history keeps the column, as Vim moves between lines", () => {
+Deno.test("browsing history puts the cursor at the end of every line", () => {
     const ed = new ReplEditor(new Interpreter(), ["f x = {\n    x + 1\n}", "1 + 2"]);
     ed.lines = ["12345678"]; ed.row = 0; ed.col = 6;
     keys(ed, "\x1b[A");
     equal(ed.src(), "1 + 2"); equal(ed.col, 5);
     keys(ed, "\x1b[A"); // an older entry: its last line
     equal(ed.row, 2); equal(ed.col, 1);
+    keys(ed, "\x1b[A"); // a middle line
+    equal(ed.row, 1); equal(ed.col, 9);
     keys(ed, "\x1b[A");
-    equal(ed.row, 1); equal(ed.col, 6); // the column remembered past a short line
-    keys(ed, "\x1b[B\x1b[B"); // a newer entry: its first line
+    equal(ed.row, 0); equal(ed.col, 7);
+    keys(ed, "\x1b[B\x1b[B\x1b[B"); // a newer entry: its first line
     equal(ed.src(), "1 + 2"); equal(ed.row, 0); equal(ed.col, 5);
     keys(ed, "\x1b[B"); // the draft
-    equal(ed.src(), "12345678"); equal(ed.col, 6);
-    keys(ed, "\x1b[D\x1b[A"); // moving sideways sets a new column
-    equal(ed.col, 5);
+    equal(ed.src(), "12345678"); equal(ed.col, 8);
+});
+Deno.test("Up and Down in a new entry keep the column, as in Vim", () => {
+    const ed = editor("12345678\nab\n12345678", 6);
+    keys(ed, "\x1b[B");
+    equal(ed.row, 1); equal(ed.col, 2);
+    keys(ed, "\x1b[B"); // the column remembered past a short line
+    equal(ed.row, 2); equal(ed.col, 6);
+    keys(ed, "\x1b[D\x1b[A\x1b[A"); // moving sideways sets a new column
+    equal(ed.row, 0); equal(ed.col, 5);
 });
 Deno.test("Left and Right stay on their line, as in Vim", () => {
     const ed = editor("ab\ncd", 2);
