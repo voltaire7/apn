@@ -632,18 +632,15 @@ export class ReplEditor {
 
     // Up and Down move a line within the buffer and, from its first or last
     // line, through history: an older entry's last line, a newer one's first,
-    // as if the entries were one text. Browsing history puts the cursor at the
-    // end of each line; editing a new entry, Up and Down keep the column as in
-    // Vim (clamped to each line, remembered across shorter lines until
-    // another key moves).
+    // as if the entries were one text. They keep the column, as in Vim
+    // (clamped to each line, remembered across shorter lines until another key
+    // moves); browsing history starts at the end of each line, until a move
+    // sideways sets a column.
     goal: number | null = null;
-    vertical(row: number, end = this.histIdx !== null): KeyAction {
+    vertical(row: number): KeyAction {
+        this.goal ??= this.col;
         this.row = row;
-        if (end) this.col = this.lines[row].length;
-        else {
-            this.goal ??= this.col;
-            this.col = Math.min(this.goal, this.lines[row].length);
-        }
+        this.col = Math.min(this.goal, this.lines[row].length);
         return "cont";
     }
     up(): KeyAction {
@@ -652,10 +649,11 @@ export class ReplEditor {
         if (this.histIdx === null) {
             this.draft = this.src();
             this.histIdx = this.hist.length - 1;
+            this.goal = Infinity;
         } else if (this.histIdx > 0) this.histIdx--;
         else return "cont";
         this.lines = this.hist[this.histIdx].split("\n");
-        return this.vertical(this.lines.length - 1, true);
+        return this.vertical(this.lines.length - 1);
     }
 
     down(): KeyAction {
@@ -664,7 +662,7 @@ export class ReplEditor {
         this.histIdx++;
         if (this.histIdx >= this.hist.length) this.histIdx = null;
         this.lines = (this.histIdx === null ? this.draft : this.hist[this.histIdx]).split("\n");
-        return this.vertical(0, true);
+        return this.vertical(0);
     }
 
     completionCands(): string[] {
