@@ -472,6 +472,8 @@ an invitation to rerun another clause.
 
 Fresh capitalized bindings define aliases; existing value constructor names on
 the LHS destructure and cannot be reassigned as aliases or unrelated constructors.
+An alias's parameters are lowercase names, so a capitalized left side with any
+other (`Some 1 = x`, `Pair [a,b] c = x`) is always a pattern.
 An unspecialized parent pattern `(Option value)` still binds the whole variant.
 A constructor pattern `(Some value)` extracts its field. Explicitly declared
 same-name legacy wrappers remain supported (`Box a = | Box a`), but the shared

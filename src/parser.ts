@@ -918,7 +918,13 @@ class Parser {
             case "kw": return this.parseKeyword();
             case "sym":
                 switch (t.v) {
-                    case "=": throw new Error("Parser: expected a binding before '='");
+                    case "=": {
+                        // What came before on this line was read as an expression.
+                        const before = this.source.slice(this.source.lastIndexOf("\n", t.pos - 1) + 1, t.pos).trim();
+                        throw new Error(before
+                            ? `Parser: \`${before}\` is neither a name to define nor a pattern: a definition starts with a name (f 1 = 1), a pattern binding with a pattern ([a,b] = xs)`
+                            : "Parser: expected a name or a pattern before '='");
+                    }
                     case "(":
                     case "{": {
                         const close = t.v === "(" ? ")" : "}";
@@ -1333,10 +1339,14 @@ class Parser {
         if (!this.startsPatBinding()) return false;
         const t = this.peek();
         // A built-in type name cannot be redefined, so Int x = 1 is a typed binding.
-        if (t.k === "ident" && !declaredCtors.has(t.v) && !TYPE_NAMES.includes(t.v) && !(this.peek(1).k === "sym" && ((this.peek(1) as { v: string }).v === "." || isConstructorOperator((this.peek(1) as { v: string }).v)))) return false;
+        // A capitalized name not known as a constructor starts a type alias,
+        // unless what follows it is not parameter names (Some 1 = ...).
+        const unknown = t.k === "ident" && !declaredCtors.has(t.v) && !TYPE_NAMES.includes(t.v) && !(this.peek(1).k === "sym" && ((this.peek(1) as { v: string }).v === "." || isConstructorOperator((this.peek(1) as { v: string }).v)));
+        if (unknown && !/^[A-Z]/.test(t.v)) return false;
         const save = this.i;
         try {
             const p = this.parseConsPattern();
+            if (unknown && !(p.p === "constr" && p.args.some(a => a.p !== "var"))) return false;
             if (p.p === "var") return false;
             // A typed binding names one value: Int x = 1.
             if (t.k === "ident" && TYPE_NAMES.includes(t.v) && !declaredCtors.has(t.v) && !(p.p === "constr" && p.args.length === 1)) return false;
