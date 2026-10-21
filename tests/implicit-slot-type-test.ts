@@ -6,7 +6,7 @@ for (const [source, expected] of [
     ['v = [x: 1]; v "x" = 2.0; v.x', '2'],
     ['v = [x: 1, y: 2.0]; v.[x, y] = [3.0, 4]; v', '[x: 3, y: 4.0]'],
     ['xs = [1]; i = 0; xs i = 2.0; xs', '[2]'],
-    ['v = [x: Float]; v.x = 123; v.x = 456.0; v.x', '456'],
+    ['v = [x: Float]; v.x = 123; v.x = 456.0; v.x', '456.0'],
     ['v = [x: 1/3]; v.x = 2; typeOf v.x', 'Fraction'],
     ['v = [x: 1i]; v.x = 2; typeOf v.x', 'Complex'],
 ] as const) Deno.test(`implicit slot type: ${source}`, () => {

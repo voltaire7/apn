@@ -105,15 +105,15 @@ for (const values of ['[1]', '[1, 2]', '[1, 2, 3, 4]']) {
 }
 
 for (const [source, expected] of [
-    ['Vector3 = [x: Float, y: Float, z: Float]\nvec = Vector3\nvec.x = 123\n[vec, Vector3]', '[[x: 123, y: Float, z: Float], [x: Float, y: Float, z: Float]]'],
+    ['Vector3 = [x: Float, y: Float, z: Float]\nvec = Vector3\nvec.x = 123\n[vec, Vector3]', '[[x: 123.0, y: Float, z: Float], [x: Float, y: Float, z: Float]]'],
     ['v = [x: Int]\nv "x" = 1\nv', '[x: 1]'],
-    ['v = [x: Int, y: Float]\nv.[x, y] = [1, 2]\nv', '[x: 1, y: 2]'],
+    ['v = [x: Int, y: Float]\nv.[x, y] = [1, 2]\nv', '[x: 1, y: 2.0]'],
     ['xs = [Int]\nxs 0 = 1\nxs', '[1]'],
-    ['xs = [Int, Float]\nxs (-1) = 2\nxs', '[Int, 2]'],
+    ['xs = [Int, Float]\nxs (-1) = 2\nxs', '[Int, 2.0]'],
     ['xs = [Int]\ni = 0\nxs (i + 0) = 1\nxs', '[1]'],
-    ['UserId = Int\nv = [id: UserId]\nv.id = 3\nv', '[id: 3]'],
+    ['UserId = Int\nv = [id: UserId]\nv.id = 3\nv', '[id: UserId 3]'],
     ['((Int -> Int) identity) <- return ((x -> x)); v = [f: typeOf identity]\nv.f = (+ 1)\nv.f 2', '3'],
-] as const) Deno.test(`assignment replaces bare type slots: ${source}`, () => {
+] as const) Deno.test(`assignment gives a type field a default: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });

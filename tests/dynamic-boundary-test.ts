@@ -57,14 +57,14 @@ for (const [source, message] of [
     ['x = "old"; scope <- Dynamic env; scope.x = 123; x', 'cannot replace string with int'],
     ['x = true; scope <- Dynamic env; scope.x = "bad"; x', 'cannot replace bool with string'],
     ['x = [name: "old"]; scope <- Dynamic env; scope.x = [name: 2]; x.name', 'cannot replace string with int'],
-    ['x = [name: "old"]; scope <- Dynamic env; scope.x.name = 2; x.name', 'cannot replace string with int'],
+    ['x = [name: "old"]; scope <- Dynamic env; scope.x.name = 2; x.name', 'cannot use Int where String is required'],
     ['xs = [1, 2]; scope <- Dynamic env; scope.xs = [3]; xs', 'list length changed'],
     ['xs = ["old"]; scope <- Dynamic env; scope.xs = [123]; xs', 'cannot replace string with int'],
     ['f x = x; scope <- Dynamic env; scope.f = Dynamic (x -> "bad")', 'explicit function contract'],
     ['((Int -> Int) f) <- return ((x -> x))\nscope <- Dynamic env\nscope.f = Dynamic (x -> "bad")\nf 1', 'Int expects a number'],
     ['x = "old"; Dynamic (use [x: 123]); x', 'cannot replace string with int'],
     ['scope <- Dynamic env; scope.Int = String', 'cannot change an established type descriptor'],
-    ['Option a = Some a | None\nx <- return (Some 1)\nscope <- Dynamic env\nscope.x = Some "bad"\nx', 'cannot convert String to Int'],
+    ['Option a = Some a | None\nx <- return (Some 1)\nscope <- Dynamic env\nscope.x = Some "bad"\nx', 'cannot use String where Int is required'],
 ]) Deno.test(`Dynamic runtime boundary rejects: ${source}`, () => {
     requireChecked(source);
     try { run(source); } catch (error) {

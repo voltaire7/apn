@@ -14,7 +14,7 @@ Vector3 [z: 3]         # [x: 0.0, y: 0.0, z: 3.0]
 Vector3                # [x: Float, y: Float, z: Float]
 ```
 
-Supplied fields apply their template slots. Omitted type slots initialize to
+Supplied fields convert to their slots' types. Omitted type slots initialize to
 the defaults below; omitted concrete values retain their defaults. Nested
 record/list slots initialize recursively. Extra named fields are appended;
 nonempty positional lists must supply exactly one value per field. Only `[]`
@@ -24,20 +24,18 @@ Assignments rebind a scoped copy and preserve numeric annotations. The displayed
 `0.0` above is internally `Float 0.0`, so later assignments remain checked Float
 conversions. The original template remains unchanged.
 
-Assignment to a bare type slot replaces the constructor without conversion.
-Untouched slots remain type descriptors; the shared template is unchanged:
+Assigning a value to a type slot makes it that type's default
+([slot assignment](templates-and-types.md#slot-assignment)). Untouched slots
+remain type descriptors; the shared template is unchanged:
 
 ```apn
 vec = Vector3
-vec.x = 1              # [x: 1, y: Float, z: Float]
-xs = [Int]
-xs 0 = 1               # [1]
+vec.x = 1              # [x: 1.0, y: Float, z: Float]
+vec []                 # [x: 1.0, y: 0.0, z: 0.0]
 ```
 
-This applies to dot, string-key, pluck, and list-index assignment. New record
-fields can still be inserted. Ordinary function and record slots are replaced;
-they are not called or merged. A constructed Float field keeps its annotation:
-assigning `Int` to it fails with `cannot convert Type to Float`.
+A constructed Float field keeps its type: assigning `Int` to it fails with
+`cannot use Type where Float is required`.
 
 ## Default values for omitted slots
 
@@ -136,6 +134,4 @@ or `inexact` explicitly when the value needs rounding first. Float32 arithmetic
 continues to round its results to binary32, but `Float32 .1` now errors.
 
 Numeric assignment uses the same type as `typeOf`, including for literals:
-`v = [x: 1]; v.x = 1.0` keeps Int 1, while `v.x = 1.5` fails. Bare
-constructors are still replaced, but a numeric replacement then establishes
-its own type for subsequent assignments.
+`v = [x: 1]; v.x = 1.0` keeps Int 1, while `v.x = 1.5` fails.

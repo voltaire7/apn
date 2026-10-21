@@ -26,7 +26,7 @@ for (const source of ['[x: false] [1]', '[x: "old"] [1]', "[x: 'a'] [1]"]) {
     Deno.test(`scalar default retains kind: ${source}`, () => {
         const i = new Interpreter();
         try { i.renderString(i.run(parseDocument(source))); } catch (e) {
-            if (!String(e).includes('template expects')) throw e;
+            if (!String(e).includes('cannot use Int where')) throw e;
             return;
         }
         throw new Error('expected conversion failure');

@@ -1,9 +1,11 @@
 # Templates and type aliases
 
-Record construction (a record holding a type, given values) applies its type
-slots and overrides concrete defaults; any other record given fields is
-updated, exactly as by field assignment (see [slot assignment](#slot-assignment)).
-Dotted list application applies its slots and rejects scalar slots.
+Every record field has a type: the type it holds (`[x: Float]`), or the type of
+the value it holds, which is then that type's default (`[x: 1.1]` is a Float
+field defaulting to `1.1`). A record holding a type, given values, builds one;
+any other record given fields is updated, exactly as by field assignment (see
+[slot assignment](#slot-assignment)). Either way a given value converts to its
+field's type. Dotted list application applies its slots and rejects scalar slots.
 Concrete scalars (numbers, strings, characters, and booleans) are not callable.
 
 ## Concrete defaults
@@ -12,18 +14,24 @@ Concrete scalars (numbers, strings, characters, and booleans) are not callable.
 0 123                       # error: cannot apply a number
 [0].[123]                   # error: cannot apply a number
 [x: Int 0] [floor .2]       # [x: 0]
-[x: Int 0] [Float .2]          # error: lossy conversion
+[x: Int 0] [Float .2]       # error: lossy conversion
 [x: 0] [x: 123]             # [x: 123]
+[x: 1.1] [10]               # [x: 10.0]: x is a Float
+[x: 1] [2.5]                # error: lossy conversion
+[x: false] [1]              # error: cannot use Int where Bool is required
 ["old"].["new"]             # error: cannot apply a string
 [Bool].[true]               # [true]
 [Char].['b']                 # ['b']
 ```
 
-Inside a record template, an untyped numeric default accepts any number unchanged.
-An explicitly typed numeric default converts through its constructor: all inputs require lossless conversion. Overflow and nonzero imaginary-part
-loss still error. String, character, and boolean defaults accept their own kind only inside record templates.
+A value given to a field (by position, by name, or by assignment) converts
+losslessly to the field's type, whether or not the program is checked: a
+number to the default's numeric type (`typeOf` of it, so `1` is an Int),
+rejecting overflow and nonzero imaginary-part loss; a string, character or
+Bool only from its own kind; a function or action only from its own kind. A
+function field is replaced, never applied: `[x: 0, y: (*2)] [1, 2]` is an error.
 Standalone `"old" "new"`, `'a' 'b'`, and `false true` are application errors.
-Functions retain ordinary application, including effects.
+List templates apply their function slots, including effects (see [Lists](#lists)).
 
 Numeric parameter patterns always require lossless conversion, including for
 bare literals. `f (Int x) = x` accepts `2.0` but does not match `.2`; another
@@ -218,23 +226,27 @@ v.x = 123                  # stores 123.0
 v "y" = 321                # stores integer 321
 ```
 
-Bare constructors are replaced without conversion:
+A slot holding a type takes a type, which changes it, or a value, which
+becomes a default of that type (as `x: Float 123` would be written):
 
 ```apn
 v = [x: Float]
-v.x = 123                  # changes the default to integer 123
+v.x = 123                  # [x: 123.0]
 v = [x: Float]
-v.x = Int                  # replaces the constructor
+v.x = Int                  # [x: Int]
+xs = [Int]
+# xs 0 = .2                # error: lossy conversion
 ```
 
-Construct the record first (`v = [x: Float] []`) or store an explicit numeric
-value (`Float 1`) to retain that numeric constraint on subsequent assignments.
-Ordinary records and functions are replaced, never merged or called:
+A `Type` field's values are types: `[type: Type] [Int]` and
+`[type: Type] [type: Int]` are both `[type: Int]`. Records are replaced, never
+merged; a function is replaced by a function, never called:
 
 ```apn
 v = [f: (* 2), child: [x: 1]]
-v.f = 3                    # stores 3; does not call (* 2)
+v.f = (+ 1)                # replaces (* 2); does not call it
 v.child = [y: 2]           # replaces the whole child
+# v.f = 3                  # error: cannot use Int where a -> b is required
 ```
 
 A record applied to a record of fields is field assignment, `r [f: v, g: w]`
@@ -244,12 +256,15 @@ evaluated), when the record holds values or the fields hold types. So
 `[f: (* 2)] [f: (+ 1)]` is `[f: (+ 1)]`, `[x: 1] [y: 2]` is `[x: 1, y: 2]`, a
 model is updated as Elm's `{ model | name = n }` (`model [name: n]`), and a
 type is edited as `Vector3.x = Int` edits it: `Vector3 [x: Int]` is
-`[x: Int, y: Float, z: Float]`. A record holding a type given values is a
-template, filled as above: `Vector3 [x: 1]` is `[x: 1.0, y: 0.0, z: 0.0]`.
-(Assigning a value into a type's field sets that field's default instead:
-`Vector3.x = 1` is the template `[x: 1, y: Float, z: Float]`, as above.)
-Whether a record holds a type is told from what it was built with, without
-evaluating its fields. A parameter given a record literal may be a function or
+`[x: Int, y: Float, z: Float]`. A record holding a type given values builds
+one: given fields take their values as by assignment and the others their
+defaults, so `Vector3 [x: 1]` is `[x: 1.0, y: 0.0, z: 0.0]`. (Assigning a
+value into a type's field sets that field's default instead: `Vector3.x = 1`
+is the type `[x: 1.0, y: Float, z: Float]`, and `Vector3 []` is then
+`[x: 1.0, y: 0.0, z: 0.0]`.) A list gives values in field order, exactly as by
+name: `r [10, 20]` is `r [x: 10, y: 20]`. Whether a record holds a type is told
+from what it was built with and the fields it is given, without evaluating the
+others. A parameter given a record literal may be a function or
 such a record; the checker decides once its type is known.
 
 ### Computed keys and multiple indices

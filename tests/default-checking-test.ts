@@ -140,7 +140,7 @@ Deno.test("all standard modules check without evaluation", () => {
 Deno.test("Dynamic writes cannot invalidate a checked Mutable payload", () => {
     const i = session(); run(i, 'cell = Mutable 1');
     try { run(i, 'Dynamic (set cell "bad")'); } catch (error) {
-        if (!String(error).includes('cannot convert String to Int')) throw error;
+        if (!String(error).includes('cannot use String where Int is required')) throw error;
         if (run(i, 'cell + 1') !== '2') throw new Error('cell was corrupted');
         return;
     }

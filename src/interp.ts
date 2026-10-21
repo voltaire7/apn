@@ -481,16 +481,27 @@ export class Interpreter {
         }
     }
 
+    // A field's new value, as its old one requires: every field has a type,
+    // what it holds. Holding a type, it is given a type (its type changes; a
+    // Type field takes it as its value) or a value converted to it, a default
+    // of that type (Vector3.x = 1 is x: Float 1). Holding a value, it is given
+    // one of that value's type: a number converted losslessly, a string,
+    // character or Bool of its kind, a function.
     private assignSlot(slot: Value, value: Value): Value {
         // Inspect the old slot without invoking an action stored there.
         slot = this.force(slot);
+        if (this.holdsType(slot)) return this.holdsType(value) ? value : this.applyTemplateSlot(slot, value);
+        const mismatch = (): never => {
+            const source = this.renderString(this.callNative("typeOf", [value]));
+            throw new APNError("runtime", `cannot use ${source} where ${this.renderString(this.callNative("typeOf", [slot]))} is required`);
+        };
+        if (["string", "char", "bool"].includes(slot.kind) && this.dataValue(value).kind !== slot.kind) mismatch();
+        const callable = (v: Value) => v.kind === "closure" ? v.params.length > 0 : ["clauseFn", "native", "contract"].includes(v.kind);
+        if (callable(slot) && !callable(this.force(value)) || slot.kind === "io" && this.force(value).kind !== "io") mismatch();
         if (isNumeric(slot)) {
-            const target = numericType(slot);
-            if (!isNumeric(value)) {
-                const source = this.renderString(this.callNative("typeOf", [value]));
-                throw new APNError("runtime", `cannot convert ${source} to ${target}`);
-            }
-            return this.constructType(target, value);
+            const data = this.dataValue(value);
+            if (!isNumeric(data)) mismatch();
+            return this.constructType(numericType(slot), data);
         }
         if (slot.kind === "variant" && slot.family) {
             return this.conform({ kind: "type", name: slot.family.name, family: slot.family, arguments: slot.arguments }, value);
@@ -1849,37 +1860,35 @@ export class Interpreter {
                     // Application uses the exact string, including any quote characters.
                     return this.recordField(f, carg.v);
                 }
-                if (carg.kind === "list") {
-                    if (carg.v.length !== 0 && carg.v.length !== f.v.length) {
+                if (carg.kind === "list" || carg.kind === "record") {
+                    // Fields given by name, or all of them in order (r [10] is r [x: 10]).
+                    if (carg.kind === "list" && carg.v.length !== 0 && carg.v.length !== f.v.length) {
                         throw new Error(`Runtime: field count (${f.v.length}) does not match list size (${carg.v.length})`);
                     }
-                    const result: Value = { kind: "record", v: f.v.map(([k, template], i) => [k, this.defer(() => i < carg.v.length ? this.applyTemplateSlot(template, carg.v[i]) : this.defaultField(template, []))] as [string, Value]) };
-                    if (this.isTypeValue(f)) this.declaredTypes.set(result, f);
-                    return result;
-                }
-                // Given fields, a record is updated exactly as by field assignment:
-                // a record of values (model [name: n]), or a type given types
-                // (Vector3 [x: Int] is Vector3.x = Int). A type given values builds one.
-                if (carg.kind === "record" && (!this.holdsType(f) || this.holdsType(carg))) {
-                    return this.assignFields(f, carg.v.map(([key, value]) => [key, this.demand(value)]));
-                }
-                if (carg.kind === "record") {
-                    const supplied = new Set(carg.v.map(([key]) => key));
-                    const declared = this.isTypeValue(f);
+                    const given: Array<[string, Value]> = carg.kind === "record" ? carg.v : carg.v.map((value, i) => [f.v[i][0], value]);
+                    const slots = new Map(f.v);
+                    // A record holding a type, given values (not types, unless for a
+                    // Type field), builds one; any other is updated exactly as by
+                    // field assignment (model [name: n]; Vector3 [x: Int] is
+                    // Vector3.x = Int).
+                    // (A given field's slot is forced to tell, as assigning it would.)
+                    const building = !given.some(([key, value]) => this.holdsType(value) && !this.typeOfTypes(slots.get(key)))
+                        && (!given.length || this.holdsType(f) || given.some(([key]) => slots.has(key) && this.holdsType(this.force(slots.get(key)!))));
+                    if (!building) return this.assignFields(f, given.map(([key, value]) => [key, this.demand(value)]));
+                    const supplied = new Map(given);
                     for (const [key, slot] of f.v) {
                         if (slot.kind === "type" && slot.name === "$any" && !supplied.has(key)) {
                             throw new APNError("runtime", `missing field '${key}'`);
                         }
                     }
-                    const idx = new Map(f.v.map(([k], i) => [k, i]));
-                    const out: [string, Value][] = f.v.map(([k, template]) => [k, this.defer(() => this.defaultField(template, []))]);
-                    for (const [k, v] of carg.v) {
-                        const i = idx.get(k);
-                        if (i !== undefined) out[i] = [k, this.defer(() => this.applyTemplateSlot(f.v[i][1], v))]; else out.push([k, v]);
-                    }
+                    // Each given field takes its value as by assignment; the others
+                    // take their defaults (a type's zero value).
+                    const out: [string, Value][] = f.v.map(([key, slot]) => [key, this.defer(() => supplied.has(key)
+                        ? this.assignSlot(slot, this.reference(supplied.get(key)!)) : this.defaultField(slot, []))]);
+                    for (const [key, value] of given) if (!slots.has(key)) out.push([key, value]);
                     const result: Value = { kind: "record", v: out };
                     // A schema's value (Body [...]) is declared its type, as List T's.
-                    if (declared) this.declaredTypes.set(result, f);
+                    if (this.isTypeValue(f)) this.declaredTypes.set(result, f);
                     return result;
                 }
                 if (carg.kind === "int") {
@@ -2949,6 +2958,12 @@ export class Interpreter {
             }
         }
         return false;
+    }
+
+    // Whether a slot is a Type field's, whose values are types.
+    private typeOfTypes(slot: Value | undefined): boolean {
+        const type = slot && this.force(slot);
+        return type?.kind === "type" && type.name === "Type" && !type.family;
     }
 
     // Whether a value holds a type (a template: [x: Int, y: 0], [xs: [Int]]),

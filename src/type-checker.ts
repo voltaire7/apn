@@ -2466,10 +2466,24 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const fields = new Map(rec.fields);
         for (const [key, incoming, at] of entries) {
             if (!fields.has(key)) newField(rec, key, e);
-            const previous = fields.get(key), old = previous && resolve(previous);
-            fields.set(key, old && ["atom", "variant", "fn"].includes(old.k) ? convert(old, incoming, at) : incoming);
+            fields.set(key, slotValue(fields.get(key), incoming, at));
         }
         return { k: "record", fields, open: rec.open, closed: rec.closed };
+    }
+    // A field's new value, as its old one requires (the interpreter's
+    // assignSlot): holding a type, given a type (it changes; a Type field
+    // takes it as its value) or a value converted to it; holding a value,
+    // given one of that value's type.
+    function slotValue(previous: Ty | undefined, incoming: Ty, at: Expr): Ty {
+        const old = previous && resolve(previous);
+        if (!old) return incoming;
+        if (holdsTypeTy(old)) return holdsTypeTy(resolve(incoming)) ? incoming : convert(old.k === "type" ? old.value : schemaValue(old, at), incoming, at);
+        return ["atom", "variant", "fn"].includes(old.k) ? convert(old, incoming, at) : incoming;
+    }
+    function holdsTypeTy(t: Ty): boolean { return t.k === "type" || describing(t); }
+    function typeOfTypes(field: Ty | undefined): boolean {
+        const t = field && resolve(field), value = t?.k === "type" ? resolve(t.value) : undefined;
+        return value?.k === "atom" && value.name === "Type";
     }
     function application(f: Ty, argument: Entry, e: Expr): Ty {
         spend(e);
@@ -2835,10 +2849,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // Given fields, a record is updated exactly as by field assignment:
             // a record of values (model [name: n]), or a type given types
             // (Vector3 [x: Int] is Vector3.x = Int). A type given values builds one.
-            const holdsType = (r: Extract<Ty, { k: "record" }>) => [...r.fields.values()].some(field => { const t = resolve(field); return t.k === "type" || describing(t); });
-            if (a.k === "record" && (!holdsType(f) || holdsType(a))) {
-                return assignFields(f, [...a.fields].map(([key, type]) => [key, type, fieldExpr(e, key)]), e);
-            }
+            // Fields given by name, or all of them in order (r [10] is r [x: 10]).
+            const given: Array<[string, Ty, Expr]> | undefined = a.k === "record" ? [...a.fields].map(([key, type]) => [key, type, fieldExpr(e, key)])
+                : a.k === "list" && a.items?.length === f.fields.size ? [...f.fields.keys()].map((key, n) => [key, a.items![n], e.t === "list" ? e.v[n] ?? e : e])
+                : undefined;
+            // A record holding a type, given values (not types, unless for a
+            // Type field), builds one; any other is updated exactly as by field
+            // assignment (model [name: n]; Vector3 [x: Int] is Vector3.x = Int).
+            const building = [...f.fields.values()].some(field => holdsTypeTy(resolve(field)))
+                && !(given ?? []).some(([key, type]) => holdsTypeTy(resolve(type)) && !typeOfTypes(f.fields.get(key)));
+            if (given && !building) return assignFields(f, given, e);
             // A value not known yet (a parameter, Dynamic, a computed one) is
             // converted at runtime; it is the record the schema describes.
             const unknownValue = a.k === "var" || a.k === "operation" || isExplicit(a);
@@ -2850,10 +2870,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (a.k === "list" && a.items && a.items.length && a.items.length !== f.fields.size) {
                     problem(`record needs ${f.fields.size} positional values, got ${a.items.length}`, e);
                 }
+                // Each given field takes its value as by assignment; the others
+                // take their defaults (a type's zero value).
                 const fields = new Map(f.fields);
                 for (const [key, target] of fields) {
                     const t = resolve(target), value = supplied.get(key);
-                    fields.set(key, t.k === "type" ? value ? convert(t.value, value, e) : t.value : value ?? t);
+                    fields.set(key, value ? slotValue(t, value, given?.find(([k]) => k === key)?.[2] ?? e) : t.k === "type" ? t.value : t);
                 }
                 for (const [key, value] of supplied) if (!fields.has(key)) fields.set(key, value);
                 // A record schema's value keeps its fields (see newField); an open
@@ -3317,6 +3339,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         key && !key.terms.size && rec.length && !rec.length.terms.size &&
                         (key.constant >= rec.length.constant || key.constant < -rec.length.constant)
                     ) problem("list index out of range", e.index);
+                    if (rec.items && key && !key.terms.size) {
+                        const n = Number(key.constant < 0n ? key.constant + BigInt(rec.items.length) : key.constant);
+                        if (n >= 0 && n < rec.items.length) {
+                            const items = [...rec.items];
+                            items[n] = slotValue(items[n], value, e.value);
+                            return { ...rec, items, element: union(items) };
+                        }
+                    }
+                    if (holdsTypeTy(resolve(rec.element))) { runtimeChecks++; return rec; }
                     convert(rec.element, value, e.value);
                     return rec;
                 }
@@ -3324,7 +3355,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (rec.k === "record" && field !== undefined) {
                     const fields = new Map(rec.fields), old = fields.get(field);
                     if (!old) newField(rec, field, e);
-                    fields.set(field, old && resolve(old).k !== "type" ? convert(old, value, e.value) : value);
+                    fields.set(field, slotValue(old, value, e.value));
                     return { k: "record", fields, closed: rec.closed };
                 }
                 return unknown();

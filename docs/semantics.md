@@ -829,9 +829,9 @@ streaming/interruption recovery. The showcase is the broader syntax reference.
 ## List index assignment
 
 `arr 0 = 10` rebinds an existing list to a modified copy in the current scope,
-like record field assignment. Bare constructors are replaced:
-`arr = [Int]; arr 0 = .2` produces `[0.2]`. Existing typed values retain their
-conversion checks: `arr = [Int 0]; arr 0 = .2` errors. `arr (-1) = 10` updates its final element.
+like record field assignment, converting the value to the element's type:
+`arr = [Float]; arr 0 = 1` produces `[1.0]`, and `arr = [Int]; arr 0 = .2`
+errors, as `arr = [Int 0]; arr 0 = .2` does. `arr (-1) = 10` updates its final element.
 A single index must evaluate to an integer or a variant from a nullary-only family
 (using zero-based declaration order); a finite list of these indices selects multiple
 slots. `arr [1, 2] = arr [2, 1]` swaps the old values. Multi-index assignment requires
@@ -1182,7 +1182,8 @@ See [numeric arrays](arrays.md) for matching-shape rules and lazy validation.
 
 Type descriptors remain constructors in every ordinary value context. Applying a
 record template initializes omitted type slots; `Vector3 []` constructs defaults.
-Assignment replaces bare type slots; constructed typed numeric values retain conversion checks. See [zero initialization](zero-initialization.md)
+Assigning a value into a type slot makes it that type's default
+([slot assignment](templates-and-types.md#slot-assignment)). See [zero initialization](zero-initialization.md)
 for the default table, type inspection, variant rules and limitations.
 
 ## String formatting

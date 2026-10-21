@@ -319,6 +319,11 @@ print [vec [z: 0] == { vec.z = 0; vec }]  # => [true]
 Vec3 = [x: Float, y: Float, z: Float]
 print (Vec3 [x: Int])            # => [x: Int, y: Float, z: Float]   as Vec3.x = Int
 print (Vec3 [x: 1])              # => [x: 1.0, y: 0.0, z: 0.0]
+# Every field has a type: the one it holds, or its value's (then its default).
+# A value given to it converts losslessly; Type fields take types as values.
+print ([x: 1.1] [10])            # => [x: 10.0]
+# [x: 1] [2.5] and [x: false] [1] are errors
+print ([type: Type] [Int])       # => [type: Int]
 
 # block scope: the update shadows obj only INSIDE the { }  (a bare block
 # statement runs eagerly — a 0-arg DEF like  w = { ... } declares a
@@ -1730,8 +1735,8 @@ print zeroVector                     # => [x: 123.0, y: 0.0, z: 0.0]
 print ZeroVector                     # => [x: Float, y: Float, z: Float]
 template = ZeroVector
 template.x = 123
-print template                       # => [x: 123, y: Float, z: Float]
-print (template [])                  # => [x: 123, y: 0.0, z: 0.0]
+print template                       # => [x: 123.0, y: Float, z: Float]   a Float 123.0
+print (template [])                  # => [x: 123.0, y: 0.0, z: 0.0]
 typeTemplate = ZeroVector
 typeTemplate.x = Int
 print typeTemplate                       # => [x: Int, y: Float, z: Float]
