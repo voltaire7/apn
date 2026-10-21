@@ -593,8 +593,7 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   holds checks on it; so is a call of a typed parameter (`coerce`) with a
   symbolic argument whose type waits (for a list or record schema, in a part
   too: `waitingWithin`; `symbolicArgument` includes list `items`), except
-  while trying an overload's choices (`choosing`), and function minus keeps its negated
-  operand's facts as the `-` operation's `known`. Constructors of
+  while trying an overload's choices (`choosing`). Constructors of
   concrete fields are `coerce` functions; a converting payload pattern on a
   concrete field converts it (`bind`). `castPattern` walks a parameter or
   binding pattern beside the argument's known value (variant `payload`s of

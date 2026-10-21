@@ -1481,13 +1481,7 @@ export class Interpreter {
             case "+":
                 if (l.kind === "string" && r.kind === "string") return mkStr(l.v + r.v);
                 return bad();
-            case "*": return bad();
-            case "-":
-                if ((l.kind === "closure" || l.kind === "clauseFn" || l.kind === "native" || l.kind === "type") && isNumeric(r)) {
-                    return this.apply(l, negate(r));
-                }
-                return bad();
-            case "/": case "%": return bad();
+            case "*": case "-": case "/": case "%": return bad();
             case "<": return this.compare(l, r) < 0 ? mkBool(true) : mkBool(false);
             case ">": return this.compare(l, r) > 0 ? mkBool(true) : mkBool(false);
             case "<=": return this.compare(l, r) <= 0 ? mkBool(true) : mkBool(false);

@@ -645,8 +645,18 @@ class Parser {
         return left;
     }
 
+    // A '-' written against its operand negates it (-x, -(1/3), -[1,2,3]); a
+    // spaced one is always subtraction, of two operands, or a section ((- 2)).
+    tightMinus(t = this.peek()): boolean {
+        return t.k === "sym" && t.v === "-" && !/[\s)\]},;]/.test(this.source[t.pos + 1] ?? " ");
+    }
+
     parseOperand(): Expr {
-        if (this.isSym("-")) { this.next(); return { t: "unop", op: "neg", e: this.parseOperators(8) }; }
+        if (this.isSym("-")) {
+            if (!this.tightMinus()) throw new Error("Parser: write a negation against its operand (-x); a spaced '-' subtracts");
+            this.next();
+            return { t: "unop", op: "neg", e: this.parseOperators(8) };
+        }
         if (this.isSym("!")) { this.next(); return { t: "unop", op: "not", e: this.parseOperators(8) }; }
         return this.parseApp();
     }
@@ -669,6 +679,15 @@ class Parser {
             const t = this.peek();
             if (t.k === "newline" || t.k === "dedent" || t.k === "indent" || t.k === "eof") break;
             if (t.k === "sym" && t.v === ";") break;
+            // f -x passes -x: a '-' spaced before and not after negates.
+            if (this.tightMinus(t) && /\s/.test(this.source[t.pos - 1] ?? "")) {
+                this.next();
+                const a: Expr = { t: "unop", op: "neg", e: this.parsePostfix(this.parsePrimary()) };
+                sourceLocations.set(a, { source: this.source, file: this.file, start: t.pos, end: this.peek().pos });
+                f = { t: "app", f, a };
+                sourceLocations.set(f, { source: this.source, file: this.file, start, end: this.peek().pos });
+                continue;
+            }
             if (t.k === "ident" || t.k === "int" || t.k === "float" || t.k === "bool" ||
                     (t.k === "kw" && (t.v === "true" || t.v === "false")) ||
                     t.k === "str" || t.k === "char" ||
@@ -1339,8 +1358,8 @@ class Parser {
     }
 
     // Operator sections, for every operator: (+ 2) is x -> x + 2, (2 +) is
-    // x -> 2 + x, and a lone (+) is the operator's function. (- 2) is not a
-    // section: it stays unary negation (use a lambda); (10 -) and (-) are.
+    // x -> 2 + x, and a lone (+) is the operator's function. (- 2) is a
+    // section and (-2) a negation (see tightMinus).
     // Each is a lambda over a binop, so the operator's meaning is looked up
     // where it is applied, like any other use of it.
     static operatorBody(op: string, l: Expr, r: Expr): Expr {
@@ -1352,7 +1371,7 @@ class Parser {
         const t = this.peek();
         const lone = this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === close;
         // op-front:  (+ 2)   (op followed by an operand, then ')')
-        if (t.k === "sym" && isOperatorName(t.v) && (t.v !== "-" || lone)) {
+        if (t.k === "sym" && isOperatorName(t.v) && !this.tightMinus(t)) {
             try {
                 // lone (op): a 2-arg lambda —  add = (+)
                 if (lone) {

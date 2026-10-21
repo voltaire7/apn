@@ -1483,7 +1483,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const output = application(a, { type: application(b, { type: input }, { t: "placeholder" }) }, { t: "placeholder" });
             return fn(input, output);
         }
-        if (t.op === "-" && callable(a) && numeric(b)) return application(a, { type: b, ...resolveKnown(t.known ?? {}) }, { t: "placeholder" });
         if (a.k === "list" || b.k === "list") {
             if (a.k === "list" && b.k === "list") {
                 // Elementwise arithmetic pairs lists of equal length.
@@ -2899,7 +2898,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         }
         // Numeric defaults are only replaceable inside container templates.
-        if (f.k === "atom" && NUMERIC_TYPES.includes(f.name)) return problem("cannot apply a number", e);
+        if (f.k === "atom" && NUMERIC_TYPES.includes(f.name)) {
+            return problem("cannot apply a number", e, e.t === "unop" && e.op === "neg" ? "to subtract, space the '-' on both sides (x - 1)" : undefined);
+        }
         if (f.k === "atom" && ["String", "Char", "Bool"].includes(f.name)) {
             return problem(`cannot apply ${text(f)}`, e);
         }
@@ -3544,14 +3545,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 // Numeric/array arithmetic and callable * retain runtime overload selection.
                 const x = resolve(a), y = resolve(b);
-                // Function minus (g -1) applies g to the negated value: check
-                // that argument as written, so a literal converts statically.
-                if (op === "-" && ["fn", "type", "overload"].includes(x.k) && y.k === "atom" && NUMERIC_TYPES.includes(y.name)) {
-                    const negated: Expr = { t: "unop", op: "neg", e: e.r };
-                    const loc = sourceLocations.get(e.r) ?? sourceLocations.get(e);
-                    if (loc) sourceLocations.set(negated, loc);
-                    return application(a, { type: b, ...valueEntry(negated, scope) }, negated);
-                }
                 if (x.k === "atom" && y.k === "atom") {
                     if (NUMERIC_TYPES.includes(x.name) && NUMERIC_TYPES.includes(y.name)) {
                         if (["Float", "Float32", "Float64"].includes(x.name) && ["Float", "Float32", "Float64"].includes(y.name)) {
@@ -3563,15 +3556,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     if (op === "+" && x.name === "String" && y.name === "String") return atom("String");
                     return problem(`operator '${op}' cannot combine ${text(x)} and ${text(y)}`, e);
                 }
-                if (op !== "*" && op !== "-" && op !== "\\" && (x.k === "type" || y.k === "type")) {
+                if (op !== "*" && op !== "\\" && (x.k === "type" || y.k === "type")) {
                     return problem(`operator '${op}' requires values, not a type constructor`, e);
-                }
-                if (op === "-") {
-                    // Possibly function minus, decided later (h x = g -x): keep
-                    // the negated value, known once the enclosing call is.
-                    const result: Ty = { k: "operation", op: "-", args: [a, b], known: valueEntry({ t: "unop", op: "neg", e: e.r }, scope), lossless: [losslessInt(e.l, scope), losslessInt(e.r, scope)] };
-                    requirements.push(result);
-                    return resolve(result);
                 }
                 return operation(op, [a, b], [losslessInt(e.l, scope), losslessInt(e.r, scope)]);
             }

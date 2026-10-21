@@ -438,8 +438,8 @@ print (partialPick 1)                       # => y -> 1 + y
 
 print (map (10 -) [1,2,3])            # => [9,8,7]
 print (foldl (-) 100 [1,2,3])         # => 94   (a lone (-) subtracts)
-print (-2)                                # => -2  ((- 2) is NOT a section:
-                                          #     unary minus wins; use x -> x - 2)
+print (-2)                                # => -2  (a '-' against its operand negates)
+print (map (- 2) [5,6])                   # => [3,4] (a spaced '-' subtracts: a section)
 
 # ---------------------------------------------------------
 # 10b. OPERATORS ARE FUNCTIONS
@@ -675,7 +675,7 @@ print { 4 * 3 }              # => 12
 # [1 + 1, 2] and (Int x), y -> x. So x=1, [1, 2], [1 + 1,2], [x:1] and ( 1 ) are
 # parse errors, as are f(x), f[1] and f{ x } (application needs a space), a
 # ',' ending a line (newlines separate items), and an operator spaced on one
-# side only (1 +2, 1+ 2; 1+2 and 1 + 2 are fine, and sqrt -1 is sqrt - 1):
+# side only (1 +2, 1+ 2; 1+2 and 1 + 2 are fine, and sqrt -1 is sqrt (-1)):
 layoutItems = [
     1,2
     3
@@ -1100,9 +1100,10 @@ print $ false ? "yes" : "no" # => no
 print (0+1i)  # => 0+1i
 print ((1+2i) * (3+4i))  # => -5+10i
 
-# Experimental function-minus: a function receives the negated numeric RHS.
+# A '-' spaced before and not after passes a negative argument: f -x is f (-x).
 print (sqrt -1)       # => 0+1i
-print (sqrt - 1)      # => 0+1i (spacing makes no difference)
+print (sqrt -1 * 4)   # => 0+4i  ((sqrt -1) * 4)
+# x -1 for a number x: cannot apply a number (subtract with x - 1)
 # natural (UInt n) = n; natural -1   # static error: UInt cannot represent a negative integer
 #                     one = 1; natural -one   # likewise, with a known value
 #                     negated x = natural -x; negated 2   # and at the call that supplies it

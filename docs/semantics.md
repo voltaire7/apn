@@ -99,11 +99,12 @@ Spacing is part of the syntax (a parse error otherwise):
   or closing bracket is an error). Selections keep their dot: `v.[x,y]`,
   `v.(key)`, `obj.{ x + 1 }`.
 - A binary operator has a space on both sides or neither: `1 + 2` or `1+2`,
-  not `1 +2` or `1+ 2`, except that a space before `-` or `!` alone is allowed:
-  `f -1` is `f - 1` (the [function-minus overload](#inspection-and-numbers)) and
-  `f !b` applies `f` to `!b`. After an opening bracket, a `,` or another
-  operator one is prefix (`[-1]`, `a == -1`); before a closing bracket it ends
-  a section (`(1 +)`).
+  not `1 +2` or `1+ 2`, except that a space before `-` or `!` alone passes a
+  negated argument: `f -1` is `f (-1)` and `f !b` is `f (!b)`. A `-` written
+  against its operand negates it (`-x`, `-(1/3)`, `-[1,2,3]`, `[-1]`,
+  `a == -1`); a spaced one always subtracts, so `y = - 3` is an error and
+  `(- 2)` a section. Before a closing bracket an operator ends a section
+  (`(1 +)`).
 - A record field is `key: value`, not `key:value`: `[x: 1]`, not `[x:1]`;
   likewise keyed patterns and selections (`[x: a, y: b]`).
 - `( )` and `[ ]` take no space inside (`(123)`, `[1,2]`); a `{ }` block on one
@@ -158,9 +159,9 @@ selected branch runs. The ternary's `:` is not cons (`::`), so a branch may
 cons freely: `b ? x :: xs : []`.
 
 Operator sections: `(+ 2)` is `x -> x + 2`, `(2 +)` is `x -> 2 + x`, and a lone
-operator `(+)` is a two-argument function. `-` works in the same positions,
-`(10 -)` is `x -> 10 - x` and `(-)` subtracts, except that `(-2)` and `(- 2)`
-are negative numbers rather than sections; write `x -> x - 2` for that.
+operator `(+)` is a two-argument function. `-` works in the same positions:
+`(- 2)` is `x -> x - 2`, `(10 -)` is `x -> 10 - x` and `(-)` subtracts, while
+`(-2)` is the number.
 
 ### Iteration and ranges
 
@@ -284,9 +285,9 @@ and `2 ^ -3` is `1/8`. `-2 ^ 2` is `-(2 ^ 2)`; use `(-2) ^ 2` for `4`.
 Sections work too: `(^ 2)`, `(2 ^)`, and `(^)`.
 
 Unary operators take a power expression as their operand; nest them with parentheses,
-as in `-(-x)`. For negative function arguments use `f (-1)`. The experimental
-function-minus overload also allows `f -1`, but follows binary subtraction's
-precedence: `sqrt -1 * 4` groups as `sqrt - (1 * 4)`.
+as in `-(-x)`. As an argument (`f -x`, a space before the `-` and none after)
+the negation takes only its operand, as any argument does: `sqrt -1 * 4` is
+`(sqrt -1) * 4`, and `x -1` for a number `x` is an error (subtract with `x - 1`).
 
 ### Defining and overloading operators
 
@@ -885,14 +886,9 @@ not call `f`. Sequential consumption supports long sequences. As with other
 nested deferred computations, skipping many unevaluated elements then demanding
 a value that depends on all of them can hit the evaluator's stack limit.
 
-Experimental function-minus overload: `f - x` applies a function `f` to the
-negated numeric value of `x`. It accepts native functions, lambdas, and named
-functions (including partial applications). Both operands are demanded as for
-ordinary subtraction. `sqrt -1` and `sqrt - 1` both produce `0+1i`.
-The checker checks the negated argument as a call would, so `g -1` (or
-`g -k` with `k = 1`) for `g (UInt n)` is a static error like `g (-1)`; so is
-`h 2` for `h x = g -x` or `h x = g (-x)`, where the value is known only at
-the call. A typed parameter (a numeric type, a schema, a contract) given a
+The checker checks a negated argument as written, so `g -1` (or `g -k` with
+`k = 1`) for `g (UInt n)` is a static error; so is `h 2` for `h x = g -x`,
+where the value is known only at the call. A typed parameter (a numeric type, a schema, a contract) given a
 value that depends on an enclosing function's parameter is checked at that
 function's calls, by value, as a direct call would be: with
 `Pt = [x: Float, y: Float]` and `g (Pt p)`, `h x = g x` accepts `h [1,2]` as
