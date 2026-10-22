@@ -34,7 +34,7 @@ runCounter (MkCounter f) s = f s
 return x = MkCounter (s -> [x,s])
 tick = MkCounter (s -> [s, s + 1])`;
 
-const mapText = "map\nf, (Some x) -> Some (f x)\n_,None -> None\nf, (Ok x) -> Ok (f x)\n_, (Err error) -> Err error";
+const mapText = "map\nf, (Some x) -> Some (f x)\n_, None -> None\nf, (Ok x) -> Ok (f x)\n_, (Err error) -> Err error";
 for (const [name, source, expected] of [
     ["return takes the monad its annotation names", 'import "option"\nprint (Option Int { return 42 })\nprint (List Int { return 43 })\nx <- IO Int { return 44 }\nprint x',
         ["Some 42", "[43]", "44"]],
@@ -45,7 +45,7 @@ for (const [name, source, expected] of [
     ["an Option do-block stops at None", 'import "option"\nfound = Option Int {\n    a <- Some 1\n    b <- None\n    return (a + b)\n}\nprint found\nboth = Option Int {\n    a <- Some 1\n    b <- Some 2\n    return (a + b)\n}\nprint both',
         ["None", "Some 3"]],
     ["a method prints its builtin and every instance", 'import "option"\nprint map\nprint return\nprint (>>=)\nprint (<$>)',
-        [mapText, "return\nSome\nOk", "(>>=)\n(Some x), f -> f x\nNone,_ -> None\n(Ok x), f -> f x\n(Err error), _ -> Err error", mapText]],
+        [mapText, "return\nSome\nOk", "(>>=)\n(Some x), f -> f x\nNone, _ -> None\n(Ok x), f -> f x\n(Err error), _ -> Err error", mapText]],
     ["Result instances", 'import "option"\nprint (map (+ 1) (Ok 1))\nprint (map (+ 1) (Err "bad"))\nprint (Ok 3 >>= (x -> Ok (x + 1)))', ["Ok 2", 'Err "bad"', "Ok 4"]],
     ["<*> derives from >>=", 'import "option"\nprint (Some (+ 1) <*> Some 41)\nprint ([(+ 1), (* 2)] <*> [10,20])', ["Some 42", "[11,21,20,40]"]],
     ["a user-defined monad", `${counter}\ncounted = Counter Int Int {\n    a <- tick\n    b <- tick\n    return (a * 100 + b)\n}\nprint (runCounter counted 5)\nprint (runCounter (map (* 2) tick) 3)`,
@@ -69,7 +69,7 @@ for (const [name, source, expected] of [
         ["1\n\"one\"", "1", "one", "Int | String", "2"]],
     ["return prints as the list's value, then its overloads applied", 'import "option"\nprint (return 5)\nprint (Option (return 1))',
         ["[5]\nSome 5\nOk 5", "Some 1"]],
-    ["partly applied functions show their arguments", "addOp = (+)\nprint (addOp 1)\nprint (+ 1)\nf a b = a + b\nprint (f 1)\ng = x,y,z -> x * y * z\nprint (g 2 3)",
+    ["partly applied functions show their arguments", "addOp = (+)\nprint (addOp 1)\nprint (+ 1)\nf a b = a + b\nprint (f 1)\ng = x, y, z -> x * y * z\nprint (g 2 3)",
         ["(1 +)", "(+ 1)", "b -> 1 + b", "z -> 2 * 3 * z"]],
     // As in Haskell, a discarded statement in a monad is chained: Err or None stops the block.
     ["a discarded Err or None stops a block", 'import ["option","number"]\nf n = {\n    Err "x"\n    return n\n}\nprint [f 1]\ng n = {\n    n > 0 ? Ok [] : Err "not positive"\n    return (n * 2)\n}\nprint [g 1, g 0]\nh n = {\n    _ <- safeDiv 1 n\n    None\n    return n\n}\nprint (h 1)',

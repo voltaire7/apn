@@ -21,7 +21,7 @@ _field name value = {
 # The values of a list of Results, or the first error.
 _all results = match results [
     [] -> Ok []
-    result :: rest -> map2 (x,xs -> x :: xs) result (_all rest)
+    result :: rest -> map2 (x, xs -> x :: xs) result (_all rest)
 ]
 # A value as a type describes it, as Dynamic so one function decodes them all:
 # a record schema field by field (its values take the schema's keys, as a

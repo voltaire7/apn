@@ -48,7 +48,7 @@ not x = !x
 # A macro: a function from syntax to syntax. A call gives it its arguments
 # as written (toAST's data, unevaluated), and the syntax it returns runs in
 # place of the call, in the caller's scope:
-#     ifNot = Macro (condition,body -> ["?:",condition,["{}"],body])
+#     ifNot = Macro (condition, body -> ["?:",condition,["{}"],body])
 Macro f = | Macro f
 
 # Functor, Applicative and Monad. IO and lists are built in; any other type

@@ -30,7 +30,7 @@ _splitOn delimiter text = {
 joinWith delimiter xs = String {
     match xs [
         [] -> ""
-        first :: rest -> foldl (joined,x -> joined ++ delimiter ++ x) first rest
+        first :: rest -> foldl (joined, x -> joined ++ delimiter ++ x) first rest
     ]
 }
 replaceAll search replacement text = joinWith replacement (splitOn search text)

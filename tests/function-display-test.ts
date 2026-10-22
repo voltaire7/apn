@@ -16,7 +16,7 @@ for (const [code, expected] of [
     ['(+)', '(+)'],
     ['addOp = (+); addOp 1', '(1 +)'],
     ['(+ 1)', '(+ 1)'],
-    ['g = x,y,z -> x * y * z; g 2 (1 + 1)', 'z -> 2 * (1 + 1) * z'],
+    ['g = x, y, z -> x * y * z; g 2 (1 + 1)', 'z -> 2 * (1 + 1) * z'],
     ['h (Int x) y = x + y; h x 0 = x; h 1', 'y -> 1 + y\n0 -> 1'],
 ]) Deno.test(`function display: ${code}`, () => {
     const i = new Interpreter();

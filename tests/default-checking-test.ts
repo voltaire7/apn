@@ -186,7 +186,7 @@ for (const [source, expected] of [
     // A length the type leaves open is the one evaluation finds.
     ['g [a,b] = a + b; g (map (x -> x) (tail [1,2,3]))', '5'],
     ['g [a,b] = a + b; g (tail [0,1,2])', '3'],
-    ['f xs = foldl (acc,x -> x :: acc) xs [1,2]; g [a,b,c,d] = a + b; g (f [1,2])', '3'],
+    ['f xs = foldl (acc, x -> x :: acc) xs [1,2]; g [a,b,c,d] = a + b; g (f [1,2])', '3'],
     ['f xs = filter (x -> x > 0) xs; g [a,b] = a + b; g (f [1,2])', '3'],
     ['toList 0 = []; toList k = (k - 1) :: toList (k - 1); xs = toList 3; g [a,_,_] = a; g xs', '2'],
     ['toList Z = []; toList (S k) = k :: toList k; Vect 3 UInt (toList 3)', '[UInt 2, UInt 1, UInt 0]'],
@@ -246,7 +246,7 @@ for (const [source, expected] of [
 });
 for (const source of [
     'import "sequence"; g [a,b] = a + b; g (reverse [1,2,3])',
-    'f xs = foldl (acc,x -> x :: acc) xs [1,2]; g [a,b] = a + b; g (f [1,2])',
+    'f xs = foldl (acc, x -> x :: acc) xs [1,2]; g [a,b] = a + b; g (f [1,2])',
     'f xs = 0 :: xs; g [a,b] = a + b; g (f [1,2])',
     'f xs = xs ++ xs; g [a,b] = a + b; g (f [1,2])',
     'f xs = { xs = [1,2,3]; xs }; g [a,b] = a + b; g (f [1,2])',
@@ -693,7 +693,7 @@ for (const [source, expected] of [
     ['g (f (r (all (> 0) [1,2])))', '0'],
     ['g (f (r (isSome (find (> 1) [1,2]))))', '0'],
     ['g (f (r (sum [1,2] == 3)))', '0'],
-    ['g (f (r (foldr (x,acc -> x + acc) 0 [1,2] == 3)))', '0'],
+    ['g (f (r (foldr (x, acc -> x + acc) 0 [1,2] == 3)))', '0'],
     ['g (f (q (take 1 (repeat 0))))', '0'],
     ['g (f (q (take 1 [0..])))', '0'],
     ['g (f (q (filter (> 3) (take 5 [0..]))))', '0'],

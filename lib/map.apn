@@ -18,4 +18,4 @@ frequencies xs = {
     foldl increment (HashMap []) xs
 }
 groupBy project xs = mapValues reverse
-    (foldl (m,x -> insertWith (old,new -> new ++ old) [[project x, [x]]] m) (HashMap []) xs)
+    (foldl (m, x -> insertWith (old, new -> new ++ old) [[project x, [x]]] m) (HashMap []) xs)

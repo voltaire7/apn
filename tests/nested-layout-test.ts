@@ -29,7 +29,7 @@ for (const [source, expected] of [
     ["a = (x -> {\n    x + 1\n}) 2\nb = 4\na + b", "7"],
     ["(x -> {\n    ys = ([\n        x\n        x + 1\n    ])\n    ys\n}) 2", "[2,3]"],
     // A deeper line starting an argument continues the application.
-    ["(x -> {\n    f = y,z -> y + z\n    f x\n        10\n}) 2", "12"],
+    ["(x -> {\n    f = y, z -> y + z\n    f x\n        10\n}) 2", "12"],
 ]) Deno.test(`nested container layout: ${source}`, () => {
     const interp = new Interpreter();
     const actual = interp.renderString(interp.run(parseDocument(source)));

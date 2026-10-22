@@ -146,7 +146,7 @@ export function syntaxSource(v: Value): string {
         case "->": {
             const params = rest[0]?.kind === "list" ? rest[0].v : [];
             const body = rest[1], guard = tagOf(body) === "|" && body.kind === "list" ? body.v : undefined;
-            return itemsText(params.map(operand)) + (guard ? ` | ${syntaxSource(guard[1])} -> ${syntaxSource(guard[2])}` : ` -> ${syntaxSource(body)}`);
+            return params.map(operand).join(", ") + (guard ? ` | ${syntaxSource(guard[1])} -> ${syntaxSource(guard[2])}` : ` -> ${syntaxSource(body)}`);
         }
         case "?:": return `${operand(rest[0])} ? ${operand(rest[1])} : ${operand(rest[2])}`;
         case ".": return `${operand(rest[0])}.${text(rest[1])}`;

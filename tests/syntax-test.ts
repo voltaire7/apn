@@ -20,7 +20,7 @@ for (const [source, expected] of [
     ["[x = 1, x + 1]", '["[]",["=","x",1],["+","x",1]]'],
     ["f n = n * 2", '["=",["f","n"],["*","n",2]]'],
     ["Some v = m", '["=",["Some","v"],"m"]'],
-    ["x,y -> x", '["->",["x","y"],"x"]'],
+    ["x, y -> x", '["->",["x","y"],"x"]'],
     ["[1..]", '["..",1,[]]'],
     ["r.x", '[".","r","x"]'],
     ["[x: 1]", '["[:]",["x",1]]'],
@@ -37,7 +37,7 @@ for (const [source, expected] of [
 for (const source of [
     "f x + 1", "1 + 2 * 3", "(1 + 2) * 3", "f (g x) (-1)", '"a\\"b\\n"', "'c'", "[1,2,[3]]", "[1 + 1, 2]",
     "[x: 1, y: [2,3]]", "r.x.y", "xs.(i + 1)", "r.[a,b]", "[1,3..9]", "[0..]", "c ? 1 : 2",
-    "x,y -> x * y", "(Int n), [a,b] | n > 0 -> a", "{ a <- return 1; print a }", "[x = 1, x + 1]",
+    "x, y -> x * y", "(Int n), [a,b] | n > 0 -> a", "{ a <- return 1; print a }", "[x = 1, x + 1]",
     "f n = n * 2", "x :: xs = ys", "!b", "map (+ 1) xs", "head $ [1,2]", "{}", 'import ["option","map"]',
     "Some (Some 1)", "-x ^ 2", "n -> match n [0 -> 1, _ -> 2]", "(+)", "(- 2)", "(10 -)",
 ]) Deno.test(`fromAST round trip: ${source}`, () => {
@@ -74,7 +74,7 @@ Deno.test("toAST does not evaluate or check its argument", () => {
 // A macro's function gets its arguments as written; the syntax it returns runs
 // in place of the call, in the caller's scope. The checker expands it too.
 const macros = [
-    'ifNot = Macro (condition,body -> ["?:",condition,["{}"],body])',
+    'ifNot = Macro (condition, body -> ["?:",condition,["{}"],body])',
     'twice = Macro (e -> ["[]",e,e])',
     "show = Macro (e -> to String (fromAST e))",
     "same = Macro (e -> e)",

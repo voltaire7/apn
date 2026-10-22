@@ -26,7 +26,7 @@ print None             # => None
 # ---------------------------------------------------------
 # 2. FUNCTIONS & LAMBDAS
 #    Two styles to define a function:
-#      - lambda:     name = x -> body   (multi-param: a,b,c -> body)
+#      - lambda:     name = x -> body   (multi-param: a, b, c -> body)
 #      - Haskell:    name x = body      (params attached to the left of `=`)
 #    Both support recursion and partial application.
 # ---------------------------------------------------------
@@ -480,8 +480,8 @@ print ([1] +++ [2] +++ [3])               # => [1,0,2,0,3]
 nums = [1,2,3,4,5]
 print (map (x -> x * x) nums)                 # => [1,4,9,16,25]
 print (filter (x -> x > 2) nums)              # => [3,4,5]
-print (foldl (acc,x -> acc + x) 0 nums)       # => 15
-print (foldr (x,acc -> x - acc) 0 [1,2,3])  # => 2
+print (foldl (acc, x -> acc + x) 0 nums)       # => 15
+print (foldr (x, acc -> x - acc) 0 [1,2,3])  # => 2
 
 # pattern-lambdas: a lambda param may be a pattern (here, destructuring a pair)
 print (map ([a,b] -> a + b) [[1,2],[3,4]])  # => [3,7]
@@ -659,7 +659,7 @@ print (fromAST (doubled (toAST (x + 1))))  # => (x + 1) * 2
 print (eval (doubled ["sqrt",16]))        # => 8
 # Macro f: a call gives f its arguments as toAST data, unevaluated, and the
 # data f returns runs in place of the call, in the caller's scope.
-ifNot = Macro (condition,body -> ["?:",condition,["{}"],body])
+ifNot = Macro (condition, body -> ["?:",condition,["{}"],body])
 ifNot (1 > 2) (print "ran")   # => ran
 pairOf = Macro (e -> ["[]",e,e])
 pairUp n = pairOf (n + 1)
@@ -688,10 +688,10 @@ print (4 * 3)                # => 12
 print { 4 * 3 }              # => 12
 # print {5}, print { 5  }    # parse errors: exactly one space inside each brace
 # Spacing is syntax: x = 1, [1,2,3], [x: 1, y: 2], (x), { x }. A comma takes a
-# space after it only when an item it separates has one: [1,2], x,y -> x, but
-# [1 + 1, 2] and (Int x), y -> x. So x=1, [1, 2], [1 + 1,2], [x:1] and ( 1 ) are
-# parse errors, as are f(x), f[1] and f{ x } (application needs a space), a
-# ',' ending a line (newlines separate items), and an operator spaced on one
+# space after it only when an item it separates has one: [1,2], but [1 + 1, 2];
+# lambda parameters always take one: x, y -> x. So x=1, [1, 2], [1 + 1,2],
+# x,y -> x, [x:1] and ( 1 ) are parse errors, as are f(x), f[1] and f{ x }
+# (application needs a space), a ',' ending a line (newlines separate items), and an operator spaced on one
 # side only (1 +2, 1+ 2; 1+2 and 1 + 2 are fine, and sqrt -1 is sqrt (-1)):
 layoutItems = [
     1,2
@@ -823,7 +823,7 @@ print (12345678901234567890 * 12345678901234567890)
 # => 152415787532388367501905199875019052100
 print (take 3 [9007199254740993..])
 # => [9007199254740993,9007199254740994,9007199254740995]
-print (foldl (_,b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
+print (foldl (_, b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 # tests/bigint-test.ts checks F1500 beyond the old floating-point overflow.
 
 # ---------------------------------------------------------
@@ -1367,7 +1367,7 @@ print (length "\r\v\f")                         # 3: whitespace escapes
 selfFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1)))
 print (selfFactorial 5)                         # 120
 print (combinators.S combinators.K combinators.K 42)  # 42
-print (combinators.Y (recur,n -> n == 0 ? 1 : n * recur (n - 1)) 5) # 120
+print (combinators.Y (recur, n -> n == 0 ? 1 : n * recur (n - 1)) 5) # 120
 print (take 4 (fix (xs -> 1 :: xs)))              # [1,1,1,1]
 
 # Advent of Code helpers: parsing, strict simulation and graph traversal.
@@ -1572,7 +1572,7 @@ random = import "random"
 print (roll >= 1 && roll <= 6)                 # true
 print (head (random.step (random.list 3 (random.uniform "a" ["b"])) 7))  # ["a","b","b"]
 decode = import "decode"
-pointDecoder = map2 (x,y -> [x: x, y: y])
+pointDecoder = map2 (x, y -> [x: x, y: y])
     (decode.field "x" decode.int)
     (decode.field "y" decode.int)
 print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1, \"y\": 2}"))  # Ok [x: 1, y: 2]
@@ -1891,8 +1891,8 @@ print (filter (x -> x) [0,1,2])      # => [1,2]
 print (match 42 [_ | [] -> 0, x | 1 -> x]) # => 42
 
 # Type variables preserve relationships between inputs and outputs.
-print (typeOf (x,_ -> x))                # => a -> b -> a
-print (typeOf (f,x -> f x))              # => (a -> b) -> a -> b
+print (typeOf (x, _ -> x))                # => a -> b -> a
+print (typeOf (f, x -> f x))              # => (a -> b) -> a -> b
 print (typeOf (x -> [x,x]))             # => a -> List a
 
 # Value-dependent types; the same constraints run at dynamic boundaries.
@@ -1904,7 +1904,7 @@ print (typeOf (appendSized [1,2] [3]))  # => Vect 3 Int
 # An indexed family: each constructor says the type it makes.
 Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a
 # Its parameters may also be written as a lambda, as f = x -> e is f x = e.
-Pair = a,b -> (MkPair a b | NoPair)
+Pair = a, b -> (MkPair a b | NoPair)
 print (MkPair 1 "x")                     # => MkPair 1 "x"
 # An operator starting with ':' bound to a constructor is an infix pattern
 # too: (::) = Cons would make x :: xs build and match Cons x xs.
@@ -2054,12 +2054,12 @@ print (vectAppend [1,2] [3,4])            # => [1,2,3,4]
 print (typeOf (vectAppend [] [3,4]))       # => Vect 2 Int
 sameArguments x x = x
 print (sameArguments 3 3)                  # => 3
-print ((x,x -> x) 4 4)                    # => 4
+print ((x, x -> x) 4 4)                    # => 4
 # A lambda's parameters are patterns separated by ', '; t x is one pattern
 # binding the argument's type, as in f (t x) = t, match alternatives included.
 print ((t _ -> t) "a")                     # => String
 print (match 1 [t x -> [t,x]])            # => [Int,1]
-print ((_,_ -> 1) 2 3)                    # => 1
+print ((_, _ -> 1) 2 3)                    # => 1
 
 # Files and REPL submissions check by default; Dynamic marks runtime boundaries.
 dynamicNumber = Dynamic 41
@@ -2087,7 +2087,7 @@ print ((Int value -> value) 123)           # => 123
 # a type is a type variable; [Int] is one Int, List Int a list of any length.
 print ((a -> a) == typeOf (x -> x))        # => true
 print ((b -> b) == typeOf (x -> x))        # => true (variable names don't matter)
-print ((a -> a) == typeOf (x,_ -> x))      # => false
+print ((a -> a) == typeOf (x, _ -> x))      # => false
 print (List Int == typeOf [1,2,3])       # => true
 print ([Int] == typeOf [1])                # => false ([Int] is positional)
 print (typeOf map)                         # => (a -> b) -> c a -> c b (c: any type map works on)

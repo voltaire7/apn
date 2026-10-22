@@ -86,7 +86,7 @@ const cases: [string, string][] = [
     ['lookup "a" (frequencies ["a","b","a"])', '2'],
     ['lookup "a" (mergeWith (+) (HashMap [a: 2]) (HashMap [a: 3]))', '5'],
     ['lookup 1 (groupBy (x -> x % 2) [1..5])', '[1,3,5]'],
-    ['pairs (filterMap (key,value -> value > 2) (HashMap [a: 1, b: 3]))', '[["b",3]]'],
+    ['pairs (filterMap (key, value -> value > 2) (HashMap [a: 1, b: 3]))', '[["b",3]]'],
 ];
 for (const [source, expected] of cases) Deno.test(`std: ${source}`, () => {
     const i = new Interpreter();
@@ -96,7 +96,7 @@ for (const [source, expected] of cases) Deno.test(`std: ${source}`, () => {
 });
 for (const [source, message] of [
     ['chunksOf 0 [1]', 'positive size'],
-    ['sortBy (x,y -> true) [2,1]', 'integer'],
+    ['sortBy (x, y -> true) [2,1]', 'integer'],
     ['from (List Char) [1]', 'Char'],
     ['factorial (-1)', 'non-negative'],
     ['import "missing"', 'unknown module'],

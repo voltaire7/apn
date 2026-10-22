@@ -210,8 +210,8 @@ class Parser {
     }
 
     // A ',' follows its item directly, and takes nothing after it when no
-    // item it separates has a space ([1,2,3], x,y -> x), one space otherwise
-    // ([x: 1, y: 2], [1 + 1, 2]). A newline already separates items, so a
+    // item it separates has a space ([1,2,3]), one space otherwise ([x: 1, y: 2],
+    // [1 + 1, 2], and always between lambda parameters: x, y -> x). A newline already separates items, so a
     // ',' ending its line is redundant.
     checkCommaSpacing(t: Token, holds: "record" | "list" | "params", tight: boolean): void {
         const after = this.source.slice(t.pos + 1).split("\n", 1)[0];
@@ -221,15 +221,16 @@ class Parser {
         // x:xs (cons written the old way) right after '[' read as a field: the item is a cons.
         const item = this.source.slice(this.source.lastIndexOf("[", t.pos) + 1, t.pos);
         if (holds === "record" && /^\s*[\w']+:\S/.test(item)) throw new Error(`Parser: cons is '::': write [${item.trim().replace(":", " :: ")}, ...]`);
-        const what = holds === "params" ? "lambda parameters" : holds === "record" ? "record fields" : "list items";
+        if (holds === "params") throw new Error("Parser: separate lambda parameters by ', ' (write x, y -> x + y)");
+        const what = holds === "record" ? "record fields" : "list items";
         throw new Error(tight
-            ? `Parser: separate ${what} with no spaces in them by ',' alone (write ${holds === "params" ? "x,y -> x + y" : "[1,2,3]"})`
-            : `Parser: separate ${what} by ', ' when one has a space (write ${holds === "params" ? "(Int x), y -> x + y" : holds === "record" ? "[x: 1, y: 2]" : "[1 + 1, 2]"})`);
+            ? `Parser: separate ${what} with no spaces in them by ',' alone (write [1,2,3])`
+            : `Parser: separate ${what} by ', ' when one has a space (write ${holds === "record" ? "[x: 1, y: 2]" : "[1 + 1, 2]"})`);
     }
 
     // The commas whose items have no space in them (outside strings and
-    // characters): a line's items in [ ], or one lambda's parameters (from the
-    // first's bracket or token to the last's '->').
+    // characters): a line's items in [ ]. Lambda parameters are always
+    // separated by ', ', as the lambda they start is spaced.
     tightCommas(): Set<number> {
         const tight = new Set<number>(), toks = this.toks;
         const layout = (t?: Token) => t !== undefined && ["newline", "indent", "dedent", "eof"].includes(t.k);
@@ -267,24 +268,11 @@ class Parser {
                 frames[frames.length - 1].start = closes(t) ? frames[frames.length - 1].start : next;
                 continue;
             }
-            if (t.k === "sym" && t.v === ",") {
-                if (!frame.list && !frame.commas.length) {
-                    // A lambda's first parameter: one token, or one bracketed group.
-                    let first = i - 1;
-                    if (closes(toks[first])) {
-                        for (let depth = 0; first >= 0; first--) {
-                            if (closes(toks[first])) depth++;
-                            if (opens(toks[first]) && --depth === 0) break;
-                        }
-                    }
-                    frame.start = first;
-                }
+            if (frame.list && t.k === "sym" && t.v === ",") {
                 frame.items.push([frame.start, i]);
                 frame.commas.push(i);
                 frame.start = i + 1;
-                continue;
             }
-            if (!frame.list && t.k === "sym" && t.v === "->") decide(frame, i);
         }
         return tight;
     }
@@ -2048,8 +2036,8 @@ export function exprToSource(e: Expr): string {
         case "binop": return `${exprToSource(e.l)} ${e.op} ${exprToSource(e.r)}`;
         case "unop": return `${e.op === "neg" ? "-" : "!"}${exprToSource(e.e)}`;
         case "app": return `${exprToSource(e.f)} ${exprToSource(e.a)}`;
-        case "patternLambda": return `${itemsText(e.params.map(patternSource))}${e.guard ? " | " + exprToSource(e.guard) : ""} -> ${exprToSource(e.body)}`;
-        case "lambda": return `${itemsText(e.params)} -> ${exprToSource(e.body)}`;
+        case "patternLambda": return `${e.params.map(patternSource).join(", ")}${e.guard ? " | " + exprToSource(e.guard) : ""} -> ${exprToSource(e.body)}`;
+        case "lambda": return `${e.params.join(", ")} -> ${exprToSource(e.body)}`;
         case "list": return `[${itemsText(e.v.map(exprToSource))}]`;
         case "record": return `[${e.v.map(([k, x]) => `${keySource(k)}: ${exprToSource(x)}`).join(", ")}]`;
     case "floatRange": {

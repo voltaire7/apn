@@ -18,8 +18,8 @@ for (const declaration of [
     "Vec n a = Nil -> Vec 0 a | Cons a (Vec k a) -> Vec (k + 1) a",
     "Vec n a =\n    | Nil -> Vec 0 a\n    | Cons a (Vec k a) -> Vec (k + 1) a",
     "Vec = n -> a -> (Nil -> Vec 0 a | Cons a (Vec k a) -> Vec (k + 1) a)",
-    "Vec = n,a -> (Nil -> Vec 0 a | Cons a (Vec k a) -> Vec (k + 1) a)",
-    "Vec = n,a -> (\n    | Nil -> Vec 0 a\n    | Cons a (Vec k a) -> Vec (k + 1) a\n)",
+    "Vec = n, a -> (Nil -> Vec 0 a | Cons a (Vec k a) -> Vec (k + 1) a)",
+    "Vec = n, a -> (\n    | Nil -> Vec 0 a\n    | Cons a (Vec k a) -> Vec (k + 1) a\n)",
 ]) {
     Deno.test(`one family, however declared: ${JSON.stringify(declaration)}`, () => {
         const actual = run(declaration + USE);

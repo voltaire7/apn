@@ -285,7 +285,7 @@ function helpText(): string {
         `  vec.x = 10 / obj.child.x = 10 / vec.[x,y] = [1,2]  (record update: rebinds a modified`,
         `              copy, scoped like any def — blocks shadow; [] seeds a record)`,
         `  f = { ... }  ({ stays on the = line; body +4 spaces; } aligned)`,
-        `  x -> expr; x,y -> expr; (Int x), y -> expr   (lambdas; t x -> t is one pattern)`,
+        `  x -> expr; x, y -> expr; (Int x), y -> expr   (lambdas; t x -> t is one pattern)`,
         `  xs * x -> { expr } * y -> expr   (braces end the first lambda)`,
         `  cond ? a : b   (ternary)`,
         `  match x [ pat -> expr, ... ]   (ordinary function; alternatives are pattern lambdas)`,

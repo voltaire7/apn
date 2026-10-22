@@ -307,7 +307,7 @@ first (Cons x _) = x              # first Nil is a static error
 ```
 
 A family's parameters may also be written as a lambda, as `f = x -> e` is
-`f x = e`: `Vec = n,a -> (Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a)`
+`f x = e`: `Vec = n, a -> (Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a)`
 (or `n -> a -> (...)`) declares the same `Vec`; the constructors stand in the
 parentheses, on one line or each on its own line after a `|`.
 
@@ -425,13 +425,13 @@ same x x = x
 same 3 3                         # 3
 # same 3 4                       # no matching clause
 
-(x,x -> x) 3 3                  # 3
+(x, x -> x) 3 3                  # 3
 ```
 
 Within one parameter list, the first occurrence binds and subsequent occurrences
 compare using APN equality. This also applies inside list and record patterns.
 The names shadow outer bindings; separate nested lambdas introduce separate
-scopes. `_` is always an independent wildcard, so `(_,_ -> 1) 2 3` returns 1.
+scopes. `_` is always an independent wildcard, so `(_, _ -> 1) 2 3` returns 1.
 The checker requires compatible types; equal values are still checked at runtime.
 Comparing infinite lists may not terminate. Function equality retains APN's
 existing behavior; repeated patterns do not prove function equivalence.

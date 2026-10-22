@@ -251,9 +251,9 @@ _subscriptions = browser.batch [
     browser.onKeyDown (GameKey true)
     browser.onResize GameResized
     browser.onMouseMove GameMouseMove
-    browser.onMouseClick (_,_ -> GameClick)
-    browser.onMouseDown (_,_ -> GameButton true)
-    browser.onMouseUp (_,_ -> GameButton false)
+    browser.onMouseClick (_, _ -> GameClick)
+    browser.onMouseDown (_, _ -> GameButton true)
+    browser.onMouseUp (_, _ -> GameButton false)
 ]
 
 # A game: view computer memory gives the shapes, update computer memory the
@@ -265,5 +265,5 @@ game viewMemory updateMemory memory = browser.element [
     view: (g -> _view g.computer.screen (viewMemory g.computer g.memory))
     subscriptions: (_ -> _subscriptions)
 ]
-picture shapes = game (_,_ -> shapes) (_,memory -> memory) []
-animation viewTime = game (computer,_ -> viewTime computer.time) (_,memory -> memory) []
+picture shapes = game (_, _ -> shapes) (_, memory -> memory) []
+animation viewTime = game (computer, _ -> viewTime computer.time) (_, memory -> memory) []

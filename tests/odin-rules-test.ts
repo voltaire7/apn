@@ -38,7 +38,7 @@ for (const [source, error] of [
     ['assert (1 == 2)', 'assertion failed: (1 == 2)'],
     ['check = assert\ncheck false', 'assertion failed: false'],
     ['import "function"\nbracket 1 (_ -> []) (x -> (y -> x))', 'must return data'],
-    ['import "function"\nbracket 1 (x,y -> []) (x -> x)', 'release must take one remaining argument'],
+    ['import "function"\nbracket 1 (x, y -> []) (x -> x)', 'release must take one remaining argument'],
     ['import "io"\nwithFile "lib/io.apn" 123', 'callback must take one remaining argument'],
 ]) Deno.test(`Odin-inspired rejection: ${source}`, () => {
     try { result(source); } catch (e) { if (String(e).includes(error)) return; throw e; }

@@ -24,7 +24,7 @@ for (const [code, expected] of [
     ['((Int -> Int) identity) <- return ((x -> x))\nTransform = typeOf identity\nfunc (Transform f) = Int { f 123 }\nfunc (*2)', '246'],
     ['func ((Int -> Int) f) = 42; func (x -> missing)', '42'],
     ['func ((Int -> Int) f) = f 2.0; func (*2)', '4'],
-    ['func ((Int -> Int -> Int) f) = f 2 3; func (x,y -> x + y)', '5'],
+    ['func ((Int -> Int -> Int) f) = f 2 3; func (x, y -> x + y)', '5'],
     ['match 1 [((Int -> Int) f) -> f 0, x -> x]', '1'],
     // An alternative's parameter is one pattern, as everywhere: t x binds the type.
     ['match 1 [t x -> [t,x]]', '[Int,1]'],
@@ -41,7 +41,7 @@ for (const [code, error] of [
     ['match 1 [_ -> _, _ -> 42]', 'not implemented'],
     ['match 1 [42]', 'one remaining argument'],
     // A two-parameter lambda needs parentheses in a list; match gives it one argument.
-    ['match 1 [(x,y -> x)]', 'one remaining argument'],
+    ['match 1 [(x, y -> x)]', 'one remaining argument'],
     ['match missing []', 'non-exhaustive match'],
     ['match 1 42', 'expected a list'],
     ['func ((Int -> Int) f) = f (Float .5); func (*2)', 'lossy conversion'],

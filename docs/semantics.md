@@ -83,13 +83,13 @@ Spacing is part of the syntax (a parse error otherwise):
 - A binding's `=` has one space on each side: `x = 1`, not `x=1` or `x  = 1`.
 - A `,` follows its item directly. When no item it separates has a space in
   it (outside string and character literals), it takes nothing after it:
-  `[1,2,3]`, `[0,-1,1/2,v.x]`, `["a b","c"]`, `x,y -> x + y`; otherwise it takes
-  one space: `[1 + 1, 2]`, `[Some 1, None]`, `[x: 1, y: 2]`, `(Int x), y -> x`.
-  The items are a line's in one bracket, or one lambda's parameters, so
-  `[[1,2],[3]]` but `[[1 + 1], [3]]`, and `[1, 2]` or `[1 + 1,2]` is an error.
-  This covers list items and patterns, record fields, bare selections
-  (`v.[x,y]`), ranges (`[1,3..9]`), `match` clause lists, import lists and
-  lambda parameters.
+  `[1,2,3]`, `[0,-1,1/2,v.x]`, `["a b","c"]`; otherwise it takes one space:
+  `[1 + 1, 2]`, `[Some 1, None]`, `[x: 1, y: 2]`. The items are a line's in one
+  bracket, so `[[1,2],[3]]` but `[[1 + 1], [3]]`, and `[1, 2]` or `[1 + 1,2]` is
+  an error. This covers list items and patterns, record fields, bare
+  selections (`v.[x,y]`), ranges (`[1,3..9]`), `match` clause lists and import
+  lists. Lambda parameters, which start a spaced lambda, always take one space:
+  `x, y -> x + y`, `(Int x), y -> x`.
 - A `,` separates two items on one line. A newline already separates items,
   so a `,` ending a line is an error, as is a trailing one (`[1,2,]`); a
   multi-line list or record puts one item per line without commas (or several
@@ -129,14 +129,14 @@ indented line (`func =` then `    {`, with the `}` aligned under the `{`).
 
 ### Functions and conditionals
 
-`f x y = body` and `f = x,y -> body` both define curried functions, so
+`f x y = body` and `f = x, y -> body` both define curried functions, so
 `add 2` is a partial application. A lambda's parameters are patterns
 separated by `, ` (as in Idris); juxtaposition is one pattern, as inside a
 definition's parentheses: `t x -> t` takes one argument and binds its type,
 like `f (t x) = t`, and `f a e -> …` is the flat typed pattern `((f a) e)`, as
 `(Vec n a xs)` is `((Vec n a) xs)`. This holds everywhere, `match` alternatives included.
 Directly inside `[ ]`, a `,` separates the list's items, so a lambda with
-several parameters there is parenthesized: `[(x,y -> x), f]`. A function may be written as several
+several parameters there is parenthesized: `[(x, y -> x), f]`. A function may be written as several
 equations, tried in source order:
 
 ```apn
@@ -775,7 +775,7 @@ with several clauses shows each as a pattern lambda on its own line:
 A partly applied function shows what is left of it: the clauses its arguments
 match, as a call would choose them, without the matched parameters and with
 the names they bound shown as the arguments. With `g (Int x) y = x + y` and
-`g (Float x) y = 0`, `g 1` prints `y -> 1 + y`; `(a,b -> a + b) 1` prints
+`g (Float x) y = 0`, `g 1` prints `y -> 1 + y`; `(a, b -> a + b) 1` prints
 `b -> 1 + b`. A clause a call could still reach stays (`h x 0 = x` alongside
 adds the line `0 -> 1`). Printing evaluates an argument only as far as
 matching a pattern needs; one not evaluated yet shows as its source.
@@ -849,7 +849,7 @@ scope, where its names are the caller's (macros are unhygienic). Arguments
 after that apply to its value.
 
 ```apn
-ifNot = Macro (condition,body -> ["?:",condition,["{}"],body])
+ifNot = Macro (condition, body -> ["?:",condition,["{}"],body])
 twice = Macro (e -> ["[]",e,e])
 f n = twice (n + 1)        # f 4 is [5,5]
 ```
@@ -1384,8 +1384,8 @@ Bool and short-circuit: `0 && missing` is false, `1 || missing` is true.
 Truthiness does not change equality or Bool pattern matching: `0 != false`,
 and `(Bool x)` still matches booleans rather than every convertible value.
 
-Type variables preserve relationships: `typeOf (x,y -> x)` displays
-`a -> b -> a`, `typeOf (f,x -> f x)` displays `(a -> b) -> a -> b`, and
+Type variables preserve relationships: `typeOf (x, y -> x)` displays
+`a -> b -> a`, `typeOf (f, x -> f x)` displays `(a -> b) -> a -> b`, and
 `typeOf (x -> [x,x])` displays `a -> List a`. Names are assigned afresh in
 left-to-right order for each description. Function applications, lexical
 captures, list patterns and generic constructor patterns propagate constraints;

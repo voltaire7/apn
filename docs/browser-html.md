@@ -184,7 +184,7 @@ These follow Elm's modules of the same names; the
   `decode.decodeValue decoder value` is `Ok` or `Err`; `decode.string`,
   `decode.int`, `decode.float`, `decode.bool`, `decode.field name d`,
   `decode.at path d`, `decode.list d`, `decode.succeed x`; decoders are
-  monads too (`map4 (a,b,c,d -> ...) d1 d2 d3 d4`). A type decodes as it
+  monads too (`map4 (a, b, c, d -> ...) d1 d2 d3 d4`). A type decodes as it
   says, wherever a decoder goes: Quotes's `http.expectJson GotQuote Quote`
   reads each field of `Quote = [quote: String, ...]` by name, and fails, as
   `field` does, on a missing or mistyped one (also `field "year" Int`,

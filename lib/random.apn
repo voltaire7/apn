@@ -39,9 +39,9 @@ weighted first others = {
             ? head (tail choice)
             : pick (tail options) (roll - weight choice)
     }
-    map (pick choices) (float 0 (foldl (total,choice -> total + weight choice) 0 choices))
+    map (pick choices) (float 0 (foldl (total, choice -> total + weight choice) 0 choices))
 }
-list n generator = n <= 0 ? return [] : map2 (x,xs -> x :: xs) generator (list (n - 1) generator)
+list n generator = n <= 0 ? return [] : map2 (x, xs -> x :: xs) generator (list (n - 1) generator)
 # A command sending toMessage of a value drawn from a fresh seed.
 sample generator = map (s -> head (step generator s)) entropy
 generate toMessage generator = perform toMessage (sample generator)
