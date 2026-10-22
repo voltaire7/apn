@@ -22,9 +22,8 @@ import { type Value, Env, IOTail } from "./types.ts";
 import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
-import { parse, exprToSource, patternSource, rangeExpr, isOperatorName, PRIMITIVE_OPERATORS } from "./parser.ts";
-import { itemsText, spacedItem } from "./separators.ts";
-import { syntaxExpr, syntaxOf, syntaxSource } from "./syntax-data.ts";
+import { parse, exprToSource, patternSource, rangeExpr, isOperatorName, PRIMITIVE_OPERATORS, fixityOf, getLooseSpacing, setLooseSpacing } from "./parser.ts";
+import { charLiteral, itemsText, spacedItem, stringLiteral } from "./separators.ts";
 
 // ---------------- Evaluator ----------------
 
@@ -64,7 +63,7 @@ export const NATIVES: Array<[string, number]> = [
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
     ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1], ["use", 1],
-    ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1], ["primEval", 1], ["primFromAST", 1],
+    ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1], ["primEval", 1], ["primFixity", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
     ["primBind", 2], ["primAp", 2], ["primReturn", 1], ["primThrow", 1], ["primSource", 1],
@@ -759,6 +758,120 @@ export class Interpreter {
         return v;
     }
 
+
+    // An expression as data, as written: a leaf is a number, a Bool, a name or
+    // a literal's source text ("x", "\"x\"", "'c'"); anything else is a list,
+    // an application function first (["f","x"], ["+",1,2]), or headed by a
+    // token no name can be: ["[]",...] a list, ["[:]",[key,value]...] a record,
+    // ["->",[params],body], ["?:",c,a,b], [".",r,key], ["{}",...] a block,
+    // ["..",low,high,next], ["=",left,right], ["<-",left,right], ["()","+",x]
+    // the section (+ x), ["import",...]. A pattern is written as an expression.
+    sexprOf(e: Expr): Value {
+        const of = (x: Expr) => this.sexprOf(x);
+        const node = (...items: Value[]) => mkList(items);
+        const text = (t: string) => mkStr(t);
+        const pattern = (p: Pattern) => this.patternNode(p);
+        const range = (low: Value, high: Value | undefined, next: Value | undefined) =>
+            node(text(".."), low, high ?? mkList([]), ...next ? [next] : []);
+        switch (e.t) {
+            case "import": return node(text("import"), ...[e.module].flat().map(text));
+            case "numeric": return e.v;
+            case "int": return mkInt(e.v);
+            case "float": return { kind: "float", v: e.v };
+            case "bool": return mkBool(e.v);
+            case "string": return text(stringLiteral(e.v));
+            case "char": return text(charLiteral(e.v));
+            case "placeholder": return text("_");
+            case "var": return text(e.name);
+            case "binop": return node(text(e.op), of(e.l), of(e.r));
+            case "pipe": return node(text("$"), of(e.f), of(e.x));
+            case "unop": return node(text(e.op === "neg" ? "negate" : "not"), of(e.e));
+            case "app": {
+                // f x y is ["f","x","y"]: one list for the whole spine.
+                const args: Expr[] = [];
+                let head: Expr = e;
+                while (head.t === "app") { args.unshift(head.a); head = head.f; }
+                return node(of(head), ...args.map(of));
+            }
+            case "lambda": {
+                // An operator section, as written: (+) its name, (2 +) the operator
+                // given its left operand, (+ 2) a "()" node.
+                const op = e.body.t === "binop" ? e.body.op : e.body.t === "pipe" ? "$" : undefined;
+                const [l, r] = e.body.t === "binop" ? [e.body.l, e.body.r] : e.body.t === "pipe" ? [e.body.f, e.body.x] : [];
+                const own = (x: Expr | undefined, param: string) => x?.t === "var" && x.name === param;
+                if (op && e.params.join() === "$L,$R") return text(op);
+                if (op && e.params.join() === "$S" && own(l, "$S")) return node(text("()"), text(op), of(r!));
+                if (op && e.params.join() === "$S" && own(r, "$S")) return node(text(op), of(l!));
+                return node(text("->"), mkList(e.params.map(text)), of(e.body));
+            }
+            case "patternLambda": {
+                const body = e.guard ? node(text("|"), of(e.guard), of(e.body)) : of(e.body);
+                return node(text("->"), mkList(e.params.map(pattern)), body);
+            }
+            case "ternary": return node(text("?:"), of(e.cond), of(e.then), of(e.els));
+            case "list": return node(text("[]"), ...e.v.map(of));
+            case "record": return node(text("[:]"), ...e.v.map(([k, x]) => node(text(keySource(k)), of(x))));
+            case "recordAccess": return node(text("."), of(e.rec), e.scoped && e.argument ? this.scoped(e.argument) : text(keySource(e.field)));
+            case "pluck":
+                if (e.values) return node(text("."), of(e.rec), of(e.values));
+                return node(text("."), of(e.rec), e.entries.every(x => typeof x === "string")
+                    ? node(text("[]"), ...(e.entries as string[]).map(text))
+                    : node(text("[:]"), ...(e.entries as [string, string][]).map(([k, v]) => node(text(keySource(k)), text(v)))));
+            case "computedRange": return range(of(e.lo), e.hi ? of(e.hi) : undefined, e.second ? of(e.second) : undefined);
+            case "range": return range(mkInt(e.lo), e.hi === null ? undefined : mkInt(e.hi), e.step !== 1n ? mkInt(e.lo + e.step) : undefined);
+            case "floatRange": return range({ kind: "float", v: e.lo }, e.hi === null ? undefined : { kind: "float", v: e.hi }, { kind: "float", v: e.lo + e.step });
+            case "rationalRange": return range(e.lo, e.hi === null ? undefined : e.hi, arithmetic("+", e.lo, e.step) as Value);
+            // a single-statement ( ) group is transparent: toAST (1 + 2) is ["+",1,2]
+            case "block":
+                if (e.stmts.length === 1 && e.style === "(") return of(e.stmts[0]);
+                return node(text("{}"), ...e.stmts.flatMap(st => st.t === "stmDef" ? this.clauseNodes(st) : [of(st)]));
+            case "stmDef": {
+                const binds = this.clauseNodes(e);
+                return binds.length === 1 ? binds[0] : node(text("{}"), ...binds);
+            }
+            case "patDef":
+                if (e.value.t === "setItem" || e.value.t === "setFields") return of(e.value);
+                return node(text(e.eager ? "<-" : "="), pattern(e.pattern), of(e.value));
+            case "setItem": return node(text("="), node(of(e.rec), of(e.index)), of(e.value));
+            case "setFields": {
+                const rec = (e.path ?? []).reduce((r, key) => node(text("."), r, text(keySource(key))), of(e.rec));
+                const target = e.entries.length === 1 && !e.aliases ? node(text("."), rec, text(keySource(e.entries[0])))
+                    : node(text("."), rec, node(text("[]"), ...e.entries.map(text)));
+                return node(text("="), target, of(e.value));
+            }
+        }
+    }
+    // What r.(e) and r.{ e } select: always a block, so a name stays a selection.
+    private scoped(e: Expr): Value {
+        const stmts = e.t === "block" ? e.stmts : [e];
+        return mkList([mkStr("{}"), ...stmts.map(st => this.sexprOf(st))]);
+    }
+    // A definition's clauses, each ["=", [name, params...], body] (["=", name, body] without parameters).
+    private clauseNodes(d: Extract<Expr, { t: "stmDef" }>): Value[] {
+        return d.clauses.map(c => mkList([mkStr("="),
+            c.params.length ? mkList([mkStr(d.name), ...c.params.map(p => this.patternNode(p))]) : mkStr(d.name), this.sexprOf(c.body)]));
+    }
+    // A pattern, as the expression it is written as.
+    private patternNode(p: Pattern): Value {
+        const node = (...items: Value[]) => mkList(items), text = mkStr, of = (q: Pattern) => this.patternNode(q);
+        switch (p.p) {
+            case "var": return text(p.name);
+            case "wildcard": return text("_");
+            case "int": return mkInt(p.v);
+            case "float": return { kind: "float", v: p.v };
+            case "string": return text(stringLiteral(p.v));
+            case "char": return text(charLiteral(p.v));
+            case "bool": return mkBool(p.v);
+            case "list": return node(text("[]"), ...p.v.map(of));
+            case "cons": return node(text(p.op ?? "::"), of(p.head), of(p.tail));
+            case "constr": return p.args.length ? node(text(p.tag), ...p.args.map(of)) : text(p.tag);
+            case "typeBind": return node(text(p.name), of(p.value));
+            case "schema": return node(this.sexprOf(p.type), of(p.value));
+            case "as": return node(text("."), of(p.left), of(p.right));
+            case "recPat": return node(text("[:]"), ...p.v.map(([k, v]) => node(text(keySource(k)), text(v))));
+            case "range": return node(text(".."), mkInt(p.lo), mkInt(p.hi));
+        }
+    }
 
     // A concrete value back to a literal expression (for step's evaluation
     // levels): lists/records rebuild structurally, so  [1 + 2]  steps to  [3].
@@ -1643,12 +1756,6 @@ export class Interpreter {
     apply(f: Value, arg: Value, probe = false, tail = false, tailLoad = false): Value | TailCall {
         // A lazy 0-param def used as a function (`f = g; f 1`) is a thunk — run it.
         f = this.force(f);
-        // Only a call, written as one, applies a macro (tail marks those).
-        if (f.kind === "variant" && f.tag === "Macro" && f.family?.name === "Macro") {
-            if (!tail || arg.kind !== "thunk") throw new APNError("runtime", "a macro takes its arguments as written in a call", {
-                hint: "call the macro directly (m x), not through another function" });
-            return this.expand(f, arg);
-        }
         if (isNumeric(f)) throw new APNError("runtime", "cannot apply a number", {
             hint: "use a type constructor such as `Int`, or replace a default inside a template",
         });
@@ -1731,8 +1838,7 @@ export class Interpreter {
                     // a 0-arg action APPLIED to arguments: run it, then hand the
                     // result the argument — keeps partial application working:
                     //   addTwo = add 2   addTwo 10  ==  (add 2) 10
-                    const g = this.callBlockFn(f);
-                    return tail ? this.apply(g, arg, probe, true, tailLoad) : this.apply(g, arg, probe);
+                    return this.apply(this.callBlockFn(f), arg);
                 }
                 const child = new Env(f.env);
                 child.setLocal(f.params[0], arg);
@@ -1886,29 +1992,6 @@ export class Interpreter {
                     { hint: f.kind === "io" ? "an action is not a function; bind its result first: `x <- action`" : "lists index by integer; container templates apply their slots to supplied values" },
                 );
         }
-    }
-
-    // A macro applied to an argument gives its function the argument as written
-    // (toAST's data); once the function returns data rather than a function,
-    // that syntax runs in place of the call, in the caller's scope. Macros are
-    // pure, so each call expands once.
-    private expansions = new WeakMap<Expr, WeakMap<Value, Value | Expr>>();
-    private expand(macro: Extract<Value, { kind: "variant" }>, arg: Extract<Value, { kind: "thunk" }>): Value | TailCall {
-        const cache = this.expansions.get(arg.body) ?? new WeakMap<Value, Value | Expr>();
-        this.expansions.set(arg.body, cache);
-        let expansion = cache.get(macro);
-        if (!expansion) {
-            const result = this.force(this.apply(macro.v[0], syntaxOf(arg.body)));
-            expansion = ["closure", "clauseFn", "native", "contract", "functionType"].includes(result.kind)
-                ? { ...macro, v: [result] } : syntaxExpr(this.syntaxData(result), "<macro>");
-            cache.set(macro, expansion);
-        }
-        return "kind" in expansion ? expansion : new TailCall(expansion, arg.env!);
-    }
-    // Syntax data with every list realized, as the printer reads it.
-    private syntaxData(v: Value): Value {
-        v = this.demand(v);
-        return this.isList(v) ? mkList(this.items(v).map(x => this.syntaxData(x))) : v;
     }
 
     delay(body: Expr): Value {
@@ -3352,15 +3435,32 @@ export class Interpreter {
                 // ( ) groups); the expression is never evaluated
                 return mkStr(exprToSource(t.body));
             }
-            return syntaxOf(t.body);
+            return this.sexprOf(t.body);
         }
-        if (name === "primFromAST") return mkStr(syntaxSource(this.syntaxData(argsIn[0])));
-        // eval's syntax runs at the program's top level, as a group: its
+        // An operator's precedence and associativity, as fromAST needs them.
+        if (name === "primFixity") {
+            const op = this.dataValue(argsIn[0]);
+            if (op.kind !== "string") throw new APNError("runtime", "fixity needs an operator name");
+            const { prec, assoc } = fixityOf(op.v);
+            return mkList([mkInt(BigInt(prec)), mkStr(assoc)]);
+        }
+        // eval's source runs at the program's top level, as a group: its
         // bindings stay inside it, and an action is returned, not run.
         if (name === "primEval") {
+            const source = this.dataValue(argsIn[0]);
+            if (source.kind !== "string") throw new APNError("runtime", "eval needs syntax data, as toAST gives");
+            const loose = getLooseSpacing();
+            setLooseSpacing(true);
+            let program: TopLevel[];
+            try { program = parse(source.v, "<eval>"); } finally { setLooseSpacing(loose); }
+            const stmts: Expr[] = program.map(tl => {
+                if (tl.t === "def") return { t: "stmDef", name: tl.name, clauses: tl.clauses };
+                if (tl.t === "type") throw new APNError("runtime", "eval cannot declare a type");
+                return tl.t === "expr" ? tl.value : tl;
+            });
             const caller = this.env;
             this.env = this.live(this.programEnv);
-            try { return this.demand(this.eval(syntaxExpr(this.syntaxData(argsIn[0]), "<eval>"))); } finally { this.env = caller; }
+            try { return this.demand(this.eval({ t: "block", stmts, style: "{" })); } finally { this.env = caller; }
         }
         if (name === "step") return this.stepNative(argsIn);
         if (name === "debug") {

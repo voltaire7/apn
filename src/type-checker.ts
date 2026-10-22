@@ -8,8 +8,7 @@ import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typed
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric } from "./numbers.ts";
 import { APNError, didYouMean, formatFileReadError, withArticle } from "./errors.ts";
 import { parse, parseDocument, rangeExpr, PRIMITIVE_OPERATORS } from "./parser.ts";
-import { mkBool, mkList, mkStr, type Value, valueToString } from "./types.ts";
-import { syntaxExpr, syntaxOf } from "./syntax-data.ts";
+import { mkStr, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
 
 const PRELUDE_OPERATORS = new Set(PRIMITIVE_OPERATORS.values());
@@ -1046,7 +1045,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const expression = (e?.t === "placeholder" ? undefined : e) ?? activeExpression ?? checkingExpression;
         const loc = expression && sourceLocations.get(expression);
         throw {
-            message: loc?.expansion ? `${message} (in this call's expansion, ${loc.expansion})` : message,
+            message,
             pos: loc?.start ?? 0,
             len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)),
             source: loc?.source, file: loc?.file, ...hint ? { hint } : {},
@@ -3181,7 +3180,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const chosen = peek(() => computed(e.f, scope).type, undefined);
                     if (chosen) { callee = chosen; resolved = resolve(chosen); }
                 }
-                if (resolved.k === "variant" && resolved.name === "Macro") return macroCall(e, a, resolved, scope, expected);
                 if (resolved.k === "intrinsic" && resolved.name === "load" && a.t === "string" && options.loads) {
                     const loaded = options.loads(a.v, scope, e === tailStatement);
                     for (const [name, entry] of loaded) scope.set(name, entry);
@@ -4849,41 +4847,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return undefined;
     }
     // A known value as toString renders it (primitives and lists of them).
-    // A macro call: the macro's function, run on the argument as written,
-    // gives a function (the call takes more arguments) or the syntax that
-    // replaces the call, checked there. When the checker cannot compute it,
-    // the call is a runtime check.
-    const macroFunctions = new WeakMap<Expr, KnownFunction>();
-    function macroCall(e: Extract<Expr, { t: "app" | "pipe" }>, a: Expr, macro: Ty, scope: Scope, expected?: Ty): Ty {
-        const f = macroFunctions.get(e.f) ?? peek(() => {
-            const value = demand(computed(e.f, scope));
-            return value?.tag === "Macro" ? demand(value.payload?.[0])?.fn : undefined;
-        }, undefined);
-        const result = f && peek(() => budgeted(() => demand(applyKnown(f, [knownSyntax(syntaxOf(a))], 0))), undefined);
-        if (result?.fn) { macroFunctions.set(e, result.fn); return macro; }
-        const data = result && syntaxOfKnown(result);
-        if (data) return infer(syntaxExpr(data, "<macro>", sourceLocations.get(e)), scope, expected);
-        runtimeChecks++;
-        return explicitDynamic;
-    }
-    // Syntax data as known facts, and back.
-    function knownSyntax(v: Value): Known {
-        if (v.kind === "string") return { string: v.v };
-        if (v.kind === "bool") return { boolean: v.v };
-        if (v.kind === "list") return known(v.v.map(knownSyntax));
-        return knownNumber(v as Numeric) ?? {};
-    }
-    function syntaxOfKnown(k: Known | undefined): Value | undefined {
-        k = demand(k);
-        if (!k) return undefined;
-        const n = numericOf(k);
-        if (n !== undefined) return n as Value;
-        if (k.string !== undefined) return mkStr(k.string);
-        if (k.boolean !== undefined) return mkBool(k.boolean);
-        const items = isList(k) ? elementsOf(k) : undefined;
-        const values = items?.map(syntaxOfKnown);
-        return values?.every(x => x) ? mkList(values as Value[]) : undefined;
-    }
     function renderKnown(k: Known | undefined): string | undefined {
         k = readMutable(k);
         if (!k) return undefined;
@@ -6343,8 +6306,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("readStdin", [], io(str));
     native("getArgs", [], io(list(str)));
     for (const name of ["entropy", "currentTime", "zoneOffset"]) native(name, [], io(int));
-    // lib/syntax.apn's fromAST: syntax data as source.
-    native("primFromAST", [variable()], str);
+    // An operator's [precedence,associativity] (lib/syntax.apn's fromAST).
+    native("primFixity", [str], { k: "list", element: { k: "union", choices: [int, str] }, items: [int, str], length: constant(2n) });
     // p5's Sketch (a callback's p) and its objects: records whose methods are
     // Dynamic (their arguments are checked as they run).
     // A method's Dynamic parameters convert their arguments (as a (Dynamic x) parameter does).
@@ -6392,8 +6355,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Prefix - and ! as the prelude's functions (toAST writes -x as ["negate","x"]).
     { const a = variable(); scope.set("negate", { type: fn(a, operation("negate", [a])) }); }
     scope.set("not", { type: fn(bool, bool) });
-    // A macro wraps a function from syntax to syntax (lib/prelude.apn).
-    { const f = variable(); scope.set("Macro", { type: fn(f, { k: "variant", name: "Macro", args: [f] }) }); }
     // map2 f a b ... map4: map then <*>, in any monad (the prelude's).
     for (const [name, arity] of [["map2", 3], ["map3", 4], ["map4", 5]] as const) scope.set(name, { type: { k: "intrinsic", name, arity } });
     // when and unless: action >> return [], in the action's monad.

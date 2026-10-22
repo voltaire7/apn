@@ -1,0 +1,79 @@
+# fromAST's printer (lib/syntax.apn loads it): syntax data is lists of mixed
+# leaves and nodes, so it runs Dynamic, as the meta reader does.
+_fromAST (String leaf) = _operator leaf ? "(" ++ leaf ++ ")" : leaf
+_fromAST (Bool b) = to String b
+_fromAST (Number n) = to String n
+_fromAST (head :: rest) = _node head rest
+
+_node "[]" items = "[" ++ _items (map _fromAST items) ++ "]"
+_node "[:]" fields = "[" ++ joinWith ", " (map ([key,value] -> key ++ ": " ++ _fromAST value) fields)
+    ++ "]"
+_node "->" [params,body] = joinWith ", " (map _operand params) ++ _arrow body
+_node "?:" [c,yes,no] = _operand c ++ " ? " ++ _operand yes ++ " : " ++ _operand no
+_node "." [r, (String key)] = _operand r ++ "." ++ key
+_node "." [r,selected] = _operand r ++ "." ++ _fromAST selected
+_node "{}" [] = "{}"
+_node "{}" statements = "{ " ++ joinWith "; " (map _fromAST statements) ++ " }"
+_node ".." [low,high] = "[" ++ _operand low ++ ".." ++ _bound high ++ "]"
+_node ".." [low,high,next] = "[" ++ _items [_operand low, _operand next ++ ".." ++ _bound high] ++ "]"
+_node "=" [left,right] = _fromAST left ++ " = " ++ _fromAST right
+_node "<-" [left,right] = _fromAST left ++ " <- " ++ _fromAST right
+_node "()" [op,x] = "(" ++ op ++ " " ++ _operand x ++ ")"
+_node "import" [m] = "import " ++ to String m
+_node "import" ms = "import [" ++ _items (map (to String) ms) ++ "]"
+_node head args = _application head args
+
+# A lambda's body, after its guard if it has one.
+_arrow ["|",guard,body] = " | " ++ _fromAST guard ++ " -> " ++ _fromAST body
+_arrow body = " -> " ++ _fromAST body
+_bound [] = ""
+_bound high = _operand high
+
+# An operator given its two operands is written between them.
+_application function args = length args == 2 && _isOperator function ? _infix function args
+    : joinWith " " (map _operand (function :: args))
+_infix op [a,b] = _infixOperand op "left" a ++ " " ++ op ++ " " ++ _infixOperand op "right" b
+_isOperator (String name) = _operator name
+_isOperator _ = false
+# An operand of an operator needs no parentheses when it is a call
+# (application binds tightest) or an operator binding tighter, or as tight on
+# its associativity's side.
+_infixOperand outer side syntax = _isInfix syntax
+    ? (_binds outer side (head syntax) ? _fromAST syntax : "(" ++ _fromAST syntax ++ ")")
+    : _isCall syntax ? _fromAST syntax : _operand syntax
+_isInfix (function :: args) = length args == 2 && _isOperator function
+_isInfix _ = false
+_isCall (function :: _ :: _) = !(_tag function)
+_isCall _ = false
+_binds outer side inner = {
+    [precedence,associativity] = primFixity outer
+    [own,_] = primFixity inner
+    own > precedence || own == precedence && associativity == side
+}
+
+# An operand or argument: parenthesized unless it is one piece of syntax.
+_operand syntax = _atomic syntax ? _fromAST syntax : "(" ++ _fromAST syntax ++ ")"
+_atomic (String _) = true
+_atomic (Bool _) = true
+_atomic (Number n) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) (to String n))
+_atomic (head :: _) = contains head ["[]","[:]","{}",".","..","()"]
+# The heads that are syntax, not functions.
+_tag head = contains head ["[]","[:]","->","?:",".","{}","..","=","<-","()","import","|"]
+_operator name = contains (head (to (List Char) name)) (to (List Char) "!$%&*+-/<=>\\^|~:")
+
+# A ',' takes a space only when an item it separates has one (outside string
+# and character literals), as the parser requires.
+_items xs = joinWith (any _spaced xs ? ", " : ",") xs
+_spaced text = _spacedChars (to (List Char) text)
+_spacedChars cs = match cs [
+    [] -> false
+    '"' :: rest -> _spacedChars (_afterString rest)
+    '\'' :: _ :: '\'' :: rest -> _spacedChars rest
+    c :: rest -> contains c (to (List Char) " \t\n") || _spacedChars rest
+]
+_afterString cs = match cs [
+    [] -> []
+    '\\' :: _ :: rest -> _afterString rest
+    '"' :: rest -> rest
+    _ :: rest -> _afterString rest
+]
