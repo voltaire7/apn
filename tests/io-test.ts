@@ -44,7 +44,6 @@ for (const [name, source, expected] of [
     ["iteration yields the results", "xs <- [1,2] * n -> return (n * 10)\nprint xs", ["[10,20]"]],
     ["recursive actions run in constant stack", 'loop n = n == 0 ? return "done" : { emit ""; loop (n - 1) }\nr <- loop 5000\nprint r', ["done"]],
     ["set is an action", "c = Mutable 0\nbump = set c (c + 1)\nprint (c + 0)\nbump\nbump\nprint (c + 0)", ["0", "2"]],
-    ["env yields a live view", "x = 1\nscope <- Dynamic env\nscope.x = 2\nprint x", ["2"]],
     ["do runs a list of actions", 'r <- do [print "a", print "b", return 3]\nprint r', ["a", "b", "3"]],
     ["map over an action, list and Option", 'import "option"\nn <- map (+ 1) (return 1)\nprint [n]\nprint (map (* 2) [1,2])\nprint (map (* 2) (Some 4))\nprint (map (* 2) None)',
         ["[2]", "[2,4]", "Some 8", "None"]],
@@ -73,7 +72,6 @@ for (const [source, message, kind] of [
     ['sayHello = IO { print "hello" }', "IO is a type constructor", "type"],
     ["x = IO 5", "IO is a type constructor", "type"],
     ['x = IO Int (print 1)', "where Int is required", "type"],
-    ["x = 1\n(Dynamic env).x", "an action has no fields", "runtime"],
 ] as const) Deno.test(`IO rejects: ${JSON.stringify(source)}`, () => fails(source, message, kind));
 Deno.test("IO: an action is not a condition", () => {
     try { run("x = print 1\nprint (x ? 1 : 2)", false); } catch (e) { if (String(e).includes("not a condition")) return; throw e; }

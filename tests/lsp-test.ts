@@ -17,10 +17,10 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     equal(lint("foo =")[0].code, "parse");
     equal(lint("f = {\n  1\n}")[0].code, "lex");
     equal(lint("1 `add` 2")[0].range.start, { line: 0, character: 2 });
-    // Unused parameters warn; _ and _-prefixed names discard, and env may read any name.
+    // Unused parameters warn; _ and _-prefixed names discard.
     const unused = (source: string) => lint(source).filter(d => d.code === "unused").map(d => [d.range.start.line, d.range.start.character, d.message]);
     equal(unused("f x y = x"), [[0, 4, "'y' is never used; write _ to discard it"]]);
-    equal(unused("f x _ = x\ng _y = 1\nh x = { scope <- env; return [] }"), []);
+    equal(unused("f x _ = x\ng _y = 1"), []);
     equal(unused("return x = MkCounter (s -> [1,s])").map(d => d[2]), ["'x' is never used; write _ to discard it"]);
     equal(unused("xs = [0,0]\ni = 0\nxs i = 1\nSome v = Some 1"), []);
     // A field update reads the record and binds no new names.

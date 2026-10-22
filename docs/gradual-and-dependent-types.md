@@ -129,20 +129,10 @@ conversions when demanded. Dynamic keeps existing evaluation rules: `=` actions
 remain repeatable, `<-` captures their result, and unused list elements stay lazy.
 It preserves Mutable identity rather than copying its current contents.
 
-### Reflection and writes
+### Guarded writes
 
-```apn
-count = 1
-scope <- Dynamic env
-scope.count = 2                       # updates count
-# scope.count = "hello"               # runtime error
-key = "count"
-Int (scope key)                        # 2
-```
-
-Checked execution protects reflected writes and names installed by `use`, `import`, or
-`load` from changing existing binding types. `Dynamic env` also guards writes
-through that view in ordinary execution. New names may be added, but using a
+Checked execution protects names installed by `use`, `import`, or `load` from
+changing existing binding types. New names may be added, but using a
 runtime-created name in checked code still requires a Dynamic boundary or an
 explicitly checked projection.
 
@@ -150,21 +140,12 @@ These guards are conservative: existing record fields and positional list types
 must be preserved, including list length. Additional record fields are allowed.
 Lazy record/list payloads are checked when demanded, so a nested error can occur
 on a later read. Scalar batch writes are validated before publication. Type
-descriptors cannot be replaced by different descriptors through reflection.
-Opaque references cannot be replaced by different references through reflection.
-`set` also guards existing `Mutable` payload types in checked execution, including
-writes inside Dynamic expressions.
+descriptors cannot be replaced by different descriptors this way, nor opaque
+references by different references. `set` also guards existing `Mutable` payload
+types in checked execution, including writes inside Dynamic expressions.
 
-To replace a function through reflection, first capture a function with an
-explicit contract:
-
-```apn
-((Int -> Int) f) <- (x -> x)
-scope <- Dynamic env
-scope.f = Dynamic (x -> x + 1)
-f 1                                  # 2; replacement retains the contract
-```
-
+A function can be replaced only where it was captured with an explicit contract
+(`((Int -> Int) f) <- return (x -> x)`), and the replacement retains it.
 Replacing an uncontracted function is rejected. A deferred action declared with
 `=` is also a function: the guard does not run it to discover its result type.
 Use `<-` when the binding should hold the evaluated value or contract. These
@@ -551,20 +532,7 @@ in another order. A statement whose run is uncertain (a write under a condition
 the checker cannot decide, code it cannot follow) leaves only the top-level
 cells and values it can reach unknown: those its names, and the definitions
 they name, refer to, including what its lazily computed values are computed
-from and what a file it loads (by a literal path) names. An `env` view
-(`scope <- Dynamic env`, also one bound by an earlier REPL input) reaches the
-bindings it names: literal fields (`scope.bump`, `scope "bump"`,
-`scope.[a,b]`, `scope.x = v`) and keys whose string the checker knows where
-the view is used (`key = "bump"; (scope key) 0`, with `key` read as bound
-then; a key bound locally, `{ k = "bump"; (scope k) 0 }`, may be each value
-it is bound to). This holds wherever the view goes: stored in a record, list
-or cell (`rr <- [s: scope]; (rr.s "bump") 0`, `((head box) "bump") 0`), passed
-to or returned from a function, in this program or an earlier REPL input. A
-use the checker cannot follow reaches everything: a key it does not know (a
-parameter, a name bound more than once, a cell's contents), a value that may
-be a view taken apart (`match`, record patterns or spread `[_: v]`), computed
-with (`v + 1`), or given to a function it cannot see (a parameter, a native
-that reads records), and a view of a local scope used away from it. A name
+from and what a file it loads (by a literal path) names. A name
 opened by `use` reaches the field it was opened from; one opened from a
 record of unknown fields reaches everything. A function held by a pattern
 binding (`h <- (x -> ...)`) runs its body where it is called. Lazily computed list elements run where the program forces
@@ -596,7 +564,7 @@ Record-template patterns convert positional lists at runtime and
 are checked against their named field types. Inferred parameters do not silently
 convert arguments; actual constructors and converting patterns provide conversions.
 
-Runtime reflection uses `Dynamic env`. The result of `from String`, syntax inspection
+The result of `from String`, syntax inspection
 with `toAST` and `eval`, debugger `step`, and native FFI/resource interfaces carries Dynamic
 where its shape cannot be known statically. The metacircular evaluator declares
 its runtime parser/evaluator execution as Dynamic. HTML, browser configuration,

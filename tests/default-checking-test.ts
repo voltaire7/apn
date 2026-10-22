@@ -79,7 +79,6 @@ for (const source of [
     'x | missingGuard -> x',
     'f x = x == 0 ? 1 : x * x; f (Dynamic 2)',
     'Vect 2 Int [1]',
-    'env',
     'f g = [g 1, g "a"]; f (x -> 0)',
     'f r = r.y == 0 ? 5.0 : r.vy * 9007199254740993; f [y: 1.0, vy: 2.0]',
     'bad = Vect n a xs -> Vect m a ys -> Vect (n + m + 1) a {\n    match xs [\n        [] -> ys\n        x::xs -> x :: bad xs ys\n    ]\n}',
@@ -772,7 +771,7 @@ for (const source of [
     'g (f (r (sum [1..20000] == 0)))',
 ]) Deno.test(`rebinding blocks and long lists stay checked: ${source}`, () => rejected(session(), `${optionClauses}\n${sizeClauses}\n${textClauses}\n${source}`));
 // Effects are not performed, but their results are known. Mutable cells keep
-// their contents unless code in the session can write one (set, load, use, env).
+// their contents unless code in the session can write one (set, load, use).
 const effectPrelude = `${optionClauses}\n${sizeClauses}\n${textClauses}`;
 for (const [source, expected] of [
     ['v <- print 3; g (f (r (null v)))','0'],
@@ -838,26 +837,12 @@ for (const [source, expected] of [
     ['counter = Mutable 0\nother = Mutable 7\nys = map (x -> x * 2) [1,2]\nm = HashMap [["a",1]]\nhas "a" m ? set counter (head ys) : return []\ng (f (r (other + 0 == 7)))', '0'],
     // A load reaches only what the loaded file's source names.
     ['counter = Mutable 0\nother = Mutable 7\nset other 8\nload "examples/advent-of-code/lanternfish"\ng (f (r (other + 0 == 8)))','0'],
-    // An env view reaches the bindings it names; use, the fields it opened.
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter (counter + 1)\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? scope.bumpC 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    // A name use opened reaches the field it was opened from.
     ['counter = Mutable 0\nother = Mutable 7\nns = [bump: (x -> set counter 3)]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    // A computed key the checker knows names its binding.
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nscope <- Dynamic env\nkey = "bumpC"\nm = HashMap [["a",1]]\nhas "a" m ? (scope key) 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nbumpC x = set counter 1\nscope <- Dynamic env\nkey = "bumpC"\n(scope key) 0\ng (f (r (counter + 0 == 1)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nscope <- Dynamic env\nkey = "bumpC"\ncall x = (scope key) x\nm = HashMap [["a",1]]\nhas "a" m ? call 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    // A function held by a pattern binding runs its body where it is called.
     ['counter = Mutable 0\nother = Mutable 7\nhb <- return ((x -> 0))\nhb 0\ng (f (r (other + 0 == 7)))','0'],
     // Keys bound locally, and views stored in records, lists and cells or
     // passed to functions, reach the bindings their uses name.
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? { k = "bumpC"; (scope k) 0 } : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? { k <- return ("bump"); j = k ++ "C"; (scope j) 0 } : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\ncall y = { k = "bumpC"; (scope k) y }\nhas "a" m ? call 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nrr <- return ([s: scope, t: 5])\nhas "a" m ? (rr.s "bumpC") rr.t : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nk = "bumpC"\nrr <- return ([s: scope])\nhas "a" m ? (rr.s k) 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nbox = Mutable [scope]\nhas "a" m ? ((head box) "bumpC") 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhold = Mutable [scope]\nset hold [scope]\nhas "a" m ? ((head hold) "bumpC") 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\npick = (v -> v)\nhas "a" m ? ((pick scope) "bumpC") 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\ngetV y = scope\nhas "a" m ? ((getV 0) "bumpC") 0 : return []\ng (f (r (other + 0 == 7)))','0'],
-    ['counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nvia v = ((Dynamic v) "bumpC") 0\nhas "a" m ? via scope : return []\ng (f (r (other + 0 == 7)))','0'],
     // A top-level value (an application or pipe that is not an action too:
     // xs = map ... is a list, kept) is computed when first used and kept; a
     // top-level action (a block, or an application yielding one) runs at each use.
@@ -890,83 +875,18 @@ for (const source of [
     'counter = Mutable 0; [set counter 9, 1]; g (f (r (counter + 0 == 9)))',
     // A statement whose run is uncertain leaves what it can reach unknown.
     'counter = Mutable 0\nm = HashMap [["a",1]]\nhas "a" m ? set counter 5 : return []\ng (f (r (counter + 0 == 5)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter (counter + 1)\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? scope.bumpC 0 : return []\ng (f (r (counter + 0 == 1)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? scope.bumpO 0 : return []\ng (f (r (other + 0 == 7)))',
-    // A key names the binding it is, wherever the view is used; one the
-    // checker does not know (a parameter, a local, a rebound name, a cell's
-    // contents) can name any binding.
-    'counter = Mutable 0\nother = Mutable 7\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpO"\nm = HashMap [["a",1]]\nhas "a" m ? (scope key) 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpC"\ncall key = (scope key) 0\nm = HashMap [["a",1]]\nhas "a" m ? call "bumpO" : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpC"\nm = HashMap [["a",1]]\nhas "a" m ? (key -> (scope key) 0) "bumpO" : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpC"\nm = HashMap [["a",1]]\nhas "a" m ? { key = "bumpO"; (scope key) 0 } : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nkey = "bumpC"\nkey = "bumpO"\nm = HashMap [["a",1]]\nhas "a" m ? (scope key) 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpO x = set other 1\nscope <- Dynamic env\npick = Mutable "bumpC"\nset pick "bumpO"\nm = HashMap [["a",1]]\nhas "a" m ? (scope (pick + "")) 0 : return []\ng (f (r (other + 0 == 7)))',
     // A function held by a pattern binding runs its body where it is called.
     'counter = Mutable 0\nother = Mutable 7\nhb <- return (x -> { set other 1; return 0 })\nhb 0\ng (f (r (other + 0 == 7)))',
     'counter = Mutable 0\nother = Mutable 7\nhs <- return [x -> { set other 1; return 0 }]\n(head hs) 0\ng (f (r (other + 0 == 7)))',
     'counter = Mutable 0\nother = Mutable 7\npick n = n > 0 ? (x -> { set other 1; 0 }) : (x -> 0)\nhb <- return (pick 1)\nm = HashMap [["a",1]]\nhas "a" m ? hb 0 : 0\ng (f (r (other + 0 == 7)))',
     'counter = Mutable 0\nother = Mutable 7\n[ha,hb] <- return [(x -> return 0), (x -> { set other 1; return 0 })]\nhb 0\ng (f (r (other + 0 == 7)))',
-    // Through local keys and stored or passed views alike; a use the checker
-    // cannot follow (a parameter key, computing with or taking apart a value
-    // that may be a view, an unknown function given one, a local scope's view
-    // used elsewhere) reaches everything.
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? { k = "bumpO"; (scope k) 0 } : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? { k <- return ("bump"); j = k ++ "O"; (scope j) 0 } : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nk = "bumpO"\nhas "a" m ? { (scope k) 0; k = "bumpC" } : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? { k = "bumpC"; k = "bumpO"; (scope k) 0 } : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nhas "a" m ? { [k] = ["bumpO"]; (scope k) 0 } : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nrr <- return ([s: scope])\nhas "a" m ? (rr.s "bumpO") 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nbox = Mutable [scope]\nhas "a" m ? ((head box) "bumpO") 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\npick = (v -> v)\nhas "a" m ? ((pick scope) "bumpO") 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nfs = [(x -> (scope "bumpO") x)]\nhas "a" m ? (head fs) 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nvia v = ((Dynamic v) "bumpO") 0\nhas "a" m ? via scope : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nvia2 v k = ((Dynamic v) k) 0\nhas "a" m ? via2 scope "bumpC" : return []\ng (f (r (counter + 0 == 0)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nadd1 v = v + 1\nhas "a" m ? add1 scope : return []\ng (f (r (counter + 0 == 0)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nm2 v = match v [[bumpO: h] -> h 0]\nhas "a" m ? m2 scope : return []\ng (f (r (counter + 0 == 0)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nrr2 <- return ([_: scope])\nhas "a" m ? rr2.bumpC 0 : return []\ng (f (r (counter + 0 == 0)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\napply2 h = h scope\nhas "a" m ? apply2 (v -> ((Dynamic v) "bumpC") 0) : return []\ng (f (r (counter + 0 == 0)))',
-    'counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nscope <- Dynamic env\nm = HashMap [["a",1]]\nmk y = { bumpL = (x -> set other 1); Dynamic env }\nlv <- mk 0\nhas "a" m ? (lv "bumpL") 0 : return []\ng (f (r (counter + 0 == 0)))',
-    'counter = Mutable 0\nother = Mutable 7\nscope <- Dynamic env\nscope.other = Mutable 1\ng (f (r (other + 0 == 7)))',
+    // A name use opened reaches the field it was opened from.
     'counter = Mutable 0\nother = Mutable 7\nns = [bump: (x -> set other 3)]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))',
     'counter = Mutable 0\nother = Mutable 7\nns = [bump: (x -> set counter 3)]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (counter + 0 == 0)))',
     'counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 0)))',
     'counter = Mutable 0\nsnap = counter + 0\nset counter 4\nprint snap\nset counter 9\ng (f (r (snap + 0 == 9)))',
     'counter = Mutable 0\ninit = set counter 5\ninit\nset counter 1\ninit\ng (f (r (counter + 0 == 1)))',
 ]) Deno.test(`cells written after reads stay checked: ${source}`, () => rejected(session(), `${effectPrelude}\n${source}`));
-// Env views, keys and stored views carry over to later REPL inputs.
-Deno.test("an env view from an earlier REPL input reaches the bindings it names", () => {
-    const i = session();
-    run(i, `${effectPrelude}\nscope <- Dynamic env; key = "bumpO"; call x = (scope key) x; []`);
-    const later = (call: string) => `counter = Mutable 0\nother = Mutable 7\nbumpC x = set counter 1\nbumpO x = set other 1\nm = HashMap [["a",1]]\nhas "a" m ? ${call} : return []\ng (f (r (other + 0 == 7)))`;
-    if (run(i, later("return []")) !== "0") throw new Error("unrelated statement");
-    if (run(i, later("scope.bumpC 0")) !== "0") throw new Error("literal field");
-    if (run(i, later('(scope "bumpC") 0')) !== "0") throw new Error("literal key");
-    rejected(i, later("(scope key) 0"));
-    rejected(i, later("call 0"));
-    if (run(i, 'counter = Mutable 0; bumpC x = set counter 1; scope.bumpC 0; g (f (r (counter + 0 == 1)))') !== "0") throw new Error("followed");
-    // call keeps the key it was written with, which a later input's rebinding
-    // does not change (and the checker cannot tell, so it assumes any).
-    run(i, 'key = "bumpC"');
-    rejected(i, later("call 0"));
-    run(i, 'key = "bumpO"');
-    rejected(i, later("call 0"));
-    // Through a name a later input bound using the view.
-    run(i, 'callWith k = (scope k) 0\n((Int -> Int) hidden) <- return (Dynamic (x -> seq ((scope "bumpO") x) 0))');
-    rejected(i, later('callWith "bumpO"'));
-    rejected(i, later("hidden 0"));
-    // A name rebound to something else is no longer a view.
-    run(i, 'scope = [bumpC: (x -> 5)]');
-    rejected(i, 'counter = Mutable 0\nbumpC x = set counter 1\nprint (scope.bumpC 0)\ng (f (r (counter + 0 == 1)))');
-});
-Deno.test("a view an earlier REPL input stored reaches what its uses name", () => {
-    const i = session();
-    run(i, `${effectPrelude}\nscope <- Dynamic env; []`);
-    run(i, "box = Mutable [scope]; []");
-    const later = (call: string) => `counter = Mutable 0\nother = Mutable 7\nbumpO x = set other 1\nm = HashMap [["a",1]]\nhas "a" m ? ${call} : return []\ng (f (r (other + 0 == 7)))`;
-    if (run(i, later("return []")) !== "0") throw new Error("unrelated statement");
-    rejected(i, later('((head box) "bumpO") 0'));
-    if (run(i, later('((head box) "bumpC") 0').replace("bumpO x", "bumpC x = set counter 1; bumpO x")) !== "0") throw new Error("stored view");
-});
 for (const source of ['x::xs = []', 'x::y::z = [1]', 'f n = { x::xs = []; x }']) Deno.test(`a cons binding of a list known too short is rejected: ${source}`, () => rejected(session(), source));
 Deno.test("an unknown constructor in a pattern is named, with the module that declares it", () => {
     for (const [source, message, hint] of [

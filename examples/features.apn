@@ -887,7 +887,7 @@ print "still running before the final halt"
 
 # ---------------------------------------------------------
 # 17b. IO ACTIONS — effects are values
-#    print, emit, readFile, readStdin, getArgs, fetch, set, exit and env
+#    print, emit, readFile, readStdin, getArgs, fetch, set and exit
 #    are IO actions: print 5 BUILDS an action and nothing happens until it
 #    runs. A top-level statement runs its action (a file's statements are an
 #    implicit do-block), and x <- action runs one and binds its result.
@@ -1536,18 +1536,6 @@ print (onlyOne (vowelOrPair (vowelIfShort (take (mutableCounter - 1) [7,8,9]))))
 # map builds a list of actions; do runs them in order.
 do (map (x -> set mutableCounter $ x) [5,1])
 print (onlyOne (vowelOrPair (vowelIfShort (take mutableCounter [7,8,9]))))  # 1
-# An uncertain statement forgets only what it reaches; through env, the
-# bindings it names, by literal fields or keys the checker knows.
-counterView <- Dynamic env
-otherCounter = Mutable 4
-uncertainKeys = HashMap [["a",1]]
-counterKey = "bumpCounter"
-has "a" uncertainKeys ? (counterView counterKey) 0 : return 0
-print (onlyOne (vowelOrPair (vowelIfShort (take (otherCounter - 3) [7,8,9]))))  # 1
-# Also through a view stored in a record, with a key bound locally.
-viewHolder = [view: counterView]
-has "a" uncertainKeys ? { localKey = "bumpCounter"; (viewHolder.view localKey) 0 } : return 0
-print (onlyOne (vowelOrPair (vowelIfShort (take (otherCounter - 3) [7,8,9]))))  # 1
 
 # p5 sketches are descriptions until built for the browser.
 p5 = import "p5"
@@ -1853,16 +1841,6 @@ implicitNumber.x = 1.0
 print implicitNumber                  # => [x: 1]
 # implicitNumber.x = 1.5               # error: lossy conversion to Int
 
-# A first-class live view of the lexical environment: env is the action
-# yielding it, so scope <- env (or Dynamic env) binds the view.
-environmentExample = 1
-scope <- Dynamic env
-scope.environmentExample = 2
-print environmentExample              # => 2
-environmentExample = 3
-print scope.environmentExample        # => 3
-print scope.[environmentExample]      # => [3]
-
 # Rich type descriptions inspect lazy elements and function bodies without running them.
 print (typeOf [1,2,3,4])           # => List Int
 print (typeOf [1..])                     # => List Int (no infinite traversal)
@@ -2057,10 +2035,6 @@ dynamicNumber = Dynamic 41
 print (Int dynamicNumber + 1)              # => 42
 ((Int -> Int) checkedIncrement) <- return (Dynamic (x -> x + 1))
 print (checkedIncrement 41)                # => 42
-reflectedNumber = 1
-reflectedScope <- Dynamic env
-reflectedScope.reflectedNumber = 2
-print reflectedNumber                     # => 2
 # Int (Dynamic "bad") fails at runtime; unknowns outside Dynamic still fail checking.
 
 # Inference retains operator constraints across calls and REPL submissions.

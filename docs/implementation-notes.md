@@ -292,7 +292,7 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   root (`Env.root`) and gives a rebound one a version (`new Env(env, true)`),
   which the statement loops (top level, blocks, do-blocks) go on in;
   `Env.bindings` reads a scope through its versions (module and load
-  exports), and `newest` keeps env views live. An import, load or `use`
+  exports), and `newest` is the version `eval` runs in. An import, load or `use`
   publishes the same way, and its statement adopts the version
   (`adoptPublished`). The checker never re-checks a reader: a reader's types
   are its version's. Its static block evaluation (`evaluateBlock`) follows
@@ -323,15 +323,10 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   succeeds only when the browser will find every module.
   Tests: `tests/package-import-test.ts`, `tests/html-test.ts`.
 
-## Mutable references and `env`
+## Mutable references
 
 - `reference()` preserves cell identity; `demand()` reads the contents without
   memoizing the read over the cell. Tests: `tests/mutable-test.ts`.
-- `env` evaluates to an action yielding a live record view backed by `Env`
-  (`record.scope`), capturing the lexical scope where `env` is evaluated;
-  `Dynamic` of an action converts its result. Never enumerate by forcing
-  values. Writes use `Env.set` (nearest owner, else local) and must not rebind
-  the view's name. Tests: `tests/environment-test.ts`.
 - A cell keeps the type a conversion declared for its first contents
   (`declaredTypes`: `List T x`, a record schema's value) as `schema`, and `set`
   conforms to it. A record marked `shared` (a p5 object) is cached by its
@@ -506,8 +501,8 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   (`sameBinding`), since nested call arguments are each evaluated.
   Effects (`print`, `emit`, `assert`, `debug`) only return their results
   statically. `Known.mutable` is a cell. While `CheckOptions.mutation` (the
-  session-wide `mayMutate` scan for `set` and `load`; `env` and `use` only
-  expose bindings that scan saw) is false,
+  session-wide `mayMutate` scan for `set` and `load`; `use` only exposes
+  bindings that scan saw) is false,
   `readMutable` gives its first contents. Otherwise cells are followed per
   root (`KnownCell.root`): `writeMutable` updates them in evaluation order,
   every lazily evaluated computation runs under `lazily` as its own region,
@@ -524,7 +519,7 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   equality). Top-level cells (`KnownCell.program`, made while
   `creatingTopLevel`) are written only by `executeTopLevel`, which statically
   runs each top-level statement that `mayWrite` (reaches `set` or `load`
-  through named definitions, `env` views and `use`d fields) before it is checked; reads in that
+  through named definitions and `use`d fields) before it is checked; reads in that
   statement come from `executedParts`, the values that run gave each
   argument-free part (unknown if it never evaluated them). A top-level value
   whose definition touches a top-level cell (`touchedTopLevel`) keeps its
@@ -541,21 +536,8 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   values `reachable` from the statement's names (through definition bodies,
   the facts of those names, the `Known.origin` of lazy values, and
   `CheckOptions.loadedNames` for literal loads, `Entry.opened` for names
-  `use` opened, `Entry.bound` for pattern bindings, and `viewReach` for
-  `env` views) become `invalid`. `viewFlow` runs over every program in the
-  session (`CheckOptions.viewPrograms`, libraries included, once any uses
-  `env`) to a fixpoint: each name per scope frame (function parameters,
-  lambda parameters, block locals), each function's result, and each
-  expression (`viewValue`, which tracks functions by arity, natives via
-  `CheckOptions.nativeArities`) gets a kind: may be a view, hold views as
-  elements or deeper, or be a local scope's view. `viewReach` then reads
-  each use in walked code: a view applied to a key or field names those
-  bindings (`keyStrings` evaluates keys where reached, taking each value of
-  a simple local binding and refusing parameters and cells); a value that
-  may be a view or hold one, given to code that may read it, fails. The
-  session also shares top-level views once their program ran
-  (`envTopViews`; the evaluator reads a top-level view's field at the root).
-  A failing use, an opaque `use` here or elsewhere
+  `use` opened, and `Entry.bound` for pattern bindings) become `invalid`.
+  An opaque `use` here or elsewhere
   (`CheckOptions.openedElsewhere`), or a lazy value without an origin
   clears `programValid`. Lazy list
   cells and deferred values keep their result only when computed touching

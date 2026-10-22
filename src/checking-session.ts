@@ -1,7 +1,7 @@
 import { APNError } from "./errors.ts";
 import { parse } from "./parser.ts";
 import { loadPath, readLoad, resolveModule, unknownModule } from "./modules.ts";
-import { type CheckOptions, checkTypes, copyTypeScope, isEnvView, mayMutate, mentionsAny, topNames, type TypeScope } from "./type-checker.ts";
+import { type CheckOptions, checkTypes, copyTypeScope, mayMutate, type TypeScope } from "./type-checker.ts";
 import type { TopLevel } from "./ast.ts";
 import { NATIVE_EXPORTS } from "./native-exports.ts";
 
@@ -23,8 +23,6 @@ export class CheckingSession {
     // A bundle (a browser build) to import from instead of the disk: virtual
     // paths to sources (see bundleProgram in modules.ts).
     moduleSources?: Record<string, string>;
-    /** The runtime's natives by arity (to follow env views through calls). */
-    nativeArities?: Map<string, number>;
     // Instances of map, >>=, <*> and return the session's programs and modules define.
     instances = new Map<string, unknown[]>();
     // Clauses' inferred result types, for overloads chosen by result type.
@@ -43,31 +41,15 @@ export class CheckingSession {
 
     commit(candidate: TypeScope, visible: Set<string>): void {
         this.scope = new Map([...candidate].filter(([name]) => visible.has(name)));
-        // A binding to an env view counts once its program has run.
-        for (const name of this.stagedViews) this.envTopViews.add(name);
-        this.stagedViews.clear();
     }
 
     /** Whether any program this session has checked may write a Mutable cell. */
     private mutation = false;
     /** Programs that used use on a record of unknown fields. */
     private opaqueUses = new Set<TopLevel[]>();
-    /** Every program checked (libraries too), to follow env views through; and whether any uses env. */
-    private programs: TopLevel[][] = [];
-    private usesEnv = false;
-    /** Top-level names whose latest binding is an env view; staged until the program runs. */
-    private envTopViews = new Set<string>();
-    private stagedViews = new Set<string>();
 
     private check(program: TopLevel[], directory: string, initial: TypeScope, library: boolean): { scope: TypeScope; exports: TypeScope } {
-        // Views staged by a program that never ran are dropped.
-        if (this.checking++ === 0) this.stagedViews.clear();
-        try { return this.checkProgram(program, directory, initial, library); } finally { this.checking--; }
-    }
-    private checking = 0;
-    private checkProgram(program: TopLevel[], directory: string, initial: TypeScope, library: boolean): { scope: TypeScope; exports: TypeScope } {
         this.mutation ||= mayMutate(program);
-        this.trackViews(program);
         let scope: TypeScope = new Map();
         let exports: TypeScope = new Map();
         const result = checkTypes(program, {
@@ -76,9 +58,6 @@ export class CheckingSession {
             inputs: library ? undefined : this.inputs,
             mutation: () => this.mutation,
             openedElsewhere: () => [...this.opaqueUses].some(p => p !== program),
-            viewPrograms: () => this.usesEnv ? this.programs : [],
-            envTopViews: () => this.envTopViews,
-            nativeArities: this.nativeArities,
             instances: this.instances,
             resultHeads: this.resultHeads,
             loadedNames: path => this.loadedNames(path, directory),
@@ -100,26 +79,6 @@ export class CheckingSession {
             throw error;
         }
         return { scope, exports };
-    }
-
-    // Follow env views across programs: every program's code, and the
-    // top-level bindings that are views.
-    private trackViews(program: TopLevel[]): void {
-        this.programs.push(program);
-        this.usesEnv ||= mentionsAny(program, new Set(["env"]));
-        const bound = topNames(program);
-        // Each name's last binding here decides; a view counts once the program runs.
-        const views = new Set<string>();
-        for (const statement of program) {
-            const value = statement.t === "patDef" ? statement.value : statement.t === "def" && !statement.clauses[0].params.length ? statement.clauses[0].body : undefined;
-            for (const name of topNames([statement])) {
-                if (value && isEnvView(value, new Set(["env"]))) views.add(name); else views.delete(name);
-            }
-        }
-        for (const name of bound) {
-            if (views.has(name)) this.stagedViews.add(name);
-            else { this.envTopViews.delete(name); this.stagedViews.delete(name); }
-        }
     }
 
     module(module: string | string[], directory = "."): TypeScope {

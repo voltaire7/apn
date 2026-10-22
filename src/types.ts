@@ -50,7 +50,7 @@ export type Value =
     // so a value never keeps the scope that made it alive.
     | { kind: "deferred"; compute?: () => Value; value?: Value; busy?: boolean; describes?: Value }
     // shared: a stateful object (a p5 object), which a definition allocates once, as a Mutable.
-    | { kind: "record"; v: Array<[string, Value]>; scope?: Env; guarded?: boolean; shared?: boolean }
+    | { kind: "record"; v: Array<[string, Value]>; shared?: boolean }
     | { kind: "variant"; tag: string; v: Value[]; family?: VariantFamily; arguments?: Value[] }
     // A partly applied closure keeps its whole parameter list and the arguments
     // applied so far, for showing it: (a b -> a + b) 1.
@@ -125,7 +125,6 @@ export function valueToString(v: Value): string {
             return `[${itemsText(out.map(valueToString))}]`;
         }
         case "record":
-            if (v.scope) return "env";
             return `[${v.v.map(([k, val]) => `${keySource(k)}: ${valueToString(val)}`).join(", ")}]`;
         case "variant": return v.tag + v.v.map(argumentText).join("");
         case "closure": return functionSource(v);

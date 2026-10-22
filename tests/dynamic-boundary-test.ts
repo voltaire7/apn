@@ -18,19 +18,10 @@ for (const [source, expected] of [
     ['((Int -> Int) f) <- return ((x -> x)); f (Dynamic 2)', '2'],
     ['Vect 2 Int (Dynamic [1,2])', '[1,2]'],
     ['xs <- return (Vect 2 Int (Dynamic [1,missing])); head xs', '1'],
-    ['xs = 1::xs; scope <- Dynamic env; scope.xs = Dynamic [2..]; head xs', '2'],
     ['Vect 2 Int [Dynamic 1, Dynamic 2]', '[1,2]'],
-    ['xs <- return (Vect 2 Int [1,2]); scope <- Dynamic env; scope.xs = [3,4]; typeOf xs', 'Vect 2 Int'],
-    ['x = 1; scope <- Dynamic env; scope.x = 2; x', '2'],
-    ['x = 1; scope <- Dynamic env; key = "x"; Int (scope key)', '1'],
-    ['scope <- Dynamic env; scope.newName = 42; Int scope.newName', '42'],
-    ['x = [name: "old", age: 1]; scope <- Dynamic env; scope.x = [name: "new", age: 2]; x.name', '"new"'],
-    ['xs = [1,2]; scope <- Dynamic env; scope.xs = [3,4]; xs', '[3,4]'],
-    ['((Int -> Int) f) <- return ((x -> x))\nscope <- Dynamic env\nscope.f = Dynamic (x -> x + 1)\nf 1', '2'],
     ['Dynamic (import "function"); 123', '123'],
     ['Dynamic (import ["text","type"]); 123', '123'],
     ['x = 1; Dynamic $ use [x: 2]; x', '2'],
-    ['Option a = Some a | None; x <- return (Some 1); scope <- Dynamic env; scope.x = None; x', 'None'],
 ] as const) Deno.test(`explicit Dynamic boundary: ${source}`, () => {
     const result = requireChecked(source);
     if (result.dynamicBoundaries || !result.runtimeChecks) throw new Error(JSON.stringify(result));
@@ -39,7 +30,6 @@ for (const [source, expected] of [
 });
 
 for (const source of [
-    'x = env',
     'x = Dynamic 1; missing',
     'f x = x == 0 ? 1 : x * x; f (Dynamic 2)',
     'f (Dynamic x) = missing x',
@@ -54,17 +44,7 @@ for (const [source, message] of [
     ['((Int -> Int) f) <- return (Dynamic (x -> "bad")); f 1', 'Int expects a number'],
     ['Vect 2 Int (Dynamic [1])', 'length mismatch'],
     ['Vect 2 Int (Dynamic [1,"bad"])', 'Int expects a number'],
-    ['x = "old"; scope <- Dynamic env; scope.x = 123; x', 'cannot replace string with int'],
-    ['x = true; scope <- Dynamic env; scope.x = "bad"; x', 'cannot replace bool with string'],
-    ['x = [name: "old"]; scope <- Dynamic env; scope.x = [name: 2]; x.name', 'cannot replace string with int'],
-    ['x = [name: "old"]; scope <- Dynamic env; scope.x.name = 2; x.name', 'cannot use Int where String is required'],
-    ['xs = [1,2]; scope <- Dynamic env; scope.xs = [3]; xs', 'list length changed'],
-    ['xs = ["old"]; scope <- Dynamic env; scope.xs = [123]; xs', 'cannot replace string with int'],
-    ['f x = x; scope <- Dynamic env; scope.f = Dynamic (x -> "bad")', 'explicit function contract'],
-    ['((Int -> Int) f) <- return ((x -> x))\nscope <- Dynamic env\nscope.f = Dynamic (x -> "bad")\nf 1', 'Int expects a number'],
     ['x = "old"; Dynamic (use [x: 123]); x', 'cannot replace string with int'],
-    ['scope <- Dynamic env; scope.Int = String', 'cannot change an established type descriptor'],
-    ['Option a = Some a | None\nx <- return (Some 1)\nscope <- Dynamic env\nscope.x = Some "bad"\nx', 'cannot use String where Int is required'],
 ]) Deno.test(`Dynamic runtime boundary rejects: ${source}`, () => {
     requireChecked(source);
     try { run(source); } catch (error) {
@@ -74,29 +54,9 @@ for (const [source, message] of [
     throw new Error('missing runtime error');
 });
 
-Deno.test('reflected batch writes validate before publishing scalar changes', () => {
-    const source = 'a = 1; b = "old"; scope <- Dynamic env; scope.[a,b] = [2,123]';
-    requireChecked(source);
-    const i = new Interpreter(); i.checkedExecution = true;
-    try { i.run(parseDocument(source)); } catch (error) {
-        if (!String(error).includes('cannot replace string with int')) throw error;
-        if (i.renderString(i.run(parseDocument('[a,b]'))) !== '[1,"old"]') throw new Error('partial write');
-        return;
-    }
-    throw new Error('missing runtime error');
-});
-
 Deno.test('Dynamic construction and patterns preserve Mutable identity', () => {
     const actual = run('x <- return (Mutable 1)\nf (Dynamic v) = v\nd <- return (Dynamic x)\nalias <- return (f d)\nset alias 2\nx', false);
     if (actual !== '2') throw new Error(actual);
-});
-
-Deno.test('Dynamic environment guards also work in ordinary execution', () => {
-    try { run('x = "old"; scope <- Dynamic env; scope.x = 1', false); } catch (error) {
-        if (String(error).includes('cannot replace string with int')) return;
-        throw error;
-    }
-    throw new Error('missing runtime error');
 });
 
 Deno.test('load exports cannot invalidate checked bindings', () => {
@@ -126,15 +86,6 @@ for (const module of ['"function"', '["type","function"]']) {
         throw new Error('missing runtime error');
     });
 }
-Deno.test('guarding an action does not execute it to discover its result type', () => {
-    const i = new Interpreter(); i.checkedExecution = true;
-    i.run(parseDocument('action = { fail "must not run" }; scope <- Dynamic env'));
-    try { i.run(parseDocument('scope.action = 1')); } catch (error) {
-        if (String(error).includes('explicit function contract')) return;
-        throw error;
-    }
-    throw new Error('missing runtime error');
-});
 Deno.test("set on an explicit Dynamic target is checked at runtime", () => {
     const value = run("cell = Dynamic (Mutable 1); set cell 2; Int (Dynamic cell) + 1");
     if (value !== "3") throw new Error(`expected 3, got ${value}`);

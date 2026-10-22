@@ -24,7 +24,6 @@ export function toJson(i: Interpreter, value: Value, indent = 0, name = "toJson"
             case "rational": case "complex":
                 return fail(`${i.renderString(v)} has no JSON number`, "convert it with inexact first (a JSON number is an integer or a float)");
             case "record":
-                if (v.scope) fail("cannot encode an environment view");
                 return join(v.v.map(([key, item]) => `${JSON.stringify(key)}:${indent ? " " : ""}${encode(item, depth + 1)}`), "{", "}");
             case "hashmap":
                 return join([...v.entries.values()].map(([key, item]) => {

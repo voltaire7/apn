@@ -3,7 +3,7 @@ import type { Diagnostic } from "./lint.ts";
 
 // Warnings for names a parameter pattern binds but its body never uses:
 // write _ to discard a value. Names starting with _ are discarded on
-// purpose. A body that reads env may use any name, so it is not checked.
+// purpose.
 // Like the other lint analyses, this never evaluates APN.
 export function unusedDiagnostics(program: TopLevel[], source: string): Diagnostic[] {
     const diagnostics: Diagnostic[] = [];
@@ -14,7 +14,6 @@ export function unusedDiagnostics(program: TopLevel[], source: string): Diagnost
     const report = (names: string[], body: Expr, extra: Expr[] = []) => {
         const used = new Set<string>();
         for (const e of [body, ...extra]) free(e, new Set(), used, new Set(names));
-        if (used.has("env")) return;
         const start = firstOffset(body);
         for (const name of names) {
             if (used.has(name) || name.startsWith("_") || name.startsWith("$")) continue;

@@ -482,7 +482,7 @@ APN code is pure; effects are **IO actions**, ordinary values describing what
 to do. `print "hi"` builds the action that prints `hi`; nothing is printed
 until the action runs. The effectful builtins all return actions: `print` and
 `emit` (yielding `[]`), `readFile`, `readStdin`, `getArgs`, `fetch`, `exit`,
-`set` (writing a `Mutable` cell), `env`, `bracket`, `withFile` and
+`set` (writing a `Mutable` cell), `bracket`, `withFile` and
 `ffi.withLibrary`. An action prints as its type, since only running it shows its result:
 `print (print 1)` prints `IO []`, an annotated `IO Int { ... }` prints `IO Int`,
 and an action whose result is not known before it runs prints `IO a`.
@@ -537,7 +537,7 @@ Each run of a do-block starts a fresh scope for the statements from that point
 on, so running an action twice repeats its effects and its bindings. A recursive
 action (`loop n = { print n; loop (n + 1) }`) runs its last statement in place,
 in constant stack. Using an action where a value is needed is an error that
-says so: `(print 1) + 1`, `env.x`, `action ? a : b`. Bind the result first.
+says so: `(print 1) + 1`, `(readFile "f").x`, `action ? a : b`. Bind the result first.
 
 `<-` is a statement binding, not a function-definition form or chainable binary
 operator. `f x <- ...`, `x <- y <- ...`, and missing right-hand sides are invalid.
@@ -1261,30 +1261,7 @@ field named `(x)`, use `record "(x)" = value` or `record.[(x)] = [value]`.
 List operands retain dotted template application: `[Int,Float].([1] ++ [2])`
 returns `[1,2.0]`, evaluating the input expression in the surrounding scope.
 
-## Live environment
-
-`env` is the action yielding a live record view of the current lexical scope
-and visible parent bindings, including builtins; views exist only inside IO.
-The view captures binding references without forcing values. `scope <- env`
-retains that scope; later definitions and rebindings are visible through it.
-`scope.x` and `scope "x"` read bindings (`env.x` itself is an error: an action
-has no fields). Checked code marks the boundary: `scope <- Dynamic env`.
-
-`scope.x = value` and `scope "x" = value` update the nearest visible binding,
-using the same type conversion checks as field assignment. New names are
-created in the captured scope. This explicitly writes through the view even
-from an inner block; ordinary `x = value` still follows normal scope rules.
-Pluck assignments validate all conversions before publishing updates.
-
-The view can escape a function and keep its local scope alive. `pairs scope`
-exposes its visible entries; plucks produce ordinary lists or records.
-`typeOf scope` is Record. Environment views compare by scope identity.
-Printing displays bindings as a record; actions are shown without invoking
-them, and recursive references to the same environment print as `env`.
-Ordinary lazy data is rendered normally, so an infinite list can keep printing.
-Resource scopes reject environment views as escaping references.
-
-### Type descriptions
+## Type descriptions
 
 `typeOf [1,2,3]` displays `List Int`, a list of any length (`[Int]` is the
 positional type of exactly one Int); heterogeneous literal lists display their
@@ -1312,7 +1289,7 @@ constructor it keeps its broad identity: `typeOf [1] == List` and
 `typeOf f == Function` are true. A description is not an enforced schema; use a
 typed pattern or contract when you need validation.
 
-### Function types
+## Function types
 
 Where a type is expected, a lambda is read as the function type it spells out,
 as `[Int]` is both a list and a positional type: in a typed pattern
@@ -1340,7 +1317,7 @@ variables (with `(a -> a)`, the argument `1` makes `a` Int), and the result
 must then have that type, else the call is an error. Each call decides them
 afresh. The checker checks the same statically.
 
-### Empty results and truthiness
+## Empty results and truthiness
 
 There is no `Unit` type or separate unit value. `[]` is the ordinary empty list
 and the result of empty `()` / `{}` blocks, printing, mutation, and other

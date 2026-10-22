@@ -109,8 +109,7 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   its whole scope or starts a new version of a visible one, which code written
   before keeps not seeing (`f = x -> ...` is a clause of `f`, like
   `f x = ...`); records and lists are never mutated in place (updates bind a
-  modified copy). Only `Mutable` cells and `env` views mutate, and only
-  through IO actions.
+  modified copy). Only `Mutable` cells mutate, and only through IO actions.
 - **Purity:** effectful builtins return IO actions and never act when applied;
   only statements, `<-` and running do-blocks run actions (`runIO`, keeping
   recursive actions in constant stack). Operators are prelude functions
@@ -146,5 +145,5 @@ Read the relevant doc and its tests before changing an area:
 | C interop (FFI) | `docs/c-interop.md` | `tests/c-interop-test.ts`; also run `./tests/run-c-interop-tests` |
 
 Per-feature invariants (record keys, eager `<-` binding, tail calls, `use`/
-`import`, `env`, resources, dotted patterns, selection assignment, and more)
+`import`, resources, dotted patterns, selection assignment, and more)
 are in `docs/implementation-notes.md`, each with the tests that guard it.

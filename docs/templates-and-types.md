@@ -362,9 +362,7 @@ print obj.child.x          # 10
 ```
 
 Ordinary updates create scoped copies; they do not mutate captured snapshots,
-and a lazy alias keeps the version it saw, as every binding does. Live
-[environment views](semantics.md#live-environment) are an exception: writes
-through them update their backing bindings.
+and a lazy alias keeps the version it saw, as every binding does.
 
 The RHS sees the old binding. Bounds, shape, and immediate conversion failures
 leave that binding unchanged. Selected outer values are checked before publishing;
