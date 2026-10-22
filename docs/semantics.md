@@ -757,8 +757,14 @@ does not evaluate its `halt` action.
 
 ## Inspection and numbers
 
-`quote` gives its argument's source text without evaluating it, groups' parentheses
-included; [`toAST`](standard-library.md#code-as-data--syntax) gives it as lists. `debug`
+A `(Quote q)` parameter takes its argument as written, unevaluated and
+unchecked: `q` is its source text, groups' parentheses included
+(`labelled (Quote q) = q ++ "!"; labelled (1 + 1)` is `"(1 + 1)!"`). It is the
+text of the expression written in the call, so `y = 1 + 1; labelled y` gives
+`"y!"`, and a function passing its parameter on passes that parameter's name.
+`Quote` is only a parameter pattern; a program may bind the name to its own
+type. The prelude defines `quote (Quote q) = q`, and
+[`toAST`](standard-library.md#code-as-data--syntax) by reading `q` as lists. `debug`
 forces its argument without running a returned action: `a = print 3; debug a`
 prints `a`. `step` retains
 its expression-inspection/evaluation rules demonstrated in `examples/features.apn`.

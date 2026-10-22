@@ -42,6 +42,7 @@ export function symbols(text: string): Symbol[] {
 
 const builtins = new Map<string, string>([
     ...NATIVES.filter(([name]) => !name.startsWith("intrinsics.")).map(([name, arity]): [string, string] => [name, `Built-in function; ${arity} argument${arity === 1 ? "" : "s"}.`]),
+    ["Quote", "Quote — a parameter pattern: f (Quote q) = ... binds q to the argument's source text, unevaluated."],
     ["intrinsics", "intrinsics — the record of functions APN cannot define (the prelude binds (+) to intrinsics.add)."],
     ...TYPE_NAMES.map((name): [string, string] => [name, "Built-in type constructor."]),
     ["print", "print value — action printing the value and a newline; yields []."],

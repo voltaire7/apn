@@ -310,6 +310,7 @@ const explicitDynamic: Ty = { k: "dynamic", explicit: true };
 const isExplicit = (t: Ty): boolean => { const value = resolve(t); return value.k === "dynamic" && !!value.explicit; };
 const variable = (): Ty => ({ k: "var" });
 const atom = (name: string): Ty => name === "Dynamic" ? explicitDynamic : { k: "atom", name };
+const isQuote = (t: Ty): boolean => { const value = resolve(t); return value.k === "atom" && value.name === "Quote"; };
 // The payload a numeric constructor pattern binds: the number without its
 // type annotation (Int for UInt8, Float for Float32); aggregates stay as written.
 function untypedPayload(t: Ty): Ty {
@@ -1804,6 +1805,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     unify(expected, { k: "type", value: t.value }, e);
                     return;
                 }
+                // (Quote q) takes the argument as written: q is its source text.
+                if (t.k === "type" && isQuote(t.value) && p.args.length === 1) {
+                    unify(t.value, expected, e);
+                    bind(p.args[0], atom("String"), scope, e, bound);
+                    return;
+                }
                 if (t.k === "type") {
                     const value = t.value.k === "atom" && t.value.name === "List" ? list(variable()) : t.value;
                     unify(value, expected, e);
@@ -2819,11 +2826,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (resolved.k === "intrinsic" && resolved.name === "do" && a.t === "list") {
                     return infer({ t: "block", stmts: a.v, style: "{" }, scope);
                 }
-                // quote and toAST read their argument unevaluated (unchecked); syntax
-                // data is Dynamic, as eval's result is.
-                if (resolved.k === "intrinsic" && ["quote", "debug", "toAST"].includes(resolved.name)) {
-                    return resolved.name === "quote" ? atom("String") : resolved.name === "debug" ? list(variable(), constant(0n)) : explicitDynamic;
-                }
+                // debug reads its argument unevaluated (unchecked).
+                if (resolved.k === "intrinsic" && resolved.name === "debug") return list(variable(), constant(0n));
+                // A (Quote q) parameter takes its argument as written: it is not checked.
+                if (resolved.k === "fn" && isQuote(resolved.input)) return resolved.output;
+                if (resolved.k === "type" && isQuote(resolved.value)) return problem("Quote is a parameter pattern, not a function", e, "define one: quote (Quote q) = q");
                 if (resolved.k === "intrinsic" && resolved.name === "intrinsics.eval") {
                     infer(a, scope);
                     runtimeChecks++;
@@ -5630,7 +5637,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("isType", [variable(), variable()], bool);
     native("parse", [str], explicitDynamic);
     native("step", [int, variable()], explicitDynamic);
-    for (const name of ["quote", "debug", "toAST", "intrinsics.eval", "use", "load"]) scope.set(name, { type: { k: "intrinsic", name } });
+    for (const name of ["debug", "intrinsics.eval", "use", "load"]) scope.set(name, { type: { k: "intrinsic", name } });
+    // Quote, a parameter pattern taking its argument as written ((Quote q)
+    // binds its source text), and the prelude's quote and toAST, defined by one.
+    scope.set("Quote", { type: { k: "type", value: atom("Quote") } });
+    scope.set("quote", { type: fn(atom("Quote"), str) });
+    scope.set("toAST", { type: fn(atom("Quote"), explicitDynamic) });
+    native("intrinsics.syntax", [str], explicitDynamic);
     native("exit", [int], io(empty));
     native("null", [variable()], bool);
     native("length", [list(variable())], int);

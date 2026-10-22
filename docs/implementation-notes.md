@@ -644,7 +644,12 @@ configuration. Tests: `tests/lsp-test.ts`.
 
 ## Code as data
 
-`toAST` (`sexprOf`) reads its argument's parse tree, unevaluated: operator
+A `(Quote q)` parameter (`matchPattern`, checked only while the name
+`Quote` is the runtime's `QUOTE`) binds `exprToSource` of the argument
+thunk's body, so an argument must arrive as the call's own thunk; the
+checker gives the parameter type `Quote`, and a call to such a function
+infers nothing for that argument. `toAST` reads that text with
+`intrinsics.syntax` (`sexprOf` of what `readSource` parses): operator
 sections become names, partial applications or `"()"` nodes, and an
 application's spine is flattened. `lib/syntax.apn` loads its printer
 (`lib/syntax/source.apn`) behind `Dynamic`, as `meta` does, since syntax data

@@ -10,7 +10,7 @@ frequencies $ words $ "one two one" # HashMap [["one",2],["two",1]]
 The prelude, `lib/prelude.apn`, needs no import: it defines every binary
 operator (`(+) = intrinsics.add`, ...; the `intrinsics` record holds the
 functions APN cannot define) and its fixity, `negate` and `not` (the functions
-`-x` and `!x` are), and the Functor, Applicative
+`-x` and `!x` are), `quote` and `toAST`, and the Functor, Applicative
 and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
 `sequence`, `mapM`, `map2`–`map4`, `when`, `unless`, `return`, `throw`, `empty`, `guard`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).
 
@@ -277,7 +277,9 @@ doubled e = ["*",e,2]
 eval (doubled ["sqrt",16])             # 8
 ```
 
-`toAST e` gives `e`, unevaluated and unchecked, as lists (a `Dynamic` value):
+`toAST e` gives `e`, unevaluated and unchecked, as lists (a `Dynamic` value).
+The prelude defines it with a [`(Quote q)` parameter](semantics.md#inspection-and-numbers),
+which takes the argument's source text, and reads that text as lists:
 
 - a leaf is a number, a Bool, a name (`"x"`, `"+"`, `"Some"`) or a literal's
   source text, quotes included (`"\"hi\""`, `"'c'"`), so `f x` is

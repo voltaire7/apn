@@ -645,6 +645,10 @@ debug $ step 2 inner         # => return 42     (the block's tail statement)
 # evaluated:
 print (quote (1 + 1))         # => (1 + 1)
 print $ quote $ 1 + 1         # => 1 + 1
+# A (Quote q) parameter takes its argument as written: q is its source text.
+# The prelude defines quote (Quote q) = q, and toAST by reading q as lists.
+labelled (Quote q) value = q ++ " is " ++ to String value
+print (labelled (6 * 7) 42)   # => (6 * 7) is 42
 
 # toAST — an expression as lists, unevaluated: an application is a list,
 # function first; a name is a string, a string literal its quoted source.

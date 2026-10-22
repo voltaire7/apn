@@ -1,7 +1,7 @@
 import { keySource } from "./record-keys.ts";
 import type { Expr, Pattern } from "./ast.ts";
 import type { Value } from "./types.ts";
-import { exprToSource, fixityOf } from "./parser.ts";
+import { exprToSource, fixityOf, sectionSource } from "./parser.ts";
 import { compoundArgument, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
 
@@ -64,15 +64,10 @@ export function argument(v: Value): string {
 }
 // An operator's lambda as source writes it: (+), (1 +), (+ 1).
 function operatorForm(params: string[], body: Expr, applied: Value[]): string | undefined {
-    if (body.t !== "binop") return undefined;
+    if (!applied.length) return sectionSource(params, body, e => source(e, 11));
     const is = (e: Expr, name: string) => e.t === "var" && e.name === name;
-    if (params.length === 2 && params[0] === "$L" && params[1] === "$R" && is(body.l, "$L") && is(body.r, "$R")) {
-        if (!applied.length) return `(${body.op})`;
-        if (applied.length === 1) return `(${argument(applied[0])} ${body.op})`;
-    }
-    if (params.length === 1 && params[0] === "$S" && !applied.length) {
-        if (is(body.l, "$S")) return `(${body.op} ${source(body.r, 11)})`;
-        if (is(body.r, "$S")) return `(${source(body.l, 11)} ${body.op})`;
+    if (body.t === "binop" && applied.length === 1 && params.join() === "$L,$R" && is(body.l, "$L") && is(body.r, "$R")) {
+        return `(${argument(applied[0])} ${body.op})`;
     }
     return undefined;
 }

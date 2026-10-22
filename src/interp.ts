@@ -28,6 +28,9 @@ import { charLiteral, itemsText, spacedItem, stringLiteral } from "./separators.
 // ---------------- Evaluator ----------------
 
 // Internal control transfers, caught only by their matching execution loop.
+// The prelude's Quote, a parameter pattern taking its argument as written
+// ((Quote q) binds its source text); a program may bind the name to its own type.
+const QUOTE: Value = { kind: "type", name: "Quote" };
 // Natives by name, and the intrinsics (intrinsics.add, ...) as fields of one record.
 function bindNatives(env: Env, natives: Iterable<readonly [string, number]>): void {
     const intrinsics: [string, Value][] = [];
@@ -74,7 +77,7 @@ export const NATIVES: Array<[string, number]> = [
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
     ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1], ["use", 1],
-    ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
+    ["emit", 1], ["step", 2], ["intrinsics.syntax", 1], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
     ["intrinsics.bind", 2], ["intrinsics.ap", 2], ["intrinsics.return", 1], ["intrinsics.throw", 1], ["intrinsics.source", 1],
@@ -200,6 +203,7 @@ export class Interpreter {
         const builtins = new Env();
         // Vect is the prelude's declaration.
         for (const type of TYPE_NAMES) if (type !== "Vect") builtins.setLocal(type, { kind: "type", name: type });
+        builtins.setLocal("Quote", QUOTE);
         builtins.setLocal("Z", ZERO);
         bindNatives(builtins, [...NATIVES, ...STANDARD_NATIVES]);
         for (const [name, value] of this.preludeBindings) builtins.setLocal(name, value);
@@ -234,6 +238,7 @@ export class Interpreter {
 
     constructor() {
         for (const name of TYPE_NAMES) if (name !== "Vect") this.env.setLocal(name, { kind: "type", name });
+        this.env.setLocal("Quote", QUOTE);
         this.env.setLocal("Z", ZERO);
         bindNatives(this.env, NATIVES);
         const outer = this.env;
@@ -1754,6 +1759,8 @@ export class Interpreter {
             case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
                 if (f.name === "$any" && !f.family && !f.alias) return arg;
+                if (f === QUOTE) throw new APNError("runtime", "Quote is a parameter pattern, not a function", {
+                    hint: "define one: quote (Quote q) = q" });
                 if (f.name === "Dynamic" && !f.family && !f.alias) {
                     this.dynamicDepth++;
                     try { return this.constructType("Dynamic", this.reference(arg)); }
@@ -1960,6 +1967,20 @@ export class Interpreter {
                     { hint: f.kind === "io" ? "an action is not a function; bind its result first: `x <- action`" : "lists index by integer; container templates apply their slots to supplied values" },
                 );
         }
+    }
+
+    // Source text as statements, its spacing read loosely (it is generated,
+    // or written inside a string).
+    private readSource(text: string, file: string): Expr[] {
+        const loose = getLooseSpacing();
+        setLooseSpacing(true);
+        let program: TopLevel[];
+        try { program = parse(text, file); } finally { setLooseSpacing(loose); }
+        return program.map(tl => {
+            if (tl.t === "def") return { t: "stmDef", name: tl.name, clauses: tl.clauses };
+            if (tl.t === "type") throw new APNError("runtime", "source read as syntax cannot declare a type");
+            return tl.t === "expr" ? tl.value : tl;
+        });
     }
 
     delay(body: Expr): Value {
@@ -2603,7 +2624,7 @@ export class Interpreter {
         if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
         // A named subtype's own pattern outranks its base's: (Money x) first.
         // Only a constructor pattern looks at its argument.
-        if (pattern.p !== "constr") return 0;
+        if (pattern.p !== "constr" || pattern.tag === "Quote" && this.env.get("Quote") === QUOTE) return 0;
         const named = this.reference(arg);
         if (named.kind === "variant" && named.family?.base) {
             if (pattern.tag === named.family.name) return 35;
@@ -3390,15 +3411,12 @@ export class Interpreter {
         // syntax and step has its own rules. Ordinary natives (including
         // print and toString) demand values and run zero-argument actions.
         // expression-level natives: they consume the argument's UNEVALUATED form
-        if (name === "quote" || name === "toAST") {
-            const t = argsIn[0];
-            if (t.kind !== "thunk") throw new APNError("runtime", `${name} needs an expression`);
-            if (name === "quote") {
-                // quote: the expression's SOURCE TEXT as a string (parens kept for
-                // ( ) groups); the expression is never evaluated
-                return mkStr(exprToSource(t.body));
-            }
-            return this.sexprOf(t.body);
+        // Source text read as syntax data (toAST's lists).
+        if (name === "intrinsics.syntax") {
+            const source = this.dataValue(argsIn[0]);
+            if (source.kind !== "string") throw new APNError("runtime", "syntax reads source text");
+            const stmts = this.readSource(source.v, "<syntax>");
+            return this.sexprOf(stmts.length === 1 ? stmts[0] : { t: "block", stmts, style: "{" });
         }
         // An operator's precedence and associativity, as fromAST needs them.
         if (name === "intrinsics.fixity") {
@@ -3412,15 +3430,7 @@ export class Interpreter {
         if (name === "intrinsics.eval") {
             const source = this.dataValue(argsIn[0]);
             if (source.kind !== "string") throw new APNError("runtime", "eval needs syntax data, as toAST gives");
-            const loose = getLooseSpacing();
-            setLooseSpacing(true);
-            let program: TopLevel[];
-            try { program = parse(source.v, "<eval>"); } finally { setLooseSpacing(loose); }
-            const stmts: Expr[] = program.map(tl => {
-                if (tl.t === "def") return { t: "stmDef", name: tl.name, clauses: tl.clauses };
-                if (tl.t === "type") throw new APNError("runtime", "eval cannot declare a type");
-                return tl.t === "expr" ? tl.value : tl;
-            });
+            const stmts = this.readSource(source.v, "<eval>");
             const caller = this.env;
             this.env = this.live(this.programEnv);
             try { return this.demand(this.eval({ t: "block", stmts, style: "{" })); } finally { this.env = caller; }
@@ -4022,6 +4032,12 @@ export class Interpreter {
         if (p.p === "var") {
             if (binds.has(p.name)) return this.equals(binds.get(p.name)!, v);
             binds.set(p.name, v); return true;
+        }
+        // (Quote q) takes the argument as written: q is its source text.
+        if (p.p === "constr" && p.tag === "Quote" && p.args.length === 1 && this.env.get("Quote") === QUOTE) {
+            if (v.kind !== "thunk") throw new APNError("runtime", "(Quote q) takes an argument as written, not a computed value", {
+                hint: "call the function with the expression itself (f (x + 1)), not through another function" });
+            return this.matchPattern(p.args[0], mkStr(exprToSource(v.body)), binds);
         }
         if (p.p === "constr" && p.tag === "Dynamic" && p.args.length === 1) {
             const type = this.reference(this.env.get(p.tag)!);

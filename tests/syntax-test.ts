@@ -70,3 +70,25 @@ Deno.test("eval runs at the top level, not in the caller's scope", () => {
 Deno.test("toAST does not evaluate or check its argument", () => {
     if (shown(session(), "toAST (undefinedName 1)") !== '["undefinedName",1]') throw new Error("unchecked");
 });
+
+// A (Quote q) parameter takes its argument as written: q is its source text.
+for (const [source, expected] of [
+    ['shown (Quote q) = q ++ " ="\nshown $ undefinedName + 1', '"undefinedName + 1 ="'],
+    ["quote (1 + 1)", '"(1 + 1)"'],
+    ["quote (+ 1)", '"(+ 1)"'],
+    ["x = 5\nquote x", '"x"'],
+    ["wrap y = quote y\nwrap (1 + 2)", '"y"'],
+    ["both (Quote q) n = [q,n]\nboth (n + 1) 3", '["(n + 1)",3]'],
+    ['Quote = [quote: String, year: Int]\nf (Quote q) = q.year\nf [quote: "a", year: 3]', "3"],
+] as const) Deno.test(`Quote: ${JSON.stringify(source)}`, () => {
+    const actual = shown(session(), source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+
+Deno.test("Quote is a parameter pattern, not a function", () => {
+    try { shown(session(), "Quote (1 + 1)"); } catch (error) {
+        if (String(error).includes("Quote is a parameter pattern")) return;
+        throw error;
+    }
+    throw new Error("accepted");
+});

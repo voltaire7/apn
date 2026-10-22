@@ -52,6 +52,17 @@ export const PRIMITIVE_OPERATORS = new Map<string, string>([
     ["intrinsics.mod", "%"], ["intrinsics.pow", "^"], ["intrinsics.compose", "\\"],
 ]);
 
+// An operator section as written ((+), (+ 1), (2 +)), which the parser reads
+// as a lambda over $L,$R or $S; operand writes the section's operand.
+export function sectionSource(params: string[], body: Expr, operand: (e: Expr) => string): string | undefined {
+    const parts = body.t === "binop" ? [body.op, body.l, body.r] as const : body.t === "pipe" ? ["$", body.f, body.x] as const : undefined;
+    if (!parts) return undefined;
+    const [op, l, r] = parts, is = (e: Expr, name: string) => e.t === "var" && e.name === name, names = params.join();
+    if (names === "$L,$R" && is(l, "$L") && is(r, "$R")) return `(${op})`;
+    if (names === "$S" && is(l, "$S")) return `(${op} ${operand(r)})`;
+    if (names === "$S" && is(r, "$S")) return `(${operand(l)} ${op})`;
+    return undefined;
+}
 // An operator naming a constructor, usable in patterns: ::, :+, ...
 export function isConstructorOperator(text: string): boolean {
     return text.length > 1 && text.startsWith(":") && isOperatorName(text);
@@ -2021,7 +2032,7 @@ export function exprToSource(e: Expr): string {
         case "unop": return `${e.op === "neg" ? "-" : "!"}${exprToSource(e.e)}`;
         case "app": return `${exprToSource(e.f)} ${exprToSource(e.a)}`;
         case "patternLambda": return `${e.params.map(patternSource).join(", ")}${e.guard ? " | " + exprToSource(e.guard) : ""} -> ${exprToSource(e.body)}`;
-        case "lambda": return `${e.params.join(", ")} -> ${exprToSource(e.body)}`;
+        case "lambda": return sectionSource(e.params, e.body, exprToSource) ?? `${e.params.join(", ")} -> ${exprToSource(e.body)}`;
         case "list": return `[${itemsText(e.v.map(exprToSource))}]`;
         case "record": return `[${e.v.map(([k, x]) => `${keySource(k)}: ${exprToSource(x)}`).join(", ")}]`;
     case "floatRange": {

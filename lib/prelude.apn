@@ -45,6 +45,10 @@ infixr 9 \
 # Prefix - and ! as functions: toAST writes -x as ["negate","x"].
 negate x = -x
 not x = !x
+# A (Quote q) parameter takes its argument as written, unevaluated: q is its
+# source text. quote gives it; toAST reads it as lists (see lib/syntax.apn).
+quote (Quote q) = q
+toAST (Quote q) = intrinsics.syntax q
 
 # Functor, Applicative and Monad. IO and lists are built in; any other type
 # joins by defining instances of map, >>= and return (as the option
