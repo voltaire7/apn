@@ -3165,8 +3165,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "ternary": {
                 infer(e.cond, scope);
                 const known = boolean(e.cond, scope);
-                if (known !== undefined) return infer(known ? e.then : e.els, scope);
+                if (known !== undefined) {
+                    // Only the taken branch is checked; a return taken still
+                    // takes its monad from the other, when that one has a type.
+                    const taken = infer(known ? e.then : e.els, scope);
+                    if (!isPending(resolve(taken))) return taken;
+                    let other: Ty | undefined;
+                    if (!succeeds(() => { other = infer(known ? e.els : e.then, scope); })) return taken;
+                    return returnIn(e, taken, other!);
+                }
                 const a = infer(e.then, scope), b = infer(e.els, scope, a);
+                if (isPending(resolve(a)) !== isPending(resolve(b))) { unify(a, b, e); return returnIn(e, a, b); }
                 // A type chosen by a condition known only when it runs: one of
                 // the two, checked against the value at runtime.
                 if (resolve(a).k === "type" && resolve(b).k === "type" && text(a) !== text(b)) {
@@ -5449,6 +5458,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The monad an expression is in (a do-block, a >>= chain, a call), for a
     // run that would leave its value undecided; "?" when inferences disagree
     // (a generic function's body at different calls), which decides nothing.
+    // A ternary whose one branch is a return in the monad of the other: its
+    // type is that monad's, which the runtime realizes the return in.
+    function returnIn(e: Expr, a: Ty, b: Ty): Ty {
+        const decided = isPending(resolve(a)) ? b : a, r = resolve(decided);
+        if (isPending(r) || !monadic(r)) return a;
+        recordMonad(e, monadKind(r));
+        return decided;
+    }
+    function monadic(r: Ty): boolean {
+        return r.k === "list" || r.k === "variant" && !isIO(r) && !!instanceFor(">>=", [r]);
+    }
     function recordMonad(e: Expr, head: string): void {
         const at = sourceLocations.get(e), key = at && `${at.file}:${at.start}`;
         if (!key || !options.resultHeads || choosing) return;

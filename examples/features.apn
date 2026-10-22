@@ -1004,6 +1004,9 @@ print [check 2, check 0, check 200]
 checkChain n = unless (n > 0) (Err "not positive") >> guard (n < 100) >> return (n * 2)
 # => [Ok 4, Err "not positive", Err "guard failed: n < 100"]
 print [checkChain 2, checkChain 0, checkChain 200]
+# unless c x is c ? return [] : x: a return in one branch is in the other's monad.
+checkTernary n = n > 0 ? return n : Err "not positive"
+print [checkTernary 2, checkTernary 0]    # => [Ok 2, Err "not positive"]
 # throw e is the failure in whatever monad the context names.
 print [Option Int (throw "x"), Result Int String (throw "x")]  # => [None, Err "x"]
 # A monad of your own: a counter threading a number through each step.

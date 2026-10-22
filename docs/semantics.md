@@ -658,8 +658,9 @@ half n = Result Int String {
 A block whose statements can all be undecided at run time (`check 2` above
 runs only `return` values) takes the monad its code names, as types decide in
 Haskell: the checker finds it (`Result`, from `Err`), and the run uses it. So
-does a `>>=` or `>>` chain, and a call: `unless (n > 0) (Err "x") >> return n`
-is a Result for any `n`. Where inferences disagree (a generic function such as
+does a `>>=` or `>>` chain, a call, and a ternary whose other branch names the
+monad: `unless (n > 0) (Err "x") >> return n` and `n > 0 ? return n : Err "x"`
+are Results for any `n`, even when the condition is known. Where inferences disagree (a generic function such as
 `wrap x = return x`, used in several monads), the context decides, as before.
 `throw e` is the monad's failure, chosen by the context as `return` is: `[]`
 in a list, an action failing with `e` in IO, and an instance for each variant
