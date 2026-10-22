@@ -252,11 +252,11 @@ interface ViewContext { frames: ViewFrame[]; local: boolean }
 // (unresolved), the strings a key may be, and views whose scope is known.
 interface ViewHooks { unresolved?: (name: string) => number; key?: (key: Expr) => string[] | undefined; direct?: (e: Expr) => boolean }
 // Natives that may take a view without reading its bindings, returning it at most.
-const VIEW_SAFE_NATIVES = new Set(["print", "emit", "debug", "assert", "typeOf", "isType", "toString", "set", "Dynamic", "Mutable", "return", "primReturn",
+const VIEW_SAFE_NATIVES = new Set(["print", "emit", "debug", "assert", "typeOf", "isType", "toString", "set", "Dynamic", "Mutable", "return", "intrinsics.return",
     "Int", "UInt", "Int8", "UInt8", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64", "Int128", "UInt128",
     "Float", "Float32", "Float64", "Fraction", "Complex", "ComplexExact", "Number", "Real", "Integer", "Exact", "Inexact", "Bool", "String", "Char"]);
 // return x (return x) yields x itself when run by <-.
-const VIEW_IDENTITY_NATIVES = new Set(["print", "emit", "debug", "Dynamic", "Mutable", "return", "primReturn"]);
+const VIEW_IDENTITY_NATIVES = new Set(["print", "emit", "debug", "Dynamic", "Mutable", "return", "intrinsics.return"]);
 // Natives that fail on a record and only rearrange (or pick from) lists.
 const VIEW_LIST_NATIVES = new Set(["head", "tail", "take", "drop", "length", "null"]);
 const VIEW_PICKING_NATIVES = new Set(["head"]);
@@ -2463,7 +2463,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return list(apply(t.element, a.element, e), t.length);
     }
     // An operator intrinsic applied as a function ((+) is a section, but
-    // add = primAdd; add 1 2 applies the intrinsic).
+    // add = intrinsics.add; add 1 2 applies the intrinsic).
     function operatorApplication(op: string, a: Ty, b: Ty, e: Expr): Ty {
         if (isExplicit(a) || isExplicit(b)) { runtimeChecks++; return ["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(op) ? atom("Bool") : explicitDynamic; }
         if (["==", "!=", "&&", "||"].includes(op)) return atom("Bool");
@@ -3193,7 +3193,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (resolved.k === "intrinsic" && ["quote", "debug", "toAST"].includes(resolved.name)) {
                     return resolved.name === "quote" ? atom("String") : resolved.name === "debug" ? list(variable(), constant(0n)) : explicitDynamic;
                 }
-                if (resolved.k === "intrinsic" && resolved.name === "primEval") {
+                if (resolved.k === "intrinsic" && resolved.name === "intrinsics.eval") {
                     infer(a, scope);
                     runtimeChecks++;
                     return explicitDynamic;
@@ -5297,7 +5297,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             } };
         }
         // return x: the action yielding x.
-        if ((head.name === "return" || head.name === "primReturn") && builtin && args.length === 1) {
+        if (head.name === "return" && builtin && args.length === 1) {
             const inner = value(args[0]);
             return { action: () => inner };
         }
@@ -6279,7 +6279,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("isType", [variable(), variable()], bool);
     native("parse", [str], explicitDynamic);
     native("step", [int, variable()], explicitDynamic);
-    for (const name of ["quote", "debug", "toAST", "primEval", "use", "load"]) scope.set(name, { type: { k: "intrinsic", name } });
+    for (const name of ["quote", "debug", "toAST", "intrinsics.eval", "use", "load"]) scope.set(name, { type: { k: "intrinsic", name } });
     native("exit", [int], io(empty));
     native("null", [variable()], bool);
     native("length", [list(variable())], int);
@@ -6307,7 +6307,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("getArgs", [], io(list(str)));
     for (const name of ["entropy", "currentTime", "zoneOffset"]) native(name, [], io(int));
     // An operator's [precedence,associativity] (lib/syntax.apn's fromAST).
-    native("primFixity", [str], { k: "list", element: { k: "union", choices: [int, str] }, items: [int, str], length: constant(2n) });
+    native("intrinsics.fixity", [str], { k: "list", element: { k: "union", choices: [int, str] }, items: [int, str], length: constant(2n) });
     // p5's Sketch (a callback's p) and its objects: records whose methods are
     // Dynamic (their arguments are checked as they run).
     // A method's Dynamic parameters convert their arguments (as a (Dynamic x) parameter does).
@@ -6344,14 +6344,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         scope.set(op, { type: t });
     }
     // The prelude's Functor/Applicative/Monad functions (see lib/prelude.apn).
-    for (const [names, op, arity] of [[["map", "<$>"], "map", 2], [["<*>", "primAp"], "ap", 2], [[">>=", "primBind"], "bind", 2],
+    for (const [names, op, arity] of [[["map", "<$>"], "map", 2], [["<*>", "intrinsics.ap"], "ap", 2], [[">>=", "intrinsics.bind"], "bind", 2],
         [[">>"], "then", 2], [["=<<"], "bindFlip", 2], [["sequence"], "sequence", 1], [["mapM"], "mapM", 2]] as const) {
         for (const name of names) scope.set(name, { type: { k: "intrinsic", name: op, arity } });
     }
-    for (const name of ["return", "primReturn"]) { const t = variable(); scope.set(name, { type: fn(t, pendingTy(t)) }); }
+    for (const name of ["return", "intrinsics.return"]) { const t = variable(); scope.set(name, { type: fn(t, pendingTy(t)) }); }
     scope.set("empty", { type: pendingTy(variable()) });
-    for (const name of ["throw", "primThrow"]) { const t = variable(); scope.set(name, { type: fn(t, pendingTy(variable())) }); }
-    scope.set("primSource", { type: fn(variable(), atom("String")) });
+    for (const name of ["throw", "intrinsics.throw"]) { const t = variable(); scope.set(name, { type: fn(t, pendingTy(variable())) }); }
+    scope.set("intrinsics.source", { type: fn(variable(), atom("String")) });
     // Prefix - and ! as the prelude's functions (toAST writes -x as ["negate","x"]).
     { const a = variable(); scope.set("negate", { type: fn(a, operation("negate", [a])) }); }
     scope.set("not", { type: fn(bool, bool) });
@@ -6375,6 +6375,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         native("bracket", [a, fn(a, b), fn(a, c)], io(runType(c)));
         for (const name of ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer", "withFile"]) scope.set(name, { type: explicitDynamic });
     }
+    // The intrinsics (intrinsics.add, ...) are the fields of one record.
+    const intrinsics = [...scope].filter(([name]) => name.startsWith("intrinsics."));
+    for (const [name] of intrinsics) scope.delete(name);
+    scope.set("intrinsics", { type: { k: "record", fields: new Map(intrinsics.map(([name, entry]) => [name.slice("intrinsics.".length), entry.type])) } });
     for (const entry of scope.values()) { entry.inherited = true; entry.builtin = true; }
     if (options.initial) for (const [name, entry] of copyTypeScope(options.initial)) scope.set(name, entry);
     const originalScope = new Map(scope);

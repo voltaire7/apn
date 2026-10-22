@@ -24,24 +24,24 @@ infixl 7 * / %
 infixr 8 ^
 infixr 9 \
 
-($) = primApply
-(||) = primOr
-(&&) = primAnd
-(==) = primEq
-(!=) = primNe
-(<) = primLt
-(>) = primGt
-(<=) = primLe
-(>=) = primGe
-(::) = primCons
-(+) = primAdd
-(-) = primSub
-(++) = primAppend
-(*) = primMul
-(/) = primDiv
-(%) = primMod
-(^) = primPow
-(\) = primCompose
+($) = intrinsics.apply
+(||) = intrinsics.or
+(&&) = intrinsics.and
+(==) = intrinsics.eq
+(!=) = intrinsics.ne
+(<) = intrinsics.lt
+(>) = intrinsics.gt
+(<=) = intrinsics.le
+(>=) = intrinsics.ge
+(::) = intrinsics.cons
+(+) = intrinsics.add
+(-) = intrinsics.sub
+(++) = intrinsics.append
+(*) = intrinsics.mul
+(/) = intrinsics.div
+(%) = intrinsics.mod
+(^) = intrinsics.pow
+(\) = intrinsics.compose
 # Prefix - and ! as functions: toAST writes -x as ["negate","x"].
 negate x = -x
 not x = !x
@@ -56,16 +56,16 @@ not x = !x
 #     m >>= f       f applied to what m holds or yields, flattened
 #     m >> k        m, then k: m >>= (_ -> k)
 (<$>) = map
-return = primReturn
+return = intrinsics.return
 # throw e: the monad's failure, decided by the context as return is: [] in a
 # list, None in an Option, Err e in a Result, and in IO an action failing
 # with e. empty is throw "empty"; guard condition is return [] when it holds,
 # else a throw naming the condition: a false guard stops a do-block.
-throw = primThrow
+throw = intrinsics.throw
 empty = throw "empty"
-guard condition = condition ? return [] : throw ("guard failed: " ++ primSource condition)
-(<*>) = primAp
-(>>=) = primBind
+guard condition = condition ? return [] : throw ("guard failed: " ++ intrinsics.source condition)
+(<*>) = intrinsics.ap
+(>>=) = intrinsics.bind
 m >> k = m >>= (_ -> k)
 # f applied to what several values hold, in any monad (Elm's map2 ... map4).
 map2 f a b = map f a <*> b

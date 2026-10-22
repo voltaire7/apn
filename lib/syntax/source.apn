@@ -46,8 +46,8 @@ _isInfix _ = false
 _isCall (function :: _ :: _) = !(_tag function)
 _isCall _ = false
 _binds outer side inner = {
-    [precedence,associativity] = primFixity outer
-    [own,_] = primFixity inner
+    [precedence,associativity] = intrinsics.fixity outer
+    [own,_] = intrinsics.fixity inner
     own > precedence || own == precedence && associativity == side
 }
 

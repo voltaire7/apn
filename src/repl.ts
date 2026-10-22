@@ -2,7 +2,7 @@ import { lex, type Token } from "./lexer.ts";
 import { parse } from "./parser.ts";
 import { VERSION } from "./cli-options.ts";
 import { APNError } from "./errors.ts";
-import { NATIVE_NAMES, NATIVES, envNames, dirname, Interpreter, setInterruptFlag, resetInterrupt } from "./interp.ts";
+import { NATIVE_NAMES, envNames, dirname, Interpreter, setInterruptFlag, resetInterrupt } from "./interp.ts";
 import type { Value, Env } from "./types.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { highlightTokens, PALETTES } from "./highlight.ts";
@@ -669,7 +669,7 @@ export class ReplEditor {
 
     completionCands(): string[] {
         const s = new Set<string>(["match"]);
-        for (const [n] of NATIVES) s.add(n);
+        for (const n of NATIVE_NAMES) s.add(n);
         for (const n of envNames(this.interp.env)) s.add(n);
         return [...s].sort();
     }

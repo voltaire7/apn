@@ -219,7 +219,7 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   disagree); `eval` realizes a `pending` result by the expression it returns
   from, or the outermost one a tail call left (`decided`). `throw e` is a `pending` `throw` step, realized as `return`
   is (`instanceIn`): `[]` for a list, a failing action for IO, else the
-  `throw` instance whose head is the target's. `primSource` reads a
+  `throw` instance whose head is the target's. `intrinsics.source` reads a
   parameter's argument expression one step back, as `assert` reads its own.
 - `f a` in a written type: at runtime a variable type with `arguments` (apply
   of a variable type to a type, a `typeBind` parameter, and a `schema`
@@ -666,7 +666,7 @@ configuration. Tests: `tests/lsp-test.ts`.
 sections become names, partial applications or `"()"` nodes, and an
 application's spine is flattened. `lib/syntax.apn` loads its printer
 (`lib/syntax/source.apn`) behind `Dynamic`, as `meta` does, since syntax data
-mixes leaves and nodes; `primFixity` gives it the parser's fixities. `eval`
+mixes leaves and nodes; `intrinsics.fixity` gives it the parser's fixities. `eval`
 parses `fromAST`'s text with the parser itself, spacing rules and line limit
 off, so evaluated code cannot drift from written code. Tests:
 `tests/syntax-test.ts`.

@@ -445,13 +445,13 @@ print (map (- 2) [5,6])                   # => [3,4] (a spaced '-' subtracts: a 
 # 10b. OPERATORS ARE FUNCTIONS
 #    The prelude (lib/prelude.apn) defines every binary operator as a
 #    function bound to its symbol, with a fixity declaration:
-#        infixl 6 + - ++        (+) = primAdd
+#        infixl 6 + - ++        (+) = intrinsics.add
 #    infixl / infixr / infix give a precedence 0..9; an operator without
 #    one is infixl 9. Overloading an operator is fine; creating new
 #    operators works too but is NOT recommended (prefer a named function).
 # ---------------------------------------------------------
 print ((+) 1 2)                           # => 3
-print (primMul 6 7)                       # => 42  (the intrinsic behind *)
+print (intrinsics.mul 6 7)                # => 42  (the intrinsic behind *)
 
 # overloading: these clauses run first; anything else falls back to the
 # builtin +, as the inner (a + b) on two Ints does

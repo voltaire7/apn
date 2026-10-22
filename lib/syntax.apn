@@ -6,4 +6,4 @@ import ["sequence","text"]
 # fromAST writes such data as source; eval runs it at the program's top level.
 Dynamic $ load "syntax/source"
 fromAST syntax = String (Dynamic (_fromAST syntax))
-eval syntax = primEval (fromAST syntax)
+eval syntax = intrinsics.eval (fromAST syntax)

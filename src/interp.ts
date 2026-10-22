@@ -28,6 +28,17 @@ import { charLiteral, itemsText, spacedItem, stringLiteral } from "./separators.
 // ---------------- Evaluator ----------------
 
 // Internal control transfers, caught only by their matching execution loop.
+// Natives by name, and the intrinsics (intrinsics.add, ...) as fields of one record.
+function bindNatives(env: Env, natives: Iterable<readonly [string, number]>): void {
+    const intrinsics: [string, Value][] = [];
+    for (const [name, arity] of natives) {
+        if (name in RETIRED_NATIVES) continue;
+        const value: Value = { kind: "native", name, arity, applied: [] };
+        if (name.startsWith("intrinsics.")) intrinsics.push([name.slice("intrinsics.".length), value]);
+        else env.setLocal(name, value);
+    }
+    env.setLocal("intrinsics", { kind: "record", v: intrinsics });
+}
 class TailCall {
     constructor(readonly body: Expr, readonly env: Env) {}
 }
@@ -63,17 +74,18 @@ export const NATIVES: Array<[string, number]> = [
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
     ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1], ["use", 1],
-    ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1], ["primEval", 1], ["primFixity", 1],
+    ["emit", 1], ["step", 2], ["quote", 1], ["toAST", 1], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
-    ["primBind", 2], ["primAp", 2], ["primReturn", 1], ["primThrow", 1], ["primSource", 1],
+    ["intrinsics.bind", 2], ["intrinsics.ap", 2], ["intrinsics.return", 1], ["intrinsics.throw", 1], ["intrinsics.source", 1],
     // Natural numbers are UInt: Z is UInt 0, S n the next one.
     ["S", 1],
     // to T x writes x as a T; from T x reads it back (methods, like map).
     ["to", 2], ["from", 2],
 ];
 // The names editors color as built-in functions (the natives, cast and do).
-export const NATIVE_NAMES = new Set(["cast", "do", ...NATIVES.map(([name]) => name)]);
+// The names natives are bound by (each intrinsic is a field of intrinsics).
+export const NATIVE_NAMES = new Set(["cast", "do", ...NATIVES.map(([name]) => name.split(".")[0])]);
 const ZERO: Value = { kind: "int", v: 0n, typeName: "UInt" };
 
 export class Interpreter {
@@ -190,7 +202,7 @@ export class Interpreter {
         // Vect is the prelude's declaration.
         for (const type of TYPE_NAMES) if (type !== "Vect") builtins.setLocal(type, { kind: "type", name: type });
         builtins.setLocal("Z", ZERO);
-        for (const [name, arity] of [...NATIVES, ...STANDARD_NATIVES]) if (!(name in RETIRED_NATIVES)) builtins.setLocal(name, { kind: "native", name, arity, applied: [] });
+        bindNatives(builtins, [...NATIVES, ...STANDARD_NATIVES]);
         for (const [name, value] of this.preludeBindings) builtins.setLocal(name, value);
         const scope = new Env(builtins);
         for (const exported of file.std ? NATIVE_EXPORTS[file.std] ?? [] : []) scope.setLocal(exported, builtins.get(exported)!);
@@ -224,9 +236,7 @@ export class Interpreter {
     constructor() {
         for (const name of TYPE_NAMES) if (name !== "Vect") this.env.setLocal(name, { kind: "type", name });
         this.env.setLocal("Z", ZERO);
-        for (const [name, arity] of NATIVES) {
-            if (!(name in RETIRED_NATIVES)) this.env.setLocal(name, { kind: "native", name, arity, applied: [] });
-        }
+        bindNatives(this.env, NATIVES);
         const outer = this.env;
         this.env = new Env(outer);
         this.env.setLocal("fail", { kind: "native", name: "fail", arity: 1, applied: [] });
@@ -1370,7 +1380,7 @@ export class Interpreter {
                     }
                     case "pipe": {
                         const dollar = this.env.get("$");
-                        if (!(dollar?.kind === "native" && dollar.name === "primApply" && !dollar.applied.length)) {
+                        if (!(dollar?.kind === "native" && dollar.name === "intrinsics.apply" && !dollar.applied.length)) {
                             r = this.evalBinop({ t: "binop", op: "$", l: e.f, r: e.x });
                             break;
                         }
@@ -1466,7 +1476,7 @@ export class Interpreter {
             // Reject a definitely non-list tail without evaluating either side.
             // Unknown tails stay lazy, so head (1:missing) remains productive.
             const cons = this.env.get("::");
-            if (cons?.kind === "native" && cons.name === "primCons" && !cons.applied.length) {
+            if (cons?.kind === "native" && cons.name === "intrinsics.cons" && !cons.applied.length) {
                 throw new APNError("runtime", `cons tail expected a list, got ${e.r.t}`);
             }
         }
@@ -2192,7 +2202,7 @@ export class Interpreter {
     private loadingPrelude = true;
 
     // The builtin each method starts from (its IO and list instances).
-    static readonly METHOD_NATIVES = new Map([["map", "map"], ["primReturn", "return"], ["primThrow", "throw"], ["primBind", ">>="], ["primAp", "<*>"], ["to", "to"], ["from", "from"]]);
+    static readonly METHOD_NATIVES = new Map([["map", "map"], ["intrinsics.return", "return"], ["intrinsics.throw", "throw"], ["intrinsics.bind", ">>="], ["intrinsics.ap", "<*>"], ["to", "to"], ["from", "from"]]);
     // to T x and from T x: a program's instances first (newest first), then
     // the builtin ones: String (its text, read back as parse does), JSON
     // (JSON text) and List Char (a string's characters). to of any other type
@@ -3316,13 +3326,13 @@ export class Interpreter {
 
         const primitive = PRIMITIVE_OPERATORS.get(name);
         if (primitive) return this.operate(primitive, argsIn[0], argsIn[1]);
-        if (name === "primBind") return this.bind(argsIn[0], argsIn[1]);
-        if (name === "primAp") return this.apValue(argsIn[0], argsIn[1]);
-        if (name === "primReturn") return this.pendingReturn(argsIn[0]);
-        if (name === "primThrow") return { kind: "pending", step: { op: "throw", value: argsIn[0] } };
+        if (name === "intrinsics.bind") return this.bind(argsIn[0], argsIn[1]);
+        if (name === "intrinsics.ap") return this.apValue(argsIn[0], argsIn[1]);
+        if (name === "intrinsics.return") return this.pendingReturn(argsIn[0]);
+        if (name === "intrinsics.throw") return { kind: "pending", step: { op: "throw", value: argsIn[0] } };
         // The source a parameter's argument was written as at the call (guard's
         // condition), as assert shows its expression.
-        if (name === "primSource") {
+        if (name === "intrinsics.source") {
             let argument = argsIn[0];
             if (argument.kind === "thunk" && argument.body.t === "var") argument = argument.env?.get(argument.body.name) ?? argument;
             let body = argument.kind === "thunk" ? argument.body : undefined;
@@ -3438,7 +3448,7 @@ export class Interpreter {
             return this.sexprOf(t.body);
         }
         // An operator's precedence and associativity, as fromAST needs them.
-        if (name === "primFixity") {
+        if (name === "intrinsics.fixity") {
             const op = this.dataValue(argsIn[0]);
             if (op.kind !== "string") throw new APNError("runtime", "fixity needs an operator name");
             const { prec, assoc } = fixityOf(op.v);
@@ -3446,7 +3456,7 @@ export class Interpreter {
         }
         // eval's source runs at the program's top level, as a group: its
         // bindings stay inside it, and an action is returned, not run.
-        if (name === "primEval") {
+        if (name === "intrinsics.eval") {
             const source = this.dataValue(argsIn[0]);
             if (source.kind !== "string") throw new APNError("runtime", "eval needs syntax data, as toAST gives");
             const loose = getLooseSpacing();
@@ -4231,7 +4241,7 @@ export class Interpreter {
                 // The constructor the operator names: list cons, or one a program
                 // bound it to ((::) = Cons makes x :: xs match Cons x xs).
                 const op = p.op ?? "::", bound = this.env.get(op), named = bound && this.reference(bound);
-                if (named && !(named.kind === "native" && named.name === "primCons" && !named.applied.length)) {
+                if (named && !(named.kind === "native" && named.name === "intrinsics.cons" && !named.applied.length)) {
                     if (named.kind === "native" && named.name === "__constr" && named.arity === 2 && !named.applied.length) {
                         return this.matchPattern({ p: "constr", tag: named.tag!, args: [p.head, p.tail] }, v, binds);
                     }

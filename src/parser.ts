@@ -46,10 +46,10 @@ const RESERVED_OPERATORS = new Set(["=", "|", ":", "->", "<-", "!"]);
 // The intrinsics behind the prelude's operators (lib/prelude.apn binds
 // each symbol to one), keyed by name.
 export const PRIMITIVE_OPERATORS = new Map<string, string>([
-    ["primApply", "$"], ["primOr", "||"], ["primAnd", "&&"], ["primEq", "=="], ["primNe", "!="],
-    ["primLt", "<"], ["primGt", ">"], ["primLe", "<="], ["primGe", ">="], ["primCons", "::"],
-    ["primAdd", "+"], ["primSub", "-"], ["primAppend", "++"], ["primMul", "*"], ["primDiv", "/"],
-    ["primMod", "%"], ["primPow", "^"], ["primCompose", "\\"],
+    ["intrinsics.apply", "$"], ["intrinsics.or", "||"], ["intrinsics.and", "&&"], ["intrinsics.eq", "=="], ["intrinsics.ne", "!="],
+    ["intrinsics.lt", "<"], ["intrinsics.gt", ">"], ["intrinsics.le", "<="], ["intrinsics.ge", ">="], ["intrinsics.cons", "::"],
+    ["intrinsics.add", "+"], ["intrinsics.sub", "-"], ["intrinsics.append", "++"], ["intrinsics.mul", "*"], ["intrinsics.div", "/"],
+    ["intrinsics.mod", "%"], ["intrinsics.pow", "^"], ["intrinsics.compose", "\\"],
 ]);
 
 // An operator naming a constructor, usable in patterns: ::, :+, ...

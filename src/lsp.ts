@@ -41,7 +41,8 @@ export function symbols(text: string): Symbol[] {
 }
 
 const builtins = new Map<string, string>([
-    ...NATIVES.map(([name, arity]): [string, string] => [name, `Built-in function; ${arity} argument${arity === 1 ? "" : "s"}.`]),
+    ...NATIVES.filter(([name]) => !name.startsWith("intrinsics.")).map(([name, arity]): [string, string] => [name, `Built-in function; ${arity} argument${arity === 1 ? "" : "s"}.`]),
+    ["intrinsics", "intrinsics — the record of functions APN cannot define (the prelude binds (+) to intrinsics.add)."],
     ...TYPE_NAMES.map((name): [string, string] => [name, "Built-in type constructor."]),
     ["env", "env — action yielding a live record view of the lexical environment: scope <- env; scope.x reads and scope.x = value updates a binding."],
     ["print", "print value — action printing the value and a newline; yields []."],

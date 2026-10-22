@@ -246,8 +246,8 @@ never hangs the prompt.
 
 Every binary operator is an ordinary function defined in the language: the
 prelude (`lib/prelude.apn`, in scope everywhere) binds each symbol to an
-intrinsic function and declares its fixity, and `a + b` applies whatever `+`
-is bound to. The table below is the prelude's, from tightest to loosest
+intrinsic function, a field of the `intrinsics` record (`(+) = intrinsics.add`),
+and declares its fixity, and `a + b` applies whatever `+` is bound to. The table below is the prelude's, from tightest to loosest
 binding; operators in the same row have equal precedence.
 
 | Operation | Fixity | Associativity | Grouping example |
