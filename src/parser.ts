@@ -52,13 +52,12 @@ export const PRIMITIVE_OPERATORS = new Map<string, string>([
     ["intrinsics.mod", "%"], ["intrinsics.pow", "^"], ["intrinsics.compose", "\\"],
 ]);
 
-// An operator section as written ((+), (+ 1), (2 +)), which the parser reads
-// as a lambda over $L,$R or $S; operand writes the section's operand.
+// An operator section as written ((+ 1), (2 +)), which the parser reads as a
+// lambda over $S; operand writes the section's operand.
 export function sectionSource(params: string[], body: Expr, operand: (e: Expr) => string): string | undefined {
     const parts = body.t === "binop" ? [body.op, body.l, body.r] as const : body.t === "pipe" ? ["$", body.f, body.x] as const : undefined;
     if (!parts) return undefined;
     const [op, l, r] = parts, is = (e: Expr, name: string) => e.t === "var" && e.name === name, names = params.join();
-    if (names === "$L,$R" && is(l, "$L") && is(r, "$R")) return `(${op})`;
     if (names === "$S" && is(l, "$S")) return `(${op} ${operand(r)})`;
     if (names === "$S" && is(r, "$S")) return `(${operand(l)} ${op})`;
     return undefined;
@@ -1372,11 +1371,11 @@ class Parser {
         // op-front:  (+ 2)   (op followed by an operand, then ')')
         if (t.k === "sym" && isOperatorName(t.v) && !this.tightMinus(t)) {
             try {
-                // lone (op): a 2-arg lambda —  add = (+)
+                // lone (op): the operator's own binding, as a + b applies it —  add = (+)
                 if (lone) {
                     this.next(); // op
                     this.next(); // )
-                    return { t: "lambda", params: ["$L", "$R"], body: Parser.operatorBody(t.v, { t: "var", name: "$L" }, { t: "var", name: "$R" }) };
+                    return { t: "var", name: t.v };
                 }
                 this.next(); // op
                 const operandStart = this.peek().pos;
@@ -2027,7 +2026,7 @@ export function exprToSource(e: Expr): string {
         case "string": return stringLiteral(e.v);
         case "char": return charLiteral(e.v);
         case "placeholder": return "_";
-        case "var": return e.name;
+        case "var": return isOperatorName(e.name) ? `(${e.name})` : e.name;
         case "binop": return `${exprToSource(e.l)} ${e.op} ${exprToSource(e.r)}`;
         case "unop": return `${e.op === "neg" ? "-" : "!"}${exprToSource(e.e)}`;
         case "app": return `${exprToSource(e.f)} ${exprToSource(e.a)}`;

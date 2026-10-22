@@ -56,3 +56,22 @@ for (const [source, message, kind] of [
     ["print (1 <%%> 2)", "unbound operator '<%%>'", "type"],
     ["print (1+-2)", "unbound operator '+-'", "type"],
 ] as const) Deno.test(`operators reject: ${source}`, () => fails(source, message, kind));
+
+// An operator written infix, as (op) or as its intrinsic is checked the same
+// way, and -x and !x the same as negate x and not x.
+for (const [spellings, text] of [
+    [['f [a,b] = a\nf ([1] ++ [2,3])', 'f [a,b] = a\nf ((++) [1] [2,3])', 'f [a,b] = a\nf (intrinsics.append [1] [2,3])'], "length mismatch"],
+    [['f [a,b] = a\nf (0 :: [2,3])', 'f [a,b] = a\nf ((::) 0 [2,3])'], "length mismatch"],
+    [['y = (print 1) + 1', 'y = (+) (print 1) 1', 'y = intrinsics.add (print 1) 1'], "cannot use an action"],
+    [['foldl (x, y -> x + y) 0 ["a"]', 'foldl (+) 0 ["a"]'], "cannot combine Int and String"],
+    [['y = !(print 1)', 'y = not (print 1)'], "an action is not a condition"],
+    [['y = -"a"', 'y = negate "a"'], "cannot negate String"],
+] as const) for (const source of spellings) Deno.test(`one typing for each spelling: ${JSON.stringify(source)}`, () => fails(source, text, "type"));
+for (const [source, expected] of [
+    ["print (not 0)", ["true"]],
+    ["Cents = | Cents Int\n(Cents a) + (Cents b) = Cents (a + b)\nprint ((+) (Cents 1) (Cents 2))\nprint (zipWith (+) [1] [2])", ["Cents 3", "[3]"]],
+    ["print (+)\nprint ((+) 1)\nprint (quote (+))", ["(+)", "(1 +)", "(+)"]],
+] as const) Deno.test(`operators as functions: ${JSON.stringify(source)}`, () => {
+    const actual = run(source);
+    if (actual.join("\n") !== expected.join("\n")) throw new Error(`${actual} != ${expected}`);
+});

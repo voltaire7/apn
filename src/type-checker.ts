@@ -37,7 +37,9 @@ type Ty =
     | { k: "union"; choices: Ty[]; undecided?: boolean; name?: string }
     | { k: "mutable"; value: Ty }
     | { k: "map"; key: Ty; value: Ty }
-    | { k: "intrinsic"; name: string; arity?: number; args?: Ty[] }
+    // entries: what is known about each argument given so far (an operator's
+    // operands, as an infix operator's are known).
+    | { k: "intrinsic"; name: string; arity?: number; args?: Ty[]; entries?: Entry[] }
     // known: what a deferred call knows about its argument's value (a literal,
     // possibly symbolic in a parameter), so clause ranking can use it later.
     // written: where a call deferred to its enclosing function's calls was written.
@@ -925,7 +927,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.op.startsWith("overloaded:")) {
             const at: Expr = { t: "placeholder" }, [f, l, r] = t.args;
             if (overloadAccepts(f, l, r)) return application(application(f, { type: l }, at), { type: r }, at);
-            return operatorApplication(t.op.slice("overloaded:".length), l, r, at);
+            return operatorApplication(t.op.slice("overloaded:".length), { type: l }, { type: r }, at);
         }
         if (t.op.startsWith("field:")) {
             const name = t.op.slice(6);
@@ -1380,8 +1382,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // An Int operand the checker knows, small enough to convert to binary64
     // losslessly: arithmetic with a Float then gives a Float (dt / 8).
-    function losslessInt(e: Expr, scope: Scope): boolean {
-        const known = index(e, scope);
+    function losslessInt(known: Index | undefined): boolean {
         return !!known && !known.terms.size && (known.constant < 0n ? -known.constant : known.constant) <= 2n ** 53n;
     }
     // The result of arithmetic on two numeric types: lossless says which
@@ -2102,13 +2103,75 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // An operator intrinsic applied as a function ((+) is a section, but
     // add = intrinsics.add; add 1 2 applies the intrinsic).
-    function operatorApplication(op: string, a: Ty, b: Ty, e: Expr): Ty {
-        if (isExplicit(a) || isExplicit(b)) { runtimeChecks++; return ["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(op) ? atom("Bool") : explicitDynamic; }
+    // !x and -x, written prefix or called (not x, negate x): one typing for
+    // both. ! takes any value's truth; an action has none.
+    function prefixApplication(op: "not" | "negate", operand: Ty, e: Expr): Ty {
+        if (op === "not") {
+            if (isIO(resolve(operand))) return problem("an action is not a condition", e, "bind its result first: `x <- action`");
+            return atom("Bool");
+        }
+        if (isExplicit(operand)) { runtimeChecks++; return explicitDynamic; }
+        return operation("negate", [operand]);
+    }
+    // A prelude operator applied to its operands, written infix (a + b) or
+    // called ((+) a b, intrinsics.add a b): one typing for both. An operand
+    // known to be an Int a Float holds exactly keeps the arithmetic a Float.
+    function operatorApplication(op: string, left: Entry, right: Entry, e: Expr): Ty {
+        const a = left.type, b = right.type, lossless = [losslessInt(left.index), losslessInt(right.index)];
+        // An undecided return is not a value until its monad is named.
+        if (op !== "$" && op !== "::" && op !== ">>=" && op !== ">>" && [a, b].some(x => isPending(resolve(x)))) {
+            return problem("ambiguous: nothing decides which return", e, "name the type it should have, as in `Option Int (return ...)`");
+        }
+        // An action is not the value it yields.
+        if (op !== "$" && op !== "::" && [a, b].some(x => isIO(resolve(x)))) {
+            return problem(`operator '${op}' cannot use an action (${text(isIO(resolve(a)) ? a : b)}) as a value`, e, "bind its result first: `x <- action`");
+        }
+        if (isExplicit(a) || isExplicit(b)) {
+            runtimeChecks++;
+            return ["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(op) ? atom("Bool") : explicitDynamic;
+        }
+        if (op === "$") return application(a, right, e);
         if (["==", "!=", "&&", "||"].includes(op)) return atom("Bool");
-        if (["<", ">", "<=", ">="].includes(op)) { operation("compare", [a, b]); return atom("Bool"); }
-        if (op === "::") { unify(list(a), b, e); return list(a); }
-        if (op === "$") return application(a, { type: b }, e);
-        return operation(op, [a, b]);
+        if (["<", ">", "<=", ">="].includes(op)) {
+            operation("compare", [a, b]);
+            return atom("Bool");
+        }
+        if (op === "::") {
+            // ':' adds one element. One that does not fit the tail's
+            // elements makes a mixed list, as in a literal
+            // ([1,2]:[3,4] is [[1,2],3,4]; [1]:[[3,4]] is [[1],[3,4]]).
+            const before = resolve(b);
+            if (before.k === "list" && !fits(list(a), before)) {
+                return list(union([a, before.element]), before.length ? indexAdd(before.length, constant(1n)) : undefined);
+            }
+            unify(list(a), b, e);
+            const tail = resolve(b);
+            return list(a, tail.k === "list" && tail.length ? indexAdd(tail.length, constant(1n)) : undefined);
+        }
+        if (op === "++") {
+            const x = resolve(a), y = resolve(b);
+            if (x.k === "list" && y.k === "list") {
+                return list(union([x.element, y.element]), x.length && y.length ? indexAdd(x.length, y.length) : undefined);
+            }
+            return operation("++", [a, b]);
+        }
+        // Numeric/array arithmetic and callable * retain runtime overload selection.
+        const x = resolve(a), y = resolve(b);
+        if (x.k === "atom" && y.k === "atom") {
+            if (NUMERIC_TYPES.includes(x.name) && NUMERIC_TYPES.includes(y.name)) {
+                if (["Float", "Float32", "Float64"].includes(x.name) && ["Float", "Float32", "Float64"].includes(y.name)) {
+                    if (x.name !== "Float" && y.name !== "Float" && x.name !== y.name) return problem("mixed Float32 and Float64 arithmetic requires an explicit cast", e);
+                    return x.name === "Float" ? y : x;
+                }
+                return arithmeticResult(op, x, y, lossless);
+            }
+            if (op === "+" && x.name === "String" && y.name === "String") return atom("String");
+            return problem(`operator '${op}' cannot combine ${text(x)} and ${text(y)}`, e);
+        }
+        if (op !== "*" && op !== "\\" && (x.k === "type" || y.k === "type")) {
+            return problem(`operator '${op}' requires values, not a type constructor`, e);
+        }
+        return operation(op, [a, b], lossless);
     }
     // The record with these fields set: r.f = v, r.[f, g] = [v, w], and
     // r [f: v, g: w], which is the same update. A field it has converts its new
@@ -2143,9 +2206,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A Mutable cell applies as its contents (an index into a list cell).
         while (f.k === "mutable") f = resolve(f.value);
         if (f.k === "intrinsic") {
-            const args = [...f.args ?? [], argument.type];
-            if (args.length < (f.arity ?? 1)) return { ...f, args };
-            if (PRELUDE_OPERATORS.has(f.name)) return operatorApplication(f.name, args[0], args[1], e);
+            const args = [...f.args ?? [], argument.type], entries = [...f.entries ?? [], argument];
+            if (args.length < (f.arity ?? 1)) return { ...f, args, entries };
+            if (PRELUDE_OPERATORS.has(f.name)) return operatorApplication(f.name, entries[0], entries[1], e);
+            if (f.name === "not" || f.name === "negate") return prefixApplication(f.name, args[0], e);
             // set is an action whatever it writes: its target and value are
             // checked (a requirement) once their types are known.
             if (f.name === "set") { operation(f.name, args); return io(list(variable(), constant(0n))); }
@@ -2590,7 +2654,27 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const loc = sourceLocations.get(e);
         if (loc) { sourceLocations.set(partial, loc); sourceLocations.set(call, loc); sourceLocations.set((partial as Extract<Expr, { t: "app" }>).f, loc); }
         operatorCalls.set(e, call);
+        written.add(call).add((partial as Extract<Expr, { t: "app" }>).f);
         return call;
+    }
+    // A prelude operator written as a function is typed as it is written
+    // infix: (+) a b as a + b, and (+) alone as x, y -> x + y. (The calls
+    // operatorCall writes for a program's own operator clauses are not.)
+    const written = new WeakSet<Expr>(), asInfix = new WeakMap<Expr, Expr>();
+    function infixSpelling(e: Expr, scope: Scope): Expr | undefined {
+        const name = (x: Expr) => x.t === "var" && PRELUDE_OPERATORS.has(x.name) && !constructorOperators.has(x.name) && scope.has(x.name) ? x.name : undefined;
+        if (written.has(e)) return undefined;
+        let infix = asInfix.get(e);
+        if (!infix && e.t === "app" && e.f.t === "app" && name(e.f.f)) infix = { t: "binop", op: name(e.f.f)!, l: e.f.a, r: e.a };
+        if (!infix && name(e)) {
+            const [l, r]: Expr[] = [{ t: "var", name: "$L" }, { t: "var", name: "$R" }];
+            infix = { t: "lambda", params: ["$L", "$R"], body: { t: "binop", op: name(e)!, l, r } };
+        }
+        if (!infix) return undefined;
+        const loc = sourceLocations.get(e);
+        if (loc && !asInfix.has(e)) sourceLocations.set(infix, loc);
+        asInfix.set(e, infix);
+        return infix;
     }
     // Whether an operator overload's clauses accept operands of these
     // (known) types, tried on copies.
@@ -2728,6 +2812,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "string":
                 return atom("String");
             case "var": {
+                const infix = infixSpelling(e, scope);
+                if (infix) return infer(infix, scope, expected);
                 let entry = scope.get(e.name);
                 const declaration = forwardDefinitions.get(e.name);
                 if (declaration && entry?.type === forward.get(e.name)) {
@@ -2796,6 +2882,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return functionType(e.params, e.body, scope, undefined, e.guard, alternativeInputs.get(e), alternativeClaims.get(e));
             case "app":
             case "pipe": {
+                const infix = infixSpelling(e, scope);
+                if (infix) return infer(infix, scope, expected);
                 if (e.t === "pipe" && builtinOperator(scope.get("$")?.type) !== "$") {
                     const call: Expr = { t: "binop", op: "$", l: e.f, r: e.x };
                     const loc = sourceLocations.get(e);
@@ -3151,67 +3239,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return value;
                 };
                 const [a, b] = operands ?? [constrain(infer(e.l, scope)), constrain(infer(e.r, scope))];
-                // An undecided return is not a value until its monad is named.
-                if (op !== "$" && op !== "::" && op !== ">>=" && op !== ">>" && [a, b].some(x => isPending(resolve(x)))) {
-                    return problem("ambiguous: nothing decides which return", e, "name the type it should have, as in `Option Int (return ...)`");
-                }
-                // An action is not the value it yields.
-                if (op !== "$" && op !== "::" && [a, b].some(x => isIO(resolve(x)))) {
-                    return problem(`operator '${op}' cannot use an action (${text(isIO(resolve(a)) ? a : b)}) as a value`, e, "bind its result first: `x <- action`");
-                }
-                if (isExplicit(a) || isExplicit(b)) {
-                    runtimeChecks++;
-                    return ["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(op) ? atom("Bool") : explicitDynamic;
-                }
-                if (op === "$") return application(a, { type: b, ...valueEntry(e.r, scope) }, e.r);
-                if (["==", "!=", "&&", "||"].includes(op)) return atom("Bool");
-                if (["<", ">", "<=", ">="].includes(op)) {
-                    operation("compare", [a, b]);
-                    return atom("Bool");
-                }
-                if (op === "::") {
-                    // ':' adds one element. One that does not fit the tail's
-                    // elements makes a mixed list, as in a literal
-                    // ([1,2]:[3,4] is [[1,2],3,4]; [1]:[[3,4]] is [[1],[3,4]]).
-                    const before = resolve(b);
-                    if (before.k === "list" && !fits(list(a), before)) {
-                        return list(union([a, before.element]), before.length ? indexAdd(before.length, constant(1n)) : undefined);
-                    }
-                    unify(list(a), b, e);
-                    const tail = resolve(b);
-                    return list(a, tail.k === "list" && tail.length ? indexAdd(tail.length, constant(1n)) : undefined);
-                }
-                if (op === "++") {
-                    const x = resolve(a), y = resolve(b);
-                    if (x.k === "list" && y.k === "list") {
-                        return list(union([x.element, y.element]), x.length && y.length ? indexAdd(x.length, y.length) : undefined);
-                    }
-                    return operation("++", [a, b]);
-                }
-                // Numeric/array arithmetic and callable * retain runtime overload selection.
-                const x = resolve(a), y = resolve(b);
-                if (x.k === "atom" && y.k === "atom") {
-                    if (NUMERIC_TYPES.includes(x.name) && NUMERIC_TYPES.includes(y.name)) {
-                        if (["Float", "Float32", "Float64"].includes(x.name) && ["Float", "Float32", "Float64"].includes(y.name)) {
-                            if (x.name !== "Float" && y.name !== "Float" && x.name !== y.name) return problem("mixed Float32 and Float64 arithmetic requires an explicit cast", e);
-                            return x.name === "Float" ? y : x;
-                        }
-                        return arithmeticResult(op, x, y, [losslessInt(e.l, scope), losslessInt(e.r, scope)]);
-                    }
-                    if (op === "+" && x.name === "String" && y.name === "String") return atom("String");
-                    return problem(`operator '${op}' cannot combine ${text(x)} and ${text(y)}`, e);
-                }
-                if (op !== "*" && op !== "\\" && (x.k === "type" || y.k === "type")) {
-                    return problem(`operator '${op}' requires values, not a type constructor`, e);
-                }
-                return operation(op, [a, b], [losslessInt(e.l, scope), losslessInt(e.r, scope)]);
+                if (op === "$" && !isExplicit(a) && !isExplicit(b)) return application(a, { type: b, ...valueEntry(e.r, scope) }, e.r);
+                return operatorApplication(op, { type: a, index: index(e.l, scope) }, { type: b, index: index(e.r, scope) }, e);
             }
-            case "unop": {
-                const operand = infer(e.e, scope);
-                if (e.op === "not") return atom("Bool");
-                if (isExplicit(operand)) { runtimeChecks++; return explicitDynamic; }
-                return operation("negate", [operand]);
-            }
+            case "unop": return prefixApplication(e.op === "not" ? "not" : "negate", infer(e.e, scope), e);
             case "block": {
                 const child: Scope = new BlockScope(scope);
                 let result: Ty = list(dynamic, constant(0n)), action = false;
@@ -4358,6 +4389,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "string": return { string: e.v };
             case "char": return { char: e.v };
             case "var": {
+                // (+) is x, y -> x + y here too.
+                const infix = env.has(e.name) ? undefined : infixSpelling(e, scope);
+                if (infix) return evaluateKnown(infix, env, scope, depth);
                 if (env.has(e.name)) return lookup(env, e.name);
                 const entry = scope.get(e.name);
                 if (!entry) return undefined;
@@ -5717,8 +5751,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     for (const name of ["throw", "intrinsics.throw"]) { const t = variable(); scope.set(name, { type: fn(t, pendingTy(variable())) }); }
     scope.set("intrinsics.source", { type: fn(variable(), atom("String")) });
     // Prefix - and ! as the prelude's functions (toAST writes -x as ["negate","x"]).
-    { const a = variable(); scope.set("negate", { type: fn(a, operation("negate", [a])) }); }
-    scope.set("not", { type: fn(bool, bool) });
+    for (const name of ["negate", "not"]) scope.set(name, { type: { k: "intrinsic", name, arity: 1 } });
     // map2 f a b ... map4: map then <*>, in any monad (the prelude's).
     for (const [name, arity] of [["map2", 3], ["map3", 4], ["map4", 5]] as const) scope.set(name, { type: { k: "intrinsic", name, arity } });
     // when and unless: action >> return [], in the action's monad.

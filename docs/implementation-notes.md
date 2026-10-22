@@ -132,7 +132,7 @@ as text imports, so editor launchers must let Deno read them.
 Operators: the lexer reads a maximal run of operator characters as one token;
 the parser seeds its fixity table from `lib/prelude.apn` at module load and
 pre-scans every parsed source for fixity declarations, which persist across
-parses (later REPL input). The prelude binds each operator to a `prim*`
+parses (later REPL input). The prelude binds each operator to an `intrinsics.*`
 native (`PRIMITIVE_OPERATORS` in `src/parser.ts`), forced at startup so a
 binop finds the native itself: `evalBinop` then runs `operate` directly
 (strict operands evaluated in place, `::`/`++`/`&&`/`||`/`$` over thunks) and
@@ -143,7 +143,11 @@ extends. The checker gives operator names an intrinsic type per builtin; a
 binop on another binding is inferred as the call `(op l) r`, and an overload
 of a prelude operator falls back to the builtin rule when its clauses do not
 accept known operand types; operands not known yet make an `overloaded:op`
-operation that chooses once they are. A math function's clauses get an
+operation that chooses once they are. `(op)` parses as the name `op`;
+`infixSpelling` has the checker read `(op) a b` as the binop and a lone `(op)`
+as `$L, $R -> $L op $R`, and `operatorApplication` and `prefixApplication`
+are the one typing a binop or unop shares with a call of the intrinsic
+(`intrinsics.add`, `negate`, `not`). A math function's clauses get an
 `overload` type of themselves and the previous meaning (also for their own
 recursive calls). Tests: `tests/operators-test.ts`,
 `tests/default-checking-test.ts`. `cast` is a `clauseFn`, not a native:

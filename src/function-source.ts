@@ -1,7 +1,7 @@
 import { keySource } from "./record-keys.ts";
 import type { Expr, Pattern } from "./ast.ts";
 import type { Value } from "./types.ts";
-import { exprToSource, fixityOf, sectionSource } from "./parser.ts";
+import { exprToSource, fixityOf, PRIMITIVE_OPERATORS, sectionSource } from "./parser.ts";
 import { compoundArgument, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
 
@@ -64,12 +64,7 @@ export function argument(v: Value): string {
 }
 // An operator's lambda as source writes it: (+), (1 +), (+ 1).
 function operatorForm(params: string[], body: Expr, applied: Value[]): string | undefined {
-    if (!applied.length) return sectionSource(params, body, e => source(e, 11));
-    const is = (e: Expr, name: string) => e.t === "var" && e.name === name;
-    if (body.t === "binop" && applied.length === 1 && params.join() === "$L,$R" && is(body.l, "$L") && is(body.r, "$R")) {
-        return `(${argument(applied[0])} ${body.op})`;
-    }
-    return undefined;
+    return applied.length ? undefined : sectionSource(params, body, e => source(e, 11));
 }
 export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" | "native" }>): string {
     if (v.kind === "closure") {
@@ -80,7 +75,10 @@ export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" 
         return applied.length ? `(${text})${applied.map(a => ` ${argument(a)}`).join("")}` : text;
     }
     if (v.kind === "native") {
-        const name = v.tag ?? v.name;
+        // An operator's intrinsic shows as the operator: (+), and (1 +) given 1.
+        const op = PRIMITIVE_OPERATORS.get(v.name);
+        if (op && v.applied.length === 1) return `(${argument(v.applied[0])} ${op})`;
+        const name = op ? `(${op})` : v.tag ?? v.name;
         return name + v.applied.map(a => ` ${argument(a)}`).join("");
     }
     // Each clause is a pattern lambda, one per line, with the arguments

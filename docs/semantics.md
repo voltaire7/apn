@@ -160,7 +160,8 @@ selected branch runs. The ternary's `:` is not cons (`::`), so a branch may
 cons freely: `b ? x :: xs : []`.
 
 Operator sections: `(+ 2)` is `x -> x + 2`, `(2 +)` is `x -> 2 + x`, and a lone
-operator `(+)` is a two-argument function. `-` works in the same positions:
+operator `(+)` is the function `+` is bound to, so `(+) a b` is `a + b` in every
+way, its checking included (as `negate x` is `-x` and `not x` is `!x`). `-` works in the same positions:
 `(- 2)` is `x -> x - 2`, `(10 -)` is `x -> 10 - x` and `(-)` subtracts, while
 `(-2)` is the number.
 

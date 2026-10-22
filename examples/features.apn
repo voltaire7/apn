@@ -452,6 +452,8 @@ print (map (- 2) [5,6])                   # => [3,4] (a spaced '-' subtracts: a 
 # ---------------------------------------------------------
 print ((+) 1 2)                           # => 3
 print (intrinsics.mul 6 7)                # => 42  (the intrinsic behind *)
+# (op) a b is a + b in every way, checking included; not x is !x, negate x is -x.
+print [not 0, !0]                         # => [true,true]
 
 # overloading: these clauses run first; anything else falls back to the
 # builtin +, as the inner (a + b) on two Ints does

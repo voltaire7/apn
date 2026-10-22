@@ -777,12 +777,11 @@ export class Interpreter {
                 return node(of(head), ...args.map(of));
             }
             case "lambda": {
-                // An operator section, as written: (+) its name, (2 +) the operator
-                // given its left operand, (+ 2) a "()" node.
+                // An operator section, as written: (2 +) the operator given its
+                // left operand, (+ 2) a "()" node.
                 const op = e.body.t === "binop" ? e.body.op : e.body.t === "pipe" ? "$" : undefined;
                 const [l, r] = e.body.t === "binop" ? [e.body.l, e.body.r] : e.body.t === "pipe" ? [e.body.f, e.body.x] : [];
                 const own = (x: Expr | undefined, param: string) => x?.t === "var" && x.name === param;
-                if (op && e.params.join() === "$L,$R") return text(op);
                 if (op && e.params.join() === "$S" && own(l, "$S")) return node(text("()"), text(op), of(r!));
                 if (op && e.params.join() === "$S" && own(r, "$S")) return node(text(op), of(l!));
                 return node(text("->"), mkList(e.params.map(text)), of(e.body));
@@ -2211,12 +2210,9 @@ export class Interpreter {
         }
         throw new APNError("runtime", `no ${method} instance for ${this.renderString(type)}`, { hint: `define one, such as \`${method} ${this.renderString(type)} x = ...\`` });
     }
-    // The method a value is: its builtin, or an operator section of it ((>>=)).
+    // The method a value is: its builtin ((>>=) is intrinsics.bind).
     private methodOf(v: Value): string | undefined {
-        if (v.kind === "native" && !v.applied.length) return Interpreter.METHOD_NATIVES.get(v.name);
-        if (v.kind !== "closure" || v.applied?.length || v.params.join() !== "$L,$R" || v.body.t !== "binop") return undefined;
-        const op = v.body.op, bound = v.env?.get(op), base = bound && this.reference(bound);
-        return base?.kind === "native" && !base.applied.length ? Interpreter.METHOD_NATIVES.get(base.name) : undefined;
+        return v.kind === "native" && !v.applied.length ? Interpreter.METHOD_NATIVES.get(v.name) : undefined;
     }
     // A method as an overloaded function shows itself: its builtin (by name),
     // then each instance's clauses, one per line, oldest first.
