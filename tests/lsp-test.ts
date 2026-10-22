@@ -159,6 +159,12 @@ Deno.test("lint reports a clause or alternative that never runs", () => {
     // a rebinding starts a new version.
     equal(unreachable("f x = 0\nf 1 = 2\ng x = 0\ng (Int n) = n\nk x = 0\nk y = 9"), []);
     equal(unreachable("n x x = 0\nn [a] b = 1\nw = x | x > 0 -> 1\nw [a] = 2\nr x = 0\nr = 5\nr [a] = 1"), []);
+    // Constructors of imported modules, standard or the program's own, rank no
+    // higher either; one the linter cannot resolve is left alone.
+    equal(unreachable("import \"browser\"\nv _ = 0\nv Visible = 1"), [2]);
+    const cards = new URL("./fixtures/lint/", import.meta.url).pathname;
+    equal(lint("import \"cards\"\ns _ = 0\ns Hearts = 1", false, cards).filter(d => d.code === "unreachable-clause").map(d => d.range.start.line), [2]);
+    equal(unreachable("import \"cards\"\ns _ = 0\ns Hearts = 1"), []);
     // match tries alternatives in order: any after an unconditional one never runs.
     equal(unreachable("v = match 3 [\n    x -> 0\n    1 -> 5\n]"), [2]);
     equal(unreachable("v = match 3 [\n    1 -> 5\n    x -> 0\n]"), []);

@@ -10,6 +10,13 @@ import { RETIRED_NATIVES, nativeModule } from "./native-exports.ts";
 import { standardExports } from "./modules.ts";
 import { itemsText } from "./separators.ts";
 
+// A file URI's folder, where its imports resolve; "." for any other document.
+function folderOf(uri: string): string {
+    if (!uri.startsWith("file:")) return ".";
+    const path = new URL(uri).pathname;
+    return path.slice(0, path.lastIndexOf("/") + 1);
+}
+
 type Message = { jsonrpc?: string; id?: number | string | null; method?: string; params?: any };
 type Document = { text: string; version: number };
 type Symbol = { name: string; kind: number; range: Range; selectionRange: Range; detail: string };
@@ -111,7 +118,7 @@ export class LanguageServer {
             error: { code, message: messageText } });
         const publish = (uri: string, document?: Document) => output.push({ jsonrpc: "2.0",
             method: "textDocument/publishDiagnostics", params: { uri,
-                ...(document ? { version: document.version } : {}), diagnostics: document ? lint(document.text, this.typeChecking) : [] } });
+                ...(document ? { version: document.version } : {}), diagnostics: document ? lint(document.text, this.typeChecking, folderOf(uri)) : [] } });
         const p = message.params ?? {};
         if (message.method === "exit") { this.exitCode = this.shutdown ? 0 : 1; return output; }
         if (message.method === "initialize" && !this.initialized) {

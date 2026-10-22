@@ -1,25 +1,36 @@
 import { clauseKey, METHODS, sourceLocations, type Expr, type Pattern, type TopLevel } from "./ast.ts";
 import type { Diagnostic } from "./lint.ts";
+import { resolveModule } from "./modules.ts";
+import { parseDocument } from "./parser.ts";
 
 // This analysis never evaluates APN. Unknown families or dynamic handler lists
-// are left to runtime matching; guards cannot establish total coverage.
-export function matchDiagnostics(program: TopLevel[], source: string): Diagnostic[] {
+// are left to runtime matching; guards cannot establish total coverage. The
+// families it knows are the program's and those the modules it imports declare
+// (resolved from directory, as the interpreter resolves them, and read only).
+export function matchDiagnostics(program: TopLevel[], source: string, directory = "."): Diagnostic[] {
     const families = new Map<string, Map<string, number>>();
     const constructors = new Map<string, string>();
     const add = (name: string, variants: Array<[string, number]>) => {
         families.set(name, new Map(variants));
         for (const [tag] of variants) constructors.set(tag, name);
     };
-    for (const node of program) {
-        if (node.t === "type") add(node.def.name, node.def.variants.map(v => [v.tag, v.arity]));
-        if (node.t === "expr" && node.value.t === "import") {
-            const modules = [node.value.module].flat();
-            if (modules.includes("option")) {
-                add("Option", [["Some", 1], ["None", 0]]);
-                add("Result", [["Ok", 1], ["Err", 1]]);
+    const visited = new Set<string>();
+    const declare = (statements: TopLevel[], from: string) => {
+        for (const node of statements) {
+            if (node.t === "type") add(node.def.name, node.def.variants.map(v => [v.tag, v.arity]));
+            if (node.t !== "expr" || node.value.t !== "import") continue;
+            for (const spec of [node.value.module].flat()) {
+                let module;
+                try { module = resolveModule(spec, from); } catch { continue; }
+                if (!module || visited.has(module.key)) continue;
+                visited.add(module.key);
+                for (const file of module.files) {
+                    try { declare(parseDocument(file.source), file.directory); } catch { /* a module that does not parse declares nothing here */ }
+                }
             }
         }
-    }
+    };
+    declare(program, directory);
     type Scope = Map<string, string | undefined>;
     const diagnostics: Diagnostic[] = [];
     const pos = (offset: number) => {

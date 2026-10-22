@@ -22,9 +22,10 @@ export function position(source: string, offset: number): Position {
     return { line: lines.length - 1, character: lines.at(-1)!.length };
 }
 
-export function lint(source: string, types = false): Diagnostic[] {
+// directory: where the source's imports are resolved from (its file's folder).
+export function lint(source: string, types = false, directory = "."): Diagnostic[] {
     try {
-        const program = parseDocument(source), diagnostics = [...matchDiagnostics(program, source), ...unusedDiagnostics(program, source), ...divisionDiagnostics(program, source), ...terminationDiagnostics(program, source)];
+        const program = parseDocument(source), diagnostics = [...matchDiagnostics(program, source, directory), ...unusedDiagnostics(program, source), ...divisionDiagnostics(program, source), ...terminationDiagnostics(program, source)];
         if (types) for (const issue of checkTypes(program).issues) diagnostics.push({
             range: { start: position(source, issue.pos), end: position(source, issue.pos + issue.len) },
             severity: 1, source: "apn", code: "type", message: issue.message,
@@ -51,7 +52,7 @@ export async function runLint(args: string[]): Promise<number> {
     let failed = false;
     for (const file of files) {
         try {
-            const diagnostics = lint(await Deno.readTextFile(file), types);
+            const diagnostics = lint(await Deno.readTextFile(file), types, file.slice(0, file.lastIndexOf("/") + 1) || ".");
             results.push({ file, diagnostics });
             if (diagnostics.some(d => d.severity === 1)) failed = true;
             if (!json) for (const d of diagnostics) {

@@ -1,0 +1,2 @@
+# A module declaring a family, for the linter's imported constructors.
+Suit = Hearts | Spades
