@@ -269,34 +269,36 @@ Run `apn examples/standard-library.apn` for a complete example.
 ## Code as data — `syntax`
 
 ```apn
+toAST (f x + 1)                        # ["+",["f","x"],1]   (prelude)
 import "syntax"
-toAST (f x + 1)    # Apply (Apply (Name "+") (Apply (Name "f") (Name "x"))) (Numeral 1)
-fromAST (toAST (n -> n * 2 + 1))               # "n -> n * 2 + 1"
-eval (Apply (Name "sqrt") (Numeral 16))         # 4
+fromAST (toAST (n -> n * 2 + 1))       # "n -> n * 2 + 1"
+doubled e = ["*",e,2]
+eval (doubled ["sqrt",16])             # 8
 ```
 
-`Expr` is APN's syntax as data: `Name`, `Hole` (`_`), `Numeral`, `Text`,
-`Character`, `Boolean`, `Apply`, `Section` (`(+ 1)`), `Negate`, `Not`, `If`,
-`Lambda` (parameters, optional guard, body), `Items` (a list), `Range`,
-`Fields` (a record), `Field` (`r.x`), `Select` (`r.[x,y]`, `r.(e)`), `Block`,
-`Bind` (`=`), `Run` (`<-`) and `Import`. It records an expression as written,
-with no second form for what reads the same:
+`toAST e` gives `e`, unevaluated and unchecked, as lists (a `Dynamic` value):
 
-- an operator is an application of its name: `a + b` is
-  `Apply (Apply (Name "+") a) b`, `(2 +)` is `Apply (Name "+") (Numeral 2)`
-  and `(+)` is `Name "+"`;
-- a pattern is the expression it is written as: `Some x`, `x :: xs`, `[a,b]`
-  and `_` are `Apply`, `Items` and `Hole`;
-- every binding is a `Bind` of its left side to its right: `x = 1`, `f n = ...`
-  (one per clause), `Some v = m`, `r.x = 1` and `xs 0 = 1` alike; what a
-  left side means is decided where it runs, as for written code.
+- a leaf is a number, a Bool, a name (`"x"`, `"+"`, `"Some"`) or a literal's
+  source text, quotes included (`"\"hi\""`, `"'c'"`), so `f x` is
+  `["f","x"]` and `f "x"` is `["f","\"x\""]`;
+- an application is a list, function first: `f x y` is `["f","x","y"]` and
+  `a + b` is `["+","a","b"]`; `(2 +)` is `["+",2]`, `(+)` is `"+"`, and
+  negation is a call (`-x` is `["negate","x"]`, `!b` is `["not","b"]`);
+- other syntax is a list headed by a token no name can be: `["[]",...]` a
+  list, `["[:]",[key,value]...]` a record, `["->",[params],body]` a lambda
+  (a guard makes the body `["|",guard,body]`), `["?:",c,a,b]`, `[".",r,key]`
+  (or a selection: `[".",r,["[]","x","y"]]`), `["{}",...]` a block,
+  `["..",low,high]` (`[]` for no end; a step adds the second element),
+  `["=",left,right]`, `["<-",left,right]`, `["()","+",x]` the section
+  `(+ x)`, and `["import",...]`;
+- a pattern is written as the expression it is (`Some x` is `["Some","x"]`),
+  and every binding is an `"="` node: `f n = ...` is `["=",["f","n"],...]`.
 
-`toAST e` is `e`'s Expr; `e` is neither evaluated nor checked. `fromAST`
-writes an Expr as source, which reads back as the same Expr, parenthesized
-only where precedence needs it. `eval` runs an Expr as written source runs, at
-the program's top level (as Lisp's `eval` uses the global environment): its
-bindings stay inside it, an action it makes is returned, not run, and its
-result is `Dynamic`. Source positions and comments are not part of an Expr.
+Building code is building a list. `fromAST` writes such data as source,
+parenthesized only where precedence needs it, which reads back as the same
+data. `eval` runs it as written source runs, at the program's top level (as
+Lisp's `eval` uses the global environment): its bindings stay inside it, an
+action it makes is returned, not run, and its result is `Dynamic`.
 
 ## Metacircular evaluator — `meta`
 

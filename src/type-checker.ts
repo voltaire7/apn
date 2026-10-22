@@ -3188,17 +3188,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (resolved.k === "intrinsic" && resolved.name === "do" && a.t === "list") {
                     return infer({ t: "block", stmts: a.v, style: "{" }, scope);
                 }
-                if (resolved.k === "intrinsic" && ["quote", "debug"].includes(resolved.name)) {
-                    return resolved.name === "quote" ? atom("String") : list(variable(), constant(0n));
+                // quote and toAST read their argument unevaluated (unchecked); syntax
+                // data is Dynamic, as eval's result is.
+                if (resolved.k === "intrinsic" && ["quote", "debug", "toAST"].includes(resolved.name)) {
+                    return resolved.name === "quote" ? atom("String") : resolved.name === "debug" ? list(variable(), constant(0n)) : explicitDynamic;
                 }
-                // syntax.apn's toAST = primToAST [hole: Hole, ...]: an Expr, its
-                // argument unevaluated (unchecked); eval's result is Dynamic.
-                if (resolved.k === "intrinsic" && resolved.name === "primToAST") {
-                    const constructors = resolve(infer(a, scope));
-                    const expr = constructors.k === "record" ? constructors.fields.get("hole") : undefined;
-                    return { k: "intrinsic", name: "toAST", args: expr ? [expr] : [] };
-                }
-                if (resolved.k === "intrinsic" && resolved.name === "toAST") return resolved.args?.[0] ?? explicitDynamic;
                 if (resolved.k === "intrinsic" && resolved.name === "primEval") {
                     infer(a, scope);
                     runtimeChecks++;
@@ -6281,7 +6275,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("isType", [variable(), variable()], bool);
     native("parse", [str], explicitDynamic);
     native("step", [int, variable()], explicitDynamic);
-    for (const name of ["quote", "debug", "primToAST", "primEval", "use", "load"]) scope.set(name, { type: { k: "intrinsic", name } });
+    for (const name of ["quote", "debug", "toAST", "primEval", "use", "load"]) scope.set(name, { type: { k: "intrinsic", name } });
     native("exit", [int], io(empty));
     native("null", [variable()], bool);
     native("length", [list(variable())], int);

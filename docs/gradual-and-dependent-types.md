@@ -596,8 +596,8 @@ Record-template patterns convert positional lists at runtime and
 are checked against their named field types. Inferred parameters do not silently
 convert arguments; actual constructors and converting patterns provide conversions.
 
-Runtime reflection uses `Dynamic env`. The result of `from String`, running syntax
-with `eval`, debugger `step`, and native FFI/resource interfaces carries Dynamic
+Runtime reflection uses `Dynamic env`. The result of `from String`, syntax inspection
+with `toAST` and `eval`, debugger `step`, and native FFI/resource interfaces carries Dynamic
 where its shape cannot be known statically. The metacircular evaluator declares
 its runtime parser/evaluator execution as Dynamic. HTML, browser configuration,
 and p5 payloads declare Dynamic fields for host-interpreted data and callbacks.

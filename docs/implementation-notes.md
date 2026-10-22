@@ -662,15 +662,14 @@ configuration. Tests: `tests/lsp-test.ts`.
 
 ## Code as data
 
-`lib/syntax.apn` declares `Expr` and passes its constructors to `primToAST`
-as a record, so the type is written once; `astOf` builds from the parser's
-nodes (operator sections become `Name`, a partial application or `Section`).
-`primToAST` takes its expression argument unevaluated, so `toAST` must stay
-point-free. `eval` parses `fromAST`'s text with the parser itself, spacing
-rules and line limit off, rather than converting an Expr back to nodes, so
-evaluated code cannot drift from written code. The checker types `toAST`'s
-result as the record's `hole` field type and never checks its argument.
-Tests: `tests/syntax-test.ts`.
+`toAST` (`sexprOf`) reads its argument's parse tree, unevaluated: operator
+sections become names, partial applications or `"()"` nodes, and an
+application's spine is flattened. `lib/syntax.apn` loads its printer
+(`lib/syntax/source.apn`) behind `Dynamic`, as `meta` does, since syntax data
+mixes leaves and nodes; `primFixity` gives it the parser's fixities. `eval`
+parses `fromAST`'s text with the parser itself, spacing rules and line limit
+off, so evaluated code cannot drift from written code. Tests:
+`tests/syntax-test.ts`.
 
 ## Metacircular evaluator
 

@@ -646,17 +646,17 @@ debug $ step 2 inner         # => return 42     (the block's tail statement)
 print (quote (1 + 1))         # => (1 + 1)
 print $ quote $ 1 + 1         # => 1 + 1
 
-# Code as data (import "syntax"): toAST gives an expression, unevaluated, as an
-# Expr (an operator is an application of its name; a pattern is the expression
-# it is written as); fromAST writes one back; eval runs one at the top level.
+# toAST — an expression as lists, unevaluated: an application is a list,
+# function first; a name is a string, a string literal its quoted source.
+print (toAST (1 + 2))         # => ["+",1,2]
+print (toAST (f x "y"))       # => ["f","x","\"y\""]
+print (toAST [x -> x, 2])     # => ["[]",["->",["x"],"x"],2]
+# import "syntax": fromAST writes such data back; eval runs it at the top level.
 import "syntax"
-print (toAST (1 + 2))         # => Apply (Apply (Name "+") (Numeral 1)) (Numeral 2)
-print (toAST (f "x"))         # => Apply (Name "f") (Text "x")   (names are not strings)
 print (fromAST (toAST (n -> n * 2 + 1)))  # => n -> n * 2 + 1
-print (fromAST (Apply (Name "sqrt") (Numeral 16)))  # => sqrt 16
-print (eval (Apply (Name "sqrt") (Numeral 16)))     # => 4
-applyTwice (Apply f x) = Apply f (Apply f x)
-print (eval (applyTwice (toAST (negate 3))))  # => 3
+doubled e = ["*",e,2]         # building code is building a list
+print (fromAST (doubled (toAST (x + 1))))  # => (x + 1) * 2
+print (eval (doubled ["sqrt",16]))        # => 8
 
 # to String / from String (string <-> value conversion; to String quotes strings)
 print (to String "hi")       # => "hi"
@@ -1673,7 +1673,7 @@ print [do [1,2], { 1; 2 }]         # => [2,2]: no action, so the last value
 print [do [], {}]                   # => [[],[]]: no statements
 print [x = 1, x + 1]                # => [1,2]: a list item may be a binding
 print [do [x = 1, x + 1], { x = 1; x + 1 }]  # => [2,2]
-print (fromAST (toAST [x = 1, x + 1]))  # => [x = 1, x + 1]
+print (toAST [x = 1, x + 1])        # => ["[]",["=","x",1],["+","x",1]]
 
 # A new top-level statement after a closed block must start at column one.
 # f = { print "hi" }

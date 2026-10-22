@@ -758,7 +758,7 @@ does not evaluate its `halt` action.
 ## Inspection and numbers
 
 `quote` gives its argument's source text without evaluating it, groups' parentheses
-included; [`toAST`](standard-library.md#code-as-data--syntax) gives it as data. `debug`
+included; [`toAST`](standard-library.md#code-as-data--syntax) gives it as lists. `debug`
 forces its argument without running a returned action: `a = print 3; debug a`
 prints `a`. `step` retains
 its expression-inspection/evaluation rules demonstrated in `examples/features.apn`.
