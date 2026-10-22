@@ -657,6 +657,15 @@ print (fromAST (toAST (n -> n * 2 + 1)))  # => n -> n * 2 + 1
 doubled e = ["*",e,2]         # building code is building a list
 print (fromAST (doubled (toAST (x + 1))))  # => (x + 1) * 2
 print (eval (doubled ["sqrt",16]))        # => 8
+# Macro f: a call gives f its arguments as toAST data, unevaluated, and the
+# data f returns runs in place of the call, in the caller's scope.
+ifNot = Macro (condition,body -> ["?:",condition,["{}"],body])
+ifNot (1 > 2) (print "ran")   # => ran
+pairOf = Macro (e -> ["[]",e,e])
+pairUp n = pairOf (n + 1)
+print (pairUp 4)              # => [5,5]
+traced = Macro (e -> ["++", to String (fromAST e ++ " = "), ["to","String",e]])
+print (traced (2 * 3 + 1))    # => 2 * 3 + 1 = 7
 
 # to String / from String (string <-> value conversion; to String quotes strings)
 print (to String "hi")       # => "hi"

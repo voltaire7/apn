@@ -152,7 +152,8 @@ export function flattenTypedPatterns(node: unknown, parameters: (name: string) =
 }
 
 // Source metadata is kept out of AST serialization and source round-trips.
-export interface SourceLocation { source: string; file: string; start: number; end: number; }
+// expansion: the source of the macro expansion a node is part of (located at the call).
+export interface SourceLocation { source: string; file: string; start: number; end: number; expansion?: string }
 export const sourceLocations = new WeakMap<Expr, SourceLocation>();
 
 // Clauses with equivalent patterns (and guards): parameter names do not

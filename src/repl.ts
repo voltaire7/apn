@@ -351,6 +351,8 @@ function helpText(): string {
         `print x    any value (strings raw), returns x;  emit  = no newline`,
         `debug x    shows the SOURCE as written;  step n v  descends v's body`,
         `quote x = source text; toAST (1 + 2) => ["+",1,2]; import "syntax": fromAST, eval`,
+        `Macro f: a call gives f its arguments as toAST data; the data it returns runs there`,
+        `  twice = Macro (e -> ["[]",e,e]);  twice (n + 1) => [n + 1, n + 1]`,
         `Environment: scope <- env; scope.x = value updates the visible binding`,
         `Mutable: x = Mutable 0; set x $ (x + 1); print x`,
         `Builtins: head tail take drop length null enumerate map filter zipWith`,

@@ -1,9 +1,7 @@
-import ["sequence","text"]
 # Code as data. toAST (in the prelude) gives an expression as lists: a leaf is
 # a number, a Bool, a name or a literal's source text ("x", "\"x\"", "'c'");
 # an application is a list, function first (["f","x"], ["+",1,2]); other
 # syntax is a list headed by a token no name can be (["[]",1,2] is [1,2]).
 # fromAST writes such data as source; eval runs it at the program's top level.
-Dynamic $ load "syntax/source"
-fromAST syntax = String (Dynamic (_fromAST syntax))
-eval syntax = primEval (fromAST syntax)
+fromAST = primFromAST
+eval = primEval

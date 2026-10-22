@@ -838,6 +838,28 @@ Indexes and counts remain arbitrary-precision until a checked conversion is
 needed for a host array index. `exit` accepts a signed 32-bit status, matching
 its host boundary; larger values raise an error instead of being rounded.
 
+## Macros
+
+`Macro f` (in the prelude) makes `f`, a function from syntax to syntax, a
+macro. A call gives `f` each argument as written, as
+[`toAST`](standard-library.md#code-as-data--syntax) does: unevaluated and
+unchecked. While `f` returns a function the call takes more arguments; once
+it returns data, that syntax replaces the call and runs in the caller's
+scope, where its names are the caller's (macros are unhygienic). Arguments
+after that apply to its value.
+
+```apn
+ifNot = Macro (condition,body -> ["?:",condition,["{}"],body])
+twice = Macro (e -> ["[]",e,e])
+f n = twice (n + 1)        # f 4 is [5,5]
+```
+
+Only a call applies a macro: passed to another function, it is an error.
+A macro is pure, so a call expands once. The checker expands a call whose
+macro and arguments it can compute and checks the expansion in place, so a
+problem in it is reported at the call, quoting the expansion; a call it
+cannot expand is a runtime check.
+
 ## Verification
 
 ```sh

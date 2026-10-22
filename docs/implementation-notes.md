@@ -662,13 +662,20 @@ configuration. Tests: `tests/lsp-test.ts`.
 
 ## Code as data
 
-`toAST` (`sexprOf`) reads its argument's parse tree, unevaluated: operator
-sections become names, partial applications or `"()"` nodes, and an
-application's spine is flattened. `lib/syntax.apn` loads its printer
-(`lib/syntax/source.apn`) behind `Dynamic`, as `meta` does, since syntax data
-mixes leaves and nodes; `primFixity` gives it the parser's fixities. `eval`
-parses `fromAST`'s text with the parser itself, spacing rules and line limit
-off, so evaluated code cannot drift from written code. Tests:
+`toAST` (`syntaxOf` in `src/syntax-data.ts`) reads its argument's parse
+tree, unevaluated: operator sections become names, partial applications or
+`"()"` nodes, and an application's spine is flattened. `syntaxSource` there is
+the one printer (`fromAST`, `eval` and macros); `syntaxExpr` parses its text
+with the parser itself, spacing rules and line limit off, so evaluated code
+cannot drift from written code.
+
+A macro expands in `apply`, only for the calls `eval` makes for `app` and
+`pipe` nodes (`tail`), each argument thunk's body giving its syntax; a partial
+result is a new `Macro` value, and expansions are cached by argument node and
+macro value. The checker's `macroCall` runs the macro's function in the known
+evaluator on the same data, keeps a partial result by call node, and infers
+the expansion in place; `syntaxExpr` locates every expansion node at the call,
+with the expansion's source, which `problem` quotes. Tests:
 `tests/syntax-test.ts`.
 
 ## Metacircular evaluator

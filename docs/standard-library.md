@@ -300,6 +300,9 @@ data. `eval` runs it as written source runs, at the program's top level (as
 Lisp's `eval` uses the global environment): its bindings stay inside it, an
 action it makes is returned, not run, and its result is `Dynamic`.
 
+A [macro](semantics.md#macros) (`Macro f`, in the prelude) runs such data in
+place of its call, in the caller's scope.
+
 ## Metacircular evaluator — `meta`
 
 `metaEval source` runs the supported APN core through an APN-written reader and
