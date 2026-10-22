@@ -73,8 +73,10 @@ are exempt. It warns about a clause that
 [never runs](semantics.md#functions-and-conditionals) because an earlier one
 takes any argument (`f xs = 0` then `f [a,b] = a + b`), and about a `match`
 alternative after one that takes any value. The constructors it knows are
-the program's and those its imports and `load` statements declare (`load "f"`,
-also `Dynamic $ load "f"`): it resolves each from the file's folder as the
+the program's and those its imports, `load` statements (`load "f"`, also
+`Dynamic $ load "f"`) and `use` statements declare, where `use` opens a record
+bound to an import or a load (`opt = import "option"; use opt`), written in
+place, or a list of them: it resolves each from the file's folder as the
 interpreter does and reads (never runs) it, so a file it cannot read declares
 nothing. It warns
 about a literal zero divisor (`x / 0`, `x % 0`, `quotient x 0`, `remainder x 0`,

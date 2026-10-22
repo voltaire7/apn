@@ -15,30 +15,49 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
         families.set(name, new Map(variants));
         for (const [tag] of variants) constructors.set(tag, name);
     };
+    // The files an expression brings in: a module it imports or a file it
+    // loads (also through Dynamic), resolved from a file's folder.
+    type Source = { key: string; text: string; directory: string };
+    const sourcesOf = (e: Expr, from: string): Source[] => {
+        if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return sourcesOf(e.stmts[0], from);
+        if ((e.t === "app" || e.t === "pipe") && e.f.t === "var" && e.f.name === "Dynamic") return sourcesOf(e.t === "app" ? e.a : e.x, from);
+        if (e.t === "import") return [e.module].flat().flatMap(spec => {
+            let module;
+            try { module = resolveModule(spec, from); } catch { return []; }
+            return module ? module.files.map((file, n) => ({ key: `${module.key}#${n}`, text: file.source, directory: file.directory })) : [];
+        });
+        const argument = isLoadCall(e) && (e.t === "app" ? e.a : e.t === "pipe" ? e.x : undefined);
+        if (!argument || argument.t !== "string") return [];
+        let path;
+        try { path = loadPath(argument.v, from); } catch { return []; }
+        const text = readLoad(path);
+        return text === undefined ? [] : [{ key: path, text, directory: path.slice(0, path.lastIndexOf("/") + 1) }];
+    };
+    // A file's families, and those of what it imports, loads, or opens with
+    // use: a record bound to an import or a load, either written in place, or
+    // a list of them.
     const visited = new Set<string>();
     const declare = (statements: TopLevel[], from: string) => {
+        const records = new Map<string, Source[]>();
+        const open = (sources: Source[]) => {
+            for (const source of sources) {
+                if (visited.has(source.key)) continue;
+                visited.add(source.key);
+                let parsed;
+                try { parsed = parseDocument(source.text); } catch { continue; }
+                declare(parsed, source.directory);
+            }
+        };
+        const used = (e: Expr): Source[] => e.t === "var" ? records.get(e.name) ?? []
+            : e.t === "list" ? e.v.flatMap(used) : sourcesOf(e, from);
         for (const node of statements) {
             if (node.t === "type") add(node.def.name, node.def.variants.map(v => [v.tag, v.arity]));
-            const loaded = node.t === "expr" ? loadedName(node.value) : undefined;
-            if (loaded !== undefined) {
-                let path;
-                try { path = loadPath(loaded, from); } catch { continue; }
-                const text = visited.has(path) ? undefined : readLoad(path);
-                visited.add(path);
-                try { if (text !== undefined) declare(parseDocument(text), path.slice(0, path.lastIndexOf("/") + 1)); }
-                catch { /* a file that does not parse declares nothing here */ }
-                continue;
-            }
-            if (node.t !== "expr" || node.value.t !== "import") continue;
-            for (const spec of [node.value.module].flat()) {
-                let module;
-                try { module = resolveModule(spec, from); } catch { continue; }
-                if (!module || visited.has(module.key)) continue;
-                visited.add(module.key);
-                for (const file of module.files) {
-                    try { declare(parseDocument(file.source), file.directory); } catch { /* a module that does not parse declares nothing here */ }
-                }
-            }
+            const bound = node.t === "def" && !node.clauses[0].params.length ? [node.name, node.clauses[0].body] as const
+                : node.t === "patDef" && node.pattern.p === "var" ? [node.pattern.name, node.value] as const : undefined;
+            if (bound) records.set(bound[0], sourcesOf(bound[1], from));
+            if (node.t !== "expr") continue;
+            const e = node.value;
+            open(e.t === "app" && e.f.t === "var" && e.f.name === "use" ? used(e.a) : sourcesOf(e, from));
         }
     };
     declare(program, directory);
@@ -186,10 +205,3 @@ function patternNames(p: Pattern): string[] {
         : value && typeof value === "object" && "p" in value ? patternNames(value as Pattern) : []);
 }
 
-// The file a load statement names literally: load "f", also as Dynamic $ load "f".
-function loadedName(e: Expr): string | undefined {
-    if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return loadedName(e.stmts[0]);
-    if ((e.t === "app" || e.t === "pipe") && e.f.t === "var" && e.f.name === "Dynamic") return loadedName(e.t === "app" ? e.a : e.x);
-    const argument = isLoadCall(e) && (e.t === "app" ? e.a : e.t === "pipe" ? e.x : undefined);
-    return argument && argument.t === "string" ? argument.v : undefined;
-}

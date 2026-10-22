@@ -169,6 +169,14 @@ Deno.test("lint reports a clause or alternative that never runs", () => {
     for (const load of ['load "cards"', 'Dynamic $ load "cards"', 'load "missing"']) {
         equal(lint(`${load}\ns _ = 0\ns Hearts = 1`, false, cards).filter(d => d.code === "unreachable-clause").length, load.includes("cards") ? 1 : 0);
     }
+    // And of a record use opens: one bound to an import or a load, written in
+    // place, or in a list; not a record never opened, or rebound to another.
+    const opened = (source: string) => lint(source, false, cards).filter(d => d.code === "unreachable-clause").length;
+    equal(opened('opt = import "option"\nuse opt\nf _ = 0\nf (Some x) = x'), 1);
+    equal(opened('t <- load "cards"\nuse [t]\ns _ = 0\ns Hearts = 1'), 1);
+    equal(opened('use (import "cards")\ns _ = 0\ns Hearts = 1'), 1);
+    equal(opened('opt = import "option"\nf _ = 0\nf (Some x) = x'), 0);
+    equal(opened('t <- load "cards"\nt = [x: 1]\nuse t\ns _ = 0\ns Hearts = 1'), 0);
     // match tries alternatives in order: any after an unconditional one never runs.
     equal(unreachable("v = match 3 [\n    x -> 0\n    1 -> 5\n]"), [2]);
     equal(unreachable("v = match 3 [\n    1 -> 5\n    x -> 0\n]"), []);
