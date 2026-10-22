@@ -1349,6 +1349,9 @@ import "meta"
 print (metaEval "id x = x; id 42")                 # 42
 print (metaEval "x = 1 :: x; take 4 x")           # [1,1,1,1]
 print (metaEval "true ? 7 : missing")              # 7
+# It reads and runs toAST's lists, so toAST's output runs on it too:
+print (metaParse "f x = x * 2; f 21")   # => ["{}",["=",["f","x"],["*","x",2]],["f",21]]
+print (metaEvalSyntax (toAST ((x -> x * 2) 21)))  # 42
 print (length "\r\v\f")                         # 3: whitespace escapes
 
 # Self-application, SKI, and fixed points, entirely in APN.

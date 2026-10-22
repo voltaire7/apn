@@ -42,6 +42,9 @@ infixr 9 \
 (%) = primMod
 (^) = primPow
 (\) = primCompose
+# Prefix - and ! as functions: toAST writes -x as ["negate","x"].
+negate x = -x
+not x = !x
 
 # Functor, Applicative and Monad. IO and lists are built in; any other type
 # joins by defining instances of map, >>= and return (as the option

@@ -27,7 +27,7 @@ TypeScript driver only supplies the absolute path. All parsing and evaluation
 happens in APN:
 
 1. The APN reader (`metaParse`) turns the evaluator's source into ordinary APN lists.
-2. `meRun` evaluates those definitions, constructing an interpreted `meEval`.
+2. `meEval` evaluates those definitions, constructing an interpreted `meEval`.
 3. The interpreted `meEval` evaluates an arithmetic expression, an identity
    function application, and a conditional with an unbound unused branch.
 
@@ -40,15 +40,21 @@ the live evaluator source, so the proof cannot silently drift from the code.
 
 | File | Responsibility |
 | --- | --- |
-| `lib/meta.apn` | `metaEval source` and `metaSelfEval evaluatorSource source` |
+| `lib/meta.apn` | `metaEval source`, `metaEvalSyntax syntax` and `metaSelfEval evaluatorSource source` |
 | `lib/meta/parser.apn` | Character tokenizer and precedence parser |
 | `lib/meta/evaluator.apn` | Environments, closures, recursive scope, application, dispatch |
 | `lib/meta/primitives.apn` | Explicit object-language primitive environment |
 
-Syntax is data: `["literal",42]`, `["variable","x"]`,
-`["lambda","x",body]`, `["apply",function,argument]`,
-`["if",condition,yes,no]`, `["list",expressions]`, and
-`["scope",definitions,body]`. `metaParse` returns `[definitions,expression]`.
+Syntax is data, in the lists [`toAST`](standard-library.md#code-as-data--syntax)
+gives: `metaParse "fact n = n * 2; fact 5"` is
+`["{}",["=",["fact","n"],["*","n",2]],["fact",5]]`, and `metaEvalSyntax`
+runs `toAST`'s output as it runs the reader's. A leaf is a number, a Bool, a
+name or a string literal's quoted source (which the evaluator unescapes); a
+list headed by `->`, `?:`, `[]`, `.`, `$` or `{}` is that form, and any other
+list applies its first element to the rest. `$` is a form, not a primitive, so
+it can apply an object-language closure. To run the user's program, the
+self-evaluation names it and its primitives (`objectProgram`, `objectScope`)
+in the outer scope.
 
 Environments are persistent HashMaps. A closure is a map containing its
 parameter, body and lexical environment. Applying a closure extends that
@@ -110,6 +116,6 @@ still hit that limit. Sequence operations that require the end of an infinite
 input still do not terminate.
 
 List application selects indices, including a list of indices. Dotted list templates
-use a separate `template` AST tag and `meTemplate`; they still apply object-language
+use the `"."` form and `meTemplate`; they still apply object-language
 closures through `meApply`. The reader supports bracket, string, and parenthesized
 template inputs. Record plucks remain outside this core subset.

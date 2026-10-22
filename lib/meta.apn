@@ -3,22 +3,24 @@ Dynamic $ load "meta/parser"
 Dynamic $ load "meta/evaluator"
 Dynamic $ load "meta/primitives"
 
-# The reader's output is ordinary APN lists; their shape is not statically typed.
+# The reader's output is toAST's lists; their shape is not statically typed.
 metaParse source = Dynamic (mpParse source)
 
 # Parse once, then evaluate syntax in our own environment and closure machinery.
 metaEval source = Dynamic {
     [program] = [mpParse source]
-    seq (mpForce program) (meRun (fst program) (snd program) metaPrimitives)
+    seq (mpForce program) (metaEvalSyntax program)
 }
+# Syntax data, from the reader or from toAST, as the evaluator runs it.
+metaEvalSyntax syntax = Dynamic (meEval metaPrimitives syntax)
 
 # Evaluate the evaluator's source, then ask that interpreted evaluator to run
 # the user's parsed program. Neither layer calls the host parser/evaluator.
+# The program and its primitives reach the interpreted evaluator by name.
 metaSelfEval evaluatorSource source = Dynamic {
     [core] = [mpParse evaluatorSource]
     [program] = [mpParse source]
-    [expression] = [["scope", fst program, snd program]]
-    [evaluate] = [["apply",["variable","meEval"],["literal",metaPrimitives]]]
-    [call] = [["apply",evaluate,["literal",expression]]]
-    seq (mpForce core) (seq (mpForce program) (meRun (fst core) call metaPrimitives))
+    [scope] = [insert [["objectScope",metaPrimitives],["objectProgram",program]] metaPrimitives]
+    [call] = [["meEval","objectScope","objectProgram"]]
+    seq (mpForce core) (seq (mpForce program) (meEval scope (core ++ [call])))
 }

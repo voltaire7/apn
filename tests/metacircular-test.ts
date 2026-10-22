@@ -76,3 +76,17 @@ Deno.test("evaluation depth remains bounded with a language error", () => {
     }
     throw new Error("expected the APN recursion guard");
 });
+// The reader writes toAST's lists, and the evaluator runs toAST's output.
+for (const source of ['fact n = n == 0 ? 1 : n * fact (n - 1); fact 5', 'x = 1 :: x; take 6 x', '[1, 2 + 3, 7]',
+    '"a\\"b" ++ "c"', '(x -> x + 1) $ 2', '-2 ^ 2', 'outer x = { inner y = x + y; inner }; outer 40 2', 'f a b = a; f 1 2']) {
+    Deno.test(`metaParse reads as toAST does: ${source}`, () => {
+        const i = new Interpreter(); i.run(parse('import "meta"'));
+        i.env.setLocal("source", { kind: "string", v: source });
+        const read = i.renderString(i.run(parse("metaParse source")));
+        const written = i.renderString(i.run(parse(`toAST {\n    ${source.replaceAll("; ", "\n    ")}\n}`)));
+        if (read !== written) throw new Error(`${read} != ${written}`);
+        const hostInterpreter = new Interpreter(), host = hostInterpreter.renderString(hostInterpreter.run(parse(source)));
+        const ran = i.renderString(i.run(parse(`metaEvalSyntax (toAST {\n    ${source.replaceAll("; ", "\n    ")}\n})`)));
+        if (ran !== host) throw new Error(`${ran} != ${host}`);
+    });
+}

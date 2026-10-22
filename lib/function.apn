@@ -6,7 +6,6 @@ flip f x y = f y x
 on f project x y = f (project x) (project y)
 apply f x = f x
 twice f x = f (f x)
-not x = !x
 pair x y = [x,y]
 fst [x,_] = x
 snd [_,y] = y

@@ -1,18 +1,75 @@
 # Metacircular core. No host eval, parse, toAST, or interpreter callback.
-# Syntax is data: [tag,...]. Environments are persistent maps of lazy values.
+# Syntax is toAST's lists: a leaf is a number, a Bool, a name or a string
+# literal's quoted source; [function, arguments...] applies; other syntax is
+# headed by a tag: ["->",params,body], ["?:",c,a,b], ["[]",...], [".",f,input],
+# ["$",f,x] and ["{}",...], whose ["=",left,right] statements bind recursively.
+# Environments are persistent maps of lazy values.
 meCons x xs = x :: xs
-meBindings definitions scope = (null definitions
+meEval scope expression = (typeOf expression == List
+    ? meNode scope (head expression) (tail expression)
+    : typeOf expression == typeOf "text"
+    ? meLeaf scope expression
+    : expression)
+meQuote = head (to (List Char) "\"")
+meLeaf scope text = (head (to (List Char) text) == meQuote
+    ? from (List Char) (meUnescape (meInner (to (List Char) text)))
+    : lookup text scope)
+meInner chars = take (length chars - 2) (tail chars)
+meBackslash = head (to (List Char) "\\")
+meUnescape chars = (null chars
     ? []
-    : meCons [head (head definitions), meEval scope ((head definitions) 1)]
-        (meBindings (tail definitions) scope))
-meScope definitions parent = {
-    scope = [insert (meBindings definitions (head scope)) parent]
-    head scope
-}
+    : head chars == meBackslash
+    ? meCons (meEscape (head (tail chars))) (meUnescape (tail (tail chars)))
+    : meCons (head chars) (meUnescape (tail chars)))
+meEscape c = (c == head (to (List Char) "n")
+    ? head (to (List Char) "\n")
+    : c == head (to (List Char) "t")
+    ? head (to (List Char) "\t")
+    : c == head (to (List Char) "r")
+    ? head (to (List Char) "\r")
+    : c)
+meNode scope tag arguments = (typeOf tag == typeOf "text"
+    ? (has tag meForms
+        ? (lookup tag meForms) scope arguments
+        : meApplyAll (meEval scope tag) (meList scope arguments))
+    : meApplyAll (meEval scope tag) (meList scope arguments))
+meForms = HashMap [["->",meLambda],["?:",meIf],["[]",meList],[".",meTemplateOf],["$",mePipe],["{}",meBlock]]
+meLambda scope arguments = meClosure (head arguments) (arguments 1) scope
+meIf scope arguments = (meEval scope (head arguments)
+    ? meEval scope (arguments 1)
+    : meEval scope (arguments 2))
 meList scope expressions = (null expressions
     ? []
     : meCons (meEval scope (head expressions)) (meList scope (tail expressions)))
-meClosure parameter body scope = (HashMap ([["__closure",true],["parameter",parameter]]
+mePipe scope arguments = meApply (meEval scope (head arguments)) (meEval scope (arguments 1))
+meTemplateOf scope arguments = (meTemplate (meEval scope (head arguments))
+    (meTemplateInput (meEval scope (arguments 1))))
+meApplyAll function arguments = (null arguments
+    ? function
+    : meApplyAll (meApply function (head arguments)) (tail arguments))
+# A block: its bindings, recursively in scope, then its last statement's value.
+meBlock scope statements = (null statements
+    ? []
+    : meLast (meScope statements scope) statements)
+meLast scope statements = (null (tail statements)
+    ? (meBinding (head statements)
+        ? lookup (meName ((head statements) 1)) scope
+        : meEval scope (head statements))
+    : meLast scope (tail statements))
+meBinding statement = (typeOf statement == List ? head statement == "=" : false)
+meName left = (typeOf left == typeOf "text" ? left : head left)
+meValue left right = (typeOf left == typeOf "text" ? right : ["->", tail left, right])
+meBindings statements scope = (null statements
+    ? []
+    : meBinding (head statements)
+    ? meCons (meBound scope (head statements)) (meBindings (tail statements) scope)
+    : meBindings (tail statements) scope)
+meBound scope binding = [meName (binding 1), meEval scope (meValue (binding 1) (binding 2))]
+meScope statements parent = {
+    scope = [insert (meBindings statements (head scope)) parent]
+    head scope
+}
+meClosure parameters body scope = (HashMap ([["__closure",true],["parameters",parameters]]
     ++ [["body",body],["scope",scope]]))
 meZipTemplate functions values = (null functions
     ? (null values ? [] : fail "list template and input must have the same length")
@@ -22,26 +79,16 @@ meZipTemplate functions values = (null functions
         (meZipTemplate (tail functions) (tail values)))
 meTemplateInput value = typeOf value == typeOf "text" ? to (List Char) value : value
 meTemplate functions values = meZipTemplate functions values
-meTemplateSlot function argument = (typeOf function == typeOf []
+meTemplateSlot function argument = (typeOf function == List
     ? meTemplate function (meTemplateInput argument)
     : meApply function argument)
+# A closure takes its parameters one at a time.
 meApply function argument = (typeOf function == HashMap
     ? (has "__closure" function
-        ? meEval (insert [[lookup "parameter" function, argument]] (lookup "scope" function))
-            (lookup "body" function)
+        ? meEnter (lookup "parameters" function) (lookup "body" function)
+            (insert [[head (lookup "parameters" function), argument]] (lookup "scope" function))
         : function argument)
     : function argument)
-meTemplateOf scope expression = (meTemplate (meEval scope (expression 1))
-    (meTemplateInput (meEval scope (expression 2))))
-meIf scope expression = (meEval scope (expression 1)
-    ? meEval scope (expression 2)
-    : meEval scope (expression 3))
-meEval scope expression = (lookup (head expression) (HashMap ([["literal", expression 1]]
-    ++ [["variable", lookup (expression 1) scope]]
-    ++ [["lambda", meClosure (expression 1) (expression 2) scope]]
-    ++ [["template", meTemplateOf scope expression]]
-    ++ [["apply", meApply (meEval scope (expression 1)) (meEval scope (expression 2))]]
-    ++ [["if", meIf scope expression]]
-    ++ [["list", meList scope (expression 1)]]
-    ++ [["scope", meEval (meScope (expression 1) scope) (expression 2)]])))
-meRun definitions expression primitives = meEval (meScope definitions primitives) expression
+meEnter parameters body scope = (null (tail parameters)
+    ? meEval scope body
+    : meClosure (tail parameters) body scope)

@@ -8,7 +8,8 @@ frequencies $ words $ "one two one" # HashMap [["one",2],["two",1]]
 ```
 
 The prelude, `lib/prelude.apn`, needs no import: it defines every binary
-operator (`(+) = primAdd`, ...) and its fixity, and the Functor, Applicative
+operator (`(+) = primAdd`, ...) and its fixity, `negate` and `not` (the functions
+`-x` and `!x` are), and the Functor, Applicative
 and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
 `sequence`, `mapM`, `map2`–`map4`, `when`, `unless`, `return`, `throw`, `empty`, `guard`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).
 
@@ -106,7 +107,6 @@ See [zero initialization](zero-initialization.md) for type defaults and inspecti
 | `flip f x y` | `f y x` |
 | `on f project x y` | Compare/combine projected values |
 | `apply f x`, `twice f x` | Apply once or twice |
-| `not x` | Boolean negation |
 | `pair x y`, `fst pair`, `snd pair` | Two-element lists |
 | `curry f x y`, `uncurry f pair` | Convert between pair and curried arguments |
 | `seq value next` | Demand the outer value, then return `next`; does not deeply force lists |
@@ -303,8 +303,8 @@ action it makes is returned, not run, and its result is `Dynamic`.
 ## Metacircular evaluator — `meta`
 
 `metaEval source` runs the supported APN core through an APN-written reader and
-evaluator. `metaParse source` returns the reader's output, `[definitions,
-expression]`, as `Dynamic` data. `metaSelfEval evaluatorSource source` adds another evaluation layer:
+evaluator. `metaParse source` returns the reader's output, in `toAST`'s lists,
+as `Dynamic` data, and `metaEvalSyntax` runs such data, `toAST`'s included. `metaSelfEval evaluatorSource source` adds another evaluation layer:
 it evaluates the evaluator's source, then runs the program with that evaluator.
 See [the proof, supported subset and primitive boundary](metacircular-evaluator.md).
 

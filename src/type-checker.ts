@@ -5317,6 +5317,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (head.name === "to" && t?.k === "type" && !(inner?.k === "variant" && inner.name === "JSON")) return value({ t: "app", f: args[0], a: args[1] });
             return undefined;
         }
+        // not x and negate x: the prelude's functions for !x and -x.
+        if ((head.name === "not" || head.name === "negate") && builtin && args.length === 1) {
+            return value({ t: "unop", op: head.name === "not" ? "not" : "neg", e: args[0] });
+        }
         // List T: the type of lists of T (to (List Char) names it).
         if (head.name === "List" && builtin && args.length === 1) {
             const element = value(args[0])?.type, t = element && resolve(element);
@@ -6348,6 +6352,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("empty", { type: pendingTy(variable()) });
     for (const name of ["throw", "primThrow"]) { const t = variable(); scope.set(name, { type: fn(t, pendingTy(variable())) }); }
     scope.set("primSource", { type: fn(variable(), atom("String")) });
+    // Prefix - and ! as the prelude's functions (toAST writes -x as ["negate","x"]).
+    { const a = variable(); scope.set("negate", { type: fn(a, operation("negate", [a])) }); }
+    scope.set("not", { type: fn(bool, bool) });
     // map2 f a b ... map4: map then <*>, in any monad (the prelude's).
     for (const [name, arity] of [["map2", 3], ["map3", 4], ["map4", 5]] as const) scope.set(name, { type: { k: "intrinsic", name, arity } });
     // when and unless: action >> return [], in the action's monad.
