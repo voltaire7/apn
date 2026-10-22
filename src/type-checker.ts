@@ -4455,6 +4455,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "binop": return evaluateBinop(e, env, scope, depth);
             case "app": {
+                // (op) a b is a op b here too.
+                const infix = e.f.t === "app" && e.f.f.t === "var" && !env.has(e.f.f.name) ? infixSpelling(e, scope) : undefined;
+                if (infix) return evaluateKnown(infix, env, scope, depth);
                 const result = evaluateApp(e, env, scope, depth);
                 if (result === undefined) incomplete = true;
                 return result;
@@ -4567,59 +4570,65 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // types its clauses do not accept, as inferred.
         if (!env.has(e.op) && !builtinAt(e, scope)) return evaluateKnown(operatorCall(e), env, scope, depth);
         if (env.has(e.op)) { incomplete = true; return undefined; }
+        return evaluateOperator(e.op, e.l, e.r, env, scope, depth);
+    }
+    // A prelude operator's builtin meaning on its operands, written infix
+    // (a + b) or called (intrinsics.add a b): one evaluation for both.
+    function evaluateOperator(op: string, left: Expr, right: Expr, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
         const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
+        if (op === "$") return value({ t: "app", f: left, a: right });
         // x :: xs; the tail may be endless (repeat x = x :: repeat x).
         // The tail is evaluated only when an element past the head is needed.
-        if (e.op === "::") {
-            const h = lazyValue(() => value(e.l), { exprs: [e.l], env });
-            return lazyList(() => ({ head: h, tail: value(e.r) ?? {} }), { exprs: [e.l, e.r], env });
+        if (op === "::") {
+            const h = lazyValue(() => value(left), { exprs: [left], env });
+            return lazyList(() => ({ head: h, tail: value(right) ?? {} }), { exprs: [left, right], env });
         }
-        if (e.op === "++") {
-            const l = value(e.l), r = value(e.r);
+        if (op === "++") {
+            const l = value(left), r = value(right);
             if (l?.string !== undefined && r?.string !== undefined) return { string: l.string + r.string };
             if (l?.items && r?.items) return known([...l.items, ...r.items]);
             const size = l?.size !== undefined && r?.size !== undefined ? { size: l.size + r.size } : {};
             if (!l?.items && !l?.cell) return l?.size !== undefined && r?.size !== undefined ? size : undefined;
-            const append = (left: Known): Known => lazyList(() => {
-                const cell = cellOf(left);
+            const append = (rest: Known): Known => lazyList(() => {
+                const cell = cellOf(rest);
                 return cell === null ? cellOf(r) : cell && { head: cell.head, tail: append(cell.tail) };
-            }, { exprs: [e.l, e.r], env });
+            }, { exprs: [left, right], env });
             return { ...append(l), ...size };
         }
-        if (e.op === "&&" || e.op === "||") {
-            const l = truth(value(e.l));
+        if (op === "&&" || op === "||") {
+            const l = truth(value(left));
             if (l === undefined) return undefined;
-            if (e.op === "&&" ? !l : l) return { boolean: l };
-            const r = truth(value(e.r));
+            if (op === "&&" ? !l : l) return { boolean: l };
+            const r = truth(value(right));
             return r === undefined ? undefined : { boolean: r };
         }
-        const l = readMutable(value(e.l)), r = readMutable(value(e.r));
+        const l = readMutable(value(left)), r = readMutable(value(right));
         const x = numericOf(l), y = numericOf(r);
         if (x !== undefined && y !== undefined) {
-            if (["+", "-", "*", "/", "%"].includes(e.op)) return attempt(() => typedArithmetic(e.op, x, y));
-            if (e.op === "^") return attempt(() => typedPower(x, y));
-            if (e.op === "==" || e.op === "!=") return attempt(() => equalNumbers(x, y) === (e.op === "=="));
-            if (["<", ">", "<=", ">="].includes(e.op)) {
+            if (["+", "-", "*", "/", "%"].includes(op)) return attempt(() => typedArithmetic(op, x, y));
+            if (op === "^") return attempt(() => typedPower(x, y));
+            if (op === "==" || op === "!=") return attempt(() => equalNumbers(x, y) === (op === "=="));
+            if (["<", ">", "<=", ">="].includes(op)) {
                 return attempt(() => {
                     const c = compareNumbers(x, y);
                     // Ordered comparisons involving NaN are false.
                     if (Number.isNaN(c)) return false;
-                    return e.op === "<" ? c < 0 : e.op === ">" ? c > 0 : e.op === "<=" ? c <= 0 : c >= 0;
+                    return op === "<" ? c < 0 : op === ">" ? c > 0 : op === "<=" ? c <= 0 : c >= 0;
                 });
             }
             return undefined;
         }
-        if (e.op === "==" || e.op === "!=") {
+        if (op === "==" || op === "!=") {
             const same = equalKnown(l, r);
-            return same === undefined ? undefined : { boolean: same === (e.op === "==") };
+            return same === undefined ? undefined : { boolean: same === (op === "==") };
         }
-        if (!["<", ">", "<=", ">="].includes(e.op)) return undefined;
+        if (!["<", ">", "<=", ">="].includes(op)) return undefined;
         let order: number | undefined;
         for (const key of ["string", "char"] as const) {
             if (l?.[key] !== undefined && r?.[key] !== undefined) order = l[key]! < r[key]! ? -1 : l[key]! > r[key]! ? 1 : 0;
         }
         if (order === undefined) return undefined;
-        return { boolean: e.op === "<" ? order < 0 : e.op === ">" ? order > 0 : e.op === "<=" ? order <= 0 : order >= 0 };
+        return { boolean: op === "<" ? order < 0 : op === ">" ? order > 0 : op === "<=" ? order <= 0 : order >= 0 };
     }
     // An application: lambdas, function values, pure builtins, and calls by name.
     function evaluateApp(e: Extract<Expr, { t: "app" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
@@ -4629,6 +4638,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         let head: Expr = e;
         while (head.t === "app") { args.unshift(head.a); head = head.f; }
         if (head.t === "block" && head.stmts.length === 1 && head.style === "(") head = head.stmts[0];
+        // An operator's intrinsic called (intrinsics.add a b) is its builtin meaning.
+        const intrinsic = head.t === "recordAccess" && !head.scoped && (!head.argument || head.argument.t === "var" && head.argument.name === head.field) && head.rec.t === "var" && head.rec.name === "intrinsics"
+            && !env.has("intrinsics") && scope.get("intrinsics")?.builtin ? PRIMITIVE_OPERATORS.get(`intrinsics.${head.field}`) : undefined;
+        if (intrinsic && args.length === 2) return evaluateOperator(intrinsic, args[0], args[1], env, scope, depth);
         // A lambda (or operator section): too few arguments give a function
         // value, extra ones apply its result.
         if (head.t === "lambda") {

@@ -147,7 +147,9 @@ operation that chooses once they are. `(op)` parses as the name `op`;
 `infixSpelling` has the checker read `(op) a b` as the binop and a lone `(op)`
 as `$L, $R -> $L op $R`, and `operatorApplication` and `prefixApplication`
 are the one typing a binop or unop shares with a call of the intrinsic
-(`intrinsics.add`, `negate`, `not`). A math function's clauses get an
+(`intrinsics.add`, `negate`, `not`). The checker's evaluator reads `(op)` the
+same way, and `evaluateOperator` is the builtin meaning a binop and a call of
+the intrinsic share (`evaluateBinop` only chooses a program's overload). A math function's clauses get an
 `overload` type of themselves and the previous meaning (also for their own
 recursive calls). Tests: `tests/operators-test.ts`,
 `tests/default-checking-test.ts`. `cast` is a `clauseFn`, not a native:

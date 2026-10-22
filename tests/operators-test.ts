@@ -75,3 +75,13 @@ for (const [source, expected] of [
     const actual = run(source);
     if (actual.join("\n") !== expected.join("\n")) throw new Error(`${actual} != ${expected}`);
 });
+
+// The checker's evaluator knows an operator's result in each spelling: f
+// checks only when the take count, and so the list's length, is known.
+for (const count of ["1 + 1", "(+) 1 1", "intrinsics.add 1 1", "(1 +) 1", "($) id 2", "intrinsics.apply id 2",
+    "(-) 3 1", "intrinsics.sub 3 1", "length ((++) [1] [2])", "length (intrinsics.cons 1 [5])", "negate (-2)"]) {
+    Deno.test(`the checker evaluates each spelling: ${count}`, () => {
+        const actual = run(`id x = x\nf [a,b] = a\nprint (f (take (${count}) [1,2,3]))`);
+        if (actual.join() !== "1") throw new Error(actual.join());
+    });
+}
