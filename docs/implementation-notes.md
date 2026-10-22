@@ -652,8 +652,9 @@ infers nothing for that argument. `toAST` reads that text with
 `intrinsics.syntax` (`sexprOf` of what `readSource` parses): operator
 sections become names, partial applications or `"()"` nodes, and an
 application's spine is flattened. `lib/syntax.apn` loads its printer
-(`lib/syntax/source.apn`) behind `Dynamic`, as `meta` does, since syntax data
-mixes leaves and nodes; `intrinsics.fixity` gives it the parser's fixities. `eval`
+(`lib/syntax/source.apn`) and `toLambda`'s desugarer (`lib/syntax/lambda.apn`)
+behind `Dynamic`, as `meta` does, since syntax data mixes leaves and nodes;
+both load into one scope, so their `_` helpers need distinct names; `intrinsics.fixity` gives it the parser's fixities. `eval`
 parses `fromAST`'s text with the parser itself, spacing rules and line limit
 off, so evaluated code cannot drift from written code. Tests:
 `tests/syntax-test.ts`.

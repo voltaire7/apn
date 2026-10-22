@@ -303,6 +303,27 @@ data. `eval` runs it as written source runs, at the program's top level (as
 Lisp's `eval` uses the global environment): its bindings stay inside it, an
 action it makes is returned, not run, and its result is `Dynamic`.
 
+`toLambda e` gives `e` as `toAST` does, desugared to a core of names,
+literals, one-parameter lambdas and application, which runs as `e` does:
+
+```apn
+fromAST (toLambda { x = 10; y = x + 1; y })    # "(x -> (y -> y) (x + 1)) 10"
+fromAST (toLambda (x, y -> x + y))              # "x -> y -> x + y"
+eval (toLambda { fact n = n == 0 ? 1 : n * fact (n - 1); fact 5 })   # 120
+```
+
+A block's binding `x = e; rest` is `(x -> rest) e`, so a later binding of a
+name is an inner lambda shadowing it, as a new version does; `x <- e; rest` is
+`e >>= (x -> rest)`, and an action statement `s; rest` is `s >> rest`. A
+binding that refers to itself is a fixed point, through Curry's Y combinator
+written out, so the result needs no library. A definition with several
+clauses, or patterns for parameters, is a lambda per argument and a `match`
+over them; sections and `$` become lambdas and application. Other syntax
+(`?:`, lists, records, ranges, patterns) stays as it is, its parts
+desugared. `toLambda` sees only the quoted code, so a binding of a name bound
+outside it that refers to that name (`x = x + 1`) is read as recursion, not
+as a new version of the outer `x`.
+
 ## Metacircular evaluator — `meta`
 
 `metaEval source` runs the supported APN core through an APN-written reader and

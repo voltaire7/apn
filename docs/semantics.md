@@ -739,7 +739,8 @@ for parameter patterns, named inputs, and local collection updates.
 
 Variable and wildcard patterns leave their arguments deferred. Other patterns
 force only the structure they inspect. A cons pattern binds a lazy head and
-lazy tail; an exact-length list pattern checks the spine length. Pattern-clause
+lazy tail; an exact-length list pattern checks the spine length, and its
+items may be cons patterns (`[x :: _, d]`), as in a list expression. Pattern-clause
 fallthrough shares argument thunks, preventing duplicate evaluation of an
 already demanded argument. Variant construction defers its fields. In a
 constructor pattern, a bare capitalized argument takes no fields of its own

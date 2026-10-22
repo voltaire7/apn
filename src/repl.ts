@@ -351,7 +351,7 @@ function helpText(): string {
         `print x    any value (strings raw), returns x;  emit  = no newline`,
         `debug x    shows the SOURCE as written;  step n v  descends v's body`,
         `f (Quote q) = ...: q is the argument's source text; quote (1 + 2) => "(1 + 2)"`,
-        `toAST (1 + 2) => ["+",1,2]; import "syntax": fromAST, eval`,
+        `toAST (1 + 2) => ["+",1,2]; import "syntax": fromAST, eval, toLambda`,
         `Mutable: x = Mutable 0; set x $ (x + 1); print x`,
         `Builtins: head tail take drop length null enumerate map filter zipWith`,
         `          foldl foldr pairs format to from exit load step`,

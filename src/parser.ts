@@ -463,7 +463,7 @@ class Parser {
                 } else {
                     if (mode === "keyed") throw new Error("Parser: pattern cannot mix bare names and 'key: name' entries");
                     mode = "bare";
-                    ps.push(this.parsePattern());
+                    ps.push(this.parseConsPattern());
                 }
                 if (this.eatSym(",")) continue;
                 break;

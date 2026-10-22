@@ -92,3 +92,34 @@ Deno.test("Quote is a parameter pattern, not a function", () => {
     }
     throw new Error("accepted");
 });
+
+// toLambda desugars code to lambdas and application, and the result runs as
+// the original does.
+for (const [source, expected] of [
+    ["{ x = 10; y = 20; x }", "(x -> (y -> x) 20) 10"],
+    ["{ x = 10; y = x + 1; y }", "(x -> (y -> y) (x + 1)) 10"],
+    ["{ x = 1; x = x + 1; x }", "(x -> (x -> x) (x + 1)) 1"],
+    ["x, y -> x + y", "x -> y -> x + y"],
+    ["map (+ 1) xs", "map (_1 -> _1 + 1) xs"],
+    ["f $ g x", "f (g x)"],
+    ["{ a <- return 1; print a; return (a + 1) }", "return 1 >>= (a -> print a >> return (a + 1))"],
+    ["{ [a,b] = [1,2]; a + b }", "([a,b] -> a + b) [1,2]"],
+    ["{ ones = 1 :: ones; take 2 ones }",
+        "(ones -> take 2 ones) ((f -> (x -> f (x x)) (x -> f (x x))) (ones -> 1 :: ones))"],
+    ["{ first (x :: _) d = x; first [] d = d; first [] 0 }",
+        "(first -> first [] 0) (_1 -> _2 -> match [_1,_2] [[x :: _, d] -> x, [[],d] -> d])"],
+] as const) Deno.test(`toLambda: ${source}`, () => {
+    const actual = shown(session(), `fromAST (toLambda ${source.startsWith("{") ? source : `(${source})`})`, true);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const [source, expected] of [
+    ["{ fact n = n == 0 ? 1 : n * fact (n - 1); fact 5 }", "120"],
+    ["{ len [] = 0; len (_ :: rest) = 1 + len rest; len [7,8,9] }", "3"],
+    ["{ ones = 1 :: ones; take 3 ones }", "[1,1,1]"],
+    ["{ first (x :: _) d = x; first [] d = d; first [] 7 }", "7"],
+    ["{ x = 1; x = x + 1; [x, x * 10] }", "[2,20]"],
+] as const) Deno.test(`toLambda runs as written: ${source}`, () => {
+    const i = session();
+    const actual = shown(i, `eval (toLambda ${source})`), original = shown(i, source);
+    if (actual !== expected || original !== expected) throw new Error(`${actual}, ${original} != ${expected}`);
+});
