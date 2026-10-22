@@ -1,4 +1,4 @@
-import { sourceLocations, type Expr, type Pattern, type TopLevel } from "./ast.ts";
+import { clauseKey, METHODS, sourceLocations, type Expr, type Pattern, type TopLevel } from "./ast.ts";
 import type { Diagnostic } from "./lint.ts";
 
 // This analysis never evaluates APN. Unknown families or dynamic handler lists
@@ -45,8 +45,48 @@ export function matchDiagnostics(program: TopLevel[], source: string): Diagnosti
         return undefined;
     };
     const irrefutable = (p: Pattern) => p.p === "wildcard" || p.p === "var";
+    const lineOf = (e: Expr) => { const at = sourceLocations.get(e); return at && pos(at.start); };
+    const unreachable = (at: { line: number; character: number } | undefined, message: string) => {
+        if (at) diagnostics.push({ range: { start: { line: at.line, character: 0 }, end: at }, severity: 2, source: "apn", code: "unreachable-clause", message });
+    };
+    // A clause takes any argument when its parameters are distinct names or _.
+    type Clause = { params: Pattern[]; body: Expr; guard?: Expr };
+    const takesAny = (c: Clause) => {
+        const names = c.params.flatMap(p => p.p === "var" ? [p.name] : []);
+        return !c.guard && c.params.every(irrefutable) && new Set(names).size === names.length;
+    };
+    // Clauses rank by their patterns (a literal first, then a built-in type, as
+    // dispatch does); these patterns rank with a plain name, so a clause of only
+    // them never runs after one that takes any argument.
+    const ranksLowest = (p: Pattern): boolean => ["var", "wildcard", "list", "cons", "recPat", "range"].includes(p.p)
+        || p.p === "as" && ranksLowest(p.left) && ranksLowest(p.right) || p.p === "constr" && constructors.has(p.tag);
+    // A scope's definitions, in order: a clause after one of the same function
+    // taking any argument (not an equivalent one, which replaces it) never runs.
+    // A binding without parameters starts a new version of the name.
+    type Definition = { name: string; clauses: Clause[] } | { rebinds: string[] };
+    const clauseOrder = (definitions: Definition[]) => {
+        const earlier = new Map<string, Clause[]>();
+        for (const d of definitions) {
+            if ("rebinds" in d) { d.rebinds.forEach(name => earlier.delete(name)); continue; }
+            if (METHODS.has(d.name)) continue;
+            for (const c of d.clauses) {
+                if (!c.params.length) { earlier.delete(d.name); continue; }
+                const seen = (earlier.get(d.name) ?? []).filter(e => clauseKey(d.name, e) !== clauseKey(d.name, c));
+                const any = seen.find(e => takesAny(e) && e.params.length === c.params.length);
+                if (any && c.params.every(ranksLowest)) {
+                    unreachable(lineOf(c.body), `This clause of '${d.name}' never runs: the clause on line ${(lineOf(any.body)?.line ?? 0) + 1} takes any argument and comes first.`);
+                }
+                earlier.set(d.name, [...seen, c]);
+            }
+        }
+    };
     const visit = (e: Expr, scope: Scope) => {
         if (e.t === "app" && e.f.t === "app" && e.f.f.t === "var" && e.f.f.name === "match" && !scope.has("match") && e.a.t === "list") {
+            // Alternatives are tried in order: one after an unconditional one never runs.
+            const first = e.a.v.findIndex(a => a.t === "lambda" || a.t === "patternLambda" && takesAny(a));
+            if (first >= 0) for (const alt of e.a.v.slice(first + 1)) {
+                if (alt.t === "lambda" || alt.t === "patternLambda") unreachable(lineOf(alt.body) ?? lineOf(alt), "This alternative never runs: an earlier one takes any value.");
+            }
             const family = familyOf(e.f.a, scope);
             const variants = family && families.get(family);
             if (variants && e.a.v.every(a => (a.t === "patternLambda" || a.t === "lambda") && a.params.length === 1)) {
@@ -86,6 +126,8 @@ export function matchDiagnostics(program: TopLevel[], source: string): Diagnosti
             return;
         }
         if (e.t === "block") {
+            clauseOrder(e.stmts.flatMap<Definition>(st => st.t === "stmDef" ? [{ name: st.name, clauses: st.clauses }]
+                : st.t === "patDef" ? [{ rebinds: patternNames(st.pattern) }] : []));
             const inner = new Map(scope);
             for (const stmt of e.stmts) {
                 if (stmt.t === "stmDef") inner.set(stmt.name, undefined);
@@ -103,6 +145,8 @@ export function matchDiagnostics(program: TopLevel[], source: string): Diagnosti
     };
     const top = new Map<string, string | undefined>();
     for (const node of program) if (node.t === "def") top.set(node.name, undefined);
+    clauseOrder(program.flatMap<Definition>(node => node.t === "def" ? [{ name: node.name, clauses: node.clauses }]
+        : node.t === "patDef" ? [{ rebinds: patternNames(node.pattern) }] : []));
     for (const node of program) {
         if (node.t === "def") for (const clause of node.clauses) {
             const scope = new Map(top); clause.params.forEach(p => bind(p, scope)); visit(clause.body, scope);
@@ -111,4 +155,11 @@ export function matchDiagnostics(program: TopLevel[], source: string): Diagnosti
         else if (node.t === "patDef") { bind(node.pattern, top); visit(node.value, top); }
     }
     return diagnostics;
+}
+
+// The names a binding pattern binds.
+function patternNames(p: Pattern): string[] {
+    if (p.p === "var") return [p.name];
+    return Object.values(p).flatMap(value => Array.isArray(value) ? value.flatMap(x => x && typeof x === "object" && "p" in x ? patternNames(x) : [])
+        : value && typeof value === "object" && "p" in value ? patternNames(value as Pattern) : []);
 }

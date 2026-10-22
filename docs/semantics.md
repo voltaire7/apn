@@ -147,7 +147,10 @@ len (x::rest) = 1 + len rest
 Literal patterns (integers, floats, strings, characters, `true`, `false`) are
 tried before other clauses; numeric literal patterns compare numerically, so
 `2` and `2.0` match each other. Integer ranges (`[1..9]`) are also patterns.
-Otherwise clauses run in source order. When no equation matches, the
+Otherwise clauses run in source order, so after a clause taking any argument
+(distinct names or `_`, no guard) a clause of lists, cons, records or
+constructor patterns never runs; one with an equivalent pattern replaces it
+instead. When no equation matches, the
 error names the function: `no clause of 'len'
 matches the given arguments`. When what is known of the arguments already
 rules out every clause (a literal, a constructor, a list's length: `pred 0`

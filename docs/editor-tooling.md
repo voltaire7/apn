@@ -69,7 +69,11 @@ errors or general type errors. It warns about a parameter its body never uses
 (`f x y = x` warns about `y`; write `_` to discard it), including a name a
 typed pattern's type binds (`a` in `first ((List a) (x::_)) = x`; a name
 repeated in another parameter's type is a use). Names starting with `_`
-are exempt. It warns
+are exempt. It warns about a clause that
+[never runs](semantics.md#functions-and-conditionals) because an earlier one
+takes any argument (`f xs = 0` then `f [a,b] = a + b`), counting only
+constructors the program or `option` declares, and about a `match`
+alternative after one that takes any value. It warns
 about a literal zero divisor (`x / 0`, `x % 0`, `quotient x 0`, `remainder x 0`,
 `modulo x 0`), which fails when demanded; `/` with a Float on either side is IEEE
 division and is not reported. Laziness keeps these warnings rather than errors:

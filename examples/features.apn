@@ -94,6 +94,8 @@ pairSum xs = match xs [
 ]
 print (pairSum [10,20])  # => 30
 print (pairSum [1])        # => 0
+# A later pairSum [a,b] = a + b would be another clause of this pairSum, after
+# one that takes any argument, so it would never run: apn --lint warns.
 
 # the same `[x,y]` pattern also destructures a RECORD by field name
 sumRec [x,y] = x + y
