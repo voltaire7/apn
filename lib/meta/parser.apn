@@ -11,7 +11,13 @@ mpFlush state = state.buffer == "" ? state : [
     kind: ""
     depth: state.depth
 ]
-mpState mode buffer tokens kind depth = [.mode,.buffer,.tokens,.kind,.depth]
+mpState mode buffer tokens kind depth = [
+    mode: mode
+    buffer: buffer
+    tokens: tokens
+    kind: kind
+    depth: depth
+]
 mpWordChars = to (List Char) "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
 mpNesting c = c == "(" ? 1 : c == "[" ? 1 : c == ")" ? -1 : c == "]" ? -1 : 0
 mpStringStep state c = c == "\\"

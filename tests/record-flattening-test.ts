@@ -8,7 +8,7 @@ for (const checked of [false, true]) {
             ['base = [x: 1]; [x: "hi", _: base]', "[x: 1]"],
             ["[_: [x: 1], _: [y: 2], z: 3]", "[x: 1, y: 2, z: 3]"],
             ["r = [_: [child: [x: 1]], y: 2]; r.child.x", "1"],
-            ["x = 1; r = [.x, _: [y: 2]]; r.y", "2"],
+            ["x = 1; r = [x: x, _: [y: 2]]; r.y", "2"],
             ["base = [x: 1]; r = [_: base]; r.x = 2; [base.x,r.x]", "[1,2]"],
             [
                 "unused = Dynamic missing; base = [x: unused]; r = [_: base, y: 2]; r.y",

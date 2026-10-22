@@ -186,13 +186,11 @@ class Parser {
         if (/\s$/.test(before) || !/^ \S/.test(after)) throw new Error("Parser: separate statements on one line with '; ' (write print 1; print 2)");
     }
 
-    // Whether the [ at index opens record fields ([x: 1], [.x], keyed patterns
-    // and selections) rather than list items.
+    // Whether the [ at index opens record fields ([x: 1], keyed patterns and
+    // selections) rather than list items.
     opensRecord(index: number): boolean {
         let i = index + 1;
         while (["newline", "indent", "dedent"].includes(this.toks[i]?.k)) i++;
-        const first = this.toks[i], second = this.toks[i + 1];
-        if (first?.k === "sym" && first.v === "." && second?.k === "ident") return true;
         const saved = this.i;
         this.i = i;
         try { return this.isKeyedEntry(); } finally { this.i = saved; }
@@ -987,29 +985,15 @@ class Parser {
                         this.skipListLeading();
                         // Empty list: []
                         if (this.isSym("]")) { this.next(); return { t: "list", v: [] }; }
-                        // Record entries are explicit key/value pairs or .name shorthand.
-                        if (this.isKeyedEntry() || this.isSym(".")) {
+                        // Record entries are key/value pairs.
+                        if (this.isKeyedEntry()) {
                             const fs: Array<[string, Expr]> = [];
                             for (;;) {
-                                if (this.eatSym(".")) {
-                                    const name = this.next();
-                                    if (name.k !== "ident" || name.v === "_") {
-                                        throw new Error("Parser: record shorthand requires a variable name after '.'");
-                                    }
-                                    const value: Expr = { t: "var", name: name.v };
-                                    sourceLocations.set(value, { source: this.source, file: this.file, start: name.pos, end: name.pos + name.v.length });
-                                    fs.push([name.v, value]);
-                                    const next = this.peek();
-                                    if (!this.isSym(",") && !this.isSym("]") && next.k !== "newline" && next.k !== "dedent") {
-                                        throw new Error("Parser: expected ',' or newline after record shorthand");
-                                    }
-                                } else {
-                                    const keyToken = this.peek();
-                                    const key = this.parseEntryKey();
-                                    if (this.isSym(":")) this.keyColon();
-                                    this.expectSym(":");
-                                    fs.push([key, this.item(keyToken, () => this.parseDelimitedExpr())]);
-                                }
+                                const keyToken = this.peek();
+                                const key = this.parseEntryKey();
+                                if (this.isSym(":")) this.keyColon();
+                                this.expectSym(":");
+                                fs.push([key, this.item(keyToken, () => this.parseDelimitedExpr())]);
                                 this.skipListSeparators();
                                 if (this.isSym("]")) { this.next(); return { t: "record", v: fs }; }
                                 if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside record literal");

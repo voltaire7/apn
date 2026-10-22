@@ -493,34 +493,6 @@ reads at most one cell beyond the required count, including infinite inputs.
 Field conversion errors remain deferred until those fields are demanded.
 Equally matching record templates retain source-order dispatch.
 
-## Record field shorthand
-
-`[.x,.y]` expands to `[x: x, y: y]`, using variables from the current scope.
-Shorthand and explicit fields can appear together, separated by commas or
-newlines:
-
-```apn
-x = 1
-y = 2
-record = [.x,.y]                 # [x: 1, y: 2]
-mixed = [.x, other: y]            # [x: 1, other: 2]
-```
-
-Each shorthand entry must be a dot followed by a variable name. Use an explicit
-field for an expression or renamed value. Values retain ordinary record laziness;
-undefined names receive the same checks as explicit field values.
-
-`[x,y]` remains a positional list. `[y,x]` swaps its positions; `[.y,.x]`
-creates named fields in that order. To exchange named values, use `[x: y, y: x]`.
-The shorthand is record-construction syntax, independent of the receiving function
-or inferred types. Existing record patterns and pluck syntax are unchanged.
-
-For example, when these callbacks are in scope:
-
-```apn
-main = p5.sketch [.setup,.draw,.mousePressed]
-```
-
 ## Flattening record fields
 
 An anonymous `_: record` entry merges that record's fields into the literal:
