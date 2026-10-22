@@ -1339,6 +1339,7 @@ print (mapError upper $ Err "oops")   # Err "OOPS"
 print (safeDiv 7 2)                   # Some 7/2
 print (safeDiv 7 0)                   # None
 print (okOr "no samples" $ safeDiv 10 0)  # Err "no samples"
+print (map (to Option) [Ok 1, Err "x"])  # [Some 1, None]: to Option drops the error
 print (safeDiv 1 4 >>= safeDiv 1)     # Some 4: =<< and >>= chain Option steps
 # unwrap and expect take the value out, as in Rust: None or Err is a runtime
 # error (expect "no samples" None fails with "no samples"). A constructor

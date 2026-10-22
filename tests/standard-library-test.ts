@@ -36,6 +36,8 @@ const cases: [string, string][] = [
     ['mapError upper (Err "oops")', 'Err "OOPS"'],
     ['okOr "empty" (Some 1)', 'Ok 1'],
     ['okOr "empty" None', 'Err "empty"'],
+    ['map (to Option) [Ok 1, Err "x"]', '[Some 1, None]'],
+    ['[to Option (Some 2), to Option None]', '[Some 2, None]'],
     ['[unwrap (Some 1), unwrap (Ok 2), expect "a" (Some 3), expect "b" (Ok 4)]', '[1,2,3,4]'],
     ['typeOf unwrap', 'Option a | Result a b -> a'],
     // A constructor pattern binds in a block as at the top level.

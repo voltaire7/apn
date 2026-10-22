@@ -138,7 +138,9 @@ to Celsius (F 212)              # C 100.0
 ```
 
 (`to Celsius (F f) = ...` would read `Celsius (F f)` as one typed pattern, as
-any capitalized name in a parameter list takes the patterns after it.)
+any capitalized name in a parameter list takes the patterns after it. An
+instance of several clauses writes the type alone in parentheses, as
+`option` does: `to (Option) (Ok x) = Some x` and `to (Option) (Err _) = None`.)
 
 ## Absence and errors — `option`
 
@@ -160,13 +162,14 @@ Importing `option` also brings the Functor and Monad instances of both types
 | `mapError f result` | Transform `Err`, preserve `Ok` |
 | `resultDefault fallback result` | Unwrap `Ok`, use fallback for `Err` |
 | `okOr error option` | `Some x` as `Ok x`; `None` as `Err error` |
+| `to Option result` | `Ok x` as `Some x`; `Err e` as `None` (Elm's `Result.toMaybe`) |
 | `expect message m` | The value in `Some`/`Ok`; for `None` a runtime error with the message, for `Err e` the message and `e` |
 | `unwrap m` | The value in `Some`/`Ok`, or a runtime error (`unwrap: None`, `unwrap: Err "oops"`) |
 
 A function with one way to fail returns an `Option` (`mean`, `headOption`,
 `safeDiv`, ...): `None` already says what happened. `okOr` turns it into a
 `Result` where a message describes the failure, such as in a chain of steps
-that report errors.
+that report errors; `to Option` drops the message again.
 
 These are ordinary APN variants. `Result` does not catch runtime exceptions.
 
