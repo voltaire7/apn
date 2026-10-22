@@ -27,6 +27,9 @@ function fails(source: string, text: string, kind?: string): void {
 
 for (const [name, source, expected] of [
     ["operators are functions", "print ((+) 1 2)\nprint (foldl (*) 1 [1..5])\nprint (intrinsics.add 1 2)", ["3", "120", "3"]],
+    // Each use of an intrinsic has its own type variables.
+    ["intrinsics are polymorphic at each use", "x <- intrinsics.return 1\ny <- intrinsics.return \"s\"\nprint [x + 1]\nprint (y ++ \"!\")\nprint (intrinsics.source 1 ++ intrinsics.source \"a\")",
+        ["[2]", "s!", "1\"a\""]],
     ["sections of any operator", "print (map (2 ^) [1,2,3])\nprint (map (++ [0]) [[1],[2]])\nprint (filter (>= 2) [1,2,3])", ["[2,4,8]", "[[1,0],[2,0]]", "[2,3]"]],
     ["prelude fixities", "print (1 + 2 * 3)\nprint (2 ^ 3 ^ 2)\nprint (10 - 3 - 2)\nprint (1 :: 2 :: [3])\nprint (-2 ^ 2)", ["7", "512", "5", "[1,2,3]", "-4"]],
     ["cons stays lazy", "ones = 1::ones\nprint (take 3 ones)", ["[1,1,1]"]],
