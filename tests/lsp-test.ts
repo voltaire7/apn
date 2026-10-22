@@ -165,6 +165,10 @@ Deno.test("lint reports a clause or alternative that never runs", () => {
     const cards = new URL("./fixtures/lint/", import.meta.url).pathname;
     equal(lint("import \"cards\"\ns _ = 0\ns Hearts = 1", false, cards).filter(d => d.code === "unreachable-clause").map(d => d.range.start.line), [2]);
     equal(unreachable("import \"cards\"\ns _ = 0\ns Hearts = 1"), []);
+    // So are those of a file a statement loads (load "f", Dynamic $ load "f").
+    for (const load of ['load "cards"', 'Dynamic $ load "cards"', 'load "missing"']) {
+        equal(lint(`${load}\ns _ = 0\ns Hearts = 1`, false, cards).filter(d => d.code === "unreachable-clause").length, load.includes("cards") ? 1 : 0);
+    }
     // match tries alternatives in order: any after an unconditional one never runs.
     equal(unreachable("v = match 3 [\n    x -> 0\n    1 -> 5\n]"), [2]);
     equal(unreachable("v = match 3 [\n    1 -> 5\n    x -> 0\n]"), []);

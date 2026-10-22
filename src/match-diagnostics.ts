@@ -1,12 +1,13 @@
-import { clauseKey, METHODS, sourceLocations, type Expr, type Pattern, type TopLevel } from "./ast.ts";
+import { clauseKey, isLoadCall, METHODS, sourceLocations, type Expr, type Pattern, type TopLevel } from "./ast.ts";
 import type { Diagnostic } from "./lint.ts";
-import { resolveModule } from "./modules.ts";
+import { loadPath, readLoad, resolveModule } from "./modules.ts";
 import { parseDocument } from "./parser.ts";
 
 // This analysis never evaluates APN. Unknown families or dynamic handler lists
 // are left to runtime matching; guards cannot establish total coverage. The
-// families it knows are the program's and those the modules it imports declare
-// (resolved from directory, as the interpreter resolves them, and read only).
+// families it knows are the program's and those the modules it imports and the
+// files it loads declare (resolved from directory, as the interpreter resolves
+// them, and read only).
 export function matchDiagnostics(program: TopLevel[], source: string, directory = "."): Diagnostic[] {
     const families = new Map<string, Map<string, number>>();
     const constructors = new Map<string, string>();
@@ -18,6 +19,16 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
     const declare = (statements: TopLevel[], from: string) => {
         for (const node of statements) {
             if (node.t === "type") add(node.def.name, node.def.variants.map(v => [v.tag, v.arity]));
+            const loaded = node.t === "expr" ? loadedName(node.value) : undefined;
+            if (loaded !== undefined) {
+                let path;
+                try { path = loadPath(loaded, from); } catch { continue; }
+                const text = visited.has(path) ? undefined : readLoad(path);
+                visited.add(path);
+                try { if (text !== undefined) declare(parseDocument(text), path.slice(0, path.lastIndexOf("/") + 1)); }
+                catch { /* a file that does not parse declares nothing here */ }
+                continue;
+            }
             if (node.t !== "expr" || node.value.t !== "import") continue;
             for (const spec of [node.value.module].flat()) {
                 let module;
@@ -173,4 +184,12 @@ function patternNames(p: Pattern): string[] {
     if (p.p === "var") return [p.name];
     return Object.values(p).flatMap(value => Array.isArray(value) ? value.flatMap(x => x && typeof x === "object" && "p" in x ? patternNames(x) : [])
         : value && typeof value === "object" && "p" in value ? patternNames(value as Pattern) : []);
+}
+
+// The file a load statement names literally: load "f", also as Dynamic $ load "f".
+function loadedName(e: Expr): string | undefined {
+    if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return loadedName(e.stmts[0]);
+    if ((e.t === "app" || e.t === "pipe") && e.f.t === "var" && e.f.name === "Dynamic") return loadedName(e.t === "app" ? e.a : e.x);
+    const argument = isLoadCall(e) && (e.t === "app" ? e.a : e.t === "pipe" ? e.x : undefined);
+    return argument && argument.t === "string" ? argument.v : undefined;
 }
