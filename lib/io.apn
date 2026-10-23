@@ -2,5 +2,5 @@
 # Read one path from the command line, or all stdin when no path (or '-') is given.
 readInput = {
     args <- getArgs
-    null args ? readStdin : head args == "-" ? readStdin : readFile (head args)
+    null args ? readStdin : (head args == "-" ? readStdin : readFile (head args))
 }

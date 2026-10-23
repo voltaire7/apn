@@ -14,16 +14,16 @@ view computer mario = {
 }
 
 toGif mario = mario.y > 0 ? "https://elm-lang.org/images/mario/jump/" ++ mario.dir ++ ".gif"
-    : mario.vx != 0 ? "https://elm-lang.org/images/mario/walk/" ++ mario.dir ++ ".gif"
-    : "https://elm-lang.org/images/mario/stand/" ++ mario.dir ++ ".gif"
+    : (mario.vx != 0 ? "https://elm-lang.org/images/mario/walk/" ++ mario.dir ++ ".gif"
+    : "https://elm-lang.org/images/mario/stand/" ++ mario.dir ++ ".gif")
 
 update computer mario = {
     dt = 1.666
     vx = toX computer.keyboard
-    vy = mario.y == 0 ? computer.keyboard.up ? 5.0 : 0.0 : mario.vy - dt / 8
+    vy = mario.y == 0 ? (computer.keyboard.up ? 5.0 : 0.0) : mario.vy - dt / 8
     x = mario.x + dt * vx
     y = mario.y + dt * vy
-    [x: x, y: max 0 y, vx: vx, vy: vy, dir: vx == 0 ? mario.dir : vx < 0 ? "left" : "right"]
+    [x: x, y: max 0 y, vx: vx, vy: vy, dir: vx == 0 ? mario.dir : (vx < 0 ? "left" : "right")]
 }
 
 main = game view update [x: 0.0, y: 0.0, vx: 0, vy: 0.0, dir: "right"]

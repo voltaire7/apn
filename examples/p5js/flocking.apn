@@ -63,7 +63,7 @@ fly width height flock boid = {
 }
 
 # Past an edge, a boid comes in at the opposite one.
-wrap at edge = at < -size ? edge + size : at > edge + size ? -size : at
+wrap at edge = at < -size ? edge + size : (at > edge + size ? -size : at)
 
 total vectors = foldl (+) [0.0,0.0] vectors
 

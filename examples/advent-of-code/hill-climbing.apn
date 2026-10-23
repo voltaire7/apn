@@ -7,7 +7,7 @@ solveHill text = {
     height = length rows
     [cells] = [HashMap (zipWithIndex (concat rows))]
     [alphabet] = [HashMap (zip (to (List Char) "abcdefghijklmnopqrstuvwxyz") [0..25])]
-    elevation c = c == 'S' ? 0 : c == 'E' ? 25 : lookup c alphabet
+    elevation c = c == 'S' ? 0 : (c == 'E' ? 25 : lookup c alphabet)
     start = withDefault (fail "missing start S") (findIndex (=='S') (concat rows))
     goal = withDefault (fail "missing goal E") (findIndex (=='E') (concat rows))
     neighbors cell = {

@@ -10,5 +10,5 @@
 do [] = {}
 do [e] = e
 do (e :: es) = intrinsics.runs e ? e >>= r -> do (intrinsics.bound e r ++ es)
-    : intrinsics.binding e ? do es
-    : { e; do es }
+    : (intrinsics.binding e ? do es
+    : { e; do es })

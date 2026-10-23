@@ -25,14 +25,14 @@ _kind (String _) = "piece"
 _kind (Bool _) = "piece"
 _kind (Number n) = {
     text = to String n
-    head (to (List Char) text) == '-' ? "negative" : _digits n ? "piece" : "infix"
+    head (to (List Char) text) == '-' ? "negative" : (_digits n ? "piece" : "infix")
 }
 _kind (function :: args) = contains function ["[]","[:]","{}",".","..","()"] ? "piece"
-    : function == "->" ? "lambda"
-    : function == "?:" ? "ternary"
-    : contains function ["=","<-","import"] ? function
-    : _isOperator function && length args == 2 ? "infix"
-    : "call"
+    : (function == "->" ? "lambda"
+    : (function == "?:" ? "ternary"
+    : (contains function ["=","<-","import"] ? function
+    : (_isOperator function && length args == 2 ? "infix"
+    : "call"))))
 _digits (Number n) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) (to String n))
 _digits [".",_,key] = _digits key
 _digits (String text) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) text)
@@ -73,8 +73,8 @@ _node _ "[:]" fields = "["
     ++ joinWith ", " (map ([key,value] -> key ++ ": " ++ _shown _end value) fields) ++ "]"
 _node _ "->" [params,body] = joinWith ", " (map _parameter params) ++ _arrow body
 _node [_,_,follows] "?:" [c,yes,no] =
-    _shown ["operand",0,1] c ++ " ? " ++ _shown ["operand",1,-1] yes ++ " : "
-        ++ _shown ["operand",1,follows] no
+    _branch ["operand",0,1] c ++ " ? " ++ _branch ["operand",1,-1] yes ++ " : "
+        ++ _branch ["operand",1,follows] no
 _node _ "." [r, (String key)] = _shown ["selected",0,0] r ++ "." ++ key
 _node _ "." [r,selected] = _shown ["selected",0,0] r ++ "." ++ _bare _end selected
 _node _ "{}" [] = "{}"
@@ -90,6 +90,8 @@ _node place function args = length args == 2 && _isOperator function && !_tag fu
     ? _infix place function args
     : _application place function args
 
+# A ternary inside a ternary is parenthesized: c ? (d ? 1 : 2) : 3.
+_branch place syntax = _kind syntax == "ternary" ? "(" ++ _bare _end syntax ++ ")" : _shown place syntax
 # A lambda's parameter, a pattern, stands alone unless it is compound.
 _parameter syntax = _kind syntax == "piece" ? _bare _end syntax : "(" ++ _bare _end syntax ++ ")"
 # A lambda's body, after its guard if it has one.

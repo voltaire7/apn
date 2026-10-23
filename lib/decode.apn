@@ -32,8 +32,8 @@ _decodeAs (Record schema) value = map (values -> (map (v -> _ -> v) values).sche
     (_all (map ([name,t] -> _field name value >>= _decodeAs t) (pairs schema)))
 _decodeAs (Decoder decoder) value = map Dynamic (decoder value)
 _decodeAs t value = _decodeAs (_basic t) value
-_basic t = t == String ? string : t == Int ? int : t == Float ? float : t == Bool ? bool
-    : expecting (to String t) (isType t)
+_basic t = t == String ? string : (t == Int ? int : (t == Float ? float : (t == Bool ? bool
+    : expecting (to String t) (isType t))))
 decodeValue (Decoder decoder) value = decoder value
 decodeValue (Type t) value = _decodeAs t value
 # A type's decoder, for what takes only a decoder (map f (fromType Quote)), or

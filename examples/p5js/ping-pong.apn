@@ -41,8 +41,8 @@ draw (Sketch p) = {
     # Past an edge, the other player scores; the top and bottom bounce.
     [x,y] = ball
     x < 0 ? { set scores [leftScore, rightScore + 1]; resetBall p }
-        : x > p.width ? { set scores [leftScore + 1, rightScore]; resetBall p }
-        : when (y < 0 || y > p.height) (set speed (speed * [1,-1]))
+        : (x > p.width ? { set scores [leftScore + 1, rightScore]; resetBall p }
+        : when (y < 0 || y > p.height) (set speed (speed * [1,-1])))
     # W and S move the left paddle, the arrow keys the right one.
     left <- move p "w" "s" leftY
     right <- move p p.UP_ARROW p.DOWN_ARROW rightY

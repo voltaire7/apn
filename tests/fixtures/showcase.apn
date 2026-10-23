@@ -340,7 +340,7 @@ print fresh                      # => [field: 1]
 larger a b = a > b ? a : b
 print (larger 4 9)            # => 9
 
-smallest a b c = (a < b ? a : b) < c ? a < b ? a : b : c
+smallest a b c = (a < b ? a : b) < c ? (a < b ? a : b) : c
 print (smallest 7 2 9)     # => 2
 
 # lazy arguments make `if` just a function — only the TAKEN branch runs

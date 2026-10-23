@@ -226,7 +226,7 @@ for (const [name, source, expected] of [
     ["a do-block statement", 'import "option"\ncheck n = {\n    n > 0 ? return [] : Err "not positive"\n    Ok n\n}\nprint (check 5)\nprint (check -1)', ["Ok 5", 'Err "not positive"']],
     ["a known condition", 'import "option"\nx = 5 > 0 ? return [] : Err "no"\nprint x', ["Ok []"]],
     ["Option and lists", 'import "option"\nhalf n = n % 2 == 0 ? return (n / 2) : None\nprint (half 4)\npick n = n > 0 ? return n : [0,1]\nprint (pick 5)', ["Some 2", "[5]"]],
-    ["nested ternaries", 'import "option"\ngrade n = n > 90 ? return "A" : n > 50 ? return "B" : Err "fail"\nprint (grade 60)', ['Ok "B"']],
+    ["nested ternaries", 'import "option"\ngrade n = n > 90 ? return "A" : (n > 50 ? return "B" : Err "fail")\nprint (grade 60)', ['Ok "B"']],
     ["a bound result", 'import "option"\nsafe n = {\n    k <- n > 0 ? return n : Err "neg"\n    Ok (k * 2)\n}\nprint (safe 4)', ["Ok 8"]],
 ] as const) Deno.test(`ternary return: ${name}`, () => {
     const actual = run(source);

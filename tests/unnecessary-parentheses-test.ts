@@ -12,7 +12,7 @@ for (const source of [
     "print (r.x)",
     "-(f x)",
     "y = (a + b)",
-    "c ? (a ? 1 : 2) : 3",
+    "c ? ((a ? 1 : 2)) : 3",
 ]) Deno.test(`unnecessary parentheses: ${source}`, () => {
     try { parse(source); } catch (error) {
         if (String(error).includes("unnecessary parentheses")) return;
@@ -21,7 +21,21 @@ for (const source of [
     throw new Error("accepted");
 });
 
+// A ternary inside a ternary needs its parentheses, in any of its places.
+for (const source of ["c ? a ? 1 : 2 : 3", "c ? 1 : a ? 2 : 3", "c ? 1 : 2 ? 3 : 4", "c\n    ? a ? 1 : 2\n    : 3"]) {
+    Deno.test(`a nested ternary needs parentheses: ${JSON.stringify(source)}`, () => {
+        try { parse(source); } catch (error) {
+            if (String(error).includes("a ternary inside a ternary needs parentheses")) return;
+            throw error;
+        }
+        throw new Error("accepted");
+    });
+}
+
 for (const source of [
+    "c ? (a ? 1 : 2) : 3",
+    "c ? 1 : (a ? 2 : 3)",
+    "(c ? a : b) ? 1 : 2",
     "(a + b) * c",
     "a - (b - c)",
     "(a :: b) :: c",
@@ -113,7 +127,7 @@ function tree(x: unknown): unknown {
 for (const source of [
     "f x + 1", "(1 + 2) * 3", "a - (b - c)", "(a :: b) :: c", "a ^ b ^ c", "(a ^ b) ^ c", "f (g x) -1",
     "f -(a + b)", "-(-x)", "!f x", "-x ^ 2", "(-x) ^ 2", "r.x.y", "xs.(i + 1)", "(r.1).2", "(f x).y",
-    "c ? d ? 1 : 2 : 3", "(c ? 1 : 2) + 3", "a $ b ? c : d", "c ? (a $ b) : d", "f $ g $ x",
+    "c ? (d ? 1 : 2) : 3", "c ? 1 : (d ? 2 : 3)", "(c ? 1 : 2) + 3", "a $ b ? c : d", "c ? (a $ b) : d", "f $ g $ x",
     "xs >>= x -> f x", "xs >>= (x -> f x) >>= g", "(x -> x) 1", "f (x -> x) y", "run (x -> x)",
     "[(x, y -> x)]", "[x -> x]", "map (+ 1) xs", "(+)", "(10 -)", "[1 + 1, 2]", "[x: f 1]",
     "x | x > 0 -> y -> y", "{ a <- return 1; print (a + 1) }", "a && (b || c)", "[a + 1..b]",

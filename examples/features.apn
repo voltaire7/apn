@@ -95,7 +95,7 @@ print (parser.parse parser.number "12")  # => Ok 12
 # ---------------------------------------------------------
 # The ternary c ? a : b is APN's if. Arguments are lazy, so only the branch
 # taken is evaluated.
-signName n = n < 0 ? "negative" : n == 0 ? "zero" : "positive"
+signName n = n < 0 ? "negative" : (n == 0 ? "zero" : "positive")
 print (signName -5)                      # => negative
 
 # match tries patterns in order; a guard (| condition) refines one.

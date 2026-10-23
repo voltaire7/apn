@@ -187,7 +187,9 @@ use `match` with guarded pattern lambdas instead (see
 
 There is no `if`/`then`/`else`; use the ternary `cond ? a : b`. Only the
 selected branch runs. The ternary's `:` is not cons (`::`), so a branch may
-cons freely: `b ? x :: xs : []`.
+cons freely: `b ? x :: xs : []`. A ternary inside a ternary, in any of its
+places, is parenthesized: `c ? (d ? 1 : 2) : 3`, `n < 0 ? -1 : (n > 0 ? 1 : 0)`;
+`c ? d ? 1 : 2 : 3` and `c ? 1 : d ? 2 : 3` are errors.
 
 Operator sections: `(+ 2)` is `x -> x + 2`, `(2 +)` is `x -> 2 + x`, and a lone
 operator `(+)` is the function `+` is bound to, so `(+) a b` is `a + b` in every
@@ -354,7 +356,7 @@ binding; operators in the same row have equal precedence.
 | `==`, `!=`, `<`, `>`, `<=`, `>=` | `infixl 4` | Left | `a < b == c` → `(a < b) == c` |
 | Logical `&&` | `infixl 3` | Left | `a && b && c` → `(a && b) && c` |
 | Logical `\|\|` | `infixl 2` | Left | `a \|\| b \|\| c` → `(a \|\| b) \|\| c` |
-| Ternary `? :` | syntax | Right | `a ? b : c ? d : e` → `a ? b : (c ? d : e)` |
+| Ternary `? :` | syntax | — | a nested one is parenthesized: `a ? b : (c ? d : e)` |
 | Application `$` | `infixr 0` | Right | `f $ g $ x` → `f (g x)` |
 
 `f \ g` creates a function that computes `f (g x)` when called with `x`.

@@ -27,7 +27,7 @@ get request = HttpGet request.url request.expect
 # An expectation: json says whether the body is parsed (as from JSON) first;
 # success gets the body, failure the status (0: no answer, -1: not JSON) and why.
 failure toMessage status reason = toMessage
-    (Err (status == 0 ? NetworkError : status == -1 ? BadBody reason : BadStatus status))
+    (Err (status == 0 ? NetworkError : (status == -1 ? BadBody reason : BadStatus status)))
 expectString toMessage = [
     json: false
     success: body -> toMessage (Ok body)

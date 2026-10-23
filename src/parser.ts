@@ -626,11 +626,32 @@ class Parser {
 
     noCons = 0; // >0 while parsing a ternary branch (`:` belongs to the ternary)
 
+    // A ternary's branch. A ternary inside one is parenthesized, which keeps
+    // its parentheses (see judge): c ? (d ? 1 : 2) : 3, c ? 1 : (d ? 2 : 3).
+    branches = new Set<number>();
+    branch(): Expr {
+        const at = this.nextToken(), start = this.toks[at];
+        this.branches.add(at);
+        const e = this.parseOperators(1);
+        if (e.t === "ternary") throw new APNError("parse", "a ternary inside a ternary needs parentheses", {
+            pos: start.pos, len: 1, hint: "write c ? (d ? 1 : 2) : 3, or c ? 1 : (d ? 2 : 3)",
+        });
+        return e;
+    }
+    // The index of the next token past line breaks and indentation.
+    nextToken(): number {
+        let j = this.i;
+        while (["newline", "indent", "dedent"].includes(this.toks[j].k)) j++;
+        return j;
+    }
+
     parseOperators(minPrec: number): Expr {
         const start = this.peek().pos;
+        const at = this.nextToken();
         let left = this.parseOperand();
         this.judge(left, e => e.t !== "import" && level(e) >= minPrec && this.fitsBefore(e) &&
-            !(isLambda(e) && (this.noLambda || this.listedParams(left))) && !(e.t === "unop" && this.afterPrefix(left)));
+            !(isLambda(e) && (this.noLambda || this.listedParams(left))) && !(e.t === "unop" && this.afterPrefix(left)) &&
+            !(e.t === "ternary" && this.branches.has(at)));
         for (;;) {
             // A deeper line starting with an operator (or a ternary's ?)
             // continues the expression, as a trailing one does.
@@ -643,11 +664,11 @@ class Parser {
                 this.skipLayout();
                 const saved = this.noCons;
                 this.noCons = 1;
-                const then = this.parseOperators(1);
+                const then = this.branch();
                 this.noCons = saved;
                 this.continueLine(x => x.k === "sym" && x.v === ":");
                 this.expectSym(":");
-                const els = this.parseOperators(1);
+                const els = this.branch();
                 left = { t: "ternary", cond: left, then, els };
                 continue;
             }
@@ -2241,7 +2262,11 @@ function bareSource(e: Expr, where: Place): string {
             return e.hi === null
                 ? `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..]`
                 : `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..${e.hi}]`;
-        case "ternary": return `${of(e.cond, place("operand", 0, 1))} ? ${of(e.then, place("operand", 1))} : ${of(e.els, place("operand", 1, where.follows))}`;
+        case "ternary": {
+            // A ternary inside a ternary is parenthesized: c ? (d ? 1 : 2) : 3.
+            const branch = (x: Expr, at: Place) => ungrouped(x).t === "ternary" ? `(${of(ungrouped(x))})` : of(x, at);
+            return `${branch(e.cond, place("operand", 0, 1))} ? ${branch(e.then, place("operand", 1))} : ${branch(e.els, place("operand", 1, where.follows))}`;
+        }
         case "recordAccess": {
             // A scoped selection's brackets are its syntax: xs.(i + 1), r.{ k }.
             const argument = e.scoped && e.argument ? e.argument : undefined;
