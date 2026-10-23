@@ -104,6 +104,9 @@ for (const source of [
     'numbers = import "number"\n{ numbers; 1 }\nsq 3',
     'numbers = import "number"\nf _ = numbers\nm = f []\nsq 3',
     'random = { import "number" }\nsq 3',
+    // An item after an x <- m item yields the block ending in it: { x <- m; x } is an error.
+    'print [x <- return 1, x]',
+    'print [x <- [1,2], 7]',
 ]) Deno.test(`default checking rejects before evaluation: ${source}`, () => rejected(session(), source));
 
 Deno.test("a static error prevents earlier effects and bindings", () => {

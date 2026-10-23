@@ -1739,11 +1739,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const before = new Map<string, Entry>();
         const local = items.some(item => item.expr && binding(item.expr)) || changed.size > 0;
         let run: { scope: Scope; local: Scope } | undefined;
+        // The bindings so far: an item after an x <- m item yields the block of
+        // them ending in it (see Interpreter.yields), checked as one.
+        const statements: Expr[] = [];
+        let runs = false;
         // A list is an unevaluated block: its x <- m items bind as a block's do.
         doBlocks.push({});
         try { return codeItems(); } finally { doBlocks.pop(); }
         function codeItems(): Ty {
         const out = items.map((item): FormulaItem => {
+            if (item.expr && binding(item.expr)) {
+                statements.push(item.expr);
+                runs ||= item.expr.t === "patDef" && !!item.expr.eager;
+            }
             if (!item.expr || item.type && !mentions(item.expr, changed)) {
                 for (const [name, entry] of item.binds ?? []) { before.set(name, entry); run?.local.set(name, entry); }
                 return item;
@@ -1758,6 +1766,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             try {
                 const t = infer(item.expr, here);
                 type = binding(item.expr) ? bindingValue(item.expr, here) ?? variable() : item.slot ? slotValue(item.slot, t, item.expr) : t;
+                if (runs && !binding(item.expr)) infer({ t: "block", stmts: [...statements, item.expr], style: "{" }, item.scope ?? here);
             } finally { openNames = outer; }
             const names = item.expr.t === "patDef" ? patternNames(item.expr.pattern)
                 : item.expr.t === "stmDef" && /^[A-Z]/.test(item.expr.name) && item.expr.clauses[0].params.length ? item.expr.clauses[0].params.flatMap(patternNames)
@@ -5979,6 +5988,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("intrinsics.written", [variable()], str);
     native("intrinsics.binding", [variable()], bool);
     native("intrinsics.runs", [variable()], bool);
+    native("intrinsics.yields", [variable()], list(variable()));
     native("intrinsics.bound", [variable(), variable()], list(variable()));
     native("intrinsics.syntax", [variable()], explicitDynamic);
     scope.set("toAST", { type: fn(variable(), explicitDynamic) });

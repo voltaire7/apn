@@ -83,7 +83,7 @@ export const NATIVES: Array<[string, number]> = [
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
     ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1], ["use", 1],
-    ["emit", 1], ["step", 2], ["intrinsics.syntax", 1], ["intrinsics.written", 1], ["intrinsics.binding", 1], ["intrinsics.runs", 1], ["intrinsics.bound", 2], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
+    ["emit", 1], ["step", 2], ["intrinsics.syntax", 1], ["intrinsics.written", 1], ["intrinsics.binding", 1], ["intrinsics.yields", 1], ["intrinsics.runs", 1], ["intrinsics.bound", 2], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
     ["intrinsics.bind", 2], ["intrinsics.ap", 2], ["intrinsics.return", 1], ["intrinsics.throw", 1], ["intrinsics.source", 1],
@@ -2260,6 +2260,26 @@ export class Interpreter {
             return { kind: "cons", head, tail: this.rerun(cell.tail, next) };
         });
     }
+    // What code yields, item by item (print, reduce): a binding yields nothing,
+    // and an item after an x <- m item is the block of the bindings before it
+    // ending in it, run by do ([x <- m, f x] yields m >>= x -> f x). An item's
+    // own value stays its statement's, which do runs once.
+    private yielded(item: Value, bindings: Value[]): Value {
+        if (!bindings.some(b => this.written(b)?.runs)) return item;
+        return this.defer(() => this.apply(this.demand(this.preludeBindings.get("do")!), this.appendCode(mkList(bindings), mkList([item]))));
+    }
+    private yields(list: Value, bindings: Value[] = []): Value {
+        return this.defer(() => {
+            for (let rest = list;;) {
+                checkInterrupt();
+                const cell = this.cell(rest);
+                if (cell === null) return mkList([]);
+                rest = cell.tail;
+                if (this.written(cell.head)?.binds) { bindings = [...bindings, cell.head]; continue; }
+                return { kind: "cons", head: this.yielded(cell.head, bindings), tail: this.yields(rest, bindings) };
+            }
+        });
+    }
     // xs ++ ys: xs's items, then ys's, which see the bindings xs's make (see
     // rerun): [x = 1] ++ [x + 1] is the code [x = 1, x + 1].
     private appendCode(xs: Value, ys: Value, before = new Map<string, Value>()): Value {
@@ -2754,9 +2774,11 @@ export class Interpreter {
                     item += text;
                     if ((heldLength += text.length) > 4096) decide(spacedItem(item));
                 };
-                for (const element of this.elements(v)) {
-                    // A list shows what its code yields: a binding yields nothing.
-                    if (this.written(element)?.binds) continue;
+                // A list shows what its code yields (see yields).
+                const bindings: Value[] = [];
+                for (const entry of this.elements(v)) {
+                    if (this.written(entry)?.binds) { bindings.push(entry); continue; }
+                    const element = this.yielded(entry, bindings);
                     if (count++) separator === undefined ? held.push(null) : emit(separator);
                     item = "";
                     this.render(element, out, false, ancestors);
@@ -3695,6 +3717,7 @@ export class Interpreter {
         // Whether a list's item is a binding (x = 1), unevaluated: code that
         // yields no value (see reduce).
         if (name === "intrinsics.binding") return { kind: "bool", v: !!this.written(argsIn[0])?.binds };
+        if (name === "intrinsics.yields") return this.yields(argsIn[0]);
         // An x <- m item (see runItem); bound gives the code x = r, which joined
         // before the items after it binds x to r for them (see appendCode).
         if (name === "intrinsics.runs") return { kind: "bool", v: !!this.written(argsIn[0])?.runs };
