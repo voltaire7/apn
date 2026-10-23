@@ -244,6 +244,10 @@ export function describeType(value: Value): string {
                 if (e.op === "\\") {
                     const input = fresh(); return arrow(input, apply(l, apply(r, input)));
                 }
+                // The monad operators have one type, whatever instances they have.
+                if ([">>=", ">>", "<*>", "<$>", "=<<"].includes(e.op) && !locals.has(e.op) && env.get(e.op)) {
+                    return apply(apply(inspect(env.get(e.op)!), l), r);
+                }
                 const a = resolve(l), b = resolve(r);
                 if (["+", "-", "*"].includes(e.op) && a.tag === "name" && b.tag === "name" && a.name === b.name && NUMERIC_TYPES.includes(a.name)) return a;
                 // The remaining overloaded operators have no single sound static rule.
@@ -303,8 +307,14 @@ export function describeType(value: Value): string {
                     // The checker's signature; the few it types as intrinsics
                     // (map over any functor, length of anything) are written here.
                     const written = signatureExpr(v.name);
+                    // f a: a type holding an a, the monad or functor (Option a, List a).
+                    const f = fresh(), held = (x: Shape): Shape => ({ tag: "apply", head: f, args: [x] });
                     const intrinsics: Record<string, Shape> = {
-                        map: (f => arrow(arrow(a, b), arrow({ tag: "apply", head: f, args: [a] }, { tag: "apply", head: f, args: [b] })))(fresh()),
+                        map: arrow(arrow(a, b), arrow(held(a), held(b))),
+                        "intrinsics.bind": arrow(held(a), arrow(arrow(a, held(b)), held(b))),
+                        "intrinsics.ap": arrow(held(arrow(a, b)), arrow(held(a), held(b))),
+                        "intrinsics.return": arrow(a, held(a)),
+                        "intrinsics.throw": arrow(a, held(b)),
                         length: arrow(a, named("Int")),
                         fail: arrow(named("String"), a),
                     };
@@ -319,12 +329,33 @@ export function describeType(value: Value): string {
             default: return named({ bool: "Bool", string: "String", char: "Char", record: "Record", mutable: "Mutable", pointer: "Pointer", hashmap: "HashMap", nomatch: "a", io: "IO" }[v.kind]);
         }
     }
-    const names = new Map<Shape, string>();
+    // A variable applied to types (map's f a) is named f, g, ...; the others
+    // a, b, ... in order, skipping those names.
+    const names = new Map<Shape, string>(), heads = new Set<Shape>(), seen = new Set<Shape>();
+    const letter = (n: number) => String.fromCharCode(97 + n % 26) + (n >= 26 ? Math.floor(n / 26) : "");
+    function findHeads(t: Shape): void {
+        t = resolve(t);
+        if (seen.has(t)) return;
+        seen.add(t);
+        if (t.tag === "apply") {
+            const head = resolve(t.head);
+            if (head.tag === "var" && !names.has(head)) { names.set(head, letter(5 + heads.size)); heads.add(head); }
+            [t.head, ...t.args].forEach(findHeads);
+        } else if (t.tag === "arrow") { findHeads(t.from); findHeads(t.to); }
+        else if (t.tag === "list") findHeads(t.element);
+        else if (t.tag === "name") t.args.forEach(findHeads);
+        else if (t.tag === "union") t.choices.forEach(findHeads);
+    }
+    let count = 0;
     function show(t: Shape, precedence = 0): string {
         t = resolve(t);
         switch (t.tag) {
             case "var": {
-                if (!names.has(t)) { const n = names.size; names.set(t, String.fromCharCode(97 + n % 26) + (n >= 26 ? Math.floor(n / 26) : "")); }
+                if (!names.has(t)) {
+                    const taken = new Set(names.values());
+                    while (taken.has(letter(count))) count++;
+                    names.set(t, letter(count++));
+                }
                 return names.get(t)!;
             }
             // [Int,Float] is a positional type; a list of any length is List Int.
@@ -346,5 +377,7 @@ export function describeType(value: Value): string {
             }
         }
     }
-    return show(inspect(value));
+    const shape = inspect(value);
+    findHeads(shape);
+    return show(shape);
 }

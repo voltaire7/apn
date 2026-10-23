@@ -679,8 +679,10 @@ prints as its source; using one as a plain value is an ambiguity error.
 There are no `Functor` or `Monad` types: a parameter passed to `map` or `>>=`
 accepts whatever has an instance, checked at each call (`double m = map (* 2) m`;
 `double 5` is a static error, as is a type with no `map` instance).
-`typeOf map` is `(a -> b) -> c a -> c b`, `c` being that type (see "Function
-types": `((a -> b) -> f a -> f b) == typeOf map`).
+`typeOf map` is `(a -> b) -> f a -> f b`, `f` being that type, and the monad
+functions read as Haskell's: `typeOf (>>=)` is `f a -> (a -> f b) -> f b`,
+`typeOf (>>)` is `f a -> f b -> f b` (see "Function types"). A variable
+applied to types is named `f`, `g`, ...; the others `a`, `b`, ....
 
 ### Overloading on the result type
 

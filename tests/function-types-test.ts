@@ -22,17 +22,20 @@ for (const [name, source, expected] of [
         ["true", "true", "false", "true"]],
     ["a function type taking a function", "print (((a -> b) -> List a -> List a) == typeOf filter)\nprint (typeOf filter)",
         ["true", "(a -> b) -> List a -> List a"]],
-    // map works on any type with a map instance: c a is that type holding a.
+    // map works on any type with a map instance: f a is that type holding a.
     ["map's type maps any functor", "print (typeOf map)\nd m = map (* 2) m\nprint (typeOf d)",
-        ["(a -> b) -> c a -> c b", "a b -> a c"]],
+        ["(a -> b) -> f a -> f b", "f a -> f b"]],
+    // The monad functions, as Haskell writes them (f is the monad).
+    ["the monad functions' types", "print (typeOf (>>=))\nprint (typeOf (>>))\nprint (typeOf (<*>))\nprint (typeOf return)\nprint (typeOf (=<<))",
+        ["f a -> (a -> f b) -> f b", "f a -> f b -> f b", "f (a -> b) -> f a -> f b", "a -> f a", "(a -> f b) -> f a -> f b"]],
     // f a: a type variable applied to a type, any type holding an a.
     ["a type variable applied to a type", 'print (((a -> b) -> f a -> f b) == typeOf map)\nprint (((a -> b) -> g x -> g y) == typeOf map)\nprint (((a -> b) -> List a -> List b) == typeOf map)',
         ["true", "false", "false"]],
     ["f a in a contract takes any type holding an a", 'import "option"\napply2 (((a -> b) -> f a -> f b) m) xs = m (* 2) xs\nprint [apply2 map [1,2], apply2 map (Some 3)]\nprint (typeOf apply2)\ntwice ((f a -> f a) h) x = h (h x)\nprint (twice tail [1,2,3])',
-        ["[[2,4], Some 6]", "((a -> b) -> c a -> c b) -> c a -> c b", "[3]"]],
+        ["[[2,4], Some 6]", "((a -> b) -> f a -> f b) -> f a -> f b", "[3]"]],
     // f a e: the type's first two parameters (as a parameter ((f a) e), as (Vec n a xs)).
     ["a type variable applied to several types", 'import "option"\nboth (((a -> b) -> f a e -> f b e) m) r = m (* 2) r\nprint [both map (Ok 3), both map (Err "no")]\nprint (typeOf both)\nk ((a -> List (f a e)) h) = h\nprint (k (x -> [Ok x]) 1)\nprint (isType ((f a e) -> f a e) (x -> x))\nprint (isType (((f a) e) -> f a e) (x -> x))\nprint (isType (f a e -> f a e) (x -> x))',
-        ['[Ok 6, Err "no"]', "((a -> b) -> c a d -> c b d) -> c a d -> c b d", "[Ok 1]", "true", "true", "true"]],
+        ['[Ok 6, Err "no"]', "((a -> b) -> f a c -> f b c) -> f a c -> f b c", "[Ok 1]", "true", "true", "true"]],
     ["[Int] is positional; a list of any length is List Int", "print (List Int == typeOf [1,2,3])\nprint ([Int] == typeOf [1])\nprint (typeOf [1,\"a\"])\nprint (typeOf [1] == List)",
         ["true", "false", "List (Int | String)", "true"]],
     ["a name bound to a type is that type; any other is a variable", "a = 100\nprint ((a -> a) == typeOf (x -> x))\nt = Int\nprint ((t -> t) == typeOf ((Int x) -> x))\nprint ((t -> t) == typeOf (x -> x))",
