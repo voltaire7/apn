@@ -4,7 +4,8 @@ Two modes, picked automatically: a **TTY** stdin gets the raw-mode line editor
 (`ReplEditor`); a **piped** stdin (`... | deno run main.ts`) gets the plain
 line loop — no colors, no editor, same chunk semantics. Each input is a
 statement: an action runs (as in a file) and its result is echoed, except an
-empty result (`print 3` shows only `3`); bindings echo nothing. Interactive features:
+empty result (`print 3` shows only `3`); bindings echo nothing. `echo x` prints
+a value the same way from any program (see `docs/semantics.md`). Interactive features:
 
 - **History**: Up/Down walk submitted chunks. In a single-line buffer the
   arrows navigate history; in a multi-line buffer (continuation or a recalled

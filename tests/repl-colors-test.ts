@@ -1,6 +1,6 @@
 import { parse } from "../main.ts";
 import { Interpreter } from "../src/interp.ts";
-import { renderColored, highlightLine } from "../src/repl.ts";
+import { renderColored, highlightLine, colored } from "../src/repl.ts";
 import { highlightHtml } from "../src/highlight.ts";
 
 // The REPL echo: every value is colored as the interpreter renders it.
@@ -119,4 +119,29 @@ Deno.test("the web editor's HTML escapes tokens after coloring them", () => {
     const html = highlightHtml('f x = match x [\n    1 -> "<b>"\n]', new Set());
     if (!html.includes('<span class="t-operator">-&gt;</span>') || !html.includes('<span class="t-string">"&lt;b&gt;"</span>')) throw new Error(html);
     if (!html.includes('<span class="t-keyword">match</span>') || html.split("\n").length !== 3) throw new Error(html);
+});
+
+Deno.test("a type's numeric arguments are colored as numbers", () => {
+    const interp = new Interpreter();
+    const output = echo(interp, interp.run(parse("Vect 2 (Vect 1 Int)")));
+    if (!output.includes("\x1b[38;2;229;200;144m1\x1b[0m")) throw new Error(output);
+    if (output.replace(/\x1b\[[0-9;]*m/g, "") !== "Vect 2 (Vect 1 Int)") throw new Error(output);
+});
+
+// echo x prints what the REPL echoes for x, colored when paint is set.
+Deno.test("echo prints as the REPL echoes", () => {
+    const output: string[] = [];
+    const log = console.log;
+    console.log = (...args: unknown[]) => output.push(args.map(String).join(" "));
+    try {
+        const interp = new Interpreter();
+        interp.enableChecking();
+        interp.run(parse('echo ["hi", Vect 1 Int]'));
+        interp.paint = colored;
+        interp.run(parse('echo "hi"'));
+        const expected = echo(interp, interp.run(parse('"hi"')));
+        if (output[0] !== '["hi", Vect 1 Int]' || output[1] !== expected) throw new Error(JSON.stringify(output));
+    } finally {
+        console.log = log;
+    }
 });

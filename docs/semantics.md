@@ -448,8 +448,10 @@ fibs = 0 : 1 : zipWith (+) fibs (tail fibs)
 print (take 12 fibs)   # [0,1,1,2,3,5,8,13,21,34,55,89]
 ```
 
-Entering `x` or `fibs` in the REPL streams elements until Ctrl+C. `print` and
-`emit` also stream lists, including nested ones. File mode executes bare
+Entering `x` or `fibs` in the REPL streams elements until Ctrl+C. `print`,
+`echo` and `emit` also stream lists, including nested ones. `echo x` prints `x`
+as the REPL echoes it: strings and characters quoted (`echo "hi"` prints
+`"hi"`, `print "hi"` prints `hi`), and colored on a terminal. File mode executes bare
 expressions without echoing them; use `print x` to stream from a file.
 
 `x = x` cannot produce even an outer value. Demanding it waits indefinitely
@@ -577,8 +579,8 @@ equality with `x`.
 
 APN code is pure; effects are **IO actions**, ordinary values describing what
 to do. `print "hi"` builds the action that prints `hi`; nothing is printed
-until the action runs. The effectful builtins all return actions: `print` and
-`emit` (yielding `[]`), `readFile`, `readStdin`, `getArgs`, `fetch`, `exit`,
+until the action runs. The effectful builtins all return actions: `print`,
+`echo` and `emit` (yielding `[]`), `readFile`, `readStdin`, `getArgs`, `fetch`, `exit`,
 `set` (writing a `Mutable` cell), `bracket`, `withFile` and
 `ffi.withLibrary`. An action prints as its type, since only running it shows its result:
 `print (print 1)` prints `IO []`, an annotated `IO Int { ... }` prints `IO Int`,

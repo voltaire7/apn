@@ -531,12 +531,12 @@ const LIST_NATIVES = ["filter", "map", "take", "drop", "zipWith"];
 const EVALUATED_NATIVES = new Set([
     ...LIST_NATIVES, "length", "head", "tail", "null", "foldl", "foldr", "iterate", "enumerate",
     "chars", "fromChars", "upper", "lower", "toString", "intToString", "seq", "parse",
-    "print", "emit", "debug", "assert", "set", "readFile", "use",
+    "print", "echo", "emit", "debug", "assert", "set", "readFile", "use",
 ]);
 // Builtins that demand their arguments when called.
 const STRICT_NATIVES = new Set([
     "head", "tail", "null", "length", "chars", "fromChars", "upper", "lower", "toString", "intToString",
-    "parse", "print", "emit", "debug", "assert", "set", "seq", "readFile", "use",
+    "parse", "print", "echo", "emit", "debug", "assert", "set", "seq", "readFile", "use",
 ]);
 // Static evaluation limits: nesting (recursion) depth, and work per root value.
 const EVALUATION_DEPTH = 5000;
@@ -5108,9 +5108,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // assert c x is x, as Haskell's (c is checked when it runs).
             case "seq": case "assert": args[0](); return args[1]();
             // Effects are actions, run statically where the program runs them;
-            // print, emit, debug and set yield []. Printing
+            // print, echo, emit, debug and set yield []. Printing
             // renders, forcing every element in order.
-            case "print": case "emit": return { action: () => {
+            case "print": case "echo": case "emit": return { action: () => {
                 if (renderKnown(args[0]()) === undefined) incomplete = true;
                 return known([]);
             }, actionResult: "[]" };
@@ -6005,7 +6005,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     };
     const int = atom("Int"), str = atom("String"), bool = atom("Bool"), num = atom("Number");
     const empty = list(variable(), constant(0n));
-    for (const name of ["print", "emit"]) native(name, [variable()], io(empty));
+    for (const name of ["print", "echo", "emit"]) native(name, [variable()], io(empty));
     { const held = variable(); native("assert", [variable(), held], held); }
     native("isType", [variable(), variable()], bool);
     native("parse", [str], explicitDynamic);

@@ -531,7 +531,7 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   meet is unknown or endless, and argument-free compound expressions are
   cached per node and the bindings of the names they mention
   (`sameBinding`), since nested call arguments are each evaluated.
-  Effects (`print`, `emit`, `assert`, `debug`) only return their results
+  Effects (`print`, `echo`, `emit`, `assert`, `debug`) only return their results
   statically. `Known.mutable` is a cell. While `CheckOptions.mutation` (the
   session-wide `mayMutate` scan for `set` and `load`; `use` only exposes
   bindings that scan saw) is false,

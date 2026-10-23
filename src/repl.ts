@@ -103,10 +103,10 @@ function lastIsPrintCall(src: string): boolean {
         if (!last || last.t !== "expr") return false;
         let e = last.value;
         for (;;) {
-            if (e.t === "app" && e.f.t === "var" && (e.f.name === "print" || e.f.name === "emit")) return true;
+            if (e.t === "app" && e.f.t === "var" && ["print", "echo", "emit"].includes(e.f.name)) return true;
             if (e.t === "pipe") {
                 const c = e.f;
-                if (c.t === "var" && (c.name === "print" || c.name === "emit")) return true;
+                if (c.t === "var" && ["print", "echo", "emit"].includes(c.name)) return true;
                 e = c;
                 continue;
             }
@@ -205,15 +205,18 @@ const A = {
 };
 const paint = (code: string, s: string) => code + s + A.reset;
 
+// Text the interpreter renders, colored by its kind (Interpreter.paint).
+export function colored(text: string, kind?: Value["kind"] | "key"): string {
+    if (kind === "key") return text;
+    if (kind === "int" || kind === "float" || kind === "rational" || kind === "complex") return highlightLine(text);
+    const type = kind === "string" || kind === "char" ? "string"
+        : kind === "bool" ? "keyword"
+        : kind === "variant" || kind === "type" ? "type" : "punctuation";
+    return paint(T[type], text);
+}
+
 export function renderColored(interp: Interpreter, value: Value, emit: (s: string) => void): void {
-    interp.render(value, (text, kind) => {
-        if (kind === "key") { emit(text); return; }
-        if (kind === "int" || kind === "float" || kind === "rational" || kind === "complex") { emit(highlightLine(text)); return; }
-        const type = kind === "string" || kind === "char" ? "string"
-            : kind === "bool" ? "keyword"
-            : kind === "variant" || kind === "type" ? "type" : "punctuation";
-        emit(paint(T[type], text));
-    });
+    interp.render(value, (text, kind) => emit(colored(text, kind)));
 }
 
 
@@ -930,6 +933,7 @@ async function setTtyCooked(saved: string): Promise<void> {
 async function replTTY(): Promise<void> {
     const interp = new Interpreter();
     interp.enableChecking();
+    if (Deno.stdout.isTerminal()) interp.paint = colored;
     const hist = loadHistory();
     const ed = new ReplEditor(interp, hist);
     const watch = await startInterruptWatcher();

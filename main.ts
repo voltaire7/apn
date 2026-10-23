@@ -12,7 +12,7 @@ import { CLI_HELP, readCliOptions, VERSION } from "./src/cli-options.ts";
 import { setLooseSpacing } from "./src/parser.ts";
 import { formatFileReadError } from "./src/errors.ts";
 import { Interpreter, dirname } from "./src/interp.ts";
-import { runSource, repl, formatError } from "./src/repl.ts";
+import { runSource, repl, formatError, colored } from "./src/repl.ts";
 export { parse } from "./src/parser.ts";
 export { lex } from "./src/lexer.ts";
 
@@ -73,6 +73,7 @@ if (import.meta.main) {
         interp.sourceDir = dirname(file);
         interp.sourceFile = file;
         interp.programArgs = _args.slice(1);
+        if (Deno.stdout.isTerminal()) interp.paint = colored;
         try {
             runSource(src, interp, true); // file mode executes effects without rendering the last value
         } catch (err) {
