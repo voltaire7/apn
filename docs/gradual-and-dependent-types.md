@@ -328,9 +328,8 @@ it. What the proof cannot decide (a difference that depends on the indices, a
 recursion that does not shrink, a body it cannot follow) is checked when the
 claim runs, as before.
 
-`(Vec n a xs)` is the typed pattern `((Vec n a) xs)` for any type, as
-`(Vect n a xs)` is: a type applied to its parameters and one more pattern.
-With just the parameters, `(Option t)` still matches a type value.
+`(Vec n a xs)` is the typed pattern `((Vec n a) xs)`, as for any type with
+parameters (see [patterns](semantics.md#patterns-variants-and-scope)).
 
 ## Inferring arguments from a vector pattern
 

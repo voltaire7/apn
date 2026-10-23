@@ -1,4 +1,4 @@
-import { clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flattenTypedPatterns, isLoadCall, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
+import { clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, flattenTypedPatterns, isLoadCall, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -336,6 +336,20 @@ function integerResult(a: Ty, b: Ty): Ty | undefined {
 }
 const fn = (input: Ty, output: Ty, binder?: string, coerce = false): Ty => ({ k: "fn", input, output, binder, coerce });
 const list = (element: Ty, length?: Index): Ty => ({ k: "list", element, length });
+// A list taken whole, whatever its elements: (List _ xs), (List a xs).
+function wholeList(p: Pattern): p is Extract<Pattern, { p: "schema" }> {
+    return p.p === "schema" && p.type.t === "app" && p.type.f.t === "var" && p.type.f.name === "List" &&
+        (p.type.a.t === "placeholder" || p.type.a.t === "var" && /^[a-z]/.test(p.type.a.name));
+}
+// How many parameters a type takes: List a one, Option a one, Vect n a two;
+// none for Int, a record type or a type already applied.
+function typeParameters(type: Ty): number {
+    const t = resolve(type);
+    if (t.k === "factory") return 2;
+    if (t.k !== "type" || t.applied) return 0;
+    const value = resolve(t.value);
+    return value.k === "variant" && !value.base ? value.args.length : value.k === "atom" && value.name === "List" ? 1 : 0;
+}
 const constant = (n: bigint): Index => ({ constant: n, terms: new Map() });
 const resolve = (t: Ty): Ty => t.k === "var" && t.link ? resolve(t.link) : t.k === "apply" ? appliedType(t) : t;
 // f a once f is known: the type itself (List a, Result a e); else f a.
@@ -1840,6 +1854,27 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     unify(vector, expected, e);
                     bind(value, vector, scope, e, bound);
                     return;
+                }
+                // (Option t), a type applied to exactly its parameters, matches a
+                // type value: Option Int binds t to Int.
+                const parameters = typeParameters(t);
+                if (t.k === "type" && parameters && p.args.length === parameters) {
+                    const parts = p.args.map(() => variable()), value = resolve(t.value);
+                    unify({ k: "type", value: value.k === "variant" ? { ...value, args: parts } : list(parts[0]) }, expected, e);
+                    p.args.forEach((x, n) => bind(x, { k: "type", value: parts[n] }, scope, e, bound));
+                    return;
+                }
+                // One more is a value of the type: (Option t x) is ((Option t) x), read
+                // here when a call checks the clause before its statement.
+                if (parameters && p.args.length === parameters + 1 && t.k !== "factory") {
+                    const flat = flatTypedPattern(p, () => parameters);
+                    if (flat) { bind(flat, expected, scope, e, bound); return; }
+                }
+                // Any other count is neither: (Pair x) for Pair a b.
+                if (t.k === "type" && parameters && p.args.length) {
+                    const value = patternSource(p.args[p.args.length - 1]);
+                    problem(`'${p.tag}' in a pattern takes ${parameters} type${parameters === 1 ? "" : "s"}, or ${parameters + 1} patterns for a value`, e,
+                        `write (${p.tag} ${"_ ".repeat(parameters)}${value})`);
                 }
                 if (p.tag === "Type") {
                     const payload: Ty = { k: "type", value: variable() };
@@ -3464,8 +3499,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // it cannot match; other patterns 0.
     function patternScore(p: Pattern, argument: Entry): [number, number] {
         if (["int", "float", "bool", "string", "char"].includes(p.p)) return [40, 40];
-        if (p.p !== "constr" || !TYPE_NAMES.includes(p.tag)) return [0, 0];
-        const c = category(argument.type), tag = p.tag;
+        const tag = wholeList(p) ? "List" : p.p === "constr" ? p.tag : "";
+        if (!TYPE_NAMES.includes(tag)) return [0, 0];
+        const c = category(argument.type);
         if (tag === "Dynamic") return [30, 30];
         if (tag === "Vect") return !c ? [-1000, 30] : "kind" in c && c.kind === "List" ? [30, 30] : [-1000, -1000];
         if (tag === "Mutable" || tag === "Pointer") return [-1000, 30];
@@ -4277,6 +4313,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         } else if (p.p === "constr" && p.tag === "S" && p.args.length === 1) {
             const n = naturalArgument(p, value);
             if (n !== undefined && n > 0n) bindKnown(p.args[0], { number: { kind: "int", v: n - 1n, typeName: "UInt" } }, env, refutable);
+        } else if (wholeList(p)) {
+            bindKnown(p.value, value, env, refutable);
         } else if (p.p === "constr" && TYPE_NAMES.includes(p.tag) && p.args.length === 1 && plain(p.args[0])) {
             if (!NUMERIC_TYPES.includes(p.tag)) { env.set(p.args[0].name, value); return; }
             const n = numericOf(value);
@@ -5069,6 +5107,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // A lossless conversion (1) is certain only for a known value.
             return (score === 30 || score === 10 || score === 1) && irrefutable(p.args[0]);
         }
+        if (wholeList(p)) return score === 30 && irrefutable(p.value);
         if (p.p === "list") return p.v.every(irrefutable) && listLength(argument, p.v.length) === true;
         if (p.p === "cons") return irrefutable(p.head) && irrefutable(p.tail) && listLength(argument, 0) === false;
         return false;
@@ -5900,11 +5939,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         rewriteInfixConstructors(statement, op => constructorOperators.get(op));
         // (Vec n a xs) is the typed pattern ((Vec n a) xs) for a type with parameters.
-        flattenTypedPatterns(statement, name => {
-            const t = resolve(scope.get(name)?.type ?? dynamic), value = t.k === "type" ? resolve(t.value) : undefined;
-            if (t.k === "factory") return 2;
-            return value?.k === "variant" && !value.base ? value.args.length : undefined;
-        });
+        flattenTypedPatterns(statement, name => typeParameters(scope.get(name)?.type ?? dynamic));
         checkingExpression = statement.t === "expr" || statement.t === "patDef" ? statement.value : statement.t === "def" ? statement.clauses[0].body : undefined;
         try {
             statementWrote = false;

@@ -40,9 +40,9 @@ mouseDragged (Sketch p) = {
     set boids (boids ++ [boid])
 }
 
-# Each boid flies, among the boids as they were (a typed (List flock) parameter
+# Each boid flies, among the boids as they were (a typed (List _ flock) parameter
 # reads the cell's contents when called, before set replaces them).
-flyAll width height (List flock) = map (fly width height flock) flock
+flyAll width height (List _ flock) = map (fly width height flock) flock
 
 # A boid steered by its neighbors, then moved, wrapping around the edges.
 fly width height flock boid = {

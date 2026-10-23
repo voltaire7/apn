@@ -71,15 +71,15 @@ Deno.test('withFile closes handles even when saved outside the scope', () => {
     throw new Error('escaped live handle');
 });
 for (const [code, warnings] of [
-    ['Option a = Some a | None\nf (Option value) = match value [Some x -> x]', 1],
-    ['Option a = Some a | None\nf (Option value) = match value [Some x -> x, None -> 0]', 0],
-    ['Option a = Some a | None\nf (Option value) = match value [Some x | x > 0 -> x, None -> 0]', 1],
-    ['Option a = Some a | None\nf (Option value) = match value [Some x -> x, _ -> 0]', 0],
-    ['Option a = Some a | None\nf (Option value) = match value handlers', 0],
-    ['Option a = Some a | None\nf (Option value) = match value [handler]', 0],
-    ['Option a = Some a | None\nf (Option value) = value -> match value [Some x -> x]', 0],
-    ['Option a = Some a | None\nf match (Option value) = match value [Some x -> x]', 0],
-    ['import "option"\nf (Option value) = match value [None -> 0]', 1],
+    ['Option a = Some a | None\nf (Option _ value) = match value [Some x -> x]', 1],
+    ['Option a = Some a | None\nf (Option _ value) = match value [Some x -> x, None -> 0]', 0],
+    ['Option a = Some a | None\nf (Option _ value) = match value [Some x | x > 0 -> x, None -> 0]', 1],
+    ['Option a = Some a | None\nf (Option _ value) = match value [Some x -> x, _ -> 0]', 0],
+    ['Option a = Some a | None\nf (Option _ value) = match value handlers', 0],
+    ['Option a = Some a | None\nf (Option _ value) = match value [handler]', 0],
+    ['Option a = Some a | None\nf (Option _ value) = value -> match value [Some x -> x]', 0],
+    ['Option a = Some a | None\nf match (Option _ value) = match value [Some x -> x]', 0],
+    ['import "option"\nf (Option _ value) = match value [None -> 0]', 1],
 ] as const) Deno.test(`exhaustiveness diagnostic: ${code}`, () => {
     const ds = lint(code).filter(d => d.code !== 'unused');
     if (ds.length !== warnings || ds.some(d => d.code !== 'non-exhaustive-match' || d.severity !== 2)) throw new Error(JSON.stringify(ds));

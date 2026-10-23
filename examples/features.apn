@@ -1648,15 +1648,21 @@ print (checkedApply (*2))                     # 246 (typed Int)
 editorDouble x = x * 2
 print (editorDouble 21)                     # => 42
 
-# Parent type patterns bind the whole variant; constructor patterns unpack it.
+# A type applied to its parameters matches a type value; one more pattern is a
+# value of that type, which binds the parameters: (ExampleOption a value) takes
+# the whole variant, a its payload's type. Constructor patterns unpack it.
 ExampleOption a = ExampleSome a | ExampleNone
-exampleUnwrap (ExampleOption value) = match value [
+exampleUnwrap (ExampleOption _ value) = match value [
     ExampleSome x -> x
     ExampleNone -> 0
 ]
 print (exampleUnwrap (ExampleSome 123))      # => 123
 print (exampleUnwrap ExampleNone)        # => 0
 print (typeOf (ExampleSome 123))             # => ExampleOption
+examplePayload (ExampleOption a _) = a
+print (examplePayload (ExampleSome "x"))     # => String
+exampleParameter (ExampleOption a) = a
+print (exampleParameter (ExampleOption Int)) # => Int
 
 # C interop is opt-in: importing it and declaring signatures runs no C code.
 ffiExample = import "ffi"

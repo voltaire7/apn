@@ -33,7 +33,7 @@ mousePressed (Sketch p) = {
 # The next generation: a cell with 3 living neighbors lives, and a living one
 # with 2 stays alive. The neighbors are counted all at once, adding the
 # board's 8 shifts (+ adds lists element by element).
-generate (List cells) = {
+generate (List _ cells) = {
     shift [dx,dy] = map (rotate dx) (rotate dy cells)
     offsets = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]]
     neighbors = foldl (+) (map (map (_ -> 0)) cells) (map shift offsets)

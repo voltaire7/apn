@@ -26,7 +26,7 @@ draw (Sketch p) = {
 }
 
 # Each particle, and a line to the next, both fading; drawn last to first.
-display (Sketch p) (List path) = mapM (n -> {
+display (Sketch p) (List _ path) = mapM (n -> {
     particle = path n
     opacity = particle.frames / particleFadeFrames
     [x,y] = particle.position
@@ -65,7 +65,7 @@ createParticle (Sketch p) = {
     set previous mouse
 }
 
-addParticle position velocity (List paths) = {
+addParticle position velocity (List _ paths) = {
     path = paths (length paths - 1)
     particle = [
         position: position, velocity: velocity, hue: length path * 30 % 360

@@ -42,7 +42,7 @@ draw (Sketch p) = {
 }
 
 # Small flakes fall faster; one past the bottom starts again at the top.
-fall height (List flakes) = map (flake -> {
+fall height (List _ flakes) = map (flake -> {
     y = flake.y + 8 / flake.size
     flake.y = y > height ? -50.0 : y
     flake

@@ -6,7 +6,7 @@ Glsl = | Glsl String
 
 # A value's GLSL code.
 glsl (Glsl code) = code
-glsl (List items) = "vec" ++ to String (length items) ++ "(" ++ joinWith ", " (map glsl items)
+glsl (List _ items) = "vec" ++ to String (length items) ++ "(" ++ joinWith ", " (map glsl items)
     ++ ")"
 glsl (Number n) = to String (Float n)
 

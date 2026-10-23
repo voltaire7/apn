@@ -166,7 +166,7 @@ Deno.test("default checking reports an unbound name with a suggestion", () => {
 for (const [source, expected] of [
     ['import "sequence"; g [a,b] = forceList [b, a + b]; repeatApply 3 g [1,2]', '[5,8]'],
     ['import "sequence"\ntick [a,b,c,d,e,f,g,h,i] = forceList [b, c, d, e, f, g, h + a, i, a]\nsum (repeatApply 80 tick [0,1,1,2,1,0,0,0,0])', '5934'],
-    ['f (List xs) = xs; g [a,b] = f [b, a + b]; g (g [1,2])', '[3,5]'],
+    ['f (List _ xs) = xs; g [a,b] = f [b, a + b]; g (g [1,2])', '[3,5]'],
     ['import "sequence"; g [a,b] = a + b; g (forceList [1,2])', '3'],
     ['g [a,b] = a + b; g (map (x -> x * 2) [1,2])', '6'],
     ['xs = map (x -> x + 1) [1,2]\nys = map (x -> x * 2) [1,2,3]\ng [a,b] = a + b\n[g xs, length ys]', '[5,3]'],
@@ -216,7 +216,7 @@ for (const [source, expected] of [
     ['twice xs = xs * x -> x * 2; g [p,q] = p + q; g (twice [1,2])','6'],
     ['number xs = enumerate xs; g [p,q] = p; [g (number [1,2]), length (number [1,2,3])]','[[0,1],3]'],
     ['h a b = [map (x -> x) a, map (x -> x) b]; h [1] [1,2]','[[1],[1,2]]'],
-    ['f (List xs) = xs; h a b = [f a, f b]; h [1] [1,2]','[[1],[1,2]]'],
+    ['f (List _ xs) = xs; h a b = [f a, f b]; h [1] [1,2]','[[1],[1,2]]'],
 ] as const) Deno.test(`checker keeps builtin list lengths: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -332,7 +332,7 @@ for (const [source, expected] of [
     ['f (Int n) = [0]; f (String s) = [1,2]; g [a,b] = a; g (f "x")', '1'],
     ['f (Number n) = [0]; f xs = [1,2]; g [a] = a; g (f 2.5)', '0'],
     ['f (Exact n) = [0]; f xs = [1,2]; g [a,b] = a; g (f 2.5)', '1'],
-    ['f (List xs) = [0]; f other = [1,2]; g [a] = a; g (f [5,6])', '0'],
+    ['f (List _ xs) = [0]; f other = [1,2]; g [a] = a; g (f [5,6])', '0'],
     ['f (Int n) = [0]; f xs = [1,2]; h x = g (f x); g [a] = a; h 3', '0'],
 ] as const) Deno.test(`typed clauses rank like the runtime: ${source}`, () => {
     const actual = run(session(), source);
@@ -1150,7 +1150,7 @@ for (const [source, expected] of [
     ['f w = Float (w - 20)\nf (Number 3)', '-17.0'],
     ['f r = List Int (from JSON r)\nf "[1, 2]"', '[1,2]'],
     // A list indexed by a lambda's parameter.
-    ['f (List xs) = map (n -> xs n) [0..1]\nf [5,6]', '[5,6]'],
+    ['f (List _ xs) = map (n -> xs n) [0..1]\nf [5,6]', '[5,6]'],
     // An overloaded operator in a function whose operands are parameters.
     ['Money = | Money Int\n(Money a) + (Money b) = Money (a + b)\nf x y = x + y\nf (Money 1) (Money 2)', 'Money 3'],
     ['Money = | Money Int\n(Money a) + (Money b) = Money (a + b)\nf x y = x + y\nf 1 2', '3'],
@@ -1178,6 +1178,6 @@ for (const [source, expected] of [
 }
 for (const source of [
     'f w = Float (w - 20)\nf "a"',
-    'f (List xs) = map (n -> xs n) ["a"]\nf [1]',
+    'f (List _ xs) = map (n -> xs n) ["a"]\nf [1]',
     'f b = Int (b ? 1 : "a")\nf true',
 ]) Deno.test(`p5.js-example typing rejects: ${source}`, () => rejected(session(), source));

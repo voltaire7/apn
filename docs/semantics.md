@@ -782,6 +782,16 @@ already demanded argument. Variant construction defers its fields. In a
 constructor pattern, a bare capitalized argument takes no fields of its own
 (`R low None high`); one with fields is parenthesized (`R (Some x) y`).
 
+A type in a pattern takes its parameters, then a value. Applied to exactly its
+parameters it matches a type value, each name binding the part in its place:
+`(Option t)` given `Option Int` binds `t` to `Int`, `(Vect n a)` given `Vect 3
+Float` binds 3 and `Float`. One more pattern is a value of that type, the typed
+pattern `((Option t) x)`, whose names the value binds: `(Option t x)` given
+`Some "a"` binds `t` to `String` and `x` to the whole variant, and `(List _ xs)`
+takes any list. Any other count is a static error (`(Pair x)` for `Pair a b`).
+A type without parameters takes its value at once (`(Int x)`, `(Color c)`), and
+a constructor sharing its type's name (`Box a = | Box a`) is the constructor.
+
 Destructuring definitions immediately perform the pattern match, but bound
 variables remain deferred. Blocks create child scopes. Environments are
 lexical, and a rebinding never changes what was written before it (see
@@ -1177,7 +1187,7 @@ previously forced calculation is not recomputed after mutation. Compound
 contents retain ordinary lazy semantics; `set` does not deep-copy or deeply
 force them. So a part of the new contents computed later (an element of
 `map f cell`) reads the cell as it is then, the new contents: a typed
-parameter reads the old ones when its function is called (`step (List xs) =
+parameter reads the old ones when its function is called (`step (List _ xs) =
 map f xs`, then `set cell (step cell)`). A value that depends on itself never
 finishes; in a browser page, which cannot wait, it is an error.
 
@@ -1359,10 +1369,9 @@ Headed by a name bound to nothing, such a pattern takes a type apart, as
 `(Option t)` matches a type value: each name binds the type's part in its
 place, and a literal must equal it, so `(t1 1 t2 -> print [t1,t2]) (Vect 1 Int)`
 prints `[Vect,Int]` (and `withFile "notes" file -> ...` is such a lambda). A
-definition's parameter reads the same in parentheses, `f (t1 1 t2) = ...`, and
-a type applied to its parameters takes a type value apart too: `f (Vect n a)`
-given `Vect 3 Float` binds `n` to 3 and `a` to `Float`. Such a function takes a
-`Type`: `typeOf f` is `Type -> ...`.
+definition's parameter reads the same in parentheses, `f (t1 1 t2) = ...`, as
+does a type applied to its parameters (see [patterns](#patterns-variants-and-scope)).
+Such a function takes a `Type`: `typeOf f` is `Type -> ...`.
 
 Types differing only in their variables' names are equal: `(b -> b) == typeOf
 (x -> x)`. A function contract checks each call: its arguments decide its type

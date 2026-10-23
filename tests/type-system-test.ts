@@ -26,7 +26,7 @@ for (const [source, expected] of [
     ["Function (x -> x + 1) 2", "3"], ["Type Int", "Int"],
     ["Choice = | Chosen x\nVariant (Chosen 1)", "Chosen 1"],
     ["[isType Bool true, isType String 1, isType List [1..], isType Type Bool]", "[true,false,true,true]"],
-    ['f (Bool x) = "bool"\nf (String x) = "string"\nf (List x) = "list"\n[f true, f "hi", f [1]]', '["bool","string","list"]'],
+    ['f (Bool x) = "bool"\nf (String x) = "string"\nf (List _ x) = "list"\n[f true, f "hi", f [1]]', '["bool","string","list"]'],
     ["value = true\ncast Bool $ value", "true"],
     ["myTypeOf (t x) = t\nmyTypeOf true", "Bool"],
     ["myTypeOf (t x) = t\nmyTypeOf (Int32 5)", "Int32"],

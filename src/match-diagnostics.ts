@@ -10,9 +10,11 @@ import { parseDocument } from "./parser.ts";
 // them, and read only).
 export function matchDiagnostics(program: TopLevel[], source: string, directory = "."): Diagnostic[] {
     const families = new Map<string, Map<string, number>>();
+    const parameters = new Map<string, number>();
     const constructors = new Map<string, string>();
-    const add = (name: string, variants: Array<[string, number]>) => {
+    const add = (name: string, count: number, variants: Array<[string, number]>) => {
         families.set(name, new Map(variants));
+        parameters.set(name, count);
         for (const [tag] of variants) constructors.set(tag, name);
     };
     // The files an expression brings in: a module it imports or a file it
@@ -51,7 +53,7 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
         const used = (e: Expr): Source[] => e.t === "var" ? records.get(e.name) ?? []
             : e.t === "list" ? e.v.flatMap(used) : sourcesOf(e, from);
         for (const node of statements) {
-            if (node.t === "type") add(node.def.name, node.def.variants.map(v => [v.tag, v.arity]));
+            if (node.t === "type") add(node.def.name, node.def.parameters?.length ?? 0, node.def.variants.map(v => [v.tag, v.arity]));
             const bound = node.t === "def" && !node.clauses[0].params.length ? [node.name, node.clauses[0].body] as const
                 : node.t === "patDef" && node.pattern.p === "var" ? [node.pattern.name, node.value] as const : undefined;
             if (bound) records.set(bound[0], sourcesOf(bound[1], from));
@@ -72,7 +74,9 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
         else if (pattern.p === "typeBind") { scope.set(pattern.name, undefined); bind(pattern.value, scope); }
         else if (pattern.p === "constr") {
             for (const arg of pattern.args) bind(arg, scope);
-            if (families.has(pattern.tag) && pattern.args.length === 1 && pattern.args[0].p === "var") scope.set(pattern.args[0].name, pattern.tag);
+            // (Option _ value): the pattern after the type's parameters is its value.
+            const value = pattern.args[parameters.get(pattern.tag) ?? -1];
+            if (families.has(pattern.tag) && pattern.args.length === parameters.get(pattern.tag)! + 1 && value.p === "var") scope.set(value.name, pattern.tag);
         } else {
             for (const value of Object.values(pattern)) {
                 if (value && typeof value === "object" && "p" in value) bind(value as Pattern, scope);

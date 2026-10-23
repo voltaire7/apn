@@ -28,9 +28,9 @@ setup (Sketch p) = {
 # A new head a cell ahead, and the tail's last cell gone.
 updateSegments = set segments (advance segments)
 
-# A typed (List cells) parameter reads the cell's contents when called, so the
+# A typed (List _ cells) parameter reads the cell's contents when called, so the
 # new snake is built from the old one.
-advance (List cells) = {
+advance (List _ cells) = {
     step = match direction [
         "right" -> [1,0]
         "up" -> [0,-1]
@@ -39,7 +39,7 @@ advance (List cells) = {
     ]
     head cells + step :: take (length cells - 1) cells
 }
-grow (List cells) = cells ++ [cells (length cells - 1)]
+grow (List _ cells) = cells ++ [cells (length cells - 1)]
 
 draw (Sketch p) = {
     p.background 0

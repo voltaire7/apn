@@ -79,7 +79,7 @@ for (const [source, expected] of [
     ['Option a = Some a | None\nNone = None\n123', '123'],
     ['UserId = | MkUserId Int\nMkUserId 123', 'MkUserId 123'],
     ['UserId = | MkUserId Int\nget (MkUserId x) = x\nget (MkUserId 123)', '123'],
-    ['Option a = Some a | None\nx = Option Int (Some missing)\nf (Option v) = 42\nf x', '42'],
+    ['Option a = Some a | None\nx = Option Int (Some missing)\nf (Option _ v) = 42\nf x', '42'],
     ['Option a = Some a | None\ntypeOf (Option Int None)', 'Option Int'],
 ] as const) Deno.test(`templates: ${source}`, () => {
     const actual = result(source);

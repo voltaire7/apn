@@ -3149,13 +3149,19 @@ export class Interpreter {
     // on demand, once; a name nothing gives is any type.
     private indexCache = new WeakMap<Value, Value[]>();
     indicesOf(value: Extract<Value, { kind: "variant" }>): Value[] | undefined {
+        return value.family?.results ? this.familyArguments(value) : undefined;
+    }
+    // Any family's value's arguments: those it was given (Option Int), else
+    // the ones its fields give, as for an indexed family (Option Int for Some 1).
+    private familyArguments(value: Extract<Value, { kind: "variant" }>): Value[] | undefined {
         const family = value.family;
-        if (!family?.results) return undefined;
+        if (!family) return undefined;
+        if (!family.results && value.arguments) return value.arguments;
         const cached = this.indexCache.get(value);
         if (cached) return cached;
         const scope = new Env(family.env);
         const fields = family.fields?.get(value.tag) ?? [];
-        const given = (name: string, found: () => Value) => { if (!scope.map.has(name)) scope.setLocal(name, found()); };
+        const given = (name: string, found: () => Value) => { if (!scope.map.has(name)) scope.setLocal(name, this.defer(found)); };
         fields.forEach((spec, n) => {
             while (spec.t === "block" && spec.stmts.length === 1) spec = spec.stmts[0];
             if (spec.t === "var" && /^[a-z]/.test(spec.name)) { given(spec.name, () => this.callNative("typeOf", [value.v[n]])); return; }
@@ -3167,7 +3173,7 @@ export class Interpreter {
             const indices = inner.kind === "variant" && inner.family === family ? this.indicesOf(inner) : undefined;
             args.forEach((arg, i) => { if (arg.t === "var" && /^[a-z]/.test(arg.name) && indices?.[i]) given(arg.name, () => indices[i]); });
         });
-        const result = family.results.get(value.tag);
+        const result = family.results?.get(value.tag);
         const args: Expr[] = [];
         let head = result;
         while (head?.t === "app") { args.unshift(head.a); head = head.f; }
@@ -3930,6 +3936,15 @@ export class Interpreter {
         return this.matchPattern(p.value, given.arguments[pieces.length], binds);
     }
 
+    // How many parameters the type a name is bound to takes: List a one,
+    // Option a one, Vect n a two; none for Int or a record type.
+    private typeParameters(name: string): number {
+        const bound = this.env.get(name), t = bound && this.reference(bound);
+        if (t?.kind !== "type" || t.arguments?.length || t.alias) return 0;
+        if (t.family) return t.family.parameters?.length ?? 0;
+        return t.name === "List" ? 1 : t.name === "Vect" ? 2 : 0;
+    }
+
     private typeBinding(p: Extract<Pattern, { p: "schema" }>, v: Value, binds: Map<string, Value>): boolean | undefined {
         const args: Expr[] = [];
         let head = p.type;
@@ -3938,6 +3953,11 @@ export class Interpreter {
         if (head.t !== "var") return undefined;
         const type = this.env.get(head.name), base = type && this.reference(type);
         if (base?.kind === "type" && base.family?.results) return this.indexedPattern(base.family, args, p.value, v, binds);
+        // (Option t) x: a free name binds the argument the value's fields give
+        // (_ takes any).
+        if (base?.kind === "type" && base.family && !base.alias && !base.arguments?.length &&
+            args.some(arg => arg.t === "placeholder" || arg.t === "var" && /^[a-z]/.test(arg.name) && !binds.has(arg.name) && this.typeVariableName(arg.name, this.env)))
+            return this.indexedPattern(base.family, args, p.value, v, binds);
         // A length is a value: a bound name is that value. A type position keeps
         // a name bound to a type or function; any other name binds here, as
         // does one an empty vector left open (f = Vect n a xs -> Vect m a ys -> ...
@@ -3978,10 +3998,10 @@ export class Interpreter {
     private indexedPattern(family: import("./types.ts").VariantFamily, args: Expr[], value: Pattern, v: Value, binds: Map<string, Value>): boolean {
         const actual = this.dataValue(v);
         if (actual.kind !== "variant" || actual.family !== family) return false;
-        const indices = this.indicesOf(actual)!;
+        const indices = this.familyArguments(actual)!;
         // An index position (one a constructor's result computes: Z, S k) is a
         // value; a type position follows the written-function-type rule.
-        const valueAt = (n: number) => [...family.results!.values()].some(result => {
+        const valueAt = (n: number) => [...family.results?.values() ?? []].some(result => {
             const parts: Expr[] = [];
             while (result.t === "app") { parts.unshift(result.a); result = result.f; }
             return parts[n] && !(parts[n].t === "var" && /^[a-z]/.test((parts[n] as { name: string }).name));
@@ -4132,13 +4152,22 @@ export class Interpreter {
             const captured = this.hasSchemaCapture(type) ? this.captureSchema(type, converted, binds) : converted;
             return captured !== null && this.matchPattern(p.value, captured, binds);
         }
-        // A type applied to patterns, given a type value, takes it apart, as
-        // (Option t) matches Option Int: (Vect 1 t) given Vect 1 Int binds t to Int.
-        if (p.p === "constr" && p.args.length) {
+        // A type applied to its parameters matches a type value and takes it
+        // apart: (Option t) given Option Int binds t to Int, (Vect 1 t) given
+        // Vect 1 Int binds t. One more pattern is a value of that type:
+        // (Option t x) is ((Option t) x), as (Int x) is a value of Int.
+        const parameters = p.p === "constr" && p.args.length ? this.typeParameters(p.tag) : 0;
+        if (p.p === "constr" && parameters && p.args.length === parameters) {
             const given = this.reference(v);
-            if (given.kind === "type" && given.name === p.tag && given.arguments?.length === p.args.length) {
-                return p.args.every((arg, n) => this.matchPattern(arg, given.arguments![n], binds));
-            }
+            return given.kind === "type" && given.name === p.tag && given.arguments?.length === parameters &&
+                p.args.every((arg, n) => this.matchPattern(arg, given.arguments![n], binds));
+        }
+        if (p.p === "constr" && parameters && p.args.length === parameters + 1) {
+            // (Vect n a xs) takes a vector apart: a mismatch fails the match.
+            const type = this.reference(this.env.get(p.tag)!);
+            if (type.kind === "type" && type.name === "Vect") return this.matchVectorPattern(p.args, v, binds);
+            const flat = flatTypedPattern(p, () => parameters);
+            if (flat) return this.matchPattern(flat, v, binds);
         }
         // A typed pattern names the type an undecided call should have:
         // g (Int n) applied to read "3" takes the Int overload.
@@ -4163,7 +4192,6 @@ export class Interpreter {
             const binding = this.env.get(p.tag);
             if (binding) {
                 const type = this.reference(binding);
-                if (p.args.length === 3 && type.kind === "type" && type.name === "Vect" && !type.arguments?.length && !type.family && !type.alias) return this.matchVectorPattern(p.args, v, binds);
                 if (p.args.length === 1 && type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) return this.matchPattern(p.args[0], this.conform(type, v), binds);
                 if (p.args.length === 1 && type.kind === "type" && !type.family && !type.alias) {
                     return this.matchPattern({ p: "constr", tag: type.name, args: p.args }, v, binds);
@@ -4173,21 +4201,11 @@ export class Interpreter {
                     const input = type.kind === "record" ? this.recordPatternInput(type, actual) : this.isList(actual) ? actual : null;
                     return input !== null && this.matchPattern(p.args[0], this.conform(type, input), binds);
                 }
-                // (Vec n a xs) is the typed pattern ((Vec n a) xs).
-                const flat = flatTypedPattern(p, name => {
-                    const bound = this.env.get(name), t = bound && this.reference(bound);
-                    return t?.kind === "type" && t.family && !t.arguments?.length && !t.alias ? t.family.parameters?.length : undefined;
-                });
-                if (flat) return this.matchPattern(flat, v, binds);
+                // A type without parameters takes its value: (Color c) takes Red,
+                // (Money x) Money 2's payload.
                 if (type.kind === "type" && type.family) {
-                    // The type itself, described (Option t matching the type Option Int):
-                    // its arguments bind to the pattern's.
-                    const described = this.reference(v);
-                    if (described.kind === "type" && described.family === type.family) {
-                        return p.args.every((arg, i) => this.matchPattern(arg, described.arguments?.[i] ?? { kind: "type", name: "$any" }, binds));
-                    }
                     const actual = this.dataValue(v);
-                    return p.args.length === 1 && actual.kind === "variant" && actual.family === type.family &&
+                    return p.args.length === 1 && !parameters && actual.kind === "variant" && actual.family === type.family &&
                         this.matchPattern(p.args[0], type.family.base ? actual.v[0] : this.conform(type, actual), binds);
                 }
                 if (type.kind === "functionType") {
