@@ -1,5 +1,6 @@
 import { Interpreter, setInterruptFlag, resetInterrupt } from "../src/interp.ts";
 import { parse } from "../main.ts";
+import { runSource } from "../src/repl.ts";
 
 // Exercise APN source and observable output, without dependencies or runtime mocks.
 function execute(source: string): string[] {
@@ -541,3 +542,17 @@ shape (t1 1 t2) = [t1,t2]
 parts (Vect n a) = [n,a]
 print [shape (Vect 1 Int), parts (Vect 3 Float)]
 print [typeOf shape, typeOf parts]`, ["[Vect,Int]", "[Vect,3,Float]", "one", "[[Vect,Int],[3,Float]]", "[Type -> List Type, Type -> List (Int | Type)]"]);
+
+// The tour and the former feature showcase (a regression program) check and
+// run as whole programs.
+for (const path of ["../examples/features.apn", "fixtures/showcase.apn"]) Deno.test(`program runs: ${path}`, () => {
+    const url = new URL(path, import.meta.url), i = new Interpreter();
+    i.enableChecking();
+    i.sourceDir = new URL(".", url).pathname;
+    i.sourceFile = url.pathname;
+    const [log, write] = [console.log, Deno.stdout.writeSync];
+    console.log = () => {};
+    Deno.stdout.writeSync = (data: Uint8Array) => data.length;
+    try { runSource(Deno.readTextFileSync(url), i, true); }
+    finally { [console.log, Deno.stdout.writeSync] = [log, write]; }
+});

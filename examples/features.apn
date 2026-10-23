@@ -1,2293 +1,315 @@
-# CLI file errors are concise: apn missing.apn reports file not found and exits 1.
-# =========================================================
-#  APN — Applicative Polish Notation — feature showcase
-#  A lazy functional language with static inference and Dynamic boundaries.
-#  CLI: apn --help (or -h) lists commands. The apn launcher requires Deno 2.8.0+.
-#  apn --unknown prints one line: error: unknown option '--unknown'
-#  The error: label is red in a terminal; redirected errors contain no color codes.
-#  Run files directly: static checking is automatic; --check validates without execution.
-#  apn file.apn --flag passes --flag to the script; apn -- -file.apn runs a dash-named file.
-
-#  Run:  deno run --allow-read main.ts examples/features.apn
-#  NOTE: indentation is strict "4-space layout" — every nested
-#  level is exactly +4 spaces (and only +4).
-# =========================================================
+# APN overview
+#
+# A tour of APN, Applicative Polish Notation, in the manner of Odin's
+# overview: each section introduces one part of the language with a short
+# example. It assumes you know what variables, functions and types are.
+#
+#     ./apn examples/features.apn
+#
+# Each "# =>" comment is what its line prints. docs/semantics.md is the full
+# reference, docs/ covers each area in depth, and tests/ hold the edge cases.
 
 # ---------------------------------------------------------
-# 1. DATA TYPES (variants / ADTs)
-#    The option module declares  Option a = Some a | None : the unary
-#    constructor `Some` wraps a value; bare `None` is a tag.
+# Hello
 # ---------------------------------------------------------
-import "option"
+# A program is a file of statements, run from top to bottom. A file prints
+# only what it asks to; the REPL (./apn with no file) echoes each value.
+print "Hello, world!"                    # => Hello, world!
 
-print (Some 42)        # => Some 42
-print None             # => None
-
-# ---------------------------------------------------------
-# 2. FUNCTIONS & LAMBDAS
-#    Two styles to define a function:
-#      - lambda:     name = x -> body   (multi-param: a, b, c -> body)
-#      - Haskell:    name x = body      (params attached to the left of `=`)
-#    Both support recursion and partial application.
-# ---------------------------------------------------------
-func x = x + x                # Haskell style
-print (func 21)               # => 42
-
-double = x -> x * 2           # lambda style
-print (double 21)             # => 42
-
-add a b = a + b               # Haskell style, multi-param
-print (add 3 4)               # => 7
-
-addTwo = add 2                # partial application
-print (addTwo 10)             # => 12
+# A comment starts with # and ends with its line.
 
 # ---------------------------------------------------------
-# 3. RECURSION
+# Bindings
 # ---------------------------------------------------------
-recursiveFactorial n = match n [
-    0 -> 1
-    _ -> n * recursiveFactorial (n - 1)
-]
-print (recursiveFactorial 10)   # => 3628800
+# name = value names a value. A value never changes: binding a name again
+# starts a new version of it, and code written before keeps the old one.
+answer = 42
+count = 1
+count = count + 1                        # the right side reads the version before
+print [answer,count]                     # => [42,2]
 
-fib n = match n [
-    0 -> 0
-    1 -> 1
-    _ -> fib (n - 1) + fib (n - 2)
-]
-print (fib 10)         # => 55
+# The left side may be a pattern, which takes the value apart.
+[low,high] = [1,9]
+top :: others = [1,2,3]
+print [low,high,top,others]              # => [1,9,1,[2,3]]
 
-# ---------------------------------------------------------
-# 4. PATTERN MATCHING (match) & PATTERN DEFINITIONS
-#    Patterns: literals, wildcard _, cons x:rest, lists, variants, guards.
-#    `match` is THE pattern-matching form (there is no `case`):
-#        match scrutinee [ pattern -> expr, ... ]
-#    A `[x,y]` pattern matches BOTH a list (positionally) and a record
-#    (by field name). A def can also be given as multiple clauses (equations)
-#    like Haskell, dispatched in order on its parameters:
-#         f pat1 = body1
-#         f pat2 = body2
-# ---------------------------------------------------------
-safeHead xs = match xs [
-    [] -> None
-    x::_ -> Some x
-]
-print (safeHead [1,2,3])  # => Some 1
-print (safeHead [])          # => None
-
-# multiple equations (clauses), like Haskell
-len [] = 0
-len (_::rest) = 1 + len rest
-print (len [1,2,3])      # => 3
-
-sumList xs = match xs [
-    [] -> 0
-    x::rest -> x + sumList rest
-]
-print (sumList [1,2,3,4,5])  # => 15
-
-# exact-length list pattern — binds each element
-pairSum xs = match xs [
-    [a,b] -> a + b
-    _ -> 0
-]
-print (pairSum [10,20])  # => 30
-print (pairSum [1])        # => 0
-# A later pairSum [a,b] = a + b would be another clause of this pairSum, after
-# one that takes any argument, so it would never run: apn --lint warns.
-
-# the same `[x,y]` pattern also destructures a RECORD by field name
-sumRec [x,y] = x + y
-print (sumRec [x: 10, y: 20])  # => 30
-print (sumRec [10,20])       # => 30
-
-# guards
-classify n = match n [
-    x | x < 0 -> "negative"
-    x | x == 0 -> "zero"
-    _ -> "positive"
-]
-print (classify -5)     # => negative
-print (classify 0)      # => zero
-print (classify 7)      # => positive
-
-# ---------------------------------------------------------
-# 4b. MATCH LAYOUTS —  match scrutinee [ pattern -> expr, ... ]
-#     Alternatives are delimited with [ ], separated by `, ` OR a newline.
-#     PREFERRED STYLE for a function whose entire body is one match is the
-#     same-line-open form:
-#         f x = match x [
-#             pattern -> body
-#         ]
-#     (The block form `f x =\n    match x [ ... ]` also parses but is not
-#     used in this showcase.) The fully single-line form:
-#         f x = match x [ pat1 -> e1, pat2 -> e2 ]
-# ---------------------------------------------------------
-factA n = match n [
-    0 -> 1
-    _ -> n * factA (n - 1)
-]
-print (factA 10)            # => 3628800
-
-factC n = match n [0 -> 1, _ -> n * factC (n - 1)]
-print (factC 6)             # => 720
-
-# all patterns work here too: cons, literals, _ , guards, ...
-safeM xs = match xs [
-    [] -> None
-    x::_ -> Some x
-]
-print (safeM [3,4])       # => Some 3
-print (safeM [])            # => None
-# A [] inside a pattern tests that part; the value it matches can be any list.
-joinM xs ys = match [xs,ys] [
-    [[],rest] -> rest
-    [(x::more),rest] -> x :: joinM more rest
-]
-print (joinM [1,2] [3])    # => [1,2,3]
-
-classM n = match n [
-    x | x < 0 -> "negative"
-    x | x == 0 -> "zero"
-    _ -> "positive"
-]
-print (classM -5)           # => negative
-print (classM 0)            # => zero
-print (classM 7)            # => positive
-
-# a def body may also start `match` on the SAME line as `=`
-matchInline n = match n [
-    0 -> "zero"
-    _ -> "other"
-]
-print (matchInline 0)       # => zero
-print (matchInline 9)       # => other
-
-# ---------------------------------------------------------
-# 5. LISTS — heterogeneous, like JS arrays, but almost lazy.
-#    Literal lists stay in an unevaluated (lazy) state until used. A list of
-#    bare names is still a list — the names resolve to the variables' values.
-#    (An OBJECT is a record literal: [x: 1, y: 2, z: 3].)
-# ---------------------------------------------------------
-print [213,"hello"]         # => [213,"hello"]
-print [1,2,3]             # => [1,2,3]
-print ([] ++ [1,2] ++ [3])  # => [1,2,3]
-
-# multi-line list literals: elements separate on their own lines, so commas
-# are optional there (a comma also still works):
-arr = [
-    1
-    2
-    3
-]
-print arr                     # => [1,2,3]
-arr = [
-    1,2,3
-]
-print arr                     # => [1,2,3]   (commas on one line fine too)
-
-nested = [
-    1
-    [2,3]
-    4
-]
-print nested                  # => [1,[2,3],4]
-
-print $ head $ [1,2,3]  # => 1
-print (tail [1,2,3])      # => [2,3]
-print (length "hello")        # => 5
-print (length [1,2,3])    # => 3
-print (null [])               # => true
-print (null [1])              # => false
-
-# a bare-name list is ALWAYS a list — elements are (lazy) variable refs
-a = 100
-b = 200
-vals = [a,b]
-print vals                       # => [100,200]
-print (map (x -> x * 2) vals)    # => [200,400]
-
-# indexing by APPLICATION:  a list applied to a number is an element
-# (negative counts from the end); a list of indices selects several elements.
-#  nums -1 passes -1 (a space before the - and none after); nums - 1 subtracts.
-nums = [10,20,30]
-print (nums 0)                    # => 10
-print (nums 1)                    # => 20
-print (nums -1)                   # => 30
-print (nums [0,2])              # => [10,30]
-print (nums -1 + nums 0)          # => 40
-print (tail nums 0)               # => 20   (index a computed list)
-nums [1,2] = nums [2,1]
-print nums                       # => [10,30,20]
-nums -1 = 40                     # the last item, as nums -1 reads it
-print nums                       # => [10,30,40]
-print [String,Int].["x",1]    # => ["x",1]
-print [(+ 1), (* 2)].[10,20]    # => [11,40]
-listTemplate = [Int,Float]
-listInput = [1,2]
-print listTemplate.(listInput)    # => [1,2.0]
-
-print ([[1,2],[3,4]] 1 0)   # => 3    (nested indexing, left-assoc)
-
-# ---------------------------------------------------------
-# 6. RECORDS — [name: value, ...] and field access
-# ---------------------------------------------------------
-person = [name: "Alice", age: 30]
-print person.name        # => Alice
-print person.age         # => 30
-print person             # => [name: "Alice", age: 30]
-
-# All keys are strings; quoted field syntax includes the quote characters.
-keyKinds = [field: 123, "field": 456, 1: 10, "1": 100]
-print keyKinds.field          # => 123
-print (keyKinds "field")      # => 123
-print keyKinds."field"        # => 456
-print (keyKinds "\"field\"")  # => 456
-print keyKinds.1              # => 10
-print (keyKinds "1")          # => 10
-print keyKinds."1"            # => 100
-print (keyKinds 0)            # => ["field",123] (positional entry)
-print keyKinds               # => [field: 123, "field": 456, 1: 10, "1": 100]
-[field: namedValue, "field": stringValue] = keyKinds
-print [namedValue,stringValue] # => [123,456]
-keyKinds."field" = 789
-print keyKinds.[field,"field"] # => [123,789]
-keyKinds "field" = 10
-print keyKinds.[field,"field"] # => [10,789]
-keyKinds "1" = 20
-print keyKinds.1              # => 20
-# A list's integer index and a string are not interchangeable:
-# nums "0" is an error; nums 0 indexes its first element.
-
-# nested records + chained access
-nestedRecord = [inner: [z: 99]]
-print nestedRecord.inner.z     # => 99
-
-# Keys may be quoted strings or numbers; dot access uses literal keys.
-weird = ["my field": 1, 123: 2]
-print weird."my field"           # => 1
-print weird.123                  # => 2
-key = "123"
-print (weird key)                # => 2 (computed named field)
-# weird.(expression)             # evaluates expression with fields in scope
-print (enumerate [10,20,30])  # => [[0,10],[1,20],[2,30]]
-print (enumerate [10,20,30] * [index,value] -> index + value) # => [10,21,32]
-print (take 3 (enumerate [10..])) # => [[0,10],[1,11],[2,12]]
-
-# ---------------------------------------------------------
-# 7. PROTOTYPE-BASED OBJECTS —  APPLYING a record clones it:  vec [1,2,3]
-#    positional (one value per field) or  vec [z: 3, x: 1]  named (override/
-#    add, any order). An int argument indexes positionally -> [field,value].
-#    The prototype is any RECORD (LOWERCASE name — capital names are
-#    constructors); a bare-name list is a LIST, never an object.
-# ---------------------------------------------------------
-vector3 = [x: 0, y: 0, z: 0]        # prototype with defaults
-print vector3                       # => [x: 0, y: 0, z: 0]
-print (vector3 [1,2,3])         # => [x: 1, y: 2, z: 3]   positional clone
-print (vector3 [x: 1, y: 2, z: 3])  # => [x: 1, y: 2, z: 3]   named override
-print (vector3 [z: 3, x: 1])        # => [x: 1, y: 0, z: 3]  reorder — y keeps default
-print (vector3 [x: 1, y: 2, z: 3, a: 0])  # => [x: 1, y: 2, z: 3, a: 0]  new field
-print vector3                       # => [x: 0, y: 0, z: 0]   prototype untouched
-print (vector3 [1,2,3]).z       # => 3     (.z chains over the clone)
-print (vector3 1)                   # => ["y",0]   int index -> [field,value]
-
-# .[...] still exists, but as the QUOTED PLUCK:  a.[x,y]  gathers values
-# into a LIST;  a.[x: v1, y: v2]  keeps the fields under NEW keys.
-print vector3.[x,y]               # => [0,0]
-print vector3.[z,x,y]           # => [0,0,0]     reorder
-print vector3.[x: first, y: second]     # => [first: 0, second: 0]  renamed
-
-# ---------------------------------------------------------
-# 7b. RECORD UPDATE —  vec.x = 10  rebinds vec to a MODIFIED COPY
-#     (records are never mutated in place). The rebinding is scoped
-#     like any def, so assignments inside a { } block SHADOW the
-#     outer name. Pluck assignment sets several fields from a list —
-#     the right side is evaluated FIRST, so the classic swap works.
-# ---------------------------------------------------------
-vec = [x: 1, y: 2, z: 3]
-vec.x = 10
-print vec                        # => [x: 10, y: 2, z: 3]
-vec.w = 99
-print vec                        # => [x: 10, y: 2, z: 3, w: 99]   new field
-
-vec.[x,y] = vec.[y,x]
-print vec                        # => [x: 2, y: 10, z: 3, w: 99]  swap!
-vec.[x,y] = [7,8]
-print vec                        # => [x: 7, y: 8, z: 3, w: 99]
-# Applying a record of values to fields is the same update, as an expression:
-# vec [x: 1, y: 2] is { vec.x = 1; vec.y = 2; vec }.
-print (vec [x: 1, y: 2])         # => [x: 1, y: 2, z: 3, w: 99]
-print [vec [z: 0] == { vec.z = 0; vec }]  # => [true]
-# A type given types is edited the same way; given values, it builds one.
-Vec3 = [x: Float, y: Float, z: Float]
-print (Vec3 [x: Int])            # => [x: Int, y: Float, z: Float]   as Vec3.x = Int
-print (Vec3 [x: 1])              # => [x: 1.0, y: 0.0, z: 0.0]
-# Every field has a type: the one it holds, or its value's (then its default).
-# A value given to it converts losslessly; Type fields take types as values.
-print ([x: 1.1] [10])            # => [x: 10.0]
-# [x: 1] [2.5] and [x: false] [1] are errors
-# [f: (* 2)] [1]               # type error: cannot use Int where a -> b is required
-print ([type: Type] [Int])       # => [type: Int]
-
-# block scope: the update shadows obj only INSIDE the { }  (a bare block
-# statement runs eagerly — a 0-arg DEF like  w = { ... } declares a
-# function and does not run here)
-obj = [field: 1]
-{
-    obj.field = 10
-    print obj                   # => [field: 10]
-}
-print obj                        # => [field: 1]
-
-# an empty list seeds a record on first assignment
-fresh = []
-fresh.field = 1
-print fresh                      # => [field: 1]
-
-# ---------------------------------------------------------
-# 8. TERNARY — cond ? a : b  (replaces if/then/else)
-# ---------------------------------------------------------
-larger a b = a > b ? a : b
-print (larger 4 9)            # => 9
-
-smallest a b c = (a < b ? a : b) < c ? a < b ? a : b : c
-print (smallest 7 2 9)     # => 2
-
-# lazy arguments make `if` just a function — only the TAKEN branch runs
-ifFn cond then else = cond ? then : else
-ifFn false (print "a") (print "b")     # prints: b
-print (ifFn true 1 2)                  # => 1
-
-# ---------------------------------------------------------
-# 9. BINDINGS —  symbol = value  (the ONLY form; no let, no mutation)
-#    The LHS may be a destructuring PATTERN:  [name,hello] = expr
-#    (list positionally, record by field name). Bindings are scoped
-#    to their block; a block's value is its LAST statement.
-# ---------------------------------------------------------
+# A block groups statements. Its bindings stay inside it, and its value is
+# its last statement's.
 greeting = {
     name = "world"
-    hello = "Hello"
-    hello ++ ", " ++ name ++ "!"
+    "Hello, " ++ name ++ "!"
 }
-print greeting             # => Hello, world!
+print greeting                           # => Hello, world!
 
-greeting = {
-    [name,hello] = ["world","Hello"]
-    hello ++ ", " ++ name ++ "!"
+# ---------------------------------------------------------
+# Layout
+# ---------------------------------------------------------
+# Each level indents exactly 4 spaces. A newline at the same level ends a
+# statement and a line indented 4 more continues it; ; puts two statements
+# on one line. Spacing is part of the syntax: x = 1, [1,2], [x: 1], f x and
+# { x }, where a comma takes a space only when the items have one
+# ([1 + 1, 2]). A line is at most 99 characters.
+sum3 = 1
+    + 2
+    + 3
+print sum3; print "on one line"         # => 6, then on one line
+
+# ---------------------------------------------------------
+# Literals
+# ---------------------------------------------------------
+# Integers are exact and unbounded, and dividing them gives an exact
+# fraction. A number with a point is a Float. Complex numbers are built in.
+print [42,-7,0xFF,0b101]                 # => [42,-7,255,5]
+print (2 ^ 100)                          # => 1267650600228229401496703205376
+print (1 / 3 + 1 / 6)                    # => 1/2
+print [.5, 1e3, .1 + .2]                 # => [0.5,1000.0,0.30000000000000004]
+print (sqrt -1)                          # => 0+1i
+
+# Strings use double quotes, characters single ones. A string is text, and
+# its characters are a list.
+print ["text",'c',true,false]            # => ["text",'c',true,false]
+print ("con" ++ "cat")                   # => concat
+print (to (List Char) "hi")              # => ['h','i']
+
+# ---------------------------------------------------------
+# Modules
+# ---------------------------------------------------------
+# import "name" brings a standard module's names into scope, and a list
+# imports several. A module bound to a name stays qualified. Your own files
+# and folders import the same way; load "file" runs a file by its path.
+import ["option","number","syntax"]
+parser = import "parser"
+print (sq 12)                            # => 144
+print (parser.parse parser.number "12")  # => Ok 12
+
+# ---------------------------------------------------------
+# Control flow
+# ---------------------------------------------------------
+# The ternary c ? a : b is APN's if. Arguments are lazy, so only the branch
+# taken is evaluated.
+signName n = n < 0 ? "negative" : n == 0 ? "zero" : "positive"
+print (signName -5)                      # => negative
+
+# match tries patterns in order; a guard (| condition) refines one.
+describe n = match n [
+    0 -> "zero"
+    k | k < 0 -> "negative"
+    [1..9] -> "a digit"
+    _ -> "large"
+]
+print (map describe [0,-1,7,99])         # => ["zero","negative","a digit","large"]
+
+# Repetition is recursion, or * over a list or a count.
+countdown n = n == 0 ? [] : n :: countdown (n - 1)
+print (countdown 3)                      # => [3,2,1]
+[1,2,3] * x -> emit x                    # => 123
+print ""
+3 * _ -> emit "ab"                       # => ababab
+print ""
+
+# while and for take their code as written and run an action while it holds;
+# loop action runs forever.
+for [i = 0, i < 3, i = i + 1] (emit i)   # => 012
+print ""
+counter = Mutable 0
+while [counter < 3] {
+    emit counter
+    set counter (counter + 1)
 }
-print greeting             # => Hello, world!
-
-greeting = {
-    [name,hello] = [hello: "Hello", name: "record"]  # fields by name
-    hello ++ ", " ++ name ++ "!"
-}
-print greeting             # => Hello, record!
-
-# A cons pattern takes a list apart, bare or parenthesized.
-first::rest = [1,2,3,4]
-print [first,rest]        # => [1,[2,3,4]]
-(one::two::others) = [1,2,3,4]
-# A literal is a pattern too: 1 = 1 matches; 1 = 2 is a static error.
-4 = length [first,two,3,4]
-print others               # => [3,4]
-# first:rest = []          # static error: an empty list has no head
-
-# Constructor patterns destructure like Haskell — bare (Some v = ...),
-# parenthesized ((Some v) = ...), or nested in a list ([Some v] = [...]).
-# Existing constructor names destructure; new capital names bind type aliases.
-# Constructor declarations use | (a leading | for a single constructor),
-# as option's  Option a = Some a | None  does.
-Some v = Some 123
-print v                    # => 123
-
-# RENAME destructuring (Rust-style):  [srcKey: name, ...]  pulls those fields
-# OUT of a record and binds name — [x: val1, y: val2] = [x: 1, y: 2, z: 3]
-point = [x: 1, y: 2, z: 3]
-[x: val1, y: val2] = point
-print [val1,val2]        # => [1,2]
-# works in function params and match alternatives too:
-sumXY ([x: xv, y: yv]) = xv + yv
-print (sumXY point)        # => 3
+print ""                                 # => 012
 
 # ---------------------------------------------------------
-# 10. PIPES, OPERATOR SECTIONS, PRECEDENCE
-#    f $ x            applies f to x; right associative
-#    (+ 2) / (2 +)    operator sections  ->  \x -> x + 2 / \x -> 2 + x
+# Functions
 # ---------------------------------------------------------
-negate x = -x
-print (negate $ 5)                        # => -5
-print (map (x -> x * 10) $ [1,2,3])   # => [10,20,30]
-print $ to String $ map (x -> x * 10) $ [1,2,3]  # => [10,20,30]
+# A function is written with its parameters, or as a lambda. Applying it to
+# fewer arguments gives a function of the rest.
+add a b = a + b
+double = x -> x * 2
+increment = add 1
+twice f x = f (f x)
+print [increment 5, twice double 5]      # => [6,20]
 
-# Named functions use ordinary application; backtick infix is invalid.
-print (2 + 3 * 4)                         # => 14
-print (10 - 3 - 2)                        # => 5
-print (1 :: 2 :: [])                        # => [1,2]
+# A function may have several clauses, chosen by pattern, in order.
+size [] = 0
+size (_ :: rest) = 1 + size rest
+print (size [7,8,9])                     # => 3
 
-myApp xs ys = xs ++ ys
-print (myApp [1,2] [3,4])           # => [1,2,3,4]
+# Operators are functions: (+) is the function, (+ 1) and (10 -) sections.
+# f $ x applies (to the rest of the line), and f \ g composes.
+print [(+) 1 2, (10 -) 3]                # => [3,7]
+print ((+ 1) \ (* 2) $ 5)               # => 11
 
-print (map (+ 2) [1,2,3])             # => [3,4,5]
-print (map (2 +) [1,2,3])             # => [3,4,5]
-print (map (* 10) [1,2,3])            # => [10,20,30]
-print (filter (2 <) [3,1,4,1,5])  # => [3,4,5]
-addOp = (+)                                 # a lone (op) is a 2-arg lambda
-print (addOp 1 2)                           # => 3
-print (addOp 1)                             # => (1 +)   (partial, as usual)
-# A partly applied function prints what is left of it after matching.
-partialPick (Int x) y = x + y
-partialPick (Float _) _ = 0
-print (partialPick 1)                       # => y -> 1 + y
-
-print (map (10 -) [1,2,3])            # => [9,8,7]
-print (foldl (-) 100 [1,2,3])         # => 94   (a lone (-) subtracts)
-print -2                                  # => -2  (a '-' against its operand negates)
-print (map (- 2) [5,6])                   # => [3,4] (a spaced '-' subtracts: a section)
+# Evaluation is lazy: a value is computed when it is first needed, once.
+# So a list may go on forever, or refer to itself.
+ones = 1 :: ones
+fibs = 0 :: 1 :: zipWith (+) fibs (tail fibs)
+print [take 3 ones, take 10 fibs]        # => [[1,1,1],[0,1,1,2,3,5,8,13,21,34]]
+print (take 3 (filter isPrime [100..]))  # => [101,103,107]
 
 # ---------------------------------------------------------
-# 10b. OPERATORS ARE FUNCTIONS
-#    The prelude (lib/prelude.apn) defines every binary operator as a
-#    function bound to its symbol, with a fixity declaration:
-#        infixl 6 + - ++        (+) = intrinsics.add
-#    infixl / infixr / infix give a precedence 0..9; an operator without
-#    one is infixl 9. Overloading an operator is fine; creating new
-#    operators works too but is NOT recommended (prefer a named function).
+# Operators
 # ---------------------------------------------------------
-print ((+) 1 2)                           # => 3
-print (intrinsics.mul 6 7)                # => 42  (the intrinsic behind *)
-# (op) a b is a + b in every way, checking included; not x is !x, negate x is -x.
-print [not 0, !0]                         # => [true,true]
+# The prelude defines every operator, with its precedence (infixl 6 + -).
+# Arithmetic is exact; on lists and records it goes element by element.
+print [7 % 3, 2 ^ -3, -2 ^ 2]            # => [1,1/8,-4]
+print [1 < 2 && "a" != "b", !true]       # => [true,false]
+print ([1,2,3] + [10,20,30])             # => [11,22,33]
+print (2 * [x: 1, y: 2])                 # => [x: 2, y: 4]
 
-# overloading: these clauses run first; anything else falls back to the
-# builtin +, as the inner (a + b) on two Ints does
+# A clause for some arguments overloads an operator; others reach the rest.
 Cents = | Cents Int
 (Cents a) + (Cents b) = Cents (a + b)
-print (Cents 150 + Cents 75)              # => Cents 225
-print (1 + 2)                             # => 3
-# a function using + on its parameters takes either meaning
-addBoth x y = x + y
-print [addBoth (Cents 1) (Cents 2), addBoth 1 2]  # => [Cents 3, 3]
-
-# the math functions overload the same way (sin, cos, sqrt, floor, max, ...)
-Dual = | Dual Float Float
-sin (Dual a b) = Dual (sin a) (b * cos a)
-print (sin (Dual 0.0 1.0))                # => Dual 0.0 1.0
-print (sin 0.0)                           # => 0.0
-
-# a new operator with a fixity (possible, but not recommended)
-infixr 5 +++
-xs +++ ys = xs ++ [0] ++ ys
-print ([1] +++ [2] +++ [3])               # => [1,0,2,0,3]
+print [Cents 150 + Cents 75, 1 + 2]      # => [Cents 225, 3]
 
 # ---------------------------------------------------------
-# 11. HIGHER-ORDER FUNCTIONS — map / filter / foldl / foldr
+# Lists
 # ---------------------------------------------------------
-nums = [1,2,3,4,5]
-print (map (x -> x * x) nums)                 # => [1,4,9,16,25]
-print (filter (x -> x > 2) nums)              # => [3,4,5]
-print (foldl (acc, x -> acc + x) 0 nums)       # => 15
-print (foldr (x, acc -> x - acc) 0 [1,2,3])  # => 2
+# A list holds any values. Applying it to an index gives an element
+# (negative counts from the end); a list of indexes selects several.
+xs = [10,20,30]
+print [xs 0, xs -1, xs [0,2]]            # => [10,30,[10,30]]
+print [1 :: xs, xs ++ [40], [1..5], [0,5..20]]
+# => [[1,10,20,30],[10,20,30,40],[1,2,3,4,5],[0,5,10,15,20]]
 
-# pattern-lambdas: a lambda param may be a pattern (here, destructuring a pair)
-print (map ([a,b] -> a + b) [[1,2],[3,4]])  # => [3,7]
+# Updating an element binds a copy with the change, as every update does.
+xs 1 = 25
+print xs                                 # => [10,25,30]
+print (foldl (+) 0 xs)                   # => 65
 
-# ARGUMENTS ARE LAZY (Haskell): quicksort's block-local `smaller`/`bigger`
-# are 0-arg actions passed unevaluated — pattern clauses demand their values
-quicksort [] = []
-quicksort (x::xs) = {
-    smaller = filter (<= x) xs; bigger = filter (> x) xs
-    quicksort smaller ++ [x] ++ quicksort bigger
+# ---------------------------------------------------------
+# Records
+# ---------------------------------------------------------
+# A record is a list with named fields.
+person = [name: "Ada", age: 36]
+print person.name                        # => Ada
+person.age = 37
+print person                             # => [name: "Ada", age: 37]
+[name,age] = person                      # fields by name
+print age                                # => 37
+
+# Applying a record to values makes a copy with those fields set, so any
+# record is a prototype.
+origin = [x: 0, y: 0, z: 0]
+print (origin [z: 3])                    # => [x: 0, y: 0, z: 3]
+print (origin [1,2,3])                   # => [x: 1, y: 2, z: 3]
+
+# A record iterates as [field,value] pairs.
+person * print \ format "%: %"           # => name: Ada, then age: 37
+
+# ---------------------------------------------------------
+# Types
+# ---------------------------------------------------------
+# Every value has a type. The checker infers types before a program runs
+# and reports what would fail; there are no annotations to write.
+print [typeOf 1, typeOf [1,2], typeOf "a"]  # => [Int, List Int, String]
+print (typeOf (x -> [x,x]))              # => a -> List a
+
+# A type is a function: applied, it converts a value without losing
+# anything, and given nothing it makes its zero value.
+print [Float 1, UInt8 200, Int 0]        # => [1.0, UInt8 200, 0]
+Point = [x: Float, y: Float]
+print [Point [1,2], Point []]            # => [[x: 1.0, y: 2.0], [x: 0.0, y: 0.0]]
+
+# A type in a pattern requires it, converting as above.
+halve (Int n) = n / 2
+Int dozen = 12
+print [halve 3, halve dozen]             # => [3/2,6]
+
+# A variant type lists its constructors.
+Shape = Circle Float | Rect Float Float
+area (Circle r) = 3 * r * r
+area (Rect w h) = w * h
+print (map area [Circle 1, Rect 2 3])    # => [3.0,6.0]
+
+# Option (Some x or None) and Result (Ok x or Err e) mark missing values
+# and failures.
+print [safeDiv 1 2, safeDiv 1 0]         # => [Some 1/2, None]
+print (withDefault 0 (safeDiv 1 0))      # => 0
+
+# An alias of a scalar type names a new one, which does not mix with others.
+UserId = Int
+print (UserId 7)                         # => UserId 7
+
+# Types may depend on values: Vect n a is a list of n elements of type a,
+# and the checker computes n.
+appendSized (Vect n a xs) (Vect m a ys) = Vect (n + m) a (xs ++ ys)
+print (typeOf (appendSized [1,2] [3]))   # => Vect 3 Int
+
+# What the checker cannot know becomes a check when the program runs:
+# Dynamic marks such a boundary.
+dynamicNumber = Dynamic 41
+print (Int dynamicNumber + 1)            # => 42
+
+# ---------------------------------------------------------
+# Effects
+# ---------------------------------------------------------
+# An effect is a value, an IO action, and naming one does not run it. A
+# statement runs the action it is, and x <- action runs one and binds what
+# it yields. A block that runs actions is an action too.
+hello = print "hello"
+hello                                    # => hello
+greet who = {
+    print ("hi " ++ who)
+    return (length who)
 }
-print (quicksort [82,15,4,95,36,32])  # => [4,15,32,36,82,95]
+letters <- greet "Ada"                   # => hi Ada
+print letters                            # => 3
+
+# A Mutable cell is the one thing that changes, and only by an action.
+total = Mutable 0
+[1,2,3] * n -> set total (total + n)
+print total                              # => 6
 
 # ---------------------------------------------------------
-# 12. STRINGS, CHARS, FLOATS, BOOLS, CONVERSION
+# Monads
 # ---------------------------------------------------------
-print "a string"
-print 'c'
-print 3.14
-print true
-print false
-print (to String 42)      # => 42       (strings print as raw text)
-print (true ? "yes" : "no")  # => yes   (the ternary yields a string)
-print (1 == 1)            # => true
-print (1 < 2)             # => true
-print ("a" != "b")        # => true
-
-# ---------------------------------------------------------
-# 13. TYPES COME FROM CONSTRUCTORS — there are no annotations
-#    '::' is cons (x :: rest); ':' writes record entries ([x: 1]) and a
-#    ternary's else, so `x: Int = 5` is a syntax error.
-# ---------------------------------------------------------
-print {
-    x = Int 20                      # construct a typed value
-    x * 2
-}                                   # => 40
-Int typedCount = 3                  # a type pattern binding declares a typed name
-Float typedRatio = 1                # it converts as an argument would: 1.0
-# UInt typedBad = -1                # static error: UInt cannot represent a negative integer
-print [typedCount,typedRatio]      # => [3,1.0]
-typedInc (Int x) = x + 1            # a constructor pattern requires an Int
-print (typedInc 1)                  # => 2
-typedFn ((Int -> Int) k) = k 2      # a function contract
-print (typedFn (+ 1))               # => 3
-typedLam = (Int x) -> x + 1         # lambdas take constructor patterns too
-print (typedLam 5)                  # => 6
-bytePair [UInt8 a, UInt8 b] = a + b  # typed elements convert like a typed parameter
-print (bytePair [3,4])             # => 7 (bytePair [3,300] is a static range error)
-someFloat (Some (Float x)) = x      # so do variant payloads
-print (someFloat (Some 1))          # => 1.0
-Reading = Celsius Float | NoReading # a concrete field converts when constructed
-print (Celsius 21)                  # => Celsius 21.0
-Span = Span2 Int Int | NoSpan       # every payload field converts, by value
-# On several lines, each constructor starts its own line after a '|'.
-Heading =
-    | Northward
-    | Southward
-print [Northward,Southward]        # => [Northward,Southward]
-spanEnd (Span2 _ (UInt8 b)) = b     # spanEnd (Span2 1 300) is a static range error
-print (spanEnd (Span2 1 3))         # => 3
-byteField ([x: UInt8] r) = r.x      # record fields are checked by value too
-scaled v = byteField [x: v * 100]   # scaled 3 is a static range error
-print (scaled 1)                    # => UInt8 100
-print (byteField [x: 300, _: [x: 3]])  # => UInt8 3 (a later spread wins, as at runtime)
-print ([1,2] :: [3,4])            # => [[1,2],3,4]  ('::' adds one element; joining is ++)
-tailOf (_ :: rest) = rest           # '::' in a pattern is cons too
-print [0 :: []]                     # => [[0]]  (no parentheses needed in a list)
-print (tailOf [1,2,3])          # => [2,3]
-
-# ---------------------------------------------------------
-# 14. ITERATION (`*`), pairs, format
-#    seq * fn — iterate and collect the results   runs fn for its effect; result is discarded.
-#    A list iterates per element; a record per entry as [field,value].
-# ---------------------------------------------------------
-[1,2,3] * x -> print x                   # prints 1, 2, 3
-[1,2,3] * x -> print (x * 10)             # prints 10, 20, 30
-
-# records iterate as [field,value] pairs — destructure with a pattern-lambda;
-# `format` builds a string, so `print` emits it as raw text
-[name: "Alice", age: 30] * [f,v] -> print $ format "%: %" [f,v]
-                                             # prints name: Alice, age: 30
-
-[x: 1, y: 2, z: 3] * [field,value] -> print $ format "%: %" [field,value]
-                                             # prints x: 1, y: 2, z: 3
-
-# `*` is OVERLOADED: numbers multiply, but seq * fn ITERATES (and returns
-# the results). An int count runs fn that many times (0..n-1, negatives
-# count down from 0):
-3 * _ -> print "three"                       # prints three, three, three
--2 * x -> print x                            # prints 0, -1
-
-# ranges are INCLUSIVE int lists (Haskell-style); the first two elements
-# give the STEP: [2,4..100] counts by 2 — and [0..] is INFINITE: print
-# streams it AS IT IS CONSTRUCTED (Ctrl+C breaks it).
-print [0..5]                                 # => [0,1,2,3,4,5]
-print [5..3]                                 # => [5,4,3]   (implicit step adapts)
-print [0,1..-100]                           # => []          (explicit step, wrong way)
-print [2,4..10]                            # => [2,4,6,8,10]
-print [1+1..4]                               # => [2,3,4]   (bounds are constant arithmetic)
-print [10..12+3]                             # => [10,11,12,13,14,15]
-[0..3] * x -> print x                        # prints 0, 1, 2, 3
-#   print ([0..])                            # 0, 1, 2, ... forever
-#   [0..] * x -> print x                     # ditto
-
-# `:` cons works in EXPRESSIONS too (right-associative; parenthesize inside
-# list literals so it doesn't read as record syntax):
-print (0::[])                                 # => [0]
-print (0::1::[])                               # => [0,1]
-print [0::[]]                                 # => [[0]]
-
-print (zipWith (+) [1,2,3] [10,20,30])  # => [11,22,33]
-
-# and ranges PATTERNS-match — [lo..hi] fits any int in the range:
-size n = match n [
-    [0..5] -> "small"
-    _ -> "big"
-]
-print (size 7)                               # => big
-print (size 3)                               # => small
-
-print $ format "vec = % (100%%)" [[x: 1, y: 2]]
-# format "% %" [1]                  # error: missing argument
-# format "%" [1,2]                 # error: extra argument
-# format "%" [x: 1]                 # error: arguments must be a list
-print $ pairs [a: 1, b: 2]                   # => [["a",1],["b",2]]
-
-print (format "% / %" [1,2])               # => 1 / 2
-print (format "last: %" [9])                 # => last: 9
-print (format "100%%" [])                    # => 100%  (%% is a literal %)
-
-# ---------------------------------------------------------
-# 15. OUTPUT & INTROSPECTION — print / emit / debug / probe / toAST / step
-#     print takes ANY value (strings print raw, unquoted) and RETURNS it,
-#     so pipes continue; it EVALUATES 0-arg actions it is given.
-# ---------------------------------------------------------
-print 123                     # => 123
-print "hello"                 # => hello
-print [1,2,3,4]         # => [1,2,3,4]
-print [name: "Alice", age: 30]   # => [name: "Alice", age: 30]
-
-# emit is print WITHOUT the newline (also returns its value)
-emit "same"; emit " line"; print ""     # prints: same line
-
-# debug shows the argument AS WRITTEN — the unevaluated source:
-debug (1 + 1)                 # => 1 + 1
-debug [1 + 2, 3 + 4]         # => [1 + 2, 3 + 4]
-debug 42                      # => 42
-
-# step n descends n levels into a value's unevaluated structure and yields
-# a LIVE value: debug shows the level's source, <- runs an action.
-inner = {
-    print "inner"
-    return 42
-}
-stepped <- step 1 inner       # => inner          (runs the action)
-print stepped                 # => 42
-debug $ step 1 inner         # => { print "inner"; 42 }
-debug $ step 2 inner         # => return 42     (the block's tail statement)
-
-# A list keeps its items as written: it is CODE. probe shows a value as code,
-# print its values (print xs is probe (reduce xs)); a string probes quoted.
-probe [1 + 1, 2]              # => [1 + 1, 2]
-print [1 + 1, 2]              # => [2,2]
-probe (reduce [1 + 1])        # => [2]
-probe "hi"                    # => "hi"
-# Editing code is list editing. ++ joins code: the items after a binding see
-# it, wherever they were written (a name the code reads may be bound only by
-# code joined before it). An item update replaces the item, as code.
-joined = [x = 1] ++ [x + 1]
-probe joined                  # => [x = 1, x + 1]
-print joined                  # => [1,2]
-edited = [x = 1, x + 1] ++ [5]
-edited 0 = (x = 10)
-print edited                  # => [10,11,5]
-probe (take 1 edited ++ [x * 3])          # => [x = 10, x * 3]
-print (take 1 edited ++ [x * 3])          # => [10,30]
-
-# toAST — code as lists, unevaluated: an application is a list, function
-# first; a name is a string, a string literal its quoted source.
-print (toAST [1 + 2])         # => ["[]",["+",1,2]]
-print (toAST [f x "y"])       # => ["[]",["f","x","\"y\""]]
-print (toAST [x -> x, 2])     # => ["[]",["->",["x"],"x"],2]
-# import "syntax": fromAST writes such data back; eval runs it at the top level.
-import "syntax"
-print (fromAST (toAST [n -> n * 2 + 1]))  # => [n -> n * 2 + 1]
-doubled e = ["*",e,2]         # building code is building a list
-print (fromAST (doubled (toAST [x + 1] 1)))  # => (x + 1) * 2
-print (eval (doubled ["sqrt",16]))        # => 8
-# toLambda: code desugared to lambdas and application, as code: probe shows
-# the lambdas; a binding becomes a lambda's parameter, so it is no item.
-probe (toLambda [x = 1, x + 1])          # => [(x -> x + 1) 1]
-probe (toLambda [x = 10, y = x + 1, y])  # => [(x -> (y -> y) (x + 1)) 10]
-print (toLambda [fact n = n == 0 ? 1 : n * fact (n - 1), fact 5])  # => [120]
-probe (toLambda [{ a <- return 1; return (a + 1) }])  # => [return 1 >>= a -> return (a + 1)]
-# Parsers, as Haskell's Parsec, are monads: a do-block reads input in order.
-parser = import "parser"
-date = {
-    y <- parser.number
-    parser.char '-'
-    m <- parser.number
-    return [y,m]
-}
-print (parser.parse date "2026-10")                 # => Ok [2026,10]
-print (parser.parse parser.number "12x")            # => Err "unexpected 'x'"
-
-# to String / from String (string <-> value conversion; to String quotes strings)
-print (to String "hi")       # => "hi"
-print (from String "42")      # => 42
-
-# ---------------------------------------------------------
-# # 16. GROUPS, BLOCKS, INDENTATION & SEMICOLONS
-#    ( ) and { } are interchangeable: both are groups/blocks.
-#    Empty groups/blocks return an empty list. A block's value is the LAST statement's value.
-#    Newlines act as implicit semicolons; an explicit `;` also separates
-#    statements, but only two on one line (`a; b`): a `;` ending a line,
-#    doubled, or before a closing bracket is an error, being redundant.
-#    Indentation is rigid: every nested level is exactly +4.
-# ---------------------------------------------------------
-print []                     # => []            (empty list)
-print {}                     # => []            (empty block result)
-print { 5 }                  # => 5             (braces group like parens; spaces inside)
-print (x = 2; x * 6)         # => 12            (parens group like braces)
-print (4 * 3)                # => 12
-print { 4 * 3 }              # => 12
-# print {5}, print { 5  }    # parse errors: exactly one space inside each brace
-# Spacing is syntax: x = 1, [1,2,3], [x: 1, y: 2], (f x), { x }. A comma takes a
-# space after it only when an item it separates has one: [1,2], but [1 + 1, 2];
-# lambda parameters always take one: x, y -> x. So x=1, [1, 2], [1 + 1,2],
-# x,y -> x, [x:1] and ( 1 ) are parse errors, as are f(x), f[1] and f{ x }
-# (application needs a space), a ',' ending a line (newlines separate items), and an operator spaced on one
-# side only (1 +2, 1+ 2; 1+2 and 1 + 2 are fine, and sqrt -1 passes -1):
-layoutItems = [
-    1,2
-    3
-]
-print layoutItems            # => [1,2,3]
-print [1 + 1, 2]             # => [2,2]       (values print by the same rule)
-print [[x: 1], [y: 2]]       # => [[x: 1], [y: 2]]
-# A line is at most 99 characters, each literal and comment counting as one:
-print (123456789012345678901234567890123456789012345678901234567890 + 987654321098765432109876543210987654321098765432109876543210)  # => 1111111110111111111011111111101111111110111111111011111111100
-# Parentheses appear only where they change how code reads: print (5), (a * b) + c,
-# f ((g x)) and xs >>= (x -> f x) are parse errors. A lambda ending its expression
-# takes the rest; one passed as an argument keeps them, run (x -> e) (bare,
-# run x -> e is a lambda with a typed parameter); f = (x -> e) keeps them (a
-# value, where f = x -> e is a clause of f), as does [(x, y -> e)].
-# A typed parameter headed by a free name takes a type apart, literals compared:
-(t1 1 t2 -> print [t1,t2]) (Vect 1 Int)  # => [Vect,Int]
-parts (Vect n a) = [n,a]                 # a type applied to its parameters, too
-print (parts (Vect 3 Float))             # => [3,Float]
-print (typeOf parts)                     # => Type -> List (Int | Type)
-print ([1,2,3] >>= x -> [x, x * 10])  # => [1,10,2,20,3,30]
-# A definition's parameters read as arguments do: f Int x = x takes the type Int,
-# then x (f Int 3). So a constructor applied to patterns, or a cons, is
-# parenthesized: firstOr d (x :: _) = x (firstOr d x :: _ = x is a parse error).
-# A lambda's single pattern needs none: Some x -> x.
-firstOr _ (x :: _) = x
-firstOr fallback [] = fallback
-print (firstOr 0 [7,8])               # => 7
-# apn --loose FILE relaxes every spacing rule, and this one.
-
-group = { 1; 2; 3 }          # a 0-arg function: its body is the block
-print group                  # => 3    (the parens run it)
-
-inlineBlock = { 1 + 1 }      # a same-line { } block
-print inlineBlock            # => 2
-
-# statements on one line separated by explicit `;`
-print "hello"; print ", world"        # prints: hello
-                                      # prints: , world
-
-# a multi-line `{ }` block as a function body (value = last statement);
-# with an effect in it, the body is an action, ending with one (return)
-area w h = {
-    print "computing area"
-    return (w * h)
-}
-computedArea <- area 3 4     # prints: computing area
-print computedArea           # => 12
-
-# local definitions are allowed inside a block
-both = {
-    x = 40
-    y = 2
-    x + y
-}
-print both                   # => 42
-
-# blank lines inside a block are fine; statements still stop at same-level
-# newlines (implicit semicolons) and continue on +4-indented lines
-seqOf = {
-    print "one"
-
-    return (6 * 7)
-}
-seqResult <- seqOf           # prints: one
-print seqResult              # => 42
-
-# Unfinished definitions use an explicit placeholder; defining it is silent.
-unfinished = _
-probe [unfinished]           # => [unfinished] (inspect without evaluating)
-# Evaluating unfinished raises "not implemented" (asserted in tests).
-explicitEmpty = []
-print explicitEmpty           # => []
-# Missing sides of = are syntax errors: foo =, foo = ;, and = bar.
-# A following same-level statement cannot supply a missing body.
-
-# a function body that continues on a +4-indented line spans lines;
-# `[ ]` also spans lines and elements separate by newline (commas optional),
-# so arguments can be written across lines and even in columns:
-spanArgs =
-    myApp [
-        1
-        2
-    ] [
-        3
-        4
-    ]
-print spanArgs                # => [1,2,3,4]
-
-# INVALID (the lexer rejects these; demoed in comments only):
-#   - a { that ends its own line with a body NOT indented by exactly +4:
-#         func = {
-#       print 1                #   <- must be indented exactly 4 spaces
-#         }
-#   - any indentation that skips a level (0 -> 8) or is not a multiple of 4.
-
-# Leading-dot decimal literals are floats; ordinary binary float rounding applies.
-print (take 5 [0,0.5..100])  # => [0.0,0.5,1.0,1.5,2.0]
-print (length [0,0.5..100])  # => 201
-print ([0,0.5..100] -1)     # => 100.0
-print (.1 + .2)              # => 0.30000000000000004
-print -.5                   # => -0.5
-
-# List assignment rebinds a copy, like record field assignment.
-editable = [1,2,3]
-editable 0 = 10
-editable (-1) = 30
-print editable               # => [10,2,30]
-editable 1 = editable 0 + 1
-print editable               # => [10,11,30]
-
-# ---------------------------------------------------------
-# 16b. EVALUATION CONTRACT (see docs/semantics.md and tests/semantics-test.ts)
-#    Pure values are lazy and computed once; effects are IO actions, which
-#    only statements and <- bindings run (section 17b).
-# ---------------------------------------------------------
-evaluationValue = 2 + 1
-print evaluationValue       # => 3 (computed when first used, then kept)
-appliedValue = abs (0 - 3)  # an application that is not an action: kept too
-print appliedValue          # => 3
-actionValue = { print "action"; return 4 }  # an IO action: defining it runs nothing
-actionResult <- actionValue # => action (<- runs it and binds its result)
-print actionResult          # => 4
-actionValue                 # => action (each run repeats the effect)
-keepFirst x _ = x
-print (keepFirst 7 (Dynamic missingEvaluationArg)) # => 7 (unused argument is deferred)
-print (true ? 8 : Dynamic missingEvaluationArg)    # => 8 (unselected branch is deferred)
-# Lazy heads, tails, and recursive lists:
-ones = 1::ones
-fibs = 0 :: 1 :: zipWith (+) fibs (tail fibs)
-print (take 5 ones)          # => [1,1,1,1,1]
-print (take 12 fibs)         # => [0,1,1,2,3,5,8,13,21,34,55,89]
-print (take 4 (drop 5 fibs)) # => [5,8,13,21]
-print (head [1, Dynamic missingEvaluationArg]) # => 1 (unused element stays deferred)
-print (take 4 (map (+ 1) [0..]))       # => [1,2,3,4]
-print (take 4 (filter (n -> n % 2 == 0) [0..])) # => [0,2,4,6]
-# In the REPL, entering ones or fibs streams until Ctrl+C.
-# Invalid cons: x = x:1; x reports "cons tail expected a list, got int".
-# A self-containing list (x = [x]; print x) reports a cyclic nested value.
-# These expected failures are asserted in tests/semantics-test.ts.
-# Files use explicit print/emit for output; don't run unbounded output here.
-# Unproductive x = x waits until Ctrl+C; invalid numeric conversions still error.
-
-# Arbitrary-precision integers: no rounding above 2^53 and no Infinity.
-print (9007199254740993 + 2)  # => 9007199254740995
-print (12345678901234567890 * 12345678901234567890)
-# => 152415787532388367501905199875019052100
-print (take 3 [9007199254740993..])
-# => [9007199254740993,9007199254740994,9007199254740995]
-print (foldl (_, b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
-# tests/bigint-test.ts checks F1500 beyond the old floating-point overflow.
-
-# ---------------------------------------------------------
-# 17. EXIT, LOAD & HALT
-#    exit n    ends the whole process with status code n (n must be an int);
-#              works anywhere: top level, inside blocks, lambdas, iteration, ...
-#    load p    imports a file RELATIVE TO THE CURRENT FILE. Two effects:
-#              (1) as a STATEMENT it merges the file's own definitions into
-#                  the current scope (an `include`);
-#              (2) as a VALUE it returns them as a MODULE record, so
-#                  numbers = load "../lib/number"; numbers.sq 4 ... is namespaced access.
-#              Inside a { } block the merge stays scoped to that block.
-#    halt      is NOT a builtin. It is defined in system — the standard
-#              library — as  `halt = exit 0`. Expression 0-arg defs are LAZY, so
-#              importing system doesn't terminate the program; `halt` only
-#              fires (exits 0) when it is actually USED.
-# ---------------------------------------------------------
-# Selective imports bind only the requested names.
-[halt: selectedHalt] = import "system"
-# selectedHalt is available; other exports are not introduced by this binding.
-{
-    load "../lib/number"           # extensionless name; sq joins this block
-    print (sq 5)                   # => 25
-}
-# In the REPL, bare load does not echo the returned module or force its exports.
-import "system"               # halt is a deferred action
-
-numbers = load "../lib/number"      # namespaced module record
-print (numbers.sq 4)           # => 16
-print (numbers.cube 2)         # => 8; each use loads the file again, replacing its own definitions
-{
-    load "../lib/number"
-    sq x = x + 1                   # rebinding a loaded name ...
-    load "../lib/number"           # ... does not stop a later load from replacing it
-    print (sq 3)                   # => 9
-}
-# A value never changes: a rebinding is a new version from there on, and
-# what was written before keeps the one it saw, at the top level as in a block.
-{
-    shout s = s ++ "!"
-    loud x = shout x
-    shout s = s ++ "!!"
-    print [loud "hi", shout "hi"]  # => ["hi!","hi!!"]
-    count = 1
-    count = count + 1              # the right side reads the version before
-    print count                    # => 2
-    ones = 1 :: ones               # a new name's value may refer to itself
-    print (take 3 ones)            # => [1,1,1]
-}
-# More clauses are a new version too: a function written between them keeps
-# the clauses before (label 1 below would match no clause of describe).
-describe0 0 = "zero"
-label0 x = "it is " ++ describe0 x
-describe0 1 = "one"
-print [label0 0, describe0 1]    # => ["it is zero","one"]
-
-# step into the imported halt (an action whose body is exit 0):
-debug $ step 1 halt          # => exit 0
-# print RUNS the level, so this terminates the program:
-#   print $ step 1 halt
-
-# a load inside a { } block stays in the block's scope
-scoped = {
-    load "../lib/number"
-    sq 6
-}
-print scoped                # => 36
-
-print "still running before the final halt"
-
-# ---------------------------------------------------------
-# 17b. IO ACTIONS — effects are values
-#    print, emit, readFile, readStdin, getArgs, fetch, set and exit
-#    are IO actions: print 5 BUILDS an action and nothing happens until it
-#    runs. A top-level statement runs its action (a file's statements are an
-#    implicit do-block), and x <- action runs one and binds its result.
-#    A block that runs anything (a <- binding, or a discarded statement
-#    whose value is an action) is a do-block: the block is itself an
-#    action, and its last statement must be an action too (return x yields
-#    a plain x). A block of bindings stays a value: Int { 42 } is an Int,
-#    IO Int { return 42 } an action yielding one.
-#    IO is a type constructor: IO [] is the type of an action yielding [],
-#    and IO [] action checks one. return x is the action yielding x.
-# ---------------------------------------------------------
-lazyNote = {
-    print "lazyNote WAS called"
-    return (6 * 7)
-}
-noted <- lazyNote          # => lazyNote WAS called
-print (noted * 2)          # => 84
-sayHello = IO [] { print "hello" }   # IO { ... } is an error: IO needs a type
-sayHello                   # => hello
-sayHello                   # => hello (each run repeats the effect)
-unused = print "never"     # naming an action does not run it
-pureBlock = {
-    base = 40
-    base + 2
-}
-print (pureBlock + 0)      # => 42 (only bindings: a plain value)
-countdown n = n == 0 ? return "liftoff" : {
-    emit (to String n ++ " ")
-    countdown (n - 1)
-}
-launched <- countdown 3    # => 3 2 1 (recursive actions run in constant stack)
-print launched             # => liftoff (on the same line)
-# (print 1) + 1 is a type error: an action is not its result (bind it first).
-# Iterating an action runs each as it is reached: [0..] * print streams
-# until Ctrl+C (not run here).
-
-# ---------------------------------------------------------
-# 17c. FUNCTORS AND MONADS — instances by overloading
-#    map (<$>), <*>, >>=, >>, return, throw, guard, sequence, mapM, when and
-#    unless work in any monad. IO and lists are built in; a type joins by defining
-#    instance clauses for map, >>= and return, which add to the method
-#    everywhere (Option's and Result's live in the option module).
-#    return x is undecided until its monad is known: an annotation, a >>=
-#    with a concrete value, or running it (IO).
-# ---------------------------------------------------------
-print (map (* 2) [1,2,3])               # => [2,4,6]
-print ((+ 1) <$> Some 41)                  # => Some 42
-print (Some 3 >>= x -> x > 2 ? Some (x * 10) : None)    # => Some 30
-print ([1,2] >>= x -> [x, x * 10])        # => [1,10,2,20]
-print ([(+ 1), (* 2)] <*> [10,20])        # => [11,21,20,40]
-return "chained" >>= print                 # => chained
-print "first" >> print "second"            # => first, then second
-doubled <- mapM (x -> return (x * 2)) [1,2,3]
-print doubled                              # => [2,4,6]
-when (length doubled == 3) (print "three") # => three
-# while runs its code again before each pass; loop runs forever.
-counted = Mutable 0
-while [counted < 3] {
-    emit counted
-    set counted (counted + 1)
-}
-print ""                                   # => 012
-# for runs code as written: its start, then while its condition holds, the
-# action (which reads the code's names) and the step, an action or a new
-# binding (no value changes: i = i + 1 binds the next pass's i).
-for [i = 0, i < 3, i = i + 1] (emit i)
-print ""                                   # => 012
-for [i = Mutable 0, i < 3, set i $ i + 1] (emit i)
-print ""                                   # => 012
-# => [42], Some 42, Ok 42 (undecided: the list's, then each instance, one per line)
-print (return 42)
-print (Option Int { return 42 })           # => Some 42
-print (List Int { return 43 })             # => [43]
-fromIO <- IO Int { return 44 }
-print fromIO                               # => 44
-# A do-block over any monad: a List block tries every combination, an
-# Option block stops at the first None.
-sums = List Int {
+# A do-block runs in any monad, not just IO: in a list it tries every
+# combination, in an Option it stops at the first None.
+pairs3 = List Int {
     a <- [1,2]
     b <- [10,20]
     return (a + b)
 }
-print sums                                 # => [11,21,12,22]
-noSum = Option Int {
-    a <- Some 1
-    b <- None
+print pairs3                             # => [11,21,12,22]
+both = Option Int {
+    a <- safeDiv 1 2
+    b <- safeDiv 1 0
     return (a + b)
 }
-print noSum                                # => None
-# A do-block over a parameter takes the monad each call gives it.
-incremented m = {
-    x <- m
-    return (x + 1)
+print both                               # => None
+print (Some 3 >>= x -> Some (x * 10))    # => Some 30
+
+# Parsers are monads too, as Haskell's Parsec.
+date = {
+    year <- parser.number
+    parser.char '-'
+    month <- parser.number
+    return [year,month]
 }
-print [incremented (Some 1), incremented [1,2]]  # => [Some 2, [2,3]]
-# As in Haskell, a discarded statement in a monad is chained, so a false
-# guard (a throw: [] in a list, None in an Option) or a discarded Err stops the
-# block; a passing assert yields true, which is pure in any block.
-evens = {
-    x <- [1..6]
-    assert (x > 0)
-    guard (x % 2 == 0)
-    return x
-}
-print evens                                # => [2,4,6]
-positive n = {
-    _ <- Some n
-    guard (n > 0)
-    return n
-}
-print [positive 3, positive -1]            # => [Some 3, None]
-# A false guard throws its condition as written: in a Result block that is
-# Err "guard failed: ..."; unless (or when) names a specific error. check 2 runs only
-# returns; the checker finds the block's monad (Result) and the run uses it.
-check n = {
-    unless (n > 0) (Err "not positive")
-    guard (n < 100)
-    return (n * 2)
-}
-# => [Ok 4, Err "not positive", Err "guard failed: n < 100"]
-print [check 2, check 0, check 200]
-# The same as a chain: >> runs each in turn (>>= would need a function).
-checkChain n = unless (n > 0) (Err "not positive") >> guard (n < 100) >> return (n * 2)
-# => [Ok 4, Err "not positive", Err "guard failed: n < 100"]
-print [checkChain 2, checkChain 0, checkChain 200]
-# unless c x is c ? return [] : x: a return in one branch is in the other's monad.
-checkTernary n = n > 0 ? return n : Err "not positive"
-print [checkTernary 2, checkTernary 0]    # => [Ok 2, Err "not positive"]
-# throw e is the failure in whatever monad the context names.
-print [Option Int (throw "x"), Result Int String (throw "x")]  # => [None, Err "x"]
-# A monad of your own: a counter threading a number through each step.
-Counter s a = | MkCounter (s -> [a,s])
-runCounter (MkCounter f) s = f s
-(MkCounter g) >>= f = MkCounter (s -> {
-    [a,s1] = g s
-    runCounter (f a) s1
-})
-return x = MkCounter (s -> [x,s])
-tick = MkCounter (s -> [s, s + 1])
-twoTicks = Counter Int Int {
-    a <- tick
-    b <- tick
-    return (a * 100 + b)
-}
-print (runCounter twoTicks 5)              # => [506,7]
-print (runCounter (map (* 2) tick) 3)     # => [6,4] (map from >>= and return)
-# A parameter passed to map accepts whatever map has an instance for; the
-# checker checks each call (doubleAll 5: map needs an action, a list or a
-# monadic value). typeOf map is (a -> b) -> c a -> c b: c is that type.
-# (Written signatures use it too: f a, below with function types.)
-doubleAll m = map (* 2) m
-print [doubleAll [1,2], doubleAll [3]]    # => [[2,4],[6]]
-print (doubleAll (Some 4))                 # => Some 8
-# return is also overloaded on its result: return = MkLabel is return in Label.
-# Any definition of map, >>=, <*> or return is an instance, curried or not.
-Label a = | MkLabel a
-(MkLabel x) >>= f = f x
-return = MkLabel
-print (Label Int { return 9 })             # => MkLabel 9
-# to T x writes x as a T and from T x reads it back; they are methods too.
-print (to String 1.5 ++ "!")               # => 1.5!
-print (Int (from String "41") + 1)         # => 42
-print (to JSON [n: 1])                     # => {"n":1}
-print (from (List Char) (to (List Char) "abc"))        # => abc
-# A list template converts position by position, as cast does ([Char] is one Char).
-print (to [Char,Char] "hi")             # => ['h','i']
-describeType Int = "integer"               # a bare type name matches that type
-describeType String = "text"
-print [describeType Int, describeType String]  # => ["integer","text"]
-TempC = | InC Float
-TempF = | InF Float
-to TempC = (InF f) -> InC ((f - 32) * 5 / 9)
-print (to TempC (InF 212))                 # => InC 100.0
-# A method prints as an overloaded function: its builtin (IO and lists),
-# then each instance, one per line.
-print return                               # => return,Some,Ok,x -> MkCounter (s -> [x,s]),
-                                           #    MkLabel
+print (parser.parse date "2026-10")      # => Ok [2026,10]
 
-# Clauses with the same patterns but another result type overload each other;
-# the context of a call names the type, choosing one.
-blank _ = 0
-blank _ = ""
-print (Int (blank []))                     # => 0
-print [String (blank [])]                  # => [""]
-print (blank [])                           # => 0 and "" (undecided: each overload)
-print (typeOf (blank []))                  # => Int | String
-afterBlank (Int n) = n + 1
-print (afterBlank (blank []))              # => 1 (a typed parameter names Int)
-# blank [] + 1 is an error: ambiguous: nothing decides which blank
-
-# Explicit braces end a lambda body, so maps can chain after the closing brace.
-[x: 1, y: 2, z: 3] * [field,value] -> {
-    format "%: %" [field,value]
-} * x -> print x  # => x: 1, y: 2, z: 3 (one per line)
-
-# Required definition layout: same-line {, body +4 spaces, aligned }.
-layoutBlock = {
-    print "layout block"
-    print "aligned close"
-}
-layoutBlock
-layoutInline = { print "inline"; print "block" }
-layoutInline
-layoutExpression =
-    print "indented expression"
-layoutExpression
-# Invalid: an opening { on the next line after =, dedented statements,
-# or a closing } indented to the body level.
-
-print ['a'..'e']                           # => abcde
-print (take 6 (iterate (*2) 1))              # => [1,2,4,8,16,32]
-print (take 6 (iterate (x -> x * 2 + 1) 0))  # => [0,1,3,7,15,31]
-
-# Scheme-style numbers with APN notation and procedure names.
-print [0xFF,0b11010100,0o235461]  # => [255,212,80689]
-print (1 / 3 + 1 / 6)               # => 1/2
-print (1 + 2.0)                     # => 3.0
-print [quotient -7 3, remainder -7 3, modulo -7 3] # => [-2,-1,2]
-print [sqrt 4, sqrt (9 / 16), sqrt -1] # => [2,3/4,0+1i]
-print (sqrt 2)                      # => 1.4142135623730951
-print (makeRectangular 1 2 * makeRectangular 3 4) # => -5+10i
-rectangular = makeRectangular 3 4
-print [realPart rectangular, imagPart rectangular, magnitude rectangular]  # => [3,4,5]
-print [isInteger 3.0, isExact 3.0, isExact (1 / 3)] # => [true,false,true]
-print [exact .5, inexact (1 / 2)]   # => [1/2,0.5]
-print [round 2.5, round 3.5]        # => [2.0,4.0]
-print [floor (-3 / 2), ceiling (-3 / 2), truncate (-3 / 2)] # => [-2,-1,-1]
-print [numerator (6 / 4), denominator (6 / 4)] # => [3,2]
-print [gcd 32 36, lcm 32 36, min 1 2.0, max 1 2.0] # => [4,288,1.0,2.0]
-print (rationalize .3 .1)            # => 0.3333333333333333
-print [exp 0, log 1, sin 0, cos 0, tan 0, asin 0, acos 1, atan 0] # => [1,0,0,1,0,0,0,0]
-print [0,1/2..2]                   # => [0,1/2,1,3/2,2]
-print (expt 2 -3)                   # => 1/8
-print [1e3,.5e2,1.2e-3]         # => [1000.0,50.0,0.0012]
-print (from String (to String (makeRectangular 1 .5))) # => 1.0+0.5i
-print [isInfinite (1.0 / 0.0), isNaN (0.0 / 0.0)] # => [true,true]
-
-# Keyword-led expressions parse their trailing operators in the REPL too:
-# true ? "yes" : "no" => "yes"
-print $ true ? "yes" : "no"  # => yes
-print $ false ? "yes" : "no" # => no
-
-print (0+1i)  # => 0+1i
-print ((1+2i) * (3+4i))  # => -5+10i
-
-# A '-' spaced before and not after passes a negative argument: f -x is f (-x).
-print (sqrt -1)       # => 0+1i
-print (sqrt -1 * 4)   # => 0+4i  ((sqrt -1) * 4)
-# x -1 for a number x: cannot apply a number (subtract with x - 1)
-# natural (UInt n) = n; natural -1   # static error: UInt cannot represent a negative integer
-#                     one = 1; natural -one   # likewise, with a known value
-#                     negated x = natural -x; negated 2   # and at the call that supplies it
-#                     negated x = natural (-x); negated 2 # likewise; negated (-2) is natural 2
-#                     unused y = negated 2                # an error even if unused is never called
-# Schemas too: with Pt = [x: Float, y: Float] and g (Pt p), h x = g x accepts h [1,2] as
-# g [1,2] does.
-print (10 - 1)        # => 9
-print ((x -> x * 2) -3) # => -6
-
-print 2@0 # => 2
-print (isExact 2@0) # => true
-print (isExact 2@3) # => false
-print 2@3 # => -1.9799849932008908+0.2822400161197344i
-
-# First-class checked numeric types and overloads.
-print (take 3 (100 * Int))           # => [0,1,2]
-print (take 3 ([1..100] * Int))      # => [1,2,3]
-print (100 * Int 0)                  # => 0
-print (Int 123)                      # => 123
-print (UInt32 4294967295)             # => UInt32 4294967295
-# UInt is the natural numbers: Z is UInt 0, S n the next one. The patterns
-# Z and S k take a number apart (k is one less), on plain integers.
-naturalFactorial Z = 1
-naturalFactorial (S k) = (k + 1) * naturalFactorial k
-print (naturalFactorial 20)          # => UInt 2432902008176640000
-print (S (S Z))                      # => UInt 2
-print (typeOf S)                     # => UInt -> UInt (a builtin's type is the checker's)
-naturalsBelow Z = []
-naturalsBelow (S k) = k :: naturalsBelow k
-print (naturalsBelow 3)              # => [UInt 2, UInt 1, UInt 0]
-# The checker evaluates the list to learn its length: Vect 2 is a static error.
-print (Vect 3 UInt (naturalsBelow 3))  # => [UInt 2, UInt 1, UInt 0]
-# naturalFactorial (-1)               # static error: UInt cannot represent a negative integer
-# A literal in a typed pattern is a value of that type: (UInt 0) matches 0.
-# (UInt k) binds the untyped payload, so these are plain integers, while
-# naturalsBelow's S k binds the predecessor, a UInt.
-belowTyped (UInt 0) = []
-belowTyped (UInt k) = k - 1 :: belowTyped (k - 1)
-print (belowTyped 3)                 # => [2,1,0]
-print (Float32 .5)                   # => Float32 0.5
-print (Fraction (1/3))               # => Fraction 1/3
-print (Int $ truncate $ 3.7)         # => 3
-print (Float32 1 / 10)              # => Float32 0.1
-print (typeOf (Int32 1))             # => Int32
-print (isType Number (Int32 1))      # => true
-print (take 3 (100 * _ -> Int 0))         # => [0,0,0]
-typedAdd (Int x) (Int y) = Int (x + y)
-typedAdd (Float x) (Float y) = Float (x + y)
-typedAdd (Number x) (Number y) = x + y
-print (typedAdd (Int 2) (Int 3))      # => 5
-print (typedAdd (Float 2) (Float 3))  # => 5.0
-print (typedAdd (1/3) (1/6))          # => 1/2
-# f = Int x -> ... is the curried spelling of f (Int x) = ..., so it overloads too.
-describe = Int _ -> "an Int"
-describe = Float _ -> "a Float"
-print [describe 1, describe 1.5]      # => ["an Int","a Float"]
-describe (Int _) = "an integer"       # an equivalent clause rebinds it
-print [describe 1, describe 1.5]      # => ["an integer","a Float"]
-# Int32 2147483648, Float32 (Float .1), and UInt (-1) are checked errors.
-
-# Numeric patterns only accept lossless conversions, even for bare literals.
-integerClause (Int _) = "integer"
-integerClause _ = "fallback"
-print (integerClause .2)            # => "fallback"
-print (integerClause 2.0)           # => "integer"
-# A lone (Int x) clause applied to .2 reports no matching clause.
-
-# Constructors are lossless for both bare and typed numbers; rounding is explicit.
-print (Int (floor .2))               # => 0
-# Int .2 and Int (Float .2)          # error: round explicitly first
-print (Int (truncate (Float .2)))    # => 0
-print (Int $ floor $ Float .2)       # => 0
-print (.2 == Float .2)               # => true (numeric equality)
-numericPayload (_ value) = value      # _ discards the type, keeps the payload
-print (numericPayload (Int32 123))   # => 123
-retypedAdd (Int x) (Int y) = Int (x + y)
-print (retypedAdd (Int 2) (Int 3))   # => 5
-print cast                          # => its clauses, one pattern lambda per line
-
-# Container templates apply their existing slots to incoming values.
-namedTemplates = [Int,Float]
-namedValues = [1,2]
-print namedTemplates.namedValues    # => [1,2.0]
-print [namedValues: 42].namedValues # => 42 (literal record field)
-print ([x: 0] [123])                 # => [x: 123] (record default override)
-# Scalars are not callable: 0 123, "old" "new", and false true all error.
-print [String,Bool,Char].["new",true,'b'] # => ["new",true,'b']
-# ["old"].["new"], [0].[1], and [false].[true] error: scalar slots cannot be applied.
-print ([name: "old", enabled: false] [name: "new", enabled: true])
-print [Int].[floor .2]               # => [0]
-print ((* 2) * [1,2,3,4])     # => [2,4,6,8]
-print (cast String $ cast [Char,Char] $ "a😀") # => "a😀"
-print [Char,Char,Char,Char,Char]."hello"            # => ['h','e','l','l','o']
-print [Char,Char]."a😀"                  # => ['a','😀']
-print (Int * [1,2,3,4])       # => [1,2,3,4]
-print [Int,String].[123,"hello"] # => [123,"hello"]
-print (take 3 (map Int [0..]))         # => [0,1,2]
-print ([x: Int, y: 0] [x: 1, y: 2]) # => [x: 1, y: 2]
-print ([x: Int, y: Int] [x: 123])    # => [x: 123, y: 0]
-# [Int].[1,2] and [Int].[] error: one template slot requires one value.
-print [isType [Int] [1], isType [Int] [1,2]] # => [true,false]
-slots = [Int].[0]
-slots 0 = floor .2
-print slots                         # => [0]
-slots 0 = 123
-print slots                         # => [123]
-recordSlots = [x: Int, y: Int] []
-recordSlots.y = 321
-print recordSlots                   # => [x: 0, y: 321]
-recordSlots "y" = floor .2
-print recordSlots.y                 # => 0
-# recordSlots.y = Float .2           # error: lossy typed conversion
-# slots 1 = 1                       # error: slot 1 does not exist
-print [].[]                      # => [] (no hidden element schema)
-print [Int].[0]                     # => [0] (constructor application)
-print ([10] 0)                      # => 10 (integer indexing)
-Count = Int
-Numbers = [Int]
-Point = [x: Float, y: Float]
-print (Count 123)                   # => Count 123 (an alias of Int names a subtype)
-print Numbers.[1]                  # => [1]
-print (Point [x: 1, y: 2])          # => [x: 1.0, y: 2.0]
-firstNumber (Numbers values) = head values
-print (firstNumber [123])           # => 123
-print (cast [Int,Int] [1,2])         # => [1,2]
-NumericOption a = Option a
-print (NumericOption Int (Some 123)) # => Some 123
-UserId = | MkUserId Int
-print (MkUserId 123)                # => MkUserId 123
-
-
-# Persistent HashMap, accepting records or association lists.
-typedMap = insert [x: 123] $ HashMap []
-print typedMap                      # => HashMap [["x",123]]
-print (typedMap "x")                 # => 123
-typedMapNext = insert [y: 456] $ typedMap
-print (has "y" typedMap)             # => false
-print (has "y" typedMapNext)         # => true
-print (keys typedMapNext)            # => ["x","y"]
-print (values typedMapNext)          # => [123,456]
-print (pairs typedMapNext)           # => [["x",123],["y",456]]
-print (length typedMapNext)          # => 2
-print (remove "x" $ typedMapNext)    # => HashMap [["y",456]]
-print (HashMap [["a",1],["b",2]]) # => HashMap [["a",1],["b",2]]
-
-print (typeOf $ true) # => Bool
-
-print (Bool true)        # => true
-print (String "hi")      # => hi
-print (Char 'a')         # => 'a'
-print []                # => []
-print (List [1,2])      # => [1,2]
-print (Record [x: 1])    # => [x: 1]
-print (Function (x -> x + 1) 2) # => 3
-print (Type Bool)        # => Bool
-
-myTypeOf (t _) = print t
-myTypeOf true       # => Bool
-myTypeOf (Int32 5)  # => Int32
-
-# HTTP and JSON. fetch url options returns the response as a record (status,
-# ok, statusText, url, headers, body); fetchText and fetchJson return a
-# successful body. to JSON / prettyJson / from JSON are JSON.stringify / JSON.parse.
-# Ctrl+C in the REPL interrupts a slow request; a timeout option bounds one.
-# A data: URL needs no network; ./apn grants network access for real requests:
-#   fetch "https://www.youtube-transcript.io/api/channels" [
-#       method: "POST"
-#       headers: [Authorization: "Basic <token>", Content-Type: "application/json"]
-#       body: to JSON [ids: ["jawed"]]
-#   ]
-import ["http","json"]
-reply <- fetch "data:application/json,{\"ids\":[\"jawed\"]}" [method: "GET"]
-print [reply.status,reply.ok]               # => [200,true]
-print (from JSON reply.body).ids             # => ["jawed"]
-print (to JSON [ids: ["jawed"], count: 1])   # => {"ids":["jawed"], "count":1}
-header = [Content-Type: "json", my value: 1] # bare keys may hold '-' and spaces
-print (header "Content-Type")                # => json  (not the quoted key "Content-Type")
-decoded <- fetchJson "data:application/json,[1,2.5,null]" []
-print decoded                                 # => [1,2.5,[]]
-
-# Standard modules are cached imports, separate from file execution with load.
-# Each is imported by name (there is no whole-library module); a list imports
-# several, each once: import ["option","option"] is a parse error. Editors
-# completing a standard name add its import (into the first import, as a list).
-# Before its import, using any standard export (fail, upper, okOr) is a static
-# error at the name, whose hint names the import: add `import "function"` to use `fail`.
-import [
-    "type","function","option","sequence","array","number","text","map"
-    "combinator","io","system","search"
-]
-print (cast String $ to (List Char) "hello") # => "hello"
-# reverse is implemented in APN with a linear-time accumulator fold.
-print (head (reverse [1..10000]))   # 10000
-print (reverse [1,2,3])           # [3,2,1]
-print (reverse "a😀b")              # b😀a
-# The checker runs the same text functions: to (List Char) counts code points here too,
-# so Vect 3 Char (to (List Char) "a😀") would be a static length error.
-print (Vect 2 Char (to (List Char) "a😀"))  # => ['a','😀']
-print (take 6 primes)                 # [2,3,5,7,11,13]
-print (mean [1,2])                   # Some 3/2
-print (frequencies $ words $ "one two one")
-print (take 5 (scanl (+) 0 [1..]))     # [0,1,3,6,10]
-print (groupBy isEven [1..4])
-print (map sq $ Some 3)         # Some 9
-print (mapError upper $ Err "oops")   # Err "OOPS"
-# Division by zero is an error for exact numbers (a Float gives infinity);
-# safeDiv returns None instead, and okOr names the failure as a Result.
-print (safeDiv 7 2)                   # Some 7/2
-print (safeDiv 7 0)                   # None
-print (okOr "no samples" $ safeDiv 10 0)  # Err "no samples"
-print (map (to Option) [Ok 1, Err "x"])  # [Some 1, None]: to Option drops the error
-print (safeDiv 1 4 >>= safeDiv 1)     # Some 4: =<< and >>= chain Option steps
-# unwrap and expect take the value out, as in Rust: None or Err is a runtime
-# error (expect "no samples" None fails with "no samples"). A constructor
-# pattern binding does the same, in a block as at the top level.
-print [unwrap (safeDiv 6 3), expect "no samples" (Ok 5)]  # [2,5]
-half n = {
-    Some h = safeDiv n 2
-    h
-}
-print (half 9)                        # 9/2
-# A deeper line starting with an operator (or a ternary's ? or :) continues
-# its statement, so each step of a chain can take its own line.
-perItem total count = okOr "no items" (safeDiv total count)
-    >>= share -> share > 100
-        ? Err "share too large"
-        : Ok share
-    >>= checked -> Ok (checked * 2)
-print [perItem 300 2, perItem 300 3]  # [Err "share too large", Ok 200]
-
-# The language evaluates source through its APN-written reader and evaluator.
-import "meta"
-print (metaEval "id x = x; id 42")                 # 42
-print (metaEval "x = 1 :: x; take 4 x")           # [1,1,1,1]
-print (metaEval "true ? 7 : missing")              # 7
-# It reads and runs toAST's lists, so toAST's output runs on it too:
-print (metaParse "f x = x * 2; f 21")   # => ["{}",["=",["f","x"],["*","x",2]],["f",21]]
-print (metaEvalSyntax (toAST [(x -> x * 2) 21] 1))  # 42
-print (length "\r\v\f")                         # 3: whitespace escapes
-
-# Self-application, SKI, and fixed points, entirely in APN.
-selfFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))
-print (selfFactorial 5)                         # 120
-print (combinators.S combinators.K combinators.K 42)  # 42
-print (combinators.Y (recur, n -> n == 0 ? 1 : n * recur (n - 1)) 5) # 120
-print (take 4 (fix (xs -> 1 :: xs)))              # [1,1,1,1]
-
-# Advent of Code helpers: parsing, strict simulation and graph traversal.
-print (integers "1 -2 3")                      # [1,-2,3]
-print (repeatApply 5 (*2) 1)                   # 32
-# A forced step over a fixed-size state checks statically: forceList and map
-# keep their argument's length, so the [a,b] pattern always fits.
-fibStep [a,b] = forceList [b, a + b]
-print (repeatApply 10 fibStep [0,1])         # [55,89]
-# The same holds for enumerate, xs * f, and elementwise list arithmetic,
-# and for the library's reverse, sort, sortBy, sortOn and zipWithIndex.
-swapPair [a,b] = [b,a]
-print (swapPair ([1,2] * (x -> x * 10) + [3,4]))  # [24,13]
-print (swapPair (sort [9,4]))                # [9,4]
-# Nested lengths follow too: each inner list keeps its argument's length.
-# An empty-list clause and a cons clause are checked as separate choices.
-emptyOrHead [] = "empty"
-emptyOrHead (x::_) = x
-print (emptyOrHead [5] + 1)                   # 6
-# The first clause that definitely matches decides the result, as at runtime.
-zeroOrPair [] = [0]
-zeroOrPair _ = [1,2]
-onlyOne [a] = a
-print (onlyOne (zeroOrPair []))               # 0
-# Typed clauses rank as at runtime: an exact type comes before a plain variable.
-pairOrZero _ = [1,2]
-pairOrZero (Int _) = [0]
-print (onlyOne (pairOrZero 3))                # 0
-# Clauses may return lists of different lengths; each call gets its clause's.
-zeroOrPairOf (Int n) = [n,n]
-zeroOrPairOf 0 = [0]
-print (onlyOne (zeroOrPairOf 0))              # 0
-# The literal can also arrive through another function's parameter.
-onlyOneOf n = onlyOne (zeroOrPairOf n)
-print (onlyOneOf 0)                           # 0
-# Booleans and strings too: the clause is chosen at each call of the wrapper.
-flagged true = [1]
-flagged _ = [0,0]
-onlyFlag b = onlyOne (flagged b)
-print (onlyFlag true)                         # 1
-# Characters and floats are literal patterns too, compared as at runtime.
-describeLiteral 'a' = "letter a"
-describeLiteral 1.5 = "one and a half"
-describeLiteral _ = "other"
-# ["letter a","one and a half","other"]
-print [describeLiteral 'a', describeLiteral 1.5, describeLiteral 'b']
-vowelOrPair 'a' = [1]
-vowelOrPair _ = [0,0]
-onlyVowel c = onlyOne (vowelOrPair c)
-print (onlyVowel 'a')                         # 1
-# A function's result counts too, when it is called directly by name.
-alwaysA _ = 'a'
-print (onlyOne (vowelOrPair (alwaysA 5)))     # 1
-# Results that depend on argument values are evaluated at each call.
-vowelIf b = b ? 'a' : 'z'
-print (onlyOne (vowelOrPair (vowelIf true)))  # 1
-onlyVowelIf b = onlyOne (vowelOrPair (vowelIf b))
-print (onlyVowelIf true)                      # 1
-# Float and exact-rational conditions are evaluated as the runtime computes them.
-vowelBelowHalf x = x < 1 / 2 ? 'a' : 'z'
-print (onlyOne (vowelOrPair (vowelBelowHalf 0.25)))  # 1
-# Fixed-width numbers keep their precision: in Float32, .1 + .2 == .3.
-vowelIfSingle x = Float32 x + Float32 .2 == Float32 .3 ? 'a' : 'z'
-print (onlyOne (vowelOrPair (vowelIfSingle .1)))     # 1
-# A known value that converts losslessly selects a typed clause, as at runtime.
-vowelIfInt (Int _) = 'a'
-vowelIfInt _ = 'z'
-print (onlyOne (vowelOrPair (vowelIfInt (UInt 3))))  # 1
-# Lengths count too, through parameters, map, and recursion.
-vowelIfShort xs = length xs < 2 ? 'a' : 'z'
-shortVowel ys = onlyOne (vowelOrPair (vowelIfShort (map (+ 1) ys)))
-print (shortVowel [7])                                # 1
-# filter and take run on known elements: only 3 is above the limit.
-aboveVowel limit = onlyOne (vowelOrPair (vowelIfShort (filter (> limit) [1,2,3])))
-print (aboveVowel 2)                                  # 1
-# zip stops at the shorter list; takeWhile stops at the first failure.
-pairedVowel ys = onlyOne (vowelOrPair (vowelIfShort (zip ys [1,2,3])))
-print (pairedVowel [9])                               # 1
-leadingVowel limit = onlyOne (vowelOrPair (vowelIfShort (takeWhile (< limit) [1,2,3])))
-print (leadingVowel 2)                                # 1
-# splitWhile splits where takeWhile stops (html's span is the HTML element).
-print (splitWhile (< 3) [1,2,3,1])                 # [[1,2],[3,1]]
-print (true ? 1 :: [] : [])                            # [1]
-# Library code runs statically on known values: words, dropWhile, endless lists.
-wordVowel text = onlyOne (vowelOrPair (vowelIfShort (words text)))
-print (wordVowel "hello")                             # 1
-print (onlyOne (vowelOrPair (vowelIfShort (take 1 [0..]))))  # 1
-# from String reads numbers and booleans; recursion runs as deep as the runtime's.
-print (onlyOne (vowelOrPair (vowelIfShort (take (Int (from String "1")) [0..]))))  # 1
-countDown n = n == 0 ? [] : n :: countDown (n - 1)
-print (onlyOne (vowelOrPair (vowelIfShort (drop 299 (countDown 300)))))  # 1
-# A closure keeps the version of a name it saw, whatever later rebinds it;
-# long ranges are cut arithmetically.
-latest xs = {
-    limit = 1
-    firsts = () -> take limit xs
-    limit = 5
-    firsts []
-}
-print (onlyOne (vowelOrPair (vowelIfShort (latest [7,8,9]))))  # 1
-print (onlyOne (vowelOrPair (vowelIfShort (drop 999999 [1..1000000]))))  # 1
-# Checking performs no effects, but knows what an action run with <- yields.
-emitted <- emit [7]                                    # [7] (output actions yield [])
-print (onlyOne (vowelOrPair (vowelIfShort emitted)))  # 1
-# A cell written after it is read follows the run's order.
-bumped _ = {
-    c = Mutable 1
-    set c (c + 1)
-    return (c + 0)
-}
-bumpedValue <- bumped 0
-print (onlyOne (vowelOrPair (vowelIfShort (take (bumpedValue - 1) [7,8,9]))))  # 1
-sortedAndReversed xs = [sort xs, reverse xs]
-firstOfBoth [[a,_],[c,_]] = [a,c]
-print (firstOfBoth (sortedAndReversed [3,1]))  # [1,1]
-print (lookup 3 (bfsDistances (n -> n < 3 ? [n + 1] : []) [0])) # 3
-# I/O in scripts: readFile "input.input", readStdin, getArgs, readInput.
-
-# Runtime range endpoints.
-rangeFactorial n = product [1..n]
-print (rangeFactorial 5)                       # 120
-# REPL: func 0 = 1, then func 1 = 0, keeps both clauses.
-# Ctrl+C interrupts both [0..] output and unproductive x = x evaluation.
-
-# Browser HTML values are constructed in APN; build the interactive example with:
-# apn --html examples/browser/counter.apn counter.html
-# The build also bundles the local modules (files or folders) the program imports
-# and the files it loads; a load of a computed path bundles the program's whole folder.
-# A module in a subfolder imports packages from parent folders up to the program's.
-# examples/packages/main.apn demonstrates file, folder and subfolder packages.
-html = import "html"
-browserPreview = html.div [] [
-    html.button [] [html.text "-"]
-    html.div [] [html.text "0"]
-    html.button [] [html.text "+"]
-]
-print browserPreview
-
-# A cell made from a schema's value holds that type: List fields take any
-# length. Field access reads its contents.
-Trail = [head: [Float,Float], points: List [Float,Float]]
-trail = Mutable (Trail [head: [0.0,0.0], points: []])
-set trail [head: [1.0,2.0], points: [[0.0,0.0],[1.0,2.0]]]
-print trail.points                            # [[0.0,0.0],[1.0,2.0]]
-
-# Mutable references retain identity across scopes and aliases.
-mutableCounter = Mutable 0
-{
-    set mutableCounter $ mutableCounter + 1
-}
-print mutableCounter                         # 1
-counterAlias = mutableCounter
-set counterAlias $ 2
-print mutableCounter                         # 2
-# The checker follows top-level cells through the statements that write them.
-print (onlyOne (vowelOrPair (vowelIfShort (take (mutableCounter - 1) [7,8,9]))))  # 1
-# A statement may write and read them: each part sees the run's order.
-bumpCounter _ = {
-    set mutableCounter $ mutableCounter + 1
-    return (mutableCounter + 0)
-}
-counted <- bumpCounter 0
-print (onlyOne (vowelOrPair (vowelIfShort (take (counted - 2) [7,8,9]))))  # 1
-# A top-level value using a cell is computed at its first use and kept.
-counterAtFirstUse = mutableCounter + 0
-print counterAtFirstUse                      # 3
-set mutableCounter $ 10
-print (onlyOne (vowelOrPair (vowelIfShort (take (counterAtFirstUse - 2) [7,8,9]))))  # 1
-# An action kept in a cell runs where a later statement runs it.
-pendingBox = Mutable [set mutableCounter $ 0]
-set pendingBox [set mutableCounter $ 2]
-print pendingBox                              # [IO []] (storing it runs nothing)
-head pendingBox                               # runs the stored action
-print (onlyOne (vowelOrPair (vowelIfShort (take (mutableCounter - 1) [7,8,9]))))  # 1
-# map builds a list of actions; do runs them in order.
-do (map (x -> set mutableCounter $ x) [5,1])
-print (onlyOne (vowelOrPair (vowelIfShort (take mutableCounter [7,8,9]))))  # 1
-
-# p5 sketches are descriptions until built for the browser.
-p5 = import "p5"
-print (typeOf (p5.sketch [draw: p -> p.background "black"])) # P5Program
-# apn --html examples/browser/p5-sketch.apn p5-sketch.html
-
-# Elm-style programs (examples/elm; apn --site examples/elm site builds them
-# with an editor): commands and subscriptions are data the page runs, and
-# generators, decoders, times and shapes are ordinary values.
-print (typeOf (p5.canvas [draw: p -> p.background "black"]))    # Html (a sketch inside a view)
-random = import "random"
-[roll,_] = random.step (random.int 1 6) (random.initialSeed 42)
-print (roll >= 1 && roll <= 6)                 # true
-print (head (random.step (random.list 3 (random.uniform "a" ["b"])) 7))  # ["a","b","b"]
-decode = import "decode"
-pointDecoder = map2 (x, y -> [x: x, y: y])
-    (decode.field "x" decode.int)
-    (decode.field "y" decode.int)
-print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1, \"y\": 2}"))  # Ok [x: 1, y: 2]
-# Err "Expecting an OBJECT with a field named `y`"
-print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1}"))
-# A type decodes as it says, each field by name, wherever a decoder goes; a
-# record type made the result, so it keeps its fields (lamp.lti = true fails).
-Pixel = [x: Int, y: Int, lit: Bool]
-pixelJson = from JSON "{\"y\": 2, \"x\": 1, \"lit\": true}"
-print (decode.decodeValue Pixel pixelJson)     # Ok [x: 1, y: 2, lit: true]
-print (decode.decodeValue (decode.list Pixel) [pixelJson])  # Ok [[x: 1, y: 2, lit: true]]
-print (to Pixel [lit: true])                   # [x: 0, y: 0, lit: true] (as Pixel [...])
-lamp = Pixel []
-lamp.lit = true
-print [_: lamp, size: 2]                       # [x: 0, y: 0, lit: true, size: 2] (a copy)
-asPixel value = Pixel value                    # converted when it runs
-print (asPixel [lit: true]).lit                # true
-clock = import "time"
-print (clock.toMinute clock.utc (clock.millisToPosix 754000))     # 12
-print (map2 (+) (Some 1) (Some 2))             # Some 3
-print (numbers.degrees 180 == numbers.pi)      # true
-playground = import "playground"
-# Placed 0 10 30 1 1 (Rectangle (Rgb 52 101 164) 4 4)
-print (playground.rotate 30 $ playground.moveUp 10 $ playground.square playground.blue 4)
-# Message types say what they carry: a record alias is a type argument, and a
-# field may name a module's type (clock.Posix here; browser.Viewport, file.File).
-Spot = [x: Float, y: Float]
-Trail = Walked (List Spot) | Stamped clock.Posix
-print [Walked [[x: 1, y: 2]], Stamped (clock.millisToPosix 0)]  # [Walked [[x: 1.0, y: 2.0]], ...
-
-# Functions display their source without running their bodies.
-printFunction x = print x
-print printFunction                          # x -> print x
-
-# Alternatives are first-class functions, and match is an intrinsic callable function.
-handlers = [
-    Some y -> y
-    None -> 0
-]
-print (match (Some 123) handlers)              # 123
-print (match None handlers)                    # 0
-dispatch = match (Some 123)
-print (dispatch handlers)                     # 123
-print (match (Dynamic missing) [_ -> 42])               # 42; unused value stays lazy
-checkedApply ((Int -> Int) f) = Int { f 123 }
-print (checkedApply (*2))                     # 246 (typed Int)
-
-# Editor tooling checks this file without executing these actions:
-#   apn --lint examples/features.apn
-#   ./editors/neovim/try-apn examples/editor-playground.apn
-# The editor launcher keeps your normal LazyVim config; --clean opts out.
-# It grants Deno read access to the bundled match prelude at startup.
-# APN editor colors match the REPL, including numeric markers and ternary colons.
-# Lint warns about recursion that may never finish (up n = up (n + 1): no
-# smaller argument); a stream such as nats n = n : nats (n + 1) is fine.
-editorDouble x = x * 2
-print (editorDouble 21)                     # => 42
-
-# A type applied to its parameters matches a type value; one more pattern is a
-# value of that type, which binds the parameters: (ExampleOption a value) takes
-# the whole variant, a its payload's type. Constructor patterns unpack it.
-ExampleOption a = ExampleSome a | ExampleNone
-exampleUnwrap (ExampleOption _ value) = match value [
-    ExampleSome x -> x
-    ExampleNone -> 0
-]
-print (exampleUnwrap (ExampleSome 123))      # => 123
-print (exampleUnwrap ExampleNone)        # => 0
-print (typeOf (ExampleSome 123))             # => ExampleOption
-examplePayload (ExampleOption a _) = a
-print (examplePayload (ExampleSome "x"))     # => String
-exampleParameter (ExampleOption a) = a
-print (exampleParameter (ExampleOption Int)) # => Int
-
-# C interop is opt-in: importing it and declaring signatures runs no C code.
-ffiExample = import "ffi"
-print (isType Type Pointer)                   # => true
-print (ffiExample.function [Int32,Int32] Int32) # signature record
-# ./examples/c-interop/run-demo demonstrates C calls and mutable Pointer memory.
-# ./examples/c-interop/run-donut animates a C-rendered donut driven by APN.
-# Zero-argument C actions use bare fields: c.donut_finish; print c.greeting.
-
-# <- runs an action now and keeps its result; = only names the action.
-captured <- { print "captured now"; return "kept" } # => captured now
-print captured                               # => kept (the stored result)
-eagerArgs <- getArgs
-print eagerArgs                              # => [] without CLI arguments
-lazyCapture <- return [Dynamic missing, 42]   # return v: <- binds v now (outer value only)
-print (lazyCapture 1)                         # => 42
-# x <- 42 is an error: <- runs an action; bind a value with = (or <- return v).
-
-# REPL regression: paste this expression, move after `match` on its first line,
-# and press Enter. Output must start below the closing ], preserving every line.
-match (Some 123) [
-    Some x -> print x
-    None -> _
-]
-
-print (2 ^ 3 ^ 2)              # => 512
-print (-2 ^ 2)                 # => -4
-print (2 ^ -3)                 # => 1/8
-print ((^ 2) 5)                # => 25
-print ((2 ^) 5)                # => 32
-
-# Tail calls reuse the evaluator loop; arguments remain lazy.
-tailCountdown 0 = 42
-tailCountdown n = tailCountdown (n - 1)
-print (tailCountdown 10000)          # => 42
-# A file ending in load "itself" likewise repeats until Ctrl+C.
-
-# do statements is the block with those statements: do [a,b] is { a; b }.
-do [print "hi", print "there"]      # => hi, then there
-lastOne <- do [print "first", return 42]  # { print "first"; return 42 }
-print lastOne                       # => 42
-print [do [1,2], { 1; 2 }]         # => [2,2]: no action, so the last value
-print [do [], {}]                   # => [[],[]]: no statements
-print [x = 1, x + 1]                # => [1,2]: a list item may be a binding
-print [do [x = 1, x + 1], { x = 1; x + 1 }]  # => [2,2]
-print (toAST [x = 1, x + 1])        # => ["[]",["=","x",1],["+","x",1]]
-# Such a list's bindings name its items: replacing one recomputes the items reading it.
-code = [x = 1, y = 2, x + y]
-before = code
+# ---------------------------------------------------------
+# Code as data
+# ---------------------------------------------------------
+# A list keeps its items as written. print shows their values and probe
+# the code; editing code is editing a list.
+probe [1 + 1, 2]                         # => [1 + 1, 2]
+print [1 + 1, 2]                         # => [2,2]
+code = [x = 1] ++ [x + 1]
+print code                               # => [1,2]
 code 0 = (x = 10)
-print [before,code]                 # => [[1,2,3],[10,2,12]]
-print (do code)                     # => 12
-
-# A new top-level statement after a closed block must start at column one.
-# f = { print "hi" }
-#     print "outside"               # parse error: unexpected top-level indentation
-
-# Blocks inside parentheses retain newline-separated local statements.
-print $ map (x -> {
-    result = x + x
-    result * result
-}) [1,2,3,4]           # => [4,16,36,64]
-
-# Composition binds tighter than iteration and pipes.
-[x: 1, y: 2, z: 3] * print \ format "%: %"  # x: 1, y: 2, z: 3
-print ([1,2,3] * (+ 1) \ (* 2))         # => [3,5,7]
-print ((+ 1) \ (* 2) $ 3)                 # => 7
-
-# Import a list of modules, returning their combined namespace.
-combinedNamespace = import ["function","number"]
-print (combinedNamespace.id 42)           # => 42
-
-# REPL/Neovim: load and use share import's keyword color.
-# Open namespace records (or a list of them) in the current scope.
-standardNamespace = import "combinator"
-use standardNamespace
-print (identity 123)                     # => 123
-use [[useFirst: 10], [useSecond: 20]]
-print (useFirst + useSecond)              # => 30
-
-# Record-template patterns accept positional lists just like template application.
-VectorForPattern = [x: Float, y: Float, z: Float]
-showVector (VectorForPattern v) = print v
-showVector [1,2,3]  # => [x: 1.0, y: 2.0, z: 3.0]
-vectorPatternX (VectorForPattern v) = v.x
-print (vectorPatternX [1,2,3])        # => 1.0 (also checked before execution)
-
-# REPL: typing ) on an indent-only line dedents one level, like ] and }.
-# Backspace after a lone ) restores the continuation indent; paste stays literal.
-# A closing parenthesis on its own line aligns with the opening line.
-print
-    123                                      # => 123
-# print (
-#     123
-#     )                                # indentation error
-
-# Numeric arrays: arithmetic is elementwise; ++ remains concatenation.
-print ([1,2,3] + [10,20,30])         # => [11,22,33]
-print (2 * [[1,2],[3,4]])             # => [[2,4],[6,8]]
-print (10 - [1,2,3])                   # => [9,8,7]
-print ([1,2,3] / 2)                    # => [1/2,1,3/2]
-print -[1,2,3]                         # => [-1,-2,-3]
-print (take 3 ([0..] + [10..]))           # => [10,12,14]
-print ([x: 1, y: 2] + [y: 20, x: 10])   # => [x: 11, y: 22]
-ArrayVector = [x: Float, y: Float, z: Float]
-# (ArrayVector[1,2,3], without the space, is an error)
-print (ArrayVector [1,2,3] * 2)         # => [x: 2.0, y: 4.0, z: 6.0]
-print ([1,2] ++ [3,4])                 # => [1,2,3,4]
-import "array"
-print (shape [[1,2],[3,4]])            # => [2,2]
-print (dot [1,2,3] [4,5,6])           # => 32
-print (transpose [[1,2,3],[4,5,6]])  # => [[1,4],[2,5],[3,6]]
-print (matmul [[1,2],[3,4]] [[5,6],[7,8]]) # => [[19,22],[43,50]]
-# [1,2] + [3]                            # length mismatch when traversed
-# [[1,2],[3,4]] + [10,20]                 # rank mismatch; scalar broadcast only
-
-# Iteration accepts the function on either side.
-print * [1,2,3,4]                     # prints 1, 2, 3, 4
-print ((+ 1) * [1,2,3])                # => [2,3,4]
-print (Int * 3)                          # => [0,1,2]
-"hi" * print                             # a string's characters: prints 'h', 'i'
-
-# Zero initialization happens at construction; bare types stay constructors.
-print [Int,Float,Int32,Bool,String] # => [Int,Float,Int32,Bool,String]
-ZeroVector = [x: Float, y: Float, z: Float]
-zeroVector = ZeroVector []
-zeroVector.x = 123
-print zeroVector                     # => [x: 123.0, y: 0.0, z: 0.0]
-print ZeroVector                     # => [x: Float, y: Float, z: Float]
-template = ZeroVector
-template.x = 123
-print template                       # => [x: 123.0, y: Float, z: Float]   a Float 123.0
-print (template [])                  # => [x: 123.0, y: 0.0, z: 0.0]
-typeTemplate = ZeroVector
-typeTemplate.x = Int
-print typeTemplate                       # => [x: Int, y: Float, z: Float]
-replacement = [nested: [x: 1]]
-replacement.nested = [y: 2]
-print replacement                    # => [nested: [y: 2]]
-print (Int * [1,2,3])            # => [1,2,3]
-print (ZeroVector [1,2,3])        # => [x: 1.0, y: 2.0, z: 3.0]
-# ZeroVector [1,2]                  # error: positional fields must be complete
-# Int + 1 and sqrt Float are errors; constructors are not numbers.
-print (typeOf (Int 1))               # => Int
-print (Type ZeroVector)              # => [x: Float, y: Float, z: Float]
-DefaultChoice a = Present a | Absent
-print ([choice: DefaultChoice Int] []) # => [choice: Absent]
-DefaultUser = | MakeDefaultUser Int String
-print ([user: DefaultUser] [])        # => [user: MakeDefaultUser 0 ""]
-# Int .2, cast Int .2 and [Int].[.2] reject lossy conversion.
-print (Int (floor .2))               # => 0
-
-# Collection assignments evaluate variable and computed indices in the old scope.
-indexedValues = [0,0]
-selectedIndex = 0
-indexedValues selectedIndex = 1
-indexedValues (selectedIndex + 1) = indexedValues selectedIndex + 1
-print indexedValues                 # => [1,2]
-indexedObject = [x: Int] []
-selectedKey = "x"
-indexedObject selectedKey = 3
-print indexedObject                 # => [x: 3]
-
-# An alias of a scalar type names a subtype: it keeps its name, is accepted
-# wherever its base is, and two names do not mix.
-AccountId = Int
-OtherId = Int
-getAccountId (AccountId n) = n
-print (AccountId 7)                  # => AccountId 7
-print (getAccountId (AccountId 7))   # => 7
-print (AccountId 2 + AccountId 3)    # => AccountId 5
-print (AccountId 1 + 1)              # => AccountId 2 (a plain Int joins it)
-print (AccountId == Int)            # => false
-idKind (AccountId _) = "account"
-idKind (Int _) = "int"
-print [idKind (AccountId 1), idKind (OtherId 1), idKind 1]  # => ["account","int","int"]
-# AccountId 1 + OtherId 1           # error: cannot combine AccountId and OtherId
-# Applying a base type unwraps: OtherId (Int (AccountId 4)) moves between names.
-print (Float $ AccountId 4)          # => 4.0
-print (OtherId (Int (AccountId 4)))  # => OtherId 4
-
-# Nullary variants index lists in declaration order.
-Compass = Up | Down | Left | Right
-deltas = [[0,-1],[0,1],[-1,0],[1,0]]
-print (deltas Left)                 # => [-1,0]
-deltas Up = [0,0]
-print (deltas Up)                   # => [0,0]
-print (Left + 1)                    # => 3
-print (Left * Right)                # => 6
-print -Down                         # => -1
-print (deltas (Down + 1))            # => [-1,0]
-
-# The linter warns if a known family's literal alternatives omit a case.
-# Guards do not count as unconditional coverage; dynamic lists stay runtime-checked.
-compassName (Compass direction) = match direction [
-    Up -> "up"
-    Down -> "down"
-    Left -> "left"
-    Right -> "right"
-]
-assert (compassName Up == "up")
-# assert (1 == 2)                   # error includes expression, source file and line
-
-# Scoped cleanup runs after returned lazy data has been evaluated.
-import "function"
-released = Mutable false
-bracketed <- bracket 42 (_ -> set released true) (n -> [n, n + 1])
-print bracketed                    # => [42,43]
-print released                     # => true
-import "io"
-# A read-only OS device keeps the showcase independent of its working directory.
-nothing <- withFile "/dev/null" (file -> file.read)
-print nothing                      # => empty line
-
-# Dot field spellings are literal string keys, including punctuation.
-oddKeys = []
-oddKeys.-1 = 1
-oddKeys "(x)" = 2
-print [oddKeys.-1, oddKeys "-1"]       # => [1,1]
-print [oddKeys "(x)", oddKeys "(x)"]     # => [2,2]
-
-# Implicit numeric types constrain assignment too.
-implicitNumber = [x: 1]
-implicitNumber.x = 1.0
-print implicitNumber                  # => [x: 1]
-# implicitNumber.x = 1.5               # error: lossy conversion to Int
-
-# Rich type descriptions inspect lazy elements and function bodies without running them.
-print (typeOf [1,2,3,4])           # => List Int
-print (typeOf [1..])                     # => List Int (no infinite traversal)
-describeIdentity (Int x) = x
-print (typeOf describeIdentity)          # => Int -> Int
-print (typeOf (x -> print x))            # => a -> []
-print (typeOf [1,"hello"])             # => List (Int | String)
-# (a '::' list is described the same)
-print (typeOf (1 :: ["hello"]))         # => List (Int | String)
-
-# Empty results are lists; conditions use truthiness.
-print ({} == [])                        # => true
-print (Bool * [0,1,"","hello",[],[0]])  # => [false,true,false,true,false,true]
-print (0 && Dynamic missingTruthinessName)          # => false; right side is skipped
-print (1 || Dynamic missingTruthinessName)          # => true
-print (filter (x -> x) [0,1,2])      # => [1,2]
-print (match 42 [_ | [] -> 0, x | 1 -> x]) # => 42
-
-# Type variables preserve relationships between inputs and outputs.
-print (typeOf (x, _ -> x))                # => a -> b -> a
-print (typeOf (f, x -> f x))              # => (a -> b) -> a -> b
-print (typeOf (x -> [x,x]))             # => a -> List a
-
-# Value-dependent types; the same constraints run at dynamic boundaries.
-SizedInts n = Vect n Int
-copySized n ((SizedInts n) xs) = xs
-# A typed pattern binds the names its type does not know yet: n and a here.
-appendSized ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys)
-print (typeOf (appendSized [1,2] [3]))  # => Vect 3 Int
-# A length keeps a name bound to a value (n above, an earlier parameter's); one
-# bound to a function, which no length is, binds there, even one defined later.
-extentOf (Vect extent a xs) = extent
-extent xs = length xs
-print (extentOf [7,8,9])                # => 3
-# An indexed family: each constructor says the type it makes.
-Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a
-# Its parameters may also be written as a lambda, as f = x -> e is f x = e.
-Pair = a, b -> (MkPair a b | NoPair)
-print (MkPair 1 "x")                     # => MkPair 1 "x"
-# An operator starting with ':' bound to a constructor is an infix pattern
-# too: (::) = Cons would make x :: xs build and match Cons x xs.
-(:+) = MkPair
-swapPair (x :+ y) = y :+ x
-print (swapPair (1 :+ "x"))              # => MkPair "x" 1
-# A clause for some arguments overloads an operator; others reach the builtin.
-print {
-    1 + 1 = 3
-    [1 + 1, 1 + 2]
-}                                        # => [3,3]
-pairVec = Cons 1 (Cons 2 Nil)
-print (typeOf pairVec)                   # => Vec 2 Int
-joinVec Nil ys = ys
-joinVec (Cons x rest) ys = Cons x (joinVec rest ys)
-print (typeOf (joinVec pairVec pairVec)) # => Vec 4 Int
-vecLength ((Vec n _) _) = n
-print (vecLength pairVec + 1)            # => 3
-firstVec (Cons x _) = x
-print (firstVec pairVec)                 # => 1
-# firstVec Nil and Vec 3 Int pairVec are static errors.
-# A clause may claim its result's index; the checker proves each claim by
-# induction: Nil makes n 0, Cons x r makes it one more than r's, and the
-# recursive call on the smaller r meets its own clause's claim. Claiming
-# n + m + 1 in the second clause is a static error at the definition.
-revVec ((Vec n a) Nil) ((Vec m a) acc) = Vec (n + m) a acc
-revVec ((Vec n a) (Cons x r)) ((Vec m a) acc) = Vec (n + m) a (revVec r (Cons x acc))
-print (revVec pairVec Nil)               # => Cons 2 (Cons 1 Nil)
-# (Vec n a xs) is ((Vec n a) xs), as for Vect. A match alternative's x:xs
-# takes the scrutinee's tail as one shorter, as a clause's does.
-vecSize (Vec n _ _) = n
-print (vecSize pairVec)                  # => 2
-countVect (Vect _ _ xs) = match xs [[] -> 0, (_::rest) -> 1 + countVect rest]
-# Vect is the prelude's family of lists counting their elements:
-# Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a.
-# A program's family of the same shape is the same length-indexed list.
-Lst n a = [] -> Lst 0 a | a :: Lst k a -> Lst (k + 1) a
-print (typeOf (Lst 2 Int [5,6]))        # => Vect 2 Int
-# A claim around a match is checked in each alternative under its own facts
-# ([] makes n zero); claiming n + m + 1 here would be a static error.
-appendVect (Vect n a xs) (Vect m a ys) = Vect (n + m) a {
-    match xs [
-        [] -> ys
-        x :: rest -> x :: appendVect rest ys
-    ]
-}
-print (typeOf (appendVect [1,2] [3]))  # => Vect 3 Int
-# Written with lambdas it is the same function, checked the same way.
-appendLambda = Vect n a xs -> Vect m a ys -> Vect (n + m) a {
-    match xs [
-        [] -> ys
-        x :: rest -> x :: appendLambda rest ys
-    ]
-}
-print (appendLambda [] [3])              # => [3]
-print (countVect [7,8,9])              # => 3
-print (copySized 3 [1,2,3])            # => [1,2,3]
-print (typeOf (SizedInts 3 [1,2,3]))   # => Vect 3 Int
-SelectedType flag = flag ? Int : String
-print (SelectedType true 123)           # => 123
-print (SelectedType false "hello")      # => hello
-# The checker evaluates the pure code a type needs, as the program would:
-# SelectedType (isEven 3) 5 and Vect (sizeFor 2) Int [1,2,3] are static errors.
-sizeFor n = n * 2
-print (Vect (sizeFor 2) Int [1,2,3,4])  # => [1,2,3,4]
-# A type name bound to a lambda is used as it is used: applied, it runs;
-# where a type is expected, it is the function type it spells.
-SizedFloats = n -> Vect n Float
-print (SizedFloats 2 [1,2])            # => [1.0,2.0]
-IntMaker = _ -> Int
-makeOne ((IntMaker) k) = k []
-print (makeOne (_ -> 7))                # => 7
-cellType 0 = Int
-cellType _ = String
-print (cellType 1 "text")               # => text
-# A type chosen by a parameter is decided at each run: a runtime check.
-labelled n = SelectedType (n > 3) "few"
-print (labelled 2 ++ "!")               # => few!
-# labelled 5 fails when run: Int expects a number.
-# apn --check examples/types/dependent-vectors.apn checks without executing.
-# apn examples/types/dependent-vectors.apn checks, then runs by default.
-
-# Bracketed field assignment always takes a matching list of values.
-singlePluck = [x: 1]
-singlePluck.[x] = [10]
-print singlePluck                    # => [x: 10]
-# singlePluck.[x] = 10 errors: the RHS must be a list.
-
-nestedUpdate = [child: [x: Float 1, y: 2]]
-nestedUpdate.child.x = 10
-print nestedUpdate                  # => [child: [x: 10.0, y: 2]]
-nestedUpdate.child.[x,y] = [20,30]
-print nestedUpdate.child            # => [x: 20.0, y: 30]
-
-# String arguments look up association lists; integer arguments index them.
-associations = [["x",1],["y",2]]
-print (associations "x")             # => 1
-print (associations 0)               # => ["x",1]
-print ([["x",1],["x",2]] "x")   # => 1 (first matching key)
-
-# Evaluate expressions with record fields in a local scope.
-scopedPoint = [x: 3, y: 4]
-print scopedPoint.(x + y)            # => 7
-print scopedPoint.([x,y])          # => [3,4]
-print scopedPoint.(x = 10; x + y)    # => 14
-print scopedPoint.x                 # => 3
-
-# Numeric powers retain exact arithmetic; Ctrl+C interrupts large REPL powers.
-print ([x: 1, y: 2, z: 3].[x,y] ^ 10) # => [1,1024]
-# In the REPL: vec.[x,y] ^ 100000000 can be stopped with Ctrl+C.
-
-# Explicit floating constructors round; implicit narrowing remains lossless.
-print (Float32 .1)                    # => Float32 0.1
-print (Float32 .1 + .2)               # => Float32 0.3
-print (Float32 .1 + Float32 .2)       # => Float32 0.3
-# Int .2 still errors; use Int (floor .2) to choose integer rounding.
-
-# Float is flexible; Float32 and Float64 commit to a precision.
-flexibleValue = .2
-print (Float32 .1 + flexibleValue)   # => Float32 0.3
-print (Float .2 + Float32 .1)        # => Float32 0.3
-# Float32 .1 + Float64 .2 errors: choose a precision with a cast.
-print (Float32 .1 + cast Float32 (Float64 .2)) # => Float32 0.3
-
-print scopedPoint.{
-    result = x + y
-    result * result
-}                                   # => 49
-
-print ({ + 2 } 3)                   # => 5, like (+ 2) 3
-bracePattern { Int x } = x + 1
-print (bracePattern 2)              # => 3
-
-# Recursive inference accepts self-application without Dynamic or new wrappers.
-# Strict --check rejects unresolved operations elsewhere in this full showcase.
-inferredSelf f = f f
-print (inferredSelf (_ -> 123))       # => 123
-inferredFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))
-print (inferredFactorial 5)                 # => 120
-# loop x = loop x and x = x remain legal; checking never executes them.
-
-# Dependent pattern binders; repeated names require agreement.
-vectAppend (Vect n a []) (Vect m a ys) = Vect (n + m) a ys
-vectAppend (Vect n a (x::xs)) (Vect m a ys) =
-    Vect (n + m) a (x :: vectAppend xs ys)
-print (vectAppend [1,2] [3,4])            # => [1,2,3,4]
-print (typeOf (vectAppend [] [3,4]))       # => Vect 2 Int
-sameArguments x x = x
-print (sameArguments 3 3)                  # => 3
-print ((x, x -> x) 4 4)                    # => 4
-# A lambda's parameters are patterns separated by ', '; t x is one pattern
-# binding the argument's type, as in f (t x) = t, match alternatives included.
-print ((t _ -> t) "a")                     # => String
-print (match 1 [t x -> [t,x]])            # => [Int,1]
-print ((_, _ -> 1) 2 3)                    # => 1
-
-# Files and REPL submissions check by default; Dynamic marks runtime boundaries.
-dynamicNumber = Dynamic 41
-print (Int dynamicNumber + 1)              # => 42
-((Int -> Int) checkedIncrement) <- return (Dynamic (x -> x + 1))
-print (checkedIncrement 41)                # => 42
-# Int (Dynamic "bad") fails at runtime; unknowns outside Dynamic still fail checking.
-
-# Inference retains operator constraints across calls and REPL submissions.
-inferredIncrement x = x + 1
-print (inferredIncrement 41)               # => 42
-# inferredIncrement "bad"                  # type error before any effects
-# print "not printed"; missingName         # type error: whole submission rejected
-# --check follows literal imports/loads without running their effects.
-
-# Expression arrows always create lambdas; contracts belong in patterns.
-print ((Int value -> value) 123)           # => 123
-# (Int -> Int) checkedIncrement applies a lambda, not a function-type constructor.
-# Where a type is expected, a lambda is read as the function type it spells
-# out, as [Int] is a list and a positional type. A lowercase name not bound to
-# a type is a type variable; [Int] is one Int, List Int a list of any length.
-print ((a -> a) == typeOf (x -> x))        # => true
-print ((b -> b) == typeOf (x -> x))        # => true (variable names don't matter)
-print ((a -> a) == typeOf (x, _ -> x))      # => false
-print (List Int == typeOf [1,2,3])       # => true
-print ([Int] == typeOf [1])                # => false ([Int] is positional)
-print (typeOf map)                         # => (a -> b) -> c a -> c b (c: any type map works on)
-print ((a -> a).(+ 1) 41)                  # => 42 (checked: the result is the input's type)
-applyTwice ((a -> a) f) x = f (f x)
-print (applyTwice (* 3) 2)                 # => 18
-print (isType (Int -> Int) (+ 1))          # => true
-print (((a -> b) -> List a -> List a) == typeOf filter)  # => true (a function type taking one)
-# f a is a type variable applied to a type: any type holding an a (List a,
-# Option a). As a contract it accepts map and checks each use.
-print (((a -> b) -> f a -> f b) == typeOf map)        # => true
-twiceMapped (((a -> b) -> f a -> f b) m) xs = m (* 2) (m (+ 1) xs)
-print [twiceMapped map [1,2], twiceMapped map (Some 3)]  # => [[4,6], Some 8]
-# f a e fills a type's first two parameters (Result a e); as a parameter it
-# is the flat typed pattern ((f a) e), as (Vec n a xs) is.
-doubleOk (((a -> b) -> f a e -> f b e) m) r = m (* 2) r
-print [doubleOk map (Ok 4), doubleOk map (Err "no")]  # => [Ok 8, Err "no"]
-
-typedLambda = (Int value) -> Int { value + value }
-typedNamed (Int value) = Int { value + value }
-print (typedLambda 21)                    # => 42
-print (typedNamed 21)                     # => 42
-print (typeOf typedLambda)                # => Int -> Int
-print (typeOf typedNamed)                 # => Int -> Int
-
-# A named definition also binds its name for repeated-name equality.
-selfOnly selfOnly = selfOnly
-print (selfOnly selfOnly == selfOnly)     # => true
-# selfOnly 1                  # argument 'selfOnly' must equal the function 'selfOnly'; got Int
-
-# Wildcard schema fields accept any value without conversion.
-showField ([x: _] v) = print v.x
-showField [123]                          # => 123
-showField ["hello"]                      # => hello
-showField [x: true]                      # => true
-mixedFields ([x: _, y: Float] v) = [v.x,v.y]
-print (mixedFields ["hello",2])         # => ["hello",2.0]
-
-# Dotted patterns retain the same argument while destructuring it.
-retainRecord whole.[x,y] = [whole,x,y]
-print (retainRecord [x: 1, y: 2, z: 3])      # => [[x: 1, y: 2, z: 3], 1, 2]
-sharedValue.aliasValue = 123
-print [sharedValue,aliasValue]          # => [123,123]
-wholePair.[firstItem,secondItem] = [1,2]
-print [wholePair,firstItem,secondItem]  # => [[1,2],1,2]
-# Existing roots still update fields, without creating local field-name bindings.
-updateRecord = [x: 0]
-updateRecord.x = 1
-print updateRecord                       # => [x: 1]
-
-# Anonymous record entries merge fields; later entries replace earlier values.
-baseRecord = [x: 1]
-print [_: baseRecord, y: 2, z: 3]        # => [x: 1, y: 2, z: 3]
-print [_: baseRecord, x: "new"]          # => [x: "new"]
-updateRecord._ = [y: 2]
-print updateRecord                       # => [x: 1, y: 2]
-
-# Type and value shapes can be captured together.
-inspectSingle ([elementType] [item]) = [elementType,item]
-print (inspectSingle [123])              # => [Int,123]
-print (inspectSingle ["hello"])          # => [String,"hello"]
-
-# Named list selection, positional templates, and named schema-pattern input.
-print ([10,20,30] [first: 0, last: 2])  # [first: 10, last: 30]
-print ([Int] [x: 0])                   # [x: Int]
-print [Float].[x: 1]                   # [x: 1.0]
-print [String,Int].[name: "a", age: 2] # [name: "a", age: 2]
-inspectNamedSlot ([t] [x]) = [t,x]
-print (inspectNamedSlot [1])           # [Int,1]
-print (inspectNamedSlot [other: 2, x: 1]) # [Int,1]
-convertNamedSlot ([Float] [x]) = x
-print (convertNamedSlot [x: 1])        # 1.0
-
-# Selection read/write symmetry and record remainders.
-symmetryArray = [10,20,30]
-symmetryArray [first: 0, last: 2] = [last: 300, first: 100]
-print symmetryArray                  # [100,20,300]
-symmetryRecord = [x: 1, y: 2]
-symmetryRecord.[x: a, y: b] = [b: 20, a: 10]
-print symmetryRecord                 # [x:10,y:20]
-symmetryPairs = [["x",1],["y",2]]
-symmetryPairs "x" = 10
-print symmetryPairs                  # [["x",10],["y",2]]
-[x: symmetryFirst, _: symmetryRest] = [x: 1, y: 2, z: 3]
-print [symmetryFirst,symmetryRest]   # [1,[y:2,z:3]]
-
-halt   # `halt = exit 0` — terminates the showcase cleanly (status 0)
+probe code                               # => [x = 10, x + 1]
+print code                               # => [10,11]
+print (toAST [f x + 1])                  # => ["[]",["+",["f","x"],1]]
+probe (toLambda [x = 1, x + 1])          # => [(x -> x + 1) 1]
 
 # ---------------------------------------------------------
-# ERROR REPORTING — every failure is an APNError rendered with a bold
-# headline, an optional "hint: did you mean ...?", and for parse errors
-# a --> line, source context, and a caret under the offending token
-# (the lexer stamps every token with a position). Unbound variables are
-# caught by the static checker before the program runs (`print yy`
-# after `y = 3` reports "unbound variable 'yy'" with "did you mean
-# 'y'?"); missing record fields get the same suggestions at runtime,
-# operator type errors read "cannot apply '+' to list and int", and
-# unterminated strings are real errors now (they used to
-# silently swallow the rest of the file). Errors exit non-zero, so they
-# cannot appear in this showcase's expected output — try `x = 1 + ]`
-# or `prynt 1` in the REPL.
+# Beyond this tour
 # ---------------------------------------------------------
-
-# ---------------------------------------------------------
-# The INTERACTIVE REPL (deno run main.ts) has its own feature set —
-# history navigation (Up at the first line / Down at the last line;
-# inside multiline input the arrows move between lines), persisted history, Tab
-# completion + 4-space tabs, colored input/echo, multi-line chunks
-# with auto-indent. These are interactive-only and cannot run in this
-# file-mode showcase: see :help inside the REPL, or docs/repl.md.
-# ---------------------------------------------------------
-
-# REPL editing: Option+Left/Right moves by word. Enter submits unless the
-# cursor immediately follows (, { or [; then it indents. Shift+Enter reverses this,
-# including submitting invalid code. Brackets in strings/comments are ignored.
-
-# REPL: Ctrl+W deletes the previous word with legacy or enhanced terminal keys.
-
-# REPL: after [ then a newline and an indented 1, Enter adds another indented
-# line. Shift+Enter submits instead. After the closing ], Enter submits.
-
-# REPL echo colors: [1] and [x: 1] show yellow numbers and gray structure;
-# nested strings and booleans retain their scalar colors during lazy streaming.
-
-# REPL input colors: unary/binary operators are peach; []{}[];, :. stay gray.
-
-# REPL echo: fractions such as 1/3 have yellow digits and a peach slash.
-
-# REPL echo: complex signs in 0+1i and 0-1i are peach too.
-
-# REPL input: ternary : is peach; record : and assignment = are gray.
-
-# REPL: Enter on a blank continuation line keeps its indentation; only an
-# opening bracket on the current line adds another four spaces.
-
-# REPL numeric markers: i in 2i, x/b/o in radix literals, and e in 1e3
-# are peach; numeric digits (including hexadecimal letters) stay yellow.
-
-# Paste this multiline definition into the REPL: its indentation is preserved.
-# Pasting inserts the complete snippet; press Enter afterward to submit it.
-pasteHandlers = [
-    Some y -> print y
-    None -> []
-]
-print (length pasteHandlers)               # => 2
+# - The standard library (docs/standard-library.md): text, maps, JSON, HTTP,
+#   files, random numbers, arrays and more.
+# - Browser programs in the Elm style and p5.js sketches (examples/elm,
+#   examples/p5js; docs/browser-html.md): apn --html FILE.apn OUT.html.
+# - C functions through import "ffi" (docs/c-interop.md).
+# - APN evaluating APN (docs/metacircular-evaluator.md).
+# - The REPL (docs/repl.md) and editor tooling (docs/editor-tooling.md).

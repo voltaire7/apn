@@ -48,10 +48,18 @@ function bundleFiles(bundle: Record<string, string>): Files {
         lib: BUNDLE_LIB,
     };
 }
-const asFolder = (directory: string) => directory.endsWith("/") ? directory : `${directory}/`;
+// A path with its . and .. parts resolved, so one file has one spelling.
+function normal(path: string): string {
+    const parts: string[] = [];
+    for (const part of path.split("/")) {
+        if (part === "..") parts.pop();
+        else if (part && part !== ".") parts.push(part);
+    }
+    return `/${parts.join("/")}`;
+}
 function absolute(directory: string, files: Files): string {
-    if (files !== disk || directory.startsWith("/")) return asFolder(directory);
-    return new URL(asFolder(directory), `file://${Deno.cwd()}/`).pathname;
+    const folder = normal(files !== disk || directory.startsWith("/") ? directory : `${Deno.cwd()}/${directory}`);
+    return folder.endsWith("/") ? folder : `${folder}/`;
 }
 
 // name.apn, else name/*.apn, under the folder base.
@@ -114,8 +122,7 @@ export function unknownModule(spec: string, bundled = false): { message: string;
  */
 export function loadPath(name: string, directory: string, bundle?: Record<string, string>): string {
     const files = bundle ? bundleFiles(bundle) : disk;
-    const path = name.startsWith("/") ? `${name}.apn` : `${absolute(directory, files)}${name}.apn`;
-    return new URL(path, "file:///").pathname;
+    return normal(name.startsWith("/") ? `${name}.apn` : `${absolute(directory, files)}${name}.apn`);
 }
 /** A loaded file's source, from the disk or a bundle. */
 export function readLoad(path: string, bundle?: Record<string, string>): string | undefined {

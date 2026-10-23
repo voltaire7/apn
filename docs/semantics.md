@@ -854,8 +854,10 @@ does not evaluate its `halt` action.
 
 `probe` shows a value as code (see [code](#code)). `debug`
 forces its argument without running a returned action: `a = print 3; debug a`
-prints `a`. `step` retains
-its expression-inspection/evaluation rules demonstrated in `examples/features.apn`.
+prints `a`. `step n v` goes `n` levels into `v`'s unevaluated structure and
+gives that level as a live value: `debug` shows its source, and `<-` runs it
+when it is an action (`inner = { print 1; return 2 }`: `debug $ step 2 inner`
+shows `return 2`).
 `to String` demands its argument and collects its full rendering into a string.
 Values render as source writes them: strings and characters escaped
 (`"a\"b"`), a constructor argument that is itself
@@ -936,12 +938,12 @@ its host boundary; larger values raise an error instead of being rounded.
 
 ```sh
 deno check main.ts
-deno test tests/*-test.ts
-deno run --allow-read main.ts examples/features.apn
+deno test --allow-read tests/*-test.ts
 ```
 
 The assertions cover finite prefixes, shared effects, patterns, errors, and
-streaming/interruption recovery. The showcase is the broader syntax reference.
+streaming/interruption recovery. `examples/features.apn` is a tour of the
+language.
 
 ## List index assignment
 

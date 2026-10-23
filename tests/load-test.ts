@@ -12,6 +12,14 @@ for (const name of ["number"]) {
         if (i.sourceDir !== directory) throw new Error("source directory not restored");
     });
 }
+// A library file loaded through '..' is the library's own: its imports are
+// the modules the program has, so their types are the same types.
+Deno.test("a library file loaded through .. shares the library's modules", () => {
+    const i = new Interpreter();
+    i.sourceDir = new URL("fixtures", import.meta.url).pathname;
+    i.run(parse('import "option"\nsix = { load "../../lib/number"; sq 6 }\nsix'));
+    if (i.renderString(i.run(parse("Option Int { return 1 }"))) !== "Some 1") throw new Error("a second Option");
+});
 Deno.test("extensionless load reports the resolved APN path", () => {
     const i = new Interpreter();
     try { i.run(parse('load "missing-load-test-source"')); }

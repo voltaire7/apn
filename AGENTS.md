@@ -5,15 +5,12 @@
 1. **The workflow is mandatory.** For ANY change (add, change, or remove a
    feature), you MUST:
    1. Edit the relevant `src/` module (or `main.ts` for entry-point changes).
-   2. Update `examples/features.apn` so it demonstrates the new/updated behavior
-      (this file is the living spec AND the smoke test).
-   3. Type-check, test, and run the full showcase:
+   2. Type-check and test:
           deno check main.ts
           deno test --allow-read tests/*-test.ts
-          deno run --allow-read main.ts examples/features.apn
-   4. Confirm output matches expectations before declaring done.
-   Do not end a task without completing all steps. Never leave `examples/features.apn`
-   out of date. Some areas need extra checks; see the index below.
+   3. Confirm output matches expectations before declaring done.
+   Do not end a task without completing all steps. Some areas need extra
+   checks; see the index below.
 2. **Keep it green.** If a change breaks any existing feature, fix it before
    finishing. Do not leave the project in a broken state.
 3. **Keep the docs true.** When behavior changes, update the matching file in
@@ -47,14 +44,15 @@ Key files:
 - `src/errors.ts` — `APNError`, `didYouMean`
 - `src/repl.ts` — REPL editor and drivers
 - `lib/*.apn` — standard library (`import "text"`, `import ["option","map"]`, ...)
-- `examples/features.apn` — showcase of every feature; `tests/semantics-test.ts`
+- `examples/features.apn` — a short tour of the language in the manner of
+  Odin's overview, not a list of every feature; `tests/semantics-test.ts`
   asserts observable evaluation rules
 
 ## Run / verify
 
 Deno 2.8.0 or newer (the first release that loads the interpreter's
 `with { type: "text" }` imports; `apn` enforces it). From the repo root:
-- Showcase / smoke test: `deno run --allow-read main.ts examples/features.apn`
+- Language tour: `deno run --allow-read main.ts examples/features.apn`
 - Tests: `deno test --allow-read tests/*-test.ts` (Deno.test, no package.json)
 - Type-check: `deno check main.ts` (plus `src/browser-runtime.ts` and `src/editor.ts` for browser changes)
 - REPL / run a file: `./apn` or `./apn FILE.apn` (adds write/env flags so
