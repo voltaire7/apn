@@ -89,7 +89,6 @@ for (const source of [
     'f x = x == 0 ? 1 : x * x; f (Dynamic 2)',
     'Vect 2 Int [1]',
     'f g = [g 1, g "a"]; f (x -> 0)',
-    'f r = r.y == 0 ? 5.0 : r.vy * 9007199254740993; f [y: 1.0, vy: 2.0]',
     'bad = Vect n a xs -> Vect m a ys -> Vect (n + m + 1) a {\n    match xs [\n        [] -> ys\n        x::xs -> x :: bad xs ys\n    ]\n}',
     'Quote = [quote: String, year: Int]; from Quote [quote: "q", year: 1]',
     'Quote = [quote: String, year: Int]; to Quote [year: "x"]',
@@ -113,6 +112,45 @@ for (const source of [
     'print [x <- [1,2], 7]',
 ]) Deno.test(`default checking rejects before evaluation: ${source}`, () => rejected(session(), source));
 
+// A choice between values (a ternary's branches, a match's arms, a function's
+// clauses) has either type, as a list's items do: used where every one fits,
+// or narrowed by a pattern. Where the checker knows which is taken, it is that.
+const choices = 'import "time"\nt <- currentTime\nfunc x = x ? "yes" : false\n' +
+    'h x = match x [\n    0 -> "zero"\n    _ -> false\n]\ng 0 = "zero"\ng _ = false\n';
+for (const [source, expected] of [
+    ['[func true, func false, h 0, h 1, g 0, g 1]', '["yes",false,"zero",false,"zero",false]'],
+    ['[func (t > 0) == "yes", (t > 0 ? 1 : 2.5) + 1 > 0]', '[true,true]'],
+    ['func true ++ "!"', '"yes!"'],
+    ['d (String s) = s ++ "!"; d (Bool b) = b ? "T" : "F"; [d (func (t > 0)), d (h t), d (g t)]', '["yes!","F","F"]'],
+    ['match (func (t > 0)) [\n    String s -> s ++ "!"\n    _ -> "no"\n]', '"yes!"'],
+    ['[h 0 ++ "!", g 0 ++ "!"]', '["zero!","zero!"]'],
+    ['xs = [1,"a"]; d (Int n) = n + 1; d (String s) = s ++ "!"; map d xs', '[2,"a!"]'],
+] as const) Deno.test(`a choice has either type: ${source}`, () => {
+    const actual = run(session(), choices + source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const source of [
+    'func (t > 0) ++ "!"', 'h t ++ "!"', 'g t ++ "!"',
+    // Every choice must be accepted where it is used.
+    'd (String s) = s ++ "!"; d (Bool b) = "b"; d [func (t > 0), 1] 1',
+    'xs = [1,"a",true]; d (Int n) = n + 1; d (String s) = s ++ "!"; map d xs',
+    // A statement of a do-block is an action whichever branch is taken.
+    'f x = x ? print "yes" : false\nk y = {\n    f y\n    print 2\n}',
+]) Deno.test(`a choice is used as every type it may be: ${source}`, () => rejected(session(), choices + source));
+
+// A ternary's branch is checked as the expression alone is: a lossy mix the
+// checker types as Number fails when it runs, in a branch as outside one.
+for (const source of [
+    'f r = r.vy * 9007199254740993; f [y: 1.0, vy: 2.0]',
+    'f r = r.y == 0 ? 5.0 : r.vy * 9007199254740993; f [y: 1.0, vy: 2.0]',
+]) Deno.test(`a lossy mix fails when it runs: ${source}`, () => {
+    try { run(session(), source); } catch (error) {
+        if ((error as Error).message === "lossy implicit numeric conversion; use inexact explicitly") return;
+        throw error;
+    }
+    throw new Error(`accepted: ${source}`);
+});
+
 Deno.test("a static error prevents earlier effects and bindings", () => {
     const i = session(), lines: unknown[] = [], oldLog = console.log;
     console.log = (...values: unknown[]) => { lines.push(values); };
@@ -126,7 +164,10 @@ Deno.test("REPL clauses and polymorphism survive separate submissions", () => {
     if (run(i, '[func 0, func 1]') !== '[1,0]') throw new Error('lost clause');
     run(i, 'func 0 = 2');
     if (run(i, '[func 0, func 1]') !== '[2,0]') throw new Error('replacement lost clause');
-    rejected(i, 'func 2 = "bad"');
+    // A clause with another result type: either, where the call cannot tell.
+    run(i, 'func 2 = "two"');
+    if (run(i, '[func 0, func 2]') !== '[2,"two"]') throw new Error('lost the new clause');
+    rejected(i, 'import "time"; t <- currentTime; func t ++ "!"');
     run(i, 'id x = x');
     if (run(i, 'id 1') !== '1' || run(i, 'id true') !== 'true') throw new Error('lost polymorphism');
 });
@@ -380,8 +421,11 @@ for (const [source, expected] of [
 for (const source of [
     'f (Int n) = [1,2]; f 0 = [0]; g [a,b] = a; g (f 0)',
     'f (Int n) = [1,2]; f 0 = [0]; g [a] = a; g (f 3)',
-    'f (Int n) = "a"; f 0 = 1',
-    'f (Int n) = ["a","b"]; f 0 = [1]',
+    // Clauses with different result types: where the call cannot tell which
+    // runs (the time is not known), the result is either, used as both.
+    'import "time"; f (Int n) = "a"; f 0 = 1; t <- currentTime; f t ++ "b"',
+    'import "time"; f (Int n) = ["a","b"]; f 0 = [1]; t <- currentTime; head (f t) + 1',
+    'f (Int n) = "a"; f 0 = 1; f 0 ++ "b"',
 ]) Deno.test(`clauses with different results stay checked: ${source}`, () => rejected(session(), source));
 // A literal passed through function parameters still selects clauses: a
 // deferred call keeps its argument's (symbolic) value, and each call

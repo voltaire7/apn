@@ -24,8 +24,30 @@ known contradictions without requiring every operation to be established.
 The checker infers polymorphic functions, propagates application constraints,
 checks structural record fields, constructor patterns,
 and dependent list lengths. Inner scopes may shadow names with another type.
-Clauses for the same input domain must share a result type; distinct typed
-input domains remain overloads. No `::` declaration is required.
+Distinct typed input domains remain overloads. No `::` declaration is
+required.
+
+A choice between values has either type, as a list's items do (`[1,"a"]` is
+`List (Int | String)`): a conditional's branches (`x ? "yes" : false` is
+`String | Bool`), a `match`'s alternatives and a function's clauses. Such a
+value is used where every choice fits (`(c ? 1 : 2.5) + 1`, `func x == "yes"`,
+`print`), or narrowed by a pattern: a `match`, or clauses for each type, which
+each choice reaches as the runtime dispatches it. So `func x ++ "!"` is an
+error, since a `Bool` cannot be appended, and so is a block statement that is
+an action on one branch only. Where the checker knows which is taken (a known
+condition, argument or scrutinee), the value has that one's type:
+`func true ++ "!"` checks. Clauses with an earlier one's patterns but another
+result type are instead an overload the context chooses
+([overloading on the result type](semantics.md#overloading-on-the-result-type)).
+
+```apn
+func x = x ? "yes" : false
+print (func true ++ "!")           # yes!
+describe (String s) = s ++ "!"
+describe (Bool b) = b ? "T" : "F"
+print (describe (func false))      # F
+# t <- currentTime; func (t > 0) ++ "!"   static error: cannot append Bool and String
+```
 
 A parameter is known from what the code does with it. Reading or assigning a
 field makes it a record with that field whose other fields stay open:

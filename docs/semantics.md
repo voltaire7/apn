@@ -186,7 +186,9 @@ use `match` with guarded pattern lambdas instead (see
 [pattern functions](pattern-functions.md)).
 
 There is no `if`/`then`/`else`; use the ternary `cond ? a : b`. Only the
-selected branch runs. The ternary's `:` is not cons (`::`), so a branch may
+selected branch runs, and the branches may differ in type (`x ? "yes" : false`;
+see [choices](gradual-and-dependent-types.md), as for `match` and clauses).
+The ternary's `:` is not cons (`::`), so a branch may
 cons freely: `b ? x :: xs : []`. A ternary inside a ternary, in any of its
 places, is parenthesized: `c ? (d ? 1 : 2) : 3`, `n < 0 ? -1 : (n > 0 ? 1 : 0)`;
 `c ? d ? 1 : 2 : 3` and `c ? 1 : d ? 2 : 3` are errors.

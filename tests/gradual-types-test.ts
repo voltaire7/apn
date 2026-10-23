@@ -6,6 +6,8 @@ for (
     const source of [
         'id x = x; [id 1, id "hi"]',
         "f (Int x) = x; f 1",
+        // Clauses may give different types: a call gives the clause's that runs.
+        'f 0 = 1; f 1 = "one"; f 0 + 1',
         'f x = x.x; f [x: 1, y: "extra"]',
         "Option a = Some a | None; f (Some x) = x; f None = 0; f (Some 1)",
         "Vect 3 Int [1,2,3]",
@@ -26,7 +28,7 @@ for (
 for (
     const [source, message] of [
         ['f (Int x) = x; f "bad"', "cannot use String"],
-        ['f 0 = 1; f 1 = "bad"', "cannot use String"],
+        ['f 0 = 1; f 1 = "bad"; f 1 + 1', "cannot combine String and Int"],
         ["f x = x.x; f [y: 2]", "missing field"],
         ["Vect 3 Int [1,2]", "length mismatch"],
         ["Vect 2 Int [1,2,3]", "length mismatch"],

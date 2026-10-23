@@ -761,6 +761,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return xs.length ? { length: xs.length } : {};
     }
     function pair(key: Ty, value: Ty): Ty { return { k: "list", element: union([key, value]), items: [key, value], length: constant(2n) }; }
+    // The type of a choice between values (a ternary's branches, a match's
+    // arms, a function's clauses): one type when they unify, else either
+    // one, as a list's items are ([1,"a"] is List (Int | String)).
+    function either(a: Ty, b: Ty, e?: Expr): Ty {
+        if (!succeeds(() => unify(copy(a), copy(b), e))) return union([a, b]);
+        unify(a, b, e);
+        return a;
+    }
     function union(types: Ty[]): Ty {
         const choices = types.flatMap(t => { const r = resolve(t); return r.k === "union" ? r.choices : [t]; });
         const unique: Ty[] = [];
@@ -1084,7 +1092,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 for (const check of f.checks ?? []) resolve(check);
                 const output = resolve(f.output);
                 lengths.push(output.k === "list" ? output.length : undefined);
-                if (outputs.length) unify(outputs[0], output);
+                // Alternatives give either result, as a ternary's branches do.
+                if (outputs.length) outputs[0] = either(outputs[0], output);
                 else outputs.push(output.k === "list" ? list(output.element) : output);
             }
             // Alternatives that all have one length (a claim each met) give it.
@@ -2450,6 +2459,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (f.k === "overload") {
             const input = resolve(argument.type);
             if (input.k === "var" || input.k === "operation") return deferredCall(f, argument);
+            // A value of a union of known types is one of them: each takes the
+            // clause that accepts it, as the runtime dispatches, and every one must.
+            if (input.k === "union" && !input.undecided && input.choices.every(choice => !variables(choice).size && resolve(choice).k !== "operation")) {
+                return union(input.choices.map(choice => application(f, { ...argument, type: choice }, e)));
+            }
             let outputs: Ty[] = [];
             const accepted: { clauses?: ClauseOrder[]; call?: Entry[] }[] = [];
             for (const choice of f.choices) {
@@ -2998,6 +3012,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const at = sourceLocations.get(statement);
         if (at && !choosing) options.moduleStatements?.add(`${at.file}:${at.start}`);
     }
+    // A call whose type is a choice of types, and whose value the checker can
+    // compute, has the type of that value: func true is a String when
+    // func x = x ? "yes" : false.
+    function narrowed(e: Expr, scope: Scope, t: Ty): Ty {
+        const r = resolve(t);
+        if (r.k !== "union" || r.undecided || e.t !== "app" && e.t !== "pipe") return t;
+        const k = demand(budgeted(() => evaluateKnown(e, new Map(), scope, 0), SYMBOLIC_BUDGET));
+        const name = !k ? undefined : k.boolean !== undefined ? "Bool" : k.string !== undefined ? "String"
+            : k.char !== undefined ? "Char" : k.number ? numericType(k.number) : undefined;
+        return r.choices.find(choice => { const x = resolve(choice); return x.k === "atom" && x.name === name; }) ?? t;
+    }
     function infer(e: Expr, scope: Scope, expected?: Ty): Ty {
         spend(e);
         if (++inferenceDepth > 256) {
@@ -3011,7 +3036,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         activeExpression = e;
         if (sourceLocations.has(e)) locatedExpression = e;
         try {
-            const t = inferExpression(e, scope, expected);
+            const t = narrowed(e, scope, inferExpression(e, scope, expected));
             inferred.set(e, t);
             // A >>= chain or a call in a monad: its value may be undecided at
             // run time (unless c (Err e) >> return x when c holds).
@@ -3477,8 +3502,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     if (!left.items?.length || !right.items?.length) { unify(left.element, right.element, e); return list(left.element); }
                     return list(union([left.element, right.element]));
                 }
-                unify(a, b, e);
-                return a;
+                return either(a, b, e);
             }
             case "binop": {
                 // Against a type, a lambda written in place is read as one, as
@@ -3565,7 +3589,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const fits = (t: Ty): boolean => {
                         const v = resolve(t);
                         if (["var", "operation", "dynamic", "intrinsic"].includes(v.k) || isIO(v) || isPending(v) || moduleOf(v)) return true;
-                        if (v.k === "union") return v.choices.some(fits);
+                        // The block picks an overload (undecided); a value is any of its choices.
+                        if (v.k === "union") return v.undecided ? v.choices.some(fits) : v.choices.every(fits);
                         if (v.k === "list") return !!block.monad && resolve(block.monad).k === "list" || v.items?.length === 0 || !!v.length && !v.length.terms.size && v.length.constant === 0n;
                         return v.k === "variant" && !!instanceFor(">>=", [v]);
                     };
@@ -4989,6 +5014,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (cell.program) programCells.add(cell);
             return { mutable: cell };
         }
+        // match x [alternatives]: a function whose clauses are the alternatives,
+        // called with x (a guarded one is not evaluated here).
+        if (head.name === "match" && builtin && args.length === 2 && args[1].t === "list") {
+            const alternatives = args[1].v;
+            if (!alternatives.every(x => x.t === "patternLambda" && !x.guard && x.params.length === 1)) return undefined;
+            const clauses = alternatives.map((x, index) => {
+                const { params, body } = x as Extract<Expr, { t: "patternLambda" }>;
+                const names = params.flatMap(patternNames);
+                return { index, params, body, refutable: new Set(names.filter((name, i) => names.indexOf(name) !== i)) };
+            });
+            return evaluateCall({ scope, clauses }, [value(args[0]) ?? {}], depth, new Map(env));
+        }
         // do xs: the block whose statements are the elements. With an action
         // among them it is one, running each in order and yielding the last's
         // result; otherwise it is the last value ([] for none).
@@ -5942,7 +5979,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         return false;
                     } finally { dynamicBoundaries = boundaries; }
                 };
-                if ((!merges(copy(existing), copy(t)) || emptyAgainstOpen(existing, t)) && merges(withoutLengths(copy(existing)), withoutLengths(copy(t)))) {
+                // So does one whose result has another type (g true = "yes";
+                // g false = false): a call gives the result of each clause that
+                // may run, either of them where it cannot tell, as a ternary does.
+                const arity = c.params.length;
+                if ((!merges(copy(existing), copy(t)) || emptyAgainstOpen(existing, t)) && (merges(withoutLengths(copy(existing)), withoutLengths(copy(t)))
+                    || arity && merges(withoutResult(copy(existing), arity), withoutResult(copy(t), arity)))) {
                     key = `${key}#${index}`;
                     existing = undefined;
                 }
