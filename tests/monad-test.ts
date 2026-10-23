@@ -44,6 +44,14 @@ Deno.test("while and loop", () => {
     if (output.join(",") !== "1,2") throw new Error(output.join(","));
 });
 
+// for runs its code as written: the step is an action or a new binding.
+Deno.test("for", () => {
+    const passes = run("for [i = 0, i < 3, i = i + 1] { print i }\nfor [i = Mutable 5, i < 7, set i $ i + 1] { print i }\nfor [n = 1, n < 9, n = n * 2] (print n)\nfor [i = 0, i < 100000, i = i + 1] {}\nprint \"done\"");
+    if (passes.join(",") !== "0,1,2,5,6,1,2,4,8,done") throw new Error(passes.join(","));
+    fails("for [i = 0, i < 3, set i $ i + 1] { print i }", "set expects a Mutable reference");
+    fails("for [i = 0, i < 3] { print i }", "for takes code as written");
+});
+
 const counter = `Counter s a = | MkCounter (s -> [a,s])
 runCounter (MkCounter f) s = f s
 (MkCounter g) >>= f = MkCounter (s -> {

@@ -13,7 +13,7 @@ functions APN cannot define) and its fixity, `negate` and `not` (the functions
 `-x` and `!x` are), `probe`, `reduce` and `toAST` (see [code](semantics.md#code)),
 and the Functor, Applicative
 and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
-`sequence`, `mapM`, `map2`–`map4`, `when`, `unless`, `loop`, `while`, `return`, `throw`, `empty`, `guard`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).
+`sequence`, `mapM`, `map2`–`map4`, `when`, `unless`, `loop`, `while`, `for`, `return`, `throw`, `empty`, `guard`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).
 
 `import` accepts a literal module name or a list of literal module names.
 For example, `import ["number","text"]` opens both modules and returns

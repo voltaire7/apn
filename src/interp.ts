@@ -54,7 +54,7 @@ class TailLoad {
 }
 
 // Natives with effects: applying one builds an IO action; running it performs them.
-export const IO_NATIVES = new Set(["print", "emit", "exit", "set", "while", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
+export const IO_NATIVES = new Set(["print", "emit", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
 // What the actions of IO builtins yield, for showing their types (IO []).
 const IO_RESULTS: Record<string, string> = {
     print: "[]", emit: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
@@ -76,7 +76,7 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
-    ["assert", 1], ["match", 2], ["set", 2], ["while", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
+    ["assert", 1], ["match", 2], ["set", 2], ["while", 2], ["for", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
@@ -3495,6 +3495,42 @@ export class Interpreter {
             while (this.truthy(read())) {
                 checkInterrupt();
                 this.runIO(action);
+            }
+            return mkList([]);
+        }
+        // for [start, condition, step] action: start's bindings, then, while the
+        // condition holds, the action, then the step: an action it runs, or a
+        // binding the next pass sees (i = i + 1). The code is read as written,
+        // and the action too, after the code's bindings (as ++ joins code).
+        if (name === "for") {
+            const [code, action] = argsIn;
+            const items = this.items(this.dataValue(code)).map(item => this.written(item));
+            if (items.length !== 3 || items.some(item => !item)) {
+                throw new APNError("runtime", "for takes code as written: [start, condition, step]", { hint: "for [i = 0, i < 10, i = i + 1] { print i }" });
+            }
+            const [start, condition, step] = items as Written[];
+            const state: CodeState = { before: new Map(), changed: new Set() };
+            const run = (expr: Expr, env: Env): Value => {
+                const old = this.env;
+                this.env = env;
+                try { return this.eval(expr); } finally { this.env = old; }
+            };
+            this.runItem(start, state);
+            while (this.truthy(run(condition.expr, state.scope!))) {
+                checkInterrupt();
+                if (action.kind === "thunk" && action.env) {
+                    const scope = new Env(action.env);
+                    for (const [name, value] of state.before) scope.setLocal(name, value);
+                    this.runIO(run(action.body, scope));
+                } else this.runIO(action);
+                if (step.expr.t !== "stmDef" && step.expr.t !== "patDef") this.runIO(run(step.expr, state.scope!));
+                else {
+                    // A step's new binding is computed now, and each pass reads it in a
+                    // fresh scope, so a long loop builds no chain of versions.
+                    this.written(this.runItem(step, state))?.binds?.forEach(value => this.demand(value));
+                    state.scope = new Env(start.env);
+                    for (const [name, value] of state.before) state.scope.setLocal(name, value);
+                }
             }
             return mkList([]);
         }

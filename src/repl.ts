@@ -316,6 +316,7 @@ function helpText(): string {
         `  IO [] is the type of an action yielding []; IO [] { print "hi" } checks one; return x`,
         `  map/<$>, return, <*>, >>=, >>, =<<, sequence, mapM, when, unless (IO, lists, Option)`,
         `  while (n < 3) (set n (n + 1)) reads n anew each time; loop action runs forever`,
+        `  for [i = 0, i < 3, i = i + 1] { print i }: the step rebinds i (or set a cell)`,
         `  throw e (None, Err e, [], an IO failure), guard c: a false guard throws c; so does a discarded None/Err`,
         `  map f (Leaf x) = ...; (Box x) >>= f = ...; return = Box   instances`,
         `  Option Int { return 42 } => Some 42; List Int { a <- [1,2]; return a }   any monad`,

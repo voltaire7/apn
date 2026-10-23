@@ -971,7 +971,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.op === "set") {
             // An explicit Dynamic target (such as an FFI Pointer) is checked at runtime.
             if (isExplicit(a)) { runtimeChecks++; return io(list(variable(), constant(0n))); }
-            if (a.k !== "mutable") return problem("set expects a Mutable reference");
+            if (a.k !== "mutable") return problem("set expects a Mutable reference", undefined, "a value never changes: make a cell (i = Mutable 0), or bind a new version (i = i + 1)");
             convert(a.value, b, { t: "placeholder" });
             return io(list(variable(), constant(0n)));
         }
@@ -3070,6 +3070,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const isType = scope.get("isType")!;
                     lambdaType(typeArgument, scope, new Map());
                     return application(copy(isType.type), { type: variable() }, e);
+                }
+                // for [start, condition, step] action: the action reads the names
+                // the code binds (as code joined after it does); the condition is a Bool.
+                if (e.t === "app" && e.f.t === "app" && e.f.f.t === "var" && e.f.f.name === "for" && scope.get("for")?.builtin && e.f.a.t === "list") {
+                    const code = resolve(infer(e.f.a, scope)) as Extract<Ty, { k: "list" }>;
+                    const items = code.formula?.items ?? [];
+                    if (items.length !== 3) return problem("for takes code as written: [start, condition, step]", e.f.a, "for [i = 0, i < 10, i = i + 1] { print i }");
+                    closed(code);
+                    unify(items[1].type ?? variable(), bool, e.f.a.v[1]);
+                    const inner: Scope = new BlockScope(scope);
+                    for (const [name, entry] of items[0].binds ?? []) inner.set(name, entry);
+                    infer(e.a, inner);
+                    return io(list(variable(), constant(0n)));
                 }
                 callees.add(e.f);
                 let callee = infer(e.f, scope), resolved = resolve(callee);
@@ -5985,6 +5998,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // loop action never finishes: its result is the action's monad.
     { const action = variable(); scope.set("loop", { type: fn(action, action) }); }
     native("while", [bool, variable()], io(empty));
+    native("for", [list(variable()), variable()], io(empty));
     // guard condition: return [] or empty, in the monad the context decides.
     scope.set("guard", { type: fn(variable(), pendingTy(list(variable(), constant(0n)))) });
     scope.set("cast", { type: { k: "intrinsic", name: "cast", arity: 2 } });

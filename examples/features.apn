@@ -1003,6 +1003,13 @@ while (counted < 3) {
     set counted (counted + 1)
 }
 print ""                                   # => 012
+# for runs code as written: its start, then while its condition holds, the
+# action (which reads the code's names) and the step, an action or a new
+# binding (no value changes: i = i + 1 binds the next pass's i).
+for [i = 0, i < 3, i = i + 1] (emit i)
+print ""                                   # => 012
+for [i = Mutable 0, i < 3, set i $ i + 1] (emit i)
+print ""                                   # => 012
 # => [42], Some 42, Ok 42 (undecided: the list's, then each instance, one per line)
 print (return 42)
 print (Option Int { return 42 })           # => Some 42
