@@ -315,6 +315,7 @@ function helpText(): string {
         `  f n = { print n; return n }   a block running an action is an action; it ends with one`,
         `  IO [] is the type of an action yielding []; IO [] { print "hi" } checks one; return x`,
         `  map/<$>, return, <*>, >>=, >>, =<<, sequence, mapM, when, unless (IO, lists, Option)`,
+        `  while (n < 3) (set n (n + 1)) reads n anew each time; loop action runs forever`,
         `  throw e (None, Err e, [], an IO failure), guard c: a false guard throws c; so does a discarded None/Err`,
         `  map f (Leaf x) = ...; (Box x) >>= f = ...; return = Box   instances`,
         `  Option Int { return 42 } => Some 42; List Int { a <- [1,2]; return a }   any monad`,

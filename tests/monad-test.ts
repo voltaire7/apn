@@ -25,6 +25,25 @@ function fails(source: string, text: string, kind?: string): void {
     throw new Error(`accepted: ${source}`);
 }
 
+// while reads its condition again before each run, as written in the call;
+// loop runs its action until something stops the program.
+Deno.test("while and loop", () => {
+    const loops = run("n = Mutable 0\nwhile (n < 3) {\n    print n\n    set n (n + 1)\n}\nbig = Mutable 0\nwhile (big < 100000) (set big (big + 1))\nprint big\nnever = false\nwhile never (print \"no\")");
+    if (loops.join(",") !== "0,1,2,100000") throw new Error(loops.join(","));
+    const output: string[] = [];
+    const log = console.log;
+    console.log = (...args: unknown[]) => output.push(args.map(String).join(" "));
+    try {
+        const i = new Interpreter();
+        i.enableChecking();
+        i.run(parse('c = Mutable 0\nloop {\n    set c (c + 1)\n    when (c == 50000) (throw "stop")\n    when (c < 3) (print c)\n}'));
+        throw new Error("loop finished");
+    } catch (error) {
+        if (!String((error as Error).message).includes("stop")) throw error;
+    } finally { console.log = log; }
+    if (output.join(",") !== "1,2") throw new Error(output.join(","));
+});
+
 const counter = `Counter s a = | MkCounter (s -> [a,s])
 runCounter (MkCounter f) s = f s
 (MkCounter g) >>= f = MkCounter (s -> {

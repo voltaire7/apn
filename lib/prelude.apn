@@ -86,6 +86,9 @@ sequence actions = actions * action -> action
 mapM f xs = sequence (map f xs)
 when condition action = condition ? action >> return [] : return []
 unless condition action = condition ? return [] : action >> return []
+# loop action runs action forever (until the program exits or is stopped);
+# while c action runs it while c, read again before each run, holds.
+loop action = action >> loop action
 # Representations: to T x writes x as a T, from T x reads it back (to String,
 # to JSON, to (List Char); from String parses). They are methods: a program
 # adds a type by defining to or from for it, as for map.

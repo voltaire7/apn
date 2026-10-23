@@ -5982,6 +5982,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     for (const [name, arity] of [["map2", 3], ["map3", 4], ["map4", 5]] as const) scope.set(name, { type: { k: "intrinsic", name, arity } });
     // when and unless: action >> return [], in the action's monad.
     for (const name of ["when", "unless"]) scope.set(name, { type: { k: "intrinsic", name: "when", arity: 2 } });
+    // loop action never finishes: its result is the action's monad.
+    { const action = variable(); scope.set("loop", { type: fn(action, action) }); }
+    native("while", [bool, variable()], io(empty));
     // guard condition: return [] or empty, in the monad the context decides.
     scope.set("guard", { type: fn(variable(), pendingTy(list(variable(), constant(0n)))) });
     scope.set("cast", { type: { k: "intrinsic", name: "cast", arity: 2 } });

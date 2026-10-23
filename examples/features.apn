@@ -996,6 +996,13 @@ print "first" >> print "second"            # => first, then second
 doubled <- mapM (x -> return (x * 2)) [1,2,3]
 print doubled                              # => [2,4,6]
 when (length doubled == 3) (print "three") # => three
+# while reads its condition again before each run; loop runs forever.
+counted = Mutable 0
+while (counted < 3) {
+    emit counted
+    set counted (counted + 1)
+}
+print ""                                   # => 012
 # => [42], Some 42, Ok 42 (undecided: the list's, then each instance, one per line)
 print (return 42)
 print (Option Int { return 42 })           # => Some 42

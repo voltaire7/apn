@@ -753,6 +753,8 @@ its call wrote it, as `assert` shows its expression (`guard b` names `b`).
 | `sequence actions` | runs each action, yielding the list of results |
 | `mapM f xs` | `sequence (map f xs)` |
 | `when c m`, `unless c m` | `m >> return []` when `c` is true (false), else `return []`: in any monad (`unless ok (Err e)`) |
+| `loop m` | `m >> loop m`: runs `m` forever, until the program exits or is stopped |
+| `while c m` | runs the action `m` as long as `c` holds, `c` read again before each run as written in the call: `while (n < 3) (set n (n + 1))` reads the cell `n` anew |
 | `throw e` | the monad's failure: `[]` in a list, `None` in an Option, `Err e` in a Result, a failing action in IO (instances: `throw _ = None`) |
 | `empty` | `throw "empty"`: the monad's value holding nothing |
 | `guard c` | `return []` when `c` holds, else `throw "guard failed: c"` (as written): a false guard stops a do-block |

@@ -68,6 +68,8 @@ const builtins = new Map<string, string>([
     ["mapM", "mapM f xs — sequence (map f xs)."],
     ["when", "when condition action — run the action when the condition is true."],
     ["unless", "unless condition action — run the action when the condition is false."],
+    ["loop", "loop action — run the action forever."],
+    ["while", "while condition action — run the action while the condition, read again each time, holds."],
     ["guard", "guard condition — return [] when the condition holds, else throw \"guard failed: condition\" (as written): a false guard stops a do-block."],
     ["empty", "empty — throw \"empty\": the monad's value holding nothing."],
     ["throw", "throw e — the monad's failure, decided by the context: [] in a list, None in an Option, Err e in a Result, a failing action in IO."],

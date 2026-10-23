@@ -54,7 +54,7 @@ class TailLoad {
 }
 
 // Natives with effects: applying one builds an IO action; running it performs them.
-export const IO_NATIVES = new Set(["print", "emit", "exit", "set", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
+export const IO_NATIVES = new Set(["print", "emit", "exit", "set", "while", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
 // What the actions of IO builtins yield, for showing their types (IO []).
 const IO_RESULTS: Record<string, string> = {
     print: "[]", emit: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
@@ -76,7 +76,7 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
-    ["assert", 1], ["match", 2], ["set", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
+    ["assert", 1], ["match", 2], ["set", 2], ["while", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
@@ -3481,6 +3481,22 @@ export class Interpreter {
             // Validate the whole input before publishing; keep the field values lazy.
             this.publishForeignBindings(this.env, bindings);
             return { kind: "list", v: [] };
+        }
+        // while c action: runs action as long as c holds, c read again before
+        // each run, as written in the call (while (n < 3) reads a cell anew).
+        if (name === "while") {
+            const [condition, action] = argsIn;
+            const read = (): Value => {
+                if (condition.kind !== "thunk" || !condition.env) return condition;
+                const old = this.env;
+                this.env = condition.env;
+                try { return this.eval(condition.body); } finally { this.env = old; }
+            };
+            while (this.truthy(read())) {
+                checkInterrupt();
+                this.runIO(action);
+            }
+            return mkList([]);
         }
         if (name === "set") {
             const target = this.reference(argsIn[0]);
