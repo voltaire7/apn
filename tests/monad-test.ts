@@ -36,6 +36,12 @@ tick = MkCounter (s -> [s, s + 1])`;
 
 const mapText = "map\nf, (Some x) -> Some (f x)\n_, None -> None\nf, (Ok x) -> Ok (f x)\n_, (Err error) -> Err error";
 for (const [name, source, expected] of [
+    // A do-block over a parameter's monad binds what that monad holds, once
+    // a call gives it: x is the Option's value, not the Option.
+    ["a do-block over a parameter's monad", 'import "option"\nf m = {\n    x <- m\n    return (x + 1)\n}\nprint (f (Some 1))\nprint (f [1,2])',
+        ["Some 2", "[2,3]"]],
+    ["mutually recursive do-blocks over a parameter's monad", counter + '\npair m = {\n    x <- m\n    y <- other m\n    return [x,y]\n}\nother m = {\n    x <- m\n    return (x * 10)\n}\nprint (runCounter (pair tick) 1)',
+        ["[[1,20],3]"]],
     ["return takes the monad its annotation names", 'import "option"\nprint (Option Int { return 42 })\nprint (List Int { return 43 })\nx <- IO Int { return 44 }\nprint x',
         ["Some 42", "[43]", "44"]],
     ["return is undecided until used", 'import "option"\nr = return 7\nprint (Option Int r)\nprint (List Int r)\nz <- r\nprint z', ["Some 7", "[7]", "7"]],

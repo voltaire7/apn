@@ -1016,6 +1016,12 @@ noSum = Option Int {
     return (a + b)
 }
 print noSum                                # => None
+# A do-block over a parameter takes the monad each call gives it.
+incremented m = {
+    x <- m
+    return (x + 1)
+}
+print [incremented (Some 1), incremented [1,2]]  # => [Some 2, [2,3]]
 # As in Haskell, a discarded statement in a monad is chained, so a false
 # guard (a throw: [] in a list, None in an Option) or a discarded Err stops the
 # block; a passing assert yields true, which is pure in any block.

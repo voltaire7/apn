@@ -57,24 +57,21 @@ infixr 3 <|>
     Err _ -> _parserRun q input
 ])
 # p read as many times as it can (some: at least once).
+# They read in a loop, in constant stack, so long input parses.
 many p = Parser (input -> {
-    read = _parserMany p input
+    read = _parserMany p input []
     Ok [read.items,read.rest]
 })
 some p = Parser (input -> match (_parserRun p input) [
     Ok [x,rest] -> {
-        read = _parserMany p rest
-        Ok [x :: read.items, read.rest]
+        read = _parserMany p rest [x]
+        Ok [read.items,read.rest]
     }
     Err message -> Err message
 ])
-_parserMany p input = match (_parserRun p input) [
-    Ok [x,rest] -> {
-        read = _parserMany p rest
-        [items: x :: read.items, rest: read.rest]
-    }
-    Err _ -> [items: [], rest: input]
-]
+_parserMany p input items = _parserNext p (_parserRun p input) input items
+_parserNext p (Ok [x,rest]) _ items = _parserMany p rest (x :: items)
+_parserNext _ (Err _) input items = [items: reverse items, rest: input]
 optional p = map Some p <|> return None
 # p's, separated by sep's.
 sepBy p sep = sepBy1 p sep <|> return []

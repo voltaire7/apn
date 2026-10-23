@@ -918,10 +918,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // What running a value of type t yields: an action's result, or the
     // value itself (x <- 5 binds 5); decided once t is known.
+    // What x <- m binds: what the action yields, or what another monad holds
+    // (an Option's value, a list's element), once m's type is known.
     function runType(t: Ty): Ty {
         const v = resolve(t);
         if (isIO(v) || isPending(v)) return (v as Extract<Ty, { k: "variant" }>).args[0];
-        return v.k === "var" || v.k === "operation" ? operation("run", [v]) : v;
+        if (v.k === "var" || v.k === "operation") return operation("run", [v]);
+        const held = monadHeld(v);
+        return held === undefined ? v : held ?? variable();
     }
     function evaluateOperation(t: Extract<Ty, { k: "operation" }>): Ty {
         const operands = t.args.map(resolve);

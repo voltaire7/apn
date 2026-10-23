@@ -25,6 +25,8 @@ const cases: [string, string][] = [
     ['import "parser"\nparse (string "hi" <|> string "ho") "ho"', 'Ok "ho"'],
     ['import "parser"\nparse (some digit) ""', 'Err "expected one of 0123456789, got the end"'],
     ['import "parser"\nparse (many (token (some letter))) "ab cd"', "Ok [['a','b'],['c','d']]"],
+    // many reads in a loop: long input parses in constant stack.
+    ['import "parser"\nvalue (Ok x) = x\nlength (value (parse (many digit) (replicate 20000 (head (to (List Char) "7")))))', "20000"],
     // Any list parses, code included.
     ['import "parser"\nparse (some (satisfy "an even number" (n -> n % 2 == 0))) [2,4,5]', 'Err "unexpected 5"'],
     ["takeWhile (x -> 1) [1]", "[1]"],
