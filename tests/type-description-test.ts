@@ -44,7 +44,7 @@ for (const [source, expected] of [
     ['f x = f x; typeOf f', 'a -> b'],
     ['typeOf (typeOf [1])', 'Type'],
     ['[typeOf [1] == List, isType (typeOf [1]) ["hi"]]', '[true,true]'],
-    ['f x = x; [typeOf f == Function, isType (typeOf f) x -> 1]', '[true,true]'],
+    ['f x = x; [typeOf f == Function, isType (typeOf f) (x -> 1)]', '[true,true]'],
     ['count = Mutable 0; action x = set count 1; typeOf action; count', '0'],
     ['count = Mutable 0; typeOf [set count 1]; count', '0'],
     ['f x = fail "do not call"; typeOf f', 'a -> b'],

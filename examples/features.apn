@@ -647,14 +647,14 @@ print stepped                 # => 42
 debug $ step 1 inner         # => { print "inner"; 42 }
 debug $ step 2 inner         # => return 42     (the block's tail statement)
 
-# quote — the expression's SOURCE TEXT as a string (parens kept), never
-# evaluated:
-print (quote (1 + 1))         # => (1 + 1)
+# quote — the expression's SOURCE TEXT as a string (its grouping parentheses
+# are the argument's, not the expression's), never evaluated:
+print (quote (1 + 1))         # => 1 + 1
 print $ quote $ 1 + 1         # => 1 + 1
 # A (Quote q) parameter takes its argument as written: q is its source text.
 # The prelude defines quote (Quote q) = q, and toAST by reading q as lists.
 labelled (Quote q) value = q ++ " is " ++ to String value
-print (labelled (6 * 7) 42)   # => (6 * 7) is 42
+print (labelled (6 * 7) 42)   # => 6 * 7 is 42
 
 # toAST — an expression as lists, unevaluated: an application is a list,
 # function first; a name is a string, a string literal its quoted source.
@@ -711,8 +711,9 @@ print [[x: 1], [y: 2]]       # => [[x: 1], [y: 2]]
 print (123456789012345678901234567890123456789012345678901234567890 + 987654321098765432109876543210987654321098765432109876543210)  # => 1111111110111111111011111111101111111110111111111011111111100
 # Parentheses appear only where they change how code reads: print (5), (a * b) + c,
 # f ((g x)) and xs >>= (x -> f x) are parse errors. A lambda ending its expression
-# takes the rest, as a last argument too; f = (x -> e) keeps them (a value, where
-# f = x -> e is a clause of f), as do run (x -> e) and [(x, y -> e)].
+# takes the rest; one passed as an argument is always parenthesized, run (x -> e)
+# (or run $ x -> e); f = (x -> e) keeps them (a value, where f = x -> e is a
+# clause of f), as does [(x, y -> e)].
 print ([1,2,3] >>= x -> [x, x * 10])  # => [1,10,2,20,3,30]
 # A definition's parameters read as arguments do: f Int x = x takes the type Int,
 # then x (f Int 3). So a constructor applied to patterns, or a cons, is
@@ -1387,7 +1388,7 @@ print (metaEvalSyntax (toAST ((x -> x * 2) 21)))  # 42
 print (length "\r\v\f")                         # 3: whitespace escapes
 
 # Self-application, SKI, and fixed points, entirely in APN.
-selfFactorial = (self -> n -> self self n) self -> n -> n == 0 ? 1 : n * self self (n - 1)
+selfFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))
 print (selfFactorial 5)                         # 120
 print (combinators.S combinators.K combinators.K 42)  # 42
 print (combinators.Y (recur, n -> n == 0 ? 1 : n * recur (n - 1)) 5) # 120
@@ -1857,12 +1858,12 @@ assert (compassName Up == "up")
 # Scoped cleanup runs after returned lazy data has been evaluated.
 import "function"
 released = Mutable false
-bracketed <- bracket 42 (_ -> set released true) n -> [n, n + 1]
+bracketed <- bracket 42 (_ -> set released true) (n -> [n, n + 1])
 print bracketed                    # => [42,43]
 print released                     # => true
 import "io"
 # A read-only OS device keeps the showcase independent of its working directory.
-nothing <- withFile "/dev/null" file -> file.read
+nothing <- withFile "/dev/null" (file -> file.read)
 print nothing                      # => empty line
 
 # Dot field spellings are literal string keys, including punctuation.
@@ -2048,7 +2049,7 @@ print (bracePattern 2)              # => 3
 # Strict --check rejects unresolved operations elsewhere in this full showcase.
 inferredSelf f = f f
 print (inferredSelf (_ -> 123))       # => 123
-inferredFactorial = (self -> n -> self self n) self -> n -> n == 0 ? 1 : n * self self (n - 1)
+inferredFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))
 print (inferredFactorial 5)                 # => 120
 # loop x = loop x and x = x remain legal; checking never executes them.
 

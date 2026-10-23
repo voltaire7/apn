@@ -26,7 +26,7 @@ function run(source: string): string {
     return interpreter.renderString(interpreter.run(parseDocument(prelude + source)));
 }
 function call(body: string): string {
-    return `ffi.withLibrary library ${signatures} c -> {\n${body.split('\n').map((s) => '    ' + s).join('\n')}\n}`;
+    return `ffi.withLibrary library ${signatures} $ c -> {\n${body.split('\n').map((s) => '    ' + s).join('\n')}\n}`;
 }
 for (const [name, body, expected] of [
     ['signed integers', 'c.add 12 30', 'Int32 42'],
@@ -87,7 +87,7 @@ Deno.test({ name: 'escaped C pointers cannot access unloaded storage', ignore: !
     throw new Error('Expected closed-library error');
 } });
 Deno.test('C interop rejects ambiguous Int ABI before loading a library', () => {
-    try { run('ffi.withLibrary "missing" [f: ffi.function [Int] []] c -> []'); }
+    try { run('ffi.withLibrary "missing" [f: ffi.function [Int] []] (c -> [])'); }
     catch (e) { if (String(e).includes('fixed-width')) return; throw e; }
     throw new Error('Expected a fixed-width ABI error');
 });
@@ -100,7 +100,7 @@ Deno.test({ name: 'escaped lazy nullary C action rejects use after library closu
 
 Deno.test({ name: "C interop: quote characters are part of the symbol name", ignore: !library, fn() {
     try {
-        run(`ffi.withLibrary library ["add": ffi.function [Int32,Int32] Int32] c -> c."add" 20 22`);
+        run(`ffi.withLibrary library ["add": ffi.function [Int32,Int32] Int32] $ c -> c."add" 20 22`);
     } catch (error) {
         if (String(error).includes("cannot open") && String(error).includes("add")) return;
         throw error;

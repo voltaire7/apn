@@ -589,7 +589,7 @@ self f = f f
 self (ignored -> 123)              # 123
 # self 123                        # static type error: expected a function
 
-factorial = (self -> n -> self self n) self -> n -> n == 0 ? 1 : n * self self (n - 1)
+factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))
 factorial 5                       # 120
 ```
 
@@ -600,7 +600,7 @@ shared variables. Recursive diagnostics use `mu rec0. ...` to bind a recursive
 reference. This is inferred metadata, not new APN declaration syntax.
 
 Ordinary recursion, `x = x`, and self-application such as
-`(x -> x x) x -> x x` can be checked without executing them. Acceptance does
+`(x -> x x) (x -> x x)` can be checked without executing them. Acceptance does
 not guarantee termination. Recursive lazy values such as `xs = 1 :: xs` keep
 their existing runtime behavior.
 

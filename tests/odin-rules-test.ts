@@ -23,9 +23,9 @@ for (const [source, expected] of [
     ['UserId = Int\n[v: UserId] []', '[v: UserId 0]'],
     ['v = [x: Int] [y: 2]\nv', '[x: 0, y: 2]'],
     ['assert true', 'true'],
-    ['import "function"\ncount = Mutable 0\nbracket 42 (_ -> set count 1) x -> x + 1\ncount', '1'],
-    ['import "function"\nbracket 42 (_ -> []) x -> [x,x+1]', '[42,43]'],
-    ['import "function"\ncount = Mutable 0\nv <- bracket 1 (_ -> set count 9) _ -> [count + 1]\n[v,count]', '[[1],9]'],
+    ['import "function"\ncount = Mutable 0\nbracket 42 (_ -> set count 1) (x -> x + 1)\ncount', '1'],
+    ['import "function"\nbracket 42 (_ -> []) (x -> [x,x+1])', '[42,43]'],
+    ['import "function"\ncount = Mutable 0\nv <- bracket 1 (_ -> set count 9) (_ -> [count + 1])\n[v,count]', '[[1],9]'],
 ]) Deno.test(`Odin-inspired rule: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -37,8 +37,8 @@ for (const [source, error] of [
     ['Distance = Int8\nDistance 127 + Distance 1', 'out of range'],
     ['assert (1 == 2)', 'assertion failed: (1 == 2)'],
     ['check = assert\ncheck false', 'assertion failed: false'],
-    ['import "function"\nbracket 1 (_ -> []) x -> y -> x', 'must return data'],
-    ['import "function"\nbracket 1 (x, y -> []) x -> x', 'release must take one remaining argument'],
+    ['import "function"\nbracket 1 (_ -> []) (x -> y -> x)', 'must return data'],
+    ['import "function"\nbracket 1 (x, y -> []) (x -> x)', 'release must take one remaining argument'],
     ['import "io"\nwithFile "lib/io.apn" 123', 'callback must take one remaining argument'],
 ]) Deno.test(`Odin-inspired rejection: ${source}`, () => {
     try { result(source); } catch (e) { if (String(e).includes(error)) return; throw e; }
@@ -56,17 +56,17 @@ Deno.test('assert captures its original source file and line', () => {
 Deno.test('resource release runs when a lazy result fails', () => {
     const i = new Interpreter();
     i.run(parseDocument('import "function"\ncount = Mutable 0'));
-    try { i.renderString(i.run(parseDocument('bracket 1 (_ -> set count 7) _ -> [missing]'))); } catch { /* expected */ }
+    try { i.renderString(i.run(parseDocument('bracket 1 (_ -> set count 7) (_ -> [missing])'))); } catch { /* expected */ }
     if (i.renderString(i.run(parseDocument('count'))) !== '7') throw new Error('cleanup skipped');
 });
 Deno.test('withFile evaluates a lazy read before closing', () => {
-    const source = 'import "io"\nwithFile "lib/io.apn" f -> f.read';
+    const source = 'import "io"\nwithFile "lib/io.apn" (f -> f.read)';
     const actual = result(source);
     if (!actual.includes('readInput')) throw new Error(actual);
 });
 Deno.test('withFile closes handles even when saved outside the scope', () => {
     const i = new Interpreter();
-    i.run(parseDocument('import "io"\nsaved = Mutable []\nwithFile "lib/io.apn" f -> set saved f'));
+    i.run(parseDocument('import "io"\nsaved = Mutable []\nwithFile "lib/io.apn" (f -> set saved f)'));
     try { i.run(parseDocument('saved.read')); } catch (e) { if (String(e).includes('resource is closed')) return; throw e; }
     throw new Error('escaped live handle');
 });
@@ -96,7 +96,7 @@ Deno.test('bracket releases in reverse order on interruption', () => {
         return { kind: 'list', v: [] };
     } });
     try {
-        i.run(parseDocument('bracket 1 (_ -> set order (order ++ "outer"))\n    _ -> bracket 2 (_ -> set order (order ++ "inner")) interruptNow'));
+        i.run(parseDocument('bracket 1 (_ -> set order (order ++ "outer"))\n    (_ -> bracket 2 (_ -> set order (order ++ "inner")) interruptNow)'));
         throw new Error('expected interruption');
     } catch (e) { if (!String(e).includes('interrupted')) throw e; }
     finally { setInterruptFlag(null); }
@@ -105,7 +105,7 @@ Deno.test('bracket releases in reverse order on interruption', () => {
 Deno.test('bracket does not release a resource that failed to acquire', () => {
     const i = new Interpreter();
     i.run(parseDocument('import "function"; released = Mutable false'));
-    try { i.run(parseDocument('bracket missing (_ -> set released true) x -> x')); } catch { /* expected */ }
+    try { i.run(parseDocument('bracket missing (_ -> set released true) (x -> x)')); } catch { /* expected */ }
     if (i.renderString(i.run(parseDocument('released'))) !== 'false') throw new Error('released absent resource');
 });
 Deno.test('assert reports piped source', () => {

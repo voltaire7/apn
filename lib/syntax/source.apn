@@ -9,14 +9,12 @@ _fromAST syntax = _shown _end syntax
 # precedence follows after it (-1: nothing follows). An "item" is an operand
 # in a list, where x, y -> e would be two items; a "guard" one, a lambda's
 # guard, holds no lambda. An "argument" takes one piece, a "head" a function
-# applied, "selected" the left of a '.', and a "trailing" lambda (the last
-# argument) stands bare when minimum is 1.
+# applied, and "selected" the left of a '.'.
 _end = ["operand",0,-1]
 _shown place syntax = _fits place syntax ? _bare place syntax : "(" ++ _bare _end syntax ++ ")"
 _fits ["argument",_,_] syntax = _kind syntax == "piece" || _kind syntax == "negative"
 _fits ["head",_,_] syntax = _kind syntax == "piece" || _kind syntax == "call"
 _fits ["selected",_,_] syntax = _kind syntax == "piece" && !_digits syntax
-_fits ["trailing",bare,_] _ = bare == 1
 _fits [kind,minimum,follows] syntax = _level syntax >= minimum
     && (follows < 0 || follows < _reach syntax)
     && !(_kind syntax == "lambda" && (kind == "guard" || kind == "item" && _params syntax > 1))
@@ -106,28 +104,10 @@ _infix [_,_,follows] op [a,b] = {
     precedence = head (_fixity op)
     _shown ["operand",0,precedence] a ++ " " ++ op ++ " " ++ _shown ["operand", _binding op, follows] b
 }
-# A call: the function, its arguments, and a last argument that is a lambda,
-# bare when it ends the expression and the pieces before it cannot read as
-# its parameters (f x -> e is a lambda over a typed x).
-_application [kind,_,follows] function args = {
-    before = _pieces function ++ _initOf args
-    final = _lastOf args
-    lastPlace = _kind final == "lambda" && follows < 0 && kind != "guard"
-        && !(kind == "item" && _params final > 1) && _trailable before
-        ? ["trailing",1,-1] : ["argument",0,-1]
-    joinWith " " ([_shown ["head",0,-1] function] ++ map (_shown ["argument",0,-1]) (_initOf args)
-        ++ [_shown lastPlace final])
-}
-_lastOf xs = head (reverse xs)
-_initOf xs = take (length xs - 1) xs
-# The pieces a function applied is written as: f x y for (f x) y.
-_pieces syntax = _kind syntax == "call" ? _pieces (head syntax) ++ tail syntax : [syntax]
-_trailable before = !any _capitalOrBlank before && !_lowerName (_lastOf before)
-_capitalOrBlank (String name) = name == "_" || contains (head (to (List Char) name)) _capitals
-_capitalOrBlank _ = false
-_lowerName (String name) = contains (head (to (List Char) name)) (to (List Char) "abcdefghijklmnopqrstuvwxyz")
-_lowerName _ = false
-_capitals = to (List Char) "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+# A call: the function, then its arguments, each one piece (a lambda among
+# them parenthesized).
+_application _ function args =
+    joinWith " " (_shown ["head",0,-1] function :: map (_shown ["argument",0,-1]) args)
 _isOperator (String name) = _operator name
 _isOperator _ = false
 # The heads that are syntax, not functions.

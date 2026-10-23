@@ -54,7 +54,7 @@ view model = div [] [
         input [
             typeAttribute "file"
             accept ".json"
-            onEvent "change" event -> Picked event.files
+            onEvent "change" (event -> Picked event.files)
         ] []
     ]
 ]

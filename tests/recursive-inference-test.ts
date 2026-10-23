@@ -8,12 +8,12 @@ for (
         "self f = f f; self self",
         "self f = f f; self (x -> x)",
         "self f = f f; [self (x -> 123), self (x -> true)]",
-        "omega = (x -> x x) x -> x x",
+        "omega = (x -> x x) (x -> x x)",
         "loop x = loop x",
         "forever x = forever; forever 1 2",
         "x = x",
         "xs = 1 :: xs",
-        "Y f = (x -> f (x x)) x -> f (x x)",
+        "Y f = (x -> f (x x)) (x -> f (x x))",
     "Option a = Some a | None; self f = f f; a = self (x -> Some x); [a, self (x -> Some x)]",
     "self f = f f; a = self (x -> [x]); b = self (x -> [x]); a ++ b",
     "self f = f f; a = self (x -> [next: x]); b = self (x -> [next: x]); [a,b]",
@@ -46,7 +46,7 @@ for (
 
 Deno.test("the original self-application factorial still checks and runs", () => {
     const source =
-        "factorial = (self -> n -> self self n) self -> n -> n == 0 ? 1 : n * self self (n - 1)\nfactorial 5";
+        "factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))\nfactorial 5";
     const checked = checkSource(source, "<test>", { strict: true });
     if (checked.issues.length || checked.dynamicBoundaries) throw new Error(JSON.stringify(checked));
     const interpreter = new Interpreter();

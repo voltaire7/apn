@@ -29,7 +29,7 @@ for (const [source, expected] of [
     ['templates = [String,Int]; values = ["x",1]; templates.values', '["x",1]'],
     ['xs = [1]; xs = [2,3]; xs', '[2,3]'],
     ['f x = x + 1; [f 1, f 2.0]', '[2,3.0]'],
-    ['factorial = (self -> n -> self self n) self -> n -> n == 0 ? 1 : n * self self (n - 1)\nfactorial 5', '120'],
+    ['factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))\nfactorial 5', '120'],
     ['import "type"; cast Float32 (Float64 .2)', 'Float32 0.2'],
     // A parameter's record is known from the fields code uses, also when it assigns them.
     ['f r = { r.a = 5; r }; f [a: 1, b: 2]', '[a: 5, b: 2]'],

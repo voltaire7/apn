@@ -1,70 +1,21 @@
-import { keySource } from "./record-keys.ts";
 import type { Expr, Pattern } from "./ast.ts";
 import type { Value } from "./types.ts";
-import { exprToSource, fixityOf, PRIMITIVE_OPERATORS, sectionSource } from "./parser.ts";
+import { exprToSource, patternSource, PRIMITIVE_OPERATORS, sectionSource } from "./parser.ts";
 import { compoundArgument, valueToString } from "./types.ts";
-import { itemsText } from "./separators.ts";
 
-function pattern(p: Pattern): string {
-    switch (p.p) {
-        case "as": return `${pattern(p.left)}.${pattern(p.right)}`;
-        case "schema": return `(${source(p.type)} ${pattern(p.value)})`;
-        case "wildcard": return "_";
-        case "var": return p.name;
-        case "int": return String(p.v);
-        case "bool": return String(p.v);
-        case "string": return JSON.stringify(p.v);
-        case "char": return exprToSource({ t: "char", v: p.v });
-        case "float": return exprToSource({ t: "float", v: p.v });
-        case "list": return `[${itemsText(p.v.map(pattern))}]`;
-        case "cons": return `(${pattern(p.head)} ${p.op ?? "::"} ${pattern(p.tail)})`;
-        case "constr": return p.args.length ? `(${p.tag} ${p.args.map(pattern).join(" ")})` : p.tag;
-        case "typeBind": return `(${p.name} ${pattern(p.value)})`;
-        case "recPat": return `[${p.v.map(([k, v]) => `${keySource(k)}: ${v}`).join(", ")}]`;
-        case "range": return `[${p.lo}..${p.hi}]`;
-    }
-}
-function source(e: Expr, parent = -1): string {
-    let text: string, level = 12;
-    switch (e.t) {
-        case "string": return JSON.stringify(e.v);
-        case "app": level = 10; text = `${source(e.f, 10)} ${source(e.a, 11)}`; break;
-        case "binop": {
-            // Levels follow the fixity table: operators 0..9, application 10.
-            const { prec, assoc } = fixityOf(e.op);
-            level = prec;
-            text = `${source(e.l, prec + (assoc === "left" ? 0 : 1))} ${e.op} ${source(e.r, prec + (assoc === "right" ? 0 : 1))}`;
-            break;
-        }
-        // Prefix - and ! bind tighter than * (7) and looser than ^ (8).
-        case "unop": level = 7.5; text = `${e.op === "neg" ? "-" : "!"}${source(e.e, 8)}`; break;
-        case "patternLambda": level = -1; text = `${e.params.map(pattern).join(", ")}${e.guard ? " | " + source(e.guard) : ""} -> ${source(e.body)}`; break;
-        case "lambda": level = -1; text = `${e.params.join(", ")} -> ${source(e.body)}`; break;
-        case "pipe": level = 0; text = `${source(e.f, 1)} $ ${source(e.x, 0)}`; break;
-        case "ternary": level = 1; text = `${source(e.cond, 2)} ? ${source(e.then, 6)} : ${source(e.els, 2)}`; break;
-        case "list": return `[${itemsText(e.v.map(x => source(x)))}]`;
-        case "record": return `[${e.v.map(([k, v]) => `${keySource(k)}: ${source(v)}`).join(", ")}]`;
-        case "block": {
-            if (e.style === "(" && e.stmts.length === 1) return `(${source(e.stmts[0])})`;
-            return `{ ${e.stmts.map(x => source(x)).join("; ")} }`;
-        }
-        case "stmDef": return e.clauses.map(c => `${e.name}${c.params.length ? " " + c.params.map(pattern).join(" ") : ""} = ${source(c.body)}`).join("; ");
-        case "patDef": return (e.value.t === "setItem" || e.value.t === "setFields") ? source(e.value) : `${pattern(e.pattern)} ${e.eager ? "<-" : "="} ${source(e.value)}`;
-        case "recordAccess": return `${source(e.rec, 11)}.${e.scoped && e.argument ? source(e.argument) : keySource(e.field)}`;
-        default: return exprToSource(e);
-    }
-    return level < parent ? `(${text})` : text;
-}
+// Function text is source text (exprToSource): an argument is written as one.
+const source = (e: Expr, argument = false) => exprToSource(e, argument ? { kind: "argument", min: 0, follows: -1 } : undefined);
+const pattern = patternSource;
 // Inspect syntax only: never demand bound arguments or walk a captured environment.
 export function argument(v: Value): string {
-    if (v.kind === "thunk") return source(v.body, 11);
+    if (v.kind === "thunk") return source(v.body, true);
     if (v.kind === "deferred") return "...";
     const text = valueToString(v);
     return compoundArgument(v) ? `(${text})` : text;
 }
 // An operator's lambda as source writes it: (+), (1 +), (+ 1).
 function operatorForm(params: string[], body: Expr, applied: Value[]): string | undefined {
-    return applied.length ? undefined : sectionSource(params, body, e => source(e, 11));
+    return applied.length ? undefined : sectionSource(params, body, e => exprToSource(e, { kind: "operand", min: 8, follows: -1 }));
 }
 export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" | "native" }>): string {
     if (v.kind === "closure") {
@@ -93,7 +44,7 @@ export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" 
 function clauseSource(c: { params: Pattern[]; body: Expr; guard?: Expr }): string {
     const lone = c.params.length === 1 && c.params[0].p === "constr" && c.params[0].args.length;
     const params = lone ? pattern(c.params[0]).slice(1, -1) : c.params.map(pattern).join(", ");
-    return `${params}${c.guard ? " | " + source(c.guard) : ""} -> ${source(c.body)}`;
+    return `${params}${c.guard ? " | " + exprToSource(c.guard, { kind: "guard", min: 0, follows: -1 }) : ""} -> ${source(c.body)}`;
 }
 
 // What is left of a function after some of its arguments: the remaining

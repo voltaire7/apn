@@ -123,13 +123,15 @@ Spacing is part of the syntax (a parse error otherwise):
 Parentheses appear only where they change how code reads: a group that reads
 the same without them is a parse error (`unnecessary parentheses`). So
 `print 5`, `print r.x`, `f -1`, `a + b * c`, `(f x) y` as `f x y`, and a lambda
-that ends its expression takes the rest without them: `xs >>= x -> f x`, and as
-a last argument `withFile "notes" file -> file.read`. They stay where they group
-differently, as in `(a + b) * c`, `f (g x)`, `(-2) ^ 2`, `-(-x)` and
-`xs >>= (x -> f x) >>= g`, or where the bare spelling means something else:
+that ends its expression takes the rest without them: `xs >>= x -> f x`. They
+stay where they group differently, as in `(a + b) * c`, `f (g x)`, `(-2) ^ 2`,
+`-(-x)` and `xs >>= (x -> f x) >>= g`, or where the bare spelling means
+something else:
 
+- a lambda passed as an argument is always parenthesized, `withFile "notes"
+  (file -> file.read)` (`run x -> e` would read `run x` as the lambda's typed
+  parameter); a bare one is an error, and `f $ x -> e` passes a last one;
 - `f = (x -> e)` binds a value, while `f = x -> e` is a clause of `f`;
-- `run (x -> e)`: `run x -> e` reads `run x` as the lambda's typed parameter;
 - `[(x, y -> e)]`: in a list, the `,` would separate two items;
 - `xs (i) = v` sets an item, while `xs i = v` defines `xs`;
 - `obj.[(k)]` selects the computed key `k`, and `(r.1).2` is not `r.1.2`, which
@@ -793,8 +795,9 @@ does not evaluate its `halt` action.
 ## Inspection and numbers
 
 A `(Quote q)` parameter takes its argument as written, unevaluated and
-unchecked: `q` is its source text, groups' parentheses included
-(`labelled (Quote q) = q ++ "!"; labelled (1 + 1)` is `"(1 + 1)!"`). It is the
+unchecked: `q` is its source text, the expression the argument is (its
+grouping parentheses belong to the call: `labelled (Quote q) = q ++ "!";
+labelled (1 + 1)` is `"1 + 1!"`), written with parentheses only where needed. It is the
 text of the expression written in the call, so `y = 1 + 1; labelled y` gives
 `"y!"`, and a function passing its parameter on passes that parameter's name.
 `Quote` is only a parameter pattern; a program may bind the name to its own

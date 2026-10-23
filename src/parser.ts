@@ -691,7 +691,7 @@ class Parser {
     }
 
     parseApp(): Expr {
-        const start = this.peek().pos, first = this.i;
+        const start = this.peek().pos;
         const piece = this.parsePrimary(), head = this.parsePostfix(piece);
         if (head !== piece) this.judge(piece, postfixHead);
         let f = head;
@@ -730,10 +730,6 @@ class Parser {
             } else break;
         }
         if (f !== head) this.judge(head, e => (primary(e) || e.t === "app") && reach(e) === Infinity);
-        const last = f.t === "app" ? f.a : undefined;
-        if (last && this.groups.has(last) && isLambda((last as Extract<Expr, { t: "block" }>).stmts[0])) {
-            this.judge(last, e => this.fitsBefore(e) && !this.listedParams(last) && this.trailingLambda(first, f));
-        }
         return f;
     }
 
@@ -749,24 +745,13 @@ class Parser {
         return lambda.params.length > 1 && this.enclosing(this.groups.get(group)!) === "[";
     }
 
-    // Whether the application ending in the group (its last argument, a
-    // lambda) reads the same without its parentheses: f a (x -> b) is f a x -> b,
-    // but f a (x -> b) with f a lowercase names is a lambda over a typed x.
-    trailingLambda(first: number, app: Expr): boolean {
-        const open = this.groups.get((app as Extract<Expr, { t: "app" }>).a)!, close = this.i - 1;
-        const count = (e: Expr): number => e.t === "app" ? 1 + count(e.f) : 0;
-        const bare = new Parser([...this.toks.slice(first, open), ...this.toks.slice(open + 1, close), { k: "eof", pos: this.toks[close].pos }], this.source, this.file);
-        bare.statementIndent = this.statementIndent;
-        try {
-            const e = bare.parseApp();
-            return bare.peek().k === "eof" && e.t === "app" && isLambda(e.a) && count(e) === count(app);
-        } catch { return false; }
-    }
-
     // An argument: a primary and its postfix accesses. Parentheses around the
-    // primary are unnecessary where its expression is one fits would take.
+    // primary are unnecessary where its expression is one fits would take; a
+    // lambda argument is always parenthesized (f a x -> e would read as one
+    // lambda, or as f a given a lambda: write f a (x -> e), or f a $ x -> e).
     parsePiece(fits: (e: Expr) => boolean): Expr {
-        const piece = this.parsePrimary(), e = this.parsePostfix(piece);
+        const at = this.i, piece = this.parsePrimary(), e = this.parsePostfix(piece);
+        if (isLambda(piece) && !(piece.t === "lambda" && piece.params[0] === "$S")) this.bareLambdas.set(at, true);
         this.judge(piece, e === piece ? fits : postfixHead);
         return e;
     }
@@ -777,6 +762,7 @@ class Parser {
     // last parse of the tokens decides, so a speculative one is overruled.
     groups = new WeakMap<Expr, number>();
     unnecessary = new Map<number, boolean>();
+    bareLambdas = new Map<number, boolean>();
     judge(group: Expr, fits: (e: Expr) => boolean): void {
         const open = this.groups.get(group);
         if (open !== undefined) this.unnecessary.set(open, fits((group as Extract<Expr, { t: "block" }>).stmts[0]));
@@ -975,6 +961,7 @@ class Parser {
             let header: { params: Pattern[]; guard?: Expr } | undefined;
             try { header = this.lambdaHeader(); } catch { this.i = save; }
             if (header) {
+                this.bareLambdas.set(save, false);
                 this.skipContinuation();
                 const body = this.isSym("{") ? this.parsePrimary() : this.parseExpr();
                 if (!header.guard && header.params.every(p => p.p === "var") && new Set(header.params.map(p => (p as Extract<Pattern, { p: "var" }>).name)).size === header.params.length) {
@@ -1325,8 +1312,14 @@ class Parser {
     }
 
     reportUnnecessary(): void {
-        const open = [...this.unnecessary].filter(([, redundant]) => redundant).map(([index]) => index).sort((a, b) => a - b)[0];
-        if (open === undefined) return;
+        const first = (verdicts: Map<number, boolean>) => [...verdicts].filter(([, error]) => error).map(([index]) => index).sort((a, b) => a - b)[0] ?? Infinity;
+        const open = first(this.unnecessary), lambda = first(this.bareLambdas);
+        if (lambda < open) {
+            throw new APNError("parse", "a lambda passed as an argument is written in parentheses", {
+                pos: this.toks[lambda].pos, len: 1, hint: "write f (x -> e), or f $ x -> e for the last argument",
+            });
+        }
+        if (open === Infinity) return;
         const close = this.closer(open);
         const text = this.source.slice(this.toks[open].pos, this.toks[close].pos + 1);
         throw new APNError("parse", `unnecessary parentheses: ${text.includes("\n") || text.length > 40 ? "this group" : `\`${text}\``} reads the same without them`, {
@@ -2166,11 +2159,51 @@ function patternVariables(p: Pattern): string[] {
 }
 
 
-export function exprToSource(e: Expr): string {
+// Source text for an expression, with parentheses only where the parser
+// needs them (the unnecessary-parentheses rule, as level and reach above
+// read it): each part is written for its place, and a group in the tree is
+// written as its expression.
+export type Place = { kind: "operand" | "item" | "guard" | "argument" | "head" | "selected"; min: number; follows: number };
+const END: Place = { kind: "operand", min: 0, follows: -1 };
+const place = (kind: Place["kind"], min = 0, follows = -1): Place => ({ kind, min, follows });
+const isGroup = (e: Expr): e is Extract<Expr, { t: "block" }> => e.t === "block" && e.style === "(" && e.stmts.length === 1 && !["stmDef", "patDef", "setItem", "setFields"].includes(e.stmts[0].t);
+const ungrouped = (e: Expr): Expr => isGroup(e) ? ungrouped(e.stmts[0]) : e;
+// How far written text reaches right: as reach, but a call's lambda argument
+// is parenthesized, so a call takes in nothing.
+function written(e: Expr): number {
+    e = ungrouped(e);
+    const binding = (op: string) => fixityOf(op).assoc === "right" ? fixityOf(op).prec : fixityOf(op).prec + 1;
+    switch (e.t) {
+        case "lambda": case "patternLambda": return sectionSource(e.t === "lambda" ? e.params : [], e.body, String) ? Infinity : -Infinity;
+        case "ternary": return Math.min(1, written(e.els));
+        case "unop": return Math.min(8, written(e.e));
+        case "binop": return Math.min(binding(e.op), written(e.r));
+        case "pipe": return Math.min(binding("$"), written(e.x));
+        default: return Infinity;
+    }
+}
+function fits(where: Place, e: Expr): boolean {
+    const section = e.t === "lambda" && sectionSource(e.params, e.body, String) !== undefined;
+    switch (where.kind) {
+        case "argument": return primary(e) || section || e.t === "unop" && e.op === "neg";
+        case "head": return primary(e) || section || e.t === "app";
+        case "selected": return postfixHead(e) || section;
+    }
+    const top = e.t === "binop" ? e.op : e.t === "pipe" ? "$" : undefined;
+    return level(e) >= where.min && (where.follows < 0 || where.follows < written(e)) &&
+        !(isLambda(e) && !section && (where.kind === "guard" || where.kind === "item" && (e as { params: unknown[] }).params.length > 1)) &&
+        !(top && fixityOf(top).assoc === "none" && fixityOf(top).prec === where.follows);
+}
+export function exprToSource(e: Expr, where: Place = END): string {
+    e = ungrouped(e);
+    return fits(where, e) ? bareSource(e, where) : `(${bareSource(e, END)})`;
+}
+function bareSource(e: Expr, where: Place): string {
+    const of = (x: Expr, at: Place = END) => exprToSource(x, at);
     switch (e.t) {
         case "computedRange": {
-            const end = `..${e.hi === null ? "" : exprToSource(e.hi)}`;
-            return `[${itemsText(e.second === null ? [exprToSource(e.lo) + end] : [exprToSource(e.lo), exprToSource(e.second) + end])}]`;
+            const end = `..${e.hi === null ? "" : of(e.hi, place("operand", 6))}`;
+            return `[${itemsText(e.second === null ? [of(e.lo, place("operand", 6)) + end] : [of(e.lo, place("operand", 6)), of(e.second, place("operand", 6)) + end])}]`;
         }
         case "import": return `import ${Array.isArray(e.module) ? `[${itemsText(e.module.map(m => JSON.stringify(m)))}]` : JSON.stringify(e.module)}`;
         case "numeric": return numberText(e.v);
@@ -2182,43 +2215,53 @@ export function exprToSource(e: Expr): string {
         case "char": return charLiteral(e.v);
         case "placeholder": return "_";
         case "var": return isOperatorName(e.name) ? `(${e.name})` : e.name;
-        case "binop": return `${exprToSource(e.l)} ${e.op} ${exprToSource(e.r)}`;
-        case "unop": return `${e.op === "neg" ? "-" : "!"}${exprToSource(e.e)}`;
-        case "app": return `${exprToSource(e.f)} ${exprToSource(e.a)}`;
-        case "patternLambda": return `${e.params.map(patternSource).join(", ")}${e.guard ? " | " + exprToSource(e.guard) : ""} -> ${exprToSource(e.body)}`;
-        case "lambda": return sectionSource(e.params, e.body, exprToSource) ?? `${e.params.join(", ")} -> ${exprToSource(e.body)}`;
-        case "list": return `[${itemsText(e.v.map(exprToSource))}]`;
-        case "record": return `[${e.v.map(([k, x]) => `${keySource(k)}: ${exprToSource(x)}`).join(", ")}]`;
-    case "floatRange": {
-        const decimal = (v: number) => Number.isInteger(v) ? `${v}.0` : String(v);
-        return `[${decimal(e.lo)}${e.step !== 1 ? `,${decimal(e.lo + e.step)}` : ""}..${e.hi === null ? "" : decimal(e.hi)}]`;
-    }
-    case "range":
-      return e.hi === null
-        ? `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..]`
-        : `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..${e.hi}]`;
-        case "ternary": return `${exprToSource(e.cond)} ? ${exprToSource(e.then)} : ${exprToSource(e.els)}`;
-        case "pipe": return `${exprToSource(e.f)} $ ${exprToSource(e.x)}`;
-        case "recordAccess":
-            return `${exprToSource(e.rec)}.${e.scoped && e.argument ? exprToSource(e.argument) : keySource(e.field)}`;
-        case "pluck":
-            if (e.values) return `${exprToSource(e.rec)}.${exprToSource(e.values)}`;
-            return `${exprToSource(e.rec)}.[${itemsText(e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`))}]`;
-        case "setItem": {
-            const index = exprToSource(e.index);
-            return `${exprToSource(e.rec)} ${e.index.t === "block" ? index : `(${index})`} = ${exprToSource(e.value)}`;
+        case "binop": return `${of(e.l, place("operand", 0, fixityOf(e.op).prec))} ${e.op} ${of(e.r, place("operand", fixityOf(e.op).assoc === "right" ? fixityOf(e.op).prec : fixityOf(e.op).prec + 1, where.follows))}`;
+        case "pipe": return `${of(e.f, place("operand", 0, fixityOf("$").prec))} $ ${of(e.x, place("operand", fixityOf("$").prec, where.follows))}`;
+        case "unop": {
+            // -(-x) is not --x, one operator.
+            const operand = ungrouped(e.e), at = where.kind === "argument" ? place("argument") : place("operand", 8, where.follows);
+            return `${e.op === "neg" ? "-" : "!"}${operand.t === "unop" ? `(${of(operand)})` : of(operand, at)}`;
         }
+        case "app": {
+            const args: Expr[] = [];
+            let head: Expr = e;
+            for (; head.t === "app"; head = ungrouped(head.f)) args.unshift(head.a);
+            return [of(head, place("head")), ...args.map(a => of(a, place("argument")))].join(" ");
+        }
+        case "patternLambda": return `${e.params.map(patternSource).join(", ")}${e.guard ? " | " + of(e.guard, place("guard")) : ""} -> ${of(e.body)}`;
+        case "lambda": return sectionSource(e.params, e.body, x => of(x, place("operand", 8))) ?? `${e.params.join(", ")} -> ${of(e.body)}`;
+        case "list": return `[${itemsText(e.v.map(x => of(x, place("item"))))}]`;
+        case "record": return `[${e.v.map(([k, x]) => `${keySource(k)}: ${of(x)}`).join(", ")}]`;
+        case "floatRange": {
+            const decimal = (v: number) => Number.isInteger(v) ? `${v}.0` : String(v);
+            return `[${decimal(e.lo)}${e.step !== 1 ? `,${decimal(e.lo + e.step)}` : ""}..${e.hi === null ? "" : decimal(e.hi)}]`;
+        }
+        case "range":
+            return e.hi === null
+                ? `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..]`
+                : `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..${e.hi}]`;
+        case "ternary": return `${of(e.cond, place("operand", 0, 1))} ? ${of(e.then, place("operand", 1))} : ${of(e.els, place("operand", 1, where.follows))}`;
+        case "recordAccess": {
+            // A scoped selection's brackets are its syntax: xs.(i + 1), r.{ k }.
+            const argument = e.scoped && e.argument ? e.argument : undefined;
+            const key = !argument ? keySource(e.field) : isGroup(argument) ? `(${of(argument)})` : of(argument);
+            return `${of(e.rec, place("selected"))}.${key}`;
+        }
+        case "pluck":
+            if (e.values) return `${of(e.rec, place("selected"))}.${of(e.values)}`;
+            return `${of(e.rec, place("selected"))}.[${itemsText(e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`))}]`;
+        case "setItem": return `${of(e.rec, place("head"))} (${of(e.index)}) = ${of(e.value)}`;
         case "setFields":
-            return `${exprToSource(e.rec)}.${(e.path ?? []).map(keySource).map(key => key + ".").join("")}[${itemsText(e.entries.map((key, n) => keySource(key) + (e.aliases ? ": " + keySource(e.aliases[n]) : "")))}] = ${exprToSource(e.value)}`;
+            return `${of(e.rec, place("selected"))}.${(e.path ?? []).map(keySource).map(key => key + ".").join("")}[${itemsText(e.entries.map((key, n) => keySource(key) + (e.aliases ? ": " + keySource(e.aliases[n]) : "")))}] = ${of(e.value)}`;
         case "block": {
-            const body = e.stmts.map(exprToSource).join("; ");
-            return e.style === "(" ? `(${body})` : `{ ${body} }`;
+            const body = e.stmts.map(x => of(x)).join("; ");
+            return e.style === "(" ? `(${body})` : e.stmts.length ? `{ ${body} }` : "{}";
         }
         // A binding (a block's statement or a list's item): f n = ..., [a,b] = xs.
-        case "stmDef": return e.clauses.map(c => [e.name, ...c.params.map(patternSource)].join(" ") + ` = ${exprToSource(c.body)}`).join("; ");
+        case "stmDef": return e.clauses.map(c => [e.name, ...c.params.map(patternSource)].join(" ") + ` = ${of(c.body)}`).join("; ");
         case "patDef":
-            if (e.value.t === "setItem" || e.value.t === "setFields") return exprToSource(e.value);
-            return `${patternSource(e.pattern)} ${e.eager ? "<-" : "="} ${exprToSource(e.value)}`;
+            if (e.value.t === "setItem" || e.value.t === "setFields") return of(e.value);
+            return `${patternSource(e.pattern)} ${e.eager ? "<-" : "="} ${of(e.value)}`;
         default: return "<expr>";
     }
 }

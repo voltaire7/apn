@@ -2692,8 +2692,10 @@ export class Interpreter {
             // m >>= (_ -> k), as >> makes it, shows as m >> k.
             const clause = f.kind === "clauseFn" && f.clauses.length === 1 && !f.applied.length ? f.clauses[0] : undefined;
             const ignored = f.kind === "clauseFn" && clause && clause.params.length === 1 && clause.params[0].p === "wildcard" && !clause.guard && clause.body.t === "var" ? f.env.get(clause.body.name) : undefined;
-            if (ignored) { const k = this.reference(ignored); return `${left} >> ${k.kind === "pending" ? this.undecidedText(k, true) : argument(k)}`; }
-            return `${left} >>= ${argument(f)}`;
+            // The right operand ends the text unless this is nested on the left of another.
+            const right = (v: Value) => (v.kind === "closure" || v.kind === "clauseFn" && v.clauses.length === 1) && !nested ? functionSource(v) : argument(v);
+            if (ignored) { const k = this.reference(ignored); return `${left} >> ${k.kind === "pending" ? this.undecidedText(k, true) : right(k)}`; }
+            return `${left} >>= ${right(f)}`;
         }
         if (step.op === "do") return exprToSource(step.block);
         if (nested) return `${step.op} ${argument(step.value)}`;

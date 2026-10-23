@@ -3,7 +3,7 @@
 ```apn
 import "combinator"
 
-selfFactorial = (self -> n -> self self n) self -> n -> n == 0 ? 1 : n * self self (n - 1)
+selfFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))
 selfFactorial 5  # 120
 ```
 
@@ -54,8 +54,8 @@ argument unevaluated.
 ## Fixed points and laziness
 
 ```apn
-yCombinator f = (x -> f (x x)) x -> f (x x)
-zCombinator f = (x -> f (v -> x x v)) x -> f (v -> x x v)
+yCombinator f = (x -> f (x x)) (x -> f (x x))
+zCombinator f = (x -> f (v -> x x v)) (x -> f (v -> x x v))
 thetaCombinator f = (x, y -> y (x x y)) (x, y -> y (x x y)) f
 ```
 

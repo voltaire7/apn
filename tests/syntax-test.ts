@@ -50,8 +50,8 @@ for (const source of [
     "[x = 1, x + 1]", "f n = n * 2", "x :: xs = ys", "!b", "map (+ 1) xs", "head $ [1,2]", "f $ g $ x",
     "{}", 'import ["option","map"]', "Some (Some 1)", "-x ^ 2", "n -> match n [0 -> 1, _ -> 2]", "(+)",
     "(- 2)", "(10 -)", "xs >>= x -> f x", "xs >>= (x -> f x) >>= g", "(x -> x) 1", "f (x -> x) y",
-    "run (x -> x)", 'withFile "notes" file -> file.read', "withFile path (file -> file.read)",
-    "bracket 1 (_ -> []) x -> y -> x", "[(x, y -> x)]", "[x -> x]", "foo Bar (x -> x)",
+    "run (x -> x)", "withFile path (file -> file.read)", 'withFile "notes" $ file -> file.read',
+    "bracket 1 (_ -> []) (x -> y -> x)", "[(x, y -> x)]", "[x -> x]", "foo Bar (x -> x)",
     "a && (b || c)", "a == (b == c)", "-(a + b)", "f \\ g \\ h", "(f \\ g) \\ h", "1 + (x -> x)",
 ]) Deno.test(`fromAST round trip: ${source}`, () => {
     const i = session(), text = JSON.stringify(source);
@@ -88,11 +88,11 @@ Deno.test("toAST does not evaluate or check its argument", () => {
 // A (Quote q) parameter takes its argument as written: q is its source text.
 for (const [source, expected] of [
     ['shown (Quote q) = q ++ " ="\nshown $ undefinedName + 1', '"undefinedName + 1 ="'],
-    ["quote (1 + 1)", '"(1 + 1)"'],
+    ["quote (1 + 1)", '"1 + 1"'],
     ["quote (+ 1)", '"(+ 1)"'],
     ["x = 5\nquote x", '"x"'],
     ["wrap y = quote y\nwrap (1 + 2)", '"y"'],
-    ["both (Quote q) n = [q,n]\nboth (n + 1) 3", '["(n + 1)",3]'],
+    ["both (Quote q) n = [q,n]\nboth (n + 1) 3", '["n + 1",3]'],
     ['Quote = [quote: String, year: Int]\nf (Quote q) = q.year\nf [quote: "a", year: 3]', "3"],
 ] as const) Deno.test(`Quote: ${JSON.stringify(source)}`, () => {
     const actual = shown(session(), source);
@@ -119,9 +119,9 @@ for (const [source, expected] of [
     ["{ a <- return 1; print a; return (a + 1) }", "return 1 >>= a -> print a >> return (a + 1)"],
     ["{ [a,b] = [1,2]; a + b }", "([a,b] -> a + b) [1,2]"],
     ["{ ones = 1 :: ones; take 2 ones }",
-        "(ones -> take 2 ones) ((f -> (x -> f (x x)) x -> f (x x)) ones -> 1 :: ones)"],
+        "(ones -> take 2 ones) ((f -> (x -> f (x x)) (x -> f (x x))) (ones -> 1 :: ones))"],
     ["{ first (x :: _) d = x; first [] d = d; first [] 0 }",
-        "(first -> first [] 0) _1 -> _2 -> match [_1,_2] [[x :: _, d] -> x, [[],d] -> d]"],
+        "(first -> first [] 0) (_1 -> _2 -> match [_1,_2] [[x :: _, d] -> x, [[],d] -> d])"],
     // A list's bindings scope over its later items, as a block's do.
     ["[x = 1, y = 2, x + y]", "(x -> (y -> [x, y, x + y]) 2) 1"],
     ["[[a,b] = [1,2], a + b]", "(_item1 -> ([a,b] -> [_item1, a + b]) _item1) [1,2]"],

@@ -31,7 +31,7 @@ for (const [name, source, expected] of [
     ["f a in a contract takes any type holding an a", 'import "option"\napply2 (((a -> b) -> f a -> f b) m) xs = m (* 2) xs\nprint [apply2 map [1,2], apply2 map (Some 3)]\nprint (typeOf apply2)\ntwice ((f a -> f a) h) x = h (h x)\nprint (twice tail [1,2,3])',
         ["[[2,4], Some 6]", "((a -> b) -> c a -> c b) -> c a -> c b", "[3]"]],
     // f a e: the type's first two parameters (as a parameter ((f a) e), as (Vec n a xs)).
-    ["a type variable applied to several types", 'import "option"\nboth (((a -> b) -> f a e -> f b e) m) r = m (* 2) r\nprint [both map (Ok 3), both map (Err "no")]\nprint (typeOf both)\nk ((a -> List (f a e)) h) = h\nprint (k (x -> [Ok x]) 1)\nprint (isType ((f a e) -> f a e) x -> x)\nprint (isType (((f a) e) -> f a e) x -> x)\nprint (isType (f a e -> f a e) x -> x)',
+    ["a type variable applied to several types", 'import "option"\nboth (((a -> b) -> f a e -> f b e) m) r = m (* 2) r\nprint [both map (Ok 3), both map (Err "no")]\nprint (typeOf both)\nk ((a -> List (f a e)) h) = h\nprint (k (x -> [Ok x]) 1)\nprint (isType ((f a e) -> f a e) (x -> x))\nprint (isType (((f a) e) -> f a e) (x -> x))\nprint (isType (f a e -> f a e) (x -> x))',
         ['[Ok 6, Err "no"]', "((a -> b) -> c a d -> c b d) -> c a d -> c b d", "[Ok 1]", "true", "true", "true"]],
     ["[Int] is positional; a list of any length is List Int", "print (List Int == typeOf [1,2,3])\nprint ([Int] == typeOf [1])\nprint (typeOf [1,\"a\"])\nprint (typeOf [1] == List)",
         ["true", "false", "List (Int | String)", "true"]],

@@ -28,7 +28,7 @@ for (const source of [
 Deno.test("arrow lambda application does not wrap a function", () => {
     const i = new Interpreter();
     try {
-        i.run(parseDocument("(Int -> Int) x -> x"));
+        i.run(parseDocument("(Int -> Int) (x -> x)"));
     } catch (error) {
         if (String(error).includes("no clause")) return;
         throw error;

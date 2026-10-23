@@ -1,4 +1,4 @@
-import { parse, setLooseSpacing } from "../src/parser.ts";
+import { exprToSource, parse, setLooseSpacing } from "../src/parser.ts";
 
 // Parentheses that do not change how an expression reads are an error.
 for (const source of [
@@ -13,8 +13,6 @@ for (const source of [
     "-(f x)",
     "y = (a + b)",
     "c ? (a ? 1 : 2) : 3",
-    'withFile "notes" (file -> file.read)',
-    "(x -> x) (y -> y)",
 ]) Deno.test(`unnecessary parentheses: ${source}`, () => {
     try { parse(source); } catch (error) {
         if (String(error).includes("unnecessary parentheses")) return;
@@ -37,8 +35,10 @@ for (const source of [
     "xs >>= (x -> f x) >>= g",
     // f = x -> e is a clause of f; f = (x -> e) binds a value.
     "f = (x -> x)",
-    // f x -> e would read f x as the lambda's typed parameter.
+    // A lambda argument is always parenthesized.
     "run (x -> x)",
+    'withFile "notes" (file -> file.read)',
+    "(x -> x) (y -> y)",
     "[(x, y -> x)]",
     "xs (i) = 2",
     "obj.[(key)]",
@@ -86,4 +86,40 @@ Deno.test("a constructor pattern without its fields is an error", async () => {
         }
         throw new Error(`accepted: ${source}`);
     }
+});
+
+for (const source of ['withFile "notes" file -> file.read', "(x -> x) y -> y", "f 1 x -> x"]) {
+    Deno.test(`bare lambda argument: ${source}`, () => {
+        try { parse(source); } catch (error) {
+            if (String(error).includes("a lambda passed as an argument is written in parentheses")) return;
+            throw error;
+        }
+        throw new Error("accepted");
+    });
+}
+
+// exprToSource (function text, (Quote q)) writes an expression with
+// parentheses only where needed: its text parses strictly to the same tree.
+const STATEMENTS = new Set(["stmDef", "patDef", "setItem", "setFields"]);
+function tree(x: unknown): unknown {
+    if (typeof x === "bigint") return x.toString();
+    if (Array.isArray(x)) return x.map(tree);
+    if (!x || typeof x !== "object") return x;
+    const o = x as Record<string, unknown>;
+    if (o.t === "block" && o.style === "(" && Array.isArray(o.stmts) && o.stmts.length === 1 && !STATEMENTS.has((o.stmts[0] as { t: string }).t)) return tree(o.stmts[0]);
+    return Object.fromEntries(Object.keys(o).sort().map(k => [k, tree(o[k])]));
+}
+for (const source of [
+    "f x + 1", "(1 + 2) * 3", "a - (b - c)", "(a :: b) :: c", "a ^ b ^ c", "(a ^ b) ^ c", "f (g x) -1",
+    "f -(a + b)", "-(-x)", "!f x", "-x ^ 2", "(-x) ^ 2", "r.x.y", "xs.(i + 1)", "(r.1).2", "(f x).y",
+    "c ? d ? 1 : 2 : 3", "(c ? 1 : 2) + 3", "a $ b ? c : d", "c ? (a $ b) : d", "f $ g $ x",
+    "xs >>= x -> f x", "xs >>= (x -> f x) >>= g", "(x -> x) 1", "f (x -> x) y", "run (x -> x)",
+    "[(x, y -> x)]", "[x -> x]", "map (+ 1) xs", "(+)", "(10 -)", "[1 + 1, 2]", "[x: f 1]",
+    "x | x > 0 -> y -> y", "{ a <- return 1; print (a + 1) }", "a && (b || c)", "[a + 1..b]",
+]) Deno.test(`exprToSource round trip: ${source}`, () => {
+    const [top] = parse(source);
+    const e = top.t === "expr" ? top.value : undefined;
+    if (!e) throw new Error("not an expression");
+    const written = exprToSource(e), [again] = parse(written);
+    if (again.t !== "expr" || JSON.stringify(tree(again.value)) !== JSON.stringify(tree(e))) throw new Error(`${written} reads differently`);
 });

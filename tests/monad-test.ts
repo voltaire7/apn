@@ -62,7 +62,7 @@ for (const [name, source, expected] of [
     ["a curried definition overloads like clauses", "describe = Int _ -> \"Int\"\ndescribe = Float _ -> \"Float\"\nprint [describe 1, describe 1.5]\nalso = x -> x + 1\nalso = x -> x + 2\nprint (also 1)",
         ['["Int","Float"]', "3"]],
     ["undecided values and actions print without running", 'print $ return 123\nprint [return "a"]\nprint (return 1 >>= x -> return x)\nprint (print 1)\nprint (IO Int { return 1 })\nprint (typeOf (print 1))\nprint (typeOf (return 1))',
-        ["[123]", '[return "a"]', "return 1 >>= (x -> return x)", "IO []", "IO Int", "IO []", "m Int"]],
+        ["[123]", '[return "a"]', "return 1 >>= x -> return x", "IO []", "IO Int", "IO []", "m Int"]],
     ["constructor arguments print as source writes them", 'import "option"\nprint (return (Some 1))\nprint (Some (Some -1))\nprint (Some [1,2])',
         ["[Some 1]\nSome (Some 1)\nOk (Some 1)", "Some (Some -1)", "Some [1,2]"]],
     ["overloads chosen by result type", 'f x = 1\nf x = "one"\nprint (f 0)\nprint (Int (f 0))\nprint (String (f 0))\nprint (typeOf (f 0))\ng (Int n) = n + 1\nprint (g (f 0))',

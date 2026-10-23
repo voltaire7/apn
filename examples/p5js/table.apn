@@ -66,7 +66,7 @@ view model = div [] [
         input [
             typeAttribute "file"
             accept ".csv"
-            onEvent "change" event -> Picked event.files
+            onEvent "change" (event -> Picked event.files)
         ] []
     ]
 ]

@@ -25,13 +25,13 @@ alongside the code, and don't restate the user-facing rules here.
 - The unnecessary-parentheses rule is decided where a group stands (`judge`,
   by the `(` token's index) and reported after the parse, since speculative
   parses (ranges, item assignment, lambda headers) are rolled back and the last
-  parse of the tokens decides. It must never flag a group whose removal changes
-  the parse: when unsure it keeps the group; a lambda ending an application is
-  checked by re-parsing that application without the group. Pattern groups are
-  not judged. `fromAST` (`lib/syntax/source.apn`) writes each piece for its
-  place by the same rules, checked by a strict round trip in
-  `tests/syntax-test.ts`; other printers' source is read with loose spacing,
-  so they may keep extra parentheses. `tests/unnecessary-parentheses-test.ts`.
+  parse of the tokens decides; a bare lambda argument (`bareLambdas`) is
+  reported the same way. It must never flag a group whose removal changes the
+  parse: when unsure it keeps the group. Pattern groups are not judged. The
+  printers write each piece for its place by the same rules: `exprToSource`
+  (with `level`/`reach`, also behind function text and `(Quote q)`) and
+  `fromAST` (`lib/syntax/source.apn`), each checked by a strict round trip
+  (`tests/unnecessary-parentheses-test.ts`, `tests/syntax-test.ts`).
 
 ## Evaluation core
 
