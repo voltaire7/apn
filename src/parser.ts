@@ -1542,21 +1542,53 @@ class Parser {
             this.next(); // =
             return { name: op.v, clauses: [{ params: [], body: this.parseDefBody("=") }] };
         }
+        let found: { name: string; params: Pattern[] } | undefined;
         try {
-            const left = this.parsePatternAtom();
+            const left = this.parsePatternAtom(), afterLeft = this.i;
             const name = this.peek();
             // x :: xs = ... binds a constructor pattern; it defines no operator.
             if (name.k === "sym" && isOperatorName(name.v) && !isConstructorOperator(name.v)) {
                 this.next();
-                const right = this.parsePatternAtom();
+                const rightStart = this.i, right = this.parsePatternAtom(), afterRight = this.i;
                 if (this.isSym("=")) {
-                    this.next();
-                    return { name: name.v, clauses: [{ params: [left, right], body: this.parseDefBody("=") }] };
+                    this.i = afterLeft;
+                    this.oneParameter(save, left);
+                    this.i = afterRight;
+                    this.oneParameter(rightStart, right);
+                    found = { name: name.v, params: [left, right] };
                 }
             }
-        } catch { /* not an operator definition */ }
+        } catch (e) { if (e instanceof APNError) throw e; /* not an operator definition */ }
+        if (found) {
+            this.next(); // =
+            return { name: found.name, clauses: [{ params: found.params, body: this.parseDefBody("=") }] };
+        }
         this.i = save;
         return null;
+    }
+
+    // A definition's parameter, from token start to here, is one piece: a
+    // constructor or type applied to patterns, or an infix constructor, is
+    // parenthesized, f (Some x) = ..., since f Some x = ... looks like two.
+    oneParameter(start: number, p: Pattern): Pattern {
+        const compound = p.p === "constr" && p.args.length > 0 || p.p === "cons";
+        const first = this.toks[start], last = this.toks[this.i - 1];
+        let grouped = false;
+        if (first.k === "sym" && (first.v === "(" || first.v === "{")) {
+            let depth = 0, k = start;
+            for (; k < this.i; k++) {
+                const t = this.toks[k];
+                if (t.k === "sym" && "([{".includes(t.v)) depth++;
+                else if (t.k === "sym" && ")]}".includes(t.v) && --depth === 0) break;
+            }
+            grouped = k === this.i - 1;
+        }
+        if (!compound || grouped) return p;
+        const text = this.source.slice(first.pos, last.pos + tokLen(last));
+        throw new APNError("parse", `the parameter \`${text}\` is one pattern: write it in parentheses`, {
+            pos: first.pos, len: text.length,
+            hint: `write (${text})${p.p === "constr" && declaredTypes.has(p.tag) && !declaredCtors.has(p.tag) ? `, or (${p.tag}) for a separate type parameter` : ""}`,
+        });
     }
 
     // Skip newlines, indents, AND dedents (used where layout boundaries separate
@@ -1647,7 +1679,8 @@ class Parser {
         const params: Pattern[] = [];
         // Haskell-style params are PATTERNS:  f [x, y] = ..., f (x :: rest) = ...
         while (this.startsParam(this.peek())) {
-            params.push(this.parseConsPattern());
+            const start = this.i;
+            params.push(this.oneParameter(start, this.parseConsPattern()));
         }
         const equals = this.next(); // =
         let body = this.parseDefBody();

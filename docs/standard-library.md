@@ -137,10 +137,10 @@ to Celsius = (F f) -> C ((f - 32) * 5 / 9)
 to Celsius (F 212)              # C 100.0
 ```
 
-(`to Celsius (F f) = ...` would read `Celsius (F f)` as one typed pattern, as
-any capitalized name in a parameter list takes the patterns after it. An
-instance of several clauses writes the type alone in parentheses, as
-`option` does: `to (Option) (Ok x) = Some x` and `to (Option) (Err _) = None`.)
+(`to Celsius (F f) = ...` is an error: `Celsius (F f)` would be one parameter,
+a typed pattern. Written as clauses, an instance puts the type alone in
+parentheses, as `option` does: `to (Option) (Ok x) = Some x` and
+`to (Option) (Err _) = None`.)
 
 ## Absence and errors — `option`
 

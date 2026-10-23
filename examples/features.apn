@@ -709,6 +709,12 @@ print (123456789012345678901234567890123456789012345678901234567890 + 9876543210
 # takes the rest, as a last argument too; f = (x -> e) keeps them (a value, where
 # f = x -> e is a clause of f), as do run (x -> e) and [(x, y -> e)].
 print ([1,2,3] >>= x -> [x, x * 10])  # => [1,10,2,20,3,30]
+# A definition's parameter that is a constructor applied to patterns, or a cons,
+# is parenthesized: firstOr d (x :: _) = x, since firstOr d x :: _ = x would look
+# like more parameters (a parse error). A lambda's single pattern needs none.
+firstOr _ (x :: _) = x
+firstOr fallback [] = fallback
+print (firstOr 0 [7,8])               # => 7
 # apn --loose FILE relaxes every spacing rule, and this one.
 
 group = { 1; 2; 3 }          # a 0-arg function: its body is the block

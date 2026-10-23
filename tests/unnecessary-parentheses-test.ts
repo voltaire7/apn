@@ -50,3 +50,25 @@ Deno.test("--loose accepts unnecessary parentheses", () => {
     setLooseSpacing(true);
     try { parse("print (5)"); } finally { setLooseSpacing(false); }
 });
+
+// A definition's parameter written with spaces is one pattern, so it is
+// parenthesized: f Some x = ... would look like two parameters.
+for (const source of [
+    "Option a = Some a | None\nf Some x = x",
+    "len _ :: rest = 1",
+    "Money = | Money Int\nMoney a + Money b = Money (a + b)",
+]) Deno.test(`bare compound parameter: ${JSON.stringify(source)}`, () => {
+    try { parse(source); } catch (error) {
+        if (String(error).includes("is one pattern")) return;
+        throw error;
+    }
+    throw new Error("accepted");
+});
+
+for (const source of [
+    "Option a = Some a | None\nf (Some x) = x\nf None = 0",
+    "len (_ :: rest) = 1",
+    "f (Int x) y = x",
+    "Option a = Some a | None\ng = Some x -> x",
+    "Option a = Some a | None\nSome v = Some 1",
+]) Deno.test(`parenthesized parameter: ${JSON.stringify(source)}`, () => { parse(source); });

@@ -135,7 +135,11 @@ differently, as in `(a + b) * c`, `f (g x)`, `(-2) ^ 2`, `-(-x)` and
 - `obj.[(k)]` selects the computed key `k`, and `(r.1).2` is not `r.1.2`, which
   reads the number `1.2`.
 
-Patterns are not checked: `len (_ :: rest) = ...` keeps its parentheses.
+In a definition's parameters it turns around: a parameter that is a constructor
+or type applied to patterns, or an infix constructor, is parenthesized
+(`f (Some x) = ...`, `len (_ :: rest) = ...`), since `f Some x = ...` would look
+like two parameters and is an error. A lambda's parameter or a binding's pattern
+stands alone and takes none: `Some x -> x`, `Some v = m`.
 
 Lists print the same way: `print [1,2,[3]]` shows `[1,2,[3]]` and records show
 `[x: 1, y: 2]`. A list prints its items once its `,` is decided: when an item

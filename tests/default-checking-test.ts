@@ -890,7 +890,7 @@ for (const source of [
 for (const source of ['x::xs = []', 'x::y::z = [1]', 'f n = { x::xs = []; x }']) Deno.test(`a cons binding of a list known too short is rejected: ${source}`, () => rejected(session(), source));
 Deno.test("an unknown constructor in a pattern is named, with the module that declares it", () => {
     for (const [source, message, hint] of [
-        ["func (Some x)::xs = print [x,xs]", "unknown constructor 'Some' in a pattern", "add `import \"option\"` to use `Some`"],
+        ["func ((Some x)::xs) = print [x,xs]", "unknown constructor 'Some' in a pattern", "add `import \"option\"` to use `Some`"],
         ["print None", "unbound variable 'None'", "add `import \"option\"` to use `None`"],
         ["Option a = Some a | None; k (Smoe x) = x", "unknown constructor 'Smoe' in a pattern", "did you mean 'Some'?"],
     ]) {
@@ -901,7 +901,7 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
         }
         throw new Error(`accepted: ${source}`);
     }
-    if (run(session(), 'import "option"; func (Some x)::xs = [x,xs]; func [Some 1, None]') !== "[1,[None]]") throw new Error("with the import");
+    if (run(session(), 'import "option"; func ((Some x)::xs) = [x,xs]; func [Some 1, None]') !== "[1,[None]]") throw new Error("with the import");
 });
 // An unbound name is reported where it is written, with the standard module
 // exporting it, before any check of what it would have been.

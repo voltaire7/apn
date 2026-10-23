@@ -435,9 +435,9 @@ for (const source of ["x: Int = 5", "f x: Int = x", "f (x: Int) = x", "g = (x: I
     failure(`':' is not a type annotation: ${source}`, source, "APN has no type annotations");
 }
 failure("':' is not cons", "print (1 : [2])", "cons is '::'");
-example("cons parameters still parse", `
-f x::rest = rest
-g (x::rest) = rest
+example("cons parameters parse", `
+f (x::rest) = rest
+g (x :: rest) = rest
 one (x::[]) = x
 lam = (x::rest) -> rest
 print [f [1,2], g [3,4], one [5], lam [6,7]]`, ["[[2],[4],5,[7]]"]);
