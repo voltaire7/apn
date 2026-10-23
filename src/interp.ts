@@ -3482,47 +3482,47 @@ export class Interpreter {
             this.publishForeignBindings(this.env, bindings);
             return { kind: "list", v: [] };
         }
-        // while c action: runs action as long as c holds, c read again before
-        // each run, as written in the call (while (n < 3) reads a cell anew).
-        if (name === "while") {
-            const [condition, action] = argsIn;
-            const read = (): Value => {
-                if (condition.kind !== "thunk" || !condition.env) return condition;
-                const old = this.env;
-                this.env = condition.env;
-                try { return this.eval(condition.body); } finally { this.env = old; }
-            };
-            while (this.truthy(read())) {
-                checkInterrupt();
-                this.runIO(action);
-            }
-            return mkList([]);
-        }
-        // for [start, condition, step] action: start's bindings, then, while the
-        // condition holds, the action, then the step: an action it runs, or a
-        // binding the next pass sees (i = i + 1). The code is read as written,
-        // and the action too, after the code's bindings (as ++ joins code).
-        if (name === "for") {
+        // while [condition] action: runs the code again before each pass, its
+        // last item the condition (earlier ones may bind names), and the
+        // action while that holds. for [start, condition, step] action: start's
+        // bindings, then while the condition holds, the action and the step, an
+        // action it runs or a binding the next pass sees (i = i + 1). Each
+        // action reads the code's names, as code joined after it does.
+        if (name === "while" || name === "for") {
             const [code, action] = argsIn;
             const items = this.items(this.dataValue(code)).map(item => this.written(item));
-            if (items.length !== 3 || items.some(item => !item)) {
-                throw new APNError("runtime", "for takes code as written: [start, condition, step]", { hint: "for [i = 0, i < 10, i = i + 1] { print i }" });
+            const shape = name === "for" ? "[start, condition, step]" : "[condition]";
+            if (!items.length || items.some(item => !item) || name === "for" && items.length !== 3) {
+                throw new APNError("runtime", `${name} takes code as written: ${shape}`, {
+                    hint: name === "for" ? "for [i = 0, i < 10, i = i + 1] { print i }" : "while [n < 10] { ... }" });
             }
-            const [start, condition, step] = items as Written[];
-            const state: CodeState = { before: new Map(), changed: new Set() };
+            const written = items as Written[];
             const run = (expr: Expr, env: Env): Value => {
                 const old = this.env;
                 this.env = env;
                 try { return this.eval(expr); } finally { this.env = old; }
             };
+            const act = (state: CodeState) => {
+                if (action.kind !== "thunk" || !action.env) { this.runIO(action); return; }
+                const scope = new Env(action.env);
+                for (const [name, value] of state.before) scope.setLocal(name, value);
+                this.runIO(run(action.body, scope));
+            };
+            if (name === "while") {
+                for (;;) {
+                    checkInterrupt();
+                    const state: CodeState = { before: new Map(), changed: new Set() };
+                    const values = written.map(item => this.runItem(item, state));
+                    if (!this.truthy(values.at(-1)!)) return mkList([]);
+                    act(state);
+                }
+            }
+            const [start, condition, step] = written;
+            const state: CodeState = { before: new Map(), changed: new Set() };
             this.runItem(start, state);
             while (this.truthy(run(condition.expr, state.scope!))) {
                 checkInterrupt();
-                if (action.kind === "thunk" && action.env) {
-                    const scope = new Env(action.env);
-                    for (const [name, value] of state.before) scope.setLocal(name, value);
-                    this.runIO(run(action.body, scope));
-                } else this.runIO(action);
+                act(state);
                 if (step.expr.t !== "stmDef" && step.expr.t !== "patDef") this.runIO(run(step.expr, state.scope!));
                 else {
                     // A step's new binding is computed now, and each pass reads it in a

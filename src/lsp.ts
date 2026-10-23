@@ -69,7 +69,7 @@ const builtins = new Map<string, string>([
     ["when", "when condition action — run the action when the condition is true."],
     ["unless", "unless condition action — run the action when the condition is false."],
     ["loop", "loop action — run the action forever."],
-    ["while", "while condition action — run the action while the condition, read again each time, holds."],
+    ["while", "while [condition] action — run the code again before each pass, and the action while the condition holds."],
     ["for", "for [start, condition, step] action — start, then the action and the step while the condition holds."],
     ["guard", "guard condition — return [] when the condition holds, else throw \"guard failed: condition\" (as written): a false guard stops a do-block."],
     ["empty", "empty — throw \"empty\": the monad's value holding nothing."],

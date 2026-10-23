@@ -996,9 +996,9 @@ print "first" >> print "second"            # => first, then second
 doubled <- mapM (x -> return (x * 2)) [1,2,3]
 print doubled                              # => [2,4,6]
 when (length doubled == 3) (print "three") # => three
-# while reads its condition again before each run; loop runs forever.
+# while runs its code again before each pass; loop runs forever.
 counted = Mutable 0
-while (counted < 3) {
+while [counted < 3] {
     emit counted
     set counted (counted + 1)
 }

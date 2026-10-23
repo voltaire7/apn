@@ -3071,16 +3071,22 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     lambdaType(typeArgument, scope, new Map());
                     return application(copy(isType.type), { type: variable() }, e);
                 }
-                // for [start, condition, step] action: the action reads the names
-                // the code binds (as code joined after it does); the condition is a Bool.
-                if (e.t === "app" && e.f.t === "app" && e.f.f.t === "var" && e.f.f.name === "for" && scope.get("for")?.builtin && e.f.a.t === "list") {
+                // while [condition] action and for [start, condition, step] action:
+                // code as written; the action reads the names it binds (as code joined
+                // after it does), and the condition is a Bool.
+                const loop = e.t === "app" && e.f.t === "app" && e.f.f.t === "var" && ["while", "for"].includes(e.f.f.name) && scope.get(e.f.f.name)?.builtin ? e.f.f.name : undefined;
+                if (loop && e.t === "app" && e.f.t === "app") {
+                    const shape = loop === "for" ? "[start, condition, step]" : "[condition]";
+                    const hint = loop === "for" ? "for [i = 0, i < 10, i = i + 1] { print i }" : "while [n < 10] { ... }";
+                    if (e.f.a.t !== "list") return problem(`${loop} takes code as written: ${shape}`, e.f.a, hint);
                     const code = resolve(infer(e.f.a, scope)) as Extract<Ty, { k: "list" }>;
                     const items = code.formula?.items ?? [];
-                    if (items.length !== 3) return problem("for takes code as written: [start, condition, step]", e.f.a, "for [i = 0, i < 10, i = i + 1] { print i }");
+                    if (!items.length || loop === "for" && items.length !== 3) return problem(`${loop} takes code as written: ${shape}`, e.f.a, hint);
                     closed(code);
-                    unify(items[1].type ?? variable(), bool, e.f.a.v[1]);
+                    const at = loop === "for" ? 1 : items.length - 1;
+                    unify(items[at].type ?? variable(), bool, e.f.a.v[at]);
                     const inner: Scope = new BlockScope(scope);
-                    for (const [name, entry] of items[0].binds ?? []) inner.set(name, entry);
+                    for (const item of loop === "for" ? items.slice(0, 1) : items) for (const [name, entry] of item.binds ?? []) inner.set(name, entry);
                     infer(e.a, inner);
                     return io(list(variable(), constant(0n)));
                 }
@@ -5997,7 +6003,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     for (const name of ["when", "unless"]) scope.set(name, { type: { k: "intrinsic", name: "when", arity: 2 } });
     // loop action never finishes: its result is the action's monad.
     { const action = variable(); scope.set("loop", { type: fn(action, action) }); }
-    native("while", [bool, variable()], io(empty));
+    native("while", [list(variable()), variable()], io(empty));
     native("for", [list(variable()), variable()], io(empty));
     // guard condition: return [] or empty, in the monad the context decides.
     scope.set("guard", { type: fn(variable(), pendingTy(list(variable(), constant(0n)))) });

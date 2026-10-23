@@ -25,11 +25,12 @@ function fails(source: string, text: string, kind?: string): void {
     throw new Error(`accepted: ${source}`);
 }
 
-// while reads its condition again before each run, as written in the call;
+// while runs its code again before each pass, its last item the condition;
 // loop runs its action until something stops the program.
 Deno.test("while and loop", () => {
-    const loops = run("n = Mutable 0\nwhile (n < 3) {\n    print n\n    set n (n + 1)\n}\nbig = Mutable 0\nwhile (big < 100000) (set big (big + 1))\nprint big\nnever = false\nwhile never (print \"no\")");
-    if (loops.join(",") !== "0,1,2,100000") throw new Error(loops.join(","));
+    const loops = run("n = Mutable 0\nwhile [n < 3] {\n    print n\n    set n (n + 1)\n}\nbig = Mutable 0\nwhile [big < 100000] (set big (big + 1))\nprint big\nnever = false\nwhile [never] (print \"no\")\nm = Mutable 20\nwhile [half = quotient m 2, half > 2] {\n    print half\n    set m half\n}");
+    if (loops.join(",") !== "0,1,2,100000,10,5") throw new Error(loops.join(","));
+    fails("n = Mutable 0\nwhile (n < 3) (set n (n + 1))", "while takes code as written");
     const output: string[] = [];
     const log = console.log;
     console.log = (...args: unknown[]) => output.push(args.map(String).join(" "));
