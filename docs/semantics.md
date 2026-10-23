@@ -504,7 +504,10 @@ preserve both identities. On an existing record, `obj "field" = value` updates
 or adds the key string `field`, just like `obj.field = value`. Strings containing
 quotes likewise update the corresponding quoted field. The key may be a string
 literal, variable, or expression: `obj key = value` and `obj (prefix ++ key) = value`.
-`obj "1" = value` updates numeric-named field `1`. Assignment evaluates the key
+`obj "1" = value` updates numeric-named field `1`. An integer writes the entry
+at that position as reading it gives it, a `[key,value]` pair: for `v = [x: 1,
+y: 2]`, `v 0 = ["x1",22]` makes `[x1: 22, y: 2]` (a key another entry has is an
+error, as is a new one on a record a schema made). Assignment evaluates the key
 once before the RHS, replaces the selected slot with conversion checks for existing
 numeric values, variants, and function contracts, and rebinds a scoped copy.
 It does not invoke an ordinary function stored in the old slot. A new field is

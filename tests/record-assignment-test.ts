@@ -32,7 +32,7 @@ for (const [assignment, error] of [
     ['obj "x" = missing', "unbound variable"],
     ['obj key = 10', 'unbound variable'],
     ['obj "x" "y" = 10', 'one index'],
-    ['obj 0 = 10', 'string field name'],
+    ['obj 0 = 10', 'an entry is a [key,value] pair'],
 ] as const) {
     Deno.test(`failed record assignment preserves binding: ${assignment}`, () => {
         const i = new Interpreter();

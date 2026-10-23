@@ -405,6 +405,15 @@ print (false ? 1 : (true ? 2 : 3))
 print ((* 2) $ (+ 1) $ 3)
 print (-head [2,3])
 `, ["14", "20", "5", "12", "[1,2]", "true", "2", "8", "-2"]);
+// v n = [key,value] writes entry n as v n reads it.
+example("a record's entry is written by position as a pair", `
+v = [x: 1, y: 2, z: 3]
+v 0 = ["x1",22]
+print v
+v -1 = ["z",30]
+print [v 0, v -1]`, ["[x1: 22, y: 2, z: 3]", '[["x1",22],["z",30]]']);
+failure("a record's entry is a pair", "v = [x: 1]\nv 0 = [x1: 22]", "an entry is a [key,value] pair");
+failure("a record's entry keeps keys distinct", 'v = [x: 1, y: 2]\nv 0 = ["y",22]', "the record already has a field 'y'");
 example("a list item may be a binding, in scope for the items after it", `
 print [x = 1]
 print [x = 1, x + 1]

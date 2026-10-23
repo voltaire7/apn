@@ -741,7 +741,9 @@ export class Interpreter {
             return this.setIndex(collection, index, mkList([]), { expr: item, env: this.env });
         }
         if (collection.kind === "record") {
-            if (key.kind !== "string") throw new APNError("runtime", "record assignment needs a string field name");
+            const entry = key.kind === "string" ? undefined : this.listIndex(key);
+            if (entry !== undefined) return this.setEntry(collection, entry, this.demand(this.eval(expression)));
+            if (key.kind !== "string") throw new APNError("runtime", "record assignment needs a field name, or an entry's index");
             return this.assignFields(collection, [[key.v, this.demand(this.eval(expression))]]);
         }
         throw new APNError("runtime", "indexed assignment expects an existing list or record");
@@ -1666,6 +1668,22 @@ export class Interpreter {
             if (index < 0) out.push([this.newField(rec, key), value]);
             else out[index] = [key, this.assignSlot(out[index][1], value)];
         }
+        return this.keepType(rec, { kind: "record", v: out });
+    }
+
+    // v 0 = ["x1",22]: entry n replaced by a [key,value] pair, as v 0 reads it;
+    // a negative n counts from the end.
+    private setEntry(rec: Extract<Value, { kind: "record" }>, index: bigint, value: Value): Value {
+        const n = Number(index < 0n ? index + BigInt(rec.v.length) : index);
+        if (n < 0 || n >= rec.v.length) throw new APNError("runtime", `the record has no entry ${index}`, { hint: `it has ${rec.v.length}` });
+        const pair = this.isList(value) ? this.items(value) : [];
+        const key = pair.length === 2 ? this.dataValue(pair[0]) : undefined, field = pair[1];
+        if (key?.kind !== "string") throw new APNError("runtime", "an entry is a [key,value] pair, as reading it gives: [\"x1\",22]");
+        const [old, held] = rec.v[n];
+        const other = rec.v.findIndex(([k], i) => k === key.v && i !== n);
+        if (other >= 0) throw new APNError("runtime", `the record already has a field '${keyText(key.v)}' (entry ${other})`);
+        const out = rec.v.slice();
+        out[n] = key.v === old ? [old, this.assignSlot(held, field)] : [this.newField(rec, key.v), field];
         return this.keepType(rec, { kind: "record", v: out });
     }
 

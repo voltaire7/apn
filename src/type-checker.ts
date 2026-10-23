@@ -3349,6 +3349,29 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return rec;
                 }
                 const field = e.index.t === "string" ? e.index.v : e.index.t === "var" ? scope.get(e.index.name)?.string : undefined;
+                // v 0 = ["x1",22]: entry n replaced by a [key,value] pair, as v 0 reads it.
+                if (rec.k === "record" && field === undefined && key && !key.terms.size) {
+                    const entries = [...rec.fields], n = Number(key.constant < 0n ? key.constant + BigInt(entries.length) : key.constant);
+                    if (n < 0 || n >= entries.length) return problem(`the record has no entry ${key.constant}`, e.index, `it has ${entries.length}`);
+                    let written = e.value;
+                    while (written.t === "block" && written.style === "(" && written.stmts.length === 1) written = written.stmts[0];
+                    const incoming = resolve(value);
+                    const entry: [string, Ty] | undefined = written.t === "list" && written.v.length === 2 && written.v[0].t === "string" && incoming.k === "list"
+                        ? [written.v[0].v, incoming.items?.[1] ?? incoming.element] : undefined;
+                    if (!entry) {
+                        // A pair whose key is known only when it runs is checked then.
+                        if (incoming.k !== "record" && !(incoming.k === "list" && incoming.items && incoming.items.length !== 2)) {
+                            runtimeChecks++;
+                            return { k: "record", fields: new Map(), closed: false };
+                        }
+                        return problem(`an entry is a [key,value] pair, as reading it gives: ["x1",22], not ${text(incoming)}`, e.value);
+                    }
+                    const [name, type] = entry, [old, held] = entries[n];
+                    if (name !== old && rec.fields.has(name)) return problem(`the record already has a field '${name}'`, e.value);
+                    if (name !== old) newField(rec, name, e);
+                    entries[n] = [name, name === old ? slotValue(held, type, e.value) : type];
+                    return { k: "record", fields: new Map(entries), closed: rec.closed };
+                }
                 if (rec.k === "record" && field !== undefined) {
                     const fields = new Map(rec.fields), old = fields.get(field);
                     if (!old) newField(rec, field, e);

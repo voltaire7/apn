@@ -104,6 +104,10 @@ for (const source of [
     'numbers = import "number"\n{ numbers; 1 }\nsq 3',
     'numbers = import "number"\nf _ = numbers\nm = f []\nsq 3',
     'random = { import "number" }\nsq 3',
+    // A record's entry is written as a [key,value] pair, within the record.
+    'v = [x: 1]\nv 0 = [x1: 22]',
+    'v = [x: 1]\nv 1 = ["a",1]',
+    'P = [x: Float, y: Float]\np = P [1,2]\np 1 = ["w",1]',
     // An item after an x <- m item yields the block ending in it: { x <- m; x } is an error.
     'print [x <- return 1, x]',
     'print [x <- [1,2], 7]',
