@@ -1819,8 +1819,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const value = resolve(t);
         if (value.k !== "list" || !value.open) return;
         const [name, at] = value.open.entries().next().value!;
-        firstUnbound ??= { ...at, name, hint: "bind it in code joined before this: [x = 1] ++ [x + 1]" };
+        firstUnbound ??= { ...at, name, hint: unboundHint(name) ?? "bind it in code joined before this: [x = 1] ++ [x + 1]" };
         dynamicBoundaries++;
+    }
+    // What would bind a name: a retired native's replacement, a module bound
+    // to a name (it opens only where that name is a statement), or the standard
+    // module defining it.
+    function unboundHint(name: string, scope?: Scope): string | undefined {
+        const module = standardModule(name), now = RETIRED_NATIVES[name];
+        const holder = scope && [...scope].find(([, entry]) => moduleOf(entry.type)?.has(name))?.[0];
+        return now ? `write \`${now} x\`` : holder ? `write \`${holder}.${name}\`, or the statement \`${holder}\` to open its names`
+            : module ? `add \`import "${module}"\` to use \`${name}\`` : undefined;
     }
 
     function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr, bound = new Set<string>()): void {
@@ -3044,12 +3053,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 if (!entry && !firstUnbound && options.runtimeNames && !options.runtimeNames.has(e.name)) {
                     const near = didYouMean(e.name, [...scope.keys(), ...options.runtimeNames]);
-                    const module = standardModule(e.name), now = RETIRED_NATIVES[e.name];
-                    // A module bound to a name opens only where that name is a statement.
-                    const holder = [...scope].find(([, entry]) => moduleOf(entry.type)?.has(e.name))?.[0];
-                    firstUnbound = { expr: e, within: locatedExpression ?? checkingExpression, name: e.name, hint: now ? `write \`${now} x\``
-                        : holder ? `write \`${holder}.${e.name}\`, or the statement \`${holder}\` to open its names`
-                        : module ? `add \`import "${module}"\` to use \`${e.name}\`` : near ? `did you mean '${near}'?` : undefined };
+                    firstUnbound = { expr: e, within: locatedExpression ?? checkingExpression, name: e.name,
+                        hint: unboundHint(e.name, scope) ?? (near ? `did you mean '${near}'?` : undefined) };
                 }
                 if (!entry) return unknown();
                 const type = instantiate(entry);

@@ -909,6 +909,9 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
     for (const [source, message, hint] of [
         ["func ((Some x)::xs) = print [x,xs]", "unknown constructor 'Some' in a pattern", "add `import \"option\"` to use `Some`"],
         ["print None", "unbound variable 'None'", "add `import \"option\"` to use `None`"],
+        // In code too: a name the library defines is a missing import, not open code.
+        ["print [x <- Some 1, return x]", "unbound variable 'Some'", "add `import \"option\"` to use `Some`"],
+        ["print [y + 1]", "unbound variable 'y'", "bind it in code joined before this"],
         ["Option a = Some a | None; k (Smoe x) = x", "unknown constructor 'Smoe' in a pattern", "did you mean 'Some'?"],
     ]) {
         try { run(session(), source); } catch (error) {
