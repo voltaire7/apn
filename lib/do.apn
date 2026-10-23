@@ -1,9 +1,14 @@
 # do statements is the block with those statements, as Haskell's do:
 #     do [e] = e
+#     do (x <- m :: es) = m >>= x -> do es
 #     do (e :: es) = e >> do es
 # A block is that chain ({ e; ss } is e >> { ss }), [] (the unit) and a
-# statement opening a module aside, so do (e :: es) is { e; do es }. A binding
-# has already put its name in scope for the items after it, and yields nothing.
+# statement opening a module aside, so do (e :: es) is { e; do es }. An x <- m
+# item's value is m: do runs it and joins x = its result before the items
+# after it. A binding has already put its name in scope for them, and yields
+# nothing.
 do [] = {}
 do [e] = e
-do (e :: es) = intrinsics.binding e ? do es : { e; do es }
+do (e :: es) = intrinsics.runs e ? e >>= r -> do (intrinsics.bound e r ++ es)
+    : intrinsics.binding e ? do es
+    : { e; do es }

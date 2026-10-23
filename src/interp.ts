@@ -29,7 +29,9 @@ import { charLiteral, itemsText, spacedItem, stringLiteral } from "./separators.
 
 // Internal control transfers, caught only by their matching execution loop.
 // An item of a list as written (see Interpreter.written).
-type Written = { expr: Expr; env: Env; binds?: Map<string, Value> };
+// runs: an x <- m item, whose names are bound when the code runs (see do);
+// joined: the bindings code joined before it gave it when it last ran.
+type Written = { expr: Expr; env: Env; binds?: Map<string, Value>; runs?: boolean; joined?: Map<string, Value> };
 // Code running item by item: the bindings so far, the names bound
 // differently than when the items after were written, and the scope the
 // current run of items written in one scope shares.
@@ -81,7 +83,7 @@ export const NATIVES: Array<[string, number]> = [
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
     ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1], ["use", 1],
-    ["emit", 1], ["step", 2], ["intrinsics.syntax", 1], ["intrinsics.written", 1], ["intrinsics.binding", 1], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
+    ["emit", 1], ["step", 2], ["intrinsics.syntax", 1], ["intrinsics.written", 1], ["intrinsics.binding", 1], ["intrinsics.runs", 1], ["intrinsics.bound", 2], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
     ["intrinsics.bind", 2], ["intrinsics.ap", 2], ["intrinsics.return", 1], ["intrinsics.throw", 1], ["intrinsics.source", 1],
@@ -2187,11 +2189,23 @@ export class Interpreter {
             state.scope = new Env(item.env);
             for (const [name, value] of state.before) state.scope.setLocal(name, value);
         }
+        // What earlier joins gave it, unless the code before it now binds the name.
+        for (const [name, value] of item.joined ?? []) if (!state.before.has(name)) state.scope.setLocal(name, value);
+        const joined = item.joined || state.before.size ? new Map([...item.joined ?? [], ...state.before]) : undefined;
         const old = this.env;
         this.env = state.scope;
         try {
             const { expr } = item;
-            if (expr.t !== "stmDef" && expr.t !== "patDef") return this.writtenAs(this.delay(expr), { expr, env: item.env });
+            if (expr.t !== "stmDef" && expr.t !== "patDef") return this.writtenAs(this.delay(expr), { expr, env: item.env, joined });
+            // x <- m: its value is the action m; x is bound when the code runs
+            // (do runs m and joins x = its result before the items after it).
+            if (expr.t === "patDef" && expr.eager) {
+                const binds = new Map(patternVariables(expr.pattern).map(name => [name, this.defer(() => {
+                    throw new APNError("runtime", `'${name}' is bound when the code runs`, { hint: "run the list with do, which runs each x <- m in turn" });
+                })]));
+                for (const [name, bound] of binds) { this.env.setLocal(name, bound); state.before.set(name, bound); state.changed.add(name); }
+                return this.writtenAs(this.delay(expr.value), { expr, env: item.env, binds, runs: true, joined });
+            }
             // Some v = m takes a value apart, as a pattern binding does.
             const existing = expr.t === "stmDef" && /^[A-Z]/.test(expr.name) ? this.env.get(expr.name) : undefined;
             const pattern: Pattern | undefined = expr.t === "patDef" ? expr.pattern
@@ -2202,7 +2216,7 @@ export class Interpreter {
             state.scope = this.env;
             const binds = new Map((pattern ? patternVariables(pattern) : [(expr as Extract<Expr, { t: "stmDef" }>).name]).map(name => [name, this.env.get(name)!]));
             for (const [name, bound] of binds) { state.before.set(name, bound); state.changed.add(name); }
-            return this.writtenAs({ kind: "deferred", compute: () => value }, { expr, env: item.env, binds });
+            return this.writtenAs({ kind: "deferred", compute: () => value }, { expr, env: item.env, binds, joined });
         } finally { this.env = old; }
     }
     // A pattern binding's item, matched when a name it binds is first used
@@ -3681,6 +3695,16 @@ export class Interpreter {
         // Whether a list's item is a binding (x = 1), unevaluated: code that
         // yields no value (see reduce).
         if (name === "intrinsics.binding") return { kind: "bool", v: !!this.written(argsIn[0])?.binds };
+        // An x <- m item (see runItem); bound gives the code x = r, which joined
+        // before the items after it binds x to r for them (see appendCode).
+        if (name === "intrinsics.runs") return { kind: "bool", v: !!this.written(argsIn[0])?.runs };
+        if (name === "intrinsics.bound") {
+            const item = this.written(argsIn[0]);
+            if (!item?.runs) throw new APNError("runtime", "bound needs an x <- m item");
+            const env = new Env(item.env), result = " result";
+            env.setLocal(result, argsIn[1]);
+            return this.codeList([{ t: "patDef", pattern: (item.expr as Extract<Expr, { t: "patDef" }>).pattern, value: { t: "var", name: result } }], env);
+        }
         // An operator's precedence and associativity, as fromAST needs them.
         if (name === "intrinsics.fixity") {
             const op = this.dataValue(argsIn[0]);

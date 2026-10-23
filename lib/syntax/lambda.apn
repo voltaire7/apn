@@ -26,12 +26,13 @@ _core bound head args = map (_lambda bound) (head :: args)
 
 # A list with bindings: its bindings scope over its later items, so each
 # other item is the block of the bindings before it, ending in the item:
-# [x = 1, x + 1] is [(x -> x + 1) 1].
+# [x = 1, x + 1] is [(x -> x + 1) 1], [x <- m, f x] is [m >>= x -> f x].
 _listItems _ _ [] = []
 _listItems bound before (item :: rest) = _isBinding item
     ? _listItems bound (before ++ [item]) rest
     : _block bound (before ++ [item]) :: _listItems bound before rest
 _isBinding ["=",_,_] = true
+_isBinding ["<-",_,_] = true
 _isBinding _ = false
 
 # One lambda per parameter; a guard stays on the last.

@@ -416,7 +416,16 @@ print [x + 1, x = 1, x]
 print x
 probe [x = 1, x + 1]`, ["[]", "[2]", "2", "[6]", "[3]", "[8,1]", "7",
     "[x = 1, x + 1]"]);
-failure("a list item cannot run an action", "print [x <- return 1, x]", "cannot run an action");
+// x <- m is a list item as a block's statement: do runs m and binds x for the
+// items after it, in any monad; it yields nothing, and x is bound only then.
+example("an x <- m item binds when do runs the code", `
+print (do [x <- [1,2], y <- [10,20], return (x + y)])
+code = [n <- return 5, z = n * 2, print z]
+do code
+probe code
+vw <- do [v <- return 1, w <- return (v + 1), return [v,w]]
+print vw`, ["[11,21,12,22]", "10", "[n <- return 5, z = n * 2, print z]", "[1,2]"]);
+failure("an x <- m item's name is bound only when the code runs", "print [x <- return 1, x]", "'x' is bound when the code runs");
 example("minus sections: (10 -), (- 2) and (-) are sections, (-2) a negation", `
 print ((10 -) 3)
 print ((-) 10 3)

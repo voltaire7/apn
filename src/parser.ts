@@ -1154,12 +1154,12 @@ class Parser {
                             }
                             this.i = save; // not a range at all
                         }
-                        // An item may be a binding, as a block's statement may: its
-                        // value is what it binds, in scope for the items after it.
+                        // An item may be a binding, as a block's statement may: it is
+                        // in scope for the items after it (x <- m when the code runs).
                         const es = [] as Expr[];
                         for (;;) {
-                            if (this.isEagerBinding()) throw new Error("Parser: a list item cannot run an action (x <- ...); use a block { x <- ...; ... }");
-                            es.push(this.item(this.peek(), () => this.isPatBinding() ? this.parsePatBinding() : this.isDef() ? this.parseBlockDef() : this.parseDelimitedExpr()));
+                            es.push(this.item(this.peek(), () => this.isEagerBinding() ? this.parseEagerBinding()
+                                : this.isPatBinding() ? this.parsePatBinding() : this.isDef() ? this.parseBlockDef() : this.parseDelimitedExpr()));
                             this.skipListSeparators();
                             if (this.isSym("]")) { this.next(); return { t: "list", v: es }; }
                             if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside list literal");

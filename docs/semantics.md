@@ -287,7 +287,10 @@ print [1 + 1, 2]            # [2,2]
 
 A list item may be a binding, as a group's statement may: it binds for the
 items after it and, as in a block, yields no value of its own (`print [x = 1,
-x + 1]` prints `[2]`, and `do [x = 1, x + 1]` is 2); `<-` stays a block's. The
+x + 1]` prints `[2]`, and `do [x = 1, x + 1]` is 2). An `x <- m` item is a
+statement too: its value is the action `m`, and `do` runs it, binding `x` for
+the items after it, in any monad (`do [x <- [1,2], return (x * 10)]` is
+`[10,20]`); until then `x` is unbound, and reading it is an error. The
 list is still its code, the binding one of its items: `length` counts it,
 indexing and updates reach it, and `print`, `to String` and `reduce` give what
 the code yields, fewer items, as `filter` may. A pattern

@@ -327,7 +327,7 @@ over them; sections and `$` become lambdas and application. A list's
 bindings scope over its later items as a block's do: each other item is the
 block of the bindings before it, ending in the item, and a binding is a
 lambda's parameter, so it is no item of its own (`[x = 1, x + 1]` is
-`[(x -> x + 1) 1]`). Other syntax
+`[(x -> x + 1) 1]`, `[x <- m, f x]` is `[m >>= x -> f x]`). Other syntax
 (`?:`, lists, records, ranges, patterns) stays as it is, its parts
 desugared. `toLambda` sees only the code it is given, so a binding of a name bound
 outside it that refers to that name (`x = x + 1`) is read as recursion, not

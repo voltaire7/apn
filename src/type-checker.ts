@@ -1739,6 +1739,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const before = new Map<string, Entry>();
         const local = items.some(item => item.expr && binding(item.expr)) || changed.size > 0;
         let run: { scope: Scope; local: Scope } | undefined;
+        // A list is an unevaluated block: its x <- m items bind as a block's do.
+        doBlocks.push({});
+        try { return codeItems(); } finally { doBlocks.pop(); }
+        function codeItems(): Ty {
         const out = items.map((item): FormulaItem => {
             if (!item.expr || item.type && !mentions(item.expr, changed)) {
                 for (const [name, entry] of item.binds ?? []) { before.set(name, entry); run?.local.set(name, entry); }
@@ -1765,6 +1769,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const types = out.map(item => item.type ?? variable());
         const open = new Map(out.flatMap(item => [...item.open ?? []]));
         return { k: "list", element: types.length ? union(types) : variable(), length: constant(BigInt(types.length)), items: types, formula: { items: out }, open: open.size ? open : undefined };
+        }
     }
     const binding = (e: Expr) => e.t === "stmDef" || e.t === "patDef";
     // code n = e: the code with item n replaced by e, written here (see
@@ -5973,6 +5978,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // the values alone (a plain list, not code).
     native("intrinsics.written", [variable()], str);
     native("intrinsics.binding", [variable()], bool);
+    native("intrinsics.runs", [variable()], bool);
+    native("intrinsics.bound", [variable(), variable()], list(variable()));
     native("intrinsics.syntax", [variable()], explicitDynamic);
     scope.set("toAST", { type: fn(variable(), explicitDynamic) });
     scope.set("probe", { type: fn(variable(), io(empty)) });
