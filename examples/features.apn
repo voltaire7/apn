@@ -716,6 +716,9 @@ print (123456789012345678901234567890123456789012345678901234567890 + 9876543210
 # value, where f = x -> e is a clause of f), as does [(x, y -> e)].
 # A typed parameter headed by a free name takes a type apart, literals compared:
 (t1 1 t2 -> print [t1,t2]) (Vect 1 Int)  # => [Vect,Int]
+parts (Vect n a) = [n,a]                 # a type applied to its parameters, too
+print (parts (Vect 3 Float))             # => [3,Float]
+print (typeOf parts)                     # => Type -> List (Int | Type)
 print ([1,2,3] >>= x -> [x, x * 10])  # => [1,10,2,20,3,30]
 # A definition's parameters read as arguments do: f Int x = x takes the type Int,
 # then x (f Int 3). So a constructor applied to patterns, or a cons, is

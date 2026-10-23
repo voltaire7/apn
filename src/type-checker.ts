@@ -1814,7 +1814,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         hint: module ? `add \`import "${module}"\` to use \`${p.tag}\`` : near ? `did you mean '${near}'?`
                             : `declare a type with \`${p.tag}\` first${p.tag === "Nil" || p.tag === "Cons" ? "; a list's patterns are `[]` and `(x :: xs)`" : ""}` };
                 }
-                if (t.k === "factory" && p.args.length === 3) {
+                // (Vect n a xs) takes a vector apart; (Vect n a), a type applied to its
+                // parameters, a type value (as (Option t) does): Vect 1 Int binds a to Int.
+                if (t.k === "factory" && (p.args.length === 3 || p.args.length === 2)) {
                     const [size, element, value] = p.args;
                     let length: Index | undefined;
                     if (size.p === "var") {
@@ -1832,6 +1834,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     } else if (element.p === "constr" && !element.args.length) {
                         item = typeExpr({ t: "var", name: element.tag }, scope);
                     } else if (element.p !== "wildcard") problem("Vect element pattern needs a type, name, or _", e);
+                    // A type value's length is read when it runs: a named one is an Int.
+                    if (!value) { unify({ k: "type", value: list(item, size.p === "int" ? length : undefined) }, expected, e); return; }
                     const vector = list(item, length);
                     unify(vector, expected, e);
                     bind(value, vector, scope, e, bound);

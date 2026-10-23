@@ -518,4 +518,8 @@ print (f 4)`, ["[[1,2,3],[10,2,12]]", "12", "[10,5,0]", "8"]);
 example("a typed pattern headed by a free name takes a type apart", `
 (t1 1 t2 -> print [t1,t2]) (Vect 1 Int)
 (t1 n t2 -> print [t1,n,t2]) (Vect 3 Float)
-print (match (Vect 1 Int) [t1 2 t2 -> "two", t1 1 t2 -> "one"])`, ["[Vect,Int]", "[Vect,3,Float]", "one"]);
+print (match (Vect 1 Int) [t1 2 t2 -> "two", t1 1 t2 -> "one"])
+shape (t1 1 t2) = [t1,t2]
+parts (Vect n a) = [n,a]
+print [shape (Vect 1 Int), parts (Vect 3 Float)]
+print [typeOf shape, typeOf parts]`, ["[Vect,Int]", "[Vect,3,Float]", "one", "[[Vect,Int],[3,Float]]", "[Type -> List Type, Type -> List (Int | Type)]"]);

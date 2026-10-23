@@ -4132,6 +4132,14 @@ export class Interpreter {
             const captured = this.hasSchemaCapture(type) ? this.captureSchema(type, converted, binds) : converted;
             return captured !== null && this.matchPattern(p.value, captured, binds);
         }
+        // A type applied to patterns, given a type value, takes it apart, as
+        // (Option t) matches Option Int: (Vect 1 t) given Vect 1 Int binds t to Int.
+        if (p.p === "constr" && p.args.length) {
+            const given = this.reference(v);
+            if (given.kind === "type" && given.name === p.tag && given.arguments?.length === p.args.length) {
+                return p.args.every((arg, n) => this.matchPattern(arg, given.arguments![n], binds));
+            }
+        }
         // A typed pattern names the type an undecided call should have:
         // g (Int n) applied to read "3" takes the Int overload.
         if (p.p === "constr" && p.args.length) {

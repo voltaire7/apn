@@ -146,11 +146,28 @@ export function describeType(value: Value): string {
             case "string": result = named("String"); break;
             case "char": result = named("Char"); break;
             case "float": result = named("Float"); break;
-            case "schema": result = declared(p.type, new Map()); pattern(p.value, env, locals, result); break;
+            case "schema": {
+                // Headed by a free name (t1 1 t2), it takes a type apart: a Type.
+                let head = p.type;
+                while (head.t === "app") head = head.f;
+                if (head.t === "var" && /^[a-z]/.test(head.name) && env.get(head.name) === undefined) {
+                    locals.set(head.name, named("Type"));
+                    for (let e = p.type; e.t === "app"; e = e.f) if (e.a.t === "var") pattern({ p: "var", name: e.a.name }, env, locals);
+                    pattern(p.value, env, locals);
+                    result = named("Type");
+                    break;
+                }
+                result = declared(p.type, new Map()); pattern(p.value, env, locals, result); break;
+            }
             case "constr": {
                 const ctor = env.get(p.tag);
                 const family = ctor && (ctor.kind === "native" || ctor.kind === "variant" || ctor.kind === "type") ? ctor.family : undefined;
-                if (p.tag === "Vect" && p.args.length === 3) {
+                // (Vect n a) takes a type value apart.
+                if (p.tag === "Vect" && p.args.length === 2) {
+                    result = named("Type");
+                    pattern(p.args[0], env, locals, named("Int"));
+                    pattern(p.args[1], env, locals, named("Type"));
+                } else if (p.tag === "Vect" && p.args.length === 3) {
                     const element = fresh();
                     result = list(element);
                     pattern(p.args[0], env, locals, named("Int"));

@@ -380,7 +380,11 @@ class Parser {
 
     parsePatternAtom(): Pattern {
         const t = this.peek();
-        if (t.k === "sym" && t.v === "(") this.unnecessary.delete(this.i);
+        if (t.k === "sym" && t.v === "(") {
+            this.unnecessary.delete(this.i);
+            const run = this.typedRun(true);
+            if (run) return run;
+        }
         if (t.k === "sym" && t.v === "_") { this.next(); return { p: "wildcard" }; }
         if (t.k === "int") { this.next(); return { p: "int", v: t.v }; }
         if (this.isSym("-") && this.peek(1).k === "int") {
@@ -1236,23 +1240,26 @@ class Parser {
         return { params, guard };
     }
 
-    lambdaParam(): Pattern {
-        const t = this.peek(), next = this.peek(1);
-        // f a e, or (f a e): an e of type f a, as (Vec n a xs) is ((Vec n a)
-        // xs) and x y is (x y); read as a type, f applied to a and e.
-        // The type's arguments may be literals too: t1 1 t2, withFile "notes" file.
-        const open = t.k === "sym" && t.v === "(" ? 1 : 0, pieces: Expr[] = [];
+    // f a e, t1 1 t2, withFile "notes" file (or the same in parentheses): one
+    // typed pattern, an e of type f a, the type's arguments names or literals.
+    typedRun(open: boolean): Pattern | undefined {
+        const pieces: Expr[] = [];
         const piece = (w: Token): Expr | undefined => w.k === "ident" && /^[a-z]/.test(w.v) ? { t: "var", name: w.v }
             : !pieces.length ? undefined : w.k === "int" ? { t: "int", v: w.v } : w.k === "float" ? { t: "float", v: w.v }
             : w.k === "str" ? { t: "string", v: w.v } : w.k === "char" ? { t: "char", v: w.v } : undefined;
-        let n = open;
+        let n = open ? 1 : 0;
         for (let w = this.peek(n), e = piece(w); e; w = this.peek(++n), e = piece(w)) pieces.push(e);
         const end = this.peek(n), value = pieces[pieces.length - 1];
-        if (pieces.length >= 3 && value.t === "var" && end.k === "sym" && (open ? end.v === ")" : ["->", ",", "|"].includes(end.v))) {
-            for (let k = 0; k < n + open; k++) this.next();
-            const type = pieces.slice(1, -1).reduce((f: Expr, a): Expr => ({ t: "app", f, a }), pieces[0]);
-            return { p: "schema", type, value: { p: "var", name: value.name } };
-        }
+        if (pieces.length < 3 || value.t !== "var" || end.k !== "sym" || !(open ? end.v === ")" : ["->", ",", "|"].includes(end.v))) return undefined;
+        for (let k = 0; k < n + (open ? 1 : 0); k++) this.next();
+        const type = pieces.slice(1, -1).reduce((f: Expr, a): Expr => ({ t: "app", f, a }), pieces[0]);
+        return { p: "schema", type, value: { p: "var", name: value.name } };
+    }
+
+    lambdaParam(): Pattern {
+        const t = this.peek(), next = this.peek(1);
+        const run = this.typedRun(t.k === "sym" && t.v === "(");
+        if (run) return run;
         if ((t.k === "ident" && /^[a-z]/.test(t.v) || t.k === "sym" && t.v === "_") && this.startsParam(next)) {
             this.next();
             return { p: "typeBind", name: t.k === "ident" ? t.v : "_", value: this.parseConsPattern() };

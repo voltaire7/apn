@@ -1358,7 +1358,11 @@ flat typed pattern `((f a) e)`; parenthesized, `(f a e)`, it reads the same).
 Headed by a name bound to nothing, such a pattern takes a type apart, as
 `(Option t)` matches a type value: each name binds the type's part in its
 place, and a literal must equal it, so `(t1 1 t2 -> print [t1,t2]) (Vect 1 Int)`
-prints `[Vect,Int]` (and `withFile "notes" file -> ...` is such a lambda).
+prints `[Vect,Int]` (and `withFile "notes" file -> ...` is such a lambda). A
+definition's parameter reads the same in parentheses, `f (t1 1 t2) = ...`, and
+a type applied to its parameters takes a type value apart too: `f (Vect n a)`
+given `Vect 3 Float` binds `n` to 3 and `a` to `Float`. Such a function takes a
+`Type`: `typeOf f` is `Type -> ...`.
 
 Types differing only in their variables' names are equal: `(b -> b) == typeOf
 (x -> x)`. A function contract checks each call: its arguments decide its type
