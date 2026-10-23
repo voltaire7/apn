@@ -1027,10 +1027,10 @@ incremented m = {
 print [incremented (Some 1), incremented [1,2]]  # => [Some 2, [2,3]]
 # As in Haskell, a discarded statement in a monad is chained, so a false
 # guard (a throw: [] in a list, None in an Option) or a discarded Err stops the
-# block; a passing assert yields true, which is pure in any block.
+# block. Every statement that binds nothing is in the block's monad: a plain
+# value (assert's true) is an error there, as in Haskell.
 evens = {
     x <- [1..6]
-    assert (x > 0)
     guard (x % 2 == 0)
     return x
 }

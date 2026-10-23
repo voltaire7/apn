@@ -3486,6 +3486,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const child: Scope = new BlockScope(scope);
                 let result: Ty = list(dynamic, constant(0n)), action = false;
                 const block: { monad?: Ty } = {};
+                const discards: Array<[Expr, Ty]> = [];
                 doBlocks.push(block);
                 try {
                     for (const [n, s] of e.stmts.entries()) {
@@ -3497,6 +3498,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         // A discarded list is pure ([] is also the unit value) unless
                         // the block is a list block.
                         const discarded = s.t !== "patDef" && s.t !== "stmDef" && n < e.stmts.length - 1 ? resolve(result) : undefined;
+                        if (discarded) discards.push([s, discarded]);
                         const monadic = !!discarded && discarded.k === "variant" && !isIO(discarded) && !isPending(discarded) && !!instanceFor(">>=", [discarded]);
                         if (s.t === "patDef" ? s.eager : discarded && (isIO(discarded) || isPending(discarded) || monadic)) action = true;
                         if (discarded && isIO(discarded)) {
@@ -3513,6 +3515,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // The block's monad, for the run: a block of returns and guards
                 // takes it from here, as types decide in Haskell.
                 if (block.monad) recordMonad(e, monadKind(block.monad));
+                // As in Haskell, each statement that binds nothing is in the
+                // block's monad: a plain value would be computed and dropped.
+                // [] is the unit (what print yields); a module opens names.
+                for (const [s, type] of discards) {
+                    const fits = (t: Ty): boolean => {
+                        const v = resolve(t);
+                        if (["var", "operation", "dynamic", "intrinsic"].includes(v.k) || isIO(v) || isPending(v) || moduleOf(v)) return true;
+                        if (v.k === "union") return v.choices.some(fits);
+                        if (v.k === "list") return !!block.monad && resolve(block.monad).k === "list" || v.items?.length === 0 || !!v.length && !v.length.terms.size && v.length.constant === 0n;
+                        return v.k === "variant" && !!instanceFor(">>=", [v]);
+                    };
+                    if (fits(type)) continue;
+                    const monad = block.monad ? resolve(block.monad) : undefined;
+                    const wanted = !monad || isIO(monad) ? "an action" : `${withArticle(monadKind(monad))} value`;
+                    problem(`a statement in a do-block must be ${wanted}, not ${text(type)}: its value would be dropped`, s,
+                        resolve(type).k === "atom" && text(type) === "Bool" ? "to check a condition here, use `guard c`" : "bind it (`x = ...`), or remove it");
+                }
                 const last = e.stmts[e.stmts.length - 1];
                 if (last.t === "patDef" || last.t === "stmDef") return problem("the last statement of a do-block must be an action, not a binding", last, "end the block with an action, such as `return x`");
                 const final = resolve(result), monad = block.monad && resolve(block.monad);

@@ -598,9 +598,14 @@ statement is chained with `>>`, so a discarded `Err e` or `None` stops the
 block. A discarded list is the exception: `[]` is also the unit value (what
 `print` yields), so a list starts no do-block, though inside a list do-block
 it is chained. Its last statement must itself be an action, whose result the
-block yields: end with `return x` to yield a plain value. A block of
-bindings, or of discarded pure statements such as `assert` (which yields
-`true`), stays an ordinary value:
+block yields: end with `return x` to yield a plain value. As in Haskell, each
+statement of a do-block that binds nothing is in its monad (an action in an IO
+block), `[]` (the unit) and a statement opening a module aside: a plain value
+(`123`, or the `true` of `assert c`) would be computed and dropped, so it is an
+error (check a condition there with `guard c`). What the check cannot decide
+(a parameter's result) is checked when the statement runs. A block of
+bindings, or of discarded pure statements such as `assert`, stays an ordinary
+value:
 
 ```apn
 area w h = {

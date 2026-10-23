@@ -114,8 +114,8 @@ for (const [name, source, expected] of [
     // As in Haskell, a discarded statement in a monad is chained: Err or None stops the block.
     ["a discarded Err or None stops a block", 'import ["option","number"]\nf n = {\n    Err "x"\n    return n\n}\nprint [f 1]\ng n = {\n    n > 0 ? Ok [] : Err "not positive"\n    return (n * 2)\n}\nprint [g 1, g 0]\nh n = {\n    _ <- safeDiv 1 n\n    None\n    return n\n}\nprint (h 1)',
         ['[Err "x"]', '[Ok 2, Err "not positive"]', "None"]],
-    ["assert yields true, pure in any block", "xs = {\n    x <- [1,2]\n    assert (x > 0)\n    return x\n}\nprint xs\ndouble n = {\n    assert (n > 0)\n    n * 2\n}\nprint (double 3)\nprint (assert 1)",
-        ["[1,2]", "6", "true"]],
+    ["assert yields true, in a block of values", "double n = {\n    assert (n > 0)\n    n * 2\n}\nprint (double 3)\nprint (assert 1)",
+        ["6", "true"]],
     ["guard stops a list, Option or Result block; empty is decided by its context", 'import ["option","number"]\nevens = {\n    x <- [1..6]\n    guard (x % 2 == 0)\n    return x\n}\nprint evens\npositive n = {\n    _ <- Some n\n    guard (n > 0)\n    return n\n}\nprint [positive 3, positive -1]\nprint (Option Int empty)\nprint (List Int empty)\nprint empty\ncheck n = {\n    _ <- Ok n\n    guard (n > 0)\n    return n\n}\nprint [check 1, check 0]\nhalf n = Result Int String {\n    guard (n % 2 == 0)\n    return (n / 2)\n}\nprint [half 4, half 3, Option Int { guard false; return 1 }]',
         ["[2,4,6]", "[Some 3, None]", "None", "[]", '[]\nNone\nErr "empty"', '[Ok 1, Err "guard failed: n > 0"]', '[Ok 2, Err "guard failed: n % 2 == 0", None]']],
     ["when and unless work in any monad", 'import "option"\nprint (unless false (Err "no"))\nprint (Option (when false (Some 1)))\nwhen true (print "ran")',
@@ -149,6 +149,12 @@ for (const [source, message, kind] of [
     ['act n = {\n    guard (n > 0)\n    print n\n}\nact 0', "guard failed: n > 0", "runtime"],
     ['import "option"\nprint (sequence [Some 1, [2]])', "cannot use Vect 1 Int where Option a is required", "type"],
     ["print (sequence [1,2])", "sequence needs a list of actions or monadic values, not Int", "type"],
+    // As in Haskell, a do-block's statements that bind nothing are in its monad.
+    ['func = {\n    123\n    print "hello"\n    return (1 + 1)\n}', "a statement in a do-block must be an action, not Int", "type"],
+    ['func = {\n    print "hello"\n    [1,2]\n    return 2\n}', "a statement in a do-block must be an action, not Vect 2 Int", "type"],
+    ['import "option"\nf n = {\n    _ <- Some n\n    5\n    return n\n}', "a statement in a do-block must be an Option value, not Int", "type"],
+    ["xs = {\n    x <- [1,2]\n    assert (x > 0)\n    return x\n}", "a statement in a do-block must be a List value, not Bool", "type"],
+    ['h f = {\n    f []\n    print "a"\n    return 2\n}\nh (_ -> 1)', "a statement in a do-block must be an action, not Int", "runtime"],
 ] as const) Deno.test(`monads reject: ${JSON.stringify(source)}`, () => fails(source, message, kind));
 // A block of returns and guards takes the monad its other statements name, as
 // types decide in Haskell: the checker finds it, and the run uses it.

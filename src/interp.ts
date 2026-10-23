@@ -1137,6 +1137,20 @@ export class Interpreter {
     // Run the rest of a do-block from its first action, in a fresh scope per
     // run: each statement's IO runs in order; the last statement's action is
     // the block's continuation.
+    // As in Haskell, a do-block's statement that binds nothing is in its monad
+    // (see the checker): what the check could not decide is checked here. [] is
+    // the unit, a module opens names, and a list block takes lists.
+    private dropped(s: Expr, value: Value, listBlock: boolean): void {
+        if (["io", "pending"].includes(value.kind) || this.moduleValues.has(value)) return;
+        if (value.kind === "variant" && value.family && this.familiesOf(">>=").has(value.family)) return;
+        if (this.isList(value) && (listBlock || this.cell(value) === null)) return;
+        const at = sourceLocations.get(s);
+        const error = new APNError("runtime", `a statement in a do-block must be an action, not ${this.typeText(value)}: its value would be dropped`, {
+            hint: "bind it (`x = ...`), or remove it", ...at ? { pos: at.start, len: Math.max(1, at.end - at.start) } : {},
+        });
+        if (at) error.src = at.source;
+        throw error;
+    }
     private runDoBlock(e: Extract<Expr, { t: "block" }>, env: Env, start: number, first?: Value): Value | IOTail {
         const caller = this.env;
         this.env = new Env(env);
@@ -1151,7 +1165,12 @@ export class Interpreter {
                 }
                 else if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
                 else if (s.t === "patDef") r = this.evalPatBinding(s);
-                else if (i < e.stmts.length - 1) { this.opens(this.runStmt(this.eval(s)), s); this.adoptPublished(); }
+                else if (i < e.stmts.length - 1) {
+                    const value = this.demand(this.eval(s));
+                    this.dropped(s, value, false);
+                    this.opens(this.runStmt(value), s);
+                    this.adoptPublished();
+                }
                 else {
                     // The last statement is the action whose result the block yields.
                     const last = this.realize(this.eval(s), { kind: "type", name: "IO" });
@@ -1390,6 +1409,9 @@ export class Interpreter {
                         this.env = child;
                         try {
                             r = { kind: "list", v: [] };
+                            // A plain statement before the block turns out a do-block (checked then).
+                            let plain: [Expr, Value] | undefined;
+                            const doBlock = (listBlock: boolean) => { if (plain) this.dropped(plain[0], plain[1], listBlock); };
                             for (let si = 0; si < e.stmts.length; si++) {
                                 const s = e.stmts[si];
                                 if (s.t === "stmDef") { r = this.evalDef(s.name, s.clauses); continue; }
@@ -1410,25 +1432,30 @@ export class Interpreter {
                                 // The rest of the block runs in the scope as it is here.
                                 const block = e, start = si, here = this.env;
                                 if (!value || value.kind === "io") {
+                                    doBlock(false);
                                     r = { kind: "io", run: () => this.runDoBlock(block, here, start, value) };
                                     break;
                                 }
                                 if (value.kind === "pending") {
                                     // Undecided, unless the checker found the block's monad.
                                     const target = this.checkedMonad(block);
+                                    doBlock(target?.kind === "type" && target.name === "List");
                                     r = target ? this.desugarDo(block, here, start, target, value) : { kind: "pending", step: { op: "do", block, env: here, start, first: value } };
                                     break;
                                 }
                                 if (s.t === "patDef") {
                                     const target = this.monadTypeOf(value);
                                     if (!target) throw new APNError("runtime", `<- runs an action, not a ${value.kind}`, { hint: "bind a value with `=`" });
+                                    doBlock(this.isList(value));
                                     r = this.desugarDo(block, here, start, target, value);
                                     break;
                                 }
                                 if (value.kind === "variant" && value.family && this.familiesOf(">>=").has(value.family)) {
+                                    doBlock(false);
                                     r = this.desugarDo(block, here, start, this.monadTypeOf(value)!, value);
                                     break;
                                 }
+                                if (!(this.isList(value) && this.cell(value) === null)) plain ??= [s, value];
                                 r = value;
                                 this.adoptPublished();
                             }
