@@ -72,11 +72,13 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   conflicts with them, is inconsistent, or has a simpler or more general
   alternative, say so plainly and propose the fix instead of silently
   bending the implementation to make it work.
-- Judge a rule by the code it makes people write. Before tightening the
-  syntax (an error, a required or forbidden spelling), write out the programs
-  it forces and read them: a rule applied mechanically produced
-  `withFile "notes" file -> file.read`. And when a spelling already reads one
-  way (`xs -2 = 5` as `xs` given `-2`), make it mean that rather than an error.
+- Judge a syntax rule by the code it makes people write. Before tightening
+  the syntax (an error, a required or forbidden spelling, a printer's output),
+  write out the programs it forces and check what each already means in the
+  language: `withFile "notes" file -> file.read` is a lambda with one typed
+  parameter (as `f a e -> ...`), so neither printing an application that way
+  nor making it an error is right. A spelling that already reads one way
+  keeps that meaning (`xs -2 = 5` is `xs` given `-2`).
 - A definition takes exactly the parameters it is written with. Never give one
   a hidden parameter or call it with a different arity internally (no rewriting
   `return ((Option _) x) = Some x` into a two-parameter clause on the type),

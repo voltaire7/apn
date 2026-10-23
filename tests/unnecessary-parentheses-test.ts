@@ -35,7 +35,7 @@ for (const source of [
     "xs >>= (x -> f x) >>= g",
     // f = x -> e is a clause of f; f = (x -> e) binds a value.
     "f = (x -> x)",
-    // A lambda argument is always parenthesized.
+    // A lambda argument keeps its parentheses: run x -> x is a lambda.
     "run (x -> x)",
     'withFile "notes" (file -> file.read)',
     "(x -> x) (y -> y)",
@@ -88,15 +88,16 @@ Deno.test("a constructor pattern without its fields is an error", async () => {
     }
 });
 
-for (const source of ['withFile "notes" file -> file.read', "(x -> x) y -> y", "f 1 x -> x"]) {
-    Deno.test(`bare lambda argument: ${source}`, () => {
-        try { parse(source); } catch (error) {
-            if (String(error).includes("a lambda passed as an argument is written in parentheses")) return;
-            throw error;
-        }
-        throw new Error("accepted");
-    });
-}
+// Juxtaposed words before -> are one typed parameter, as f a e -> ... is (e of
+// type f a), literals included: withFile "notes" file -> e is a lambda, not
+// withFile "notes" given one, so a lambda argument keeps its parentheses.
+Deno.test("a juxtaposed lambda parameter is one typed pattern", () => {
+    for (const source of ['withFile "notes" file -> file.read', "t1 1 t2 -> [t1,t2]"]) {
+        const [top] = parse(source);
+        const e = top.t === "expr" ? top.value : undefined;
+        if (e?.t !== "patternLambda" || e.params.length !== 1 || e.params[0].p !== "schema") throw new Error(source);
+    }
+});
 
 // exprToSource (function text, (Quote q)) writes an expression with
 // parentheses only where needed: its text parses strictly to the same tree.

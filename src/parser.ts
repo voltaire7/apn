@@ -746,12 +746,10 @@ class Parser {
     }
 
     // An argument: a primary and its postfix accesses. Parentheses around the
-    // primary are unnecessary where its expression is one fits would take; a
-    // lambda argument is always parenthesized (f a x -> e would read as one
-    // lambda, or as f a given a lambda: write f a (x -> e), or f a $ x -> e).
+    // primary are unnecessary where its expression is one fits would take (a
+    // lambda argument keeps them: f a (x -> e), as f a x -> e is).
     parsePiece(fits: (e: Expr) => boolean): Expr {
-        const at = this.i, piece = this.parsePrimary(), e = this.parsePostfix(piece);
-        if (isLambda(piece) && !(piece.t === "lambda" && piece.params[0] === "$S")) this.bareLambdas.set(at, true);
+        const piece = this.parsePrimary(), e = this.parsePostfix(piece);
         this.judge(piece, e === piece ? fits : postfixHead);
         return e;
     }
@@ -762,7 +760,6 @@ class Parser {
     // last parse of the tokens decides, so a speculative one is overruled.
     groups = new WeakMap<Expr, number>();
     unnecessary = new Map<number, boolean>();
-    bareLambdas = new Map<number, boolean>();
     judge(group: Expr, fits: (e: Expr) => boolean): void {
         const open = this.groups.get(group);
         if (open !== undefined) this.unnecessary.set(open, fits((group as Extract<Expr, { t: "block" }>).stmts[0]));
@@ -961,7 +958,6 @@ class Parser {
             let header: { params: Pattern[]; guard?: Expr } | undefined;
             try { header = this.lambdaHeader(); } catch { this.i = save; }
             if (header) {
-                this.bareLambdas.set(save, false);
                 this.skipContinuation();
                 const body = this.isSym("{") ? this.parsePrimary() : this.parseExpr();
                 if (!header.guard && header.params.every(p => p.p === "var") && new Set(header.params.map(p => (p as Extract<Pattern, { p: "var" }>).name)).size === header.params.length) {
@@ -1244,14 +1240,18 @@ class Parser {
         const t = this.peek(), next = this.peek(1);
         // f a e, or (f a e): an e of type f a, as (Vec n a xs) is ((Vec n a)
         // xs) and x y is (x y); read as a type, f applied to a and e.
-        const open = t.k === "sym" && t.v === "(" ? 1 : 0, names: string[] = [];
+        // The type's arguments may be literals too: t1 1 t2, withFile "notes" file.
+        const open = t.k === "sym" && t.v === "(" ? 1 : 0, pieces: Expr[] = [];
+        const piece = (w: Token): Expr | undefined => w.k === "ident" && /^[a-z]/.test(w.v) ? { t: "var", name: w.v }
+            : !pieces.length ? undefined : w.k === "int" ? { t: "int", v: w.v } : w.k === "float" ? { t: "float", v: w.v }
+            : w.k === "str" ? { t: "string", v: w.v } : w.k === "char" ? { t: "char", v: w.v } : undefined;
         let n = open;
-        for (let w = this.peek(n); w.k === "ident" && /^[a-z]/.test(w.v); w = this.peek(++n)) names.push(w.v);
-        const end = this.peek(n);
-        if (names.length >= 3 && end.k === "sym" && (open ? end.v === ")" : ["->", ",", "|"].includes(end.v))) {
+        for (let w = this.peek(n), e = piece(w); e; w = this.peek(++n), e = piece(w)) pieces.push(e);
+        const end = this.peek(n), value = pieces[pieces.length - 1];
+        if (pieces.length >= 3 && value.t === "var" && end.k === "sym" && (open ? end.v === ")" : ["->", ",", "|"].includes(end.v))) {
             for (let k = 0; k < n + open; k++) this.next();
-            const type = names.slice(1, -1).reduce((f: Expr, name): Expr => ({ t: "app", f, a: { t: "var", name } }), { t: "var", name: names[0] });
-            return { p: "schema", type, value: { p: "var", name: names[names.length - 1] } };
+            const type = pieces.slice(1, -1).reduce((f: Expr, a): Expr => ({ t: "app", f, a }), pieces[0]);
+            return { p: "schema", type, value: { p: "var", name: value.name } };
         }
         if ((t.k === "ident" && /^[a-z]/.test(t.v) || t.k === "sym" && t.v === "_") && this.startsParam(next)) {
             this.next();
@@ -1312,14 +1312,8 @@ class Parser {
     }
 
     reportUnnecessary(): void {
-        const first = (verdicts: Map<number, boolean>) => [...verdicts].filter(([, error]) => error).map(([index]) => index).sort((a, b) => a - b)[0] ?? Infinity;
-        const open = first(this.unnecessary), lambda = first(this.bareLambdas);
-        if (lambda < open) {
-            throw new APNError("parse", "a lambda passed as an argument is written in parentheses", {
-                pos: this.toks[lambda].pos, len: 1, hint: "write f (x -> e), or f $ x -> e for the last argument",
-            });
-        }
-        if (open === Infinity) return;
+        const open = [...this.unnecessary].filter(([, redundant]) => redundant).map(([index]) => index).sort((a, b) => a - b)[0];
+        if (open === undefined) return;
         const close = this.closer(open);
         const text = this.source.slice(this.toks[open].pos, this.toks[close].pos + 1);
         throw new APNError("parse", `unnecessary parentheses: ${text.includes("\n") || text.length > 40 ? "this group" : `\`${text}\``} reads the same without them`, {

@@ -6,7 +6,7 @@ APN calls shared C libraries through Deno FFI. No new call syntax is required:
 ffi = import "ffi"
 ffi.withLibrary "./libmath.dylib" [
     add: ffi.function [Int32,Int32] Int32
-] $ c -> {
+] c -> {
     print (c.add 20 22)  # Int32 42
 }
 ```

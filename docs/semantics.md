@@ -128,9 +128,9 @@ stay where they group differently, as in `(a + b) * c`, `f (g x)`, `(-2) ^ 2`,
 `-(-x)` and `xs >>= (x -> f x) >>= g`, or where the bare spelling means
 something else:
 
-- a lambda passed as an argument is always parenthesized, `withFile "notes"
-  (file -> file.read)` (`run x -> e` would read `run x` as the lambda's typed
-  parameter); a bare one is an error, and `f $ x -> e` passes a last one;
+- a lambda passed as an argument, as in `withFile "notes" (file -> file.read)`:
+  bare, `withFile "notes" file -> file.read` is a lambda with one typed
+  parameter, `file` of type `withFile "notes"` (as `f a e -> ...` is);
 - `f = (x -> e)` binds a value, while `f = x -> e` is a clause of `f`;
 - `[(x, y -> e)]`: in a list, the `,` would separate two items;
 - `xs (i) = v` sets an item, while `xs i = v` defines `xs`;
@@ -1355,6 +1355,8 @@ Int where f a is required). Applied to more types, it fills the first
 parameters in order: `f a e` is `Result a e` (but not `List a` or `Option a`),
 so `(a -> b) -> f a e -> f b e` maps a Result (`f a e` as a parameter is the
 flat typed pattern `((f a) e)`; parenthesized, `(f a e)`, it reads the same).
+The type's arguments may be literals: `t1 1 t2 -> ...` takes a `t2` of type
+`t1 1`, and `withFile "notes" file -> ...` a `file` of type `withFile "notes"`.
 
 Types differing only in their variables' names are equal: `(b -> b) == typeOf
 (x -> x)`. A function contract checks each call: its arguments decide its type

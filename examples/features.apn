@@ -711,9 +711,9 @@ print [[x: 1], [y: 2]]       # => [[x: 1], [y: 2]]
 print (123456789012345678901234567890123456789012345678901234567890 + 987654321098765432109876543210987654321098765432109876543210)  # => 1111111110111111111011111111101111111110111111111011111111100
 # Parentheses appear only where they change how code reads: print (5), (a * b) + c,
 # f ((g x)) and xs >>= (x -> f x) are parse errors. A lambda ending its expression
-# takes the rest; one passed as an argument is always parenthesized, run (x -> e)
-# (or run $ x -> e); f = (x -> e) keeps them (a value, where f = x -> e is a
-# clause of f), as does [(x, y -> e)].
+# takes the rest; one passed as an argument keeps them, run (x -> e) (bare,
+# run x -> e is a lambda with a typed parameter); f = (x -> e) keeps them (a
+# value, where f = x -> e is a clause of f), as does [(x, y -> e)].
 print ([1,2,3] >>= x -> [x, x * 10])  # => [1,10,2,20,3,30]
 # A definition's parameters read as arguments do: f Int x = x takes the type Int,
 # then x (f Int 3). So a constructor applied to patterns, or a cons, is
