@@ -3907,6 +3907,29 @@ export class Interpreter {
     // as Vect n a xs, binds the length and element type; (List a) xs binds a
     // to the elements' type, computed only if used. undefined when the type
     // binds nothing (every name in it is bound).
+    // A typed pattern headed by a free name, given an applied type, takes the
+    // type apart, as (Option t) matches a type value: t1 1 t2 given Vect 1 Int
+    // binds t1 to Vect and t2 to Int, and 1 must be its first argument.
+    private typeShape(p: Extract<Pattern, { p: "schema" }>, v: Value, binds: Map<string, Value>): boolean | undefined {
+        const pieces: Expr[] = [];
+        let head = p.type;
+        for (; head.t === "app"; head = head.f) pieces.unshift(head.a);
+        if (head.t !== "var" || !/^[a-z]/.test(head.name) || binds.has(head.name) || this.env.get(head.name) !== undefined) return undefined;
+        const given = this.reference(v);
+        if (given.kind !== "type" || !given.arguments?.length) return undefined;
+        if (pieces.length + 1 !== given.arguments.length) return false;
+        const base = this.env.get(given.name);
+        binds.set(head.name, base ? this.reference(base) : { kind: "type", name: given.name, family: given.family });
+        const part = (e: Expr): Pattern | undefined => e.t === "var" ? { p: "var", name: e.name } : e.t === "placeholder" ? { p: "wildcard" }
+            : e.t === "int" ? { p: "int", v: e.v } : e.t === "float" ? { p: "float", v: e.v } : e.t === "string" ? { p: "string", v: e.v }
+            : e.t === "char" ? { p: "char", v: e.v } : undefined;
+        for (const [n, piece] of pieces.entries()) {
+            const pattern = part(piece);
+            if (!pattern || !this.matchPattern(pattern, given.arguments[n], binds)) return false;
+        }
+        return this.matchPattern(p.value, given.arguments[pieces.length], binds);
+    }
+
     private typeBinding(p: Extract<Pattern, { p: "schema" }>, v: Value, binds: Map<string, Value>): boolean | undefined {
         const args: Expr[] = [];
         let head = p.type;
@@ -4067,6 +4090,8 @@ export class Interpreter {
             }
         }
         if (p.p === "schema") {
+            const shape = this.typeShape(p, v, binds);
+            if (shape !== undefined) return shape;
             const bindsType = this.typeBinding(p, v, binds);
             if (bindsType !== undefined) return bindsType;
             const scope = new Env(this.env);

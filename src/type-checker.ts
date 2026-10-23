@@ -1734,6 +1734,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // Compared numerically: 2.0 also matches the integer 2.
                 return unify(expected, atom("Number"), e);
             case "schema": {
+                // Headed by a free name (t1 1 t2), the pattern may take a type
+                // apart as well as a value of one: its names are types, decided
+                // when it runs (t1 1 t2 given Vect 1 Int is Vect, 1, Int).
+                const pieces: Expr[] = [];
+                let head = p.type;
+                for (; head.t === "app"; head = head.f) pieces.unshift(head.a);
+                if (head.t === "var" && /^[a-z]/.test(head.name) && !scope.has(head.name)) {
+                    for (const piece of [head, ...pieces]) {
+                        if (piece.t === "var" && !scope.has(piece.name)) bind({ p: "var", name: piece.name }, { k: "type", value: variable() }, scope, e, bound);
+                    }
+                    bind(p.value, expected, scope, e, bound);
+                    return;
+                }
                 const t = typeExpr(p.type, scope, bound);
                 application({ k: "fn", input: t, output: t, coerce: true, pattern: p }, { type: expected }, e);
                 bind(p.value, t, scope, e, bound);

@@ -130,7 +130,7 @@ something else:
 
 - a lambda passed as an argument, as in `withFile "notes" (file -> file.read)`:
   bare, `withFile "notes" file -> file.read` is a lambda with one typed
-  parameter, `file` of type `withFile "notes"` (as `f a e -> ...` is);
+  parameter (as `f a e -> ...` is), which takes a type apart;
 - `f = (x -> e)` binds a value, while `f = x -> e` is a clause of `f`;
 - `[(x, y -> e)]`: in a list, the `,` would separate two items;
 - `xs (i) = v` sets an item, while `xs i = v` defines `xs`;
@@ -1355,8 +1355,10 @@ Int where f a is required). Applied to more types, it fills the first
 parameters in order: `f a e` is `Result a e` (but not `List a` or `Option a`),
 so `(a -> b) -> f a e -> f b e` maps a Result (`f a e` as a parameter is the
 flat typed pattern `((f a) e)`; parenthesized, `(f a e)`, it reads the same).
-The type's arguments may be literals: `t1 1 t2 -> ...` takes a `t2` of type
-`t1 1`, and `withFile "notes" file -> ...` a `file` of type `withFile "notes"`.
+Headed by a name bound to nothing, such a pattern takes a type apart, as
+`(Option t)` matches a type value: each name binds the type's part in its
+place, and a literal must equal it, so `(t1 1 t2 -> print [t1,t2]) (Vect 1 Int)`
+prints `[Vect,Int]` (and `withFile "notes" file -> ...` is such a lambda).
 
 Types differing only in their variables' names are equal: `(b -> b) == typeOf
 (x -> x)`. A function contract checks each call: its arguments decide its type

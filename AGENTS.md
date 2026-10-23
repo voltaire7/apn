@@ -76,8 +76,8 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   the syntax (an error, a required or forbidden spelling, a printer's output),
   write out the programs it forces and check what each already means in the
   language: `withFile "notes" file -> file.read` is a lambda with one typed
-  parameter (as `f a e -> ...`), so neither printing an application that way
-  nor making it an error is right. A spelling that already reads one way
+  parameter (as `(t1 1 t2 -> ...) (Vect 1 Int)` is), so neither printing an
+  application that way nor making it an error is right. A spelling that already reads one way
   keeps that meaning (`xs -2 = 5` is `xs` given `-2`).
 - A definition takes exactly the parameters it is written with. Never give one
   a hidden parameter or call it with a different arity internally (no rewriting
