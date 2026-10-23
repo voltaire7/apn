@@ -4,10 +4,10 @@ import { highlightLine } from "../src/repl.ts";
 import { APNError } from "../src/errors.ts";
 
 for (const [literal, constructor] of [
-    ["2@3", "makePolar 2 3"], ["2@-3", "makePolar 2 (-3)"],
+    ["2@3", "makePolar 2 3"], ["2@-3", "makePolar 2 -3"],
     ["2@+3", "makePolar 2 3"], [".5@.25", "makePolar .5 .25"],
-    ["2e1@3e-1", "makePolar 20.0 .3"], ["-2@3", "-(makePolar 2 3)"],
-    ["2 @ 3", "makePolar 2 3"], ["2@3 + 1", "(makePolar 2 3) + 1"],
+    ["2e1@3e-1", "makePolar 20.0 .3"], ["-2@3", "-makePolar 2 3"],
+    ["2 @ 3", "makePolar 2 3"], ["2@3 + 1", "makePolar 2 3 + 1"],
     ["magnitude 2@3", "magnitude (makePolar 2 3)"],
     ['from String "2@3"', "makePolar 2 3"],
 ]) {

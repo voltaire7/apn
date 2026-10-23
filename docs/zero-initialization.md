@@ -114,7 +114,7 @@ Constructors now apply the same checks to bare and annotated numbers:
 Int .2                       # error: lossy conversion
 Int (Float .2)               # error: lossy conversion
 Int (floor .2)               # 0
-Int (truncate (-1.7))        # -1
+Int (truncate -1.7)          # -1
 Float (inexact 9007199254740993) # 9007199254740992.0
 ```
 

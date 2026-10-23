@@ -2590,10 +2590,8 @@ export class Interpreter {
                     // A named subtype's payload shows without its base's name:
                     // F 0.1 for F = Float32, not F (Float32 0.1).
                     if (v.family?.base && isNumeric(shown) && shown.typeName) {
-                        const text = numberText(shown);
-                        emit(text.startsWith("-") ? " (" : " ");
-                        emit(text, shown.kind);
-                        if (text.startsWith("-")) emit(")");
+                        emit(" ");
+                        emit(numberText(shown), shown.kind);
                         continue;
                     }
                     const wrap = compoundArgument(shown);

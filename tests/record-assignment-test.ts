@@ -8,7 +8,7 @@ for (const [name, source, expected] of [
     ["numeric named field", 'obj = [1: 1, "1": 2]\nobj "1" = 10\n[obj.1,obj."1"]', '[10,2]'],
     ["sequential updates use old RHS", 'obj = [x: 1]\nobj "x" = obj.x + 1\nobj "x" = obj "x" + 1\nobj.x', '3'],
     ["block scopes update", 'obj = [x: 1]\ninner = { obj "x" = 10; obj }\n[inner,obj]', '[[x: 10], [x: 1]]'],
-    ["captured alias keeps old record", 'obj = [x: 1]\nold <- return (obj)\nobj "x" = 10\n[old,obj]', '[[x: 1], [x: 10]]'],
+    ["captured alias keeps old record", 'obj = [x: 1]\nold <- return obj\nobj "x" = 10\n[old,obj]', '[[x: 1], [x: 10]]'],
     ["unused field remains deferred", 'unused = missing + 1\nobj = [x: 1, other: unused]\nobj "x" = 10\nobj.x', '10'],
     ["list value remains lazy", 'obj = [x: [0]]\nobj "x" = [missing,2]\nobj.x 1', '2'],
     ["string pattern functions", 'f "x" = 10\nf "y" = 20\n[f "x", f "y"]', '[10,20]'],

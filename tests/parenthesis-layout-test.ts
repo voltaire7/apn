@@ -14,12 +14,12 @@ for (const source of [
     throw new Error('accepted misaligned parenthesis');
 });
 for (const source of [
-    'vec * (\n    print\n)',
-    'f (\n    x)',
+    '(\n    vec + 1\n) * print',
+    'f (\n    x y)',
     'f (x +\n    y)',
     'f (\n    + 1\n)',
-    'f = {\n    g (\n        x\n    )\n}',
-    'f (\n    g (\n        x\n    )\n)',
+    'f = {\n    g (\n        x y\n    )\n}',
+    'f (\n    g (\n        x y\n    )\n)',
 ]) Deno.test(`preserve aligned and inline parentheses: ${source}`, () => { parseDocument(source); });
 Deno.test('misaligned parenthesis has an editor diagnostic at the closer', () => {
     const diagnostics = lint('vec * (\n    print\n    )');

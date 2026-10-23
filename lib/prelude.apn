@@ -70,7 +70,7 @@ empty = throw "empty"
 guard condition = condition ? return [] : throw ("guard failed: " ++ intrinsics.source condition)
 (<*>) = intrinsics.ap
 (>>=) = intrinsics.bind
-m >> k = m >>= (_ -> k)
+m >> k = m >>= _ -> k
 # f applied to what several values hold, in any monad (Elm's map2 ... map4).
 map2 f a b = map f a <*> b
 map3 f a b c = map f a <*> b <*> c

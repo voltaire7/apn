@@ -439,8 +439,8 @@ Option a = Some a | None
 Optional a = Option a
 UserId = | MkUserId Int
 
-(Optional Int) (Some 123)  # Some 123
-(Option Int) None          # None
+Optional Int (Some 123)    # Some 123
+Option Int None            # None
 MkUserId 123               # MkUserId 123
 Some value = Some 123      # destructures; value is 123
 None = None                # pattern assertion
@@ -449,7 +449,7 @@ None = None                # pattern assertion
 Type parameters are retained and supplied by type application. Bare constructors
 remain polymorphic; `typeOf (Some 123)` reports the unspecialized parent `Option`
 without demanding its payload. Explicit specialization retains its arguments:
-`typeOf ((Option Int) None)` is `Option Int`. Different type arguments produce
+`typeOf (Option Int None)` is `Option Int`. Different type arguments produce
 different type descriptions. Payload conversions are deferred until used.
 Concrete fields such as `Int` in `MkUserId Int` are enforced on construction,
 also lazily. They convert as a typed parameter does, and the static check

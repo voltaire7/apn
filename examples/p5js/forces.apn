@@ -4,7 +4,7 @@ import "p5"
 
 # A ball: its mass, where it is, its velocity and its hue.
 Mover = [mass: Float, position: [Float,Float], velocity: [Float,Float], hue: Int]
-movers = Mutable ((List Mover) [])
+movers = Mutable (List Mover [])
 # The liquid fills the canvas's lower half, and drags by this coefficient.
 drag = 0.1
 
@@ -44,7 +44,7 @@ draw (Sketch p) = {
 fall height mover = {
     [_,y] = mover.position
     speed = mag mover.velocity
-    resistance = y > height / 2 ? setMag (drag * speed * speed) (-mover.velocity) : [0.0,0.0]
+    resistance = y > height / 2 ? setMag (drag * speed * speed) -mover.velocity : [0.0,0.0]
     mover.velocity = mover.velocity + resistance / mover.mass + [0.0,0.1]
     mover.position = mover.position + mover.velocity
     mover

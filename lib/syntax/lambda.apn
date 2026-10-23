@@ -55,7 +55,7 @@ _isDefinition _ = false
 _value bound clauses = {
     name = _name (head clauses 1)
     value = _definition (name :: bound) clauses
-    _isName name && !(contains name bound) && _mentions name value
+    _isName name && !contains name bound && _mentions name value
         ? [_y,["->",[name],value]]
         : value
 }

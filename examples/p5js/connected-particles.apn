@@ -5,7 +5,7 @@ import ["p5","sequence"]
 # A particle: where it is, its velocity, its hue and the frames until it is gone.
 Particle = [position: [Float,Float], velocity: [Float,Float], hue: Int, frames: Int]
 # Paths of particles, the newest last, each drawn by one drag of the mouse.
-paths = Mutable ((List (List Particle)) [])
+paths = Mutable (List (List Particle) [])
 # The frame the next particle may come in, and where the last one came in.
 nextParticleFrame = Mutable 0
 previous = Mutable [0.0,0.0]

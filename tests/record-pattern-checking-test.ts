@@ -56,7 +56,7 @@ Deno.test("record-pattern printing converts positional input before the body run
 for (const [source, expected] of [
     ["[x,y] = [y: 2, x: 10]; x - y", "8"],
     ['[x,y] = [y: "b", x: 1]; [x + 1, y ++ "c"]', '[2,"bc"]'],
-    ["[x,y] <- return ([y: 2, x: 10]); x - y", "8"],
+    ["[x,y] <- return [y: 2, x: 10]; x - y", "8"],
     ["r = { [x,y] = [y: 2, x: 10]; x - y }; r", "8"],
     ["[x] = [x: 1, y: 2]; x", "1"],
     ["[a,b] = [1,2]; a + b", "3"],

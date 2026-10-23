@@ -236,14 +236,14 @@ example("positive indexing and length do not evaluate unrelated heads", `
 print ([missing,7,missing] 1)
 print (length [missing,missing])
 print (null (missing::missing))
-print ([1,2,3] (-1))
-print (map ([1..]) [0,2,4])
+print ([1,2,3] -1)
+print (map [1..] [0,2,4])
 `, ["7", "2", "false", "3", "[1,3,5]"]);
 
 example("equality compares list representations and stops at a mismatch", `
-print ((1::2::[]) == [1,2])
+print (1::2::[] == [1,2])
 print ([1..3] == [1,2,3])
-print ((1::missing) == (2::missing))
+print (1::missing == 2::missing)
 `, ["true", "true", "false"]);
 
 example("partial applications do not mutate other uses of a function", `
@@ -270,10 +270,10 @@ x::xs = [1,2,3,4]
 print [x,xs]
 (a::b::rest) = [5,6,7]
 print [a,b,rest]
-h::t <- return ([8,9])
+h::t <- return [8,9]
 print t
 `, ["[1,[2,3,4]]", "[5,6,[7]]", "[9]"]);
-failure("take rejects negative counts", "print (take (-1) [])", "non-negative int");
+failure("take rejects negative counts", "print (take -1 [])", "non-negative int");
 failure("drop rejects non-integer counts", "print (drop 1.0 [])", "non-negative int");
 failure("head still rejects empty lists", "print (head [])", "head of empty list");
 failure("finite indexing still checks bounds", "print ([1,2] 2)", "out of range");
@@ -345,9 +345,9 @@ print (take 5 (numbers 10))
 failure("a recursive head cannot hide a literal non-list tail",
     "x = x::1\nx", "cons tail expected a list, got int");
 failure("computed non-list tails are rejected when consumed",
-    "x = 1::(1 + 1)\ntail x", "cons tail expected a list, got int");
+    "x = 1::1 + 1\ntail x", "cons tail expected a list, got int");
 failure("nested recursive heads report a rendering error",
-    "x = x::(1 + 1)\nprint x", "cannot display a cyclic nested value");
+    "x = x::1 + 1\nprint x", "cannot display a cyclic nested value");
 failure("self-containing list literals report a rendering error",
     "x = [x]\nprint x", "cannot display a cyclic nested value");
 example("sharing a finite list between siblings is not a rendering cycle",
@@ -423,7 +423,7 @@ print ((-) 10 3)
 print (foldl (-) 100 [1,2,3])
 print (map (100 -) [1,2])
 print ((- 2) 10)
-print (-2)
+print -2
 print (10 - 2)`, ["7", "7", "94", "[99,98]", "8", "-2", "8"]);
 example("types come from constructor patterns, not annotations", `
 f (Int x) = x + 1

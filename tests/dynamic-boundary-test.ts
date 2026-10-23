@@ -14,8 +14,8 @@ for (const [source, expected] of [
     ['f (Dynamic x) = x x; Int (f (y -> 42))', '42'],
     ['f (Int x) = x + 1; f (Dynamic 2)', '3'],
     ['cast Int (Dynamic 42)', '42'],
-    ['((Int -> Int) f) <- return ((Dynamic (x -> x + 1))); f 2', '3'],
-    ['((Int -> Int) f) <- return ((x -> x)); f (Dynamic 2)', '2'],
+    ['((Int -> Int) f) <- return (Dynamic (x -> x + 1)); f 2', '3'],
+    ['((Int -> Int) f) <- return (x -> x); f (Dynamic 2)', '2'],
     ['Vect 2 Int (Dynamic [1,2])', '[1,2]'],
     ['xs <- return (Vect 2 Int (Dynamic [1,missing])); head xs', '1'],
     ['Vect 2 Int [Dynamic 1, Dynamic 2]', '[1,2]'],
@@ -40,7 +40,7 @@ for (const source of [
 
 for (const [source, message] of [
     ['Int (Dynamic "bad")', 'Int expects a number'],
-    ['((Int -> Int) f) <- return ((x -> x)); f (Dynamic "bad")', 'Int expects a number'],
+    ['((Int -> Int) f) <- return (x -> x); f (Dynamic "bad")', 'Int expects a number'],
     ['((Int -> Int) f) <- return (Dynamic (x -> "bad")); f 1', 'Int expects a number'],
     ['Vect 2 Int (Dynamic [1])', 'length mismatch'],
     ['Vect 2 Int (Dynamic [1,"bad"])', 'Int expects a number'],

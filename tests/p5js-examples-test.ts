@@ -68,7 +68,7 @@ Deno.test("Game of Life counts neighbors with shifted boards", () => {
     if (value(i, "blinker") !== "[[0,0,0,0,0],[0,0,0,0,0],[0,1,1,1,0],[0,0,0,0,0],[0,0,0,0,0]]") throw new Error(value(i, "blinker"));
 });
 Deno.test("Mandelbrot escapes count iterations", () => {
-    const i = load("mandelbrot-set", "\ncounts = [escape 0.0 0.0, escape (-0.75) 0.1, escape 1.0 1.0]\n");
+    const i = load("mandelbrot-set", "\ncounts = [escape 0.0 0.0, escape -0.75 0.1, escape 1.0 1.0]\n");
     if (value(i, "counts") !== "[100,34,3]") throw new Error(value(i, "counts"));
 });
 Deno.test("a p5.strands shader's hook is written as GLSL", () => {

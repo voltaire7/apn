@@ -3,10 +3,10 @@ import { Interpreter } from "../src/interp.ts";
 import { highlightTokens } from "../src/highlight.ts";
 
 for (const [source, expected] of [
-    [String.raw`((x -> x + 1) \ (x -> x * 2)) 3`, "7"],
-    [String.raw`((x -> x + 1) \ (x -> x * 2) \ (x -> x - 3)) 5`, "5"],
+    [String.raw`((x -> x + 1) \ x -> x * 2) 3`, "7"],
+    [String.raw`((x -> x + 1) \ (x -> x * 2) \ x -> x - 3) 5`, "5"],
     [String.raw`(x -> x + 1) \ (x -> x * 2) $ 3`, "7"],
-    [String.raw`((x -> 42) \ (x -> missing)) missing`, "42"],
+    [String.raw`((x -> 42) \ x -> missing) missing`, "42"],
     [String.raw`import "sequence"
 even n = n % 2 == 0
 calculate bottom top = (sum \ filter even) [bottom..top]
@@ -15,8 +15,8 @@ calculate 1 10`, "30"],
 increment x = x + 1
 h = increment \ double
 [h 3, h 4]`, "[7,9]"],
-    [String.raw`((\) (x -> x + 1) (x -> x * 2)) 3`, "7"],
-    [String.raw`(Int \ (x -> x + 1)) 3`, "4"],
+    [String.raw`(\) (x -> x + 1) (x -> x * 2) 3`, "7"],
+    [String.raw`(Int \ x -> x + 1) 3`, "4"],
 ]) Deno.test(`composition: ${source}`, () => {
     const interp = new Interpreter();
     const actual = interp.renderString(interp.run(parseDocument(source)));
@@ -30,7 +30,7 @@ even n = n % 2 == 0
 calculate bottom top = sum \ filter even [bottom..top]
 calculate 1 10`,
     String.raw`(x -> x) \ 3`,
-    String.raw`3 \ (x -> x)`,
+    String.raw`3 \ x -> x`,
 ]) Deno.test(`composition rejects non-functions: ${source}`, () => {
     const interp = new Interpreter();
     try { interp.renderString(interp.run(parseDocument(source))); }

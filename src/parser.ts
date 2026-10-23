@@ -93,6 +93,33 @@ declareFixities(lex(preludeSource));
 
 // ---------------- Parser ----------------
 
+// For the unnecessary-parentheses rule: how an expression would parse written
+// without its parentheses. A primary is one piece of an application (a name,
+// literal, bracket or postfix access); level is its loosest top operator
+// (Infinity: none, so any operand place takes it); reach is the loosest
+// operator after it that it would take in (a lambda's body takes everything).
+const isLambda = (e: Expr) => e.t === "lambda" || e.t === "patternLambda";
+const primary = (e: Expr) => !["binop", "pipe", "unop", "app", "ternary", "lambda", "patternLambda", "import"].includes(e.t);
+// (r.1).2 is not r.1.2, which reads the float 1.2.
+const postfixHead = (e: Expr) => primary(e) && !["int", "float", "numeric"].includes(e.t) && !(e.t === "recordAccess" && /^\d/.test(e.field));
+function level(e: Expr): number {
+    if (e.t === "binop") return fixityOf(e.op).prec;
+    if (e.t === "pipe") return fixityOf("$").prec;
+    return e.t === "ternary" ? 1 : Infinity;
+}
+function reach(e: Expr): number {
+    const binding = (op: string) => fixityOf(op).assoc === "right" ? fixityOf(op).prec : fixityOf(op).prec + 1;
+    switch (e.t) {
+        case "lambda": case "patternLambda": return -Infinity;
+        case "app": return isLambda(e.a) ? -Infinity : Infinity;
+        case "ternary": return Math.min(1, reach(e.els));
+        case "unop": return Math.min(8, reach(e.e));
+        case "binop": return Math.min(binding(e.op), reach(e.r));
+        case "pipe": return Math.min(binding("$"), reach(e.x));
+        default: return Infinity;
+    }
+}
+
 class Parser {
     toks: Token[];
     i = 0;
@@ -353,6 +380,7 @@ class Parser {
 
     parsePatternAtom(): Pattern {
         const t = this.peek();
+        if (t.k === "sym" && t.v === "(") this.unnecessary.delete(this.i);
         if (t.k === "sym" && t.v === "_") { this.next(); return { p: "wildcard" }; }
         if (t.k === "int") { this.next(); return { p: "int", v: t.v }; }
         if (this.isSym("-") && this.peek(1).k === "int") {
@@ -597,6 +625,8 @@ class Parser {
     parseOperators(minPrec: number): Expr {
         const start = this.peek().pos;
         let left = this.parseOperand();
+        this.judge(left, e => e.t !== "import" && level(e) >= minPrec && this.fitsBefore(e) &&
+            !(isLambda(e) && (this.noLambda || this.listedParams(left))) && !(e.t === "unop" && this.afterPrefix(left)));
         for (;;) {
             // A deeper line starting with an operator (or a ternary's ?)
             // continues the expression, as a trailing one does.
@@ -661,8 +691,10 @@ class Parser {
     }
 
     parseApp(): Expr {
-        const start = this.peek().pos;
-        let f = this.parsePostfix(this.parsePrimary());
+        const start = this.peek().pos, first = this.i;
+        const piece = this.parsePrimary(), head = this.parsePostfix(piece);
+        if (head !== piece) this.judge(piece, postfixHead);
+        let f = head;
         // application: f x y  (does not cross a newline at the statement's level,
         // nor a `;`). A deeper line starting an argument continues it, as one
         // starting with an operator does (never with `{`: braces stay on the line),
@@ -681,7 +713,7 @@ class Parser {
             // f -x passes -x: a '-' spaced before and not after negates.
             if (this.tightMinus(t) && /\s/.test(this.source[t.pos - 1] ?? "")) {
                 this.next();
-                const a: Expr = { t: "unop", op: "neg", e: this.parsePostfix(this.parsePrimary()) };
+                const a: Expr = { t: "unop", op: "neg", e: this.parsePiece(primary) };
                 sourceLocations.set(a, { source: this.source, file: this.file, start: t.pos, end: this.peek().pos });
                 f = { t: "app", f, a };
                 sourceLocations.set(f, { source: this.source, file: this.file, start, end: this.peek().pos });
@@ -691,13 +723,78 @@ class Parser {
                     (t.k === "kw" && (t.v === "true" || t.v === "false")) ||
                     t.k === "str" || t.k === "char" ||
                     (t.k === "sym" && (t.v === "(" || t.v === "[" || t.v === "{"))) {
-                const a = this.parsePostfix(this.parsePrimary());
+                const a = this.parsePiece(e => primary(e) || e.t === "unop" && e.op === "neg" && primary(e.e));
                 sourceLocations.set(a, { source: this.source, file: this.file, start: t.pos, end: this.peek().pos });
                 f = { t: "app", f, a };
                 sourceLocations.set(f, { source: this.source, file: this.file, start, end: this.peek().pos });
             } else break;
         }
+        if (f !== head) this.judge(head, e => (primary(e) || e.t === "app") && reach(e) === Infinity);
+        const last = f.t === "app" ? f.a : undefined;
+        if (last && this.groups.has(last) && isLambda((last as Extract<Expr, { t: "block" }>).stmts[0])) {
+            this.judge(last, e => this.fitsBefore(e) && !this.listedParams(last) && this.trailingLambda(first, f));
+        }
         return f;
+    }
+
+    // -(-x) is not --x, one operator.
+    afterPrefix(group: Expr): boolean {
+        const open = this.groups.get(group)!, before = this.toks[open - 1];
+        return before?.k === "sym" && (before.v === "-" || before.v === "!") && before.pos + 1 === this.toks[open].pos;
+    }
+
+    // In a list, (x, y -> e) needs its parentheses: x, y would be two items.
+    listedParams(group: Expr): boolean {
+        const lambda = (group as Extract<Expr, { t: "block" }>).stmts[0] as Extract<Expr, { t: "lambda" | "patternLambda" }>;
+        return lambda.params.length > 1 && this.enclosing(this.groups.get(group)!) === "[";
+    }
+
+    // Whether the application ending in the group (its last argument, a
+    // lambda) reads the same without its parentheses: f a (x -> b) is f a x -> b,
+    // but f a (x -> b) with f a lowercase names is a lambda over a typed x.
+    trailingLambda(first: number, app: Expr): boolean {
+        const open = this.groups.get((app as Extract<Expr, { t: "app" }>).a)!, close = this.i - 1;
+        const count = (e: Expr): number => e.t === "app" ? 1 + count(e.f) : 0;
+        const bare = new Parser([...this.toks.slice(first, open), ...this.toks.slice(open + 1, close), { k: "eof", pos: this.toks[close].pos }], this.source, this.file);
+        bare.statementIndent = this.statementIndent;
+        try {
+            const e = bare.parseApp();
+            return bare.peek().k === "eof" && e.t === "app" && isLambda(e.a) && count(e) === count(app);
+        } catch { return false; }
+    }
+
+    // An argument: a primary and its postfix accesses. Parentheses around the
+    // primary are unnecessary where its expression is one fits would take.
+    parsePiece(fits: (e: Expr) => boolean): Expr {
+        const piece = this.parsePrimary(), e = this.parsePostfix(piece);
+        this.judge(piece, e === piece ? fits : postfixHead);
+        return e;
+    }
+
+    // Parentheses around one expression where it reads the same without them
+    // are an error (reported once the parse is done; --loose allows them). A
+    // group's verdict is decided where it stands, by the ( token's index; the
+    // last parse of the tokens decides, so a speculative one is overruled.
+    groups = new WeakMap<Expr, number>();
+    unnecessary = new Map<number, boolean>();
+    judge(group: Expr, fits: (e: Expr) => boolean): void {
+        const open = this.groups.get(group);
+        if (open !== undefined) this.unnecessary.set(open, fits((group as Extract<Expr, { t: "block" }>).stmts[0]));
+    }
+
+    // Whether what follows the group leaves its expression, written bare, as
+    // it is: the end of the expression, or an operator it would not take in.
+    fitsBefore(e: Expr): boolean {
+        let j = this.i;
+        while (["newline", "indent", "dedent"].includes(this.toks[j].k)) j++;
+        const t = this.toks[j];
+        if (t.k === "eof" || j > this.i && this.lineIndent(t) <= this.statementIndent) return true;
+        if (t.k !== "sym") return false;
+        if ([")", "]", "}", ",", ";", ":", "->", "..", "|"].includes(t.v)) return true;
+        const prec = t.v === "?" ? 1 : isOperatorName(t.v) ? fixityOf(t.v).prec : undefined;
+        if (prec === undefined) return false;
+        const top = e.t === "binop" ? e.op : e.t === "pipe" ? "$" : undefined;
+        return prec < reach(e) && !(top && fixityOf(top).assoc === "none" && fixityOf(top).prec === prec);
     }
 
     // Postfix:  quoted OBJECT access  a.b, a."b", a.123  and the
@@ -710,7 +807,7 @@ class Parser {
             const t = this.peek();
             if (t.k === "sym" && (t.v === "{" || t.v === "(")) {
                 const argument = this.parsePrimary();
-                e = { t: "recordAccess", rec: e, field: this.source.slice(t.pos, this.peek().pos).trimEnd(), argument, scoped: true };
+                e = { t: "recordAccess", rec: e, field: this.source.slice(t.pos, this.toks[this.i - 1].pos + 1), argument, scoped: true };
             } else if (t.k === "sym" && (t as { v: string }).v === "[") {
                 const bracketStart = this.i;
                 const values = this.parsePrimary();
@@ -739,6 +836,8 @@ class Parser {
                     const mixed = new Set(entries.map((x) => typeof x));
                     if (mixed.size > 1) throw new Error("Parser: pluck cannot mix bare names and 'key: name' pairs");
                 } catch { quoted = false; entries.length = 0; }
+                // Quoted, the bracket holds keys: (x) there is a computed key.
+                if (quoted) for (let k = bracketStart; k < bracketEnd; k++) this.unnecessary.delete(k);
                 this.i = bracketEnd;
                 e = { t: "pluck", rec: e, entries, values, quoted };
             } else {
@@ -926,7 +1025,7 @@ class Parser {
                     }
                     case "(":
                     case "{": {
-                        const close = t.v === "(" ? ")" : "}";
+                        const close = t.v === "(" ? ")" : "}", open = this.i;
                         this.next();
                         // () and {} are the same: a group/block. Empty blocks return an empty list.
                         if (this.isSym(close)) { this.next(); return { t: "block", stmts: [], style: t.v }; }
@@ -960,7 +1059,13 @@ class Parser {
                                     throw new Error("Parser: closing } must align with the line containing {");
                                 }
                                 this.statementIndent = outerIndent;
-                                this.next(); return { t: "block", stmts, style: close === ")" ? "(" : "{" };
+                                this.next();
+                                const block: Expr = { t: "block", stmts, style: close === ")" ? "(" : "{" };
+                                if (close === ")" && stmts.length === 1 && !["stmDef", "patDef", "setItem", "setFields"].includes(stmts[0].t)) {
+                                    this.groups.set(block, open);
+                                    this.unnecessary.set(open, false);
+                                }
+                                return block;
                             }
                             const tb = this.peek();
                             this.statementIndent = this.lineIndent(tb);
@@ -1207,6 +1312,21 @@ class Parser {
         }
         const next = this.peek(1);
         return t.k === "ident" && (/^[A-Z]/.test(t.v) || (next.k === "sym" && (next.v === "." || isConstructorOperator(next.v))));
+    }
+
+    reportUnnecessary(): void {
+        const open = [...this.unnecessary].filter(([, redundant]) => redundant).map(([index]) => index).sort((a, b) => a - b)[0];
+        if (open === undefined) return;
+        let close = open + 1;
+        for (let depth = 0; ; close++) {
+            const t = this.toks[close];
+            if (t.k === "sym" && "([{".includes(t.v)) depth++;
+            else if (t.k === "sym" && ")]}".includes(t.v) && depth-- === 0) break;
+        }
+        const text = this.source.slice(this.toks[open].pos, this.toks[close].pos + 1);
+        throw new APNError("parse", `unnecessary parentheses: ${text.includes("\n") || text.length > 40 ? "this group" : `\`${text}\``} reads the same without them`, {
+            pos: this.toks[open].pos, len: 1, hint: "remove the ( and its )",
+        });
     }
 
     // Lookahead: is the statement  pattern = expr ? Restores the token index.
@@ -1496,6 +1616,9 @@ class Parser {
                 this.i = saved; return null;
             }
         } catch { this.i = saved; return null; }
+        // xs (i) = v is not xs i = v, a definition (nor xs -i = v, one of -).
+        const group = this.groups.get(left.a);
+        if (group !== undefined) this.unnecessary.delete(group);
         this.expectSym("=");
         const value = this.parseDefBody();
         return { t: "patDef", pattern: { p: "var", name: left.f.name },
@@ -1532,6 +1655,9 @@ class Parser {
         // same clause, so another one overloads it the same way.
         let guard: Expr | undefined;
         const lambda = !params.length && /^[a-z]/.test(name) ? curried(name, body) : undefined;
+        // f = (x -> e) binds a value where f = x -> e is a clause: its parentheses count.
+        const group = this.groups.get(body);
+        if (!params.length && /^[a-z]/.test(name) && group !== undefined && isLambda((body as Extract<Expr, { t: "block" }>).stmts[0])) this.unnecessary.set(group, false);
         if (lambda) {
             params.push(...lambda.params);
             guard = lambda.guard;
@@ -1942,6 +2068,7 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
         p.checkColons();
         if (!looseSpacing) p.checkBracketSpacing();
         const out = p.parseTopLevel();
+        if (!looseSpacing) p.reportUnnecessary();
         return groupClauses(out);
     } catch (err) {
         if (err instanceof APNError) {

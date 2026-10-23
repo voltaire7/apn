@@ -6,4 +6,4 @@ TaskEffect = TaskPerform Dynamic Dynamic | TaskAttempt Dynamic Dynamic Dynamic
 perform toMessage action = TaskPerform action toMessage
 # attempt sends Ok of the result, or Err of the error's message when it fails.
 attempt toMessage action = TaskAttempt action (result -> toMessage (Ok result))
-    (error -> toMessage (Err error))
+    error -> toMessage (Err error)

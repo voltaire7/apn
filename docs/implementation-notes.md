@@ -22,6 +22,14 @@ alongside the code, and don't restate the user-facing rules here.
   for piped stdin; see `docs/repl.md`.
 - AST `sourceLocations` is a WeakMap kept outside the serialized AST shapes.
   Parser expression spans keep source/file for assertions and match diagnostics.
+- The unnecessary-parentheses rule is decided where a group stands (`judge`,
+  by the `(` token's index) and reported after the parse, since speculative
+  parses (ranges, item assignment, lambda headers) are rolled back and the last
+  parse of the tokens decides. It must never flag a group whose removal changes
+  the parse: when unsure it keeps the group; a lambda ending an application is
+  checked by re-parsing that application without the group. Pattern groups are
+  not judged. Generated source (fromAST, printers) is read with loose spacing,
+  so printers may keep extra parentheses. `tests/unnecessary-parentheses-test.ts`.
 
 ## Evaluation core
 

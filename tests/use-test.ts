@@ -19,7 +19,7 @@ for (const [source, expected] of [
 });
 Deno.test('use exports retain their defining module scope', () => {
     const i = new Interpreter();
-    const actual = result(i, 'module = { private = 40; [add: (x -> private + x)] }\nuse module\nadd 2');
+    const actual = result(i, 'module = { private = 40; [add: x -> private + x] }\nuse module\nadd 2');
     if (actual !== '42' || i.env.get('private') !== undefined) throw new Error(actual);
 });
 for (const source of ['use 1', 'use [[x: 2], 3]', 'use [x: 2, "bad": 3]', 'use [1: 2]', 'use ["_": 2]']) {

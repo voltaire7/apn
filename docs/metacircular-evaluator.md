@@ -78,7 +78,8 @@ and recursive lists remain productive.
 - Singleton list templates map lazily; longer templates apply positionally.
   Template elements are evaluated by the metacircular apply function, including
   object-language closures. Integer application remains indexing.
-- Newline or semicolon separators, `#` comments, common string escapes.
+- Newline or semicolon separators (a deeper line continues its statement, and a
+  line ending in `{` opens a block 4 deeper), `#` comments, common string escapes.
 - Exact fractions produced by division, inherited from APN arithmetic.
 
 The source reader does **not** implement patterns, overload declarations, variant

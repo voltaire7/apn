@@ -62,9 +62,9 @@ for (const [source, message, kind] of [
 for (const [spellings, text] of [
     [['f [a,b] = a\nf ([1] ++ [2,3])', 'f [a,b] = a\nf ((++) [1] [2,3])', 'f [a,b] = a\nf (intrinsics.append [1] [2,3])'], "length mismatch"],
     [['f [a,b] = a\nf (0 :: [2,3])', 'f [a,b] = a\nf ((::) 0 [2,3])'], "length mismatch"],
-    [['y = (print 1) + 1', 'y = (+) (print 1) 1', 'y = intrinsics.add (print 1) 1'], "cannot use an action"],
+    [['y = print 1 + 1', 'y = (+) (print 1) 1', 'y = intrinsics.add (print 1) 1'], "cannot use an action"],
     [['foldl (x, y -> x + y) 0 ["a"]', 'foldl (+) 0 ["a"]'], "cannot combine Int and String"],
-    [['y = !(print 1)', 'y = not (print 1)'], "an action is not a condition"],
+    [['y = !print 1', 'y = not (print 1)'], "an action is not a condition"],
     [['y = -"a"', 'y = negate "a"'], "cannot negate String"],
 ] as const) for (const source of spellings) Deno.test(`one typing for each spelling: ${JSON.stringify(source)}`, () => fails(source, text, "type"));
 for (const [source, expected] of [
@@ -79,7 +79,7 @@ for (const [source, expected] of [
 // The checker's evaluator knows an operator's result in each spelling: f
 // checks only when the take count, and so the list's length, is known.
 for (const count of ["1 + 1", "(+) 1 1", "intrinsics.add 1 1", "(1 +) 1", "($) id 2", "intrinsics.apply id 2",
-    "(-) 3 1", "intrinsics.sub 3 1", "length ((++) [1] [2])", "length (intrinsics.cons 1 [5])", "negate (-2)"]) {
+    "(-) 3 1", "intrinsics.sub 3 1", "length ((++) [1] [2])", "length (intrinsics.cons 1 [5])", "negate -2"]) {
     Deno.test(`the checker evaluates each spelling: ${count}`, () => {
         const actual = run(`id x = x\nf [a,b] = a\nprint (f (take (${count}) [1,2,3]))`);
         if (actual.join() !== "1") throw new Error(actual.join());

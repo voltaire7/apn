@@ -31,9 +31,9 @@ view model = div [
     style "flex-direction" "column"
     style "justify-content" "center"
     style "align-items" "center"
-    preventDefaultOn "dragenter" (_ -> DragEnter)
-    preventDefaultOn "dragover" (_ -> DragEnter)
-    preventDefaultOn "dragleave" (_ -> DragLeave)
+    preventDefaultOn "dragenter" _ -> DragEnter
+    preventDefaultOn "dragover" _ -> DragEnter
+    preventDefaultOn "dragleave" _ -> DragLeave
     preventDefaultOn "drop" dropped
 ] [
     button [onClick Pick] [text "Upload Images"]

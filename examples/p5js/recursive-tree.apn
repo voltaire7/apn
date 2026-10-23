@@ -15,8 +15,8 @@ draw (Sketch p) = {
     # The trunk, then the branches from its top.
     p.translate (p.width / 2) p.height
     p.stroke [0,255,255]
-    p.line 0 0 0 (-120)
-    p.translate 0 (-120)
+    p.line 0 0 0 -120
+    p.translate 0 -120
     branch p angle 120 0
     p.describe ("A tree drawn by recursively drawing branches, with angle determined by the "
         ++ "user mouse position.")
@@ -29,7 +29,7 @@ branch (Sketch p) angle size level = {
     h = size * 0.66
     when (h > 2) {
         limb p angle h level angle
-        limb p angle h level (-angle)
+        limb p angle h level -angle
     }
 }
 
@@ -37,8 +37,8 @@ branch (Sketch p) angle size level = {
 limb (Sketch p) angle h level turn = {
     p.push
     p.rotate turn
-    p.line 0 0 0 (-h)
-    p.translate 0 (-h)
+    p.line 0 0 0 -h
+    p.translate 0 -h
     branch p angle h (level + 1)
     p.pop
 }

@@ -100,7 +100,7 @@ for (const [source, message] of [
     ['chunksOf 0 [1]', 'positive size'],
     ['sortBy (x, y -> true) [2,1]', 'integer'],
     ['from (List Char) [1]', 'Char'],
-    ['factorial (-1)', 'non-negative'],
+    ['factorial -1', 'non-negative'],
     ['import "missing"', 'unknown module'],
     ['import 123', 'string'],
 ]) Deno.test(`std rejects: ${source}`, () => {

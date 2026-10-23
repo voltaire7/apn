@@ -26,7 +26,7 @@ Deno.test("p5 example dispatches setup, animation, and mutable click events", ()
 });
 Deno.test("p5 call supports overload arguments and rejects unsafe integer conversion", () => {
     const i = new Interpreter();
-    i.run(parse('p5 = import "p5"\nmain = p5.sketch [\n    setup: (p -> p.call "fill" [255,0,0])\n    draw: (p -> p.circle 9007199254740993 0 10)\n]'));
+    i.run(parse('p5 = import "p5"\nmain = p5.sketch [\n    setup: p -> p.call "fill" [255,0,0]\n    draw: p -> p.circle 9007199254740993 0 10\n]'));
     let args: unknown[] = [];
     const sketch = new P5Sketch(i, i.env.get('main')!, { fill: (...a: unknown[]) => { args = a; }, circle: () => {} });
     sketch.dispatch('setup');
@@ -39,7 +39,7 @@ Deno.test("p5 call supports overload arguments and rejects unsafe integer conver
 });
 Deno.test("p5 objects are made once per sketch, and preload waits for them", async () => {
     const i = new Interpreter();
-    i.run(parse('import "p5"\nimg = loadImage "a.png"\nmain = sketch [preload: [img], setup: (Sketch p -> p.image img 1 2)]'));
+    i.run(parse('import "p5"\nimg = loadImage "a.png"\nmain = sketch [preload: [img], setup: Sketch p -> p.image img 1 2]'));
     let loads = 0, drawn: unknown;
     const image = { width: 5 };
     const sketch = new P5Sketch(i, i.env.get("main")!, {
@@ -53,7 +53,7 @@ Deno.test("p5 objects are made once per sketch, and preload waits for them", asy
 });
 Deno.test("p5 call yields p5's result; a callback without arguments gets the sketch's p", () => {
     const i = new Interpreter();
-    i.run(parse('import "p5"\nshape = buildGeometry (Sketch p -> p.sphere 3)\nmain = sketch [setup: (Sketch p -> {\n    rate <- p.call "frameRate" []\n    p.model shape\n    p.text (to String rate) 0 0\n})]'));
+    i.run(parse('import "p5"\nshape = buildGeometry (Sketch p -> p.sphere 3)\nmain = sketch [setup: Sketch p -> {\n    rate <- p.call "frameRate" []\n    p.model shape\n    p.text (to String rate) 0 0\n}]'));
     const calls: unknown[][] = [];
     const sketch = new P5Sketch(i, i.env.get("main")!, {
         frameRate: () => 60,
@@ -67,7 +67,7 @@ Deno.test("p5 call yields p5's result; a callback without arguments gets the ske
 });
 Deno.test("p5 takes a HashMap (keys a program computes) as an object", () => {
     const i = new Interpreter();
-    i.run(parse('import "p5"\nmain = sketch [setup: (Sketch p -> p.call "fill" [HashMap [["a b",1]]])]'));
+    i.run(parse('import "p5"\nmain = sketch [setup: Sketch p -> p.call "fill" [HashMap [["a b",1]]]]'));
     let given: unknown;
     new P5Sketch(i, i.env.get("main")!, { fill: (x: unknown) => { given = x; } }).dispatch("setup");
     if (JSON.stringify(given) !== '{"a b":1}') throw new Error(JSON.stringify(given));

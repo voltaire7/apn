@@ -20,8 +20,8 @@ setup (Sketch p) = {
         p.fill [angle,85,90]
         p.circle 0 0 50
         # The label upright, nearer the center.
-        p.translate (-50) 0
-        p.rotate (-angle)
+        p.translate -50 0
+        p.rotate -angle
         p.fill 0
         p.text (to String angle ++ "°") 0 0
         p.pop

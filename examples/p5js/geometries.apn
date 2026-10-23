@@ -17,16 +17,16 @@ setup (Sketch p) = {
 
 # Each shape where it stands, as it draws itself.
 shapes = [
-    [-250, -100, (Sketch p -> p.plane 70 70)]
-    [-75, -100, (Sketch p -> p.box 70 70 70)]
-    [100, -100, (Sketch p -> p.cylinder 70 70)]
-    [275, -100, (Sketch p -> p.cone 50 70)]
-    [-250, 100, (Sketch p -> p.torus 50 20)]
+    [-250, -100, Sketch p -> p.plane 70 70]
+    [-75, -100, Sketch p -> p.box 70 70 70]
+    [100, -100, Sketch p -> p.cylinder 70 70]
+    [275, -100, Sketch p -> p.cone 50 70]
+    [-250, 100, Sketch p -> p.torus 50 20]
     # A black stroke shows the sphere's movement.
-    [-75, 100, (Sketch p -> { p.stroke 0; p.sphere 50 })]
-    [100, 100, (Sketch p -> p.ellipsoid 20 40 40)]
+    [-75, 100, Sketch p -> { p.stroke 0; p.sphere 50 }]
+    [100, 100, Sketch p -> p.ellipsoid 20 40 40]
     # Turned to start upright.
-    [275, 100, (Sketch p -> { p.rotateZ 180; p.model astronaut })]
+    [275, 100, Sketch p -> { p.rotateZ 180; p.model astronaut }]
 ]
 
 draw (Sketch p) = {

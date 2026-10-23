@@ -262,8 +262,8 @@ _subscriptions = browser.batch [
 game viewMemory updateMemory memory = browser.element [
     init: [[memory: memory, computer: _computer], browser.getViewport GameViewport]
     update: _advance updateMemory
-    view: (g -> _view g.computer.screen (viewMemory g.computer g.memory))
-    subscriptions: (_ -> _subscriptions)
+    view: g -> _view g.computer.screen (viewMemory g.computer g.memory)
+    subscriptions: _ -> _subscriptions
 ]
 picture shapes = game (_, _ -> shapes) (_, memory -> memory) []
 animation viewTime = game (computer, _ -> viewTime computer.time) (_, memory -> memory) []

@@ -4,10 +4,10 @@ import { parse } from "../main.ts";
 const sourcePrograms = [
     '[["x",1]] "x"',
     "templates = [x -> x * 2]; values = [3]; templates.values",
-     '[10,20,30] [2,1]', '[[(x -> x + 1)], [(x -> x * 2)]].[[3],[4]]',
+     '[10,20,30] [2,1]', '[[x -> x + 1], [x -> x * 2]].[[3],[4]]',
     "2 ^ 3 ^ 2", "-2 ^ 2", "2 ^ -3",
-    '[c -> c, c -> c, c -> c]."a😀é"', '[c -> 42, c -> 42]."hi"', '[(c -> c), (c -> c)]."hi"',
-     '[x -> x * 2, x -> x * 2, x -> x * 2].[1,2,3]', '[(x -> x + 1), (x -> x * 2)].[3,4]',
+    '[c -> c, c -> c, c -> c]."a😀é"', '[c -> 42, c -> 42]."hi"', '[c -> c, c -> c]."hi"',
+     '[x -> x * 2, x -> x * 2, x -> x * 2].[1,2,3]', '[x -> x + 1, x -> x * 2].[3,4]',
     '42', '1 + 2 * 3', '(1 + 2) * 3', '-12 + 5', '1 / 3 + 1 / 6',
     'true ? 42 : missing', 'false ? missing : 7', '!false', '[]',
     '"hello" ++ " world"', '[1, 2 + 3, 7]', 'head [42,missing]',
@@ -15,7 +15,7 @@ const sourcePrograms = [
     '(x -> x + 1) 41', 'compose f g x = f (g x); compose (x -> x * 2) (x -> x + 1) 20',
     'fact n = n == 0 ? 1 : n * fact (n - 1); fact 5',
     'x = 1::x; take 6 x',
-    'mapLocal f xs = null xs ? [] : (f (head xs)) :: mapLocal f (tail xs)\nmapLocal (x -> x * 2) [1,2,3]',
+    'mapLocal f xs = null xs ? [] : f (head xs) :: mapLocal f (tail xs)\nmapLocal (x -> x * 2) [1,2,3]',
     'outer x = { inner y = x + y; inner }; outer 40 2',
     'x = 7; f ignored = x; { x = 99; f 0 }',
     'even n = n == 0 ? true : odd (n - 1); odd n = n == 0 ? false : even (n - 1); even 4',
@@ -41,7 +41,7 @@ for (const source of ['["old"].["new"]', '[0].[123]', '[false].[true]', '"old" "
         throw new Error("Expected a syntax/runtime error");
     });
 }
-for (const source of ['20 + 22', 'id x = x; id 42', 'true ? 42 : missing', 'head ([x -> x * 2].[21])', 'head ([c -> 42, c -> 42]."hi")']) {
+for (const source of ['20 + 22', 'id x = x; id 42', 'true ? 42 : missing', 'head [x -> x * 2].[21]', 'head [c -> 42, c -> 42]."hi"']) {
     Deno.test(`evaluator evaluates its own source, then: ${source}`, () => {
         const i = new Interpreter(); i.run(parse('import "meta"'));
         i.env.setLocal("evaluatorSource", { kind: "string", v: Deno.readTextFileSync(new URL("../lib/meta/evaluator.apn", import.meta.url)) });

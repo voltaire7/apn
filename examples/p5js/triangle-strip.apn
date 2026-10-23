@@ -34,7 +34,7 @@ setup (Sketch p) = {
 draw shown (Sketch p) = {
     p.background 0
     [centerX,centerY] = [p.width / 2, p.height / 2]
-    p.translate (-centerX) (-centerY)
+    p.translate -centerX -centerY
     # The sketch's values are Dynamic: Number converts one for round.
     count = Int (round (Number (remap p.mouseX 0 p.width 6 60)))
     when (count != shown) (p.send (Counted count))
@@ -53,4 +53,4 @@ corner (Sketch p) angle radius centerX centerY = {
     p.vertex (centerX + cos (degrees angle) * radius) (centerY + sin (degrees angle) * radius)
 }
 
-main = browser.element [init: init, update: update, subscriptions: (_ -> browser.none), view: view]
+main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]

@@ -21,8 +21,8 @@ update msg shown = match msg [
 # The canvas's box takes the drop (and the page does not open the file).
 view shown = div [
     style "display" "inline-block"
-    preventDefaultOn "dragover" (_ -> Hover)
-    preventDefaultOn "drop" (event -> null event.files ? Hover : Drop (head event.files))
+    preventDefaultOn "dragover" _ -> Hover
+    preventDefaultOn "drop" event -> null event.files ? Hover : Drop (head event.files)
 ] [canvas [setup: setup, draw: draw shown]]
 
 setup (Sketch p) = p.createCanvas 710 400
@@ -40,4 +40,4 @@ draw shown (Sketch p) = match shown [
     }
 ]
 
-main = browser.element [init: init, update: update, subscriptions: (_ -> browser.none), view: view]
+main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]

@@ -26,6 +26,6 @@ draw playing _ = playing ? video.loop : video.pause
 main = browser.element [
     init: init
     update: update
-    subscriptions: (_ -> browser.none)
+    subscriptions: _ -> browser.none
     view: view
 ]

@@ -97,9 +97,9 @@ value = Dynamic 41
 Int value + 1                         # 42; Int validates at runtime
 Int (Dynamic "hello")                 # runtime error
 
-((Int -> Int) increment) <- (Dynamic (x -> x + 1))
+((Int -> Int) increment) <- Dynamic (x -> x + 1)
 increment 41                          # 42
-((Int -> Int) bad) <- (Dynamic (x -> "hello"))
+((Int -> Int) bad) <- Dynamic (x -> "hello")
 bad 1                                 # runtime error: result is not an Int
 
 accept (Dynamic x) = x                 # explicit dynamic parameter
@@ -241,7 +241,7 @@ cellType _ = String
 SelectedType (isEven 4) 5              # Int: isEven 4 is true
 # SelectedType (isEven 3) 5            # static error: String is required
 # Vect (sizeFor 2) Int [1,2,3]         # static error: expected 4, got 3
-(cellType 1) "text"                    # String
+cellType 1 "text"                      # String
 ```
 
 What evaluation cannot decide is checked when the program runs, never
@@ -436,7 +436,7 @@ element type. Length-preserving operations keep their input's length: `map`,
 `zipWithIndex`, and `forceList`. `pairs record` has one pair per field. Your own
 functions carry lengths through too, including nested ones: a result that is an
 argument, a list literal of such results, or an argument passed through those
-operations (`twice xs = xs * (x -> x * 2)`, `h a b = [map f a, map f b]`). A
+operations (`twice xs = xs * x -> x * 2`, `h a b = [map f a, map f b]`). A
 fold, cons, append, or filter makes the length unknown. So
 `g [a,b] = ...; g (sort [2,1])` checks, `g (map f [1,2,3])` is a length
 error, and `[1,2] + [3,4,5]` is rejected before running. Lengths follow a
@@ -521,7 +521,7 @@ top level is followed through the top-level statements that can write it,
 which the checker runs in program order before checking each one: after
 `counter = Mutable 0; set counter 4`, `counter + 0` is 4. Within a statement
 that writes top-level cells, each part has the value that run gave it, so with
-`bump x = { set counter (counter + 1); counter + 0 }`, `(counter + 0) + bump 0`
+`bump x = { set counter (counter + 1); counter + 0 }`, `counter + 0 + bump 0`
 is 1 and `bump 0 + (counter + 0)` is 2; printing forces every element, in order.
 A top-level value that uses a top-level cell is followed where the program
 uses it: `snap = counter + 0` is computed at its first use and kept, and an
@@ -554,7 +554,7 @@ application, also when passed through a parameter: `filter (> 1) [1,2]` and
 does not fix the length of a parameter whose pattern leaves it open, so
 `go xs = null xs ? [] : go []` accepts lists of any length. So with
 `safe n = n > 0 ? Some n : None`, `f (safe 4)` uses the `Some` clause and
-`f (safe (-3))` the `None` one. Inside another function (`h v = g (f (safe v))`)
+`f (safe -3)` the `None` one. Inside another function (`h v = g (f (safe v))`)
 the decision waits for `h`'s calls, where `v` is known. Where a value stays
 unknown, every possible result counts. Evaluation is bounded in work, so very
 long computations fall back to that. Calls through a variable that holds a function are not
@@ -589,7 +589,7 @@ self f = f f
 self (ignored -> 123)              # 123
 # self 123                        # static type error: expected a function
 
-factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1)))
+factorial = (self -> n -> self self n) self -> n -> n == 0 ? 1 : n * self self (n - 1)
 factorial 5                       # 120
 ```
 
@@ -600,7 +600,7 @@ shared variables. Recursive diagnostics use `mu rec0. ...` to bind a recursive
 reference. This is inferred metadata, not new APN declaration syntax.
 
 Ordinary recursion, `x = x`, and self-application such as
-`(x -> x x) (x -> x x)` can be checked without executing them. Acceptance does
+`(x -> x x) x -> x x` can be checked without executing them. Acceptance does
 not guarantee termination. Recursive lazy values such as `xs = 1 :: xs` keep
 their existing runtime behavior.
 

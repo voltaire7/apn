@@ -48,4 +48,4 @@ draw model (Sketch p) = {
     }) [gap / 2, gap * 3 / 2..size]) [gap / 2, gap * 3 / 2..size]
 }
 
-main = browser.element [init: init, update: update, subscriptions: (_ -> browser.none), view: view]
+main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]

@@ -14,7 +14,7 @@ print (mean [])                         # None
 
 # A word-frequency leaderboard, with stable tie ordering.
 poem = "Time flies like an arrow fruit flies like a banana"
-leaderboard = sortOn (entry -> -(snd entry)) $ pairs $ frequencies $ words $ lower $ poem
+leaderboard = sortOn (entry -> -snd entry) $ pairs $ frequencies $ words $ lower $ poem
 leaderboard * [word,count] -> {
     print (format "%: %" [word,count])
 }

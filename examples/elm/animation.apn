@@ -6,7 +6,7 @@ import "playground"
 view time = [
     rotate (spin 3 time) $ moveLeft 100 $ octagon darkGray 36
     rotate (spin 3 time) $ moveRight 100 $ octagon darkGray 36
-    rotate (zigzag (-2) 2 8 time) $ moveUp (wave 50 54 2 time) $ rectangle red 300 80
+    rotate (zigzag -2 2 8 time) $ moveUp (wave 50 54 2 time) $ rectangle red 300 80
 ]
 
 main = animation view

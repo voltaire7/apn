@@ -18,7 +18,7 @@ Msg =
     | Released String Float
 
 init = [
-    [bubbles: (List Bubble) [], pressed: [0.0,0.0], creating: false]
+    [bubbles: List Bubble [], pressed: [0.0,0.0], creating: false]
     task.perform Loaded (readFile "assets/bubbles.csv")
 ]
 
@@ -66,7 +66,7 @@ view model = div [] [
         input [
             typeAttribute "file"
             accept ".csv"
-            onEvent "change" (event -> Picked event.files)
+            onEvent "change" event -> Picked event.files
         ] []
     ]
 ]
@@ -120,4 +120,4 @@ mouseReleased model (Sketch p) = when model.creating {
     p.send (Released (String name) (Float (dist x y p.mouseX p.mouseY)))
 }
 
-main = browser.element [init: init, update: update, subscriptions: (_ -> browser.none), view: view]
+main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]

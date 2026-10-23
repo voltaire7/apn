@@ -87,7 +87,7 @@ Deno.test({ name: 'escaped C pointers cannot access unloaded storage', ignore: !
     throw new Error('Expected closed-library error');
 } });
 Deno.test('C interop rejects ambiguous Int ABI before loading a library', () => {
-    try { run('ffi.withLibrary "missing" [f: ffi.function [Int] []] (c -> [])'); }
+    try { run('ffi.withLibrary "missing" [f: ffi.function [Int] []] c -> []'); }
     catch (e) { if (String(e).includes('fixed-width')) return; throw e; }
     throw new Error('Expected a fixed-width ABI error');
 });

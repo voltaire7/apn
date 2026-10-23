@@ -317,7 +317,7 @@ eval (toLambda { fact n = n == 0 ? 1 : n * fact (n - 1); fact 5 })   # 120
 
 A block's binding `x = e; rest` is `(x -> rest) e`, so a later binding of a
 name is an inner lambda shadowing it, as a new version does; `x <- e; rest` is
-`e >>= (x -> rest)`, and an action statement `s; rest` is `s >> rest`. A
+`e >>= x -> rest`, and an action statement `s; rest` is `s >> rest`. A
 binding that refers to itself is a fixed point, through Curry's Y combinator
 written out, so the result needs no library. A definition with several
 clauses, or patterns for parameters, is a lambda per argument and a `match`

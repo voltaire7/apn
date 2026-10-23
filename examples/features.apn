@@ -108,7 +108,7 @@ classify n = match n [
     x | x == 0 -> "zero"
     _ -> "positive"
 ]
-print (classify (-5))   # => negative
+print (classify -5)     # => negative
 print (classify 0)      # => zero
 print (classify 7)      # => positive
 
@@ -152,7 +152,7 @@ classM n = match n [
     x | x == 0 -> "zero"
     _ -> "positive"
 ]
-print (classM (-5))         # => negative
+print (classM -5)           # => negative
 print (classM 0)            # => zero
 print (classM 7)            # => positive
 
@@ -210,21 +210,21 @@ print (map (x -> x * 2) vals)    # => [200,400]
 
 # indexing by APPLICATION:  a list applied to a number is an element
 # (negative counts from the end); a list of indices selects several elements.
-#  arr -1  would be arithmetic, so use parens:  arr (-1)
+#  nums -1 passes -1 (a space before the - and none after); nums - 1 subtracts.
 nums = [10,20,30]
 print (nums 0)                    # => 10
 print (nums 1)                    # => 20
-print (nums (-1))                 # => 30
+print (nums -1)                   # => 30
 print (nums [0,2])              # => [10,30]
-print ((nums (-1)) + (nums 0))    # => 40
-print ((tail nums) 0)             # => 20   (index a computed list)
+print (nums -1 + nums 0)          # => 40
+print (tail nums 0)               # => 20   (index a computed list)
 nums [1,2] = nums [2,1]
 print nums                       # => [10,30,20]
-print ([String,Int].["x",1])  # => ["x",1]
-print ([(+ 1), (* 2)].[10,20])  # => [11,40]
+print [String,Int].["x",1]    # => ["x",1]
+print [(+ 1), (* 2)].[10,20]    # => [11,40]
 listTemplate = [Int,Float]
 listInput = [1,2]
-print (listTemplate.(listInput))  # => [1,2.0]
+print listTemplate.(listInput)    # => [1,2.0]
 
 print ([[1,2],[3,4]] 1 0)   # => 3    (nested indexing, left-assoc)
 
@@ -287,14 +287,14 @@ print (vector3 [x: 1, y: 2, z: 3])  # => [x: 1, y: 2, z: 3]   named override
 print (vector3 [z: 3, x: 1])        # => [x: 1, y: 0, z: 3]  reorder — y keeps default
 print (vector3 [x: 1, y: 2, z: 3, a: 0])  # => [x: 1, y: 2, z: 3, a: 0]  new field
 print vector3                       # => [x: 0, y: 0, z: 0]   prototype untouched
-print ((vector3 [1,2,3]).z)     # => 3     (.z chains over the clone)
+print (vector3 [1,2,3]).z       # => 3     (.z chains over the clone)
 print (vector3 1)                   # => ["y",0]   int index -> [field,value]
 
 # .[...] still exists, but as the QUOTED PLUCK:  a.[x,y]  gathers values
 # into a LIST;  a.[x: v1, y: v2]  keeps the fields under NEW keys.
-print (vector3.[x,y])             # => [0,0]
-print (vector3.[z,x,y])         # => [0,0,0]     reorder
-print (vector3.[x: first, y: second])   # => [first: 0, second: 0]  renamed
+print vector3.[x,y]               # => [0,0]
+print vector3.[z,x,y]           # => [0,0,0]     reorder
+print vector3.[x: first, y: second]     # => [first: 0, second: 0]  renamed
 
 # ---------------------------------------------------------
 # 7b. RECORD UPDATE —  vec.x = 10  rebinds vec to a MODIFIED COPY
@@ -349,7 +349,7 @@ print fresh                      # => [field: 1]
 larger a b = a > b ? a : b
 print (larger 4 9)            # => 9
 
-smallest a b c = (a < b ? a : b) < c ? (a < b ? a : b) : c
+smallest a b c = (a < b ? a : b) < c ? a < b ? a : b : c
 print (smallest 7 2 9)     # => 2
 
 # lazy arguments make `if` just a function — only the TAKEN branch runs
@@ -368,19 +368,19 @@ greeting = {
     hello = "Hello"
     hello ++ ", " ++ name ++ "!"
 }
-print (greeting)           # => Hello, world!
+print greeting             # => Hello, world!
 
 greeting = {
     [name,hello] = ["world","Hello"]
     hello ++ ", " ++ name ++ "!"
 }
-print (greeting)           # => Hello, world!
+print greeting             # => Hello, world!
 
 greeting = {
     [name,hello] = [hello: "Hello", name: "record"]  # fields by name
     hello ++ ", " ++ name ++ "!"
 }
-print (greeting)           # => Hello, record!
+print greeting             # => Hello, record!
 
 # A cons pattern takes a list apart, bare or parenthesized.
 first::rest = [1,2,3,4]
@@ -440,7 +440,7 @@ print (partialPick 1)                       # => y -> 1 + y
 
 print (map (10 -) [1,2,3])            # => [9,8,7]
 print (foldl (-) 100 [1,2,3])         # => 94   (a lone (-) subtracts)
-print (-2)                                # => -2  (a '-' against its operand negates)
+print -2                                  # => -2  (a '-' against its operand negates)
 print (map (- 2) [5,6])                   # => [3,4] (a spaced '-' subtracts: a section)
 
 # ---------------------------------------------------------
@@ -580,12 +580,12 @@ print (tailOf [1,2,3])          # => [2,3]
 # ranges are INCLUSIVE int lists (Haskell-style); the first two elements
 # give the STEP: [2,4..100] counts by 2 — and [0..] is INFINITE: print
 # streams it AS IT IS CONSTRUCTED (Ctrl+C breaks it).
-print ([0..5])                               # => [0,1,2,3,4,5]
-print ([5..3])                               # => [5,4,3]   (implicit step adapts)
-print ([0,1..-100])                         # => []          (explicit step, wrong way)
-print ([2,4..10])                          # => [2,4,6,8,10]
-print ([1+1..4])                             # => [2,3,4]   (bounds are constant arithmetic)
-print ([10..12+3])                           # => [10,11,12,13,14,15]
+print [0..5]                                 # => [0,1,2,3,4,5]
+print [5..3]                                 # => [5,4,3]   (implicit step adapts)
+print [0,1..-100]                           # => []          (explicit step, wrong way)
+print [2,4..10]                            # => [2,4,6,8,10]
+print [1+1..4]                               # => [2,3,4]   (bounds are constant arithmetic)
+print [10..12+3]                             # => [10,11,12,13,14,15]
 [0..3] * x -> print x                        # prints 0, 1, 2, 3
 #   print ([0..])                            # 0, 1, 2, ... forever
 #   [0..] * x -> print x                     # ditto
@@ -594,7 +594,7 @@ print ([10..12+3])                           # => [10,11,12,13,14,15]
 # list literals so it doesn't read as record syntax):
 print (0::[])                                 # => [0]
 print (0::1::[])                               # => [0,1]
-print [(0::[])]                               # => [[0]]
+print [0::[]]                                 # => [[0]]
 
 print (zipWith (+) [1,2,3] [10,20,30])  # => [11,22,33]
 
@@ -685,16 +685,16 @@ print (from String "42")      # => 42
 print []                     # => []            (empty list)
 print {}                     # => []            (empty block result)
 print { 5 }                  # => 5             (braces group like parens; spaces inside)
-print (5)                    # => 5             (parens group like braces)
+print (x = 2; x * 6)         # => 12            (parens group like braces)
 print (4 * 3)                # => 12
 print { 4 * 3 }              # => 12
 # print {5}, print { 5  }    # parse errors: exactly one space inside each brace
-# Spacing is syntax: x = 1, [1,2,3], [x: 1, y: 2], (x), { x }. A comma takes a
+# Spacing is syntax: x = 1, [1,2,3], [x: 1, y: 2], (f x), { x }. A comma takes a
 # space after it only when an item it separates has one: [1,2], but [1 + 1, 2];
 # lambda parameters always take one: x, y -> x. So x=1, [1, 2], [1 + 1,2],
 # x,y -> x, [x:1] and ( 1 ) are parse errors, as are f(x), f[1] and f{ x }
 # (application needs a space), a ',' ending a line (newlines separate items), and an operator spaced on one
-# side only (1 +2, 1+ 2; 1+2 and 1 + 2 are fine, and sqrt -1 is sqrt (-1)):
+# side only (1 +2, 1+ 2; 1+2 and 1 + 2 are fine, and sqrt -1 passes -1):
 layoutItems = [
     1,2
     3
@@ -704,13 +704,18 @@ print [1 + 1, 2]             # => [2,2]       (values print by the same rule)
 print [[x: 1], [y: 2]]       # => [[x: 1], [y: 2]]
 # A line is at most 99 characters, each literal and comment counting as one:
 print (123456789012345678901234567890123456789012345678901234567890 + 987654321098765432109876543210987654321098765432109876543210)  # => 1111111110111111111011111111101111111110111111111011111111100
-# apn --loose FILE relaxes every spacing rule.
+# Parentheses appear only where they change how code reads: print (5), (a * b) + c,
+# f ((g x)) and xs >>= (x -> f x) are parse errors. A lambda ending its expression
+# takes the rest, as a last argument too; f = (x -> e) keeps them (a value, where
+# f = x -> e is a clause of f), as do run (x -> e) and [(x, y -> e)].
+print ([1,2,3] >>= x -> [x, x * 10])  # => [1,10,2,20,3,30]
+# apn --loose FILE relaxes every spacing rule, and this one.
 
 group = { 1; 2; 3 }          # a 0-arg function: its body is the block
-print (group)                # => 3    (the parens run it)
+print group                  # => 3    (the parens run it)
 
 inlineBlock = { 1 + 1 }      # a same-line { } block
-print (inlineBlock)          # => 2
+print inlineBlock            # => 2
 
 # statements on one line separated by explicit `;`
 print "hello"; print ", world"        # prints: hello
@@ -731,7 +736,7 @@ both = {
     y = 2
     x + y
 }
-print (both)                 # => 42
+print both                   # => 42
 
 # blank lines inside a block are fine; statements still stop at same-level
 # newlines (implicit semicolons) and continue on +4-indented lines
@@ -763,7 +768,7 @@ spanArgs =
         3
         4
     ]
-print (spanArgs)              # => [1,2,3,4]
+print spanArgs                # => [1,2,3,4]
 
 # INVALID (the lexer rejects these; demoed in comments only):
 #   - a { that ends its own line with a body NOT indented by exactly +4:
@@ -775,9 +780,9 @@ print (spanArgs)              # => [1,2,3,4]
 # Leading-dot decimal literals are floats; ordinary binary float rounding applies.
 print (take 5 [0,0.5..100])  # => [0.0,0.5,1.0,1.5,2.0]
 print (length [0,0.5..100])  # => 201
-print ([0,0.5..100] (-1))   # => 100.0
+print ([0,0.5..100] -1)     # => 100.0
 print (.1 + .2)              # => 0.30000000000000004
-print (-.5)                 # => -0.5
+print -.5                   # => -0.5
 
 # List assignment rebinds a copy, like record field assignment.
 editable = [1,2,3]
@@ -802,14 +807,14 @@ print actionResult          # => 4
 actionValue                 # => action (each run repeats the effect)
 keepFirst x _ = x
 print (keepFirst 7 (Dynamic missingEvaluationArg)) # => 7 (unused argument is deferred)
-print (true ? 8 : (Dynamic missingEvaluationArg))  # => 8 (unselected branch is deferred)
+print (true ? 8 : Dynamic missingEvaluationArg)    # => 8 (unselected branch is deferred)
 # Lazy heads, tails, and recursive lists:
 ones = 1::ones
 fibs = 0 :: 1 :: zipWith (+) fibs (tail fibs)
 print (take 5 ones)          # => [1,1,1,1,1]
 print (take 12 fibs)         # => [0,1,1,2,3,5,8,13,21,34,55,89]
 print (take 4 (drop 5 fibs)) # => [5,8,13,21]
-print (head [1, (Dynamic missingEvaluationArg)]) # => 1 (unused element stays deferred)
+print (head [1, Dynamic missingEvaluationArg]) # => 1 (unused element stays deferred)
 print (take 4 (map (+ 1) [0..]))       # => [1,2,3,4]
 print (take 4 (filter (n -> n % 2 == 0) [0..])) # => [0,2,4,6]
 # In the REPL, entering ones or fibs streams until Ctrl+C.
@@ -892,7 +897,7 @@ scoped = {
     load "../lib/number"
     sq 6
 }
-print (scoped)              # => 36
+print scoped                # => 36
 
 print "still running before the final halt"
 
@@ -946,8 +951,8 @@ print launched             # => liftoff (on the same line)
 # ---------------------------------------------------------
 print (map (* 2) [1,2,3])               # => [2,4,6]
 print ((+ 1) <$> Some 41)                  # => Some 42
-print (Some 3 >>= (x -> x > 2 ? Some (x * 10) : None))  # => Some 30
-print ([1,2] >>= (x -> [x, x * 10]))      # => [1,10,2,20]
+print (Some 3 >>= x -> x > 2 ? Some (x * 10) : None)    # => Some 30
+print ([1,2] >>= x -> [x, x * 10])        # => [1,10,2,20]
 print ([(+ 1), (* 2)] <*> [10,20])        # => [11,21,20,40]
 return "chained" >>= print                 # => chained
 print "first" >> print "second"            # => first, then second
@@ -989,7 +994,7 @@ positive n = {
     guard (n > 0)
     return n
 }
-print [positive 3, positive (-1)]          # => [Some 3, None]
+print [positive 3, positive -1]            # => [Some 3, None]
 # A false guard throws its condition as written: in a Result block that is
 # Err "guard failed: ..."; unless (or when) names a specific error. check 2 runs only
 # returns; the checker finds the block's monad (Result) and the run uses it.
@@ -1096,8 +1101,8 @@ print (take 6 (iterate (x -> x * 2 + 1) 0))  # => [0,1,3,7,15,31]
 print [0xFF,0b11010100,0o235461]  # => [255,212,80689]
 print (1 / 3 + 1 / 6)               # => 1/2
 print (1 + 2.0)                     # => 3.0
-print [quotient (-7) 3, remainder (-7) 3, modulo (-7) 3] # => [-2,-1,2]
-print [sqrt 4, sqrt (9 / 16), sqrt (-1)] # => [2,3/4,0+1i]
+print [quotient -7 3, remainder -7 3, modulo -7 3] # => [-2,-1,2]
+print [sqrt 4, sqrt (9 / 16), sqrt -1] # => [2,3/4,0+1i]
 print (sqrt 2)                      # => 1.4142135623730951
 print (makeRectangular 1 2 * makeRectangular 3 4) # => -5+10i
 rectangular = makeRectangular 3 4
@@ -1111,7 +1116,7 @@ print [gcd 32 36, lcm 32 36, min 1 2.0, max 1 2.0] # => [4,288,1.0,2.0]
 print (rationalize .3 .1)            # => 0.3333333333333333
 print [exp 0, log 1, sin 0, cos 0, tan 0, asin 0, acos 1, atan 0] # => [1,0,0,1,0,0,0,0]
 print [0,1/2..2]                   # => [0,1/2,1,3/2,2]
-print (expt 2 (-3))                 # => 1/8
+print (expt 2 -3)                   # => 1/8
 print [1e3,.5e2,1.2e-3]         # => [1000.0,50.0,0.0012]
 print (from String (to String (makeRectangular 1 .5))) # => 1.0+0.5i
 print [isInfinite (1.0 / 0.0), isNaN (0.0 / 0.0)] # => [true,true]
@@ -1138,10 +1143,10 @@ print (sqrt -1 * 4)   # => 0+4i  ((sqrt -1) * 4)
 print (10 - 1)        # => 9
 print ((x -> x * 2) -3) # => -6
 
-print (2@0) # => 2
+print 2@0 # => 2
 print (isExact 2@0) # => true
 print (isExact 2@3) # => false
-print (2@3) # => -1.9799849932008908+0.2822400161197344i
+print 2@3 # => -1.9799849932008908+0.2822400161197344i
 
 # First-class checked numeric types and overloads.
 print (take 3 (100 * Int))           # => [0,1,2]
@@ -1166,7 +1171,7 @@ print (Vect 3 UInt (naturalsBelow 3))  # => [UInt 2, UInt 1, UInt 0]
 # (UInt k) binds the untyped payload, so these are plain integers, while
 # naturalsBelow's S k binds the predecessor, a UInt.
 belowTyped (UInt 0) = []
-belowTyped (UInt k) = (k - 1) :: belowTyped (k - 1)
+belowTyped (UInt k) = k - 1 :: belowTyped (k - 1)
 print (belowTyped 3)                 # => [2,1,0]
 print (Float32 .5)                   # => Float32 0.5
 print (Fraction (1/3))               # => Fraction 1/3
@@ -1212,19 +1217,19 @@ print cast                          # => its clauses, one pattern lambda per lin
 namedTemplates = [Int,Float]
 namedValues = [1,2]
 print namedTemplates.namedValues    # => [1,2.0]
-print ([namedValues: 42].namedValues) # => 42 (literal record field)
+print [namedValues: 42].namedValues # => 42 (literal record field)
 print ([x: 0] [123])                 # => [x: 123] (record default override)
 # Scalars are not callable: 0 123, "old" "new", and false true all error.
-print ([String,Bool,Char].["new",true,'b']) # => ["new",true,'b']
+print [String,Bool,Char].["new",true,'b'] # => ["new",true,'b']
 # ["old"].["new"], [0].[1], and [false].[true] error: scalar slots cannot be applied.
 print ([name: "old", enabled: false] [name: "new", enabled: true])
-print ([Int].[floor .2])             # => [0]
+print [Int].[floor .2]               # => [0]
 print ((* 2) * [1,2,3,4])     # => [2,4,6,8]
 print (cast String $ cast [Char,Char] $ "a😀") # => "a😀"
-print ([Char,Char,Char,Char,Char]."hello")          # => ['h','e','l','l','o']
-print ([Char,Char]."a😀")                # => ['a','😀']
+print [Char,Char,Char,Char,Char]."hello"            # => ['h','e','l','l','o']
+print [Char,Char]."a😀"                  # => ['a','😀']
 print (Int * [1,2,3,4])       # => [1,2,3,4]
-print ([Int,String].[123,"hello"]) # => [123,"hello"]
+print [Int,String].[123,"hello"] # => [123,"hello"]
 print (take 3 (map Int [0..]))         # => [0,1,2]
 print ([x: Int, y: 0] [x: 1, y: 2]) # => [x: 1, y: 2]
 print ([x: Int, y: Int] [x: 123])    # => [x: 123, y: 0]
@@ -1242,20 +1247,20 @@ recordSlots "y" = floor .2
 print recordSlots.y                 # => 0
 # recordSlots.y = Float .2           # error: lossy typed conversion
 # slots 1 = 1                       # error: slot 1 does not exist
-print ([].[])                    # => [] (no hidden element schema)
-print ([Int].[0])                   # => [0] (constructor application)
+print [].[]                      # => [] (no hidden element schema)
+print [Int].[0]                     # => [0] (constructor application)
 print ([10] 0)                      # => 10 (integer indexing)
 Count = Int
 Numbers = [Int]
 Point = [x: Float, y: Float]
 print (Count 123)                   # => Count 123 (an alias of Int names a subtype)
-print (Numbers.[1])                # => [1]
+print Numbers.[1]                  # => [1]
 print (Point [x: 1, y: 2])          # => [x: 1.0, y: 2.0]
 firstNumber (Numbers values) = head values
 print (firstNumber [123])           # => 123
 print (cast [Int,Int] [1,2])         # => [1,2]
 NumericOption a = Option a
-print ((NumericOption Int) (Some 123)) # => Some 123
+print (NumericOption Int (Some 123)) # => Some 123
 UserId = | MkUserId Int
 print (MkUserId 123)                # => MkUserId 123
 
@@ -1282,7 +1287,7 @@ print (Char 'a')         # => 'a'
 print []                # => []
 print (List [1,2])      # => [1,2]
 print (Record [x: 1])    # => [x: 1]
-print ((Function (x -> x + 1)) 2) # => 3
+print (Function (x -> x + 1) 2) # => 3
 print (Type Bool)        # => Bool
 
 myTypeOf (t _) = print t
@@ -1302,7 +1307,7 @@ myTypeOf (Int32 5)  # => Int32
 import ["http","json"]
 reply <- fetch "data:application/json,{\"ids\":[\"jawed\"]}" [method: "GET"]
 print [reply.status,reply.ok]               # => [200,true]
-print ((from JSON reply.body).ids)           # => ["jawed"]
+print (from JSON reply.body).ids             # => ["jawed"]
 print (to JSON [ids: ["jawed"], count: 1])   # => {"ids":["jawed"], "count":1}
 header = [Content-Type: "json", my value: 1] # bare keys may hold '-' and spaces
 print (header "Content-Type")                # => json  (not the quoted key "Content-Type")
@@ -1370,7 +1375,7 @@ print (metaEvalSyntax (toAST ((x -> x * 2) 21)))  # 42
 print (length "\r\v\f")                         # 3: whitespace escapes
 
 # Self-application, SKI, and fixed points, entirely in APN.
-selfFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1)))
+selfFactorial = (self -> n -> self self n) self -> n -> n == 0 ? 1 : n * self self (n - 1)
 print (selfFactorial 5)                         # 120
 print (combinators.S combinators.K combinators.K 42)  # 42
 print (combinators.Y (recur, n -> n == 0 ? 1 : n * recur (n - 1)) 5) # 120
@@ -1456,7 +1461,7 @@ leadingVowel limit = onlyOne (vowelOrPair (vowelIfShort (takeWhile (< limit) [1,
 print (leadingVowel 2)                                # 1
 # splitWhile splits where takeWhile stops (html's span is the HTML element).
 print (splitWhile (< 3) [1,2,3,1])                 # [[1,2],[3,1]]
-print (true ? (1 :: []) : [])                          # [1]
+print (true ? 1 :: [] : [])                            # [1]
 # Library code runs statically on known values: words, dropWhile, endless lists.
 wordVowel text = onlyOne (vowelOrPair (vowelIfShort (words text)))
 print (wordVowel "hello")                             # 1
@@ -1522,7 +1527,7 @@ print trail.points                            # [[0.0,0.0],[1.0,2.0]]
 # Mutable references retain identity across scopes and aliases.
 mutableCounter = Mutable 0
 {
-    set mutableCounter $ (mutableCounter + 1)
+    set mutableCounter $ mutableCounter + 1
 }
 print mutableCounter                         # 1
 counterAlias = mutableCounter
@@ -1532,7 +1537,7 @@ print mutableCounter                         # 2
 print (onlyOne (vowelOrPair (vowelIfShort (take (mutableCounter - 1) [7,8,9]))))  # 1
 # A statement may write and read them: each part sees the run's order.
 bumpCounter _ = {
-    set mutableCounter $ (mutableCounter + 1)
+    set mutableCounter $ mutableCounter + 1
     return (mutableCounter + 0)
 }
 counted <- bumpCounter 0
@@ -1554,13 +1559,13 @@ print (onlyOne (vowelOrPair (vowelIfShort (take mutableCounter [7,8,9]))))  # 1
 
 # p5 sketches are descriptions until built for the browser.
 p5 = import "p5"
-print (typeOf (p5.sketch [draw: (p -> p.background "black")])) # P5Program
+print (typeOf (p5.sketch [draw: p -> p.background "black"])) # P5Program
 # apn --html examples/browser/p5-sketch.apn p5-sketch.html
 
 # Elm-style programs (examples/elm; apn --site examples/elm site builds them
 # with an editor): commands and subscriptions are data the page runs, and
 # generators, decoders, times and shapes are ordinary values.
-print (typeOf (p5.canvas [draw: (p -> p.background "black")]))  # Html (a sketch inside a view)
+print (typeOf (p5.canvas [draw: p -> p.background "black"]))    # Html (a sketch inside a view)
 random = import "random"
 [roll,_] = random.step (random.int 1 6) (random.initialSeed 42)
 print (roll >= 1 && roll <= 6)                 # true
@@ -1718,9 +1723,8 @@ print (vectorPatternX [1,2,3])        # => 1.0 (also checked before execution)
 # REPL: typing ) on an indent-only line dedents one level, like ] and }.
 # Backspace after a lone ) restores the continuation indent; paste stays literal.
 # A closing parenthesis on its own line aligns with the opening line.
-print (
-    123
-)                                      # => 123
+print
+    123                                      # => 123
 # print (
 #     123
 #     )                                # indentation error
@@ -1730,7 +1734,7 @@ print ([1,2,3] + [10,20,30])         # => [11,22,33]
 print (2 * [[1,2],[3,4]])             # => [[2,4],[6,8]]
 print (10 - [1,2,3])                   # => [9,8,7]
 print ([1,2,3] / 2)                    # => [1/2,1,3/2]
-print (-[1,2,3])                       # => [-1,-2,-3]
+print -[1,2,3]                         # => [-1,-2,-3]
 print (take 3 ([0..] + [10..]))           # => [10,12,14]
 print ([x: 1, y: 2] + [y: 20, x: 10])   # => [x: 11, y: 22]
 ArrayVector = [x: Float, y: Float, z: Float]
@@ -1818,7 +1822,7 @@ deltas Up = [0,0]
 print (deltas Up)                   # => [0,0]
 print (Left + 1)                    # => 3
 print (Left * Right)                # => 6
-print (-Down)                       # => -1
+print -Down                         # => -1
 print (deltas (Down + 1))            # => [-1,0]
 
 # The linter warns if a known family's literal alternatives omit a case.
@@ -1835,12 +1839,12 @@ assert (compassName Up == "up")
 # Scoped cleanup runs after returned lazy data has been evaluated.
 import "function"
 released = Mutable false
-bracketed <- bracket 42 (_ -> set released true) (n -> [n, n + 1])
+bracketed <- bracket 42 (_ -> set released true) n -> [n, n + 1]
 print bracketed                    # => [42,43]
 print released                     # => true
 import "io"
 # A read-only OS device keeps the showcase independent of its working directory.
-nothing <- withFile "/dev/null" (file -> file.read)
+nothing <- withFile "/dev/null" file -> file.read
 print nothing                      # => empty line
 
 # Dot field spellings are literal string keys, including punctuation.
@@ -1869,8 +1873,8 @@ print (typeOf (1 :: ["hello"]))         # => List (Int | String)
 # Empty results are lists; conditions use truthiness.
 print ({} == [])                        # => true
 print (Bool * [0,1,"","hello",[],[0]])  # => [false,true,false,true,false,true]
-print (0 && (Dynamic missingTruthinessName))        # => false; right side is skipped
-print (1 || (Dynamic missingTruthinessName))        # => true
+print (0 && Dynamic missingTruthinessName)          # => false; right side is skipped
+print (1 || Dynamic missingTruthinessName)          # => true
 print (filter (x -> x) [0,1,2])      # => [1,2]
 print (match 42 [_ | [] -> 0, x | 1 -> x]) # => 42
 
@@ -1963,7 +1967,7 @@ makeOne ((IntMaker) k) = k []
 print (makeOne (_ -> 7))                # => 7
 cellType 0 = Int
 cellType _ = String
-print ((cellType 1) "text")             # => text
+print (cellType 1 "text")               # => text
 # A type chosen by a parameter is decided at each run: a runtime check.
 labelled n = SelectedType (n > 3) "few"
 print (labelled 2 ++ "!")               # => few!
@@ -2026,7 +2030,7 @@ print (bracePattern 2)              # => 3
 # Strict --check rejects unresolved operations elsewhere in this full showcase.
 inferredSelf f = f f
 print (inferredSelf (_ -> 123))       # => 123
-inferredFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1)))
+inferredFactorial = (self -> n -> self self n) self -> n -> n == 0 ? 1 : n * self self (n - 1)
 print (inferredFactorial 5)                 # => 120
 # loop x = loop x and x = x remain legal; checking never executes them.
 
@@ -2133,8 +2137,8 @@ print (inspectSingle ["hello"])          # => [String,"hello"]
 # Named list selection, positional templates, and named schema-pattern input.
 print ([10,20,30] [first: 0, last: 2])  # [first: 10, last: 30]
 print ([Int] [x: 0])                   # [x: Int]
-print ([Float].[x: 1])                 # [x: 1.0]
-print ([String,Int].[name: "a", age: 2]) # [name: "a", age: 2]
+print [Float].[x: 1]                   # [x: 1.0]
+print [String,Int].[name: "a", age: 2] # [name: "a", age: 2]
 inspectNamedSlot ([t] [x]) = [t,x]
 print (inspectNamedSlot [1])           # [Int,1]
 print (inspectNamedSlot [other: 2, x: 1]) # [Int,1]

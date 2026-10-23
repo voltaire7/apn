@@ -39,11 +39,11 @@ _isOperator _ = false
 # (application binds tightest) or an operator binding tighter, or as tight on
 # its associativity's side.
 _infixOperand outer side syntax = _isInfix syntax
-    ? (_binds outer side (head syntax) ? _fromAST syntax : "(" ++ _fromAST syntax ++ ")")
+    ? _binds outer side (head syntax) ? _fromAST syntax : "(" ++ _fromAST syntax ++ ")"
     : _isCall syntax ? _fromAST syntax : _operand syntax
-_isInfix (function :: args) = length args == 2 && _isOperator function && !(_tag function)
+_isInfix (function :: args) = length args == 2 && _isOperator function && !_tag function
 _isInfix _ = false
-_isCall (function :: _ :: _) = !(_tag function)
+_isCall (function :: _ :: _) = !_tag function
 _isCall _ = false
 _binds outer side inner = {
     [precedence,associativity] = intrinsics.fixity outer

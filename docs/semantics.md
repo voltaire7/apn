@@ -72,7 +72,7 @@ and `[1]::[[3,4]]` is `[[1],[3,4]]`. It never joins lists; that is `++`
 (`[1,2] ++ [3,4]` is `[1,2,3,4]`).
 
 `( )` and `{ }` are interchangeable statement groups. Their value is the last
-statement's value (`(4 * 3)` and `{ 4 * 3 }` are both `12`), and an empty group is
+statement's value (`(x = 4; x * 3)` and `{ x = 4; x * 3 }` are both `12`), and an empty group is
 `[]`. Definitions inside a group are local to it:
 `x = 1; y = { x = 40; x + 2 }` leaves `x` as `1` and `y` as `42`.
 There are no tuples: `(1, 2)` is a syntax error; use a list such as
@@ -95,20 +95,20 @@ Spacing is part of the syntax (a parse error otherwise):
   multi-line list or record puts one item per line without commas (or several
   per line, `1,2`, separated by commas).
 - Application is juxtaposition with a space, also before a list, a group or a
-  block: `Vector3 [1,2,3]`, `func (123)` and `run { x }`, not `Vector3[1,2,3]`,
-  `func(123)` or `run{ x }` (a `[`, `(` or `{` directly after a name, literal
+  block: `Vector3 [1,2,3]`, `func (f x)` and `run { x }`, not `Vector3[1,2,3]`,
+  `func(f x)` or `run{ x }` (a `[`, `(` or `{` directly after a name, literal
   or closing bracket is an error). Selections keep their dot: `v.[x,y]`,
   `v.(key)`, `obj.{ x + 1 }`.
 - A binary operator has a space on both sides or neither: `1 + 2` or `1+2`,
   not `1 +2` or `1+ 2`, except that a space before `-` or `!` alone passes a
-  negated argument: `f -1` is `f (-1)` and `f !b` is `f (!b)`. A `-` written
+  negated argument: `f -1` passes `-1` and `f !b` passes `!b`. A `-` written
   against its operand negates it (`-x`, `-(1/3)`, `-[1,2,3]`, `[-1]`,
   `a == -1`); a spaced one always subtracts, so `y = - 3` is an error and
   `(- 2)` a section. Before a closing bracket an operator ends a section
   (`(1 +)`).
 - A record field is `key: value`, not `key:value`: `[x: 1]`, not `[x:1]`;
   likewise keyed patterns and selections (`[x: a, y: b]`).
-- `( )` and `[ ]` take no space inside (`(123)`, `[1,2]`); a `{ }` block on one
+- `( )` and `[ ]` take no space inside (`(f x)`, `[1,2]`); a `{ }` block on one
   line takes exactly one (`{ 123 }`, not `{123}` or `{ 123  }`). Empty groups
   are `()`, `[]` and `{}`.
 - Across lines, a bracket ending its line (before an optional comment) and a
@@ -118,7 +118,24 @@ Spacing is part of the syntax (a parse error otherwise):
   at the end of a line, at the start of one, doubled (`;;`), or next to a
   bracket's inside (`{ print 1; }`) is an error. `--loose` lifts all of
   these, so `{ print 1;print 2 }` and a `;` at a line's end are accepted there.
-  It lifts the 99-character line limit too.
+  It lifts the 99-character line limit, and the parentheses rule below, too.
+
+Parentheses appear only where they change how code reads: a group that reads
+the same without them is a parse error (`unnecessary parentheses`). So
+`print 5`, `print r.x`, `f -1`, `a + b * c`, `(f x) y` as `f x y`, and a lambda
+that ends its expression takes the rest without them: `xs >>= x -> f x`, and as
+a last argument `withFile "notes" file -> file.read`. They stay where they group
+differently, as in `(a + b) * c`, `f (g x)`, `(-2) ^ 2`, `-(-x)` and
+`xs >>= (x -> f x) >>= g`, or where the bare spelling means something else:
+
+- `f = (x -> e)` binds a value, while `f = x -> e` is a clause of `f`;
+- `run (x -> e)`: `run x -> e` reads `run x` as the lambda's typed parameter;
+- `[(x, y -> e)]`: in a list, the `,` would separate two items;
+- `xs (i) = v` sets an item, while `xs i = v` defines `xs`;
+- `obj.[(k)]` selects the computed key `k`, and `(r.1).2` is not `r.1.2`, which
+  reads the number `1.2`.
+
+Patterns are not checked: `len (_ :: rest) = ...` keeps its parentheses.
 
 Lists print the same way: `print [1,2,[3]]` shows `[1,2,[3]]` and records show
 `[x: 1, y: 2]`. A list prints its items once its `,` is decided: when an item
@@ -166,7 +183,7 @@ Operator sections: `(+ 2)` is `x -> x + 2`, `(2 +)` is `x -> 2 + x`, and a lone
 operator `(+)` is the function `+` is bound to, so `(+) a b` is `a + b` in every
 way, its checking included (as `negate x` is `-x` and `not x` is `!x`). `-` works in the same positions:
 `(- 2)` is `x -> x - 2`, `(10 -)` is `x -> 10 - x` and `(-)` subtracts, while
-`(-2)` is the number.
+`-2` is the number (`(-2) ^ 2` is `4`).
 
 ### Iteration and ranges
 
@@ -237,7 +254,7 @@ value converts as an argument converts for `f (Int x)`, so `Float y = 1`
 binds `1.0` and `Int z = 2.5` is a lossy-conversion error. A value the
 checker knows (a negated or parenthesized literal, or a constant such as
 `0 - 1` or `k * 3`) is converted statically, so `UInt n = -1` is a static
-error, and so is a call such as `g (-1)` or `g (k * 3)` for `g (UInt n)`. Later
+error, and so is a call such as `g -1` or `g (k * 3)` for `g (UInt n)`. Later
 assignments keep the type (`x = "a"` is a type error). Built-in type names
 cannot be redefined, so `Int x = ...` is always this binding; `Int = 5` and
 `Int x y = 5` remain errors.
@@ -541,7 +558,7 @@ Each run of a do-block starts a fresh scope for the statements from that point
 on, so running an action twice repeats its effects and its bindings. A recursive
 action (`loop n = { print n; loop (n + 1) }`) runs its last statement in place,
 in constant stack. Using an action where a value is needed is an error that
-says so: `(print 1) + 1`, `(readFile "f").x`, `action ? a : b`. Bind the result first.
+says so: `print 1 + 1`, `(readFile "f").x`, `action ? a : b`. Bind the result first.
 
 `<-` is a statement binding, not a function-definition form or chainable binary
 operator. `f x <- ...`, `x <- y <- ...`, and missing right-hand sides are invalid.
@@ -592,7 +609,7 @@ takes the monad of the first context that names one:
 
 - an annotation: `Option Int { return 42 }` is `Some 42`, `List Int { return 43 }`
   is `[43]`, `IO Int { return 44 }` an action yielding 44;
-- a `>>=` with a concrete value: `Some 3 >>= (x -> return (x * 2))` is `Some 6`;
+- a `>>=` with a concrete value: `Some 3 >>= x -> return (x * 2)` is `Some 6`;
 - running it: a statement or `<-` runs it as IO.
 
 Until then it stays undecided, so one `return` value can be used in several
@@ -673,7 +690,7 @@ its call wrote it, as `assert` shows its expression (`guard b` names `b`).
 | `return x` | `x` in the monad the context decides |
 | `mf <*> mx` | the function `mf` holds, applied to what `mx` holds |
 | `m >>= f` | `f` applied to what `m` holds or yields, flattened (`f` must be a function: to run a value after `m`, use `>>`) |
-| `m >> k`, `f =<< m` | `m >>= (_ -> k)`; `m >>= f` |
+| `m >> k`, `f =<< m` | `m >>= _ -> k`; `m >>= f` |
 | `sequence actions` | runs each action, yielding the list of results |
 | `mapM f xs` | `sequence (map f xs)` |
 | `when c m`, `unless c m` | `m >> return []` when `c` is true (false), else `return []`: in any monad (`unless ok (Err e)`) |
@@ -777,7 +794,7 @@ its expression-inspection/evaluation rules demonstrated in `examples/features.ap
 `to String` demands its argument and collects its full rendering into a string.
 Values render as source writes them: strings and characters escaped
 (`"a\"b"`), a constructor argument that is itself
-compound is parenthesized (`Some (Some 1)`, `Distance (-2)`), operators show
+compound is parenthesized (`Some (Some 1)`, but `Distance -2`), operators show
 as sections (`(+)`, `(+ 1)`, and `(1 +)` for `(+)` applied to 1). A function
 with several clauses shows each as a pattern lambda on its own line:
 `f (Int x) = 1; f (Float x) = 2` prints `Int x -> 1` and `Float x -> 2`
@@ -914,14 +931,14 @@ value that depends on an enclosing function's parameter is checked at that
 function's calls, by value, as a direct call would be: with
 `Pt = [x: Float, y: Float]` and `g (Pt p)`, `h x = g x` accepts `h [1,2]` as
 `g [1,2]` does, and `h x = g [x,-x]` rejects `h 2` for `[x: UInt, y: UInt]`
-but accepts `h 0`. For numbers: `h (-2)` passes `2` to `g`, and `h x = g x` accepts `h 2` and rejects
-`h (-2)` and `h "a"`. Such calls are checked even if `h` is never called: a
+but accepts `h 0`. For numbers: `h -2` passes `2` to `g`, and `h x = g x` accepts `h 2` and rejects
+`h -2` and `h "a"`. Such calls are checked even if `h` is never called: a
 call of `h` inside another, uncalled function (`d y = h 2`) is checked with
 its value, and `h`'s own definition is checked by type, so a parameter `h`
 also uses as a String cannot reach `g (UInt n)`. The error points at the call
 that supplies the value, or at `g x` when `h`'s definition alone decides it.
 Numeric subtraction is unchanged. Precedence and associativity are unchanged:
-`sqrt -1 * 4` means `sqrt -(1 * 4)`, while `sqrt -1 + 2` means
+`sqrt -1 * 4` means `(sqrt -1) * 4`, as `sqrt -1 + 2` means
 `(sqrt -1) + 2`. Use parentheses when a different grouping is intended.
 
 Polar literals use `radius@angle`, e.g. `2@3`, with angles in radians.
@@ -971,7 +988,7 @@ round-tripping decimal); `Float (Int 9007199254740993)` rounds to
 
 Integer constructors remain lossless: `Int .2` and `Int (Float .2)` both error.
 Choose integer rounding explicitly: `Int (floor .2)` is `0`, while
-`Int (truncate (-1.7))` is `-1`. Fixed-width integer overflow and nonzero
+`Int (truncate -1.7)` is `-1`. Fixed-width integer overflow and nonzero
 imaginary-part loss remain errors. Typed parameter matching, function contracts,
 and assignment to existing numeric slots remain lossless. Floating arithmetic
 adapts flexible Float operands as described below.
@@ -1127,7 +1144,7 @@ loading retains its existing definition behavior.
 `x = Mutable 0` allocates a shared cell when first used (an IORef); functions
 taking arguments can create independent cells. A cell holds values of its
 first contents' type (`Mutable [0,0]` holds pairs); one made from a
-conversion holds that type's values, so `Mutable ((List [Int,Int]) [])`, or a
+conversion holds that type's values, so `Mutable (List [Int,Int] [])`, or a
 record schema's value (`Mutable (Body [...])`), holds lists of any length where
 the type says `List`. Like a cell, a stateful object a definition makes (a
 [p5](p5.md) object such as `loadImage "a.png"`) is made once, where the

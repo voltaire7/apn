@@ -10,6 +10,12 @@ function session(): Interpreter {
     return i;
 }
 const shown = (i: Interpreter, source: string, raw = false) => i.renderString(i.run(parse(source)), raw);
+// f applied to source, in parentheses only where they are needed.
+function applied(f: string, source: string): string {
+    const grouped = `${f} (${source})`;
+    try { parse(grouped); } catch (e) { if (/unnecessary parentheses/.test(String(e))) return `${f} ${source}`; }
+    return grouped;
+}
 
 for (const [source, expected] of [
     ["f x + 1", '["+",["f","x"],1]'],
@@ -29,21 +35,21 @@ for (const [source, expected] of [
     ["(2 +)", '["+",2]'],
     ["1 + missing", '["+",1,"missing"]'],
 ] as const) Deno.test(`toAST: ${source}`, () => {
-    const actual = shown(session(), `toAST (${source})`);
+    const actual = shown(session(), applied("toAST", source));
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 
 // fromAST writes source that reads back as the same Expr.
 for (const source of [
-    "f x + 1", "1 + 2 * 3", "(1 + 2) * 3", "f (g x) (-1)", '"a\\"b\\n"', "'c'", "[1,2,[3]]", "[1 + 1, 2]",
+    "f x + 1", "1 + 2 * 3", "(1 + 2) * 3", "f (g x) -1", '"a\\"b\\n"', "'c'", "[1,2,[3]]", "[1 + 1, 2]",
     "[x: 1, y: [2,3]]", "r.x.y", "xs.(i + 1)", "r.[a,b]", "[1,3..9]", "[0..]", "c ? 1 : 2",
     "x, y -> x * y", "(Int n), [a,b] | n > 0 -> a", "{ a <- return 1; print a }", "[x = 1, x + 1]",
     "f n = n * 2", "x :: xs = ys", "!b", "map (+ 1) xs", "head $ [1,2]", "{}", 'import ["option","map"]',
     "Some (Some 1)", "-x ^ 2", "n -> match n [0 -> 1, _ -> 2]", "(+)", "(- 2)", "(10 -)",
 ]) Deno.test(`fromAST round trip: ${source}`, () => {
     const i = session();
-    const written = shown(i, `fromAST (toAST (${source}))`, true);
-    const again = shown(i, `toAST (${written})`), original = shown(i, `toAST (${source})`);
+    const written = shown(i, applied("fromAST", applied("toAST", source)), true);
+    const again = shown(i, applied("toAST", written)), original = shown(i, applied("toAST", source));
     if (again !== original) throw new Error(`${written}: ${again} != ${original}`);
 });
 

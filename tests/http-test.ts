@@ -28,7 +28,7 @@ for (const [source, expected] of [
     ['import "json"; to JSON [1..3]', '"[1,2,3]"'],
     ['import "json"; prettyJson [a: [1]]', '"{\\n  \\"a\\": [\\n    1\\n  ]\\n}"'],
     ['import "json"; from JSON "{\\"status\\": 1, \\"odd-key\\": [true, null, 2.5]}"', '[status: 1, odd-key: [true,[],2.5]]'],
-    ['import "json"; (from JSON "{\\"odd-key\\": 3}") "odd-key"', '3'],
+    ['import "json"; from JSON "{\\"odd-key\\": 3}" "odd-key"', '3'],
     ['import "json"; v = [a: [1,2], b c: "x", Content-Type: 1, "q": 2]; from JSON (to JSON v) == v', 'true'],
     ['import "json"; from JSON "123456789012345678901234567890"', '123456789012345678901234567890'],
     ['import "json"; from JSON "\\"\\\\u00e9\\""', '"é"'],

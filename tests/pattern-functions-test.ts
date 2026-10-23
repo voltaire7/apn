@@ -21,7 +21,7 @@ for (const [code, expected] of [
     ['match [3] [head]', '3'],
     ['f 0 = 9; f 1 = 8; match 1 [f, _ -> 0]', '8'],
     ['func ((Int -> Int) f) = Int { f 123 }; func (*2)', '246'],
-    ['((Int -> Int) identity) <- return ((x -> x))\nTransform = typeOf identity\nfunc (Transform f) = Int { f 123 }\nfunc (*2)', '246'],
+    ['((Int -> Int) identity) <- return (x -> x)\nTransform = typeOf identity\nfunc (Transform f) = Int { f 123 }\nfunc (*2)', '246'],
     ['func ((Int -> Int) f) = 42; func (x -> missing)', '42'],
     ['func ((Int -> Int) f) = f 2.0; func (*2)', '4'],
     ['func ((Int -> Int -> Int) f) = f 2 3; func (x, y -> x + y)', '5'],
@@ -78,7 +78,7 @@ Deno.test("match is intrinsic and has no public attempt protocol", () => {
 });
 
 Deno.test("match traverses many rejected alternatives without recursive dispatch", () => {
-    if (result('match 1 ((map (n -> (0 -> 0)) [1..10000]) ++ [_ -> 42])') !== '42') throw new Error('dispatch failed');
+    if (result('match 1 (map (n -> 0 -> 0) [1..10000] ++ [_ -> 42])') !== '42') throw new Error('dispatch failed');
 });
 
 Deno.test("guards accept truthy numbers", () => {

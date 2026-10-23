@@ -26,7 +26,7 @@ for (const [source, expected] of [
     ['[.2 == Float .2, Int 1 == Float 1, Int32 1 == 1]', '[true,true,true]'],
     ['cast Bool true', 'true'],
     ['take 1 (cast List [1,missing])', '[1]'],
-    ['((Int -> Int) identity) <- return ((x -> x)); (cast (typeOf identity) (x -> x + 1)) 2', '3'],
+    ['((Int -> Int) identity) <- return (x -> x); cast (typeOf identity) (x -> x + 1) 2', '3'],
     ['Float .2 + .3', '0.5'],
     ['Int 1 + .2', '1.2'],
 ] as const) Deno.test(`APN cast: ${source}`, () => {
@@ -35,8 +35,8 @@ for (const [source, expected] of [
 });
 for (const [source, error] of [
     ['Int .2', 'lossy conversion'],
-    ['Int (-.2)', 'lossy conversion'],
-    ['Int (-1.7)', 'lossy conversion'],
+    ['Int -.2', 'lossy conversion'],
+    ['Int -1.7', 'lossy conversion'],
     ['Int (1/3)', 'lossy conversion'],
     ['Int (.1 + .1)', 'lossy conversion'],
     ['cast Int (Float .2)', 'lossy conversion'],
@@ -58,7 +58,7 @@ for (const [source, error] of [
     ['Count = Int\nf (Count x) = x\nf .2', 'no clause'],
     ['Int8 128', 'out of range'],
     ['cast Int8 (Int 128)', 'out of range'],
-    ['cast UInt (Int (-1))', 'negative integer'],
+    ['cast UInt (Int -1)', 'negative integer'],
     ['cast Int (Complex (1+2i))', 'real number'],
     ['cast Int "hi"', 'expects a number'],
     ['cast (x -> x) 1', 'no clause'],

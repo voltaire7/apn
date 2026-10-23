@@ -82,7 +82,7 @@ draw model (Sketch p) = {
     material model p
     p.ambientLight 128
     p.call "spotLight" [255, 255, 255, 0, -p.height / 2, 200, 0, 0.5, -1, 30]
-    p.translate 0 (-25)
+    p.translate 0 -25
     p.scale 4
     p.rotateZ 180
     p.model astronaut
@@ -114,4 +114,4 @@ ambientSpecular model (Sketch p) = {
     when (model.on Specular) (p.specularMaterial (model.colors Specular))
 }
 
-main = browser.element [init: init, update: update, subscriptions: (_ -> browser.none), view: view]
+main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]

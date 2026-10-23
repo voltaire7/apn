@@ -111,7 +111,7 @@ for (const [source, expected] of [
     ['obj = [(x): [y: 42]]\n(obj "(x)").y', '42'],
     ['obj = [((x)): 4, (): 5]\n[obj "((x))", obj "()"]', '[4,5]'],
     ['obj = [(x + 1): 6]\nobj "(x + 1)"', '6'],
-    ['obj = [-1: 1]\n[obj.-1 - 1, obj (-1)]', '[0,["-1",1]]'],
+    ['obj = [-1: 1]\n[obj.-1 - 1, obj -1]', '[0,["-1",1]]'],
 ] as const) Deno.test(`literal extended field names: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

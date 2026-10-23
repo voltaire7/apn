@@ -93,7 +93,7 @@ Deno.test('one-line brackets: exactly one space inside braces, none inside ( ) a
         }
         throw new Error(`accepted: ${source}`);
     }
-    for (const source of ['{ 123 }', '{}', '()', '[]', '(123)', '[1,2]', 'f x = {\n    x\n}', 'f x = {  # note\n    x\n}', 'xs = [\n    1\n]', 's = "{x}"', 'print { 1 }  # c', 'obj = [x: 1]; obj.{ x + 1 }']) parseDocument(source);
+    for (const source of ['{ 123 }', '{}', '()', '[]', '123', '[1,2]', 'f x = {\n    x\n}', 'f x = {  # note\n    x\n}', 'xs = [\n    1\n]', 's = "{x}"', 'print { 1 }  # c', 'obj = [x: 1]; obj.{ x + 1 }']) parseDocument(source);
 });
 Deno.test('spacing at =, commas and record colons', () => {
     for (const source of ['x=1', 'x =1', 'x= 1', 'x  = 1', 'x =  1', '[1, 2]', '[1 ,2]', '[1 , 2]', '[1,  2]', '[x: 1,y: 2]', '[x: 1 , y: 2]', '[x: 1,  y: 2]',
@@ -110,7 +110,7 @@ Deno.test('spacing at =, commas and record colons', () => {
     }
     for (const source of ['x = 1', 'f x = x + 1', 'z =\n    5', '[1,2,3,4]', '[[1,2],[3]]', '[x: 1, y: 2]', '[x: [1,2], y: 3]', '[-1: 1, (x): 2]',
             'f [x: a, y: b] = a', 'f (x::xs) = x', 'xs = [\n    1\n    2\n]', 'r = [\n    a: 1\n    b: 2\n]', 'xs = [\n    1,2\n    3\n]',
-            'func x = x; func (123)', 'f x = x; f { 1 }', 'obj = [x: 1]; obj.{ x + 1 }', 'v = [x: 1, y: 2]; v.[x,y]', 'v = [x: 1, y: 2]; v.[x: a, y: b]',
+            'func x = x; func 123', 'f x = x; f { 1 }', 'obj = [x: 1]; obj.{ x + 1 }', 'v = [x: 1, y: 2]; v.[x,y]', 'v = [x: 1, y: 2]; v.[x: a, y: b]',
             'V = [x: Int, y: Int]; v = V [1,2]', 'x = 1::[2]', '[[1],[2]]', '[1 + 1, 2]', '[[1 + 1, 2], [3]]', '["a b","c"]', '[0,-1,1/2,v.x]',
             'x, y -> x', '(Int x), y -> x', '1+2', 'f x = x; f -1', '(1 +)', '(+ 1)', 'a = 1; a == -1', 'xs = [\n    1,2\n    3 + 1, 4\n]']) parseDocument(source);
 });

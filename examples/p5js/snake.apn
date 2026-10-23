@@ -5,7 +5,7 @@ import ["p5","sequence"]
 [gridWidth,gridHeight,startingSegments] = [30,30,10]
 # The snake's cells from its head (a list of any length), its direction, the
 # fruit, the scores and whether a game is on.
-segments = Mutable ((List [Int,Int]) [])
+segments = Mutable (List [Int,Int] [])
 direction = Mutable "right"
 fruit = Mutable [0,0]
 score = Mutable 0

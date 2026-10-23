@@ -9,7 +9,7 @@ for (const [source, expected] of [
     ['head (head (enumerate [missing]))', '0'],
     ['head (enumerate (42::missing))', '[0,42]'],
     ['enumerate [10,20] * [i,x] -> typeOf i', '[Int,Int]'],
-    ['(enumerate [10,20]) 1', '[1,20]'],
+    ['enumerate [10,20] 1', '[1,20]'],
 ] as const) Deno.test(`enumerate numeric indices: ${source}`, () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(source)));

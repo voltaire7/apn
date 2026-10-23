@@ -83,7 +83,7 @@ draw (Sketch p) = {
     layer.begin
     p.background 255
     p.ambientLight 100
-    p.directionalLight [255,255,255] (-1) 1 (-1)
+    p.directionalLight [255,255,255] -1 1 -1
     p.ambientMaterial [255,0,0]
     p.fill [255,255,100]
     p.specularMaterial 255

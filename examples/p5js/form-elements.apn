@@ -54,4 +54,4 @@ draw model (Sketch p) = {
     p.text "What is your favorite food?" 25 200
 }
 
-main = browser.element [init: init, update: update, subscriptions: (_ -> browser.none), view: view]
+main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]

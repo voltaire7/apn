@@ -231,7 +231,7 @@ func ((Int -> Int) f) = Int {
 }
 func (*2)                       # 246 (typed Int)
 
-((Int -> Int) increment) <- (x -> x + 1)
+((Int -> Int) increment) <- x -> x + 1
 increment 123                  # 124
 ```
 

@@ -30,11 +30,11 @@ failure toMessage status reason = toMessage
     (Err (status == 0 ? NetworkError : status == -1 ? BadBody reason : BadStatus status))
 expectString toMessage = [
     json: false
-    success: (body -> toMessage (Ok body))
+    success: body -> toMessage (Ok body)
     failure: failure toMessage
 ]
 expectJson toMessage decoder = [
     json: true
-    success: (value -> toMessage (mapError BadBody (_decode.decodeValue decoder value)))
+    success: value -> toMessage (mapError BadBody (_decode.decodeValue decoder value))
     failure: failure toMessage
 ]

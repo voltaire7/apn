@@ -2,7 +2,7 @@ import "combinator"
 
 # The supplied Scheme expression, translated directly. "self" replaces "!",
 # which APN reserves for logical negation. The definition never names itself.
-selfFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * (self self (n - 1)))
+selfFactorial = (self -> n -> self self n) self -> n -> n == 0 ? 1 : n * self self (n - 1)
 print (selfFactorial 5)                       # 120
 
 # The recursion recipe is separate from the mechanism that ties its knot.

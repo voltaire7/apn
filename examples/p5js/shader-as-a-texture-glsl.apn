@@ -137,10 +137,10 @@ draw (Sketch p) = {
     theShader.setUniform "mouse" [p.mouseX, remap p.mouseY 0 p.height p.height 0]
     p.shader theShader
     # A sphere and a circle, painted by the shader.
-    p.translate (-150) 0
+    p.translate -150 0
     p.push
-    p.rotateX (-p.mouseY)
-    p.rotateY (-p.mouseX)
+    p.rotateX -p.mouseY
+    p.rotateY -p.mouseX
     p.sphere 125
     p.pop
     # A fifth argument smooths the circle's edge in 3D.

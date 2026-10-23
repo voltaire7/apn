@@ -11,8 +11,8 @@ const run = (source: string) => { const i = new Interpreter(); return i.renderSt
 for (const source of [
     ELEM + "Elem (isEven 4) 5",
     ELEM + "big n = n > 3; Elem (big 5) 7",
-    "elemType flag = flag ? Int : String; (elemType (3 > 1)) 5",
-    "cell 0 = Int; cell _ = String; (cell 1) \"s\"",
+    "elemType flag = flag ? Int : String; elemType (3 > 1) 5",
+    "cell 0 = Int; cell _ = String; cell 1 \"s\"",
     "fib 0 = 0; fib 1 = 1; fib n = fib (n - 1) + fib (n - 2); Vect (fib 5) Int [1,2,3,4,5]",
 ]) {
     Deno.test(`a type computed by known code is decided: ${source}`, () => {
@@ -23,8 +23,8 @@ for (const source of [
 
 for (const [source, message] of [
     [ELEM + "Elem (isEven 4) \"s\"", "cannot use String where Int is required"],
-    ["elemType flag = flag ? Int : String; (elemType (3 > 1)) \"s\"", "cannot use String where Int is required"],
-    ["cell 0 = Int; cell _ = String; (cell 1) 5", "cannot use Int where String is required"],
+    ["elemType flag = flag ? Int : String; elemType (3 > 1) \"s\"", "cannot use String where Int is required"],
+    ["cell 0 = Int; cell _ = String; cell 1 5", "cannot use Int where String is required"],
     ["fib 0 = 0; fib 1 = 1; fib n = fib (n - 1) + fib (n - 2); Vect (fib 5) Int [1,2,3,4]", "length mismatch: expected 5, got 4"],
     [ELEM + "f n = Elem (n > 3) [1]", "cannot use Vect 1 Int where Int or String is required"],
 ]) {

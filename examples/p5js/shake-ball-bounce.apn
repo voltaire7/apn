@@ -8,7 +8,7 @@ Ball = [
     x: Float, y: Float, diameter: Float, xspeed: Float, yspeed: Float, direction: Float
     restX: Float, restY: Float
 ]
-balls = Mutable ((List Ball) [])
+balls = Mutable (List Ball [])
 # How much the device's acceleration must change to shake the balls.
 threshold = 30
 
@@ -25,8 +25,8 @@ newBall (Sketch p) = {
     x <- p.random 0 p.width
     y <- p.random 0 p.height
     diameter <- p.random 10 30
-    xspeed <- p.random (-2) 2
-    yspeed <- p.random (-2) 2
+    xspeed <- p.random -2 2
+    yspeed <- p.random -2 2
     return [
         x: Float x, y: Float y, diameter: Float diameter, xspeed: Float xspeed
         yspeed: Float yspeed, direction: 0.7, restX: Float xspeed, restY: Float yspeed

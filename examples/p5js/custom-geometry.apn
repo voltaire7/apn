@@ -25,7 +25,7 @@ drawSnake (Sketch p) = {
     length <- p.random 10 30
     segments = Int (ceiling (Number length))
     mapM (segment -> {
-        turn <- p.random (-60) 60
+        turn <- p.random -60 60
         p.rotateY turn
         p.call "translate" [0,0,50]
         p.push
@@ -58,7 +58,7 @@ draw (Sketch p) = {
     p.noStroke
     p.scale 1.5
     # Slowly around the plane of snakes.
-    p.rotateX (-45)
+    p.rotateX -45
     p.rotateY (p.frameCount * 0.25)
     p.lights
     p.specularMaterial "white"

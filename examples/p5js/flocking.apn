@@ -5,7 +5,7 @@ import ["html","number","p5"]
 
 # A boid: where it is, its velocity and its hue.
 Boid = [position: [Float,Float], velocity: [Float,Float], hue: Float]
-boids = Mutable ((List Boid) [])
+boids = Mutable (List Boid [])
 # A boid's size, and its greatest speed and steering force.
 size = 3.0
 maxSpeed = 3.0
@@ -23,8 +23,8 @@ setup (Sketch p) = {
 }
 
 newBoid (Sketch p) x y = {
-    dx <- p.random (-1) 1
-    dy <- p.random (-1) 1
+    dx <- p.random -1 1
+    dy <- p.random -1 1
     hue <- p.random 0 256
     return [position: [Float x, Float y], velocity: [Float dx, Float dy], hue: Float hue]
 }
@@ -94,7 +94,7 @@ render (Sketch p) boid = {
     p.push
     p.translate x y
     p.rotate (heading boid.velocity + pi / 2)
-    p.triangle 0 (-size * 2) (-size) (size * 2) size (size * 2)
+    p.triangle 0 (-size * 2) -size (size * 2) size (size * 2)
     p.pop
 }
 

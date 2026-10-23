@@ -6,7 +6,7 @@ for (const [source, expected] of [
     ['f = {}; f', '[]'],
     ['do []', '[]'],
     ['typeOf ()', 'List a'],
-    ['[Bool 0, Bool 1, Bool (-1), Bool 0.0, Bool 0i, Bool 1i]', '[false,true,true,false,false,true]'],
+    ['[Bool 0, Bool 1, Bool -1, Bool 0.0, Bool 0i, Bool 1i]', '[false,true,true,false,false,true]'],
     ['[Bool "", Bool "0", Bool [], Bool [missing], Bool [1..]]', '[false,true,false,true,true]'],
     ['r = [x: Record] []; [Bool r.x, Bool [x: 1], Bool (HashMap [])]', '[false,true,false]'],
     ['[Bool Int, Bool (x -> x), Bool (Mutable 0), Bool (Mutable 1)]', '[true,true,false,true]'],

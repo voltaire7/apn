@@ -4,11 +4,11 @@ for (const [source, expected] of [
     ['(+ 1) * [1,2,3]', '[2,3,4]'],
     ['increment x = x + 1\nincrement * [1,2,3]', '[2,3,4]'],
     ['Int * 3', '[0,1,2]'],
-    ['Int * (-3)', '[0,-1,-2]'],
+    ['Int * -3', '[0,-1,-2]'],
     ['Int * []', '[]'],
     ['(entry -> entry 1) * [x: 1, y: 2]', '[1,2]'],
     ['((+ 1) \\ (* 2)) * [1,2,3]', '[3,5,7]'],
-    ['((Int -> Int) increment) <- return ((+ 1)); increment * [1,2]', '[2,3]'],
+    ['((Int -> Int) increment) <- return (+ 1); increment * [1,2]', '[2,3]'],
     ['[1,2,3] * 2', '[2,4,6]'],
     ['2 * [1,2,3]', '[2,4,6]'],
 ]) Deno.test(`function-left iteration: ${source}`, () => {

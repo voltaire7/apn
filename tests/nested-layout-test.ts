@@ -22,12 +22,12 @@ Deno.test("parenthesized lambda block preserves statement boundaries and prints 
 });
 
 for (const [source, expected] of [
-    ["([\n    1,2\n    3\n])", "[1,2,3]"],
-    ["([\n    1\n    2\n])", "[1,2]"],
-    ["(\n    {\n        x = 2\n        x + 3\n    }\n)", "5"],
-    ["(x -> {\n    y = (x +\n        x)\n    y * y\n}) 3", "36"],
+    ["[\n    1,2\n    3\n]", "[1,2,3]"],
+    ["[\n    1\n    2\n]", "[1,2]"],
+    ["(\n    x -> {\n        y = x + 2\n        y + 3\n    }\n) 0", "5"],
+    ["(x -> {\n    y = x +\n        x\n    y * y\n}) 3", "36"],
     ["a = (x -> {\n    x + 1\n}) 2\nb = 4\na + b", "7"],
-    ["(x -> {\n    ys = ([\n        x\n        x + 1\n    ])\n    ys\n}) 2", "[2,3]"],
+    ["(x -> {\n    ys = [\n        x\n        x + 1\n    ]\n    ys\n}) 2", "[2,3]"],
     // A deeper line starting an argument continues the application.
     ["(x -> {\n    f = y, z -> y + z\n    f x\n        10\n}) 2", "12"],
 ]) Deno.test(`nested container layout: ${source}`, () => {

@@ -42,7 +42,7 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     equal(unused("f (Vect n a xs) = [n,xs]").map(d => d[2]), ["'a' is never used; write _ to discard it"]);
     // A literal zero divisor warns, except IEEE division with a Float on either side.
     const zero = (source: string) => lint(source).filter(d => d.code === "zeroDivisor").map(d => [d.range.start.line, d.range.start.character, d.range.end.character]);
-    equal(zero("a = 1 / 0\nb = (/ 0)\nc = quotient 7 (-0)\nd = 7 % 0.0\ne = modulo 7 0"), [[0, 8, 9], [1, 7, 8], [2, 15, 19], [3, 8, 11], [4, 13, 14]]);
+    equal(zero("a = 1 / 0\nb = (/ 0)\nc = quotient 7 -0\nd = 7 % 0.0\ne = modulo 7 0"), [[0, 8, 9], [1, 7, 8], [2, 15, 17], [3, 8, 11], [4, 13, 14]]);
     equal(zero("a = 1.0 / 0\nb = 1 / 0.0\nc = 1 / x\nd = safeDiv 1 0"), []);
     // Recursion with no smaller argument where the call is certainly evaluated.
     const endless = (source: string) => lint(source).filter(d => d.code === "termination").map(d => d.range.start.line);

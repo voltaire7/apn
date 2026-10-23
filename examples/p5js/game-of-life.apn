@@ -4,7 +4,7 @@ import ["p5","sequence"]
 
 cellSize = 20
 # The board, a row of 0s (dead) and 1s (alive) each, wrapping around its edges.
-board = Mutable ((List (List Int)) [])
+board = Mutable (List (List Int) [])
 
 setup (Sketch p) = {
     p.frameRate 10

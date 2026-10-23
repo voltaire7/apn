@@ -42,4 +42,4 @@ draw name (Sketch p) = {
     p.describe ("The name " ++ name ++ " in large black text on a white background.")
 }
 
-main = browser.element [init: init, update: update, subscriptions: (_ -> browser.none), view: view]
+main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]

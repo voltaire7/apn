@@ -20,7 +20,7 @@ toGif mario = mario.y > 0 ? "https://elm-lang.org/images/mario/jump/" ++ mario.d
 update computer mario = {
     dt = 1.666
     vx = toX computer.keyboard
-    vy = mario.y == 0 ? (computer.keyboard.up ? 5.0 : 0.0) : mario.vy - dt / 8
+    vy = mario.y == 0 ? computer.keyboard.up ? 5.0 : 0.0 : mario.vy - dt / 8
     x = mario.x + dt * vx
     y = mario.y + dt * vy
     [x: x, y: max 0 y, vx: vx, vy: vy, dir: vx == 0 ? mario.dir : vx < 0 ? "left" : "right"]

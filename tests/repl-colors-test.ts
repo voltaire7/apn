@@ -63,7 +63,7 @@ Deno.test("fraction slashes are peach in scalar and nested echoes", () => {
 
 Deno.test("complex signs are peach in scalar and nested echoes", () => {
     const interp = new Interpreter();
-    for (const source of ["sqrt (-1)", "makeRectangular 0 (-1)"]) {
+    for (const source of ["sqrt -1", "makeRectangular 0 -1"]) {
         const value = interp.run(parse(source));
         const sign = source.startsWith("sqrt") ? "+" : "-";
         const expected = `\x1b[38;2;239;159;118m${sign}\x1b[0m`;

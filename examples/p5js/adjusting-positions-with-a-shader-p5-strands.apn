@@ -10,7 +10,7 @@ wiggle inputs = {
 }
 
 # time is the sketch's milliseconds, set each frame.
-wiggleShader = buildColorShader [time: ["float", (Sketch p -> p.millis)]] [objectInputs: wiggle]
+wiggleShader = buildColorShader [time: ["float", Sketch p -> p.millis]] [objectInputs: wiggle]
 
 # A ribbon of vertices, red to blue along its length.
 ribbon = buildGeometry (Sketch p -> {

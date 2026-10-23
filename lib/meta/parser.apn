@@ -37,12 +37,13 @@ mpLexStepRaw state char = {
     [c] = [from (List Char) [char]]
     [flushed] = [mpFlush state]
     [newline] = [c == "\n"]
+    [lineBreak] = [newline || c == "\r"]
     [space] = [contains char (to (List Char) " \t\r\n")]
     [punctuation] = [contains char (to (List Char) "()[]{},;.")]
     [word] = [contains char mpWordChars]
     [kind] = [word ? "word" : "symbol"]
     state.mode == "comment"
-        ? (newline ? mpLexStep (mpState "code" "" state.tokens "" state.depth) char : state)
+        ? lineBreak ? mpLexStep (mpState "code" "" state.tokens "" state.depth) char : state
         : state.mode == "escape"
         ? mpState "string" (state.buffer ++ "\\" ++ c) state.tokens "" state.depth
         : state.mode == "string"
@@ -52,7 +53,7 @@ mpLexStepRaw state char = {
         : c == "\""
         ? mpState "string" "" flushed.tokens "" state.depth
         : space
-        ? (newline ? mpLineEnd state flushed : flushed)
+        ? newline ? mpLineEnd state flushed : flushed
         : punctuation
         ? mpState "code" "" (_prepend (mpToken "symbol" c) flushed.tokens) ""
             (state.depth + mpNesting c)
@@ -61,17 +62,34 @@ mpLexStepRaw state char = {
         : mpState "code" c flushed.tokens kind state.depth
 }
 mpLex source = {
-    [state] = [foldl mpLexStep (mpState "code" "" [] "" 0) (to (List Char) source)]
+    [state] = [foldl mpLexStep (mpState "code" "" [] "" 0) (to (List Char) (mpJoin source))]
     state.mode == "string" ? fail "meta reader: unterminated string"
         : state.mode == "escape" ? fail "meta reader: unterminated escape"
-        : reverse ((mpFlush state).tokens)
+        : reverse (mpFlush state).tokens
 }
-mpText tokens = null tokens ? "<end>" : (head tokens) 1
+# A line deeper than its statement continues it, as in APN: the line break
+# before it reads as "\r", a space that also ends a comment. A line ending in
+# { opens a block, whose statements stand 4 deeper.
+mpJoin source = {
+    [_,pieces] = foldl mpLine [[0],[]] (lines source)
+    joinWith "" (reverse pieces)
+}
+mpLine [levels,pieces] line = {
+    chars = to (List Char) line
+    indent = length (takeWhile (== ' ') chars)
+    blank = all (== ' ') chars || startsWith "#" (trim line)
+    open = dropWhile (> indent) levels
+    break = blank || indent <= head open ? "\n" : "\r"
+    piece = null pieces ? line : break ++ line
+    blank ? [levels, piece :: pieces]
+        : [endsWith "{" (trim line) ? indent + 4 :: open : open, piece :: pieces]
+}
+mpText tokens = null tokens ? "<end>" : head tokens 1
 mpSkip tokens = dropWhile (token -> token 1 == ";") tokens
 mpRequire wanted tokens = mpText tokens == wanted
     ? tail tokens
     : fail ("meta reader: expected " ++ wanted ++ ", got " ++ mpText tokens)
-mpDigit c = withDefault (-1) $ findIndex (==c) (to (List Char) "0123456789")
+mpDigit c = withDefault -1 $ findIndex (==c) (to (List Char) "0123456789")
 mpDigits n c = mpDigit c < 0 ? fail "meta reader: invalid integer" : n * 10 + mpDigit c
 mpNumber text = foldl mpDigits 0 (to (List Char) text)
 mpNames tokens = takeWhile (token -> head token == "word") tokens

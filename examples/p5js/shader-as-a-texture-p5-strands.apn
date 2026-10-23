@@ -30,9 +30,9 @@ tiles inputs = {
 
 # The canvas's size, the mouse and the time are set each frame.
 theShader = buildMaterialShader [
-    size: ["vec2", (Sketch p -> return [p.width,p.height])]
-    mouse: ["vec2", (Sketch p -> return [p.mouseX,p.mouseY])]
-    time: ["float", (Sketch p -> p.millis)]
+    size: ["vec2", Sketch p -> return [p.width,p.height]]
+    mouse: ["vec2", Sketch p -> return [p.mouseX,p.mouseY]]
+    time: ["float", Sketch p -> p.millis]
 ] [pixelInputs: tiles]
 
 setup (Sketch p) = {
@@ -46,10 +46,10 @@ draw (Sketch p) = {
     p.background 255
     p.shader theShader
     # A sphere and a circle, painted by the shader.
-    p.translate (-150) 0
+    p.translate -150 0
     p.push
-    p.rotateX (-p.mouseY)
-    p.rotateY (-p.mouseX)
+    p.rotateX -p.mouseY
+    p.rotateY -p.mouseX
     p.sphere 125
     p.pop
     # A fifth argument smooths the circle's edge in 3D.

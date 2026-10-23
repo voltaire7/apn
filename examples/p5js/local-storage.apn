@@ -4,7 +4,7 @@ import "p5"
 
 # Bubbles, each a circle with a name; and the press a new one starts from.
 Bubble = [x: Float, y: Float, radius: Float, name: String]
-bubbles = Mutable ((List Bubble) [])
+bubbles = Mutable (List Bubble [])
 pressed = Mutable [0.0,0.0]
 creating = Mutable false
 
@@ -12,7 +12,7 @@ setup (Sketch p) = {
     p.createCanvas 640 360
     # The bubbles kept from an earlier visit ([] if none).
     saved <- p.getItem "bubbles"
-    set bubbles ((List Bubble) saved)
+    set bubbles (List Bubble saved)
     p.ellipseMode p.RADIUS
     p.textSize 20
     p.describe ("When the cursor clicks on the canvas, drags, and releases, a black outline "

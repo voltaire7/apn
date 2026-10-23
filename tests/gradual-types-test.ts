@@ -30,7 +30,7 @@ for (
         ["f x = x.x; f [y: 2]", "missing field"],
         ["Vect 3 Int [1,2]", "length mismatch"],
         ["Vect 2 Int [1,2,3]", "length mismatch"],
-        ["Vect (-1) Int []", "nonnegative"],
+        ["Vect -1 Int []", "nonnegative"],
         ["Vect 2 123 [1,2]", "element must be a type"],
         ["f n ((Vect n Int) xs) = xs; f 3 [1,2]", "length mismatch"],
         ["f n ((Vect (n + 1) Int) xs) = xs; f 2 [1,2]", "length mismatch"],
@@ -51,7 +51,7 @@ for (
         ["typeOf (Vect 3 Int [1,2,3])", "Vect 3 Int"],
         ["v = Vect 2 Int [1,2]; v 0 = 3; [v, typeOf v]", "[[3,2], Vect 2 Int]"],
         ["[isType (Vect 2 Int) [1,2], isType (Vect 2 Int) [1]]", "[true,false]"],
-        ["[(Vect 2 Int) == (Vect 2 Int), (Vect 2 Int) == (Vect 3 Int)]", "[true,false]"],
+        ["[Vect 2 Int == Vect 2 Int, Vect 2 Int == Vect 3 Int]", "[true,false]"],
         ['f (Dynamic x) = x; f "hi"', '"hi"'],
     ]
 ) {
