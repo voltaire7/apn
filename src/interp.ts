@@ -162,14 +162,17 @@ export class Interpreter {
     private importing = new Set<string>();
 
     importStandard(module: string | string[], open = true): Value {
-        if (this.checking && !this.dynamicDepth) this.checking.module(module, this.sourceDir);
+        // The static check follows an import outside Dynamic, so it typed what
+        // the module's bindings replace (its step over the debugger's).
+        const checked = !!this.checking && !this.dynamicDepth;
+        if (checked) this.checking!.module(module, this.sourceDir);
         if (Array.isArray(module)) {
             const fields = new Map<string, Value>();
             for (const name of module) {
                 const record = this.importStandard(name, false) as Extract<Value, { kind: "record" }>;
                 for (const [key, value] of record.v) fields.set(key, value);
             }
-            if (open) this.publishForeignBindings(this.env, [...fields]);
+            if (open) this.publishForeignBindings(this.env, [...fields], undefined, checked);
             return { kind: "record", v: [...fields] };
         }
         const resolved = resolveModule(module, this.sourceDir, this.moduleSources, this.moduleRoot);
@@ -191,7 +194,7 @@ export class Interpreter {
                 this.modules.set(resolved.key, record);
             } finally { this.importing.delete(resolved.key); }
         }
-        if (open) this.publishForeignBindings(this.env, record.v);
+        if (open) this.publishForeignBindings(this.env, record.v, undefined, checked);
         return record;
     }
 
@@ -2970,6 +2973,13 @@ export class Interpreter {
     }
     // Whether a lowercase name in a type is a type variable: it is unless it
     // names a type, or a function (which builds one).
+    // A name in a length position that keeps its value: one bound to a value.
+    // Any other (unbound, or a type or function, which no length is) binds
+    // there, as a type position binds a name bound to a value.
+    private lengthValue(name: string): Value | undefined {
+        const bound = this.env.get(name);
+        return bound && this.typeVariableName(name, this.env) ? bound : undefined;
+    }
     private typeVariableName(name: string, scope: Env): boolean {
         const bound = scope.get(name);
         if (!bound) return true;
@@ -3862,8 +3872,8 @@ export class Interpreter {
         if (!this.isList(value)) return false;
         let size: bigint, element: Value | undefined;
         const sizePattern = args[0];
-        const fixed = sizePattern.p === "int" ? mkInt(sizePattern.v)
-            : sizePattern.p === "var" && binds.has(sizePattern.name) ? this.dataValue(binds.get(sizePattern.name)!) : undefined;
+        const known = sizePattern.p === "var" ? binds.get(sizePattern.name) ?? this.lengthValue(sizePattern.name) : undefined;
+        const fixed = sizePattern.p === "int" ? mkInt(sizePattern.v) : known && this.dataValue(known);
         if (fixed && (fixed.kind !== "int" || fixed.v < 0n)) return false;
         const limit = fixed?.kind === "int" ? fixed.v : undefined;
         if (value.kind === "list" && value.schema?.kind === "type" && value.schema.name === "Vect") {
@@ -3883,7 +3893,7 @@ export class Interpreter {
                 rest = cell.tail;
             }
         }
-        if (!this.matchPattern(args[0], mkInt(size), binds)) return false;
+        if (limit !== undefined && size !== limit || !this.matchPattern(args[0], mkInt(size), binds)) return false;
         const typePattern = args[1];
         if (typePattern.p === "var") {
             const holes = this.vectorTypeHoles.get(binds) ?? new Set<string>();
@@ -3964,7 +3974,7 @@ export class Interpreter {
         // given [] first binds a from ys, as the clause f (Vect n a xs) (Vect m a ys) does).
         const open = (name: string) => { const bound = this.env.get(name), t = bound && this.reference(bound); return t?.kind === "type" && t.name === "$any" && !!t.description; };
         const free = (e: Expr, n: number) => e.t === "placeholder" || e.t === "var" && /^[a-z]/.test(e.name) && !binds.has(e.name) &&
-            (base?.kind === "type" && base.name === "Vect" && n === 0 ? !this.env.get(e.name) : this.typeVariableName(e.name, this.env) || open(e.name));
+            (base?.kind === "type" && base.name === "Vect" && n === 0 ? !this.lengthValue(e.name) : this.typeVariableName(e.name, this.env) || open(e.name));
         if (!args.some(free)) return undefined;
         if (base?.kind !== "type" || base.family || base.alias) return undefined;
         // Each argument as the Vect pattern's part: a free name binds, a bound
@@ -4008,7 +4018,7 @@ export class Interpreter {
         });
         for (const [n, arg] of args.entries()) {
             if (arg.t === "placeholder") continue;
-            const free = arg.t === "var" && /^[a-z]/.test(arg.name) && !binds.has(arg.name) && (valueAt(n) ? !this.env.get(arg.name) : this.typeVariableName(arg.name, this.env));
+            const free = arg.t === "var" && /^[a-z]/.test(arg.name) && !binds.has(arg.name) && (valueAt(n) ? !this.lengthValue(arg.name) : this.typeVariableName(arg.name, this.env));
             if (free) { binds.set((arg as { name: string }).name, indices[n]); continue; }
             const wanted = arg.t === "var" && binds.has(arg.name) ? binds.get(arg.name)! : this.reference(this.eval(arg));
             if (!this.sameIndex(wanted, indices[n])) return false;

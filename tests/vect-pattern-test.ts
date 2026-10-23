@@ -25,6 +25,9 @@ for (const [source, expected] of [
     ['f (Vect n a xs) (Vect m a ys) = a; f (Vect 0 Int []) []', 'Int'],
     ['VectAlias = Vect; f (VectAlias n a xs) = n; f [1,2]', '2'],
     ['f (Vect n a xs) = n; f _ = 123; f [1,2]', '2'],
+    // A length keeps a name bound to a value; a function's name binds there.
+    ['size = 2; f (Vect size a xs) = 1; f _ = 0; [f [1], f [1,2]]', '[0,1]'],
+    ['o (Vect k a xs) = k; k x = x; o [1,2,3]', '3'],
 ] as const) Deno.test(`Vect pattern runtime: ${source}`, () => {
     const actual = run(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -49,6 +52,8 @@ for (const source of [
     'f (Vect n a xs) = Vect n a xs; f [1,2]',
     'f (Vect n a xs) (Vect n a ys) = xs; f [1] [2]',
     'f x x = x; f 1 1',
+    'o (Vect k a xs) = k; k x = x; o [1,2,3]',
+    'o ((Vect k Int) xs) = k; k x = x; o [1,2,3]',
 ]) Deno.test(`Vect and equality patterns check statically: ${source}`, () => {
     const result = requireChecked(source);
     if (result.dynamicBoundaries) throw new Error(JSON.stringify(result));

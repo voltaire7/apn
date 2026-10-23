@@ -1515,11 +1515,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             args.forEach((arg, n) => {
                 // A name an earlier parameter bound is that value.
                 if (arg.t !== "var" || !/^([a-z]|\$_)/.test(arg.name) || captures.has(arg.name)) return;
-                // A length is a value: a bound name is that value. A type
-                // position keeps a name bound to a type or function; any other
-                // name is a type variable, as in a written function type.
+                // A type position keeps a name bound to a type or function; any
+                // other name is a type variable, as in a written function type.
+                // A length, a value, keeps a name bound to a value instead.
                 const bound = scope.get(arg.name), kind = bound && resolve(bound.type).k;
-                if (valueAt(n) ? bound : kind === "type" || kind === "fn" || kind === "intrinsic" || kind === "factory" || kind === "alias") return;
+                // (A function defined later is declared ahead: forward.)
+                const typeLike = kind === "type" || kind === "fn" || kind === "intrinsic" || kind === "factory" || kind === "alias" ||
+                    !!bound && bound.type === forward.get(arg.name);
+                if (valueAt(n) ? bound && !typeLike : typeLike) return;
                 captures.add(arg.name);
                 if (vector && n === 0) scope.set(arg.name, { type: atom("Int"), mono: true, index: { constant: 0n, terms: new Map([[`n${serial++}`, 1n]]) } });
                 else if (valueAt(n)) scope.set(arg.name, { type: variable(), mono: true });

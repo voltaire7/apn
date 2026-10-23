@@ -1919,6 +1919,11 @@ copySized n ((SizedInts n) xs) = xs
 # A typed pattern binds the names its type does not know yet: n and a here.
 appendSized ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys)
 print (typeOf (appendSized [1,2] [3]))  # => Vect 3 Int
+# A length keeps a name bound to a value (n above, an earlier parameter's); one
+# bound to a function, which no length is, binds there, even one defined later.
+extentOf (Vect extent a xs) = extent
+extent xs = length xs
+print (extentOf [7,8,9])                # => 3
 # An indexed family: each constructor says the type it makes.
 Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a
 # Its parameters may also be written as a lambda, as f = x -> e is f x = e.

@@ -190,8 +190,9 @@ bound earlier must agree: `h ((Vect n a) xs) ((Vect n a) ys)` requires equal
 lengths, statically where they are known. Which names a pattern binds follows
 the rule for written function types: a name an earlier parameter bound is
 that value; a name bound to a type or function keeps it; any other lowercase
-name in a type position is bound by the pattern (a length, being a value,
-keeps a bound name's value).
+name in a type position is bound by the pattern. A length, being a value, is
+the reverse: it keeps a name bound to a value, and binds any other, such as a
+function's name (even one defined later), which no length is.
 
 ```apn
 app ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys)

@@ -86,6 +86,14 @@ for (const module of ['"function"', '["type","function"]']) {
         throw new Error('missing runtime error');
     });
 }
+// An import the static check follows typed what it replaces: random's step
+// takes the place of the debugger's.
+Deno.test("a checked import replaces a builtin function", () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    const actual = i.renderString(i.run(parseDocument('import "random"\nstep (Generator (s -> [1,s])) 0')));
+    if (actual !== "[1,0]") throw new Error(actual);
+});
 Deno.test("set on an explicit Dynamic target is checked at runtime", () => {
     const value = run("cell = Dynamic (Mutable 1); set cell 2; Int (Dynamic cell) + 1");
     if (value !== "3") throw new Error(`expected 3, got ${value}`);
