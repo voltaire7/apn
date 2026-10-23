@@ -297,8 +297,10 @@ which takes the argument's source text, and reads that text as lists:
   and every binding is an `"="` node: `f n = ...` is `["=",["f","n"],...]`.
 
 Building code is building a list. `fromAST` writes such data as source,
-parenthesized only where precedence needs it, which reads back as the same
-data. `eval` runs it as written source runs, at the program's top level (as
+with parentheses only where the parser needs them (so it passes the
+[parentheses rule](semantics.md)), which reads back as the same data:
+`fromAST (toLambda { a <- return 1; return (a + 1) })` is
+`return 1 >>= a -> return (a + 1)`. `eval` runs it as written source runs, at the program's top level (as
 Lisp's `eval` uses the global environment): its bindings stay inside it, an
 action it makes is returned, not run, and its result is `Dynamic`.
 

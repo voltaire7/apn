@@ -671,6 +671,8 @@ print (eval (doubled ["sqrt",16]))        # => 8
 print (fromAST (toLambda { x = 10; y = x + 1; y }))  # => (x -> (y -> y) (x + 1)) 10
 print (eval (toLambda { fact n = n == 0 ? 1 : n * fact (n - 1); fact 5 }))  # => 120
 print (fromAST $ toLambda [x = 1, y = 2, x + y])  # => (x -> (y -> [x, y, x + y]) 2) 1
+# fromAST writes parentheses only where the parser needs them:
+print (fromAST $ toLambda { a <- return 1; return (a + 1) })  # => return 1 >>= a -> return (a + 1)
 
 # to String / from String (string <-> value conversion; to String quotes strings)
 print (to String "hi")       # => "hi"

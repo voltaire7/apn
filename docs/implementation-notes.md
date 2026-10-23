@@ -28,8 +28,10 @@ alongside the code, and don't restate the user-facing rules here.
   parse of the tokens decides. It must never flag a group whose removal changes
   the parse: when unsure it keeps the group; a lambda ending an application is
   checked by re-parsing that application without the group. Pattern groups are
-  not judged. Generated source (fromAST, printers) is read with loose spacing,
-  so printers may keep extra parentheses. `tests/unnecessary-parentheses-test.ts`.
+  not judged. `fromAST` (`lib/syntax/source.apn`) writes each piece for its
+  place by the same rules, checked by a strict round trip in
+  `tests/syntax-test.ts`; other printers' source is read with loose spacing,
+  so they may keep extra parentheses. `tests/unnecessary-parentheses-test.ts`.
 
 ## Evaluation core
 

@@ -39,17 +39,25 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 
-// fromAST writes source that reads back as the same Expr.
+// fromAST writes source that reads back as the same Expr, with parentheses
+// only where they are needed (it parses with every rule on).
 for (const source of [
-    "f x + 1", "1 + 2 * 3", "(1 + 2) * 3", "f (g x) -1", '"a\\"b\\n"', "'c'", "[1,2,[3]]", "[1 + 1, 2]",
-    "[x: 1, y: [2,3]]", "r.x.y", "xs.(i + 1)", "r.[a,b]", "[1,3..9]", "[0..]", "c ? 1 : 2",
-    "x, y -> x * y", "(Int n), [a,b] | n > 0 -> a", "{ a <- return 1; print a }", "[x = 1, x + 1]",
-    "f n = n * 2", "x :: xs = ys", "!b", "map (+ 1) xs", "head $ [1,2]", "{}", 'import ["option","map"]',
-    "Some (Some 1)", "-x ^ 2", "n -> match n [0 -> 1, _ -> 2]", "(+)", "(- 2)", "(10 -)",
+    "f x + 1", "1 + 2 * 3", "(1 + 2) * 3", "a - (b - c)", "a - b - c", "(a :: b) :: c", "a ^ b ^ c",
+    "(a ^ b) ^ c", "f (g x) -1", '"a\\"b\\n"', "'c'", "[1,2,[3]]", "[1 + 1, 2]", "[x: 1, y: [2,3]]",
+    "r.x.y", "xs.(i + 1)", "r.[a,b]", "(r.1).2", "(f x).y", "[1,3..9]", "[0..]", "[a + 1..b]",
+    "c ? 1 : 2", "c ? d ? 1 : 2 : 3", "c ? 1 : d ? 2 : 3", "f (c ? 1 : 2)", "a $ b ? c : d",
+    "c ? (a $ b) : d", "x, y -> x * y", "(Int n), [a,b] | n > 0 -> a", "{ a <- return 1; print a }",
+    "[x = 1, x + 1]", "f n = n * 2", "x :: xs = ys", "!b", "map (+ 1) xs", "head $ [1,2]", "f $ g $ x",
+    "{}", 'import ["option","map"]', "Some (Some 1)", "-x ^ 2", "n -> match n [0 -> 1, _ -> 2]", "(+)",
+    "(- 2)", "(10 -)", "xs >>= x -> f x", "xs >>= (x -> f x) >>= g", "(x -> x) 1", "f (x -> x) y",
+    "run (x -> x)", 'withFile "notes" file -> file.read', "withFile path (file -> file.read)",
+    "bracket 1 (_ -> []) x -> y -> x", "[(x, y -> x)]", "[x -> x]", "foo Bar (x -> x)",
+    "a && (b || c)", "a == (b == c)", "-(a + b)", "f \\ g \\ h", "(f \\ g) \\ h", "1 + (x -> x)",
 ]) Deno.test(`fromAST round trip: ${source}`, () => {
-    const i = session();
-    const written = shown(i, applied("fromAST", applied("toAST", source)), true);
-    const again = shown(i, applied("toAST", written)), original = shown(i, applied("toAST", source));
+    const i = session(), text = JSON.stringify(source);
+    const written = shown(i, `fromAST (intrinsics.syntax ${text})`, true);
+    parse(written);
+    const again = shown(i, `intrinsics.syntax ${JSON.stringify(written)}`), original = shown(i, `intrinsics.syntax ${text}`);
     if (again !== original) throw new Error(`${written}: ${again} != ${original}`);
 });
 
@@ -108,12 +116,12 @@ for (const [source, expected] of [
     ["x, y -> x + y", "x -> y -> x + y"],
     ["map (+ 1) xs", "map (_1 -> _1 + 1) xs"],
     ["f $ g x", "f (g x)"],
-    ["{ a <- return 1; print a; return (a + 1) }", "return 1 >>= (a -> print a >> return (a + 1))"],
+    ["{ a <- return 1; print a; return (a + 1) }", "return 1 >>= a -> print a >> return (a + 1)"],
     ["{ [a,b] = [1,2]; a + b }", "([a,b] -> a + b) [1,2]"],
     ["{ ones = 1 :: ones; take 2 ones }",
-        "(ones -> take 2 ones) ((f -> (x -> f (x x)) (x -> f (x x))) (ones -> 1 :: ones))"],
+        "(ones -> take 2 ones) ((f -> (x -> f (x x)) x -> f (x x)) ones -> 1 :: ones)"],
     ["{ first (x :: _) d = x; first [] d = d; first [] 0 }",
-        "(first -> first [] 0) (_1 -> _2 -> match [_1,_2] [[x :: _, d] -> x, [[],d] -> d])"],
+        "(first -> first [] 0) _1 -> _2 -> match [_1,_2] [[x :: _, d] -> x, [[],d] -> d]"],
     // A list's bindings scope over its later items, as a block's do.
     ["[x = 1, y = 2, x + y]", "(x -> (y -> [x, y, x + y]) 2) 1"],
     ["[[a,b] = [1,2], a + b]", "(_item1 -> ([a,b] -> [_item1, a + b]) _item1) [1,2]"],

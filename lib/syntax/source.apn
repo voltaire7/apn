@@ -1,62 +1,135 @@
 # fromAST's printer (lib/syntax.apn loads it): syntax data is lists of mixed
-# leaves and nodes, so it runs Dynamic, as the meta reader does.
-_fromAST (String leaf) = _operator leaf ? "(" ++ leaf ++ ")" : leaf
-_fromAST (Bool b) = to String b
-_fromAST (Number n) = to String n
-_fromAST (head :: rest) = _node head rest
+# leaves and nodes, so it runs Dynamic, as the meta reader does. A piece of
+# syntax is written for the place it stands in, in parentheses only where it
+# would read differently bare there, as the parser requires.
+_fromAST syntax = _shown _end syntax
 
-_node "[]" items = "[" ++ _items (map _fromAST items) ++ "]"
-_node "[:]" fields = "[" ++ joinWith ", " (map ([key,value] -> key ++ ": " ++ _fromAST value) fields)
-    ++ "]"
-_node "->" [params,body] = joinWith ", " (map _operand params) ++ _arrow body
-_node "?:" [c,yes,no] = _operand c ++ " ? " ++ _operand yes ++ " : " ++ _operand no
-_node "." [r, (String key)] = _operand r ++ "." ++ key
-_node "." [r,selected] = _operand r ++ "." ++ _fromAST selected
-_node "{}" [] = "{}"
-_node "{}" statements = "{ " ++ joinWith "; " (map _fromAST statements) ++ " }"
-_node ".." [low,high] = "[" ++ _operand low ++ ".." ++ _bound high ++ "]"
-_node ".." [low,high,next] = "[" ++ _items [_operand low, _operand next ++ ".." ++ _bound high] ++ "]"
-_node "=" [left,right] = _fromAST left ++ " = " ++ _fromAST right
-_node "<-" [left,right] = _fromAST left ++ " <- " ++ _fromAST right
-_node "()" [op,x] = "(" ++ op ++ " " ++ _operand x ++ ")"
-_node "import" [m] = "import " ++ to String m
-_node "import" ms = "import [" ++ _items (map (to String) ms) ++ "]"
-_node head args = _application head args
+# A place: [kind, minimum, follows]. An "operand" takes an expression whose
+# loosest operator binds at least minimum and that takes in no operator of
+# precedence follows after it (-1: nothing follows). An "item" is an operand
+# in a list, where x, y -> e would be two items; a "guard" one, a lambda's
+# guard, holds no lambda. An "argument" takes one piece, a "head" a function
+# applied, "selected" the left of a '.', and a "trailing" lambda (the last
+# argument) stands bare when minimum is 1.
+_end = ["operand",0,-1]
+_shown place syntax = _fits place syntax ? _bare place syntax : "(" ++ _bare _end syntax ++ ")"
+_fits ["argument",_,_] syntax = _kind syntax == "piece" || _kind syntax == "negative"
+_fits ["head",_,_] syntax = _kind syntax == "piece" || _kind syntax == "call"
+_fits ["selected",_,_] syntax = _kind syntax == "piece" && !_digits syntax
+_fits ["trailing",bare,_] _ = bare == 1
+_fits [kind,minimum,follows] syntax = _level syntax >= minimum
+    && (follows < 0 || follows < _reach syntax)
+    && !(_kind syntax == "lambda" && (kind == "guard" || kind == "item" && _params syntax > 1))
+    && !(_kind syntax == "infix" && _fixity (head syntax) == [follows,"none"])
 
-# A lambda's body, after its guard if it has one.
-_arrow ["|",guard,body] = " | " ++ _fromAST guard ++ " -> " ++ _fromAST body
-_arrow body = " -> " ++ _fromAST body
-_bound [] = ""
-_bound high = _operand high
-
-# An operator given its two operands is written between them.
-_application function args = length args == 2 && _isOperator function ? _infix function args
-    : joinWith " " (map _operand (function :: args))
-_infix op [a,b] = _infixOperand op "left" a ++ " " ++ op ++ " " ++ _infixOperand op "right" b
-_isOperator (String name) = _operator name
-_isOperator _ = false
-# An operand of an operator needs no parentheses when it is a call
-# (application binds tightest) or an operator binding tighter, or as tight on
-# its associativity's side.
-_infixOperand outer side syntax = _isInfix syntax
-    ? _binds outer side (head syntax) ? _fromAST syntax : "(" ++ _fromAST syntax ++ ")"
-    : _isCall syntax ? _fromAST syntax : _operand syntax
-_isInfix (function :: args) = length args == 2 && _isOperator function && !_tag function
-_isInfix _ = false
-_isCall (function :: _ :: _) = !_tag function
-_isCall _ = false
-_binds outer side inner = {
-    [precedence,associativity] = intrinsics.fixity outer
-    [own,_] = intrinsics.fixity inner
-    own > precedence || own == precedence && associativity == side
+# What a piece of syntax is, as the parser reads it.
+_kind (String _) = "piece"
+_kind (Bool _) = "piece"
+_kind (Number n) = {
+    text = to String n
+    head (to (List Char) text) == '-' ? "negative" : _digits n ? "piece" : "infix"
+}
+_kind (function :: args) = contains function ["[]","[:]","{}",".","..","()"] ? "piece"
+    : function == "->" ? "lambda"
+    : function == "?:" ? "ternary"
+    : contains function ["=","<-","import"] ? function
+    : _isOperator function && length args == 2 ? "infix"
+    : "call"
+_digits (Number n) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) (to String n))
+_digits [".",_,key] = _digits key
+_digits (String text) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) text)
+_digits _ = false
+_params [_,params,_] = length params
+# The loosest operator a piece of syntax holds at its top, and the loosest one
+# after it that it would take in (a lambda takes in everything).
+_level syntax = match (_kind syntax) [
+    "infix" -> _precedence syntax
+    "ternary" -> 1
+    _ -> 99
+]
+_reach syntax = match (_kind syntax) [
+    "lambda" -> -1
+    "negative" -> 8
+    "ternary" -> min 1 (_reach (syntax 3))
+    "infix" -> _infixReach syntax
+    _ -> 99
+]
+_infixReach (Number _) = 8
+_infixReach [op,_,right] = min (_binding op) (_reach right)
+_precedence (Number _) = 7
+_precedence (op :: _) = head (_fixity op)
+_fixity op = intrinsics.fixity op
+# The least precedence an operator's right operand takes.
+_binding op = {
+    [precedence,associativity] = _fixity op
+    associativity == "right" ? precedence : precedence + 1
 }
 
-# An operand or argument: parenthesized unless it is one piece of syntax.
-_operand syntax = _atomic syntax ? _fromAST syntax : "(" ++ _fromAST syntax ++ ")"
-_atomic (String _) = true
-_atomic (Bool _) = true
-_atomic (Number n) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) (to String n))
-_atomic (head :: _) = contains head ["[]","[:]","{}",".","..","()"]
+_bare _ (String leaf) = _operator leaf ? "(" ++ leaf ++ ")" : leaf
+_bare _ (Bool b) = to String b
+_bare _ (Number n) = to String n
+_bare place (function :: args) = _node place function args
+
+_node _ "[]" items = "[" ++ _items (map (_shown ["item",0,-1]) items) ++ "]"
+_node _ "[:]" fields = "["
+    ++ joinWith ", " (map ([key,value] -> key ++ ": " ++ _shown _end value) fields) ++ "]"
+_node _ "->" [params,body] = joinWith ", " (map _parameter params) ++ _arrow body
+_node [_,_,follows] "?:" [c,yes,no] =
+    _shown ["operand",0,1] c ++ " ? " ++ _shown ["operand",1,-1] yes ++ " : "
+        ++ _shown ["operand",1,follows] no
+_node _ "." [r, (String key)] = _shown ["selected",0,0] r ++ "." ++ key
+_node _ "." [r,selected] = _shown ["selected",0,0] r ++ "." ++ _bare _end selected
+_node _ "{}" [] = "{}"
+_node _ "{}" statements = "{ " ++ joinWith "; " (map (_shown _end) statements) ++ " }"
+_node _ ".." [low,high] = "[" ++ _bound low ++ ".." ++ _bound high ++ "]"
+_node _ ".." [low,high,next] = "[" ++ _items [_bound low, _bound next ++ ".." ++ _bound high] ++ "]"
+_node _ "=" [left,right] = _bare _end left ++ " = " ++ _shown _end right
+_node _ "<-" [left,right] = _bare _end left ++ " <- " ++ _shown _end right
+_node _ "()" [op,x] = "(" ++ op ++ " " ++ _shown ["operand",8,-1] x ++ ")"
+_node _ "import" [m] = "import " ++ to String m
+_node _ "import" ms = "import [" ++ _items (map (to String) ms) ++ "]"
+_node place function args = length args == 2 && _isOperator function && !_tag function
+    ? _infix place function args
+    : _application place function args
+
+# A lambda's parameter, a pattern, stands alone unless it is compound.
+_parameter syntax = _kind syntax == "piece" ? _bare _end syntax : "(" ++ _bare _end syntax ++ ")"
+# A lambda's body, after its guard if it has one.
+_arrow ["|",guard,body] = " | " ++ _shown ["guard",0,-1] guard ++ " -> " ++ _shown _end body
+_arrow body = " -> " ++ _shown _end body
+_bound [] = ""
+_bound syntax = _shown ["operand",6,-1] syntax
+
+# An operator between its operands: the left one takes in nothing up to the
+# operator, the right one binds at least as tightly as the operator takes.
+_infix [_,_,follows] op [a,b] = {
+    precedence = head (_fixity op)
+    _shown ["operand",0,precedence] a ++ " " ++ op ++ " " ++ _shown ["operand", _binding op, follows] b
+}
+# A call: the function, its arguments, and a last argument that is a lambda,
+# bare when it ends the expression and the pieces before it cannot read as
+# its parameters (f x -> e is a lambda over a typed x).
+_application [kind,_,follows] function args = {
+    before = _pieces function ++ _initOf args
+    final = _lastOf args
+    lastPlace = _kind final == "lambda" && follows < 0 && kind != "guard"
+        && !(kind == "item" && _params final > 1) && _trailable before
+        ? ["trailing",1,-1] : ["argument",0,-1]
+    joinWith " " ([_shown ["head",0,-1] function] ++ map (_shown ["argument",0,-1]) (_initOf args)
+        ++ [_shown lastPlace final])
+}
+_lastOf xs = head (reverse xs)
+_initOf xs = take (length xs - 1) xs
+# The pieces a function applied is written as: f x y for (f x) y.
+_pieces syntax = _kind syntax == "call" ? _pieces (head syntax) ++ tail syntax : [syntax]
+_trailable before = !any _capitalOrBlank before && !_lowerName (_lastOf before)
+_capitalOrBlank (String name) = name == "_" || contains (head (to (List Char) name)) _capitals
+_capitalOrBlank _ = false
+_lowerName (String name) = contains (head (to (List Char) name)) (to (List Char) "abcdefghijklmnopqrstuvwxyz")
+_lowerName _ = false
+_capitals = to (List Char) "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+_isOperator (String name) = _operator name
+_isOperator _ = false
 # The heads that are syntax, not functions.
 _tag head = contains head ["[]","[:]","->","?:",".","{}","..","=","<-","()","import","|"]
 _operator name = contains (head (to (List Char) name)) (to (List Char) "!$%&*+-/<=>\\^|~:")
