@@ -1547,6 +1547,7 @@ class Parser {
             this.next(); // =
             return { name: op.v, clauses: [{ params: [], body: this.parseDefBody("=") }] };
         }
+        let negated: Token | undefined;
         try {
             const left = this.parsePatternAtom();
             const name = this.peek();
@@ -1555,11 +1556,22 @@ class Parser {
                 this.next();
                 const right = this.parsePatternAtom();
                 if (this.isSym("=")) {
-                    this.next();
-                    return { name: name.v, clauses: [{ params: [left, right], body: this.parseDefBody("=") }] };
+                    // xs -2 = 5 reads as xs given -2, as f -1 passes -1: neither
+                    // a definition of - nor (yet) an item update.
+                    if (name.v === "-" && this.tightMinus(name) && /\s/.test(this.source[name.pos - 1] ?? "")) negated = name;
+                    else {
+                        this.next();
+                        return { name: name.v, clauses: [{ params: [left, right], body: this.parseDefBody("=") }] };
+                    }
                 }
             }
         } catch { /* not an operator definition */ }
+        if (negated) {
+            const left = this.source.slice(this.toks[save].pos, negated.pos).trimEnd(), right = this.source.slice(negated.pos + 1, this.peek().pos).trimEnd();
+            throw new APNError("parse", `\`${left} -${right} = ...\` is ambiguous: an item update or a definition of -`, {
+                pos: negated.pos, len: 1, hint: `write ${left} (-${right}) = ... to set an item, or ${left} - ${right} = ... to define -`,
+            });
+        }
         this.i = save;
         return null;
     }

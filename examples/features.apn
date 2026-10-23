@@ -220,6 +220,9 @@ print (nums -1 + nums 0)          # => 40
 print (tail nums 0)               # => 20   (index a computed list)
 nums [1,2] = nums [2,1]
 print nums                       # => [10,30,20]
+# nums -1 = 40 is an error (nums - 1 = 40 would define -); set the last item so:
+nums (-1) = 40
+print nums                       # => [10,30,40]
 print [String,Int].["x",1]    # => ["x",1]
 print [(+ 1), (* 2)].[10,20]    # => [11,40]
 listTemplate = [Int,Float]

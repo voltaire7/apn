@@ -67,3 +67,14 @@ Deno.test('failed computed slot conversion preserves initialized type', () => {
     catch (e) { if (!(e instanceof Error) || !e.message.includes('lossy conversion')) throw e; }
     if (i.renderString(i.run(parseDocument('[arr, typeOf (arr 0)]'))) !== '[[0],Int]') throw new Error('lost value or type');
 });
+
+// xs -2 = 5 would define - (xs - 2 = 5): it is an error naming both spellings.
+for (const source of ["arr = [0,0]\narr -1 = 2", "arr = [0,0]\ni = 1\narr -i = 2", "f = { xs = [1]; xs -1 = 5; xs }"]) {
+    Deno.test(`lopsided minus before = is an error: ${JSON.stringify(source)}`, () => {
+        try { parseDocument(source); } catch (error) {
+            if (String(error).includes("an item update or a definition of -")) return;
+            throw error;
+        }
+        throw new Error("accepted");
+    });
+}
