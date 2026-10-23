@@ -69,6 +69,9 @@ for (const [source, expected] of [
     // A record its type made takes updates to its fields, and a literal copy new ones.
     ['Quote = [quote: String, year: Int]\nq = Quote []\nq.year = 3\nq "quote" = "x"\n[_: q, more: 1]', '[quote: "x", year: 3, more: 1]'],
     // A name defined as an import opens the module where it is a statement.
+    // A list item may take a value apart with a constructor, as a block's statement may.
+    ['import "option"\n[Some v = Some 3, v + 1]', '[4]'],
+    ['import "option"\ncode = [Some v = Some 3] ++ [v]\ncode 0 = (Some v = Some 5)\ncode', '[5]'],
     ['numbers = import "number"\nnumbers\nsq 3', '9'],
     ['numbers = import "number"\nalias = numbers\n{ alias; cube 2 }', '8'],
     ['random = { import "random"; import "number" }\nrandom.sq 4', '16'],
