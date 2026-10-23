@@ -166,7 +166,7 @@ Deno.test("standard natives require importing their module", () => {
 Deno.test("reverse uses APN typed clauses and is available from either module", () => {
     for (const module of ["sequence", "text"]) {
         const i = new Interpreter();
-        i.importStandard(module);
+        i.run(parse(`import "${module}"`));
         const fn = i.demand(i.env.get("reverse")!);
         if (fn.kind !== "clauseFn") throw new Error("reverse must use typed APN overloads");
         if (i.renderString(i.run(parse('reverse "a😀b"'))) !== '"b😀a"') throw new Error(module);
@@ -177,7 +177,7 @@ Deno.test("reverse uses APN typed clauses and is available from either module", 
 for (const eager of ['=', '<-']) {
     for (const cached of [false, true]) Deno.test(`selective import ${eager}, cached ${cached}`, () => {
         const i = new Interpreter();
-        if (cached) i.importStandard('system', false);
+        if (cached) i.importStandard('system');
         const before = new Set(i.env.map.keys());
         i.run(parse(`[halt] ${eager} import "system"`));
         const added = [...i.env.map.keys()].filter(name => !before.has(name));

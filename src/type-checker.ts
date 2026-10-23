@@ -1,4 +1,4 @@
-import { clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm } from "./ast.ts";
+import { clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, statementCore, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -172,6 +172,9 @@ interface Entry {
     nonGeneric?: Set<Ty>;
     // definition: the value expression of a value binding (its identity).
     definition?: Expr;
+    // opens: the module a name is defined as (system = import "system", or a
+    // load), which a statement of that name opens (see opensModule).
+    opens?: TypeScope;
 }
 export type TypeScope = Map<string, Entry>;
 /** A definition, by name and its clauses (a function) or body (a value). */
@@ -291,7 +294,7 @@ class BlockScope extends Map<string, Entry> {
 }
 // A module's record: each field's type is its scope entry's, read when needed.
 class ModuleFields extends Map<string, Ty> {
-    constructor(private readonly scope: TypeScope) { super(); }
+    constructor(readonly scope: TypeScope) { super(); }
     override get size() { return this.scope.size; }
     override get(name: string) { return this.scope.get(name)?.type; }
     override has(name: string) { return this.scope.has(name); }
@@ -2938,6 +2941,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             throw error;
         } finally { choosing--; pending.length = saved; }
     }
+    // An import or load statement, or a statement that is a name defined as
+    // one, opens the module's names into its block (see Interpreter.moduleKind).
+    const moduleScope = (e: Expr, t: Ty): TypeScope | undefined => {
+        const module = resolve(t);
+        return (e.t === "import" || isLoadCall(e)) && module.k === "record" && module.fields instanceof ModuleFields ? module.fields.scope : undefined;
+    };
+    function opensModule(statement: Expr, scope: Scope, t: Ty): void {
+        const e = statementCore(statement);
+        const module = e.t === "var" ? scope.get(e.name)?.opens : moduleScope(e, t);
+        if (module) for (const [name, entry] of copyTypeScope(module)) scope.set(name, entry);
+    }
     function infer(e: Expr, scope: Scope, expected?: Ty): Ty {
         spend(e);
         if (++inferenceDepth > 256) {
@@ -2998,7 +3012,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!entry && !firstUnbound && options.runtimeNames && !options.runtimeNames.has(e.name)) {
                     const near = didYouMean(e.name, [...scope.keys(), ...options.runtimeNames]);
                     const module = standardModule(e.name), now = RETIRED_NATIVES[e.name];
-                    firstUnbound = { expr: e, within: locatedExpression ?? checkingExpression, name: e.name, hint: now ? `write \`${now} x\`` : module ? `add \`import "${module}"\` to use \`${e.name}\`` : near ? `did you mean '${near}'?` : undefined };
+                    // A module bound to a name opens only where that name is a statement.
+                    const holder = [...scope].find(([, entry]) => entry.opens?.has(e.name))?.[0];
+                    firstUnbound = { expr: e, within: locatedExpression ?? checkingExpression, name: e.name, hint: now ? `write \`${now} x\``
+                        : holder ? `write \`${holder}.${e.name}\`, or the statement \`${holder}\` to open its names`
+                        : module ? `add \`import "${module}"\` to use \`${e.name}\`` : near ? `did you mean '${near}'?` : undefined };
                 }
                 if (!entry) return unknown();
                 const type = instantiate(entry);
@@ -3006,12 +3024,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "placeholder":
                 return variable();
-            case "import": {
+            case "import":
                 if (!options.imports) return unknown();
-                const imported = copyTypeScope(options.imports(e.module));
-                for (const [name, entry] of imported) scope.set(name, entry);
-                return { k: "record", fields: new ModuleFields(imported) };
-            }
+                return { k: "record", fields: new ModuleFields(copyTypeScope(options.imports(e.module))) };
             case "list": {
                 const code = codeList(e.v.map(expr => ({ expr, scope })));
                 for (const [name, at] of (code as Extract<Ty, { k: "list" }>).open ?? []) openNames?.set(name, { ...at, name });
@@ -3099,9 +3114,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     if (chosen) { callee = chosen; resolved = resolve(chosen); }
                 }
                 if (resolved.k === "intrinsic" && resolved.name === "load" && a.t === "string" && options.loads) {
-                    const loaded = options.loads(a.v, scope, e === tailStatement);
-                    for (const [name, entry] of loaded) scope.set(name, entry);
-                    return { k: "record", fields: new Map([...loaded].map(([name, entry]) => [name, entry.type])) };
+                    return { k: "record", fields: new ModuleFields(options.loads(a.v, scope, e === tailStatement)) };
                 }
                 if (resolved.k === "intrinsic" && resolved.name === "do" && a.t === "list") {
                     return infer({ t: "block", stmts: a.v, style: "{" }, scope);
@@ -3458,6 +3471,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 try {
                     for (const [n, s] of e.stmts.entries()) {
                         result = infer(s, child);
+                        opensModule(s, child, result);
                         // A <- binding, or a discarded statement in a monad, makes the
                         // block a do-block: its last statement is the action (or the
                         // Option, ...) whose result it yields, in the block's monad.
@@ -3517,7 +3531,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 let valueType: Ty | undefined;
                 const t = inferDefinition(e.pattern.p === "var" ? { name: e.pattern.name, body: e.value } : undefined, !e.eager,
                     () => {
-                        const value = valueType = infer(e.value, e.value.t === "import" ? new Map(scope) : scope);
+                        const value = valueType = infer(e.value, scope);
                         if (!e.eager) return value;
                         return boundBy(resolve(value), e.value);
                     });
@@ -5732,7 +5746,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const body = clauses[0].body;
             touchedTopLevel = false;
             // A value definition is lazy: it reads its names when first used.
-            const t = inferDefinition({ name, body }, true, () => infer(body, ["import", "app", "pipe"].includes(body.t) ? new Map(scope) : scope));
+            const t = inferDefinition({ name, body }, true, () => infer(body, ["app", "pipe"].includes(body.t) ? new Map(scope) : scope));
+            const opens = body.t === "var" ? scope.get(body.name)?.opens : moduleScope(body, t);
             if (pending) unify(pending, t, location);
             const value = valueEntry(body, scope);
             // An action (readInput = { ... }) is run where it is used, with that check's inputs.
@@ -5758,6 +5773,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 ...lazyTop ? { lazyTop } : facts,
                 nonGeneric: captured(new Map([...scope].filter(([key]) => key !== name))),
                 definition: body,
+                ...opens ? { opens } : {},
             });
             return;
         }
@@ -6107,7 +6123,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
             } else if (statement.t === "expr") {
                 executeTopLevel(statement.value, scope);
-                validate(infer(statement.value, scope));
+                const type = infer(statement.value, scope);
+                validate(type);
+                opensModule(statement.value, scope, type);
             } else {
                 // An eager binding (<-) runs where it stands; a lazy one when first used.
                 const eager = statement.t === "patDef" && !!statement.eager;

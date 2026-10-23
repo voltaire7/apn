@@ -74,13 +74,20 @@ print (to (List Char) "hi")              # => ['h','i']
 # ---------------------------------------------------------
 # Modules
 # ---------------------------------------------------------
-# import "name" brings a standard module's names into scope, and a list
-# imports several. A module bound to a name stays qualified. Your own files
-# and folders import the same way; load "file" runs a file by its path.
+# An import statement opens a module's names into the block it is in, as =
+# binds a name; a list imports several. Bound to a name, a module opens where
+# that name is a statement, and reading one of its fields opens nothing. Your
+# own files and folders import the same way; load "file" runs a file by path.
 import ["option","number","syntax"]
 parser = import "parser"
 print (sq 12)                            # => 144
 print (parser.parse parser.number "12")  # => Ok 12
+{
+    text = import "text"
+    print (text.words "a b")             # => ["a","b"]
+    text
+    print (unwords ["c","d"])            # => c d
+}
 
 # ---------------------------------------------------------
 # Control flow

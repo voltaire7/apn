@@ -16,8 +16,9 @@ and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
 `sequence`, `mapM`, `map2`–`map4`, `when`, `unless`, `loop`, `while`, `for`, `return`, `throw`, `empty`, `guard`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).
 
 `import` accepts a literal module name or a list of literal module names.
-For example, `import ["number","text"]` opens both modules and returns
-a merged export record. Later modules win name collisions, and `import []`
+For example, `import ["number","text"]` as a statement opens both modules
+(see [module imports](semantics.md#module-imports)); its value is a merged
+export record. Later modules win name collisions, and `import []`
 returns an empty record. Commas or newlines separate module names, and a list
 names each module once (`import ["option","option"]` is a parse error). Standard
 modules are imported by name, with no prefix: `import "text"`. There is no

@@ -1174,8 +1174,22 @@ variable, as in `(t x) (t y)`, requires both arguments to have the same type.
 
 ## Module imports
 
-`import "name"` evaluates a module once per interpreter and brings its exports
-into the current scope. The name is looked up next to the importing file (the
+`import "name"` evaluates a module once per interpreter; its value is the
+module, a record of its exports. Like `=`, it also binds, as a statement: an
+import statement opens the module's exports into the block it is in (`{}`,
+`()` and `do []` alike), and so does a statement that is a name defined as an
+import, which is that import run there:
+
+```
+system = import "system"   # binds system; opens nothing
+system.halt                # a field of the module: opens nothing
+system                     # opens halt into this block
+```
+
+Anywhere else a module is a value and opens nothing: a function returning
+`system` returns the module. A `load` opens the file's definitions by the
+same rule, and `Dynamic e` as a statement is `e`, checked when it runs.
+The name is looked up next to the importing file (the
 current directory in the REPL) as `name.apn`, then as a `name/` folder, whose
 `.apn` files (not subfolders: `import "name/sub"`) form one module; a file wins
 over a folder of the same name. Failing that, each parent folder is searched
@@ -1184,9 +1198,9 @@ is a standard module such as
 `function`, `option`, `sequence`, `number`, `text` or `map`. Standard modules
 take no prefix; `import "std"` and `import "std/text"` are errors. Module
 evaluation uses an isolated scope with builtins and explicit dependencies;
-caller bindings do not affect it. Reimporting installs the cached exports
-again. Imports return an export record. A definition such as
-`s = import "sequence"` defers importing until demanded.
+caller bindings do not affect it. Reimporting opens the cached exports
+again. A definition such as `s = import "sequence"` defers importing until
+demanded.
 `load` remains uncached file execution relative to the current source file.
 `numbers = load "number"` is repeatable like a zero-argument definition, so each use
 of `numbers` loads the file again. A load the static check follows (a literal

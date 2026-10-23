@@ -68,6 +68,10 @@ for (const [source, expected] of [
     ['"ab" * c -> to String c', '["\'a\'","\'b\'"]'],
     // A record its type made takes updates to its fields, and a literal copy new ones.
     ['Quote = [quote: String, year: Int]\nq = Quote []\nq.year = 3\nq "quote" = "x"\n[_: q, more: 1]', '[quote: "x", year: 3, more: 1]'],
+    // A name defined as an import opens the module where it is a statement.
+    ['numbers = import "number"\nnumbers\nsq 3', '9'],
+    ['numbers = import "number"\nalias = numbers\n{ alias; cube 2 }', '8'],
+    ['random = { import "random"; import "number" }\nrandom.sq 4', '16'],
 ] as const) Deno.test(`default checking session: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -90,6 +94,11 @@ for (const source of [
     'Quote = [quote: String, year: Int]; q = Quote []; q "yaer" = 1',
     'Quote = [quote: String, year: Int]; f (Quote q) = { q.x = 1; q }',
     'Quote = [quote: String, year: Int]; conv r = Quote r; (conv [year: "x"]).year',
+    // Only a statement opens a module: not a field of it, a block's, or a function's result.
+    'numbers = import "number"\nnumbers.sq 2\nsq 3',
+    'numbers = import "number"\n{ numbers; 1 }\nsq 3',
+    'numbers = import "number"\nf _ = numbers\nf []\nsq 3',
+    'random = { import "number" }\nsq 3',
 ]) Deno.test(`default checking rejects before evaluation: ${source}`, () => rejected(session(), source));
 
 Deno.test("a static error prevents earlier effects and bindings", () => {

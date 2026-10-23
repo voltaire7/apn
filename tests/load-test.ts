@@ -1,4 +1,5 @@
 import { Interpreter } from "../src/interp.ts";
+import type { Value } from "../src/types.ts";
 import { parse } from "../src/parser.ts";
 
 for (const name of ["number"]) {
@@ -32,10 +33,30 @@ Deno.test("extensionless load reports the resolved APN path", () => {
 
 Deno.test("system exposes halt as a deferred action", () => {
     const i = new Interpreter();
-    const module = i.run(parse('system = import "system"; system'));
+    const module = i.run(parse('system = import "system"; [system]')) as Extract<Value, { kind: "list" }>;
     if (i.env.get("halt")) throw new Error("namespaced import opened halt");
-    if (module.kind !== "record" || !module.v.some(([key]) => key === "halt")) throw new Error("halt was not exported in the module");
-    if (!i.renderString(module).includes("halt:")) throw new Error("module inspection lost halt");
+    const record = i.force(module.v[0]);
+    if (record.kind !== "record" || !record.v.some(([key]) => key === "halt")) throw new Error("halt was not exported in the module");
+    if (!i.renderString(record).includes("halt:")) throw new Error("module inspection lost halt");
+});
+
+// An import or load opens its names only as a statement: written there, or as
+// a name defined as one; a field of it, or a function returning it, opens none.
+for (const [source, opened] of [
+    ['system = import "system"\nsystem', true],
+    ['system = import "system"\nmodule = system\nmodule', true],
+    ['system = import "system"\n{ system; 1 }', false],
+    ['system = import "system"\nhaltAction = system.halt', false],
+    ['system = import "system"\nmodule _ = system\nmodule []', false],
+    ['Dynamic $ import "system"', true],
+    ['numbers = load "../lib/number"\nnumbers', true],
+    ['numbers = load "../lib/number"\nnumbers.sq 2', false],
+] as const) Deno.test(`a statement opens a module: ${JSON.stringify(source)}`, () => {
+    const i = new Interpreter();
+    i.sourceDir = new URL(".", import.meta.url).pathname;
+    i.run(parse(source));
+    const name = source.includes("load") ? "sq" : "halt";
+    if (!!i.env.get(name) !== opened) throw new Error(`${name} ${opened ? "not opened" : "opened"}`);
 });
 
 for (const path of ['number.apn', 'number.APN', 'number.txt', '../lib/number.apn', '/tmp/number.apn', '', 'folder/']) {
