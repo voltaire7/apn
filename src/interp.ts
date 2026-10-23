@@ -56,10 +56,10 @@ class TailLoad {
 }
 
 // Natives with effects: applying one builds an IO action; running it performs them.
-export const IO_NATIVES = new Set(["print", "echo", "emit", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
+export const IO_NATIVES = new Set(["print", "echo", "emit", "repl", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
 // What the actions of IO builtins yield, for showing their types (IO []).
 const IO_RESULTS: Record<string, string> = {
-    print: "[]", emit: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
+    print: "[]", echo: "[]", emit: "[]", repl: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
     entropy: "Int", currentTime: "Int", zoneOffset: "Int",
 };
 
@@ -79,7 +79,7 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
     ["assert", 2], ["match", 2], ["set", 2], ["while", 2], ["for", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
-    ["print", 1], ["echo", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
+    ["print", 1], ["echo", 1], ["repl", 0], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
     ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1], ["use", 1],
@@ -163,6 +163,10 @@ export class Interpreter {
     programArgs: string[] = [];
     // Colors rendered text by its kind, for echo on a terminal (see repl.ts).
     paint?: (text: string, kind?: Value["kind"] | "key") => string;
+    // The REPL loop repl runs (see session): the command line's (repl.ts).
+    interactive?: () => void;
+    // The outermost run's program and the statement it is running.
+    private running?: { program: TopLevel[]; index: number };
     // A bundle (a browser build) to import from instead of the disk: virtual
     // paths to sources (see bundleProgram in modules.ts).
     moduleSources?: Record<string, string>;
@@ -299,6 +303,7 @@ export class Interpreter {
         try {
             let last: Value = { kind: "list", v: [] };
             for (const [index, tl] of program.entries()) {
+                if (this.runDepth === 1 && !this.dynamicDepth) this.running = { program, index };
                 if (tl.t === "type") {
                     // A family of lists counting its elements (Vect n a = [] ->
                     // Vect Z a | a :: Vect k a -> Vect (S k) a) is the length-indexed list.
@@ -356,6 +361,30 @@ export class Interpreter {
                 for (let scope: Env | null = this.env; scope; scope = scope.parent) for (const name of scope.map.keys()) visible.add(name);
                 this.checking!.commit(candidate, visible);
             }
+        }
+    }
+
+    // A REPL session (repl) on the program's top-level names as they are where
+    // it runs (a function's locals have no static types to check against):
+    // its chunks are top-level runs, checked against the program's types
+    // before the running statement, and what they bind stays in the session.
+    private session(loop: () => void): void {
+        const caller = this.env, root = this.programEnv, names = new Map(root.map), newest = root.newest;
+        const { runDepth, dynamicDepth, running } = this;
+        this.env = this.live(root);
+        const visible = new Set<string>();
+        for (let scope: Env | null = this.env; scope; scope = scope.parent) for (const name of scope.map.keys()) visible.add(name);
+        const leave = this.checking && running ? this.checking.enter(running.program, running.index, this.sourceDir, visible) : undefined;
+        this.runDepth = this.dynamicDepth = 0;
+        try {
+            loop();
+        } finally {
+            this.runDepth = runDepth; this.dynamicDepth = dynamicDepth;
+            this.running = running; this.env = caller;
+            leave?.();
+            root.map.clear();
+            for (const [name, value] of names) root.map.set(name, value);
+            root.newest = newest;
         }
     }
 
@@ -3839,6 +3868,10 @@ export class Interpreter {
             // The REPL's echo: strings quoted, colored on a terminal.
             case "echo":
                 this.printValue(a, true, false, this.paint);
+                return mkList([]);
+            case "repl":
+                if (!this.interactive) throw new APNError("runtime", "repl needs a terminal: run the program with apn");
+                this.session(this.interactive);
                 return mkList([]);
             case "toString":
                 return mkStr(this.renderString(a));

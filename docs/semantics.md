@@ -580,7 +580,7 @@ equality with `x`.
 APN code is pure; effects are **IO actions**, ordinary values describing what
 to do. `print "hi"` builds the action that prints `hi`; nothing is printed
 until the action runs. The effectful builtins all return actions: `print`,
-`echo` and `emit` (yielding `[]`), `readFile`, `readStdin`, `getArgs`, `fetch`, `exit`,
+`echo`, `emit` and `repl` (yielding `[]`), `readFile`, `readStdin`, `getArgs`, `fetch`, `exit`,
 `set` (writing a `Mutable` cell), `bracket`, `withFile` and
 `ffi.withLibrary`. An action prints as its type, since only running it shows its result:
 `print (print 1)` prints `IO []`, an annotated `IO Int { ... }` prints `IO Int`,
@@ -596,6 +596,21 @@ Actions run in exactly two places:
   `text <- readFile "input.txt"`. The right side must be an action: `x <- 2 + 3`
   is an error (bind a value with `=`). The one exception is `load`, which runs
   a file: `module <- load "file"` binds its exports.
+
+`repl` opens a REPL session where it runs, on the program's top-level names
+as they are there: the bindings made so far, checked against their types at
+that statement (a function's or block's own names are not in it). Its inputs
+run as the REPL's do, and it ends on `:quit` or the end of input (Ctrl+D),
+yielding `[]`; the program then goes on. What the session binds stays in it,
+so the program keeps its own bindings, but its actions take effect: a
+`Mutable` cell it sets keeps the contents. A session needs the command line
+(`apn`); elsewhere `repl` is a runtime error.
+
+```
+x = 1
+repl                   # >>> x + 1 shows 2; >>> x = 5 binds x in the session
+print x                # 1, once the session ends
+```
 
 `IO` is a type constructor, like `Option`: `IO []` is the type of an action
 yielding `[]` (what `print` builds), `IO Int` of one yielding an `Int`.

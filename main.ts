@@ -11,8 +11,8 @@
 import { CLI_HELP, readCliOptions, VERSION } from "./src/cli-options.ts";
 import { setLooseSpacing } from "./src/parser.ts";
 import { formatFileReadError } from "./src/errors.ts";
-import { Interpreter, dirname } from "./src/interp.ts";
-import { runSource, repl, formatError, colored } from "./src/repl.ts";
+import { dirname } from "./src/interp.ts";
+import { runSource, repl, formatError, commandLineInterpreter } from "./src/repl.ts";
 export { parse } from "./src/parser.ts";
 export { lex } from "./src/lexer.ts";
 
@@ -68,12 +68,10 @@ if (import.meta.main) {
             console.error(formatFileReadError(file, error));
             Deno.exit(1);
         }
-        const interp = new Interpreter();
-        interp.enableChecking();
+        const interp = commandLineInterpreter();
         interp.sourceDir = dirname(file);
         interp.sourceFile = file;
         interp.programArgs = _args.slice(1);
-        if (Deno.stdout.isTerminal()) interp.paint = colored;
         try {
             runSource(src, interp, true); // file mode executes effects without rendering the last value
         } catch (err) {
@@ -81,9 +79,6 @@ if (import.meta.main) {
             Deno.exit(1);
         }
     } else {
-        repl().catch((err: unknown) => {
-            console.error(err);
-            Deno.exit(1);
-        });
+        repl();
     }
 }

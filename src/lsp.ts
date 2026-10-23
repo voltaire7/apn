@@ -54,6 +54,7 @@ const builtins = new Map<string, string>([
     ["intrinsics", "intrinsics — the record of functions APN cannot define (the prelude binds (+) to intrinsics.add)."],
     ...TYPE_NAMES.map((name): [string, string] => [name, "Built-in type constructor."]),
     ["print", "print value — action printing the value and a newline; yields []."],
+    ["repl", "repl — action starting a REPL session on the program's scope where it runs; what the session binds stays in it. Yields [] when the session ends (:quit or end of input)."],
     ["echo", "echo value — action printing the value as the REPL echoes it (strings quoted, colored on a terminal) and a newline; yields []."],
     ["emit", "emit value — action printing the value without a newline; yields []."],
     ["set", "set cell value — action replacing a Mutable cell's contents; yields []."],

@@ -314,6 +314,7 @@ function helpText(): string {
         `  operators spaced on both sides or neither: 1 + 2, 1+2 (not 1 +2); -x negates, f -1 passes -1`,
         `  ; or newline       statement separators (blocks & top level)`,
         `  print, readFile, fetch, set ... are IO actions: statements and <- run them`,
+        `  echo x prints x as the REPL shows it; repl opens a session on a program's names`,
         `  x <- action        run it now and bind its result (outer value only); x <- return v is strict`,
         `  f n = { print n; return n }   a block running an action is an action; it ends with one`,
         `  IO [] is the type of an action yielding []; IO [] { print "hi" } checks one; return x`,
@@ -835,7 +836,7 @@ export class ReplEditor {
     pendingKeys = "";
     pastePending = false;
 
-    async readChunk(): Promise<string | null> {
+    readChunk(): string | null {
         this.lines = [""]; this.row = 0; this.col = 0;
         this.histIdx = null; this.goal = null; this.esc = ""; this.tabPrefix = ""; this.visRow = 0;
         this.render();
@@ -846,7 +847,7 @@ export class ReplEditor {
         let stash = ""; // a paste whose end marker has not arrived yet
         while (true) {
             if (queue === "") {
-                const n = await Deno.stdin.read(buf);
+                const n = Deno.stdin.readSync(buf);
                 if (n === null) return null;
                 queue = (stash + dec.decode(buf.subarray(0, n), { stream: true })).replace(/\r\n?/g, "\n");
                 stash = "";
@@ -894,7 +895,9 @@ export class ReplEditor {
 
 // The SIGINT watcher worker: its event loop is free while the main thread
 // spins in a divergent evaluation, so Ctrl+C always gets through.
-async function startInterruptWatcher(): Promise<{ worker: Worker; flag: Int32Array }> {
+// The REPL runs synchronously (repl runs inside an evaluation), so it waits
+// for the worker's listener on the flag's third slot.
+function startInterruptWatcher(): { worker: Worker; flag: Int32Array } {
     const src = `self.onmessage = (e) => {
         const flag = new Int32Array(e.data);
         Deno.addSignalListener("SIGINT", () => {
@@ -902,42 +905,45 @@ async function startInterruptWatcher(): Promise<{ worker: Worker; flag: Int32Arr
             Atomics.store(flag, 0, 1);
             Atomics.store(flag, 1, 888);
         });
-        self.postMessage("ready");
+        Atomics.store(flag, 2, 1);
+        Atomics.notify(flag, 2);
     };`;
     const worker = new Worker(`data:application/javascript,${encodeURIComponent(src)}`, {
         type: "module",
         name: "apn-sigint",
     });
-    const sab = new SharedArrayBuffer(8);
-    const ready = new Promise<void>((resolve, reject) => {
-        worker.onmessage = () => resolve();
-        worker.onerror = (event) => reject(new Error(event.message));
-    });
-    worker.postMessage(sab);
-    await ready;
-    return { worker, flag: new Int32Array(sab) };
+    const flag = new Int32Array(new SharedArrayBuffer(12));
+    worker.postMessage(flag.buffer);
+    if (Atomics.wait(flag, 2, 0, 5000) === "timed-out") {
+        worker.terminate();
+        throw new Error("the Ctrl+C watcher did not start");
+    }
+    return { worker, flag };
 }
 
 // stty helpers: capture the cooked termios once, restore it around each
 // evaluation so Ctrl+C raises a real SIGINT (needs --allow-run).
-async function ttyCookedSettings(): Promise<string> {
+function ttyCookedSettings(): string {
     const p = new Deno.Command("stty", { args: ["-g"], stdin: "inherit", stdout: "piped", stderr: "null" });
-    const out = await p.output();
-    return new TextDecoder().decode(out.stdout).trim();
+    return new TextDecoder().decode(p.outputSync().stdout).trim();
 }
 
-async function setTtyCooked(saved: string): Promise<void> {
-    await new Deno.Command("stty", { args: [saved], stdin: "inherit", stdout: "null", stderr: "null" }).output();
+function setTtyCooked(saved: string): void {
+    new Deno.Command("stty", { args: [saved], stdin: "inherit", stdout: "null", stderr: "null" }).outputSync();
 }
 
-async function replTTY(): Promise<void> {
-    const interp = new Interpreter();
-    interp.enableChecking();
-    if (Deno.stdout.isTerminal()) interp.paint = colored;
+// The editor of the session running now: a session repl opens inside it
+// shares its terminal setup and takes the keys typed ahead.
+let activeEditor: ReplEditor | undefined;
+
+function replTTY(interp: Interpreter): void {
     const hist = loadHistory();
     const ed = new ReplEditor(interp, hist);
-    const watch = await startInterruptWatcher();
-    setInterruptFlag(watch.flag);
+    const outer = activeEditor;
+    if (outer) { ed.pendingKeys = outer.pendingKeys; outer.pendingKeys = ""; }
+    activeEditor = ed;
+    const watch = outer ? undefined : startInterruptWatcher();
+    if (watch) setInterruptFlag(watch.flag);
 
     // Route console.log (used by the print/debug natives) through the editor
     // so output is newline-correct while the terminal is raw.
@@ -946,13 +952,13 @@ async function replTTY(): Promise<void> {
         ed.print(args.map((x) => typeof x === "string" ? x : String(x)).join(" "));
     };
 
-    const savedCooked = await ttyCookedSettings();
+    const savedCooked = ttyCookedSettings();
     Deno.stdin.setRaw(true);
     ed.emit("\x1b[>1u"); // request distinct modified keys (Kitty keyboard protocol)
-    ed.emit("\x1b[?2004h"); // ask the terminal to wrap pastes in ESC[200~..ESC[201~
+    if (!outer) ed.emit("\x1b[?2004h"); // ask the terminal to wrap pastes in ESC[200~..ESC[201~
     try {
         while (true) {
-            const src = await ed.readChunk();
+            const src = ed.readChunk();
             if (src === null) { ed.print("bye"); return; }
             const cmd = src.trim();
             if (cmd === ":quit" || cmd === ":q") { ed.print("bye"); return; }
@@ -971,7 +977,7 @@ async function replTTY(): Promise<void> {
             // hot loops throw). Editing happens back in raw mode where Ctrl+C is
             // the usual 0x03 clear/quit.
             ed.emit("\x1b[<u"); // cooked evaluation needs ordinary Ctrl+C, not enhanced key bytes
-            await setTtyCooked(savedCooked);
+            setTtyCooked(savedCooked);
             try {
                 const val = runSourceValue(src, interp, lastIsBinding(src) || lastIsPrintCall(src));
                 if (val !== null) {
@@ -990,10 +996,11 @@ async function replTTY(): Promise<void> {
             }
         }
     } finally {
-        setInterruptFlag(null);
-        watch.worker.terminate();
+        if (watch) { setInterruptFlag(null); watch.worker.terminate(); }
         ed.emit("\x1b[<u");
-        ed.emit("\x1b[?2004l");
+        if (!outer) ed.emit("\x1b[?2004l");
+        else outer.pendingKeys = ed.pendingKeys;
+        activeEditor = outer;
         console.log = origLog;
         Deno.stdin.setRaw(false);
     }
@@ -1001,90 +1008,88 @@ async function replTTY(): Promise<void> {
 
 // ---- piped REPL (stdin not a TTY): plain line loop, no editor/colors ----
 
-async function replPiped(): Promise<void> {
-    const interp = new Interpreter();
-    interp.enableChecking();
-
-    const decoder = new TextDecoder();
+// Lines read from stdin and not used yet, shared so that a session repl opens
+// takes the lines after the one that opened it.
+const piped = { lines: [] as string[], rest: "", decoder: new TextDecoder() };
+function pipedLine(): string | null {
     const buf = new Uint8Array(1024);
-    const stdin = Deno.stdin;
-
-    let pending = "";
-    const prompt = ">>> ";
-
-    const processBuffer = (chunk: string): string[] => {
-        return chunk.split("\n");
-    };
-
-    let leftover = "";
-
-    // We drive input manually; print the initial prompt.
-    await Deno.stdout.write(new TextEncoder().encode(prompt));
-
-    while (true) {
-        const n = await stdin.read(buf);
-        if (n === null) break;
-        const chunk = decoder.decode(buf.subarray(0, n));
-        leftover += chunk;
-        const lines = processBuffer(leftover);
-        leftover = lines.pop() ?? "";
-
-        for (const rawLine of lines) {
-            const line = rawLine.trimEnd();
-            if (line.length === 0) {
-                await Deno.stdout.write(new TextEncoder().encode(prompt));
-                continue;
-            }
-            if (line === ":quit" || line === ":q") {
-                console.log("bye");
-                return;
-            }
-            if (line === ":help" || line === ":h") {
-                console.log(helpText());
-                await Deno.stdout.write(new TextEncoder().encode(prompt));
-                continue;
-            }
-
-            pending = pending ? pending + "\n" + line : line;
-            // Try to evaluate; if the parse error indicates an incomplete block
-            // (missing `in`, `->`, or a structural `newline`), keep accumulating so
-            // users can enter multi-line constructs. Otherwise report the error.
-            try {
-                const val = runSourceValue(pending, interp, lastIsBinding(pending) || lastIsPrintCall(pending));
-                if (val !== null) interp.printValue(val, true, false);
-                pending = "";
-                await Deno.stdout.write(new TextEncoder().encode(prompt));
-                continue;
-            } catch (err) {
-                const msg = (err as Error).message;
-                if (isIncompleteError(msg)) {
-                    // Possibly incomplete — keep going.
-                    await Deno.stdout.write(new TextEncoder().encode("... "));
-                    continue;
-                }
-                // Real error: show it, reset pending.
-                console.log(formatError(err, false));
-                pending = "";
-                await Deno.stdout.write(new TextEncoder().encode(prompt));
-                continue;
-            }
+    while (!piped.lines.length) {
+        const n = Deno.stdin.readSync(buf);
+        if (n === null) {
+            if (!piped.rest) return null;
+            piped.lines.push(piped.rest);
+            piped.rest = "";
+            break;
         }
-        if (leftover !== "") {
-            await Deno.stdout.write(new TextEncoder().encode(prompt));
-        }
+        const lines = (piped.rest + piped.decoder.decode(buf.subarray(0, n), { stream: true })).split("\n");
+        piped.rest = lines.pop()!;
+        piped.lines.push(...lines);
     }
+    return piped.lines.shift()!;
 }
 
-export async function repl(): Promise<void> {
+function replPiped(interp: Interpreter): void {
+    const write = (text: string) => Deno.stdout.writeSync(ENC.encode(text));
+    const prompt = ">>> ";
+    let pending = "";
+    write(prompt);
+    for (let line = pipedLine(); line !== null; line = pipedLine()) {
+        line = line.trimEnd();
+        if (line.length === 0) {
+            write(prompt);
+            continue;
+        }
+        if (line === ":quit" || line === ":q") {
+            console.log("bye");
+            return;
+        }
+        if (line === ":help" || line === ":h") {
+            console.log(helpText());
+            write(prompt);
+            continue;
+        }
+        pending = pending ? pending + "\n" + line : line;
+        // Try to evaluate; if the parse error indicates an incomplete block
+        // (missing `in`, `->`, or a structural `newline`), keep accumulating so
+        // users can enter multi-line constructs. Otherwise report the error.
+        try {
+            const val = runSourceValue(pending, interp, lastIsBinding(pending) || lastIsPrintCall(pending));
+            if (val !== null) interp.printValue(val, true, false);
+        } catch (err) {
+            if (isIncompleteError((err as Error).message)) {
+                write("... ");
+                continue;
+            }
+            console.log(formatError(err, false));
+        }
+        pending = "";
+        write(prompt);
+    }
+    write("\n");
+}
+
+// A REPL session on the interpreter's scope: the editor on a terminal, a
+// plain line loop otherwise. It returns when the input ends or on :quit.
+function session(interp: Interpreter): void {
+    if (Deno.stdin.isTerminal()) replTTY(interp);
+    else replPiped(interp);
+}
+
+// An interpreter for running programs from the command line: echo colors on a
+// terminal, and repl opens a session (see Interpreter.session).
+export function commandLineInterpreter(): Interpreter {
+    const interp = new Interpreter();
+    interp.enableChecking();
+    if (Deno.stdout.isTerminal()) interp.paint = colored;
+    interp.interactive = () => session(interp);
+    return interp;
+}
+
+export function repl(): void {
     console.log(`APN interpreter v${VERSION}`);
     console.log("Applicative Polish Notation — lazy, statically checked with inference and Dynamic boundaries.");
-    if (Deno.stdin.isTerminal()) {
-        console.log(":help :quit  |  Up/Down history  |  Tab complete/indent  |  Ctrl+C/D quit");
-        await replTTY();
-        return;
-    }
-    console.log("Commands: :help :quit");
-    console.log();
-    await replPiped();
+    if (Deno.stdin.isTerminal()) console.log(":help :quit  |  Up/Down history  |  Tab complete/indent  |  Ctrl+C/D quit");
+    else console.log("Commands: :help :quit\n");
+    session(commandLineInterpreter());
 }
 

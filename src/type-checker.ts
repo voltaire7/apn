@@ -196,6 +196,8 @@ export interface CheckOptions {
      * would read (undefined when unreadable) and getArgs. The runtime must see
      * the same snapshot. Lint and editor checks leave it unset. */
     inputs?: { readFile(path: string): string | undefined; args(): string[]; readStdin?(): string | undefined };
+    /** Receives the scope before the program's statement at index (see CheckingSession.enter). */
+    before?: { index: number; scope: (scope: TypeScope) => void };
     /** The variable names a file loaded by this path mentions, if the session checked it. */
     loadedNames?: (path: string) => Set<string> | undefined;
     /** Whether code checked in this session outside this program used use on
@@ -213,9 +215,9 @@ export interface CheckOptions {
      * asked when a cell is read; computed from the program when unset. */
     mutation?: () => boolean;
 }
-// Code that may write a Mutable cell: set, or code loaded at runtime. (use
-// opens a record's fields, which writes no cell.)
-const MUTATING_NAMES = new Set(["set", "load"]);
+// Code that may write a Mutable cell: set, or code loaded or typed (repl) at
+// runtime. (use opens a record's fields, which writes no cell.)
+const MUTATING_NAMES = new Set(["set", "load", "repl"]);
 const isFunctionExpr = (e: Expr): e is Extract<Expr, { t: "lambda" | "patternLambda" }> => e.t === "lambda" || e.t === "patternLambda";
 // A lambda, grouped or not.
 const functionExpr = (e: Expr): Extract<Expr, { t: "lambda" | "patternLambda" }> | undefined =>
@@ -6006,6 +6008,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const int = atom("Int"), str = atom("String"), bool = atom("Bool"), num = atom("Number");
     const empty = list(variable(), constant(0n));
     for (const name of ["print", "echo", "emit"]) native(name, [variable()], io(empty));
+    native("repl", [], io(empty));
     { const held = variable(); native("assert", [variable(), held], held); }
     native("isType", [variable(), variable()], bool);
     native("parse", [str], explicitDynamic);
@@ -6142,7 +6145,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         seen.add(value);
         for (const child of children(value)) validate(child, seen);
     }
-    for (const statement of program) {
+    for (const [index, statement] of program.entries()) {
+        if (options.before?.index === index) options.before.scope(new Map(scope));
         // Each top-level statement gets the same bounded work, so a long module
         // is not limited by its length.
         budget = STATEMENT_BUDGET;

@@ -22,10 +22,21 @@ server.daemon_threads = True
 threading.Thread(target=server.serve_forever, daemon=True).start()
 slow = f'fetch "http://127.0.0.1:{server.server_address[1]}/" []'.encode()
 
-pid, terminal = pty.fork()
-if pid == 0:
-    os.execvp("deno", ["deno", "run", "--no-prompt", "--allow-env=HOME",
-                       "--allow-read", "--allow-net=127.0.0.1", "--allow-run=stty", "main.ts"])
+def start(*args):
+    pid, terminal = pty.fork()
+    if pid == 0:
+        os.execvp("deno", ["deno", "run", "--no-prompt", "--allow-env=HOME",
+                           "--allow-read", "--allow-net=127.0.0.1", "--allow-run=stty", "main.ts", *args])
+    return pid, terminal
+
+def stop(pid):
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    os.waitpid(pid, 0)
+
+pid, terminal = start()
 
 def read_for(seconds):
     data = bytearray()
@@ -39,7 +50,7 @@ def read_for(seconds):
     return bytes(data)
 
 try:
-    assert b">>>" in read_for(1), "REPL failed to start"
+    assert b">>>" in read_for(3), "REPL failed to start"
     for source in (b"[0..]", b"x = x", b"x",
                    b'load "tests/fixtures/tail-load/forever"',
                    b"loop n = loop n", b"loop 0", b'import "http"', slow):
@@ -54,9 +65,31 @@ try:
     assert b"42" in read_for(0.3), "REPL failed to recover"
     print("Ctrl+C interrupts infinite output, cyclic evaluation and a slow fetch; REPL recovers.")
 finally:
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
-    os.waitpid(pid, 0)
+    stop(pid)
+    os.close(terminal)
+
+# repl from a program: a session on its scope, which Ctrl+C interrupts within
+# and Ctrl+D ends, after which the program goes on with its own bindings.
+pid, terminal = start("tests/fixtures/repl-session.apn")
+try:
+    assert b">>>" in read_for(3), "repl failed to start a session"
+    os.write(terminal, b"x + 1\r")
+    assert b"2" in read_for(0.5), "the session does not see the program's x"
+    os.write(terminal, b"[0..]\r")
+    read_for(0.25)
+    os.write(terminal, b"\x03")
+    assert b"Interrupted." in read_for(0.7), "Ctrl+C did not interrupt within the session"
+    os.write(terminal, b"x = 5\r")
+    read_for(0.3)
+    os.write(terminal, b"repl\r")
+    read_for(0.5)
+    os.write(terminal, b"x\r")
+    assert b"5" in read_for(0.5), "a nested session does not see its caller's x"
+    os.write(terminal, b"\x04")
+    read_for(0.3)
+    os.write(terminal, b"\x04")
+    assert b"after 1" in read_for(1), "the program did not go on after the session"
+    print("repl opens sessions on a program's scope; Ctrl+C and Ctrl+D work within them.")
+finally:
+    stop(pid)
     os.close(terminal)

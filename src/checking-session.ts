@@ -44,17 +44,28 @@ export class CheckingSession {
         this.scope = new Map([...candidate].filter(([name]) => visible.has(name)));
     }
 
+    // A REPL session inside a run (repl) checks against the program's types
+    // before its statement at index, of the names the run has bound there.
+    // The returned function ends the session, restoring the session's scope.
+    enter(program: TopLevel[], index: number, directory: string, visible: Set<string>): () => void {
+        const saved = this.scope;
+        let before: TypeScope = new Map();
+        this.check(program, directory, saved, false, { index, scope: scope => { before = scope; } });
+        this.scope = new Map([...before].filter(([name]) => visible.has(name)));
+        return () => { this.scope = saved; };
+    }
+
     /** Whether any program this session has checked may write a Mutable cell. */
     private mutation = false;
     /** Programs that used use on a record of unknown fields. */
     private opaqueUses = new Set<TopLevel[]>();
 
-    private check(program: TopLevel[], directory: string, initial: TypeScope, library: boolean): { scope: TypeScope; exports: TypeScope } {
+    private check(program: TopLevel[], directory: string, initial: TypeScope, library: boolean, before?: CheckOptions["before"]): { scope: TypeScope; exports: TypeScope } {
         this.mutation ||= mayMutate(program);
         let scope: TypeScope = new Map();
         let exports: TypeScope = new Map();
         const result = checkTypes(program, {
-            strict: true, initial, library,
+            strict: true, initial, library, before,
             runtimeNames: !library && this.runtimeNames ? new Set(this.runtimeNames()) : undefined,
             inputs: library ? undefined : this.inputs,
             mutation: () => this.mutation,

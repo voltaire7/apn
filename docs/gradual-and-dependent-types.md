@@ -511,7 +511,7 @@ elements) stay unknown.
 Effects are never performed while checking, but their results are known:
 `print x`, `echo x` and `emit x` are `x`, `set` and `debug` give `[]`, and `assert c x` gives `x`. A
 `Mutable` cell's contents are known when nothing checked in the session can
-write a cell (no `set` or `load`). Otherwise contents are followed
+write a cell (no `set`, `load` or `repl`). Otherwise contents are followed
 in the run's order: block statements, eager bindings (`<-`) and operands run in
 order, a lazy binding is read when used, and a list element or call argument
 that reads a cell is computed where it is first needed, so

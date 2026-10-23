@@ -5,7 +5,9 @@ Two modes, picked automatically: a **TTY** stdin gets the raw-mode line editor
 line loop — no colors, no editor, same chunk semantics. Each input is a
 statement: an action runs (as in a file) and its result is echoed, except an
 empty result (`print 3` shows only `3`); bindings echo nothing. `echo x` prints
-a value the same way from any program (see `docs/semantics.md`). Interactive features:
+a value the same way from any program, and `repl` opens a session from one,
+on its names where it runs (see `docs/semantics.md`); a session inside another
+shares its terminal setup and the input typed ahead. Interactive features:
 
 - **History**: Up/Down walk submitted chunks. In a single-line buffer the
   arrows navigate history; in a multi-line buffer (continuation or a recalled
