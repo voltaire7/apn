@@ -68,13 +68,14 @@ Deno.test('failed computed slot conversion preserves initialized type', () => {
     if (i.renderString(i.run(parseDocument('[arr, typeOf (arr 0)]'))) !== '[[0],Int]') throw new Error('lost value or type');
 });
 
-// xs -2 = 5 would define - (xs - 2 = 5): it is an error naming both spellings.
-for (const source of ["arr = [0,0]\narr -1 = 2", "arr = [0,0]\ni = 1\narr -i = 2", "f = { xs = [1]; xs -1 = 5; xs }"]) {
-    Deno.test(`lopsided minus before = is an error: ${JSON.stringify(source)}`, () => {
-        try { parseDocument(source); } catch (error) {
-            if (String(error).includes("an item update or a definition of -")) return;
-            throw error;
-        }
-        throw new Error("accepted");
-    });
-}
+// xs -2 = 5 gives xs -2, as f -1 passes -1: an item update, or a clause.
+for (const [source, expected] of [
+    ["arr = [0,0,0]\narr -2 = 5\narr", "[0,5,0]"],
+    ["arr = [0,0]\ni = 1\narr -i = 2\narr", "[0,2]"],
+    ["f = { xs = [1,2]; xs -1 = 5; xs }\nf", "[1,5]"],
+    ['f -1 = "minus one"\nf n = "other"\n[f -1, f 2]', '["minus one","other"]'],
+]) Deno.test(`negated index or parameter: ${JSON.stringify(source)}`, () => {
+    const interp = new Interpreter();
+    const actual = interp.renderString(interp.run(parseDocument(source)));
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});

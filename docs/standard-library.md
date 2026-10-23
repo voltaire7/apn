@@ -308,6 +308,7 @@ literals, one-parameter lambdas and application, which runs as `e` does:
 ```apn
 fromAST (toLambda { x = 10; y = x + 1; y })    # "(x -> (y -> y) (x + 1)) 10"
 fromAST (toLambda (x, y -> x + y))              # "x -> y -> x + y"
+fromAST (toLambda [x = 1, y = 2, x + y])        # "(x -> (y -> [x, y, x + y]) 2) 1"
 eval (toLambda { fact n = n == 0 ? 1 : n * fact (n - 1); fact 5 })   # 120
 ```
 
@@ -317,7 +318,10 @@ name is an inner lambda shadowing it, as a new version does; `x <- e; rest` is
 binding that refers to itself is a fixed point, through Curry's Y combinator
 written out, so the result needs no library. A definition with several
 clauses, or patterns for parameters, is a lambda per argument and a `match`
-over them; sections and `$` become lambdas and application. Other syntax
+over them; sections and `$` become lambdas and application. A list's
+bindings scope over its later items as a block's do, each item being the
+value its binding binds (a pattern binding's whole value, under a fresh name
+`_item1`, ...). Other syntax
 (`?:`, lists, records, ranges, patterns) stays as it is, its parts
 desugared. `toLambda` sees only the quoted code, so a binding of a name bound
 outside it that refers to that name (`x = x + 1`) is read as recursion, not

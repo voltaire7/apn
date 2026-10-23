@@ -114,8 +114,11 @@ for (const [source, expected] of [
         "(ones -> take 2 ones) ((f -> (x -> f (x x)) (x -> f (x x))) (ones -> 1 :: ones))"],
     ["{ first (x :: _) d = x; first [] d = d; first [] 0 }",
         "(first -> first [] 0) (_1 -> _2 -> match [_1,_2] [[x :: _, d] -> x, [[],d] -> d])"],
+    // A list's bindings scope over its later items, as a block's do.
+    ["[x = 1, y = 2, x + y]", "(x -> (y -> [x, y, x + y]) 2) 1"],
+    ["[[a,b] = [1,2], a + b]", "(_item1 -> ([a,b] -> [_item1, a + b]) _item1) [1,2]"],
 ] as const) Deno.test(`toLambda: ${source}`, () => {
-    const actual = shown(session(), `fromAST (toLambda ${source.startsWith("{") ? source : `(${source})`})`, true);
+    const actual = shown(session(), applied("fromAST", applied("toLambda", source)), true);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const [source, expected] of [
@@ -124,6 +127,8 @@ for (const [source, expected] of [
     ["{ ones = 1 :: ones; take 3 ones }", "[1,1,1]"],
     ["{ first (x :: _) d = x; first [] d = d; first [] 7 }", "7"],
     ["{ x = 1; x = x + 1; [x, x * 10] }", "[2,20]"],
+    ["[x = 1, y = 2, x + y]", "[1,2,3]"],
+    ["[[a,b] = [3,4], double n = n * 2, double (a * b)]", "[[3,4], n -> n * 2, 24]"],
 ] as const) Deno.test(`toLambda runs as written: ${source}`, () => {
     const i = session();
     const actual = shown(i, `eval (toLambda ${source})`), original = shown(i, source);

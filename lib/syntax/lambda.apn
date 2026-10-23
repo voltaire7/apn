@@ -4,8 +4,9 @@
 # binding of x is an inner lambda shadowing it; a binding that refers to
 # itself is a fixed point (Curry's Y); a definition with several clauses, or
 # patterns for parameters, a match over its arguments; x <- e; rest is
-# e >>= (x -> rest), and an action statement s; rest is s >> rest. Other
-# syntax (?:, lists, records, ranges, patterns) stays, its parts desugared.
+# e >>= (x -> rest), and an action statement s; rest is s >> rest. A list's
+# bindings scope over its later items as a block's do. Other syntax (?:,
+# lists, records, ranges, patterns) stays, its parts desugared.
 _lambda bound (String leaf) = leaf
 _lambda bound (Bool b) = b
 _lambda bound (Number n) = n
@@ -18,7 +19,34 @@ _core bound "{}" statements = _block bound statements
 _core bound "()" [op,x] = ["->", ["_1"], [op, "_1", _lambda bound x]]
 _core bound "$" [f,x] = [_lambda bound f, _lambda bound x]
 _core bound "=" [left,right] = ["=", _bindingPattern left, _value bound [["=",left,right]]]
+_core bound "[]" items = any _isBinding items
+    ? _block bound (_listBlock items)
+    : map (_lambda bound) ("[]" :: items)
 _core bound head args = map (_lambda bound) (head :: args)
+
+# A list with bindings is the block of its bindings, ending in the list of
+# its items' values: [x = 1, x + 1] is { x = 1; [x, x + 1] }, so
+# (x -> [x, x + 1]) 1. A binding's item is what it binds; a pattern
+# binding's, its whole value, under a fresh name (_item1, ...).
+_listBlock items = {
+    [statements,values] = _listed 1 items
+    statements ++ ["[]" :: values]
+}
+_listed _ [] = [[],[]]
+_listed n (item :: rest) = {
+    [statements,values] = _listed (n + 1) rest
+    [own,value] = _listedItem n item
+    [own ++ statements, value :: values]
+}
+_listedItem n ["=",left,right] = _isPlain left || _isDefinition left
+    ? [[["=",left,right]], _bindingPattern left]
+    : {
+        name = "_item" ++ to String n
+        [[["=",name,right],["=",left,name]],name]
+    }
+_listedItem _ item = [[],item]
+_isBinding ["=",_,_] = true
+_isBinding _ = false
 
 # One lambda per parameter; a guard stays on the last.
 _curry bound [param] body = ["->", [param], _lambda (_binders param ++ bound) body]

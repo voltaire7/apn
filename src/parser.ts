@@ -711,7 +711,7 @@ class Parser {
             if (t.k === "newline" || t.k === "dedent" || t.k === "indent" || t.k === "eof") break;
             if (t.k === "sym" && t.v === ";") break;
             // f -x passes -x: a '-' spaced before and not after negates.
-            if (this.tightMinus(t) && /\s/.test(this.source[t.pos - 1] ?? "")) {
+            if (this.negated(t)) {
                 this.next();
                 const a: Expr = { t: "unop", op: "neg", e: this.parsePiece(primary) };
                 sourceLocations.set(a, { source: this.source, file: this.file, start: t.pos, end: this.peek().pos });
@@ -1547,7 +1547,6 @@ class Parser {
             this.next(); // =
             return { name: op.v, clauses: [{ params: [], body: this.parseDefBody("=") }] };
         }
-        let negated: Token | undefined;
         try {
             const left = this.parsePatternAtom();
             const name = this.peek();
@@ -1555,25 +1554,24 @@ class Parser {
             if (name.k === "sym" && isOperatorName(name.v) && !isConstructorOperator(name.v)) {
                 this.next();
                 const right = this.parsePatternAtom();
-                if (this.isSym("=")) {
-                    // xs -2 = 5 reads as xs given -2, as f -1 passes -1: neither
-                    // a definition of - nor (yet) an item update.
-                    if (name.v === "-" && this.tightMinus(name) && /\s/.test(this.source[name.pos - 1] ?? "")) negated = name;
-                    else {
-                        this.next();
-                        return { name: name.v, clauses: [{ params: [left, right], body: this.parseDefBody("=") }] };
-                    }
+                // xs -2 = 5 gives xs -2, as f -1 passes -1: no definition of -.
+                if (this.isSym("=") && !this.negated(name)) {
+                    this.next();
+                    return { name: name.v, clauses: [{ params: [left, right], body: this.parseDefBody("=") }] };
                 }
             }
         } catch { /* not an operator definition */ }
-        if (negated) {
-            const left = this.source.slice(this.toks[save].pos, negated.pos).trimEnd(), right = this.source.slice(negated.pos + 1, this.peek().pos).trimEnd();
-            throw new APNError("parse", `\`${left} -${right} = ...\` is ambiguous: an item update or a definition of -`, {
-                pos: negated.pos, len: 1, hint: `write ${left} (-${right}) = ... to set an item, or ${left} - ${right} = ... to define -`,
-            });
-        }
         this.i = save;
         return null;
+    }
+
+    // A '-' spaced before and not after: a negated argument (f -1), not subtraction.
+    negated(t: Token): boolean {
+        return t.k === "sym" && t.v === "-" && this.tightMinus(t) && /\s/.test(this.source[t.pos - 1] ?? "");
+    }
+    // A negative number as a definition's parameter, as an argument: f -1 = ...
+    negativeLiteral(): boolean {
+        return this.negated(this.peek()) && (this.peek(1).k === "int" || this.peek(1).k === "float");
     }
 
     // A definition's parameter reads as an argument does: a capitalized name
@@ -1613,10 +1611,7 @@ class Parser {
             const t = this.next(); // definition name
             if (t.k !== "ident") return false;
             // collect param patterns; a param must be a self-delimited pattern
-            for (;;) {
-                if (!this.startsParam(this.peek())) break;
-                this.parseConsPattern();
-            }
+            while (this.startsParam(this.peek()) || this.negativeLiteral()) this.parseConsPattern();
             return this.isSym("=");
         } catch {
             return false;
@@ -1651,7 +1646,7 @@ class Parser {
                 this.i = saved; return null;
             }
         } catch { this.i = saved; return null; }
-        // xs (i) = v is not xs i = v, a definition (nor xs -i = v, one of -).
+        // xs (i) = v is not the definition xs i = v.
         const group = this.groups.get(left.a);
         if (group !== undefined) this.unnecessary.delete(group);
         this.expectSym("=");
@@ -1681,7 +1676,7 @@ class Parser {
         const name = (this.next() as { v: string }).v;
         const params: Pattern[] = [];
         // Haskell-style params are PATTERNS:  f [x, y] = ..., f (x :: rest) = ...
-        while (this.startsParam(this.peek())) params.push(this.parameter());
+        while (this.startsParam(this.peek()) || this.negativeLiteral()) params.push(this.parameter());
         const equals = this.next(); // =
         let body = this.parseDefBody();
         // f = Int x -> ... is the curried spelling of f (Int x) = ...: the

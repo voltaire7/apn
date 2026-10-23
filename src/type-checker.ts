@@ -1665,11 +1665,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         });
         return { k: "list", element: union(items), items, length: constant(BigInt(items.length)) };
     }
+    // The type of the value each pattern binding binds (see bindingValue).
+    const boundValues = new WeakMap<Expr, Ty>();
     // The value a binding statement gives, as a block's last statement or a
     // list's item: what it binds, when it binds one name.
     function bindingValue(statement: Expr | undefined, scope: Scope): Ty | undefined {
-        const name = statement?.t === "stmDef" ? statement.name : statement?.t === "patDef" && statement.pattern.p === "var" ? statement.pattern.name : undefined;
-        return name === undefined ? undefined : scope.get(name)?.type;
+        if (statement?.t === "patDef") return boundValues.get(statement);
+        return statement?.t === "stmDef" ? scope.get(statement.name)?.type : undefined;
     }
 
     // A list literal with bindings: each binding's item is its value, in scope
@@ -1684,7 +1686,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return type;
             }
             const t = infer(expr, scope);
-            return expr.t === "stmDef" || expr.t === "patDef" ? bindingValue(expr, scope) ?? unknown() : t;
+            return expr.t === "stmDef" || expr.t === "patDef" ? bindingValue(expr, scope) ?? variable() : t;
         });
         return { k: "list", element: types.length ? union(types) : variable(), length: constant(BigInt(types.length)), items: types, formula: { items, scope: parent } };
     }
@@ -3362,6 +3364,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         if (!e.eager) return value;
                         return boundBy(resolve(value), e.value);
                     });
+                boundValues.set(e, t);
                 // A top-level x <- action knows what the action yields, run statically.
                 const ran = e === eagerResult?.statement ? eagerResult.known
                     ?? (valueType && resolve(valueType).k !== "mutable" ? runLocally(e.value, scope) : undefined) : undefined;

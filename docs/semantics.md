@@ -895,8 +895,8 @@ streaming/interruption recovery. The showcase is the broader syntax reference.
 `arr 0 = 10` rebinds an existing list to a modified copy in the current scope,
 like record field assignment, converting the value to the element's type:
 `arr = [Float]; arr 0 = 1` produces `[1.0]`, and `arr = [Int]; arr 0 = .2`
-errors, as `arr = [Int 0]; arr 0 = .2` does. `arr (-1) = 10` updates its final element; `arr -1 = 10` is an error, since
-`arr - 1 = 10` would define `-`.
+errors, as `arr = [Int 0]; arr 0 = .2` does. `arr -1 = 10` updates its final element, as `arr -1` reads it (`arr - 1 = 10`
+defines `-`); likewise `f -1 = ...` is a clause of `f` for the argument `-1`.
 A single index must evaluate to an integer or a variant from a nullary-only family
 (using zero-based declaration order); a finite list of these indices selects multiple
 slots. `arr [1,2] = arr [2,1]` swaps the old values. Multi-index assignment requires
