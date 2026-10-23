@@ -139,16 +139,18 @@ export function rewriteInfixConstructors(node: unknown, tagOf: (op: string) => s
     for (const key of Object.keys(n)) delete n[key];
     Object.assign(n, { p: "constr", tag, args });
 }
-// Rewrite every flat typed pattern in node to its typed form, in place.
-export function flattenTypedPatterns(node: unknown, parameters: (name: string) => number | undefined): void {
-    if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) { node.forEach(x => flattenTypedPatterns(x, parameters)); return; }
-    const n = node as Record<string, unknown>;
-    if ("p" in n) {
-        const flat = flatTypedPattern(n as Pattern, parameters);
-        if (flat) { for (const key of Object.keys(n)) delete n[key]; Object.assign(n, flat); }
+// A pattern with every flat typed pattern in it read as its typed form,
+// copied where that changes it: the pattern as written stays as it is.
+export function typedForm(p: Pattern, parameters: (name: string) => number | undefined): Pattern {
+    const read = flatTypedPattern(p, parameters) ?? p;
+    const isPattern = (x: unknown): x is Pattern => !!x && typeof x === "object" && "p" in x;
+    let changed = read !== p;
+    const copy: Record<string, unknown> = { ...read };
+    for (const [key, value] of Object.entries(read)) {
+        const parts = Array.isArray(value) ? value.map(x => isPattern(x) ? typedForm(x, parameters) : x) : isPattern(value) ? typedForm(value, parameters) : value;
+        if (Array.isArray(value) ? (parts as unknown[]).some((x, n) => x !== value[n]) : parts !== value) { copy[key] = parts; changed = true; }
     }
-    for (const value of Object.values(n)) if (value && typeof value === "object") flattenTypedPatterns(value, parameters);
+    return changed ? copy as Pattern : p;
 }
 
 // Source metadata is kept out of AST serialization and source round-trips.

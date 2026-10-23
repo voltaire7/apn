@@ -429,9 +429,13 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   certain case: simple patterns, no guard, a clause no earlier one covers,
   every equation solved. Anything else proves nothing and is left to the
   runtime check. `define` runs them; proven functions are `provenClaims`.
-- Flat typed patterns are rewritten in place before a statement is checked
-  (`flattenTypedPatterns`, `ast.ts`), so every checker pass sees one form;
-  the runtime applies the same `flatTypedPattern` when it matches.
+- The checker never rewrites the program the runtime runs. It reads flat typed
+  patterns as typed (`typedForm`, `ast.ts`, a copy) where it takes in a
+  definition's clauses (`define`) or a function's parameters (`inferFunction`),
+  and `bind` reads one met anywhere else, so every checker pass sees one form;
+  the runtime applies the same `flatTypedPattern` when it matches, except that
+  it takes `(Vect n a xs)` apart itself (a mismatch fails the match).
+  `tests/vect-pattern-test.ts`.
 - A `match` alternative's input starts from `patternInput` (the scrutinee's
   length at cons positions, fresh elsewhere), so its patterns still only test.
   `selfOpen` lets a recursive call pass any length to a parameter whose typed

@@ -64,10 +64,29 @@ for (const source of [
     'bad (Vect n a (x::xs)) = Vect n a xs',
     'f (Vect n a xs) (Vect m a ys) = xs; f [1] [true]',
     'f (Vect n a xs) (Vect n a ys) = xs; f [1] [2,3]',
+    // A call checked before the clause's statement reads it the same way.
+    'size = 2; h x = f x; f (Vect size Int xs) = xs; h [1,2,3]',
     'f x x = x; f 1 true',
     '(x, x -> x) 1 true',
 ]) Deno.test(`Vect and equality patterns have static contradictions: ${source}`, () => {
     if (!checkSource(source, '<test>', { strict: true }).issues.length) throw new Error('expected static error');
+});
+// The checker reads (Vect n a xs) without rewriting it: a checked run takes
+// the vector apart as an unchecked one does, a mismatch failing the match.
+Deno.test('a checked Vect pattern mismatch fails the match', () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    try { i.run(parseDocument('f (Vect 2 Int xs) = xs\nf (Dynamic [1,2,3])')); } catch (error) {
+        if (String(error).includes('no clause')) return;
+        throw error;
+    }
+    throw new Error('expected pattern mismatch');
+});
+Deno.test('checking leaves a flat typed pattern as written', () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    const shown = i.renderString(i.run(parseDocument('f (Vect n a xs) = n\nf')));
+    if (shown !== 'Vect n a xs -> n') throw new Error(shown);
 });
 Deno.test('Vect patterns retain annotated element laziness', () => {
     const source = 'size (Vect n a xs) = n; size (Vect 1 Int [missing])';

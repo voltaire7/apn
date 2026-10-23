@@ -1,4 +1,4 @@
-import { clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, flattenTypedPatterns, isLoadCall, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel } from "./ast.ts";
+import { clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -1831,10 +1831,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         hint: module ? `add \`import "${module}"\` to use \`${p.tag}\`` : near ? `did you mean '${near}'?`
                             : `declare a type with \`${p.tag}\` first${p.tag === "Nil" || p.tag === "Cons" ? "; a list's patterns are `[]` and `(x :: xs)`" : ""}` };
                 }
-                // (Vect n a xs) takes a vector apart; (Vect n a), a type applied to its
-                // parameters, a type value (as (Option t) does): Vect 1 Int binds a to Int.
-                if (t.k === "factory" && (p.args.length === 3 || p.args.length === 2)) {
-                    const [size, element, value] = p.args;
+                // One more pattern than a type's parameters is a value of the type
+                // (see typed), wherever the pattern is bound.
+                const parameters = typeParameters(t);
+                if (parameters && p.args.length === parameters + 1) {
+                    const flat = flatTypedPattern(p, () => parameters);
+                    if (flat) { bind(flat, expected, scope, e, bound); return; }
+                }
+                // (Vect n a), a type applied to its parameters, is a type value (as
+                // (Option t) is): Vect 1 Int binds a to Int.
+                if (t.k === "factory" && p.args.length === 2) {
+                    const [size, element] = p.args;
                     let length: Index | undefined;
                     if (size.p === "var") {
                         const previous = bound.has(size.name) ? scope.get(size.name) : undefined;
@@ -1852,26 +1859,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         item = typeExpr({ t: "var", name: element.tag }, scope);
                     } else if (element.p !== "wildcard") problem("Vect element pattern needs a type, name, or _", e);
                     // A type value's length is read when it runs: a named one is an Int.
-                    if (!value) { unify({ k: "type", value: list(item, size.p === "int" ? length : undefined) }, expected, e); return; }
-                    const vector = list(item, length);
-                    unify(vector, expected, e);
-                    bind(value, vector, scope, e, bound);
+                    unify({ k: "type", value: list(item, size.p === "int" ? length : undefined) }, expected, e);
                     return;
                 }
                 // (Option t), a type applied to exactly its parameters, matches a
                 // type value: Option Int binds t to Int.
-                const parameters = typeParameters(t);
                 if (t.k === "type" && parameters && p.args.length === parameters) {
                     const parts = p.args.map(() => variable()), value = resolve(t.value);
                     unify({ k: "type", value: value.k === "variant" ? { ...value, args: parts } : list(parts[0]) }, expected, e);
                     p.args.forEach((x, n) => bind(x, { k: "type", value: parts[n] }, scope, e, bound));
                     return;
-                }
-                // One more is a value of the type: (Option t x) is ((Option t) x), read
-                // here when a call checks the clause before its statement.
-                if (parameters && p.args.length === parameters + 1 && t.k !== "factory") {
-                    const flat = flatTypedPattern(p, () => parameters);
-                    if (flat) { bind(flat, expected, scope, e, bound); return; }
                 }
                 // Any other count is neither: (Pair x) for Pair a b.
                 if (t.k === "type" && parameters && p.args.length) {
@@ -5376,6 +5373,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Does a parameter's typed pattern bind its length to a new name (n in
     // (Vect n a) xs), so that it takes a list of any length?
+    // A pattern as the checker reads it: (Vec n a xs) is the typed pattern
+    // ((Vec n a) xs) for a type with parameters, without rewriting the program
+    // (the runtime takes a Vect apart itself: a mismatch fails the match).
+    function typed(p: Pattern, scope: Scope): Pattern {
+        return typedForm(p, name => typeParameters(scope.get(name)?.type ?? dynamic));
+    }
     function bindsLength(p: Pattern, scope: Scope): boolean {
         while (p.p === "typeBind" || p.p === "as") p = p.p === "as" ? p.left : p.value;
         if (p.p !== "schema") return false;
@@ -5388,6 +5391,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             !!length && (length.t === "placeholder" || length.t === "var" && /^[a-z]/.test(length.name) && !scope.has(length.name));
     }
     function inferFunction(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr, given?: Ty[]): Ty {
+        params = params.map(p => typed(p, parent));
         // A body that is a lambda (f = x -> y -> e is the clause f x = y -> e)
         // is checked with the clause's parameters, as f x y = e is: the same
         // curried function, so a result constructor around e is its signature too.
@@ -5472,6 +5476,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return t.k === "variant";
     }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
+        clauses = clauses.map(c => ({ ...c, params: c.params.map(p => typed(p, scope)) }));
         // Index claims (Vec (n + m) a ys) are proven by induction where they
         // can be; a wrong one is an error here, whether or not it is called.
         if (indexedFamilies.size) {
@@ -5941,8 +5946,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             else constructorOperators.delete(statement.name);
         }
         rewriteInfixConstructors(statement, op => constructorOperators.get(op));
-        // (Vec n a xs) is the typed pattern ((Vec n a) xs) for a type with parameters.
-        flattenTypedPatterns(statement, name => typeParameters(scope.get(name)?.type ?? dynamic));
         checkingExpression = statement.t === "expr" || statement.t === "patDef" ? statement.value : statement.t === "def" ? statement.clauses[0].body : undefined;
         try {
             statementWrote = false;
