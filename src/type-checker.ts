@@ -864,11 +864,25 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return monadicType("sequence", list(application(a, { type: b.element }, at)), b);
         }
         if (op === "sequence") {
-            if (a.k !== "list") return problem("sequence expects a list of actions");
-            if (a.items && !a.items.length) return io(list(variable(), constant(0n)));
-            const each = variable();
-            unify(a.element, io(each));
-            return io({ k: "list", element: each, ...sameLength(a) });
+            if (a.k !== "list") return problem("sequence expects a list of monadic values");
+            if (a.items && !a.items.length) return pendingTy(list(variable(), constant(0n)));
+            // A list of m x is m (List x), in its elements' monad (an action's
+            // when none is known yet); undecided ones (return x) join it.
+            const choices = (t: Ty): Ty[] => { const r = resolve(t); return r.k === "union" ? r.choices.flatMap(choices) : [r]; };
+            const elements = a.items ? a.items.flatMap(choices) : choices(a.element);
+            const m = elements.find(t => !isPending(t) && t.k !== "var") ?? elements[0];
+            const holding = (inner: Ty): Ty | undefined => isIO(m) || m.k === "var" ? io(inner) : isPending(m) ? pendingTy(inner)
+                : m.k === "list" ? list(inner)
+                : m.k === "variant" && instanceFor(">>=", [m]) ? { k: "variant", name: m.name, args: [inner, ...m.args.slice(1)] }
+                : m.k === "apply" ? { k: "apply", head: m.head, args: [inner, ...m.args.slice(1)] } : undefined;
+            if (!holding(variable())) return problem(`sequence needs a list of actions or monadic values, not ${text(m)}`);
+            // Each holds its own type, as a list's items may differ.
+            const held = elements.map(element => {
+                const each = variable();
+                unify(isPending(element) ? pendingTy(each) : holding(each)!, element);
+                return each;
+            });
+            return holding({ k: "list", element: union(held), ...sameLength(a) })!;
         }
         const container = op === "map" ? b : a, other = op === "map" ? a : b;
         if (isExplicit(container) || isExplicit(other)) { runtimeChecks++; return explicitDynamic; }

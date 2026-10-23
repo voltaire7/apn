@@ -46,6 +46,12 @@ Deno.test("while and loop", () => {
 });
 
 // for runs its code as written: the step is an action or a new binding.
+// sequence passes on what it has so far: a long list of actions runs in constant stack.
+Deno.test("mapM over a long list of actions", () => {
+    const total = run("c = Mutable 0\nxs <- mapM (x -> { set c (c + x); return x }) [1..30000]\nprint [length xs, c + 0]");
+    if (total.join() !== "[30000,450015000]") throw new Error(total.join());
+});
+
 Deno.test("for", () => {
     const passes = run("for [i = 0, i < 3, i = i + 1] { print i }\nfor [i = Mutable 5, i < 7, set i $ i + 1] { print i }\nfor [n = 1, n < 9, n = n * 2] (print n)\nfor [i = 0, i < 100000, i = i + 1] {}\nprint \"done\"");
     if (passes.join(",") !== "0,1,2,5,6,1,2,4,8,done") throw new Error(passes.join(","));
@@ -114,6 +120,9 @@ for (const [name, source, expected] of [
         ["[2,4,6]", "[Some 3, None]", "None", "[]", '[]\nNone\nErr "empty"', '[Ok 1, Err "guard failed: n > 0"]', '[Ok 2, Err "guard failed: n % 2 == 0", None]']],
     ["when and unless work in any monad", 'import "option"\nprint (unless false (Err "no"))\nprint (Option (when false (Some 1)))\nwhen true (print "ran")',
         ['Err "no"', "Some []", "ran"]],
+    // As Haskell's: m (List x) in the elements' monad, each in turn.
+    ["sequence and mapM work in any monad", 'import "option"\nprint (sequence [Some 1, Some "a"])\nprint (sequence [Some 1, None])\nprint (sequence [[1,2],[3,4]])\nprint (mapM (x -> x > 0 ? Ok x : Err x) [1,-2,-3])\nxs <- mapM (x -> return (x * 2)) [1,2]\nprint (xs 1 + 1)\nprint (typeOf sequence)',
+        ['Some [1,"a"]', "None", "[[1,3],[1,4],[2,3],[2,4]]", "Err -2", "5", "List (f a) -> f (List a)"]],
 ] as const) Deno.test(`monads: ${name}`, () => {
     for (const checked of [true, false]) {
         const actual = run(source, checked);
@@ -138,6 +147,8 @@ for (const [source, message, kind] of [
     ['import "option"\nmixed n = {\n    _ <- Some n\n    Ok n\n    return n\n}', "a Result value cannot run in an Option do-block", "type"],
     ['Tree = Leaf Int | Node Tree Tree\nprint (Tree empty)', "no throw instance for Tree", "runtime"],
     ['act n = {\n    guard (n > 0)\n    print n\n}\nact 0', "guard failed: n > 0", "runtime"],
+    ['import "option"\nprint (sequence [Some 1, [2]])', "cannot use Vect 1 Int where Option a is required", "type"],
+    ["print (sequence [1,2])", "sequence needs a list of actions or monadic values, not Int", "type"],
 ] as const) Deno.test(`monads reject: ${JSON.stringify(source)}`, () => fails(source, message, kind));
 // A block of returns and guards takes the monad its other statements name, as
 // types decide in Haskell: the checker finds it, and the run uses it.

@@ -752,7 +752,7 @@ its call wrote it, as `assert` shows its expression (`guard b` names `b`).
 | `mf <*> mx` | the function `mf` holds, applied to what `mx` holds |
 | `m >>= f` | `f` applied to what `m` holds or yields, flattened (`f` must be a function: to run a value after `m`, use `>>`) |
 | `m >> k`, `f =<< m` | `m >>= _ -> k`; `m >>= f` |
-| `sequence actions` | runs each action, yielding the list of results |
+| `sequence ms` | each of `ms` in turn, in their monad, yielding the list of what each holds or yields: `sequence [Some 1, Some 2]` is `Some [1,2]`, `sequence [[1,2],[3]]` is `[[1,3],[2,3]]`; a list of actions runs each, in constant stack |
 | `mapM f xs` | `sequence (map f xs)` |
 | `when c m`, `unless c m` | `m >> return []` when `c` is true (false), else `return []`: in any monad (`unless ok (Err e)`) |
 | `loop m` | `m >> loop m`: runs `m` forever, until the program exits or is stopped |

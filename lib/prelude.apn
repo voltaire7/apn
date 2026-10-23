@@ -79,10 +79,13 @@ map2 f a b = map f a <*> b
 map3 f a b c = map f a <*> b <*> c
 map4 f a b c d = map f a <*> b <*> c <*> d
 f =<< m = m >>= f
-# Actions over lists: sequence runs each, yielding their results; mapM f xs
-# runs f on each element; when and unless run an action on a condition.
-sequence [] = return []
-sequence actions = actions * action -> action
+# Monadic values over lists, in any monad: sequence runs each in turn,
+# yielding the list of their results (Haskell's); mapM f xs runs f on each
+# element; when and unless run an action on a condition. sequence passes on
+# what it has so far, so a long list of actions runs in constant stack.
+sequence ms = _sequenceFrom ms (xs -> xs)
+_sequenceFrom [] done = return (done [])
+_sequenceFrom (m :: rest) done = m >>= x -> _sequenceFrom rest (xs -> done (x :: xs))
 mapM f xs = sequence (map f xs)
 when condition action = condition ? action >> return [] : return []
 unless condition action = condition ? return [] : action >> return []
