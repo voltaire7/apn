@@ -220,7 +220,11 @@ group is scoped to that group. Bindings are statements, not expressions, but a
 group's value is its last statement's, and a binding's is the value it binds:
 `print (x = 1)` prints 1, and `x` is unbound after it. A list item may be a
 binding too, as a group's statement may: its value is the item, and it is in
-scope for the items after it (`[x = 1, x + 1]` is `[1,2]`); `<-` stays a block's. A value never changes once written, so when
+scope for the items after it (`[x = 1, x + 1]` is `[1,2]`); `<-` stays a block's.
+Such a list's bindings name its items, so a copy with an item replaced
+recomputes the items that read it: after `code = [x = 1, y = 2, x + y]` and
+`code 0 = 10` (or `code 0 = (x = 10)`), `code` is `[10,2,12]` and `do code` is
+`12`, while a value read from the old `code` keeps its old items. A value never changes once written, so when
 something is computed never changes what it is. A name not visible here is
 defined for its whole scope: code above may use it (functions may call each
 other in any order), and its value may refer to itself (`ones = 1 :: ones`).

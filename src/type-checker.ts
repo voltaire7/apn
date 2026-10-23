@@ -52,7 +52,7 @@ type Ty =
     // collects argument types across curried application. Both describe the
     // function's code, so they are trusted only at a direct call by name.
     | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; summary?: Summary }
-    | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number> }
+    | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number>; formula?: Formula }
     | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string>; closed?: boolean }
     // chosen: one of value's choices, picked by a condition known only at runtime.
     // given: an indexed family's index values written so far, by parameter (Vec 2 Int).
@@ -172,6 +172,9 @@ export type TypeScope = Map<string, Entry>;
 /** A definition, by name and its clauses (a function) or body (a value). */
 interface Definition { name: string; clauses?: { params: Pattern[]; body: Expr }[]; body?: Expr }
 type Scope = TypeScope;
+// A list built from bindings: its items as written, and the scope they read,
+// so an item update re-infers the items after it (see bindingList).
+type Formula = { items: { expr: Expr; type?: Ty }[]; scope: Scope };
 export interface CheckOptions {
     strict?: boolean;
     library?: boolean;
@@ -1662,6 +1665,30 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         });
         return { k: "list", element: union(items), items, length: constant(BigInt(items.length)) };
     }
+    // The value a binding statement gives, as a block's last statement or a
+    // list's item: what it binds, when it binds one name.
+    function bindingValue(statement: Expr | undefined, scope: Scope): Ty | undefined {
+        const name = statement?.t === "stmDef" ? statement.name : statement?.t === "patDef" && statement.pattern.p === "var" ? statement.pattern.name : undefined;
+        return name === undefined ? undefined : scope.get(name)?.type;
+    }
+
+    // A list literal with bindings: each binding's item is its value, in scope
+    // for the items after it. An item given as a type (an update's) binds the
+    // names its binding has to that type.
+    function bindingList(items: Formula["items"], parent: Scope): Ty {
+        const scope: Scope = new Map(parent);
+        const types = items.map(({ expr, type }) => {
+            if (type) {
+                if (expr.t === "stmDef") scope.set(expr.name, { type });
+                else if (expr.t === "patDef") bind(expr.pattern, type, scope, expr);
+                return type;
+            }
+            const t = infer(expr, scope);
+            return expr.t === "stmDef" || expr.t === "patDef" ? bindingValue(expr, scope) ?? unknown() : t;
+        });
+        return { k: "list", element: types.length ? union(types) : variable(), length: constant(BigInt(types.length)), items: types, formula: { items, scope: parent } };
+    }
+
     function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr, bound = new Set<string>()): void {
         switch (p.p) {
             case "as": {
@@ -2847,6 +2874,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return { k: "record", fields: new ModuleFields(imported) };
             }
             case "list": {
+                if (e.v.some(x => x.t === "stmDef" || x.t === "patDef")) return bindingList(e.v.map(expr => ({ expr })), scope);
                 const items = e.v.map((x) => infer(x, scope));
                 const element: Ty = items.length ? union(items) : variable();
                 return { k: "list", element, length: constant(BigInt(items.length)), items };
@@ -3100,9 +3128,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         if (n >= 0 && n < rec.items.length) {
                             const items = [...rec.items];
                             items[n] = slotValue(items[n], value, e.value);
+                            if (rec.formula) return bindingList(rec.formula.items.map((item, k) => k === n ? { expr: item.expr, type: items[n] } : item), rec.formula.scope);
                             return { ...rec, items, element: union(items) };
                         }
                     }
+                    // An item of a list built from bindings, at an index known only
+                    // at run time, may change the items reading it.
+                    if (rec.formula) { convert(rec.element, value, e.value); return { k: "list", element: unknown(), length: rec.length }; }
                     if (holdsTypeTy(resolve(rec.element))) { runtimeChecks++; return rec; }
                     convert(rec.element, value, e.value);
                     return rec;
@@ -3285,7 +3317,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         }
                     }
                 } finally { doBlocks.pop(); }
-                if (!action) return result;
+                if (!action) return bindingValue(e.stmts[e.stmts.length - 1], child) ?? result;
                 // The block's monad, for the run: a block of returns and guards
                 // takes it from here, as types decide in Haskell.
                 if (block.monad) recordMonad(e, monadKind(block.monad));

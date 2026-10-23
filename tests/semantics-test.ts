@@ -505,3 +505,13 @@ g x Float = x
 to Option (Ok x) = Some x
 print [f Int 3, g 2 Float]
 print (to Option (Ok 1))`, ["[3,2]", "Some 1"]);
+example("a list's bindings name its items", `
+code = [x = 1, y = 2, x + y]
+before = code
+code 0 = (x = 10)
+print [before,code]
+print (do code)
+code [1,2] = [5,0]
+print code
+f k = { c = [a = 1, a * 2]; c 0 = k; c 1 }
+print (f 4)`, ["[[1,2,3],[10,2,12]]", "12", "[10,5,0]", "8"]);

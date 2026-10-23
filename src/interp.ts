@@ -1200,14 +1200,7 @@ export class Interpreter {
                     case "floatRange": r = { kind: "floatRange", lo: e.lo, step: e.step, hi: e.hi }; break;
                     case "list": {
                         if (!e.v.some(x => x.t === "stmDef" || x.t === "patDef")) { r = { kind: "lazyList", exprs: e.v, env: this.env }; break; }
-                        // Items with bindings, as a block's statements: each binding's
-                        // value is its item, and is in scope for the items after it.
-                        const old = this.env;
-                        this.env = new Env(old);
-                        try {
-                            r = mkList(e.v.map(x => x.t === "stmDef" ? this.evalDef(x.name, x.clauses)
-                                : x.t === "patDef" ? this.evalPatBinding(x) : this.delay(x)));
-                        } finally { this.env = old; }
+                        r = this.bindingList(e.v.map(expr => ({ expr })), this.env);
                         break;
                     }
                     case "record": {
@@ -2099,8 +2092,40 @@ export class Interpreter {
         throw new APNError("runtime", `index ${original} out of range`);
     }
 
+    // Items with bindings, as a block's statements: each binding's value is
+    // its item, and is in scope for the items after it. The list keeps its
+    // items, so its bindings name them: a copy with an item replaced (given
+    // as a value) binds that item's names to it and recomputes the rest, as
+    // [x = 1, x + 1] with item 0 set to 10 is [10,11].
+    private formulas = new WeakMap<Value, { items: { expr: Expr; value?: Value }[]; env: Env }>();
+    private bindingList(items: { expr: Expr; value?: Value }[], env: Env): Value {
+        const old = this.env;
+        this.env = new Env(env);
+        try {
+            const list = mkList(items.map(({ expr, value }, n) => {
+                if (!value) return expr.t === "stmDef" ? this.evalDef(expr.name, expr.clauses) : expr.t === "patDef" ? this.evalPatBinding(expr) : this.delay(expr);
+                if (expr.t === "stmDef") this.bindNames([[expr.name, value]]);
+                if (expr.t === "patDef") {
+                    const binds = new Map<string, Value>();
+                    if (!this.matchPattern(expr.pattern, this.force(value), binds)) throw new APNError("runtime", `item ${n} no longer matches its pattern`);
+                    this.bindNames(binds);
+                }
+                return value;
+            }));
+            this.formulas.set(list, { items, env });
+            return list;
+        } finally { this.env = old; }
+    }
+
     setIndex(list: Value, index: bigint, value: Value): Value {
         const actual = this.force(list);
+        const formula = this.formulas.get(actual);
+        if (formula) {
+            const offset = index < 0n ? BigInt(formula.items.length) + index : index;
+            if (offset < 0n || offset >= formula.items.length) throw new APNError("runtime", `index ${index} out of range`);
+            const slot = this.assignSlot(this.index(actual, offset), value);
+            return this.bindingList(formula.items.map((item, n) => BigInt(n) === offset ? { expr: item.expr, value: slot } : item), formula.env);
+        }
         if (actual.kind === "list" && actual.schema) {
             const values = [...actual.v];
             const offset = index < 0n ? BigInt(values.length) + index : index;

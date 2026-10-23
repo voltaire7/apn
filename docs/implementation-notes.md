@@ -169,6 +169,12 @@ exported by `function`. Tests: `tests/language-cast-test.ts`,
 
 ## Records, keys, and assignment
 
+- A list literal with binding items keeps its items (`formulas` in the
+  interpreter, a list type's `formula` in the checker): `setIndex` rebuilds
+  such a list with the replaced item given as a value, binding that item's
+  names to it, and the checker re-infers the items the same way; an update at
+  an index known only at run time makes the items' type unknown.
+
 - `Parser.parseEntryKey` reads a record literal's or keyed pattern's key: a
   run of names, numbers and `-` up to `:` is one bare key spelled as in the
   source; elsewhere (`.field`, selections) `parseKey` reads a single token.
