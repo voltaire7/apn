@@ -28,7 +28,7 @@ alongside the code, and don't restate the user-facing rules here.
   parse of the tokens decides. It must never flag a group whose removal changes the
   parse: when unsure it keeps the group. Pattern groups are not judged. The
   printers write each piece for its place by the same rules: `exprToSource`
-  (with `level`/`reach`, also behind function text and `(Quote q)`) and
+  (with `level`/`reach`, also behind function text and `probe`) and
   `fromAST` (`lib/syntax/source.apn`), each checked by a strict round trip
   (`tests/unnecessary-parentheses-test.ts`, `tests/syntax-test.ts`).
 
@@ -669,12 +669,22 @@ configuration. Tests: `tests/lsp-test.ts`.
 
 ## Code as data
 
-A `(Quote q)` parameter (`matchPattern`, checked only while the name
-`Quote` is the runtime's `QUOTE`) binds `exprToSource` of the argument
-thunk's body, so an argument must arrive as the call's own thunk; the
-checker gives the parameter type `Quote`, and a call to such a function
-infers nothing for that argument. `toAST` reads that text with
-`intrinsics.syntax` (`sexprOf` of what `readSource` parses): operator
+Code is kept per item, not per list: `Interpreter.writtenItems` maps an item
+value to how it was written (expression, scope, the names a binding bound),
+and `written` sees through a thunk that only names another value (`x :: acc`
+in a fold), so list functions that pass items on keep their code. A list
+literal's item must be a fresh value it owns (a binding's is wrapped), never a
+shared one. Only `++` (`appendCode`) and an item update (`setIndex`) run items
+again, through `rerun`, which is lazy in the spine (`cycle xs = xs ++ cycle
+xs` still streams) and reruns only items that `mentions` a changed name.
+Items written in one scope share one `Env`, so clauses written as items merge.
+The checker mirrors this in `codeList`: a list type's `formula` holds each
+item's expression, scope, type and bindings, and `open` the names read
+unbound, which `closed` reports where values are needed (any application or
+operator but `++` and the functions in `READS_CODE`); `++` after a list whose
+code it cannot follow makes them a runtime check. `toAST` reads items with
+`intrinsics.syntax` (`sexprOf` of each item's expression; source text, which
+the tests and the meta reader compare against, reads with `readSource`): operator
 sections become names, partial applications or `"()"` nodes, and an
 application's spine is flattened. `lib/syntax.apn` loads its printer
 (`lib/syntax/source.apn`) and `toLambda`'s desugarer (`lib/syntax/lambda.apn`)

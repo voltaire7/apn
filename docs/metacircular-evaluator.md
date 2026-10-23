@@ -46,7 +46,7 @@ the live evaluator source, so the proof cannot silently drift from the code.
 | `lib/meta/primitives.apn` | Explicit object-language primitive environment |
 
 Syntax is data, in the lists [`toAST`](standard-library.md#code-as-data--syntax)
-gives: `metaParse "fact n = n * 2; fact 5"` is
+gives (an item's, as `toAST [e] 1`): `metaParse "fact n = n * 2; fact 5"` is
 `["{}",["=",["fact","n"],["*","n",2]],["fact",5]]`, and `metaEvalSyntax`
 runs `toAST`'s output as it runs the reader's. A leaf is a number, a Bool, a
 name or a string literal's quoted source (which the evaluator unescapes); a

@@ -1,4 +1,4 @@
-import { clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm } from "./ast.ts";
+import { clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -12,6 +12,9 @@ import { mkStr, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
 
 const PRELUDE_OPERATORS = new Set(PRIMITIVE_OPERATORS.values());
+// The prelude's functions that read a list's code, not its values: an open
+// list may go to them (see closed).
+const READS_CODE = new Set(["probe", "toAST", "toLambda", "intrinsics.written", "intrinsics.syntax"]);
 // IO t: an action yielding t.
 function io(t: Ty): Ty { return { k: "variant", name: "IO", args: [t] }; }
 function isIO(t: Ty): boolean { return t.k === "variant" && t.name === "IO" && t.args.length === 1; }
@@ -52,7 +55,9 @@ type Ty =
     // collects argument types across curried application. Both describe the
     // function's code, so they are trusted only at a direct call by name.
     | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; summary?: Summary }
-    | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number>; formula?: Formula }
+    // formula: a list literal's code; open: the names its code reads that are
+    // bound nowhere yet (a list joined before it may bind them), by where read.
+    | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number>; formula?: Formula; open?: Map<string, { expr: Expr; within?: Expr }> }
     | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string>; closed?: boolean }
     // chosen: one of value's choices, picked by a condition known only at runtime.
     // given: an indexed family's index values written so far, by parameter (Vec 2 Int).
@@ -172,9 +177,12 @@ export type TypeScope = Map<string, Entry>;
 /** A definition, by name and its clauses (a function) or body (a value). */
 interface Definition { name: string; clauses?: { params: Pattern[]; body: Expr }[]; body?: Expr }
 type Scope = TypeScope;
-// A list built from bindings: its items as written, and the scope they read,
-// so an item update re-infers the items after it (see bindingList).
-type Formula = { items: { expr: Expr; type?: Ty }[]; scope: Scope };
+// A list literal's code, as the runtime keeps it: each item as written, in
+// the scope it was written in, with its type, the names it binds and the open
+// names it reads (an item without an expression is a plain list's value), so
+// ++ and an item update infer again the items whose names change (codeList).
+type Formula = { items: FormulaItem[] };
+type FormulaItem = { expr?: Expr; scope?: Scope; type?: Ty; binds?: Map<string, Entry>; open?: Map<string, { expr: Expr; within?: Expr }>; slot?: Ty };
 export interface CheckOptions {
     strict?: boolean;
     library?: boolean;
@@ -315,7 +323,6 @@ const explicitDynamic: Ty = { k: "dynamic", explicit: true };
 const isExplicit = (t: Ty): boolean => { const value = resolve(t); return value.k === "dynamic" && !!value.explicit; };
 const variable = (): Ty => ({ k: "var" });
 const atom = (name: string): Ty => name === "Dynamic" ? explicitDynamic : { k: "atom", name };
-const isQuote = (t: Ty): boolean => { const value = resolve(t); return value.k === "atom" && value.name === "Quote"; };
 // The payload a numeric constructor pattern binds: the number without its
 // type annotation (Int for UInt8, Float for Float32); aggregates stay as written.
 function untypedPayload(t: Ty): Ty {
@@ -681,7 +688,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The innermost expression being inferred that has a source location.
     let locatedExpression: Expr | undefined;
     let firstUnknown: Expr | undefined, unknownLength = false;
-    let firstUnbound: { expr: Expr; name: string; hint?: string; inPattern?: boolean; within?: Expr } | undefined;
+    type Unbound = { expr: Expr; name: string; hint?: string; inPattern?: boolean; within?: Expr };
+    let firstUnbound: Unbound | undefined;
+    // The names bound nowhere that the list item being inferred reads, by
+    // where it reads them: code may read a name a list joined before binds.
+    let openNames: Map<string, Unbound> | undefined;
     // Callee positions of application chains, where a function's shape is trusted.
     const callees = new WeakSet<Expr>();
     // An expression to report at: this one, or the innermost with a location.
@@ -1691,21 +1702,84 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return statement?.t === "stmDef" ? scope.get(statement.name)?.type : undefined;
     }
 
-    // A list literal with bindings: each binding's item is its value, in scope
-    // for the items after it. An item given as a type (an update's) binds the
-    // names its binding has to that type.
-    function bindingList(items: Formula["items"], parent: Scope): Ty {
-        const scope: Scope = new Map(parent);
-        const types = items.map(({ expr, type }) => {
-            if (type) {
-                if (expr.t === "stmDef") scope.set(expr.name, { type });
-                else if (expr.t === "patDef") bind(expr.pattern, type, scope, expr);
-                return type;
+    // A list's code (see Formula): each item inferred in the scope it was
+    // written in after the bindings of the items before it (a joined list's
+    // winning over the names there), as a block's statements are; a binding's
+    // item is the value it binds. An item reading a name in changed is
+    // inferred again, any other keeps its type. A name bound nowhere is open.
+    function codeList(items: FormulaItem[], changed = new Set<string>()): Ty {
+        changed = new Set(changed);
+        const before = new Map<string, Entry>();
+        const local = items.some(item => item.expr && binding(item.expr)) || changed.size > 0;
+        let run: { scope: Scope; local: Scope } | undefined;
+        const out = items.map((item): FormulaItem => {
+            if (!item.expr || item.type && !mentions(item.expr, changed)) {
+                for (const [name, entry] of item.binds ?? []) { before.set(name, entry); run?.local.set(name, entry); }
+                return item;
             }
-            const t = infer(expr, scope);
-            return expr.t === "stmDef" || expr.t === "patDef" ? bindingValue(expr, scope) ?? variable() : t;
+            if (run?.scope !== item.scope) {
+                const scope: Scope = local ? new BlockScope(item.scope!) : item.scope!;
+                for (const [name, entry] of before) scope.set(name, entry);
+                run = { scope: item.scope!, local: scope };
+            }
+            const here = run!.local, outer = openNames, open = openNames = new Map();
+            let type: Ty;
+            try {
+                const t = infer(item.expr, here);
+                type = binding(item.expr) ? bindingValue(item.expr, here) ?? variable() : item.slot ? slotValue(item.slot, t, item.expr) : t;
+            } finally { openNames = outer; }
+            const names = item.expr.t === "patDef" ? patternNames(item.expr.pattern)
+                : item.expr.t === "stmDef" && /^[A-Z]/.test(item.expr.name) && item.expr.clauses[0].params.length ? item.expr.clauses[0].params.flatMap(patternNames)
+                : item.expr.t === "stmDef" ? [item.expr.name] : [];
+            const binds = names.length ? new Map(names.flatMap(name => { const entry = here.get(name); return entry ? [[name, entry] as const] : []; })) : undefined;
+            for (const [name, entry] of binds ?? []) { before.set(name, entry); changed.add(name); }
+            return { ...item, type, binds, open: open.size ? open : undefined };
         });
-        return { k: "list", element: types.length ? union(types) : variable(), length: constant(BigInt(types.length)), items: types, formula: { items, scope: parent } };
+        const types = out.map(item => item.type ?? variable());
+        const open = new Map(out.flatMap(item => [...item.open ?? []]));
+        return { k: "list", element: types.length ? union(types) : variable(), length: constant(BigInt(types.length)), items: types, formula: { items: out }, open: open.size ? open : undefined };
+    }
+    const binding = (e: Expr) => e.t === "stmDef" || e.t === "patDef";
+    // code n = e: the code with item n replaced by e, written here (see
+    // codeList), so code 0 = (x = 10) binds x for the items after it; at known
+    // indices only.
+    function editCode(rec: Extract<Ty, { k: "list" }>, e: Extract<Expr, { t: "setItem" }>, key: Index | undefined, scope: Scope): Ty | undefined {
+        const items = rec.formula!.items;
+        const at = (k: Index | undefined) => {
+            if (!k || k.terms.size) return undefined;
+            const n = Number(k.constant < 0n ? k.constant + BigInt(items.length) : k.constant);
+            return n >= 0 && n < items.length ? n : undefined;
+        };
+        const edits: [number, Expr][] = [];
+        if (e.index.t === "list") {
+            if (e.value.t !== "list" || e.value.v.length !== e.index.v.length) return undefined;
+            for (const [m, slot] of e.index.v.entries()) {
+                const n = at(index(slot, scope));
+                if (n === undefined) return undefined;
+                edits.push([n, e.value.v[m]]);
+            }
+        } else {
+            const n = at(key);
+            if (n === undefined) return undefined;
+            let expr = e.value;
+            while (expr.t === "block" && expr.style === "(" && expr.stmts.length === 1) expr = expr.stmts[0];
+            edits.push([n, expr]);
+        }
+        const changed = new Set<string>(), next = [...items];
+        for (const [n, expr] of edits) {
+            for (const name of next[n].binds?.keys() ?? []) changed.add(name);
+            next[n] = { expr, scope, slot: binding(expr) ? undefined : rec.items?.[n] };
+        }
+        return codeList(next, changed);
+    }
+    // Code whose values are needed must name only what is bound: an open
+    // list's names are unbound where they are read.
+    function closed(t: Ty): void {
+        const value = resolve(t);
+        if (value.k !== "list" || !value.open) return;
+        const [name, at] = value.open.entries().next().value!;
+        firstUnbound ??= { ...at, name, hint: "bind it in code joined before this: [x = 1] ++ [x + 1]" };
+        dynamicBoundaries++;
     }
 
     function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr, bound = new Set<string>()): void {
@@ -1885,12 +1959,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // A bare type name matches that type itself, as a value: describe Int.
                 if (t.k === "type" && !p.args.length && !naturalPattern(p, scope)) {
                     unify(expected, { k: "type", value: t.value }, e);
-                    return;
-                }
-                // (Quote q) takes the argument as written: q is its source text.
-                if (t.k === "type" && isQuote(t.value) && p.args.length === 1) {
-                    unify(t.value, expected, e);
-                    bind(p.args[0], atom("String"), scope, e, bound);
                     return;
                 }
                 if (t.k === "type") {
@@ -2238,8 +2306,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (op === "++") {
             const x = resolve(a), y = resolve(b);
+            // Code joins code: the right's items see the left's bindings.
+            if (x.k === "list" && y.k === "list" && x.formula && (y.formula || y.items)) {
+                const right = y.formula?.items ?? y.items!.map((type): FormulaItem => ({ type }));
+                return codeList([...x.formula.items, ...right], new Set(x.formula.items.flatMap(item => [...item.binds?.keys() ?? []])));
+            }
             if (x.k === "list" && y.k === "list") {
-                return list(union([x.element, y.element]), x.length && y.length ? indexAdd(x.length, y.length) : undefined);
+                // The left's code is not known here (a function made it, as
+                // take 1 code does): whether it binds the right's open names
+                // is checked when it runs.
+                if (y.open) runtimeChecks++;
+                return { k: "list", element: union([x.element, y.element]), length: x.length && y.length ? indexAdd(x.length, y.length) : undefined, open: x.open };
             }
             return operation("++", [a, b]);
         }
@@ -2910,6 +2987,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     entry = rootScope.get(e.name);
                     if (entry) scope.set(e.name, entry);
                 }
+                if (!entry && openNames && !options.runtimeNames?.has(e.name)) {
+                    if (!openNames.has(e.name)) openNames.set(e.name, { expr: e, name: e.name, within: locatedExpression ?? checkingExpression });
+                    return variable();
+                }
                 if (!entry && !firstUnbound && options.runtimeNames && !options.runtimeNames.has(e.name)) {
                     const near = didYouMean(e.name, [...scope.keys(), ...options.runtimeNames]);
                     const module = standardModule(e.name), now = RETIRED_NATIVES[e.name];
@@ -2928,10 +3009,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return { k: "record", fields: new ModuleFields(imported) };
             }
             case "list": {
-                if (e.v.some(x => x.t === "stmDef" || x.t === "patDef")) return bindingList(e.v.map(expr => ({ expr })), scope);
-                const items = e.v.map((x) => infer(x, scope));
-                const element: Ty = items.length ? union(items) : variable();
-                return { k: "list", element, length: constant(BigInt(items.length)), items };
+                const code = codeList(e.v.map(expr => ({ expr, scope })));
+                for (const [name, at] of (code as Extract<Ty, { k: "list" }>).open ?? []) openNames?.set(name, { ...at, name });
+                return code;
             }
             case "record": {
                 let result: Ty = { k: "record", fields: new Map() };
@@ -3005,9 +3085,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 // debug reads its argument unevaluated (unchecked).
                 if (resolved.k === "intrinsic" && resolved.name === "debug") return list(variable(), constant(0n));
-                // A (Quote q) parameter takes its argument as written: it is not checked.
-                if (resolved.k === "fn" && isQuote(resolved.input)) return resolved.output;
-                if (resolved.k === "type" && isQuote(resolved.value)) return problem("Quote is a parameter pattern, not a function", e, "define one: quote (Quote q) = q");
                 if (resolved.k === "intrinsic" && resolved.name === "intrinsics.eval") {
                     infer(a, scope);
                     runtimeChecks++;
@@ -3064,6 +3141,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const holder = resolve(inferred.get(head.rec) ?? dynamic);
                     return holder.k === "record" && !!holder.open;
                 })()) argumentType = withoutLengths(copy(argumentType, new Map([...variables(argumentType)].map(v => [v, v]))), true);
+                if (!(head.t === "var" && READS_CODE.has(head.name))) closed(argumentType);
+                closed(callee);
                 const result = application(callee, { type: argumentType, ...valueEntry(a, scope) }, a);
                 if (!callees.has(e)) noClauseMatches(e, scope);
                 // A partial application that leaves its call chain is an ordinary function value.
@@ -3129,7 +3208,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return result;
             }
             case "setItem": {
-                const rec = resolve(infer(e.rec, scope)), value = infer(e.value, scope), key = index(e.index, scope);
+                const rec = resolve(infer(e.rec, scope)), key = index(e.index, scope);
+                const edited = rec.k === "list" && rec.formula ? editCode(rec, e, key, scope) : undefined;
+                if (edited) return edited;
+                const value = infer(e.value, scope);
                 if (isExplicit(rec)) { infer(e.index, scope); runtimeChecks++; return explicitDynamic; }
                 if (rec.k === "list") {
                     const keys = resolve(infer(e.index, scope));
@@ -3182,13 +3264,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         if (n >= 0 && n < rec.items.length) {
                             const items = [...rec.items];
                             items[n] = slotValue(items[n], value, e.value);
-                            if (rec.formula) return bindingList(rec.formula.items.map((item, k) => k === n ? { expr: item.expr, type: items[n] } : item), rec.formula.scope);
                             return { ...rec, items, element: union(items) };
                         }
                     }
                     // An item of a list built from bindings, at an index known only
                     // at run time, may change the items reading it.
-                    if (rec.formula) { convert(rec.element, value, e.value); return { k: "list", element: unknown(), length: rec.length }; }
+                    if (rec.formula?.items.some(item => item.binds)) { convert(rec.element, value, e.value); return { k: "list", element: unknown(), length: rec.length }; }
                     if (holdsTypeTy(resolve(rec.element))) { runtimeChecks++; return rec; }
                     convert(rec.element, value, e.value);
                     return rec;
@@ -3341,6 +3422,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return value;
                 };
                 const [a, b] = operands ?? [constrain(infer(e.l, scope)), constrain(infer(e.r, scope))];
+                if (op !== "++") { closed(a); closed(b); }
                 if (op === "$" && !isExplicit(a) && !isExplicit(b)) return application(a, { type: b, ...valueEntry(e.r, scope) }, e.r);
                 return operatorApplication(op, { type: a, index: index(e.l, scope) }, { type: b, index: index(e.r, scope) }, e);
             }
@@ -5811,12 +5893,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("parse", [str], explicitDynamic);
     native("step", [int, variable()], explicitDynamic);
     for (const name of ["debug", "intrinsics.eval", "use", "load"]) scope.set(name, { type: { k: "intrinsic", name } });
-    // Quote, a parameter pattern taking its argument as written ((Quote q)
-    // binds its source text), and the prelude's quote and toAST, defined by one.
-    scope.set("Quote", { type: { k: "type", value: atom("Quote") } });
-    scope.set("quote", { type: fn(atom("Quote"), str) });
-    scope.set("toAST", { type: fn(atom("Quote"), explicitDynamic) });
-    native("intrinsics.syntax", [str], explicitDynamic);
+    // A list's code: probe shows it, toAST gives it as lists; reduce gives
+    // the values alone (a plain list, not code).
+    native("intrinsics.written", [variable()], str);
+    native("intrinsics.syntax", [variable()], explicitDynamic);
+    scope.set("toAST", { type: fn(variable(), explicitDynamic) });
+    scope.set("probe", { type: fn(variable(), io(empty)) });
+    { const item = variable(); scope.set("reduce", { type: fn(list(item), list(item)) }); }
     native("exit", [int], io(empty));
     native("null", [variable()], bool);
     native("length", [list(variable())], int);

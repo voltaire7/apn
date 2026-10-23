@@ -10,7 +10,8 @@ frequencies $ words $ "one two one" # HashMap [["one",2],["two",1]]
 The prelude, `lib/prelude.apn`, needs no import: it defines every binary
 operator (`(+) = intrinsics.add`, ...; the `intrinsics` record holds the
 functions APN cannot define) and its fixity, `negate` and `not` (the functions
-`-x` and `!x` are), `quote` and `toAST`, and the Functor, Applicative
+`-x` and `!x` are), `probe`, `reduce` and `toAST` (see [code](semantics.md#code)),
+and the Functor, Applicative
 and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
 `sequence`, `mapM`, `map2`–`map4`, `when`, `unless`, `return`, `throw`, `empty`, `guard`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).
 
@@ -269,16 +270,16 @@ Run `apn examples/standard-library.apn` for a complete example.
 ## Code as data — `syntax`
 
 ```apn
-toAST (f x + 1)                        # ["+",["f","x"],1]   (prelude)
+toAST [f x + 1]                        # ["[]",["+",["f","x"],1]]   (prelude)
 import "syntax"
-fromAST (toAST (n -> n * 2 + 1))       # "n -> n * 2 + 1"
+fromAST (toAST [n -> n * 2 + 1])       # "[n -> n * 2 + 1]"
 doubled e = ["*",e,2]
 eval (doubled ["sqrt",16])             # 8
 ```
 
-`toAST e` gives `e`, unevaluated and unchecked, as lists (a `Dynamic` value).
-The prelude defines it with a [`(Quote q)` parameter](semantics.md#inspection-and-numbers),
-which takes the argument's source text, and reads that text as lists:
+`toAST code` gives [code](semantics.md#code), a list's items as written,
+unevaluated, as lists (a `Dynamic` value), the list itself a `["[]",...]`
+node, so `toAST [e] 1` is `e`'s:
 
 - a leaf is a number, a Bool, a name (`"x"`, `"+"`, `"Some"`) or a literal's
   source text, quotes included (`"\"hi\""`, `"'c'"`), so `f x` is
@@ -299,19 +300,20 @@ which takes the argument's source text, and reads that text as lists:
 Building code is building a list. `fromAST` writes such data as source,
 with parentheses only where the parser needs them (so it passes the
 [parentheses rule](semantics.md)), which reads back as the same data:
-`fromAST (toLambda { a <- return 1; return (a + 1) })` is
-`return 1 >>= a -> return (a + 1)`. `eval` runs it as written source runs, at the program's top level (as
+`fromAST ["->",["a"],["+","a",1]]` is `a -> a + 1`. `eval` runs it as written
+source runs, at the program's top level (as
 Lisp's `eval` uses the global environment): its bindings stay inside it, an
 action it makes is returned, not run, and its result is `Dynamic`.
 
-`toLambda e` gives `e` as `toAST` does, desugared to a core of names,
-literals, one-parameter lambdas and application, which runs as `e` does:
+`toLambda code` gives code desugared to a core of names, literals,
+one-parameter lambdas and application, as code (evaluated as `eval` does):
+`probe` shows the lambdas, and each item runs as the original's does:
 
 ```apn
-fromAST (toLambda { x = 10; y = x + 1; y })    # "(x -> (y -> y) (x + 1)) 10"
-fromAST (toLambda (x, y -> x + y))              # "x -> y -> x + y"
-fromAST (toLambda [x = 1, y = 2, x + y])        # "(x -> (y -> [x, y, x + y]) 2) 1"
-eval (toLambda { fact n = n == 0 ? 1 : n * fact (n - 1); fact 5 })   # 120
+probe (toLambda [{ x = 10; y = x + 1; y }])  # [(x -> (y -> y) (x + 1)) 10]
+probe (toLambda [(x, y -> x + y)])           # [x -> y -> x + y]
+probe (toLambda [x = 1, y = 2, x + y])       # [(x -> (y -> x + y) 2) 1]
+toLambda [fact n = n == 0 ? 1 : n * fact (n - 1), fact 5]   # [120]
 ```
 
 A block's binding `x = e; rest` is `(x -> rest) e`, so a later binding of a
@@ -321,13 +323,48 @@ binding that refers to itself is a fixed point, through Curry's Y combinator
 written out, so the result needs no library. A definition with several
 clauses, or patterns for parameters, is a lambda per argument and a `match`
 over them; sections and `$` become lambdas and application. A list's
-bindings scope over its later items as a block's do, each item being the
-value its binding binds (a pattern binding's whole value, under a fresh name
-`_item1`, ...). Other syntax
+bindings scope over its later items as a block's do: each other item is the
+block of the bindings before it, ending in the item, and a binding is a
+lambda's parameter, so it is no item of its own (`[x = 1, x + 1]` is
+`[(x -> x + 1) 1]`). Other syntax
 (`?:`, lists, records, ranges, patterns) stays as it is, its parts
-desugared. `toLambda` sees only the quoted code, so a binding of a name bound
+desugared. `toLambda` sees only the code it is given, so a binding of a name bound
 outside it that refers to that name (`x = x + 1`) is read as recursion, not
 as a new version of the outer `x`.
+
+## Parsers — `parse`
+
+```apn
+import "parse"
+date = {
+    y <- number
+    char '-'
+    m <- number
+    return [y,m]
+}
+parse date "2026-10"                      # Ok [2026,10]
+parse (sepBy number (char ',')) "1,2,3"   # Ok [1,2,3]
+parse number "12x"                        # Err "unexpected 'x'"
+```
+
+Parsers, as Haskell's Parsec: a `Parser a` reads the start of its input and
+gives its value and the rest, or what it expected. Parsers are monads (`map`,
+`>>=`, `return`), so a do-block reads its input in order. `parse p input` is
+`Ok` of the value `p` reads from all of `input`, or `Err` of a message. The
+input is a list, and a string is its characters, so a list of anything parses
+(`satisfy "an even number" (n -> n % 2 == 0)` reads numbers).
+
+- one item: `item`, `satisfy what test`, `char c`, `oneOf "abc"`, `digit`,
+  `letter`, `space`; `string "text"`; `end`, the end of the input;
+- combining: `p <|> q` (`q` if `p` fails), `many p` and `some p` (as often as
+  `p` reads; `some`, at least once), `optional p` (`Some` or `None`),
+  `sepBy p sep` and `sepBy1 p sep`;
+- `number`, a whole number; `spaces`; `token p`, `p` and the spaces after it.
+
+`<|>` does not undo what `p` read before it failed, and `many` stops at the
+first item `p` cannot read, so `parse` reports what follows it. Its names
+repeat others' (`string`, as `decode`'s): a program using both imports one
+qualified (`parsing = import "parse"`).
 
 ## Metacircular evaluator — `meta`
 

@@ -20,7 +20,7 @@ for (const [source, expected] of [
     ['obj = [x: 1]\nkey = "x"\nobj key = 2\nobj', '[x: 2]'],
     ['obj = [x: 1]\nkey = "y"\nobj (key ++ "z") = 2\nobj', '[x: 1, yz: 2]'],
     ['obj = [x: 1]\nkey = "x"\ninside = { obj (key ++ "") = 2; obj }\n[inside,obj]', '[[x: 2], [x: 1]]'],
-    ['quote { arr (i + 1) = 2 }', '"{ arr (i + 1) = 2 }"'],
+    ['intrinsics.written [{ arr (i + 1) = 2 }]', '"[{ arr (i + 1) = 2 }]"'],
     ['f x = { arr (i + 1) = x; arr }\nf', 'x -> { arr (i + 1) = x; arr }'],
     ['i = 0\nf i = i + 1\nf 4', '5'],
     ['f x = x\ni = 0\nf i = i + 2\nf 4', '6'],

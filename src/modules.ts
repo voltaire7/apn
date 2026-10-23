@@ -240,9 +240,10 @@ export function bundleProgram(source: string, directory: string): Record<string,
 }
 
 // Standard modules whose names repeat other modules' (decode.int and
-// random.int, svg.circle and playground's circle): a program using both of a
-// pair imports one qualified, so they offer no "add import" names.
-export const QUALIFIED_MODULES = new Set(["random", "decode", "svg"]);
+// random.int, svg.circle and playground's circle, parse.string and
+// decode.string): a program using both of a pair imports one qualified, so
+// they offer no "add import" names.
+export const QUALIFIED_MODULES = new Set(["random", "decode", "svg", "parse"]);
 
 // The standard library's exports by name, with the modules defining each:
 // top-level names not starting with _, and each module's natives, for

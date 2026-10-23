@@ -8,6 +8,7 @@ Dynamic $ load "syntax/source"
 Dynamic $ load "syntax/lambda"
 fromAST syntax = String (Dynamic (_fromAST syntax))
 eval syntax = intrinsics.eval (fromAST syntax)
-# toLambda gives code, as toAST does, desugared to lambdas and application:
-# { x = 10; y = x + 1; y } is (x -> (y -> y) (x + 1)) 10 (see syntax/lambda).
-toLambda (Quote q) = Dynamic (_lambda [] (intrinsics.syntax q))
+# toLambda gives code desugared to lambdas and application, as code: each
+# item of [x = 10, y = x + 1, y] is the block of the bindings before it, so
+# its last is (x -> (y -> y) (x + 1)) 10 (see syntax/lambda). probe shows it.
+toLambda code = eval (Dynamic (_lambda [] (intrinsics.syntax code)))

@@ -221,12 +221,7 @@ A range pattern `[lo..hi]` matches any integer from `lo` to `hi` inclusive.
 group is scoped to that group. Bindings are statements, not expressions, but a
 group's value is its last statement's, and a binding's is the value it binds:
 `print (x = 1)` prints 1, and `x` is unbound after it. A list item may be a
-binding too, as a group's statement may: its value is the item, and it is in
-scope for the items after it (`[x = 1, x + 1]` is `[1,2]`); `<-` stays a block's.
-Such a list's bindings name its items, so a copy with an item replaced
-recomputes the items that read it: after `code = [x = 1, y = 2, x + y]` and
-`code 0 = 10` (or `code 0 = (x = 10)`), `code` is `[10,2,12]` and `do code` is
-`12`, while a value read from the old `code` keeps its old items. A value never changes once written, so when
+binding too (see [code](#code)). A value never changes once written, so when
 something is computed never changes what it is. A name not visible here is
 defined for its whole scope: code above may use it (functions may call each
 other in any order), and its value may refer to itself (`ones = 1 :: ones`).
@@ -276,6 +271,56 @@ cannot be redefined, so `Int x = ...` is always this binding; `Int = 5` and
 In file mode, bare expressions run for their effects but are not printed; use
 `print`. The REPL echoes expression results but not assignments, so `x = x`
 never hangs the prompt.
+
+### Code
+
+A list keeps its items as written, each in the scope it was written in: a list
+is code, edited as any list is. `probe` shows a value as code (a list's items
+as written, a string quoted), `print` shows its values, and `reduce xs` is the
+values alone, a list that is no longer code, so `print xs` is
+`probe (reduce xs)`:
+
+```apn
+probe [1 + 1, 2]            # [1 + 1, 2]
+print [1 + 1, 2]            # [2,2]
+```
+
+A list item may be a binding, as a group's statement may: its item is the
+value it binds, and it binds for the items after it (`[x = 1, x + 1]` is
+`[1,2]`, and `do [x = 1, x + 1]` is 2); `<-` stays a block's. A pattern
+binding's item matches when a name it binds is first used. An item may read a
+name bound nowhere where it is written: the list is open code, which code
+joined before it may complete. `++` joins code: the items after a binding see
+it, wherever they were written, and it wins over a name visible there:
+
+```apn
+code = [x = 1] ++ [x + 1]
+probe code                  # [x = 1, x + 1]
+print code                  # [1,2]
+y = 100
+print ([y = 1] ++ [y + 1])  # [1,2]
+```
+
+An item update replaces the item with the code on its right, run in the list
+(a value it gives takes the replaced item's type): the items after it that
+read a name either item binds run again, and every other keeps its value. The
+copy is a new list; one read from the old keeps its old items:
+
+```apn
+code = [x = 1, x + 1] ++ [5]
+code 0 = (x = 10)
+print code                  # [10,11,5]
+code 1 = x * 3              # x is the list's: [10,30,5]
+```
+
+A list function passes the items it keeps on as written, with their values
+(`take 1 code ++ [x * 5]` is `[10,50]`); only `++` and an update run items
+again. One that makes new items (`map f xs`) makes values. Using an open
+list's values (`print [x + 1]`) is an error naming the unbound name where it
+is written; the static check reports it, except after code it cannot follow
+(a list a function made, as `take` does), which is checked when it runs.
+`toAST` gives code as lists and `toLambda` desugars it, as code (see
+[code as data](standard-library.md#code-as-data--syntax)).
 
 ## Operator precedence and associativity
 
@@ -804,15 +849,7 @@ does not evaluate its `halt` action.
 
 ## Inspection and numbers
 
-A `(Quote q)` parameter takes its argument as written, unevaluated and
-unchecked: `q` is its source text, the expression the argument is (its
-grouping parentheses belong to the call: `labelled (Quote q) = q ++ "!";
-labelled (1 + 1)` is `"1 + 1!"`), written with parentheses only where needed. It is the
-text of the expression written in the call, so `y = 1 + 1; labelled y` gives
-`"y!"`, and a function passing its parameter on passes that parameter's name.
-`Quote` is only a parameter pattern; a program may bind the name to its own
-type. The prelude defines `quote (Quote q) = q`, and
-[`toAST`](standard-library.md#code-as-data--syntax) by reading `q` as lists. `debug`
+`probe` shows a value as code (see [code](#code)). `debug`
 forces its argument without running a returned action: `a = print 3; debug a`
 prints `a`. `step` retains
 its expression-inspection/evaluation rules demonstrated in `examples/features.apn`.

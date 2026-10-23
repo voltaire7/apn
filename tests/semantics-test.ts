@@ -121,9 +121,9 @@ print (true ? 7 : missing)
 print (false ? missing : 8)
 `, ["7", "8"]);
 
-example("quote does not evaluate its argument", `
-print (quote missing)
-`, ["missing"]);
+example("probe shows code as written, unevaluated", `
+probe [missing + 1]
+`, ["[missing + 1]"]);
 
 example("debug inspects an action without calling its body", `
 action = print "unexpected"
@@ -413,9 +413,8 @@ print [[a,b] = [1,2], a + b]
 x = 7
 print [x + 1, x = 1, x]
 print x
-print (quote [x = 1, x + 1])
-print (quote (x = 1))`, ["[1]", "[1,2]", "2", "[n -> n * 2, 6]", "[[1,2],3]", "[8,1,1]", "7",
-    "[x = 1, x + 1]", "(x = 1)"]);
+probe [x = 1, x + 1]`, ["[1]", "[1,2]", "2", "[n -> n * 2, 6]", "[[1,2],3]", "[8,1,1]", "7",
+    "[x = 1, x + 1]"]);
 failure("a list item cannot run an action", "print [x <- return 1, x]", "cannot run an action");
 example("minus sections: (10 -), (- 2) and (-) are sections, (-2) a negation", `
 print ((10 -) 3)
@@ -505,6 +504,25 @@ g x Float = x
 to Option (Ok x) = Some x
 print [f Int 3, g 2 Float]
 print (to Option (Ok 1))`, ["[3,2]", "Some 1"]);
+example("a list is code: ++ joins it and an update replaces an item", `
+code = [x = 1] ++ [x + 1]
+probe code
+print code
+edited = [x = 1, x + 1] ++ [5]
+edited 0 = (x = 10)
+print edited
+probe edited
+edited 1 = x * 3
+print edited
+y = 100
+print ([y = 1] ++ [y + 1])
+probe (take 1 edited ++ [x * 5])
+print (take 1 edited ++ [x * 5])
+cycle xs = xs ++ cycle xs
+print (take 5 (cycle [1,2]))
+probe (reduce [1 + 1])`, ["[x = 1, x + 1]", "[1,2]", "[10,11,5]", "[x = 10, x + 1, 5]", "[10,30,5]", "[1,2]",
+    "[x = 10, x * 5]", "[10,50]", "[1,2,1,2,1]", "[2]"]);
+failure("an open list's values need its names", "print [x + 1]", "unbound variable 'x'");
 example("a list's bindings name its items", `
 code = [x = 1, y = 2, x + y]
 before = code
@@ -513,7 +531,7 @@ print [before,code]
 print (do code)
 code [1,2] = [5,0]
 print code
-f k = { c = [a = 1, a * 2]; c 0 = k; c 1 }
+f k = { c = [a = 1, a * 2]; c 0 = (a = k); c 1 }
 print (f 4)`, ["[[1,2,3],[10,2,12]]", "12", "[10,5,0]", "8"]);
 example("a typed pattern headed by a free name takes a type apart", `
 (t1 1 t2 -> print [t1,t2]) (Vect 1 Int)

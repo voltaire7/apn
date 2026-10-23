@@ -45,10 +45,13 @@ infixr 9 \
 # Prefix - and ! as functions: toAST writes -x as ["negate","x"].
 negate x = -x
 not x = !x
-# A (Quote q) parameter takes its argument as written, unevaluated: q is its
-# source text. quote gives it; toAST reads it as lists (see lib/syntax.apn).
-quote (Quote q) = q
-toAST (Quote q) = intrinsics.syntax q
+# A list keeps its items as written: it is code, edited as any list is (++
+# joins code, an item update replaces an item). probe shows the code, print
+# the values; reduce gives the values alone. toAST gives the code as lists
+# (see lib/syntax.apn).
+probe x = print (intrinsics.written x)
+reduce xs = map (x -> x) xs
+toAST code = intrinsics.syntax code
 
 # Functor, Applicative and Monad. IO and lists are built in; any other type
 # joins by defining instances of map, >>= and return (as the option

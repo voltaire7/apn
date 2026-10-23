@@ -16,21 +16,25 @@ import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, ca
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { clauseKey, countingFamily, flatTypedPattern, isLoadCall, mergeClauses } from "./ast.ts";
+import { clauseKey, countingFamily, flatTypedPattern, isLoadCall, mentions, mergeClauses } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
-import { parse, exprToSource, patternSource, rangeExpr, isOperatorName, PRIMITIVE_OPERATORS, fixityOf, getLooseSpacing, setLooseSpacing } from "./parser.ts";
+import { parse, exprToSource, patternSource, patternVariables, rangeExpr, isOperatorName, PRIMITIVE_OPERATORS, fixityOf, getLooseSpacing, setLooseSpacing } from "./parser.ts";
 import { charLiteral, itemsText, spacedItem, stringLiteral } from "./separators.ts";
 
 // ---------------- Evaluator ----------------
 
 // Internal control transfers, caught only by their matching execution loop.
-// The prelude's Quote, a parameter pattern taking its argument as written
-// ((Quote q) binds its source text); a program may bind the name to its own type.
-const QUOTE: Value = { kind: "type", name: "Quote" };
+// An item of a list as written (see Interpreter.written).
+type Written = { expr: Expr; env: Env; binds?: Map<string, Value> };
+// Code running item by item: the bindings so far, the names bound
+// differently than when the items after were written, and the scope the
+// current run of items written in one scope shares.
+type CodeState = { before: Map<string, Value>; changed: Set<string>; env?: Env; scope?: Env };
+
 // Natives by name, and the intrinsics (intrinsics.add, ...) as fields of one record.
 function bindNatives(env: Env, natives: Iterable<readonly [string, number]>): void {
     const intrinsics: [string, Value][] = [];
@@ -77,7 +81,7 @@ export const NATIVES: Array<[string, number]> = [
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
     ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1], ["use", 1],
-    ["emit", 1], ["step", 2], ["intrinsics.syntax", 1], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
+    ["emit", 1], ["step", 2], ["intrinsics.syntax", 1], ["intrinsics.written", 1], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
     ["intrinsics.bind", 2], ["intrinsics.ap", 2], ["intrinsics.return", 1], ["intrinsics.throw", 1], ["intrinsics.source", 1],
@@ -206,7 +210,6 @@ export class Interpreter {
         const builtins = new Env();
         // Vect is the prelude's declaration.
         for (const type of TYPE_NAMES) if (type !== "Vect") builtins.setLocal(type, { kind: "type", name: type });
-        builtins.setLocal("Quote", QUOTE);
         builtins.setLocal("Z", ZERO);
         bindNatives(builtins, [...NATIVES, ...STANDARD_NATIVES]);
         for (const [name, value] of this.preludeBindings) builtins.setLocal(name, value);
@@ -241,7 +244,6 @@ export class Interpreter {
 
     constructor() {
         for (const name of TYPE_NAMES) if (name !== "Vect") this.env.setLocal(name, { kind: "type", name });
-        this.env.setLocal("Quote", QUOTE);
         this.env.setLocal("Z", ZERO);
         bindNatives(this.env, NATIVES);
         const outer = this.env;
@@ -689,14 +691,20 @@ export class Interpreter {
                 });
                 let rest = this.dataValue(this.eval(expression));
                 if (!this.isList(rest)) throw new APNError("runtime", "multi-index assignment needs a list of values");
-                const values: Value[] = [];
+                const values: Value[] = [], items: (Written | undefined)[] = [];
                 for (const _index of indices) {
                     const cell = this.cell(rest);
                     if (!cell) throw new APNError("runtime", "index count does not match value count");
-                    values.push(this.demand(cell.head));
+                    items.push(this.written(cell.head));
+                    values.push(items.at(-1) ? cell.head : this.demand(cell.head));
                     rest = cell.tail;
                 }
                 if (this.cell(rest)) throw new APNError("runtime", "index count does not match value count");
+                // Items written as code replace theirs as code, in order.
+                if (items.some(item => item)) {
+                    const slots = indices.map(index => this.index(collection, index));
+                    return indices.reduce((list, index, n) => this.setIndex(list, index, values[n], items[n], slots[n]), collection);
+                }
                 // Check each conversion against its original slot, even for duplicate indices.
                 const checked = indices.map((index, n) => this.setIndex(collection, index, values[n]));
                 let result = collection;
@@ -705,8 +713,10 @@ export class Interpreter {
             }
             const index = this.listIndex(key);
             if (index === undefined) throw new APNError("runtime", "list assignment needs an integer index or a nullary variant from an enumeration");
-            const value = this.demand(this.eval(expression));
-            return this.setIndex(collection, index, value);
+            // The new item is code, as the list's are: code 0 = (x = 10) binds x.
+            let item = expression;
+            while (item.t === "block" && item.style === "(" && item.stmts.length === 1) item = item.stmts[0];
+            return this.setIndex(collection, index, mkList([]), { expr: item, env: this.env });
         }
         if (collection.kind === "record") {
             if (key.kind !== "string") throw new APNError("runtime", "record assignment needs a string field name");
@@ -1203,7 +1213,7 @@ export class Interpreter {
                     case "floatRange": r = { kind: "floatRange", lo: e.lo, step: e.step, hi: e.hi }; break;
                     case "list": {
                         if (!e.v.some(x => x.t === "stmDef" || x.t === "patDef")) { r = { kind: "lazyList", exprs: e.v, env: this.env }; break; }
-                        r = this.bindingList(e.v.map(expr => ({ expr })), this.env);
+                        r = this.codeList(e.v, this.env);
                         break;
                     }
                     case "record": {
@@ -1474,7 +1484,7 @@ export class Interpreter {
         if (op === "++") {
             const l = this.dataValue(lThunk);
             const r = rThunk;
-            if (this.isList(l)) return this.append(l, r);
+            if (this.isList(l)) return this.appendCode(l, r);
             const right = this.dataValue(r);
             if (l.kind === "string" && right.kind === "string") return mkStr(l.v + right.v);
             throw new APNError("runtime", `cannot apply '++' to ${l.kind} and ${right.kind}`);
@@ -1754,8 +1764,6 @@ export class Interpreter {
             case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
                 if (f.name === "$any" && !f.family && !f.alias) return arg;
-                if (f === QUOTE) throw new APNError("runtime", "Quote is a parameter pattern, not a function", {
-                    hint: "define one: quote (Quote q) = q" });
                 if (f.name === "Dynamic" && !f.family && !f.alias) {
                     this.dynamicDepth++;
                     try { return this.constructType("Dynamic", this.reference(arg)); }
@@ -1995,7 +2003,7 @@ export class Interpreter {
                 checkInterrupt();
                 if (v.kind === "lazyList") {
                     const env = v.env;
-                    v.value ??= mkList(v.exprs.map((body) => ({ kind: "thunk", body, env })));
+                    v.value ??= mkList(v.exprs.map((body) => this.writtenAs({ kind: "thunk", body, env }, { expr: body, env })));
                     v = v.value;
                 } else if (v.kind === "thunk" || v.kind === "deferred") {
                     if (v.value !== undefined) { v = v.value; continue; }
@@ -2095,41 +2103,141 @@ export class Interpreter {
         throw new APNError("runtime", `index ${original} out of range`);
     }
 
-    // Items with bindings, as a block's statements: each binding's value is
-    // its item, and is in scope for the items after it. The list keeps its
-    // items, so its bindings name them: a copy with an item replaced (given
-    // as a value) binds that item's names to it and recomputes the rest, as
-    // [x = 1, x + 1] with item 0 set to 10 is [10,11].
-    private formulas = new WeakMap<Value, { items: { expr: Expr; value?: Value }[]; env: Env }>();
-    private bindingList(items: { expr: Expr; value?: Value }[], env: Env): Value {
+    // How a list literal's item was written: its expression, the scope it was
+    // written in, and the names it bound if it is a binding. A list's code is
+    // its items as written (one without, such as an item map made, is its
+    // value), so code is edited as any list is: reverse and take keep it, ++
+    // joins it (appendCode) and an item update replaces an item (setIndex).
+    private writtenItems = new WeakMap<Value, Written>();
+    private writtenAs(value: Value, item: Written): Value {
+        this.writtenItems.set(value, item);
+        return value;
+    }
+    // How an item was written, through the names it was passed by (x :: acc
+    // in a fold takes the item x names).
+    private written(value: Value): Written | undefined {
+        for (let depth = 0; depth < 64; depth++) {
+            const item = this.writtenItems.get(value);
+            if (item || value.kind !== "thunk" || value.body.t !== "var") return item;
+            const named = value.env?.get(value.body.name);
+            if (!named) return undefined;
+            value = named;
+        }
+        return undefined;
+    }
+    // A list literal with bindings: its items, in order, as a block's statements.
+    private codeList(exprs: Expr[], env: Env): Value {
+        const state: CodeState = { before: new Map(), changed: new Set() };
+        return mkList(exprs.map(expr => this.runItem({ expr, env }, state)));
+    }
+    // Run an item as written after the bindings before it: in the scope it was
+    // written in, with those bindings in it (a joined list's winning over the
+    // names there). Consecutive items written in one scope share one, as a
+    // block's statements do (a function's clauses written as items merge).
+    // A binding's item is its value; the names it binds go in state.
+    private runItem(item: Written, state: CodeState): Value {
+        if (state.env !== item.env || !state.scope) {
+            state.env = item.env;
+            state.scope = new Env(item.env);
+            for (const [name, value] of state.before) state.scope.setLocal(name, value);
+        }
         const old = this.env;
-        this.env = new Env(env);
+        this.env = state.scope;
         try {
-            const list = mkList(items.map(({ expr, value }, n) => {
-                if (!value) return expr.t === "stmDef" ? this.evalDef(expr.name, expr.clauses) : expr.t === "patDef" ? this.evalPatBinding(expr) : this.delay(expr);
-                if (expr.t === "stmDef") this.bindNames([[expr.name, value]]);
-                if (expr.t === "patDef") {
-                    const binds = new Map<string, Value>();
-                    if (!this.matchPattern(expr.pattern, this.force(value), binds)) throw new APNError("runtime", `item ${n} no longer matches its pattern`);
-                    this.bindNames(binds);
-                }
-                return value;
-            }));
-            this.formulas.set(list, { items, env });
-            return list;
+            const { expr } = item;
+            if (expr.t !== "stmDef" && expr.t !== "patDef") return this.writtenAs(this.delay(expr), { expr, env: item.env });
+            // Some v = m takes a value apart, as a pattern binding does.
+            const existing = expr.t === "stmDef" && /^[A-Z]/.test(expr.name) ? this.env.get(expr.name) : undefined;
+            const pattern: Pattern | undefined = expr.t === "patDef" ? expr.pattern
+                : existing && (existing.kind === "native" && existing.tag || existing.kind === "variant") && expr.t === "stmDef"
+                    ? { p: "constr", tag: expr.name, args: expr.clauses[0].params } : undefined;
+            const value = pattern ? this.matchItem(pattern, expr.t === "patDef" ? expr.value : (expr as Extract<Expr, { t: "stmDef" }>).clauses[0].body)
+                : this.evalDef((expr as Extract<Expr, { t: "stmDef" }>).name, (expr as Extract<Expr, { t: "stmDef" }>).clauses);
+            state.scope = this.env;
+            const binds = new Map((pattern ? patternVariables(pattern) : [(expr as Extract<Expr, { t: "stmDef" }>).name]).map(name => [name, this.env.get(name)!]));
+            for (const [name, bound] of binds) { state.before.set(name, bound); state.changed.add(name); }
+            return this.writtenAs({ kind: "deferred", compute: () => value }, { expr, env: item.env, binds });
         } finally { this.env = old; }
     }
-
-    setIndex(list: Value, index: bigint, value: Value): Value {
-        const actual = this.force(list);
-        const formula = this.formulas.get(actual);
-        if (formula) {
-            const offset = index < 0n ? BigInt(formula.items.length) + index : index;
-            if (offset < 0n || offset >= formula.items.length) throw new APNError("runtime", `index ${index} out of range`);
-            const slot = this.assignSlot(this.index(actual, offset), value);
-            return this.bindingList(formula.items.map((item, n) => BigInt(n) === offset ? { expr: item.expr, value: slot } : item), formula.env);
+    // A pattern binding's item, matched when a name it binds is first used
+    // (code may read a name a list joined before it binds): its value.
+    private matchItem(pattern: Pattern, written: Expr): Value {
+        const scope = this.env, value = this.delay(written);
+        let matched: Map<string, Value> | undefined;
+        const match = (): Map<string, Value> => {
+            if (matched) return matched;
+            const old = this.env;
+            this.env = scope;
+            try {
+                const binds = new Map<string, Value>();
+                if (!this.matchPattern(pattern, this.force(value), binds)) throw new APNError("runtime", `the item ${patternSource(pattern)} = ... did not match its value`);
+                return matched = binds;
+            } finally { this.env = old; }
+        };
+        for (const name of patternVariables(pattern)) this.env.setLocal(name, this.defer(() => this.reference(match().get(name)!)));
+        return this.defer(() => { match(); return this.reference(value); });
+    }
+    // The bindings a kept item makes, for the items after it.
+    private keepItem(item: Value, state: CodeState): void {
+        for (const [name, bound] of this.written(item)?.binds ?? []) {
+            state.before.set(name, bound);
+            state.scope?.setLocal(name, bound);
         }
+    }
+    // The items after code was joined or changed before them: one that reads a
+    // name bound differently now runs again (runItem); any other is kept, its
+    // value shared.
+    private rerun(rest: Value, state: CodeState): Value {
+        if (!state.changed.size) return rest;
+        return this.defer(() => {
+            const cell = this.cell(rest);
+            if (cell === null) return mkList([]);
+            const next: CodeState = { ...state, before: new Map(state.before), changed: new Set(state.changed) };
+            const item = this.written(cell.head);
+            let head = cell.head;
+            if (item && mentions(item.expr, next.changed)) head = this.runItem(item, next);
+            else this.keepItem(head, next);
+            return { kind: "cons", head, tail: this.rerun(cell.tail, next) };
+        });
+    }
+    // xs ++ ys: xs's items, then ys's, which see the bindings xs's make (see
+    // rerun): [x = 1] ++ [x + 1] is the code [x = 1, x + 1].
+    private appendCode(xs: Value, ys: Value, before = new Map<string, Value>()): Value {
+        return this.defer(() => {
+            const cell = this.cell(xs);
+            if (cell === null) {
+                const right = this.dataValue(ys);
+                if (!this.isList(right)) throw new APNError("runtime", "list append expects a list");
+                return this.rerun(right, { before, changed: new Set(before.keys()) });
+            }
+            const binds = this.written(cell.head)?.binds;
+            return { kind: "cons", head: cell.head, tail: this.appendCode(cell.tail, ys, binds ? new Map([...before, ...binds]) : before) };
+        });
+    }
+    // A value's code: a list's items as written (an item without, as its
+    // value's code), anything else as its value is shown.
+    private writtenText(v: Value): string {
+        const value = this.dataValue(v);
+        if (value.kind === "range" || value.kind === "floatRange" || value.kind === "rationalRange" || !this.isList(value)) return this.renderString(value);
+        const ITEM = { kind: "item", min: 0, follows: -1 } as const;
+        return `[${itemsText(this.items(value).map(item => {
+            const written = this.written(item);
+            return written ? exprToSource(written.expr, ITEM) : this.writtenText(item);
+        }))}]`;
+    }
+
+    // A copy of a list with an item replaced: by a value, or by an item as
+    // written, which runs as the list's code does (see runItem). The items
+    // after it reading a name either binds run again (see rerun). A value
+    // takes the type of its slot (the item replaced, unless given).
+    setIndex(list: Value, index: bigint, value: Value, item?: Written, slot?: Value): Value {
+        const actual = this.force(list);
         if (actual.kind === "list" && actual.schema) {
+            if (item) {
+                const old = this.env;
+                this.env = item.env;
+                try { value = this.demand(this.eval(item.expr)); } finally { this.env = old; }
+            }
             const values = [...actual.v];
             const offset = index < 0n ? BigInt(values.length) + index : index;
             if (offset < 0n || offset >= values.length) throw new APNError("runtime", `index ${index} out of range`);
@@ -2139,24 +2247,29 @@ export class Interpreter {
             return { ...actual, v: values };
         }
         const original = index;
-        if (index < 0n) {
-            const values = this.items(list);
-            index += BigInt(values.length);
-            if (index < 0n || index >= values.length) throw new APNError("runtime", `index ${original} out of range`);
-            values[Number(index)] = this.assignSlot(values[Number(index)], value);
-            return mkList(values);
-        }
-        const prefix: Value[] = [];
+        if (index < 0n) index += BigInt(this.items(list).length);
+        if (index < 0n) throw new APNError("runtime", `index ${original} out of range`);
+        const prefix: Value[] = [], state: CodeState = { before: new Map(), changed: new Set() };
         for (;;) {
             checkInterrupt();
             const cell = this.cell(list);
             if (cell === null) throw new APNError("runtime", `index ${original} out of range`);
             if (index-- === 0n) {
-                let result: Value = { kind: "cons", head: this.assignSlot(cell.head, value), tail: cell.tail };
+                for (const name of this.written(cell.head)?.binds?.keys() ?? []) state.changed.add(name);
+                let head: Value;
+                if (item) {
+                    head = this.runItem(item, state);
+                    // A value takes its slot's type, as a field's does; a binding
+                    // binds what it binds.
+                    if (!this.written(head)?.binds) head = this.writtenAs({ kind: "deferred", value: this.assignSlot(slot ?? cell.head, this.demand(head)) }, { expr: item.expr, env: item.env });
+                } else head = this.assignSlot(slot ?? cell.head, value);
+                state.scope = undefined;
+                let result: Value = { kind: "cons", head, tail: this.rerun(cell.tail, state) };
                 for (let i = prefix.length - 1; i >= 0; i--) result = { kind: "cons", head: prefix[i], tail: result };
                 return result;
             }
             prefix.push(cell.head);
+            this.keepItem(cell.head, state);
             list = cell.tail;
         }
     }
@@ -2646,7 +2759,7 @@ export class Interpreter {
         if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
         // A named subtype's own pattern outranks its base's: (Money x) first.
         // Only a constructor pattern looks at its argument.
-        if (pattern.p !== "constr" || pattern.tag === "Quote" && this.env.get("Quote") === QUOTE) return 0;
+        if (pattern.p !== "constr") return 0;
         const named = this.reference(arg);
         if (named.kind === "variant" && named.family?.base) {
             if (pattern.tag === named.family.name) return 35;
@@ -3449,12 +3562,22 @@ export class Interpreter {
         // print and toString) demand values and run zero-argument actions.
         // expression-level natives: they consume the argument's UNEVALUATED form
         // Source text read as syntax data (toAST's lists).
+        // Code as data: a list's items as written (or source text), as lists
+        // (see lib/syntax.apn).
         if (name === "intrinsics.syntax") {
-            const source = this.dataValue(argsIn[0]);
-            if (source.kind !== "string") throw new APNError("runtime", "syntax reads source text");
-            const stmts = this.readSource(source.v, "<syntax>");
-            return this.sexprOf(stmts.length === 1 ? stmts[0] : { t: "block", stmts, style: "{" });
+            const code = this.dataValue(argsIn[0]);
+            // Source text reads as the program's code does.
+            if (code.kind === "string") {
+                const stmts = this.readSource(code.v, "<syntax>");
+                return this.sexprOf(stmts.length === 1 ? stmts[0] : { t: "block", stmts, style: "{" });
+            }
+            if (!this.isList(code)) throw new APNError("runtime", "toAST reads code, a list", { hint: "write toAST [x + 1]" });
+            return mkList([mkStr("[]"), ...this.items(code).map(item => {
+                const written = this.written(item);
+                return this.sexprOf(written ? written.expr : this.readSource(this.writtenText(item), "<syntax>")[0]);
+            })]);
         }
+        if (name === "intrinsics.written") return mkStr(this.writtenText(argsIn[0]));
         // An operator's precedence and associativity, as fromAST needs them.
         if (name === "intrinsics.fixity") {
             const op = this.dataValue(argsIn[0]);
@@ -3787,6 +3910,8 @@ export class Interpreter {
                 head: this.defer(() => {
                     if (replaceDefaults) return this.applyTemplateSlot(template.head, value.head);
                     const target = this.force(template.head);
+                    // A type variable no call decided takes any value, as conform's does.
+                    if (target.kind === "type" && target.variable) return this.reference(value.head);
                     return this.isList(target) ? this.templateList(target, value.head) : this.apply(target, value.head);
                 }),
                 tail: this.applyListTemplate(template.tail, value.tail, replaceDefaults),
@@ -4107,12 +4232,6 @@ export class Interpreter {
             if (binds.has(p.name)) return this.equals(binds.get(p.name)!, v);
             binds.set(p.name, v); return true;
         }
-        // (Quote q) takes the argument as written: q is its source text.
-        if (p.p === "constr" && p.tag === "Quote" && p.args.length === 1 && this.env.get("Quote") === QUOTE) {
-            if (v.kind !== "thunk") throw new APNError("runtime", "(Quote q) takes an argument as written, not a computed value", {
-                hint: "call the function with the expression itself (f (x + 1)), not through another function" });
-            return this.matchPattern(p.args[0], mkStr(exprToSource(v.body)), binds);
-        }
         if (p.p === "constr" && p.tag === "Dynamic" && p.args.length === 1) {
             const type = this.reference(this.env.get(p.tag)!);
             if (type.kind === "type" && type.name === "Dynamic" && !type.family && !type.alias) {
@@ -4181,11 +4300,15 @@ export class Interpreter {
         }
         // A typed pattern names the type an undecided call should have:
         // g (Int n) applied to read "3" takes the Int overload.
+        // So does a constructor pattern, its family: (Parser p) given return x
+        // takes Parser's return.
         if (p.p === "constr" && p.args.length) {
             const undecided = this.reference(v);
-            const named = undecided.kind === "pending" && undecided.step.op === "call" ? this.env.get(p.tag) : undefined;
-            const type = named && this.reference(named);
-            if (type && type.kind === "type") {
+            const named = undecided.kind === "pending" ? this.env.get(p.tag) : undefined;
+            const found = named && this.reference(named);
+            const type: Value | undefined = found?.kind === "type" && undecided.kind === "pending" && undecided.step.op === "call" ? found
+                : found?.kind === "native" && found.tag && found.family ? { kind: "type", name: found.family.name, family: found.family } : undefined;
+            if (type) {
                 try { v = this.realize(undecided, type); }
                 catch (error) { if (error instanceof APNError) return false; throw error; }
             }

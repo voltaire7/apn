@@ -83,10 +83,11 @@ for (const source of ['fact n = n == 0 ? 1 : n * fact (n - 1); fact 5', 'x = 1 :
         const i = new Interpreter(); i.run(parse('import "meta"'));
         i.env.setLocal("source", { kind: "string", v: source });
         const read = i.renderString(i.run(parse("metaParse source")));
-        const written = i.renderString(i.run(parse(`toAST {\n    ${source.replaceAll("; ", "\n    ")}\n}`)));
+        const block = `syntax = toAST [{\n    ${source.replaceAll("; ", "\n    ")}\n}]`;
+        const written = i.renderString(i.run(parse(`${block}\nsyntax 1`)));
         if (read !== written) throw new Error(`${read} != ${written}`);
         const hostInterpreter = new Interpreter(), host = hostInterpreter.renderString(hostInterpreter.run(parse(source)));
-        const ran = i.renderString(i.run(parse(`metaEvalSyntax (toAST {\n    ${source.replaceAll("; ", "\n    ")}\n})`)));
+        const ran = i.renderString(i.run(parse(`${block}\nmetaEvalSyntax (syntax 1)`)));
         if (ran !== host) throw new Error(`${ran} != ${host}`);
     });
 }

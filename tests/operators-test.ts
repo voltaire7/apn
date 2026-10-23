@@ -70,7 +70,7 @@ for (const [spellings, text] of [
 for (const [source, expected] of [
     ["print (not 0)", ["true"]],
     ["Cents = | Cents Int\n(Cents a) + (Cents b) = Cents (a + b)\nprint ((+) (Cents 1) (Cents 2))\nprint (zipWith (+) [1] [2])", ["Cents 3", "[3]"]],
-    ["print (+)\nprint ((+) 1)\nprint (quote (+))", ["(+)", "(1 +)", "(+)"]],
+    ["print (+)\nprint ((+) 1)\nprobe [(+)]", ["(+)", "(1 +)", "[(+)]"]],
 ] as const) Deno.test(`operators as functions: ${JSON.stringify(source)}`, () => {
     const actual = run(source);
     if (actual.join("\n") !== expected.join("\n")) throw new Error(`${actual} != ${expected}`);

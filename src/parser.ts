@@ -2145,7 +2145,7 @@ function curried(name: string, body: Expr): { params: Pattern[]; body: Expr; gua
     return undefined;
 }
 
-function patternVariables(p: Pattern): string[] {
+export function patternVariables(p: Pattern): string[] {
     switch (p.p) {
         case "var": return [p.name];
         case "typeBind": return [p.name, ...patternVariables(p.value)];
@@ -2277,7 +2277,8 @@ export function patternSource(p: Pattern): string {
         case "string": return stringLiteral(p.v);
         case "char": return charLiteral(p.v);
         case "float": return numberText({ kind: "float", v: p.v });
-        case "list": return `[${itemsText(p.v.map(patternSource))}]`;
+        // An item stands alone up to its ',': [x :: _, d], [Some x, y].
+        case "list": return `[${itemsText(p.v.map(q => q.p === "cons" || q.p === "constr" && q.args.length ? patternSource(q).slice(1, -1) : patternSource(q)))}]`;
         case "cons": return `(${patternSource(p.head)} ${p.op ?? "::"} ${patternSource(p.tail)})`;
         case "constr": return p.args.length ? `(${p.tag} ${p.args.map(patternSource).join(" ")})` : p.tag;
         case "typeBind": return `(${p.name} ${patternSource(p.value)})`;

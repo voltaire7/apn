@@ -20,31 +20,17 @@ _core bound "()" [op,x] = ["->", ["_1"], [op, "_1", _lambda bound x]]
 _core bound "$" [f,x] = [_lambda bound f, _lambda bound x]
 _core bound "=" [left,right] = ["=", _bindingPattern left, _value bound [["=",left,right]]]
 _core bound "[]" items = any _isBinding items
-    ? _block bound (_listBlock items)
+    ? "[]" :: _listItems bound [] items
     : map (_lambda bound) ("[]" :: items)
 _core bound head args = map (_lambda bound) (head :: args)
 
-# A list with bindings is the block of its bindings, ending in the list of
-# its items' values: [x = 1, x + 1] is { x = 1; [x, x + 1] }, so
-# (x -> [x, x + 1]) 1. A binding's item is what it binds; a pattern
-# binding's, its whole value, under a fresh name (_item1, ...).
-_listBlock items = {
-    [statements,values] = _listed 1 items
-    statements ++ ["[]" :: values]
-}
-_listed _ [] = [[],[]]
-_listed n (item :: rest) = {
-    [statements,values] = _listed (n + 1) rest
-    [own,value] = _listedItem n item
-    [own ++ statements, value :: values]
-}
-_listedItem n ["=",left,right] = _isPlain left || _isDefinition left
-    ? [[["=",left,right]], _bindingPattern left]
-    : {
-        name = "_item" ++ to String n
-        [[["=",name,right],["=",left,name]],name]
-    }
-_listedItem _ item = [[],item]
+# A list with bindings: its bindings scope over its later items, so each
+# other item is the block of the bindings before it, ending in the item:
+# [x = 1, x + 1] is [(x -> x + 1) 1].
+_listItems _ _ [] = []
+_listItems bound before (item :: rest) = _isBinding item
+    ? _listItems bound (before ++ [item]) rest
+    : _block bound (before ++ [item]) :: _listItems bound before rest
 _isBinding ["=",_,_] = true
 _isBinding _ = false
 

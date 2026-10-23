@@ -125,6 +125,15 @@ export function flatTypedPattern(p: Pattern, parameters: (name: string) => numbe
     if (args.some(a => !a)) return undefined;
     return { p: "schema", type: args.reduce<Expr>((f, a) => ({ t: "app", f, a: a! }), { t: "var", name: p.tag }), value: p.args[p.args.length - 1] };
 }
+// Does an expression read any of these names? Any mention counts, so code
+// joined after a list's bindings runs again only where it may read them.
+export function mentions(e: unknown, names: Set<string>): boolean {
+    if (!e || typeof e !== "object" || !names.size) return false;
+    if (Array.isArray(e)) return e.some(x => mentions(x, names));
+    const node = e as Record<string, unknown>;
+    if ((node.t === "var" && names.has(node.name as string)) || (node.t === "binop" && names.has(node.op as string))) return true;
+    return Object.values(node).some(x => x && typeof x === "object" && mentions(x, names));
+}
 // Rewrite every infix pattern whose operator names a constructor ((::) = Cons)
 // to that constructor's pattern (x :: xs is Cons x xs), in place.
 export function rewriteInfixConstructors(node: unknown, tagOf: (op: string) => string | undefined): void {
