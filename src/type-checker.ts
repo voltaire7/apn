@@ -174,6 +174,8 @@ interface Entry {
     definition?: Expr;
 }
 export type TypeScope = Map<string, Entry>;
+/** A name of explicit Dynamic type: its uses are checked at run time. */
+export const dynamicEntry = (): Entry => ({ type: explicitDynamic });
 /** A definition, by name and its clauses (a function) or body (a value). */
 interface Definition { name: string; clauses?: { params: Pattern[]; body: Expr }[]; body?: Expr }
 type Scope = TypeScope;

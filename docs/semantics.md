@@ -597,10 +597,14 @@ Actions run in exactly two places:
   is an error (bind a value with `=`). The one exception is `load`, which runs
   a file: `module <- load "file"` binds its exports.
 
-`repl` opens a REPL session where it runs, on the program's top-level names
-as they are there: the bindings made so far, checked against their types at
-that statement (a function's or block's own names are not in it). Its inputs
-run as the REPL's do, and it ends on `:quit` or the end of input (Ctrl+D),
+`repl` opens a REPL session where it runs, on the names visible there, a
+function's parameters and local names among them. A top-level name as the
+running statement has it is checked against the program's types there. Any
+other name (a local, or an older version of a top-level name that a function
+sees) is typed by its value: data already evaluated, or a literal not
+evaluated yet, as the literal that writes it (`n` given `3` is an `Int`), and
+anything else as `Dynamic`, so its uses are checked when they run. Opening a
+session evaluates nothing. Its inputs run as the REPL's do, and it ends on `:quit` or the end of input (Ctrl+D),
 yielding `[]`; the program then goes on. What the session binds stays in it,
 so the program keeps its own bindings, but its actions take effect: a
 `Mutable` cell it sets keeps the contents. A session needs the command line
@@ -610,6 +614,8 @@ so the program keeps its own bindings, but its actions take effect: a
 x = 1
 repl                   # >>> x + 1 shows 2; >>> x = 5 binds x in the session
 print x                # 1, once the session ends
+f n = { repl; return n }
+f 3                    # >>> n + 1 shows 4; >>> n ++ "a" is a type error
 ```
 
 `IO` is a type constructor, like `Option`: `IO []` is the type of an action

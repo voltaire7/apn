@@ -36,10 +36,24 @@ Deno.test("a session sees the program's names as they are where repl runs", () =
     equal(printed, ["s"]);
 });
 
-Deno.test("a session sees the top-level names, not a function's or block's own", () => {
-    const program = "g = 4\nf n = {\n    m = n\n    repl\n    return m\n}\nr <- f 3\nprint r";
-    const { echoes, printed } = session(program, [["g", "n", "m"]]);
-    equal(echoes, ["4", "type error: unbound variable 'n'", "type error: unbound variable 'm'"]);
+Deno.test("a session inside a function sees its names, typed by their values", () => {
+    const program = [
+        "x = 1", "f n = {", "    m = n", "    xs = [1..]", "    h = y -> y + n", "    repl", "    return m", "}",
+        'x = "later"', "r <- f 3", "print r",
+    ].join("\n");
+    const { echoes, printed } = session(program, [[
+        "n + 1", 'n ++ "a"', "take 2 xs", "h 2", 'h "a"', "x", 'x ++ "a"', "m = 10", "m",
+    ]]);
+    equal(echoes, [
+        // n is the literal 3 passed in: an Int, exactly.
+        "4", "type error: cannot append Int and String",
+        // A range is data; h, a function, is Dynamic: its misuse fails when run.
+        "[1,2]", "5", "runtime error: cannot apply '+' to string and int",
+        // f sees the x before x = "later".
+        "1", "type error: cannot append Int and String",
+        "10", "10",
+    ]);
+    // m = 10 stayed in the session.
     equal(printed, ["3"]);
 });
 

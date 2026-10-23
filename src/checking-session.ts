@@ -1,7 +1,7 @@
 import { APNError } from "./errors.ts";
 import { parse } from "./parser.ts";
 import { loadPath, readLoad, resolveModule, unknownModule } from "./modules.ts";
-import { type CheckOptions, checkTypes, copyTypeScope, mayMutate, type TypeScope } from "./type-checker.ts";
+import { type CheckOptions, checkTypes, copyTypeScope, dynamicEntry, mayMutate, type TypeScope } from "./type-checker.ts";
 import type { TopLevel } from "./ast.ts";
 import { NATIVE_EXPORTS } from "./native-exports.ts";
 
@@ -45,14 +45,23 @@ export class CheckingSession {
     }
 
     // A REPL session inside a run (repl) checks against the program's types
-    // before its statement at index, of the names the run has bound there.
-    // The returned function ends the session, restoring the session's scope.
-    enter(program: TopLevel[], index: number, directory: string, visible: Set<string>): () => void {
+    // before its statement at index, of the visible names the run has bound
+    // there, and types each local as the literal of its value or as Dynamic
+    // (null; see Interpreter.sessionNames). The returned function ends the
+    // session, restoring the session's scope.
+    enter(program: TopLevel[], index: number, directory: string, visible: Set<string>, locals: Map<string, string | null>): () => void {
         const saved = this.scope;
         let before: TypeScope = new Map();
         this.check(program, directory, saved, false, { index, scope: scope => { before = scope; } });
-        this.scope = new Map([...before].filter(([name]) => visible.has(name)));
+        const scope = new Map([...before].filter(([name]) => visible.has(name)));
+        for (const [name, source] of locals) scope.set(name, this.literal(name, source, scope) ?? dynamicEntry());
+        this.scope = scope;
         return () => { this.scope = saved; };
+    }
+    private literal(name: string, source: string | null, scope: TypeScope): ReturnType<typeof dynamicEntry> | undefined {
+        if (source === null) return undefined;
+        try { return this.check(parse(`${name} = ${source}`), ".", scope, false).scope.get(name); }
+        catch { return undefined; }
     }
 
     /** Whether any program this session has checked may write a Mutable cell. */

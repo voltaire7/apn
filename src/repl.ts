@@ -314,7 +314,7 @@ function helpText(): string {
         `  operators spaced on both sides or neither: 1 + 2, 1+2 (not 1 +2); -x negates, f -1 passes -1`,
         `  ; or newline       statement separators (blocks & top level)`,
         `  print, readFile, fetch, set ... are IO actions: statements and <- run them`,
-        `  echo x prints x as the REPL shows it; repl opens a session on a program's names`,
+        `  echo x prints x as the REPL shows it; repl opens a session on the names where it runs`,
         `  x <- action        run it now and bind its result (outer value only); x <- return v is strict`,
         `  f n = { print n; return n }   a block running an action is an action; it ends with one`,
         `  IO [] is the type of an action yielding []; IO [] { print "hi" } checks one; return x`,

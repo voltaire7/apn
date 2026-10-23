@@ -364,17 +364,18 @@ export class Interpreter {
         }
     }
 
-    // A REPL session (repl) on the program's top-level names as they are where
-    // it runs (a function's locals have no static types to check against):
-    // its chunks are top-level runs, checked against the program's types
-    // before the running statement, and what they bind stays in the session.
+    // A REPL session (repl) on the names visible where it runs, a function's
+    // own among them: its chunks are top-level runs in that scope, and what
+    // they bind stays in the session. A top-level name as the running
+    // statement has it is checked against the program's types there; any
+    // other name (a local, or an older version a function sees) by its value
+    // (see sessionNames).
     private session(loop: () => void): void {
-        const caller = this.env, root = this.programEnv, names = new Map(root.map), newest = root.newest;
+        const caller = this.env, roots = [...new Set([caller.root(), this.programEnv])];
+        const saved = roots.map(root => ({ root, names: new Map(root.map), newest: root.newest }));
         const { runDepth, dynamicDepth, running } = this;
-        this.env = this.live(root);
-        const visible = new Set<string>();
-        for (let scope: Env | null = this.env; scope; scope = scope.parent) for (const name of scope.map.keys()) visible.add(name);
-        const leave = this.checking && running ? this.checking.enter(running.program, running.index, this.sourceDir, visible) : undefined;
+        const { visible, locals } = this.sessionNames(caller);
+        const leave = this.checking && running ? this.checking.enter(running.program, running.index, this.sourceDir, visible, locals) : undefined;
         this.runDepth = this.dynamicDepth = 0;
         try {
             loop();
@@ -382,10 +383,84 @@ export class Interpreter {
             this.runDepth = runDepth; this.dynamicDepth = dynamicDepth;
             this.running = running; this.env = caller;
             leave?.();
-            root.map.clear();
-            for (const [name, value] of names) root.map.set(name, value);
-            root.newest = newest;
+            for (const { root, names, newest } of saved) {
+                root.map.clear();
+                for (const [name, value] of names) root.map.set(name, value);
+                root.newest = newest;
+            }
         }
+    }
+
+    // The names a session sees from env: visible, those bound as at the top
+    // level now (typed statically), and locals, each with the source of its
+    // value when that is finite data already evaluated (typed exactly, as
+    // that literal) or null (Dynamic: what it cannot know is checked at run
+    // time). Nothing is forced: a session computes nothing to start.
+    private sessionNames(env: Env): { visible: Set<string>; locals: Map<string, string | null> } {
+        const top = this.live(this.programEnv), visible = new Set<string>(), locals = new Map<string, string | null>();
+        for (let scope: Env | null = env; scope; scope = scope.parent) for (const [name, value] of scope.map) {
+            if (visible.has(name) || locals.has(name)) continue;
+            if (top.get(name) === value) visible.add(name);
+            else if (/^[a-z_][A-Za-z0-9_']*$/.test(name)) locals.set(name, this.dataSource(value) ?? null);
+        }
+        return { visible, locals };
+    }
+
+    // A value as the literal that writes it, when it is data that is already
+    // evaluated (or a literal not evaluated yet, such as an argument 3) and
+    // that literal means the same value: a list item written as other code
+    // ([1 + 1]), a typed record, or a constructor the scope names differently
+    // is not. A range stays one ([1..]). Nothing is evaluated or rendered.
+    private dataSource(value: Value): string | undefined {
+        let budget = 10_000;
+        const literal = (e: Expr): boolean => ["int", "float", "bool", "string", "char", "numeric", "range"].includes(e.t)
+            || e.t === "list" && e.v.every(literal) || e.t === "record" && e.v.every(([, x]) => literal(x));
+        const evaluated = (v: Value): Value | undefined => {
+            while (v.kind === "thunk" || v.kind === "deferred" || v.kind === "lazyList") {
+                if (v.value === undefined) return undefined;
+                v = v.value;
+            }
+            return v;
+        };
+        // An argument with a space in it is parenthesized: Some (UInt8 3).
+        const argument = (text: string) => /\s/.test(text) && !/^[[("']/.test(text) ? `(${text})` : text;
+        const source = (item: Value): string | undefined => {
+            if (--budget < 0) return undefined;
+            const v = evaluated(item);
+            if (!v) return item.kind === "thunk" && literal(item.body) ? exprToSource(item.body) : undefined;
+            const text = shape(v);
+            const written = this.written(item);
+            return text !== undefined && (!written || !written.binds && !written.runs && exprToSource(written.expr) === text) ? text : undefined;
+        };
+        const items = (values: Value[]): string | undefined => {
+            const texts = values.map(source);
+            return texts.every(text => text !== undefined) ? `[${itemsText(texts as string[])}]` : undefined;
+        };
+        const shape = (v: Value): string | undefined => {
+            switch (v.kind) {
+                case "int": case "float": case "rational": case "complex": case "bool": case "string": case "char": return valueToString(v);
+                case "range": return v.hi === null || (v.hi - v.lo) / v.step < 10_000n ? valueToString(v) : undefined;
+                case "list": return v.schema ? undefined : items(v.v);
+                case "cons": {
+                    const values: Value[] = [];
+                    let rest: Value | undefined = v;
+                    for (; rest?.kind === "cons" && values.length < 10_000; rest = evaluated(rest.tail)) values.push(rest.head);
+                    return rest?.kind === "list" && !rest.schema ? items([...values, ...rest.v]) : undefined;
+                }
+                case "record": {
+                    if (v.shared || !v.v.length || this.declaredTypes.has(v)) return undefined;
+                    const fields = v.v.map(([key, x]) => [key, source(x)] as const);
+                    return fields.every(([, text]) => text !== undefined) ? `[${fields.map(([key, text]) => `${keySource(key)}: ${text}`).join(", ")}]` : undefined;
+                }
+                case "variant": {
+                    const named = this.programEnv.get(v.tag), args = v.v.map(source);
+                    if (!named || !(named.kind === "variant" || named.kind === "native") || named.family !== v.family) return undefined;
+                    return args.every(text => text !== undefined) ? [v.tag, ...(args as string[]).map(argument)].join(" ") : undefined;
+                }
+                default: return undefined;
+            }
+        };
+        return source(value);
     }
 
     // Bind names as Haskell's values are bound: a value never changes. A name
