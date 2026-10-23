@@ -683,15 +683,15 @@ probe (toLambda [x = 10, y = x + 1, y])  # => [(x -> (y -> y) (x + 1)) 10]
 print (toLambda [fact n = n == 0 ? 1 : n * fact (n - 1), fact 5])  # => [120]
 probe (toLambda [{ a <- return 1; return (a + 1) }])  # => [return 1 >>= a -> return (a + 1)]
 # Parsers, as Haskell's Parsec, are monads: a do-block reads input in order.
-parsing = import "parse"
+parser = import "parser"
 date = {
-    y <- parsing.number
-    parsing.char '-'
-    m <- parsing.number
+    y <- parser.number
+    parser.char '-'
+    m <- parser.number
     return [y,m]
 }
-print (parsing.parse date "2026-10")                # => Ok [2026,10]
-print (parsing.parse parsing.number "12x")          # => Err "unexpected 'x'"
+print (parser.parse date "2026-10")                 # => Ok [2026,10]
+print (parser.parse parser.number "12x")            # => Err "unexpected 'x'"
 
 # to String / from String (string <-> value conversion; to String quotes strings)
 print (to String "hi")       # => "hi"

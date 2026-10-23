@@ -5,7 +5,7 @@
 #     parse date "2026-10" is Ok [2026,10]
 # The input is a list (a string is its characters), so a list of anything
 # parses, code included. Its names repeat others' (string, as decode's): a
-# program using both imports one qualified (parsing = import "parse").
+# program using both imports one qualified (parser = import "parser").
 import ["option","sequence"]
 Parser a = | Parser (input -> Result [a,input] String)
 _parserRun (Parser p) input = p input

@@ -332,10 +332,10 @@ desugared. `toLambda` sees only the code it is given, so a binding of a name bou
 outside it that refers to that name (`x = x + 1`) is read as recursion, not
 as a new version of the outer `x`.
 
-## Parsers — `parse`
+## Parsers — `parser`
 
 ```apn
-import "parse"
+import "parser"
 date = {
     y <- number
     char '-'
@@ -364,7 +364,7 @@ input is a list, and a string is its characters, so a list of anything parses
 `<|>` does not undo what `p` read before it failed, and `many` stops at the
 first item `p` cannot read, so `parse` reports what follows it. Its names
 repeat others' (`string`, as `decode`'s): a program using both imports one
-qualified (`parsing = import "parse"`).
+qualified (`parser = import "parser"`).
 
 ## Metacircular evaluator — `meta`
 
