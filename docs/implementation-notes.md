@@ -315,12 +315,14 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   `Env.bindings` reads a scope through its versions (module and load
   exports), and `newest` is the version `eval` runs in. An import, load or `use`
   publishes the same way, and its statement adopts the version
-  (`adoptPublished`). Only a statement opens a module: `Interpreter.moduleKind`
-  and the checker's `opensModule` read the statement (through `statementCore`),
-  never the value, so a name defined as an import (tagged in `moduleBindings`;
-  the checker's `Entry.opens`) opens and a function returning one does not. A
-  load statement passes its block to `loadFile` (`openingLoad`); a load in an
-  expression publishes nothing. The checker never re-checks a reader: a reader's types
+  (`adoptPublished`). A statement opens a module by its value: the runtime
+  tags the records `importStandard` and `loadFile` make (`moduleValues`, with a
+  load's origin) and `opens` publishes a statement's tagged result; the
+  checker's module records keep `ModuleFields` (also through `copy`) and its
+  `opensModule` records each such statement in `moduleStatements`, whose
+  results the runtime demands. A load in an expression publishes nothing;
+  only a tail load's file publishes into its loader. Tests: `tests/load-test.ts`,
+  `tests/default-checking-test.ts`. The checker never re-checks a reader: a reader's types
   are its version's. Its static block evaluation (`evaluateBlock`) follows
   the same rule. Tests: `tests/semantics-test.ts`, `tests/default-checking-test.ts`.
 - A statically checked load (`verifyLoad` ran) publishes without

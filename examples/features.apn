@@ -75,9 +75,10 @@ print (to (List Char) "hi")              # => ['h','i']
 # Modules
 # ---------------------------------------------------------
 # An import statement opens a module's names into the block it is in, as =
-# binds a name; a list imports several. Bound to a name, a module opens where
-# that name is a statement, and reading one of its fields opens nothing. Your
-# own files and folders import the same way; load "file" runs a file by path.
+# binds a name; a list imports several. Any statement whose value is a module
+# opens it (a name bound to one, here), and reading one of its fields opens
+# nothing. Your own files and folders import the same way; load "file" runs a
+# file by its path.
 import ["option","number","syntax"]
 parser = import "parser"
 print (sq 12)                            # => 144

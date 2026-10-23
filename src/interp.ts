@@ -16,7 +16,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, ca
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { clauseKey, countingFamily, flatTypedPattern, isLoadCall, mentions, mergeClauses, statementCore } from "./ast.ts";
+import { clauseKey, countingFamily, flatTypedPattern, isLoadCall, mentions, mergeClauses } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, typeToString, valueToString, rawString } from "./types.ts";
@@ -165,36 +165,23 @@ export class Interpreter {
     private modules = new Map<string, Extract<Value, { kind: "record" }>>();
     private importing = new Set<string>();
 
-    // An import or load statement, or a statement that is a name defined as
-    // one, opens the module's names into its block, as = binds one; the module
-    // is its value. Anywhere else (system.halt, a function returning system)
-    // the module is a value and opens nothing.
-    private moduleBindings = new WeakMap<Value, "import" | "load">();
-    private moduleKind(statement: Expr): "import" | "load" | undefined {
-        const e = statementCore(statement);
-        if (e.t === "import") return "import";
-        if (isLoadCall(e)) return "load";
-        const bound = e.t === "var" ? this.env.get(e.name) : undefined;
-        return bound && this.moduleBindings.get(bound);
-    }
-    private openModule(e: Expr, kind: "import" | "load", tailLoad = false): Value {
-        const checked = !!this.checking && !this.dynamicDepth;
-        if (kind === "load") {
-            // A load publishes what its file defines as it runs (see loadFile);
-            // a name whose load already ran (its value is kept) opens its module.
-            this.openingLoad = this.env;
-            try {
-                const module = this.force(this.runStmt(this.eval(e, tailLoad), tailLoad)) as Extract<Value, { kind: "record" }>;
-                if (this.openingLoad) this.publishForeignBindings(this.openingLoad, module.v, undefined, checked);
-                return module;
-            } finally { this.openingLoad = undefined; this.adoptPublished(); }
-        }
-        const module = this.force(this.eval(e)) as Extract<Value, { kind: "record" }>;
-        this.publishForeignBindings(this.env, module.v, undefined, checked);
+    // A module (what import or load gives) opens its names into the block of
+    // a statement that runs it, as = binds one, however the statement gets it
+    // (import "system", system, f [] returning it); the module is its value.
+    // Anywhere else it is a value: system.halt reads a field and opens nothing.
+    private moduleValues = new WeakMap<Value, { origin?: string; checked?: boolean }>();
+    private opens(result: Value, statement: Expr): boolean {
+        // A result kept unevaluated (return (import "system")) is evaluated when
+        // the check found the statement yields a module.
+        const at = sourceLocations.get(statement);
+        const value = at && this.checking?.moduleStatements.has(`${at.file}:${at.start}`) ? this.demand(result) : result;
+        const module = this.moduleValues.get(value);
+        if (!module) return false;
+        const checked = module.checked ?? (!!this.checking && !this.dynamicDepth);
+        this.publishForeignBindings(this.env, (value as Extract<Value, { kind: "record" }>).v, module.origin, checked);
         this.adoptPublished();
-        return module;
+        return true;
     }
-    private openingLoad?: Env;
 
     importStandard(module: string | string[]): Value {
         // The static check follows an import outside Dynamic, so it typed what
@@ -207,7 +194,9 @@ export class Interpreter {
                 const record = this.importStandard(name) as Extract<Value, { kind: "record" }>;
                 for (const [key, value] of record.v) fields.set(key, value);
             }
-            return { kind: "record", v: [...fields] };
+            const record: Value = { kind: "record", v: [...fields] };
+            this.moduleValues.set(record, {});
+            return record;
         }
         const resolved = resolveModule(module, this.sourceDir, this.moduleSources, this.moduleRoot);
         if (!resolved) { const { message, hint } = unknownModule(module, !!this.moduleSources); throw new APNError("runtime", message, { hint }); }
@@ -226,6 +215,7 @@ export class Interpreter {
                 }
                 record = { kind: "record", v: [...fields] };
                 this.modules.set(resolved.key, record);
+                this.moduleValues.set(record, {});
             } finally { this.importing.delete(resolved.key); }
         }
         return record;
@@ -340,18 +330,12 @@ export class Interpreter {
                     last = this.evalPatBinding(tl);
                     continue;
                 }
-                const module = this.moduleKind(tl.value);
-                // A file's last load runs in its place (a tail load, see loadFile).
-                const tail = tailLoad && index === program.length - 1;
-                if (module) {
-                    this.openModule(tl.value, module, tail);
-                    last = { kind: "list", v: [] };
-                    continue;
-                }
                 // a bare expression statement: 0-arg functions and thunks RUN here
+                const tail = tailLoad && index === program.length - 1;
                 const value = this.eval(tl.value, tail);
                 this.ranAction = false;
                 last = this.runStmt(value, tail);
+                if (this.opens(last, tl.value)) last = { kind: "list", v: [] };
                 this.adoptPublished();
             }
             succeeded = true;
@@ -485,14 +469,8 @@ export class Interpreter {
         }
         // Value-style def: single clause, no params.
         const value = clauses[0].body;
-        const alias = value.t === "var" ? this.env.get(value.name) : undefined;
-        if (alias && this.moduleBindings.has(alias)) {
-            this.bindNames([[name, alias]]);
-            return alias;
-        }
         if (value.t === "import") {
             const imported = this.defer(() => this.importStandard(value.module));
-            this.moduleBindings.set(imported, "import");
             this.bindNames([[name, imported]]);
             return imported;
         }
@@ -511,7 +489,6 @@ export class Interpreter {
         if (value.t === "block" || value.t === "app" || value.t === "pipe") {
             const child = new Env(this.env);
             const clo: Value = { kind: "closure", params: [], body: value, env: child };
-            if (isLoadCall(value)) this.moduleBindings.set(clo, "load");
             child.setLocal(name, clo);
             this.bindNames([[name, clo]]);
             return clo;
@@ -1167,11 +1144,14 @@ export class Interpreter {
             let r: Value = { kind: "list", v: [] };
             for (let i = start; i < e.stmts.length; i++) {
                 const s = e.stmts[i];
-                if (i === start && first) { const result = this.runIO(first); r = s.t === "patDef" ? this.bindResult(s, result) : result; }
+                if (i === start && first) {
+                    const result = this.runIO(first);
+                    r = s.t === "patDef" ? this.bindResult(s, result) : result;
+                    if (s.t !== "patDef") this.opens(result, s);
+                }
                 else if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
                 else if (s.t === "patDef") r = this.evalPatBinding(s);
-                else if (i < e.stmts.length - 1 && this.moduleKind(s)) r = this.openModule(s, this.moduleKind(s)!);
-                else if (i < e.stmts.length - 1) { this.runStmt(this.eval(s)); this.adoptPublished(); }
+                else if (i < e.stmts.length - 1) { this.opens(this.runStmt(this.eval(s)), s); this.adoptPublished(); }
                 else {
                     // The last statement is the action whose result the block yields.
                     const last = this.realize(this.eval(s), { kind: "type", name: "IO" });
@@ -1419,8 +1399,6 @@ export class Interpreter {
                                     next = new TailCall(s, this.env);
                                     break;
                                 }
-                                const module = s.t === "patDef" ? undefined : this.moduleKind(s);
-                                if (module) { r = this.openModule(s, module); continue; }
                                 // A <- binding, or a discarded statement in a monad, makes the
                                 // rest of the block a do-block: the block is the action (or
                                 // the Option, ...) that runs it, as in Haskell.
@@ -1428,6 +1406,7 @@ export class Interpreter {
                                 // return and the like, else the value's own (a list, an Option).
                                 // A discarded list is pure: [] is also the unit value.
                                 const value = s.t === "patDef" ? (isLoadCall(s.value) || s.value.t === "import" ? undefined : this.reference(this.eval(s.value))) : this.demand(this.eval(s));
+                                if (s.t !== "patDef" && this.opens(value!, s)) { r = value!; continue; }
                                 // The rest of the block runs in the scope as it is here.
                                 const block = e, start = si, here = this.env;
                                 if (!value || value.kind === "io") {
@@ -3850,10 +3829,6 @@ export class Interpreter {
     // so a tail load never retains a JavaScript evaluator stack frame.
     loadFile(pathValue: Value): Value {
         const caller = this.env, callerDir = this.sourceDir;
-        // Only a load statement opens what the file defines, into its block;
-        // a file a tail load ran opens into its loader's (a statement there).
-        const open = this.openingLoad;
-        this.openingLoad = undefined;
         // Each file's scope, and its newest version once it has run (a tail
         // load from a block leaves the block's; the file's is below it).
         const frames: Array<{ caller: Env; loaded: Env; latest?: Env; origin: string; checked: boolean }> = [];
@@ -3912,10 +3887,13 @@ export class Interpreter {
                     checkInterrupt();
                     const frame = frames.pop()!, bindings = frame.latest!.bindings();
                     const loader = frames[frames.length - 1];
-                    const into = loader ? frame.caller : open;
-                    const published = into && this.publishForeignBindings(into, [...bindings], frame.origin, frame.checked);
+                    // A file a tail load ran opens into its loader's scope (a
+                    // statement there); the first file's module opens where a
+                    // statement runs it (see opens).
+                    const published = loader && this.publishForeignBindings(frame.caller, [...bindings], frame.origin, frame.checked);
                     result = { kind: "record", v: [...bindings.keys()].map((key): [string, Value] => [key, (published ?? bindings).get(key)!]) };
                     if (loader) loader.latest = latest(published!, loader.loaded);
+                    else this.moduleValues.set(result, { origin: frame.origin, checked: frame.checked });
                 }
                 return result;
             }

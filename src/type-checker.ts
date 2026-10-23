@@ -1,4 +1,4 @@
-import { clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, statementCore, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm } from "./ast.ts";
+import { clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -172,9 +172,6 @@ interface Entry {
     nonGeneric?: Set<Ty>;
     // definition: the value expression of a value binding (its identity).
     definition?: Expr;
-    // opens: the module a name is defined as (system = import "system", or a
-    // load), which a statement of that name opens (see opensModule).
-    opens?: TypeScope;
 }
 export type TypeScope = Map<string, Entry>;
 /** A definition, by name and its clauses (a function) or body (a value). */
@@ -210,6 +207,8 @@ export interface CheckOptions {
      * source position of its body, for the runtime to choose overloads that
      * differ only in result type. */
     resultHeads?: Map<string, string>;
+    /** The statements (by source location) whose value is a module, which the runtime opens. */
+    moduleStatements?: Set<string>;
     /** Whether any code in this session may write a Mutable cell (see mayMutate),
      * asked when a cell is read; computed from the program when unset. */
     mutation?: () => boolean;
@@ -291,6 +290,11 @@ class BlockScope extends Map<string, Entry> {
     override *values(): MapIterator<Entry> { for (const name of this.keys()) yield this.get(name)!; }
     override [Symbol.iterator]() { return this.entries(); }
     override forEach(f: (value: Entry, key: string, map: Map<string, Entry>) => void) { for (const [k, v] of this.entries()) f(v, k, this); }
+}
+// The names a module type holds, for a record a module made.
+function moduleOf(t: Ty): TypeScope | undefined {
+    const module = resolve(t);
+    return module.k === "record" && module.fields instanceof ModuleFields ? module.fields.scope : undefined;
 }
 // A module's record: each field's type is its scope entry's, read when needed.
 class ModuleFields extends Map<string, Ty> {
@@ -645,7 +649,9 @@ function copy(
         }
         case "record":
             Object.assign(result, {
-                fields: new Map([...t.fields].map(([k, v]) => [k, go(v)])),
+                // A module's fields are its own generic names: copied as an import copies them.
+                fields: t.fields instanceof ModuleFields ? new ModuleFields(copyTypeScope(t.fields.scope))
+                    : new Map([...t.fields].map(([k, v]) => [k, go(v)])),
             });
             break;
         case "type":
@@ -2941,16 +2947,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             throw error;
         } finally { choosing--; pending.length = saved; }
     }
-    // An import or load statement, or a statement that is a name defined as
-    // one, opens the module's names into its block (see Interpreter.moduleKind).
-    const moduleScope = (e: Expr, t: Ty): TypeScope | undefined => {
-        const module = resolve(t);
-        return (e.t === "import" || isLoadCall(e)) && module.k === "record" && module.fields instanceof ModuleFields ? module.fields.scope : undefined;
-    };
+    // A statement whose value is a module (what import or load gives) opens its
+    // names into its block, however it gets it (see Interpreter.opens).
     function opensModule(statement: Expr, scope: Scope, t: Ty): void {
-        const e = statementCore(statement);
-        const module = e.t === "var" ? scope.get(e.name)?.opens : moduleScope(e, t);
-        if (module) for (const [name, entry] of copyTypeScope(module)) scope.set(name, entry);
+        // An action yielding a module opens it when the statement runs it.
+        const ran = resolve(t), module = moduleOf(isIO(ran) ? (ran as Extract<Ty, { k: "variant" }>).args[0] : ran);
+        if (!module) return;
+        for (const [name, entry] of copyTypeScope(module)) scope.set(name, entry);
+        const at = sourceLocations.get(statement);
+        if (at && !choosing) options.moduleStatements?.add(`${at.file}:${at.start}`);
     }
     function infer(e: Expr, scope: Scope, expected?: Ty): Ty {
         spend(e);
@@ -3013,7 +3018,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const near = didYouMean(e.name, [...scope.keys(), ...options.runtimeNames]);
                     const module = standardModule(e.name), now = RETIRED_NATIVES[e.name];
                     // A module bound to a name opens only where that name is a statement.
-                    const holder = [...scope].find(([, entry]) => entry.opens?.has(e.name))?.[0];
+                    const holder = [...scope].find(([, entry]) => moduleOf(entry.type)?.has(e.name))?.[0];
                     firstUnbound = { expr: e, within: locatedExpression ?? checkingExpression, name: e.name, hint: now ? `write \`${now} x\``
                         : holder ? `write \`${holder}.${e.name}\`, or the statement \`${holder}\` to open its names`
                         : module ? `add \`import "${module}"\` to use \`${e.name}\`` : near ? `did you mean '${near}'?` : undefined };
@@ -3471,7 +3476,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 try {
                     for (const [n, s] of e.stmts.entries()) {
                         result = infer(s, child);
-                        opensModule(s, child, result);
+                        if (s.t !== "patDef" && s.t !== "stmDef") opensModule(s, child, result);
                         // A <- binding, or a discarded statement in a monad, makes the
                         // block a do-block: its last statement is the action (or the
                         // Option, ...) whose result it yields, in the block's monad.
@@ -5747,7 +5752,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             touchedTopLevel = false;
             // A value definition is lazy: it reads its names when first used.
             const t = inferDefinition({ name, body }, true, () => infer(body, ["app", "pipe"].includes(body.t) ? new Map(scope) : scope));
-            const opens = body.t === "var" ? scope.get(body.name)?.opens : moduleScope(body, t);
             if (pending) unify(pending, t, location);
             const value = valueEntry(body, scope);
             // An action (readInput = { ... }) is run where it is used, with that check's inputs.
@@ -5773,7 +5777,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 ...lazyTop ? { lazyTop } : facts,
                 nonGeneric: captured(new Map([...scope].filter(([key]) => key !== name))),
                 definition: body,
-                ...opens ? { opens } : {},
             });
             return;
         }

@@ -1175,20 +1175,26 @@ variable, as in `(t x) (t y)`, requires both arguments to have the same type.
 ## Module imports
 
 `import "name"` evaluates a module once per interpreter; its value is the
-module, a record of its exports. Like `=`, it also binds, as a statement: an
-import statement opens the module's exports into the block it is in (`{}`,
-`()` and `do []` alike), and so does a statement that is a name defined as an
-import, which is that import run there:
+module, a record of its exports. Like `=`, it also binds, as a statement: a
+statement whose value is a module opens the module's exports into the block
+it is in (`{}`, `()` and `do []` alike), however it gets the module: the
+import itself, a name for it, a function returning it, or an action yielding
+it.
 
 ```
 system = import "system"   # binds system; opens nothing
 system.halt                # a field of the module: opens nothing
 system                     # opens halt into this block
+f _ = { print "f"; return system }
+f []                       # prints f, then opens halt
 ```
 
-Anywhere else a module is a value and opens nothing: a function returning
-`system` returns the module. A `load` opens the file's definitions by the
-same rule, and `Dynamic e` as a statement is `e`, checked when it runs.
+Anywhere else a module is a value and opens nothing: a binding
+(`m = f []`), an argument, or a field read. A module is not an action, so a
+do-block yielding one ends with `return`. The check records which statements
+yield a module, so one kept unevaluated (`return (import "system")`) is
+evaluated to open it. A `load` opens the file's definitions by the same rule.
+A plain record is not a module: only `use` opens one.
 The name is looked up next to the importing file (the
 current directory in the REPL) as `name.apn`, then as a `name/` folder, whose
 `.apn` files (not subfolders: `import "name/sub"`) form one module; a file wins

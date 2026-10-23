@@ -27,6 +27,7 @@ export class CheckingSession {
     instances = new Map<string, unknown[]>();
     // Clauses' inferred result types, for overloads chosen by result type.
     resultHeads = new Map<string, string>();
+    moduleStatements = new Set<string>();
     /** Names the interpreter can resolve, so the checker can tell a typo from a runtime-only builtin. */
     runtimeNames?: () => Iterable<string>;
     /** The program's input when checking right before a run (see CheckOptions.inputs). */
@@ -60,6 +61,7 @@ export class CheckingSession {
             openedElsewhere: () => [...this.opaqueUses].some(p => p !== program),
             instances: this.instances,
             resultHeads: this.resultHeads,
+            moduleStatements: this.moduleStatements,
             loadedNames: path => this.loadedNames(path, directory),
             imports: module => {
                 const fields = this.module(module, directory);

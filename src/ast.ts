@@ -197,13 +197,6 @@ export function mergeClauses<C extends { params: Pattern[]; guard?: Expr }>(name
 }
 
 // A direct load call (load "file", load $ path): <- may bind its exports.
-// What a statement is: Dynamic e is e (checked when it runs), (e) is e.
-export function statementCore(e: Expr): Expr {
-    if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return statementCore(e.stmts[0]);
-    if ((e.t === "app" || e.t === "pipe") && e.f.t === "var" && e.f.name === "Dynamic") return statementCore(e.t === "app" ? e.a : e.x);
-    return e;
-}
-
 export function isLoadCall(e: Expr): boolean {
     if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return isLoadCall(e.stmts[0]);
     return (e.t === "app" || e.t === "pipe") && e.f.t === "var" && e.f.name === "load";

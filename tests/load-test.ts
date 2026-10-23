@@ -40,19 +40,24 @@ Deno.test("system exposes halt as a deferred action", () => {
     if (!i.renderString(record).includes("halt:")) throw new Error("module inspection lost halt");
 });
 
-// An import or load opens its names only as a statement: written there, or as
-// a name defined as one; a field of it, or a function returning it, opens none.
+// A module opens its names where a statement runs it, however it gets it (the
+// import, a name for it, a function returning it, an action yielding it); a
+// field of it, a binding of it, or a block's statement opens none here.
 for (const [source, opened] of [
     ['system = import "system"\nsystem', true],
     ['system = import "system"\nmodule = system\nmodule', true],
+    ['system = import "system"\nmodule _ = system\nmodule []', true],
+    ['f _ = {\n    print "test"\n    return (import "system")\n}\nf []', true],
     ['system = import "system"\n{ system; 1 }', false],
     ['system = import "system"\nhaltAction = system.halt', false],
-    ['system = import "system"\nmodule _ = system\nmodule []', false],
+    ['system = import "system"\nmodule _ = system\nm = module []', false],
     ['Dynamic $ import "system"', true],
     ['numbers = load "../lib/number"\nnumbers', true],
     ['numbers = load "../lib/number"\nnumbers.sq 2', false],
 ] as const) Deno.test(`a statement opens a module: ${JSON.stringify(source)}`, () => {
+    // Checked, as programs run: the check finds a result return keeps unevaluated.
     const i = new Interpreter();
+    i.enableChecking();
     i.sourceDir = new URL(".", import.meta.url).pathname;
     i.run(parse(source));
     const name = source.includes("load") ? "sq" : "halt";
