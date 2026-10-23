@@ -294,9 +294,10 @@ statement too: its value is the action `m`, and `do` runs it, binding `x` for
 the items after it, in any monad (`do [x <- [1,2], return (x * 10)]` is
 `[10,20]`). What such code yields item by item (`print`, `reduce`) is, for an
 item after it, the block of the bindings before the item ending in it, as
-`toLambda` reads it: `print [x <- [1,2], return (x * 10)]` prints `[[10,20]]`,
-and `print [x <- return 1, x]` is an error (`{ x <- return 1; x }` ends in no
-action). The item's own value stays its statement's, so `x` is bound only
+`toLambda` reads it: `print [x <- [1,2], return (x * 10)]` prints `[[10,20]]`.
+A block whose monad nothing decides is run, as the REPL runs it, so `print
+[x <- return 1, return x]` prints `[1]`; `print [x <- return 1, x]` is an error
+(`{ x <- return 1; x }` ends in no action). The item's own value stays its statement's, so `x` is bound only
 when the code runs: `[x <- m, x] 1` is an error. The
 list is still its code, the binding one of its items: `length` counts it,
 indexing and updates reach it, and `print`, `to String` and `reduce` give what

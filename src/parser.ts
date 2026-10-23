@@ -634,7 +634,7 @@ class Parser {
         this.branches.add(at);
         const e = this.parseOperators(1);
         if (e.t === "ternary") throw new APNError("parse", "a ternary inside a ternary needs parentheses", {
-            pos: start.pos, len: 1, hint: "write c ? (d ? 1 : 2) : 3, or c ? 1 : (d ? 2 : 3)",
+            pos: start.pos, len: 1, hint: "write `c ? (d ? 1 : 2) : 3`, or `c ? 1 : (d ? 2 : 3)`",
         });
         return e;
     }

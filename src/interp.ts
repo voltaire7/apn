@@ -2262,8 +2262,8 @@ export class Interpreter {
     }
     // What code yields, item by item (print, reduce): a binding yields nothing,
     // and an item after an x <- m item is the block of the bindings before it
-    // ending in it ([x <- m, f x] yields { x <- m; f x }). An item's own value
-    // stays its statement's, which do runs once.
+    // ending in it ([x <- m, f x] yields { x <- m; f x }; run if undecided).
+    // An item's own value stays its statement's, which do runs once.
     private yielded(item: Value, bindings: Value[]): Value {
         const written = this.written(item);
         if (!written || !bindings.some(b => this.written(b)?.runs)) return item;
@@ -2274,7 +2274,12 @@ export class Interpreter {
         return this.defer(() => {
             const old = this.env;
             this.env = scope;
-            try { return this.eval(block); } finally { this.env = old; }
+            try {
+                // An undecided block (of returns) is run, as the REPL runs it:
+                // [x <- return 1, return x] yields 1.
+                const value = this.reference(this.eval(block));
+                return value.kind === "pending" ? this.runIO(value) : value;
+            } finally { this.env = old; }
         });
     }
     private yields(list: Value, bindings: Value[] = []): Value {
