@@ -35,7 +35,7 @@ for (const [name, source, expected] of [
     ["IO types describe actions", "print (IO [])\nprint (IO Int)", ["IO []", "IO Int"]],
     ["a block with an action statement is an action", 'f n = { print n; return (n * 2) }\ny <- f 3\nprint y', ["3", "6"]],
     ["a block of bindings stays a value", "f n = { m = n + 1; m * 2 }\nprint (f 3 + 1)", ["9"]],
-    ["pure statements in a block stay pure", "f n = { assert (n > 0); n * 2 }\nprint (f 3)", ["6"]],
+    ["a discarded unit keeps a block pure", "f n = { []; n * 2 }\nprint (f 3)", ["6"]],
     ["a <- binding makes a block an action", "f n = { m <- return (n + 1); return (m * 2) }\ny <- f 3\nprint y", ["8"]],
     ["each run of an action repeats it", 'a = { print "run"; return 1 }\nx <- a\ny <- a\nprint (x + y)', ["run", "run", "2"]],
     ["a stored action reads cells again at each run", 'c = Mutable 0\nxs = [set c (c + 1)]\nhead xs\nhead xs\nprint (c + 0)', ["2"]],

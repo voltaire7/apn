@@ -296,7 +296,7 @@ function helpText(): string {
         `  f x = 1; f x = "one"   overloads by result type: Int (f 0) is 1, String (f 0) "one"`,
         `  Option a = Some a | None`,
         `  UserId = Int   (a named subtype: keeps its name, is an Int, UserId x patterns unwrap)`,
-        `  assert (condition)   (reports expression and source location)`,
+        `  assert c x           x once c holds (a failure reports c and its location)`,
         `  [1,2,3]  [0..5] [0,0.5..100] [0..]  ranges; 0:[] conses`,
         `  ['a'..'e'] => "abcde"; take 6 (iterate (*2) 1) => [1,2,4,8,16,32]`,
         `  ones = 1:ones; take 5 ones   lazy heads/tails; drop 5 ones`,

@@ -76,12 +76,12 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
-    ["assert", 1], ["match", 2], ["set", 2], ["while", 2], ["for", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
+    ["assert", 2], ["match", 2], ["set", 2], ["while", 2], ["for", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
     ["print", 1], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
     ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1], ["use", 1],
-    ["emit", 1], ["step", 2], ["intrinsics.syntax", 1], ["intrinsics.written", 1], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
+    ["emit", 1], ["step", 2], ["intrinsics.syntax", 1], ["intrinsics.written", 1], ["intrinsics.binding", 1], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
     ["intrinsics.bind", 2], ["intrinsics.ap", 2], ["intrinsics.return", 1], ["intrinsics.throw", 1], ["intrinsics.source", 1],
@@ -2747,6 +2747,8 @@ export class Interpreter {
                     if ((heldLength += text.length) > 4096) decide(spacedItem(item));
                 };
                 for (const element of this.elements(v)) {
+                    // A list shows what its code yields: a binding yields nothing.
+                    if (this.written(element)?.binds) continue;
                     if (count++) separator === undefined ? held.push(null) : emit(separator);
                     item = "";
                     this.render(element, out, false, ancestors);
@@ -3484,8 +3486,8 @@ export class Interpreter {
                 if (location) error.src = location.source;
                 throw error;
             }
-            // true, not [] (the empty list): a passing assert is pure in any block.
-            return { kind: "bool", v: true };
+            // assert c x is x, as Haskell's: a value, or an action, checked first.
+            return argsIn[1];
         }
         if (name === "match") {
             // Traverse only as far as the first match. Share the original lazy
@@ -3682,6 +3684,9 @@ export class Interpreter {
             })]);
         }
         if (name === "intrinsics.written") return mkStr(this.writtenText(argsIn[0]));
+        // Whether a list's item is a binding (x = 1), unevaluated: code that
+        // yields no value (see reduce).
+        if (name === "intrinsics.binding") return { kind: "bool", v: !!this.written(argsIn[0])?.binds };
         // An operator's precedence and associativity, as fromAST needs them.
         if (name === "intrinsics.fixity") {
             const op = this.dataValue(argsIn[0]);

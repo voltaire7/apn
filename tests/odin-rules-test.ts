@@ -22,7 +22,7 @@ for (const [source, expected] of [
     ['UserId = Int\nOrderId = Int\nf (UserId n) = n\nf _ = 0\nf (OrderId 3)', '0'],
     ['UserId = Int\n[v: UserId] []', '[v: UserId 0]'],
     ['v = [x: Int] [y: 2]\nv', '[x: 0, y: 2]'],
-    ['assert true', 'true'],
+    ['assert true "kept"', '"kept"'],
     ['import "function"\ncount = Mutable 0\nbracket 42 (_ -> set count 1) (x -> x + 1)\ncount', '1'],
     ['import "function"\nbracket 42 (_ -> []) (x -> [x,x+1])', '[42,43]'],
     ['import "function"\ncount = Mutable 0\nv <- bracket 1 (_ -> set count 9) (_ -> [count + 1])\n[v,count]', '[[1],9]'],
@@ -35,8 +35,8 @@ for (const [source, error] of [
     ['UserId = Int\nOrderId = Int\nUserId (OrderId 3)', 'explicit unwrapping'],
     ['Money = Float\nDistance = Float\nMoney 1 + Distance 2', 'cannot combine Money and Distance'],
     ['Distance = Int8\nDistance 127 + Distance 1', 'out of range'],
-    ['assert (1 == 2)', 'assertion failed: (1 == 2)'],
-    ['check = assert\ncheck false', 'assertion failed: false'],
+    ['assert (1 == 2) 0', 'assertion failed: (1 == 2)'],
+    ['check = assert\ncheck false 0', 'assertion failed: false'],
     ['import "function"\nbracket 1 (_ -> []) (x -> y -> x)', 'must return data'],
     ['import "function"\nbracket 1 (x, y -> []) (x -> x)', 'release must take one remaining argument'],
     ['import "io"\nwithFile "lib/io.apn" 123', 'callback must take one remaining argument'],
@@ -46,9 +46,9 @@ for (const [source, error] of [
 });
 Deno.test('assert captures its original source file and line', () => {
     const i = new Interpreter();
-    try { i.run(parse('x = 1\nassert (x == 2)', 'original.apn')); }
+    try { i.run(parse('x = 1\nassert (x == 2) []', 'original.apn')); }
     catch (e) {
-        if (!(e instanceof APNError) || !e.message.includes('original.apn:2') || e.src !== 'x = 1\nassert (x == 2)') throw e;
+        if (!(e instanceof APNError) || !e.message.includes('original.apn:2') || e.src !== 'x = 1\nassert (x == 2) []') throw e;
         return;
     }
     throw new Error('expected assertion failure');
@@ -108,13 +108,13 @@ Deno.test('bracket does not release a resource that failed to acquire', () => {
     try { i.run(parseDocument('bracket missing (_ -> set released true) (x -> x)')); } catch { /* expected */ }
     if (i.renderString(i.run(parseDocument('released'))) !== 'false') throw new Error('released absent resource');
 });
-Deno.test('assert reports piped source', () => {
+Deno.test('assert reports its source with a piped value', () => {
     const i = new Interpreter();
     i.run(parseDocument('counter = Mutable 0'));
-    try { i.run(parse('assert $ counter == 1', 'pipe.apn')); throw new Error('accepted'); }
+    try { i.run(parse('assert (counter == 1) $ []', 'pipe.apn')); throw new Error('accepted'); }
     catch (e) { if (!String(e).includes('pipe.apn:1')) throw e; }
 });
 
 Deno.test("assert accepts a truthy number", () => {
-    if (result("assert 1") !== "true") throw new Error("expected true");
+    if (result("assert 1 2") !== "2") throw new Error("expected 2");
 });

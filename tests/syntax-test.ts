@@ -67,7 +67,7 @@ for (const [source, expected] of [
     ['eval ["+",1,2]', "3"],
     ['double e = ["*",e,2]\neval (double (toAST [3 + 1]))', "[8]"],
     ["square n = n * n\neval (toAST [square 7])", "[49]"],
-    ["eval (toAST [x = 1, x + 1])", "[1,2]"],
+    ["eval (toAST [x = 1, x + 1])", "[2]"],
     ["eval (toAST [x = 1])\nx = 5\nx", "5"],
     ["action = eval (toAST [print 1])\n2", "2"],
     ['eval "head" [4,5]', "4"],

@@ -299,15 +299,15 @@ print (parser.parse date "2026-10")      # => Ok [2026,10]
 # ---------------------------------------------------------
 # Code as data
 # ---------------------------------------------------------
-# A list keeps its items as written. print shows their values and probe
-# the code; editing code is editing a list.
+# A list keeps its items as written. print shows what they yield (a binding
+# yields nothing) and probe the code; editing code is editing a list.
 probe [1 + 1, 2]                         # => [1 + 1, 2]
 print [1 + 1, 2]                         # => [2,2]
 code = [x = 1] ++ [x + 1]
-print code                               # => [1,2]
+print code                               # => [2]
 code 0 = (x = 10)
 probe code                               # => [x = 10, x + 1]
-print code                               # => [10,11]
+print code                               # => [11]
 print (toAST [f x + 1])                  # => ["[]",["+",["f","x"],1]]
 probe (toLambda [x = 1, x + 1])          # => [(x -> x + 1) 1]
 

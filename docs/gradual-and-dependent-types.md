@@ -509,7 +509,7 @@ budget allows; computations past the budget (such as summing a million
 elements) stay unknown.
 
 Effects are never performed while checking, but their results are known:
-`print x` and `emit x` are `x`, `set` and `debug` give `[]`, and `assert` gives `true`. A
+`print x` and `emit x` are `x`, `set` and `debug` give `[]`, and `assert c x` gives `x`. A
 `Mutable` cell's contents are known when nothing checked in the session can
 write a cell (no `set` or `load`). Otherwise contents are followed
 in the run's order: block statements, eager bindings (`<-`) and operands run in

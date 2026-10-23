@@ -5038,7 +5038,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // The pure builtins, run on known arguments as the runtime runs them.
     function evaluateNative(name: string, args: (() => Known | undefined)[], depth: number, origin?: Origin): Known | undefined {
-        const arity = name === "foldl" || name === "foldr" || name === "zipWith" ? 3 : name === "set" || LIST_NATIVES.includes(name) || name === "iterate" || name === "seq" ? 2 : 1;
+        const arity = name === "foldl" || name === "foldr" || name === "zipWith" ? 3 : name === "set" || LIST_NATIVES.includes(name) || name === "iterate" || name === "seq" || name === "assert" ? 2 : 1;
         if (args.length !== arity) return undefined;
         // Folds may apply f at other moments than here: a region. map, zipWith,
         // filter and iterate apply it where the runtime does (lazily for heads).
@@ -5062,16 +5062,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const n = k?.string !== undefined ? BigInt(k.string.length) : knownLength(k);
                 return n === undefined ? undefined : { index: constant(n) };
             }
-            case "seq": args[0](); return args[1]();
+            // assert c x is x, as Haskell's (c is checked when it runs).
+            case "seq": case "assert": args[0](); return args[1]();
             // Effects are actions, run statically where the program runs them;
-            // print, emit, debug and set yield [], assert true. Printing
+            // print, emit, debug and set yield []. Printing
             // renders, forcing every element in order.
             case "print": case "emit": return { action: () => {
                 if (renderKnown(args[0]()) === undefined) incomplete = true;
                 return known([]);
             }, actionResult: "[]" };
             // use forces its record and binds its fields (lazily): no other effect.
-            case "assert": args[0](); return { boolean: true };
             case "debug": case "use": args[0](); return known([]);
             case "set": return { action: () => { writeMutable(args[0](), args[1]); return known([]); }, actionResult: "[]" };
             // Input read at check time, from the same snapshot the run uses.
@@ -5963,7 +5963,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const int = atom("Int"), str = atom("String"), bool = atom("Bool"), num = atom("Number");
     const empty = list(variable(), constant(0n));
     for (const name of ["print", "emit"]) native(name, [variable()], io(empty));
-    native("assert", [variable()], bool);
+    { const held = variable(); native("assert", [variable(), held], held); }
     native("isType", [variable(), variable()], bool);
     native("parse", [str], explicitDynamic);
     native("step", [int, variable()], explicitDynamic);
@@ -5971,6 +5971,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A list's code: probe shows it, toAST gives it as lists; reduce gives
     // the values alone (a plain list, not code).
     native("intrinsics.written", [variable()], str);
+    native("intrinsics.binding", [variable()], bool);
     native("intrinsics.syntax", [variable()], explicitDynamic);
     scope.set("toAST", { type: fn(variable(), explicitDynamic) });
     scope.set("probe", { type: fn(variable(), io(empty)) });

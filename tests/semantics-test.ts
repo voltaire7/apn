@@ -80,8 +80,8 @@ piped
 piped
 `, ["3", "3", "4", "4"]);
 
-example("a block of pure statements stays a value", `
-twice x = { assert (x > 0); x * 2 }
+example("a block of bindings and the unit stays a value", `
+twice x = { []; y = x * 2; y }
 print (twice 3 + 1)
 `, ["7"]);
 
@@ -414,7 +414,7 @@ print [[a,b] = [1,2], a + b]
 x = 7
 print [x + 1, x = 1, x]
 print x
-probe [x = 1, x + 1]`, ["[1]", "[1,2]", "2", "[n -> n * 2, 6]", "[[1,2],3]", "[8,1,1]", "7",
+probe [x = 1, x + 1]`, ["[]", "[2]", "2", "[6]", "[3]", "[8,1]", "7",
     "[x = 1, x + 1]"]);
 failure("a list item cannot run an action", "print [x <- return 1, x]", "cannot run an action");
 example("minus sections: (10 -), (- 2) and (-) are sections, (-2) a negation", `
@@ -521,8 +521,9 @@ probe (take 1 edited ++ [x * 5])
 print (take 1 edited ++ [x * 5])
 cycle xs = xs ++ cycle xs
 print (take 5 (cycle [1,2]))
-probe (reduce [1 + 1])`, ["[x = 1, x + 1]", "[1,2]", "[10,11,5]", "[x = 10, x + 1, 5]", "[10,30,5]", "[1,2]",
-    "[x = 10, x * 5]", "[10,50]", "[1,2,1,2,1]", "[2]"]);
+probe (reduce [1 + 1])
+print (length edited)`, ["[x = 1, x + 1]", "[2]", "[11,5]", "[x = 10, x + 1, 5]", "[30,5]", "[2]",
+    "[x = 10, x * 5]", "[50]", "[1,2,1,2,1]", "[2]", "3"]);
 failure("an open list's values need its names", "print [x + 1]", "unbound variable 'x'");
 example("a list's bindings name its items", `
 code = [x = 1, y = 2, x + y]
@@ -533,7 +534,7 @@ print (do code)
 code [1,2] = [5,0]
 print code
 f k = { c = [a = 1, a * 2]; c 0 = (a = k); c 1 }
-print (f 4)`, ["[[1,2,3],[10,2,12]]", "12", "[10,5,0]", "8"]);
+print (f 4)`, ["[[3],[12]]", "12", "[5,0]", "8"]);
 example("a typed pattern headed by a free name takes a type apart", `
 (t1 1 t2 -> print [t1,t2]) (Vect 1 Int)
 (t1 n t2 -> print [t1,n,t2]) (Vect 3 Float)

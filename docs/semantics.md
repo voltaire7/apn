@@ -285,9 +285,12 @@ probe [1 + 1, 2]            # [1 + 1, 2]
 print [1 + 1, 2]            # [2,2]
 ```
 
-A list item may be a binding, as a group's statement may: its item is the
-value it binds, and it binds for the items after it (`[x = 1, x + 1]` is
-`[1,2]`, and `do [x = 1, x + 1]` is 2); `<-` stays a block's. A pattern
+A list item may be a binding, as a group's statement may: it binds for the
+items after it and, as in a block, yields no value of its own (`print [x = 1,
+x + 1]` prints `[2]`, and `do [x = 1, x + 1]` is 2); `<-` stays a block's. The
+list is still its code, the binding one of its items: `length` counts it,
+indexing and updates reach it, and `print`, `to String` and `reduce` give what
+the code yields, fewer items, as `filter` may. A pattern
 binding's item matches when a name it binds is first used. An item may read a
 name bound nowhere where it is written: the list is open code, which code
 joined before it may complete. `++` joins code: the items after a binding see
@@ -296,9 +299,9 @@ it, wherever they were written, and it wins over a name visible there:
 ```apn
 code = [x = 1] ++ [x + 1]
 probe code                  # [x = 1, x + 1]
-print code                  # [1,2]
+print code                  # [2]
 y = 100
-print ([y = 1] ++ [y + 1])  # [1,2]
+print ([y = 1] ++ [y + 1])  # [2]
 ```
 
 An item update replaces the item with the code on its right, run in the list
@@ -309,12 +312,12 @@ copy is a new list; one read from the old keeps its old items:
 ```apn
 code = [x = 1, x + 1] ++ [5]
 code 0 = (x = 10)
-print code                  # [10,11,5]
-code 1 = x * 3              # x is the list's: [10,30,5]
+print code                  # [11,5]
+code 1 = x * 3              # x is the list's: [30,5]
 ```
 
 A list function passes the items it keeps on as written, with their values
-(`take 1 code ++ [x * 5]` is `[10,50]`); only `++` and an update run items
+(`take 1 code ++ [x * 5]` prints `[50]`); only `++` and an update run items
 again. One that makes new items (`map f xs`) makes values. Using an open
 list's values (`print [x + 1]`) is an error naming the unbound name where it
 is written; the static check reports it, except after code it cannot follow
@@ -601,11 +604,10 @@ it is chained. Its last statement must itself be an action, whose result the
 block yields: end with `return x` to yield a plain value. As in Haskell, each
 statement of a do-block that binds nothing is in its monad (an action in an IO
 block), `[]` (the unit) and a statement opening a module aside: a plain value
-(`123`, or the `true` of `assert c`) would be computed and dropped, so it is an
-error (check a condition there with `guard c`). What the check cannot decide
-(a parameter's result) is checked when the statement runs. A block of
-bindings, or of discarded pure statements such as `assert`, stays an ordinary
-value:
+(`123`) would be computed and dropped, so it is an error (check a condition
+there with `guard c`, or `assert c x`, which is `x` once `c` holds, as
+Haskell's). What the check cannot decide (a parameter's result) is checked
+when the statement runs. A block of bindings stays an ordinary value:
 
 ```apn
 area w h = {
@@ -613,7 +615,7 @@ area w h = {
     return (w * h)            # a plain w * h here is an error
 }
 size <- area 3 4              # prints, then binds 12
-double n = { assert (n > 0); n * 2 }   # a plain function: double 3 is 6
+double n = assert (n > 0) (n * 2)      # a plain function: double 3 is 6
 answer = Int { 42 }           # an Int
 action = IO Int { return 42 } # an action yielding an Int
 ```

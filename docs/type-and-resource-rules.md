@@ -77,12 +77,13 @@ of exhaustiveness for arbitrary programs. Runtime `match` semantics are unchange
 ## Assertions
 
 ```apn
-assert (length [1,2] == 3)
+area w h = assert (w >= 0 && h >= 0) (w * h)
 ```
 
-`assert` requires a truthy value and returns [] on success. On failure it reports the
-original argument expression, file name and line, with a source caret. Aliases
-such as `check = assert` work too. `<repl>` identifies interactive source. Wrapped
+`assert c x` is `x` once `c` holds, as Haskell's: `x` may be a value or an
+action (`assert ok (print "ready")`), in any monad. `c` must be truthy; on
+failure it reports the original condition expression, file name and line,
+with a source caret. Aliases such as `check = assert` work too. `<repl>` identifies interactive source. Wrapped
 calls report the expression passed to the intrinsic, not a reconstructed call
 stack. Assertions are always enabled and evaluate their argument once.
 

@@ -647,12 +647,12 @@ probe "hi"                    # => "hi"
 # code joined before it). An item update replaces the item, as code.
 joined = [x = 1] ++ [x + 1]
 probe joined                  # => [x = 1, x + 1]
-print joined                  # => [1,2]
+print joined                  # => [2]
 edited = [x = 1, x + 1] ++ [5]
 edited 0 = (x = 10)
-print edited                  # => [10,11,5]
+print edited                  # => [11,5]
 probe (take 1 edited ++ [x * 3])          # => [x = 10, x * 3]
-print (take 1 edited ++ [x * 3])          # => [10,30]
+print (take 1 edited ++ [x * 3])          # => [30]
 
 # toAST — code as lists, unevaluated: an application is a list, function
 # first; a name is a string, a string literal its quoted source.
@@ -1028,7 +1028,7 @@ print [incremented (Some 1), incremented [1,2]]  # => [Some 2, [2,3]]
 # As in Haskell, a discarded statement in a monad is chained, so a false
 # guard (a throw: [] in a list, None in an Option) or a discarded Err stops the
 # block. Every statement that binds nothing is in the block's monad: a plain
-# value (assert's true) is an error there, as in Haskell.
+# value is an error there, as in Haskell.
 evens = {
     x <- [1..6]
     guard (x % 2 == 0)
@@ -1734,14 +1734,14 @@ lastOne <- do [print "first", return 42]  # { print "first"; return 42 }
 print lastOne                       # => 42
 print [do [1,2], { 1; 2 }]         # => [2,2]: no action, so the last value
 print [do [], {}]                   # => [[],[]]: no statements
-print [x = 1, x + 1]                # => [1,2]: a list item may be a binding
+print [x = 1, x + 1]                # => [2]: a binding item yields no value
 print [do [x = 1, x + 1], { x = 1; x + 1 }]  # => [2,2]
 print (toAST [x = 1, x + 1])        # => ["[]",["=","x",1],["+","x",1]]
 # Such a list's bindings name its items: replacing one recomputes the items reading it.
 code = [x = 1, y = 2, x + y]
 before = code
 code 0 = (x = 10)
-print [before,code]                 # => [[1,2,3],[10,2,12]]
+print [before,code]                 # => [[3],[12]]
 print (do code)                     # => 12
 
 # A new top-level statement after a closed block must start at column one.
@@ -1891,8 +1891,8 @@ compassName (Compass direction) = match direction [
     Left -> "left"
     Right -> "right"
 ]
-assert (compassName Up == "up")
-# assert (1 == 2)                   # error includes expression, source file and line
+print (assert (compassName Up == "up") "up")  # => up (assert c x is x once c holds)
+# assert (1 == 2) []                # error includes expression, source file and line
 
 # Scoped cleanup runs after returned lazy data has been evaluated.
 import "function"
