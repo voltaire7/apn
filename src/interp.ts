@@ -1137,9 +1137,9 @@ export class Interpreter {
     // Run the rest of a do-block from its first action, in a fresh scope per
     // run: each statement's IO runs in order; the last statement's action is
     // the block's continuation.
-    // As in Haskell, a do-block's statement that binds nothing is in its monad
-    // (see the checker): what the check could not decide is checked here. [] is
-    // the unit, a module opens names, and a list block takes lists.
+    // As in Haskell, a block's statement that binds nothing, but the last, is in
+    // its monad (see the checker): what the check could not decide is checked
+    // here. [] is the unit, a module opens names, and a list block takes lists.
     private dropped(s: Expr, value: Value, listBlock: boolean): void {
         if (["io", "pending"].includes(value.kind) || this.moduleValues.has(value)) return;
         if (value.kind === "variant" && value.family && this.familiesOf(">>=").has(value.family)) return;
@@ -1409,9 +1409,6 @@ export class Interpreter {
                         this.env = child;
                         try {
                             r = { kind: "list", v: [] };
-                            // A plain statement before the block turns out a do-block (checked then).
-                            let plain: [Expr, Value] | undefined;
-                            const doBlock = (listBlock: boolean) => { if (plain) this.dropped(plain[0], plain[1], listBlock); };
                             for (let si = 0; si < e.stmts.length; si++) {
                                 const s = e.stmts[si];
                                 if (s.t === "stmDef") { r = this.evalDef(s.name, s.clauses); continue; }
@@ -1432,30 +1429,27 @@ export class Interpreter {
                                 // The rest of the block runs in the scope as it is here.
                                 const block = e, start = si, here = this.env;
                                 if (!value || value.kind === "io") {
-                                    doBlock(false);
                                     r = { kind: "io", run: () => this.runDoBlock(block, here, start, value) };
                                     break;
                                 }
                                 if (value.kind === "pending") {
                                     // Undecided, unless the checker found the block's monad.
                                     const target = this.checkedMonad(block);
-                                    doBlock(target?.kind === "type" && target.name === "List");
                                     r = target ? this.desugarDo(block, here, start, target, value) : { kind: "pending", step: { op: "do", block, env: here, start, first: value } };
                                     break;
                                 }
                                 if (s.t === "patDef") {
                                     const target = this.monadTypeOf(value);
                                     if (!target) throw new APNError("runtime", `<- runs an action, not a ${value.kind}`, { hint: "bind a value with `=`" });
-                                    doBlock(this.isList(value));
                                     r = this.desugarDo(block, here, start, target, value);
                                     break;
                                 }
                                 if (value.kind === "variant" && value.family && this.familiesOf(">>=").has(value.family)) {
-                                    doBlock(false);
                                     r = this.desugarDo(block, here, start, this.monadTypeOf(value)!, value);
                                     break;
                                 }
-                                if (!(this.isList(value) && this.cell(value) === null)) plain ??= [s, value];
+                                // do { e; ss } is e >> do { ss }: a plain e is an error (see dropped).
+                                this.dropped(s, value, false);
                                 r = value;
                                 this.adoptPublished();
                             }

@@ -3511,13 +3511,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         }
                     }
                 } finally { doBlocks.pop(); }
-                if (!action) return bindingValue(e.stmts[e.stmts.length - 1], child) ?? result;
-                // The block's monad, for the run: a block of returns and guards
-                // takes it from here, as types decide in Haskell.
-                if (block.monad) recordMonad(e, monadKind(block.monad));
-                // As in Haskell, each statement that binds nothing is in the
-                // block's monad: a plain value would be computed and dropped.
-                // [] is the unit (what print yields); a module opens names.
+                // As in Haskell (do { e; ss } = e >> do { ss }), each statement
+                // that binds nothing, but the last, is in the block's monad, in
+                // any block: a plain value would be computed and dropped. [] is
+                // the unit (what print yields); a module opens names.
                 for (const [s, type] of discards) {
                     const fits = (t: Ty): boolean => {
                         const v = resolve(t);
@@ -3532,6 +3529,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     problem(`a statement in a do-block must be ${wanted}, not ${text(type)}: its value would be dropped`, s,
                         resolve(type).k === "atom" && text(type) === "Bool" ? "to check a condition here, use `guard c`" : "bind it (`x = ...`), or remove it");
                 }
+                if (!action) return bindingValue(e.stmts[e.stmts.length - 1], child) ?? result;
+                // The block's monad, for the run: a block of returns and guards
+                // takes it from here, as types decide in Haskell.
+                if (block.monad) recordMonad(e, monadKind(block.monad));
                 const last = e.stmts[e.stmts.length - 1];
                 if (last.t === "patDef" || last.t === "stmDef") return problem("the last statement of a do-block must be an action, not a binding", last, "end the block with an action, such as `return x`");
                 const final = resolve(result), monad = block.monad && resolve(block.monad);

@@ -115,6 +115,9 @@ for (const [name, source, expected] of [
     ["a discarded Err or None stops a block", 'import ["option","number"]\nf n = {\n    Err "x"\n    return n\n}\nprint [f 1]\ng n = {\n    n > 0 ? Ok [] : Err "not positive"\n    return (n * 2)\n}\nprint [g 1, g 0]\nh n = {\n    _ <- safeDiv 1 n\n    None\n    return n\n}\nprint (h 1)',
         ['[Err "x"]', '[Ok 2, Err "not positive"]', "None"]],
     // assert c x is x, as Haskell's: a value, or an action in any monad.
+    // do is Haskell's (do [e] = e; do (e :: es) = e >> do es); [] and bindings drop.
+    ["do chains its statements; bindings and the unit yield nothing", 'print (do [x = 1, x + 1])\ng n = { []; m = n * 2; m }\nprint (g 3)\ndo [print "a", print "b"]',
+        ["2", "6", "a", "b"]],
     ["assert c x is x once c holds", "double n = assert (n > 0) (n * 2)\nprint (double 3)\nxs = {\n    x <- [1,2]\n    assert (x > 0) (return x)\n}\nprint xs\nassert true (print \"ran\")",
         ["6", "[1,2]", "ran"]],
     ["guard stops a list, Option or Result block; empty is decided by its context", 'import ["option","number"]\nevens = {\n    x <- [1..6]\n    guard (x % 2 == 0)\n    return x\n}\nprint evens\npositive n = {\n    _ <- Some n\n    guard (n > 0)\n    return n\n}\nprint [positive 3, positive -1]\nprint (Option Int empty)\nprint (List Int empty)\nprint empty\ncheck n = {\n    _ <- Ok n\n    guard (n > 0)\n    return n\n}\nprint [check 1, check 0]\nhalf n = Result Int String {\n    guard (n % 2 == 0)\n    return (n / 2)\n}\nprint [half 4, half 3, Option Int { guard false; return 1 }]',
@@ -156,6 +159,11 @@ for (const [source, message, kind] of [
     ['import "option"\nf n = {\n    _ <- Some n\n    5\n    return n\n}', "a statement in a do-block must be an Option value, not Int", "type"],
     ["xs = {\n    x <- [1,2]\n    x > 0\n    return x\n}", "a statement in a do-block must be a List value, not Bool", "type"],
     ['h f = {\n    f []\n    print "a"\n    return 2\n}\nh (_ -> 1)', "a statement in a do-block must be an action, not Int", "runtime"],
+    // { e; ss } is e >> { ss } in any block, as Haskell's do: a plain e is an error.
+    ['f = {\n    123\n    print "x"\n}', "a statement in a do-block must be an action, not Int", "type"],
+    ["x = { 1 + 1; 5 }", "a statement in a do-block must be an action, not Int", "type"],
+    ['h f = {\n    f []\n    print "x"\n}\nh (_ -> 1)', "a statement in a do-block must be an action, not Int", "runtime"],
+    ["print (do [1,2])", "a statement in a do-block must be an action, not Int", "type"],
 ] as const) Deno.test(`monads reject: ${JSON.stringify(source)}`, () => fails(source, message, kind));
 // A block of returns and guards takes the monad its other statements name, as
 // types decide in Haskell: the checker finds it, and the run uses it.

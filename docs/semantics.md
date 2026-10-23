@@ -592,22 +592,27 @@ error. `return x` yields `x` in whatever monad the context needs (see below), as
 
 ### Blocks are do-blocks
 
-A block that runs anything is a **do-block**: the block evaluates to an action
-that, when run, executes its statements in order. A block becomes a do-block
-at its first `<-` binding, or at its first discarded statement (one before
-the last) whose value is in a monad: an action, `return x`, or a value of a
-type with a `>>=` instance (`Err e`, `None`). As in Haskell, a discarded
-statement is chained with `>>`, so a discarded `Err e` or `None` stops the
-block. A discarded list is the exception: `[]` is also the unit value (what
-`print` yields), so a list starts no do-block, though inside a list do-block
-it is chained. Its last statement must itself be an action, whose result the
-block yields: end with `return x` to yield a plain value. As in Haskell, each
-statement of a do-block that binds nothing is in its monad (an action in an IO
-block), `[]` (the unit) and a statement opening a module aside: a plain value
-(`123`) would be computed and dropped, so it is an error (check a condition
-there with `guard c`, or `assert c x`, which is `x` once `c` holds, as
-Haskell's). What the check cannot decide (a parameter's result) is checked
-when the statement runs. A block of bindings stays an ordinary value:
+A block is Haskell's do, its bindings `let`s:
+
+```
+{ e }              is e
+{ e; ss }          is e >> { ss }
+{ x <- e; ss }     is e >>= x -> { ss }
+{ x = e; ss }      is (x -> { ss }) e     (a binding scopes over what follows)
+```
+
+So a block with a `<-` binding, or a statement that binds nothing before its
+last, is a **do-block**: it evaluates to an action (or an Option, a list, ...)
+that runs its statements in order, and a discarded `Err e` or `None` stops it.
+Each such statement is in the block's monad, an action in an IO block; a plain
+value (`{ 123; print "x" }`) would be computed and dropped, so it is an error
+(check a condition with `guard c`, or `assert c x`, which is `x` once `c`
+holds, as Haskell's). Two statements are dropped instead: `[]`, the unit (what
+`print` yields; inside a list do-block it is chained), and one opening a
+module. What the check cannot decide (a parameter's result) is checked when
+the statement runs. A do-block's last statement must itself be an action,
+whose result the block yields: end with `return x` to yield a plain value. A
+block of bindings stays an ordinary value:
 
 ```apn
 area w h = {
@@ -1313,8 +1318,8 @@ answer <- do [print "calculating", return 42]  # prints, binds 42
 
 `do statements` is the [block](#blocks-are-do-blocks) with those statements:
 `do [a,b,c]` is `{ a; b; c }` in every way, so `do []` is `{}` (the empty
-list), `do [1,2]` is 2, `do [x = 1, x + 1]` is 2, and with an action among them it is a do-block
-whose last element must be an action. It accepts computed lists too, and
+list), `do [x = 1, x + 1]` is 2, `do [1,2]` is an error (`1 >> 2`), and with an
+action among them it is a do-block whose last element must be an action. It accepts computed lists too, and
 processes the spine incrementally. Each run of the action runs the elements
 again; an error stops the sequence.
 

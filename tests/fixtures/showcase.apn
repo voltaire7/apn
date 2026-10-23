@@ -737,8 +737,8 @@ firstOr fallback [] = fallback
 print (firstOr 0 [7,8])               # => 7
 # apn --loose FILE relaxes every spacing rule, and this one.
 
-group = { 1; 2; 3 }          # a 0-arg function: its body is the block
-print group                  # => 3    (the parens run it)
+group = { one = 1; one + 2 }  # a block's value is its last statement's
+print group                  # => 3    ({ 1; 2; 3 } is an error: as in Haskell, 1 >> ...)
 
 inlineBlock = { 1 + 1 }      # a same-line { } block
 print inlineBlock            # => 2
@@ -1732,7 +1732,6 @@ print (tailCountdown 10000)          # => 42
 do [print "hi", print "there"]      # => hi, then there
 lastOne <- do [print "first", return 42]  # { print "first"; return 42 }
 print lastOne                       # => 42
-print [do [1,2], { 1; 2 }]         # => [2,2]: no action, so the last value
 print [do [], {}]                   # => [[],[]]: no statements
 print [x = 1, x + 1]                # => [2]: a binding item yields no value
 print [do [x = 1, x + 1], { x = 1; x + 1 }]  # => [2,2]

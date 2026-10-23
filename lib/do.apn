@@ -1,4 +1,9 @@
-# do statements is the block with those statements: do [a,b] is { a; b }.
+# do statements is the block with those statements, as Haskell's do:
+#     do [e] = e
+#     do (e :: es) = e >> do es
+# A block is that chain ({ e; ss } is e >> { ss }), [] (the unit) and a
+# statement opening a module aside, so do (e :: es) is { e; do es }. A binding
+# has already put its name in scope for the items after it, and yields nothing.
 do [] = {}
-do [statement] = statement
-do (statement :: rest) = { statement; do rest }
+do [e] = e
+do (e :: es) = intrinsics.binding e ? do es : { e; do es }
