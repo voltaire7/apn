@@ -51,13 +51,11 @@ Deno.test("--loose accepts unnecessary parentheses", () => {
     try { parse("print (5)"); } finally { setLooseSpacing(false); }
 });
 
-// A definition's parameter written with spaces is one pattern, so it is
-// parenthesized: f Some x = ... would look like two parameters.
+// A definition's parameters read as arguments do, so a cons is parenthesized.
 for (const source of [
-    "Option a = Some a | None\nf Some x = x",
     "len _ :: rest = 1",
-    "Money = | Money Int\nMoney a + Money b = Money (a + b)",
-]) Deno.test(`bare compound parameter: ${JSON.stringify(source)}`, () => {
+    "f x y :: ys = y",
+]) Deno.test(`bare cons parameter: ${JSON.stringify(source)}`, () => {
     try { parse(source); } catch (error) {
         if (String(error).includes("is one pattern")) return;
         throw error;
@@ -71,4 +69,21 @@ for (const source of [
     "f (Int x) y = x",
     "Option a = Some a | None\ng = Some x -> x",
     "Option a = Some a | None\nSome v = Some 1",
+    "Money = | Money Int\nMoney a + Money b = Money (a + b)",
 ]) Deno.test(`parenthesized parameter: ${JSON.stringify(source)}`, () => { parse(source); });
+
+// Every constructor pattern takes its fields, so f Some x = ... (the function
+// Some, then x) is a static error.
+Deno.test("a constructor pattern without its fields is an error", async () => {
+    const { Interpreter } = await import("../src/interp.ts");
+    for (const source of ['import "option"\nf Some x = x', 'import "option"\ng = Some -> 1']) {
+        const i = new Interpreter();
+        i.enableChecking();
+        try { i.run(parse(source)); } catch (error) {
+            const e = error as { message: string; hint?: string };
+            if (e.message.includes("'Some' in a pattern takes 1 field") && e.hint === "write (Some x)") continue;
+            throw error;
+        }
+        throw new Error(`accepted: ${source}`);
+    }
+});

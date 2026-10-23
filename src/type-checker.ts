@@ -7,7 +7,7 @@ import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric } from "./numbers.ts";
 import { APNError, didYouMean, formatFileReadError, withArticle } from "./errors.ts";
-import { parse, parseDocument, rangeExpr, PRIMITIVE_OPERATORS } from "./parser.ts";
+import { parse, parseDocument, patternSource, rangeExpr, PRIMITIVE_OPERATORS } from "./parser.ts";
 import { mkStr, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
 
@@ -1843,6 +1843,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         convert(local, f.input, e, false, new Map(), true);
                     } else bind(arg, f.input, scope, e, bound);
                     rest = f.output;
+                }
+                // A constructor pattern takes all its fields: f Some x = ... is the
+                // function Some, then x, which no value matches.
+                const missing = (ty: Ty): number => { const f = resolve(ty); return f.k === "fn" ? 1 + missing(f.output) : 0; };
+                if (entry && missing(rest)) {
+                    const fields = [...p.args.map(patternSource), ..."xyzuvw".slice(0, missing(rest))].join(" ");
+                    problem(`'${p.tag}' in a pattern takes ${p.args.length + missing(rest)} field${p.args.length + missing(rest) === 1 ? "" : "s"}`, e, `write (${p.tag} ${fields})`);
                 }
                 // Matching a Dynamic value against a constructor checks it at runtime.
                 if (isExplicit(resolve(expected))) runtimeChecks++;

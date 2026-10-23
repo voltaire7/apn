@@ -498,3 +498,10 @@ for (const source of [
     'describe 0 = "zero"\nlabel x = describe x\ndescribe 1 = "one"\nprint (label 1)',
     'h = {\n    describe 0 = "zero"\n    label x = describe x\n    describe 1 = "one"\n    label 1\n}\nprint h',
 ]) failure(`a function keeps the clauses it saw: ${source}`, source, "no clause of 'describe' matches");
+example("a definition's parameters read as arguments", `
+import "option"
+f Int x = x
+g x Float = x
+to Option (Ok x) = Some x
+print [f Int 3, g 2 Float]
+print (to Option (Ok 1))`, ["[3,2]", "Some 1"]);

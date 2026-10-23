@@ -31,8 +31,8 @@ okOr _ (Some x) = Ok x
 okOr error None = Err error
 # A Result as an Option (Elm's Result.toMaybe): Ok x is Some x, and Err drops
 # its error. Other values convert as to Option does for any type.
-to (Option) (Ok x) = Some x
-to (Option) (Err _) = None
+to Option (Ok x) = Some x
+to Option (Err _) = None
 # The value inside, or a runtime error when there is none: expect names what
 # was missing (and shows an Err's error); unwrap is for quick scripts.
 expect _ (Some x) = x

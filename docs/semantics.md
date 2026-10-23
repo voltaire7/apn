@@ -135,11 +135,15 @@ differently, as in `(a + b) * c`, `f (g x)`, `(-2) ^ 2`, `-(-x)` and
 - `obj.[(k)]` selects the computed key `k`, and `(r.1).2` is not `r.1.2`, which
   reads the number `1.2`.
 
-In a definition's parameters it turns around: a parameter that is a constructor
-or type applied to patterns, or an infix constructor, is parenthesized
-(`f (Some x) = ...`, `len (_ :: rest) = ...`), since `f Some x = ...` would look
-like two parameters and is an error. A lambda's parameter or a binding's pattern
-stands alone and takes none: `Some x -> x`, `Some v = m`.
+A definition's parameters read as arguments do: each juxtaposed piece is one
+parameter, so `f Int x = ...` takes the type `Int`, then `x` (called `f Int 3`,
+as `to Int x` is). A constructor applied to patterns is therefore
+parenthesized, `f (Some x) = ...`: a constructor pattern takes all its fields,
+so `f Some x = ...` is a static error, as `Some -> 1` is. A cons is
+parenthesized too: `len x :: xs = ...` is an error (write `len (x :: xs)`). A
+lambda's parameter, an operator definition's operand and a binding's pattern
+take a whole pattern, as an operand does: `Some x -> x`,
+`(Money a) + Money b = ...`, `Some v = m`.
 
 Lists print the same way: `print [1,2,[3]]` shows `[1,2,[3]]` and records show
 `[x: 1, y: 2]`. A list prints its items once its `,` is decided: when an item
@@ -596,7 +600,7 @@ return = Some                      # return in Option
 converts as applying it: `to Quote x` is `Quote x`),
 `from T x` reads one back. A bare type name in a pattern matches that type
 itself (`describe Int = "integer"`), so an instance names its type:
-`to Celsius = (F f) -> C ((f - 32) * 5 / 9)`. See the
+`to Celsius (F f) = C ((f - 32) * 5 / 9)`. See the
 [standard library](standard-library.md).
 
 `return` is overloaded on its result type (see "Overloading on the result

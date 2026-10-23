@@ -128,19 +128,15 @@ See [zero initialization](zero-initialization.md) for type defaults and inspecti
 
 They are methods, like `map`: a program adds a type by defining an instance,
 which joins them everywhere. A bare type name in a pattern matches that type,
-so an instance names its type as its first parameter, in curried form:
+so an instance names its type as its first parameter (as `option` defines
+`to Option (Ok x) = Some x` and `to Option (Err _) = None`):
 
 ```apn
 Celsius = | C Float
 Fahrenheit = | F Float
-to Celsius = (F f) -> C ((f - 32) * 5 / 9)
+to Celsius (F f) = C ((f - 32) * 5 / 9)
 to Celsius (F 212)              # C 100.0
 ```
-
-(`to Celsius (F f) = ...` is an error: `Celsius (F f)` would be one parameter,
-a typed pattern. Written as clauses, an instance puts the type alone in
-parentheses, as `option` does: `to (Option) (Ok x) = Some x` and
-`to (Option) (Err _) = None`.)
 
 ## Absence and errors — `option`
 
