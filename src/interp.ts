@@ -2262,11 +2262,20 @@ export class Interpreter {
     }
     // What code yields, item by item (print, reduce): a binding yields nothing,
     // and an item after an x <- m item is the block of the bindings before it
-    // ending in it, run by do ([x <- m, f x] yields m >>= x -> f x). An item's
-    // own value stays its statement's, which do runs once.
+    // ending in it ([x <- m, f x] yields { x <- m; f x }). An item's own value
+    // stays its statement's, which do runs once.
     private yielded(item: Value, bindings: Value[]): Value {
-        if (!bindings.some(b => this.written(b)?.runs)) return item;
-        return this.defer(() => this.apply(this.demand(this.preludeBindings.get("do")!), this.appendCode(mkList(bindings), mkList([item]))));
+        const written = this.written(item);
+        if (!written || !bindings.some(b => this.written(b)?.runs)) return item;
+        // The block, run where the item is, with what earlier joins gave it.
+        const block: Expr = { t: "block", stmts: [...bindings.map(b => this.written(b)!.expr), written.expr], style: "{" };
+        const scope = new Env(written.env);
+        for (const [name, value] of written.joined ?? []) scope.setLocal(name, value);
+        return this.defer(() => {
+            const old = this.env;
+            this.env = scope;
+            try { return this.eval(block); } finally { this.env = old; }
+        });
     }
     private yields(list: Value, bindings: Value[] = []): Value {
         return this.defer(() => {
