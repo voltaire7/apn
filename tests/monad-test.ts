@@ -186,6 +186,7 @@ Deno.test("monads: >>= with no function fails when it would apply it", () => {
 });
 // As for a do-block, the checker decides a >>= chain's or a call's monad when
 // the run would leave its value undecided; a generic function's is not decided.
+// A run without checking infers the same, so it decides alike.
 for (const [name, source, expected] of [
     ["a >> chain", 'import "option"\ncheck n = unless (n > 0) (Err "not positive") >> guard (n < 100) >> return (n * 2)\nprint [check 2, check 0, check 200]',
         ['[Ok 4, Err "not positive", Err "guard failed: n < 100"]']],
@@ -193,8 +194,10 @@ for (const [name, source, expected] of [
     ["a list chain", "evens = [1..6] >>= x -> guard (x % 2 == 0) >> return x\nprint evens", ["[2,4,6]"]],
     ["not a generic function", 'import "option"\nwrap x = return x\nprint [Option Int (wrap 1), List Int (wrap 2)]', ["[Some 1, [2]]"]],
 ] as const) Deno.test(`monads: the checker decides ${name}`, () => {
-    const actual = run(source);
-    if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(JSON.stringify(actual));
+    for (const checked of [true, false]) {
+        const actual = run(source, checked);
+        if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`checked=${checked}: ${JSON.stringify(actual)}`);
+    }
 });
 Deno.test("monads: an undecided >> chain prints as written", () => {
     for (const checked of [true, false]) {
@@ -204,8 +207,10 @@ Deno.test("monads: an undecided >> chain prints as written", () => {
 });
 Deno.test("monads: the checker decides an undecided block's monad", () => {
     const source = 'import ["option","number"]\ncheck n = {\n    unless (n > 0) (Err "not positive")\n    return (n * 2)\n}\nprint [check 2, check 0]';
-    const actual = run(source);
-    if (JSON.stringify(actual) !== JSON.stringify(['[Ok 4, Err "not positive"]'])) throw new Error(JSON.stringify(actual));
+    for (const checked of [true, false]) {
+        const actual = run(source, checked);
+        if (JSON.stringify(actual) !== JSON.stringify(['[Ok 4, Err "not positive"]'])) throw new Error(`checked=${checked}: ${JSON.stringify(actual)}`);
+    }
 });
 Deno.test("monads: a type without a return instance cannot take return", () => {
     try { run("Tree = Leaf Int | Node Tree Tree\nprint (Tree { return 1 })", false); }
@@ -229,8 +234,10 @@ for (const [name, source, expected] of [
     ["nested ternaries", 'import "option"\ngrade n = n > 90 ? return "A" : (n > 50 ? return "B" : Err "fail")\nprint (grade 60)', ['Ok "B"']],
     ["a bound result", 'import "option"\nsafe n = {\n    k <- n > 0 ? return n : Err "neg"\n    Ok (k * 2)\n}\nprint (safe 4)', ["Ok 8"]],
 ] as const) Deno.test(`ternary return: ${name}`, () => {
-    const actual = run(source);
-    if (actual.join("\n") !== expected.join("\n")) throw new Error(`${actual} != ${expected}`);
+    for (const checked of [true, false]) {
+        const actual = run(source, checked);
+        if (actual.join("\n") !== expected.join("\n")) throw new Error(`checked=${checked}: ${actual} != ${expected}`);
+    }
 });
 
 // A choice of values of one monad holds either value (f is one, a a union);

@@ -198,7 +198,7 @@ export class Interpreter {
         // A result kept unevaluated (return (import "system")) is evaluated when
         // the check found the statement yields a module.
         const at = sourceLocations.get(statement);
-        const value = at && this.checking?.moduleStatements.has(`${at.file}:${at.start}`) ? this.demand(result) : result;
+        const value = at && this.types?.moduleStatements.has(`${at.file}:${at.start}`) ? this.demand(result) : result;
         const module = this.moduleValues.get(value);
         if (!module) return false;
         const checked = module.checked ?? (!!this.checking && !this.dynamicDepth);
@@ -312,7 +312,7 @@ export class Interpreter {
         const candidate = this.checking && top ? this.checking.prepare(program, this.sourceDir) : undefined;
         const inferred = !this.checking && top && !this.loadingPrelude ? this.typesOf(program) : undefined;
         // A check may decide more expressions' monads (see checkedMonad).
-        if (candidate) this.checkedHeads = new WeakMap();
+        if (top && this.types) this.checkedHeads = new WeakMap();
         // A failed run leaves the scope as it was: its definitions and versions.
         const savedEnv = this.env, root = this.env.root(), saved = candidate ? new Map(root.map) : undefined;
         let succeeded = false;
@@ -1606,7 +1606,7 @@ export class Interpreter {
                 if (next) {
                     // A tail call leaves this expression: keep the monad the
                     // checker found for it (the outermost), as below.
-                    if (this.checking?.resultHeads.size) decided ??= this.checkedMonad(e);
+                    if (this.types?.resultHeads.size) decided ??= this.checkedMonad(e);
                     e = next.body;
                     this.env = next.env;
                     continue;
@@ -2730,7 +2730,7 @@ export class Interpreter {
     // or else described from its source without running it.
     private checkedHead(clause: DefClause): string | undefined {
         const at = sourceLocations.get(clause.body);
-        return at ? this.checking?.resultHeads.get(`${at.file}:${at.start}`) : undefined;
+        return at ? this.types?.resultHeads.get(`${at.file}:${at.start}`) : undefined;
     }
     // A do-block's monad as the checker inferred it (Result for a block whose
     // statements name it), as a type: undefined when it did not, or for IO.
@@ -2739,7 +2739,7 @@ export class Interpreter {
         let head = this.checkedHeads.get(block);
         if (head === undefined) {
             const at = sourceLocations.get(block);
-            head = (at && this.checking?.resultHeads.get(`${at.file}:${at.start}`)) || "";
+            head = (at && this.types?.resultHeads.get(`${at.file}:${at.start}`)) || "";
             this.checkedHeads.set(block, head);
         }
         if (!head || head === "IO") return undefined;

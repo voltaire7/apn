@@ -250,10 +250,13 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   with their recorded type; `staticTypeOf` follows tags through thunks,
   variables and `.value` chains. The runtime asks the checker's own `convert`
   (`bridge.fits`, type-only), and the checker ignores elements' values while
-  choosing a clause (`asUsed`, `castKnown`), so both decide alike. A run
-  without `enableChecking` infers through its own quiet session (`typing`,
-  `typesOf`), so its records are the same. With no recorded type the pattern
-  matches. Tests: `tests/typed-pattern-forms-test.ts`.
+  choosing a clause (`asUsed`, `castKnown`), so both decide alike. With no
+  recorded type the pattern matches. Tests: `tests/typed-pattern-forms-test.ts`.
+- The runtime reads the checker's records (`valueTypes`, `patternTypes`,
+  `resultHeads`, `moduleStatements`) from `types`: the checking session, or
+  for a run without `enableChecking` its own quiet one (`typing`, `typesOf`),
+  which infers alike and reports nothing, so a program means the same either
+  way. Tests: `tests/typed-pattern-forms-test.ts`, `tests/monad-test.ts`.
 - `f a` in a written type: at runtime a variable type with `arguments` (apply
   of a variable type to a type, a `typeBind` parameter, and a `schema`
   parameter `((f a) e)` adding `e`, in `readFunctionType`; the parser reads a
