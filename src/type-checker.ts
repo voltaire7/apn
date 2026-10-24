@@ -207,6 +207,9 @@ export interface CheckOptions {
     openedElsewhere?: () => boolean;
     // Instance types (map, >>=, <*>, return) shared by a session's checks.
     instances?: Map<string, unknown[]>;
+    // Each declared family's parameters a value cannot hold either of two
+    // types in (see invariantParameters), shared by a session's checks.
+    invariance?: Map<string, Set<number>>;
     /** Each clause's inferred result type (its head: Int, Option, ...) by the
      * source position of its body, for the runtime to choose overloads that
      * differ only in result type. */
@@ -765,7 +768,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // arms, a function's clauses): one type when they unify, else either
     // one, as a list's items are ([1,"a"] is List (Int | String)).
     function either(a: Ty, b: Ty, e?: Expr): Ty {
-        if (!succeeds(() => unify(copy(a), copy(b), e))) return union([a, b]);
+        // They unify unless that breaks what is still to be checked of their
+        // variables: in x > 0 ? Some x : Some "neg", x is not made a String.
+        const free = new Set([...variables(a), ...variables(b)]);
+        const pending = requirements.filter(r => r.k === "operation" && [...variables(r)].some(v => free.has(v)));
+        const fits = succeeds(() => {
+            const vars = new Map<Ty, Ty>();
+            const checks = pending.map(r => copy(r, vars));
+            unify(copy(a, vars), copy(b, vars), e);
+            for (const check of checks) if (check.k === "operation") evaluateOperation(check);
+        });
+        if (!fits) return union([a, b]);
         unify(a, b, e);
         return a;
     }
@@ -780,13 +793,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // The same constructor where one side does not know an argument
             // (None's beside Some x's), or holds another type (Some 1's beside
             // Some "a"'s): one type, Option X or Option (Int | String), as data
-            // holds either. An indexed family's arguments are indexes, kept apart.
+            // holds either. An indexed family's arguments are indexes, kept apart,
+            // as is a parameter a function takes or a cell holds: a Handler Int
+            // or a Handler String takes one of them, not either.
             const same = value.k === "variant" && !isPending(value) ? unique.findIndex(old => {
                 const o = resolve(old);
-                return o.k === "variant" && o.name === value.name && o.args.length === value.args.length && (!o.indexed && !value.indexed || o.args.every((x, n) => {
+                return o.k === "variant" && o.name === value.name && o.args.length === value.args.length && o.args.every((x, n) => {
                     const p = resolve(x), q = resolve(value.args[n]);
-                    return p === q || p.k === "var" || q.k === "var";
-                }));
+                    return p === q || p.k === "var" || q.k === "var" || !o.indexed && !value.indexed && !invariance.get(o.name)?.has(n);
+                });
             }) : -1;
             if (same >= 0) {
                 const o = resolve(unique[same]) as Extract<Ty, { k: "variant" }>, v = value as Extract<Ty, { k: "variant" }>;
@@ -2855,6 +2870,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // So is a record known only as some Record (a schema a parameter holds),
         // applied as a template at runtime.
         if (f.k === "atom" && (f.name === "Function" || f.name === "Record")) return variable();
+        // One of several functions (c ? inc : bang): each must take the argument.
+        if (f.k === "union" && !f.undecided) return union(f.choices.map(choice => application(choice, argument, e)));
         return problem(`cannot apply ${text(f)}`, e);
     }
     // A list or record of types (Point = [x: Float, y: Float]) describes a type.
@@ -3031,7 +3048,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (r.k !== "union" || r.undecided || e.t !== "app" && e.t !== "pipe") return t;
         const k = demand(budgeted(() => evaluateKnown(e, new Map(), scope, 0), SYMBOLIC_BUDGET));
         const name = !k ? undefined : k.boolean !== undefined ? "Bool" : k.string !== undefined ? "String"
-            : k.char !== undefined ? "Char" : k.number ? numericType(k.number) : undefined;
+            : k.char !== undefined ? "Char" : k.number ? numericType(k.number)
+            : k.index && !k.index.terms.size ? "Int" : undefined;
         return r.choices.find(choice => { const x = resolve(choice); return x.k === "atom" && x.name === name; }) ?? t;
     }
     function infer(e: Expr, scope: Scope, expected?: Ty): Ty {
@@ -3783,6 +3801,38 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // computes them: its fields give names (k from the tail's own indices),
     // and its constructor's result type is evaluated with them.
     const indexedFamilies = new Map<string, { def: Extract<TopLevel, { t: "type" }>["def"]; scope: Scope }>();
+    const invariance = options.invariance ?? new Map<string, Set<number>>();
+    // A family's parameters named where a value is not simply held: a field's
+    // function takes it (Handler (a -> String)), a cell holds it (Mutable a),
+    // or another family's such parameter does. (A function's input of an
+    // input is held, but is kept apart too: separate is never wrong.)
+    function invariantParameters(d: Extract<TopLevel, { t: "type" }>["def"]): Set<number> {
+        const parameters = d.parameters ?? [], out = new Set<number>();
+        const named = (x: unknown): void => {
+            if (!x || typeof x !== "object") return;
+            if (Array.isArray(x)) { x.forEach(named); return; }
+            const node = x as { t?: string; p?: string; name?: string };
+            if ((node.t === "var" || node.p === "var") && node.name && parameters.includes(node.name)) out.add(parameters.indexOf(node.name));
+            Object.values(node).forEach(named);
+        };
+        const held = (e: Expr): void => {
+            if (e.t === "lambda") { e.params.forEach(p => named({ t: "var", name: p })); held(e.body); return; }
+            if (e.t === "patternLambda") { named(e.params); held(e.body); return; }
+            if (e.t === "app") {
+                const args: Expr[] = [];
+                let head: Expr = e;
+                while (head.t === "app") { args.unshift(head.a); head = head.f; }
+                const kept = head.t === "var" ? head.name === "Mutable" ? new Set(args.keys()) : invariance.get(head.name) : undefined;
+                args.forEach((arg, n) => kept?.has(n) ? named(arg) : held(arg));
+                return;
+            }
+            for (const child of Object.values(e)) {
+                for (const x of Array.isArray(child) ? child.flat() : [child]) if (x && typeof x === "object" && "t" in x) held(x as Expr);
+            }
+        };
+        for (const v of d.variants) for (const field of v.fields ?? []) held(field);
+        return out;
+    }
     // Operators a program bound to a constructor: (::) = Cons.
     const constructorOperators = new Map<string, string>();
     const provenClaims = new Map<string, { params: Pattern[]; body: Expr }[]>();
@@ -6240,6 +6290,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const d = statement.def, parameters = new Map((d.parameters ?? []).map((p) => [p, variable()]));
                 const indexed = d.variants.some(v => v.result);
                 if (indexed) indexedFamilies.set(d.name, { def: d, scope });
+                invariance.set(d.name, invariantParameters(d));
                 const result: Ty = { k: "variant", name: d.name, args: [...parameters.values()], ordinal: d.variants.every(v => !v.fields?.length), ...indexed ? { indexed } : {} };
                 scope.set(d.name, { type: { k: "type", value: result } });
                 const fieldsScope = new Map(scope);

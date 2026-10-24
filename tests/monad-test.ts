@@ -241,8 +241,9 @@ Deno.test("monads: a choice of one monad's values binds as that monad", () => {
         'm = t > 0 ? Some 1 : Some "a"', 'print (m >>= y -> Some (to String y ++ "!"))',
         'k x = x > 0 ? Some 1 : Some "neg"', "print (Some 1 >>= k >>= y -> Some (to String y))",
         "k2 x = x > 0 ? Some x : None", "print (Some -1 >>= k2)",
+        'k3 x = x > 0 ? Some x : Some "neg"', "print [Some 3 >>= k3, Some -3 >>= k3]",
     ].join("\n"));
-    if (output.join("|") !== 'Some "1!"|Some "1"|None') throw new Error(output.join("|"));
+    if (output.join("|") !== 'Some "1!"|Some "1"|None|[Some 3, Some "neg"]') throw new Error(output.join("|"));
 });
 for (const [source, text] of [
     // k may give a list: Some -1 >>= k would leave the Option monad.

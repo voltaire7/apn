@@ -25,6 +25,8 @@ export class CheckingSession {
     moduleSources?: Record<string, string>;
     // Instances of map, >>=, <*> and return the session's programs and modules define.
     instances = new Map<string, unknown[]>();
+    // Declared families' parameters kept apart in unions (see CheckOptions).
+    invariance = new Map<string, Set<number>>();
     // Clauses' inferred result types, for overloads chosen by result type.
     resultHeads = new Map<string, string>();
     moduleStatements = new Set<string>();
@@ -80,6 +82,7 @@ export class CheckingSession {
             mutation: () => this.mutation,
             openedElsewhere: () => [...this.opaqueUses].some(p => p !== program),
             instances: this.instances,
+            invariance: this.invariance,
             resultHeads: this.resultHeads,
             moduleStatements: this.moduleStatements,
             loadedNames: path => this.loadedNames(path, directory),

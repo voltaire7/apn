@@ -125,6 +125,11 @@ for (const [source, expected] of [
     ['match (func (t > 0)) [\n    String s -> s ++ "!"\n    _ -> "no"\n]', '"yes!"'],
     ['[h 0 ++ "!", g 0 ++ "!"]', '["zero!","zero!"]'],
     ['xs = [1,"a"]; d (Int n) = n + 1; d (String s) = s ++ "!"; map d xs', '[2,"a!"]'],
+    // A held value may be either: Pair 1 "a" or Pair true 'c' is Pair (Int | Bool) (String | Char).
+    ["Pair a b = | Pair a b; first (Pair x _) = x; to String (first (t > 0 ? Pair 1 \"a\" : Pair true 'c'))", '"1"'],
+    ['inc (Int n) = n + 1; dbl (Int n) = n * 2; (t > 0 ? inc : dbl) 5', '6'],
+    // The branches do not decide x where its other uses do: x > 0 keeps it a number.
+    ['k x = x > 0 ? x : "neg"; [k 1 + 1, k -1]', '[2,"neg"]'],
 ] as const) Deno.test(`a choice has either type: ${source}`, () => {
     const actual = run(session(), choices + source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -134,6 +139,11 @@ for (const source of [
     // Every choice must be accepted where it is used.
     'd (String s) = s ++ "!"; d (Bool b) = "b"; d [func (t > 0), 1] 1',
     'xs = [1,"a",true]; d (Int n) = n + 1; d (String s) = s ++ "!"; map d xs',
+    // A function a field holds takes one type, not either: Handler Int and
+    // Handler String stay apart, and a choice of functions takes what all do.
+    'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\ninc (Int n) = to String n\n' +
+        'bang (String s) = s\napply (t > 0 ? Handler inc : Handler bang) 5',
+    'inc (Int n) = n + 1; bang (String s) = s; (t > 0 ? inc : bang) 5',
     // A statement of a do-block is an action whichever branch is taken.
     'f x = x ? print "yes" : false\nk y = {\n    f y\n    print 2\n}',
 ]) Deno.test(`a choice is used as every type it may be: ${source}`, () => rejected(session(), choices + source));

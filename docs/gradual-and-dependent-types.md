@@ -36,9 +36,14 @@ each choice reaches as the runtime dispatches it. So `func x ++ "!"` is an
 error, since a `Bool` cannot be appended, and so is a block statement that is
 an action on one branch only. Where the checker knows which is taken (a known
 condition, argument or scrutinee), the value has that one's type:
-`func true ++ "!"` checks. Values of one constructor hold either value
-(`c ? Some 1 : Some "a"` is `Option (Int | String)`), so a choice of one monad's
-values is that monad, and `>>=` binds it. As in Haskell
+`func true ++ "!"` checks. Choices unify where they can without breaking
+another use: in `x > 0 ? x : "neg"`, `x` stays a number, as `x > 0` needs. Values
+of one constructor hold either value (`c ? Some 1 : Some "a"` is
+`Option (Int | String)`), except where a parameter is what a field's function
+takes or a cell holds: a `Handler (a -> String)` takes one type, so a
+`Handler Int` or a `Handler String` stays that choice. A choice of functions is
+applied as each would be. So a choice of one monad's values is that monad, and
+`>>=` binds it. As in Haskell
 (`f a -> (a -> f b) -> f b`), `>>=` keeps its left side's monad, whichever
 value its function gives: `Some n >>= k` is an error when `k` may give a list,
 as is binding a choice of two monads (`c ? Some 1 : [2]`). Clauses with an earlier one's patterns but another
