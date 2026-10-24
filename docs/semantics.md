@@ -889,7 +889,10 @@ parameters it matches a type value, each name binding the part in its place:
 Float` binds 3 and `Float`. One more pattern is a value of that type, the typed
 pattern `((Option t) x)`, whose names the value binds: `(Option t x)` given
 `Some "a"` binds `t` to `String` and `x` to the whole variant, and `(List _ xs)`
-takes any list. Any other count is a static error (`(Pair x)` for `Pair a b`).
+takes any list. `(List Int xs)` takes any list too, its elements converted as
+they are used, as a variant's payload is (an infinite list matches, and a
+`String` element fails only when used). Any other count is a static error
+(`(Pair x)` for `Pair a b`).
 A type without parameters takes its value at once (`(Int x)`, `(Color c)`), and
 a constructor sharing its type's name (`Box a = | Box a`) is the constructor.
 

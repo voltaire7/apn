@@ -10,7 +10,7 @@ import doSource from "../lib/do.apn" with { type: "text" };
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { NATIVE_EXPORTS, RETIRED_NATIVES } from "./native-exports.ts";
-import { parseLiteral } from "./text-natives.ts";
+import { parseLiteral, textNatives } from "./text-natives.ts";
 import { bundledText, loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
@@ -3975,7 +3975,7 @@ export class Interpreter {
             }
             case "length":
                 if (a.kind === "hashmap") return mkInt(a.entries.size); {
-                if (a.kind === "string") return mkInt(a.v.length);
+                if (a.kind === "string") return mkInt(textNatives.length(a.v));
                 let n = 0n;
                 for (const _ of this.elements(a)) n++;
                 return mkInt(n);
@@ -4576,6 +4576,9 @@ export class Interpreter {
             }
             if (type.kind === "type") {
                 if (type.alias) return false;
+                // (List Int xs): a list, its elements converted as they are used
+                // (as a variant's payload is), so an infinite one matches too.
+                if (this.isListType(type)) return this.isList(this.demand(actual)) && this.matchPattern(p.value, this.conform(type, actual), binds);
                 if (!type.family) return this.matchPattern({ p: "constr", tag: type.name, args: [p.value] }, actual, binds);
                 const variant = this.dataValue(actual);
                 if (variant.kind !== "variant" || variant.family !== type.family) return false;

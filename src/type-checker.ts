@@ -5233,7 +5233,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "length": {
                 const k = args[0]();
-                const n = k?.string !== undefined ? BigInt(k.string.length) : knownLength(k);
+                const n = k?.string !== undefined ? textNatives.length(k.string) : knownLength(k);
                 return n === undefined ? undefined : { index: constant(n) };
             }
             // assert c x is x, as Haskell's (c is checked when it runs).

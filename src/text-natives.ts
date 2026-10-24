@@ -8,6 +8,12 @@ export const textNatives = {
     // By code point: chars "a😀" is ['a','😀'].
     chars: (text: string): string[] => [...text],
     fromChars: (chars: string[]): string => chars.join(""),
+    // The length of a string is its number of characters, as chars gives them.
+    length: (text: string): bigint => {
+        let n = 0n;
+        for (const _ of text) n++;
+        return n;
+    },
 };
 // What parse reads from text: a Bool, a number literal, or null for neither.
 export function parseLiteral(text: string): boolean | Numeric | null {

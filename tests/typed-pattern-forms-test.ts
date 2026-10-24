@@ -74,3 +74,16 @@ for (const [source, message] of [
         if (!error.message.includes(message)) throw new Error(error.message);
     });
 }
+
+// (List Int xs) takes a list, its elements converted as they are used; length
+// counts a string's characters (code points), as chars gives them.
+for (const checked of [false, true]) for (const [source, expected] of [
+    ['f (List Int xs) = "ints"\nf _ = "other"\n[f [1,2], f 5]', '["ints","other"]'],
+    ["f (List Float xs) = xs\nf [1,2]", "[1.0,2.0]"],
+    ["f (List Int xs) = take 2 xs\nf [1..]", "[1,2]"],
+    ['[length "é", length "a😀b", length (to (List Char) "a😀b")]', "[1,3,3]"],
+    ['Vect (length "😀") Int [1]', "[1]"],
+] as const) Deno.test(`list types and string lengths (checked=${checked}): ${source}`, () => {
+    const actual = run(source, checked);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
