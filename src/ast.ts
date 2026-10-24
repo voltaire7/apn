@@ -109,10 +109,19 @@ export type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "
 // (Vec n a xs) is ((Vec n a) xs), as (Vect n a xs) is. (Option t), with just
 // the parameters, still matches a type value. parameters gives a type name's
 // parameter count, or undefined for a name that is not a type.
+// Each pattern is read once per parameter count, so the checker and the run
+// share one typed pattern (and its type expression) for it.
+const flatTyped = new WeakMap<Pattern, Map<number, Pattern | undefined>>();
 export function flatTypedPattern(p: Pattern, parameters: (name: string) => number | undefined): Pattern | undefined {
     if (p.p !== "constr") return undefined;
     const count = parameters(p.tag);
     if (!count || p.args.length !== count + 1) return undefined;
+    let read = flatTyped.get(p);
+    if (!read) flatTyped.set(p, read = new Map());
+    if (!read.has(count)) read.set(count, readFlatTyped(p));
+    return read.get(count);
+}
+function readFlatTyped(p: Extract<Pattern, { p: "constr" }>): Pattern | undefined {
     const typeArg = (q: Pattern): Expr | undefined => {
         if (q.p === "var") return { t: "var", name: q.name };
         if (q.p === "wildcard") return { t: "placeholder" };

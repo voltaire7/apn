@@ -1293,6 +1293,16 @@ export class Interpreter {
     }
 
     eval(e: Expr, tailLoad = false): Value {
+        const value = this.evaluate(e, tailLoad);
+        // A list or variant an expression makes keeps the type the checker
+        // gave it, for typed patterns (see staticTypeOf).
+        if ((e.t === "list" || e.t === "app") && this.checking?.bridge) {
+            const type = this.recordedType(e, this.checking.valueTypes);
+            if (type && !this.staticTypes.has(value)) this.staticTypes.set(value, type);
+        }
+        return value;
+    }
+    private evaluate(e: Expr, tailLoad = false): Value {
         const caller = this.env;
         let forceResult = false;
         // The monad the checker found for an expression a tail call left.
@@ -2528,6 +2538,52 @@ export class Interpreter {
     // The type a conversion's result has (List T, a record schema), for a
     // Mutable made from one.
     private declaredTypes = new WeakMap<Value, Value>();
+
+    // A typed pattern (List Int xs, Option Int x) decides by the
+    // value's type as the checker inferred it, as the checker decides: the
+    // type recorded for the expression that made the value, found through the
+    // argument's own expression and the names it was passed by. Without one
+    // (a run without the checker), the value matches and converts as used.
+    private staticTypes = new WeakMap<Value, unknown>();
+    private recordedTypes = new WeakMap<Expr, unknown>();
+    private recordedType(e: Expr, types: Map<string, unknown>): unknown {
+        if (this.recordedTypes.has(e)) return this.recordedTypes.get(e);
+        const at = sourceLocations.get(e), type = at ? types.get(`${at.file}:${at.start}`) ?? null : null;
+        this.recordedTypes.set(e, type);
+        return type;
+    }
+    private staticTypeOf(v: Value): unknown {
+        const session = this.checking!, bridge = session.bridge!;
+        let general: unknown;
+        // The most specific: a name passed through generic code has a general
+        // type there (List a), the expression that made its value a concrete one.
+        const consider = (type: unknown) => {
+            if (!type) return false;
+            if (bridge.concrete(type)) return true;
+            general ??= type;
+            return false;
+        };
+        for (let depth = 0; depth < 64; depth++) {
+            if (consider(this.staticTypes.get(v))) return this.staticTypes.get(v);
+            if (v.kind === "thunk") {
+                const type = this.recordedType(v.body, session.valueTypes);
+                if (consider(type)) return type;
+                const named = v.body.t === "var" && v.env?.get(v.body.name);
+                if (named) { v = named; continue; }
+            }
+            if ((v.kind === "thunk" || v.kind === "deferred") && v.value) { v = v.value; continue; }
+            break;
+        }
+        return general;
+    }
+    // Whether a value of a typed pattern's type may match it: its type is
+    // accepted where the pattern's is, as a typed parameter accepts it.
+    private staticallyFits(type: Expr, v: Value): boolean {
+        const bridge = this.checking?.bridge;
+        if (!bridge) return true;
+        const target = this.checking!.patternTypes.get(type), actual = target && this.staticTypeOf(v);
+        return !target || !actual || bridge.fits(target, actual);
+    }
 
     // ---- Monads: instances of map, >>=, <*> and return ----
     // Clause functions a program defines for these methods, newest last: tried
@@ -4578,10 +4634,14 @@ export class Interpreter {
                 if (type.alias) return false;
                 // (List Int xs): a list, its elements converted as they are used
                 // (as a variant's payload is), so an infinite one matches too.
-                if (this.isListType(type)) return this.isList(this.demand(actual)) && this.matchPattern(p.value, this.conform(type, actual), binds);
+                if (this.isListType(type)) {
+                    if (!this.isList(this.demand(actual)) || !this.staticallyFits(p.type, v)) return false;
+                    return this.matchPattern(p.value, this.conform(type, actual), binds);
+                }
                 if (!type.family) return this.matchPattern({ p: "constr", tag: type.name, args: [p.value] }, actual, binds);
                 const variant = this.dataValue(actual);
                 if (variant.kind !== "variant" || variant.family !== type.family) return false;
+                if (type.arguments?.length && !this.staticallyFits(p.type, v)) return false;
             }
             if (type.kind === "record") {
                 const input = this.recordPatternInput(type, this.demand(actual));

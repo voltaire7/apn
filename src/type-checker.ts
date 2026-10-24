@@ -176,6 +176,11 @@ interface Entry {
     definition?: Expr;
 }
 export type TypeScope = Map<string, Entry>;
+/** A checker's acceptance test, for the runtime to decide typed patterns as it does. */
+export interface TypeBridge {
+    fits(target: unknown, actual: unknown): boolean;
+    concrete(type: unknown): boolean;
+}
 /** A name of explicit Dynamic type: its uses are checked at run time. */
 export const dynamicEntry = (): Entry => ({ type: explicitDynamic });
 /** A definition, by name and its clauses (a function) or body (a value). */
@@ -216,6 +221,15 @@ export interface CheckOptions {
      * source position of its body, for the runtime to choose overloads that
      * differ only in result type. */
     resultHeads?: Map<string, string>;
+    /** The type of each list or variant value an expression makes, by source
+     * position (null where inferences disagree), and of each typed pattern's
+     * type, so a run decides (List Int xs) by a value's type as this does. */
+    valueTypes?: Map<string, unknown>;
+    /** By the pattern's type expression itself (a flat (List Int xs) has no source position). */
+    patternTypes?: WeakMap<Expr, unknown>;
+    /** Receives this check's own test of whether a type is accepted where a
+     * typed pattern's type is (as a typed parameter accepts it). */
+    bridge?: (bridge: TypeBridge) => void;
     /** The statements (by source location) whose value is a module, which the runtime opens. */
     moduleStatements?: Set<string>;
     /** Whether any code in this session may write a Mutable cell (see mayMutate),
@@ -1945,6 +1959,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return;
                 }
                 const t = typeExpr(p.type, scope, bound);
+                if (!choosing) options.patternTypes?.set(p.type, t);
                 application({ k: "fn", input: t, output: t, coerce: true, pattern: p }, { type: expected }, e);
                 bind(p.value, t, scope, e, bound);
                 return;
@@ -2200,6 +2215,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function castKnown(target: Ty, known: Known, e: Expr): void {
         const t = resolve(target);
         known = freshKnown(known);
+        // Choosing a clause ignores elements' values (see asUsed).
+        if (choosing && (known.items && t.k === "list" || t.k === "variant")) return;
         // A list's elements, or a list converted to a record schema's fields, in order.
         if (known.items && (t.k === "list" || t.k === "record")) {
             const fields = t.k === "record" ? [...t.fields.values()] : undefined;
@@ -2237,6 +2254,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (e.t === "unop" && e.op === "neg") { const n = numericLiteral(e.e); return n && negate(n); }
         if (e.t === "block" && e.style === "(" && e.stmts.length === 1 && e.stmts[0].t !== "stmDef" && e.stmts[0].t !== "patDef") return numericLiteral(e.stmts[0] as Expr);
         return undefined;
+    }
+    // A list's element or a variant's payload converts as it is used, so choosing
+    // a clause decides by its type alone (as the run does), never by a literal it
+    // holds (f (List Int xs) given [1,2.5]).
+    function asUsed(e: Expr): Expr {
+        return choosing ? { t: "placeholder" } : e;
     }
     function convert(
         target: Ty,
@@ -2296,7 +2319,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     t.preserve?.has(n) ? unify(t.items?.[n] ?? t.element, item, e) : convert(
                         t.items?.[n] ?? t.element,
                         item,
-                        e.t === "list" ? e.v[n] ?? e : e,
+                        asUsed(e.t === "list" ? e.v[n] ?? e : e),
                         false,
                         seen,
                         runtimeProjection || explicitFloat,
@@ -2333,7 +2356,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // One payload applied to a value (Some 300, or (Some 300)): check that value.
             let call = e;
             while (call.t === "block" && call.style === "(" && call.stmts.length === 1 && call.stmts[0].t !== "stmDef" && call.stmts[0].t !== "patDef") call = call.stmts[0] as Expr;
-            const payload = t.args.length === 1 && call.t === "app" ? call.a : e;
+            const payload = asUsed(t.args.length === 1 && call.t === "app" ? call.a : e);
             t.args.forEach((arg, n) => convert(arg, a.args[n], payload, false, seen, runtimeProjection || explicitFloat));
             return target;
         }
@@ -3090,6 +3113,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try {
             const t = narrowed(e, scope, inferExpression(e, scope, expected));
             inferred.set(e, t);
+            recordValueType(e, t);
             // A >>= chain or a call in a monad: its value may be undecided at
             // run time (unless c (Err e) >> return x when c holds).
             if (e.t === "binop" || e.t === "app" || e.t === "pipe") {
@@ -5888,6 +5912,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             throw error;
         } finally { choosing--; requirements.length = saved; }
     }
+    // A value's type for the run (see CheckOptions.valueTypes): a list's or a
+    // variant's, whose element or arguments typed patterns decide by.
+    function recordValueType(e: Expr, t: Ty): void {
+        if (!options.valueTypes) return;
+        const r = resolve(t);
+        if (r.k === "list" || r.k === "variant" && r.args.length && !isIO(r) && !isPending(r)) recordType(options.valueTypes, e, t);
+    }
+    // Recorded once per source position; a position inferred as two types
+    // (a generic body at different calls) decides nothing (null).
+    function recordType(types: Map<string, unknown>, e: Expr, t: Ty): void {
+        const at = sourceLocations.get(e), key = at && `${at.file}:${at.start}`;
+        if (!key || choosing) return;
+        const known = types.get(key) as Ty | null | undefined;
+        types.set(key, known === undefined || known === t || known && text(known) === text(t) ? t : null);
+    }
     function recordHead(body: Expr, head: string): void {
         const at = sourceLocations.get(body);
         if (at && options.resultHeads) options.resultHeads.set(`${at.file}:${at.start}`, head);
@@ -6279,6 +6318,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         seen.add(value);
         for (const child of children(value)) validate(child, seen);
     }
+    options.bridge?.({
+        // Accepted as a typed parameter of the target type accepts it.
+        fits: (target, actual) => {
+            budget = STATEMENT_BUDGET;
+            const t = resolve(target as Ty), a = resolve(actual as Ty);
+            return succeeds(() => convert(copy(t.k === "type" ? t.value : t), copy(a), { t: "placeholder" }, false, new Map(), true));
+        },
+        concrete: type => !variables(resolve(type as Ty)).size,
+    });
     for (const [index, statement] of program.entries()) {
         if (options.before?.index === index) options.before.scope(new Map(scope));
         // Each top-level statement gets the same bounded work, so a long module

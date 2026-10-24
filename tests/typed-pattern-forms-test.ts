@@ -87,3 +87,36 @@ for (const checked of [false, true]) for (const [source, expected] of [
     const actual = run(source, checked);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
+
+// A typed list or variant pattern decides by the type the checker gave the
+// value, never by what its elements hold, so the run takes the clause the
+// checker chose: where it rules a clause out (f ARG ++ "!" then checks as a
+// String), the run skips it. Elements convert as they are used. An unchecked
+// run knows no such types and takes the clause.
+const CHOICE = 'import "option"\nUserId = Int\ng x = x\n';
+for (const [pattern, argument, chosen] of [
+    ["List Int xs", '["a"]', false],
+    ["List Int xs", '(map (x -> "s") [1])', false],
+    ["List Int xs", "(map (x -> x) [[1]])", false],
+    ["List Int xs", '(g ["a"])', false],
+    ["List Int xs", "[1,2.5]", true],
+    ["List Int xs", "[]", true],
+    ["List Float xs", "[1,2]", true],
+    ["List Float xs", "(List UserId [1])", false],
+    ["Option Int x", '(Some "a")', false],
+    ["Option Int x", '(g (Some "a"))', false],
+    ["Option Int x", "None", true],
+    ["Option Float x", "(Some 1)", true],
+] as const) for (const checked of [false, true]) {
+    Deno.test(`typed clauses choose by static type (checked=${checked}): (${pattern}) ${argument}`, () => {
+        const clauses = `${CHOICE}f (${pattern}) = "typed"\nf _ = "other"\n`;
+        const expected = chosen || !checked ? '"typed!"' : '"other!"';
+        const actual = run(`${clauses}f ${argument} ++ "!"`, checked && !chosen);
+        if (checked && chosen && run(`${clauses}f ${argument}`) !== '"typed"') throw new Error("checked run skipped");
+        if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+    });
+}
+for (const checked of [false, true]) Deno.test(`a typed list's elements convert as used (checked=${checked})`, () => {
+    const actual = run("f (List Int xs) = take 1 xs\nf _ = []\nf [1,2.5]", checked);
+    if (actual !== "[1]") throw new Error(actual);
+});

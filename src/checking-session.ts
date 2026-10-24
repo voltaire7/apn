@@ -1,8 +1,8 @@
 import { APNError } from "./errors.ts";
 import { parse } from "./parser.ts";
 import { loadPath, readLoad, resolveModule, unknownModule } from "./modules.ts";
-import { type CheckOptions, checkTypes, copyTypeScope, dynamicEntry, mayMutate, type TypeScope } from "./type-checker.ts";
-import type { TopLevel } from "./ast.ts";
+import { type CheckOptions, checkTypes, copyTypeScope, dynamicEntry, mayMutate, type TypeBridge, type TypeScope } from "./type-checker.ts";
+import type { Expr, TopLevel } from "./ast.ts";
 import { NATIVE_EXPORTS } from "./native-exports.ts";
 
 /** Static state is separate from evaluation: checking never runs an APN action. */
@@ -29,6 +29,11 @@ export class CheckingSession {
     invariance = new Map<string, Set<number>>();
     // Clauses' inferred result types, for overloads chosen by result type.
     resultHeads = new Map<string, string>();
+    // Types of values and typed patterns by source position, and the newest
+    // check's acceptance test (see CheckOptions.valueTypes).
+    valueTypes = new Map<string, unknown>();
+    patternTypes = new WeakMap<Expr, unknown>();
+    bridge?: TypeBridge;
     moduleStatements = new Set<string>();
     /** Names the interpreter can resolve, so the checker can tell a typo from a runtime-only builtin. */
     runtimeNames?: () => Iterable<string>;
@@ -84,6 +89,9 @@ export class CheckingSession {
             instances: this.instances,
             invariance: this.invariance,
             resultHeads: this.resultHeads,
+            valueTypes: this.valueTypes,
+            patternTypes: this.patternTypes,
+            bridge: bridge => { this.bridge = bridge; },
             moduleStatements: this.moduleStatements,
             loadedNames: path => this.loadedNames(path, directory),
             imports: module => {

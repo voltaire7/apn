@@ -242,6 +242,17 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   is (`instanceIn`): `[]` for a list, a failing action for IO, else the
   `throw` instance whose head is the target's. `intrinsics.source` reads a
   parameter's argument expression one step back, as `assert` reads its own.
+- Typed list and variant patterns (`(List Int xs)`, `(Option Int x)`): the
+  checker records list and variant types in the session's `valueTypes`, keyed
+  by source position (a disagreement stores `null`), and each schema pattern's
+  type in `patternTypes`, keyed by the type `Expr` (so `flatTypedPattern` is
+  memoized: both sides must see one object). `eval` tags list and call results
+  with their recorded type; `staticTypeOf` follows tags through thunks,
+  variables and `.value` chains. The runtime asks the checker's own `convert`
+  (`bridge.fits`, type-only), and the checker ignores elements' values while
+  choosing a clause (`asUsed`, `castKnown`), so both decide alike. With no
+  recorded type the pattern matches (an unchecked run). Tests:
+  `tests/typed-pattern-forms-test.ts`.
 - `f a` in a written type: at runtime a variable type with `arguments` (apply
   of a variable type to a type, a `typeBind` parameter, and a `schema`
   parameter `((f a) e)` adding `e`, in `readFunctionType`; the parser reads a
