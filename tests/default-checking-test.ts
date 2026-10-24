@@ -128,6 +128,7 @@ for (const [source, expected] of [
     // A held value may be either: Pair 1 "a" or Pair true 'c' is Pair (Int | Bool) (String | Char).
     ["Pair a b = | Pair a b; first (Pair x _) = x; to String (first (t > 0 ? Pair 1 \"a\" : Pair true 'c'))", '"1"'],
     ['inc (Int n) = n + 1; dbl (Int n) = n * 2; (t > 0 ? inc : dbl) 5', '6'],
+    ['Handler a = | Handler (a -> String)\napply (Handler f) x = f x\napply (Handler (s -> s ++ "!")) "x"', '"x!"'],
     // The branches do not decide x where its other uses do: x > 0 keeps it a number.
     ['k x = x > 0 ? x : "neg"; [k 1 + 1, k -1]', '[2,"neg"]'],
 ] as const) Deno.test(`a choice has either type: ${source}`, () => {
@@ -144,6 +145,10 @@ for (const source of [
     'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\ninc (Int n) = to String n\n' +
         'bang (String s) = s\napply (t > 0 ? Handler inc : Handler bang) 5',
     'inc (Int n) = n + 1; bang (String s) = s; (t > 0 ? inc : bang) 5',
+    // A lambda a field holds is checked where the field's type is decided,
+    // however far the value travels first.
+    'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\napply (Handler (s -> s ++ "!")) 5',
+    'Handler a = | Handler (a -> String)\nh = Handler (s -> s ++ "!")\nHandler f = h\nf 5',
     // A statement of a do-block is an action whichever branch is taken.
     'f x = x ? print "yes" : false\nk y = {\n    f y\n    print 2\n}',
 ]) Deno.test(`a choice is used as every type it may be: ${source}`, () => rejected(session(), choices + source));

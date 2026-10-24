@@ -67,7 +67,9 @@ type Ty =
     | { k: "alias"; params: string[]; body: Expr; scope: Scope; args: Entry[] }
     // indexed: a family whose constructors say what they make (Vec n a), so
     // an argument may be a value (Vec 2 Int); values decide those, not types.
-    | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty; indexed?: boolean }
+    // checks: what is still to be checked of the values it holds, as a
+    // function's are (Handler (s -> s ++ "!") checks s ++ "!" once a is known).
+    | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty; indexed?: boolean; checks?: Ty[] }
     // f a: a type variable applied to types, as written ((a -> b) -> f a -> f b).
     // Its head, once known, is a ctor: a type missing its first parameters
     // (List, Option, Result _ e for f a; Result for f a e), so f a maps the
@@ -501,7 +503,7 @@ function children(t: Ty): Ty[] {
         case "record":
             return [...t.fields.values()];
         case "variant":
-            return [...t.args, ...t.base ? [t.base] : []];
+            return [...t.args, ...t.base ? [t.base] : [], ...t.checks ?? []];
         case "apply":
             return [t.head, ...t.args];
         case "ctor":
@@ -671,7 +673,7 @@ function copy(
             Object.assign(result, { args: t.args.map(a => ({ ...a, type: go(a.type) })), scope: new Map([...t.scope].map(([name, entry]) => [name, { ...entry, type: go(entry.type) }])) });
             break;
         case "variant":
-            Object.assign(result, { args: t.args.map(go), base: t.base && go(t.base) });
+            Object.assign(result, { args: t.args.map(go), base: t.base && go(t.base), checks: t.checks?.map(go) });
             break;
         case "apply":
             Object.assign(result, { head: go(t.head), args: t.args.map(go) });
@@ -735,6 +737,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
     }
     let requirements: Ty[] = [];
+    // Checks a value's type carried to where it is used (a variant's checks).
+    const carried = new Set<Ty>();
     // Inside deferred code, and the definition being checked.
     let deferred = 0, defining: Definition | undefined;
     // The top-level definition being checked (see the operation's within).
@@ -873,7 +877,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return resolve(result);
     }
     function operation(op: string, args: Ty[], lossless?: boolean[]): Ty {
-        const result: Ty = { k: "operation", op, args, ...lossless ? { lossless } : {} };
+        // written: where, for a check decided far from it (see carried).
+        const at = located(activeExpression);
+        const result: Ty = { k: "operation", op, args, ...lossless ? { lossless } : {}, ...at ? { written: at } : {} };
         requirements.push(result);
         return resolve(result);
     }
@@ -1432,6 +1438,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             expected.args.length === actual.args.length
         ) {
             expected.args.forEach((t, i) => unify(t, actual.args[i], e, seen));
+            // Where a value meets another place, what is still to be checked of it is checked there.
+            for (const check of [...expected.checks ?? [], ...actual.checks ?? []]) {
+                carried.add(check);
+                if (!requirements.includes(check)) requirements.push(check);
+            }
             return;
         }
         // A named subtype is its base wherever the base is expected.
@@ -2751,6 +2762,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const output = resolve(f.output);
             if (output.k === "fn") output.checks = [...output.checks ?? [], ...pending];
             else for (const requirement of pending) {
+                // A value built from it (Handler (s -> s ++ "!")) keeps it, for wherever it goes.
+                // Only a check on what the value's type names can be decided later.
+                if (output.k === "variant" && waiting(requirement) && !output.checks?.includes(requirement)) {
+                    const named = new Set(output.args.flatMap(arg => [...variables(arg)]));
+                    if ([...variables(requirement)].some(v => named.has(v))) output.checks = [...output.checks ?? [], requirement];
+                }
                 // Still waiting on an unknown argument (inside another function's
                 // body): it becomes that function's check, decided at its calls.
                 if (resolve(requirement) === requirement) requirements.push(requirement);
@@ -6348,8 +6365,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // A check that still waits only because a value was symbolic must not be
     // skipped: decide it now, treating that value as unknown.
-    const leftover = requirements.filter(r => { deciding = false; const waits = waiting(r); deciding = true; return waits && !waiting(r); });
+    // So must one whose operands became known after it was last seen (a check
+    // a value carried, met where its type was decided: Handler (s -> s ++ "!")).
+    const leftover = requirements.filter(r => { deciding = false; const waits = waiting(r); deciding = true; return !waiting(r) && (waits || carried.has(r)); });
     for (const requirement of leftover) {
+        if (requirement.k === "operation" && requirement.op !== "call" && requirement.written) activeExpression = requirement.written;
         try { resolve(requirement); }
         catch (error) {
             if (error && typeof error === "object" && "pos" in error && "message" in error) issues.push(error as TypeIssue);
