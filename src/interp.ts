@@ -1,4 +1,5 @@
 import { CheckingSession } from "./checking-session.ts";
+import type { TypeScope } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeType } from "./type-description.ts";
@@ -102,6 +103,11 @@ export class Interpreter {
     // and reflected writes must preserve the visible bindings it has checked.
     checkedExecution = false;
     private checking?: CheckingSession;
+    // Without checking, a run still infers its program's types, reporting
+    // nothing, so that what depends on them (typed list and variant patterns)
+    // means the same (see typesOf).
+    private typing?: CheckingSession;
+    private get types(): CheckingSession | undefined { return this.checking ?? this.typing; }
     private runDepth = 0;
     private dynamicDepth = 0;
 
@@ -123,6 +129,16 @@ export class Interpreter {
             // Interactive input is never read ahead of the program.
             readStdin: () => Deno.stdin.isTerminal() ? undefined : this.inputStdin(),
         };
+    }
+    // A run's types, inferred as checking would, its type errors unreported
+    // (the program then runs as far as it can): the scope to commit, if any.
+    private typesOf(program: TopLevel[]): TypeScope | undefined {
+        this.typing ??= this.checkingSession();
+        try { return this.typing.prepare(program, this.sourceDir); }
+        catch (error) {
+            if (error instanceof APNError) return undefined;
+            throw error;
+        }
     }
     // All of stdin, read once: readStdin returns the same text every time, so
     // the checker (reading ahead of a non-interactive run) and the run agree.
@@ -292,8 +308,9 @@ export class Interpreter {
         if (!this.runDepth && !this.dynamicDepth) this.moduleRoot = this.sourceDir;
         // Each checked top-level run takes a fresh input snapshot.
         if (this.checking && !this.runDepth && !this.dynamicDepth) this.inputFiles.clear();
-        const candidate = this.checking && !this.runDepth && !this.dynamicDepth
-            ? this.checking.prepare(program, this.sourceDir) : undefined;
+        const top = !this.runDepth && !this.dynamicDepth;
+        const candidate = this.checking && top ? this.checking.prepare(program, this.sourceDir) : undefined;
+        const inferred = !this.checking && top && !this.loadingPrelude ? this.typesOf(program) : undefined;
         // A check may decide more expressions' monads (see checkedMonad).
         if (candidate) this.checkedHeads = new WeakMap();
         // A failed run leaves the scope as it was: its definitions and versions.
@@ -356,10 +373,10 @@ export class Interpreter {
                 root.map.clear();
                 for (const [name, value] of saved) root.map.set(name, value);
             }
-            if (candidate && succeeded) {
+            if ((candidate || inferred) && succeeded) {
                 const visible = new Set<string>();
                 for (let scope: Env | null = this.env; scope; scope = scope.parent) for (const name of scope.map.keys()) visible.add(name);
-                this.checking!.commit(candidate, visible);
+                this.types!.commit(candidate ?? inferred!, visible);
             }
         }
     }
@@ -1296,8 +1313,8 @@ export class Interpreter {
         const value = this.evaluate(e, tailLoad);
         // A list or variant an expression makes keeps the type the checker
         // gave it, for typed patterns (see staticTypeOf).
-        if ((e.t === "list" || e.t === "app") && this.checking?.bridge) {
-            const type = this.recordedType(e, this.checking.valueTypes);
+        if ((e.t === "list" || e.t === "app") && this.types?.bridge) {
+            const type = this.recordedType(e, this.types.valueTypes);
             if (type && !this.staticTypes.has(value)) this.staticTypes.set(value, type);
         }
         return value;
@@ -2543,7 +2560,8 @@ export class Interpreter {
     // value's type as the checker inferred it, as the checker decides: the
     // type recorded for the expression that made the value, found through the
     // argument's own expression and the names it was passed by. Without one
-    // (a run without the checker), the value matches and converts as used.
+    // (code no check reached: Dynamic, or after a type error), the value
+    // matches and converts as used.
     private staticTypes = new WeakMap<Value, unknown>();
     private recordedTypes = new WeakMap<Expr, unknown>();
     private recordedType(e: Expr, types: Map<string, unknown>): unknown {
@@ -2553,7 +2571,7 @@ export class Interpreter {
         return type;
     }
     private staticTypeOf(v: Value): unknown {
-        const session = this.checking!, bridge = session.bridge!;
+        const session = this.types!, bridge = session.bridge!;
         let general: unknown;
         // The most specific: a name passed through generic code has a general
         // type there (List a), the expression that made its value a concrete one.
@@ -2579,9 +2597,9 @@ export class Interpreter {
     // Whether a value of a typed pattern's type may match it: its type is
     // accepted where the pattern's is, as a typed parameter accepts it.
     private staticallyFits(type: Expr, v: Value): boolean {
-        const bridge = this.checking?.bridge;
+        const bridge = this.types?.bridge;
         if (!bridge) return true;
-        const target = this.checking!.patternTypes.get(type), actual = target && this.staticTypeOf(v);
+        const target = this.types!.patternTypes.get(type), actual = target && this.staticTypeOf(v);
         return !target || !actual || bridge.fits(target, actual);
     }
 

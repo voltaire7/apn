@@ -187,9 +187,10 @@ to guess their types.
 For embedding, call `interpreter.enableChecking()` before the first `run`.
 This installs the stateful checker and runtime guards used by the CLI. The raw
 `Interpreter` API remains available for internal runtime tests and hosts that
-supply their own validation. `checkedExecution = true` alone enables runtime
-guards; it does not run the checker. A successful check involving Dynamic is not
-a promise that its runtime checks will succeed.
+supply their own validation; it still infers each run's types, reporting no
+type errors, because typed patterns decide by them. `checkedExecution = true`
+alone enables runtime guards; it does not report type errors. A successful
+check involving Dynamic is not a promise that its runtime checks will succeed.
 
 See [the runnable boundary example](../examples/types/dynamic-boundaries.apn).
 

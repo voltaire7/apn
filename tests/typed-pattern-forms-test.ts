@@ -91,8 +91,8 @@ for (const checked of [false, true]) for (const [source, expected] of [
 // A typed list or variant pattern decides by the type the checker gave the
 // value, never by what its elements hold, so the run takes the clause the
 // checker chose: where it rules a clause out (f ARG ++ "!" then checks as a
-// String), the run skips it. Elements convert as they are used. An unchecked
-// run knows no such types and takes the clause.
+// String), the run skips it. Elements convert as they are used. A run without
+// checking infers the same types, so it means the same.
 const CHOICE = 'import "option"\nUserId = Int\ng x = x\n';
 for (const [pattern, argument, chosen] of [
     ["List Int xs", '["a"]', false],
@@ -107,15 +107,15 @@ for (const [pattern, argument, chosen] of [
     ["Option Int x", '(g (Some "a"))', false],
     ["Option Int x", "None", true],
     ["Option Float x", "(Some 1)", true],
-] as const) for (const checked of [false, true]) {
-    Deno.test(`typed clauses choose by static type (checked=${checked}): (${pattern}) ${argument}`, () => {
-        const clauses = `${CHOICE}f (${pattern}) = "typed"\nf _ = "other"\n`;
-        const expected = chosen || !checked ? '"typed!"' : '"other!"';
-        const actual = run(`${clauses}f ${argument} ++ "!"`, checked && !chosen);
-        if (checked && chosen && run(`${clauses}f ${argument}`) !== '"typed"') throw new Error("checked run skipped");
-        if (actual !== expected) throw new Error(`${actual} != ${expected}`);
-    });
-}
+] as const) Deno.test(`typed clauses choose by static type: (${pattern}) ${argument}`, () => {
+    const call = `${CHOICE}f (${pattern}) = "typed"\nf _ = "other"\nf ${argument}`;
+    const expected = chosen ? '"typed"' : '"other"';
+    for (const checked of [true, false]) {
+        const actual = run(call, checked);
+        if (actual !== expected) throw new Error(`checked=${checked}: ${actual} != ${expected}`);
+    }
+    if (!chosen && run(`${call} ++ "!"`) !== '"other!"') throw new Error("the checker did not rule the clause out");
+});
 for (const checked of [false, true]) Deno.test(`a typed list's elements convert as used (checked=${checked})`, () => {
     const actual = run("f (List Int xs) = take 1 xs\nf _ = []\nf [1,2.5]", checked);
     if (actual !== "[1]") throw new Error(actual);

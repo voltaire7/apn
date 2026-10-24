@@ -2840,7 +2840,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const values = f.items ?? [f.element];
                 return union(values.map(value => {
                     const item = resolve(value);
-                    if (item.k !== "list") return problem("association lookup requires a list of pairs", e);
+                    if (item.k !== "list" || item.items && item.items.length !== 2) return problem("association lookup requires a list of pairs", e);
                     if (item.items) { unify(atom("String"), item.items[0], e); return item.items[1]; }
                     return item.element;
                 }));

@@ -893,9 +893,10 @@ takes any list. `(List Int xs)` and `(Option Int x)` decide by the type the
 checker gave the value, never by what its elements hold, so a run takes the
 clause the checker chose: `["a"]`, `map show xs` and `Some "a"` do not match,
 while `[1,2.5]` and `[1..]` do, their elements converted as they are used (2.5
-fails only when used). A run without checking knows no such types: the pattern
-then takes any list or that variant, converting the same way. Any other count
-is a static error (`(Pair x)` for `Pair a b`).
+fails only when used). A run infers these types even when it reports no type
+errors, so the choice never depends on checking; code no check reaches
+(`Dynamic`) has none, and there the pattern takes any list or that variant.
+Any other count is a static error (`(Pair x)` for `Pair a b`).
 A type without parameters takes its value at once (`(Int x)`, `(Color c)`), and
 a constructor sharing its type's name (`Box a = | Box a`) is the constructor.
 
