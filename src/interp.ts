@@ -14,7 +14,7 @@ import { parseLiteral } from "./text-natives.ts";
 import { bundledText, loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
-import { APNError, didYouMean, withArticle } from "./errors.ts";
+import { APNError, didYouMean, sharedNameAdvice, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { clauseKey, countingFamily, flatTypedPattern, isLoadCall, mentions, mergeClauses } from "./ast.ts";
 import type { DefClause, Type } from "./types.ts";
@@ -3476,7 +3476,14 @@ export class Interpreter {
                     this.env = scope;
                     try {
                         const type = this.asType(this.eval(spec));
-                        if (!type) throw new APNError("runtime", `constructor ${tag} field must describe a type`);
+                        if (!type) {
+                            let head = spec;
+                            while (head.t === "app" || head.t === "block" && head.stmts.length === 1) head = head.t === "app" ? head.f : head.stmts[0];
+                            const name = head.t === "var" ? head.name : undefined, shared = name ? scope.get(name) : undefined;
+                            const hint = name && shared && (shared.kind === "native" || shared.kind === "variant") && shared.tag === name && shared.family?.name === name
+                                ? sharedNameAdvice(name) : undefined;
+                            throw new APNError("runtime", `constructor ${tag} field must describe a type`, hint ? { hint } : undefined);
+                        }
                         return this.conform(type, value);
                     } finally { this.env = caller; }
                 });

@@ -476,6 +476,8 @@ An unspecialized parent pattern `(Option _ value)` still binds the whole variant
 A constructor pattern `(Some value)` extracts its field. Explicitly declared
 same-name legacy wrappers remain supported (`Box a = | Box a`), but the shared
 name denotes the value constructor; use distinct names for type specialization.
+So another type's field cannot name it (`Wrap a = | Wrap (Box a)` is an error
+saying so); with `Box a = | MkBox a`, `Wrap (Box a)` describes the field.
 
 Nominal wrappers can use single-constructor variants, or a named subtype
 (`UserId = Int`), which is also accepted as its base; see

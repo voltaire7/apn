@@ -43,3 +43,22 @@ Deno.test("user's original pattern dispatch prints the payload", () => {
     finally { console.log = log; }
     if (output.join() !== '123') throw new Error(JSON.stringify(output));
 });
+
+// A constructor sharing its type's name is the constructor, also in another
+// type's field, where it describes no type: the error says to name it apart.
+for (const checked of [false, true]) Deno.test(`a shared-name constructor in a field says to name it apart (checked=${checked})`, () => {
+    const interpreter = new Interpreter();
+    if (checked) interpreter.enableChecking();
+    try {
+        interpreter.renderString(interpreter.run(parseDocument('Box a = | Box a\nWrap a = | Wrap (Box a)\nWrap (Box 1)')));
+    } catch (error) {
+        const hint = (error as { hint?: string }).hint ?? "";
+        if (hint.includes("`Box` here is the constructor") && hint.includes("Box a = | MkBox")) return;
+        throw error;
+    }
+    throw new Error("accepted a constructor as a field's type");
+});
+Deno.test("a type named apart from its constructor describes a field", () => {
+    const source = 'Box a = | MkBox a\nWrap a = | Wrap (Box a)\nWrap (MkBox 1)';
+    if (result(source) !== "Wrap (MkBox 1)") throw new Error(result(source));
+});

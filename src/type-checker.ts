@@ -6,7 +6,7 @@ import { standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric } from "./numbers.ts";
-import { APNError, didYouMean, formatFileReadError, withArticle } from "./errors.ts";
+import { APNError, didYouMean, formatFileReadError, sharedNameAdvice, withArticle } from "./errors.ts";
 import { parse, parseDocument, patternSource, rangeExpr, PRIMITIVE_OPERATORS } from "./parser.ts";
 import { mkStr, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
@@ -1547,7 +1547,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.k === "fn") return fn(variable(), schemaValue(t.output, e, seen));
         // An unbound name (missing.File) is the problem to report, not its type.
         if (firstUnbound) return unknown();
-        return problem("expected a type description", e);
+        return problem("expected a type description", e, sharedNameHint(t, e));
+    }
+    // Box a = | Box a: the shared name is the constructor, so Box a is a value.
+    function sharedNameHint(t: Ty, e: Expr): string | undefined {
+        let head = e;
+        while (head.t === "app" || head.t === "block" && head.stmts.length === 1) head = head.t === "app" ? head.f : head.stmts[0];
+        return t.k === "variant" && head.t === "var" && head.name === t.name ? sharedNameAdvice(t.name) : undefined;
     }
     function typeExpr(e: Expr, scope: Scope, captures?: Set<string>): Ty {
         if (e.t === "placeholder") return variable();
