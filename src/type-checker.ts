@@ -778,17 +778,22 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const closed = value.k === "atom" || value.k === "list" && !variables(value).size;
             if (unique.some(old => old === choice || closed && resolve(old).k === value.k && !variables(old).size && text(old) === text(value))) continue;
             // The same constructor where one side does not know an argument
-            // (None's beside Some x's): one type, Option X.
-            const same = value.k === "variant" ? unique.findIndex(old => {
+            // (None's beside Some x's), or holds another type (Some 1's beside
+            // Some "a"'s): one type, Option X or Option (Int | String), as data
+            // holds either. An indexed family's arguments are indexes, kept apart.
+            const same = value.k === "variant" && !isPending(value) ? unique.findIndex(old => {
                 const o = resolve(old);
-                return o.k === "variant" && o.name === value.name && o.args.length === value.args.length && o.args.every((x, n) => {
+                return o.k === "variant" && o.name === value.name && o.args.length === value.args.length && (!o.indexed && !value.indexed || o.args.every((x, n) => {
                     const p = resolve(x), q = resolve(value.args[n]);
                     return p === q || p.k === "var" || q.k === "var";
-                });
+                }));
             }) : -1;
             if (same >= 0) {
                 const o = resolve(unique[same]) as Extract<Ty, { k: "variant" }>, v = value as Extract<Ty, { k: "variant" }>;
-                unique[same] = { ...o, args: o.args.map((x, n) => resolve(x).k === "var" ? v.args[n] : x) };
+                unique[same] = { ...o, args: o.args.map((x, n) => {
+                    const p = resolve(x), q = resolve(v.args[n]);
+                    return p.k === "var" ? v.args[n] : p === q || q.k === "var" ? x : union([x, v.args[n]]);
+                }) };
                 continue;
             }
             // Lists of one known length (c ? [x,y,z] : [0.0,0.0,0.0]): one list
@@ -923,7 +928,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const method = op === "map" ? "map" : op === "ap" ? "<*>" : ">>=";
             const k = op === "then" ? fn(variable(), other) : other;
             const direct = viaInstance(method, op === "map" ? [other, container] : [container, k]);
+            // m >>= k and m >> k stay in m's monad (f a -> (a -> f b) -> f b),
+            // whatever the instance's own clauses give: every choice k gives.
+            if (direct && (op === "bind" || op === "then")) unify({ k: "variant", name: container.name, args: container.args.map(() => variable()) }, direct);
             if (direct) return direct;
+            // The instance takes m but not k: report why, rather than no instance.
+            const instance = (op === "bind" || op === "then") && instanceFor(">>=", [container]);
+            if (instance) return application(application(copy(instance), { type: container }, at), { type: k }, at);
             if (op !== "bind" && op !== "then" && instanceFor(">>=", [container])) {
                 return { k: "variant", name: container.name, args: container.args.map(() => variable()) };
             }
@@ -3589,8 +3600,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const fits = (t: Ty): boolean => {
                         const v = resolve(t);
                         if (["var", "operation", "dynamic", "intrinsic"].includes(v.k) || isIO(v) || isPending(v) || moduleOf(v)) return true;
-                        // The block picks an overload (undecided); a value is any of its choices.
-                        if (v.k === "union") return v.undecided ? v.choices.some(fits) : v.choices.every(fits);
+                        // The block picks an overload (undecided); a value is any of its
+                        // choices, each one in the block's monad.
+                        if (v.k === "union") {
+                            if (v.undecided) return v.choices.some(fits);
+                            const monads = new Set(v.choices.map(resolve).filter(c => isIO(c) || c.k === "list" || c.k === "variant").map(monadKind));
+                            if (block.monad) monads.add(monadKind(block.monad));
+                            return monads.size <= 1 && v.choices.every(fits);
+                        }
                         if (v.k === "list") return !!block.monad && resolve(block.monad).k === "list" || v.items?.length === 0 || !!v.length && !v.length.terms.size && v.length.constant === 0n;
                         return v.k === "variant" && !!instanceFor(">>=", [v]);
                     };

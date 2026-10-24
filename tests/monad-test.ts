@@ -232,3 +232,23 @@ for (const [name, source, expected] of [
     const actual = run(source);
     if (actual.join("\n") !== expected.join("\n")) throw new Error(`${actual} != ${expected}`);
 });
+
+// A choice of values of one monad holds either value (f is one, a a union);
+// >>= keeps its monad: f a -> (a -> f b) -> f b, for every choice k gives.
+const unknownTime = 'import ["option","time"]\nt <- currentTime\n';
+Deno.test("monads: a choice of one monad's values binds as that monad", () => {
+    const output = run(unknownTime + [
+        'm = t > 0 ? Some 1 : Some "a"', 'print (m >>= y -> Some (to String y ++ "!"))',
+        'k x = x > 0 ? Some 1 : Some "neg"', "print (Some 1 >>= k >>= y -> Some (to String y))",
+        "k2 x = x > 0 ? Some x : None", "print (Some -1 >>= k2)",
+    ].join("\n"));
+    if (output.join("|") !== 'Some "1!"|Some "1"|None') throw new Error(output.join("|"));
+});
+for (const [source, text] of [
+    // k may give a list: Some -1 >>= k would leave the Option monad.
+    ["k x = x > 0 ? Some x : [x]\nprint (Some -1 >>= k)", "cannot use Vect 1 Int where Option Int is required"],
+    // Two monads are no one f.
+    ["m = t > 0 ? Some 1 : [2]\nprint (m >>= x -> return (x + 1))", "not Option Int | Vect 1 Int"],
+    // A statement of an IO block is an action whichever branch is taken.
+    ['act = t > 0 ? print "a" : Some 1\n{\n    act\n    print "b"\n}', "must be an action, not IO [] | Option Int"],
+] as const) Deno.test(`monads: a choice stays in one monad: ${source}`, () => fails(unknownTime + source, text, "type"));
