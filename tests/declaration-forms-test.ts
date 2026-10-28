@@ -67,15 +67,20 @@ for (const [source, message] of [
 Deno.test("a type name bound to a pattern lambda is a lambda too", () => {
     if (run("Maker = _ -> Int\nmake ((Maker) k) = k []\nmake (_ -> 7)") !== "7") throw new Error("Maker");
 });
-// A left side that is neither a name to define nor a pattern says so; a
-// capitalized one with a non-name parameter is a pattern, not a type alias.
+// A left side that is neither a name to define nor a pattern says so.
 for (const [source, message] of [
     ["1 1 = 1", "`1 1` is neither a name to define nor a pattern"],
     ["[1] 0 = 1", "`[1] 0` is neither a name to define nor a pattern"],
-    ["Some 1 = Some 1", "unbound variable 'Some'"],
 ]) Deno.test(`a binding's left side: ${JSON.stringify(source)}`, () => {
     const actual = failure(source);
     if (!actual.includes(message)) throw new Error(actual);
+});
+// A capitalized name decides: an existing constructor's is a pattern, any
+// other one's a definition, whatever its parameters; its adjacent clauses are
+// one definition.
+Deno.test("a new capitalized name with pattern parameters is a definition", () => {
+    const pairs = "Pairs Z a = []\nPairs (S k) a = a :: a :: Pairs k a\nPairs 2 Int";
+    if (run(pairs) !== "[Int,Int,Int,Int]") throw new Error(run(pairs));
 });
 Deno.test("a constructor pattern with a literal binds as a pattern", () => {
     if (run('import "option"\nSome 1 = Some 1\nSome x = Some 2\nx') !== "2") throw new Error("Some 1");

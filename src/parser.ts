@@ -26,7 +26,7 @@ import { lex, OPERATOR_CHARS } from "./lexer.ts";
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { APNError, tokLen } from "./errors.ts";
 import type { Expr, Pattern, TopLevel, BinOp } from "./ast.ts";
-import type { Type, Value, Env } from "./types.ts";
+import type { DefClause, Type, Value, Env } from "./types.ts";
 import type { Token } from "./lexer.ts";
 import { charLiteral, itemsText, stringLiteral } from "./separators.ts";
 
@@ -1097,7 +1097,8 @@ class Parser {
                             } else if (this.isPatBinding()) {
                                 stmts.push(this.parsePatBinding());
                             } else {
-                                stmts.push(this.isDef() ? this.parseBlockDef() : this.tryItemAssign() ?? this.parseDelimitedExpr());
+                                if (this.isDef()) joinClauses(stmts, this.parseBlockDef());
+                                else stmts.push(this.tryItemAssign() ?? this.parseDelimitedExpr());
                             }
                         }
                     }
@@ -1467,14 +1468,14 @@ class Parser {
         if (!this.startsPatBinding()) return false;
         const t = this.peek();
         // A built-in type name cannot be redefined, so Int x = 1 is a typed binding.
-        // A capitalized name not known as a constructor starts a type alias,
-        // unless what follows it is not parameter names (Some 1 = ...).
+        // A capitalized name not known as a constructor starts a definition,
+        // whatever its parameters (Vect Z a = []); one the parser cannot see
+        // (an imported Some) is decided when it runs (evalDef).
         const unknown = t.k === "ident" && !declaredCtors.has(t.v) && !TYPE_NAMES.includes(t.v) && !(this.peek(1).k === "sym" && ((this.peek(1) as { v: string }).v === "." || isConstructorOperator((this.peek(1) as { v: string }).v)));
-        if (unknown && !/^[A-Z]/.test(t.v)) return false;
+        if (unknown) return false;
         const save = this.i;
         try {
             const p = this.parseConsPattern();
-            if (unknown && !(p.p === "constr" && p.args.some(a => a.p !== "var"))) return false;
             if (p.p === "var") return false;
             // A typed binding names one value: Int x = 1.
             if (t.k === "ident" && TYPE_NAMES.includes(t.v) && !declaredCtors.has(t.v) && !(p.p === "constr" && p.args.length === 1)) return false;
@@ -1671,7 +1672,7 @@ class Parser {
     }
 
     // A definition inside a `{ }` block (a statement, not a value expression).
-    parseBlockDef(): Expr {
+    parseBlockDef(): Extract<Expr, { t: "stmDef" }> {
         const d = this.parseDefStatement();
         return { t: "stmDef", name: d.name, clauses: d.clauses };
     }
@@ -1977,7 +1978,7 @@ class Parser {
                     if (this.isDef()) {
                         const declaration = this.parseDefStatement();
                         if (TYPE_NAMES.includes(declaration.name)) throw new Error("Parser: built-in type names cannot be reassigned");
-                        out.push({ t: "def", ...declaration });
+                        joinClauses(out, { t: "def", ...declaration });
                         continue;
                     }
                     const e = this.parseExpr();
@@ -2017,6 +2018,15 @@ class Parser {
         }
         return out;
     }
+}
+
+// Adjacent clauses of one capitalized name are one definition (Vect Z a = [],
+// then Vect (S k) a = ...): once it is defined, the name is a constructor, and
+// a later Name x = v destructures.
+function joinClauses<T extends { t: string }>(statements: T[], definition: T & { name: string; clauses: DefClause[] }): void {
+    const last = statements[statements.length - 1] as { t: string; name?: string; clauses?: DefClause[] } | undefined;
+    if (/^[A-Z]/.test(definition.name) && last?.t === definition.t && last.name === definition.name) last.clauses!.push(...definition.clauses);
+    else statements.push(definition);
 }
 
 // Constructors declared via capitalized bindings. This is what makes an Uppercase LHS with

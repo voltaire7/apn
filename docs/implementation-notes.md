@@ -396,6 +396,15 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
   pattern scores above the base's.
   Arithmetic on nullary-family ordinals returns ordinary numbers via
   `arithmeticValue`.
+- A capitalized function is a `type` value with `alias`: its clauses as a
+  `clauseFn` (`run`), so choosing among them is a function's; `construct`
+  applies it and makes a non-type result the constructor's (fields under
+  `alias.family`, one named family per base in `alias.named`, so equality and
+  conversion see one family). The checker's `construct` mirrors it (variant
+  types with `fields`, printed by name alone); `constructed` is the type a
+  pattern of it takes. The parser joins adjacent clauses (`joinClauses`);
+  whether a left side destructures is decided where the scope is known
+  (`evalDef`, `defineClauses`). Tests: `tests/constructor-function-test.ts`.
 - `src/resource-scope.ts` implements `bracket` and read-only `withFile`.
   Cleanup runs in `finally`; enforce `withFile` handle lifetime even if a
   handle is stashed externally.

@@ -421,6 +421,44 @@ is expected, it reads as the function type it spells: after
 `Handler = a -> Int`, `run ((Handler) h) = h 1` accepts functions returning
 an `Int`.
 
+## Constructor functions
+
+A capitalized function makes the values of its own type. Applied to all its
+parameters, it runs its clauses. A type they give is the application, as for
+`Sized n = Vect n Int` above; any other value becomes the function's own:
+
+```apn
+Rect w h = [Float w, Float h]                   # two parameters: two fields
+Percent x = Float x > 100 ? 100.0 : Float x     # one: the value it gives, named
+
+r = Rect 3 4                # Rect 3.0 4.0; typeOf r is Rect
+area (Rect w h) = w * h     # area r is 12.0
+map (Rect 1) [2,3]          # [Rect 1.0 2.0, Rect 1.0 3.0]
+Percent 150                 # Percent 100.0
+Percent 50 + 1              # Percent 51.0
+```
+
+With several parameters, the body's list is only the layout, one item per
+parameter: a `Rect` is not a list (`Rect 3 4 ++ [5]` is an error). With one,
+the value is named as a [named subtype](type-and-resource-rules.md#named-subtypes)
+is: `Percent 50` is a Float wherever one is accepted, and `(Percent p)` binds
+it. The body is the constructor's logic: it runs when a value is built, never
+in a pattern.
+
+The name on the left decides what a capitalized left side is. An existing
+constructor's (`Some`, or `Rect` once defined) is a pattern, so a later
+`Rect w h = r` takes `r` apart; any other name's is a definition, whatever its
+parameters. Adjacent clauses of one name are one definition:
+
+```apn
+Pairs Z a = []
+Pairs (S k) a = a :: a :: Pairs k a
+Pairs 2 Int                 # [Int,Int,Int,Int]
+```
+
+The run chooses among clauses with patterns; the checker leaves their result
+to it.
+
 ## Variants, parameters, and distinct wrappers
 
 A `|` distinguishes a constructor declaration from a type alias. On one line,
@@ -468,10 +506,8 @@ specialized payload contract. An unrelated outer value falls through to the
 next clause. A deferred payload failure is a runtime error when demanded, not
 an invitation to rerun another clause.
 
-Fresh capitalized bindings define aliases; existing value constructor names on
-the LHS destructure and cannot be reassigned as aliases or unrelated constructors.
-An alias's parameters are lowercase names, so a capitalized left side with any
-other (`Some 1 = x`, `Pair [a,b] c = x`) is always a pattern.
+Existing value constructor names on the left destructure and cannot be
+redefined (see [constructor functions](#constructor-functions)).
 An unspecialized parent pattern `(Option _ value)` still binds the whole variant.
 A constructor pattern `(Some value)` extracts its field. Explicitly declared
 same-name legacy wrappers remain supported (`Box a = | Box a`), but the shared

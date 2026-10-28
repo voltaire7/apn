@@ -64,12 +64,15 @@ type Ty =
     // applied: how many of a family's arguments are given (Pair a, Vec 2).
     | { k: "type"; value: Ty; chosen?: boolean; given?: Map<number, Known>; applied?: number }
     | { k: "factory"; args: Entry[] }
-    | { k: "alias"; params: string[]; body: Expr; scope: Scope; args: Entry[] }
+    // A capitalized function (see construct); clauses: when it has patterns
+    // or several clauses, chosen by the run.
+    | { k: "alias"; name: string; params: string[]; body: Expr; scope: Scope; args: Entry[]; clauses?: { params: Pattern[]; body: Expr }[] }
     // indexed: a family whose constructors say what they make (Vec n a), so
     // an argument may be a value (Vec 2 Int); values decide those, not types.
     // checks: what is still to be checked of the values it holds, as a
     // function's are (Handler (s -> s ++ "!") checks s ++ "!" once a is known).
-    | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty; indexed?: boolean; checks?: Ty[] }
+    // fields: a capitalized function's value (Rect 3 4), its args the fields' types.
+    | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty; indexed?: boolean; checks?: Ty[]; fields?: boolean }
     // f a: a type variable applied to types, as written ((a -> b) -> f a -> f b).
     // Its head, once known, is a ctor: a type missing its first parameters
     // (List, Option, Result _ e for f a; Result for f a e), so f a maps the
@@ -485,6 +488,7 @@ function text(
             // An undecided return: m T, for the monad a context will name.
             case "variant":
                 if (isPending(t)) return `m ${argument(show(t.args[0]))}`;
+                if (t.fields) return t.name;
                 return t.name + t.args.map((x) => " " + argument(show(x))).join("");
             case "apply":
                 return [resolve(t.head).k === "var" ? name(resolve(t.head), "fghm") : argument(show(t.head)),
@@ -1735,6 +1739,39 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (body.t !== "var" || base?.k !== "atom" || !NAMED_BASES.has(base.name)) return t;
         return { k: "type", value: { k: "variant", name, args: [], base } };
     }
+    // A capitalized function applied to all its parameters, as the run
+    // makes it (Interpreter.construct): a type it gives is the application;
+    // any other value is its own, named by it with one parameter, else one
+    // field per item of the list its body gives. Clauses with patterns are
+    // chosen by the run.
+    function construct(f: Extract<Ty, { k: "alias" }>, args: Entry[], e: Expr): Ty {
+        if (f.clauses) { runtimeChecks++; return explicitDynamic; }
+        const scope = new Map(f.scope);
+        f.params.forEach((name, i) => scope.set(name, { ...args[i], mono: true }));
+        const t = infer(f.body, scope), r = resolve(t);
+        if (r.k === "type" || r.k === "dynamic") return t;
+        if (args.length === 1) {
+            if (r.k === "atom" && NAMED_BASES.has(r.name)) return { k: "variant", name: f.name, args: [], base: r };
+            if (r.k === "var" || r.k === "union") { runtimeChecks++; return explicitDynamic; }
+            return { k: "variant", name: f.name, args: [t], fields: true };
+        }
+        if (r.k === "list" && r.items) {
+            if (r.items.length === args.length) return { k: "variant", name: f.name, args: r.items, fields: true };
+        } else if (r.k === "list") {
+            runtimeChecks++;
+            return { k: "variant", name: f.name, args: args.map(() => r.element), fields: true };
+        } else if (r.k === "var") { runtimeChecks++; return explicitDynamic; }
+        return problem(`${f.name} has ${args.length} fields, so its body must give a list of ${args.length} items`, e,
+            `${f.name} ${f.params.join(" ")} = [${f.params.join(", ")}] lays them out in order`);
+    }
+    // What a capitalized function makes from any arguments: the type a pattern
+    // of it takes ((Rect w h) a Rect, its fields' types fresh where they vary).
+    function constructed(f: Extract<Ty, { k: "alias" }>, e: Expr): Ty {
+        const args = f.params.map((): Entry => ({ type: variable() }));
+        let t: Ty = explicitDynamic;
+        if (!f.clauses) succeeds(() => { t = construct(f, args, e); });
+        return t;
+    }
     // A function type with its result after these parameters left open.
     function withoutResult(t: Ty, arity: number): Ty {
         const x = resolve(t);
@@ -2025,6 +2062,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     firstUnbound = { expr: e, name: p.tag, inPattern: true,
                         hint: module ? `add \`import "${module}"\` to use \`${p.tag}\`` : near ? `did you mean '${near}'?`
                             : `declare a type with \`${p.tag}\` first${p.tag === "Nil" || p.tag === "Cons" ? "; a list's patterns are `[]` and `(x :: xs)`" : ""}` };
+                }
+                // A capitalized function's value, taken apart: (Rect w h) binds
+                // its fields, (Percent p) its value, as a named one's (Money m).
+                if (t.k === "alias") {
+                    const made = resolve(constructed(t, e));
+                    if (made.k !== "variant") { p.args.forEach(x => bind(x, variable(), scope, e, bound)); return; }
+                    if (p.args.length !== t.params.length) problem(`${p.tag} has ${t.params.length} field${t.params.length === 1 ? "" : "s"}`, e);
+                    unify(made, expected, e);
+                    const parts = made.base ? [made.base] : made.args;
+                    p.args.forEach((x, n) => bind(x, parts[n] ? made.base ? untypedPayload(parts[n]) : parts[n] : variable(), scope, e, bound));
+                    return;
                 }
                 // One more pattern than a type's parameters is a value of the type
                 // (see typed), wherever the pattern is bound.
@@ -2599,9 +2647,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (f.k === "alias") {
             const args = [...f.args, argument];
             if (args.length < f.params.length) return { ...f, args };
-            const scope = new Map(f.scope);
-            f.params.forEach((name, i) => scope.set(name, { ...args[i], mono: true }));
-            return infer(f.body, scope);
+            return construct(f, args, e);
         }
         if (f.k === "type") {
             // A type chosen at runtime: the value must fit one of its choices,
@@ -5874,23 +5920,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function defineClauses(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
         // An existing constructor destructures (Some v = Some 123), also one
         // imported, which the parser cannot see; as at runtime (evalDef).
-        if (/^[A-Z]/.test(name) && clauses.length === 1 && isConstructor(scope.get(name))) {
-            infer({ t: "patDef", pattern: { p: "constr", tag: name, args: clauses[0].params }, value: clauses[0].body }, scope);
+        const existing = scope.get(name);
+        if (/^[A-Z]/.test(name) && (isConstructor(existing) || existing && resolve(existing.type).k === "alias")) {
+            for (const c of clauses) infer({ t: "patDef", pattern: { p: "constr", tag: name, args: c.params }, value: c.body }, scope);
             return;
         }
-        if (/^[A-Z]/.test(name) && clauses[0].params.every((p) => p.p === "var")) {
-            const c = clauses[0];
-            scope.set(name, {
-                type: c.params.length
-                    ? {
-                        k: "alias",
-                        params: c.params.map((p) => (p as Extract<Pattern, { p: "var" }>).name),
-                        body: c.body,
-                        scope: new Map(scope),
-                        args: [],
-                    }
-                    : namedSubtype(name, c.body, infer(c.body, scope)),
-            });
+        if (/^[A-Z]/.test(name) && clauses[0].params.length) {
+            const [c] = clauses, simple = clauses.length === 1 && c.params.every(p => p.p === "var");
+            scope.set(name, { type: {
+                k: "alias", name, params: c.params.map((p, n) => p.p === "var" ? p.name : `$${n}`), body: c.body,
+                scope: new Map(scope), args: [], ...simple ? {} : { clauses },
+            } });
+            return;
+        }
+        if (/^[A-Z]/.test(name)) {
+            scope.set(name, { type: namedSubtype(name, clauses[0].body, infer(clauses[0].body, scope)) });
             return;
         }
         defineBinding(name, clauses, scope, location, scope.get(name));

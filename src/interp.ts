@@ -507,16 +507,22 @@ export class Interpreter {
 
     evalDef(name: string, clauses: DefClause[]): Value {
         if (/^[A-Z]/.test(name)) {
-            const existing = this.env.get(name);
-            if (existing && ((existing.kind === "native" && existing.tag) || existing.kind === "variant")) {
-                return this.evalPatBinding({ pattern: { p: "constr", tag: name, args: clauses[0].params }, value: clauses[0].body });
+            // An existing constructor destructures (Some x = Some 1); each
+            // clause is a binding of its own.
+            if (this.isConstructorName(name)) {
+                let last: Value = { kind: "list", v: [] };
+                for (const clause of clauses) last = this.evalPatBinding({ pattern: { p: "constr", tag: name, args: clause.params }, value: clause.body });
+                return last;
             }
-            if (clauses.length !== 1 || clauses[0].params.some(p => p.p !== "var")) throw new APNError("runtime", "type aliases require distinct type-parameter names");
-            const parameters = clauses[0].params.map(p => (p as Extract<Pattern, { p: "var" }>).name);
-            if (new Set(parameters).size !== parameters.length) throw new APNError("runtime", "duplicate type parameter");
+            const arity = clauses[0].params.length;
+            if (clauses.some(c => c.params.length !== arity)) throw new APNError("runtime", `every clause of ${name} takes ${arity} parameters`);
+            if (arity && clauses.length > 1 && !clauses[0].params.length) throw new APNError("runtime", `${name} is defined twice`);
             const scope = new Env(this.env);
-            const alias: Value = parameters.length
-                ? { kind: "type", name, alias: { parameters, body: clauses[0].body, env: scope } }
+            // A capitalized function (Rect w h = [Float w, Float h]): its
+            // clauses run as a function's do; see construct for what it makes.
+            const alias: Value = arity
+                ? { kind: "type", name, alias: { parameters: clauses[0].params.map((p, n) => p.p === "var" ? p.name : `$${n}`),
+                    run: { kind: "clauseFn", name, clauses, arity, env: scope, applied: [] }, family: { name }, named: new Map() } }
                 : this.defer(() => {
                     const caller = this.env;
                     this.env = scope;
@@ -1968,6 +1974,10 @@ export class Interpreter {
                     try { return this.constructType("Dynamic", this.reference(arg)); }
                     finally { this.dynamicDepth--; }
                 }
+                if (f.alias) {
+                    const args = [...f.arguments ?? [], arg];
+                    return args.length < f.alias.parameters.length ? { ...f, arguments: args } : this.construct(f, args);
+                }
                 let value = this.demand(arg);
                 // A type variable applied to a type: f a, any type holding a.
                 if (f.variable && f.name !== "_" && this.isTypeValue(value)) return { ...f, arguments: [...f.arguments ?? [], value] };
@@ -1979,25 +1989,12 @@ export class Interpreter {
                     if (args.length === 1 && !this.isTypeValue(value)) throw new APNError("runtime", "Vect element must be a type");
                     return { ...f, arguments: [...args, value] };
                 }
-                const parameters = f.alias?.parameters ?? f.family?.parameters ?? [];
+                const parameters = f.family?.parameters ?? [];
                 // An indexed family takes values as arguments too (Vec 2 Int).
                 const indexed = !!f.family?.results && !(value.kind === "variant" && value.family === f.family);
-                if ((f.arguments?.length ?? 0) < parameters.length && (f.alias || indexed || this.isTypeValue(value))) {
-                    const arguments_ = [...f.arguments ?? [], isNumeric(value) ? numericPayload(value) : value];
-                    if (f.alias && arguments_.length === parameters.length) {
-                        const scope = new Env(f.alias.env);
-                        parameters.forEach((name, index) => scope.setLocal(name, arguments_[index]));
-                        const caller = this.env;
-                        this.env = scope;
-                        try {
-                            const result = this.reference(this.eval(f.alias.body));
-                            if (!this.isTypeValue(result)) throw new APNError("runtime", `${f.name} must return a type`);
-                            return result;
-                        } finally { this.env = caller; }
-                    }
-                    return { ...f, arguments: arguments_ };
+                if ((f.arguments?.length ?? 0) < parameters.length && (indexed || this.isTypeValue(value))) {
+                    return { ...f, arguments: [...f.arguments ?? [], isNumeric(value) ? numericPayload(value) : value] };
                 }
-                if (f.alias) throw new APNError("runtime", `${f.name} expects ${parameters.length} arguments`);
                 if (!f.family && ["Float", "Float32", "Float64"].includes(f.name)) {
                     if (!isNumeric(value)) throw new APNError("runtime", `${f.name} expects a number`);
                     return castNumeric(f.name, value, true);
@@ -4454,6 +4451,43 @@ export class Interpreter {
             if (!pattern || !this.matchPattern(pattern, given.arguments[n], binds)) return false;
         }
         return this.matchPattern(p.value, given.arguments[pieces.length], binds);
+    }
+
+    // A capitalized function applied to all its parameters runs its clauses. A
+    // type it gives is the application (V n = Vect n Int: V 3 is Vect 3 Int);
+    // any other value is made the function's own: with one parameter, the
+    // value named by it (Percent 150 is Percent 100.0, still a Float); with
+    // several, one field each from the list the body gives (Rect 3 4 is
+    // Rect 3.0 4.0). The list is only its layout: a Rect is not a list.
+    private construct(f: Extract<Value, { kind: "type" }>, args: Value[]): Value {
+        const alias = f.alias!;
+        let result: Value = alias.run;
+        for (const arg of args) result = this.apply(result, arg);
+        result = this.reference(this.demand(result));
+        if (this.isTypeValue(result)) return result;
+        if (args.length === 1) {
+            const value = this.dataValue(result);
+            const base = value.kind === "variant" ? undefined : this.reference(this.callNative("typeOf", [value]));
+            if (base?.kind !== "type" || !NAMED_BASES.has(base.name) || base.family || base.arguments?.length) {
+                return { kind: "variant", tag: f.name, v: [result], family: alias.family };
+            }
+            let family = alias.named.get(base.name);
+            if (!family) alias.named.set(base.name, family = { name: f.name, base });
+            return this.conform({ kind: "type", name: f.name, family }, value);
+        }
+        const layout = this.dataValue(result);
+        const items = this.isList(layout) ? [...this.elements(layout)] : undefined;
+        if (items?.length !== args.length) {
+            throw new APNError("runtime", `${f.name} has ${args.length} fields, so its body must give a list of ${args.length} items`,
+                { hint: `${f.name} ${alias.parameters.join(" ")} = [${alias.parameters.join(", ")}] lays them out in order` });
+        }
+        return { kind: "variant", tag: f.name, v: items, family: alias.family };
+    }
+    // A constructor the name is bound to here: a variant's, or a capitalized
+    // function's (a later Rect w h = r destructures).
+    private isConstructorName(name: string): boolean {
+        const bound = this.env.get(name);
+        return !!bound && ((bound.kind === "native" && !!bound.tag) || bound.kind === "variant" || bound.kind === "type" && !!bound.alias);
     }
 
     // How many parameters the type a name is bound to takes: List a one,

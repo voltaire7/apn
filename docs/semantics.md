@@ -252,8 +252,9 @@ run when the value is known (`1 = 2`, `None = Some 1`), otherwise when the
 binding runs. A bare `[x,y]`
 pattern also matches a record, selecting the fields named `x` and `y` (extra
 fields are ignored), in bindings, function parameters, and `match` alternatives. A new capitalized name on the
-left binds a type alias; see [templates and type aliases](templates-and-types.md)
-for aliases and variant declarations. An alias of a scalar type (`Money = Float`, `UserId = Int`)
+left defines a type alias or a constructor function; see
+[templates and type aliases](templates-and-types.md#constructor-functions)
+for those and variant declarations. An alias of a scalar type (`Money = Float`, `UserId = Int`)
 names a subtype: `Money 1.2` keeps its name, is accepted wherever a Float is,
 and selects a `(Money x)` clause over a `(Float x)` one; arithmetic with plain
 numbers keeps the name, and two different names do not mix. See
