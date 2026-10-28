@@ -42,7 +42,7 @@ export function fixityOf(op: string): Fixity {
 }
 // Tokens that are syntax, not operators, though made of operator characters.
 // ":" writes a record field and separates a ternary; "::" is cons.
-const RESERVED_OPERATORS = new Set(["=", "|", ":", "->", "<-", "!"]);
+const RESERVED_OPERATORS = new Set(["=", ":=", "|", ":", "->", "<-", "!"]);
 // The intrinsics behind the prelude's operators (lib/prelude.apn binds
 // each symbol to one), keyed by name.
 export const PRIMITIVE_OPERATORS = new Map<string, string>([
@@ -1628,7 +1628,7 @@ class Parser {
             if (t.k !== "ident") return false;
             // collect param patterns; a param must be a self-delimited pattern
             while (this.startsParam(this.peek()) || this.negativeLiteral()) this.parseConsPattern();
-            return this.isSym("=");
+            return this.isSym("=") || /^[A-Z]/.test(t.v) && this.isSym(":=");
         } catch {
             return false;
         } finally {
@@ -1688,13 +1688,15 @@ class Parser {
     }
 
     // Parse  name p1 p2 = body  (isDef() must already have returned true).
-    parseDefStatement(): { name: string; clauses: { params: Pattern[]; body: Expr; guard?: Expr }[] } {
+    parseDefStatement(): { name: string; clauses: DefClause[] } {
         const name = (this.next() as { v: string }).v;
         const params: Pattern[] = [];
         // Haskell-style params are PATTERNS:  f [x, y] = ..., f (x :: rest) = ...
         while (this.startsParam(this.peek()) || this.negativeLiteral()) params.push(this.parameter());
-        const equals = this.next(); // =
-        let body = this.parseDefBody();
+        const equals = this.next() as { v: string; pos: number }; // = or :=
+        const constructs = equals.v === ":=";
+        let body = this.parseDefBody(equals.v);
+        if (constructs) return { name, clauses: [{ params, body, constructs }] };
         // f = Int x -> ... is the curried spelling of f (Int x) = ...: the
         // same clause, so another one overloads it the same way.
         let guard: Expr | undefined;
@@ -1978,7 +1980,7 @@ class Parser {
                     if (this.isDef()) {
                         const declaration = this.parseDefStatement();
                         if (TYPE_NAMES.includes(declaration.name)) throw new Error("Parser: built-in type names cannot be reassigned");
-                        joinClauses(out, { t: "def", ...declaration });
+                        out.push({ t: "def", ...declaration });
                         continue;
                     }
                     const e = this.parseExpr();
@@ -2020,12 +2022,11 @@ class Parser {
     }
 }
 
-// Adjacent clauses of one capitalized name are one definition (Vect Z a = [],
-// then Vect (S k) a = ...): once it is defined, the name is a constructor, and
-// a later Name x = v destructures.
+// A block's statement, joined to the definition before it when it continues
+// it (see continues).
 function joinClauses<T extends { t: string }>(statements: T[], definition: T & { name: string; clauses: DefClause[] }): void {
-    const last = statements[statements.length - 1] as { t: string; name?: string; clauses?: DefClause[] } | undefined;
-    if (/^[A-Z]/.test(definition.name) && last?.t === definition.t && last.name === definition.name) last.clauses!.push(...definition.clauses);
+    const last = statements[statements.length - 1] as unknown as { t: string; name: string; clauses: DefClause[] } | undefined;
+    if (last?.t === definition.t && continues(last, definition)) last.clauses.push(...definition.clauses);
     else statements.push(definition);
 }
 
@@ -2139,25 +2140,21 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
     }
 }
 
-// Merge consecutive Haskell-style clauses of the same function:
+// Consecutive Haskell-style clauses of the same function are one definition:
 //   len [] = 0
 //   len (x :: rest) = 1 + len rest
-// becomes one def with two clauses. Only same-name defs that carry parameters
-// (params.length >= 1) with equal arity are grouped; value defs stay separate
-// (consecutive re-bindings still behave as last-wins aliases, as before).
+// Only same-name defs that carry parameters with equal arity, written alike
+// (both with = or both with :=), are grouped; value defs stay separate
+// (consecutive re-bindings still behave as last-wins aliases).
+function continues(last: { name: string; clauses: DefClause[] }, next: { name: string; clauses: DefClause[] }): boolean {
+    const [a, b] = [last.clauses[0], next.clauses[0]];
+    return last.name === next.name && !!b?.params.length && a.params.length === b.params.length && !a.constructs === !b.constructs;
+}
 export function groupClauses(program: TopLevel[]): TopLevel[] {
     const result: TopLevel[] = [];
     for (const tl of program) {
-        if (tl.t === "def" && tl.clauses[0] && tl.clauses[0].params.length >= 1) {
-            const last = result[result.length - 1];
-            if (last && last.t === "def" &&
-                    last.name === tl.name &&
-                    last.clauses[0].params.length === tl.clauses[0].params.length) {
-                last.clauses.push(...tl.clauses);
-                continue;
-            }
-        }
-        result.push(tl);
+        if (tl.t === "def") joinClauses(result, tl);
+        else result.push(tl);
     }
     return result;
 }
@@ -2294,7 +2291,7 @@ function bareSource(e: Expr, where: Place): string {
             return e.style === "(" ? `(${body})` : e.stmts.length ? `{ ${body} }` : "{}";
         }
         // A binding (a block's statement or a list's item): f n = ..., [a,b] = xs.
-        case "stmDef": return e.clauses.map(c => [e.name, ...c.params.map(patternSource)].join(" ") + ` = ${of(c.body)}`).join("; ");
+        case "stmDef": return e.clauses.map(c => [e.name, ...c.params.map(patternSource)].join(" ") + ` ${c.constructs ? ":=" : "="} ${of(c.body)}`).join("; ");
         case "patDef":
             if (e.value.t === "setItem" || e.value.t === "setFields") return of(e.value);
             return `${patternSource(e.pattern)} ${e.eager ? "<-" : "="} ${of(e.value)}`;

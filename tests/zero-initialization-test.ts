@@ -12,7 +12,7 @@ for (const [source, expected] of [
     ['[isType Int Int, isType Bool Bool, isType Type Int]', '[false,false,true]'],
     ['[typeOf Int, typeOf (Int 1), typeOf (Float 1), typeOf (Int32 1)]', '[Type,Int,Float,Int32]'],
     ['((Int -> Float) identity) <- return (x -> x)\n[Type Int, Type [Int], Type [x: Float], typeOf identity]', '[Int, [Int], [x: Float], Int -> Float]'],
-    ['Count = Int\n[Count, Count 3]', '[Count, Count 3]'],
+    ['Count := Int\n[Count, Count 3]', '[Count, Count 3]'],
     ['f (Type t) = t 123\nf Int', '123'],
     ['f (t x) = [t,x]\nf (Int32 7)', '[Int32,7]'],
     ['[Int]', '[Int]'],
@@ -111,7 +111,7 @@ for (const [source, expected] of [
     ['xs = [Int]\nxs 0 = 1\nxs', '[1]'],
     ['xs = [Int,Float]\nxs (-1) = 2\nxs', '[Int,2.0]'],
     ['xs = [Int]\ni = 0\nxs (i + 0) = 1\nxs', '[1]'],
-    ['UserId = Int\nv = [id: UserId]\nv.id = 3\nv', '[id: UserId 3]'],
+    ['UserId := Int\nv = [id: UserId]\nv.id = 3\nv', '[id: UserId 3]'],
     ['((Int -> Int) identity) <- return (x -> x); v = [f: typeOf identity]\nv.f = (+ 1)\nv.f 2', '3'],
 ] as const) Deno.test(`assignment gives a type field a default: ${source}`, () => {
     const actual = result(source);

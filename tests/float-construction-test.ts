@@ -5,7 +5,7 @@ for (const [source, expected] of [
     ['Float32 .1', 'Float32 0.1'],
     ['Float32 (Float .1)', 'Float32 0.1'],
     ['cast Float32 (Float .1)', 'Float32 0.1'],
-    ['F = Float32; F .1', 'F 0.1'],
+    ['F := Float32; F .1', 'F 0.1'],
     ['Float32 .1 + .2', 'Float32 0.3'],
     ['Float32 .1 + Float32 .2', 'Float32 0.3'],
     ['Float 9007199254740993', '9007199254740992.0'],

@@ -64,7 +64,7 @@ const IO_RESULTS: Record<string, string> = {
     entropy: "Int", currentTime: "Int", zoneOffset: "Int",
 };
 
-// Scalar types an alias names a subtype of (Money = Float): not aggregates.
+// Scalar types := names a subtype of (Money := Float): not aggregates.
 const NAMED_BASES = new Set([...NUMERIC_TYPES.filter(t => !["Number", "Real", "Integer", "Exact", "Inexact"].includes(t)), "String", "Bool", "Char"]);
 
 // Builtins that take an undecided value as it is: they show it or pass it on.
@@ -507,9 +507,10 @@ export class Interpreter {
 
     evalDef(name: string, clauses: DefClause[]): Value {
         if (/^[A-Z]/.test(name)) {
-            // An existing constructor destructures (Some x = Some 1); each
-            // clause is a binding of its own.
-            if (this.isConstructorName(name)) {
+            // With =, an existing constructor destructures (Some x = Some 1);
+            // each clause is a binding of its own. := always defines one.
+            const constructs = !!clauses[0].constructs;
+            if (!constructs && this.isConstructorName(name)) {
                 let last: Value = { kind: "list", v: [] };
                 for (const clause of clauses) last = this.evalPatBinding({ pattern: { p: "constr", tag: name, args: clause.params }, value: clause.body });
                 return last;
@@ -518,27 +519,30 @@ export class Interpreter {
             if (clauses.some(c => c.params.length !== arity)) throw new APNError("runtime", `every clause of ${name} takes ${arity} parameters`);
             if (arity && clauses.length > 1 && !clauses[0].params.length) throw new APNError("runtime", `${name} is defined twice`);
             const scope = new Env(this.env);
-            // A capitalized function (Rect w h = [Float w, Float h]): its
-            // clauses run as a function's do; see construct for what it makes.
+            // A capitalized function (Pairs n a = Vect (n * 2) a, or a
+            // constructor, Rect w h := [Float w, Float h]): its clauses run
+            // as a function's do; see construct for what a constructor makes.
             const alias: Value = arity
                 ? { kind: "type", name, alias: { parameters: clauses[0].params.map((p, n) => p.p === "var" ? p.name : `$${n}`),
-                    run: { kind: "clauseFn", name, clauses, arity, env: scope, applied: [] }, family: { name }, named: new Map() } }
+                    run: { kind: "clauseFn", name, clauses, arity, env: scope, applied: [] }, constructs, family: { name }, named: new Map() } }
                 : this.defer(() => {
                     const caller = this.env;
                     this.env = scope;
                     try {
-                        const value = this.reference(this.eval(clauses[0].body));
-                        // A lambda is a value: applied, it runs (Sized 2 is Vect 2 Int);
+                        // = names the value itself: Count = Int is Int. A lambda
+                        // is a value: applied, it runs (Sized 2 is Vect 2 Int);
                         // where a type is expected, it reads as a function type.
-                        if (!this.isTypeValue(value) && value.kind !== "closure" && value.kind !== "clauseFn") throw new APNError("runtime", `${name} must alias a type; use | to declare constructors`);
-                        // An alias of a scalar type names a subtype: Money = Float.
-                        // A Money is a Float wherever one is accepted, but keeps its
-                        // name, and (Money x) accepts only Money values.
+                        const value = this.reference(this.eval(clauses[0].body));
+                        if (!constructs) return value;
+                        // := names a subtype: Money := Float. A Money is a Float
+                        // wherever one is accepted, but keeps its name, and
+                        // (Money x) accepts only Money values.
                         if (value.kind === "type" && NAMED_BASES.has(value.name) && !value.family && !value.alias && !value.arguments?.length && !value.variable) {
                             const family = { name, base: value };
                             return { kind: "type", name, family };
                         }
-                        return value;
+                        throw new APNError("runtime", `${name} := needs a scalar type to name, such as Int or Float`,
+                            { hint: `${name} = ... names the value itself` });
                     } finally { this.env = caller; }
                 });
             scope.setLocal(name, alias);
@@ -4453,18 +4457,19 @@ export class Interpreter {
         return this.matchPattern(p.value, given.arguments[pieces.length], binds);
     }
 
-    // A capitalized function applied to all its parameters runs its clauses. A
-    // type it gives is the application (V n = Vect n Int: V 3 is Vect 3 Int);
-    // any other value is made the function's own: with one parameter, the
-    // value named by it (Percent 150 is Percent 100.0, still a Float); with
-    // several, one field each from the list the body gives (Rect 3 4 is
-    // Rect 3.0 4.0). The list is only its layout: a Rect is not a list.
+    // A capitalized function applied to all its parameters runs its clauses.
+    // Written with =, it gives what they give (V n = Vect n Int: V 3 is
+    // Vect 3 Int). A constructor (:=) makes the value its own: with one
+    // parameter, the value named by it (Percent 150 is Percent 100.0, still a
+    // Float); with several, one field each from the list the body gives
+    // (Rect 3 4 is Rect 3.0 4.0). The list is only its layout: a Rect is not
+    // a list.
     private construct(f: Extract<Value, { kind: "type" }>, args: Value[]): Value {
         const alias = f.alias!;
         let result: Value = alias.run;
         for (const arg of args) result = this.apply(result, arg);
         result = this.reference(this.demand(result));
-        if (this.isTypeValue(result)) return result;
+        if (!alias.constructs) return result;
         if (args.length === 1) {
             const value = this.dataValue(result);
             const base = value.kind === "variant" ? undefined : this.reference(this.callNative("typeOf", [value]));
@@ -4487,7 +4492,7 @@ export class Interpreter {
     // function's (a later Rect w h = r destructures).
     private isConstructorName(name: string): boolean {
         const bound = this.env.get(name);
-        return !!bound && ((bound.kind === "native" && !!bound.tag) || bound.kind === "variant" || bound.kind === "type" && !!bound.alias);
+        return !!bound && ((bound.kind === "native" && !!bound.tag) || bound.kind === "variant" || bound.kind === "type" && !!bound.alias?.constructs);
     }
 
     // How many parameters the type a name is bound to takes: List a one,

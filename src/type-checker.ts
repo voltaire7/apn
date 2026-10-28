@@ -24,7 +24,7 @@ function isIO(t: Ty): boolean { return t.k === "variant" && t.name === "IO" && t
 const PENDING = "$monad";
 function pendingTy(t: Ty): Ty { return { k: "variant", name: PENDING, args: [t] }; }
 function isPending(t: Ty): boolean { return t.k === "variant" && t.name === PENDING && t.args.length === 1; }
-// Scalar types an alias names a subtype of (Money = Float), as at runtime.
+// Scalar types := names a subtype of (Money := Float), as at runtime.
 const NAMED_BASES = new Set([...NUMERIC_TYPES.filter(t => !["Number", "Real", "Integer", "Exact", "Inexact"].includes(t)), "String", "Bool", "Char"]);
 // A definition that adds an instance instead of binding a name: any
 // definition of a method (map f (Some x) = ..., return = Some).
@@ -66,7 +66,7 @@ type Ty =
     | { k: "factory"; args: Entry[] }
     // A capitalized function (see construct); clauses: when it has patterns
     // or several clauses, chosen by the run.
-    | { k: "alias"; name: string; params: string[]; body: Expr; scope: Scope; args: Entry[]; clauses?: { params: Pattern[]; body: Expr }[] }
+    | { k: "alias"; name: string; params: string[]; body: Expr; scope: Scope; args: Entry[]; constructs?: boolean; clauses?: { params: Pattern[]; body: Expr }[] }
     // indexed: a family whose constructors say what they make (Vec n a), so
     // an argument may be a value (Vec 2 Int); values decide those, not types.
     // checks: what is still to be checked of the values it holds, as a
@@ -1733,10 +1733,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             throw error;
         } finally { choosing--; requirements.length = saved; }
     }
-    // An alias of a scalar type names a subtype (Money = Float), as at runtime.
+    // := of a scalar type names a subtype (Money := Float), as at runtime.
     function namedSubtype(name: string, body: Expr, t: Ty): Ty {
         const type = resolve(t), base = type.k === "type" ? resolve(type.value) : undefined;
-        if (body.t !== "var" || base?.k !== "atom" || !NAMED_BASES.has(base.name)) return t;
+        if (type.k === "dynamic") return t;
+        if (base?.k !== "atom" || !NAMED_BASES.has(base.name)) {
+            return problem(`${name} := needs a scalar type to name, such as Int or Float`, body, `${name} = ... names the value itself`);
+        }
         return { k: "type", value: { k: "variant", name, args: [], base } };
     }
     // A capitalized function applied to all its parameters, as the run
@@ -1749,7 +1752,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const scope = new Map(f.scope);
         f.params.forEach((name, i) => scope.set(name, { ...args[i], mono: true }));
         const t = infer(f.body, scope), r = resolve(t);
-        if (r.k === "type" || r.k === "dynamic") return t;
+        if (!f.constructs || r.k === "dynamic") return t;
         if (args.length === 1) {
             if (r.k === "atom" && NAMED_BASES.has(r.name)) return { k: "variant", name: f.name, args: [], base: r };
             if (r.k === "var" || r.k === "union") { runtimeChecks++; return explicitDynamic; }
@@ -2065,7 +2068,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 // A capitalized function's value, taken apart: (Rect w h) binds
                 // its fields, (Percent p) its value, as a named one's (Money m).
-                if (t.k === "alias") {
+                if (t.k === "alias" && t.constructs) {
                     const made = resolve(constructed(t, e));
                     if (made.k !== "variant") { p.args.forEach(x => bind(x, variable(), scope, e, bound)); return; }
                     if (p.args.length !== t.params.length) problem(`${p.tag} has ${t.params.length} field${t.params.length === 1 ? "" : "s"}`, e);
@@ -5917,11 +5920,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (let x: Ty = t; x.k === "fn"; x = resolve(x.output)) { count++; last = x; }
         if (count && last.k === "fn" && resolve(last.input).k !== "atom") setShape(t, { length: { param: count - 1 } });
     }
-    function defineClauses(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
-        // An existing constructor destructures (Some v = Some 123), also one
-        // imported, which the parser cannot see; as at runtime (evalDef).
-        const existing = scope.get(name);
-        if (/^[A-Z]/.test(name) && (isConstructor(existing) || existing && resolve(existing.type).k === "alias")) {
+    function defineClauses(name: string, clauses: { params: Pattern[]; body: Expr; constructs?: boolean }[], scope: Scope, location: Expr): void {
+        // With =, an existing constructor destructures (Some v = Some 123),
+        // also one imported, which the parser cannot see; as at runtime (evalDef).
+        const existing = scope.get(name), existingType = existing && resolve(existing.type), constructs = !!clauses[0].constructs;
+        if (/^[A-Z]/.test(name) && !constructs && (isConstructor(existing) || existingType?.k === "alias" && existingType.constructs)) {
             for (const c of clauses) infer({ t: "patDef", pattern: { p: "constr", tag: name, args: c.params }, value: c.body }, scope);
             return;
         }
@@ -5929,11 +5932,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const [c] = clauses, simple = clauses.length === 1 && c.params.every(p => p.p === "var");
             scope.set(name, { type: {
                 k: "alias", name, params: c.params.map((p, n) => p.p === "var" ? p.name : `$${n}`), body: c.body,
-                scope: new Map(scope), args: [], ...simple ? {} : { clauses },
+                scope: new Map(scope), args: [], constructs, ...simple ? {} : { clauses },
             } });
             return;
         }
-        if (/^[A-Z]/.test(name)) {
+        if (/^[A-Z]/.test(name) && constructs) {
             scope.set(name, { type: namedSubtype(name, clauses[0].body, infer(clauses[0].body, scope)) });
             return;
         }

@@ -4,12 +4,12 @@ These features use ordinary definitions. There are no new keywords.
 
 ## Named subtypes
 
-An alias of a scalar type (a numeric type, `String`, `Bool` or `Char`) names a
-subtype of it:
+`:=` with a scalar type (a numeric type, `String`, `Bool` or `Char`) names a
+subtype of it; `=` only gives the type another name (`Count = Int` is `Int`):
 
 ```apn
-UserId = Int                # a named subtype of Int
-OrderId = Int
+UserId := Int               # a named subtype of Int
+OrderId := Int
 
 UserId 123                  # UserId 123
 UserId == Int               # false

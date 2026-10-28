@@ -234,8 +234,8 @@ print (map area [Circle 1, Rect 2 3])    # => [3.0,6.0]
 print [safeDiv 1 2, safeDiv 1 0]         # => [Some 1/2, None]
 print (withDefault 0 (safeDiv 1 0))      # => 0
 
-# An alias of a scalar type names a new one, which does not mix with others.
-UserId = Int
+# := names a new type, which does not mix with others; = only names a value.
+UserId := Int
 print (UserId 7)                         # => UserId 7
 
 # Types may depend on values: Vect n a is a list of n elements of type a,

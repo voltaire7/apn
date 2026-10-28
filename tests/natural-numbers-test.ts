@@ -40,8 +40,8 @@ for (const [source, expected] of [
     // (_ x) takes the payload and discards the type.
     ["payload (_ x) = x; payload (Int32 5)", "5"],
     // A base type applied to a named value unwraps it.
-    ["Money = Float; Float $ Money 1.2", "1.2"],
-    ["Money = Float; Cents = Int; Cents (Int (Money 3.0))", "Cents 3"],
+    ["Money := Float; Float $ Money 1.2", "1.2"],
+    ["Money := Float; Cents := Int; Cents (Int (Money 3.0))", "Cents 3"],
 ] as const) {
     Deno.test(`natural numbers: ${source}`, () => {
         const actual = run(source);

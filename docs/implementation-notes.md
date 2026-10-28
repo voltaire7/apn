@@ -390,19 +390,21 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
 
 ## Nominal types and resources
 
-- A capitalized alias of a scalar type (`NAMED_BASES`, runtime and checker)
-  creates a generative `VariantFamily` with base metadata: a named subtype.
+- `:=` with a scalar type (`NAMED_BASES`, runtime and checker) creates a
+  generative `VariantFamily` with base metadata: a named subtype.
   Builtins see its base value (`baseValue`); base patterns unwrap it; its own
   pattern scores above the base's.
   Arithmetic on nullary-family ordinals returns ordinary numbers via
   `arithmeticValue`.
 - A capitalized function is a `type` value with `alias`: its clauses as a
   `clauseFn` (`run`), so choosing among them is a function's; `construct`
-  applies it and makes a non-type result the constructor's (fields under
+  applies it, and for a `:=` one (`DefClause.constructs`, `alias.constructs`)
+  makes the result the constructor's (fields under
   `alias.family`, one named family per base in `alias.named`, so equality and
   conversion see one family). The checker's `construct` mirrors it (variant
   types with `fields`, printed by name alone); `constructed` is the type a
-  pattern of it takes. The parser joins adjacent clauses (`joinClauses`);
+  pattern of it takes. The parser joins adjacent clauses written alike
+  (`continues`);
   whether a left side destructures is decided where the scope is known
   (`evalDef`, `defineClauses`). Tests: `tests/constructor-function-test.ts`.
 - `src/resource-scope.ts` implements `bracket` and read-only `withFile`.

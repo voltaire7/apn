@@ -38,7 +38,7 @@ export type Expr =
     | { t: "range"; lo: bigint; step: bigint; hi: bigint | null }
     | { t: "pipe"; x: Expr; f: Expr }
     | { t: "block"; stmts: Expr[]; style?: "(" | "{" }
-    | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr }[] }
+    | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr; constructs?: boolean }[] }
     | { t: "patDef"; pattern: Pattern; value: Expr; eager?: boolean; update?: { name: string; value: Expr; error?: string } };
 
 export type Pattern =

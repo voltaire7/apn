@@ -21,7 +21,7 @@ for (const [source, expected] of [
     ['xs = [10,20,30,40]\nxs (East + 1) = 99\nxs South', '99'],
     ['[1,2] * (+ East)', '[2,3]'],
     // A named Int is an Int: East joins it as it joins 1.
-    ['UserId = Int\nUserId 1 + East', 'UserId 2'],
+    ['UserId := Int\nUserId 1 + East', 'UserId 2'],
 ] as const) Deno.test(`variant arithmetic: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

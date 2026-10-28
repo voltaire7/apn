@@ -423,13 +423,15 @@ an `Int`.
 
 ## Constructor functions
 
-A capitalized function makes the values of its own type. Applied to all its
-parameters, it runs its clauses. A type they give is the application, as for
-`Sized n = Vect n Int` above; any other value becomes the function's own:
+A capitalized definition with `=` computes: applied, it gives what its body
+gives, a type (`Sized n = Vect n Int`: `Sized 2` is `Vect 2 Int`) or any value,
+and nothing is named by it (`Count = Int` is `Int`). One with `:=` is a
+constructor: it makes the values of its own type.
 
 ```apn
-Rect w h = [Float w, Float h]                   # two parameters: two fields
-Percent x = Float x > 100 ? 100.0 : Float x     # one: the value it gives, named
+Rect w h := [Float w, Float h]                  # two parameters: two fields
+Percent x := Float x > 100 ? 100.0 : Float x    # one: the value it gives, named
+UserId := Int                                   # none: a named subtype
 
 r = Rect 3 4                # Rect 3.0 4.0; typeOf r is Rect
 area (Rect w h) = w * h     # area r is 12.0
@@ -445,10 +447,10 @@ is: `Percent 50` is a Float wherever one is accepted, and `(Percent p)` binds
 it. The body is the constructor's logic: it runs when a value is built, never
 in a pattern.
 
-The name on the left decides what a capitalized left side is. An existing
-constructor's (`Some`, or `Rect` once defined) is a pattern, so a later
-`Rect w h = r` takes `r` apart; any other name's is a definition, whatever its
-parameters. Adjacent clauses of one name are one definition:
+With `=`, a capitalized left side whose name is a constructor (`Some`, or
+`Rect` once defined) is a pattern, so `Rect w h = r` takes `r` apart; any
+other is a definition, whatever its parameters. `:=` always defines.
+Adjacent clauses of one name, written alike, are one definition:
 
 ```apn
 Pairs Z a = []
@@ -516,7 +518,7 @@ So another type's field cannot name it (`Wrap a = | Wrap (Box a)` is an error
 saying so); with `Box a = | MkBox a`, `Wrap (Box a)` describes the field.
 
 Nominal wrappers can use single-constructor variants, or a named subtype
-(`UserId = Int`), which is also accepted as its base; see
+(`UserId := Int`), which is also accepted as its base; see
 [named subtypes](type-and-resource-rules.md#named-subtypes). No automatic
 cross-type conversion or zero-cost representation is implied. Class/instance syntax and static type
 inference are not part of this change.
