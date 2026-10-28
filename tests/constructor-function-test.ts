@@ -56,6 +56,17 @@ for (const checked of [true, false]) {
         if (!actual.includes(message)) throw new Error(actual);
     });
 }
+// A to String instance is how a value shows, wherever it is.
+const SHOW = 'import "option"\nFrac n d := [n,d]\nto String (Frac n d) = to String n ++ "/" ++ to String d\n';
+for (const checked of [true, false]) for (const [source, expected] of [
+    [SHOW + "[Frac 1 2, Frac 3 4]", "[1/2,3/4]"],
+    [SHOW + "Some (Frac 1 2)", "Some (1/2)"],
+    [SHOW + "to String [Frac 1 2]", '"[1/2]"'],
+    [SHOW + '"is " ++ to String (Frac 1 2)', '"is 1/2"'],
+] as const) Deno.test(`to String shows a value (checked=${checked}): ${source}`, () => {
+    const actual = run(source, checked);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
 // What the checker alone can tell.
 for (const [source, message] of [
     [RECT + "f (Rect w h d) = w\n1", "Rect has 2 fields"],

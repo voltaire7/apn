@@ -2961,6 +2961,15 @@ export class Interpreter {
     render(v: Value, emit: (s: string, kind?: Value["kind"] | "key") => void, raw = false, ancestors = new Set<Value>()): void {
         checkInterrupt();
         v = this.demand(v);
+        // A value a program says how to write (to String (Frac n d) = ...)
+        // shows as that text, wherever it is: print, the REPL, inside a list.
+        const own = this.instances.has("to") ? this.instance("to", [{ kind: "type", name: "String" }, v]) : undefined;
+        if (own) {
+            const text = this.demand(own);
+            if (text.kind !== "string") throw new APNError("runtime", `to String gave ${this.typeText(text)}, not a String`);
+            emit(text.v, v.kind);
+            return;
+        }
         // Track nested values, not successive spine cells: 1:xs may stream
         // forever, but a list containing itself cannot render a first element.
         if (ancestors.has(v)) throw new APNError("runtime", "cannot display a cyclic nested value");

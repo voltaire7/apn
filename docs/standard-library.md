@@ -138,6 +138,10 @@ Celsius = | C Float
 Fahrenheit = | F Float
 to Celsius (F f) = C ((f - 32) * 5 / 9)
 to Celsius (F 212)              # C 100.0
+
+Frac n d := [n,d]
+to String (Frac n d) = to String n ++ "/" ++ to String d
+print [Frac 1 2, Frac 3 4]      # [1/2,3/4]: printing uses the instance
 ```
 
 ## Absence and errors — `option`
