@@ -888,6 +888,23 @@ already demanded argument. Variant construction defers its fields. In a
 constructor pattern, a bare capitalized argument takes no fields of its own
 (`R low None high`); one with fields is parenthesized (`R (Some x) y`).
 
+Two core pieces underlie data and matching (the rest is to become sugar over
+them). `tag owner ctor fields` makes a value that remembers the constructor
+that made it, the type it belongs to and its fields, and does nothing else;
+patterns of the constructor read the fields back:
+
+```apn
+Box a = tag Box Box [a]
+Box 5                           # Box 5; typeOf (Box 5) is Box
+unbox (Box x) = x               # unbox (Box 5) is 5
+tag Option Some [5] == Some 5   # true: a declared constructor's own value
+```
+
+`case v [Some x -> a, None -> b, _ -> c]` matches one level: each alternative
+is a constructor with names or `_` for its fields, a literal, a name or `_`,
+and the first that fits is taken (none fitting is an error). Nested patterns
+and guards are `match`'s; a `case` alternative with one is a parse error.
+
 A type in a pattern takes its parameters, then a value. Applied to exactly its
 parameters it matches a type value, each name binding the part in its place:
 `(Option t)` given `Option Int` binds `t` to `Int`, `(Vect n a)` given `Vect 3

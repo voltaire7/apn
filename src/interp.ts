@@ -3,7 +3,7 @@ import type { TypeScope } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeType } from "./type-description.ts";
-import { MATH_FUNCTIONS, METHODS, sourceLocations } from "./ast.ts";
+import { MATH_FUNCTIONS, METHODS, caseAsMatch, sourceLocations } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
@@ -18,7 +18,7 @@ import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers
 import { APNError, didYouMean, sharedNameAdvice, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { clauseKey, countingFamily, flatTypedPattern, isLoadCall, mentions, mergeClauses } from "./ast.ts";
-import type { DefClause, Type } from "./types.ts";
+import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
@@ -92,6 +92,8 @@ export const NATIVES: Array<[string, number]> = [
     ["S", 1],
     // to T x writes x as a T; from T x reads it back (methods, like map).
     ["to", 2], ["from", 2],
+    // tag owner ctor fields: a value made by ctor, belonging to owner.
+    ["tag", 3],
 ];
 // The names editors color as built-in functions (the natives, cast and do).
 // The names natives are bound by (each intrinsic is a field of intrinsics).
@@ -961,6 +963,7 @@ export class Interpreter {
                 return node(text("->"), mkList(e.params.map(pattern)), body);
             }
             case "ternary": return node(text("?:"), of(e.cond), of(e.then), of(e.els));
+            case "case": return of(caseAsMatch(e));
             case "list": return node(text("[]"), ...e.v.map(of));
             case "record": return node(text("[:]"), ...e.v.map(([k, x]) => node(text(keySource(k)), of(x))));
             case "recordAccess": return node(text("."), of(e.rec), e.scoped && e.argument ? this.scoped(e.argument) : text(keySource(e.field)));
@@ -1394,6 +1397,7 @@ export class Interpreter {
                     }
                     case "patternLambda": r = { kind: "clauseFn", name: "<lambda>", clauses: [{ params: e.params, body: e.body, guard: e.guard }], arity: e.params.length, env: this.env, applied: [] }; break;
                     case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
+                    case "case": next = new TailCall(caseAsMatch(e), this.env); break;
                     case "ternary": {
                         const c = this.dataValue(this.eval(e.cond));
                         next = new TailCall(this.truthy(c) ? e.then : e.els, this.env);
@@ -1902,7 +1906,8 @@ export class Interpreter {
             }
             case "variant": {
                 const bv = b as any;
-                return a.tag === bv.tag && (!(a.family?.base || bv.family?.base) || a.family === bv.family) && this.equals({ kind: "list", v: a.v }, { kind: "list", v: bv.v });
+                return a.tag === bv.tag && a.family?.name === bv.family?.name && (!(a.family?.base || bv.family?.base) || a.family === bv.family) &&
+                    this.equals({ kind: "list", v: a.v }, { kind: "list", v: bv.v });
             }
             case "closure": case "clauseFn": case "native": case "contract":
                 return a === b;
@@ -4014,6 +4019,7 @@ export class Interpreter {
                 if (!this.interactive) throw new APNError("runtime", "repl needs a terminal: run the program with apn");
                 this.session(this.interactive);
                 return mkList([]);
+            case "tag": return this.tagged(args[0], args[1], args[2]);
             case "toString":
                 return mkStr(this.renderString(a));
             case "parse": {
@@ -4472,6 +4478,34 @@ export class Interpreter {
         }
         return { kind: "variant", tag: f.name, v: items, family: alias.family };
     }
+    // tag owner ctor fields: a value that remembers the constructor that made
+    // it, the type it belongs to and its fields (Some a = tag Option Some [a]).
+    // Patterns read the fields back; the value does nothing else.
+    private tagged(owner: Value, ctor: Value, fields: Value): Value {
+        const name = ctor.kind === "variant" ? ctor.tag : ctor.kind === "native" ? ctor.tag ?? ctor.name : ctor.kind === "clauseFn" || ctor.kind === "type" ? ctor.name : undefined;
+        if (!name || !/^[A-Z]/.test(name)) {
+            throw new APNError("runtime", "tag's constructor must be a capitalized definition or constructor", { hint: "Some a = tag Option Some [a]" });
+        }
+        if (!this.isList(fields)) throw new APNError("runtime", "tag's fields must be a list", { hint: `tag ${this.ownerName(owner) ?? "Option"} ${name} [x]` });
+        return { kind: "variant", tag: name, v: [...this.elements(fields)], family: this.ownerFamily(owner) };
+    }
+    // The type a tagged value belongs to: a declared one's family, or one per
+    // capitalized definition, so its values share it.
+    private owners = new WeakMap<object, VariantFamily>();
+    private ownerName(owner: Value): string | undefined {
+        return owner.kind === "type" || owner.kind === "clauseFn" ? owner.name : undefined;
+    }
+    private ownerFamily(owner: Value): VariantFamily {
+        if (owner.kind === "type" && owner.family && !owner.family.base) return owner.family;
+        const key = owner.kind === "type" ? owner.alias : owner.kind === "clauseFn" ? owner.clauses : undefined, name = this.ownerName(owner);
+        if (!key || !name || !/^[A-Z]/.test(name)) {
+            throw new APNError("runtime", "tag's owner must be a type the program defines", { hint: "Some a = tag Option Some [a]" });
+        }
+        let family = this.owners.get(key);
+        if (!family) this.owners.set(key, family = { name });
+        return family;
+    }
+
     // A constructor the name is bound to here: a variant's, or a capitalized
     // function's (a later Rect w h = r destructures).
     private isConstructorName(name: string): boolean {

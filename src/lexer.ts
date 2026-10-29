@@ -14,7 +14,7 @@ export type Token =
 
 export const KEYWORDS = new Set([
     "where",
-    "import", "true", "false", "rec",
+    "import", "true", "false", "rec", "case",
 ]);
 
 // Operators are runs of these characters (maximal munch, as in Haskell):

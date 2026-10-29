@@ -1,4 +1,4 @@
-import { sourceLocations, type Expr, type Pattern, type TopLevel } from "./ast.ts";
+import { caseAsMatch, sourceLocations, type Expr, type Pattern, type TopLevel } from "./ast.ts";
 import type { Diagnostic } from "./lint.ts";
 import { definitionsInOrder } from "./unused-diagnostics.ts";
 
@@ -59,6 +59,7 @@ const STRICT = new Set(["+", "-", "*", "/", "%", "^", "==", "!=", "<", ">", "<="
 // functions' arguments, lambdas or blocks.
 function strictCalls(e: Expr, name: string, arity: number): Call[] {
     switch (e.t) {
+        case "case": return strictCalls(caseAsMatch(e), name, arity);
         case "ternary": return [...strictCalls(e.cond, name, arity), ...strictCalls(e.then, name, arity), ...strictCalls(e.els, name, arity)];
         case "binop":
             if (STRICT.has(e.op)) return [...strictCalls(e.l, name, arity), ...strictCalls(e.r, name, arity)];

@@ -1,4 +1,4 @@
-import { clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm } from "./ast.ts";
+import { caseAsMatch, clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -1759,6 +1759,24 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return problem(`${f.name} has ${args.length} fields, so its body must give a list of ${args.length} items`, e,
             `${f.name} ${f.params.join(" ")} = [${f.params.join(", ")}] lays them out in order`);
     }
+    // tag Owner Ctor [fields], as the run makes it: a declared constructor's
+    // own value (tag Option Some [5] is Some 5), else a value of Owner whose
+    // arguments are its fields' types, which a pattern of Ctor binds.
+    function taggedType(e: Extract<Expr, { t: "app" }>, scope: Scope): Ty | undefined {
+        if (e.f.t !== "app" || e.f.f.t !== "app" || e.f.f.f.t !== "var" || e.f.f.f.name !== "tag") return undefined;
+        const primitive = scope.get("tag"), owner = e.f.f.a, ctor = e.f.a;
+        if (!primitive || resolve(primitive.type).k !== "intrinsic" || owner.t !== "var" || ctor.t !== "var") return undefined;
+        // As at runtime: an owner and a constructor the program defines.
+        if (TYPE_NAMES.includes(owner.name) || !/^[A-Z]/.test(owner.name)) return problem("tag's owner must be a type the program defines", e, "Some a = tag Option Some [a]");
+        if (TYPE_NAMES.includes(ctor.name) || !/^[A-Z]/.test(ctor.name)) {
+            return problem("tag's constructor must be a capitalized definition or constructor", e, "Some a = tag Option Some [a]");
+        }
+        const fields = resolve(infer(e.a, scope));
+        if (fields.k !== "list" || !fields.items) return undefined;
+        const declared = scope.get(ctor.name);
+        if (isConstructor(declared)) return fields.items.reduce<Ty>((made, field) => application(made, { type: field }, e), declared!.type);
+        return { k: "variant", name: owner.name, args: fields.items, fields: true };
+    }
     // What a capitalized function makes from any arguments: the type a pattern
     // of it takes ((Rect w h) a Rect, its fields' types fresh where they vary).
     function constructed(f: Extract<Ty, { k: "alias" }>, e: Expr): Ty {
@@ -2060,10 +2078,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 // A capitalized function's value, taken apart: (Rect w h) binds
                 // its fields, (Percent p) its value, as a named one's (Money m).
-                if (t.k === "alias" && t.constructs) {
-                    const made = resolve(constructed(t, e));
+                // So does a capitalized function that tags its result (Box a = tag Box Box [a]).
+                const made = t.k === "alias" ? resolve(constructed(t, e)) : undefined;
+                if (made && t.k === "alias" && (t.constructs || made.k === "variant" && made.fields)) {
                     if (made.k !== "variant") { p.args.forEach(x => bind(x, variable(), scope, e, bound)); return; }
-                    if (p.args.length !== t.params.length) problem(`${p.tag} has ${t.params.length} field${t.params.length === 1 ? "" : "s"}`, e);
+                    const count = made.base ? 1 : made.args.length;
+                    if (p.args.length !== count) problem(`${p.tag} has ${count} field${count === 1 ? "" : "s"}`, e);
                     unify(made, expected, e);
                     const parts = made.base ? [made.base] : made.args;
                     p.args.forEach((x, n) => bind(x, parts[n] ? made.base ? untypedPayload(parts[n]) : parts[n] : variable(), scope, e, bound));
@@ -2560,6 +2580,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // set is an action whatever it writes: its target and value are
             // checked (a requirement) once their types are known.
             if (f.name === "set") { operation(f.name, args); return io(list(variable(), constant(0n))); }
+            // A tag whose owner or constructor is computed is decided when it runs.
+            if (f.name === "tag") { runtimeChecks++; return explicitDynamic; }
             return operation(f.name, args);
         }
         if (f.k === "operation") return deferredCall(f, argument);
@@ -3263,6 +3285,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "pipe": {
                 const infix = infixSpelling(e, scope);
                 if (infix) return infer(infix, scope, expected);
+                const tagged = e.t === "app" ? taggedType(e, scope) : undefined;
+                if (tagged) return tagged;
                 if (e.t === "pipe" && builtinOperator(scope.get("$")?.type) !== "$") {
                     const call: Expr = { t: "binop", op: "$", l: e.f, r: e.x };
                     const loc = sourceLocations.get(e);
@@ -3586,6 +3610,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 return rec.fields.get(e.field)!;
             }
+            case "case": return infer(caseAsMatch(e), scope);
             case "ternary": {
                 infer(e.cond, scope);
                 const known = boolean(e.cond, scope);
@@ -4911,6 +4936,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return { index, size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };
             }
             case "block": return evaluateBlock(e, env, scope, depth);
+            case "case": return value(caseAsMatch(e));
             case "ternary": {
                 const condition = truth(value(e.cond));
                 if (condition === true) return value(e.then);
@@ -5655,6 +5681,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const last = e.stmts[e.stmts.length - 1];
                 return shadows || !last ? undefined : shapeOf(last, params, scope);
             }
+            case "case": return shapeOf(caseAsMatch(e), params, scope);
             case "ternary": return meetShapes(shapeOf(e.then, params, scope), shapeOf(e.els, params, scope));
             case "unop": {
                 const length = e.op === "neg" ? lengthOf(shapeOf(e.e, params, scope)) : undefined;
@@ -6334,6 +6361,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("S", { type: fn(atom("UInt"), atom("UInt"), undefined, true) });
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
     scope.set("match", { type: { k: "intrinsic", name: "match", arity: 2 } });
+    scope.set("tag", { type: { k: "intrinsic", name: "tag", arity: 3 } });
     // to T x writes x as a T, from T x reads it back (to String, to JSON, to (List Char)).
     for (const name of ["to", "from"]) scope.set(name, { type: { k: "intrinsic", name, arity: 2 } });
     scope.set("JSON", { type: { k: "type", value: { k: "variant", name: "JSON", args: [], base: atom("String") } } });

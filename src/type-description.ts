@@ -1,4 +1,4 @@
-import type { Expr, Pattern } from "./ast.ts";
+import { caseAsMatch, type Expr, type Pattern } from "./ast.ts";
 import { type Env, type Value, type VariantFamily, typeToString } from "./types.ts";
 import { numericType, NUMERIC_TYPES } from "./type-system.ts";
 import { builtinSignature } from "./type-checker.ts";
@@ -234,6 +234,7 @@ export function describeType(value: Value): string {
                 }
                 return apply(expr(e.f, env, locals), expr(e.t === "app" ? e.a : e.x, env, locals));
             }
+            case "case": return expr(caseAsMatch(e), env, locals);
             case "ternary": return unify(expr(e.then, env, locals), expr(e.els, env, locals));
             case "unop": return e.op === "not" ? named("Bool") : expr(e.e, env, locals);
             case "binop": {

@@ -99,7 +99,7 @@ declareFixities(lex(preludeSource));
 // (Infinity: none, so any operand place takes it); reach is the loosest
 // operator after it that it would take in (a lambda's body takes everything).
 const isLambda = (e: Expr) => e.t === "lambda" || e.t === "patternLambda";
-const primary = (e: Expr) => !["binop", "pipe", "unop", "app", "ternary", "lambda", "patternLambda", "import"].includes(e.t);
+const primary = (e: Expr) => !["binop", "pipe", "unop", "app", "ternary", "lambda", "patternLambda", "import", "case"].includes(e.t);
 // (r.1).2 is not r.1.2, which reads the float 1.2.
 const postfixHead = (e: Expr) => primary(e) && !["int", "float", "numeric"].includes(e.t) && !(e.t === "recordAccess" && /^\d/.test(e.field));
 function level(e: Expr): number {
@@ -1222,6 +1222,14 @@ class Parser {
             }
             case "true": this.next(); return { t: "bool", v: true };
             case "false": this.next(); return { t: "bool", v: false };
+            case "case": {
+                // The core's match: one level, case v [Some x -> a, None -> b].
+                this.next();
+                const value = this.parsePostfix(this.parsePrimary());
+                if (!this.isSym("[")) throw new Error("Parser: case takes its alternatives in [ ]: case v [Some x -> a, None -> b]");
+                const list = this.parsePrimary() as Extract<Expr, { t: "list" }>;
+                return { t: "case", value, alts: list.v.map(alt => caseAlternative(alt)) };
+            }
             default:
                 this.next();
                 throw new Error(`Parser: unexpected keyword '${t.v}'`);
@@ -2022,6 +2030,22 @@ class Parser {
     }
 }
 
+// An alternative of case: one pattern, one level deep (a constructor with
+// names or _ for its fields, a literal, a name or _), then its body.
+function caseAlternative(alt: Expr): { pattern: Pattern; body: Expr } {
+    const pattern: Pattern | undefined = alt.t === "lambda" && alt.params.length === 1 ? { p: "var", name: alt.params[0] }
+        : alt.t === "patternLambda" && alt.params.length === 1 && !alt.guard ? alt.params[0] : undefined;
+    const plain = (p: Pattern) => p.p === "var" || p.p === "wildcard";
+    const oneLevel = (p: Pattern): boolean => ["wildcard", "var", "int", "float", "bool", "string", "char"].includes(p.p) ||
+        p.p === "constr" && !TYPE_NAMES.includes(p.tag) && p.args.every(plain) ||
+        p.p === "list" && !p.v.length || p.p === "cons" && plain(p.head) && plain(p.tail);
+    if (!pattern || !oneLevel(pattern)) {
+        throw new APNError("parse", "a case alternative matches one level: a constructor with names for its fields, a literal, a name or _",
+            { pos: sourceLocations.get(alt)?.start, hint: "case v [Some x -> a, None -> b]; match takes nested patterns and guards" });
+    }
+    return { pattern, body: (alt as { body: Expr }).body };
+}
+
 // A block's statement, joined to the definition before it when it continues
 // it (see continues).
 function joinClauses<T extends { t: string }>(statements: T[], definition: T & { name: string; clauses: DefClause[] }): void {
@@ -2269,6 +2293,9 @@ function bareSource(e: Expr, where: Place): string {
             return e.hi === null
                 ? `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..]`
                 : `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..${e.hi}]`;
+        case "case":
+            return `case ${of(e.value, place("selected"))} [${itemsText(e.alts.map(({ pattern: p, body }) =>
+                `${p.p === "constr" ? [p.tag, ...p.args.map(patternSource)].join(" ") : patternSource(p)} -> ${of(body)}`))}]`;
         case "ternary": {
             // A ternary inside a ternary is parenthesized: c ? (d ? 1 : 2) : 3.
             const branch = (x: Expr, at: Place) => ungrouped(x).t === "ternary" ? `(${of(ungrouped(x))})` : of(x, at);

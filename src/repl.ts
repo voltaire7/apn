@@ -301,6 +301,8 @@ function helpText(): string {
         `  UserId := Int   (a distinct Int: none of Int's operations; UserId x patterns unwrap)`,
         `  Count = Int     (= names the value itself: Count is Int)`,
         `  Rect w h := [Float w, Float h]   (a constructor: Rect 3 4 is Rect 3.0 4.0; (Rect w h))`,
+        `  Box a = tag Box Box [a]   (a tagged value: its constructor, owner and fields)`,
+        `  case v [Some x -> a, None -> b, _ -> c]   (one-level match; match takes nested patterns)`,
         `  assert c x           x once c holds (a failure reports c and its location)`,
         `  [1,2,3]  [0..5] [0,0.5..100] [0..]  ranges; 0:[] conses`,
         `  ['a'..'e'] => "abcde"; take 6 (iterate (*2) 1) => [1,2,4,8,16,32]`,
