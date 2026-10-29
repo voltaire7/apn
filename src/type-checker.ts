@@ -1,4 +1,4 @@
-import { caseAsMatch, clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm } from "./ast.ts";
+import { clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -3610,7 +3610,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 return rec.fields.get(e.field)!;
             }
-            case "case": return infer(caseAsMatch(e), scope);
             case "ternary": {
                 infer(e.cond, scope);
                 const known = boolean(e.cond, scope);
@@ -4936,7 +4935,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return { index, size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };
             }
             case "block": return evaluateBlock(e, env, scope, depth);
-            case "case": return value(caseAsMatch(e));
             case "ternary": {
                 const condition = truth(value(e.cond));
                 if (condition === true) return value(e.then);
@@ -5681,7 +5679,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const last = e.stmts[e.stmts.length - 1];
                 return shadows || !last ? undefined : shapeOf(last, params, scope);
             }
-            case "case": return shapeOf(caseAsMatch(e), params, scope);
             case "ternary": return meetShapes(shapeOf(e.then, params, scope), shapeOf(e.els, params, scope));
             case "unop": {
                 const length = e.op === "neg" ? lengthOf(shapeOf(e.e, params, scope)) : undefined;

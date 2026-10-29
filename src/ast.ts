@@ -28,8 +28,6 @@ export type Expr =
     | { t: "patternLambda"; params: Pattern[]; body: Expr; guard?: Expr }
     | { t: "lambda"; params: string[]; body: Expr }
     | { t: "ternary"; cond: Expr; then: Expr; els: Expr }
-    // The core's one-level match (see caseAsMatch).
-    | { t: "case"; value: Expr; alts: { pattern: Pattern; body: Expr }[] }
     | { t: "list"; v: Expr[] }
     | { t: "record"; v: Array<[string, Expr]> }
     | { t: "recordAccess"; rec: Expr; field: string; argument?: Expr; scoped?: boolean }
@@ -176,22 +174,6 @@ export function typedForm(p: Pattern, parameters: (name: string) => number | und
 // Source metadata is kept out of AST serialization and source round-trips.
 export interface SourceLocation { source: string; file: string; start: number; end: number; }
 export const sourceLocations = new WeakMap<Expr, SourceLocation>();
-
-// case v [Some x -> a, None -> b] matches one level, as match does with the
-// same alternatives; until match expands into cases, both run as that match.
-const caseMatches = new WeakMap<Expr, Expr>();
-export function caseAsMatch(e: Extract<Expr, { t: "case" }>): Expr {
-    let match = caseMatches.get(e);
-    if (match) return match;
-    const at = sourceLocations.get(e);
-    const alts: Expr[] = e.alts.map(alt => ({ t: "patternLambda", params: [alt.pattern], body: alt.body }));
-    const head: Expr = { t: "app", f: { t: "var", name: "match" }, a: e.value };
-    const list: Expr = { t: "list", v: alts };
-    match = { t: "app", f: head, a: list };
-    if (at) for (const x of [match, head, list, ...alts]) sourceLocations.set(x, at);
-    caseMatches.set(e, match);
-    return match;
-}
 
 // Clauses with equivalent patterns (and guards): parameter names do not
 // matter (f (Int x) and f (Int y) are the same), and _ is a name nothing uses.

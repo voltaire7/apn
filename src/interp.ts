@@ -3,7 +3,7 @@ import type { TypeScope } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeType } from "./type-description.ts";
-import { MATH_FUNCTIONS, METHODS, caseAsMatch, sourceLocations } from "./ast.ts";
+import { MATH_FUNCTIONS, METHODS, sourceLocations } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
@@ -963,7 +963,6 @@ export class Interpreter {
                 return node(text("->"), mkList(e.params.map(pattern)), body);
             }
             case "ternary": return node(text("?:"), of(e.cond), of(e.then), of(e.els));
-            case "case": return of(caseAsMatch(e));
             case "list": return node(text("[]"), ...e.v.map(of));
             case "record": return node(text("[:]"), ...e.v.map(([k, x]) => node(text(keySource(k)), of(x))));
             case "recordAccess": return node(text("."), of(e.rec), e.scoped && e.argument ? this.scoped(e.argument) : text(keySource(e.field)));
@@ -1397,7 +1396,6 @@ export class Interpreter {
                     }
                     case "patternLambda": r = { kind: "clauseFn", name: "<lambda>", clauses: [{ params: e.params, body: e.body, guard: e.guard }], arity: e.params.length, env: this.env, applied: [] }; break;
                     case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
-                    case "case": next = new TailCall(caseAsMatch(e), this.env); break;
                     case "ternary": {
                         const c = this.dataValue(this.eval(e.cond));
                         next = new TailCall(this.truthy(c) ? e.then : e.els, this.env);

@@ -398,9 +398,7 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
   `convert` unless `matching`, a typed parameter's own check).
   Arithmetic on nullary-family ordinals returns ordinary numbers via
   `arithmeticValue`.
-- `case` is its own node, run and checked as the one-level `match` it
-  matches (`caseAsMatch`, memoized so recorded locations hold) until `match`
-  expands into cases. `tag` makes a `variant` whose family is a declared
+- `tag` makes a `variant` whose family is a declared
   owner's or one per capitalized definition (`ownerFamily`); the checker types
   `tag Owner Ctor [fields]` by its shape (`taggedType`): a declared
   constructor's application, else a `fields` variant of the field types, which
