@@ -391,9 +391,11 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
 ## Nominal types and resources
 
 - `:=` with a scalar type (`NAMED_BASES`, runtime and checker) creates a
-  generative `VariantFamily` with base metadata: a named subtype.
-  Builtins see its base value (`baseValue`); base patterns unwrap it; its own
-  pattern scores above the base's.
+  generative `VariantFamily` with base metadata: a distinct type. It is opaque:
+  operators reject it (`opaque`, and the checker's `operation`), builtins and
+  base patterns see the variant, and the checker never unifies it with its
+  base. Only conversions build one from its base (`conform`; the checker's
+  `convert` unless `matching`, a typed parameter's own check).
   Arithmetic on nullary-family ordinals returns ordinary numbers via
   `arithmeticValue`.
 - A capitalized function is a `type` value with `alias`: its clauses as a

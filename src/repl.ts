@@ -298,7 +298,7 @@ function helpText(): string {
         `  List Int is a list of any length; [Int] is exactly one Int`,
         `  f x = 1; f x = "one"   overloads by result type: Int (f 0) is 1, String (f 0) "one"`,
         `  Option a = Some a | None`,
-        `  UserId := Int   (a named subtype: keeps its name, is an Int, UserId x patterns unwrap)`,
+        `  UserId := Int   (a distinct Int: none of Int's operations; UserId x patterns unwrap)`,
         `  Count = Int     (= names the value itself: Count is Int)`,
         `  Rect w h := [Float w, Float h]   (a constructor: Rect 3 4 is Rect 3.0 4.0; (Rect w h))`,
         `  assert c x           x once c holds (a failure reports c and its location)`,

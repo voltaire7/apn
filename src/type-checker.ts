@@ -1179,16 +1179,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             else return problem(`${t.op} requires a collection; got ${text(a)}`);
             return list(t.op === "keys" ? key : t.op === "values" ? value : pair(key, value));
         }
-        // A named subtype keeps its name through arithmetic with itself or a
-        // plain value of its base (Money 1 + 1.0 is a Money); two names do not mix.
-        if (a.k === "variant" && a.base || b?.k === "variant" && b.base) {
-            const named = (x: Ty | undefined) => x?.k === "variant" && x.base ? x : undefined;
-            const [x, y] = [named(a), named(b)];
-            if (x && y && x.name !== y.name) return problem(`cannot combine ${x.name} and ${y.name}`);
-            const kept = (x ?? y)!;
-            if (["<", ">", "<=", ">="].includes(t.op)) return operation(t.op, [x ? kept.base! : a, y ? kept.base! : b!]);
-            operation(t.op, [x ? kept.base! : a, y ? kept.base! : b!]);
-            return kept;
+        // A := value has only the operations its clauses give it (opaque), as at runtime.
+        const named = [a, b].find(x => x?.k === "variant" && x.base) as Extract<Ty, { k: "variant" }> | undefined;
+        if (named) {
+            return problem(`no ${t.op === "compare" ? "comparison" : `'${t.op}'`} for ${named.name}: a := type has only the operations its clauses define`, undefined,
+                `define one, as in \`(${named.name} a) + (${named.name} b) = ${named.name} (a + b)\`, or take it apart with a pattern, (${named.name} x)`);
         }
         const numeric = (x: Ty) => x.k === "atom" && NUMERIC_TYPES.includes(x.name);
         const callable = (x: Ty) => ["fn", "type", "overload"].includes(x.k);
@@ -1463,9 +1458,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             return;
         }
-        // A named subtype is its base wherever the base is expected.
-        if (actual.k === "variant" && actual.base && expected.k !== "variant") return unify(expected, actual.base, e, seen);
-        if (expected.k === "variant" && expected.base && actual.k !== "variant") return unify(expected.base, actual, e, seen);
         problem(
             `cannot use ${text(actual)} where ${text(expected)} is required`,
             e,
@@ -2319,6 +2311,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         explicitFloat = false,
         seen = new Map<Ty, Set<Ty>>(),
         runtimeProjection = false,
+        // A typed parameter's own type, which checks identity: (UserId u)
+        // takes only a UserId, as at runtime.
+        matching = false,
     ): Ty {
         spend(e);
         const t = resolve(target), a = resolve(actual);
@@ -2337,6 +2332,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return target;
         }
         if (t.k === "atom" && t.name === "Bool" && explicitFloat) return t;
+        // Converting a value of its base to a := type makes one, as applying the
+        // type (List UserId [1]) or updating a slot does; a typed parameter
+        // only matches (see matching).
+        if (t.k === "variant" && t.base && a.k !== "variant" && !matching) {
+            convert(t.base, a, e, explicitFloat, seen, runtimeProjection);
+            return target;
+        }
         if (
             t.k === "atom" && a.k === "atom" && NUMERIC_TYPES.includes(t.name) &&
             NUMERIC_TYPES.includes(a.name)
@@ -2689,9 +2691,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 convert((t as Extract<Ty, { k: "variant" }>).args[0], result, e);
                 return t;
             }
-            // A base type applied to a named value unwraps it, as at runtime:
-            // Float (Money 1.2), Int (Money 1.0) as Int 1.0 would.
-            if (t.k === "atom" && NAMED_BASES.has(t.name) && a.k === "variant" && a.base) return application(f, { ...argument, type: a.base }, e);
             // Applying a named subtype applies its base, as at runtime: F .1 with
             // F = Float32 rounds like Float32 .1. Another name must be unwrapped.
             if (t.k === "variant" && t.base) {
@@ -2803,13 +2802,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const retained = new Map([...variables(f)].map(t => [t, t]));
                     const instantiated = copy(f, retained, [name, value]) as Extract<Ty, { k: "fn" }>;
                     if (options.strict && !f.coerce) unify(instantiated.input, argument.type, e);
-                    else convert(instantiated.input, argument.type, e, false, new Map(), !!f.coerce);
+                    else convert(instantiated.input, argument.type, e, false, new Map(), !!f.coerce, !!f.coerce);
                     return instantiated.output;
                 }
             }
             try {
                 if (options.strict && !f.coerce) unify(f.input, argument.type, e);
-                else convert(f.input, argument.type, e, false, new Map(), !!f.coerce);
+                else convert(f.input, argument.type, e, false, new Map(), !!f.coerce, !!f.coerce);
                 if (f.coerce) castKnown(f.input, argument, e);
                 if (f.coerce && f.pattern) castPattern(f.pattern, argument, e);
             } catch (error) {

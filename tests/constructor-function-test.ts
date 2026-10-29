@@ -30,11 +30,13 @@ for (const checked of [true, false]) {
         [RECT + "Rect a b = Rect 3 4\n[a,b]", "[3.0,4.0]"],
         [PERCENT + "Percent 150", "Percent 100.0"],
         [PERCENT + "typeOf (Percent 50)", "Percent"],
-        [PERCENT + "Percent 50 + 1", "Percent 51.0"],
+        [PERCENT + "(Percent a) + (Percent b) = Percent (a + b)\nPercent 90 + Percent 20", "Percent 100.0"],
         [PERCENT + "g (Percent v) = v\ng (Percent 150)", "100.0"],
         ["Frac n d := [n,d]\nFrac 1 2", "Frac 1 2"],
         ["Box a := a\nBox [1,2]", "Box [1,2]"],
         ["UserId := Int\n[UserId 5, typeOf (UserId 5)]", "[UserId 5, UserId]"],
+        ["UserId := Int\nList UserId [1,2]", "[UserId 1, UserId 2]"],
+        ["UserId := Int\nv = [id: UserId 1]\nv.id = 2\nv.id", "UserId 2"],
         // = computes: a type, or any value, nothing named.
         ["Count = Int\n[Count 5, typeOf (Count 5)]", "[5,Int]"],
         ["Box a = a\n[Box 1, Box Int]", "[1,Int]"],
@@ -51,6 +53,11 @@ for (const checked of [true, false]) {
         [RECT + "length (Rect 3 4)", checked ? "Rect" : "expected a list"],
         [RECT + "area (Rect w h) = w * h\narea 5", checked ? "cannot use Int where Rect is required" : "no clause"],
         ["Point := [x: Float]\nPoint [x: 1]", "Point := needs a scalar type to name"],
+        // A := type is opaque: only the operations its clauses define.
+        [PERCENT + "Percent 50 + 1", "no '+' for Percent"],
+        ["UserId := Int\nInt (UserId 5)", checked ? "cannot use UserId where Int is required" : "Int expects a number"],
+        // A typed parameter only matches; applying a type builds (List UserId [1]).
+        ["UserId := Int\nf (UserId u) = u\nf 5", checked ? "cannot use Int where UserId is required" : "no clause"],
     ] as const) Deno.test(`capitalized definitions reject (checked=${checked}): ${source}`, () => {
         const actual = failure(source, checked);
         if (!actual.includes(message)) throw new Error(actual);

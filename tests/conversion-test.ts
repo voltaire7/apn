@@ -25,7 +25,7 @@ for (const [source, expected] of [
     ["to (List Char) \"a😀\"", "['a','😀']"],
     ["from (List Char) ['h','i']", '"hi"'],
     // Any other type converts as applying it does.
-    ["Money := Float\nto Float (Money 1.2)", "1.2"],
+    ["Money := Float\nto Float (Money m) = m\nto Float (Money 1.2)", "1.2"],
     // A bare type name in a pattern matches that type, as a value.
     ["describe Int = \"integer\"\ndescribe String = \"text\"\n[describe Int, describe String]", '["integer","text"]'],
     [TEMPERATURE + "to Celsius (F 212)", "C 100.0"],
@@ -37,7 +37,7 @@ for (const [source, expected] of [
     ["to [Int,String] [x: 1, y: \"a\"]", '[x: 1, y: "a"]'],
     // The checker evaluates to and from as the run does, beside a program's own instances.
     [TEMPERATURE + "Vect 2 Char (to (List Char) \"a😀\")", "['a','😀']"],
-    ["Money := Float\nVect 1 Float [to Float (Money 1.2)]", "[1.2]"],
+    ["Money := Float\nto Float (Money m) = m\nVect 1 Float [to Float (Money 1.2)]", "[1.2]"],
 ] as const) {
     Deno.test(`conversions: ${source}`, () => {
         const actual = run(source);

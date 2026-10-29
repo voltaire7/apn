@@ -1696,20 +1696,9 @@ export class Interpreter {
             if (callable(l)) return this.iterate(r, l);
         }
         if (op === "==" || op === "!=") return mkBool(this.equals(l, r) === (op === "=="));
-        // A named subtype keeps its name through arithmetic with itself or a
-        // plain value (Money 1 + 1.0 is a Money); two names do not mix.
-        const named = (v: Value) => v.kind === "variant" && v.family?.base ? v.family : undefined;
-        const ln = named(l), rn = named(r);
-        if (ln || rn) {
-            if (ln && rn && ln !== rn) throw new APNError("runtime", `cannot combine ${ln.name} and ${rn.name}`, { hint: "convert one explicitly, as in `Money (amount distance)`" });
-            const family = (ln ?? rn)!;
-            const a = this.demand(ln ? (l as Extract<Value, { kind: "variant" }>).v[0] : l), b = this.demand(rn ? (r as Extract<Value, { kind: "variant" }>).v[0] : r);
-            if (["+", "-", "*", "/", "%", "^"].includes(op)) {
-                return this.conform({ kind: "type", name: family.name, family }, this.operate(op, a, b));
-            }
-            if (["<", ">", "<=", ">="].includes(op)) return this.operate(op, a, b);
-            throw new APNError("runtime", `operator '${op}' cannot use a ${family.name} here`);
-        }
+        // A := value has only the operations its clauses give it (opaque).
+        const named = [l, r].find(v => v.kind === "variant" && v.family?.base) as Extract<Value, { kind: "variant" }> | undefined;
+        if (named) throw this.opaque(op, named);
         if (["+", "-", "*", "/", "%", "^"].includes(op)) {
             l = this.arithmeticValue(l); r = this.arithmeticValue(r);
         } else if (op !== "\\") { l = this.dataValue(l); r = this.dataValue(r); }
@@ -1756,7 +1745,7 @@ export class Interpreter {
 
     private arrayNegate(value: Value): Value {
         const v = this.arithmeticValue(value);
-        if (v.kind === "variant" && v.family?.base) return this.conform({ kind: "type", name: v.family.name, family: v.family }, this.arrayNegate(v.v[0]));
+        if (v.kind === "variant" && v.family?.base) throw this.opaque("-", v);
         if (isNumeric(v)) return v.typeName ? castNumeric(v.typeName, negate(v)) : negate(v);
         if (this.isList(v)) return this.defer(() => {
             const cell = this.cell(v);
@@ -1896,12 +1885,6 @@ export class Interpreter {
             const fields = new Map(b.v);
             return a.v.length === b.v.length && a.v.every(([key, value]) => fields.has(key) && this.equals(value, fields.get(key)!));
         }
-        // A named subtype equals a plain value of its base by payload
-        // (Money 1.2 == 1.2); two different names are never equal.
-        const named = (v: Value) => v.kind === "variant" && !!v.family?.base;
-        if (named(a) !== named(b) && !(a.kind === "variant" && b.kind === "variant")) {
-            return this.equals(named(a) ? (a as Extract<Value, { kind: "variant" }>).v[0] : a, named(b) ? (b as Extract<Value, { kind: "variant" }>).v[0] : b);
-        }
         if (a.kind !== b.kind) return false;
         switch (a.kind) {
             case "int": return a.v === (b as any).v;
@@ -1985,8 +1968,6 @@ export class Interpreter {
                 let value = this.demand(arg);
                 // A type variable applied to a type: f a, any type holding a.
                 if (f.variable && f.name !== "_" && this.isTypeValue(value)) return { ...f, arguments: [...f.arguments ?? [], value] };
-                // A base type applied to a named value unwraps it: Float (Money 1.2).
-                if (!f.family && !f.alias && NAMED_BASES.has(f.name) && value.kind === "variant" && value.family?.base) value = this.baseValue(value);
                 if (f.name === "Vect" && !f.family && !f.alias && (f.arguments?.length ?? 0) < 2) {
                     const args = [...f.arguments ?? []];
                     if (!args.length && (value.kind !== "int" || value.v < 0n)) throw new APNError("runtime", "Vect length must be a nonnegative Int");
@@ -3067,14 +3048,7 @@ export class Interpreter {
     // clauses: literals first, then exact types, then conversions.
     private patternScore(pattern: Pattern, arg: Value): number {
         if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
-        // A named subtype's own pattern outranks its base's: (Money x) first.
         // Only a constructor pattern looks at its argument.
-        if (pattern.p !== "constr") return 0;
-        const named = this.reference(arg);
-        if (named.kind === "variant" && named.family?.base) {
-            if (pattern.tag === named.family.name) return 35;
-            if (TYPE_NAMES.includes(pattern.tag)) arg = named.v[0];
-        }
         if (pattern.p !== "constr" || !TYPE_NAMES.includes(pattern.tag)) return 0;
         // An undecided call fits a typed pattern as an exact type would.
         const undecided = this.reference(arg);
@@ -3093,9 +3067,12 @@ export class Interpreter {
         return pattern.p === "constr" && TYPE_NAMES.includes(pattern.tag) ? 30 : 0;
     }
 
-    // A named subtype's value as its base: Money 1.2 is 1.2 to builtins.
-    private baseValue(v: Value): Value {
-        return v.kind === "variant" && v.family?.base ? this.dataValue(v.v[0]) : v;
+    // A := value used as its representation: it has only the operations its
+    // clauses define, and a pattern takes it apart.
+    private opaque(operation: string, v: Extract<Value, { kind: "variant" }>): APNError {
+        const what = ["<", ">", "<=", ">="].includes(operation) ? "comparison" : `'${operation}'`;
+        return new APNError("runtime", `no ${what} for ${v.tag}: a := type has only the operations its clauses define`,
+            { hint: `define one, as in \`(${v.tag} a) + (${v.tag} b) = ${v.tag} (a + b)\`, or take it apart with a pattern, (${v.tag} x)` });
     }
 
     // Nothing named the type an undecided value should have.
@@ -3917,7 +3894,7 @@ export class Interpreter {
             return mkList([...map.entries.values()].map((entry) => entry[name === "keys" ? 0 : 1]));
         }
         if (NUMBER_NATIVES.some(([n]) => n === name)) {
-            let args = argsIn.map((x) => this.baseValue(this.dataValue(x)));
+            let args = argsIn.map((x) => this.dataValue(x));
             if (name === "expt" && isNumeric(args[0]) && isNumeric(args[1])) return typedPower(args[0], args[1]);
             if (args.length === 2 && isNumeric(args[0]) && isNumeric(args[1]) &&
                 ["min", "max", "gcd", "lcm", "quotient", "remainder", "modulo", "makeRectangular"].includes(name)) {
@@ -4021,8 +3998,6 @@ export class Interpreter {
         const a = args[0];
         // An undecided value reaching a builtin that needs a plain value.
         if (!SHOWS_UNDECIDED.has(name)) for (const x of args) if (x.kind === "pending") this.ambiguous(x);
-        // A named subtype is its base to builtins: sqrt (Money 4.0) is 2.0.
-        if (!SHOWS_UNDECIDED.has(name)) args.forEach((x, n) => { args[n] = this.baseValue(x); });
         switch (name) {
             // Output actions yield [] (nothing), as print does in Haskell.
             case "print":
@@ -4791,16 +4766,11 @@ export class Interpreter {
             const ref = this.reference(v);
             return ref.kind === "mutable" && p.args.length === 1 && this.matchPattern(p.args[0], ref, binds);
         }
-        // A named subtype matches its base's patterns: (Float x) takes Money 1.2.
-        if (p.p === "constr" && TYPE_NAMES.includes(p.tag) && !["Type", "Mutable", "Dynamic"].includes(p.tag)) {
-            const named = this.reference(v);
-            if (named.kind === "variant" && named.family?.base) v = named.v[0];
-        }
         v = p.p === "typeBind" || (p.p === "constr" && p.tag === "Type") ? this.demand(v) : this.dataValue(v);
         switch (p.p) {
             case "typeBind": {
                 const type = this.callNative("typeOf", [v]);
-                return this.matchPattern(p.name === "_" ? { p: "wildcard" } : { p: "var", name: p.name }, type, binds) && this.matchPattern(p.value, isNumeric(v) ? numericPayload(v) : v.kind === "variant" && v.family?.base ? v.v[0] : v, binds);
+                return this.matchPattern(p.name === "_" ? { p: "wildcard" } : { p: "var", name: p.name }, type, binds) && this.matchPattern(p.value, isNumeric(v) ? numericPayload(v) : v, binds);
             }
             case "int": return isNumeric(v) && equalNumbers(v, integer(p.v));
             case "bool": return v.kind === "bool" && v.v === p.v;

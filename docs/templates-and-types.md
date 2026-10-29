@@ -431,21 +431,23 @@ constructor: it makes the values of its own type.
 ```apn
 Rect w h := [Float w, Float h]                  # two parameters: two fields
 Percent x := Float x > 100 ? 100.0 : Float x    # one: the value it gives, named
-UserId := Int                                   # none: a named subtype
+UserId := Int                                   # none: a distinct Int
 
 r = Rect 3 4                # Rect 3.0 4.0; typeOf r is Rect
 area (Rect w h) = w * h     # area r is 12.0
 map (Rect 1) [2,3]          # [Rect 1.0 2.0, Rect 1.0 3.0]
 Percent 150                 # Percent 100.0
-Percent 50 + 1              # Percent 51.0
+(Percent a) + (Percent b) = Percent (a + b)
+Percent 90 + Percent 20     # Percent 100.0: the clause calls Percent, so its logic runs
 ```
 
 With several parameters, the body's list is only the layout, one item per
 parameter: a `Rect` is not a list (`Rect 3 4 ++ [5]` is an error). With one,
-the value is named as a [named subtype](type-and-resource-rules.md#named-subtypes)
-is: `Percent 50` is a Float wherever one is accepted, and `(Percent p)` binds
-it. The body is the constructor's logic: it runs when a value is built, never
-in a pattern.
+the value it gives is wrapped as a
+[distinct type](type-and-resource-rules.md#distinct-types)'s is, and `(Percent p)`
+binds it. Every constructor is opaque: its values have only the operations its
+clauses define (`Percent 50 + 1` is an error). The body is the constructor's
+logic: it runs when a value is built, never in a pattern.
 
 With `=`, a capitalized left side whose name is a constructor (`Some`, or
 `Rect` once defined) is a pattern, so `Rect w h = r` takes `r` apart; any
@@ -517,9 +519,8 @@ name denotes the value constructor; use distinct names for type specialization.
 So another type's field cannot name it (`Wrap a = | Wrap (Box a)` is an error
 saying so); with `Box a = | MkBox a`, `Wrap (Box a)` describes the field.
 
-Nominal wrappers can use single-constructor variants, or a named subtype
-(`UserId := Int`), which is also accepted as its base; see
-[named subtypes](type-and-resource-rules.md#named-subtypes). No automatic
+Nominal wrappers can use single-constructor variants, or a distinct type
+(`UserId := Int`); see [distinct types](type-and-resource-rules.md#distinct-types). No automatic
 cross-type conversion or zero-cost representation is implied. Class/instance syntax and static type
 inference are not part of this change.
 

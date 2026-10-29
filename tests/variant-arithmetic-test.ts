@@ -20,8 +20,6 @@ for (const [source, expected] of [
     ['xs = [10,20,30,40]\nxs (East + 1)', '30'],
     ['xs = [10,20,30,40]\nxs (East + 1) = 99\nxs South', '99'],
     ['[1,2] * (+ East)', '[2,3]'],
-    // A named Int is an Int: East joins it as it joins 1.
-    ['UserId := Int\nUserId 1 + East', 'UserId 2'],
 ] as const) Deno.test(`variant arithmetic: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -31,6 +29,8 @@ for (const source of [
     'Option a = Some a | None\nSome 1 + 1',
     'Direction + 1',
     'West / North',
+    // A := type has no arithmetic of its own (opaque).
+    'UserId := Int\nUserId 1 + East',
 ]) Deno.test(`variant arithmetic rejects: ${source}`, () => {
     try { result(source); } catch { return; }
     throw new Error('expected rejection');

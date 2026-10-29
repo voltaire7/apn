@@ -1,40 +1,37 @@
-# Named subtypes, variant indexing, and scoped resources
+# Distinct types, variant indexing, and scoped resources
 
 These features use ordinary definitions. There are no new keywords.
 
-## Named subtypes
+## Distinct types
 
-`:=` with a scalar type (a numeric type, `String`, `Bool` or `Char`) names a
-subtype of it; `=` only gives the type another name (`Count = Int` is `Int`):
+`:=` with a scalar type (a numeric type, `String`, `Bool` or `Char`) makes a
+distinct type over it; `=` only gives the type another name (`Count = Int` is
+`Int`). A distinct type is opaque: it has none of its base's operations, only
+those its clauses define.
 
 ```apn
-UserId := Int               # a named subtype of Int
+UserId := Int
 OrderId := Int
 
 UserId 123                  # UserId 123
 UserId == Int               # false
+UserId 3 == UserId 3        # true: every value has equality and printing
 extract (UserId value) = value
 extract (UserId 123)        # 123
-UserId 2 + 1                # UserId 3
-UserId 1 + OrderId 1        # error: cannot combine UserId and OrderId
+UserId 2 + 1                # error: no '+' for UserId
+(UserId a) + (UserId b) = UserId (a + b)
+UserId 2 + UserId 1         # UserId 3
 ```
 
-A `UserId` is an `Int` wherever an Int is accepted: `(Int x)` patterns, numeric
-builtins (`sqrt`), and arithmetic with plain numbers, which keeps the name. An
-Int is not a `UserId`: a `(UserId x)` pattern accepts only that name, binding the
-payload to `x`, and outranks an `(Int x)` clause for a UserId. Two different
-names never mix: arithmetic between them is an error, and they are not equal
-(`UserId 3 == OrderId 3` is false, though each equals `3`). Constructors check
-the base type; construction from another named type requires extracting its
-payload first. Applying the base type (or another base type) is that
-extraction: `Float (UserId 3)` is `3.0`, `Int (Money 1.0)` is `1`, and
-`OrderId (Int (UserId 3))` is `OrderId 3`. Aliasing a named subtype (`Alias = UserId`) keeps its identity.
-Aliases of other types (records, `Vect n Int`, parameterized aliases) remain
-plain aliases. An omitted record slot initialized from a named type wraps its
-base's default.
-
-For a type that is not accepted as its base, declare a single-constructor
-variant (`Meters = | MkMeters Float`) and unwrap it with a pattern.
+A `UserId` is not an `Int`: `(Int x)` patterns, builtins (`sqrt`) and `Int (UserId
+3)` reject it, and it equals no plain number (`UserId 3 == 3` is false). Its own
+pattern, `(UserId x)`, takes it apart and binds the `Int` to `x`; that pattern
+accepts only a `UserId`. Applying `UserId` makes one from an `Int`, as do a list
+type (`List UserId [1,2]`) and an update of a `UserId` slot, checking the value as
+`Int` would (`UserId .2` is a lossy conversion). Another distinct type must be
+taken apart first (`UserId (OrderId 3)` is an error). Aliasing a distinct type
+(`Alias = UserId`) keeps its identity. An omitted record slot initialized from
+a distinct type wraps its base's default.
 
 ## Variant list indexes
 
