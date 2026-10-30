@@ -37,6 +37,12 @@ for (const checked of [true, false]) {
         [PAIRS + "g (Pairs n a) = n\ng (Pairs 3 Int)", "3"],
         [PAIRS + "map typeOf (List (Pairs 1 Int) [[1,2]])", "[Pairs 1 Int]"],
         ["P a = [x: a, y: a]\np = P Float [x: 1, y: 2]\n[typeOf p, p.x]", "[P Float, 1.0]"],
+        // So does a name without parameters for a type or a schema; Type shows
+        // what it is, and an updated copy keeps the name.
+        ["Row = Vect 3 Int\n[Row, typeOf (Row [1,2,3]), typeOf [1,2,3]]", "[Row, Row, List Int]"],
+        ["Point = [x: Float, y: Float]\np = Point [x: 1, y: 2]\nq = p\nq.x = 5\n[typeOf p, typeOf q, Type Point, p == [x: 1.0, y: 2.0]]",
+            "[Point, Point, [x: Float, y: Float], true]"],
+        ["Point = [x: Float, y: Float]\ntypeOf ([pt: Point] []).pt", "Point"],
     ] as const) Deno.test(`capitalized definitions (checked=${checked}): ${source}`, () => {
         const actual = run(source, checked);
         if (actual !== expected) throw new Error(`${actual} != ${expected}`);

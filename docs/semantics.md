@@ -255,9 +255,10 @@ fields are ignored), in bindings, function parameters, and `match` alternatives.
 left defines a function that computes (a type alias among them), or with the
 body `_` a constructor; see
 [templates and type aliases](templates-and-types.md#constructor-functions)
-for those and variant declarations. Applied to all its parameters, one giving a
-type gives a type that remembers how it was written (`Pairs 2 Int`), as do the
-values made with it, which patterns read back (`(Pairs n a xs)`). A scalar
+for those and variant declarations. One giving a type or a schema gives, applied
+to all its parameters, a type that remembers how it was written (`Point`,
+`Pairs 2 Int`), as do the values made with it (`typeOf p` is `Point`), which
+patterns read back (`(Pairs n a xs)`). A scalar
 type (`Count = Int`) makes a named subtype: a `Count` is an `Int` wherever one is accepted and keeps its name when
 a result fits (`Count 5 + 1` is `Count 6`). A constructor (`UserId (Int id) =
 _`) makes a distinct type: `UserId 1` has none of an Int's operations, builtins

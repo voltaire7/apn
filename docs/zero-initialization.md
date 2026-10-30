@@ -11,7 +11,8 @@ vec.x = 1              # [x: 1.0, y: 0.0, z: 0.0]
 Vector3 [1,2,3]    # [x: 1.0, y: 2.0, z: 3.0]
 # Vector3 [1,2]       # error: positional fields must be complete
 Vector3 [z: 3]         # [x: 0.0, y: 0.0, z: 3.0]
-Vector3                # [x: Float, y: Float, z: Float]
+Vector3                # Vector3; Type Vector3 is [x: Float, y: Float, z: Float]
+typeOf vec             # Vector3
 ```
 
 Supplied fields convert to their slots' types. Omitted type slots initialize to

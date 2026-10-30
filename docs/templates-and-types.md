@@ -430,12 +430,15 @@ type it names is kept as a
 makes `Count 5`). A body of `_` makes a constructor instead (see
 [variants](#variants-parameters-and-distinct-wrappers)).
 
-Applied to all its parameters, one that gives any other type gives a type that
-remembers how it was written: it is that type wherever a type is used, and the
+One that gives any other type (a type or a schema, not a constructor) gives,
+applied to all its parameters, a type that remembers how it was written:
+`Point = [x: Float, y: Float]` is `Point`, `Pairs 2 Int` is `Pairs 2 Int`. It
+is that type wherever a type is used (`Type Point` shows what it is), and the
 values it makes, by applying it or by a conversion to it (`List (Pairs 1 Int)`,
-a field), remember it too. They are still what the type makes, so everything
-that takes one takes them, and what is computed from them is a plain value. A
-pattern reads back only what was remembered, never computing it backwards:
+a field, a slot's default), remember it too, as does an updated copy of one.
+They are still what the type makes, so everything that takes one takes them,
+and what is computed from them is a plain value. A pattern of a name with
+parameters reads back only what was remembered, never computing it backwards:
 
 ```apn
 Pairs n a = Vect (n * 2) a

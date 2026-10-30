@@ -21,7 +21,7 @@ for (const [source, expected] of [
     ['[].[]', '[]'],
     ['take 2 (map Int [1,2,missing])', '[1,2]'],
     ['[Int * 3, 3 * Int, 3 * Int 0]', '[[0,1,2],[0,1,2],0]'],
-    ['V = [x: Float, y: Float, z: Float]\nv = V []\nv.x = 1\n[v,V]', '[[x: 1.0, y: 0.0, z: 0.0], [x: Float, y: Float, z: Float]]'],
+    ['V = [x: Float, y: Float, z: Float]\nv = V []\nv.x = 1\n[v, Type V]', '[[x: 1.0, y: 0.0, z: 0.0], [x: Float, y: Float, z: Float]]'],
     ['V = [x: Float, y: Float]\nV [x: 1]', '[x: 1.0, y: 0.0]'],
     ['V = [x: Float, y: Float]\nV [1,2]', '[x: 1.0, y: 2.0]'],
     ['v = [x: Float] []\nv.x = 2\ntypeOf v.x', 'Float'],
@@ -105,7 +105,7 @@ for (const values of ['[1]', '[1,2]', '[1,2,3,4]']) {
 }
 
 for (const [source, expected] of [
-    ['Vector3 = [x: Float, y: Float, z: Float]\nvec = Vector3\nvec.x = 123\n[vec,Vector3]', '[[x: 123.0, y: Float, z: Float], [x: Float, y: Float, z: Float]]'],
+    ['Vector3 = [x: Float, y: Float, z: Float]\nvec = Vector3\nvec.x = 123\n[vec, Type Vector3]', '[[x: 123.0, y: Float, z: Float], [x: Float, y: Float, z: Float]]'],
     ['v = [x: Int]\nv "x" = 1\nv', '[x: 1]'],
     ['v = [x: Int, y: Float]\nv.[x,y] = [1,2]\nv', '[x: 1, y: 2.0]'],
     ['xs = [Int]\nxs 0 = 1\nxs', '[1]'],

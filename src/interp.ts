@@ -550,7 +550,7 @@ export class Interpreter {
                         if (value.kind === "type" && NAMED_BASES.has(value.name) && !value.family && !value.alias && !value.arguments?.length && !value.variable) {
                             return { kind: "type", name, family: { name, base: value } };
                         }
-                        return value;
+                        return this.remembered(name, [], value);
                     } finally { this.env = caller; }
                 });
             scope.setLocal(name, alias);
@@ -4513,10 +4513,17 @@ export class Interpreter {
     private construct(f: Extract<Value, { kind: "type" }>, args: Value[]): Value {
         let result: Value = f.alias!.run;
         for (const arg of args) result = this.apply(result, arg);
-        const made = this.reference(this.demand(result));
-        if (!this.isTypeValue(made) || made.kind === "type" && (NAMED_BASES.has(made.name) && !made.arguments?.length || made.variable)) return made;
+        return this.remembered(f.name, args.map(arg => this.reference(arg)), this.reference(this.demand(result)));
+    }
+    // A type a capitalized name gives, remembering how it was written: a
+    // type or a schema (a record or list of types), not a scalar (see Count =
+    // Int) nor a constructor (an alias of one is that constructor).
+    private remembered(name: string, args: Value[], made: Value): Value {
+        const remembers = made.kind === "type" ? !made.variable && !(NAMED_BASES.has(made.name) && !made.arguments?.length && !made.family)
+            : (made.kind === "record" || this.isList(made)) && this.isTypeValue(made);
+        if (!remembers) return made;
         const named = { ...made } as Value;
-        this.asWritten.set(named, { name: f.name, args: args.map(arg => this.reference(arg)), made });
+        this.asWritten.set(named, { name, args, made });
         return named;
     }
     // A type as written (Pairs 2 Int), and the one it is (Vect 4 Int).

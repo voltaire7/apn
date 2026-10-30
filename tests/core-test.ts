@@ -49,7 +49,7 @@ for (const checked of [true, false]) {
         [MAYBE + "return = Just\n(Just x) >>= f = f x\nNada >>= f = Nada\nMaybe Int { x <- Just 2; return (x * 3) }", "Just 6"],
         [SHAPE + "area (Circle r) = 3 * r * r\narea (Square s) = s * s\nmap area [Circle 1, Square 2]", "[3.0,4.0]"],
         [SHAPE + 'g (Shape s) = "shape"\n[typeOf (Circle 1), g (Square 1)]', '[Shape,"shape"]'],
-        [MIXED + "Mixed", "Int | String"],
+        [MIXED + "[Mixed, Type Mixed]", "[Mixed, Int | String]"],
         [MIXED + 'f (Mixed m) = "mixed"\nf _ = "other"\n[f 1, f "a", f 2.5]', '["mixed","mixed","other"]'],
         [MIXED + '[Mixed 5, isType Mixed "s"]', "[5,true]"],
         [OPTION + "OptOrList a = Option a | List a\n[OptOrList Int, isType (OptOrList Int) [1]]", "[OptOrList Int, true]"],
