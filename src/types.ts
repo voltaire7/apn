@@ -7,7 +7,8 @@ import { charLiteral, itemsText, stringLiteral } from "./separators.ts";
 // ---------------- Types & values ----------------
 
 // results: an indexed family's constructors' result types (Cons ... -> Vec (S k) a).
-export interface VariantFamily { base?: Value; name: string; parameters?: string[]; fields?: Map<string, Expr[]>; env?: Env; results?: Map<string, Expr>; }
+// opaque: a := type's, which has none of its base's operations.
+export interface VariantFamily { base?: Value; opaque?: boolean; name: string; parameters?: string[]; fields?: Map<string, Expr[]>; env?: Env; results?: Map<string, Expr>; }
 
 export type Type = string; // lightweight: we represent types as printable strings
 

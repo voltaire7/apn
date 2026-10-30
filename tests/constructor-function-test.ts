@@ -3,9 +3,10 @@ import { parse } from "../src/parser.ts";
 
 // A capitalized definition with := is a constructor: with several parameters
 // it makes one field each, laid out by the list its body gives; with one, the
-// value it gives, named; with none, a named subtype. One with = computes: it
-// gives what its body gives (a type, or any value). Checked and unchecked runs
-// agree.
+// value it gives, named; with none, an opaque named subtype. One with =
+// computes: it gives what its body gives (a type, or any value), except that a
+// scalar type keeps the name as a transparent subtype. Checked and unchecked
+// runs agree.
 function run(source: string, checked: boolean): string {
     const i = new Interpreter();
     if (checked) i.enableChecking();
@@ -37,8 +38,12 @@ for (const checked of [true, false]) {
         ["UserId := Int\n[UserId 5, typeOf (UserId 5)]", "[UserId 5, UserId]"],
         ["UserId := Int\nList UserId [1,2]", "[UserId 1, UserId 2]"],
         ["UserId := Int\nv = [id: UserId 1]\nv.id = 2\nv.id", "UserId 2"],
-        // = computes: a type, or any value, nothing named.
-        ["Count = Int\n[Count 5, typeOf (Count 5)]", "[5,Int]"],
+        // = names a scalar type transparently: a Count is an Int wherever one
+        // is accepted, and keeps its name when a result fits.
+        ["Count = Int\n[Count 5, typeOf (Count 5)]", "[Count 5, Count]"],
+        ["Count = Int\n[Count 5 + 1, Count 5 * 2 == 10, Int (Count 5), sqrt (Count 4)]", "[Count 6, true, 5, 2]"],
+        ['Count = Int\nf (Count c) = "count"\nf (Int n) = "int"\n[f (Count 1), f 1]', '["count","int"]'],
+        ["Count = Int\ng (Int n) = n + 1\ng (Count 5)", "6"],
         ["Box a = a\n[Box 1, Box Int]", "[1,Int]"],
         ["Twice w h = [w,h]\nTwice 1 2", "[1,2]"],
         ["V n = Vect (n + 0) Int\nV 3 [1,2,3]", "[1,2,3]"],
@@ -58,6 +63,9 @@ for (const checked of [true, false]) {
         ["UserId := Int\nInt (UserId 5)", checked ? "cannot use UserId where Int is required" : "Int expects a number"],
         // A typed parameter only matches; applying a type builds (List UserId [1]).
         ["UserId := Int\nf (UserId u) = u\nf 5", checked ? "cannot use Int where UserId is required" : "no clause"],
+        // Two names never mix; (Count c) still takes only a Count.
+        ["Count = Int\nAge = Int\nCount 1 + Age 2", "cannot combine Count and Age"],
+        ["Count = Int\nf (Count c) = c\nf 5", checked ? "cannot use Int where Count is required" : "no clause"],
     ] as const) Deno.test(`capitalized definitions reject (checked=${checked}): ${source}`, () => {
         const actual = failure(source, checked);
         if (!actual.includes(message)) throw new Error(actual);

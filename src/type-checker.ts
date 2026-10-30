@@ -72,7 +72,7 @@ type Ty =
     // checks: what is still to be checked of the values it holds, as a
     // function's are (Handler (s -> s ++ "!") checks s ++ "!" once a is known).
     // fields: a capitalized function's value (Rect 3 4), its args the fields' types.
-    | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty; indexed?: boolean; checks?: Ty[]; fields?: boolean }
+    | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty; opaque?: boolean; indexed?: boolean; checks?: Ty[]; fields?: boolean }
     // f a: a type variable applied to types, as written ((a -> b) -> f a -> f b).
     // Its head, once known, is a ctor: a type missing its first parameters
     // (List, Option, Result _ e for f a; Result for f a e), so f a maps the
@@ -1180,10 +1180,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return list(t.op === "keys" ? key : t.op === "values" ? value : pair(key, value));
         }
         // A := value has only the operations its clauses give it (opaque), as at runtime.
-        const named = [a, b].find(x => x?.k === "variant" && x.base) as Extract<Ty, { k: "variant" }> | undefined;
-        if (named) {
-            return problem(`no ${t.op === "compare" ? "comparison" : `'${t.op}'`} for ${named.name}: a := type has only the operations its clauses define`, undefined,
-                `define one, as in \`(${named.name} a) + (${named.name} b) = ${named.name} (a + b)\`, or take it apart with a pattern, (${named.name} x)`);
+        const opaque = [a, b].find(x => x?.k === "variant" && x.opaque) as Extract<Ty, { k: "variant" }> | undefined;
+        if (opaque) {
+            return problem(`no ${t.op === "compare" ? "comparison" : `'${t.op}'`} for ${opaque.name}: a := type has only the operations its clauses define`, undefined,
+                `define one, as in \`(${opaque.name} a) + (${opaque.name} b) = ${opaque.name} (a + b)\`, or take it apart with a pattern, (${opaque.name} x)`);
+        }
+        // A named subtype keeps its name through arithmetic with itself or a
+        // plain value of its base (Money 1 + 1.0 is a Money); two names do not mix.
+        if (a.k === "variant" && a.base || b?.k === "variant" && b.base) {
+            const named = (x: Ty | undefined) => x?.k === "variant" && x.base ? x : undefined;
+            const [x, y] = [named(a), named(b)];
+            if (x && y && x.name !== y.name) return problem(`cannot combine ${x.name} and ${y.name}`);
+            const kept = (x ?? y)!;
+            if (["<", ">", "<=", ">="].includes(t.op)) return operation(t.op, [x ? kept.base! : a, y ? kept.base! : b!]);
+            operation(t.op, [x ? kept.base! : a, y ? kept.base! : b!]);
+            return kept;
         }
         const numeric = (x: Ty) => x.k === "atom" && NUMERIC_TYPES.includes(x.name);
         const callable = (x: Ty) => ["fn", "type", "overload"].includes(x.k);
@@ -1458,6 +1469,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             return;
         }
+        // A named subtype is its base wherever the base is expected (not a := one);
+        // a plain value is not one (converting makes one: List Count [1]).
+        if (actual.k === "variant" && actual.base && !actual.opaque && expected.k !== "variant") return unify(expected, actual.base, e, seen);
         problem(
             `cannot use ${text(actual)} where ${text(expected)} is required`,
             e,
@@ -1725,14 +1739,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             throw error;
         } finally { choosing--; requirements.length = saved; }
     }
-    // := of a scalar type names a subtype (Money := Float), as at runtime.
-    function namedSubtype(name: string, body: Expr, t: Ty): Ty {
+    // = of a scalar type names a subtype (Money = Float), := an opaque one,
+    // as at runtime; undefined for anything else.
+    function namedSubtype(name: string, t: Ty, opaque: boolean): Ty | undefined {
         const type = resolve(t), base = type.k === "type" ? resolve(type.value) : undefined;
-        if (type.k === "dynamic") return t;
-        if (base?.k !== "atom" || !NAMED_BASES.has(base.name)) {
-            return problem(`${name} := needs a scalar type to name, such as Int or Float`, body, `${name} = ... names the value itself`);
-        }
-        return { k: "type", value: { k: "variant", name, args: [], base } };
+        if (base?.k !== "atom" || !NAMED_BASES.has(base.name)) return undefined;
+        return { k: "type", value: { k: "variant", name, args: [], base, ...opaque ? { opaque } : {} } };
     }
     // A capitalized function applied to all its parameters, as the run
     // makes it (Interpreter.construct): a type it gives is the application;
@@ -1746,7 +1758,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const t = infer(f.body, scope), r = resolve(t);
         if (!f.constructs || r.k === "dynamic") return t;
         if (args.length === 1) {
-            if (r.k === "atom" && NAMED_BASES.has(r.name)) return { k: "variant", name: f.name, args: [], base: r };
+            if (r.k === "atom" && NAMED_BASES.has(r.name)) return { k: "variant", name: f.name, args: [], base: r, opaque: true };
             if (r.k === "var" || r.k === "union") { runtimeChecks++; return explicitDynamic; }
             return { k: "variant", name: f.name, args: [t], fields: true };
         }
@@ -2730,6 +2742,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 convert((t as Extract<Ty, { k: "variant" }>).args[0], result, e);
                 return t;
             }
+            // A base type applied to a named value unwraps it, as at runtime:
+            // Float (Money 1.2), Int (Money 1.0) as Int 1.0 would.
+            if (t.k === "atom" && NAMED_BASES.has(t.name) && a.k === "variant" && a.base && !a.opaque) return application(f, { ...argument, type: a.base }, e);
             // Applying a named subtype applies its base, as at runtime: F .1 with
             // F = Float32 rounds like Float32 .1. Another name must be unwrapped.
             if (t.k === "variant" && t.base) {
@@ -5977,10 +5992,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return;
         }
         if (/^[A-Z]/.test(name) && constructs) {
-            scope.set(name, { type: namedSubtype(name, clauses[0].body, infer(clauses[0].body, scope)) });
+            const t = infer(clauses[0].body, scope), named = namedSubtype(name, t, true);
+            if (!named && resolve(t).k !== "dynamic") {
+                problem(`${name} := needs a scalar type to name, such as Int or Float`, clauses[0].body, `${name} = ... names the value itself`);
+            }
+            scope.set(name, { type: named ?? t });
             return;
         }
         defineBinding(name, clauses, scope, location, scope.get(name));
+        const defined = /^[A-Z]/.test(name) && scope.get(name), named = defined && namedSubtype(name, defined.type, false);
+        if (defined && named) scope.set(name, { ...defined, type: named });
     }
     // A definition's code, inferred as that definition (deferred when lazy).
     function inferDefinition<T>(definition: Definition | undefined, lazy: boolean, run: () => T): T {
@@ -6379,7 +6400,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("intrinsics.union", { type: { k: "intrinsic", name: "union", arity: 1 } });
     // to T x writes x as a T, from T x reads it back (to String, to JSON, to (List Char)).
     for (const name of ["to", "from"]) scope.set(name, { type: { k: "intrinsic", name, arity: 2 } });
-    scope.set("JSON", { type: { k: "type", value: { k: "variant", name: "JSON", args: [], base: atom("String") } } });
+    scope.set("JSON", { type: { k: "type", value: { k: "variant", name: "JSON", args: [], base: atom("String"), opaque: true } } });
     if (options.library) {
         const a = variable(), b = variable(), c = variable();
         native("bracket", [a, fn(a, b), fn(a, c)], io(runType(c)));

@@ -299,7 +299,7 @@ function helpText(): string {
         `  f x = 1; f x = "one"   overloads by result type: Int (f 0) is 1, String (f 0) "one"`,
         `  Option a = Some a | None`,
         `  UserId := Int   (a distinct Int: none of Int's operations; UserId x patterns unwrap)`,
-        `  Count = Int     (= names the value itself: Count is Int)`,
+        `  Count = Int     (a named Int: an Int wherever one is accepted, keeps its name)`,
         `  Rect w h := [Float w, Float h]   (a constructor: Rect 3 4 is Rect 3.0 4.0; (Rect w h))`,
         `  Box x = _   (a constructor: Box 5 stands for itself; Rect (Float w) (Float h) = _ converts fields)`,
         `  Box a = tag Box Box [a]   (a tagged value: its constructor, owner and fields)`,

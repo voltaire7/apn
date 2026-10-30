@@ -4,10 +4,26 @@ These features use ordinary definitions. There are no new keywords.
 
 ## Distinct types
 
-`:=` with a scalar type (a numeric type, `String`, `Bool` or `Char`) makes a
-distinct type over it; `=` only gives the type another name (`Count = Int` is
-`Int`). A distinct type is opaque: it has none of its base's operations, only
-those its clauses define.
+A scalar type (a numeric type, `String`, `Bool` or `Char`) can be named in two
+ways. `=` makes a named subtype: a `Count` is an `Int` wherever one is
+accepted, and keeps its name when a result fits.
+
+```apn
+Count = Int
+
+Count 5 + 1                 # Count 6: a Count and a plain Int give a Count
+Int (Count 5)               # 5
+sqrt (Count 4)              # 2: builtins and (Int x) patterns see the Int
+Count 5 == 5                # true
+Count 1 + Age 2             # error: cannot combine Count and Age (Age = Int)
+```
+
+Its own pattern, `(Count c)`, is chosen before `(Int n)` and accepts only a
+`Count` (a plain `5` is not one); applying `Count` or a list type
+(`List Count [1,2]`) makes one.
+
+`:=` makes a distinct type over the scalar instead. It is opaque: it has none of
+its base's operations, only those its clauses define.
 
 ```apn
 UserId := Int

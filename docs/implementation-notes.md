@@ -390,12 +390,15 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
 
 ## Nominal types and resources
 
-- `:=` with a scalar type (`NAMED_BASES`, runtime and checker) creates a
-  generative `VariantFamily` with base metadata: a distinct type. It is opaque:
-  operators reject it (`opaque`, and the checker's `operation`), builtins and
-  base patterns see the variant, and the checker never unifies it with its
-  base. Only conversions build one from its base (`conform`; the checker's
-  `convert` unless `matching`, a typed parameter's own check).
+- `=` or `:=` with a scalar type (`NAMED_BASES`, runtime and checker) creates
+  a generative `VariantFamily` with base metadata; `:=` marks it `opaque` (the
+  checker's variant `opaque` too). A transparent one is its base to operators
+  (`conform` keeps the name), builtins and base patterns (`baseValue`), and
+  the checker unifies it with its base only where the base is expected. An
+  opaque one: operators reject it (`opaque`, and the checker's `operation`),
+  builtins and base patterns see the variant. Either is built from its base
+  only by conversions (`conform`; the checker's `convert` unless `matching`, a
+  typed parameter's own check).
   Arithmetic on nullary-family ordinals returns ordinary numbers via
   `arithmeticValue`.
 - `Name params = _` is parser sugar (`constructorDeclaration`): the same

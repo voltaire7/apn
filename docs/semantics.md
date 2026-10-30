@@ -255,12 +255,14 @@ fields are ignored), in bindings, function parameters, and `match` alternatives.
 left defines a function that computes (with `=`, a type alias among them) or a
 constructor (with `:=`); see
 [templates and type aliases](templates-and-types.md#constructor-functions)
-for those and variant declarations. `:=` with a scalar type (`Money := Float`,
-`UserId := Int`) makes a distinct type (`=` only names the type: `Count = Int`
-is `Int`). It is opaque: `Money 1.2` has none of a Float's operations, builtins
-and `(Float x)` patterns reject it, its clauses give it what it needs
-(`(Money a) + (Money b) = Money (a + b)`), and `(Money x)` takes it apart. See
-[distinct types](type-and-resource-rules.md#distinct-types).
+for those and variant declarations. `=` with a scalar type (`Count = Int`)
+makes a named subtype: a `Count` is an `Int` wherever one is accepted and keeps
+its name when a result fits (`Count 5 + 1` is `Count 6`). `:=` with one
+(`UserId := Int`) makes a distinct type, which is opaque: `UserId 1` has none
+of an Int's operations, builtins and `(Int x)` patterns reject it, its clauses
+give it what it needs (`(UserId a) + (UserId b) = UserId (a + b)`), and
+`(UserId x)` takes it apart. See
+[named and distinct types](type-and-resource-rules.md#distinct-types).
 
 There are no type annotations or signatures: `:` only writes record entries
 and a ternary's else; cons is `::`. State types with constructors, `x = Int 5` or `f (Int x) = ...`; see

@@ -425,7 +425,9 @@ an `Int`.
 
 A capitalized definition with `=` computes: applied, it gives what its body
 gives, a type (`Sized n = Vect n Int`: `Sized 2` is `Vect 2 Int`) or any value,
-and nothing is named by it (`Count = Int` is `Int`). One with `:=` is a
+and nothing is named by it, except that a scalar type is kept as a
+[named subtype](type-and-resource-rules.md#distinct-types) (`Count = Int`
+makes `Count 5`). One with `:=` is a
 constructor: it makes the values of its own type.
 
 ```apn
