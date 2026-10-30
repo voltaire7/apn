@@ -61,8 +61,32 @@ export type Pattern =
     | { p: "range"; lo: bigint; hi: bigint };
 
 // A variant's result is the type it makes when not the family's own (an
-// indexed family: Cons a (Vec k a) -> Vec (S k) a).
-interface DataDef { name: string; parameters?: string[]; variants: { tag: string; arity: number; fields?: Expr[]; result?: Expr }[]; }
+// indexed family: Cons a (Vec k a) -> Vec (S k) a). Its logic, if any, is the
+// clause applying it runs (Percent (Float x) = x > 100 ? Percent 100.0 : _),
+// its _ already the raw value, intrinsics.tag owner Percent [x].
+export interface ConstructorLogic { params: Pattern[]; body: Expr; owner: { t: "var"; name: string } }
+interface DataDef { name: string; parameters?: string[]; variants: { tag: string; arity: number; fields?: Expr[]; result?: Expr; logic?: ConstructorLogic }[]; }
+
+// Whether an expression holds _ as a value (a constructor's logic does).
+export function holdsPlaceholder(e: unknown): boolean {
+    if (!e || typeof e !== "object") return false;
+    if ((e as { t?: string }).t === "placeholder") return true;
+    return Object.values(e).some(holdsPlaceholder);
+}
+// The expression with each _ replaced by the given one, in place (so its
+// nodes keep their source locations).
+export function fillPlaceholders(e: Expr, by: Expr): Expr {
+    if (e.t === "placeholder") return by;
+    const go = (x: Record<string, unknown>): void => {
+        for (const [key, child] of Object.entries(x)) {
+            if (!child || typeof child !== "object" || child === by) continue;
+            if ((child as { t?: string }).t === "placeholder") x[key] = by;
+            else go(child as Record<string, unknown>);
+        }
+    };
+    go(e as unknown as Record<string, unknown>);
+    return e;
+}
 
 // What X params = A | B is, by what its alternatives' names are bound to
 // where it runs: all new, it declares them as constructors; all existing

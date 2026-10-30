@@ -93,7 +93,7 @@ export const NATIVES: Array<[string, number]> = [
     // to T x writes x as a T; from T x reads it back (methods, like map).
     ["to", 2], ["from", 2],
     // tag owner ctor fields: a value made by ctor, belonging to owner.
-    ["tag", 3],
+    ["intrinsics.tag", 3],
     // A union of types (Mixed = Int | String).
     ["intrinsics.union", 1],
 ];
@@ -349,8 +349,12 @@ export class Interpreter {
                             // Nullary constructors are themselves the value.
                             this.env.root().setLocal(v.tag, { kind: "variant", tag: v.tag, v: [], family });
                         } else {
+                            // A constructor with logic runs it when applied; its _
+                            // makes the raw value (see ConstructorLogic).
+                            const logic = v.logic && { kind: "clauseFn" as const, name: v.tag, clauses: [{ params: v.logic.params, body: v.logic.body }], arity: v.arity, env: family.env, applied: [] };
                             this.env.root().setLocal(v.tag, {
                                 kind: "native", name: "__constr", arity: v.arity, applied: [], tag: v.tag, family,
+                                ...logic ? { invoke: (args: Value[]) => args.reduce<Value>((f, arg) => this.apply(f, arg), logic) } : {},
                             });
                         }
                     }
@@ -1215,7 +1219,7 @@ export class Interpreter {
             scope.setLocal(name, argument ?? { kind: "type", name: "$any" });
         });
         const nextPath = [...path, v];
-        return { kind: "variant", tag, family, arguments: v.arguments, v: fields.map(spec => this.defer(() => {
+        const made: Value = { kind: "variant", tag, family, arguments: v.arguments, v: fields.map(spec => this.defer(() => {
             const caller = this.env; this.env = scope;
             try {
                 const type = this.reference(this.eval(spec));
@@ -1223,6 +1227,9 @@ export class Interpreter {
                 return this.defaultField(type, nextPath);
             } finally { this.env = caller; }
         })) };
+        // A constructor with logic makes its default as it makes any value.
+        const ctor = family.env?.get(tag);
+        return ctor?.kind === "native" && ctor.invoke && made.kind === "variant" ? ctor.invoke(made.v) : made;
     }
 
     private inspectType(v: Value): Value {
@@ -4061,7 +4068,7 @@ export class Interpreter {
                 if (!this.interactive) throw new APNError("runtime", "repl needs a terminal: run the program with apn");
                 this.session(this.interactive);
                 return mkList([]);
-            case "tag": return this.tagged(args[0], args[1], args[2]);
+            case "intrinsics.tag": return this.tagged(args[0], args[1], args[2]);
             case "intrinsics.union": return this.union([...this.elements(args[0])].map(x => this.reference(x)));
             case "toString":
                 return mkStr(this.renderString(a));
@@ -4536,7 +4543,9 @@ export class Interpreter {
     private ownerName(owner: Value): string | undefined {
         return owner.kind === "type" || owner.kind === "clauseFn" ? owner.name : undefined;
     }
-    private ownerFamily(owner: Value): VariantFamily {
+    private ownerFamily(given: Value): VariantFamily {
+        // A constructor sharing its type's name is the type here (Box x = _).
+        const owner = this.sharedType(given) ?? given;
         if (owner.kind === "type" && owner.family && !owner.family.base) return owner.family;
         const key = owner.kind === "type" ? owner.alias : owner.kind === "clauseFn" ? owner.clauses : undefined, name = this.ownerName(owner);
         if (!key || !name || !/^[A-Z]/.test(name)) {

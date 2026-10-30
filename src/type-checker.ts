@@ -1769,9 +1769,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // own value (tag Option Some [5] is Some 5), else a value of Owner whose
     // arguments are its fields' types, which a pattern of Ctor binds.
     function taggedType(e: Extract<Expr, { t: "app" }>, scope: Scope): Ty | undefined {
-        if (e.f.t !== "app" || e.f.f.t !== "app" || e.f.f.f.t !== "var" || e.f.f.f.name !== "tag") return undefined;
-        const primitive = scope.get("tag"), owner = e.f.f.a, ctor = e.f.a;
-        if (!primitive || resolve(primitive.type).k !== "intrinsic" || owner.t !== "var" || ctor.t !== "var") return undefined;
+        if (e.f.t !== "app" || e.f.f.t !== "app") return undefined;
+        const head = e.f.f.f, owner = e.f.f.a, ctor = e.f.a;
+        const primitive = head.t === "var" && head.name === "tag" ? resolve(scope.get("tag")?.type ?? unknown()).k === "intrinsic"
+            : head.t === "recordAccess" && head.field === "tag" && head.rec.t === "var" && head.rec.name === "intrinsics" && !!scope.get("intrinsics")?.builtin;
+        if (!primitive || owner.t !== "var" || ctor.t !== "var") return undefined;
         // As at runtime: an owner and a constructor the program defines.
         if (TYPE_NAMES.includes(owner.name) || !/^[A-Z]/.test(owner.name)) return problem("tag's owner must be a type the program defines", e, "Some a = tag Option Some [a]");
         if (TYPE_NAMES.includes(ctor.name) || !/^[A-Z]/.test(ctor.name)) {
@@ -6377,7 +6379,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("S", { type: fn(atom("UInt"), atom("UInt"), undefined, true) });
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
     scope.set("match", { type: { k: "intrinsic", name: "match", arity: 2 } });
-    scope.set("tag", { type: { k: "intrinsic", name: "tag", arity: 3 } });
+    for (const name of ["tag", "intrinsics.tag"]) scope.set(name, { type: { k: "intrinsic", name: "tag", arity: 3 } });
     scope.set("intrinsics.union", { type: { k: "intrinsic", name: "union", arity: 1 } });
     // to T x writes x as a T, from T x reads it back (to String, to JSON, to (List Char)).
     for (const name of ["to", "from"]) scope.set(name, { type: { k: "intrinsic", name, arity: 2 } });
@@ -6489,6 +6491,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     }
                     if (v.tag === d.name) t = { ...t, shared: true } as Ty;
                     scope.set(v.tag, { type: t });
+                }
+                // A constructor's logic is a clause of its fields giving a value
+                // of its type (Percent (Float x) = x > 100 ? Percent 100.0 : _).
+                for (const v of d.variants) {
+                    if (!v.logic) continue;
+                    let made = resolve(infer({ t: "patternLambda", params: v.logic.params, body: v.logic.body }, scope));
+                    let own = resolve(scope.get(v.tag)!.type);
+                    while (made.k === "fn" && own.k === "fn") { made = resolve(made.output); own = resolve(own.output); }
+                    unify(own, made, v.logic.body);
                 }
             } else if (statement.t === "expr") {
                 executeTopLevel(statement.value, scope);

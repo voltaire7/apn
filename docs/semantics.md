@@ -890,11 +890,12 @@ constructor pattern, a bare capitalized argument takes no fields of its own
 (`R low None high`); one with fields is parenthesized (`R (Some x) y`).
 
 A capitalized definition whose body is `_` (`Box x = _`) declares a
-constructor; see [variants](templates-and-types.md#variants-parameters-and-distinct-wrappers).
-`tag owner ctor fields` makes a value that remembers the constructor that made
-it, the type it belongs to and its fields, and does nothing else (the core
-that constructors are to become sugar over); patterns of the constructor read
-the fields back:
+constructor, and one whose body holds `_` is a constructor with logic, its `_`
+the value itself; see [variants](templates-and-types.md#variants-parameters-and-distinct-wrappers).
+That value is `tag Box Box [x]`: `tag owner ctor fields` (the prelude's name
+for `intrinsics.tag`) makes a value that remembers the constructor that made
+it, the type it belongs to and its fields, and does nothing else; patterns of
+the constructor read the fields back:
 
 ```apn
 Box a = tag Box Box [a]

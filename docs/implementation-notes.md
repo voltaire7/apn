@@ -413,6 +413,11 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
   by what its names are bound to (`unionKind`, worded once in `ast.ts`): a
   union is run and checked as `X = intrinsics.union [A, B]` (`unionClause`),
   a `type` value with `choices` at runtime and a `union` type in the checker.
+- A constructor's logic (`ConstructorLogic`) is parsed with its `_` filled
+  by `intrinsics.tag Owner Name [fields]` (`constructorDeclaration`); a union
+  claiming it renames the owner. At runtime the constructor's native runs it
+  as a clause (`invoke`), as does a slot default (`zeroValue`); the checker
+  unifies its result with the constructor's.
 - `tag` makes a `variant` whose family is a declared
   owner's or one per capitalized definition (`ownerFamily`); the checker types
   `tag Owner Ctor [fields]` by its shape (`taggedType`): a declared

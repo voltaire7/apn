@@ -1,4 +1,4 @@
-import { countingFamily, sourceLocations } from "./ast.ts";
+import { countingFamily, fillPlaceholders, holdsPlaceholder, sourceLocations } from "./ast.ts";
 import { stringKey, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -1481,10 +1481,11 @@ class Parser {
             if (p.p === "var") return false;
             // A typed binding names one value: Int x = 1.
             if (t.k === "ident" && TYPE_NAMES.includes(t.v) && !declaredCtors.has(t.v) && !(p.p === "constr" && p.args.length === 1)) return false;
-            // Name params = _ declares the constructor again: _ is no value to take apart.
-            const body = this.peek(1), after = this.peek(2);
-            if (this.isSym("=") && body.k === "ident" && body.v === "_" && (["newline", "eof", "dedent"].includes(after.k) || after.k === "sym" && after.v === ";")) return false;
-            return this.isSym("=");
+            if (!this.isSym("=")) return false;
+            // Name params = ... _ declares the constructor again: _ is no value
+            // to take apart.
+            this.next();
+            return !holdsPlaceholder(this.parseExpr());
         } catch {
             return false;
         } finally {
@@ -1955,7 +1956,9 @@ class Parser {
                     // Each takes the fields its alternative gives (Some a), or its own (Some).
                     variants = variants.map((v, n) => {
                         const own = claimed[n]!.def.variants[0];
-                        return v.arity || !own.arity ? v : { tag: own.tag, arity: own.arity, fields: own.fields ?? [] };
+                        // Its logic's raw values now belong to this type.
+                        if (own.logic) own.logic.owner.name = name;
+                        return { ...v.arity || !own.arity ? v : { tag: own.tag, arity: own.arity, fields: own.fields ?? [] }, ...own.logic ? { logic: own.logic } : {} };
                     });
                     const at = Math.min(...claimed.map(c => out.indexOf(c!)));
                     const def = { name, parameters, variants };
@@ -2008,8 +2011,9 @@ class Parser {
                         const declaration = this.parseDefStatement();
                         if (TYPE_NAMES.includes(declaration.name)) throw new Error("Parser: built-in type names cannot be reassigned");
                         const [clause] = declaration.clauses;
-                        if (clause.body.t === "placeholder") {
-                            const made = constructorDeclaration(declaration.name, clause.params, t.pos);
+                        if (holdsPlaceholder(clause.body)) {
+                            const logic = clause.body.t === "placeholder" ? undefined : clause.body;
+                            const made = constructorDeclaration(declaration.name, clause.params, t.pos, logic);
                             this.unclaimed.set(declaration.name, made);
                             out.push(made);
                         } else out.push({ t: "def", ...declaration });
@@ -2058,25 +2062,32 @@ class Parser {
 // but themselves, so each is a value (Box 5), with one field per parameter. A
 // name holds anything (a type parameter); a typed name converts its field, as a
 // typed parameter does ((Float w)). It is the declaration Name a = | Name a is.
-function constructorDeclaration(name: string, params: Pattern[], pos: number): Extract<TopLevel, { t: "type" }> {
-    const parameters: string[] = [];
+function constructorDeclaration(name: string, params: Pattern[], pos: number, body?: Expr): Extract<TopLevel, { t: "type" }> {
+    const parameters: string[] = [], names: string[] = [];
     const typeOf = (p: Pattern): Expr | undefined => p.p === "var" ? { t: "var", name: p.name }
         : p.p === "int" ? { t: "int", v: p.v }
         : p.p === "constr" ? p.args.reduce<Expr | undefined>((f, a) => { const x = typeOf(a); return f && x && { t: "app", f, a: x }; }, { t: "var", name: p.tag })
         : undefined;
     const fields = params.map(p => {
-        if (p.p === "var") { parameters.push(p.name); return typeOf(p)!; }
+        if (p.p === "var") { parameters.push(p.name); names.push(p.name); return typeOf(p)!; }
         const [type, named] = p.p === "schema" ? [p.type, p.value] : p.p === "constr" && p.args.length ? [typeOf({ ...p, args: p.args.slice(0, -1) }), p.args[p.args.length - 1]] : [];
         if (!type || !named || named.p !== "var" && named.p !== "wildcard") {
             throw new APNError("parse", "a constructor's field is a name or a typed name", { pos, hint: `${name} (Float x) = _` });
         }
+        if (named.p === "var") names.push(named.name);
+        else if (body) throw new APNError("parse", "a constructor with logic names each field, which its _ holds", { pos, hint: `${name} (Float x) = ... _` });
         return type;
     });
-    if (new Set(parameters).size !== parameters.length) throw new APNError("parse", "a constructor's field names are distinct", { pos });
+    if (new Set(names).size !== names.length) throw new APNError("parse", "a constructor's field names are distinct", { pos });
     declaredTypes.add(name);
     declaredCtors.add(name);
     if (fields.length) nullaryCtors.delete(name); else nullaryCtors.add(name);
-    return { t: "type", def: { name, parameters, variants: [{ tag: name, arity: fields.length, fields }] } };
+    // Its logic's _ is the raw value: intrinsics.tag Name Name [fields].
+    const owner = { t: "var" as const, name };
+    const tag: Expr = { t: "recordAccess", rec: { t: "var", name: "intrinsics" }, field: "tag" };
+    const raw: Expr = { t: "app", f: { t: "app", f: { t: "app", f: tag, a: owner }, a: { t: "var", name } }, a: { t: "list", v: names.map(n => ({ t: "var", name: n })) } };
+    const logic = body && { params, body: fillPlaceholders(body, raw), owner };
+    return { t: "type", def: { name, parameters, variants: [{ tag: name, arity: fields.length, fields, ...logic ? { logic } : {} }] } };
 }
 
 // A block's statement, joined to the definition before it when it continues

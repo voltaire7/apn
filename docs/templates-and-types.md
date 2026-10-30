@@ -458,6 +458,24 @@ Nothing = _                   # a constructor without fields
 unbox (Box x) = x             # unbox (Box 5) is 5
 ```
 
+A body that holds `_` declares the constructor the same way and is its logic:
+applying the constructor runs it, and its `_` is the value itself, the fields
+as the parameters bound them (`tag Percent Percent [x]`). So the logic decides what every value of the type is:
+it can normalize a value, fail, or build another one, and a pattern reads back
+only what it stored.
+
+```apn
+Percent (Float x) = x > 100 ? Percent 100.0 : _
+Percent 150                   # Percent 100.0
+(Percent a) + (Percent b) = Percent (a + b)
+Percent 90 + Percent 20       # Percent 100.0: the clause calls Percent, so its logic runs
+Frac (Int n) (Int d) = d == 0 ? fail "zero denominator" : _
+```
+
+Every way of making one runs it, a record slot's default too (`[f: Frac] []`
+fails), and the checker checks that it gives the constructor's type. Its fields
+are named, since `_` holds them.
+
 A union of constructors declared with `_` claims them: they become one type's,
 exactly as a declaration of that type with those constructors makes it. An
 alternative may restate a constructor's fields (`Just a`, tying them to the
