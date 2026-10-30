@@ -465,6 +465,18 @@ to it.
 
 ## Variants, parameters, and distinct wrappers
 
+A capitalized definition whose body is `_` declares a constructor: its
+application stands for nothing but itself, so it is a value, with one field per
+parameter. A name holds anything (a type parameter); a typed name converts its
+field as a typed parameter does. A lowercase definition's `_` stays unfinished.
+
+```apn
+Box x = _                     # the same as Box a = | Box a
+Rect (Float w) (Float h) = _  # Rect 3 4 is Rect 3.0 4.0
+Nothing = _                   # a constructor without fields
+unbox (Box x) = x             # unbox (Box 5) is 5
+```
+
 A `|` distinguishes a constructor declaration from a type alias. On one line,
 constructors are separated by `|` with no leading one, except a single
 constructor, which needs a leading pipe to be a declaration. On several lines,

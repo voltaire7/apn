@@ -1980,7 +1980,9 @@ class Parser {
                     if (this.isDef()) {
                         const declaration = this.parseDefStatement();
                         if (TYPE_NAMES.includes(declaration.name)) throw new Error("Parser: built-in type names cannot be reassigned");
-                        out.push({ t: "def", ...declaration });
+                        const [clause] = declaration.clauses;
+                        out.push(clause.body.t === "placeholder" && !clause.constructs ? constructorDeclaration(declaration.name, clause.params, t.pos)
+                            : { t: "def", ...declaration });
                         continue;
                     }
                     const e = this.parseExpr();
@@ -2020,6 +2022,31 @@ class Parser {
         }
         return out;
     }
+}
+
+// Name params = _ declares a constructor: its applications stand for nothing
+// but themselves, so each is a value (Box 5), with one field per parameter. A
+// name holds anything (a type parameter); a typed name converts its field, as a
+// typed parameter does ((Float w)). It is the declaration Name a = | Name a is.
+function constructorDeclaration(name: string, params: Pattern[], pos: number): TopLevel {
+    const parameters: string[] = [];
+    const typeOf = (p: Pattern): Expr | undefined => p.p === "var" ? { t: "var", name: p.name }
+        : p.p === "int" ? { t: "int", v: p.v }
+        : p.p === "constr" ? p.args.reduce<Expr | undefined>((f, a) => { const x = typeOf(a); return f && x && { t: "app", f, a: x }; }, { t: "var", name: p.tag })
+        : undefined;
+    const fields = params.map(p => {
+        if (p.p === "var") { parameters.push(p.name); return typeOf(p)!; }
+        const [type, named] = p.p === "schema" ? [p.type, p.value] : p.p === "constr" && p.args.length ? [typeOf({ ...p, args: p.args.slice(0, -1) }), p.args[p.args.length - 1]] : [];
+        if (!type || !named || named.p !== "var" && named.p !== "wildcard") {
+            throw new APNError("parse", "a constructor's field is a name or a typed name", { pos, hint: `${name} (Float x) = _` });
+        }
+        return type;
+    });
+    if (new Set(parameters).size !== parameters.length) throw new APNError("parse", "a constructor's field names are distinct", { pos });
+    declaredTypes.add(name);
+    declaredCtors.add(name);
+    if (fields.length) nullaryCtors.delete(name); else nullaryCtors.add(name);
+    return { t: "type", def: { name, parameters, variants: [{ tag: name, arity: fields.length, fields }] } };
 }
 
 // A block's statement, joined to the definition before it when it continues

@@ -398,6 +398,9 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
   `convert` unless `matching`, a typed parameter's own check).
   Arithmetic on nullary-family ordinals returns ordinary numbers via
   `arithmeticValue`.
+- `Name params = _` is parser sugar (`constructorDeclaration`): the same
+  `type` declaration `Name a = | Name a` makes, its fields from the
+  parameters, so runtime and checker treat both alike.
 - `tag` makes a `variant` whose family is a declared
   owner's or one per capitalized definition (`ownerFamily`); the checker types
   `tag Owner Ctor [fields]` by its shape (`taggedType`): a declared
