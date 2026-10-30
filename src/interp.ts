@@ -98,6 +98,8 @@ export const NATIVES: Array<[string, number]> = [
     ["intrinsics.tag", 3],
     // get v k: what applying a value that is not a function gives (xs 2, r "x").
     ["intrinsics.get", 2],
+    // with v k x: a copy of v with k set to x (xs 2 = x binds xs to with xs 2 x).
+    ["intrinsics.with", 3],
     // A union of types (Mixed = Int | String).
     ["intrinsics.union", 1],
 ];
@@ -587,11 +589,12 @@ export class Interpreter {
             !(previous.kind === "closure" && previous.params.length > 0) &&
             !(previous.kind === "thunk" && previous.body.t === "placeholder")) {
             let collection = this.dataValue(previous);
-            if (collection.kind === "record" || this.isList(collection)) {
+            // Another value is assigned to when clauses for with give it slots.
+            if (collection.kind === "record" || this.isList(collection) || !CALLABLE_KINDS.has(collection.kind) && this.extended("with")) {
                 for (const clause of clauses) {
                     if (clause.params.length !== 1) throw new APNError("runtime", "collection assignment needs one index or field name");
                     const key = this.dataValue(this.eval(this.assignmentKey(clause.params[0])));
-                    collection = this.assignItem(collection, key, clause.body);
+                    collection = this.assigned(collection, key, clause.body);
                     this.bindNames([[name, collection]]);
                 }
                 return collection;
@@ -818,7 +821,10 @@ export class Interpreter {
         return ordinal === undefined ? v : mkInt(ordinal);
     }
 
-    private assignItem(collection: Value, key: Value, expression: Expr): Value {
+    // The builtin with: a copy of a list or record with key set to the value
+    // (written code, as a list's items are, or one already made).
+    private assignItem(collection: Value, key: Value, given: Expr | Value): Value {
+        const evaluate = () => "kind" in given ? given : this.eval(given);
         if (this.isList(collection)) {
             if (key.kind === "string") {
                 let rest = collection, position = 0n;
@@ -832,7 +838,7 @@ export class Interpreter {
                     const name = this.dataValue(first.head);
                     if (name.kind !== "string") throw new APNError("runtime", "association lookup expects string keys");
                     if (name.v === key.v) {
-                        const replacement = this.assignSlot(second.head, this.demand(this.eval(expression)));
+                        const replacement = this.assignSlot(second.head, this.demand(evaluate()));
                         return this.setIndex(collection, position, mkList([first.head, replacement]));
                     }
                     position++; rest = entry.tail;
@@ -845,7 +851,7 @@ export class Interpreter {
                     this.index(collection, index);
                     return [name, index];
                 });
-                const incoming = this.dataValue(this.eval(expression));
+                const incoming = this.dataValue(evaluate());
                 if (incoming.kind !== "record") throw new APNError("runtime", "named selection assignment requires a record");
                 const fields = new Map(incoming.v);
                 if (fields.size !== indices.length || indices.some(([name]) => !fields.has(name))) throw new APNError("runtime", "replacement fields must match selection names");
@@ -862,7 +868,7 @@ export class Interpreter {
                     this.index(collection, index); // bounds without demanding the element
                     return index;
                 });
-                let rest = this.dataValue(this.eval(expression));
+                let rest = this.dataValue(evaluate());
                 if (!this.isList(rest)) throw new APNError("runtime", "multi-index assignment needs a list of values");
                 const values: Value[] = [], items: (Written | undefined)[] = [];
                 for (const _index of indices) {
@@ -887,15 +893,16 @@ export class Interpreter {
             const index = this.listIndex(key);
             if (index === undefined) throw new APNError("runtime", "list assignment needs an integer index or a nullary variant from an enumeration");
             // The new item is code, as the list's are: code 0 = (x = 10) binds x.
-            let item = expression;
+            if ("kind" in given) return this.setIndex(collection, index, given);
+            let item = given;
             while (item.t === "block" && item.style === "(" && item.stmts.length === 1) item = item.stmts[0];
             return this.setIndex(collection, index, mkList([]), { expr: item, env: this.env });
         }
         if (collection.kind === "record") {
             const entry = key.kind === "string" ? undefined : this.listIndex(key);
-            if (entry !== undefined) return this.setEntry(collection, entry, this.demand(this.eval(expression)));
+            if (entry !== undefined) return this.setEntry(collection, entry, this.demand(evaluate()));
             if (key.kind !== "string") throw new APNError("runtime", "record assignment needs a field name, or an entry's index");
-            return this.assignFields(collection, [[key.v, this.demand(this.eval(expression))]]);
+            return this.assignFields(collection, [[key.v, this.demand(evaluate())]]);
         }
         throw new APNError("runtime", "indexed assignment expects an existing list or record");
     }
@@ -1463,6 +1470,8 @@ export class Interpreter {
                             break;
                         }
                         if (rec.kind === "io") throw new APNError("runtime", "an action has no fields", { hint: "bind its result first: `x <- action; x.field`" });
+                        // Another value's field is get v "x", when clauses for get give it fields.
+                        if (rec.kind !== "record" && !e.scoped && this.extended("get")) { r = this.apply(rec, mkStr(e.field)); break; }
                         if (rec.kind !== "record") throw new Error("record access on non-record");
                         if (e.scoped && e.argument) {
                             const outer = this.env;
@@ -1510,7 +1519,7 @@ export class Interpreter {
                     case "setItem": {
                         const collection = this.dataValue(this.eval(e.rec));
                         const key = this.dataValue(this.eval(e.index));
-                        r = this.assignItem(collection, key, e.value);
+                        r = this.assigned(collection, key, e.value);
                         break;
                     }
                     case "setFields": {
@@ -1527,12 +1536,14 @@ export class Interpreter {
                         let base: Array<[string, Value]> | null = null;
                         if (rec.kind === "record") base = rec.v;
                         else if (rec.kind === "list" && rec.v.length === 0) base = []; // [] seeds a record
-                        if (base === null) {
+                        // Another value's fields are set by with v "x" value, when clauses for with give it fields.
+                        const through = base === null && !CALLABLE_KINDS.has(rec.kind) ? this.extended("with") : undefined;
+                        if (base === null && !through) {
                             throw new APNError("runtime", `cannot set a field on a ${rec.kind}`, {
                                 hint: rec.kind === "io" ? "bind the action's result first: x <- action; x.field = 1" : "only records accept fields (an empty list promotes to a record)",
                             });
                         }
-                        if (e.entries.length === 1 && e.entries[0] === "_") {
+                        if (e.entries.length === 1 && e.entries[0] === "_" && base !== null) {
                             const expression = e.value.t === "list" ? e.value.v[0] : e.value;
                             const spread = this.dataValue(this.eval(expression));
                             if (spread.kind !== "record") throw new APNError("runtime", "record flattening expects a record");
@@ -1564,7 +1575,8 @@ export class Interpreter {
                             );
                         }
                         const values = rhs.v;
-                        r = this.assignFields(rec.kind === "record" ? rec : { kind: "record", v: base }, e.entries.map((key, i) => [key, values[i]]));
+                        r = through ? e.entries.reduce((v, key, i) => this.apply(this.apply(this.apply(through, v), mkStr(key)), values[i]), rec)
+                            : this.assignFields(rec.kind === "record" ? rec : { kind: "record", v: base! }, e.entries.map((key, i) => [key, values[i]]));
                         for (let i = parents.length - 1; i >= 0; i--) {
                             const [parent, key] = parents[i];
                             r = this.keepType(parent, { kind: "record", v: parent.v.map(([name, value]) => [name, name === key ? r : value]) });
@@ -1982,8 +1994,8 @@ export class Interpreter {
         // A value that is not a function applies as get gives it (xs 2 is
         // get xs 2); clauses for get in scope extend it.
         if (!CALLABLE_KINDS.has(f.kind)) {
-            const get = this.env.get("get");
-            return get?.kind === "clauseFn" && get.fallback ? this.apply(this.apply(get, f), arg) : this.builtinGet(f, arg);
+            const get = this.extended("get");
+            return get ? this.apply(this.apply(get, f), arg) : this.builtinGet(f, arg);
         }
         switch (f.kind) {
             case "functionType": return this.conform(f, arg);
@@ -2139,6 +2151,17 @@ export class Interpreter {
             }
             default: throw new APNError("runtime", `cannot call a non-function (${f.kind})`);
         }
+    }
+
+    // get or with, when clauses in scope extend the builtin one.
+    private extended(name: "get" | "with"): Value | undefined {
+        const f = this.env.get(name);
+        return f?.kind === "clauseFn" && f.fallback ? f : undefined;
+    }
+    // xs i = v binds xs to with xs i v: the builtin's copy, or what clauses for with give.
+    private assigned(collection: Value, key: Value, value: Expr): Value {
+        const w = this.extended("with");
+        return w ? this.apply(this.apply(this.apply(w, collection), key), this.delay(value)) : this.assignItem(collection, key, value);
     }
 
     // How many arguments a function takes before it runs (undefined for a value).
@@ -4163,6 +4186,7 @@ export class Interpreter {
                 return mkList([]);
             case "intrinsics.tag": return this.tagged(args[0], args[1], args[2]);
             case "intrinsics.get": return this.builtinGet(this.force(args[0]), args[1]);
+            case "intrinsics.with": return this.assignItem(this.dataValue(args[0]), this.dataValue(args[1]), args[2]);
             case "intrinsics.union": return this.union([...this.elements(args[0])].map(x => this.reference(x)));
             case "toString":
                 return mkStr(this.renderString(a));

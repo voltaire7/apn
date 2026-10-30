@@ -442,8 +442,8 @@ Money 3 + 4                             # Money 7: 4 is to Money 4 first
 
 The math functions (`sqrt`, `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`,
 `atan`, `atan2`, `abs`, `floor`, `ceiling`, `truncate`, `round`, `min`, `max`)
-and `get` ([indexing](#record-fields-string-keys-and-positions)) overload the
-same way, so a type can give them meaning too:
+and `get` and `with` ([indexing](#record-fields-string-keys-and-positions))
+overload the same way, so a type can give them meaning too:
 `sin (Dual a b) = Dual (sin a) (b * cos a)` leaves `sin 0.5` as it was (the
 `glsl` module writes GLSL this way). Clauses overload only a function taking
 as many arguments: `log b x = ...` and the `http` module's `get request = ...`
@@ -518,15 +518,20 @@ field. Include quote characters in the argument to select a quoted field.
 raise an error. Numeric field names retain their existing normalized spelling.
 Applying a value that is not a function is `get`: `xs 2` is `get xs 2`, the
 prelude's `intrinsics.get`, which indexes lists, records and HashMaps as
-described here. Clauses for `get` extend it, so a type of the program's own can
-be indexed, wherever it is applied (`map g`, too); other values keep the
-builtin meaning:
+described here. Assigning is its counterpart `with`: `xs 2 = x` binds `xs` to
+`with xs 2 x`, a copy with that slot replaced. Clauses for `get` and `with`
+extend them, so a type of the program's own can be indexed and assigned to,
+wherever it is applied (`map g`, too); other values keep the builtin meaning.
+On a value that is not a record, `v.x` is `get v "x"` and `v.x = y` is
+`with v "x" y`:
 
 ```apn
 Grid (List Int cells) = _
 get (Grid cells) [Int r, Int c] = cells (3 * r + c)
+with (Grid cells) [Int r, Int c] (Int x) = Grid (with cells (3 * r + c) x)
 g = Grid [1,2,3,4,5,6,7,8,9]
-g [1,2]                                 # 6
+g [1,2] = 60
+g [1,2]                                 # 60
 ```
 
 List indexing accepts integers or variants from families with only nullary constructors.

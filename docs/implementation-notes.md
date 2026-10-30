@@ -163,10 +163,17 @@ the intrinsic share (`evaluateBinop` only chooses a program's overload). A math 
 `overload` type of themselves and the previous meaning (also for their own
 recursive calls); an overload's partial calls, an intrinsic's included, stay an
 `overload` for the next argument to decide. `apply` gives a value outside
-`CALLABLE_KINDS` to the `get` in `this.env` when clauses extend it, else to
-`builtinGet` (which `intrinsics.get` runs); the checker's `application` does
-the same with `getter`, the program's extended `get`, and the intrinsic `get`
-indexes with `builtin` set, so it is not dispatched again. Tests: `tests/operators-test.ts`,
+`CALLABLE_KINDS` to the `get` in `this.env` when clauses extend it
+(`extended`), else to `builtinGet` (which `intrinsics.get` runs); `assigned`
+does the same for `with` and `assignItem`, from `setItem`, a collection's
+clause-spelled assignment and `setFields` on a value that is not a record. The
+checker's `application` does the same with `extendedFunctions`, and the
+intrinsic `get` indexes with `builtin` set, so it is not dispatched again; an
+assignment takes the program's `with` clauses when they accept the value and
+key (`overloadAccepts`), as a binop takes an operator's overload, and a call of
+the intrinsic `with` itself is a runtime check. The evaluator's `indexed`
+mirrors both: a program's `get` clauses that take the inferred types, else the
+builtin on a known list or record. Tests: `tests/operators-test.ts`,
 `tests/default-checking-test.ts`. `cast` is a `clauseFn`, not a native:
 its clauses validate list templates with `Type` and dispatch to
 `(Type target).(value)`, other types to `target value`. Expose `type`

@@ -104,6 +104,10 @@ tag = intrinsics.tag
 # assoc "key". Clauses for get extend it, so a type can be indexed:
 #     get (Grid cells) [Int r, Int c] = cells (3 * r + c)
 get = intrinsics.get
+# with v k x: a copy of v with k set to x; xs 2 = x binds xs to with xs 2 x.
+# Clauses for with extend it, as for get:
+#     with (Grid cells) [Int r, Int c] x = Grid (with cells (3 * r + c) x)
+with = intrinsics.with
 # The length-indexed list: [] has length zero, and x :: xs one more than xs.
 # Any family of lists of this shape is the same type.
 Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a

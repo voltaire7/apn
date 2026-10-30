@@ -733,8 +733,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The innermost expression being inferred that has a source location.
     let locatedExpression: Expr | undefined;
     let firstUnknown: Expr | undefined, unknownLength = false;
-    // get once a program's clauses extend it (an overload of the builtin).
-    let getter: Ty | undefined;
+    // get and with once a program's clauses extend them (overloads of the builtins).
+    const extendedFunctions = new Map<string, Ty>();
     type Unbound = { expr: Expr; name: string; hint?: string; inPattern?: boolean; within?: Expr };
     let firstUnbound: Unbound | undefined;
     // The names bound nowhere that the list item being inferred reads, by
@@ -2598,7 +2598,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         spend(e);
         f = resolve(f);
         // A value that is not a function applies as get gives it: clauses for
-        // get extend the builtin meaning (see getter).
+        // get extend the builtin meaning (see extendedFunctions).
+        const getter = extendedFunctions.get("get");
         if (getter && !builtin && gotten(f)) return application(application(getter, { type: f }, e), argument, e);
         if (!valueBlind(f)) argument = { ...argument, ...needed(argument) };
         // A Mutable cell applies as its contents (an index into a list cell).
@@ -2621,6 +2622,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             // A tag whose owner or constructor is computed is decided when it runs.
             if (f.name === "tag") { runtimeChecks++; return explicitDynamic; }
+            // with v k x, called itself: its copy's type is decided when it runs
+            // (xs 2 = x, which it gives, is checked as an assignment).
+            if (f.name === "with") { runtimeChecks++; return explicitDynamic; }
             // get v k: the builtin meaning of applying a value (xs 2, r "x").
             if (f.name === "get") return application(args[0], entries[1], e, true);
             return operation(f.name, args);
@@ -3519,6 +3523,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (rec.k === "dynamic") return unknown();
                 if (rec.k === "list" && rec.items?.length === 0) rec = { k: "record", fields: new Map() };
                 if (rec.k === "var") rec = opened(rec);
+                // Another value's fields are set by clauses for with that take it.
+                const own = extendedFunctions.get("with"), clauses = own && (resolve(own) as Extract<Ty, { k: "overload" }>).choices[0];
+                if (rec.k !== "record" && clauses && gotten(rec) && e.entries[0] !== "_" && !e.aliases && overloadAccepts(clauses, rec, atom("String"))) {
+                    let made: Ty = e.entries.reduce((t: Ty, key, n) => application(application(application(copy(clauses), { type: t }, e),
+                        { type: atom("String"), string: key }, e), { type: v.k === "list" ? v.items?.[n] ?? v.element : value }, e), rec);
+                    for (let n = parents.length - 1; n >= 0; n--) {
+                        const [parent, key, open] = parents[n];
+                        made = { k: "record", fields: new Map([...parent, [key, made]]), open };
+                    }
+                    return made;
+                }
                 if (rec.k !== "record") return problem("field assignment requires a record", e);
                 const fields = new Map(rec.fields);
                 if (e.entries.length === 1 && e.entries[0] === "_") {
@@ -3556,6 +3571,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "setItem": {
                 const rec = resolve(infer(e.rec, scope)), key = index(e.index, scope);
+                // Clauses for with that take the value and key assign through them.
+                const own = extendedFunctions.get("with"), clauses = own && (resolve(own) as Extract<Ty, { k: "overload" }>).choices[0];
+                if (clauses && gotten(rec)) {
+                    const keyType = infer(e.index, scope);
+                    if (overloadAccepts(clauses, rec, keyType)) {
+                        const partial = application(application(copy(clauses), { type: rec }, e.rec), { type: keyType, ...valueEntry(e.index, scope) }, e.index);
+                        return application(partial, { type: infer(e.value, scope), ...valueEntry(e.value, scope) }, e.value);
+                    }
+                }
                 const edited = rec.k === "list" && rec.formula ? editCode(rec, e, key, scope) : undefined;
                 if (edited) return edited;
                 const value = infer(e.value, scope);
@@ -3699,6 +3723,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (rec.k === "dynamic") return unknown();
                 if (rec.k === "operation") return operation(`field:${e.field}`, [rec]);
                 if (isIO(rec)) return problem("an action has no fields", e, "bind its result first: `x <- action; x.field`");
+                // Another value's field is get v "x", when clauses for get give it fields.
+                if (extendedFunctions.has("get") && rec.k !== "record" && gotten(rec)) return application(rec, { type: atom("String"), string: e.field }, e);
                 if (rec.k !== "record") return problem("field access requires a record", e);
                 if (!rec.fields.has(e.field)) {
                     if (rec.open) rec.fields.set(e.field, variable());
@@ -4744,7 +4770,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (!values.some(symbolic)) return computed(e, scope);
             return resolveKnown({ call: { summary, args: values } });
         }
-        if (["binop", "unop", "ternary", "numeric", "list", "range", "computedRange", "lambda"].includes(e.t)) return computed(e, scope);
+        if (["binop", "unop", "ternary", "numeric", "list", "range", "computedRange", "lambda"].includes(e.t) || e.t === "recordAccess" && !e.scoped) return computed(e, scope);
         return {};
     }
     // A computed value; over enclosing parameters it is known only at their calls.
@@ -4801,6 +4827,29 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (result[key] === undefined && facts?.[key] !== undefined) (result as Record<string, unknown>)[key] = facts[key];
         }
         return result;
+    }
+    // A value that is not a function applied to a key (xs 1, r "x"): the
+    // program's clauses for get when they take its type and the key's (as
+    // inferred, as an operator's overload is chosen), else the builtin get on a
+    // known list or record.
+    function indexed(c: Known, key: Known, of: Expr, r: Ty | undefined, depth: number): Known | undefined {
+        const own = extendedFunctions.get("get");
+        if (own && !c.fields) {
+            const l = inferred.get(of);
+            if (!l || !r || [l, r].some(x => ["var", "operation", "dynamic"].includes(resolve(x).k))) return undefined;
+            const clauses = (resolve(own) as Extract<Ty, { k: "overload" }>).choices[0];
+            if (overloadAccepts(clauses, l, r)) {
+                const summary = summaryAt(clauses, 2);
+                return summary && evaluateCall(summary, [c, key], depth);
+            }
+        }
+        const k = readMutable(key);
+        if (c.fields) return k?.string === undefined ? undefined : c.fields.find(([name]) => name === k.string)?.[1];
+        const n = numericOf(k);
+        if (n?.kind !== "int" || !isList(c)) return undefined;
+        const at = n.v < 0n ? peek(() => knownLength(c), undefined) : 0n;
+        if (at === undefined) return undefined;
+        return element(c, Number(n.v + at)) ?? undefined;
     }
     // Evaluate a call statically: rank its clauses as the runtime would, and
     // meet the results of every clause that might run. Bounded in depth and work.
@@ -5111,6 +5160,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             // f $ x applies f to x.
             case "pipe": return evaluateKnown({ t: "app", f: e.f, a: e.x }, env, scope, depth);
+            // v.x: a record's field, or what get gives another value for "x".
+            case "recordAccess": {
+                const rec = e.scoped ? undefined : demand(value(e.rec));
+                // (A list's xs.x applies it as a template.)
+                const field = rec && !rec.action && !isList(rec) ? indexed(rec, { string: e.field }, e.rec, atom("String"), depth) : undefined;
+                if (field === undefined) incomplete = true;
+                return field;
+            }
             // Code this evaluator does not follow may have effects: mark it skipped.
             default: incomplete = true; return undefined;
         }
@@ -5281,10 +5338,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // An application: lambdas, function values, pure builtins, and calls by name.
     function evaluateApp(e: Extract<Expr, { t: "app" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
         const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
-        const apply = (f: Known | undefined, args: Known[]) => { const g = demand(f)?.fn; return g && applyKnown(g, args, depth); };
         const args: Expr[] = [];
         let head: Expr = e;
         while (head.t === "app") { args.unshift(head.a); head = head.f; }
+        // A function applies; a value that is not one is indexed, as get gives it.
+        const apply = (f: Known | undefined, given: Known[]) => {
+            const d = demand(f);
+            if (d?.fn) return applyKnown(d.fn, given, depth);
+            const at = args.length - given.length;
+            return d && !d.action && given.length === 1 ? indexed(d, given[0], at ? args[at - 1] : head, inferred.get(args[at]), depth) : undefined;
+        };
         if (head.t === "block" && head.stmts.length === 1 && head.style === "(") head = head.stmts[0];
         // An operator's intrinsic called (intrinsics.add a b) is its builtin meaning.
         const intrinsic = head.t === "recordAccess" && !head.scoped && (!head.argument || head.argument.t === "var" && head.argument.name === head.field) && head.rec.t === "var" && head.rec.name === "intrinsics"
@@ -5420,6 +5483,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const numbers = values as Numeric[];
             return attempt(() => head.name === "expt" ? typedPower(numbers[0], numbers[1]) : numericNative(head.name, numbers));
         }
+        if (entry && args.length === 1 && gotten(resolve(entry.type))) return apply(value(head), [value(args[0]) ?? {}]);
         if (!trustsShape(entry)) return undefined;
         const values = args.map(a => lazyValue(() => value(a), { exprs: [a], env }));
         const summary = summaryAt(entry!.type, args.length);
@@ -6062,7 +6126,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         defineClauses(name, clauses, scope, location);
         const entry = scope.get(name);
         if (previous && entry) scope.set(name, { ...entry, type: { k: "overload", choices: [entry.type, previous], name } });
-        if (previous && name === "get") getter = scope.get(name)!.type;
+        if (previous && (name === "get" || name === "with")) extendedFunctions.set(name, scope.get(name)!.type);
         if (options.library && entry && DECLARED_KEEPS_LENGTH.has(name)) declareKeepsLength(entry.type);
     }
     // The result is a list as long as the final argument, for each overload
@@ -6171,7 +6235,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     function defineBinding(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr, previous: Entry | undefined): void {
         const collection = previous && resolve(previous.type), c = clauses[0];
-        if (collection && (collection.k === "list" || collection.k === "record" || isExplicit(collection)) && c.params.length === 1) {
+        // (Another value is assigned to when clauses for with give it slots.)
+        if (collection && (collection.k === "list" || collection.k === "record" || isExplicit(collection) || extendedFunctions.has("with") && gotten(collection)) && c.params.length === 1) {
             const p = c.params[0];
             const asKey = (p: Pattern): Expr | undefined => {
                 if (p.p === "var") return { t: "var", name: p.name };
@@ -6509,6 +6574,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     for (const name of ["tag", "intrinsics.tag"]) scope.set(name, { type: { k: "intrinsic", name: "tag", arity: 3 } });
     scope.set("intrinsics.union", { type: { k: "intrinsic", name: "union", arity: 1 } });
     for (const name of ["get", "intrinsics.get"]) scope.set(name, { type: { k: "intrinsic", name: "get", arity: 2 } });
+    for (const name of ["with", "intrinsics.with"]) scope.set(name, { type: { k: "intrinsic", name: "with", arity: 3 } });
     // to T x writes x as a T, from T x reads it back (to String, to JSON, to (List Char)).
     for (const name of ["to", "from"]) scope.set(name, { type: { k: "intrinsic", name, arity: 2 } });
     scope.set("JSON", { type: { k: "type", value: { k: "variant", name: "JSON", args: [], base: atom("String") } } });

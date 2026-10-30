@@ -47,6 +47,15 @@ for (const [name, source, expected] of [
     ["clauses for get index a type", "Grid (List Int cells) = _\nget (Grid cells) [Int r, Int c] = cells (3 * r + c)\n" +
         "g = Grid [1,2,3,4,5,6,7,8,9]\nprint (g [1,2])\nprint (map g [[0,0],[2,2]])\nprint ([10,20] 1)\nprint (get [5,6] 0)",
         ["6", "[1,9]", "20", "5"]],
+    // xs i = x binds xs to with xs i x, which clauses extend too; v.x is get v "x".
+    ["clauses for with assign to a type", "Grid (List Int cells) = _\nget (Grid cells) [Int r, Int c] = cells (3 * r + c)\n" +
+        "with (Grid cells) [Int r, Int c] (Int x) = Grid (with cells (3 * r + c) x)\n" +
+        "g = Grid [1,2,3,4,5,6,7,8,9]\nold = g\ng [1,2] = 60\nprint [g [1,2], old [1,2]]\nxs = [1,2]\nxs 0 = 5\nprint [xs, with xs 1 7]",
+        ["[60,6]", "[[5,2],[5,7]]"]],
+    ["clauses for get and with give a type fields", "Point (Float x) (Float y) = _\nget (Point x y) \"x\" = x\nget (Point x y) \"y\" = y\n" +
+        "with (Point x y) \"x\" (Float v) = Point v y\nwith (Point x y) \"y\" (Float v) = Point x v\n" +
+        "p = Point 1 2\nprint (p.x + p.y)\np.x = 5\na = [p: p]\na.p.y = 3\nprint a",
+        ["3.0", "[p: Point 5.0 3.0]"]],
     // Clauses taking another number of arguments define a new function.
     ["an overload takes as many arguments", "log b x = b\nprint (log 2 8)\nget k = k\nprint (get 3)\nprint ([4,5] 1)", ["2", "3", "5"]],
 ] as const) Deno.test(`operators: ${name}`, () => {
