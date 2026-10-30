@@ -36,7 +36,7 @@ export type Value =
     // schema: a cell holding a List T (Mutable ((List T) xs)) holds lists of any length.
     | { kind: "mutable"; v: Value; schema?: Value }
     // variable: a type variable (the a of a -> a), named by name.
-    | { kind: "type"; name: string; inspect?: boolean; description?: string; family?: VariantFamily; arguments?: Value[]; alias?: { parameters: string[]; run: Value; constructs: boolean; family: VariantFamily; named: Map<string, VariantFamily> }; variable?: boolean }
+    | { kind: "type"; name: string; inspect?: boolean; description?: string; family?: VariantFamily; arguments?: Value[]; alias?: { parameters: string[]; run: Value; constructs: boolean; family: VariantFamily; named: Map<string, VariantFamily> }; choices?: Value[]; variable?: boolean }
     | { kind: "hashmap"; entries: Map<string, [Value, Value]> }
     | Numeric
     | { kind: "rationalRange"; lo: Real; step: Real; hi: Real | null }

@@ -403,6 +403,10 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
   parameters, so runtime and checker treat both alike. A later union of
   such constructors (`Parser.unclaimed`) replaces their declarations with the
   one declaration of the union's type, where the first of them stood.
+- `X = A | B` stays a `type` statement; runtime and checker decide what it is
+  by what its names are bound to (`unionKind`, worded once in `ast.ts`): a
+  union is run and checked as `X = intrinsics.union [A, B]` (`unionClause`),
+  a `type` value with `choices` at runtime and a `union` type in the checker.
 - `tag` makes a `variant` whose family is a declared
   owner's or one per capitalized definition (`ownerFamily`); the checker types
   `tag Owner Ctor [fields]` by its shape (`taggedType`): a declared

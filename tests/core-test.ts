@@ -21,6 +21,8 @@ const CTOR = "Box x = _\nRect (Float w) (Float h) = _\nNothing = _\n";
 const MAYBE = "Just x = _\nNada = _\nMaybe a = Just a | Nada\n";
 const SHAPE = "Circle (Float r) = _\nSquare (Float s) = _\nShape = Circle | Square\n";
 const OPTION = 'import "option"\n';
+// A union of existing types is a type of its own values: made of nothing new.
+const MIXED = "Mixed = Int | String\n";
 for (const checked of [true, false]) {
     for (const [source, expected] of [
         [BOX + "Box 5", "Box 5"],
@@ -43,6 +45,10 @@ for (const checked of [true, false]) {
         [MAYBE + "return = Just\n(Just x) >>= f = f x\nNada >>= f = Nada\nMaybe Int { x <- Just 2; return (x * 3) }", "Just 6"],
         [SHAPE + "area (Circle r) = 3 * r * r\narea (Square s) = s * s\nmap area [Circle 1, Square 2]", "[3.0,4.0]"],
         [SHAPE + 'g (Shape s) = "shape"\n[typeOf (Circle 1), g (Square 1)]', '[Shape,"shape"]'],
+        [MIXED + "Mixed", "Int | String"],
+        [MIXED + 'f (Mixed m) = "mixed"\nf _ = "other"\n[f 1, f "a", f 2.5]', '["mixed","mixed","other"]'],
+        [MIXED + '[Mixed 5, isType Mixed "s"]', "[5,true]"],
+        [OPTION + "OptOrList a = Option a | List a\nOptOrList Int", "Option Int | List Int"],
     ] as const) Deno.test(`core (checked=${checked}): ${source}`, () => {
         const actual = run(source, checked);
         if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -57,6 +63,9 @@ for (const checked of [true, false]) {
         ["Bad [x] = _\n1", "a constructor's field is a name or a typed name"],
         [MAYBE + 'Maybe Int (Just "a")', checked ? "cannot use String where Int is required" : "Int expects a number"],
         ["Just x = _\nMaybe a = Just a | Nope\n1", "Maybe unions constructors declared with _, and Nope is not one"],
+        [MIXED + "Mixed 2.5", checked ? "cannot use Float where Int | String is required" : "Float is not one of Int | String"],
+        ["Foo = Int | Bar\n1", "Foo mixes a type (Int) and a new constructor (Bar)"],
+        [OPTION + "Two = Some | Int\n1", "Two's alternative Some is a constructor of another type"],
         // A lowercase definition's _ stays unfinished.
         ["f x = _\nf 1", "not implemented"],
     ] as const) Deno.test(`core rejects (checked=${checked}): ${source}`, () => {

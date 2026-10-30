@@ -64,6 +64,30 @@ export type Pattern =
 // indexed family: Cons a (Vec k a) -> Vec (S k) a).
 interface DataDef { name: string; parameters?: string[]; variants: { tag: string; arity: number; fields?: Expr[]; result?: Expr }[]; }
 
+// What X params = A | B is, by what its alternatives' names are bound to
+// where it runs: all new, it declares them as constructors; all existing
+// types, it is the union of them (unionClause). Anything else is an error,
+// worded once here for the runtime and the checker.
+export type Alternative = "new" | "type" | "constructor";
+export function unionKind(def: DataDef, kind: (name: string) => Alternative): "declaration" | "union" | string {
+    const kinds = def.variants.map(v => v.tag === "[]" || v.tag === "::" ? "new" : kind(v.tag));
+    if (kinds.every(k => k === "new")) return "declaration";
+    // One type is no union: a leading | declares a constructor (Box a = | Box a).
+    if (kinds.every(k => k === "type")) {
+        return kinds.length > 1 ? "union" : `${def.name} = | ${def.variants[0].tag} declares a constructor, and ${def.variants[0].tag} is a type already (a built-in type cannot be replaced)`;
+    }
+    const owned = def.variants.find((_, n) => kinds[n] === "constructor");
+    if (owned) return `${def.name}'s alternative ${owned.tag} is a constructor of another type; a union lists types`;
+    const [type, fresh] = [def.variants.find((_, n) => kinds[n] === "type")!, def.variants.find((_, n) => kinds[n] === "new")!];
+    return `${def.name} mixes a type (${type.tag}) and a new constructor (${fresh.tag}): its alternatives are all types (a union) or all new (a declaration)`;
+}
+// A union of existing types, as the definition X params = intrinsics.union [A, B].
+export function unionClause(def: DataDef): DefClause {
+    const alternatives = def.variants.map(v => (v.fields ?? []).reduce<Expr>((f, a) => ({ t: "app", f, a }), { t: "var", name: v.tag }));
+    const union: Expr = { t: "recordAccess", rec: { t: "var", name: "intrinsics" }, field: "union" };
+    return { params: (def.parameters ?? []).map(name => ({ p: "var", name })), body: { t: "app", f: union, a: { t: "list", v: alternatives } } };
+}
+
 // A family of lists counting its elements, as Vect is in the prelude:
 // F n a = [] -> F Z a | a :: F k a -> F (S k) a (Z or 0, S k or k + 1).
 // Such a family is the length-indexed list.

@@ -1960,10 +1960,12 @@ class Parser {
                     continue;
                 }
                 if (new Set(variants.map(v => v.tag)).size !== variants.length) throw new Error("Parser: duplicate value constructor");
-                if (variants.some(v => TYPE_NAMES.includes(v.tag))) throw new Error("Parser: a value constructor cannot replace a built-in type");
-                // Register only after the entire declaration has parsed successfully.
+                // Register only after the entire declaration has parsed successfully;
+                // alternatives that are types (Int | String) make a union, not constructors.
+                const types = variants.filter(v => v.tag !== name && declaredTypes.has(v.tag)).map(v => v.tag);
                 declaredTypes.add(name);
                 for (const { tag, arity } of variants) {
+                    if (types.includes(tag)) continue;
                     if (tag === "[]" || tag === "::") continue;
                     declaredCtors.add(tag);
                     if (arity === 0) nullaryCtors.add(tag); else nullaryCtors.delete(tag);

@@ -1,4 +1,4 @@
-import { clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm } from "./ast.ts";
+import { type Alternative, clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -1759,6 +1759,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return problem(`${f.name} has ${args.length} fields, so its body must give a list of ${args.length} items`, e,
             `${f.name} ${f.params.join(" ")} = [${f.params.join(", ")}] lays them out in order`);
     }
+    // What a name in X = A | B is bound to here, as the run decides (Interpreter.alternative).
+    function alternative(name: string, declared: string, scope: Scope): Alternative {
+        const entry = scope.get(name);
+        if (!entry || name === "[]" || name === "::") return "new";
+        if (isConstructor(entry)) {
+            let made = resolve(entry.type);
+            while (made.k === "fn") made = resolve(made.output);
+            return made.k === "variant" && made.name === declared ? "new" : "constructor";
+        }
+        return ["type", "alias", "factory"].includes(resolve(entry.type).k) ? "type" : "new";
+    }
     // tag Owner Ctor [fields], as the run makes it: a declared constructor's
     // own value (tag Option Some [5] is Some 5), else a value of Owner whose
     // arguments are its fields' types, which a pattern of Ctor binds.
@@ -2580,6 +2591,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // set is an action whatever it writes: its target and value are
             // checked (a requirement) once their types are known.
             if (f.name === "set") { operation(f.name, args); return io(list(variable(), constant(0n))); }
+            // A union of types (Mixed = Int | String).
+            if (f.name === "union") {
+                const list = resolve(args[0]), items = list.k === "list" ? list.items?.map(resolve) : undefined;
+                if (!items?.every(item => item.k === "type")) { runtimeChecks++; return explicitDynamic; }
+                return { k: "type", value: union(items.map(item => (item as Extract<Ty, { k: "type" }>).value)) };
+            }
             // A tag whose owner or constructor is computed is decided when it runs.
             if (f.name === "tag") { runtimeChecks++; return explicitDynamic; }
             return operation(f.name, args);
@@ -6359,6 +6376,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
     scope.set("match", { type: { k: "intrinsic", name: "match", arity: 2 } });
     scope.set("tag", { type: { k: "intrinsic", name: "tag", arity: 3 } });
+    scope.set("intrinsics.union", { type: { k: "intrinsic", name: "union", arity: 1 } });
     // to T x writes x as a T, from T x reads it back (to String, to JSON, to (List Char)).
     for (const name of ["to", "from"]) scope.set(name, { type: { k: "intrinsic", name, arity: 2 } });
     scope.set("JSON", { type: { k: "type", value: { k: "variant", name: "JSON", args: [], base: atom("String") } } });
@@ -6423,6 +6441,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     try { define(statement.name, statement.clauses, scope, statement.clauses[0].body); }
                     finally { topLevelDefinition = creatingTopLevel = false; }
                 }
+            }
+            else if (statement.t === "type" && unionKind(statement.def, name => alternative(name, statement.def.name, scope)) !== "declaration") {
+                // X = A | B of existing types is their union (see unionKind), as at runtime.
+                const kind = unionKind(statement.def, name => alternative(name, statement.def.name, scope));
+                if (kind !== "union") problem(kind);
+                const clause = unionClause(statement.def);
+                define(statement.def.name, [clause], scope, clause.body);
             }
             else if (statement.t === "type" && countingFamily(statement.def)) {
                 // A family of lists counting its elements is the length-indexed list.

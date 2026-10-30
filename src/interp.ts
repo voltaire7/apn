@@ -17,7 +17,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, ca
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, sharedNameAdvice, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { clauseKey, countingFamily, flatTypedPattern, isLoadCall, mentions, mergeClauses } from "./ast.ts";
+import { type Alternative, clauseKey, countingFamily, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, typeToString, valueToString, rawString } from "./types.ts";
@@ -94,6 +94,8 @@ export const NATIVES: Array<[string, number]> = [
     ["to", 2], ["from", 2],
     // tag owner ctor fields: a value made by ctor, belonging to owner.
     ["tag", 3],
+    // A union of types (Mixed = Int | String).
+    ["intrinsics.union", 1],
 ];
 // The names editors color as built-in functions (the natives, cast and do).
 // The names natives are bound by (each intrinsic is a field of intrinsics).
@@ -323,6 +325,11 @@ export class Interpreter {
             let last: Value = { kind: "list", v: [] };
             for (const [index, tl] of program.entries()) {
                 if (this.runDepth === 1 && !this.dynamicDepth) this.running = { program, index };
+                if (tl.t === "type" && tl.def.variants.some(v => v.tag !== "[]" && v.tag !== "::")) {
+                    const kind = unionKind(tl.def, name => this.alternative(name, tl.def.name));
+                    if (kind === "union") { last = this.evalDef(tl.def.name, [unionClause(tl.def)]); continue; }
+                    if (kind !== "declaration") throw new APNError("runtime", kind);
+                }
                 if (tl.t === "type") {
                     // A family of lists counting its elements (Vect n a = [] ->
                     // Vect Z a | a :: Vect k a -> Vect (S k) a) is the length-indexed list.
@@ -1959,6 +1966,12 @@ export class Interpreter {
             case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
                 if (f.name === "$any" && !f.family && !f.alias) return arg;
+                // Applying a union checks that the value is one of its types.
+                if (f.choices) {
+                    const value = this.demand(arg);
+                    if (this.belongsToType(f, value)) return value;
+                    throw new APNError("runtime", `${this.typeText(value)} is not one of ${f.name}`);
+                }
                 if (f.name === "Dynamic" && !f.family && !f.alias) {
                     this.dynamicDepth++;
                     try { return this.constructType("Dynamic", this.reference(arg)); }
@@ -3431,6 +3444,7 @@ export class Interpreter {
 
     belongsToType(type: Value, value: Value): boolean {
         type = this.reference(type); value = this.reference(value);
+        if (type.kind === "type" && type.choices) return type.choices.some(choice => this.belongsToType(choice, value));
         if (type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) {
             const [size, element] = this.vectorParts(type);
             if (!this.isList(value)) return false;
@@ -4018,6 +4032,7 @@ export class Interpreter {
                 this.session(this.interactive);
                 return mkList([]);
             case "tag": return this.tagged(args[0], args[1], args[2]);
+            case "intrinsics.union": return this.union([...this.elements(args[0])].map(x => this.reference(x)));
             case "toString":
                 return mkStr(this.renderString(a));
             case "parse": {
@@ -4476,6 +4491,26 @@ export class Interpreter {
         }
         return { kind: "variant", tag: f.name, v: items, family: alias.family };
     }
+    // A union of types: a value of any of them is one of it. Unions inside
+    // flatten and a type given twice counts once.
+    private union(types: Value[]): Value {
+        const choices: Value[] = [];
+        for (const type of types.flatMap(t => t.kind === "type" && t.choices ? t.choices : [t])) {
+            if (!this.isTypeValue(type)) throw new APNError("runtime", `a union lists types, and ${this.renderString(type)} is not one`);
+            if (!choices.some(c => this.sameType(c, type))) choices.push(type);
+        }
+        if (choices.length === 1) return choices[0];
+        const name = choices.map(c => this.renderString(c)).join(" | ");
+        return { kind: "type", name, choices };
+    }
+    // What a name in X = A | B is bound to here (see unionKind).
+    private alternative(name: string, declared: string): Alternative {
+        const bound = this.env.get(name), value = bound && this.reference(bound);
+        if (!value) return "new";
+        if (value.kind === "native" && value.tag || value.kind === "variant") return value.family?.name === declared ? "new" : "constructor";
+        return this.isTypeValue(value) ? "type" : "new";
+    }
+
     // tag owner ctor fields: a value that remembers the constructor that made
     // it, the type it belongs to and its fields (Some a = tag Option Some [a]).
     // Patterns read the fields back; the value does nothing else.
@@ -4772,6 +4807,8 @@ export class Interpreter {
             const binding = this.env.get(p.tag);
             if (binding) {
                 const type = this.reference(binding);
+                // (Mixed m): a value of any of a union's types.
+                if (type.kind === "type" && type.choices) return p.args.length === 1 && this.belongsToType(type, v) && this.matchPattern(p.args[0], v, binds);
                 if (p.args.length === 1 && type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) return this.matchPattern(p.args[0], this.conform(type, v), binds);
                 if (p.args.length === 1 && type.kind === "type" && !type.family && !type.alias) {
                     return this.matchPattern({ p: "constr", tag: type.name, args: p.args }, v, binds);

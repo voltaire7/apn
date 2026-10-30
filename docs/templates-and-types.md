@@ -491,6 +491,20 @@ Square (Float s) = _
 Shape = Circle | Square       # typeOf (Circle 1) is Shape
 ```
 
+What `X = A | B` is depends on what its alternatives' names are bound to
+where it runs. All new names declare them as constructors of `X`, as above.
+All existing types make `X` their union, which makes nothing: a value of any of
+them is one of it, `(X v)` matches it, and applying `X` checks membership. A
+mix (a type and a new name, or another type's constructor) is an error that
+names the odd one out.
+
+```apn
+Mixed = Int | String          # Mixed shows as Int | String
+f (Mixed m) = m               # takes 1 and "a", not 2.5
+Mixed 2.5                     # error: Float is not one of Int | String
+OptOrList a = Option a | List a
+```
+
 A `|` distinguishes a constructor declaration from a type alias. On one line,
 constructors are separated by `|` with no leading one, except a single
 constructor, which needs a leading pipe to be a declaration. On several lines,
