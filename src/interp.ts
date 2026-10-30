@@ -21,10 +21,10 @@ import { type Alternative, claimedDeclaration, LIST_TYPE_RANGE, clauseKey, type 
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions } from "./ast.ts";
-import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, typeToString, valueToString, rawString } from "./types.ts";
+import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
-import { parse, exprToSource, patternSource, patternVariables, rangeExpr, isOperatorName, PRIMITIVE_OPERATORS, fixityOf, getLooseSpacing, setLooseSpacing } from "./parser.ts";
+import { parse, exprToSource, patternSource, patternVariables, isOperatorName, PRIMITIVE_OPERATORS, fixityOf, getLooseSpacing, setLooseSpacing } from "./parser.ts";
 import { charLiteral, itemsText, spacedItem, stringLiteral } from "./separators.ts";
 
 // ---------------- Evaluator ----------------
@@ -458,7 +458,8 @@ export class Interpreter {
     // is not. A range stays one ([1..]). Nothing is evaluated or rendered.
     private dataSource(value: Value): string | undefined {
         let budget = 10_000;
-        const literal = (e: Expr): boolean => ["int", "float", "bool", "string", "char", "numeric", "range"].includes(e.t)
+        const literal = (e: Expr): boolean => ["int", "float", "bool", "string", "char", "numeric"].includes(e.t)
+            || e.t === "range" && [e.lo, e.second, e.hi].every(x => !x || literal(x))
             || e.t === "list" && e.v.every(literal) || e.t === "record" && e.v.every(([, x]) => literal(x));
         const evaluated = (v: Value): Value | undefined => {
             while (v.kind === "thunk" || v.kind === "deferred" || v.kind === "lazyList") {
@@ -1020,10 +1021,7 @@ export class Interpreter {
                 return node(text("."), of(e.rec), e.entries.every(x => typeof x === "string")
                     ? node(text("[]"), ...(e.entries as string[]).map(text))
                     : node(text("[:]"), ...(e.entries as [string, string][]).map(([k, v]) => node(text(keySource(k)), text(v)))));
-            case "computedRange": return e.lo ? range(of(e.lo), e.hi ? of(e.hi) : undefined, e.second ? of(e.second) : undefined) : node(text(".."));
-            case "range": return range(mkInt(e.lo), e.hi === null ? undefined : mkInt(e.hi), e.step !== 1n ? mkInt(e.lo + e.step) : undefined);
-            case "floatRange": return range({ kind: "float", v: e.lo }, e.hi === null ? undefined : { kind: "float", v: e.hi }, { kind: "float", v: e.lo + e.step });
-            case "rationalRange": return range(e.lo, e.hi === null ? undefined : e.hi, arithmetic("+", e.lo, e.step) as Value);
+            case "range": return e.lo ? range(of(e.lo), e.hi ? of(e.hi) : undefined, e.second ? of(e.second) : undefined) : node(text(".."));
             // a single-statement ( ) group is transparent: toAST (1 + 2) is ["+",1,2]
             case "block":
                 if (e.stmts.length === 1 && e.style === "(") return of(e.stmts[0]);
@@ -1401,7 +1399,7 @@ export class Interpreter {
                 let r: Value = { kind: "list", v: [] };
                 let next: TailCall | undefined;
                 switch (e.t) {
-                    case "computedRange": {
+                    case "range": {
                         // A range of a type is the list type: [Int..] is List Int,
                         // any number of Ints, possibly infinitely many.
                         // [..] repeats anything: List a, as typeOf [] is.
@@ -1416,12 +1414,11 @@ export class Interpreter {
                             return value;
                         };
                         const bound = (expression: Expr | null) => expression === null ? null : real(this.dataValue(this.eval(expression)));
-                        r = this.eval(rangeExpr(real(lo), bound(e.second), bound(e.hi)));
+                        r = rangeValue(real(lo), bound(e.second), bound(e.hi));
                         break;
                     }
                     case "import": r = this.importStandard(e.module); break;
                     case "numeric": r = e.v; break;
-                    case "rationalRange": r = { kind: "rationalRange", lo: e.lo, step: e.step, hi: e.hi }; break;
                     case "int": r = mkInt(e.v); break;
                     case "float": r = { kind: "float", v: e.v }; break;
                     case "bool": r = mkBool(e.v); break;
@@ -1463,8 +1460,6 @@ export class Interpreter {
                     case "patternLambda": r = { kind: "clauseFn", name: "<lambda>", clauses: [{ params: e.params, body: e.body, guard: e.guard }], arity: e.params.length, env: this.env, applied: [] }; break;
                     case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
                     case "ternary": next = this.coreMatch(ternaryMatch(e)); break;
-                    case "range": r = { kind: "range", lo: e.lo, step: e.step, hi: e.hi }; break;
-                    case "floatRange": r = { kind: "floatRange", lo: e.lo, step: e.step, hi: e.hi }; break;
                     case "list": {
                         if (!e.v.some(x => x.t === "stmDef" || x.t === "patDef")) { r = { kind: "lazyList", exprs: e.v, env: this.env }; break; }
                         r = this.codeList(e.v, this.env);

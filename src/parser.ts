@@ -2,26 +2,6 @@ import { claimedDeclaration, countingOf, fillPlaceholders, holdsPlaceholder, sou
 import { stringKey, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
-function rangeNum(e: Expr): Real {
-    if (e.t === "int" || e.t === "float") return { kind: e.t, v: e.v } as Real;
-    if (e.t === "unop" && e.op === "neg") return negate(rangeNum(e.e)) as Real;
-    if (e.t === "binop" && ["+", "-", "*", "/"].includes(e.op)) return arithmetic(e.op, rangeNum(e.l), rangeNum(e.r)) as Real;
-    throw new Error("Parser: range bounds must be numeric constants");
-}
-export function rangeExpr(lo: Real, second: Real | null, hi: Real | null): Expr {
-    const step = second === null ? integer(hi !== null && compareNumbers(hi, lo) < 0 ? -1n : 1n) : arithmetic("-", second, lo) as Real;
-    if ([lo, second, hi].some((x) => x?.kind === "float")) {
-        const start = asFloat(lo), delta = asFloat(step), end = hi === null ? null : asFloat(hi);
-        if (!Number.isFinite(start) || !Number.isFinite(delta) || (end !== null && !Number.isFinite(end))) throw new Error("Parser: float range bounds and step must be finite");
-        return { t: "floatRange", lo: start, step: delta, hi: end };
-    }
-    if (lo.kind === "int" && step.kind === "int" && (hi === null || hi.kind === "int")) return { t: "range", lo: lo.v, step: step.v, hi: hi?.v ?? null };
-    return { t: "rationalRange", lo, step, hi };
-}
-function rangeSyntax(lo: Expr, second: Expr | null, hi: Expr | null): Expr {
-    try { return rangeExpr(rangeNum(lo), second === null ? null : rangeNum(second), hi === null ? null : rangeNum(hi)); }
-    catch { return { t: "computedRange", lo, second, hi }; }
-}
 import { lex, OPERATOR_CHARS } from "./lexer.ts";
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { APNError, tokLen } from "./errors.ts";
@@ -1134,7 +1114,7 @@ class Parser {
                         // [..]: anything repeated, the list type of any items.
                         if (this.isSym("..") && this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === "]") {
                             this.next(); this.next();
-                            return { t: "computedRange", lo: null, second: null, hi: null };
+                            return { t: "range", lo: null, second: null, hi: null };
                         }
                         {
                             const save = this.i;
@@ -1143,7 +1123,7 @@ class Parser {
                                 this.next();
                                 if (this.isSym("]")) {
                                     this.next();
-                                    return rangeSyntax(loE, null, null);
+                                    return { t: "range", lo: loE, second: null, hi: null };
                                 }
                                 const hi = this.parseOperators(6);
                                 this.expectSym("]");
@@ -1160,7 +1140,7 @@ class Parser {
 
                                 // implicit step ADAPTS to direction: [0..-100] descends;
                                 // an EXPLICIT step pointing the wrong way stays empty
-                                return rangeSyntax(loE, null, hi);
+                                return { t: "range", lo: loE, second: null, hi };
                             }
                             if (this.isSym(",") && this.peek(1).k !== "newline" &&
                                     this.peek(1).k !== "dedent" &&
@@ -1173,11 +1153,11 @@ class Parser {
 
                                     if (this.isSym("]")) {
                                         this.next();
-                                        return rangeSyntax(loE, sE, null);
+                                        return { t: "range", lo: loE, second: sE, hi: null };
                                     }
                                     const hi = this.parseOperators(6);
                                     this.expectSym("]");
-                                    return rangeSyntax(loE, sE, hi);
+                                    return { t: "range", lo: loE, second: sE, hi };
                                 }
                                 this.i = save2; // [1, 2] — a plain list
                             }
@@ -2338,14 +2318,13 @@ export function exprToSource(e: Expr, where: Place = END): string {
 function bareSource(e: Expr, where: Place): string {
     const of = (x: Expr, at: Place = END) => exprToSource(x, at);
     switch (e.t) {
-        case "computedRange": {
+        case "range": {
             const end = `..${e.hi === null ? "" : of(e.hi, place("operand", 6))}`;
             if (e.lo === null) return `[${end}]`;
             return `[${itemsText(e.second === null ? [of(e.lo, place("operand", 6)) + end] : [of(e.lo, place("operand", 6)), of(e.second, place("operand", 6)) + end])}]`;
         }
         case "import": return `import ${Array.isArray(e.module) ? `[${itemsText(e.module.map(m => JSON.stringify(m)))}]` : JSON.stringify(e.module)}`;
         case "numeric": return numberText(e.v);
-        case "rationalRange": return `[${itemsText([numberText(e.lo), `${numberText(arithmetic("+", e.lo, e.step))}..${e.hi === null ? "" : numberText(e.hi)}`])}]`;
         case "int": return String(e.v);
         case "float": return numberText({ kind: "float", v: e.v });
         case "bool": return e.v ? "true" : "false";
@@ -2370,14 +2349,6 @@ function bareSource(e: Expr, where: Place): string {
         case "lambda": return sectionSource(e.params, e.body, x => of(x, place("operand", 8))) ?? `${e.params.join(", ")} -> ${of(e.body)}`;
         case "list": return `[${itemsText(e.v.map(x => of(x, place("item"))))}]`;
         case "record": return `[${e.v.map(([k, x]) => `${keySource(k)}: ${of(x)}`).join(", ")}]`;
-        case "floatRange": {
-            const decimal = (v: number) => Number.isInteger(v) ? `${v}.0` : String(v);
-            return `[${decimal(e.lo)}${e.step !== 1 ? `,${decimal(e.lo + e.step)}` : ""}..${e.hi === null ? "" : decimal(e.hi)}]`;
-        }
-        case "range":
-            return e.hi === null
-                ? `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..]`
-                : `[${e.lo}${e.step !== 1n ? `,${e.lo + e.step}` : ""}..${e.hi}]`;
         case "ternary": {
             // A ternary inside a ternary is parenthesized: c ? (d ? 1 : 2) : 3.
             const branch = (x: Expr, at: Place) => ungrouped(x).t === "ternary" ? `(${of(ungrouped(x))})` : of(x, at);

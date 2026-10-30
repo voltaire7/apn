@@ -221,8 +221,9 @@ functions are not composed by `*`—use `\` for composition.
 (`[5..3]` is `[5,4,3]`). `[a,b..c]` uses the step `b - a`; an explicit step
 pointing away from the end produces `[]` (`[0,1..-100]`). `[a..]` and
 `[a,b..]` are infinite lazy ranges.
-Range expression bounds may now be runtime expressions: `[1..n]`, `[a,b..end]`,
-`[start..]`. They must evaluate to real numbers. Existing automatic descending
+Range bounds are expressions, evaluated when the range is (`[1..n]`,
+`[a,b..end]`, `[start..]`), and a range prints as written. They must evaluate
+to real numbers. Existing automatic descending
 steps are preserved, so `[1..0]` is `[1,0]`; std factorial handles zero separately.
 A range pattern `[lo..hi]` matches any integer from `lo` to `hi` inclusive.
 

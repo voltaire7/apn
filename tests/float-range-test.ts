@@ -26,6 +26,21 @@ for (const [source, expected] of [
     });
 }
 
+// A range keeps its bounds as written: checked as the runtime makes it (a
+// Float bound makes Floats), and printed as written.
+for (const [source, expected] of [
+    ["x = 0\n[x,0.5..2]", "[0.0,0.5,1.0,1.5,2.0]"],
+    ["n = 1\n[0, n / 2..2]", "[0,1/2,1,3/2,2]"],
+    ["f = x -> [1 + 1..5]\nf", "x -> [1 + 1..5]"],
+]) {
+    Deno.test(`checked range: ${source}`, () => {
+        const interp = new Interpreter();
+        interp.enableChecking();
+        const actual = interp.renderString(interp.run(parse(source)));
+        if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
+    });
+}
+
 Deno.test("float range precision exhaustion reports a runtime error", () => {
     const interp = new Interpreter();
     try { interp.renderString(interp.run(parse("take 2 [10000000000000000.0..]"))); }

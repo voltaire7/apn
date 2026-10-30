@@ -1,7 +1,8 @@
 import type { Counting } from "./ast.ts";
 import { keySource } from "./record-keys.ts";
 import { functionSource } from "./function-source.ts";
-import { type Numeric, type Real, arithmetic, numberText } from "./numbers.ts";
+import { type Numeric, type Real, arithmetic, asFloat, compareNumbers, integer, numberText } from "./numbers.ts";
+import { APNError } from "./errors.ts";
 import type { Expr, Pattern } from "./ast.ts";
 import { charLiteral, itemsText, stringLiteral } from "./separators.ts";
 
@@ -252,4 +253,17 @@ export function typeToString(v: Value): string {
     if (v.kind === "list") return `[${itemsText(v.v.map(typeToString))}]`;
     if (v.kind === "record") return `[${v.v.map(([k, x]) => `${keySource(k)}: ${typeToString(x)}`).join(", ")}]`;
     return valueToString(v);
+}
+
+// The range [lo, second..hi] of numbers: by second - lo (1, or -1 down to a
+// lower hi, without second); Floats if any bound is one, else exact.
+export function rangeValue(lo: Real, second: Real | null, hi: Real | null): Extract<Value, { kind: "range" | "floatRange" | "rationalRange" }> {
+    const step = second === null ? integer(hi !== null && compareNumbers(hi, lo) < 0 ? -1n : 1n) : arithmetic("-", second, lo) as Real;
+    if ([lo, second, hi].some(x => x?.kind === "float")) {
+        const start = asFloat(lo), delta = asFloat(step), end = hi === null ? null : asFloat(hi);
+        if (!Number.isFinite(start) || !Number.isFinite(delta) || (end !== null && !Number.isFinite(end))) throw new APNError("runtime", "float range bounds and step must be finite");
+        return { kind: "floatRange", lo: start, step: delta, hi: end };
+    }
+    if (lo.kind === "int" && step.kind === "int" && (hi === null || hi.kind === "int")) return { kind: "range", lo: lo.v, step: step.v, hi: hi?.v ?? null };
+    return { kind: "rationalRange", lo, step, hi };
 }

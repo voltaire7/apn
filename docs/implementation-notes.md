@@ -101,7 +101,9 @@ constructors, lossless conversions, and arithmetic promotion.
   holds exactly (within 2^53), as numbers, and anything else as exact
   fractions; never compare an unsafe integer with a float as a double.
 
-- `mkInt(number)` accepts only safe host counters. Integer ranges stay exact;
+- `mkInt(number)` accepts only safe host counters. A range is one `range`
+  node holding its bounds as written; `rangeValue` (`src/types.ts`) makes its
+  value for the runtime and the checker's evaluator. Integer ranges stay exact;
   fractional exact ranges use `rationalRange`, mixed ranges `floatRange`.
   Float-range cells use origin + index × step, a bounded endpoint tolerance,
   and a no-progress guard, and must work through every lazy consumer.

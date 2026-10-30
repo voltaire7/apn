@@ -12,10 +12,9 @@ export type UnOp = "neg" | "not";
 
 export type Expr =
     // lo null: [..], the list type of anything.
-    | { t: "computedRange"; lo: Expr | null; second: Expr | null; hi: Expr | null }
+    | { t: "range"; lo: Expr | null; second: Expr | null; hi: Expr | null }
     | { t: "import"; module: string | string[] }
     | { t: "numeric"; v: Numeric }
-    | { t: "rationalRange"; lo: Real; step: Real; hi: Real | null }
     | { t: "int"; v: bigint }
     | { t: "float"; v: number }
     | { t: "bool"; v: boolean }
@@ -35,8 +34,6 @@ export type Expr =
     | { t: "pluck"; rec: Expr; entries: Array<string | [string, string]>; values?: Expr; quoted?: boolean }
     | { t: "setItem"; rec: Expr; index: Expr; value: Expr }
     | { t: "setFields"; rec: Expr; entries: string[]; value: Expr; path?: string[]; aliases?: string[] }
-    | { t: "floatRange"; lo: number; step: number; hi: number | null }
-    | { t: "range"; lo: bigint; step: bigint; hi: bigint | null }
     | { t: "pipe"; x: Expr; f: Expr }
     | { t: "block"; stmts: Expr[]; style?: "(" | "{" }
     | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr }[] }

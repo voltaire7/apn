@@ -5,10 +5,10 @@ import { objectFields, type P5Field, sketchFields } from "./p5.ts";
 import { standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, SCALAR_TYPES, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
-import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric } from "./numbers.ts";
+import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
 import { APNError, didYouMean, formatFileReadError, withArticle } from "./errors.ts";
-import { parse, parseDocument, patternSource, rangeExpr, PRIMITIVE_OPERATORS } from "./parser.ts";
-import { mkStr, type Value, valueToString } from "./types.ts";
+import { parse, parseDocument, patternSource, PRIMITIVE_OPERATORS } from "./parser.ts";
+import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
 
 const PRELUDE_OPERATORS = new Set(PRIMITIVE_OPERATORS.values());
@@ -3357,18 +3357,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 return result;
             }
-            case "range":
-                return list(
-                    atom("Int"),
-                    e.hi !== null && e.step !== 0n
-                        ? constant(
-                            (e.step > 0n && e.lo > e.hi) || (e.step < 0n && e.lo < e.hi)
-                                ? 0n
-                                : (e.hi - e.lo) / e.step + 1n,
-                        )
-                        : undefined,
-                );
-            case "computedRange": {
+            case "range": {
                 if (!e.lo) return { k: "type", value: list(variable()) };
                 const start = infer(e.lo, scope), type = resolve(start);
                 // A range of a type is the list type, as at runtime: [Int..] is List Int.
@@ -3376,17 +3365,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     if (e.second || e.hi) return problem(LIST_TYPE_RANGE, e, "write [Int..] for any number of Ints");
                     return { k: "type", value: list(schemaValue(type, e)) };
                 }
-                if (e.second) unify(start, infer(e.second, scope), e.second);
-                if (e.hi) unify(start, infer(e.hi, scope), e.hi);
+                // Numbers of different types make Floats if any bound is one, as at
+                // runtime ([0,0.5..100]), else exact numbers ([0,1/2..2]).
+                const bounds = [e.second, e.hi].flatMap(x => x ? [{ x, type: infer(x, scope) }] : []);
+                const named = (t: Ty) => { const r = resolve(t); return r.k === "atom" ? r.name : undefined; };
+                const kinds = new Set([start, ...bounds.map(b => b.type)].map(named));
+                if (kinds.size > 1 && !kinds.has(undefined) && [...kinds].every(k => NUMERIC_TYPES.includes(k!))) {
+                    return list(atom(kinds.has("Float") ? "Float" : "Number"));
+                }
+                for (const { x, type } of bounds) unify(start, type, x);
                 const value = resolve(start);
                 if (value.k === "atom" && value.name === "Char") return atom("String");
                 unify(atom("Number"), start, e);
-                return list(start);
+                // Integer bounds known here give its length ([1..400] has 400).
+                const known = peek(() => computed(e, scope), {} as Known);
+                const size = known.items ? BigInt(known.items.length) : known.size;
+                return list(start, size === undefined ? undefined : constant(size));
             }
-            case "floatRange":
-                return list(atom("Float"));
-            case "rationalRange":
-                return list(atom("Fraction"));
             case "lambda":
                 return functionType(e.params.map((name) => ({ p: "var", name })), e.body, scope);
             case "patternLambda":
@@ -4733,7 +4728,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (!values.some(symbolic)) return computed(e, scope);
             return resolveKnown({ call: { summary, args: values } });
         }
-        if (["binop", "unop", "ternary", "numeric", "list", "range", "computedRange", "lambda"].includes(e.t) || e.t === "recordAccess" && !e.scoped) return computed(e, scope);
+        if (["binop", "unop", "ternary", "numeric", "list", "range", "lambda"].includes(e.t) || e.t === "recordAccess" && !e.scoped) return computed(e, scope);
         return {};
     }
     // A computed value; over enclosing parameters it is known only at their calls.
@@ -4747,7 +4742,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             else if (x.t === "app") { collect(x.f); collect(x.a); }
             else if (x.t === "list") x.v.forEach(collect);
             else if (x.t === "record") x.v.forEach(([, y]) => collect(y));
-            else if (x.t === "computedRange") [x.lo, x.second, x.hi].forEach(y => y && collect(y));
+            else if (x.t === "range") [x.lo, x.second, x.hi].forEach(y => y && collect(y));
             else if (x.t === "lambda") collect(x.body);
             else if (x.t === "block") for (const st of x.stmts) {
                 if (st.t === "patDef") collect(st.value);
@@ -5097,16 +5092,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const refutable = new Set(names.filter((x, i) => names.indexOf(x) !== i));
                 return { fn: { summary: { scope, clauses: [{ index: 0, params: e.params, body: e.body, refutable }] }, env: [...env], applied: [] } };
             }
-            case "range": return rangeKnown(e.lo, e.step, e.hi);
-            case "computedRange": {
+            case "range": {
                 const bound = (x: Expr | null) => x && numericOf(value(x));
                 if (!e.lo) return undefined;
                 const lo = bound(e.lo), second = bound(e.second), hi = bound(e.hi);
                 if (!lo || e.second && !second || e.hi && !hi) return undefined;
                 if ([lo, second, hi].some(x => x && x.kind !== "int")) return undefined;
-                type Real = Parameters<typeof rangeExpr>[0];
-                const range = rangeExpr(lo as Real, second as Real | null, hi as Real | null);
-                return range.t === "range" ? rangeKnown(range.lo, range.step, range.hi) : undefined;
+                const range = rangeValue(lo as Real, second as Real | null, hi as Real | null);
+                return range.kind === "range" ? rangeKnown(range.lo, range.step, range.hi) : undefined;
             }
             case "binop": return evaluateBinop(e, env, scope, depth);
             case "app": {

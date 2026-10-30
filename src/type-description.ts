@@ -230,9 +230,8 @@ export function describeType(value: Value): string {
             case "int": case "float": case "bool": case "string": case "char":
                 return named({ int: "Int", float: "Float", bool: "Bool", string: "String", char: "Char" }[e.t]);
             case "var": return locals.get(e.name) ?? (env.get(e.name) ? inspect(env.get(e.name)!) : fresh());
-            case "range": return list(named("Int"));
-            case "floatRange": return list(named("Float"));
-            case "rationalRange": return list(named("Fraction"));
+            // [..] and [Int..] are list types; a range of numbers lists their type.
+            case "range": return e.lo ? list(expr(e.lo, env, locals)) : named("Type");
             case "list": return sequence(e.v.map(x => expr(x, env, locals)));
             case "record": return named("Record");
             case "lambda": return fn(e.params.map(name => ({ p: "var", name })), e.body, env, [], locals);
