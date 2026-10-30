@@ -1237,6 +1237,9 @@ for (const [source, expected] of [
     // An overloaded operator in a function whose operands are parameters.
     ['Money = | Money Int\n(Money a) + (Money b) = Money (a + b)\nf x y = x + y\nf (Money 1) (Money 2)', 'Money 3'],
     ['Money = | Money Int\n(Money a) + (Money b) = Money (a + b)\nf x y = x + y\nf 1 2', '3'],
+    // ... and one whose result is the parameter of a recursive call.
+    ['Q (Int a) (Int b) = _\n(Q a b) + (Q c d) = Q (a * d + c * b) (b * d)\nf k acc = k > 3 ? acc : f (k + 1) (acc + Q 1 2)\nf 1 (Q 0 1)', 'Q 12 8'],
+    ['Q a b = _\n(Q a b) + (Q c d) = Q (a * d + c * b) (b * d)\nf k acc = k > 3 ? acc : f (k + 1) (acc + Q 1 k)\nf 1 (Q 0 1)', 'Q 11 6'],
     // Clauses for a math function overload it, as for an operator.
     ['Dual = | Dual Float Float\nsin (Dual a b) = Dual (sin a) (b * cos a)\nsin (Dual 0.0 1.0)', 'Dual 0.0 1.0'],
     ['Dual = | Dual Float Float\nsin (Dual a b) = Dual (sin a) (b * cos a)\nsin 0.0', '0.0'],

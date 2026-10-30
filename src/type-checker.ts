@@ -1049,7 +1049,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // An overloaded operator's operands, once known, choose its clauses or
         // its builtin meaning.
         if (t.op.startsWith("overloaded:")) {
-            const at: Expr = { t: "placeholder" }, [f, l, r] = t.args;
+            const at: Expr = { t: "placeholder" }, [f, l, r] = operands;
             if (overloadAccepts(f, l, r)) return application(application(f, { type: l }, at), { type: r }, at);
             return operatorApplication(t.op.slice("overloaded:".length), { type: l }, { type: r }, at);
         }
