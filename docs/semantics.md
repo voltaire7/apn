@@ -428,6 +428,18 @@ Money 3 + Money 4                       # Money 7
 1 + 2                                   # 3
 ```
 
+When no clause takes a value of a type the program defines together with one
+of another type, an arithmetic or comparison operator converts the other
+through a `to` instance and runs again (promotion). Equality never converts.
+If both could convert into each other's type, the operator is ambiguous and an
+error; if neither can, it fails as before:
+
+```apn
+to Money (Int n) = Money n
+Money 3 + 4                             # Money 7: 4 is to Money 4 first
+4 + Money 3                             # Money 7
+```
+
 The math functions (`sqrt`, `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`,
 `atan`, `atan2`, `abs`, `floor`, `ceiling`, `truncate`, `round`, `min`, `max`)
 overload the same way, so a type can give them meaning too:

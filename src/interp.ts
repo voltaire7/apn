@@ -1736,6 +1736,8 @@ export class Interpreter {
             if (["<", ">", "<=", ">="].includes(op)) return this.operate(op, a, b);
             throw new APNError("runtime", `operator '${op}' cannot use a ${family.name} here`);
         }
+        const promoted = this.promote(op, l, r);
+        if (promoted) return promoted;
         if (["+", "-", "*", "/", "%", "^"].includes(op)) {
             l = this.arithmeticValue(l); r = this.arithmeticValue(r);
         } else if (op !== "\\") { l = this.dataValue(l); r = this.dataValue(r); }
@@ -2718,6 +2720,28 @@ export class Interpreter {
         }
         this.instanceFamilies.set(method, families);
         return families;
+    }
+
+    // An operand of a type the program defines, met by one of another type
+    // that no clause of the operator took, converts the other through a to
+    // instance the program gave, and the operator runs again: with
+    // to Money (Float x) = Money x, Money 1.0 + 2.5 is Money 1.0 + Money 2.5.
+    // Both converting is ambiguous; neither leaves the operator's own error.
+    private promote(op: string, l: Value, r: Value): Value | undefined {
+        if (!["+", "-", "*", "/", "%", "^", "<", ">", "<=", ">="].includes(op) || !this.instances.has("to")) return undefined;
+        const family = (v: Value) => v.kind === "variant" && v.family && !v.family.base ? v.family : undefined;
+        const lf = family(l), rf = family(r);
+        if (!lf && !rf || lf === rf) return undefined;
+        const to = (v: Value, f?: VariantFamily) => f && this.instance("to", [{ kind: "type", name: f.name, family: f }, v]);
+        const left = to(l, rf), right = to(r, lf);
+        if (left && right) {
+            throw new APNError("runtime", `ambiguous: '${op}' could convert ${lf!.name} to ${rf!.name} or ${rf!.name} to ${lf!.name}`,
+                { hint: `convert one explicitly, as in \`to ${rf!.name} x\`` });
+        }
+        if (!left && !right) return undefined;
+        const operator = this.env.get(op);
+        if (!operator) return undefined;
+        return this.apply(this.apply(operator, left ?? l), right ?? r);
     }
 
     // The first instance whose clauses accept these arguments.

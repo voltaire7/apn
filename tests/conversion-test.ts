@@ -1,5 +1,5 @@
 import { Interpreter } from "../src/interp.ts";
-import { parse } from "../src/parser.ts";
+import { parse, parseDocument } from "../src/parser.ts";
 
 // to T x writes x as a T; from T x reads it back. Both are methods: a
 // program's instances join the builtin ones (String, JSON, List Char).
@@ -59,5 +59,31 @@ for (const [source, kind, message] of [
     Deno.test(`conversions reject: ${source}`, () => {
         const error = failure(source);
         if (error.kind !== kind || !error.message.includes(message)) throw new Error(`${error.kind}: ${error.message}`);
+    });
+}
+// An operand of a type the program defines, met by one of another type that no
+// clause of the operator takes, converts the other through a to instance, and
+// the operator runs again. Checked and unchecked runs agree.
+const MONEY = "Money (Float m) = _\n(Money a) + (Money b) = Money (a + b)\n(Money a) < (Money b) = a < b\n";
+const CENTS = "Cents (Int c) = _\n(Cents a) + (Cents b) = Cents (a + b)\nto Money (Cents c) = Money (Float c / 100)\n";
+for (const checked of [true, false]) {
+    const each = (source: string) => {
+        const i = new Interpreter();
+        if (checked) i.enableChecking();
+        return i.renderString(i.run(parseDocument(source)));
+    };
+    for (const [source, expected] of [
+        [MONEY + "to Money (Float x) = Money x\n[Money 1.0 + 2.5, 2.5 + Money 1.0, Money 1.0 < 2.0]", "[Money 3.5, Money 3.5, true]"],
+        [MONEY + CENTS + "Money 1.0 + Cents 50", "Money 1.5"],
+    ] as const) Deno.test(`operators promote through to (checked=${checked}): ${source}`, () => {
+        const actual = each(source);
+        if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+    });
+    for (const [source, message] of [
+        [MONEY + "Money 1.0 + 2.5", checked ? "cannot combine Money and Float" : "cannot apply '+'"],
+        [MONEY + CENTS + "to Cents (Money m) = Cents (round (m * 100))\nMoney 1.0 + Cents 50", "ambiguous: '+' could convert Money to Cents or Cents to Money"],
+    ] as const) Deno.test(`operators promote only one way (checked=${checked}): ${source}`, () => {
+        try { each(source); } catch (error) { if ((error as Error).message.includes(message)) return; throw error; }
+        throw new Error("accepted");
     });
 }

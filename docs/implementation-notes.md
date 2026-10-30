@@ -423,6 +423,10 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
   claiming it renames the owner. At runtime the constructor's native runs it
   as a clause (`invoke`), as does a slot default (`zeroValue`); the checker
   unifies its result with the constructor's.
+- Promotion (`Interpreter.promote` when a binop's builtin meets a defined
+  type; the checker's `promotedOperands` where a user's operator clauses
+  reject the operands) finds a `to` instance with `instance`/`instanceFor` and
+  applies the operator's binding again.
 - `tag` makes a `variant` whose family is a declared
   owner's or one per capitalized definition (`ownerFamily`); the checker types
   `tag Owner Ctor [fields]` by its shape (`taggedType`): a declared

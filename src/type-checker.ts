@@ -2085,6 +2085,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         hint: module ? `add \`import "${module}"\` to use \`${p.tag}\`` : near ? `did you mean '${near}'?`
                             : `declare a type with \`${p.tag}\` first${p.tag === "Nil" || p.tag === "Cons" ? "; a list's patterns are `[]` and `(x :: xs)`" : ""}` };
                 }
+                // A bare constructor sharing its type's name is the type there,
+                // as a bare type name is: to Money (Float x) = ...
+                if (!p.args.length && t.k === "fn" && sharedType(t)) {
+                    unify(expected, { k: "type", value: sharedType(t)! }, e);
+                    return;
+                }
                 // A capitalized function that tags its result (Box a = tag Box
                 // Box [a]), taken apart: (Box x) binds its fields.
                 const made = t.k === "alias" ? resolve(constructed(t, e)) : undefined;
@@ -3150,6 +3156,26 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const k = resolve(continuation.input);
         return k.k === "fn" ? k.input : null;
     }
+    // A value of a type the program defines, met by one of another type,
+    // converts the other through a to instance (Interpreter.promote): with
+    // to Money (Float x) = Money x, Money 1.0 + 2.5 adds two Moneys.
+    function promotedOperands(op: string, l: Ty, r: Ty, e: Expr): [Ty, Ty] | undefined {
+        if (!["+", "-", "*", "/", "%", "^", "<", ">", "<=", ">="].includes(op)) return undefined;
+        const a = resolve(l), b = resolve(r);
+        const own = (x: Ty) => x.k === "variant" && !x.base ? x : undefined;
+        const [x, y] = [own(a), own(b)];
+        if (!x && !y || x && y && x.name === y.name) return undefined;
+        const to = (value: Ty, target?: Ty): Ty | undefined => {
+            if (!target) return undefined;
+            const type: Ty = { k: "type", value: target }, instance = instanceFor("to", [type, value]);
+            if (!instance || resolve(instance).k === "var") return undefined;
+            return application(application(copy(instance), { type }, e), { type: value }, e);
+        };
+        const left = to(a, y), right = to(b, x);
+        if (left && right) return problem(`ambiguous: '${op}' could convert ${x!.name} to ${y!.name} or ${y!.name} to ${x!.name}`, e, `convert one explicitly, as in \`to ${y!.name} x\``);
+        if (!left && !right) return undefined;
+        return [left ?? a, right ?? b];
+    }
     // The newest instance of a method whose clauses accept these arguments
     // (still being inferred: unknown).
     function instanceFor(method: string, args: Ty[]): Ty | undefined {
@@ -3737,6 +3763,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     // Operands not known yet (a parameter's) choose when they are.
                     if ([l, r].some(x => ["var", "operation"].includes(resolve(x).k))) return operation(`overloaded:${e.op}`, [bound.type, l, r]);
                     if (overloadAccepts(bound.type, l, r)) return infer(call, scope, expected);
+                    // An operand converted through a to instance, as at runtime.
+                    const promoted = promotedOperands(e.op, l, r, e);
+                    if (promoted && overloadAccepts(bound.type, ...promoted)) {
+                        return application(application(copy(bound.type), { type: promoted[0] }, e.l), { type: promoted[1] }, e.r);
+                    }
                     op = e.op;
                     operands = [l, r];
                 }
