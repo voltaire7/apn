@@ -1,4 +1,4 @@
-import type { Expr, Pattern } from "./ast.ts";
+import { type Expr, matchedClauses, type Pattern } from "./ast.ts";
 import { type Env, type Value, type VariantFamily, typeToString } from "./types.ts";
 import { numericType, NUMERIC_TYPES } from "./type-system.ts";
 import { builtinSignature } from "./type-checker.ts";
@@ -196,6 +196,16 @@ export function describeType(value: Value): string {
         }
         return unify(expected, result);
     }
+    // A function's clauses: one whose body matches its parameters
+    // (x -> y -> match [x, y] alternatives) is the alternatives as clauses.
+    function clauses(written: { params: Pattern[]; body: Expr }[], env: Env, applied: Value[] = []): Shape {
+        const match = env.get("match"), builtin = match?.kind === "native" && match.name === "match";
+        return join(written.flatMap(c => {
+            let { params, body } = c;
+            for (; body.t === "lambda"; body = body.body) params = [...params, ...body.params.map(name => ({ p: "var", name }) as Pattern)];
+            return matchedClauses(params, body, builtin) ?? [c];
+        }).map(c => fn(c.params, c.body, env, applied)));
+    }
     function fn(params: Pattern[], body: Expr, env: Env, applied: Value[] = [], outer = new Map<string, Shape>()): Shape {
         const locals = new Map(outer);
         // Parameters shadow captured names, while repeated names within patterns share a type.
@@ -295,8 +305,8 @@ export function describeType(value: Value): string {
             case "rationalRange": return list(named("Fraction"));
             case "cons": return unify(list(inspect(v.head)), inspect(v.tail));
             case "contract": return arrow(named(typeToString(v.from)), named(typeToString(v.to)));
-            case "closure": return v.env ? fn(v.params.map(name => ({ p: "var", name })), v.body, v.env) : inspect(v.mutableValue!);
-            case "clauseFn": return join(v.clauses.map(c => fn(c.params, c.body, v.env, v.applied)));
+            case "closure": return v.env ? clauses([{ params: v.params.map(name => ({ p: "var", name })), body: v.body }], v.env) : inspect(v.mutableValue!);
+            case "clauseFn": return clauses(v.clauses, v.env, v.applied);
             case "native": {
                 const a = fresh(), b = fresh();
                 let result: Shape;

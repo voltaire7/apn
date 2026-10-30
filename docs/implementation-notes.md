@@ -77,7 +77,10 @@ intentional evaluation change.
   the value's type is known, each body under its pattern's names, and as the
   `match` operation over the alternatives' function types when the value's type
   is known only at calls (a parameter's), as clauses are; one `chosen` join
-  serves both.
+  serves both. Clauses and alternatives are chosen by one `choose` at runtime
+  and one `possibleClauses` in the checker. A function whose body matches its
+  parameters is its alternatives as clauses (`matchedClauses`) wherever the
+  checker or `typeOf` reads a definition.
 - Sugar keeps its written node (printing, `probe`, tools) and runs and checks
   as its core expansion from `src/ast.ts` (`ternaryMatch`), built once with each part at
   its source; the expansion names nothing a binding could shadow.

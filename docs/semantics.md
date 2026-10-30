@@ -171,8 +171,13 @@ len [] = 0
 len (x::rest) = 1 + len rest
 ```
 
+A function's clauses are a `match` on its arguments: `len` is
+`len xs = match xs [[] -> 0, x::rest -> 1 + len rest]`, and with two parameters
+`f a b = match [a,b] [[p,q] -> ...]`; either spelling runs and checks the same
+(the one exception: clauses with equivalent patterns and different result types
+are an overload the context chooses: [overloading on the result type](#overloading-on-the-result-type)).
 Literal patterns (integers, floats, strings, characters, `true`, `false`) are
-tried before other clauses; numeric literal patterns compare numerically, so
+tried before other clauses ([ranking](#clause-ranking)); numeric literal patterns compare numerically, so
 `2` and `2.0` match each other. Integer ranges (`[1..9]`) are also patterns.
 Otherwise clauses run in source order, so after a clause taking any argument
 (distinct names or `_`, no guard) a clause of lists, cons, records or

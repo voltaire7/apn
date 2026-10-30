@@ -2125,48 +2125,25 @@ export class Interpreter {
                 if (raw.length < f.arity) return { ...f, applied: raw };
                 // Patterns demand only the structure they inspect. Shared
                 // argument thunks prevent repeated effects across fallthrough.
-                const hasTypedClauses = f.clauses.some((clause) => clause.params.some((p) => p.p === "constr" && TYPE_NAMES.includes(p.tag)));
-                const ranked = f.clauses.map((clause, index) => ({ clause, index, score: clause.params.reduce((score, pattern, i) => score + this.patternScore(pattern, raw[i]), 0) }))
-                    .sort((a, b) => b.score - a.score || a.index - b.index);
-                for (const { clause } of ranked) {
-                    const binds = new Map<string, Value>();
-                    // The definition name is the first binding in a named clause.
-                    // Use the original function, even when applying a partial call.
-                    if (f.name !== "<lambda>") {
-                        const self = f.env.map.get(f.name);
-                        if (self) binds.set(f.name, self);
-                    }
-                    let ok = true;
-                    const args = raw;
-                    const patternCaller = this.env;
-                    this.env = f.env;
-                    try {
-                        for (let i = 0; i < clause.params.length; i++) {
-                            if (!this.matchPattern(clause.params[i], args[i], binds)) { ok = false; break; }
-                        }
-                    } finally { this.env = patternCaller; }
-                    if (!ok) continue;
-                    const child = new Env(f.env);
-                    for (const [k, v] of binds) child.setLocal(k, v);
-                    const old = this.env;
+                // The definition name is the first binding in a named clause:
+                // the original function, even when applying a partial call.
+                const self = f.name !== "<lambda>" ? f.env.map.get(f.name) : undefined;
+                const chosen = this.choose(f.clauses, raw, f.env, self && [f.name, self]);
+                if (chosen) {
+                    const { clause, child } = chosen;
+                    // Overloads that differ only in result type: the context of
+                    // the result chooses (Int (read "3")).
+                    const choices = this.resultOverloads(f).get(clause);
+                    if (choices) return { kind: "pending", step: { op: "call", fn: f, args: raw, choices } };
+                    if (tail) return new TailCall(clause.body, child);
+                    if (probe) return this.defer(() => {
+                        const caller = this.env;
+                        this.env = child;
+                        try { return this.eval(clause.body); } finally { this.env = caller; }
+                    });
+                    const caller = this.env;
                     this.env = child;
-                    try {
-                        if (clause.guard) {
-                            const guard = this.dataValue(this.eval(clause.guard));
-                            if (!this.truthy(guard)) continue;
-                        }
-                        // Overloads that differ only in result type: the
-                        // context of the result chooses (Int (read "3")).
-                        const choices = this.resultOverloads(f).get(clause);
-                        if (choices) return { kind: "pending", step: { op: "call", fn: f, args: raw, choices } };
-                        if (probe) return this.defer(() => {
-                            const caller = this.env;
-                            this.env = child;
-                            try { return this.eval(clause.body); } finally { this.env = caller; }
-                        });
-                        if (tail) return new TailCall(clause.body, child);
-                        return this.eval(clause.body);
-                    } finally { this.env = old; }
+                    try { return this.eval(clause.body); } finally { this.env = caller; }
                 }
                 if (f.fallback) return raw.reduce((g: Value, x) => this.apply(g, x), f.fallback);
                 if (probe) return { kind: "nomatch" };
@@ -2198,20 +2175,33 @@ export class Interpreter {
         // A literal pattern tried first demands the value at once.
         const first = (ranked ?? alternatives)[0].params[0];
         const argument: Value = LITERAL_PATTERNS.has(first.p) ? this.eval(value) : { kind: "thunk", body: value, env: this.env };
-        const binds = new Map<string, Value>();
-        for (const alternative of ranked ?? this.ranked(alternatives, a => this.patternScore(a.params[0], argument))) {
-            binds.clear();
-            if (!this.matchPattern(alternative.params[0], argument, binds)) continue;
-            const child = binds.size ? new Env(this.env) : this.env;
-            for (const [k, v] of binds) child.setLocal(k, v);
-            if (alternative.guard) {
-                const old = this.env;
-                this.env = child;
-                try { if (!this.truthy(this.eval(alternative.guard))) continue; } finally { this.env = old; }
-            }
-            return new TailCall(alternative.body, child);
-        }
+        const chosen = this.choose(alternatives, [argument], this.env, undefined, ranked ?? undefined);
+        if (chosen) return new TailCall(chosen.clause.body, chosen.child);
         throw new APNError("runtime", "non-exhaustive match: no alternative fits this value");
+    }
+    // The clause these arguments take (a match's alternatives are clauses of
+    // one parameter): the most specific whose patterns and guard fit, written
+    // order breaking ties, and the scope its body runs in. Patterns are ranked
+    // and matched in the scope they were written in.
+    private choose<C extends { params: Pattern[]; guard?: Expr }>(clauses: C[], args: Value[], scope: Env, self?: [string, Value], ranked?: C[]): { clause: C; child: Env } | undefined {
+        const caller = this.env;
+        this.env = scope;
+        try {
+            const order = ranked ?? this.ranked(clauses, c => c.params.reduce((score, p, i) => score + this.patternScore(p, args[i]), 0));
+            for (const clause of order) {
+                this.env = scope;
+                const binds = new Map<string, Value>(self ? [self] : []);
+                let fits = true;
+                for (let i = 0; fits && i < clause.params.length; i++) fits = this.matchPattern(clause.params[i], args[i], binds);
+                if (!fits) continue;
+                const child = binds.size ? new Env(scope) : scope;
+                for (const [k, v] of binds) child.setLocal(k, v);
+                this.env = child;
+                if (clause.guard && !this.truthy(this.eval(clause.guard))) continue;
+                return { clause, child };
+            }
+            return undefined;
+        } finally { this.env = caller; }
     }
 
     // Items by score, highest first, keeping their order among equals.

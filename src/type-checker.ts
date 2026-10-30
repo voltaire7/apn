@@ -1,4 +1,4 @@
-import { type Alternative, claimedDeclaration, type CoreMatch, type PatternLambda, ternaryMatch, writtenMatch, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, ternaryMatch, writtenMatch, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -616,20 +616,6 @@ function substituteOnce(known: Known, subst: [string, Index] | undefined, value:
     if (result.fn) result = { ...result, fn: { ...result.fn, env: result.fn.env.map(([n, k]) => [n, go(k)]) } };
     if (result.expr) result = { ...result, expr: { ...result.expr, env: result.expr.env.map(([n, k]) => [n, go(k)]) } };
     return result;
-}
-// The names a pattern binds.
-function patternNames(p: Pattern): string[] {
-    switch (p.p) {
-        case "var": return [p.name];
-        case "as": return [...patternNames(p.left), ...patternNames(p.right)];
-        case "typeBind": return [p.name, ...patternNames(p.value)];
-        case "schema": return patternNames(p.value);
-        case "list": return p.v.flatMap(patternNames);
-        case "cons": return [...patternNames(p.head), ...patternNames(p.tail)];
-        case "constr": return p.args.flatMap(patternNames);
-        case "recPat": return p.v.map(([, binding]) => binding);
-        default: return [];
-    }
 }
 // Replace one symbolic term of an index with a value.
 function substituteIndex(index: Index, [name, value]: [string, Index]): Index {
@@ -6166,9 +6152,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : p.p === "constr" && p.args.length === 1 && p.args[0].p === "var" ? { name: p.args[0].name, exact: false }
             : { exact: false });
         const shape = shapeOf(body, named, scope);
-        const all = params.flatMap(patternNames);
-        const summary: Summary = { scope: parent, clauses: [{ index: 0, params, body, refutable: new Set([
-            ...recursiveName ? [recursiveName] : [], ...all.filter((x, n) => all.indexOf(x) !== n)]) }] };
+        const summary: Summary = { scope: parent, clauses: (matchedClauses(params, body, !!parent.get("match")?.builtin) ?? [{ params, body }]).map((c, index) => {
+            const all = c.params.flatMap(patternNames);
+            return { index, params: c.params, body: c.body, refutable: new Set([...recursiveName ? [recursiveName] : [], ...all.filter((x, n) => all.indexOf(x) !== n)]) };
+        }) };
         for (let n = inputs.length - 1; n >= 0; n--) {
             const parameter = params[n];
             const selfName = parameter.p === "var" && parameter.name === recursiveName ? recursiveName : undefined;
@@ -6186,7 +6173,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return t.k === "variant";
     }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
-        clauses = clauses.map(c => ({ ...c, params: c.params.map(p => typed(p, scope)) }));
+        clauses = clauses.flatMap(c => matchedClauses(c.params, c.body, !!scope.get("match")?.builtin) ?? [c]).map(c => ({ ...c, params: c.params.map(p => typed(p, scope)) }));
         // Index claims (Vec (n + m) a ys) are proven by induction where they
         // can be; a wrong one is an error here, whether or not it is called.
         if (indexedFamilies.size) {

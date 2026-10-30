@@ -305,6 +305,44 @@ export function writtenMatch(e: Expr): CoreMatch | undefined {
     return core;
 }
 
+// A function whose body matches its parameters in order (x -> match x
+// alternatives, or match [x, y] for two) is the function of the
+// alternatives as clauses: clauses are a match on the arguments. Not when
+// an alternative is guarded or reads a parameter, nor when two have
+// equivalent patterns (the later never runs; as clauses they would overload).
+// builtinMatch: whether match there is the builtin one.
+export function matchedClauses(params: Pattern[], body: Expr, builtinMatch: boolean): { params: Pattern[]; body: Expr }[] | undefined {
+    const names = params.map(p => p.p === "var" ? p.name : "");
+    if (!names.length || names.includes("") || new Set(names).size !== names.length || names.includes("match")) return undefined;
+    while (body.t === "block" && body.stmts.length === 1) body = body.stmts[0];
+    const written = builtinMatch && body.t === "app" && body.f.t === "app" && body.f.f.t === "var" && body.f.f.name === "match" ? writtenMatch(body) : undefined;
+    if (!written) return undefined;
+    const { value } = written, parameter = (e: Expr, n: number) => e.t === "var" && e.name === names[n];
+    if (!(names.length === 1 && parameter(value, 0)) && !(value.t === "list" && value.v.length === names.length && value.v.every(parameter))) return undefined;
+    const clauses: { params: Pattern[]; body: Expr }[] = [];
+    for (const { params: [p], body, guard } of written.alternatives) {
+        if (guard || mentions(body, new Set(names.filter(name => !patternNames(p).includes(name))))) return undefined;
+        if (names.length === 1) clauses.push({ params: [p], body });
+        else if (p.p === "list" && p.v.length === names.length) clauses.push({ params: p.v, body });
+        else return undefined;
+    }
+    const keys = clauses.map(c => clauseKey("", c));
+    return new Set(keys).size === keys.length ? clauses : undefined;
+}
+// The names a pattern binds.
+export function patternNames(p: Pattern): string[] {
+    switch (p.p) {
+        case "var": return [p.name];
+        case "as": return [...patternNames(p.left), ...patternNames(p.right)];
+        case "typeBind": return [p.name, ...patternNames(p.value)];
+        case "schema": return patternNames(p.value);
+        case "list": return p.v.flatMap(patternNames);
+        case "cons": return [...patternNames(p.head), ...patternNames(p.tail)];
+        case "constr": return p.args.flatMap(patternNames);
+        case "recPat": return p.v.map(([, binding]) => binding);
+        default: return [];
+    }
+}
 // Clauses with equivalent patterns (and guards): parameter names do not
 // matter (f (Int x) and f (Int y) are the same), and _ is a name nothing uses.
 export function clauseKey(name: string, clause: { params: Pattern[]; guard?: Expr }): string {

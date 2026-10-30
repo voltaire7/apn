@@ -22,6 +22,8 @@ for (const [code, expected] of [
     ['match 1 [Float x -> "float", Int x -> "int"]', '"int"'],
     ['cases = [n -> "any", 0 -> "zero"]; match 0 cases', '"zero"'],
     ['f 0 = "zero"; f n = "any"; match 0 [n -> "name", f]', '"zero"'],
+    // A function matching its parameters is described as its clauses.
+    ['d = x -> match x [Int n -> n + 1, String s -> s ++ "!"]; typeOf d', 'Int | String -> Int'],
     ['dispatch = match 3; dispatch [(+ 1)]', '4'],
     ['match [3] [head]', '3'],
     ['f 0 = 9; f 1 = 8; match 1 [f, _ -> 0]', '8'],

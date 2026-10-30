@@ -154,6 +154,9 @@ for (const source of [
     // however far the value travels first.
     'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\napply (Handler (s -> s ++ "!")) 5',
     'Handler a = | Handler (a -> String)\nh = Handler (s -> s ++ "!")\nHandler f = h\nf 5',
+    // A function matching its parameters is its alternatives as clauses.
+    'd = x -> match x [0 -> 1]\nd 5',
+    'add x y = match [x,y] [[0,b] -> b, [a,b] -> a + b]\nadd 0 "a" + 1',
     // A statement of a do-block is an action whichever branch is taken.
     'f x = x ? print "yes" : false\nk y = {\n    f y\n    print 2\n}',
     // Alternatives' lists of one type keep it, lengths included, as branches' do.
