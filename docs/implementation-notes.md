@@ -403,7 +403,10 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
   parameters, so runtime and checker treat both alike; it declares again where
   the name is a constructor already (`isPatBinding`). A later union of
   such constructors (`Parser.unclaimed`) replaces their declarations with the
-  one declaration of the union's type, where the first of them stood.
+  one declaration of the union's type, where the first of them stood; runtime
+  and checker claim those the parser cannot see (`unionKind`'s `claim`, from
+  each family's recorded declaration: `Interpreter.declarations`, the checker
+  entry's `declaration`), all through `claimedDeclaration`.
 - A constructor sharing its type's name reads as the type where a type is
   expected: at runtime through `sharedType` (in `asType`, `isTypeValue`,
   `sameType`, `conform`, slot defaults and assignment, `union`), in the

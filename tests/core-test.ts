@@ -138,3 +138,19 @@ for (const [source, message] of [
     const actual = failure(source, true);
     if (!actual.includes(message)) throw new Error(actual);
 });
+// The first union listing constructors declared with _ owns them, also where
+// they were declared in an earlier input or a module, which the parser cannot
+// see: as in one input, typeOf and monads key on the union.
+for (const checked of [true, false]) Deno.test(`a later union claims constructors (checked=${checked})`, () => {
+    const i = new Interpreter();
+    if (checked) i.enableChecking();
+    const each = (source: string) => i.renderString(i.run(parseDocument(source)));
+    each("Just x = _\nNada = _");
+    each("Maybe a = Just a | Nada\nreturn = Just\n(Just x) >>= f = f x\nNada >>= f = Nada");
+    const shown = each("[typeOf (Just 5), typeOf Nada, Maybe Int { x <- Just 2; return (x * 3) }]");
+    if (shown !== "[Maybe Int, Maybe a, Just 6]") throw new Error(shown);
+    each("Box x = _");
+    let message = "";
+    try { each("Mixed = Box | Int"); } catch (error) { message = (error as Error).message; }
+    if (!message.includes("Mixed unions constructors declared with _, and Int is not one")) throw new Error(message);
+});

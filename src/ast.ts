@@ -65,7 +65,9 @@ export type Pattern =
 // clause applying it runs (Percent (Float x) = x > 100 ? Percent 100.0 : _),
 // its _ already the raw value, intrinsics.tag owner Percent [x].
 export interface ConstructorLogic { params: Pattern[]; body: Expr; owner: { t: "var"; name: string } }
-interface DataDef { name: string; parameters?: string[]; variants: { tag: string; arity: number; fields?: Expr[]; result?: Expr; logic?: ConstructorLogic }[]; }
+// claims: a union claiming constructors declared with _ (see claimedDeclaration).
+export interface DataDef { name: string; parameters?: string[]; variants: DataVariant[]; claims?: boolean; }
+export type DataVariant = { tag: string; arity: number; fields?: Expr[]; result?: Expr; logic?: ConstructorLogic };
 
 // Whether an expression holds _ as a value (a constructor's logic does).
 export function holdsPlaceholder(e: unknown): boolean {
@@ -92,10 +94,16 @@ export function fillPlaceholders(e: Expr, by: Expr): Expr {
 // where it runs: all new, it declares them as constructors; all existing
 // types, it is the union of them (unionClause). Anything else is an error,
 // worded once here for the runtime and the checker.
-export type Alternative = "new" | "type" | "constructor";
-export function unionKind(def: DataDef, kind: (name: string) => Alternative): "declaration" | "union" | string {
+// unclaimed: a constructor declared with _ that no union owns yet.
+export type Alternative = "new" | "type" | "constructor" | "unclaimed";
+export function unionKind(def: DataDef, kind: (name: string) => Alternative): "declaration" | "union" | "claim" | string {
+    if (def.claims) return "declaration";
     const kinds = def.variants.map(v => v.tag === "[]" || v.tag === "::" ? "new" : kind(v.tag));
     if (kinds.every(k => k === "new")) return "declaration";
+    // The first union listing constructors declared with _ owns them.
+    const unclaimed = kinds.filter(k => k === "unclaimed").length;
+    if (unclaimed === kinds.length) return "claim";
+    if (unclaimed) return unclaimedMix(def.name, def.variants.find((_, n) => kinds[n] !== "unclaimed")!.tag);
     // One type is no union: a leading | declares a constructor (Box a = | Box a).
     if (kinds.every(k => k === "type")) {
         return kinds.length > 1 ? "union" : `${def.name} = | ${def.variants[0].tag} declares a constructor, and ${def.variants[0].tag} is a type already (a built-in type cannot be replaced)`;
@@ -104,6 +112,20 @@ export function unionKind(def: DataDef, kind: (name: string) => Alternative): "d
     if (owned) return `${def.name}'s alternative ${owned.tag} is a constructor of another type; a union lists types`;
     const [type, fresh] = [def.variants.find((_, n) => kinds[n] === "type")!, def.variants.find((_, n) => kinds[n] === "new")!];
     return `${def.name} mixes a type (${type.tag}) and a new constructor (${fresh.tag}): its alternatives are all types (a union) or all new (a declaration)`;
+}
+export function unclaimedMix(name: string, other: string): string {
+    return `${name} unions constructors declared with _, and ${other} is not one`;
+}
+// The declaration a union claiming constructors declared with _ makes: each
+// takes the fields its alternative gives (Some a), or its own (Some), and its
+// logic, whose raw values now belong to this type.
+export function claimedDeclaration(def: DataDef, own: (tag: string) => DataVariant): DataDef {
+    const variants = def.variants.map(v => {
+        const declared = own(v.tag);
+        if (declared.logic) declared.logic.owner.name = def.name;
+        return { ...v.arity || !declared.arity ? v : { tag: declared.tag, arity: declared.arity, fields: declared.fields ?? [] }, ...declared.logic ? { logic: declared.logic } : {} };
+    });
+    return { name: def.name, parameters: def.parameters, variants, claims: true };
 }
 // A union of existing types, as the definition X params = intrinsics.union [A, B].
 export function unionClause(def: DataDef): DefClause {

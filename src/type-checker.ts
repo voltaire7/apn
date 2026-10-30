@@ -1,4 +1,4 @@
-import { type Alternative, clauseKey, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, clauseKey, type DataDef, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -138,6 +138,9 @@ interface Known {
 interface Summary { clauses: (ClauseOrder & { body: Expr })[]; scope: Scope }
 interface Entry {
     type: Ty;
+    // A constructor's declaration, which a union claiming it reads (also in a
+    // later check: a REPL input, a module).
+    declaration?: DataDef;
     index?: Index;
     size?: bigint;
     items?: Known[];
@@ -1754,8 +1757,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (isConstructor(entry)) {
             let made = resolve(entry.type);
             while (made.k === "fn") made = resolve(made.output);
+            if (made.k === "variant" && made.name === declared) return "new";
+            // Declared alone with _ (Just x = _): no union owns it yet.
+            const own = entry.declaration;
+            if (own && own.variants.length === 1 && own.name === name && !own.claims) return "unclaimed";
             // One sharing its type's name is that type (see sharedType).
-            return made.k === "variant" && made.name === declared ? "new" : made.k === "variant" && made.name === name ? "type" : "constructor";
+            return made.k === "variant" && made.name === name ? "type" : "constructor";
         }
         return ["type", "alias", "factory"].includes(resolve(entry.type).k) ? "type" : "new";
     }
@@ -6442,8 +6449,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         },
         concrete: type => !variables(resolve(type as Ty)).size,
     });
-    for (const [index, statement] of program.entries()) {
+    for (const [index, written] of program.entries()) {
         if (options.before?.index === index) options.before.scope(new Map(scope));
+        // Constructors declared with _ where the parser could not see them are
+        // claimed here, as at runtime.
+        let statement = written;
+        if (statement.t === "type") {
+            const def = statement.def;
+            if (unionKind(def, name => alternative(name, def.name, scope)) === "claim") {
+                statement = { t: "type", def: claimedDeclaration(def, tag => scope.get(tag)!.declaration!.variants[0]) };
+            }
+        }
         // Each top-level statement gets the same bounded work, so a long module
         // is not limited by its length.
         budget = STATEMENT_BUDGET;
@@ -6514,7 +6530,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         t = fn(type, t, undefined, !variables(type).size);
                     }
                     if (v.tag === d.name) t = { ...t, shared: true } as Ty;
-                    scope.set(v.tag, { type: t });
+                    scope.set(v.tag, { type: t, declaration: d });
                 }
                 // A constructor's logic is a clause of its fields giving a value
                 // of its type (Percent (Float x) = x > 100 ? Percent 100.0 : _).

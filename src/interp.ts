@@ -17,7 +17,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, ca
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, clauseKey, countingFamily, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, clauseKey, type DataDef, countingFamily, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, typeToString, valueToString, rawString } from "./types.ts";
@@ -323,12 +323,16 @@ export class Interpreter {
         this.runDepth++;
         try {
             let last: Value = { kind: "list", v: [] };
-            for (const [index, tl] of program.entries()) {
+            for (const [index, written] of program.entries()) {
                 if (this.runDepth === 1 && !this.dynamicDepth) this.running = { program, index };
+                let tl = written;
                 if (tl.t === "type" && tl.def.variants.some(v => v.tag !== "[]" && v.tag !== "::")) {
-                    const kind = unionKind(tl.def, name => this.alternative(name, tl.def.name));
-                    if (kind === "union") { last = this.evalDef(tl.def.name, [unionClause(tl.def)]); continue; }
-                    if (kind !== "declaration") throw new APNError("runtime", kind);
+                    const def = tl.def, kind = unionKind(def, name => this.alternative(name, def.name));
+                    if (kind === "union") { last = this.evalDef(def.name, [unionClause(def)]); continue; }
+                    // Constructors declared with _ where the parser could not see
+                    // them (an earlier input, a module) are claimed here.
+                    if (kind === "claim") tl = { t: "type", def: claimedDeclaration(def, tag => this.declarations.get(this.constructorFamily(tag)!)!.variants[0]) };
+                    else if (kind !== "declaration") throw new APNError("runtime", kind);
                 }
                 if (tl.t === "type") {
                     // A family of lists counting its elements (Vect n a = [] ->
@@ -337,13 +341,14 @@ export class Interpreter {
                     if (countingFamily(tl.def)) { this.env.root().setLocal(tl.def.name, { kind: "type", name: "Vect" }); continue; }
                     for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) {
                         const previous = this.scopeBinding(name);
-                        if (previous && ((previous.kind === "native" && previous.tag) || previous.kind === "variant") && previous.family?.name !== tl.def.name) {
+                        if (previous && ((previous.kind === "native" && previous.tag) || previous.kind === "variant") && previous.family?.name !== tl.def.name && !tl.def.claims) {
                             throw new APNError("runtime", `cannot redeclare value constructor ${name}; it belongs to ${previous.family?.name}`);
                         }
                     }
                     const results = new Map(tl.def.variants.flatMap(v => v.result ? [[v.tag, v.result] as [string, Expr]] : []));
                     const family = { name: tl.def.name, parameters: tl.def.parameters ?? [], fields: new Map(tl.def.variants.map(v => [v.tag, v.fields ?? []])), env: new Env(this.env), ...results.size ? { results } : {} };
                     this.env.root().setLocal(tl.def.name, { kind: "type", name: tl.def.name, family });
+                    this.declarations.set(family, tl.def);
                     for (const v of tl.def.variants) {
                         if (v.arity === 0) {
                             // Nullary constructors are themselves the value.
@@ -4604,9 +4609,19 @@ export class Interpreter {
         const bound = this.env.get(name), value = bound && this.reference(bound);
         if (!value) return "new";
         if (value.kind === "native" && value.tag || value.kind === "variant") {
-            return value.family?.name === declared ? "new" : this.sharedType(value) ? "type" : "constructor";
+            if (value.family?.name === declared) return "new";
+            // Declared alone with _ (Just x = _): no union owns it yet.
+            const own = value.family && this.declarations.get(value.family);
+            if (own && own.variants.length === 1 && own.name === name && !own.claims) return "unclaimed";
+            return this.sharedType(value) ? "type" : "constructor";
         }
         return this.isTypeValue(value) ? "type" : "new";
+    }
+    // Each family's declaration, which a union claiming its constructor reads.
+    private declarations = new WeakMap<VariantFamily, DataDef>();
+    private constructorFamily(name: string): VariantFamily | undefined {
+        const bound = this.env.get(name), value = bound && this.reference(bound);
+        return value && (value.kind === "native" || value.kind === "variant") ? value.family : undefined;
     }
 
     // tag owner ctor fields: a value that remembers the constructor that made

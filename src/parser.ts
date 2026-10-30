@@ -1,4 +1,4 @@
-import { countingFamily, fillPlaceholders, holdsPlaceholder, sourceLocations } from "./ast.ts";
+import { claimedDeclaration, countingFamily, fillPlaceholders, holdsPlaceholder, sourceLocations, unclaimedMix } from "./ast.ts";
 import { stringKey, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -1949,19 +1949,13 @@ class Parser {
                 } else variants = this.parseConstructors(name, [name, ...parameters].join(" "));
                 // A union of constructors declared with _ claims them: they
                 // become this type's, where the first of them was declared.
+                // The run and the checker claim those the parser cannot see.
                 const claimed = variants.map(v => this.unclaimed.get(v.tag));
                 if (claimed.some(Boolean)) {
                     const other = variants.find((_, n) => !claimed[n]);
-                    if (other) throw new APNError("parse", `${name} unions constructors declared with _, and ${other.tag} is not one`, { pos: t.pos, hint: `declare it first: ${other.tag} = _, or ${other.tag} x = _ with a field` });
-                    // Each takes the fields its alternative gives (Some a), or its own (Some).
-                    variants = variants.map((v, n) => {
-                        const own = claimed[n]!.def.variants[0];
-                        // Its logic's raw values now belong to this type.
-                        if (own.logic) own.logic.owner.name = name;
-                        return { ...v.arity || !own.arity ? v : { tag: own.tag, arity: own.arity, fields: own.fields ?? [] }, ...own.logic ? { logic: own.logic } : {} };
-                    });
+                    if (other) throw new APNError("parse", unclaimedMix(name, other.tag), { pos: t.pos, hint: `declare it first: ${other.tag} = _, or ${other.tag} x = _ with a field` });
                     const at = Math.min(...claimed.map(c => out.indexOf(c!)));
-                    const def = { name, parameters, variants };
+                    const def = claimedDeclaration({ name, parameters, variants }, tag => claimed.find(c => c!.def.name === tag)!.def.variants[0]);
                     for (const c of claimed) { out.splice(out.indexOf(c!), 1); this.unclaimed.delete(c!.def.name); }
                     declaredTypes.add(name);
                     out.splice(at, 0, { t: "type", def });
