@@ -440,6 +440,20 @@ Money 3 + 4                             # Money 7: 4 is to Money 4 first
 4 + Money 3                             # Money 7
 ```
 
+The other way round, a value of a type the program defines converts through
+its `to` instance wherever a built-in type is needed: an index (`to Int`), an
+operand of arithmetic no clause takes (`to Int`, else `to Float`), and a typed
+pattern of a scalar type (`(Int i)`, `(Float x)`, `(String s)`), which takes it
+only when no pattern of its own type does. An enumeration has these
+instances by declaration ([variant list indexes](type-and-resource-rules.md#variant-list-indexes)):
+
+```apn
+Level (Int n) = _
+to Int (Level n) = n
+[10,20,30] (Level 2)                    # 30
+Level 2 * 5                             # 10
+```
+
 The math functions (`sqrt`, `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`,
 `atan`, `atan2`, `abs`, `floor`, `ceiling`, `truncate`, `round`, `min`, `max`)
 and `get` and `with` ([indexing](#record-fields-string-keys-and-positions))
@@ -534,8 +548,8 @@ g [1,2] = 60
 g [1,2]                                 # 60
 ```
 
-List indexing accepts integers or variants from families with only nullary constructors.
-Variants select by zero-based declaration order. A string argument performs
+List indexing accepts integers or values whose `to Int` makes one, as an
+enumeration's values do (their positions). A string argument performs
 [association-list lookup](templates-and-types.md#association-list-lookup):
 `[["0",42]] "0"` returns `42`; it never coerces `"0"` to positional index zero.
 Ordinary scalar lists such as `[10,20]` are not association lists and reject string lookup.
@@ -1070,8 +1084,8 @@ like record field assignment, converting the value to the element's type:
 `arr = [Float]; arr 0 = 1` produces `[1.0]`, and `arr = [Int]; arr 0 = .2`
 errors, as `arr = [Int 0]; arr 0 = .2` does. `arr -1 = 10` updates its final element, as `arr -1` reads it (`arr - 1 = 10`
 defines `-`); likewise `f -1 = ...` is a clause of `f` for the argument `-1`.
-A single index must evaluate to an integer or a variant from a nullary-only family
-(using zero-based declaration order); a finite list of these indices selects multiple
+A single index must evaluate to an integer or a value whose `to Int` makes one
+(an enumeration's position); a finite list of these indices selects multiple
 slots. `arr [1,2] = arr [2,1]` swaps the old values. Multi-index assignment requires
 one replacement per index; duplicate indices use the last value. Negative indices
 require a finite source list. See [slot assignment](templates-and-types.md#slot-assignment).

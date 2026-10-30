@@ -52,8 +52,12 @@ Its name is also its type where a type is expected: an omitted record slot
 
 ## Variant list indexes
 
-Families whose constructors all have no payload can index lists, starting at
-zero in declaration order:
+An enumeration, a family whose constructors all have no payload, gives each
+value its position as an `Int`, from zero in declaration order: declaring
+`Direction = North | East | South | West` also declares `to Int North = 0`
+through `to Int West = 3`. So its values index lists and take part in
+arithmetic, as any value with a `to Int` does
+([conversions](semantics.md#defining-and-overloading-operators)):
 
 ```apn
 Direction = North | East | South | West
@@ -68,12 +72,13 @@ scoped copy updates. Computed variant values work too. Lists have no key-family
 annotation: any eligible family's second constructor selects index 1. Families
 with payload constructors are not eligible, even for their nullary cases.
 Arithmetic operators `+`, `-`, `*`, `/`, `%`, `^`, and unary negation use these
-same integer ordinals and return ordinary numbers. For example, `East + 1` is
+same positions and return ordinary numbers, and an `(Int i)` parameter takes
+them. For example, `East + 1` is
 `2`, `West / South` is `3/2`, and `-East` is `-1`. Numeric collection arithmetic
 uses the same rule for elements. APN's existing numeric rules still apply.
 Variants retain their identity when printed, pattern-matched, or compared for
 equality; `North == 0` remains false. Constructors such as `Direction` and
-families with payloads do not participate in ordinal arithmetic.
+families with payloads have no positions.
 
 ## Exhaustiveness diagnostics
 

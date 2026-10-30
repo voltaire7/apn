@@ -120,6 +120,16 @@ export function unionKind(def: DataDef, kind: (name: string) => Alternative): "d
 export function unclaimedMix(name: string, other: string): string {
     return `${name} unions constructors declared with _, and ${other} is not one`;
 }
+// An enumeration (constructors without fields) gives each value its position
+// as an Int: Direction = North | East declares to Int North = 0 and
+// to Int East = 1 with it, so a value indexes and counts as that Int.
+export function enumerationPositions(def: DataDef): DefClause[] | undefined {
+    if (def.parameters?.length || def.variants.some(v => v.arity || v.result || v.logic)) return undefined;
+    return def.variants.map((v, n) => ({
+        params: [{ p: "constr", tag: "Int", args: [] }, { p: "constr", tag: v.tag, args: [] }],
+        body: { t: "int", v: BigInt(n) },
+    }));
+}
 // The declaration a union claiming constructors declared with _ makes: each
 // takes the fields its alternative gives (Some a), or its own (Some), and its
 // logic, whose raw values now belong to this type.

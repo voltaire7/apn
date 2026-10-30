@@ -1,10 +1,10 @@
-import { type Alternative, claimedDeclaration, LIST_TYPE_RANGE, clauseKey, type DataDef, countingFamily, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, countingFamily, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
 import { standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
-import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
+import { castNumeric, matchesType, NUMERIC_TYPES, numericType, SCALAR_TYPES, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric } from "./numbers.ts";
 import { APNError, didYouMean, formatFileReadError, withArticle } from "./errors.ts";
 import { parse, parseDocument, patternSource, rangeExpr, PRIMITIVE_OPERATORS } from "./parser.ts";
@@ -74,7 +74,7 @@ type Ty =
     // checks: what is still to be checked of the values it holds, as a
     // function's are (Handler (s -> s ++ "!") checks s ++ "!" once a is known).
     // fields: a capitalized function's value (Rect 3 4), its args the fields' types.
-    | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty; indexed?: boolean; checks?: Ty[]; fields?: boolean; shared?: boolean }
+    | { k: "variant"; name: string; args: Ty[]; base?: Ty; indexed?: boolean; checks?: Ty[]; fields?: boolean; shared?: boolean }
     // f a: a type variable applied to types, as written ((a -> b) -> f a -> f b).
     // Its head, once known, is a ctor: a type missing its first parameters
     // (List, Option, Result _ e for f a; Result for f a e), so f a maps the
@@ -1029,7 +1029,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (["+", "-", "*", "/", "%", "^", "++", "compare", "negate", "length", "pairs", "keys", "values", "enumerate"].includes(t.op)) {
             for (let n = 0; n < operands.length; n++) {
                 while (operands[n].k === "mutable") operands[n] = resolve((operands[n] as Extract<Ty, { k: "mutable" }>).value);
-                if (operands[n].k === "variant" && (operands[n] as Extract<Ty, { k: "variant" }>).ordinal) operands[n] = atom("Int");
+                // A value of the program's own type is the number its to instance makes.
+                if (operands[n].k === "variant") operands[n] = resolve(builtinTyped("Int", operands[n]) ?? builtinTyped("Float", operands[n]) ?? operands[n]);
             }
         }
         const [a, b] = operands;
@@ -2379,6 +2380,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return target;
         }
         if (t.k === "atom" && t.name === "Bool" && explicitFloat) return t;
+        // A typed parameter of a built-in type takes a value of the program's
+        // own type through its to instance, as at runtime: (Int i) takes East.
+        if (matching && t.k === "atom" && SCALAR_TYPES.has(t.name) && a.k === "variant" && !a.base) {
+            const made = builtinTyped(t.name, a, e);
+            if (made) return convert(target, made, e, explicitFloat, seen, runtimeProjection);
+        }
         // Converting a value of its base to a := type makes one, as applying the
         // type (List UserId [1]) or updating a slot does; a typed parameter
         // only matches (see matching).
@@ -2936,7 +2943,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const a = resolve(argument.type);
             // An index not known yet (a lambda's parameter) waits until it is.
             if (a.k === "var" || a.k === "operation") return deferredCall(f, argument);
-            if (a.k === "atom" && a.name === "Int" || a.k === "variant" && a.ordinal) {
+            if (indexType(a)) {
                 if (f.items && argument.index && !argument.index.terms.size) {
                     const n = Number(argument.index.constant), at = n < 0 ? f.items.length + n : n;
                     if (at < 0 || at >= f.items.length) return problem("list index out of bounds", e);
@@ -2949,7 +2956,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const type = resolve(index);
                 if (type.k === "var") unify(type, atom("Int"), e);
                 else if (isExplicit(type)) { runtimeChecks++; return [key, explicitDynamic]; }
-                else if (!(type.k === "atom" && type.name === "Int" || type.k === "variant" && type.ordinal)) {
+                else if (!indexType(type)) {
                     return problem("named list indices must be integers or enumeration values", e);
                 }
                 const expression = e.t === "record" ? e.v.find(([name]) => name === key)?.[1] : undefined;
@@ -3183,16 +3190,33 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const own = (x: Ty) => x.k === "variant" && !x.base ? x : undefined;
         const [x, y] = [own(a), own(b)];
         if (!x && !y || x && y && x.name === y.name) return undefined;
-        const to = (value: Ty, target?: Ty): Ty | undefined => {
-            if (!target) return undefined;
-            const type: Ty = { k: "type", value: target }, instance = instanceFor("to", [type, value]);
-            if (!instance || resolve(instance).k === "var") return undefined;
-            return application(application(copy(instance), { type }, e), { type: value }, e);
-        };
-        const left = to(a, y), right = to(b, x);
+        const left = y && convertedTo(y, a, e), right = x && convertedTo(x, b, e);
         if (left && right) return problem(`ambiguous: '${op}' could convert ${x!.name} to ${y!.name} or ${y!.name} to ${x!.name}`, e, `convert one explicitly, as in \`to ${y!.name} x\``);
         if (!left && !right) return undefined;
         return [left ?? a, right ?? b];
+    }
+    // A value converted through the program's to instance for a type (the
+    // type it makes), if there is one.
+    function convertedTo(target: Ty, value: Ty, e: Expr): Ty | undefined {
+        const type: Ty = { k: "type", value: target }, instance = instanceFor("to", [type, value]);
+        if (!instance || resolve(instance).k === "var") return undefined;
+        return application(application(copy(instance), { type }, e), { type: value }, e);
+    }
+    // A value of a type the program defines where a built-in type is needed:
+    // what its to instance for that type makes (Interpreter.builtinValue).
+    // (Choosing the instance may meet the type again, in an instance's own
+    // typed pattern: there it is not converted.)
+    function builtinTyped(name: string, t: Ty, e: Expr = { t: "placeholder" }): Ty | undefined {
+        const a = resolve(t);
+        if (a.k !== "variant" || a.base || converting.has(a.name)) return undefined;
+        converting.add(a.name);
+        try { return convertedTo(atom(name), a, e); } finally { converting.delete(a.name); }
+    }
+    const converting = new Set<string>();
+    // An index: an Int, or a value its to Int instance makes one.
+    function indexType(t: Ty): boolean {
+        const a = resolve(t), made = a.k === "variant" ? resolve(builtinTyped("Int", a) ?? a) : a;
+        return made.k === "atom" && made.name === "Int";
     }
     // The newest instance of a method whose clauses accept these arguments
     // (still being inferred: unknown).
@@ -3602,12 +3626,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         const incoming = resolve(value);
                         if (incoming.k !== "record") return problem("named selection assignment requires a record", e);
                         if (keys.fields.size !== incoming.fields.size || [...keys.fields.keys()].some(name => !incoming.fields.has(name))) return problem("replacement fields must match selection names", e);
-                        for (const [name, indexType] of keys.fields) {
-                            const type = resolve(indexType);
+                        for (const [name, key] of keys.fields) {
+                            const type = resolve(key);
                             if (type.k === "var") unify(type, atom("Int"), e);
-                            else if (!(type.k === "atom" && type.name === "Int" || type.k === "variant" && type.ordinal)) return problem("named list indices must be integers or enumeration values", e);
+                            else if (!indexType(type)) return problem("named list indices must be integers or enumeration values", e);
                             const expression = e.index.t === "record" ? e.index.v.find(([key]) => key === name)?.[1] : undefined;
-                            const selected = application(rec, { type: indexType, index: expression && index(expression, scope) }, expression ?? e);
+                            const selected = application(rec, { type: key, index: expression && index(expression, scope) }, expression ?? e);
                             convert(selected, incoming.fields.get(name)!, e.value);
                         }
                         return rec;
@@ -6665,7 +6689,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const indexed = d.variants.some(v => v.result);
                 if (indexed) indexedFamilies.set(d.name, { def: d, scope });
                 invariance.set(d.name, invariantParameters(d));
-                const result: Ty = { k: "variant", name: d.name, args: [...parameters.values()], ordinal: d.variants.every(v => !v.fields?.length), ...indexed ? { indexed } : {} };
+                const result: Ty = { k: "variant", name: d.name, args: [...parameters.values()], ...indexed ? { indexed } : {} };
                 scope.set(d.name, { type: { k: "type", value: result } });
                 const fieldsScope = new Map(scope);
                 for (const [name, t] of parameters) {
@@ -6706,6 +6730,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     while (made.k === "fn" && own.k === "fn") { made = resolve(made.output); own = resolve(own.output); }
                     unify(own, made, v.logic.body);
                 }
+                const positions = enumerationPositions(d);
+                if (positions) define("to", positions, scope, positions[0].body);
             } else if (statement.t === "expr") {
                 executeTopLevel(statement.value, scope);
                 const type = infer(statement.value, scope);

@@ -13,13 +13,14 @@ import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { NATIVE_EXPORTS, RETIRED_NATIVES } from "./native-exports.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { bundledText, loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
-import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
+import { TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { type Alternative, claimedDeclaration, LIST_TYPE_RANGE, clauseKey, type DataDef, countingFamily, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
+import { enumerationPositions } from "./ast.ts";
 import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
@@ -370,6 +371,8 @@ export class Interpreter {
                         }
                     }
                     for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) family.env.setLocal(name, this.env.get(name)!);
+                    const positions = enumerationPositions(tl.def);
+                    if (positions) this.evalDef("to", positions);
                     continue;
                 }
                 if (tl.t === "def") {
@@ -806,20 +809,33 @@ export class Interpreter {
     }
     private publishedBy = new WeakMap<Env, Map<string, { origin: string; value: Value }>>();
 
+    // An index: an Int, or a value its to Int instance makes one (an
+    // enumeration's position).
     private listIndex(value: Value): bigint | undefined {
-        if (value.kind === "int") return value.v;
-        if (value.kind !== "variant" || value.v.length || !value.family?.fields?.size) return undefined;
-        const fields = value.family.fields;
-        if ([...fields.values()].some(args => args.length)) return undefined;
-        const index = [...fields.keys()].indexOf(value.tag);
-        return index < 0 ? undefined : BigInt(index);
+        const v = value.kind === "int" ? value : this.builtinValue("Int", value);
+        return v?.kind === "int" ? v.v : undefined;
     }
 
+    // An operand of arithmetic: a value of a type the program defines is the
+    // number its to instance makes (an Int or a Float).
     private arithmeticValue(value: Value): Value {
         const v = this.dataValue(value);
-        const ordinal = v.kind === "variant" ? this.listIndex(v) : undefined;
-        return ordinal === undefined ? v : mkInt(ordinal);
+        return this.builtinValue("Int", v) ?? this.builtinValue("Float", v) ?? v;
     }
+
+    // A value of a type the program defines where a built-in type is needed:
+    // what its to instance for that type makes (to Int East is 1).
+    // (Choosing the instance may meet the value again, in an instance's own
+    // typed pattern: there it is not converted.)
+    private builtinValue(name: string, v: Value): Value | undefined {
+        if (v.kind !== "variant" || !v.family || v.family.base || !this.makes(name) || this.converting.has(v)) return undefined;
+        this.converting.add(v);
+        try {
+            const made = this.instance("to", [{ kind: "type", name }, v]);
+            return made && this.dataValue(made);
+        } finally { this.converting.delete(v); }
+    }
+    private converting = new Set<Value>();
 
     // The builtin with: a copy of a list or record with key set to the value
     // (written code, as a list's items are, or one already made).
@@ -2750,7 +2766,19 @@ export class Interpreter {
         this.instances.set(method, [...this.instances.get(method) ?? [], fn]);
         this.instanceClauses.set(fn, clauses[0]);
         this.instanceFamilies.delete(method);
+        this.makers.clear();
     }
+    // Whether some to instance may make a type (one whose clauses all name
+    // others cannot), so a value need not be offered to each.
+    private makes(name: string): boolean {
+        let known = this.makers.get(name);
+        if (known === undefined) {
+            known = (this.instances.get("to") ?? []).some(f => this.instanceTargets(f)?.has(name) !== false);
+            this.makers.set(name, known);
+        }
+        return known;
+    }
+    private makers = new Map<string, boolean>();
     // The variant families a method's instances take, read from their clauses
     // (map's second parameter, the others' first), whether they were written
     // as clauses or as a value (map = mapTree).
@@ -2798,10 +2826,14 @@ export class Interpreter {
     // The first instance whose clauses accept these arguments.
     private instance(method: string, args: Value[]): Value | undefined {
         const fns = this.instances.get(method) ?? [];
+        // (One whose clauses all name another type first is passed over at once:
+        // to Int North = 0 is no to String.)
+        const named = args[0]?.kind === "type" ? args[0].name : undefined;
         // Each argument may decide it: a curried instance (to Celsius = ...)
         // takes the first alone.
         next: for (let n = fns.length - 1; n >= 0; n--) {
             let f = fns[n];
+            if (named !== undefined && this.instanceTargets(f)?.has(named) === false) continue;
             for (let i = 0; i < args.length; i++) {
                 f = this.apply(f, args[i], true);
                 if (f.kind === "nomatch") continue next;
@@ -2811,6 +2843,17 @@ export class Interpreter {
         return undefined;
     }
 
+    // The type names an instance's clauses take first, when each names one.
+    private instanceTargets(fn: Value): Set<string> | undefined {
+        if (this.targets.has(fn)) return this.targets.get(fn);
+        const f = this.force(fn);
+        const firsts = f.kind === "clauseFn" ? f.clauses.map(c => c.params[0]) : [];
+        const targets = firsts.length && firsts.every(p => p?.p === "constr" && !p.args.length)
+            ? new Set(firsts.map(p => (p as Extract<Pattern, { p: "constr" }>).tag)) : undefined;
+        this.targets.set(fn, targets);
+        return targets;
+    }
+    private targets = new WeakMap<Value, Set<string> | undefined>();
     // return x (or throw e) in a monad: the method is overloaded on its result,
     // so the newest instance whose result is in the target monad makes it.
     private instanceIn(method: string, target: Value, x: Value): Value | undefined {
@@ -3073,7 +3116,7 @@ export class Interpreter {
         v = this.demand(v);
         // A value a program says how to write (to String (Frac n d) = ...)
         // shows as that text, wherever it is: print, the REPL, inside a list.
-        const own = this.instances.has("to") ? this.instance("to", [{ kind: "type", name: "String" }, v]) : undefined;
+        const own = this.makes("String") ? this.instance("to", [{ kind: "type", name: "String" }, v]) : undefined;
         if (own) {
             const text = this.demand(own);
             if (text.kind !== "string") throw new APNError("runtime", `to String gave ${this.typeText(text)}, not a String`);
@@ -3193,6 +3236,9 @@ export class Interpreter {
         if (undecided.kind === "pending" && undecided.step.op === "call") return 30;
         if (pattern.tag === "Vect") return this.isList(this.dataValue(arg)) ? 30 : -1000;
         const value = pattern.tag === "Mutable" ? this.reference(arg) : pattern.tag === "Type" ? this.demand(arg) : this.dataValue(arg);
+        // A conversion through a to instance fits less than any pattern of the
+        // value's own type.
+        if (SCALAR_TYPES.has(pattern.tag) && this.builtinValue(pattern.tag, value)) return -1;
         if (!NUMERIC_TYPES.includes(pattern.tag)) return this.matchesValueType(pattern.tag, value) ? 30 : -1000;
         if (!isNumeric(value)) return -1000;
         if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(pattern.tag)) return matchesType(pattern.tag, value) ? 10 : -1000;
@@ -5058,8 +5104,10 @@ export class Interpreter {
             const ref = this.reference(v);
             return ref.kind === "mutable" && p.args.length === 1 && this.matchPattern(p.args[0], ref, binds);
         }
-        // A named subtype matches its base's patterns: (Float x) takes Money 1.2.
+        // A named subtype matches its base's patterns: (Float x) takes Money 1.2;
+        // another type of the program's, what its to instance makes: (Int i) takes East.
         if (p.p === "constr" && TYPE_NAMES.includes(p.tag) && !["Type", "Mutable", "Dynamic"].includes(p.tag)) v = this.baseValue(this.reference(v));
+        if (p.p === "constr" && SCALAR_TYPES.has(p.tag)) v = this.builtinValue(p.tag, this.dataValue(v)) ?? v;
         v = p.p === "typeBind" || (p.p === "constr" && p.tag === "Type") ? this.demand(v) : this.dataValue(v);
         switch (p.p) {
             case "typeBind": {

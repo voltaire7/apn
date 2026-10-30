@@ -2,6 +2,9 @@ import { type Numeric, type Real, isNumeric, integer, floating, toReal, toExact,
 import { APNError } from "./errors.ts";
 
 export const NUMERIC_TYPES = ["Int", "UInt", ...[8, 16, 32, 64, 128].flatMap((n) => [`Int${n}`, `UInt${n}`]), "Float", "Float32", "Float64", "Fraction", "Complex", "ComplexExact", "Number", "Real", "Integer", "Exact", "Inexact"];
+// The built-in types a value of a type the program defines converts to through
+// its to instance where one is needed: an index, arithmetic, a typed pattern.
+export const SCALAR_TYPES = new Set([...NUMERIC_TYPES, "String", "Char", "Bool"]);
 export const TYPE_NAMES = [...NUMERIC_TYPES, "Dynamic", "Vect", "Mutable", "Pointer", "HashMap", "Bool", "String", "Char", "List", "Record", "Function", "Type", "Variant", "IO"];
 const canonical = (name: string) => name === "Float64" ? "Float" : name;
 export function numericType(value: Numeric): string {

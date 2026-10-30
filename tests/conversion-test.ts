@@ -75,6 +75,12 @@ for (const checked of [true, false]) {
     for (const [source, expected] of [
         [MONEY + "to Money (Float x) = Money x\n[Money 1.0 + 2.5, 2.5 + Money 1.0, Money 1.0 < 2.0]", "[Money 3.5, Money 3.5, true]"],
         [MONEY + CENTS + "Money 1.0 + Cents 50", "Money 1.5"],
+        // The other way round, where a built-in type is needed: an index,
+        // arithmetic, a typed pattern; an enumeration's positions are such instances.
+        ["Level (Int n) = _\nto Int (Level n) = n\nf (Int i) = i + 1\n[[10,20,30] (Level 2), Level 2 * 5, f (Level 4)]", "[30,10,5]"],
+        ["Direction = North | East | South\ng (Int i) = i * 10\n[to Int South, g South, [5,6] East, East + 1]", "[2,20,6,2]"],
+        // A pattern of the value's own type comes before a conversion.
+        ["Level (Int n) = _\nto Int (Level n) = n\nf (Level n) = 9\nf (Int i) = i\n[f (Level 4), f 7]", "[9,7]"],
     ] as const) Deno.test(`operators promote through to (checked=${checked}): ${source}`, () => {
         const actual = each(source);
         if (actual !== expected) throw new Error(`${actual} != ${expected}`);

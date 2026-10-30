@@ -207,7 +207,7 @@ exported by `function`. Tests: `tests/language-cast-test.ts`,
   Validate every replacement before publishing the new binding; keep
   binding publication atomic and lazy tails intact.
 - String-key association assignment must leave skipped payloads and tails lazy.
-- `listIndex` shares the nullary-variant index rule between reads and updates.
+- `listIndex` shares the index rule (an `Int`, or a `to Int`) between reads and updates.
 - Tests: `tests/record-keys-test.ts`, `tests/record-assignment-test.ts`,
   `tests/index-assignment-test.ts`, `tests/computed-assignment-test.ts`,
   `tests/selection-symmetry-test.ts`, `tests/nested-field-assignment-test.ts`.
@@ -409,8 +409,13 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
   (`baseValue`), and the checker unifies it with its base only where the base
   is expected. It is built from its base only by conversions (`conform`; the
   checker's `convert` unless `matching`, a typed parameter's own check).
-  Arithmetic on nullary-family ordinals returns ordinary numbers via
-  `arithmeticValue`.
+  A value of another type of the program's is a built-in one through its `to`
+  instance (`builtinValue`; the checker's `builtinTyped`): `listIndex`,
+  `arithmeticValue`, a scalar typed pattern (`matchPattern`, `patternScore`;
+  the checker's `convert` when `matching`), guarded (`converting`) against the
+  instance's own patterns meeting the value again. An enumeration's positions
+  are `to Int` clauses (`enumerationPositions`) the runtime and the checker
+  define with its declaration.
 - `Name params = _` is parser sugar (`constructorDeclaration`): the same
   `type` declaration `Name a = | Name a` makes, its fields from the
   parameters, so runtime and checker treat both alike; it declares again where
