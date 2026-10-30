@@ -1,4 +1,4 @@
-import { type Alternative, claimedDeclaration, LIST_TYPE_RANGE, clauseKey, type DataDef, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, LIST_TYPE_RANGE, clauseKey, type DataDef, countingFamily, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -576,6 +576,8 @@ const EVALUATION_BUDGET = 300000;
 const SYMBOLIC_BUDGET = 200;
 // A value no check has asked for yet is computed now only if it is quick.
 const QUICK_BUDGET = 2000;
+// The types of values that apply as get gives them (xs 2, r "x").
+const DATA_KINDS = new Set(["list", "record", "variant", "map", "atom"]);
 // Inference work (unification steps) per top-level statement.
 const STATEMENT_BUDGET = 250000;
 // Standard-library functions that return a list as long as their final list
@@ -731,6 +733,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The innermost expression being inferred that has a source location.
     let locatedExpression: Expr | undefined;
     let firstUnknown: Expr | undefined, unknownLength = false;
+    // get once a program's clauses extend it (an overload of the builtin).
+    let getter: Ty | undefined;
     type Unbound = { expr: Expr; name: string; hint?: string; inPattern?: boolean; within?: Expr };
     let firstUnbound: Unbound | undefined;
     // The names bound nowhere that the list item being inferred reads, by
@@ -2590,14 +2594,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const t = field && resolve(field), value = t?.k === "type" ? resolve(t.value) : undefined;
         return value?.k === "atom" && value.name === "Type";
     }
-    function application(f: Ty, argument: Entry, e: Expr): Ty {
+    function application(f: Ty, argument: Entry, e: Expr, builtin = false): Ty {
         spend(e);
         f = resolve(f);
+        // A value that is not a function applies as get gives it: clauses for
+        // get extend the builtin meaning (see getter).
+        if (getter && !builtin && gotten(f)) return application(application(getter, { type: f }, e), argument, e);
         if (!valueBlind(f)) argument = { ...argument, ...needed(argument) };
         // A Mutable cell applies as its contents (an index into a list cell).
         while (f.k === "mutable") f = resolve(f.value);
         if (f.k === "intrinsic") {
             const args = [...f.args ?? [], argument.type], entries = [...f.entries ?? [], argument];
+            if (f.name === "get" && args.length === 1) builtinGetter(args[0], e);
             if (args.length < (f.arity ?? 1)) return { ...f, args, entries };
             if (PRELUDE_OPERATORS.has(f.name)) return operatorApplication(f.name, entries[0], entries[1], e);
             if (f.name === "not" || f.name === "negate") return prefixApplication(f.name, args[0], e);
@@ -2613,6 +2621,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             // A tag whose owner or constructor is computed is decided when it runs.
             if (f.name === "tag") { runtimeChecks++; return explicitDynamic; }
+            // get v k: the builtin meaning of applying a value (xs 2, r "x").
+            if (f.name === "get") return application(args[0], entries[1], e, true);
             return operation(f.name, args);
         }
         if (f.k === "operation") return deferredCall(f, argument);
@@ -2675,7 +2685,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             if (!outputs.length) return problem(`no overload accepts ${text(argument.type)}`, e);
             if (outputs.length === 1 || outputs.every((x) => text(x) === text(outputs[0]))) return outputs[0];
-            if (outputs.every((x) => resolve(x).k === "fn")) return { k: "overload", choices: outputs, undecided: f.undecided, name: f.name };
+            // Partial calls (an intrinsic's too) stay choices the next argument decides.
+            if (outputs.every((x) => ["fn", "intrinsic"].includes(resolve(x).k))) return { k: "overload", choices: outputs, undecided: f.undecided, name: f.name };
             if (f.undecided) return { k: "union", choices: outputs, undecided: true, name: f.name };
             return union(outputs);
         }
@@ -6045,12 +6056,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             return;
         }
-        // Clauses for a math function overload it: arguments they do not take
-        // keep its previous meaning.
-        const previous = MATH_FUNCTIONS.has(name) && clauses[0].params.length ? scope.get(name) : undefined;
+        // Clauses for a math function or get overload it: arguments they do
+        // not take keep its previous meaning.
+        const previous = overloaded(name, clauses[0].params.length, scope.get(name));
         defineClauses(name, clauses, scope, location);
         const entry = scope.get(name);
-        if (previous && entry) scope.set(name, { ...entry, type: { k: "overload", choices: [entry.type, previous.type], name } });
+        if (previous && entry) scope.set(name, { ...entry, type: { k: "overload", choices: [entry.type, previous], name } });
+        if (previous && name === "get") getter = scope.get(name)!.type;
         if (options.library && entry && DECLARED_KEEPS_LENGTH.has(name)) declareKeepsLength(entry.type);
     }
     // The result is a list as long as the final argument, for each overload
@@ -6061,6 +6073,26 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         let count = 0, last: Ty = t;
         for (let x: Ty = t; x.k === "fn"; x = resolve(x.output)) { count++; last = x; }
         if (count && last.k === "fn" && resolve(last.input).k !== "atom") setShape(t, { length: { param: count - 1 } });
+    }
+    // A value's type that applies as get gives it (not a function's).
+    function gotten(t: Ty): boolean {
+        return DATA_KINDS.has(t.k) && !(t.k === "atom" && t.name === "Function");
+    }
+    // What the builtin get indexes: a list, record or HashMap (or one not known yet).
+    function builtinGetter(t: Ty, e: Expr): Ty {
+        const r = resolve(t);
+        if (!gotten(r)) return ["fn", "overload", "intrinsic"].includes(r.k) ? problem("get takes a value, not a function", e) : t;
+        return r.k === "variant" || r.k === "atom" && r.name !== "Record" ? problem(`cannot apply ${text(t)}`, e) : t;
+    }
+    // The meaning clauses for a name overload (as at runtime): a math
+    // function's or get's, when they take as many arguments.
+    function overloaded(name: string, params: number, previous: Entry | undefined): Ty | undefined {
+        if (!OVERLOADED_FUNCTIONS.has(name) || !previous || !params) return undefined;
+        let t = resolve(previous.type);
+        while (t.k === "overload") t = resolve(t.choices[t.choices.length - 1]);
+        let arity = t.k === "intrinsic" ? (t.arity ?? 1) - (t.args?.length ?? 0) : 0;
+        for (; t.k === "fn"; t = resolve(t.output)) arity++;
+        return arity === params ? previous.type : undefined;
     }
     function defineClauses(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
         // An existing constructor destructures (Some v = Some 123), also one
@@ -6218,7 +6250,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         forward.delete(name);
         // Its clauses' own calls of an overloaded math function may take the
         // previous meaning too (sin (Dual a b) = Dual (sin a) ...).
-        const fallback = MATH_FUNCTIONS.has(name) && previous && !previous.recursive ? previous.type : undefined;
+        const fallback = previous && !previous.recursive ? overloaded(name, clauses[0].params.length, previous) : undefined;
         scope.set(name, { type: fallback ? { k: "overload", choices: [pending, fallback], name } : pending, mono: true, recursive: true });
         const groups = new Map<string, Ty>();
         const domain = (t: Ty, seen = new Set<Ty>()): string => {
@@ -6476,6 +6508,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("match", { type: { k: "intrinsic", name: "match", arity: 2 } });
     for (const name of ["tag", "intrinsics.tag"]) scope.set(name, { type: { k: "intrinsic", name: "tag", arity: 3 } });
     scope.set("intrinsics.union", { type: { k: "intrinsic", name: "union", arity: 1 } });
+    for (const name of ["get", "intrinsics.get"]) scope.set(name, { type: { k: "intrinsic", name: "get", arity: 2 } });
     // to T x writes x as a T, from T x reads it back (to String, to JSON, to (List Char)).
     for (const name of ["to", "from"]) scope.set(name, { type: { k: "intrinsic", name, arity: 2 } });
     scope.set("JSON", { type: { k: "type", value: { k: "variant", name: "JSON", args: [], base: atom("String") } } });

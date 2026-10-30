@@ -1,6 +1,6 @@
 import { Interpreter } from "../src/interp.ts";
 import { parse } from "../main.ts";
-import { MATH_FUNCTIONS, METHODS } from "../src/ast.ts";
+import { OVERLOADED_FUNCTIONS, METHODS } from "../src/ast.ts";
 import { isOperatorName } from "../src/parser.ts";
 import { QUALIFIED_MODULES } from "../src/modules.ts";
 
@@ -213,9 +213,9 @@ Deno.test("no two standard modules define the same name", () => {
         const module = entry.name.slice(0, -4);
         for (const statement of parse(Deno.readTextFileSync(new URL(`../lib/${entry.name}`, import.meta.url)), module)) {
             // Instances (any definition of a method: map, return, empty, ...) join it, and clauses
-            // for an operator or a math function overload it; they bind no new name.
+            // for an operator, a math function or get overload it; they bind no new name.
             const instance = statement.t === "def" && (METHODS.has(statement.name) ||
-                (isOperatorName(statement.name) || MATH_FUNCTIONS.has(statement.name)) && statement.clauses[0].params.length > 0);
+                (isOperatorName(statement.name) || OVERLOADED_FUNCTIONS.has(statement.name)) && statement.clauses[0].params.length > 0);
             const names = instance ? [] : statement.t === "def" ? [statement.name]
                 : statement.t === "type" ? [statement.def.name, ...statement.def.variants.map(v => v.tag)]
                 : statement.t === "patDef" && statement.pattern.p === "var" ? [statement.pattern.name] : [];

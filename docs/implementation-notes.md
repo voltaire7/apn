@@ -146,7 +146,8 @@ native (`PRIMITIVE_OPERATORS` in `src/parser.ts`), forced at startup so a
 binop finds the native itself: `evalBinop` then runs `operate` directly
 (strict operands evaluated in place, `::`/`++`/`&&`/`||`/`$` over thunks) and
 applies any other binding as a function. A `clauseFn` defined for an operator
-or a math function (`MATH_FUNCTIONS`) name keeps the previous binding as
+or an `OVERLOADED_FUNCTIONS` name (math functions and `get`) with the previous
+binding's arity (`arity`; the checker's `overloaded`) keeps it as
 `fallback`; a checked write accepts an imported one over the binding it
 extends. The checker gives operator names an intrinsic type per builtin; a
 binop on another binding is inferred as the call `(op l) r`, and an overload
@@ -160,7 +161,12 @@ are the one typing a binop or unop shares with a call of the intrinsic
 same way, and `evaluateOperator` is the builtin meaning a binop and a call of
 the intrinsic share (`evaluateBinop` only chooses a program's overload). A math function's clauses get an
 `overload` type of themselves and the previous meaning (also for their own
-recursive calls). Tests: `tests/operators-test.ts`,
+recursive calls); an overload's partial calls, an intrinsic's included, stay an
+`overload` for the next argument to decide. `apply` gives a value outside
+`CALLABLE_KINDS` to the `get` in `this.env` when clauses extend it, else to
+`builtinGet` (which `intrinsics.get` runs); the checker's `application` does
+the same with `getter`, the program's extended `get`, and the intrinsic `get`
+indexes with `builtin` set, so it is not dispatched again. Tests: `tests/operators-test.ts`,
 `tests/default-checking-test.ts`. `cast` is a `clauseFn`, not a native:
 its clauses validate list templates with `Type` and dispatch to
 `(Type target).(value)`, other types to `target value`. Expose `type`

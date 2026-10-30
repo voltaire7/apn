@@ -43,6 +43,12 @@ for (const [name, source, expected] of [
     ["a local operator definition", "f x = {\n    (+) = max\n    x + 1\n}\nprint (f 5)\nprint (5 + 1)", ["5", "6"]],
     ["a local infix definition", "f x = {\n    a <+> b = a * 10 + b\n    x <+> 1 <+> 2\n}\nprint (f 5)", ["512"]],
     ["$ is an operator", "print (head $ tail [1,2,3])\nprint ((+ 1) \\ (* 2) $ 3)", ["2", "7"]],
+    // Applying a value that is not a function is get, which clauses extend.
+    ["clauses for get index a type", "Grid (List Int cells) = _\nget (Grid cells) [Int r, Int c] = cells (3 * r + c)\n" +
+        "g = Grid [1,2,3,4,5,6,7,8,9]\nprint (g [1,2])\nprint (map g [[0,0],[2,2]])\nprint ([10,20] 1)\nprint (get [5,6] 0)",
+        ["6", "[1,9]", "20", "5"]],
+    // Clauses taking another number of arguments define a new function.
+    ["an overload takes as many arguments", "log b x = b\nprint (log 2 8)\nget k = k\nprint (get 3)\nprint ([4,5] 1)", ["2", "3", "5"]],
 ] as const) Deno.test(`operators: ${name}`, () => {
     for (const checked of [true, false]) {
         const actual = run(source, checked);
@@ -55,6 +61,8 @@ for (const [source, message, kind] of [
     ["infixl 10 <**>", "precedence", "parse"],
     ["print (1 <%%> 2)", "unbound operator '<%%>'", "type"],
     ["print (1+-2)", "unbound operator '+-'", "type"],
+    ["print (get (x -> x) 1)", "get takes a value, not a function", "type"],
+    ["Grid (List Int cells) = _\nprint (Grid [1] 0)", "cannot apply Grid", "type"],
 ] as const) Deno.test(`operators reject: ${source}`, () => fails(source, message, kind));
 
 // An operator written infix, as (op) or as its intrinsic is checked the same

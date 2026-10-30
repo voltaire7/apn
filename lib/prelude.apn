@@ -100,6 +100,10 @@ JSON = String
 # patterns of ctor read back (Some a = tag Option Some [a]). A constructor's _
 # is one: the value Box x = _ makes for Box 5 is tag Box Box [5].
 tag = intrinsics.tag
+# get v k: what applying a value that is not a function gives: xs 2, r "x",
+# assoc "key". Clauses for get extend it, so a type can be indexed:
+#     get (Grid cells) [Int r, Int c] = cells (3 * r + c)
+get = intrinsics.get
 # The length-indexed list: [] has length zero, and x :: xs one more than xs.
 # Any family of lists of this shape is the same type.
 Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a

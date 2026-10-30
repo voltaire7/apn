@@ -3,7 +3,7 @@ import type { TypeScope } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeType } from "./type-description.ts";
-import { MATH_FUNCTIONS, METHODS, sourceLocations } from "./ast.ts";
+import { OVERLOADED_FUNCTIONS, METHODS, sourceLocations } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
@@ -72,6 +72,8 @@ const SHOWS_UNDECIDED = new Set(["print", "echo", "emit", "toString", "format", 
 
 // Operators whose builtin meaning does not demand both operands first.
 const LAZY_OPERATORS = new Set(["::", "++", "&&", "||", "$"]);
+// The values application calls; any other applies as get gives it.
+const CALLABLE_KINDS = new Set(["functionType", "contract", "mutable", "type", "closure", "native", "clauseFn"]);
 
 const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 
@@ -94,6 +96,8 @@ export const NATIVES: Array<[string, number]> = [
     ["to", 2], ["from", 2],
     // tag owner ctor fields: a value made by ctor, belonging to owner.
     ["intrinsics.tag", 3],
+    // get v k: what applying a value that is not a function gives (xs 2, r "x").
+    ["intrinsics.get", 2],
     // A union of types (Mixed = Int | String).
     ["intrinsics.union", 1],
 ];
@@ -603,10 +607,11 @@ export class Interpreter {
             clauses = mergeClauses(name, extended ? previous.clauses : [], clauses, c => this.clauseHead(c, scope));
             // Capture a shared env containing the binding itself, enabling recursion.
             const child = new Env(this.env);
-            // Clauses for an operator (or a math function) overload it: the
-            // previous meaning still applies to arguments no clause matches.
-            // Redefining the clauses in the same scope keeps that fallback.
-            const overloaded = !isOperatorName(name) && !MATH_FUNCTIONS.has(name) || previous === undefined ? undefined
+            // Clauses for an operator (or a math function, or get) taking as many
+            // arguments overload it: the previous meaning still applies to
+            // arguments no clause matches. Redefining the clauses in the same
+            // scope keeps that fallback.
+            const overloaded = !isOperatorName(name) && !OVERLOADED_FUNCTIONS.has(name) || previous === undefined || this.arity(previous) !== arity ? undefined
                 : previous.kind === "clauseFn" && this.scopeBinding(name) === previous ? previous.fallback : previous;
             const fn: Value = {
                 kind: "clauseFn", name, clauses, arity, env: child, applied: [], ...overloaded ? { fallback: overloaded } : {},
@@ -1974,12 +1979,12 @@ export class Interpreter {
         f = this.force(f);
         const written = this.asWritten.get(f);
         if (written) return this.writtenValue(f, this.apply(written.made, arg));
-        if (isNumeric(f)) throw new APNError("runtime", "cannot apply a number", {
-            hint: "use a type constructor such as `Int`, or replace a default inside a template",
-        });
-        if (["string", "char", "bool"].includes(f.kind)) throw new APNError("runtime", `cannot apply a ${f.kind}`, {
-            hint: "use a type constructor or replace a default inside a template",
-        });
+        // A value that is not a function applies as get gives it (xs 2 is
+        // get xs 2); clauses for get in scope extend it.
+        if (!CALLABLE_KINDS.has(f.kind)) {
+            const get = this.env.get("get");
+            return get?.kind === "clauseFn" && get.fallback ? this.apply(this.apply(get, f), arg) : this.builtinGet(f, arg);
+        }
         switch (f.kind) {
             case "functionType": return this.conform(f, arg);
             // Each call decides the contract's type variables from its
@@ -2047,7 +2052,6 @@ export class Interpreter {
                 }
                 return this.conform(f, value);
             }
-            case "hashmap": return this.mapLookup(f, this.demand(arg));
             case "closure": {
                 if (f.params.length === 0) {
                     // a 0-arg action APPLIED to arguments: run it, then hand the
@@ -2133,6 +2137,30 @@ export class Interpreter {
                     { hint: "the definition's patterns don't cover this input" },
                 );
             }
+            default: throw new APNError("runtime", `cannot call a non-function (${f.kind})`);
+        }
+    }
+
+    // How many arguments a function takes before it runs (undefined for a value).
+    private arity(v: Value): number | undefined {
+        v = this.force(v);
+        if (v.kind === "native" || v.kind === "clauseFn") return v.arity - v.applied.length;
+        return v.kind === "closure" ? v.params.length : undefined;
+    }
+
+    // The builtin get: indexing a list (by position, a list or record of
+    // positions, or an association key), a record (by key or position; given
+    // fields, a copy with them) or a HashMap.
+    builtinGet(f: Value, arg: Value): Value {
+        if (isNumeric(f)) throw new APNError("runtime", "cannot apply a number", {
+            hint: "use a type constructor such as `Int`, or replace a default inside a template",
+        });
+        if (["string", "char", "bool"].includes(f.kind)) throw new APNError("runtime", `cannot apply a ${f.kind}`, {
+            hint: "use a type constructor or replace a default inside a template",
+        });
+        if (CALLABLE_KINDS.has(f.kind)) throw new APNError("runtime", "get takes a value, not a function");
+        switch (f.kind) {
+            case "hashmap": return this.mapLookup(f, this.demand(arg));
             case "list":
             case "lazyList":
             case "cons":
@@ -4134,6 +4162,7 @@ export class Interpreter {
                 this.session(this.interactive);
                 return mkList([]);
             case "intrinsics.tag": return this.tagged(args[0], args[1], args[2]);
+            case "intrinsics.get": return this.builtinGet(this.force(args[0]), args[1]);
             case "intrinsics.union": return this.union([...this.elements(args[0])].map(x => this.reference(x)));
             case "toString":
                 return mkStr(this.renderString(a));

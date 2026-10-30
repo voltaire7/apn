@@ -442,10 +442,12 @@ Money 3 + 4                             # Money 7: 4 is to Money 4 first
 
 The math functions (`sqrt`, `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`,
 `atan`, `atan2`, `abs`, `floor`, `ceiling`, `truncate`, `round`, `min`, `max`)
-overload the same way, so a type can give them meaning too:
+and `get` ([indexing](#record-fields-string-keys-and-positions)) overload the
+same way, so a type can give them meaning too:
 `sin (Dual a b) = Dual (sin a) (b * cos a)` leaves `sin 0.5` as it was (the
-`glsl` module writes GLSL this way). Clauses for any other function define it
-afresh.
+`glsl` module writes GLSL this way). Clauses overload only a function taking
+as many arguments: `log b x = ...` and the `http` module's `get request = ...`
+define new functions, as clauses for any other function do.
 
 **Creating new operators is possible but not recommended.** A named function
 is easier to read, to search for and to explain; reach for a new symbol only
@@ -514,6 +516,19 @@ field. Include quote characters in the argument to select a quoted field.
 `pairs []` is `[]`, as `[]` is the empty record too.
 `obj.(expression)` evaluates with the record fields in scope; use `obj key` for computed lookup. Missing keys
 raise an error. Numeric field names retain their existing normalized spelling.
+Applying a value that is not a function is `get`: `xs 2` is `get xs 2`, the
+prelude's `intrinsics.get`, which indexes lists, records and HashMaps as
+described here. Clauses for `get` extend it, so a type of the program's own can
+be indexed, wherever it is applied (`map g`, too); other values keep the
+builtin meaning:
+
+```apn
+Grid (List Int cells) = _
+get (Grid cells) [Int r, Int c] = cells (3 * r + c)
+g = Grid [1,2,3,4,5,6,7,8,9]
+g [1,2]                                 # 6
+```
+
 List indexing accepts integers or variants from families with only nullary constructors.
 Variants select by zero-based declaration order. A string argument performs
 [association-list lookup](templates-and-types.md#association-list-lookup):
