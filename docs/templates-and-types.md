@@ -477,6 +477,20 @@ Nothing = _                   # a constructor without fields
 unbox (Box x) = x             # unbox (Box 5) is 5
 ```
 
+A union of constructors declared with `_` claims them: they become one type's,
+exactly as a declaration of that type with those constructors makes it. An
+alternative may restate a constructor's fields (`Just a`, tying them to the
+type's parameters); a bare one keeps the constructor's own.
+
+```apn
+Just x = _
+Nada = _
+Maybe a = Just a | Nada       # the same as Maybe a = Just a | Nada declaring both
+Circle (Float r) = _
+Square (Float s) = _
+Shape = Circle | Square       # typeOf (Circle 1) is Shape
+```
+
 A `|` distinguishes a constructor declaration from a type alias. On one line,
 constructors are separated by `|` with no leading one, except a single
 constructor, which needs a leading pipe to be a declaration. On several lines,

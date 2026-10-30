@@ -124,6 +124,8 @@ class Parser {
     toks: Token[];
     i = 0;
     seen: Token | null = null; // last token peeked/consumed — where a failure points
+    // Constructors declared with _ that no union has claimed yet (see claimed).
+    unclaimed = new Map<string, Extract<TopLevel, { t: "type" }>>();
 
     constructor(toks: Token[], private source: string, private file = "<repl>") { this.toks = toks; }
 
@@ -1939,6 +1941,24 @@ class Parser {
                     this.skipNL();
                     this.expectSym(")");
                 } else variants = this.parseConstructors(name, [name, ...parameters].join(" "));
+                // A union of constructors declared with _ claims them: they
+                // become this type's, where the first of them was declared.
+                const claimed = variants.map(v => this.unclaimed.get(v.tag));
+                if (claimed.some(Boolean)) {
+                    const other = variants.find((_, n) => !claimed[n]);
+                    if (other) throw new APNError("parse", `${name} unions constructors declared with _, and ${other.tag} is not one`, { pos: t.pos, hint: `declare it first: ${other.tag} = _, or ${other.tag} x = _ with a field` });
+                    // Each takes the fields its alternative gives (Some a), or its own (Some).
+                    variants = variants.map((v, n) => {
+                        const own = claimed[n]!.def.variants[0];
+                        return v.arity || !own.arity ? v : { tag: own.tag, arity: own.arity, fields: own.fields ?? [] };
+                    });
+                    const at = Math.min(...claimed.map(c => out.indexOf(c!)));
+                    const def = { name, parameters, variants };
+                    for (const c of claimed) { out.splice(out.indexOf(c!), 1); this.unclaimed.delete(c!.def.name); }
+                    declaredTypes.add(name);
+                    out.splice(at, 0, { t: "type", def });
+                    continue;
+                }
                 if (new Set(variants.map(v => v.tag)).size !== variants.length) throw new Error("Parser: duplicate value constructor");
                 if (variants.some(v => TYPE_NAMES.includes(v.tag))) throw new Error("Parser: a value constructor cannot replace a built-in type");
                 // Register only after the entire declaration has parsed successfully.
@@ -1981,8 +2001,11 @@ class Parser {
                         const declaration = this.parseDefStatement();
                         if (TYPE_NAMES.includes(declaration.name)) throw new Error("Parser: built-in type names cannot be reassigned");
                         const [clause] = declaration.clauses;
-                        out.push(clause.body.t === "placeholder" && !clause.constructs ? constructorDeclaration(declaration.name, clause.params, t.pos)
-                            : { t: "def", ...declaration });
+                        if (clause.body.t === "placeholder" && !clause.constructs) {
+                            const made = constructorDeclaration(declaration.name, clause.params, t.pos);
+                            this.unclaimed.set(declaration.name, made);
+                            out.push(made);
+                        } else out.push({ t: "def", ...declaration });
                         continue;
                     }
                     const e = this.parseExpr();
@@ -2028,7 +2051,7 @@ class Parser {
 // but themselves, so each is a value (Box 5), with one field per parameter. A
 // name holds anything (a type parameter); a typed name converts its field, as a
 // typed parameter does ((Float w)). It is the declaration Name a = | Name a is.
-function constructorDeclaration(name: string, params: Pattern[], pos: number): TopLevel {
+function constructorDeclaration(name: string, params: Pattern[], pos: number): Extract<TopLevel, { t: "type" }> {
     const parameters: string[] = [];
     const typeOf = (p: Pattern): Expr | undefined => p.p === "var" ? { t: "var", name: p.name }
         : p.p === "int" ? { t: "int", v: p.v }
