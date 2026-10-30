@@ -13,7 +13,9 @@ Applying `(None -> print x)` to `Some 123` fails with a no-clause error. Its bod
 is not run, so `x` is never looked up. `_` in a body still means unfinished code;
 use `[]` when a matched branch should do nothing.
 
-`match` is an intrinsic function, available by default. It tries a lazy list of unary functions in order:
+`match` is an intrinsic function, available by default. It tries a list of unary
+functions as a function's clauses are tried: the most specific that fits first (a
+literal before a type pattern before a name), in written order among equals:
 
 ```apn
 handlers = [

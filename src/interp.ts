@@ -3,7 +3,7 @@ import type { TypeScope } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeType } from "./type-description.ts";
-import { OVERLOADED_FUNCTIONS, METHODS, sourceLocations, ternaryMatch, writtenMatch, type CoreMatch } from "./ast.ts";
+import { OVERLOADED_FUNCTIONS, METHODS, sourceLocations, ternaryMatch, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
@@ -51,6 +51,9 @@ function bindNatives(env: Env, natives: Iterable<readonly [string, number]>): vo
     env.setLocal("intrinsics", { kind: "record", v: intrinsics });
 }
 const LITERAL_PATTERNS = new Set(["int", "bool", "string", "char", "float"]);
+// Written alternatives in the order they are tried, when that does not depend
+// on the value (null when it does).
+const rankedAlternatives = new WeakMap<object, PatternLambda[] | null>();
 class TailCall {
     constructor(readonly body: Expr, readonly env: Env) {}
 }
@@ -2180,14 +2183,23 @@ export class Interpreter {
     private isBuiltinMatch(v: Value | undefined): boolean {
         return v?.kind === "native" && v.name === "match" && v.applied.length === 0;
     }
-    // A match against written alternatives: the first whose pattern and guard
-    // fit gives its body, evaluated in place of the match. The value is one
-    // lazy argument shared by every alternative tried.
+    // A match against written alternatives: the most specific whose pattern and
+    // guard fit, as among a function's clauses (written order breaks ties),
+    // gives its body, evaluated in place of the match. The value is one lazy
+    // argument shared by every alternative tried.
     private coreMatch({ value, alternatives }: CoreMatch): TailCall {
-        // A literal first pattern demands the value at once.
-        const argument: Value = LITERAL_PATTERNS.has(alternatives[0].params[0].p) ? this.eval(value) : { kind: "thunk", body: value, env: this.env };
+        let ranked = rankedAlternatives.get(alternatives);
+        // Only a constructor pattern's rank depends on the value.
+        if (!ranked) {
+            const dynamic = alternatives.some(a => a.params[0].p === "constr");
+            ranked = dynamic ? null : this.ranked(alternatives, a => LITERAL_PATTERNS.has(a.params[0].p) ? 40 : 0);
+            rankedAlternatives.set(alternatives, ranked);
+        }
+        // A literal pattern tried first demands the value at once.
+        const first = (ranked ?? alternatives)[0].params[0];
+        const argument: Value = LITERAL_PATTERNS.has(first.p) ? this.eval(value) : { kind: "thunk", body: value, env: this.env };
         const binds = new Map<string, Value>();
-        for (const alternative of alternatives) {
+        for (const alternative of ranked ?? this.ranked(alternatives, a => this.patternScore(a.params[0], argument))) {
             binds.clear();
             if (!this.matchPattern(alternative.params[0], argument, binds)) continue;
             const child = binds.size ? new Env(this.env) : this.env;
@@ -2200,6 +2212,12 @@ export class Interpreter {
             return new TailCall(alternative.body, child);
         }
         throw new APNError("runtime", "non-exhaustive match: no alternative fits this value");
+    }
+
+    // Items by score, highest first, keeping their order among equals.
+    private ranked<T>(items: T[], score: (item: T) => number): T[] {
+        return items.map((item, index) => ({ item, index, score: score(item) }))
+            .sort((a, b) => b.score - a.score || a.index - b.index).map(x => x.item);
     }
 
     // get or with, when clauses in scope extend the builtin one.
@@ -3279,6 +3297,15 @@ export class Interpreter {
         if (matchesType(pattern.tag, value)) return 30;
         try { castNumeric(pattern.tag, value); return 1; } catch { return -1000; }
     }
+    // How specifically a function given as a match alternative takes a value:
+    // as its best clause does.
+    private alternativeScore(f: Value, arg: Value): number {
+        if (f.kind !== "clauseFn" || f.arity - f.applied.length !== 1) return 0;
+        const caller = this.env;
+        this.env = f.env;
+        try { return Math.max(...f.clauses.map(c => this.patternScore(c.params[f.applied.length], arg))); }
+        finally { this.env = caller; }
+    }
     // The most a pattern can score for any argument.
     private bestPatternScore(pattern: Pattern): number {
         if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
@@ -3983,10 +4010,12 @@ export class Interpreter {
             return argsIn[1];
         }
         if (name === "match") {
-            // Traverse only as far as the first match. Share the original lazy
-            // argument across probes; errors are never treated as mismatches.
-            for (const candidate of this.elements(argsIn[1])) {
-                const f = this.demand(candidate);
+            // The most specific alternative that fits, as among a function's
+            // clauses (one scores as its best clause; written order breaks ties).
+            // Share the original lazy argument across probes; errors are never
+            // treated as mismatches.
+            const alternatives = [...this.elements(argsIn[1])].map(candidate => this.demand(candidate));
+            for (const f of this.ranked(alternatives, f => this.alternativeScore(f, argsIn[0]))) {
                 const arity = f.kind === "clauseFn" || f.kind === "native" ? f.arity - f.applied.length : f.kind === "closure" ? f.params.length : f.kind === "contract" ? 1 : -1;
                 if (arity !== 1) throw new APNError("runtime", "match expects alternatives with one remaining argument");
                 const result = f.kind === "clauseFn" ? this.apply(f, argsIn[0], true) : this.defer(() => this.apply(f, argsIn[0]));

@@ -177,7 +177,9 @@ Deno.test("lint reports a clause or alternative that never runs", () => {
     equal(opened('use (import "cards")\ns _ = 0\ns Hearts = 1'), 1);
     equal(opened('opt = import "option"\nf _ = 0\nf (Some x) = x'), 0);
     equal(opened('t <- load "cards"\nt = [x: 1]\nuse t\ns _ = 0\ns Hearts = 1'), 0);
-    // match tries alternatives in order: any after an unconditional one never runs.
-    equal(unreachable("v = match 3 [\n    x -> 0\n    1 -> 5\n]"), [2]);
+    // match ranks its alternatives as clauses: a literal after an unconditional
+    // one still runs, another name or list pattern never does.
+    equal(unreachable("v = match 3 [\n    x -> 0\n    1 -> 5\n]"), []);
+    equal(unreachable("v = match 3 [\n    x -> 0\n    [a] -> 5\n    y -> 1\n]"), [2, 3]);
     equal(unreachable("v = match 3 [\n    1 -> 5\n    x -> 0\n]"), []);
 });

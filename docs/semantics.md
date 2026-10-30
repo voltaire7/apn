@@ -1245,6 +1245,8 @@ impose a specific width on them.
 without casting. `Number`, `Real`, `Integer`, `Exact`, and `Inexact` are aggregate
 numeric guards. For example `isType Number (Int32 1)` is true.
 
+### Clause ranking
+
 Typed overloads use constructor patterns:
 
 ```apn
@@ -1256,8 +1258,9 @@ add (Number x) (Number y) = x + y
 Literal matches outrank exact concrete type matches, which outrank aggregate
 matches, which outrank conversion matches. Ties retain source order. Converting
 either a typed or an untyped input must be lossless; explicit floating-point
-construction is a separate operation and does not relax pattern matching. This ranking applies to functions with typed clauses;
-ordinary pattern functions keep source order. Numeric constructor patterns extract
+construction is a separate operation and does not relax pattern matching. The same
+ranking chooses among any function's clauses and a `match`'s alternatives:
+`match 0 [n -> "any", 0 -> "zero"]` is `"zero"`. Numeric constructor patterns extract
 untyped payloads: `unwrap (Int32 x) = x` returns `5` for `Int32 5`. Return an explicit
 constructor, as above, when the result should retain a type. Patterns do not mutate
 the original argument or strip types from unrelated values.
@@ -1397,10 +1400,12 @@ and list instances), then each instance's clauses, one per line. After
 
 ## Pattern functions
 
-`match` is an intrinsic function over a lazy list of unary functions; pattern lambdas
+`match` is an intrinsic function over a list of unary functions; pattern lambdas
 and runtime function contracts are described in [pattern functions](pattern-functions.md).
-Only pattern mismatch or a false guard selects the next alternative; runtime
-errors propagate and unused alternatives remain unevaluated. Guards use truthiness.
+It tries them as a function's clauses are tried, most specific first
+([ranking](#clause-ranking)). Only pattern mismatch or a false guard selects the next
+alternative; runtime errors propagate and unchosen alternatives' bodies never run.
+Guards use truthiness.
 
 ## CLI file errors
 

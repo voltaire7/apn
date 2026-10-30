@@ -98,7 +98,8 @@ print (parser.parse parser.number "12")  # => Ok 12
 signName n = n < 0 ? "negative" : (n == 0 ? "zero" : "positive")
 print (signName -5)                      # => negative
 
-# match tries patterns in order; a guard (| condition) refines one.
+# match takes the most specific pattern that fits (a literal first, then in
+# written order); a guard (| condition) refines one.
 describe n = match n [
     0 -> "zero"
     k | k < 0 -> "negative"

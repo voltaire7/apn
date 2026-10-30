@@ -4837,14 +4837,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // Matching a pattern that inspects an argument forces it, as at runtime.
         const inspects = (p: Pattern) => p.p !== "var" && p.p !== "wildcard";
         args = args.map((k, i) => summary.clauses.some(c => c.params[i] && inspects(c.params[i])) ? demand(k) ?? {} : k);
-        const entries: Entry[] = args.map(k => ({ type: knownType(k), ...k }));
-        // Ranking looks at every clause; the run forces only what the clause it
-        // tries inspects, so ranking does not force anything that touches a cell.
-        const ranked = summary.clauses.map(c => ({ clause: c, ...peek(() => rankClause(c, entries), { low: -1000, high: Infinity, matches: false, fails: false }) }));
-        const sure = ranked.filter(r => r.matches);
-        const before = (a: typeof ranked[number], b: typeof ranked[number]) =>
-            a.low > b.high || a.low >= b.high && a.clause.index < b.clause.index;
-        const candidates = ranked.filter(r => !r.fails && !sure.some(d => d !== r && before(d, r)));
+        const candidates = possibleClauses(summary.clauses, args.map(k => ({ type: knownType(k), ...k })));
         if (candidates.length !== 1) incomplete = true;
         if (!candidates.length) return undefined;
         let result: Known | undefined;
@@ -4857,6 +4850,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (!result || candidates.length > 1 && !hasFacts(result)) return undefined;
         }
         return result;
+    }
+    // The clauses that may run for these arguments, most specific first: not
+    // those that certainly fail, nor those a clause that certainly matches
+    // outranks. Ranking looks at every clause; the run forces only what the
+    // clause it tries inspects, so ranking does not force anything that touches
+    // a cell.
+    function possibleClauses<C extends ClauseOrder>(clauses: C[], entries: Entry[]): { clause: C; matches: boolean }[] {
+        const ranked = clauses.map(c => ({ clause: c, ...peek(() => rankClause(c, entries), { low: -1000, high: Infinity, matches: false, fails: false }) }));
+        const sure = ranked.filter(r => r.matches);
+        const before = (a: typeof ranked[number], b: typeof ranked[number]) =>
+            a.low > b.high || a.low >= b.high && a.clause.index < b.clause.index;
+        return ranked.filter(r => !r.fails && !sure.some(d => d !== r && before(d, r)));
     }
     // Bind what a pattern takes from a known value: plain names, list elements,
     // a cons cell's head and tail, and a typed pattern's (converted) payload.
@@ -6009,17 +6014,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (r.k === "list" && !r.length && length && lengths.every(x => x && indexText(x) === indexText(length))) return list(r.element, length);
         return result;
     }
-    // The alternative a value known enough certainly takes: every one before
-    // it certainly fails, and it certainly matches, unguarded.
+    // The alternative a value known enough certainly takes: the only one that
+    // may, as among clauses, certainly matching and unguarded.
     function takenAlternative(value: Expr, input: Ty, alternatives: PatternLambda[], scope: Scope): number | undefined {
-        const entry: Entry = { type: input, ...valueEntry(value, scope) };
-        for (const [index, { params, guard }] of alternatives.entries()) {
+        const clauses = alternatives.map(({ params }, index) => {
             const names = params.flatMap(patternNames);
-            const rank = peek(() => rankClause({ index, params, refutable: new Set(names.filter((x, n) => names.indexOf(x) !== n)) }, [entry]), undefined);
-            if (rank?.fails) continue;
-            return rank?.matches && !guard ? index : undefined;
-        }
-        return undefined;
+            return { index, params, refutable: new Set(names.filter((x, n) => names.indexOf(x) !== n)) };
+        });
+        const possible = possibleClauses(clauses, [{ type: input, ...valueEntry(value, scope) }]);
+        if (possible.length !== 1 || !possible[0].matches) return undefined;
+        const { index } = possible[0].clause;
+        return alternatives[index].guard ? undefined : index;
     }
     // The type of a choice between two alternatives' types (see inferMatch).
     function choice(a: Ty, b: Ty, e: Expr): Ty {

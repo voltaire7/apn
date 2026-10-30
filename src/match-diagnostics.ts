@@ -127,10 +127,13 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
     };
     const visit = (e: Expr, scope: Scope) => {
         if (e.t === "app" && e.f.t === "app" && e.f.f.t === "var" && e.f.f.name === "match" && !scope.has("match") && e.a.t === "list") {
-            // Alternatives are tried in order: one after an unconditional one never runs.
-            const first = e.a.v.findIndex(a => a.t === "lambda" || a.t === "patternLambda" && takesAny(a));
-            if (first >= 0) for (const alt of e.a.v.slice(first + 1)) {
-                if (alt.t === "lambda" || alt.t === "patternLambda") unreachable(lineOf(alt.body) ?? lineOf(alt), "This alternative never runs: an earlier one takes any value.");
+            // Alternatives rank as clauses do: one of only lowest-ranking patterns
+            // after one that takes any value never runs.
+            const alternatives = e.a.v.flatMap<Clause & { at: Expr }>(a => a.t === "patternLambda" ? [{ params: a.params, guard: a.guard, body: a.body, at: a }]
+                : a.t === "lambda" ? [{ params: a.params.map(name => ({ p: "var", name })), body: a.body, at: a }] : []);
+            const first = alternatives.findIndex(takesAny);
+            if (first >= 0) for (const alt of alternatives.slice(first + 1)) {
+                if (alt.params.every(ranksLowest)) unreachable(lineOf(alt.body) ?? lineOf(alt.at), "This alternative never runs: an earlier one takes any value.");
             }
             const family = familyOf(e.f.a, scope);
             const variants = family && families.get(family);

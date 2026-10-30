@@ -284,6 +284,7 @@ export function ternaryMatch(e: Extract<Expr, { t: "ternary" }>): CoreMatch {
 const namedAlternatives = new WeakMap<Expr, PatternLambda>();
 export function writtenMatch(e: Expr): CoreMatch | undefined {
     if (e.t !== "app" || e.f.t !== "app" || e.a.t !== "list" || !e.a.v.length) return undefined;
+    if (expansions.has(e)) return expansions.get(e);
     const alternatives: PatternLambda[] = [];
     for (const x of e.a.v) {
         if (x.t === "patternLambda" && x.params.length === 1) alternatives.push(x);
@@ -299,7 +300,9 @@ export function writtenMatch(e: Expr): CoreMatch | undefined {
             alternatives.push(named);
         } else return undefined;
     }
-    return { value: e.f.a, alternatives };
+    const core = { value: e.f.a, alternatives };
+    expansions.set(e, core);
+    return core;
 }
 
 // Clauses with equivalent patterns (and guards): parameter names do not

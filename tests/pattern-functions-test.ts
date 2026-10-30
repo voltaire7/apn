@@ -16,7 +16,12 @@ for (const [code, expected] of [
     ['match None [Some x -> missing, _ -> 42]', '42'],
     ['match (Some 3) [Some x -> x]', '3'],
     ['match 0 [x | x > 0 -> x, _ -> 42]', '42'],
-    ['match 3 ((_ -> 42)::missing)', '42'],
+    // The most specific alternative that fits wins, as among clauses; written
+    // order breaks ties.
+    ['match 0 [n -> "any", 0 -> "zero"]', '"zero"'],
+    ['match 1 [Float x -> "float", Int x -> "int"]', '"int"'],
+    ['cases = [n -> "any", 0 -> "zero"]; match 0 cases', '"zero"'],
+    ['f 0 = "zero"; f n = "any"; match 0 [n -> "name", f]', '"zero"'],
     ['dispatch = match 3; dispatch [(+ 1)]', '4'],
     ['match [3] [head]', '3'],
     ['f 0 = 9; f 1 = 8; match 1 [f, _ -> 0]', '8'],
@@ -40,6 +45,8 @@ for (const [code, error] of [
     ['match 1 [x | missing -> 0, _ -> 42]', 'unbound variable'],
     ['match 1 [_ -> _, _ -> 42]', 'not implemented'],
     ['match 1 [42]', 'one remaining argument'],
+    // Ranking reads every alternative (not the bodies).
+    ['match 3 ((_ -> 42)::missing)', 'unbound variable'],
     // A two-parameter lambda needs parentheses in a list; match gives it one argument.
     ['match 1 [(x, y -> x)]', 'one remaining argument'],
     ['match missing []', 'non-exhaustive match'],

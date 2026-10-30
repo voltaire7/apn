@@ -134,6 +134,8 @@ for (const [source, expected] of [
     // A ternary is a match: a value known to take one alternative checks only it.
     ['match true [true -> 1, false -> "a" + 1]', '1'],
     ['x = 2\nmatch x [1 -> "one", n -> n + 1] + 1', '4'],
+    // The one it takes is the most specific that fits, as among clauses.
+    ['match 0 [n -> "any", 0 -> 5] + 1', '6'],
 ] as const) Deno.test(`a choice has either type: ${source}`, () => {
     const actual = run(session(), choices + source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
