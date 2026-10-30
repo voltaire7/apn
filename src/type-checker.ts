@@ -1,4 +1,4 @@
-import { type Alternative, claimedDeclaration, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, type CoreMatch, ternaryMatch, writtenMatch, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -5142,16 +5142,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return { index, size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };
             }
             case "block": return evaluateBlock(e, env, scope, depth);
-            case "ternary": {
-                const condition = truth(value(e.cond));
-                if (condition === true) return value(e.then);
-                if (condition === false) return value(e.els);
-                incomplete = true;
-                // Only facts both branches share survive; skip the second when the
-                // first has none (recursive branches would otherwise multiply).
-                const then = value(e.then);
-                return hasFacts(then) ? meetValues(then, value(e.els)) : undefined;
-            }
+            case "ternary": return evaluateMatch(ternaryMatch(e), env, scope, depth);
             case "unop": {
                 const v = readMutable(value(e.e));
                 if (e.op === "not") { const t = truth(v); return t === undefined ? undefined : { boolean: !t }; }
@@ -5204,6 +5195,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // Code this evaluator does not follow may have effects: mark it skipped.
             default: incomplete = true; return undefined;
         }
+    }
+    // A match against written alternatives: a function whose clauses are the
+    // alternatives, called with the value (a guarded one is not evaluated here).
+    // A value that leaves several possible gives only the facts all share.
+    function evaluateMatch({ value, alternatives }: CoreMatch, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
+        if (alternatives.some(x => x.guard)) return undefined;
+        const clauses = alternatives.map(({ params, body }, index) => {
+            const names = params.flatMap(patternNames);
+            return { index, params, body, refutable: new Set(names.filter((name, i) => names.indexOf(name) !== i)) };
+        });
+        return evaluateCall({ scope, clauses }, [evaluateKnown(value, env, scope, depth) ?? {}], depth, new Map(env));
     }
     // A block: its local definitions, then its last expression.
     function evaluateBlock(e: Extract<Expr, { t: "block" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
@@ -5423,17 +5425,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (cell.program) programCells.add(cell);
             return { mutable: cell };
         }
-        // match x [alternatives]: a function whose clauses are the alternatives,
-        // called with x (a guarded one is not evaluated here).
         if (head.name === "match" && builtin && args.length === 2 && args[1].t === "list") {
-            const alternatives = args[1].v;
-            if (!alternatives.every(x => x.t === "patternLambda" && !x.guard && x.params.length === 1)) return undefined;
-            const clauses = alternatives.map((x, index) => {
-                const { params, body } = x as Extract<Expr, { t: "patternLambda" }>;
-                const names = params.flatMap(patternNames);
-                return { index, params, body, refutable: new Set(names.filter((name, i) => names.indexOf(name) !== i)) };
-            });
-            return evaluateCall({ scope, clauses }, [value(args[0]) ?? {}], depth, new Map(env));
+            const written = writtenMatch(e);
+            return written && evaluateMatch(written, env, scope, depth);
         }
         // do xs: the block whose statements are the elements. With an action
         // among them it is one, running each in order and yielding the last's

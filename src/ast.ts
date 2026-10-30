@@ -261,8 +261,8 @@ export interface SourceLocation { source: string; file: string; start: number; e
 export const sourceLocations = new WeakMap<Expr, SourceLocation>();
 
 // A match of a value against written one-parameter alternatives, the core form
-// sugar expands into. The runtime, the checker and the checker's evaluator run
-// a sugar node as its expansion; the written node stays for printing and tools.
+// sugar expands into. The runtime and the checker's evaluator run a sugar node
+// as its expansion; the written node stays for printing and tools.
 export type PatternLambda = Extract<Expr, { t: "patternLambda" }>;
 export type CoreMatch = { value: Expr; alternatives: PatternLambda[] };
 const expansions = new WeakMap<Expr, CoreMatch>();
