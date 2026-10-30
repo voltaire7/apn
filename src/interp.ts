@@ -1956,6 +1956,8 @@ export class Interpreter {
     apply(f: Value, arg: Value, probe = false, tail = false, tailLoad = false): Value | TailCall {
         // A lazy 0-param def used as a function (`f = g; f 1`) is a thunk — run it.
         f = this.force(f);
+        const written = this.asWritten.get(f);
+        if (written) return this.writtenValue(f, this.apply(written.made, arg));
         if (isNumeric(f)) throw new APNError("runtime", "cannot apply a number", {
             hint: "use a type constructor such as `Int`, or replace a default inside a template",
         });
@@ -2994,7 +2996,18 @@ export class Interpreter {
         if (ancestors.has(v)) throw new APNError("runtime", "cannot display a cyclic nested value");
         ancestors.add(v);
         try {
-            if (v.kind === "hashmap") {
+            if (v.kind === "type" || this.asWritten.has(v)) {
+                // Its arguments show as source writes them: Vect 2 (Option Int),
+                // a written type's as written (Pairs 2 Int).
+                const written = this.asWritten.get(v), type = v as Extract<Value, { kind: "type" }>;
+                emit(written?.name ?? type.description ?? type.name, "type");
+                for (const argument of written?.args ?? type.arguments ?? []) {
+                    const shown = this.inspectType(argument), wrap = compoundArgument(shown);
+                    emit(wrap ? " (" : " ");
+                    this.render(shown, emit, false, ancestors);
+                    if (wrap) emit(")");
+                }
+            } else if (v.kind === "hashmap") {
                 emit("HashMap", "type"); emit(" ");
                 this.render(mkList([...v.entries.values()].map(([key, value]) => mkList([key, value]))), emit, false, ancestors);
             } else if (this.isList(v)) {
@@ -3040,15 +3053,6 @@ export class Interpreter {
                     else this.render(field, emit, false, ancestors);
                 });
                 emit("]");
-            } else if (v.kind === "type") {
-                // Its arguments show as source writes them: Vect 2 (Option Int).
-                emit(v.description ?? v.name, "type");
-                for (const argument of v.arguments ?? []) {
-                    const shown = this.inspectType(argument), wrap = compoundArgument(shown);
-                    emit(wrap ? " (" : " ");
-                    this.render(shown, emit, false, ancestors);
-                    if (wrap) emit(")");
-                }
             } else if (v.kind === "pending") {
                 // Inside another value it shows as its source (return "a").
                 emit(this.undecidedText(v, ancestors.size > 1), "pending");
@@ -3240,6 +3244,8 @@ export class Interpreter {
 
     conform(typeIn: Value, value: Value): Value {
         const read = this.reference(typeIn);
+        const written = this.asWritten.get(read);
+        if (written) return this.writtenValue(read, this.conform(written.made, value));
         const type = read.kind === "closure" || read.kind === "clauseFn" ? this.asType(read) ?? read : this.sharedType(read) ?? typeIn;
         // A type variable not decided by a call takes any value.
         if (type.kind === "type" && type.variable) return value;
@@ -3903,6 +3909,8 @@ export class Interpreter {
             if (ref.kind === "functionType") return { kind: "type", inspect: true, name: "Type" };
             if (ref.kind === "contract") return { kind: "functionType", from: ref.from, to: ref.to };
             const value = this.demand(ref);
+            const declared = this.declaredTypes.get(value);
+            if (declared && this.asWritten.has(declared)) return declared;
             if (value.kind === "io") return { kind: "type", inspect: true, name: "IO", description: valueToString(value) };
             // An undecided value: return x is m T for the monad m the context
             // decides; a call of result overloads is one of their results.
@@ -4498,11 +4506,27 @@ export class Interpreter {
     }
 
     // A capitalized function applied to all its parameters runs its clauses
-    // and gives what they give (V n = Vect n Int: V 3 is Vect 3 Int).
+    // and gives what they give (V n = Vect n Int: V 3 is Vect 3 Int). A type
+    // it gives remembers how it was written (Pairs 2 Int), unless a scalar
+    // one (a named scalar is Count = Int's kind): it is that type wherever one
+    // is used, and the values it makes remember it.
     private construct(f: Extract<Value, { kind: "type" }>, args: Value[]): Value {
         let result: Value = f.alias!.run;
         for (const arg of args) result = this.apply(result, arg);
-        return this.reference(this.demand(result));
+        const made = this.reference(this.demand(result));
+        if (!this.isTypeValue(made) || made.kind === "type" && (NAMED_BASES.has(made.name) && !made.arguments?.length || made.variable)) return made;
+        const named = { ...made } as Value;
+        this.asWritten.set(named, { name: f.name, args: args.map(arg => this.reference(arg)), made });
+        return named;
+    }
+    // A type as written (Pairs 2 Int), and the one it is (Vect 4 Int).
+    private asWritten = new WeakMap<Value, { name: string; args: Value[]; made: Value }>();
+    // A value a written type made, remembering it: a copy of its outer part,
+    // so the value it was made from keeps its own type.
+    private writtenValue(type: Value, made: Value): Value {
+        const value = { ...this.reference(this.demand(made)) } as Value;
+        this.declaredTypes.set(value, type);
+        return value;
     }
     // A union of types: a value of any of them is one of it. Unions inside
     // flatten and a type given twice counts once.
@@ -4779,6 +4803,22 @@ export class Interpreter {
             const converted = this.conform(type, actual);
             const captured = this.hasSchemaCapture(type) ? this.captureSchema(type, converted, binds) : converted;
             return captured !== null && this.matchPattern(p.value, captured, binds);
+        }
+        // A written type's parameters, and a value it made, are read back from
+        // what it remembers: (Pairs n a) given Pairs 2 Int, (Pairs n a xs)
+        // given a value Pairs 2 Int made. Nothing is computed backwards.
+        if (p.p === "constr" && p.args.length) {
+            const bound = this.env.get(p.tag), alias = bound && this.reference(bound);
+            const count = alias?.kind === "type" ? alias.alias?.parameters.length : undefined;
+            if (count && (p.args.length === count || p.args.length === count + 1)) {
+                const given = this.reference(p.args.length === count ? v : this.demand(v));
+                const type = p.args.length === count ? given : this.declaredTypes.get(given);
+                const written = type && this.asWritten.get(type);
+                if (written) {
+                    return written.name === p.tag && p.args.slice(0, count).every((arg, n) => this.matchPattern(arg, written.args[n], binds))
+                        && (p.args.length === count || this.matchPattern(p.args[count], given, binds));
+                }
+            }
         }
         // A type applied to its parameters matches a type value and takes it
         // apart: (Option t) given Option Int binds t to Int, (Vect 1 t) given

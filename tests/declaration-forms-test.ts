@@ -80,7 +80,7 @@ for (const [source, message] of [
 // one definition.
 Deno.test("a new capitalized name with pattern parameters is a definition", () => {
     const pairs = "Pairs Z a = []\nPairs (S k) a = a :: a :: Pairs k a\nPairs 2 Int";
-    if (run(pairs) !== "[Int,Int,Int,Int]") throw new Error(run(pairs));
+    if (run(pairs) !== "Pairs 2 Int") throw new Error(run(pairs));
 });
 Deno.test("a constructor pattern with a literal binds as a pattern", () => {
     if (run('import "option"\nSome 1 = Some 1\nSome x = Some 2\nx') !== "2") throw new Error("Some 1");

@@ -2094,6 +2094,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     p.args.forEach((x, n) => bind(x, made.args[n] ?? variable(), scope, e, bound));
                     return;
                 }
+                // Any other's parameters, and a value its type made, are what the
+                // run remembers it was written with: (Pairs n a), (Pairs n a xs).
+                // Only the run knows them.
+                if (t.k === "alias" && (p.args.length === t.params.length || p.args.length === t.params.length + 1)) {
+                    p.args.slice(0, t.params.length).forEach(x => bind(x, explicitDynamic, scope, e, bound));
+                    if (p.args.length > t.params.length) bind(p.args[t.params.length], expected, scope, e, bound);
+                    runtimeChecks++;
+                    return;
+                }
                 // One more pattern than a type's parameters is a value of the type
                 // (see typed), wherever the pattern is bound.
                 const parameters = typeParameters(t);

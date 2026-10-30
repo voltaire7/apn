@@ -425,7 +425,11 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
   a pattern of the tagging function binds. Tests: `tests/core-test.ts`.
 - A capitalized function is a `type` value with `alias`: its clauses as a
   `clauseFn` (`run`), so choosing among them is a function's; `construct`
-  applies it, as the checker's `construct` does; `constructed` is the type a
+  applies it, as the checker's `construct` does. A non-scalar type it gives is
+  a shallow copy registered in `asWritten` (name, arguments, the type made);
+  applying or conforming to it marks a copy of the result's outer part in
+  `declaredTypes`, which `typeOf`, rendering and patterns read. The checker
+  leaves such patterns to the run (`explicitDynamic` parameters); `constructed` is the type a
   pattern of it takes (a tagging function's `fields` variant). The parser
   joins adjacent clauses (`continues`);
   whether a left side destructures is decided where the scope is known

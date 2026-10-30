@@ -2,9 +2,9 @@ import { Interpreter } from "../src/interp.ts";
 import { parseDocument } from "../src/parser.ts";
 
 // A capitalized definition computes: applied, it gives what its body gives (a
-// type, or any value), except that a scalar type keeps the name as a
-// transparent subtype. Constructors (Name x = _) are in core-test.ts. Checked
-// and unchecked runs agree.
+// type, or any value). A scalar type keeps the name as a transparent subtype;
+// any other type remembers how it was written. Constructors (Name x = _) are in
+// core-test.ts. Checked and unchecked runs agree.
 function run(source: string, checked: boolean): string {
     const i = new Interpreter();
     if (checked) i.enableChecking();
@@ -15,6 +15,7 @@ function failure(source: string, checked: boolean): string {
     throw new Error(`accepted: ${source}`);
 }
 
+const PAIRS = "Pairs n a = Vect (n * 2) a\n";
 for (const checked of [true, false]) {
     for (const [source, expected] of [
         // = names a scalar type transparently: a Count is an Int wherever one
@@ -26,7 +27,16 @@ for (const checked of [true, false]) {
         ["Box a = a\n[Box 1, Box Int]", "[1,Int]"],
         ["Twice w h = [w,h]\nTwice 1 2", "[1,2]"],
         ["V n = Vect (n + 0) Int\nV 3 [1,2,3]", "[1,2,3]"],
-        ["Pairs Z a = []\nPairs (S k) a = a :: a :: Pairs k a\nPairs 1 Int", "[Int,Int]"],
+        ["Pairs Z a = []\nPairs (S k) a = a :: a :: Pairs k a\nPairs 1 Int", "Pairs 1 Int"],
+        // A type a capitalized function gives remembers how it was written,
+        // and so do the values it makes; patterns read that back.
+        [PAIRS + "xs = Pairs 2 Int [1,2,3,4]\n[typeOf xs, length xs, map (* 2) xs]", "[Pairs 2 Int, 4, [2,4,6,8]]"],
+        [PAIRS + "ys = [1,2,3,4]\nzs = Pairs 2 Int ys\n[typeOf ys, typeOf zs, ys == zs]", "[List Int, Pairs 2 Int, true]"],
+        [PAIRS + "f (Pairs n a xs) = [n + 1, a, xs]\nf (Pairs 2 Int [1,2,3,4])", "[3,Int,[1,2,3,4]]"],
+        [PAIRS + "f (Pairs n a xs) = n\nf _ = 0\n[f [1,2,3,4], f (Pairs 1 Int [5,6])]", "[0,1]"],
+        [PAIRS + "g (Pairs n a) = n\ng (Pairs 3 Int)", "3"],
+        [PAIRS + "map typeOf (List (Pairs 1 Int) [[1,2]])", "[Pairs 1 Int]"],
+        ["P a = [x: a, y: a]\np = P Float [x: 1, y: 2]\n[typeOf p, p.x]", "[P Float, 1.0]"],
     ] as const) Deno.test(`capitalized definitions (checked=${checked}): ${source}`, () => {
         const actual = run(source, checked);
         if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -35,6 +45,7 @@ for (const checked of [true, false]) {
         // Two names never mix; (Count c) still takes only a Count.
         ["Count = Int\nAge = Int\nCount 1 + Age 2", "cannot combine Count and Age"],
         ["Count = Int\nf (Count c) = c\nf 5", checked ? "cannot use Int where Count is required" : "no clause"],
+        [PAIRS + "Pairs 2 Int [1,2,3]", checked ? "length mismatch: expected 4, got 3" : "Vect length mismatch: expected 4, got 3"],
         ["UserId := Int\n1", "APN defines with =, not :="],
     ] as const) Deno.test(`capitalized definitions reject (checked=${checked}): ${source}`, () => {
         const actual = failure(source, checked);

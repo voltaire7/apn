@@ -424,11 +424,29 @@ an `Int`.
 ## Constructor functions
 
 A capitalized definition computes: applied, it gives what its body gives, a
-type (`Sized n = Vect n Int`: `Sized 2` is `Vect 2 Int`) or any value, and
-nothing is named by it, except that a scalar type is kept as a
+type (`Sized n = Vect n Int`: `Sized 2` is `Vect 2 Int`) or any value. A scalar
+type it names is kept as a
 [named subtype](type-and-resource-rules.md#distinct-types) (`Count = Int`
 makes `Count 5`). A body of `_` makes a constructor instead (see
 [variants](#variants-parameters-and-distinct-wrappers)).
+
+Applied to all its parameters, one that gives any other type gives a type that
+remembers how it was written: it is that type wherever a type is used, and the
+values it makes, by applying it or by a conversion to it (`List (Pairs 1 Int)`,
+a field), remember it too. They are still what the type makes, so everything
+that takes one takes them, and what is computed from them is a plain value. A
+pattern reads back only what was remembered, never computing it backwards:
+
+```apn
+Pairs n a = Vect (n * 2) a
+Pairs 2 Int                 # Pairs 2 Int, which is Vect 4 Int
+xs = Pairs 2 Int [1,2,3,4]
+typeOf xs                   # Pairs 2 Int
+length xs                   # 4; map (* 2) xs is [2,4,6,8], a plain list
+size (Pairs n a xs) = n     # size xs is 2
+size [1,2,3,4]              # no clause: nothing remembers an n for a plain list
+kind (Pairs n a) = n        # kind (Pairs 3 Int) is 3
+```
 
 A capitalized left side whose name is a constructor (`Some`, or `Rect` once
 declared) is a pattern, so `Rect w h = r` takes `r` apart, except with the body
