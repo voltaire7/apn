@@ -548,10 +548,13 @@ Some value = Some 123      # destructures; value is 123
 None = None                # pattern assertion
 ```
 
-Type parameters are retained and supplied by type application. Bare constructors
-remain polymorphic; `typeOf (Some 123)` reports the unspecialized parent `Option`
-without demanding its payload. Explicit specialization retains its arguments:
-`typeOf (Option Int None)` is `Option Int`. Different type arguments produce
+Type parameters are retained and supplied by type application. `typeOf` reports a
+value's narrowest type: its fields decide the parameters they name, demanding
+them (`typeOf (Some 123)` is `Option Int`, `typeOf (Box [1])` is `Box (List
+Int)`), and one nothing decides is a type variable (`typeOf None` is `Option a`,
+as `typeOf []` is `List a`). Explicit specialization retains its arguments:
+`typeOf (Option Int None)` is `Option Int`. Against a bare type it still
+compares by name: `typeOf (Some 1) == Option`. Different type arguments produce
 different type descriptions. Payload conversions are deferred until used.
 Concrete fields such as `Int` in `MkUserId Int` are enforced on construction,
 also lazily. They convert as a typed parameter does, and the static check

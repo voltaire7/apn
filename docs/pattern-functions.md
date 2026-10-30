@@ -281,7 +281,7 @@ variant to `value` without forcing its fields (`(Option t value)` also binds
 `t` to its payload's type; see [type patterns](semantics.md#patterns-variants-and-scope)).
 `(Some x)` instead binds the payload. Unrelated values fail the parent type
 pattern and may fall through to another clause. `Option value`, `cast Option
-value`, and `isType Option value` also check this membership; `typeOf (Some 123)` returns `Option`. Specialization such
+value`, and `isType Option value` also check this membership; `typeOf (Some 123)` returns `Option Int`. Specialization such
 as `(Option Int) (Some 123)` applies the parameter's payload contract lazily.
 See [templates and type aliases](templates-and-types.md).
 

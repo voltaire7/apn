@@ -10,7 +10,7 @@ for (const [source, expected] of [
     ['Option x = Some x | None\nOther x = | Else x\nf (Option _ x) = true\nf _ = false\nf (Else 1)', 'false'],
     ['Option x = Some x | None\nmatch (Some 3) [Option _ x -> x]', 'Some 3'],
     ['Option x = Some x | None\n[match None [Option _ x -> 1, _ -> 0], match 2 [Option _ x -> 1, _ -> 0]]', '[1,0]'],
-    ['Option x = Some x | None\n[Option (Some 1), cast Option None, isType Option (Some missing), isType Option 1, typeOf (Some 1)]', '[Some 1, None, true, false, Option]'],
+    ['Option x = Some x | None\n[Option (Some 1), cast Option None, isType Option (Some missing), isType Option 1, typeOf (Some 1)]', '[Some 1, None, true, false, Option Int]'],
     ['Option x = Some x | None\nf (Some x) = x\nf (Some 123)', '123'],
     ['Box x = | Box x\nf (Box x) = x\nf (Box 123)', '123'],
     // A type applied to its parameters is a type; one more pattern, a value of it.

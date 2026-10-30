@@ -3920,7 +3920,7 @@ export class Interpreter {
                 const held = step.op === "return" ? this.typeText(step.value) : "a";
                 return { kind: "type", inspect: true, name: "Undecided", description: `m ${/\s/.test(held) && !/^[[(]/.test(held) ? `(${held})` : held}` };
             }
-            if (value.kind === "variant" && value.family) return { kind: "type", inspect: true, name: value.family.name, family: value.family, arguments: this.indicesOf(value) ?? value.arguments };
+            if (value.kind === "variant" && value.family) return { kind: "type", inspect: true, name: value.family.name, family: value.family, arguments: this.variantArguments(value) };
             if (isNumeric(value)) return { kind: "type", inspect: true, name: numericType(value) };
             if (value.kind === "list" && value.schema) return this.inspectType(value.schema);
             if (this.isList(value)) return { kind: "type", inspect: true, name: "List", description: describeType(value) };
@@ -4534,6 +4534,39 @@ export class Interpreter {
         const value = { ...this.reference(this.demand(made)) } as Value;
         this.declaredTypes.set(value, type);
         return value;
+    }
+    // A variant's type arguments, its narrowest type's: those it was given
+    // (Option Int None) or its indices, else what its fields decide (Box 5 is
+    // Box Int: a field naming a parameter, or holding it as a type's argument,
+    // Option a). One nothing decides is a type variable (None is Option a).
+    private typeOfRunning = new Set<Value>();
+    private variantArguments(v: Extract<Value, { kind: "variant" }>): Value[] | undefined {
+        const parameters = v.family?.parameters ?? [];
+        if (v.arguments?.length || !parameters.length) return v.arguments;
+        const indices = this.indicesOf(v);
+        if (indices) return indices;
+        const found = new Map<string, Value>();
+        // A value holding itself (xs = Cons 1 xs) decides nothing more inside.
+        if (!this.typeOfRunning.has(v)) {
+            this.typeOfRunning.add(v);
+            try {
+                const read = (spec: Expr, type: () => Value): void => {
+                    if (!freeTypeNames(spec).some(name => parameters.includes(name) && !found.has(name))) return;
+                    const t = this.reference(type());
+                    if (spec.t === "var") { if (!(t.kind === "type" && t.variable)) found.set(spec.name, t); return; }
+                    const args: Expr[] = [];
+                    let head: Expr = spec;
+                    while (head.t === "app") { args.unshift(head.a); head = head.f; }
+                    if (head.t === "var" && t.kind === "type" && t.name === head.name && t.arguments?.length === args.length) {
+                        args.forEach((arg, n) => read(arg, () => t.arguments![n]));
+                    }
+                };
+                (v.family?.fields?.get(v.tag) ?? []).forEach((spec, n) => {
+                    if (n < v.v.length) read(spec, () => this.callNative("typeOf", [v.v[n]]));
+                });
+            } finally { this.typeOfRunning.delete(v); }
+        }
+        return parameters.map(name => found.get(name) ?? { kind: "type", name, variable: true });
     }
     // A union of types: a value of any of them is one of it. Unions inside
     // flatten and a type given twice counts once.
