@@ -1131,6 +1131,11 @@ class Parser {
                         // RANGE (speculative): [a..b] [a..] [a,b..c] [a,b..] — Haskell-style; the
                         // first two elements give the STEP; bounds may be runtime expressions;
                         // no upper bound = INFINITE. Falls back to a normal list literal.
+                        // [..]: anything repeated, the list type of any items.
+                        if (this.isSym("..") && this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === "]") {
+                            this.next(); this.next();
+                            return { t: "computedRange", lo: null, second: null, hi: null };
+                        }
                         {
                             const save = this.i;
                             const loE = this.parseOperators(6);
@@ -2294,6 +2299,7 @@ function bareSource(e: Expr, where: Place): string {
     switch (e.t) {
         case "computedRange": {
             const end = `..${e.hi === null ? "" : of(e.hi, place("operand", 6))}`;
+            if (e.lo === null) return `[${end}]`;
             return `[${itemsText(e.second === null ? [of(e.lo, place("operand", 6)) + end] : [of(e.lo, place("operand", 6)), of(e.second, place("operand", 6)) + end])}]`;
         }
         case "import": return `import ${Array.isArray(e.module) ? `[${itemsText(e.module.map(m => JSON.stringify(m)))}]` : JSON.stringify(e.module)}`;

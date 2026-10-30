@@ -17,7 +17,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, ca
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, claimedDeclaration, clauseKey, type DataDef, countingFamily, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, LIST_TYPE_RANGE, clauseKey, type DataDef, countingFamily, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, typeToString, valueToString, rawString } from "./types.ts";
@@ -982,7 +982,7 @@ export class Interpreter {
                 return node(text("."), of(e.rec), e.entries.every(x => typeof x === "string")
                     ? node(text("[]"), ...(e.entries as string[]).map(text))
                     : node(text("[:]"), ...(e.entries as [string, string][]).map(([k, v]) => node(text(keySource(k)), text(v)))));
-            case "computedRange": return range(of(e.lo), e.hi ? of(e.hi) : undefined, e.second ? of(e.second) : undefined);
+            case "computedRange": return e.lo ? range(of(e.lo), e.hi ? of(e.hi) : undefined, e.second ? of(e.second) : undefined) : node(text(".."));
             case "range": return range(mkInt(e.lo), e.hi === null ? undefined : mkInt(e.hi), e.step !== 1n ? mkInt(e.lo + e.step) : undefined);
             case "floatRange": return range({ kind: "float", v: e.lo }, e.hi === null ? undefined : { kind: "float", v: e.hi }, { kind: "float", v: e.lo + e.step });
             case "rationalRange": return range(e.lo, e.hi === null ? undefined : e.hi, arithmetic("+", e.lo, e.step) as Value);
@@ -1364,12 +1364,21 @@ export class Interpreter {
                 let next: TailCall | undefined;
                 switch (e.t) {
                     case "computedRange": {
-                        const real = (expression: Expr): Real => {
-                            const value = this.dataValue(this.eval(expression));
+                        // A range of a type is the list type: [Int..] is List Int,
+                        // any number of Ints, possibly infinitely many.
+                        // [..] repeats anything: List a, as typeOf [] is.
+                        const lo: Value = e.lo ? this.reference(this.dataValue(this.eval(e.lo))) : { kind: "type", name: "a", variable: true };
+                        if (this.isTypeValue(lo)) {
+                            if (e.second || e.hi) throw new APNError("runtime", LIST_TYPE_RANGE, { hint: "write [Int..] for any number of Ints" });
+                            r = { kind: "type", name: "List", arguments: [this.asType(lo) ?? lo] };
+                            break;
+                        }
+                        const real = (value: Value): Real => {
                             if (value.kind !== "int" && value.kind !== "float" && value.kind !== "rational") throw new APNError("runtime", "range bounds must be real numbers");
                             return value;
                         };
-                        r = this.eval(rangeExpr(real(e.lo), e.second === null ? null : real(e.second), e.hi === null ? null : real(e.hi)));
+                        const bound = (expression: Expr | null) => expression === null ? null : real(this.dataValue(this.eval(expression)));
+                        r = this.eval(rangeExpr(real(lo), bound(e.second), bound(e.hi)));
                         break;
                     }
                     case "import": r = this.importStandard(e.module); break;

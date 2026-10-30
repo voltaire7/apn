@@ -1467,7 +1467,10 @@ returns `[1,2.0]`, evaluating the input expression in the surrounding scope.
 ## Type descriptions
 
 `typeOf [1,2,3]` displays `List Int`, a list of any length (`[Int]` is the
-positional type of exactly one Int); heterogeneous literal lists display their
+positional type of exactly one Int). A range of a type writes it: `[Int..]` is
+`List Int`, any number of Ints, possibly infinitely many, as `[0..]` is any
+number of integers; `[..]` repeats anything (`List a`, as `typeOf []` shows),
+and a list type repeats one type (`[Int,String..]` is an error). Heterogeneous literal lists display their
 known alternatives, for example `List (Int | String)`. A list built with `::` is
 described the same way (`typeOf ([1,2]::[3,4])` is `List (List Int | Int)`, as
 for `[[1,2],3,4]`), reading its unevaluated tail without running it. Empty lists

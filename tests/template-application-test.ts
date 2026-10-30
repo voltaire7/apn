@@ -147,3 +147,30 @@ for (const [application, block, expected] of [
         if (a !== b || a !== expected) throw new Error(`${checked ? "checked" : "unchecked"}: ${a} vs ${b}`);
     }
 });
+// A range of a type is the list type: [Int..] is List Int, any number of
+// Ints, possibly infinitely many; [..] repeats anything. Checked and unchecked
+// runs agree.
+for (const checked of [true, false]) for (const [source, expected] of [
+    ['[[Int..], [Int..] == List Int, [..], typeOf []]', '[List Int, true, List a, List a]'],
+    ['[[Int..] [1,2], isType [Int..] [1,2], isType [..] ["a",1], isType [Int..] 5]', '[[1,2],true,true,false]'],
+    ['f ([Int..] xs) = "ints"\nf ([..] xs) = "any"\nf _ = "other"\n[f [1,2], f ["a"], f [1..], f 5]', '["ints","any","ints","other"]'],
+    ['Point = [x: Float, y: Float]\n[Point..] [[x: 1, y: 2]]', '[[x: 1.0, y: 2.0]]'],
+    ['Ints = [Int..]\n[Ints, typeOf (Ints [1,2])]', '[Ints,Ints]'],
+    ['[take 3 [1..], [1,3..9]]', '[[1,2,3],[1,3,5,7,9]]'],
+] as const) Deno.test(`list type ranges (checked=${checked}): ${source}`, () => {
+    const i = new Interpreter();
+    if (checked) i.enableChecking();
+    const actual = i.renderString(i.run(parseDocument(source)));
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+for (const checked of [true, false]) for (const source of ['[Int,String..]', '[Int..String]']) {
+    Deno.test(`a list type repeats one type (checked=${checked}): ${source}`, () => {
+        const i = new Interpreter();
+        if (checked) i.enableChecking();
+        try { i.run(parseDocument(source)); } catch (error) {
+            if ((error as Error).message.includes("a list type is one type repeated, written [Int..]")) return;
+            throw error;
+        }
+        throw new Error("accepted");
+    });
+}

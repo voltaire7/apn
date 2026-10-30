@@ -1,4 +1,4 @@
-import { type Alternative, claimedDeclaration, clauseKey, type DataDef, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, LIST_TYPE_RANGE, clauseKey, type DataDef, countingFamily, MATH_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -3315,7 +3315,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         : undefined,
                 );
             case "computedRange": {
-                const start = infer(e.lo, scope);
+                if (!e.lo) return { k: "type", value: list(variable()) };
+                const start = infer(e.lo, scope), type = resolve(start);
+                // A range of a type is the list type, as at runtime: [Int..] is List Int.
+                if (describing(type)) {
+                    if (e.second || e.hi) return problem(LIST_TYPE_RANGE, e, "write [Int..] for any number of Ints");
+                    return { k: "type", value: list(schemaValue(type, e)) };
+                }
                 if (e.second) unify(start, infer(e.second, scope), e.second);
                 if (e.hi) unify(start, infer(e.hi, scope), e.hi);
                 const value = resolve(start);
@@ -5017,6 +5023,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "range": return rangeKnown(e.lo, e.step, e.hi);
             case "computedRange": {
                 const bound = (x: Expr | null) => x && numericOf(value(x));
+                if (!e.lo) return undefined;
                 const lo = bound(e.lo), second = bound(e.second), hi = bound(e.hi);
                 if (!lo || e.second && !second || e.hi && !hi) return undefined;
                 if ([lo, second, hi].some(x => x && x.kind !== "int")) return undefined;
