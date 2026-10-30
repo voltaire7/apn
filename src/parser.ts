@@ -1792,7 +1792,10 @@ class Parser {
                     fields.push(this.parsePrimary());
                     if (!this.isSym("::")) throw new Error("Parser: expected a constructor: a capitalized name, [] or x :: rest");
                     this.next();
-                    fields.push(this.parseApp());
+                    // The rest may hold more elements first (a :: a :: Pairs k a).
+                    const items = [this.parseApp()];
+                    while (this.eatSym("::")) items.push(this.parseApp());
+                    fields.push(items.reduceRight((rest, item) => ({ t: "binop", op: "::", l: item, r: rest })));
                 } finally { this.noLambda--; }
                 tag = "::";
             }
@@ -1825,11 +1828,11 @@ class Parser {
             this.seen = leading;
             throw new Error(`Parser: a one-line declaration takes no leading '|' (write ${header} = A | B); only a single constructor needs one (${header} = | A)`);
         }
-        // A type of lists is a function giving the list of its elements'
-        // types, written by clauses; the list's own constructors are not
-        // declared again.
-        if (variants.some(v => v.tag === "[]" || v.tag === "::")) {
-            throw new Error(`Parser: a type of lists is written by clauses, as Vect is: ${name} Z a = [] and ${name} (S k) a = a :: ${name} k a`);
+        // A family of lists is a type function's clauses (see listClauses);
+        // the list's own constructors are not declared again.
+        const listed = variants.filter(v => v.tag === "[]" || v.tag === "::");
+        if (listed.length && (listed.length < variants.length || listed.some(v => !v.result))) {
+            throw new Error(`Parser: a family of lists has only [] and x :: rest, each saying its index: ${name} n a = [] -> ${name} Z a | a :: ${name} k a -> ${name} (S k) a`);
         }
         return variants;
     }
@@ -1962,6 +1965,11 @@ class Parser {
                     for (const c of claimed) { out.splice(out.indexOf(c!), 1); this.unclaimed.delete(c!.def.name); }
                     declaredTypes.add(name);
                     out.splice(at, 0, { t: "type", def });
+                    continue;
+                }
+                // A family of lists is sugar for a type function's clauses.
+                if (variants.some(v => v.tag === "[]" || v.tag === "::")) {
+                    out.push({ t: "def", name, clauses: listClauses(variants) });
                     continue;
                 }
                 if (new Set(variants.map(v => v.tag)).size !== variants.length) throw new Error("Parser: duplicate value constructor");
@@ -2211,6 +2219,31 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
         e.src = src;
         throw e;
     }
+}
+
+// A family of lists is sugar for a type function's clauses: each
+// alternative, [] -> Vect Z a or a :: Vect k a -> Vect (S k) a, is the
+// clause its result names, Vect Z a = [] or Vect (S k) a = a :: Vect k a.
+function listClauses(variants: { tag: string; fields: Expr[]; result?: Expr }[]): DefClause[] {
+    const pattern = (e: Expr): Pattern => {
+        while (e.t === "block" && e.stmts.length === 1) e = e.stmts[0];
+        if (e.t === "int") return { p: "int", v: e.v };
+        // k + 1 is the natural after k, as S k is.
+        if (e.t === "binop" && e.op === "+" && e.l.t === "var" && e.r.t === "int" && e.r.v === 1n) return { p: "constr", tag: "S", args: [pattern(e.l)] };
+        if (e.t === "var") return e.name === "_" ? { p: "wildcard" } : /^[A-Z]/.test(e.name) ? { p: "constr", tag: e.name, args: [] } : { p: "var", name: e.name };
+        const args: Expr[] = [];
+        let head: Expr = e;
+        while (head.t === "app") { args.unshift(head.a); head = head.f; }
+        if (head.t === "var" && /^[A-Z]/.test(head.name)) return { p: "constr", tag: head.name, args: args.map(pattern) };
+        throw new Error("Parser: a family's index is a pattern: a name, a number, Z, S k or k + 1");
+    };
+    return variants.map(v => {
+        const args: Expr[] = [];
+        let head: Expr = v.result!;
+        while (head.t === "app") { args.unshift(head.a); head = head.f; }
+        const body: Expr = v.tag === "[]" ? { t: "list", v: [] } : { t: "binop", op: "::", l: v.fields[0], r: v.fields[1] };
+        return { params: args.map(pattern), body };
+    });
 }
 
 // Consecutive Haskell-style clauses of the same function are one definition:

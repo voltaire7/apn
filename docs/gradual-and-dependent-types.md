@@ -379,12 +379,21 @@ append [1,2] [3,4]              # [1,2,3,4]
 The first pattern introduces length `n`, element type `a`, and the contents.
 The second introduces `m` and requires the same `a`. These are ordinary local
 values available in the body. `Vector` was renamed `Vect`, which the prelude
-defines as a function counting a list's elements:
+declares as the family of lists counting their elements:
+
+```apn
+Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a
+```
+
+A family of lists is sugar for a type function's clauses: each alternative is
+the clause its result names, so this is
 
 ```apn
 Vect Z a = []
 Vect (S k) a = a :: Vect k a
 ```
+
+and an index is a pattern (`Z` or `0`, `S k` or `k + 1`, a name).
 
 `Vect 3 Int` is the type of three `Int`s, and its values are ordinary lists.
 Any function of this shape (`Z` or `0`) is the same length-indexed list as
@@ -394,9 +403,7 @@ pattern: with `Pairs Z a = []` and `Pairs (S k) a = a :: a :: Pairs k a`,
 `(Pairs n a xs)` matches `[1,2,3,4]` with `n` 2 and `a` `Int`, each clause's
 result matched as a pattern and its parameters (`Z`, `S k`) built back; a
 value that no clause describes does not match. The checker leaves such `n`
-and `a` to the run. The old declaration of a family of lists
-(`[] -> ... | ... -> ...`) is a syntax error that shows the clause form.
-In a typed pattern a type's arguments take nothing after them,
+and `a` to the run. In a typed pattern a type's arguments take nothing after them,
 so `(Vect n Int xs)` and a program's own `(Lst n Int xs)` read alike.
 `(Vect n Int xs)` constrains the element type explicitly, and `(Vect 3 a xs)`
 constrains the length. For computed type expressions, the existing form

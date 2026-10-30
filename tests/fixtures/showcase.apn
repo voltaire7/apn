@@ -1988,11 +1988,11 @@ print (revVec pairVec Nil)               # => Cons 2 (Cons 1 Nil)
 vecSize (Vec n _ _) = n
 print (vecSize pairVec)                  # => 2
 countVect (Vect _ _ xs) = match xs [[] -> 0, (_::rest) -> 1 + countVect rest]
-# Vect is the prelude's function counting a list's elements:
-# Vect Z a = [] and Vect (S k) a = a :: Vect k a.
-# A program's function of the same shape is the same length-indexed list.
-Lst 0 a = []
-Lst (S k) a = a :: Lst k a
+# Vect is the prelude's family of lists counting their elements:
+# Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a, the clauses
+# Vect Z a = [] and Vect (S k) a = a :: Vect k a. A program's family of
+# the same shape is the same length-indexed list.
+Lst n a = [] -> Lst 0 a | a :: Lst k a -> Lst (k + 1) a
 print (typeOf (Lst 2 Int [5,6]))        # => Vect 2 Int
 # A claim around a match is checked in each alternative under its own facts
 # ([] makes n zero); claiming n + m + 1 here would be a static error.

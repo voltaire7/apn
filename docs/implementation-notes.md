@@ -459,7 +459,8 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
   not make is read back by `readBack` (`describes`, `holds`), and a written
   list of types applies as `templateList`. One of `countingFunction`'s shape
   (Vect's) is bound to the built-in `Vect` (the checker's `factory`), checked
-  by the parser after grouping clauses. The checker
+  by the parser after grouping clauses; a family of lists is parsed into such
+  clauses (`listClauses`). The checker
   leaves such patterns to the run (`explicitDynamic` parameters); `constructed` is the type a
   pattern of it takes (a tagging function's `fields` variant). The parser
   joins adjacent clauses (`continues`);
