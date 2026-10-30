@@ -11,6 +11,7 @@ for (const [source, expected] of [
     ['r = [x: Record] []; [Bool r.x, Bool [x: 1], Bool (HashMap [])]', '[false,true,false]'],
     ['[Bool Int, Bool (x -> x), Bool (Mutable 0), Bool (Mutable 1)]', '[true,true,false,true]'],
     ['Option a = Some a | None; Bool None', 'true'],
+    ['Flag = Bool; f = Flag false; [Bool f, !f, f ? 1 : 0, f && 1]', '[false,true,0,false]'],
     ['0 ? missing : 42', '42'],
     ['[missing] ? 42 : missing', '42'],
     ['[!0,!1,![],![missing]]', '[true,false,true,false]'],

@@ -3,7 +3,7 @@ import type { TypeScope } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeType } from "./type-description.ts";
-import { OVERLOADED_FUNCTIONS, METHODS, sourceLocations } from "./ast.ts";
+import { OVERLOADED_FUNCTIONS, METHODS, sourceLocations, ternaryMatch, writtenMatch, type CoreMatch } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
@@ -50,6 +50,7 @@ function bindNatives(env: Env, natives: Iterable<readonly [string, number]>): vo
     }
     env.setLocal("intrinsics", { kind: "record", v: intrinsics });
 }
+const LITERAL_PATTERNS = new Set(["int", "bool", "string", "char", "float"]);
 class TailCall {
     constructor(readonly body: Expr, readonly env: Env) {}
 }
@@ -1446,6 +1447,10 @@ export class Interpreter {
                         break;
                     }
                     case "app": {
+                        // The builtin match with written alternatives runs here,
+                        // its chosen body in place of the match.
+                        const written = e.f.t === "app" && e.f.f.t === "var" ? writtenMatch(e) : undefined;
+                        if (written && this.isBuiltinMatch(this.env.get(((e.f as Extract<Expr, { t: "app" }>).f as Extract<Expr, { t: "var" }>).name))) { next = this.coreMatch(written); break; }
                         // Arguments stay lazy; a completed call can hand its body
                         // straight back to this loop instead of nesting eval calls.
                         const result = this.apply(this.eval(e.f), { kind: "thunk", body: e.a, env: this.env }, false, true, tailLoad);
@@ -1454,11 +1459,7 @@ export class Interpreter {
                     }
                     case "patternLambda": r = { kind: "clauseFn", name: "<lambda>", clauses: [{ params: e.params, body: e.body, guard: e.guard }], arity: e.params.length, env: this.env, applied: [] }; break;
                     case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
-                    case "ternary": {
-                        const c = this.dataValue(this.eval(e.cond));
-                        next = new TailCall(this.truthy(c) ? e.then : e.els, this.env);
-                        break;
-                    }
+                    case "ternary": next = this.coreMatch(ternaryMatch(e)); break;
                     case "range": r = { kind: "range", lo: e.lo, step: e.step, hi: e.hi }; break;
                     case "floatRange": r = { kind: "floatRange", lo: e.lo, step: e.step, hi: e.hi }; break;
                     case "list": {
@@ -2174,6 +2175,31 @@ export class Interpreter {
             }
             default: throw new APNError("runtime", `cannot call a non-function (${f.kind})`);
         }
+    }
+
+    private isBuiltinMatch(v: Value | undefined): boolean {
+        return v?.kind === "native" && v.name === "match" && v.applied.length === 0;
+    }
+    // A match against written alternatives: the first whose pattern and guard
+    // fit gives its body, evaluated in place of the match. The value is one
+    // lazy argument shared by every alternative tried.
+    private coreMatch({ value, alternatives }: CoreMatch): TailCall {
+        // A literal first pattern demands the value at once.
+        const argument: Value = LITERAL_PATTERNS.has(alternatives[0].params[0].p) ? this.eval(value) : { kind: "thunk", body: value, env: this.env };
+        const binds = new Map<string, Value>();
+        for (const alternative of alternatives) {
+            binds.clear();
+            if (!this.matchPattern(alternative.params[0], argument, binds)) continue;
+            const child = binds.size ? new Env(this.env) : this.env;
+            for (const [k, v] of binds) child.setLocal(k, v);
+            if (alternative.guard) {
+                const old = this.env;
+                this.env = child;
+                try { if (!this.truthy(this.eval(alternative.guard))) continue; } finally { this.env = old; }
+            }
+            return new TailCall(alternative.body, child);
+        }
+        throw new APNError("runtime", "non-exhaustive match: no alternative fits this value");
     }
 
     // get or with, when clauses in scope extend the builtin one.
@@ -3856,6 +3882,8 @@ export class Interpreter {
     truthy(value: Value): boolean {
         const v = this.dataValue(value);
         if (v.kind === "bool") return v.v;
+        // A named subtype's value has its base's truthiness (Money 0 is zero).
+        if (v.kind === "variant" && v.family?.base) return this.truthy(v.v[0]);
         if (v.kind === "io" || v.kind === "pending") throw new APNError("runtime", "an action is not a condition", { hint: "run it first: `x <- action`" });
         if (isNumeric(v)) {
             if (v.kind === "complex") return this.truthy(v.re) || this.truthy(v.im);

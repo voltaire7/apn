@@ -70,7 +70,12 @@ intentional evaluation change.
 - Pattern lambdas are `patternLambda` nodes that evaluate to `clauseFn` values.
   `match` is an intrinsic, not an AST node: it probes alternatives without
   running bodies and uses `nomatch` only for mismatch, so runtime errors
-  propagate.
+  propagate. The builtin `match` applied to written one-parameter pattern
+  lambdas (`writtenMatch`) runs directly (`coreMatch`): no alternative is made
+  a function, and the chosen body is a tail call.
+- Sugar keeps its written node (printing, `probe`, tools) and runs as its core
+  expansion from `src/ast.ts` (`ternaryMatch`), built once with each part at
+  its source; the expansion names nothing a binding could shadow.
 - Field/pluck assignment desugars to an eager pattern binding
   `vec = setFields(vec, entries, rhs)` that reads the old record and the RHS
   before rebinding (so `vec.[x,y] = vec.[y,x]` swaps).
@@ -331,8 +336,9 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   view/key analysis sees through `return`/`return`. Don't change `=` semantics.
   Tests: `tests/eager-binding-test.ts`.
 - `Interpreter.eval` consumes internal `TailCall` transfers for fully applied
-  functions, ternary branches, and block tails. `TailLoad` transfers propagate
-  only from a loaded program's final expression. `loadFile` owns the iterative
+  functions, chosen `match` alternatives (a ternary's branches), and block
+  tails. `TailLoad` transfers propagate only from a loaded program's final
+  expression. `loadFile` owns the iterative
   loop and pending export merges and restores caller scope/`sourceDir` on
   success, error, or interruption. Non-tail calls keep the depth guard
   (`STACK_LIMIT`). Tests: `tests/tail-call-test.ts`, `tests/repl-interrupt-pty.py`.

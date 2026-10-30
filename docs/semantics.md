@@ -185,7 +185,9 @@ for `pred (S k) = k`), it is a static error. Guards are not allowed on definitio
 use `match` with guarded pattern lambdas instead (see
 [pattern functions](pattern-functions.md)).
 
-There is no `if`/`then`/`else`; use the ternary `cond ? a : b`. Only the
+There is no `if`/`then`/`else`; use the ternary `cond ? a : b`, which is
+`match (!cond) [false -> a, true -> b]`: the condition's
+[truthiness](#empty-results-and-truthiness) chooses. Only the
 selected branch runs, and the branches may differ in type (`x ? "yes" : false`;
 see [choices](gradual-and-dependent-types.md), as for `match` and clauses).
 The ternary's `:` is not cons (`::`), so a branch may
@@ -1410,7 +1412,8 @@ Deno stack traces. The CLI uses the supplied path literally.
 ## Tail calls and recursive loading
 
 Fully applied APN functions reuse an execution loop for calls in tail position,
-including selected ternary branches, the final expression of a block, and pipes.
+including the chosen alternative of a `match` (so a ternary's branch), the final
+expression of a block, and pipes.
 Arguments remain lazy: an unused argument is not evaluated by this optimization.
 Calls with work remaining (such as `1 + recurse n`) still consume stack, and a
 large deferred accumulator can still overflow when finally forced. Use `<-` to
@@ -1588,7 +1591,8 @@ Falsy values are `false`, numeric zero (including complex zero), floating NaN,
 empty strings, empty lists, empty records, empty HashMaps, and null pointers.
 Everything else is truthy, including type constructors, non-nullary functions,
 and every variant constructor (`None` and zero-ordinal enum cases included).
-Mutable cells use their current contents. Nullary actions run under the usual
+Mutable cells use their current contents, and a named subtype's value its base's
+(`Flag = Bool` makes `Flag false` falsy). Nullary actions run under the usual
 demand rules. A list check inspects only its first cell, not its elements or
 remaining tail; infinite nonempty lists are truthy.
 

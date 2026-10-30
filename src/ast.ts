@@ -260,6 +260,32 @@ export function typedForm(p: Pattern, parameters: (name: string) => number | und
 export interface SourceLocation { source: string; file: string; start: number; end: number; }
 export const sourceLocations = new WeakMap<Expr, SourceLocation>();
 
+// A match of a value against written one-parameter alternatives, the core form
+// sugar expands into. The runtime, the checker and the checker's evaluator run
+// a sugar node as its expansion; the written node stays for printing and tools.
+export type PatternLambda = Extract<Expr, { t: "patternLambda" }>;
+export type CoreMatch = { value: Expr; alternatives: PatternLambda[] };
+const expansions = new WeakMap<Expr, CoreMatch>();
+// c ? a : b is match (!c) [false -> a, true -> b]: ! gives the condition's
+// truthiness, as syntax no binding can shadow, and each part keeps its place
+// in the source.
+export function ternaryMatch(e: Extract<Expr, { t: "ternary" }>): CoreMatch {
+    let core = expansions.get(e);
+    if (core) return core;
+    const at = (x: Expr, source: Expr) => { const place = sourceLocations.get(source); if (place) sourceLocations.set(x, place); return x; };
+    const branch = (v: boolean, body: Expr): PatternLambda => at({ t: "patternLambda", params: [{ p: "bool", v }], body }, body) as PatternLambda;
+    core = { value: at({ t: "unop", op: "not", e: e.cond }, e.cond), alternatives: [branch(false, e.then), branch(true, e.els)] };
+    expansions.set(e, core);
+    return core;
+}
+// match x [alternatives] written with one-parameter pattern lambdas, whose
+// match the caller has found to be the builtin one.
+export function writtenMatch(e: Expr): CoreMatch | undefined {
+    if (e.t !== "app" || e.f.t !== "app" || e.a.t !== "list" || !e.a.v.length) return undefined;
+    if (!e.a.v.every(x => x.t === "patternLambda" && x.params.length === 1)) return undefined;
+    return { value: e.f.a, alternatives: e.a.v as PatternLambda[] };
+}
+
 // Clauses with equivalent patterns (and guards): parameter names do not
 // matter (f (Int x) and f (Int y) are the same), and _ is a name nothing uses.
 export function clauseKey(name: string, clause: { params: Pattern[]; guard?: Expr }): string {
