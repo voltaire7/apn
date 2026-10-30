@@ -131,6 +131,9 @@ for (const [source, expected] of [
     ['Handler a = | Handler (a -> String)\napply (Handler f) x = f x\napply (Handler (s -> s ++ "!")) "x"', '"x!"'],
     // The branches do not decide x where its other uses do: x > 0 keeps it a number.
     ['k x = x > 0 ? x : "neg"; [k 1 + 1, k -1]', '[2,"neg"]'],
+    // A ternary is a match: a value known to take one alternative checks only it.
+    ['match true [true -> 1, false -> "a" + 1]', '1'],
+    ['x = 2\nmatch x [1 -> "one", n -> n + 1] + 1', '4'],
 ] as const) Deno.test(`a choice has either type: ${source}`, () => {
     const actual = run(session(), choices + source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -151,6 +154,11 @@ for (const source of [
     'Handler a = | Handler (a -> String)\nh = Handler (s -> s ++ "!")\nHandler f = h\nf 5',
     // A statement of a do-block is an action whichever branch is taken.
     'f x = x ? print "yes" : false\nk y = {\n    f y\n    print 2\n}',
+    // Alternatives' lists of one type keep it, lengths included, as branches' do.
+    'pick b a c = b ? [map (x -> x) a, c] : [map (x -> x) a, c]\nsum3 [[x],[y,z]] = x + y + z\n' +
+        'k n = sum3 (pick (n > 0) [1,2] [1,2])',
+    'pick b a c = match b [true -> [map (x -> x) a, c], _ -> [map (x -> x) a, c]]\n' +
+        'sum3 [[x],[y,z]] = x + y + z\nk n = sum3 (pick (n > 0) [1,2] [1,2])',
 ]) Deno.test(`a choice is used as every type it may be: ${source}`, () => rejected(session(), choices + source));
 
 // A ternary's branch is checked as the expression alone is: a lossy mix the

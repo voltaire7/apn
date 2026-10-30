@@ -53,8 +53,8 @@ Deno.test("a length the checker cannot find is located and explained", () => {
     if (!error.hint?.includes("mark it `Dynamic`") || error.pos !== source.indexOf("(filter")) throw new Error(`${error.pos}: ${error.message} ${error.hint}`);
 });
 
-// A claim around a match is checked in each alternative, under its own facts:
-// [] makes n zero, x :: rest gives rest n - 1.
+// A claim around a match (or a ternary, which is one) is checked in each
+// alternative, under its own facts: [] makes n zero, x :: rest gives rest n - 1.
 const APPEND = "append (Vect n a xs) (Vect m a ys) = Vect (n + m) a {\n    match xs [\n        [] -> ys\n        x :: rest -> x :: append rest ys\n    ]\n}\n";
 for (const [source, expected] of [
     [APPEND + "typeOf (append [1,2] [3])", "Vect 3 Int"],
@@ -68,6 +68,9 @@ for (const [source, expected] of [
 for (const [source, message] of [
     [APPEND.replace("Vect (n + m) a", "Vect (n + m + 1) a") + "1", "length mismatch: expected m + 1, got m"],
     [APPEND.replace("x :: append", "x :: x :: append") + "1", "length mismatch: expected m + n, got m + n + 1"],
+    // Over a value known only at calls too.
+    ["two xs ys = Vect 2 Int (match xs [[] -> ys, x :: rest -> [x,x,x]])\n1", "length mismatch: expected 2, got 3"],
+    ["two b ys = Vect 2 Int (b ? ys : [1,2,3])\n1", "length mismatch: expected 2, got 3"],
 ] as const) {
     Deno.test(`a claim around a match rejects: ${JSON.stringify(source)}`, () => {
         const error = failure(source);

@@ -1,4 +1,4 @@
-import { type Alternative, claimedDeclaration, type CoreMatch, ternaryMatch, writtenMatch, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, type CoreMatch, type PatternLambda, ternaryMatch, writtenMatch, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -1140,7 +1140,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (t.op === "match") {
             if (b.k !== "list") return problem("match expects a list of alternatives");
-            const outputs: Ty[] = [], lengths: (Index | undefined)[] = [];
+            const outputs: Ty[] = [];
             for (const candidate of b.items ?? [b.element]) {
                 const f = resolve(candidate);
                 if (f.k !== "fn") return problem("match alternatives must be functions");
@@ -1153,16 +1153,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 else unify(openEmpty(f.input), a);
                 if (!t.solution && f.output.k !== "operation" && f.output.k !== "var") t.solution = f.output;
                 for (const check of f.checks ?? []) resolve(check);
-                const output = resolve(f.output);
-                lengths.push(output.k === "list" ? output.length : undefined);
-                // Alternatives give either result, as a ternary's branches do.
-                if (outputs.length) outputs[0] = either(outputs[0], output);
-                else outputs.push(output.k === "list" ? list(output.element) : output);
+                outputs.push(resolve(f.output));
             }
-            // Alternatives that all have one length (a claim each met) give it.
-            const first = resolve(outputs[0] ?? variable()), length = lengths[0];
-            if (first.k === "list" && length && lengths.every(x => x && indexText(x) === indexText(length))) return list(first.element, length);
-            return outputs[0] ?? variable();
+            return outputs.length ? chosen(outputs, activeExpression ?? { t: "placeholder" }) : variable();
         }
         // A requirement on a call that still waits for an unknown argument waits
         // too, rather than settling for the call's provisional solution.
@@ -1280,11 +1273,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return problem(`operator '${t.op}' cannot combine ${text(a)} and ${text(b)}`);
     }
     let lengthFacts = new Map<string, Index>();
-    // match s alternatives: the type of s, and each literal alternative's input.
-    const matchScrutinees = new WeakMap<Expr, Ty>(), alternativeInputs = new WeakMap<Expr, Ty[]>();
-    // The length a claim around a match (Vect (n + m) a (match ...)) asks of
-    // each literal alternative, checked under that alternative's own facts.
-    const alternativeClaims = new WeakMap<Expr, Index>();
+    // The length a claim around a match or ternary (Vect (n + m) a (match ...))
+    // asks of each alternative, checked under that alternative's own facts.
+    const matchClaims = new WeakMap<Expr, Index>();
     function refinedIndex(value: Index): Index {
         let result = constant(value.constant);
         for (const [name, scale] of value.terms) {
@@ -3413,7 +3404,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "lambda":
                 return functionType(e.params.map((name) => ({ p: "var", name })), e.body, scope);
             case "patternLambda":
-                return functionType(e.params, e.body, scope, undefined, e.guard, alternativeInputs.get(e), alternativeClaims.get(e));
+                return functionType(e.params, e.body, scope, undefined, e.guard);
             case "app":
             case "pipe": {
                 const infix = infixSpelling(e, scope);
@@ -3453,6 +3444,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     infer(e.a, inner);
                     return io(list(variable(), constant(0n)));
                 }
+                const written = e.t === "app" && e.f.t === "app" && e.f.f.t === "var" && e.f.f.name === "match" && scope.get("match")?.builtin ? writtenMatch(e) : undefined;
+                if (written) return inferMatch(written, e, scope);
                 callees.add(e.f);
                 let callee = infer(e.f, scope), resolved = resolve(callee);
                 // A type one of several, chosen by code (elemType flag): evaluate
@@ -3491,22 +3484,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     runtimeChecks++;
                     return explicitDynamic;
                 }
-                // A match's alternatives meet its scrutinee as a clause's patterns
-                // meet its parameters: x :: xs takes a length n list's tail as n - 1.
-                const scrutinee = e.f.t === "app" ? matchScrutinees.get(e.f) : undefined;
-                if (scrutinee && a.t === "list") {
-                    for (const alternative of a.v) if (alternative.t === "patternLambda" && alternative.params.length === 1) alternativeInputs.set(alternative, [patternInput(alternative.params[0], scrutinee)]);
-                }
                 // A length claim around a match asks it of each alternative.
                 const claimed = resolved.k === "type" ? resolve(resolved.value) : undefined;
                 if (claimed?.k === "list" && claimed.length) {
                     let inner: Expr = a;
                     while (inner.t === "block" && inner.stmts.length === 1) inner = inner.stmts[0];
-                    const alternatives = inner.t === "app" && inner.f.t === "app" && inner.f.f.t === "var" && inner.f.f.name === "match" && inner.a.t === "list" ? inner.a.v : [];
-                    for (const alternative of alternatives) if (alternative.t === "patternLambda") alternativeClaims.set(alternative, claimed.length);
+                    matchClaims.set(inner, claimed.length);
                 }
                 let argumentType = infer(a, scope);
-                if (e.f.t === "var" && e.f.name === "match" && scope.get("match")?.builtin) matchScrutinees.set(e, argumentType);
                 // A recursive call does not fix the length of a parameter whose
                 // pattern leaves it open (go xs = ... go [] ...).
                 let head: Expr = e.f, position = 0;
@@ -3765,48 +3750,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 return rec.fields.get(e.field)!;
             }
-            case "ternary": {
-                infer(e.cond, scope);
-                const known = boolean(e.cond, scope);
-                if (known !== undefined) {
-                    // Only the taken branch is checked; a return taken still
-                    // takes its monad from the other, when that one has a type.
-                    const taken = infer(known ? e.then : e.els, scope);
-                    if (!isPending(resolve(taken))) return taken;
-                    let other: Ty | undefined;
-                    if (!succeeds(() => { other = infer(known ? e.els : e.then, scope); })) return taken;
-                    return returnIn(e, taken, other!);
-                }
-                const a = infer(e.then, scope), b = infer(e.els, scope, a);
-                if (isPending(resolve(a)) !== isPending(resolve(b))) { unify(a, b, e); return returnIn(e, a, b); }
-                // A type chosen by a condition known only when it runs: one of
-                // the two, checked against the value at runtime.
-                if (resolve(a).k === "type" && resolve(b).k === "type" && text(a) !== text(b)) {
-                    runtimeChecks++;
-                    return { k: "type", value: union([(resolve(a) as Extract<Ty, { k: "type" }>).value, (resolve(b) as Extract<Ty, { k: "type" }>).value]), chosen: true };
-                }
-                const left = resolve(a), right = resolve(b);
-                if (left.k === "list" && right.k === "var") { unify(list(left.element), right, e); return list(left.element); }
-                if (right.k === "list" && left.k === "var") { unify(list(right.element), left, e); return list(right.element); }
-                if (left.k === "list" && right.k === "list") {
-                    const join = (a: Ty, b: Ty): Ty => {
-                        const x = resolve(a), y = resolve(b);
-                        if (x.k === "var" || y.k === "var") { unify(a, b, e); return a; }
-                        if (x.k === "list" && y.k === "list") {
-                            if (!x.items?.length || !y.items?.length) { unify(x.element, y.element, e); return list(x.element); }
-                            return list(union([x.element, y.element]));
-                        }
-                        return union([a, b]);
-                    };
-                    if (left.items && right.items && left.items.length === right.items.length) {
-                        const items = left.items.map((item, n) => join(item, right.items![n]));
-                        return { k: "list", element: items.length ? union(items) : variable(), items, length: constant(BigInt(items.length)) };
-                    }
-                    if (!left.items?.length || !right.items?.length) { unify(left.element, right.element, e); return list(left.element); }
-                    return list(union([left.element, right.element]));
-                }
-                return either(a, b, e);
-            }
+            case "ternary": return inferMatch(ternaryMatch(e), e, scope);
             case "binop": {
                 // Against a type, a lambda written in place is read as one, as
                 // at runtime: (a -> b) == typeOf f.
@@ -5983,19 +5927,132 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         lengthFacts = new Map(outerFacts);
         deferred++;
         try {
-            const t = inferFunction(params, body, parent, recursiveName, guard, given);
-            // A claimed length holds for this alternative when its own facts
-            // ([] makes n zero) make the two equal; then it is its length.
-            const f = resolve(t), out = f.k === "fn" ? resolve(f.output) : undefined;
-            if (claim && f.k === "fn" && out?.k === "list" && out.length) {
-                const delta = indexAdd(refinedIndex(claim), refinedIndex(out.length), -1n);
-                if (!delta.terms.size && delta.constant === 0n) f.output = list(out.element, claim);
-                else if (!delta.terms.size) problem(`length mismatch: expected ${indexIn(refinedIndex(claim), parent)}, got ${indexIn(refinedIndex(out.length), parent)}`, body);
-            }
+            const t = inferFunction(params, body, parent, recursiveName, guard, given), f = resolve(t);
+            if (claim && f.k === "fn") f.output = claimedLength(claim, f.output, body, parent);
             return t;
         }
         finally { lengthFacts = outerFacts; deferred--; }
     }
+    // A claimed length holds for an alternative when its own facts ([] makes
+    // n zero) make the two equal; then it is its length.
+    function claimedLength(claim: Index, output: Ty, body: Expr, scope: Scope): Ty {
+        const out = resolve(output);
+        if (out.k !== "list" || !out.length) return output;
+        const delta = indexAdd(refinedIndex(claim), refinedIndex(out.length), -1n);
+        if (!delta.terms.size && delta.constant === 0n) return list(out.element, claim);
+        if (!delta.terms.size) problem(`length mismatch: expected ${indexIn(refinedIndex(claim), scope)}, got ${indexIn(refinedIndex(out.length), scope)}`, body);
+        return output;
+    }
+    // The type of a match against written alternatives, a ternary's expansion
+    // included. A value whose type is known only at calls (a parameter's) is
+    // matched at each call, as clauses are: the alternatives are functions of
+    // it. Otherwise each alternative's body is checked where it stands, its
+    // pattern's names bound to what they take of the value, and one whose
+    // pattern the value's type can never fit is skipped. A value known to take
+    // one alternative checks only that one (a return there still takes its
+    // monad from another, when that one has a type). The result is either
+    // alternative's: a type chosen by a value known only when it runs is one
+    // of theirs, checked then; lists of one length keep it.
+    function inferMatch({ value, alternatives }: CoreMatch, e: Expr, scope: Scope): Ty {
+        const input = infer(value, scope), claim = matchClaims.get(e);
+        if (resolve(input).k === "var") {
+            // As a clause's patterns meet its parameters: x :: xs takes a length
+            // n list's tail as n - 1.
+            const functions = alternatives.map(({ params: [p], body, guard }) => functionType([p], body, scope, undefined, guard, [patternInput(p, input)], claim));
+            return operation("match", [input, { k: "list", element: union(functions), items: functions, length: constant(BigInt(functions.length)) }]);
+        }
+        const alternative = ({ params: [given], body, guard }: PatternLambda, expected?: Ty): Ty | undefined => {
+            const p = typed(given, scope), inner: Scope = new BlockScope(scope);
+            const outerFacts = lengthFacts, start = requirements.length;
+            lengthFacts = new Map(outerFacts);
+            try {
+                // As a clause's pattern meets its argument: x :: xs takes a length
+                // n list's tail as n - 1, and [] tests the value without emptying it.
+                const t = patternInput(p, input);
+                bind(p, t, inner, body);
+                const checks = requirements.slice(start);
+                if (!succeeds(() => {
+                    const vars = new Map<Ty, Ty>(), copies = checks.map(r => copy(r, vars));
+                    unify(copy(openEmpty(t), vars), copy(input, vars));
+                    for (const check of copies) if (check.k === "operation") evaluateOperation(check);
+                })) { requirements.length = start; return undefined; }
+                unify(openEmpty(t), input, body);
+                if (guard) infer(guard, inner);
+                const output = infer(body, inner, expected);
+                return claim ? claimedLength(claim, output, body, scope) : output;
+            } finally { lengthFacts = outerFacts; }
+        };
+        const taken = takenAlternative(value, input, alternatives, scope);
+        if (taken !== undefined) {
+            const t = alternative(alternatives[taken]) ?? variable();
+            if (!isPending(resolve(t))) return t;
+            for (const [n, other] of alternatives.entries()) {
+                let o: Ty | undefined;
+                if (n !== taken && succeeds(() => { o = alternative(other); }) && o) return returnIn(e, t, o);
+            }
+            return t;
+        }
+        const outputs: Ty[] = [];
+        for (const a of alternatives) {
+            const output = alternative(a, outputs[0]);
+            if (output) outputs.push(output);
+        }
+        if (!outputs.length) return problem("no alternative of this match fits its value", e);
+        return chosen(outputs, e);
+    }
+    // The type of one of several alternatives' results: each two as choice
+    // gives it, and lists that all have one length (a claim each met) keep it.
+    function chosen(outputs: Ty[], e: Expr): Ty {
+        const lengths = outputs.map(t => { const r = resolve(t); return r.k === "list" ? r.length : undefined; });
+        const result = outputs.reduce((a, b) => choice(a, b, e));
+        const r = resolve(result), length = lengths[0];
+        if (r.k === "list" && !r.length && length && lengths.every(x => x && indexText(x) === indexText(length))) return list(r.element, length);
+        return result;
+    }
+    // The alternative a value known enough certainly takes: every one before
+    // it certainly fails, and it certainly matches, unguarded.
+    function takenAlternative(value: Expr, input: Ty, alternatives: PatternLambda[], scope: Scope): number | undefined {
+        const entry: Entry = { type: input, ...valueEntry(value, scope) };
+        for (const [index, { params, guard }] of alternatives.entries()) {
+            const names = params.flatMap(patternNames);
+            const rank = peek(() => rankClause({ index, params, refutable: new Set(names.filter((x, n) => names.indexOf(x) !== n)) }, [entry]), undefined);
+            if (rank?.fails) continue;
+            return rank?.matches && !guard ? index : undefined;
+        }
+        return undefined;
+    }
+    // The type of a choice between two alternatives' types (see inferMatch).
+    function choice(a: Ty, b: Ty, e: Expr): Ty {
+        if (isPending(resolve(a)) !== isPending(resolve(b))) { unify(a, b, e); return returnIn(e, a, b); }
+        if (resolve(a).k === "type" && resolve(b).k === "type" && text(a) !== text(b)) {
+            runtimeChecks++;
+            return { k: "type", value: union([(resolve(a) as Extract<Ty, { k: "type" }>).value, (resolve(b) as Extract<Ty, { k: "type" }>).value]), chosen: true };
+        }
+        const left = resolve(a), right = resolve(b);
+        if (left.k === "list" && right.k === "var") { unify(list(left.element), right, e); return list(left.element); }
+        if (right.k === "list" && left.k === "var") { unify(list(right.element), left, e); return list(right.element); }
+        if (left.k === "list" && right.k === "list") {
+            const join = (a: Ty, b: Ty): Ty => {
+                const x = resolve(a), y = resolve(b);
+                if (x.k === "var" || y.k === "var") { unify(a, b, e); return a; }
+                if (x.k === "list" && y.k === "list") {
+                    // Lists of the same type stay that type, lengths included.
+                    if (text(a) === text(b)) return a;
+                    if (!x.items?.length || !y.items?.length) { unify(x.element, y.element, e); return list(x.element); }
+                    return list(union([x.element, y.element]));
+                }
+                return union([a, b]);
+            };
+            if (left.items && right.items && left.items.length === right.items.length) {
+                const items = left.items.map((item, n) => join(item, right.items![n]));
+                return { k: "list", element: items.length ? union(items) : variable(), items, length: constant(BigInt(items.length)) };
+            }
+            if (!left.items?.length || !right.items?.length) { unify(left.element, right.element, e); return list(left.element); }
+            return list(union([left.element, right.element]));
+        }
+        return either(a, b, e);
+    }
+
     // The input a match alternative's pattern starts from: the scrutinee's
     // length where the pattern takes a cons (so its tail's is one less), its
     // items where it lists them, and a fresh type elsewhere, as an

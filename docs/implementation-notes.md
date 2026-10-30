@@ -70,11 +70,16 @@ intentional evaluation change.
 - Pattern lambdas are `patternLambda` nodes that evaluate to `clauseFn` values.
   `match` is an intrinsic, not an AST node: it probes alternatives without
   running bodies and uses `nomatch` only for mismatch, so runtime errors
-  propagate. The builtin `match` applied to written one-parameter pattern
-  lambdas (`writtenMatch`) runs directly (`coreMatch`): no alternative is made
-  a function, and the chosen body is a tail call.
-- Sugar keeps its written node (printing, `probe`, tools) and runs as its core
-  expansion from `src/ast.ts` (`ternaryMatch`), built once with each part at
+  propagate. The builtin `match` applied to written one-parameter lambdas
+  (`writtenMatch`; `n -> e` is the alternative whose pattern is `n`) runs
+  directly (`coreMatch`): no alternative is made a function, and the chosen
+  body is a tail call. The checker types it (`inferMatch`) where it stands when
+  the value's type is known, each body under its pattern's names, and as the
+  `match` operation over the alternatives' function types when the value's type
+  is known only at calls (a parameter's), as clauses are; one `chosen` join
+  serves both.
+- Sugar keeps its written node (printing, `probe`, tools) and runs and checks
+  as its core expansion from `src/ast.ts` (`ternaryMatch`), built once with each part at
   its source; the expansion names nothing a binding could shadow.
 - Field/pluck assignment desugars to an eager pattern binding
   `vec = setFields(vec, entries, rhs)` that reads the old record and the RHS

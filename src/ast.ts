@@ -261,8 +261,8 @@ export interface SourceLocation { source: string; file: string; start: number; e
 export const sourceLocations = new WeakMap<Expr, SourceLocation>();
 
 // A match of a value against written one-parameter alternatives, the core form
-// sugar expands into. The runtime and the checker's evaluator run a sugar node
-// as its expansion; the written node stays for printing and tools.
+// sugar expands into. The runtime and the checker run and type a sugar node as
+// its expansion; the written node stays for printing and tools.
 export type PatternLambda = Extract<Expr, { t: "patternLambda" }>;
 export type CoreMatch = { value: Expr; alternatives: PatternLambda[] };
 const expansions = new WeakMap<Expr, CoreMatch>();
@@ -278,12 +278,28 @@ export function ternaryMatch(e: Extract<Expr, { t: "ternary" }>): CoreMatch {
     expansions.set(e, core);
     return core;
 }
-// match x [alternatives] written with one-parameter pattern lambdas, whose
-// match the caller has found to be the builtin one.
+// match x [alternatives] written with one-parameter lambdas, whose match the
+// caller has found to be the builtin one. A lambda's parameter is a pattern
+// that is a name (n -> n + 1).
+const namedAlternatives = new WeakMap<Expr, PatternLambda>();
 export function writtenMatch(e: Expr): CoreMatch | undefined {
     if (e.t !== "app" || e.f.t !== "app" || e.a.t !== "list" || !e.a.v.length) return undefined;
-    if (!e.a.v.every(x => x.t === "patternLambda" && x.params.length === 1)) return undefined;
-    return { value: e.f.a, alternatives: e.a.v as PatternLambda[] };
+    const alternatives: PatternLambda[] = [];
+    for (const x of e.a.v) {
+        if (x.t === "patternLambda" && x.params.length === 1) alternatives.push(x);
+        else if (x.t === "lambda" && x.params.length === 1) {
+            let named = namedAlternatives.get(x);
+            if (!named) {
+                const [name] = x.params;
+                named = { t: "patternLambda", params: [name === "_" ? { p: "wildcard" } : { p: "var", name }], body: x.body };
+                const place = sourceLocations.get(x);
+                if (place) sourceLocations.set(named, place);
+                namedAlternatives.set(x, named);
+            }
+            alternatives.push(named);
+        } else return undefined;
+    }
+    return { value: e.f.a, alternatives };
 }
 
 // Clauses with equivalent patterns (and guards): parameter names do not

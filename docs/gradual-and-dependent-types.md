@@ -36,7 +36,9 @@ each choice reaches as the runtime dispatches it. So `func x ++ "!"` is an
 error, since a `Bool` cannot be appended, and so is a block statement that is
 an action on one branch only. Where the checker knows which is taken (a known
 condition, argument or scrutinee), the value has that one's type:
-`func true ++ "!"` checks. Choices unify where they can without breaking
+`func true ++ "!"` checks. A conditional is a `match` on its condition (see
+[semantics](semantics.md)), so the two check alike, and choices that are lists of
+one type keep it, lengths included. Choices unify where they can without breaking
 another use: in `x > 0 ? x : "neg"`, `x` stays a number, as `x > 0` needs. Values
 of one constructor hold either value (`c ? Some 1 : Some "a"` is
 `Option (Int | String)`), except where a parameter is what a field's function
@@ -420,7 +422,7 @@ tail has length `n - 1`, and so does an `x::xs` alternative of a `match` on the
 vector (`match xs [[] -> 0, (x::rest) -> 1 + count rest]`): an alternative meets
 the scrutinee as a clause meets its parameter. A parameter whose typed pattern
 binds its length takes a list of any length, so a recursive call may pass a
-shorter one. A claim around a `match` is checked in each alternative under
+shorter one. A claim around a `match` (or a ternary) is checked in each alternative under
 that alternative's own facts, as a clause's is: `[]` makes the length zero,
 `x :: rest` gives `rest` one less, and a name takes the scrutinee as it is.
 Every alternative meeting the claim gives the `match` that length; one that
