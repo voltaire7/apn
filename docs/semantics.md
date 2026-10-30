@@ -922,7 +922,9 @@ errors, so the choice never depends on checking; code no check reaches
 (`Dynamic`) has none, and there the pattern takes any list or that variant.
 Any other count is a static error (`(Pair x)` for `Pair a b`).
 A type without parameters takes its value at once (`(Int x)`, `(Color c)`), and
-a constructor sharing its type's name (`Box x = _`) is the constructor.
+a constructor sharing its type's name (`Box x = _`) is the constructor;
+with one more argument it is a typed pattern, `(Box Int b)` being `((Box Int)
+b)`.
 
 Destructuring definitions immediately perform the pattern match, but bound
 variables remain deferred. Blocks create child scopes. Environments are

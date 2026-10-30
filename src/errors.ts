@@ -82,12 +82,6 @@ export function formatFileReadError(file: string, error: unknown): string {
 }
 
 // A noun with its indefinite article: an Option, a Result.
-// A constructor sharing its type's name (Box a = | Box a) is the constructor
-// wherever the name is read, so it does not describe the type.
-export function sharedNameAdvice(name: string): string {
-    return `\`${name}\` here is the constructor, which shares its type's name; name it apart ` +
-        `(\`${name} a = | Mk${name} ...\`) to describe the type`;
-}
 export function withArticle(noun: string): string {
     return `${/^[AEIOUaeiou]/.test(noun) ? "an" : "a"} ${noun}`;
 }

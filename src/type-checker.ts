@@ -6,7 +6,7 @@ import { standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, matchesType, NUMERIC_TYPES, numericType, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric } from "./numbers.ts";
-import { APNError, didYouMean, formatFileReadError, sharedNameAdvice, withArticle } from "./errors.ts";
+import { APNError, didYouMean, formatFileReadError, withArticle } from "./errors.ts";
 import { parse, parseDocument, patternSource, rangeExpr, PRIMITIVE_OPERATORS } from "./parser.ts";
 import { mkStr, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
@@ -1569,13 +1569,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.k === "fn") return fn(variable(), schemaValue(t.output, e, seen));
         // An unbound name (missing.File) is the problem to report, not its type.
         if (firstUnbound) return unknown();
-        return problem("expected a type description", e, sharedNameHint(t, e));
-    }
-    // Box a = | Box a: the shared name is the constructor, so Box a is a value.
-    function sharedNameHint(t: Ty, e: Expr): string | undefined {
-        let head = e;
-        while (head.t === "app" || head.t === "block" && head.stmts.length === 1) head = head.t === "app" ? head.f : head.stmts[0];
-        return t.k === "variant" && head.t === "var" && head.name === t.name ? sharedNameAdvice(t.name) : undefined;
+        return problem("expected a type description", e);
     }
     function typeExpr(e: Expr, scope: Scope, captures?: Set<string>): Ty {
         if (e.t === "placeholder") return variable();
@@ -3017,12 +3011,28 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A list or record of types (Point = [x: Float, y: Float]) describes a type.
     // The type a constructor sharing its name stands for, as at runtime
     // (Interpreter.sharedType).
+    // Applied to a type for each of its type's parameters (Box Int), it is
+    // that type applied to them; given values (Box 5), a value.
     function sharedType(t: Ty): Ty | undefined {
-        if (t.k === "variant" && t.shared) return t;
+        if (t.k === "variant" && t.shared) {
+            const args = t.args.map(resolve);
+            if (!args.every(a => a.k === "type")) return undefined;
+            return { ...t, shared: undefined, args: args.map(a => (a as Extract<Ty, { k: "type" }>).value) };
+        }
         if (t.k !== "fn" || !t.shared) return undefined;
         let out = resolve(t.output);
         while (out.k === "fn") out = resolve(out.output);
-        return out;
+        return out.k === "variant" ? { ...out, shared: undefined } : out;
+    }
+    // How many types a constructor sharing its type's name takes where a type
+    // is expected: its type's parameters, when its fields are exactly them
+    // (Box x = _), so (Box Int x) is a value of Box Int; 0 otherwise.
+    function sharedParameters(t: Ty): number {
+        if (t.k !== "fn" || !t.shared) return 0;
+        const inputs: Ty[] = [];
+        let out: Ty = t;
+        for (; out.k === "fn"; out = resolve(out.output)) inputs.push(resolve(out.input));
+        return out.k === "variant" && out.args.length === inputs.length && out.args.every((a, n) => resolve(a) === inputs[n]) ? inputs.length : 0;
     }
     function describing(x: Ty): boolean {
         return x.k === "type" || !!sharedType(x)
@@ -5837,7 +5847,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // ((Vec n a) xs) for a type with parameters, without rewriting the program
     // (the runtime takes a Vect apart itself: a mismatch fails the match).
     function typed(p: Pattern, scope: Scope): Pattern {
-        return typedForm(p, name => typeParameters(scope.get(name)?.type ?? dynamic));
+        return typedForm(p, name => {
+            const t = resolve(scope.get(name)?.type ?? dynamic);
+            return typeParameters(t) || sharedParameters(t);
+        });
     }
     function bindsLength(p: Pattern, scope: Scope): boolean {
         while (p.p === "typeBind" || p.p === "as") p = p.p === "as" ? p.left : p.value;
@@ -6478,7 +6491,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     fieldsScope.set(name, { type: { k: "type", value: t }, mono: true });
                 }
                 for (const v of d.variants) {
-                    let t = result as Ty;
+                    // One sharing the type's name makes values whose type is marked
+                    // shared too: applied to types it is that type (see sharedType).
+                    let t = (v.tag === d.name ? { ...result, shared: true } : result) as Ty;
                     // An indexed constructor's own names (k in Cons a (Vec k a)) are
                     // fresh for it; its result keeps the family's parameters it
                     // names, and leaves a computed index (S k) to values.

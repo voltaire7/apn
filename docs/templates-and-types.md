@@ -581,8 +581,14 @@ its type's name (`Box x = _`, `Box a = | Box a`) is the constructor where a
 value is expected and the type where one is expected: a field's type
 (`Wrap (Box b) = _`), a record slot (`[b: Box] []` is `[b: Box 0]` for
 `Box (Int x) = _`), `isType Box`, a type's argument (`List Box`), a union.
-Applied, it is the constructor applied, so `Wrap a = | Wrap (Box a)` is an
-error saying so; with `Box a = | MkBox a`, `Wrap (Box a)` describes the field.
+Applied to a type for each of its type's parameters, it is likewise a value
+(`Box Int`, a `Box` holding `Int`) that reads as that type applied to them
+where a type is expected, as a lambda reads as a function type:
+`Wrap a = | Wrap (Box a)`, `isType (Box Int) (Box 1)`, `[b: Box Int] []`. So
+`f ((Box Int) b) = ...`, or `f (Box Int b)`, takes a `Box Int` whole, while
+`unbox (Box x) = x`, with as many arguments as `Box` has fields, still takes it
+apart. This needs its fields to be exactly its parameters (`Box x = _`, not
+`Box (Int x) = _`).
 
 Nominal wrappers are single-constructor types (`UserId (Int id) = _`); see
 [distinct types](type-and-resource-rules.md#distinct-types). No automatic

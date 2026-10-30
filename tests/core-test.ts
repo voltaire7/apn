@@ -63,6 +63,14 @@ for (const checked of [true, false]) {
         [ID + "[[v: UserId] [], isType UserId (UserId 1), typeOf (UserId 1) == UserId]", "[[v: UserId 0], true, true]"],
         [ID + "v = [id: UserId 1]\nv.id = UserId 2\nv.id", "UserId 2"],
         [CTOR + "List Box [Box 1]", "[Box 1]"],
+        // Applied to types it is that type applied to them, where a type is
+        // expected: a typed pattern (flat too), a field, isType, a slot. Its own
+        // pattern, with as many arguments as fields, still takes it apart.
+        [CTOR + 'f ((Box Int) b) = b\nf _ = 0\ng (Box Int b) = b\ng _ = 0\nunbox (Box x) = x\n[f (Box 5), f (Box "a"), g (Box 5), g (Box "a"), unbox (Box 5)]',
+            "[Box 5, 0, Box 5, 0, 5]"],
+        [CTOR + "Wrap (Box Int b) = _\n[Wrap (Box 1), isType (Box Int) (Box 1), isType (Box Int) (Box 1.5)]", "[Wrap (Box 1), true, false]"],
+        [CTOR + "[[b: Box Int] [], List (Box Int) [Box 1], Box Int, typeOf (Box 1) == Box Int]", "[[b: Box 0], [Box 1], Box Int, true]"],
+        [CTOR + "kind (Box t x) = t\nkind (Box 2)", "Int"],
         // typeOf gives the narrowest type: its fields decide its parameters,
         // and one nothing decides is a type variable.
         [OPTION + CTOR + "Pair a b = _\n[typeOf (Box 5), typeOf (Pair 1 \"x\"), typeOf (Some (Some 1)), typeOf None, typeOf (Ok 2)]",

@@ -15,7 +15,7 @@ import { parseLiteral, textNatives } from "./text-natives.ts";
 import { bundledText, loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { TYPE_NAMES, NUMERIC_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
-import { APNError, didYouMean, sharedNameAdvice, withArticle } from "./errors.ts";
+import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { type Alternative, clauseKey, countingFamily, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
@@ -3554,9 +3554,35 @@ export class Interpreter {
 
     // A constructor sharing its type's name (Box x = _) is that type where a
     // type is expected: a field's or a slot's type, isType, a union.
+    // Applied to types, one for each of its type's parameters, it is that type
+    // applied to them (Box Int, Pair Int String); unbox (Box x) still takes a
+    // Box apart, its pattern having as many arguments as it has fields.
     sharedType(v: Value): Extract<Value, { kind: "type" }> | undefined {
-        const ctor = v.kind === "native" && !!v.tag && !v.applied.length || v.kind === "variant" && !v.v.length;
-        return ctor && v.family && v.family.name === v.tag && !v.family.base ? { kind: "type", name: v.family.name, family: v.family } : undefined;
+        if (!(v.kind === "native" && v.tag || v.kind === "variant") || !v.family || v.family.name !== v.tag || v.family.base) return undefined;
+        if (v.kind === "native" && v.applied.length) return undefined;
+        const type: Extract<Value, { kind: "type" }> = { kind: "type", name: v.family.name, family: v.family };
+        if (v.kind === "native" || !v.v.length) return type;
+        if (v.v.length !== this.typeArguments(v.family)) return undefined;
+        try {
+            const args = v.v.map(field => this.reference(this.demand(field)));
+            return args.every(arg => this.isTypeValue(arg)) ? { ...type, arguments: args } : undefined;
+        } catch (error) {
+            if (error instanceof APNError) return undefined;
+            throw error;
+        }
+    }
+    // How many type arguments the constructor a name is bound to takes, if it
+    // shares its type's name (see typeArguments); -1 if not one.
+    private sharedParameters(name: string): number {
+        const bound = this.env.get(name), ctor = bound && this.reference(bound);
+        return ctor && this.sharedType(ctor) && ctor.kind !== "type" && "family" in ctor && ctor.family ? this.typeArguments(ctor.family) : -1;
+    }
+    // How many type arguments a constructor sharing its type's name takes
+    // where a type is expected: its type's parameters, when its fields are
+    // exactly them, in order (Box x = _, Pair a b = _).
+    private typeArguments(family: VariantFamily): number {
+        const parameters = family.parameters ?? [], fields = family.fields?.get(family.name) ?? [];
+        return fields.length === parameters.length && fields.every((f, n) => f.t === "var" && f.name === parameters[n]) ? parameters.length : -1;
     }
     isTypeValue(value: Value, seen = new Set<Value>()): boolean {
         value = this.reference(value);
@@ -3595,14 +3621,7 @@ export class Interpreter {
                     this.env = scope;
                     try {
                         const type = this.asType(this.eval(spec));
-                        if (!type) {
-                            let head = spec;
-                            while (head.t === "app" || head.t === "block" && head.stmts.length === 1) head = head.t === "app" ? head.f : head.stmts[0];
-                            const name = head.t === "var" ? head.name : undefined, shared = name ? scope.get(name) : undefined;
-                            const hint = name && shared && (shared.kind === "native" || shared.kind === "variant") && shared.tag === name && shared.family?.name === name
-                                ? sharedNameAdvice(name) : undefined;
-                            throw new APNError("runtime", `constructor ${tag} field must describe a type`, hint ? { hint } : undefined);
-                        }
+                        if (!type) throw new APNError("runtime", `constructor ${tag} field must describe a type`);
                         return this.conform(type, value);
                     } finally { this.env = caller; }
                 });
@@ -4642,7 +4661,7 @@ export class Interpreter {
         while (head.t === "block" && head.stmts.length === 1) head = head.stmts[0];
         while (head.t === "app") { args.unshift(head.a); head = head.f; }
         if (head.t !== "var") return undefined;
-        const type = this.env.get(head.name), base = type && this.reference(type);
+        const type = this.env.get(head.name), bound = type && this.reference(type), base = bound && (this.sharedType(bound) ?? bound);
         if (base?.kind === "type" && base.family?.results) return this.indexedPattern(base.family, args, p.value, v, binds);
         // (Option t) x: a free name binds the argument the value's fields give
         // (_ takes any).
@@ -4869,6 +4888,12 @@ export class Interpreter {
             const given = this.reference(v);
             return given.kind === "type" && given.name === p.tag && given.arguments?.length === parameters &&
                 p.args.every((arg, n) => this.matchPattern(arg, given.arguments![n], binds));
+        }
+        // (Box Int x): one more argument than Box's fields is a value of Box Int.
+        const shared = p.p === "constr" && p.args.length ? this.sharedParameters(p.tag) : -1;
+        if (p.p === "constr" && shared >= 0 && p.args.length === shared + 1) {
+            const flat = flatTypedPattern(p, () => shared);
+            if (flat) return this.matchPattern(flat, v, binds);
         }
         if (p.p === "constr" && parameters && p.args.length === parameters + 1) {
             // (Vect n a xs) takes a vector apart: a mismatch fails the match.
