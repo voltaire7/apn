@@ -396,14 +396,20 @@ Vect (S k) a = a :: Vect k a
 and an index is a pattern (`Z` or `0`, `S k` or `k + 1`, a name).
 
 `Vect 3 Int` is the type of three `Int`s, and its values are ordinary lists.
-Any function of this shape (`Z` or `0`) is the same length-indexed list as
-`Vect`, whose lengths the checker follows even where they are unknown
-(`Vect (n + m) a`). Another type function of lists is run backwards in a
-pattern: with `Pairs Z a = []` and `Pairs (S k) a = a :: a :: Pairs k a`,
-`(Pairs n a xs)` matches `[1,2,3,4]` with `n` 2 and `a` `Int`, each clause's
-result matched as a pattern and its parameters (`Z`, `S k`) built back; a
-value that no clause describes does not match. The checker leaves such `n`
-and `a` to the run. In a typed pattern a type's arguments take nothing after them,
+Nothing about `Vect` is built in: its length, `n`, is read off its clauses by
+induction (the base clause gives `d` elements, each step `c` more, so the
+length is `c * n + d`), and the runtime and the checker follow any type
+function of lists by that length, even where it is unknown
+(`Vect (n + m) a`). With `Pairs Z a = []` and
+`Pairs (S k) a = a :: a :: Pairs k a` it is `2 * n`: `Pairs 2 Int` is four
+`Int`s, `(Pairs n a xs)` given `[1,2,3,4]` binds `n` to 2, an odd-length list
+is a static error where it is known, and `Pairs (n + 1) Int (0 :: 0 :: xs)`
+checks. Functions of the same length are the same type (one counting `n` is
+`Vect`). A function of lists of another shape (elements of other types, a
+length no `c * n + d` gives) is run backwards in a pattern instead: each
+clause's result is matched as a pattern, the elements' types binding its type
+variables and its parameters (`Z`, `S k`) built back; a value that no clause
+describes does not match, and the checker leaves its parameters to the run. In a typed pattern a type's arguments take nothing after them,
 so `(Vect n Int xs)` and a program's own `(Lst n Int xs)` read alike.
 `(Vect n Int xs)` constrains the element type explicitly, and `(Vect 3 a xs)`
 constrains the length. For computed type expressions, the existing form

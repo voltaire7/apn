@@ -26,9 +26,13 @@ for (const [source, expected] of [
     [LST + "f (Lst n Int xs) = [n,xs]\nf [1,2]", "[2,[1,2]]"],
     [LST + "app (Lst n a []) (Lst m a ys) = Lst (n + m) a ys\napp (Lst n a (x :: r)) (Lst m a ys) = Lst (n + m) a (x :: app r ys)\ntypeOf (app [1] [2,3])", "Vect 3 Int"],
     [SUGAR + "len (Lst n _ _) = n\nlen [7,8,9]", "3"],
-    ["Pairs n a = [] -> Pairs Z a | a :: a :: Pairs k a -> Pairs (S k) a\nf (Pairs n a xs) = n\nf [1,2,3,4]", "UInt 2"],
+    ["Pairs n a = [] -> Pairs Z a | a :: a :: Pairs k a -> Pairs (S k) a\nf (Pairs n a xs) = n\nf [1,2,3,4]", "2"],
     [PAIRS + "Pairs 1 Float [3,4]", "[3.0,4.0]"],
-    [PAIRS + "f (Pairs n a xs) = [n,a]\n[f [1,2,3,4], f []]", "[[UInt 2, Int], [UInt 0, a]]"],
+    // Its length, c * n + d, is read off its clauses (Pairs's 2n): n is read back from it.
+    [PAIRS + "f (Pairs n a xs) = [n,a]\n[f [1,2,3,4], f []]", "[[2,Int],[0,a]]"],
+    [PAIRS + "h (Pairs n Int xs) = Pairs (n + 1) Int (0 :: 0 :: xs)\nh [5,6]", "[0,0,5,6]"],
+    // Another shape runs its clauses backwards.
+    ["Mixed Z a = []\nMixed (S k) a = a :: Int :: Mixed k a\nf (Mixed n a xs) = [n,a]\nf [\"x\",1,\"y\",2]", "[UInt 2, String]"],
     [PAIRS + "g (Pairs n a xs) = \"pairs\"\ng xs = \"other\"\n[g [1,2,3], g [\"a\",\"b\"], g [1,\"b\"]]", '["other","pairs","other"]'],
 ] as const) {
     Deno.test(`families of lists: ${JSON.stringify(source)}`, () => {
@@ -41,6 +45,7 @@ for (const [source, message] of [
     // A family of lists has only the list's own alternatives, each with its index.
     ["Mixed n a = [] -> Mixed Z a | Other -> Mixed Z a", "a family of lists has only [] and x :: rest"],
     ["Lst n a = [] | a :: Lst k a -> Lst (S k) a", "a family of lists has only [] and x :: rest"],
+    [PAIRS + "f (Pairs n a xs) = n\nf [1,2,3]", "length mismatch: expected 2 * n"],
 ] as const) {
     Deno.test(`families of lists reject: ${JSON.stringify(source)}`, () => {
         const actual = failure(source);

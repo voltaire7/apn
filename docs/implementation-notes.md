@@ -457,10 +457,14 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
   applying or conforming to it marks a copy of the result's outer part in
   `declaredTypes`, which `typeOf`, rendering and patterns read; a value it did
   not make is read back by `readBack` (`describes`, `holds`), and a written
-  list of types applies as `templateList`. One of `countingFunction`'s shape
-  (Vect's) is bound to the built-in `Vect` (the checker's `factory`), checked
-  by the parser after grouping clauses; a family of lists is parsed into such
-  clauses (`listClauses`). The checker
+  list of types applies as `templateList`. One whose length `countingOf` reads
+  off its clauses (`Counting`: `scale * n + offset`) is instead a `type` with
+  `counts` (`counted`; the checker's `factory` with `counts`), Vect's included
+  (the parser checks a redefinition of `Vect` after grouping clauses, and the
+  checker's scope declares the prelude's): `vectorParts` and
+  `matchVectorPattern` turn the index into the length and back, and a call
+  solves a parameter's `c * n + d` for `n` (`application`). A family of lists
+  is parsed into clauses (`listClauses`). The checker
   leaves such patterns to the run (`explicitDynamic` parameters); `constructed` is the type a
   pattern of it takes (a tagging function's `fields` variant). The parser
   joins adjacent clauses (`continues`);

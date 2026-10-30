@@ -148,24 +148,31 @@ export function unionClause(def: DataDef): DefClause {
     return { params: (def.parameters ?? []).map(name => ({ p: "var", name })), body: { t: "app", f: union, a: { t: "list", v: alternatives } } };
 }
 
-// A type function counting a list's elements, as Vect is in the prelude:
-// F Z a = [] and F (S k) a = a :: F k a (Z or 0). Any function of this shape
-// is the length-indexed list, whose lengths the runtime and the checker know.
-export function countingFunction(name: string, clauses: { params: Pattern[]; body: Expr }[]): boolean {
-    if (clauses.length !== 2 || clauses.some(c => c.params.length !== 2)) return false;
+// How a type function of lists makes its length from its index n, read off
+// its clauses by induction: F Z a = d elements and F (S k) a = c elements
+// :: F k a (each of type a) give the length c * n + d. Vect's (Vect Z a = []
+// and Vect (S k) a = a :: Vect k a) is n; Pairs's, two elements a step, 2n.
+// The runtime and the checker know such a function's lengths everywhere, as
+// a list's (see Counting); any other is run as its clauses are.
+export type Counting = { scale: bigint; offset: bigint };
+export function countingOf(name: string, clauses: { params: Pattern[]; body: Expr }[]): Counting | undefined {
+    if (clauses.length !== 2 || clauses.some(c => c.params.length !== 2)) return undefined;
     const unwrap = (e: Expr): Expr => e.t === "block" && e.stmts.length === 1 ? unwrap(e.stmts[0]) : e;
     const zero = (p: Pattern) => p.p === "constr" && p.tag === "Z" && !p.args.length || p.p === "int" && p.v === 0n;
-    const empty = clauses.find(c => zero(c.params[0])), more = clauses.find(c => c !== empty);
-    const nil = empty && unwrap(empty.body);
-    if (!empty || !more || empty.params[1].p !== "var" || nil?.t !== "list" || nil.v.length) return false;
-    const [next, element] = more.params, body = unwrap(more.body);
-    if (next.p !== "constr" || next.tag !== "S" || next.args.length !== 1 || next.args[0].p !== "var" || element.p !== "var") return false;
-    if (body.t !== "binop" || body.op !== "::") return false;
-    const head = unwrap(body.l), args: Expr[] = [];
-    let f = unwrap(body.r);
-    while (f.t === "app") { args.unshift(unwrap(f.a)); f = unwrap(f.f); }
-    const is = (e: Expr | undefined, v: string) => e?.t === "var" && e.name === v;
-    return is(head, element.name) && is(f, name) && args.length === 2 && is(args[0], next.args[0].name) && is(args[1], element.name);
+    const base = clauses.find(c => zero(c.params[0])), step = clauses.find(c => c !== base);
+    if (!base || !step || base.params[1].p !== "var" || step.params[1].p !== "var") return undefined;
+    const [next] = step.params, element = step.params[1].name, is = (e: Expr | undefined, v: string) => e?.t === "var" && e.name === v;
+    if (next.p !== "constr" || next.tag !== "S" || next.args.length !== 1 || next.args[0].p !== "var") return undefined;
+    // The base's elements, a list of the element type.
+    const empty = unwrap(base.body);
+    if (empty.t !== "list" || !empty.v.every(x => is(unwrap(x), base.params[1].p === "var" ? base.params[1].name : ""))) return undefined;
+    // The step's: elements :: F k a.
+    let scale = 0n, rest = unwrap(step.body);
+    while (rest.t === "binop" && rest.op === "::" && is(unwrap(rest.l), element)) { scale++; rest = unwrap(rest.r); }
+    const args: Expr[] = [];
+    while (rest.t === "app") { args.unshift(unwrap(rest.a)); rest = unwrap(rest.f); }
+    if (!scale || !is(rest, name) || args.length !== 2 || !is(args[0], next.args[0].name) || !is(args[1], element)) return undefined;
+    return { scale, offset: BigInt(empty.v.length) };
 }
 
 // Methods: a definition of one adds an instance (map f (Some x) = ...,

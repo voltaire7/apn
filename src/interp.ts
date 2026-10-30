@@ -17,7 +17,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericType, numericPayload, m
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, claimedDeclaration, LIST_TYPE_RANGE, clauseKey, type DataDef, countingFunction, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, LIST_TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions } from "./ast.ts";
@@ -540,12 +540,14 @@ export class Interpreter {
             }
             const arity = clauses[0].params.length;
             if (clauses.some(c => c.params.length !== arity)) throw new APNError("runtime", `every clause of ${name} takes ${arity} parameters`);
-            // One counting a list's elements (Vect Z a = [], Vect (S k) a =
-            // a :: Vect k a) is the length-indexed list.
-            if (countingFunction(name, clauses)) {
-                const vect: Value = { kind: "type", name: "Vect" };
-                this.bindNames([[name, vect]]);
-                return vect;
+            // One whose length its index makes (Vect Z a = [], Vect (S k) a =
+            // a :: Vect k a) is known by that length (see countingOf); those
+            // counting n are one type, Vect.
+            const counts = countingOf(name, clauses);
+            if (counts) {
+                const type: Value = { kind: "type", name: counts.scale === 1n && !counts.offset ? "Vect" : name, counts };
+                this.bindNames([[name, type]]);
+                return type;
             }
             if (arity && clauses.length > 1 && !clauses[0].params.length) throw new APNError("runtime", `${name} is defined twice`);
             const scope = new Env(this.env);
@@ -2062,10 +2064,10 @@ export class Interpreter {
                 if (f.variable && f.name !== "_" && this.isTypeValue(value)) return { ...f, arguments: [...f.arguments ?? [], value] };
                 // A base type applied to a named value unwraps it: Float (Money 1.2).
                 if (!f.family && !f.alias && NAMED_BASES.has(f.name)) value = this.baseValue(value);
-                if (f.name === "Vect" && !f.family && !f.alias && (f.arguments?.length ?? 0) < 2) {
+                if (this.counted(f) && (f.arguments?.length ?? 0) < 2) {
                     const args = [...f.arguments ?? []];
-                    if (!args.length && (value.kind !== "int" || value.v < 0n)) throw new APNError("runtime", "Vect length must be a nonnegative Int");
-                    if (args.length === 1 && !this.isTypeValue(value)) throw new APNError("runtime", "Vect element must be a type");
+                    if (!args.length && (value.kind !== "int" || value.v < 0n)) throw new APNError("runtime", `${f.name} length must be a nonnegative Int`);
+                    if (args.length === 1 && !this.isTypeValue(value)) throw new APNError("runtime", `${f.name} element must be a type`);
                     return { ...f, arguments: [...args, value] };
                 }
                 const parameters = f.family?.parameters ?? [];
@@ -3235,11 +3237,12 @@ export class Interpreter {
             if (pattern.tag === named.family.name) return 35;
             if (TYPE_NAMES.includes(pattern.tag)) arg = named.v[0];
         }
+        const binding = this.env.get(pattern.tag);
+        if (binding && this.counted(this.reference(binding))) return this.isList(this.dataValue(arg)) ? 30 : -1000;
         if (!TYPE_NAMES.includes(pattern.tag)) return 0;
         // An undecided call fits a typed pattern as an exact type would.
         const undecided = this.reference(arg);
         if (undecided.kind === "pending" && undecided.step.op === "call") return 30;
-        if (pattern.tag === "Vect") return this.isList(this.dataValue(arg)) ? 30 : -1000;
         const value = pattern.tag === "Mutable" ? this.reference(arg) : pattern.tag === "Type" ? this.demand(arg) : this.dataValue(arg);
         // A conversion through a to instance fits less than any pattern of the
         // value's own type.
@@ -3362,23 +3365,28 @@ export class Interpreter {
         else if (buffer) Deno.stdout.writeSync(enc.encode(buffer));
     }
 
+    // A type function of lists whose length its index makes (Vect, Pairs).
+    private counted(v: Value | undefined): Counting | undefined {
+        return v?.kind === "type" && !v.family && !v.alias ? v.counts : undefined;
+    }
+    // Such a type applied: the length it makes and its element type.
     private vectorParts(type: Extract<Value, { kind: "type" }>): [bigint, Value] {
-        const [size, element] = type.arguments ?? [];
-        if (type.arguments?.length !== 2 || size.kind !== "int" || size.v < 0n) throw new APNError("runtime", "Vect needs a nonnegative length and an element type");
-        return [size.v, element];
+        const [size, element] = type.arguments ?? [], counts = type.counts!;
+        if (type.arguments?.length !== 2 || size.kind !== "int" || size.v < 0n) throw new APNError("runtime", `${type.name} needs a nonnegative length and an element type`);
+        return [counts.scale * size.v + counts.offset, element];
     }
 
-    private vectorElements(value: Value, size: bigint): Value[] {
-        if (!this.isList(value)) throw new APNError("runtime", "Vect expects a list");
+    private vectorElements(value: Value, size: bigint, name: string): Value[] {
+        if (!this.isList(value)) throw new APNError("runtime", `${name} expects a list`);
         const out: Value[] = [];
         let rest = value;
         for (let n = 0n; n < size; n++) {
             checkInterrupt();
             const cell = this.cell(rest);
-            if (!cell) throw new APNError("runtime", `Vect length mismatch: expected ${size}, got ${n}`);
+            if (!cell) throw new APNError("runtime", `${name} length mismatch: expected ${size}, got ${n}`);
             out.push(cell.head); rest = cell.tail;
         }
-        if (this.cell(rest)) throw new APNError("runtime", `Vect length mismatch: expected ${size}, got at least ${size + 1n}`);
+        if (this.cell(rest)) throw new APNError("runtime", `${name} length mismatch: expected ${size}, got at least ${size + 1n}`);
         return out;
     }
 
@@ -3389,9 +3397,9 @@ export class Interpreter {
         const type = read.kind === "closure" || read.kind === "clauseFn" ? this.asType(read) ?? read : this.sharedType(read) ?? typeIn;
         // A type variable not decided by a call takes any value.
         if (type.kind === "type" && type.variable) return value;
-        if (type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) {
+        if (type.kind === "type" && this.counted(type)) {
             const [size, element] = this.vectorParts(type);
-            const values = this.vectorElements(this.dataValue(value), size);
+            const values = this.vectorElements(this.dataValue(value), size, type.name);
             return { kind: "list", schema: type, v: values.map(x => this.defer(() => this.conform(element, x))) };
         }
         if (type.kind === "type") {
@@ -3620,7 +3628,7 @@ export class Interpreter {
     belongsToType(type: Value, value: Value): boolean {
         type = this.reference(type); value = this.reference(value);
         if (type.kind === "type" && type.choices) return type.choices.some(choice => this.belongsToType(choice, value));
-        if (type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) {
+        if (type.kind === "type" && this.counted(type)) {
             const [size, element] = this.vectorParts(type);
             if (!this.isList(value)) return false;
             let rest = value;
@@ -4587,16 +4595,18 @@ export class Interpreter {
     // Keep that binder open until another parameter supplies the evidence.
     private vectorTypeHoles = new WeakMap<Map<string, Value>, Set<string>>();
 
-    private matchVectorPattern(args: Pattern[], input: Value, binds: Map<string, Value>): boolean {
-        const value = this.dataValue(input);
+    // (F n a xs) for a type function of lists: n is read back from the
+    // length, which F makes c * n + d (see countingOf).
+    private matchVectorPattern(family: Extract<Value, { kind: "type" }>, args: Pattern[], input: Value, binds: Map<string, Value>): boolean {
+        const value = this.dataValue(input), counts = family.counts!;
         if (!this.isList(value)) return false;
         let size: bigint, element: Value | undefined;
         const sizePattern = args[0];
         const known = sizePattern.p === "var" ? binds.get(sizePattern.name) ?? this.lengthValue(sizePattern.name) : undefined;
         const fixed = sizePattern.p === "int" ? mkInt(sizePattern.v) : known && this.dataValue(known);
         if (fixed && (fixed.kind !== "int" || fixed.v < 0n)) return false;
-        const limit = fixed?.kind === "int" ? fixed.v : undefined;
-        if (value.kind === "list" && value.schema?.kind === "type" && value.schema.name === "Vect") {
+        const limit = fixed?.kind === "int" ? counts.scale * fixed.v + counts.offset : undefined;
+        if (value.kind === "list" && value.schema?.kind === "type" && this.counted(value.schema)) {
             [size, element] = this.vectorParts(value.schema);
         } else {
             size = 0n;
@@ -4613,7 +4623,9 @@ export class Interpreter {
                 rest = cell.tail;
             }
         }
-        if (limit !== undefined && size !== limit || !this.matchPattern(args[0], mkInt(size), binds)) return false;
+        if (limit !== undefined && size !== limit || size < counts.offset || (size - counts.offset) % counts.scale) return false;
+        const index = (size - counts.offset) / counts.scale;
+        if (!this.matchPattern(args[0], mkInt(index), binds)) return false;
         const typePattern = args[1];
         if (typePattern.p === "var") {
             const holes = this.vectorTypeHoles.get(binds) ?? new Set<string>();
@@ -4635,7 +4647,7 @@ export class Interpreter {
         } else if (typePattern.p !== "wildcard") {
             if (!element || !this.matchPattern(typePattern, element, binds)) return false;
         }
-        const type: Value = { kind: "type", name: "Vect", arguments: [mkInt(size), element ?? { kind: "type", name: "$any" }] };
+        const type: Value = { ...family, arguments: [mkInt(index), element ?? { kind: "type", name: "$any" }] };
         return this.matchPattern(args[2], this.conform(type, value), binds);
     }
 
@@ -4871,7 +4883,7 @@ export class Interpreter {
         const bound = this.env.get(name), t = bound && this.reference(bound);
         if (t?.kind !== "type" || t.arguments?.length || t.alias) return 0;
         if (t.family) return t.family.parameters?.length ?? 0;
-        return t.name === "List" ? 1 : t.name === "Vect" ? 2 : 0;
+        return t.name === "List" ? 1 : this.counted(t) ? 2 : 0;
     }
 
     private typeBinding(p: Extract<Pattern, { p: "schema" }>, v: Value, binds: Map<string, Value>): boolean | undefined {
@@ -4893,7 +4905,7 @@ export class Interpreter {
         // given [] first binds a from ys, as the clause f (Vect n a xs) (Vect m a ys) does).
         const open = (name: string) => { const bound = this.env.get(name), t = bound && this.reference(bound); return t?.kind === "type" && t.name === "$any" && !!t.description; };
         const free = (e: Expr, n: number) => e.t === "placeholder" || e.t === "var" && /^[a-z]/.test(e.name) && !binds.has(e.name) &&
-            (base?.kind === "type" && base.name === "Vect" && n === 0 ? !this.lengthValue(e.name) : this.typeVariableName(e.name, this.env) || open(e.name));
+            (this.counted(base) && n === 0 ? !this.lengthValue(e.name) : this.typeVariableName(e.name, this.env) || open(e.name));
         if (!args.some(free)) return undefined;
         if (base?.kind !== "type" || base.family || base.alias) return undefined;
         // Each argument as the Vect pattern's part: a free name binds, a bound
@@ -4907,9 +4919,9 @@ export class Interpreter {
             const value = this.dataValue(this.env.get(e.name)!);
             return value.kind === "int" ? { p: "int", v: value.v } : undefined;
         };
-        if (base.name === "Vect" && args.length === 2) {
+        if (this.counted(base) && args.length === 2) {
             const [size, element] = args.map(asPattern);
-            return !!size && !!element && this.matchVectorPattern([size, element, p.value], v, binds);
+            return !!size && !!element && this.matchVectorPattern(base, [size, element, p.value], v, binds);
         }
         if (base.name === "List" && args.length === 1 && (args[0].t === "var" || args[0].t === "placeholder")) {
             const list = this.dataValue(v);
@@ -5044,7 +5056,7 @@ export class Interpreter {
             this.env = scope;
             try { type = this.schemaPatternType(p.type, true); } finally { this.env = caller; }
             type = this.asType(type) ?? type;
-            if (type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) {
+            if (type.kind === "type" && this.counted(type)) {
                 return this.matchPattern(p.value, this.conform(type, v), binds);
             }
             if (!this.isTypeValue(type)) throw new APNError("runtime", "pattern expects a type description");
@@ -5121,7 +5133,7 @@ export class Interpreter {
         if (p.p === "constr" && parameters && p.args.length === parameters + 1) {
             // (Vect n a xs) takes a vector apart: a mismatch fails the match.
             const type = this.reference(this.env.get(p.tag)!);
-            if (type.kind === "type" && type.name === "Vect") return this.matchVectorPattern(p.args, v, binds);
+            if (type.kind === "type" && this.counted(type)) return this.matchVectorPattern(type, p.args, v, binds);
             const flat = flatTypedPattern(p, () => parameters);
             if (flat) return this.matchPattern(flat, v, binds);
         }
@@ -5154,7 +5166,7 @@ export class Interpreter {
                 const type = this.reference(binding);
                 // (Mixed m): a value of any of a union's types.
                 if (type.kind === "type" && type.choices) return p.args.length === 1 && this.belongsToType(type, v) && this.matchPattern(p.args[0], v, binds);
-                if (p.args.length === 1 && type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) return this.matchPattern(p.args[0], this.conform(type, v), binds);
+                if (p.args.length === 1 && type.kind === "type" && this.counted(type)) return this.matchPattern(p.args[0], this.conform(type, v), binds);
                 if (p.args.length === 1 && type.kind === "type" && !type.family && !type.alias) {
                     return this.matchPattern({ p: "constr", tag: type.name, args: p.args }, v, binds);
                 }

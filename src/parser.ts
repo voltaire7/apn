@@ -1,4 +1,4 @@
-import { claimedDeclaration, countingFunction, fillPlaceholders, holdsPlaceholder, sourceLocations, unclaimedMix } from "./ast.ts";
+import { claimedDeclaration, countingOf, fillPlaceholders, holdsPlaceholder, sourceLocations, unclaimedMix } from "./ast.ts";
 import { stringKey, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -2202,7 +2202,9 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
         if (!looseSpacing) p.reportUnnecessary();
         const grouped = groupClauses(out);
         for (const tl of grouped) {
-            if (tl.t === "def" && TYPE_NAMES.includes(tl.name) && !countingFunction(tl.name, tl.clauses)) throw new Error("Parser: built-in type names cannot be reassigned");
+            // (Vect may be defined only as the list of n elements.)
+            const counts = tl.t === "def" ? countingOf(tl.name, tl.clauses) : undefined;
+            if (tl.t === "def" && TYPE_NAMES.includes(tl.name) && !(counts?.scale === 1n && !counts.offset)) throw new Error("Parser: built-in type names cannot be reassigned");
         }
         return grouped;
     } catch (err) {

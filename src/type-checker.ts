@@ -1,4 +1,4 @@
-import { type Alternative, claimedDeclaration, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, countingFunction, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -65,7 +65,8 @@ type Ty =
     // given: an indexed family's index values written so far, by parameter (Vec 2 Int).
     // applied: how many of a family's arguments are given (Pair a, Vec 2).
     | { k: "type"; value: Ty; chosen?: boolean; given?: Map<number, Known>; applied?: number }
-    | { k: "factory"; args: Entry[] }
+    // A type function of lists whose length its index makes (Vect's n, see Counting).
+    | { k: "factory"; args: Entry[]; counts: Counting; name: string }
     // A capitalized function (see construct); clauses: when it has patterns
     // or several clauses, chosen by the run.
     | { k: "alias"; name: string; params: string[]; body: Expr; scope: Scope; args: Entry[]; clauses?: { params: Pattern[]; body: Expr }[] }
@@ -2708,9 +2709,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (args.length === 1) {
                 convert(atom("Int"), argument.type, e);
                 if (argument.index && !argument.index.terms.size && argument.index.constant < 0n) {
-                    problem("Vect length must be nonnegative", e);
+                    problem(`${f.name} length must be nonnegative`, e);
                 }
-                return { k: "factory", args };
+                return { ...f, args };
             }
             let element = resolve(argument.type);
             if (element.k === "var") {
@@ -2718,11 +2719,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 unify(element, payload, e);
                 element = payload;
             }
-            if (element.k !== "type" && element.k !== "dynamic") problem("Vect element must be a type", e);
+            if (element.k !== "type" && element.k !== "dynamic") problem(`${f.name} element must be a type`, e);
             // A length evaluation could not decide (it depends on input, or ran
             // past the evaluation budget) is checked at runtime.
             if (!args[0].index) runtimeChecks++;
-            return { k: "type", value: { k: "list", element: element.k === "type" ? element.value : dynamic, length: args[0].index, contracted: true } };
+            const length = args[0].index && indexAdd(indexScale(args[0].index, f.counts.scale), constant(f.counts.offset));
+            return { k: "type", value: { k: "list", element: element.k === "type" ? element.value : dynamic, length, contracted: true } };
         }
         if (f.k === "alias") {
             const args = [...f.args, argument];
@@ -2873,10 +2875,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 return application(f, { ...argument, type: { k: "record", fields: projected } }, e);
             }
+            // A length c * n + d the parameter names (Vect's n, Pairs's 2n) is
+            // solved for n from the argument's: c must divide what is left.
             if (expected.k === "list" && actual.k === "list" && expected.length?.terms.size === 1 && actual.length) {
                 const [name, coefficient] = [...expected.length.terms][0];
-                if (coefficient === 1n) {
-                    const value = indexAdd(actual.length, constant(-expected.length.constant));
+                const rest = indexAdd(actual.length, constant(-expected.length.constant));
+                const divides = coefficient > 0n && rest.constant % coefficient === 0n && [...rest.terms.values()].every(v => v % coefficient === 0n);
+                if (!divides && !rest.terms.size || !rest.terms.size && rest.constant < 0n) {
+                    return problem(`length mismatch: expected ${indexText(expected.length)}, got ${indexText(actual.length)}`, e);
+                }
+                if (divides) {
+                    const value: Index = { constant: rest.constant / coefficient, terms: new Map([...rest.terms].map(([t, v]) => [t, v / coefficient])) };
                     const retained = new Map([...variables(f)].map(t => [t, t]));
                     const instantiated = copy(f, retained, [name, value]) as Extract<Ty, { k: "fn" }>;
                     if (options.strict && !f.coerce) unify(instantiated.input, argument.type, e);
@@ -6189,9 +6198,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             for (const c of clauses) infer({ t: "patDef", pattern: { p: "constr", tag: name, args: c.params }, value: c.body }, scope);
             return;
         }
-        // One counting a list's elements is the length-indexed list, as at runtime.
-        if (/^[A-Z]/.test(name) && countingFunction(name, clauses)) {
-            scope.set(name, { type: { k: "factory", args: [] } });
+        // One whose length its index makes is known by that length, as at runtime.
+        const counts = /^[A-Z]/.test(name) ? countingOf(name, clauses) : undefined;
+        if (counts) {
+            scope.set(name, { type: { k: "factory", args: [], counts, name: counts.scale === 1n && !counts.offset ? "Vect" : name } });
             return;
         }
         if (/^[A-Z]/.test(name) && clauses[0].params.length) {
@@ -6470,7 +6480,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     const scope: Scope = new Map(TYPE_NAMES.map((name) => [name, { type: { k: "type", value: atom(name) } }]));
     // The prelude declares Vect as the family of lists counting their elements.
-    scope.set("Vect", { type: { k: "factory", args: [] } });
+    // The prelude's Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a.
+    scope.set("Vect", { type: { k: "factory", args: [], counts: { scale: 1n, offset: 0n }, name: "Vect" } });
     const a = variable(), b = variable();
     for (
         const [name, type] of Object.entries({
