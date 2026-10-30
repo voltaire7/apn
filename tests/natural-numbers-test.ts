@@ -39,9 +39,9 @@ for (const [source, expected] of [
     ["pred (S k) = k; pred 5 - 1", "UInt 3"],
     // (_ x) takes the payload and discards the type.
     ["payload (_ x) = x; payload (Int32 5)", "5"],
-    // A := value is taken apart with its pattern, not by its base type (opaque).
-    ["Money := Float; amount (Money m) = m; Float $ amount $ Money 1.2", "1.2"],
-    ["Money := Float; Cents := Int; amount (Money m) = m; Cents (Int (amount (Money 3.0)))", "Cents 3"],
+    // A new type's value is taken apart with its pattern, not by its base type.
+    ["Money (Float x) = _; amount (Money m) = m; Float $ amount $ Money 1.2", "1.2"],
+    ["Money (Float x) = _; Cents (Int x) = _; amount (Money m) = m; Cents (Int (amount (Money 3.0)))", "Cents 3"],
 ] as const) {
     Deno.test(`natural numbers: ${source}`, () => {
         const actual = run(source);

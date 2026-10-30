@@ -29,8 +29,8 @@ for (const source of [
     'Option a = Some a | None\nSome 1 + 1',
     'Direction + 1',
     'West / North',
-    // A := type has no arithmetic of its own (opaque).
-    'UserId := Int\nUserId 1 + East',
+    // A new type has no arithmetic of its own.
+    'UserId (Int x) = _\nUserId 1 + East',
 ]) Deno.test(`variant arithmetic rejects: ${source}`, () => {
     try { result(source); } catch { return; }
     throw new Error('expected rejection');

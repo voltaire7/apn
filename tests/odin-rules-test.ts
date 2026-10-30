@@ -8,16 +8,16 @@ function result(source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['UserId := Int\n[UserId, UserId 3, typeOf (UserId 3)]', '[UserId, UserId 3, UserId]'],
-    // A := type is opaque: only the operations its clauses define.
-    ['Distance := Float\n(Distance a) + (Distance b) = Distance (a + b)\nDistance 2 + Distance 3', 'Distance 5.0'],
-    ['UserId := Int\nf (t x) = [t,x]\nf (UserId 3)', '[UserId, UserId 3]'],
-    ['UserId := Int\nAlias = UserId\n[Alias == UserId, Alias 3 == UserId 3]', '[true,true]'],
-    ['UserId := Int\nOrderId := Int\n[UserId == OrderId, UserId 3 == OrderId 3, UserId 3 == 3]', '[false,false,false]'],
-    ['Money := Float\nf (Float x) = "Float"\nf (Money x) = "Money"\n[f 1.2, f (Money 1.2)]', '["Float","Money"]'],
-    ['UserId := Int\nunpack (UserId n) = n\nunpack (UserId 123)', '123'],
-    ['UserId := Int\nOrderId := Int\nf (UserId n) = n\nf _ = 0\nf (OrderId 3)', '0'],
-    ['UserId := Int\n[v: UserId] []', '[v: UserId 0]'],
+    ['UserId (Int x) = _\n[UserId, UserId 3, typeOf (UserId 3)]', '[UserId, UserId 3, UserId]'],
+    // A new type has only the operations its clauses define.
+    ['Distance (Float x) = _\n(Distance a) + (Distance b) = Distance (a + b)\nDistance 2 + Distance 3', 'Distance 5.0'],
+    ['UserId (Int x) = _\nf (t x) = [t,x]\nf (UserId 3)', '[UserId, UserId 3]'],
+    ['UserId (Int x) = _\nAlias = UserId\n[Alias == UserId, Alias 3 == UserId 3]', '[true,true]'],
+    ['UserId (Int x) = _\nOrderId (Int x) = _\n[UserId == OrderId, UserId 3 == OrderId 3, UserId 3 == 3]', '[false,false,false]'],
+    ['Money (Float x) = _\nf (Float x) = "Float"\nf (Money x) = "Money"\n[f 1.2, f (Money 1.2)]', '["Float","Money"]'],
+    ['UserId (Int x) = _\nunpack (UserId n) = n\nunpack (UserId 123)', '123'],
+    ['UserId (Int x) = _\nOrderId (Int x) = _\nf (UserId n) = n\nf _ = 0\nf (OrderId 3)', '0'],
+    ['UserId (Int x) = _\n[v: UserId] []', '[v: UserId 0]'],
     ['v = [x: Int] [y: 2]\nv', '[x: 0, y: 2]'],
     ['assert true "kept"', '"kept"'],
     ['import "function"\ncount = Mutable 0\nbracket 42 (_ -> set count 1) (x -> x + 1)\ncount', '1'],
@@ -28,14 +28,14 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const [source, error] of [
-    ['UserId := Int\nUserId .2', 'lossy conversion'],
-    ['UserId := Int\nOrderId := Int\nUserId (OrderId 3)', 'explicit unwrapping'],
-    ['Money := Float\nDistance := Float\nMoney 1 + Distance 2', "no '+' for Money"],
-    ['Distance := Int\nDistance 2 + 3', "no '+' for Distance"],
-    ['Distance := Int\n-Distance 2', "no '-' for Distance"],
-    ['Distance := Int\nDistance 2 < Distance 3', 'no comparison for Distance'],
-    ['Money := Float\nsqrt (Money 4.0)', 'sqrt expects numbers'],
-    ['Distance := Int8\nDistance 128', 'out of range'],
+    ['UserId (Int x) = _\nUserId .2', 'lossy conversion'],
+    ['UserId (Int x) = _\nOrderId (Int x) = _\nUserId (OrderId 3)', 'Int expects a number'],
+    ['Money (Float x) = _\nDistance (Float x) = _\nMoney 1 + Distance 2', "cannot apply '+'"],
+    ['Distance (Int x) = _\nDistance 2 + 3', "cannot apply '+'"],
+    ['Distance (Int x) = _\n-Distance 2', 'negation expects numbers'],
+    ['Distance (Int x) = _\nDistance 2 < Distance 3', 'cannot compare'],
+    ['Money (Float x) = _\nsqrt (Money 4.0)', 'sqrt expects numbers'],
+    ['Distance (Int8 x) = _\nDistance 128', 'out of range'],
     ['assert (1 == 2) 0', 'assertion failed: (1 == 2)'],
     ['check = assert\ncheck false 0', 'assertion failed: false'],
     ['import "function"\nbracket 1 (_ -> []) (x -> y -> x)', 'must return data'],

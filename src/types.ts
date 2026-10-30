@@ -7,14 +7,12 @@ import { charLiteral, itemsText, stringLiteral } from "./separators.ts";
 // ---------------- Types & values ----------------
 
 // results: an indexed family's constructors' result types (Cons ... -> Vec (S k) a).
-// opaque: a := type's, which has none of its base's operations.
-export interface VariantFamily { base?: Value; opaque?: boolean; name: string; parameters?: string[]; fields?: Map<string, Expr[]>; env?: Env; results?: Map<string, Expr>; }
+export interface VariantFamily { base?: Value; name: string; parameters?: string[]; fields?: Map<string, Expr[]>; env?: Env; results?: Map<string, Expr>; }
 
 export type Type = string; // lightweight: we represent types as printable strings
 
 // One equation of a Haskell-style function definition:  f p1 p2 ... = body
-// constructs: written with := (Rect w h := ...), a constructor, not a function.
-export interface DefClause { params: Pattern[]; body: Expr; guard?: Expr; constructs?: boolean; }
+export interface DefClause { params: Pattern[]; body: Expr; guard?: Expr; }
 
 // Runtime values (dynamically typed, like JS)
 export interface NativePointer {
@@ -37,7 +35,7 @@ export type Value =
     // schema: a cell holding a List T (Mutable ((List T) xs)) holds lists of any length.
     | { kind: "mutable"; v: Value; schema?: Value }
     // variable: a type variable (the a of a -> a), named by name.
-    | { kind: "type"; name: string; inspect?: boolean; description?: string; family?: VariantFamily; arguments?: Value[]; alias?: { parameters: string[]; run: Value; constructs: boolean; family: VariantFamily; named: Map<string, VariantFamily> }; choices?: Value[]; variable?: boolean }
+    | { kind: "type"; name: string; inspect?: boolean; description?: string; family?: VariantFamily; arguments?: Value[]; alias?: { parameters: string[]; run: Value }; choices?: Value[]; variable?: boolean }
     | { kind: "hashmap"; entries: Map<string, [Value, Value]> }
     | Numeric
     | { kind: "rationalRange"; lo: Real; step: Real; hi: Real | null }

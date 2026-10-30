@@ -95,7 +95,7 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   and the standard library): add a native, intrinsic or parser rule only for
   what APN cannot express, and keep it as small as it can be.
 - Complex syntax is sugar over a very simple base: a form expands into a few
-  primitives the rest of the language already has (`Option a := [Some a, None]`
+  primitives the rest of the language already has (`Option a = Some a | None`
   into constructors made by one tagging primitive, then `=` and a union), and
   behaves exactly as its expansion does. Add a primitive only when no
   expansion can express the form.

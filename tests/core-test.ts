@@ -23,6 +23,7 @@ const SHAPE = "Circle (Float r) = _\nSquare (Float s) = _\nShape = Circle | Squa
 const OPTION = 'import "option"\n';
 // A union of existing types is a type of its own values: made of nothing new.
 const MIXED = "Mixed = Int | String\n";
+const ID = "UserId (Int x) = _\n";
 for (const checked of [true, false]) {
     for (const [source, expected] of [
         [BOX + "Box 5", "Box 5"],
@@ -49,6 +50,16 @@ for (const checked of [true, false]) {
         [MIXED + 'f (Mixed m) = "mixed"\nf _ = "other"\n[f 1, f "a", f 2.5]', '["mixed","mixed","other"]'],
         [MIXED + '[Mixed 5, isType Mixed "s"]', "[5,true]"],
         [OPTION + "OptOrList a = Option a | List a\nOptOrList Int", "Option Int | List Int"],
+        [CTOR + "map (Rect 1) [2,3]", "[Rect 1.0 2.0, Rect 1.0 3.0]"],
+        [CTOR + 'f (Rect w h) = "rect"\nf _ = "other"\n[f (Rect 1 2), f [1,2]]', '["rect","other"]'],
+        [ID + "[UserId 5, typeOf (UserId 5), UserId 3 == 3]", "[UserId 5, UserId, false]"],
+        [ID + "(UserId a) + (UserId b) = UserId (a + b)\nUserId 2 + UserId 3", "UserId 5"],
+        // A constructor sharing its type's name is the type where one is
+        // expected: a field's or a slot's type, isType, a type's argument.
+        [ID + "Order (UserId u) (Int n) = _\nOrder (UserId 5) 3", "Order (UserId 5) 3"],
+        [ID + "[[v: UserId] [], isType UserId (UserId 1), typeOf (UserId 1) == UserId]", "[[v: UserId 0], true, true]"],
+        [ID + "v = [id: UserId 1]\nv.id = UserId 2\nv.id", "UserId 2"],
+        [CTOR + "List Box [Box 1]", "[Box 1]"],
     ] as const) Deno.test(`core (checked=${checked}): ${source}`, () => {
         const actual = run(source, checked);
         if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -66,6 +77,13 @@ for (const checked of [true, false]) {
         [MIXED + "Mixed 2.5", checked ? "cannot use Float where Int | String is required" : "Float is not one of Int | String"],
         ["Foo = Int | Bar\n1", "Foo mixes a type (Int) and a new constructor (Bar)"],
         [OPTION + "Two = Some | Int\n1", "Two's alternative Some is a constructor of another type"],
+        [CTOR + "length (Rect 3 4)", checked ? "Rect" : "expected a list"],
+        [CTOR + "area (Rect w h) = w * h\narea 5", checked ? "cannot use Int where Rect is required" : "no clause"],
+        // A new type has only the operations its clauses define; a
+        // constructor is not a conversion.
+        [ID + "Int (UserId 5)", checked ? "cannot use UserId where Int is required" : "Int expects a number"],
+        [ID + "f (UserId u) = u\nf 5", checked ? "cannot use Int where UserId is required" : "no clause"],
+        [ID + "Order (UserId u) (Int n) = _\nOrder 5 3", checked ? "cannot use Int where UserId is required" : "UserId expects a UserId variant"],
         // A lowercase definition's _ stays unfinished.
         ["f x = _\nf 1", "not implemented"],
     ] as const) Deno.test(`core rejects (checked=${checked}): ${source}`, () => {
@@ -73,3 +91,22 @@ for (const checked of [true, false]) {
         if (!actual.includes(message)) throw new Error(actual);
     });
 }
+// A to String instance is how a value shows, wherever it is.
+const SHOW = 'import "option"\nFrac n d = _\nto String (Frac n d) = to String n ++ "/" ++ to String d\n';
+for (const checked of [true, false]) for (const [source, expected] of [
+    [SHOW + "[Frac 1 2, Frac 3 4]", "[1/2,3/4]"],
+    [SHOW + "Some (Frac 1 2)", "Some (1/2)"],
+    [SHOW + "to String [Frac 1 2]", '"[1/2]"'],
+    [SHOW + '"is " ++ to String (Frac 1 2)', '"is 1/2"'],
+] as const) Deno.test(`to String shows a value (checked=${checked}): ${source}`, () => {
+    const actual = run(source, checked);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
+// What the checker alone can tell.
+for (const [source, message] of [
+    [CTOR + "f (Rect w h d) = w\n1", "'Rect' in a pattern takes 2 fields"],
+    [CTOR + 'f (Rect w h) = w ++ "x"\nf (Rect 1 2)', "cannot append Float and String"],
+] as const) Deno.test(`constructors are checked: ${source}`, () => {
+    const actual = failure(source, true);
+    if (!actual.includes(message)) throw new Error(actual);
+});

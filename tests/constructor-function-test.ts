@@ -1,43 +1,22 @@
 import { Interpreter } from "../src/interp.ts";
-import { parse } from "../src/parser.ts";
+import { parseDocument } from "../src/parser.ts";
 
-// A capitalized definition with := is a constructor: with several parameters
-// it makes one field each, laid out by the list its body gives; with one, the
-// value it gives, named; with none, an opaque named subtype. One with =
-// computes: it gives what its body gives (a type, or any value), except that a
-// scalar type keeps the name as a transparent subtype. Checked and unchecked
-// runs agree.
+// A capitalized definition computes: applied, it gives what its body gives (a
+// type, or any value), except that a scalar type keeps the name as a
+// transparent subtype. Constructors (Name x = _) are in core-test.ts. Checked
+// and unchecked runs agree.
 function run(source: string, checked: boolean): string {
     const i = new Interpreter();
     if (checked) i.enableChecking();
-    return i.renderString(i.run(parse(source)));
+    return i.renderString(i.run(parseDocument(source)));
 }
 function failure(source: string, checked: boolean): string {
     try { run(source, checked); } catch (error) { return (error as Error).message; }
     throw new Error(`accepted: ${source}`);
 }
 
-const RECT = "Rect w h := [Float w, Float h]\n";
-const PERCENT = "Percent x := Float x > 100 ? 100.0 : Float x\n";
 for (const checked of [true, false]) {
     for (const [source, expected] of [
-        [RECT + "Rect 3 4", "Rect 3.0 4.0"],
-        [RECT + "typeOf (Rect 3 4)", "Rect"],
-        [RECT + "area (Rect w h) = w * h\narea (Rect 3 4)", "12.0"],
-        [RECT + "map (Rect 1) [2,3]", "[Rect 1.0 2.0, Rect 1.0 3.0]"],
-        [RECT + "Rect 3 4 == Rect 3 4", "true"],
-        [RECT + 'f (Rect w h) = "rect"\nf _ = "other"\n[f (Rect 1 2), f [1,2]]', '["rect","other"]'],
-        // Rect is a constructor: Rect a b = r takes r apart, even right after :=.
-        [RECT + "Rect a b = Rect 3 4\n[a,b]", "[3.0,4.0]"],
-        [PERCENT + "Percent 150", "Percent 100.0"],
-        [PERCENT + "typeOf (Percent 50)", "Percent"],
-        [PERCENT + "(Percent a) + (Percent b) = Percent (a + b)\nPercent 90 + Percent 20", "Percent 100.0"],
-        [PERCENT + "g (Percent v) = v\ng (Percent 150)", "100.0"],
-        ["Frac n d := [n,d]\nFrac 1 2", "Frac 1 2"],
-        ["Box a := a\nBox [1,2]", "Box [1,2]"],
-        ["UserId := Int\n[UserId 5, typeOf (UserId 5)]", "[UserId 5, UserId]"],
-        ["UserId := Int\nList UserId [1,2]", "[UserId 1, UserId 2]"],
-        ["UserId := Int\nv = [id: UserId 1]\nv.id = 2\nv.id", "UserId 2"],
         // = names a scalar type transparently: a Count is an Int wherever one
         // is accepted, and keeps its name when a result fits.
         ["Count = Int\n[Count 5, typeOf (Count 5)]", "[Count 5, Count]"],
@@ -52,42 +31,13 @@ for (const checked of [true, false]) {
         const actual = run(source, checked);
         if (actual !== expected) throw new Error(`${actual} != ${expected}`);
     });
-    // The body's list is the layout, not the value: a Rect is not a list.
     for (const [source, message] of [
-        ["Bad w h := [w]\nBad 1 2", "Bad has 2 fields, so its body must give a list of 2 items"],
-        [RECT + "length (Rect 3 4)", checked ? "Rect" : "expected a list"],
-        [RECT + "area (Rect w h) = w * h\narea 5", checked ? "cannot use Int where Rect is required" : "no clause"],
-        ["Point := [x: Float]\nPoint [x: 1]", "Point := needs a scalar type to name"],
-        // A := type is opaque: only the operations its clauses define.
-        [PERCENT + "Percent 50 + 1", "no '+' for Percent"],
-        ["UserId := Int\nInt (UserId 5)", checked ? "cannot use UserId where Int is required" : "Int expects a number"],
-        // A typed parameter only matches; applying a type builds (List UserId [1]).
-        ["UserId := Int\nf (UserId u) = u\nf 5", checked ? "cannot use Int where UserId is required" : "no clause"],
         // Two names never mix; (Count c) still takes only a Count.
         ["Count = Int\nAge = Int\nCount 1 + Age 2", "cannot combine Count and Age"],
         ["Count = Int\nf (Count c) = c\nf 5", checked ? "cannot use Int where Count is required" : "no clause"],
+        ["UserId := Int\n1", "APN defines with =, not :="],
     ] as const) Deno.test(`capitalized definitions reject (checked=${checked}): ${source}`, () => {
         const actual = failure(source, checked);
         if (!actual.includes(message)) throw new Error(actual);
     });
 }
-// A to String instance is how a value shows, wherever it is.
-const SHOW = 'import "option"\nFrac n d := [n,d]\nto String (Frac n d) = to String n ++ "/" ++ to String d\n';
-for (const checked of [true, false]) for (const [source, expected] of [
-    [SHOW + "[Frac 1 2, Frac 3 4]", "[1/2,3/4]"],
-    [SHOW + "Some (Frac 1 2)", "Some (1/2)"],
-    [SHOW + "to String [Frac 1 2]", '"[1/2]"'],
-    [SHOW + '"is " ++ to String (Frac 1 2)', '"is 1/2"'],
-] as const) Deno.test(`to String shows a value (checked=${checked}): ${source}`, () => {
-    const actual = run(source, checked);
-    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
-});
-// What the checker alone can tell.
-for (const [source, message] of [
-    [RECT + "f (Rect w h d) = w\n1", "Rect has 2 fields"],
-    [RECT + 'f (Rect w h) = w ++ "x"\nf (Rect 1 2)', "cannot append Float and String"],
-    [RECT + 'Rect "a" 2', "cannot use String where Float is required"],
-] as const) Deno.test(`constructors are checked: ${source}`, () => {
-    const actual = failure(source, true);
-    if (!actual.includes(message)) throw new Error(actual);
-});

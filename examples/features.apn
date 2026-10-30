@@ -165,7 +165,7 @@ print ([1,2,3] + [10,20,30])             # => [11,22,33]
 print (2 * [x: 1, y: 2])                 # => [x: 2, y: 4]
 
 # A clause for some arguments overloads an operator; others reach the rest.
-Cents = | Cents Int
+Cents (Int c) = _
 (Cents a) + (Cents b) = Cents (a + b)
 print [Cents 150 + Cents 75, 1 + 2]      # => [Cents 225, 3]
 
@@ -234,9 +234,10 @@ print (map area [Circle 1, Rect 2 3])    # => [3.0,6.0]
 print [safeDiv 1 2, safeDiv 1 0]         # => [Some 1/2, None]
 print (withDefault 0 (safeDiv 1 0))      # => 0
 
-# := names a new type, which does not mix with others; = only names a value.
-UserId := Int
-print (UserId 7)                         # => UserId 7
+# A name given _ stands for itself: it declares a new type, one constructor
+# with typed fields, which does not mix with others. Its name is also the type.
+UserId (Int id) = _
+print [UserId 7, isType UserId 7]        # => [UserId 7, false]
 
 # Types may depend on values: Vect n a is a list of n elements of type a,
 # and the checker computes n.

@@ -93,7 +93,7 @@ for (const checked of [false, true]) for (const [source, expected] of [
 // checker chose: where it rules a clause out (f ARG ++ "!" then checks as a
 // String), the run skips it. Elements convert as they are used. A run without
 // checking infers the same types, so it means the same.
-const CHOICE = 'import "option"\nUserId := Int\ng x = x\n';
+const CHOICE = 'import "option"\nUserId (Int x) = _\ng x = x\n';
 for (const [pattern, argument, chosen] of [
     ["List Int xs", '["a"]', false],
     ["List Int xs", '(map (x -> "s") [1])', false],
@@ -102,7 +102,7 @@ for (const [pattern, argument, chosen] of [
     ["List Int xs", "[1,2.5]", true],
     ["List Int xs", "[]", true],
     ["List Float xs", "[1,2]", true],
-    ["List Float xs", "(List UserId [1])", false],
+    ["List Float xs", "[UserId 1]", false],
     ["Option Int x", '(Some "a")', false],
     ["Option Int x", '(g (Some "a"))', false],
     ["Option Int x", "None", true],

@@ -285,7 +285,7 @@ value`, and `isType Option value` also check this membership; `typeOf (Some 123)
 as `(Option Int) (Some 123)` applies the parameter's payload contract lazily.
 See [templates and type aliases](templates-and-types.md).
 
-When the parent and constructor share a name (`Box a = | Box a`), that name keeps
+When the parent and constructor share a name (`Box x = _`), that name keeps
 its constructor meaning: `(Box x)` unpacks the payload. Parent type patterns
 resolve in the function's definition scope, including functions from modules.
 

@@ -252,17 +252,16 @@ run when the value is known (`1 = 2`, `None = Some 1`), otherwise when the
 binding runs. A bare `[x,y]`
 pattern also matches a record, selecting the fields named `x` and `y` (extra
 fields are ignored), in bindings, function parameters, and `match` alternatives. A new capitalized name on the
-left defines a function that computes (with `=`, a type alias among them) or a
-constructor (with `:=`); see
+left defines a function that computes (a type alias among them), or with the
+body `_` a constructor; see
 [templates and type aliases](templates-and-types.md#constructor-functions)
-for those and variant declarations. `=` with a scalar type (`Count = Int`)
-makes a named subtype: a `Count` is an `Int` wherever one is accepted and keeps
-its name when a result fits (`Count 5 + 1` is `Count 6`). `:=` with one
-(`UserId := Int`) makes a distinct type, which is opaque: `UserId 1` has none
-of an Int's operations, builtins and `(Int x)` patterns reject it, its clauses
-give it what it needs (`(UserId a) + (UserId b) = UserId (a + b)`), and
-`(UserId x)` takes it apart. See
-[named and distinct types](type-and-resource-rules.md#distinct-types).
+for those and variant declarations. A scalar type (`Count = Int`) makes a named
+subtype: a `Count` is an `Int` wherever one is accepted and keeps its name when
+a result fits (`Count 5 + 1` is `Count 6`). A constructor (`UserId (Int id) =
+_`) makes a distinct type: `UserId 1` has none of an Int's operations, builtins
+and `(Int x)` patterns reject it, its clauses give it what it needs
+(`(UserId a) + (UserId b) = UserId (a + b)`), and `(UserId x)` takes it apart.
+See [named and distinct types](type-and-resource-rules.md#distinct-types).
 
 There are no type annotations or signatures: `:` only writes record entries
 and a ternary's else; cons is `::`. State types with constructors, `x = Int 5` or `f (Int x) = ...`; see
@@ -420,7 +419,7 @@ tried first; arguments no clause matches fall back to the operator's previous
 meaning, so the builtin behavior stays available:
 
 ```apn
-Money = | Money Int
+Money (Int m) = _
 (Money a) + (Money b) = Money (a + b)   # the inner + is the builtin one
 Money 3 + Money 4                       # Money 7
 1 + 2                                   # 3
@@ -919,7 +918,7 @@ errors, so the choice never depends on checking; code no check reaches
 (`Dynamic`) has none, and there the pattern takes any list or that variant.
 Any other count is a static error (`(Pair x)` for `Pair a b`).
 A type without parameters takes its value at once (`(Int x)`, `(Color c)`), and
-a constructor sharing its type's name (`Box a = | Box a`) is the constructor.
+a constructor sharing its type's name (`Box x = _`) is the constructor.
 
 Destructuring definitions immediately perform the pattern match, but bound
 variables remain deferred. Blocks create child scopes. Environments are

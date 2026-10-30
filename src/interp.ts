@@ -516,10 +516,9 @@ export class Interpreter {
 
     evalDef(name: string, clauses: DefClause[]): Value {
         if (/^[A-Z]/.test(name)) {
-            // With =, an existing constructor destructures (Some x = Some 1);
-            // each clause is a binding of its own. := always defines one.
-            const constructs = !!clauses[0].constructs;
-            if (!constructs && this.isConstructorName(name)) {
+            // An existing constructor destructures (Some x = Some 1); each
+            // clause is a binding of its own.
+            if (this.isConstructorName(name)) {
                 let last: Value = { kind: "list", v: [] };
                 for (const clause of clauses) last = this.evalPatBinding({ pattern: { p: "constr", tag: name, args: clause.params }, value: clause.body });
                 return last;
@@ -528,12 +527,11 @@ export class Interpreter {
             if (clauses.some(c => c.params.length !== arity)) throw new APNError("runtime", `every clause of ${name} takes ${arity} parameters`);
             if (arity && clauses.length > 1 && !clauses[0].params.length) throw new APNError("runtime", `${name} is defined twice`);
             const scope = new Env(this.env);
-            // A capitalized function (Pairs n a = Vect (n * 2) a, or a
-            // constructor, Rect w h := [Float w, Float h]): its clauses run
-            // as a function's do; see construct for what a constructor makes.
+            // A capitalized function (Pairs n a = Vect (n * 2) a): its clauses
+            // run as a function's do.
             const alias: Value = arity
                 ? { kind: "type", name, alias: { parameters: clauses[0].params.map((p, n) => p.p === "var" ? p.name : `$${n}`),
-                    run: { kind: "clauseFn", name, clauses, arity, env: scope, applied: [] }, constructs, family: { name }, named: new Map() } }
+                    run: { kind: "clauseFn", name, clauses, arity, env: scope, applied: [] } } }
                 : this.defer(() => {
                     const caller = this.env;
                     this.env = scope;
@@ -542,17 +540,13 @@ export class Interpreter {
                         // (Sized 2 is Vect 2 Int); where a type is expected, it
                         // reads as a function type.
                         const value = this.reference(this.eval(clauses[0].body));
-                        // = of a scalar type names a subtype: Money = Float. A
-                        // Money is a Float wherever one is accepted, but keeps
-                        // its name, and (Money x) accepts only Money values; :=
-                        // makes it opaque, with none of a Float's operations.
+                        // A scalar type names a subtype: Money = Float. A Money is
+                        // a Float wherever one is accepted, but keeps its name,
+                        // and (Money x) accepts only Money values.
                         if (value.kind === "type" && NAMED_BASES.has(value.name) && !value.family && !value.alias && !value.arguments?.length && !value.variable) {
-                            const family = { name, base: value, ...constructs ? { opaque: true } : {} };
-                            return { kind: "type", name, family };
+                            return { kind: "type", name, family: { name, base: value } };
                         }
-                        if (!constructs) return value;
-                        throw new APNError("runtime", `${name} := needs a scalar type to name, such as Int or Float`,
-                            { hint: `${name} = ... names the value itself` });
+                        return value;
                     } finally { this.env = caller; }
                 });
             scope.setLocal(name, alias);
@@ -1244,6 +1238,7 @@ export class Interpreter {
 
     private defaultField(v: Value, path: readonly Value[]): Value {
         v = this.force(v);
+        v = this.sharedType(v) ?? v;
         if (v.kind === "type") v = this.zeroValue(v, path);
         if (v.kind === "type" || v.kind === "functionType") throw new APNError("runtime", "this type needs an explicit default value");
         if (v.kind === "record") {
@@ -1706,9 +1701,6 @@ export class Interpreter {
             if (callable(l)) return this.iterate(r, l);
         }
         if (op === "==" || op === "!=") return mkBool(this.equals(l, r) === (op === "=="));
-        // A := value has only the operations its clauses give it (opaque).
-        const opaque = [l, r].find(v => v.kind === "variant" && v.family?.opaque) as Extract<Value, { kind: "variant" }> | undefined;
-        if (opaque) throw this.opaque(op, opaque);
         // A named subtype keeps its name through arithmetic with itself or a
         // plain value (Money 1 + 1.0 is a Money); two names do not mix.
         const named = (v: Value) => v.kind === "variant" && v.family?.base ? v.family : undefined;
@@ -1769,7 +1761,6 @@ export class Interpreter {
 
     private arrayNegate(value: Value): Value {
         const v = this.arithmeticValue(value);
-        if (v.kind === "variant" && v.family?.opaque) throw this.opaque("-", v);
         if (v.kind === "variant" && v.family?.base) return this.conform({ kind: "type", name: v.family.name, family: v.family }, this.arrayNegate(v.v[0]));
         if (isNumeric(v)) return v.typeName ? castNumeric(v.typeName, negate(v)) : negate(v);
         if (this.isList(v)) return this.defer(() => {
@@ -1912,7 +1903,7 @@ export class Interpreter {
         }
         // A named subtype equals a plain value of its base by payload
         // (Money 1.2 == 1.2); two different names are never equal.
-        const named = (v: Value) => v.kind === "variant" && !!v.family?.base && !v.family.opaque;
+        const named = (v: Value) => v.kind === "variant" && !!v.family?.base;
         if (named(a) !== named(b) && !(a.kind === "variant" && b.kind === "variant")) {
             return this.equals(named(a) ? (a as Extract<Value, { kind: "variant" }>).v[0] : a, named(b) ? (b as Extract<Value, { kind: "variant" }>).v[0] : b);
         }
@@ -3094,7 +3085,7 @@ export class Interpreter {
         const named = this.reference(arg);
         if (named.kind === "variant" && named.family?.base) {
             if (pattern.tag === named.family.name) return 35;
-            if (TYPE_NAMES.includes(pattern.tag) && !named.family.opaque) arg = named.v[0];
+            if (TYPE_NAMES.includes(pattern.tag)) arg = named.v[0];
         }
         if (!TYPE_NAMES.includes(pattern.tag)) return 0;
         // An undecided call fits a typed pattern as an exact type would.
@@ -3114,17 +3105,9 @@ export class Interpreter {
         return pattern.p === "constr" && TYPE_NAMES.includes(pattern.tag) ? 30 : 0;
     }
 
-    // A named subtype's value as its base: Money 1.2 is 1.2 to builtins (not a
-    // := value, which is opaque).
+    // A named subtype's value as its base: Money 1.2 is 1.2 to builtins.
     private baseValue(v: Value): Value {
-        return v.kind === "variant" && v.family?.base && !v.family.opaque ? this.dataValue(v.v[0]) : v;
-    }
-    // A := value used as its representation: it has only the operations its
-    // clauses define, and a pattern takes it apart.
-    private opaque(operation: string, v: Extract<Value, { kind: "variant" }>): APNError {
-        const what = ["<", ">", "<=", ">="].includes(operation) ? "comparison" : `'${operation}'`;
-        return new APNError("runtime", `no ${what} for ${v.tag}: a := type has only the operations its clauses define`,
-            { hint: `define one, as in \`(${v.tag} a) + (${v.tag} b) = ${v.tag} (a + b)\`, or take it apart with a pattern, (${v.tag} x)` });
+        return v.kind === "variant" && v.family?.base ? this.dataValue(v.v[0]) : v;
     }
 
     // Nothing named the type an undecided value should have.
@@ -3250,7 +3233,7 @@ export class Interpreter {
 
     conform(typeIn: Value, value: Value): Value {
         const read = this.reference(typeIn);
-        const type = read.kind === "closure" || read.kind === "clauseFn" ? this.asType(read) ?? read : typeIn;
+        const type = read.kind === "closure" || read.kind === "clauseFn" ? this.asType(read) ?? read : this.sharedType(read) ?? typeIn;
         // A type variable not decided by a call takes any value.
         if (type.kind === "type" && type.variable) return value;
         if (type.kind === "type" && type.name === "Vect" && !type.family && !type.alias) {
@@ -3336,6 +3319,8 @@ export class Interpreter {
     asType(value: Value, variables = new Map<string, Value>()): Value | undefined {
         const v = this.reference(value);
         if (v.kind === "type" || v.kind === "functionType") return v;
+        const shared = this.sharedType(v);
+        if (shared) return shared;
         if (v.kind === "closure" || v.kind === "clauseFn") return this.readFunctionType(v, variables);
         if (this.isList(v)) {
             const items: Value[] = [];
@@ -3453,6 +3438,7 @@ export class Interpreter {
 
     sameType(a: Value, b: Value): boolean {
         a = this.reference(a); b = this.reference(b);
+        a = this.sharedType(a) ?? a; b = this.sharedType(b) ?? b;
         if (a === b) return true;
         if (a.kind === "type" && b.kind === "type") {
             const other = b.arguments ?? [];
@@ -3541,7 +3527,7 @@ export class Interpreter {
     // to tell: only what is evaluated, and what a list literal is written with.
     private holdsType(value: Value, depth = 0): boolean {
         while ((value.kind === "thunk" || value.kind === "deferred") && value.value) value = value.value;
-        if (value.kind === "type" || value.kind === "functionType") return true;
+        if (value.kind === "type" || value.kind === "functionType" || this.sharedType(value)) return true;
         if (depth > 3) return false;
         if (value.kind === "record") return value.v.some(([, field]) => this.holdsType(field, depth + 1));
         if (value.kind === "list") return value.v.length > 0 && this.holdsType(value.v[0], depth + 1);
@@ -3553,9 +3539,15 @@ export class Interpreter {
         return false;
     }
 
+    // A constructor sharing its type's name (Box x = _) is that type where a
+    // type is expected: a field's or a slot's type, isType, a union.
+    sharedType(v: Value): Extract<Value, { kind: "type" }> | undefined {
+        const ctor = v.kind === "native" && !!v.tag && !v.applied.length || v.kind === "variant" && !v.v.length;
+        return ctor && v.family && v.family.name === v.tag && !v.family.base ? { kind: "type", name: v.family.name, family: v.family } : undefined;
+    }
     isTypeValue(value: Value, seen = new Set<Value>()): boolean {
         value = this.reference(value);
-        if (value.kind === "type" || value.kind === "functionType") return true;
+        if (value.kind === "type" || value.kind === "functionType" || this.sharedType(value)) return true;
         if (seen.has(value)) return false;
         const path = new Set(seen); path.add(value);
         if (value.kind === "record") return value.v.every(([, field]) => this.isTypeValue(field, path));
@@ -4293,7 +4285,7 @@ export class Interpreter {
     }
 
     applyTemplateSlot(template: Value, value: Value): Value {
-        const target = this.force(template);
+        const forced = this.force(template), target = this.sharedType(forced) ?? forced;
         if (isNumeric(target)) {
             const incoming = this.dataValue(value);
             if (!isNumeric(incoming)) throw new APNError("runtime", "a numeric template expects a number");
@@ -4498,36 +4490,12 @@ export class Interpreter {
         return this.matchPattern(p.value, given.arguments[pieces.length], binds);
     }
 
-    // A capitalized function applied to all its parameters runs its clauses.
-    // Written with =, it gives what they give (V n = Vect n Int: V 3 is
-    // Vect 3 Int). A constructor (:=) makes the value its own: with one
-    // parameter, the value named by it (Percent 150 is Percent 100.0, still a
-    // Float); with several, one field each from the list the body gives
-    // (Rect 3 4 is Rect 3.0 4.0). The list is only its layout: a Rect is not
-    // a list.
+    // A capitalized function applied to all its parameters runs its clauses
+    // and gives what they give (V n = Vect n Int: V 3 is Vect 3 Int).
     private construct(f: Extract<Value, { kind: "type" }>, args: Value[]): Value {
-        const alias = f.alias!;
-        let result: Value = alias.run;
+        let result: Value = f.alias!.run;
         for (const arg of args) result = this.apply(result, arg);
-        result = this.reference(this.demand(result));
-        if (!alias.constructs) return result;
-        if (args.length === 1) {
-            const value = this.dataValue(result);
-            const base = value.kind === "variant" ? undefined : this.reference(this.callNative("typeOf", [value]));
-            if (base?.kind !== "type" || !NAMED_BASES.has(base.name) || base.family || base.arguments?.length) {
-                return { kind: "variant", tag: f.name, v: [result], family: alias.family };
-            }
-            let family = alias.named.get(base.name);
-            if (!family) alias.named.set(base.name, family = { name: f.name, base, opaque: true });
-            return this.conform({ kind: "type", name: f.name, family }, value);
-        }
-        const layout = this.dataValue(result);
-        const items = this.isList(layout) ? [...this.elements(layout)] : undefined;
-        if (items?.length !== args.length) {
-            throw new APNError("runtime", `${f.name} has ${args.length} fields, so its body must give a list of ${args.length} items`,
-                { hint: `${f.name} ${alias.parameters.join(" ")} = [${alias.parameters.join(", ")}] lays them out in order` });
-        }
-        return { kind: "variant", tag: f.name, v: items, family: alias.family };
+        return this.reference(this.demand(result));
     }
     // A union of types: a value of any of them is one of it. Unions inside
     // flatten and a type given twice counts once.
@@ -4535,7 +4503,7 @@ export class Interpreter {
         const choices: Value[] = [];
         for (const type of types.flatMap(t => t.kind === "type" && t.choices ? t.choices : [t])) {
             if (!this.isTypeValue(type)) throw new APNError("runtime", `a union lists types, and ${this.renderString(type)} is not one`);
-            if (!choices.some(c => this.sameType(c, type))) choices.push(type);
+            if (!choices.some(c => this.sameType(c, type))) choices.push(this.sharedType(this.reference(type)) ?? type);
         }
         if (choices.length === 1) return choices[0];
         const name = choices.map(c => this.renderString(c)).join(" | ");
@@ -4545,7 +4513,9 @@ export class Interpreter {
     private alternative(name: string, declared: string): Alternative {
         const bound = this.env.get(name), value = bound && this.reference(bound);
         if (!value) return "new";
-        if (value.kind === "native" && value.tag || value.kind === "variant") return value.family?.name === declared ? "new" : "constructor";
+        if (value.kind === "native" && value.tag || value.kind === "variant") {
+            return value.family?.name === declared ? "new" : this.sharedType(value) ? "type" : "constructor";
+        }
         return this.isTypeValue(value) ? "type" : "new";
     }
 
@@ -4577,11 +4547,11 @@ export class Interpreter {
         return family;
     }
 
-    // A constructor the name is bound to here: a variant's, or a capitalized
-    // function's (a later Rect w h = r destructures).
+    // A constructor the name is bound to here (a later Rect w h = r
+    // destructures).
     private isConstructorName(name: string): boolean {
         const bound = this.env.get(name);
-        return !!bound && ((bound.kind === "native" && !!bound.tag) || bound.kind === "variant" || bound.kind === "type" && !!bound.alias?.constructs);
+        return !!bound && ((bound.kind === "native" && !!bound.tag) || bound.kind === "variant");
     }
 
     // How many parameters the type a name is bound to takes: List a one,

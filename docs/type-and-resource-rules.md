@@ -22,19 +22,20 @@ Its own pattern, `(Count c)`, is chosen before `(Int n)` and accepts only a
 `Count` (a plain `5` is not one); applying `Count` or a list type
 (`List Count [1,2]`) makes one.
 
-`:=` makes a distinct type over the scalar instead. It is opaque: it has none of
-its base's operations, only those its clauses define.
+A constructor makes a distinct type instead (see
+[variants](templates-and-types.md#variants-parameters-and-distinct-wrappers)):
+`UserId (Int id) = _` declares `UserId`, whose one field is an `Int`. It has
+none of an `Int`'s operations, only those its clauses define.
 
 ```apn
-UserId := Int
-OrderId := Int
+UserId (Int id) = _
+OrderId (Int id) = _
 
 UserId 123                  # UserId 123
-UserId == Int               # false
 UserId 3 == UserId 3        # true: every value has equality and printing
 extract (UserId value) = value
 extract (UserId 123)        # 123
-UserId 2 + 1                # error: no '+' for UserId
+UserId 2 + 1                # error: + cannot combine UserId and Int
 (UserId a) + (UserId b) = UserId (a + b)
 UserId 2 + UserId 1         # UserId 3
 ```
@@ -42,12 +43,12 @@ UserId 2 + UserId 1         # UserId 3
 A `UserId` is not an `Int`: `(Int x)` patterns, builtins (`sqrt`) and `Int (UserId
 3)` reject it, and it equals no plain number (`UserId 3 == 3` is false). Its own
 pattern, `(UserId x)`, takes it apart and binds the `Int` to `x`; that pattern
-accepts only a `UserId`. Applying `UserId` makes one from an `Int`, as do a list
-type (`List UserId [1,2]`) and an update of a `UserId` slot, checking the value as
-`Int` would (`UserId .2` is a lossy conversion). Another distinct type must be
-taken apart first (`UserId (OrderId 3)` is an error). Aliasing a distinct type
-(`Alias = UserId`) keeps its identity. An omitted record slot initialized from
-a distinct type wraps its base's default.
+accepts only a `UserId`. Applying `UserId` makes one from an `Int`, checking the
+value as `Int` would (`UserId .2` is a lossy conversion); nothing else converts
+to one (`UserId (OrderId 3)` and assigning `3` to a `UserId` slot are errors).
+Its name is also its type where a type is expected: an omitted record slot
+(`[id: UserId] []` is `[id: UserId 0]`), another constructor's field
+(`Order (UserId u) (Int n) = _`), `isType UserId`, `List UserId`.
 
 ## Variant list indexes
 

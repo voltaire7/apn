@@ -1481,6 +1481,9 @@ class Parser {
             if (p.p === "var") return false;
             // A typed binding names one value: Int x = 1.
             if (t.k === "ident" && TYPE_NAMES.includes(t.v) && !declaredCtors.has(t.v) && !(p.p === "constr" && p.args.length === 1)) return false;
+            // Name params = _ declares the constructor again: _ is no value to take apart.
+            const body = this.peek(1), after = this.peek(2);
+            if (this.isSym("=") && body.k === "ident" && body.v === "_" && (["newline", "eof", "dedent"].includes(after.k) || after.k === "sym" && after.v === ";")) return false;
             return this.isSym("=");
         } catch {
             return false;
@@ -1630,7 +1633,7 @@ class Parser {
             if (t.k !== "ident") return false;
             // collect param patterns; a param must be a self-delimited pattern
             while (this.startsParam(this.peek()) || this.negativeLiteral()) this.parseConsPattern();
-            return this.isSym("=") || /^[A-Z]/.test(t.v) && this.isSym(":=");
+            return this.isSym("=") || this.isSym(":=");
         } catch {
             return false;
         } finally {
@@ -1695,10 +1698,12 @@ class Parser {
         const params: Pattern[] = [];
         // Haskell-style params are PATTERNS:  f [x, y] = ..., f (x :: rest) = ...
         while (this.startsParam(this.peek()) || this.negativeLiteral()) params.push(this.parameter());
-        const equals = this.next() as { v: string; pos: number }; // = or :=
-        const constructs = equals.v === ":=";
+        const equals = this.next() as { v: string; pos: number };
+        if (equals.v === ":=") {
+            throw new APNError("parse", "APN defines with =, not :=", { pos: equals.pos,
+                hint: `${name} = Int names a type; ${name} (Int x) = _ declares a new one` });
+        }
         let body = this.parseDefBody(equals.v);
-        if (constructs) return { name, clauses: [{ params, body, constructs }] };
         // f = Int x -> ... is the curried spelling of f (Int x) = ...: the
         // same clause, so another one overloads it the same way.
         let guard: Expr | undefined;
@@ -2003,7 +2008,7 @@ class Parser {
                         const declaration = this.parseDefStatement();
                         if (TYPE_NAMES.includes(declaration.name)) throw new Error("Parser: built-in type names cannot be reassigned");
                         const [clause] = declaration.clauses;
-                        if (clause.body.t === "placeholder" && !clause.constructs) {
+                        if (clause.body.t === "placeholder") {
                             const made = constructorDeclaration(declaration.name, clause.params, t.pos);
                             this.unclaimed.set(declaration.name, made);
                             out.push(made);
@@ -2195,12 +2200,12 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
 // Consecutive Haskell-style clauses of the same function are one definition:
 //   len [] = 0
 //   len (x :: rest) = 1 + len rest
-// Only same-name defs that carry parameters with equal arity, written alike
-// (both with = or both with :=), are grouped; value defs stay separate
+// Only same-name defs that carry parameters with equal arity are grouped;
+// value defs stay separate
 // (consecutive re-bindings still behave as last-wins aliases).
 function continues(last: { name: string; clauses: DefClause[] }, next: { name: string; clauses: DefClause[] }): boolean {
     const [a, b] = [last.clauses[0], next.clauses[0]];
-    return last.name === next.name && !!b?.params.length && a.params.length === b.params.length && !a.constructs === !b.constructs;
+    return last.name === next.name && !!b?.params.length && a.params.length === b.params.length;
 }
 export function groupClauses(program: TopLevel[]): TopLevel[] {
     const result: TopLevel[] = [];
@@ -2343,7 +2348,7 @@ function bareSource(e: Expr, where: Place): string {
             return e.style === "(" ? `(${body})` : e.stmts.length ? `{ ${body} }` : "{}";
         }
         // A binding (a block's statement or a list's item): f n = ..., [a,b] = xs.
-        case "stmDef": return e.clauses.map(c => [e.name, ...c.params.map(patternSource)].join(" ") + ` ${c.constructs ? ":=" : "="} ${of(c.body)}`).join("; ");
+        case "stmDef": return e.clauses.map(c => [e.name, ...c.params.map(patternSource)].join(" ") + ` = ${of(c.body)}`).join("; ");
         case "patDef":
             if (e.value.t === "setItem" || e.value.t === "setFields") return of(e.value);
             return `${patternSource(e.pattern)} ${e.eager ? "<-" : "="} ${of(e.value)}`;

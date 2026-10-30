@@ -390,22 +390,25 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
 
 ## Nominal types and resources
 
-- `=` or `:=` with a scalar type (`NAMED_BASES`, runtime and checker) creates
-  a generative `VariantFamily` with base metadata; `:=` marks it `opaque` (the
-  checker's variant `opaque` too). A transparent one is its base to operators
-  (`conform` keeps the name), builtins and base patterns (`baseValue`), and
-  the checker unifies it with its base only where the base is expected. An
-  opaque one: operators reject it (`opaque`, and the checker's `operation`),
-  builtins and base patterns see the variant. Either is built from its base
-  only by conversions (`conform`; the checker's `convert` unless `matching`, a
-  typed parameter's own check).
+- A capitalized name for a scalar type (`NAMED_BASES`, runtime and checker)
+  creates a generative `VariantFamily` with base metadata. It is its base to
+  operators (`conform` keeps the name), builtins and base patterns
+  (`baseValue`), and the checker unifies it with its base only where the base
+  is expected. It is built from its base only by conversions (`conform`; the
+  checker's `convert` unless `matching`, a typed parameter's own check).
   Arithmetic on nullary-family ordinals returns ordinary numbers via
   `arithmeticValue`.
 - `Name params = _` is parser sugar (`constructorDeclaration`): the same
   `type` declaration `Name a = | Name a` makes, its fields from the
-  parameters, so runtime and checker treat both alike. A later union of
+  parameters, so runtime and checker treat both alike; it declares again where
+  the name is a constructor already (`isPatBinding`). A later union of
   such constructors (`Parser.unclaimed`) replaces their declarations with the
   one declaration of the union's type, where the first of them stood.
+- A constructor sharing its type's name reads as the type where a type is
+  expected: at runtime through `sharedType` (in `asType`, `isTypeValue`,
+  `sameType`, `conform`, slot defaults and assignment, `union`), in the
+  checker through the `shared` mark on its type (`sharedType`, read by
+  `describing`, `schemaValue`, the union intrinsic and `alternative`).
 - `X = A | B` stays a `type` statement; runtime and checker decide what it is
   by what its names are bound to (`unionKind`, worded once in `ast.ts`): a
   union is run and checked as `X = intrinsics.union [A, B]` (`unionClause`),
@@ -417,13 +420,9 @@ Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
   a pattern of the tagging function binds. Tests: `tests/core-test.ts`.
 - A capitalized function is a `type` value with `alias`: its clauses as a
   `clauseFn` (`run`), so choosing among them is a function's; `construct`
-  applies it, and for a `:=` one (`DefClause.constructs`, `alias.constructs`)
-  makes the result the constructor's (fields under
-  `alias.family`, one named family per base in `alias.named`, so equality and
-  conversion see one family). The checker's `construct` mirrors it (variant
-  types with `fields`, printed by name alone); `constructed` is the type a
-  pattern of it takes. The parser joins adjacent clauses written alike
-  (`continues`);
+  applies it, as the checker's `construct` does; `constructed` is the type a
+  pattern of it takes (a tagging function's `fields` variant). The parser
+  joins adjacent clauses (`continues`);
   whether a left side destructures is decided where the scope is known
   (`evalDef`, `defineClauses`). Tests: `tests/constructor-function-test.ts`.
 - `src/resource-scope.ts` implements `bracket` and read-only `withFile`.

@@ -139,7 +139,7 @@ Fahrenheit = | F Float
 to Celsius (F f) = C ((f - 32) * 5 / 9)
 to Celsius (F 212)              # C 100.0
 
-Frac n d := [n,d]
+Frac n d = _
 to String (Frac n d) = to String n ++ "/" ++ to String d
 print [Frac 1 2, Frac 3 4]      # [1/2,3/4]: printing uses the instance
 ```
@@ -512,8 +512,8 @@ Option a =
     | None
 ```
 
-Use a leading `|` to explicitly declare a single constructor when its name
-is already in scope, e.g. `Box a = | Box a`.
+`Box x = _` declares a single constructor, also when its name is already in
+scope.
 
 ## Creative coding — `p5`, `glsl`
 

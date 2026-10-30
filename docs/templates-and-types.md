@@ -423,38 +423,17 @@ an `Int`.
 
 ## Constructor functions
 
-A capitalized definition with `=` computes: applied, it gives what its body
-gives, a type (`Sized n = Vect n Int`: `Sized 2` is `Vect 2 Int`) or any value,
-and nothing is named by it, except that a scalar type is kept as a
+A capitalized definition computes: applied, it gives what its body gives, a
+type (`Sized n = Vect n Int`: `Sized 2` is `Vect 2 Int`) or any value, and
+nothing is named by it, except that a scalar type is kept as a
 [named subtype](type-and-resource-rules.md#distinct-types) (`Count = Int`
-makes `Count 5`). One with `:=` is a
-constructor: it makes the values of its own type.
+makes `Count 5`). A body of `_` makes a constructor instead (see
+[variants](#variants-parameters-and-distinct-wrappers)).
 
-```apn
-Rect w h := [Float w, Float h]                  # two parameters: two fields
-Percent x := Float x > 100 ? 100.0 : Float x    # one: the value it gives, named
-UserId := Int                                   # none: a distinct Int
-
-r = Rect 3 4                # Rect 3.0 4.0; typeOf r is Rect
-area (Rect w h) = w * h     # area r is 12.0
-map (Rect 1) [2,3]          # [Rect 1.0 2.0, Rect 1.0 3.0]
-Percent 150                 # Percent 100.0
-(Percent a) + (Percent b) = Percent (a + b)
-Percent 90 + Percent 20     # Percent 100.0: the clause calls Percent, so its logic runs
-```
-
-With several parameters, the body's list is only the layout, one item per
-parameter: a `Rect` is not a list (`Rect 3 4 ++ [5]` is an error). With one,
-the value it gives is wrapped as a
-[distinct type](type-and-resource-rules.md#distinct-types)'s is, and `(Percent p)`
-binds it. Every constructor is opaque: its values have only the operations its
-clauses define (`Percent 50 + 1` is an error). The body is the constructor's
-logic: it runs when a value is built, never in a pattern.
-
-With `=`, a capitalized left side whose name is a constructor (`Some`, or
-`Rect` once defined) is a pattern, so `Rect w h = r` takes `r` apart; any
-other is a definition, whatever its parameters. `:=` always defines.
-Adjacent clauses of one name, written alike, are one definition:
+A capitalized left side whose name is a constructor (`Some`, or `Rect` once
+declared) is a pattern, so `Rect w h = r` takes `r` apart, except with the body
+`_`, which declares it again; any other is a definition, whatever its
+parameters. Adjacent clauses of one name are one definition:
 
 ```apn
 Pairs Z a = []
@@ -555,14 +534,16 @@ an invitation to rerun another clause.
 Existing value constructor names on the left destructure and cannot be
 redefined (see [constructor functions](#constructor-functions)).
 An unspecialized parent pattern `(Option _ value)` still binds the whole variant.
-A constructor pattern `(Some value)` extracts its field. Explicitly declared
-same-name legacy wrappers remain supported (`Box a = | Box a`), but the shared
-name denotes the value constructor; use distinct names for type specialization.
-So another type's field cannot name it (`Wrap a = | Wrap (Box a)` is an error
-saying so); with `Box a = | MkBox a`, `Wrap (Box a)` describes the field.
+A constructor pattern `(Some value)` extracts its field. A constructor sharing
+its type's name (`Box x = _`, `Box a = | Box a`) is the constructor where a
+value is expected and the type where one is expected: a field's type
+(`Wrap (Box b) = _`), a record slot (`[b: Box] []` is `[b: Box 0]` for
+`Box (Int x) = _`), `isType Box`, a type's argument (`List Box`), a union.
+Applied, it is the constructor applied, so `Wrap a = | Wrap (Box a)` is an
+error saying so; with `Box a = | MkBox a`, `Wrap (Box a)` describes the field.
 
-Nominal wrappers can use single-constructor variants, or a distinct type
-(`UserId := Int`); see [distinct types](type-and-resource-rules.md#distinct-types). No automatic
+Nominal wrappers are single-constructor types (`UserId (Int id) = _`); see
+[distinct types](type-and-resource-rules.md#distinct-types). No automatic
 cross-type conversion or zero-cost representation is implied. Class/instance syntax and static type
 inference are not part of this change.
 

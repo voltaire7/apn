@@ -54,7 +54,9 @@ type Ty =
     // shape describes the full result in terms of the arguments (see Shape); args
     // collects argument types across curried application. Both describe the
     // function's code, so they are trusted only at a direct call by name.
-    | { k: "fn"; input: Ty; output: Ty; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; summary?: Summary }
+    // shared: a constructor sharing its type's name (Box x = _, Nothing = _),
+    // which is that type where a type is expected (sharedType).
+    | { k: "fn"; input: Ty; output: Ty; shared?: boolean; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; summary?: Summary }
     // formula: a list literal's code; open: the names its code reads that are
     // bound nowhere yet (a list joined before it may bind them), by where read.
     | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number>; formula?: Formula; open?: Map<string, { expr: Expr; within?: Expr }> }
@@ -66,13 +68,13 @@ type Ty =
     | { k: "factory"; args: Entry[] }
     // A capitalized function (see construct); clauses: when it has patterns
     // or several clauses, chosen by the run.
-    | { k: "alias"; name: string; params: string[]; body: Expr; scope: Scope; args: Entry[]; constructs?: boolean; clauses?: { params: Pattern[]; body: Expr }[] }
+    | { k: "alias"; name: string; params: string[]; body: Expr; scope: Scope; args: Entry[]; clauses?: { params: Pattern[]; body: Expr }[] }
     // indexed: a family whose constructors say what they make (Vec n a), so
     // an argument may be a value (Vec 2 Int); values decide those, not types.
     // checks: what is still to be checked of the values it holds, as a
     // function's are (Handler (s -> s ++ "!") checks s ++ "!" once a is known).
     // fields: a capitalized function's value (Rect 3 4), its args the fields' types.
-    | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty; opaque?: boolean; indexed?: boolean; checks?: Ty[]; fields?: boolean }
+    | { k: "variant"; name: string; args: Ty[]; ordinal?: boolean; base?: Ty; indexed?: boolean; checks?: Ty[]; fields?: boolean; shared?: boolean }
     // f a: a type variable applied to types, as written ((a -> b) -> f a -> f b).
     // Its head, once known, is a ctor: a type missing its first parameters
     // (List, Option, Result _ e for f a; Result for f a e), so f a maps the
@@ -1179,12 +1181,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             else return problem(`${t.op} requires a collection; got ${text(a)}`);
             return list(t.op === "keys" ? key : t.op === "values" ? value : pair(key, value));
         }
-        // A := value has only the operations its clauses give it (opaque), as at runtime.
-        const opaque = [a, b].find(x => x?.k === "variant" && x.opaque) as Extract<Ty, { k: "variant" }> | undefined;
-        if (opaque) {
-            return problem(`no ${t.op === "compare" ? "comparison" : `'${t.op}'`} for ${opaque.name}: a := type has only the operations its clauses define`, undefined,
-                `define one, as in \`(${opaque.name} a) + (${opaque.name} b) = ${opaque.name} (a + b)\`, or take it apart with a pattern, (${opaque.name} x)`);
-        }
         // A named subtype keeps its name through arithmetic with itself or a
         // plain value of its base (Money 1 + 1.0 is a Money); two names do not mix.
         if (a.k === "variant" && a.base || b?.k === "variant" && b.base) {
@@ -1469,9 +1465,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             return;
         }
-        // A named subtype is its base wherever the base is expected (not a := one);
-        // a plain value is not one (converting makes one: List Count [1]).
-        if (actual.k === "variant" && actual.base && !actual.opaque && expected.k !== "variant") return unify(expected, actual.base, e, seen);
+        // A named subtype is its base wherever the base is expected; a plain
+        // value is not one (converting makes one: List Count [1]).
+        if (actual.k === "variant" && actual.base && expected.k !== "variant") return unify(expected, actual.base, e, seen);
         problem(
             `cannot use ${text(actual)} where ${text(expected)} is required`,
             e,
@@ -1550,6 +1546,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function schemaValue(type: Ty, e: Expr, seen = new Map<Ty, Ty>()): Ty {
         const t = resolve(type);
         if (t.k === "type") return t.value;
+        const shared = sharedType(t);
+        if (shared) return shared;
         if (t.k === "dynamic") return unknown();
         if (seen.has(t)) return seen.get(t)!;
         if (t.k === "list") {
@@ -1739,37 +1737,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             throw error;
         } finally { choosing--; requirements.length = saved; }
     }
-    // = of a scalar type names a subtype (Money = Float), := an opaque one,
-    // as at runtime; undefined for anything else.
-    function namedSubtype(name: string, t: Ty, opaque: boolean): Ty | undefined {
+    // A capitalized name for a scalar type names a subtype (Money = Float), as
+    // at runtime; undefined for anything else.
+    function namedSubtype(name: string, t: Ty): Ty | undefined {
         const type = resolve(t), base = type.k === "type" ? resolve(type.value) : undefined;
         if (base?.k !== "atom" || !NAMED_BASES.has(base.name)) return undefined;
-        return { k: "type", value: { k: "variant", name, args: [], base, ...opaque ? { opaque } : {} } };
+        return { k: "type", value: { k: "variant", name, args: [], base } };
     }
     // A capitalized function applied to all its parameters, as the run
-    // makes it (Interpreter.construct): a type it gives is the application;
-    // any other value is its own, named by it with one parameter, else one
-    // field per item of the list its body gives. Clauses with patterns are
-    // chosen by the run.
+    // makes it (Interpreter.construct): what its body gives. Clauses with
+    // patterns are chosen by the run.
     function construct(f: Extract<Ty, { k: "alias" }>, args: Entry[], e: Expr): Ty {
         if (f.clauses) { runtimeChecks++; return explicitDynamic; }
         const scope = new Map(f.scope);
         f.params.forEach((name, i) => scope.set(name, { ...args[i], mono: true }));
-        const t = infer(f.body, scope), r = resolve(t);
-        if (!f.constructs || r.k === "dynamic") return t;
-        if (args.length === 1) {
-            if (r.k === "atom" && NAMED_BASES.has(r.name)) return { k: "variant", name: f.name, args: [], base: r, opaque: true };
-            if (r.k === "var" || r.k === "union") { runtimeChecks++; return explicitDynamic; }
-            return { k: "variant", name: f.name, args: [t], fields: true };
-        }
-        if (r.k === "list" && r.items) {
-            if (r.items.length === args.length) return { k: "variant", name: f.name, args: r.items, fields: true };
-        } else if (r.k === "list") {
-            runtimeChecks++;
-            return { k: "variant", name: f.name, args: args.map(() => r.element), fields: true };
-        } else if (r.k === "var") { runtimeChecks++; return explicitDynamic; }
-        return problem(`${f.name} has ${args.length} fields, so its body must give a list of ${args.length} items`, e,
-            `${f.name} ${f.params.join(" ")} = [${f.params.join(", ")}] lays them out in order`);
+        return infer(f.body, scope);
     }
     // What a name in X = A | B is bound to here, as the run decides (Interpreter.alternative).
     function alternative(name: string, declared: string, scope: Scope): Alternative {
@@ -1778,7 +1760,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (isConstructor(entry)) {
             let made = resolve(entry.type);
             while (made.k === "fn") made = resolve(made.output);
-            return made.k === "variant" && made.name === declared ? "new" : "constructor";
+            // One sharing its type's name is that type (see sharedType).
+            return made.k === "variant" && made.name === declared ? "new" : made.k === "variant" && made.name === name ? "type" : "constructor";
         }
         return ["type", "alias", "factory"].includes(resolve(entry.type).k) ? "type" : "new";
     }
@@ -2099,17 +2082,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         hint: module ? `add \`import "${module}"\` to use \`${p.tag}\`` : near ? `did you mean '${near}'?`
                             : `declare a type with \`${p.tag}\` first${p.tag === "Nil" || p.tag === "Cons" ? "; a list's patterns are `[]` and `(x :: xs)`" : ""}` };
                 }
-                // A capitalized function's value, taken apart: (Rect w h) binds
-                // its fields, (Percent p) its value, as a named one's (Money m).
-                // So does a capitalized function that tags its result (Box a = tag Box Box [a]).
+                // A capitalized function that tags its result (Box a = tag Box
+                // Box [a]), taken apart: (Box x) binds its fields.
                 const made = t.k === "alias" ? resolve(constructed(t, e)) : undefined;
-                if (made && t.k === "alias" && (t.constructs || made.k === "variant" && made.fields)) {
-                    if (made.k !== "variant") { p.args.forEach(x => bind(x, variable(), scope, e, bound)); return; }
-                    const count = made.base ? 1 : made.args.length;
+                if (made?.k === "variant" && made.fields) {
+                    const count = made.args.length;
                     if (p.args.length !== count) problem(`${p.tag} has ${count} field${count === 1 ? "" : "s"}`, e);
                     unify(made, expected, e);
-                    const parts = made.base ? [made.base] : made.args;
-                    p.args.forEach((x, n) => bind(x, parts[n] ? made.base ? untypedPayload(parts[n]) : parts[n] : variable(), scope, e, bound));
+                    p.args.forEach((x, n) => bind(x, made.args[n] ?? variable(), scope, e, bound));
                     return;
                 }
                 // One more pattern than a type's parameters is a value of the type
@@ -2184,6 +2164,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     bind(p.args[0], schema, scope, e, bound);
                     return;
                 }
+                // A constructor pattern takes all its fields: f Some x = ... is the
+                // function Some, then x, which no value matches.
+                const missing = (ty: Ty): number => { const f = resolve(ty); return f.k === "fn" ? 1 + missing(f.output) : 0; };
+                const taking = (count: number) => problem(`'${p.tag}' in a pattern takes ${count} field${count === 1 ? "" : "s"}`, e,
+                    `write (${p.tag} ${[...p.args.slice(0, count).map(patternSource), ..."xyzuvw".slice(0, count - p.args.length)].join(" ")})`);
+                if (entry && p.args.length > missing(t) && isConstructor(entry)) taking(missing(t));
                 let rest: Ty = t;
                 for (const arg of p.args) {
                     const f = resolve(rest);
@@ -2200,13 +2186,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     } else bind(arg, f.input, scope, e, bound);
                     rest = f.output;
                 }
-                // A constructor pattern takes all its fields: f Some x = ... is the
-                // function Some, then x, which no value matches.
-                const missing = (ty: Ty): number => { const f = resolve(ty); return f.k === "fn" ? 1 + missing(f.output) : 0; };
-                if (entry && missing(rest)) {
-                    const fields = [...p.args.map(patternSource), ..."xyzuvw".slice(0, missing(rest))].join(" ");
-                    problem(`'${p.tag}' in a pattern takes ${p.args.length + missing(rest)} field${p.args.length + missing(rest) === 1 ? "" : "s"}`, e, `write (${p.tag} ${fields})`);
-                }
+                if (entry && missing(rest)) taking(p.args.length + missing(rest));
                 // Matching a Dynamic value against a constructor checks it at runtime.
                 if (isExplicit(resolve(expected))) runtimeChecks++;
                 else unify(rest, expected, e);
@@ -2606,8 +2586,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // A union of types (Mixed = Int | String).
             if (f.name === "union") {
                 const list = resolve(args[0]), items = list.k === "list" ? list.items?.map(resolve) : undefined;
-                if (!items?.every(item => item.k === "type")) { runtimeChecks++; return explicitDynamic; }
-                return { k: "type", value: union(items.map(item => (item as Extract<Ty, { k: "type" }>).value)) };
+                const types = items?.map(item => item.k === "type" ? item.value : sharedType(item));
+                if (!types?.every(t => t)) { runtimeChecks++; return explicitDynamic; }
+                return { k: "type", value: union(types as Ty[]) };
             }
             // A tag whose owner or constructor is computed is decided when it runs.
             if (f.name === "tag") { runtimeChecks++; return explicitDynamic; }
@@ -2744,7 +2725,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             // A base type applied to a named value unwraps it, as at runtime:
             // Float (Money 1.2), Int (Money 1.0) as Int 1.0 would.
-            if (t.k === "atom" && NAMED_BASES.has(t.name) && a.k === "variant" && a.base && !a.opaque) return application(f, { ...argument, type: a.base }, e);
+            if (t.k === "atom" && NAMED_BASES.has(t.name) && a.k === "variant" && a.base) return application(f, { ...argument, type: a.base }, e);
             // Applying a named subtype applies its base, as at runtime: F .1 with
             // F = Float32 rounds like Float32 .1. Another name must be unwrapped.
             if (t.k === "variant" && t.base) {
@@ -3023,8 +3004,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return problem(`cannot apply ${text(f)}`, e);
     }
     // A list or record of types (Point = [x: Float, y: Float]) describes a type.
+    // The type a constructor sharing its name stands for, as at runtime
+    // (Interpreter.sharedType).
+    function sharedType(t: Ty): Ty | undefined {
+        if (t.k === "variant" && t.shared) return t;
+        if (t.k !== "fn" || !t.shared) return undefined;
+        let out = resolve(t.output);
+        while (out.k === "fn") out = resolve(out.output);
+        return out;
+    }
     function describing(x: Ty): boolean {
-        return x.k === "type"
+        return x.k === "type" || !!sharedType(x)
             || x.k === "list" && !!x.items?.length && x.items.every(item => describing(resolve(item)))
             || x.k === "record" && x.fields.size > 0 && [...x.fields.values()].every(field => describing(resolve(field)));
     }
@@ -5975,11 +5965,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (let x: Ty = t; x.k === "fn"; x = resolve(x.output)) { count++; last = x; }
         if (count && last.k === "fn" && resolve(last.input).k !== "atom") setShape(t, { length: { param: count - 1 } });
     }
-    function defineClauses(name: string, clauses: { params: Pattern[]; body: Expr; constructs?: boolean }[], scope: Scope, location: Expr): void {
-        // With =, an existing constructor destructures (Some v = Some 123),
-        // also one imported, which the parser cannot see; as at runtime (evalDef).
-        const existing = scope.get(name), existingType = existing && resolve(existing.type), constructs = !!clauses[0].constructs;
-        if (/^[A-Z]/.test(name) && !constructs && (isConstructor(existing) || existingType?.k === "alias" && existingType.constructs)) {
+    function defineClauses(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
+        // An existing constructor destructures (Some v = Some 123), also one
+        // imported, which the parser cannot see; as at runtime (evalDef).
+        if (/^[A-Z]/.test(name) && isConstructor(scope.get(name))) {
             for (const c of clauses) infer({ t: "patDef", pattern: { p: "constr", tag: name, args: c.params }, value: c.body }, scope);
             return;
         }
@@ -5987,20 +5976,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const [c] = clauses, simple = clauses.length === 1 && c.params.every(p => p.p === "var");
             scope.set(name, { type: {
                 k: "alias", name, params: c.params.map((p, n) => p.p === "var" ? p.name : `$${n}`), body: c.body,
-                scope: new Map(scope), args: [], constructs, ...simple ? {} : { clauses },
+                scope: new Map(scope), args: [], ...simple ? {} : { clauses },
             } });
             return;
         }
-        if (/^[A-Z]/.test(name) && constructs) {
-            const t = infer(clauses[0].body, scope), named = namedSubtype(name, t, true);
-            if (!named && resolve(t).k !== "dynamic") {
-                problem(`${name} := needs a scalar type to name, such as Int or Float`, clauses[0].body, `${name} = ... names the value itself`);
-            }
-            scope.set(name, { type: named ?? t });
-            return;
-        }
         defineBinding(name, clauses, scope, location, scope.get(name));
-        const defined = /^[A-Z]/.test(name) && scope.get(name), named = defined && namedSubtype(name, defined.type, false);
+        const defined = /^[A-Z]/.test(name) && scope.get(name), named = defined && namedSubtype(name, defined.type);
         if (defined && named) scope.set(name, { ...defined, type: named });
     }
     // A definition's code, inferred as that definition (deferred when lazy).
@@ -6400,7 +6381,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("intrinsics.union", { type: { k: "intrinsic", name: "union", arity: 1 } });
     // to T x writes x as a T, from T x reads it back (to String, to JSON, to (List Char)).
     for (const name of ["to", "from"]) scope.set(name, { type: { k: "intrinsic", name, arity: 2 } });
-    scope.set("JSON", { type: { k: "type", value: { k: "variant", name: "JSON", args: [], base: atom("String"), opaque: true } } });
+    scope.set("JSON", { type: { k: "type", value: { k: "variant", name: "JSON", args: [], base: atom("String") } } });
     if (options.library) {
         const a = variable(), b = variable(), c = variable();
         native("bracket", [a, fn(a, b), fn(a, c)], io(runType(c)));
@@ -6506,6 +6487,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         const type = typeExpr(field, own, captures);
                         t = fn(type, t, undefined, !variables(type).size);
                     }
+                    if (v.tag === d.name) t = { ...t, shared: true } as Ty;
                     scope.set(v.tag, { type: t });
                 }
             } else if (statement.t === "expr") {
