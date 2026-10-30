@@ -1,4 +1,4 @@
-import { type Alternative, claimedDeclaration, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, countingFamily, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, countingFunction, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -6189,6 +6189,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             for (const c of clauses) infer({ t: "patDef", pattern: { p: "constr", tag: name, args: c.params }, value: c.body }, scope);
             return;
         }
+        // One counting a list's elements is the length-indexed list, as at runtime.
+        if (/^[A-Z]/.test(name) && countingFunction(name, clauses)) {
+            scope.set(name, { type: { k: "factory", args: [] } });
+            return;
+        }
         if (/^[A-Z]/.test(name) && clauses[0].params.length) {
             const [c] = clauses, simple = clauses.length === 1 && c.params.every(p => p.p === "var");
             scope.set(name, { type: {
@@ -6679,10 +6684,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (kind !== "union") problem(kind);
                 const clause = unionClause(statement.def);
                 define(statement.def.name, [clause], scope, clause.body);
-            }
-            else if (statement.t === "type" && countingFamily(statement.def)) {
-                // A family of lists counting its elements is the length-indexed list.
-                scope.set(statement.def.name, { type: { k: "factory", args: [] } });
             }
             else if (statement.t === "type") {
                 const d = statement.def, parameters = new Map((d.parameters ?? []).map((p) => [p, variable()]));

@@ -439,7 +439,10 @@ values it makes, by applying it or by a conversion to it (`List (Pairs 1 Int)`,
 a field, a slot's default), remember it too, as does an updated copy of one.
 They are still what the type makes, so everything that takes one takes them,
 and what is computed from them is a plain value. A pattern of a name with
-parameters reads back only what was remembered, never computing it backwards:
+parameters reads back what was remembered. Another value is read back only by
+clauses that build their result from `[]` and `::`, run backwards
+([dependent types](gradual-and-dependent-types.md)); this one computes
+`n * 2`, which cannot be:
 
 ```apn
 Pairs n a = Vect (n * 2) a

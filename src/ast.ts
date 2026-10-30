@@ -148,30 +148,24 @@ export function unionClause(def: DataDef): DefClause {
     return { params: (def.parameters ?? []).map(name => ({ p: "var", name })), body: { t: "app", f: union, a: { t: "list", v: alternatives } } };
 }
 
-// A family of lists counting its elements, as Vect is in the prelude:
-// F n a = [] -> F Z a | a :: F k a -> F (S k) a (Z or 0, S k or k + 1).
-// Such a family is the length-indexed list.
-export function countingFamily(def: DataDef): boolean {
-    const nil = def.variants.find(v => v.tag === "[]"), cons = def.variants.find(v => v.tag === "::");
-    if (def.variants.length !== 2 || !nil?.result || !cons?.result || def.parameters?.length !== 2) return false;
+// A type function counting a list's elements, as Vect is in the prelude:
+// F Z a = [] and F (S k) a = a :: F k a (Z or 0). Any function of this shape
+// is the length-indexed list, whose lengths the runtime and the checker know.
+export function countingFunction(name: string, clauses: { params: Pattern[]; body: Expr }[]): boolean {
+    if (clauses.length !== 2 || clauses.some(c => c.params.length !== 2)) return false;
     const unwrap = (e: Expr): Expr => e.t === "block" && e.stmts.length === 1 ? unwrap(e.stmts[0]) : e;
-    const spine = (e: Expr): [Expr, Expr[]] => {
-        e = unwrap(e);
-        const args: Expr[] = [];
-        while (e.t === "app") { args.unshift(unwrap(e.a)); e = unwrap(e.f); }
-        return [e, args];
-    };
-    const name = (e: Expr | undefined) => e?.t === "var" && /^[a-z]/.test(e.name) ? e.name : undefined;
-    const family = (e: Expr | undefined, n: number) => { if (!e) return undefined; const [head, args] = spine(e); return head.t === "var" && head.name === def.name && args.length === n ? args : undefined; };
-    const empty = family(nil.result, 2), whole = family(cons.result, 2), tail = family(cons.fields?.[1], 2);
-    const element = name(cons.fields?.[0] && unwrap(cons.fields[0])), k = name(tail?.[0]);
-    if (!empty || !whole || !tail || !element || !k || !name(empty[1]) || name(tail[1]) !== element || name(whole[1]) !== element) return false;
-    const zero = empty[0], next = whole[0];
-    const isZero = zero.t === "var" && zero.name === "Z" || zero.t === "int" && zero.v === 0n;
-    const one = (e: Expr) => e.t === "int" && e.v === 1n;
-    const isNext = next.t === "app" && unwrap(next.f).t === "var" && (unwrap(next.f) as { name: string }).name === "S" && name(unwrap(next.a)) === k ||
-        next.t === "binop" && next.op === "+" && (name(unwrap(next.l)) === k && one(unwrap(next.r)) || one(unwrap(next.l)) && name(unwrap(next.r)) === k);
-    return isZero && isNext;
+    const zero = (p: Pattern) => p.p === "constr" && p.tag === "Z" && !p.args.length || p.p === "int" && p.v === 0n;
+    const empty = clauses.find(c => zero(c.params[0])), more = clauses.find(c => c !== empty);
+    const nil = empty && unwrap(empty.body);
+    if (!empty || !more || empty.params[1].p !== "var" || nil?.t !== "list" || nil.v.length) return false;
+    const [next, element] = more.params, body = unwrap(more.body);
+    if (next.p !== "constr" || next.tag !== "S" || next.args.length !== 1 || next.args[0].p !== "var" || element.p !== "var") return false;
+    if (body.t !== "binop" || body.op !== "::") return false;
+    const head = unwrap(body.l), args: Expr[] = [];
+    let f = unwrap(body.r);
+    while (f.t === "app") { args.unshift(unwrap(f.a)); f = unwrap(f.f); }
+    const is = (e: Expr | undefined, v: string) => e?.t === "var" && e.name === v;
+    return is(head, element.name) && is(f, name) && args.length === 2 && is(args[0], next.args[0].name) && is(args[1], element.name);
 }
 
 // Methods: a definition of one adds an instance (map f (Some x) = ...,

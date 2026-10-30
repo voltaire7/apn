@@ -17,7 +17,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericType, numericPayload, m
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, claimedDeclaration, LIST_TYPE_RANGE, clauseKey, type DataDef, countingFamily, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, LIST_TYPE_RANGE, clauseKey, type DataDef, countingFunction, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions } from "./ast.ts";
@@ -342,10 +342,7 @@ export class Interpreter {
                     else if (kind !== "declaration") throw new APNError("runtime", kind);
                 }
                 if (tl.t === "type") {
-                    // A family of lists counting its elements (Vect n a = [] ->
-                    // Vect Z a | a :: Vect k a -> Vect (S k) a) is the length-indexed list.
                     // A type is declared for its whole scope, as a new name is.
-                    if (countingFamily(tl.def)) { this.env.root().setLocal(tl.def.name, { kind: "type", name: "Vect" }); continue; }
                     for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) {
                         const previous = this.scopeBinding(name);
                         if (previous && ((previous.kind === "native" && previous.tag) || previous.kind === "variant") && previous.family?.name !== tl.def.name && !tl.def.claims) {
@@ -543,6 +540,13 @@ export class Interpreter {
             }
             const arity = clauses[0].params.length;
             if (clauses.some(c => c.params.length !== arity)) throw new APNError("runtime", `every clause of ${name} takes ${arity} parameters`);
+            // One counting a list's elements (Vect Z a = [], Vect (S k) a =
+            // a :: Vect k a) is the length-indexed list.
+            if (countingFunction(name, clauses)) {
+                const vect: Value = { kind: "type", name: "Vect" };
+                this.bindNames([[name, vect]]);
+                return vect;
+            }
             if (arity && clauses.length > 1 && !clauses[0].params.length) throw new APNError("runtime", `${name} is defined twice`);
             const scope = new Env(this.env);
             // A capitalized function (Pairs n a = Vect (n * 2) a): its clauses
@@ -2006,7 +2010,8 @@ export class Interpreter {
         // A lazy 0-param def used as a function (`f = g; f 1`) is a thunk — run it.
         f = this.force(f);
         const written = this.asWritten.get(f);
-        if (written) return this.writtenValue(f, this.apply(written.made, arg));
+        // A written list of types makes a list of them, as .[ ] does.
+        if (written) return this.writtenValue(f, this.isList(written.made) ? this.templateList(written.made, arg) : this.apply(written.made, arg));
         // A value that is not a function applies as get gives it (xs 2 is
         // get xs 2); clauses for get in scope extend it.
         if (!CALLABLE_KINDS.has(f.kind)) {
@@ -4682,6 +4687,73 @@ export class Interpreter {
         this.asWritten.set(named, { name, args, made });
         return named;
     }
+    // A type function's arguments read back from a value its clauses
+    // describe, by running them backwards: [1,2,3,4] is Pairs 2 Int, through
+    // Pairs Z a = [] and Pairs (S k) a = a :: a :: Pairs k a. A clause's
+    // result is matched as a pattern ([], [a,b], x :: rest, the function
+    // again), its elements' types binding its type variables, and its
+    // parameter patterns (Z, S k, a) are built from what they bound.
+    private readBack(f: Extract<Value, { kind: "clauseFn" }>, value: Value): Value[] | undefined {
+        for (const clause of f.clauses) {
+            const variables = new Set(clause.params.flatMap(patternVariables)), binds = new Map<string, Value>();
+            if (!this.describes(f, variables, clause.body, value, binds)) continue;
+            const scope = new Env(f.env), caller = this.env;
+            // A type variable no element decided stays one ([] is Pairs 0 a).
+            for (const name of variables) scope.setLocal(name, binds.get(name) ?? { kind: "type", name, variable: true });
+            this.env = scope;
+            try { return clause.params.map(p => this.reference(this.eval(this.assignmentKey(p)))); }
+            catch (error) { if (!(error instanceof APNError)) throw error; }
+            finally { this.env = caller; }
+        }
+        return undefined;
+    }
+    private describes(f: Extract<Value, { kind: "clauseFn" }>, variables: Set<string>, body: Expr, value: Value, binds: Map<string, Value>): boolean {
+        while (body.t === "block" && body.style === "(" && body.stmts.length === 1) body = body.stmts[0];
+        const list = this.dataValue(value);
+        if (body.t === "list") {
+            let rest: Value = list;
+            for (const item of body.v) {
+                const cell = this.isList(rest) ? this.cell(rest) : null;
+                if (!cell || !this.holds(f, variables, item, cell.head, binds)) return false;
+                rest = cell.tail;
+            }
+            return this.isList(rest) && this.cell(rest) === null;
+        }
+        if (body.t === "binop" && body.op === "::") {
+            const cell = this.isList(list) ? this.cell(list) : null;
+            return !!cell && this.holds(f, variables, body.l, cell.head, binds) && this.describes(f, variables, body.r, cell.tail, binds);
+        }
+        // The function again: its arguments, read back from the rest, agree
+        // with what the clause names them.
+        const args: Expr[] = [];
+        let head: Expr = body;
+        while (head.t === "app") { args.unshift(head.a); head = head.f; }
+        if (head.t !== "var" || head.name !== f.name || args.length !== f.arity) return false;
+        const read = this.readBack(f, list);
+        return !!read && args.every((arg, n) => {
+            if (arg.t !== "var" || !variables.has(arg.name)) return false;
+            const known = binds.get(arg.name), given = read[n];
+            if (known === undefined || known.kind === "type" && known.variable) { binds.set(arg.name, given); return true; }
+            return given.kind === "type" && given.variable || this.sameType(known, given);
+        });
+    }
+    // An element against the type its clause gives it: a type variable takes
+    // the element's type (or must already be it); another type must hold it.
+    private holds(f: Extract<Value, { kind: "clauseFn" }>, variables: Set<string>, type: Expr, element: Value, binds: Map<string, Value>): boolean {
+        const value = this.demand(element);
+        if (type.t === "var" && variables.has(type.name)) {
+            const known = binds.get(type.name);
+            if (known && !(known.kind === "type" && known.variable)) return this.belongsToType(known, value);
+            binds.set(type.name, this.reference(this.callNative("typeOf", [value])));
+            return true;
+        }
+        const caller = this.env;
+        this.env = new Env(f.env);
+        for (const [name, bound] of binds) this.env.setLocal(name, bound);
+        try { return this.belongsToType(this.reference(this.eval(type)), value); }
+        catch (error) { if (error instanceof APNError) return false; throw error; }
+        finally { this.env = caller; }
+    }
     // A type as written (Pairs 2 Int), and the one it is (Vect 4 Int).
     private asWritten = new WeakMap<Value, { name: string; args: Value[]; made: Value }>();
     // A value a written type made, remembering it: a copy of its outer part,
@@ -5012,7 +5084,8 @@ export class Interpreter {
         }
         // A written type's parameters, and a value it made, are read back from
         // what it remembers: (Pairs n a) given Pairs 2 Int, (Pairs n a xs)
-        // given a value Pairs 2 Int made. Nothing is computed backwards.
+        // given a value Pairs 2 Int made. Another value is read back by
+        // running the type function's clauses backwards (see readBack).
         if (p.p === "constr" && p.args.length) {
             const bound = this.env.get(p.tag), alias = bound && this.reference(bound);
             const count = alias?.kind === "type" ? alias.alias?.parameters.length : undefined;
@@ -5020,8 +5093,11 @@ export class Interpreter {
                 const given = this.reference(p.args.length === count ? v : this.demand(v));
                 const type = p.args.length === count ? given : this.declaredTypes.get(given);
                 const written = type && this.asWritten.get(type);
-                if (written) {
-                    return written.name === p.tag && p.args.slice(0, count).every((arg, n) => this.matchPattern(arg, written.args[n], binds))
+                const run = alias!.kind === "type" ? alias!.alias!.run : undefined;
+                const args = written?.name === p.tag ? written.args
+                    : p.args.length > count && run?.kind === "clauseFn" ? this.readBack(run, given) : undefined;
+                if (written || args) {
+                    return !!args && p.args.slice(0, count).every((arg, n) => this.matchPattern(arg, args[n], binds))
                         && (p.args.length === count || this.matchPattern(p.args[count], given, binds));
                 }
             }

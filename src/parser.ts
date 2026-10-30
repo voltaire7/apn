@@ -1,4 +1,4 @@
-import { claimedDeclaration, countingFamily, fillPlaceholders, holdsPlaceholder, sourceLocations, unclaimedMix } from "./ast.ts";
+import { claimedDeclaration, countingFunction, fillPlaceholders, holdsPlaceholder, sourceLocations, unclaimedMix } from "./ast.ts";
 import { stringKey, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -1825,13 +1825,11 @@ class Parser {
             this.seen = leading;
             throw new Error(`Parser: a one-line declaration takes no leading '|' (write ${header} = A | B); only a single constructor needs one (${header} = | A)`);
         }
-        // A family of lists has only the list's constructors, each saying the
-        // index it makes ([] -> Vect Z a): its values are lists.
-        // A list's fields are types, so a family of lists can only count its
-        // elements: it is the length-indexed list, as Vect is.
-        const listed = variants.filter(v => v.tag === "[]" || v.tag === "::");
-        if (listed.length && !countingFamily({ name, parameters: header.split(" ").slice(1), variants })) {
-            throw new Error(`Parser: a family of lists counts its elements, as Vect does: ${name} n a = [] -> ${name} Z a | a :: ${name} k a -> ${name} (S k) a`);
+        // A type of lists is a function giving the list of its elements'
+        // types, written by clauses; the list's own constructors are not
+        // declared again.
+        if (variants.some(v => v.tag === "[]" || v.tag === "::")) {
+            throw new Error(`Parser: a type of lists is written by clauses, as Vect is: ${name} Z a = [] and ${name} (S k) a = a :: ${name} k a`);
         }
         return variants;
     }
@@ -2008,7 +2006,11 @@ class Parser {
                 if (/^[A-Z]/.test(t.v)) {
                     if (this.isDef()) {
                         const declaration = this.parseDefStatement();
-                        if (TYPE_NAMES.includes(declaration.name)) throw new Error("Parser: built-in type names cannot be reassigned");
+                        // (A clause of a function counting a list's elements, as the
+                        // prelude's Vect Z a = [], is checked once its clauses are grouped.)
+                        const [first] = declaration.clauses[0].params, counting = declaration.clauses[0].params.length === 2 &&
+                            (first.p === "int" || first.p === "constr" && (first.tag === "Z" || first.tag === "S"));
+                        if (TYPE_NAMES.includes(declaration.name) && !counting) throw new Error("Parser: built-in type names cannot be reassigned");
                         const [clause] = declaration.clauses;
                         if (holdsPlaceholder(clause.body)) {
                             const logic = clause.body.t === "placeholder" ? undefined : clause.body;
@@ -2190,7 +2192,11 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
         if (!looseSpacing) p.checkBracketSpacing();
         const out = p.parseTopLevel();
         if (!looseSpacing) p.reportUnnecessary();
-        return groupClauses(out);
+        const grouped = groupClauses(out);
+        for (const tl of grouped) {
+            if (tl.t === "def" && TYPE_NAMES.includes(tl.name) && !countingFunction(tl.name, tl.clauses)) throw new Error("Parser: built-in type names cannot be reassigned");
+        }
+        return grouped;
     } catch (err) {
         if (err instanceof APNError) {
             err.src = src;
