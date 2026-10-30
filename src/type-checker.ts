@@ -574,6 +574,8 @@ const STRICT_NATIVES = new Set([
 const EVALUATION_DEPTH = 5000;
 const EVALUATION_BUDGET = 300000;
 const SYMBOLIC_BUDGET = 200;
+// A value no check has asked for yet is computed now only if it is quick.
+const QUICK_BUDGET = 2000;
 // Inference work (unification steps) per top-level statement.
 const STATEMENT_BUDGET = 250000;
 // Standard-library functions that return a list as long as their final list
@@ -2591,6 +2593,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function application(f: Ty, argument: Entry, e: Expr): Ty {
         spend(e);
         f = resolve(f);
+        if (!valueBlind(f)) argument = { ...argument, ...needed(argument) };
         // A Mutable cell applies as its contents (an index into a list cell).
         while (f.k === "mutable") f = resolve(f.value);
         if (f.k === "intrinsic") {
@@ -4086,9 +4089,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (!entry || entry.builtin || !trustsShape(entry)) return;
         const summary = summaryAt(entry.type, args.length);
         if (!summary) return;
-        const entries = args.map(a => ({ type: inferred.get(a) ?? dynamic, ...valueEntry(a, scope) }));
+        const entries = args.map(a => ({ type: inferred.get(a) ?? dynamic, ...needed(valueEntry(a, scope)) }));
         const fails = (c: ClauseOrder) => peek(() => c.params.some((p, n) => decidedByShape(p, scope) && definitelyFails(p, entries[n], 0, 0)), false);
         if (summary.clauses.length && summary.clauses.every(fails)) problem(`no clause of '${head.name}' matches these arguments`, e, "the definition's patterns don't cover this input");
+    }
+    // A value computed left waiting (over no parameters) is computed when a
+    // check depends on it, as computed would have.
+    function needed(k: Known): Known {
+        if (!k.expr || k.expr.env.length) return k;
+        const { e, scope } = k.expr;
+        return { ...k, expr: undefined, ...budgeted(() => evaluateKnown(e, new Map(), scope, 0)) };
+    }
+    // A function of any value with nothing to check on it (print): what the
+    // value is cannot change the call's type.
+    function valueBlind(f: Ty): boolean {
+        return f.k === "fn" && resolve(f.input).k === "var" && !f.binder && !f.coerce && !f.pattern && !f.shape && !f.clauses && !f.checks?.length && !f.selfName && !f.summary;
     }
     function rankClause(c: ClauseOrder, args: Entry[]): { low: number; high: number; matches: boolean; fails: boolean } {
         let low = 0, high = 0, matches = true, fails = false;
@@ -4115,7 +4130,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const outermost = budgetDepth++ === 0;
         if (outermost) {
             evaluations = 0; evaluationLimit = limit;
-            root++; cellRead = reordered = unknownWrite = incomplete = false;
+            root++; cellRead = reordered = unknownWrite = incomplete = exhausted = false;
         }
         try {
             const result = f();
@@ -4135,7 +4150,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // cell when a written cell was accessed across regions, a write hit an
     // unknown target, or evaluation skipped code or an uncertain branch.
     const programMutates = options.mutation ? undefined : mayMutate(program);
-    let root = 0, cellRead = false, reordered = false, unknownWrite = false, incomplete = false;
+    let root = 0, cellRead = false, reordered = false, unknownWrite = false, incomplete = false, exhausted = false;
     let regions: number[] = [], regionCount = 0, cellEvents = 0;
     // Top-level cells: created by a top-level definition, followed through the
     // statements that may write them, executed statically in program order.
@@ -4494,9 +4509,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const d = demand(k);
         return d?.action ? d.action() : k;
     }
+    // A computation's result, and whether the budget or the depth cut it short
+    // (then it is no value to keep: a later evaluation may finish it).
+    function finishing<T>(compute: () => T): [T, boolean] {
+        const outer = exhausted;
+        exhausted = false;
+        try { const result = compute(); return [result, exhausted]; } finally { exhausted ||= outer; }
+    }
     function spendEvaluation(depth: number): boolean {
         if (depth <= EVALUATION_DEPTH && ++evaluations <= evaluationLimit) return true;
-        incomplete = true;
+        incomplete = exhausted = true;
         return false;
     }
     // Apply a known function value to known arguments, as the runtime does:
@@ -4527,8 +4549,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return { origin, cell: () => {
             if (done) return cell;
             const events = cellEvents;
-            const result = budgeted(compute);
-            if (keeps(events)) { done = true; cell = result; }
+            const [result, cut] = finishing(() => budgeted(compute));
+            if (keeps(events) && !cut) { done = true; cell = result; }
             return result;
         } };
     }
@@ -4736,8 +4758,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         collect(e);
         // Over parameters, the value is decided again at each call; evaluating it
         // now (with the parameters unknown) rarely tells more, so spend little.
-        const facts = budgeted(() => evaluateKnown(e, new Map(), scope, 0), names.size ? SYMBOLIC_BUDGET : EVALUATION_BUDGET) ?? {};
-        if (!names.size) return facts;
+        // Over none, a quick value is known now; a longer one waits until a check
+        // needs it (see needed), so code that only passes it on (print (fib 24))
+        // does not compute it before the run does.
+        const quick = !names.size && !budgetDepth;
+        const facts = budgeted(() => evaluateKnown(e, new Map(), scope, 0), names.size ? SYMBOLIC_BUDGET : quick ? QUICK_BUDGET : EVALUATION_BUDGET);
+        if (!names.size) return quick && exhausted ? { expr: { e, scope, env: [] } } : facts ?? {};
         // Function values and lazy lists over parameters are only known at their calls.
         return { ...facts, fn: undefined, cell: undefined, expr: { e, scope, env: [...names].map(n => [n, valueEntry({ t: "var", name: n }, scope)]) } };
     }
@@ -4932,11 +4958,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const hit = cached.find(c => c.entries.every((entry, n) => sameBinding(entry, entries[n])));
         if (hit) return hit.result;
         const events = cellEvents;
-        const result = evaluateKnown(e, new Map(), scope, depth, true);
+        const [result, cut] = finishing(() => evaluateKnown(e, new Map(), scope, depth, true));
         // A value that read or wrote a cell depends on this run's order, and one
         // with lazy parts would share their forcing: evaluating the expression
         // again (an action used twice) builds them afresh.
         if (events !== cellEvents || (programMutates ?? options.mutation!()) && hasLazyParts(result)) return result;
+        if (cut) return result;
         cached.push({ entries, result });
         evaluated.set(e, cached);
         return result;
@@ -5167,8 +5194,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (state === 2) return result;
             if (state === 1) return undefined;
             state = 1;
-            try { result = compute(); } catch (error) { state = 0; throw error; }
-            state = 2;
+            let cut: boolean;
+            try { [result, cut] = finishing(compute); } catch (error) { state = 0; throw error; }
+            state = cut ? 0 : 2;
             return result;
         };
     }

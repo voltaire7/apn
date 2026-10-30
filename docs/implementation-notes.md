@@ -588,8 +588,14 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   closures, so frames stay small and recursion reaches the runtime's own
   depth. A ternary or clause set whose first result has no facts stops
   early, so recursion over unknown values stays cheap. A value over
-  parameters gets only `SYMBOLIC_BUDGET` (it is decided again at each call),
-  a list's length is never walked when the other side of a `zipWith` or a
+  parameters gets only `SYMBOLIC_BUDGET` (it is decided again at each call);
+  one over none gets `QUICK_BUDGET` at first, and if that runs out it waits
+  (an `expr` with no bindings) until a check needs it (`needed`, from
+  `application` unless the callee is `valueBlind`, and `noClauseMatches`), so
+  a value only passed on (`print (fib 24)`) is not computed before the run
+  computes it. A result the budget or depth cut short (`finishing`) is never
+  kept by `once`, `lazyList` or the per-node cache: a later evaluation, with a
+  budget of its own, may finish it. A list's length is never walked when the other side of a `zipWith` or a
   meet is unknown or endless, and argument-free compound expressions are
   cached per node and the bindings of the names they mention
   (`sameBinding`), since nested call arguments are each evaluated.
