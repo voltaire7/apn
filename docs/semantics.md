@@ -708,8 +708,8 @@ converts as applying it: `to Quote x` is `Quote x`),
 itself (`describe Int = "integer"`), so an instance names its type:
 `to Celsius (F f) = C ((f - 32) * 5 / 9)`. A `to String` instance is also how
 its values show: `print`, `echo`, the REPL and `to String` of a value holding
-one write its text, wherever it is (with `to String (Frac n d) = ...`,
-`[Frac 1 2]` shows `[1/2]`). See the [standard library](standard-library.md).
+one write its text, wherever it is (with `to String (Point x y) = ...`,
+`[Point 1 2]` shows `[1@2]`). See the [standard library](standard-library.md).
 
 `return` is overloaded on its result type (see "Overloading on the result
 type" below): a context that names Option uses the newest `return` whose

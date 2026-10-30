@@ -95,7 +95,7 @@ for (const checked of [true, false]) {
         [ID + "f (UserId u) = u\nf 5", checked ? "cannot use Int where UserId is required" : "no clause"],
         [ID + "Order (UserId u) (Int n) = _\nOrder 5 3", checked ? "cannot use Int where UserId is required" : "UserId expects a UserId variant"],
         [PERCENT + "Percent 50 + 1", checked ? "cannot combine Percent and Int" : "cannot apply '+'"],
-        ['import "function"\nFrac (Int n) (Int d) = d == 0 ? fail "zero denominator" : _\n[f: Frac] []', "zero denominator"],
+        ['import "function"\nSpan (Int lo) (Int hi) = lo > hi ? fail "empty span" : _\n[s: Span] [s: Span 2 1]', "empty span"],
         ["Low (Float _) = 1 > 0 ? Low 1 : _\n1", "a constructor with logic names each field"],
         // A lowercase definition's _ stays unfinished.
         ["f x = _\nf 1", "not implemented"],
@@ -105,12 +105,12 @@ for (const checked of [true, false]) {
     });
 }
 // A to String instance is how a value shows, wherever it is.
-const SHOW = 'import "option"\nFrac n d = _\nto String (Frac n d) = to String n ++ "/" ++ to String d\n';
+const SHOW = 'import "option"\nPoint x y = _\nto String (Point x y) = to String x ++ "@" ++ to String y\n';
 for (const checked of [true, false]) for (const [source, expected] of [
-    [SHOW + "[Frac 1 2, Frac 3 4]", "[1/2,3/4]"],
-    [SHOW + "Some (Frac 1 2)", "Some (1/2)"],
-    [SHOW + "to String [Frac 1 2]", '"[1/2]"'],
-    [SHOW + '"is " ++ to String (Frac 1 2)', '"is 1/2"'],
+    [SHOW + "[Point 1 2, Point 3 4]", "[1@2,3@4]"],
+    [SHOW + "Some (Point 1 2)", "Some (1@2)"],
+    [SHOW + "to String [Point 1 2]", '"[1@2]"'],
+    [SHOW + '"at " ++ to String (Point 1 2)', '"at 1@2"'],
 ] as const) Deno.test(`to String shows a value (checked=${checked}): ${source}`, () => {
     const actual = run(source, checked);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

@@ -469,12 +469,12 @@ Percent (Float x) = x > 100 ? Percent 100.0 : _
 Percent 150                   # Percent 100.0
 (Percent a) + (Percent b) = Percent (a + b)
 Percent 90 + Percent 20       # Percent 100.0: the clause calls Percent, so its logic runs
-Frac (Int n) (Int d) = d == 0 ? fail "zero denominator" : _
+Span (Int lo) (Int hi) = lo > hi ? fail "empty span" : _
 ```
 
-Every way of making one runs it, a record slot's default too (`[f: Frac] []`
-fails), and the checker checks that it gives the constructor's type. Its fields
-are named, since `_` holds them.
+Every way of making one runs it, a record slot's default too (`[s: Span] []`
+runs it on `Span 0 0`), and the checker checks that it gives the constructor's
+type. Its fields are named, since `_` holds them.
 
 A union of constructors declared with `_` claims them: they become one type's,
 exactly as a declaration of that type with those constructors makes it. An
