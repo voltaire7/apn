@@ -217,8 +217,8 @@ person * print \ format "%: %"           # => name: Ada, then age: 37
 # ---------------------------------------------------------
 # Every value has a type. The checker infers types before a program runs
 # and reports what would fail; there are no annotations to write.
-print [typeOf 1, typeOf [1,2], typeOf "a"]  # => [Int, List Int, String]
-print (typeOf (x -> [x,x]))              # => a -> List a
+print [typeOf 1, typeOf [1,2], typeOf "a"]  # => [Int,[Int,Int],String]
+print (typeOf (x -> [x,x]))              # => a -> [a,a]
 
 # A type is a function: applied, it converts a value without losing
 # anything, and given nothing it makes its zero value.

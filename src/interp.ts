@@ -2,7 +2,7 @@ import { CheckingSession } from "./checking-session.ts";
 import type { TypeScope } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
-import { describeType } from "./type-description.ts";
+import { describeElementType, describeType } from "./type-description.ts";
 import { OVERLOADED_FUNCTIONS, METHODS, sourceLocations, boolSelection, ternaryExpansion, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
@@ -5065,8 +5065,8 @@ export class Interpreter {
     }
     // The type typeOf describes for a list's elements: Int for [1,2].
     private elementType(list: Value): Value {
-        const described = this.reference(this.callNative("typeOf", [list]));
-        const text = described.kind === "type" && described.description ? described.description.replace(/^List /, "").replace(/^\((.*)\)$/, "$1") : "a";
+        const value = this.demand(list);
+        const text = value.kind === "list" && value.schema ? this.typeText(value).replace(/^List /, "").replace(/^\((.*)\)$/, "$1") : describeElementType(value);
         const name = /^[A-Z][A-Za-z0-9_]*/.exec(text)?.[0];
         return name && name === text && TYPE_NAMES.includes(name) ? { kind: "type", name } : { kind: "type", inspect: true, name: name ?? "$any", description: text };
     }

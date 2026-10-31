@@ -565,7 +565,7 @@ print (match (Vect 1 Int) [t1 2 t2 -> "two", t1 1 t2 -> "one"])
 shape (t1 1 t2) = [t1,t2]
 parts (Vect n a) = [n,a]
 print [shape (Vect 1 Int), parts (Vect 3 Float)]
-print [typeOf shape, typeOf parts]`, ["[Vect,Int]", "[Vect,3,Float]", "one", "[[Vect,Int],[3,Float]]", "[Type -> List Type, Type -> List (Int | Type)]"]);
+print [typeOf shape, typeOf parts]`, ["[Vect,Int]", "[Vect,3,Float]", "one", "[[Vect,Int],[3,Float]]", "[Type -> [Type,a], Type -> [Int,Type]]"]);
 
 // The tour and the former feature showcase (a regression program) check and
 // run as whole programs.

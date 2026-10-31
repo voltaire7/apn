@@ -3,6 +3,7 @@ import { type Env, type Value, type VariantFamily, typeToString } from "./types.
 import { numericType, NUMERIC_TYPES } from "./type-system.ts";
 import { builtinSignature } from "./type-checker.ts";
 import { parse } from "./parser.ts";
+import { itemsText } from "./separators.ts";
 
 // A builtin's signature as the checker writes it, read as a written type.
 const signatureExprs = new Map<string, Expr | undefined>();
@@ -20,7 +21,9 @@ type Shape =
     | { tag: "var"; link?: Shape }
     | { tag: "name"; name: string; args: Shape[] }
     | { tag: "arrow"; from: Shape; to: Shape }
-    | { tag: "list"; element: Shape }
+    // items: a list of exactly these, [Int,String] ([] none); otherwise any
+    // number of element.
+    | { tag: "list"; element: Shape; items?: Shape[] }
     | { tag: "union"; choices: Shape[] }
     // A type constructor not known yet applied to a type: map's f a. Once
     // known, f is a name holding the type's other parameters (Result _ e).
@@ -29,6 +32,8 @@ const fresh = (): Shape => ({ tag: "var" });
 const named = (name: string, args: Shape[] = []): Shape => ({ tag: "name", name, args });
 const arrow = (from: Shape, to: Shape): Shape => ({ tag: "arrow", from, to });
 const list = (element: Shape): Shape => ({ tag: "list", element });
+// A list's element: one type every item has, where any number is taken.
+const elementOf = (t: Extract<Shape, { tag: "list" }>): Shape => t.items ? t.items.reduce(unify, fresh()) : t.element;
 // A known constructor applied to its first parameters: List x, Result x e.
 const applied = (head: Extract<Shape, { tag: "name" }>, args: Shape[]): Shape =>
     head.name === "List" && !head.args.length && args.length === 1 ? list(args[0]) : named(head.name, [...args, ...head.args]);
@@ -40,7 +45,7 @@ function occurs(v: Shape, t: Shape): boolean {
     if (v === t) return true;
     switch (t.tag) {
         case "arrow": return occurs(v, t.from) || occurs(v, t.to);
-        case "list": return occurs(v, t.element);
+        case "list": return t.items ? t.items.some(a => occurs(v, a)) : occurs(v, t.element);
         case "name": return t.args.some(a => occurs(v, a));
         case "union": return t.choices.some(a => occurs(v, a));
         case "apply": return occurs(v, t.head) || t.args.some(a => occurs(v, a));
@@ -62,7 +67,7 @@ function unify(a: Shape, b: Shape): Shape {
     if (a.tag === "apply") {
         const n = a.args.length;
         if (b.tag === "apply" && b.args.length === n) { unify(a.head, b.head); a.args.forEach((x, i) => unify(x, b.args[i])); return a; }
-        if (b.tag === "list" && n === 1) { unify(a.head, named("List")); unify(a.args[0], b.element); return b; }
+        if (b.tag === "list" && n === 1) { unify(a.head, named("List")); unify(a.args[0], elementOf(b)); return b; }
         if (b.tag === "name" && b.args.length >= n) { unify(a.head, named(b.name, b.args.slice(n))); a.args.forEach((x, i) => unify(x, b.args[i])); return b; }
         const head = resolve(a.head);
         if (head.tag === "name") return unify(applied(head, a.args), b);
@@ -79,18 +84,29 @@ function unify(a: Shape, b: Shape): Shape {
         return choices.length === 1 ? choices[0] : { tag: "union", choices };
     }
     if (a.tag === "arrow" && b.tag === "arrow") return arrow(unify(a.from, b.from), unify(a.to, b.to));
-    if (a.tag === "list" && b.tag === "list") return list(unify(a.element, b.element));
+    if (a.tag === "list" && b.tag === "list") {
+        if (a.items && b.items && a.items.length === b.items.length) return { tag: "list", element: fresh(), items: a.items.map((x, n) => unify(x, b.items![n])) };
+        return list(unify(elementOf(a), elementOf(b)));
+    }
     if (a.tag === "name" && b.tag === "name" && a.name === b.name && a.args.length === b.args.length) {
         return named(a.name, a.args.map((x, i) => unify(x, b.args[i])));
     }
     return { tag: "union", choices: [a, b] };
 }
 
-export function describeType(value: Value): string {
+// A list's element type, as (List a) xs binds a: one every item has.
+export function describeElementType(value: Value): string { return describeType(value, true); }
+export function describeType(value: Value, element = false): string {
     let budget = 1024;
     const active = new Map<Value, Shape>();
     const join = (ts: Shape[]) => ts.reduce(unify, fresh());
-    const sequence = (ts: Shape[]) => list(join(ts));
+    const sequence = (ts: Shape[]): Shape => ({ tag: "list", element: fresh(), items: ts });
+    // x :: xs onto a list of known items is one item longer; onto any other
+    // list a different element makes a mixed list, as in a literal.
+    const cons = (head: Shape, tail: Shape): Shape => {
+        const t = resolve(tail);
+        return t.tag === "list" && t.items ? sequence([head, ...t.items]) : unify(list(head), tail);
+    };
     // A written type: a lowercase name not given is a type variable, the
     // same wherever it appears; a lambda is the function type it spells out.
     function declared(e: Expr, parameters: Map<string, Shape>): Shape {
@@ -248,8 +264,7 @@ export function describeType(value: Value): string {
             case "binop": {
                 if (["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(e.op)) return named("Bool");
                 const l = expr(e.l, env, locals), r = expr(e.r, env, locals);
-                // A different element makes a mixed list, as in a literal.
-                if (e.op === "::") return unify(list(l), r);
+                if (e.op === "::") return cons(l, r);
                 if (e.op === "\\") {
                     const input = fresh(); return arrow(input, apply(l, apply(r, input)));
                 }
@@ -302,7 +317,7 @@ export function describeType(value: Value): string {
             case "range": return list(named("Int"));
             case "floatRange": return list(named("Float"));
             case "rationalRange": return list(named("Fraction"));
-            case "cons": return unify(list(inspect(v.head)), inspect(v.tail));
+            case "cons": return cons(inspect(v.head), inspect(v.tail));
             case "contract": return arrow(named(typeToString(v.from)), named(typeToString(v.to)));
             case "closure": return v.env ? clauses([{ params: v.params.map(name => ({ p: "var", name })), body: v.body }], v.env) : inspect(v.mutableValue!);
             case "clauseFn": return clauses(v.clauses, v.env, v.applied);
@@ -351,7 +366,7 @@ export function describeType(value: Value): string {
             if (head.tag === "var" && !names.has(head)) { names.set(head, letter(5 + heads.size)); heads.add(head); }
             [t.head, ...t.args].forEach(findHeads);
         } else if (t.tag === "arrow") { findHeads(t.from); findHeads(t.to); }
-        else if (t.tag === "list") findHeads(t.element);
+        else if (t.tag === "list") (t.items ?? [t.element]).forEach(findHeads);
         else if (t.tag === "name") t.args.forEach(findHeads);
         else if (t.tag === "union") t.choices.forEach(findHeads);
     }
@@ -368,7 +383,11 @@ export function describeType(value: Value): string {
                 return names.get(t)!;
             }
             // [Int,Float] is a positional type; a list of any length is List Int.
-            case "list": { const text = `List ${show(t.element, 2)}`; return precedence > 1 ? `(${text})` : text; }
+            case "list": {
+                if (t.items) return `[${itemsText(t.items.map(x => show(x)))}]`;
+                const text = `List ${show(t.element, 2)}`;
+                return precedence > 1 ? `(${text})` : text;
+            }
             case "name": {
                 const text = t.name + t.args.map(a => " " + show(a, 2)).join("");
                 return t.args.length && precedence > 1 ? `(${text})` : text;
@@ -386,7 +405,8 @@ export function describeType(value: Value): string {
             }
         }
     }
-    const shape = inspect(value);
+    let shape = inspect(value);
+    if (element) { const t = resolve(shape); shape = t.tag === "list" ? elementOf(t) : fresh(); }
     findHeads(shape);
     return show(shape);
 }

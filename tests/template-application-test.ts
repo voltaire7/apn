@@ -151,7 +151,7 @@ for (const [application, block, expected] of [
 // Ints, possibly infinitely many; [..] repeats anything. Checked and unchecked
 // runs agree.
 for (const checked of [true, false]) for (const [source, expected] of [
-    ['[[Int..], [Int..] == List Int, [..], typeOf []]', '[List Int, True, List a, List a]'],
+    ['[[Int..], [Int..] == List Int, [..], typeOf []]', '[List Int, True, List a, []]'],
     ['[[Int..] [1,2], isType [Int..] [1,2], isType [..] ["a",1], isType [Int..] 5]', '[[1,2],True,True,False]'],
     ['f ([Int..] xs) = "ints"\nf ([..] xs) = "any"\nf _ = "other"\n[f [1,2], f ["a"], f [1..], f 5]', '["ints","any","ints","other"]'],
     ['Point = [x: Float, y: Float]\n[Point..] [[x: 1, y: 2]]', '[[x: 1.0, y: 2.0]]'],

@@ -31,7 +31,7 @@ for (const checked of [true, false]) {
         // A type a capitalized function gives remembers how it was written,
         // and so do the values it makes; patterns read that back.
         [PAIRS + "xs = Pairs 2 Int [1,2,3,4]\n[typeOf xs, length xs, map (* 2) xs]", "[Pairs 2 Int, 4, [2,4,6,8]]"],
-        [PAIRS + "ys = [1,2,3,4]\nzs = Pairs 2 Int ys\n[typeOf ys, typeOf zs, ys == zs]", "[List Int, Pairs 2 Int, True]"],
+        [PAIRS + "ys = [1,2,3,4]\nzs = Pairs 2 Int ys\n[typeOf ys, typeOf zs, ys == zs]", "[[Int,Int,Int,Int], Pairs 2 Int, True]"],
         [PAIRS + "f (Pairs n a xs) = [n + 1, a, xs]\nf (Pairs 2 Int [1,2,3,4])", "[3,Int,[1,2,3,4]]"],
         [PAIRS + "f (Pairs n a xs) = n\nf _ = 0\n[f [1,2,3,4], f (Pairs 1 Int [5,6])]", "[0,1]"],
         [PAIRS + "g (Pairs n a) = n\ng (Pairs 3 Int)", "3"],
@@ -39,7 +39,7 @@ for (const checked of [true, false]) {
         ["P a = [x: a, y: a]\np = P Float [x: 1, y: 2]\n[typeOf p, p.x]", "[P Float, 1.0]"],
         // So does a name without parameters for a type or a schema; Type shows
         // what it is, and an updated copy keeps the name.
-        ["Row = Vect 3 Int\n[Row, typeOf (Row [1,2,3]), typeOf [1,2,3]]", "[Row, Row, List Int]"],
+        ["Row = Vect 3 Int\n[Row, typeOf (Row [1,2,3]), typeOf [1,2,3]]", "[Row,Row,[Int,Int,Int]]"],
         ["Point = [x: Float, y: Float]\np = Point [x: 1, y: 2]\nq = p\nq.x = 5\n[typeOf p, typeOf q, Type Point, p == [x: 1.0, y: 2.0]]",
             "[Point, Point, [x: Float, y: Float], True]"],
         ["Point = [x: Float, y: Float]\ntypeOf ([pt: Point] []).pt", "Point"],
