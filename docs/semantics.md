@@ -374,6 +374,16 @@ written. `tests/sugar-test.ts` holds each form beside its expansion.
 | `xs i = v`, `v.x = y` | `xs = with xs i v`, `v = with v "x" y` |
 | `f x = e` | `f = x -> e` |
 | `f p = a; f q = b` | `f x = match x [p -> a, q -> b]` |
+| `{ x <- m; rest }` | `m >>= x -> { rest }` |
+| `{ m; rest }` (`m` an action or other monadic value) | `m >> { rest }` |
+| `{ x = e; rest }` | `(x -> { rest }) e` |
+| `{ e }`, `{}` | `e`, `[]` |
+
+A block's bindings are the one thing a lambda does not express: a name new to
+the block is bound for the whole block, so its value and earlier statements
+may read it (`{ ones = 1 :: ones; take 2 ones }`); a rebinding reads the
+version before it, as the lambda does. A program's top level is not a block:
+its statements run in order and its last may be any value.
 
 ## Operator precedence and associativity
 
@@ -769,7 +779,9 @@ after the action and pattern succeed, so `x <- return (x + 1)` reads the previou
 
 ### Monads and instances
 
-`map`, `<*>`, `>>=` and `return` work in any monad. IO is built in, as is a
+`map`, `<*>`, `>>=` and `return` work in any monad. In `m >>= f`, `f` gives a
+value of `m`'s monad (a `return` is made in it): `print 1 >> 2` is an error,
+as `{ print 1; 2 }` is. IO is built in, as is a
 `return` still waiting for its monad; every other type, lists included (the
 prelude's `[] >>= f = []` and `(x :: rest) >>= f = f x ++ (rest >>= f)`), joins
 by **instances**: definitions of these methods,

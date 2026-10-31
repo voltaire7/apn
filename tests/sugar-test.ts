@@ -28,9 +28,31 @@ for (const [sugar, expansion] of [
     ["f x = x + 1\nf 2", "f = x -> x + 1\nf 2"],
     ['f 0 = "z"\nf n = "n"\n[f 0, f 1]', 'f = n -> match n [0 -> "z", m -> "n"]\n[f 0, f 1]'],
     ["add 0 y = y\nadd x y = x + y\nadd 0 5 + add 2 3", "add = x -> y -> match [x,y] [[0,b] -> b, [a,b] -> a + b]\nadd 0 5 + add 2 3"],
+    // A block is its statements chained: x <- m is m >>= x -> ..., an action
+    // statement m >> ..., a binding x = e (x -> ...) e.
+    ["v = {\n    x <- [1,2]\n    return (x * 10)\n}\nv", "v = [1,2] >>= x -> return (x * 10)\nv"],
+    ["{\n    print 1\n    print 2\n}", "print 1 >> print 2"],
+    ['import "option"\nOption Int {\n    x <- Some 1\n    return (x + 1)\n}', 'import "option"\nOption Int (Some 1 >>= x -> return (x + 1))'],
+    ['import "option"\nOption Int {\n    None\n    return 1\n}', 'import "option"\nOption Int (None >> return 1)'],
+    ["v = {\n    x <- [1,2,3]\n    guard (x > 1)\n    return x\n}\nv", "v = [1,2,3] >>= x -> guard (x > 1) >> return x\nv"],
+    ["xs = {\n    x <- [1,2]\n    y <- [10,20]\n    return (x + y)\n}\nxs", "xs = [1,2] >>= x -> [10,20] >>= y -> return (x + y)\nxs"],
+    ["v = {\n    a = 1\n    b = a + 1\n    [a,b]\n}\nv", "v = (a -> (b -> [a,b]) (a + 1)) 1\nv"],
+    ["v = {\n    x = 1\n    x = x + 1\n    x\n}\nv", "v = (x -> (x -> x) (x + 1)) 1\nv"],
+    ["c = Mutable 0\n{\n    set c 5\n    print c\n}", "c = Mutable 0\nset c 5 >> print c"],
 ] as const) for (const checked of [false, true]) {
     Deno.test(`sugar is its expansion${checked ? ", checked" : ""}: ${JSON.stringify(sugar)}`, () => {
         const a = result(sugar, checked), b = result(expansion, checked);
         if (a !== b) throw new Error(`${a} != ${b}`);
+    });
+}
+// What fails as sugar fails as its expansion (in its own words).
+for (const [sugar, expansion] of [
+    ["v = {\n    x <- [1,2]\n    x\n}\nv", "v = [1,2] >>= x -> x\nv"],
+    ["v = {\n    print 1\n    2\n}\nv", "v = print 1 >> 2\nv"],
+    ['import "option"\nOption Int {\n    x <- Some 1\n    5\n}', 'import "option"\nSome 1 >>= x -> 5'],
+] as const) for (const checked of [false, true]) {
+    Deno.test(`sugar fails as its expansion does${checked ? ", checked" : ""}: ${JSON.stringify(sugar)}`, () => {
+        const a = result(sugar, checked), b = result(expansion, checked);
+        if (!a.startsWith("error") || !b.startsWith("error")) throw new Error(`${a} / ${b}`);
     });
 }

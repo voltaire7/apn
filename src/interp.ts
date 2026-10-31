@@ -3069,13 +3069,47 @@ export class Interpreter {
         if (m.kind === "pending") return { kind: "pending", step: { op: "bind", m, f } };
         const target = this.monadTypeOf(m);
         if (!target) throw new APNError("runtime", `'>>=' needs an action, a list or a monadic value, not a ${m.kind}`);
-        if (m.kind === "io") return { kind: "io", run: () => new IOTail(this.realize(this.continueWith(f, this.runIO(m)), target)) };
+        if (m.kind === "io") return { kind: "io", run: () => new IOTail(this.inMonad(this.continueWith(f, this.runIO(m)), target)) };
         // Any other monad's are clauses of >>= (the prelude's for lists), given
         // f with what it returns made in m's monad.
-        const k: Value = { kind: "native", name: "<bind>", arity: 1, applied: [], invoke: ([x]) => this.realize(this.continueWith(f, x), target) };
+        // (An f already made so for this monad, as rest >>= f passes it on, is
+        // used as it is.)
+        const given = f.kind === "thunk" || f.kind === "deferred" ? f.value ?? f : f;
+        const k: Value = given.kind === "native" && given.name === "<bind>" && this.bindTargets.get(given) === this.headOf(target) ? given
+            : { kind: "native", name: "<bind>", arity: 1, applied: [], invoke: ([x]) => this.inMonad(this.continueWith(f, x), target) };
+        this.bindTargets.set(k, this.headOf(target));
+        if (this.isList(m) && this.preludeListBind()) return this.concatMapList(m, k);
         const result = this.instance(">>=", [m, k]);
         if (result) return result;
         throw new APNError("runtime", `no >>= instance for ${valueToString(target)}`, { hint: "define one, such as `(Some x) >>= f = f x`" });
+    }
+
+    private bindTargets = new WeakMap<Value, string | undefined>();
+    // Whether a list's >>= is the prelude's clauses, no instance after them
+    // taking a list first: then it runs in place, as they do.
+    private preludeListBind(): boolean {
+        const instances = this.instances.get(">>=") ?? [];
+        return instances.slice(1).every(fn => {
+            const f = this.force(fn);
+            return f.kind === "clauseFn" && f.clauses.every(c => c.params[0]?.p === "constr" && !TYPE_NAMES.includes(c.params[0].tag));
+        });
+    }
+    // xs >>= k as the prelude's clauses make it: k's lists joined, lazily.
+    private concatMapList(list: Value, k: Value): Value {
+        return this.defer(() => {
+            const cell = this.cell(list);
+            return cell === null ? mkList([]) : this.dataValue(this.append(this.apply(k, cell.head), this.concatMapList(cell.tail, k)));
+        });
+    }
+    // What m >>= f's f gives, made in m's monad, where it must be a value: an
+    // action after an action (print 1 >> 2 is an error, as { print 1; 2 } is).
+    private inMonad(v: Value, target: Value): Value {
+        const made = this.realize(v, target), monad = this.monadTypeOf(this.force(made));
+        if (monad && this.headOf(monad) === this.headOf(target)) return made;
+        const head = this.headOf(target) ?? "monad";
+        throw new APNError("runtime", `'>>=' needs a function giving ${head === "IO" ? "an action" : withArticle(head)}, not ${this.typeText(made)}`, {
+            hint: head === "IO" ? "end the chain or block with an action, such as `return x`" : `give ${withArticle(head)} value, such as \`return x\``,
+        });
     }
 
     // map f m: lazily over a list, an instance, or derived from m's monad (m >>= (x -> return (f x))).
