@@ -72,7 +72,11 @@ throw = intrinsics.throw
 empty = throw "empty"
 guard condition = condition ? return [] : throw ("guard failed: " ++ intrinsics.source condition)
 (<*>) = intrinsics.ap
+# >>= runs an action, and waits on a return no context has decided yet; each
+# other monad's are its clauses, f's returns made in that monad.
 (>>=) = intrinsics.bind
+[] >>= f = []
+(x :: rest) >>= f = f x ++ (rest >>= f)
 m >> k = m >>= _ -> k
 # f applied to what several values hold, in any monad (Elm's map2 ... map4).
 map2 f a b = map f a <*> b

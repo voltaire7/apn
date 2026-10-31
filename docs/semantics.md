@@ -746,8 +746,10 @@ after the action and pattern succeed, so `x <- return (x + 1)` reads the previou
 
 ### Monads and instances
 
-`map`, `<*>`, `>>=` and `return` work in any monad. IO and lists are built
-in; any other type joins by **instances**: definitions of these methods,
+`map`, `<*>`, `>>=` and `return` work in any monad. IO is built in, as is a
+`return` still waiting for its monad; every other type, lists included (the
+prelude's `[] >>= f = []` and `(x :: rest) >>= f = f x ++ (rest >>= f)`), joins
+by **instances**: definitions of these methods,
 written like ordinary overloads, with parameters or curried (`map = mapTree`,
 `return = Some`). An instance adds to the method everywhere (prelude helpers,
 do-blocks and other modules see it) instead of shadowing it, and the newest
@@ -1403,8 +1405,8 @@ Function values display source: `func x = print x; print func` prints
 `x -> print x` without running the body. Multiple clauses display their
 equations; partially applied functions include their bound arguments without
 forcing them. Captured environments are not expanded. A method (`map`, `return`,
-`>>=`, `<*>`, `to`, `from`) displays like an overloaded function: its builtin's name (the IO
-and list instances), then each instance's clauses, one per line. After
+`>>=`, `<*>`, `to`, `from`) displays like an overloaded function: its builtin's name (what
+IO and other built-in values do), then each instance's clauses, one per line. After
 `import "option"`, `print return` shows `return`, `Some` and `Ok`.
 
 ## Pattern functions

@@ -585,7 +585,8 @@ export class Interpreter {
         // A definition of map, >>=, <*> or return defines an instance: it joins
         // the method everywhere instead of shadowing it here. Its clauses are
         // the instance (return x = Some x), or its value is (return = Some).
-        if (METHODS.has(name) && !this.loadingPrelude) {
+        // The prelude's value of a method is the method itself.
+        if (METHODS.has(name) && (!this.loadingPrelude || clauses[0].params.length)) {
             const child = new Env(this.env), arity = clauses[0].params.length, body = clauses[0].body;
             const method: Value = arity ? { kind: "clauseFn", name, clauses, arity, env: child, applied: [] } : this.defer(() => {
                 const caller = this.env;
@@ -3053,8 +3054,9 @@ export class Interpreter {
         const target = this.monadTypeOf(m);
         if (!target) throw new APNError("runtime", `'>>=' needs an action, a list or a monadic value, not a ${m.kind}`);
         if (m.kind === "io") return { kind: "io", run: () => new IOTail(this.realize(this.continueWith(f, this.runIO(m)), target)) };
+        // Any other monad's are clauses of >>= (the prelude's for lists), given
+        // f with what it returns made in m's monad.
         const k: Value = { kind: "native", name: "<bind>", arity: 1, applied: [], invoke: ([x]) => this.realize(this.continueWith(f, x), target) };
-        if (this.isList(m)) return this.concatMapList(m, k);
         const result = this.instance(">>=", [m, k]);
         if (result) return result;
         throw new APNError("runtime", `no >>= instance for ${valueToString(target)}`, { hint: "define one, such as `(Some x) >>= f = f x`" });
@@ -3077,7 +3079,6 @@ export class Interpreter {
     apValue(mfIn: Value, mx: Value): Value {
         const mf = this.dataValue(mfIn);
         if (mf.kind === "io") return { kind: "io", run: () => { const f = this.runIO(mf); return this.apply(f, this.runIO(mx)); } };
-        if (this.isList(mf)) return this.concatMapList(mf, { kind: "native", name: "<ap>", arity: 1, applied: [], invoke: ([f]) => this.mapValue(f, mx) });
         if (mf.kind !== "pending") {
             const result = this.instance("<*>", [mf, mx]);
             if (result) return result;
@@ -3085,13 +3086,6 @@ export class Interpreter {
         return this.bind(mf, { kind: "native", name: "<ap>", arity: 1, applied: [], invoke: ([f]) => this.mapValue(f, mx) });
     }
 
-    // xs >>= k for lists: k's lists concatenated, lazily.
-    private concatMapList(list: Value, k: Value): Value {
-        return this.defer(() => {
-            const cell = this.cell(list);
-            return cell === null ? mkList([]) : this.dataValue(this.append(this.apply(k, cell.head), this.concatMapList(cell.tail, k)));
-        });
-    }
 
     // A do-block in a monad other than IO: its statements chained with >>=.
     private desugarDo(e: Extract<Expr, { t: "block" }>, env: Env, start: number, target: Value, first?: Value): Value {
