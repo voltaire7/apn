@@ -1264,9 +1264,10 @@ namedValues = [1,2]
 print namedTemplates.namedValues    # => [1,2.0]
 print [namedValues: 42].namedValues # => 42 (literal record field)
 print ([x: 0] [123])                 # => [x: 123] (record default override)
-# Scalars are not callable: 0 123, "old" "new", and False True all error.
+# Numbers, strings and characters are not callable: 0 123 and "old" "new" error.
+# A Bool applied to two values is one of them: True "yes" "no" is "yes".
 print [String,Bool,Char].["new",True,'b'] # => ["new",True,'b']
-# ["old"].["new"], [0].[1], and [False].[True] error: scalar slots cannot be applied.
+# ["old"].["new"] and [0].[1] error: scalar slots cannot be applied.
 print ([name: "old", enabled: False] [name: "new", enabled: True])
 print [Int].[floor .2]               # => [0]
 print ((* 2) * [1,2,3,4])     # => [2,4,6,8]

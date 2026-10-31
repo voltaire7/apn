@@ -24,6 +24,14 @@ infixl 7 * / %
 infixr 8 ^
 infixr 9 \
 
+# get v k: what applying a value that is not a function gives: xs 2, r "x",
+# assoc "key". Clauses for get extend it, so a type can be indexed:
+#     get (Grid cells) [Int r, Int c] = cells (3 * r + c)
+get = intrinsics.get
+# A Bool applied to two values is one of them: True a b is a, False a b is b
+# (c ? a : b is Bool c a b).
+get True a = _ -> a
+get False _ = b -> b
 ($) = intrinsics.apply
 (||) = intrinsics.or
 (&&) = intrinsics.and
@@ -44,7 +52,7 @@ infixr 9 \
 (\) = intrinsics.compose
 # Prefix - and ! are these functions: -x is negate x, !x is not x.
 negate = intrinsics.negate
-not x = match (Bool x) [True -> False, False -> True]
+not x = Bool x False True
 # A list keeps its items as written: it is code, edited as any list is (++
 # joins code, an item update replaces an item). probe shows the code, print
 # the values; reduce gives the values alone. toAST gives the code as lists
@@ -104,10 +112,6 @@ JSON = String
 # patterns of ctor read back (Some a = tag Option Some [a]). A constructor's _
 # is one: the value Box x = _ makes for Box 5 is tag Box Box [5].
 tag = intrinsics.tag
-# get v k: what applying a value that is not a function gives: xs 2, r "x",
-# assoc "key". Clauses for get extend it, so a type can be indexed:
-#     get (Grid cells) [Int r, Int c] = cells (3 * r + c)
-get = intrinsics.get
 # with v k x: a copy of v with k set to x; xs 2 = x binds xs to with xs 2 x.
 # Clauses for with extend it, as for get:
 #     with (Grid cells) [Int r, Int c] x = Grid (with cells (3 * r + c) x)

@@ -32,7 +32,7 @@ for (const source of sourcePrograms) Deno.test(`metacircular agrees with host: $
     const actual = meta.renderString(meta.run(parse('metaEval source')));
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
 });
-for (const source of ['["old"].["new"]', '[0].[123]', '[False].[True]', '"old" "new"', 'False True', '0 123', 'foo =', '1 +', '[1, 2', '"unterminated', '1.2', '1; 2', 'missing', 'head []']) {
+for (const source of ['["old"].["new"]', '[0].[123]', '"old" "new"', '0 123', 'foo =', '1 +', '[1, 2', '"unterminated', '1.2', '1; 2', 'missing', 'head []']) {
     Deno.test(`metacircular rejects: ${source}`, () => {
         const i = new Interpreter(); i.run(parse('import "meta"'));
         i.env.setLocal("source", { kind: "string", v: source });

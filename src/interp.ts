@@ -3,7 +3,7 @@ import type { TypeScope } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeType } from "./type-description.ts";
-import { OVERLOADED_FUNCTIONS, METHODS, sourceLocations, ternaryExpansion, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
+import { OVERLOADED_FUNCTIONS, METHODS, sourceLocations, boolSelection, ternaryExpansion, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
@@ -1454,6 +1454,10 @@ export class Interpreter {
                         break;
                     }
                     case "app": {
+                        // A Bool applied to two values, with the prelude's get and
+                        // Bool, is the match on it its clauses make.
+                        const selection = e.f.t === "app" ? boolSelection(e) : undefined;
+                        if (selection && this.preludeSelection(selection)) { next = this.coreMatch(selection); break; }
                         // The builtin match with written alternatives runs here,
                         // its chosen body in place of the match.
                         const written = e.f.t === "app" && e.f.f.t === "var" ? writtenMatch(e) : undefined;
@@ -1467,8 +1471,8 @@ export class Interpreter {
                     case "patternLambda": r = { kind: "clauseFn", name: "<lambda>", clauses: [{ params: e.params, body: e.body, guard: e.guard }], arity: e.params.length, env: this.env, applied: [] }; break;
                     case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
                     case "ternary": {
-                        const expansion = ternaryExpansion(e);
-                        next = this.isBuiltinMatch(this.env.get("match")) ? this.coreMatch(writtenMatch(expansion)!) : new TailCall(expansion, this.env);
+                        const expansion = ternaryExpansion(e), selection = boolSelection(expansion)!;
+                        next = this.preludeSelection(selection) ? this.coreMatch(selection) : new TailCall(expansion, this.env);
                         break;
                     }
                     case "list": {
@@ -1503,7 +1507,7 @@ export class Interpreter {
                         }
                         if (rec.kind === "io") throw new APNError("runtime", "an action has no fields", { hint: "bind its result first: `x <- action; x.field`" });
                         // Another value's field is get v "x", when clauses for get give it fields.
-                        if (rec.kind !== "record" && !e.scoped && this.extended("get")) { r = this.apply(rec, mkStr(e.field)); break; }
+                        if (rec.kind !== "record" && !e.scoped && this.extended("get", rec)) { r = this.apply(rec, mkStr(e.field)); break; }
                         if (rec.kind !== "record") throw new Error("record access on non-record");
                         if (e.scoped && e.argument) {
                             const outer = this.env;
@@ -2027,7 +2031,8 @@ export class Interpreter {
         // A value that is not a function applies as get gives it (xs 2 is
         // get xs 2); clauses for get in scope extend it.
         if (!CALLABLE_KINDS.has(f.kind)) {
-            const get = this.extended("get");
+            // A Bool selects by the prelude's clauses whatever get is in scope.
+            const get = this.extended("get", f) ?? (f.kind === "bool" ? this.preludeBindings.get("get") : undefined);
             return get ? this.apply(this.apply(get, f), arg) : this.builtinGet(f, arg);
         }
         switch (f.kind) {
@@ -2186,6 +2191,12 @@ export class Interpreter {
         if (chosen) return new TailCall(chosen.clause.body, chosen.child);
         throw new APNError("runtime", "non-exhaustive match: no alternative fits this value");
     }
+    private preludeSelection({ value }: CoreMatch): boolean {
+        const get = this.extended("get", mkBool(true));
+        if (get && get !== this.preludeBindings.get("get")) return false;
+        const type = value.t === "bool" ? undefined : this.env.get("Bool");
+        return !type || type.kind === "type" && type.name === "Bool" && !type.family && !type.alias && !type.choices;
+    }
     // A matched value demanded at once: Bool x with the builtin Bool is x's
     // truth, taken in place.
     private matchedValue(value: Expr): Value {
@@ -2227,8 +2238,11 @@ export class Interpreter {
     }
 
     // get or with, when clauses in scope extend the builtin one.
-    private extended(name: "get" | "with"): Value | undefined {
+    // (The prelude's own clauses for get take only a Bool: any other value
+    // goes to the builtin get directly.)
+    private extended(name: "get" | "with", of?: Value): Value | undefined {
         const f = this.env.get(name);
+        if (name === "get" && f === this.preludeBindings.get("get") && of?.kind !== "bool") return undefined;
         return f?.kind === "clauseFn" && f.fallback ? f : undefined;
     }
     // xs i = v binds xs to with xs i v: the builtin's copy, or what clauses for with give.

@@ -1,4 +1,4 @@
-import { type Alternative, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, ternaryExpansion, writtenMatch, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -1456,6 +1456,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A named subtype is its base wherever the base is expected; a plain
         // value is not one (converting makes one: List Count [1]).
         if (actual.k === "variant" && actual.base && expected.k !== "variant") return unify(expected, actual.base, e, seen);
+        // A Bool applied to two values is one of them (True a b is a): it is a
+        // function of two arguments giving either.
+        if (actual.k === "atom" && actual.name === "Bool" && expected.k === "fn") {
+            const rest = resolve(expected.output);
+            if (rest.k === "fn") return unify(rest.output, union([expected.input, rest.input]), e, seen);
+            const other = variable();
+            return unify(rest, fn(other, union([expected.input, other])), e, seen);
+        }
         problem(
             `cannot use ${text(actual)} where ${text(expected)} is required`,
             e,
@@ -2594,6 +2602,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A value that is not a function applies as get gives it: clauses for
         // get extend the builtin meaning (see extendedFunctions).
         const getter = extendedFunctions.get("get");
+        // A Bool applied to a value is a function giving it or the next one.
+        if (f.k === "atom" && f.name === "Bool" && !getTakesBool()) { const other = variable(); return fn(other, union([argument.type, other])); }
         if (getter && !builtin && gotten(f)) return application(application(getter, { type: f }, e), argument, e);
         if (!valueBlind(f)) argument = { ...argument, ...needed(argument) };
         // A Mutable cell applies as its contents (an index into a list cell).
@@ -3436,6 +3446,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 const written = e.t === "app" && e.f.t === "app" && e.f.f.t === "var" && e.f.f.name === "match" && scope.get("match")?.builtin ? writtenMatch(e) : undefined;
                 if (written) return inferMatch(written, e, scope);
+                const selection = boolSelection(e);
+                if (selection && preludeSelection(selection, scope)) return inferMatch(selection, e, scope);
                 callees.add(e.f);
                 let callee = infer(e.f, scope), resolved = resolve(callee);
                 // A type one of several, chosen by code (elemType flag): evaluate
@@ -5086,8 +5098,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "block": return evaluateBlock(e, env, scope, depth);
             case "ternary": {
-                const expansion = ternaryExpansion(e);
-                return !env.has("match") && scope.get("match")?.builtin ? evaluateMatch(writtenMatch(expansion)!, env, scope, depth) : evaluateKnown(expansion, env, scope, depth);
+                const expansion = ternaryExpansion(e), selection = boolSelection(expansion)!;
+                return preludeSelection(selection, scope) && !env.has("Bool") && !env.has("get") ? evaluateMatch(selection, env, scope, depth) : evaluateKnown(expansion, env, scope, depth);
             }
             case "unop": {
                 if (!scope.get(e.op === "not" ? "not" : "negate")?.builtin || env.has(e.op === "not" ? "not" : "negate")) return evaluateKnown(prefixCall(e), env, scope, depth);
@@ -5140,6 +5152,26 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // Code this evaluator does not follow may have effects: mark it skipped.
             default: incomplete = true; return undefined;
         }
+    }
+    // Whether a Bool applied to two values is the prelude's selection: Bool
+    // (when named) and get are the prelude's, and no clause for get the program
+    // adds could take a Bool first.
+    function preludeSelection({ value }: CoreMatch, scope: Scope): boolean {
+        return (value.t === "bool" || !!scope.get("Bool")?.builtin) && !getTakesBool();
+    }
+    // Whether a clause for get the program adds could take a Bool first.
+    function getTakesBool(): boolean {
+        const own = extendedFunctions.get("get");
+        if (!own) return false;
+        const choices = (resolve(own) as Extract<Ty, { k: "overload" }>).choices;
+        const takes = (t: Ty): boolean => {
+            const f = resolve(t);
+            if (f.k === "overload") return f.choices.some(takes);
+            if (f.k !== "fn") return true;
+            const input = resolve(f.input);
+            return input.k === "var" || input.k === "atom" && input.name === "Bool" || input.k === "union" && input.choices.some(c => { const r = resolve(c); return r.k === "var" || r.k === "atom" && r.name === "Bool"; });
+        };
+        return takes(choices[0]);
     }
     // A match against written alternatives: a function whose clauses are the
     // alternatives, called with the value (a guarded one is not evaluated here).
@@ -5317,6 +5349,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // An application: lambdas, function values, pure builtins, and calls by name.
     function evaluateApp(e: Extract<Expr, { t: "app" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
+        const selection = boolSelection(e);
+        if (selection && preludeSelection(selection, scope) && !env.has("Bool") && !env.has("get")) return evaluateMatch(selection, env, scope, depth);
         const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
         const args: Expr[] = [];
         let head: Expr = e;

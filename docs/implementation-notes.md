@@ -84,8 +84,10 @@ intentional evaluation change.
 - Sugar keeps its written node (printing, `probe`, tools) and runs and checks
   as its core expansion from `src/ast.ts` (`ternaryExpansion`), built once with
   each part at its source. The expansion's names mean what they mean there
-  (no hygiene); the runtime and checker take the builtin `match`, `Bool`,
-  `not` and `negate` in place only while those names are still the prelude's.
+  (no hygiene); the runtime and checker take the builtin `Bool`, `not` and
+  `negate`, and the prelude's Bool clauses for `get`, in place (`boolSelection`:
+  a match on the Bool) only while those are still the prelude's. The checker
+  types a Bool where a function is required as one giving either argument.
 - Field/pluck assignment desugars to an eager pattern binding
   `vec = setFields(vec, entries, rhs)` that reads the old record and the RHS
   before rebinding (so `vec.[x,y] = vec.[y,x]` swaps).

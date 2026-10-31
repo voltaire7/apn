@@ -1,7 +1,7 @@
 import { Interpreter } from "../src/interp.ts";
 import { parseDocument } from "../src/parser.ts";
 import { checkSource } from "../src/type-checker.ts";
-for (const source of ['"old" "new"', "'a' 'b'", 'False True', 'True 1', '"old" missing', "'a' missing", 'False missing', 'x = "old"; x "new"', '(x -> x True) False']) {
+for (const source of ['"old" "new"', "'a' 'b'", '"old" missing', "'a' missing", 'x = "old"; x "new"', '0 123']) {
     Deno.test(`reject scalar application: ${source}`, () => {
         const i = new Interpreter();
         try { i.renderString(i.run(parseDocument(source))); } catch (e) {
@@ -11,6 +11,21 @@ for (const source of ['"old" "new"', "'a' 'b'", 'False True', 'True 1', '"old" m
         throw new Error('expected application failure');
     });
 }
+// A Bool applied to two values is one of them; the other is not evaluated.
+for (const [source, expected] of [
+    ['True "yes" "no"', '"yes"'],
+    ['False missing 7', '7'],
+    ['(x -> x 1 2) False', '2'],
+    ['map (b -> Bool b "t" "f") [0,1]', '["f","t"]'],
+    ['get x k = "http"; True 1 2', '1'],
+] as const) Deno.test(`a Bool selects: ${source}`, () => {
+    for (const checked of [false, true]) {
+        const i = new Interpreter();
+        if (checked) i.enableChecking();
+        const actual = i.renderString(i.run(parseDocument(source)));
+        if (actual !== expected) throw new Error(`${checked}: ${actual}`);
+    }
+});
 for (const [source, expected] of [
     ['[x: ["old",False]] [["new",True]]', '[x: ["new",True]]'],
     ['[name: "old", enabled: False] [name: "new", enabled: True]', '[name: "new", enabled: True]'],
@@ -33,7 +48,7 @@ for (const source of ['[x: False] [1]', '[x: "old"] [1]', "[x: 'a'] [1]"]) {
     });
 }
 Deno.test('gradual checker rejects scalar calls', () => {
-    for (const source of ['"old" "new"', "'a' 'b'", 'False True']) {
+    for (const source of ['"old" "new"', "'a' 'b'", '0 123']) {
         if (!checkSource(source).issues.some(x => x.message.includes('cannot apply'))) throw new Error(source);
     }
 });

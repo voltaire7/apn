@@ -263,14 +263,13 @@ export const sourceLocations = new WeakMap<Expr, SourceLocation>();
 // printing and tools, and each part keeps its place in the source.
 const sugar = new WeakMap<Expr, Expr>();
 const placed = <E extends Expr>(x: E, source: Expr): E => { const place = sourceLocations.get(source); if (place) sourceLocations.set(x, place); return x; };
-// c ? a : b is match (Bool c) [True -> a, False -> b]: Bool gives the
-// condition's truthiness.
+// c ? a : b is Bool c a b: Bool gives the condition's truthiness, and a Bool
+// applied to two values is one of them.
 export function ternaryExpansion(e: Extract<Expr, { t: "ternary" }>): Expr {
     let core = sugar.get(e);
     if (core) return core;
-    const branch = (v: boolean, body: Expr): Expr => placed({ t: "patternLambda", params: [{ p: "bool", v }], body }, body);
-    const value = placed({ t: "app", f: { t: "var", name: "Bool" }, a: e.cond }, e.cond);
-    core = placed({ t: "app", f: placed({ t: "app", f: { t: "var", name: "match" }, a: value }, e), a: { t: "list", v: [branch(true, e.then), branch(false, e.els)] } }, e);
+    const truth = placed({ t: "app", f: { t: "var", name: "Bool" }, a: e.cond }, e.cond);
+    core = placed({ t: "app", f: placed({ t: "app", f: truth, a: e.then }, e), a: e.els }, e);
     sugar.set(e, core);
     return core;
 }
@@ -278,12 +277,26 @@ export function ternaryExpansion(e: Extract<Expr, { t: "ternary" }>): Expr {
 export type PatternLambda = Extract<Expr, { t: "patternLambda" }>;
 export type CoreMatch = { value: Expr; alternatives: PatternLambda[] };
 const expansions = new WeakMap<Expr, CoreMatch>();
+// A Bool applied to two values (Bool c a b, True a b), which the prelude's
+// clauses for get make a match on it: [True -> a, False -> b]. The caller
+// finds that Bool and get are the prelude's.
+export function boolSelection(e: Expr): CoreMatch | undefined {
+    if (e.t !== "app" || e.f.t !== "app") return undefined;
+    const head = e.f.f;
+    if (head.t !== "bool" && !(head.t === "app" && head.f.t === "var" && head.f.name === "Bool")) return undefined;
+    let core = expansions.get(e);
+    if (core) return core;
+    const branch = (v: boolean, body: Expr): PatternLambda => placed({ t: "patternLambda", params: [{ p: "bool", v }], body }, body);
+    core = { value: head, alternatives: [branch(true, e.f.a), branch(false, e.a)] };
+    expansions.set(e, core);
+    return core;
+}
 // match x [alternatives] written with one-parameter lambdas, whose match the
 // caller has found to be the builtin one. A lambda's parameter is a pattern
 // that is a name (n -> n + 1).
 const namedAlternatives = new WeakMap<Expr, PatternLambda>();
 export function writtenMatch(e: Expr): CoreMatch | undefined {
-    if (e.t !== "app" || e.f.t !== "app" || e.a.t !== "list" || !e.a.v.length) return undefined;
+    if (e.t !== "app" || e.f.t !== "app" || e.f.f.t !== "var" || e.a.t !== "list" || !e.a.v.length) return undefined;
     if (expansions.has(e)) return expansions.get(e);
     const alternatives: PatternLambda[] = [];
     for (const x of e.a.v) {

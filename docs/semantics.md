@@ -191,9 +191,10 @@ use `match` with guarded pattern lambdas instead (see
 [pattern functions](pattern-functions.md)).
 
 There is no `if`/`then`/`else`; use the ternary `cond ? a : b`, which is
-`match (Bool cond) [True -> a, False -> b]` as if written in its place: the
-condition's [truthiness](#empty-results-and-truthiness) chooses, and a `match`
-the program defines is the one a ternary there uses. Only the
+`Bool cond a b` as if written in its place: the condition's
+[truthiness](#empty-results-and-truthiness) is a Bool, which applied to the two
+branches is one of them ([get](#record-fields-string-keys-and-positions)); clauses
+for `get` a program adds for a Bool are the ones a ternary there uses. Only the
 selected branch runs, and the branches may differ in type (`x ? "yes" : False`;
 see [choices](gradual-and-dependent-types.md), as for `match` and clauses).
 The ternary's `:` is not cons (`::`), so a branch may
@@ -543,7 +544,10 @@ field. Include quote characters in the argument to select a quoted field.
 raise an error. Numeric field names retain their existing normalized spelling.
 Applying a value that is not a function is `get`: `xs 2` is `get xs 2`, the
 prelude's `intrinsics.get`, which indexes lists, records and HashMaps as
-described here. Assigning is its counterpart `with`: `xs 2 = x` binds `xs` to
+described here, and the prelude's clauses `get True a = _ -> a` and
+`get False _ = b -> b`, so a Bool applied to two values is one of them
+(`True "yes" "no"` is `"yes"`; the other is never evaluated). Numbers, strings
+and characters cannot be applied. Assigning is its counterpart `with`: `xs 2 = x` binds `xs` to
 `with xs 2 x`, a copy with that slot replaced. Clauses for `get` and `with`
 extend them, so a type of the program's own can be indexed and assigned to,
 wherever it is applied (`map g`, too); other values keep the builtin meaning.
