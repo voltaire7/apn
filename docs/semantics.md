@@ -369,6 +369,7 @@ written. `tests/sugar-test.ts` holds each form beside its expansion.
 | `(+ 2)`, `(2 +)` | `x -> x + 2`, `x -> 2 + x` |
 | `f $ x` | `($) f x` |
 | `-x`, `!x` | `negate x`, `not x` |
+| `[a, b]` (a value or a pattern) | `a :: b :: []` |
 | `c ? a : b` | `Bool c a b` |
 | `v.x` | `get v "x"` |
 | `xs i = v`, `v.x = y` | `xs = with xs i v`, `v = with v "x" y` |

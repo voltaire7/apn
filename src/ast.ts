@@ -235,6 +235,14 @@ export function rewriteInfixConstructors(node: unknown, tagOf: (op: string) => s
     if (Array.isArray(node)) { node.forEach(x => rewriteInfixConstructors(x, tagOf)); return; }
     const n = node as Record<string, unknown>;
     for (const value of Object.values(n)) if (value && typeof value === "object") rewriteInfixConstructors(value, tagOf);
+    // [a, b] is a :: b :: [] in a pattern too.
+    if (n.p === "list" && (n.v as Pattern[]).length && tagOf("::")) {
+        const expanded = listPatternExpansion(n as Extract<Pattern, { p: "list" }>);
+        for (const key of Object.keys(n)) delete n[key];
+        Object.assign(n, expanded);
+        rewriteInfixConstructors(n, tagOf);
+        return;
+    }
     if (n.p !== "cons") return;
     const tag = tagOf((n.op as string | undefined) ?? "::");
     if (!tag) return;
@@ -275,6 +283,17 @@ export function ternaryExpansion(e: Extract<Expr, { t: "ternary" }>): Expr {
     core = placed({ t: "app", f: placed({ t: "app", f: truth, a: e.then }, e), a: e.els }, e);
     sugar.set(e, core);
     return core;
+}
+// [a, b] is a :: b :: [], with whatever :: means where it is written.
+export function listExpansion(e: Extract<Expr, { t: "list" }>): Expr {
+    let core = sugar.get(e);
+    if (core) return core;
+    core = e.v.reduceRight<Expr>((tail, item) => placed({ t: "binop", op: "::", l: item, r: tail }, item), placed({ t: "list", v: [] }, e));
+    sugar.set(e, core);
+    return core;
+}
+export function listPatternExpansion(p: Extract<Pattern, { p: "list" }>): Pattern {
+    return p.v.reduceRight<Pattern>((tail, head) => ({ p: "cons", head, tail }), { p: "list", v: [] });
 }
 // A match of a value against written one-parameter alternatives.
 export type PatternLambda = Extract<Expr, { t: "patternLambda" }>;

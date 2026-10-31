@@ -14,6 +14,13 @@ for (const [sugar, expansion] of [
     ['1 + "a"', '(+) 1 "a"'],
     ["V = | V Int\n(V a) + (V b) = V (a + b)\nV 1 + V 2", "V = | V Int\n(V a) + (V b) = V (a + b)\n(+) (V 1) (V 2)"],
     ["head (1 :: missing)", "head ((::) 1 missing)"],
+    // A list is its items consed onto [], with what :: means there, in
+    // values and patterns alike.
+    ['[1,"a"]', '1 :: "a" :: []'],
+    ["f [a,b] = a + b\nf [1,2]", "f (a :: b :: []) = a + b\nf (1 :: 2 :: [])"],
+    ["P a b = | MkP a b\n(::) = MkP\nsecond [x,y] = y\n[1,2]", "P a b = | MkP a b\n(::) = MkP\nsecond [x,y] = y\nMkP 1 (MkP 2 [])"],
+    ["P a b = | MkP a b\n(::) = MkP\nsecond [x,y] = y\nsecond (MkP 1 (MkP 2 []))", "P a b = | MkP a b\n(::) = MkP\nsecond (x :: y :: []) = y\nsecond (MkP 1 (MkP 2 []))"],
+    ["(::) = a, b -> a\n[5,6]", "(::) = a, b -> a\n5 :: 6 :: []"],
     ["0 && missing", "(&&) 0 missing"],
     ["(x -> x + 1) $ 2", "($) (x -> x + 1) 2"],
     ["map (+ 2) [1]", "map (x -> x + 2) [1]"],
@@ -49,6 +56,7 @@ for (const [sugar, expansion] of [
 for (const [sugar, expansion] of [
     ["v = {\n    x <- [1,2]\n    x\n}\nv", "v = [1,2] >>= x -> x\nv"],
     ["v = {\n    print 1\n    2\n}\nv", "v = print 1 >> 2\nv"],
+    ["(::) = a, b -> a\nf [x] = x\nf 1", "(::) = a, b -> a\nf (x :: []) = x\nf 1"],
     ['import "option"\nOption Int {\n    x <- Some 1\n    5\n}', 'import "option"\nSome 1 >>= x -> 5'],
 ] as const) for (const checked of [false, true]) {
     Deno.test(`sugar fails as its expansion does${checked ? ", checked" : ""}: ${JSON.stringify(sugar)}`, () => {

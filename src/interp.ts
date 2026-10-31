@@ -17,7 +17,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericType, numericPayload, m
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions } from "./ast.ts";
@@ -1497,6 +1497,12 @@ export class Interpreter {
                         break;
                     }
                     case "list": {
+                        // [a, b] is a :: b :: [], with what :: means here; the
+                        // prelude's builds the list in place.
+                        if (e.v.length && !this.loadingPrelude && !e.v.some(x => x.t === "stmDef" || x.t === "patDef")) {
+                            const cons = this.env.get("::");
+                            if (cons !== undefined && this.reference(cons) !== this.preludeBindings.get("::")) { next = new TailCall(listExpansion(e), this.env); break; }
+                        }
                         if (!e.v.some(x => x.t === "stmDef" || x.t === "patDef")) { r = { kind: "lazyList", exprs: e.v, env: this.env }; break; }
                         r = this.codeList(e.v, this.env);
                         break;
@@ -5410,6 +5416,9 @@ export class Interpreter {
                     }
                     return true;
                 }
+                // [a, b] is a :: b :: [], with what :: means here.
+                const cons = p.v.length ? this.env.get("::") : undefined, own = cons && this.reference(cons);
+                if (own && !(own.kind === "native" && own.name === "intrinsics.cons" && !own.applied.length)) return this.matchPattern(listPatternExpansion(p), v, binds);
                 if (!this.isList(v)) return false;
                 let rest: Value = v;
                 for (const pattern of p.v) {

@@ -1,4 +1,4 @@
-import { type Alternative, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -2063,6 +2063,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return;
             }
             case "list": {
+                // [a, b] is a :: b :: [], with what :: means here.
+                if (p.v.length && scope.has("::") && builtinOperator(scope.get("::")!.type) !== "::") return bind(listPatternExpansion(p), expected, scope, e, bound);
                 const items = p.v.map(() => variable());
                 const pattern: Ty = { k: "list", element: items.length ? union(items) : variable(), items, length: items.length ? constant(BigInt(items.length)) : undefined };
                 unify(pattern, expected, e);
@@ -3404,6 +3406,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!options.imports) return unknown();
                 return { k: "record", fields: new ModuleFields(copyTypeScope(options.imports(e.module))) };
             case "list": {
+                // [a, b] is a :: b :: [], with what :: means here, as at runtime.
+                if (e.v.length && !e.v.some(binding) && scope.has("::") && builtinOperator(scope.get("::")!.type) !== "::") return infer(listExpansion(e), scope, expected);
                 const code = codeList(e.v.map(expr => ({ expr, scope })));
                 for (const [name, at] of (code as Extract<Ty, { k: "list" }>).open ?? []) openNames?.set(name, { ...at, name });
                 return code;
