@@ -3,7 +3,7 @@ import { parseDocument } from "../src/parser.ts";
 
 for (const checked of [false, true]) {
     for (const [source, expected] of [
-        ['f ([x: _] v) = v.x; [f [1], f ["hi"], f [true]]', '[1,"hi",true]'],
+        ['f ([x: _] v) = v.x; [f [1], f ["hi"], f [True]]', '[1,"hi",True]'],
         ['f ([x: _] v) = v.x; f [x: 2, extra: "yes"]', '2'],
         ['f ([x: _, y: _] v) = [v.x,v.y]; f [1,"hi"]', '[1,"hi"]'],
         ['f ([x: _, y: Float] v) = [v.x,v.y]; f [1,2]', '[1,2.0]'],

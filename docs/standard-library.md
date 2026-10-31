@@ -460,7 +460,7 @@ indented by two spaces, and `from JSON text` (prelude) is `JSON.parse`:
 | list (also lazy or a range, if finite) | array |
 | `String`, `Char` | string |
 | `Int` (exact, any size), `Float` | number |
-| `Bool` | `true`, `false` |
+| `Bool` | `True`, `False` |
 
 A fraction, complex number, variant or function has no JSON form and is an
 error; convert it first. A record key's text is the JSON key, so a bare key

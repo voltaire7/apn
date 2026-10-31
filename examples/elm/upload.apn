@@ -15,7 +15,7 @@ subscriptions _ = browser.none
 view model = div [] [
     input [
         typeAttribute "file"
-        multiple true
+        multiple True
         onEvent "change" (event -> GotFiles event.files)
     ] []
     div [] [text (to String model)]

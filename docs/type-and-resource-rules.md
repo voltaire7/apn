@@ -14,7 +14,7 @@ Count = Int
 Count 5 + 1                 # Count 6: a Count and a plain Int give a Count
 Int (Count 5)               # 5
 sqrt (Count 4)              # 2: builtins and (Int x) patterns see the Int
-Count 5 == 5                # true
+Count 5 == 5                # True
 Count 1 + Age 2             # error: cannot combine Count and Age (Age = Int)
 ```
 
@@ -32,7 +32,7 @@ UserId (Int id) = _
 OrderId (Int id) = _
 
 UserId 123                  # UserId 123
-UserId 3 == UserId 3        # true: every value has equality and printing
+UserId 3 == UserId 3        # True: every value has equality and printing
 extract (UserId value) = value
 extract (UserId 123)        # 123
 UserId 2 + 1                # error: + cannot combine UserId and Int
@@ -119,9 +119,9 @@ other process-level effects, forced process termination cannot run APN cleanup.
 
 ```apn
 import "function"
-released = Mutable false
-answer <- bracket 42 (_ -> set released true) (n -> [n, n + 1])
-# answer is [42,43]; released is true
+released = Mutable False
+answer <- bracket 42 (_ -> set released True) (n -> [n, n + 1])
+# answer is [42,43]; released is True
 ```
 
 The returned value must be finite data: lists, records, variants and HashMaps are

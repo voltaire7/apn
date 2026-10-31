@@ -31,9 +31,9 @@ _listItems _ _ [] = []
 _listItems bound before (item :: rest) = _isBinding item
     ? _listItems bound (before ++ [item]) rest
     : _block bound (before ++ [item]) :: _listItems bound before rest
-_isBinding ["=",_,_] = true
-_isBinding ["<-",_,_] = true
-_isBinding _ = false
+_isBinding ["=",_,_] = True
+_isBinding ["<-",_,_] = True
+_isBinding _ = False
 
 # One lambda per parameter; a guard stays on the last.
 _curry bound [param] body = ["->", [param], _lambda (_binders param ++ bound) body]
@@ -62,9 +62,9 @@ _clauses left right rest = _isDefinition left
     ]
     : [[["=",left,right]],rest]
 _sameDefinition name ["=", (other :: _), _] = other == name
-_sameDefinition _ _ = false
+_sameDefinition _ _ = False
 _isDefinition (name :: _) = _isName name
-_isDefinition _ = false
+_isDefinition _ = False
 
 # The value a binding's clauses give, a fixed point when it refers to itself.
 _value bound clauses = {
@@ -102,9 +102,9 @@ _binders (String name) = _isName name ? [name] : []
 _binders (first :: rest) = foldr (pattern, names -> _binders pattern ++ names) [] (first :: rest)
 _binders _ = []
 _isPlain (String name) = _isName name
-_isPlain _ = false
+_isPlain _ = False
 _isName name = name != "" && name != "_" && contains (head (to (List Char) name)) _nameStarts
 _nameStarts = to (List Char) "abcdefghijklmnopqrstuvwxyz_"
 _mentions name (String leaf) = leaf == name
 _mentions name (first :: rest) = any (_mentions name) (first :: rest)
-_mentions _ _ = false
+_mentions _ _ = False

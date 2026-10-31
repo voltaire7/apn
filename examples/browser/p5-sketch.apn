@@ -15,6 +15,6 @@ draw (Sketch p) = {
 }
 mousePressed _ = {
     set clicks (clicks + 1)
-    return false
+    return False
 }
 main = sketch [setup: setup, draw: draw, mousePressed: mousePressed]

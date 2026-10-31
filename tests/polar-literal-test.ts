@@ -27,11 +27,11 @@ Deno.test("polar marker is peach", () => {
 });
 
 for (const [source, expected] of [
-    ["2@0", "2"], ["isExact 2@0", "true"],
-    ["isExact 2@3", "false"],
+    ["2@0", "2"], ["isExact 2@0", "True"],
+    ["isExact 2@3", "False"],
     ["makePolar (1/3) 0", "1/3"],
-    ["2.0@0", "2.0"], ["isExact 2.0@0", "false"],
-    ["isExact 2@0.0", "false"],
+    ["2.0@0", "2.0"], ["isExact 2.0@0", "False"],
+    ["isExact 2@0.0", "False"],
     ["makePolar 9007199254740993 0", "9007199254740993"],
     ['from String "2@0"', "2"], ["-2@0", "-2"],
 ]) {

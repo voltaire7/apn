@@ -28,7 +28,7 @@ function fails(source: string, text: string, kind?: string): void {
 // while runs its code again before each pass, its last item the condition;
 // loop runs its action until something stops the program.
 Deno.test("while and loop", () => {
-    const loops = run("n = Mutable 0\nwhile [n < 3] {\n    print n\n    set n (n + 1)\n}\nbig = Mutable 0\nwhile [big < 100000] (set big (big + 1))\nprint big\nnever = false\nwhile [never] (print \"no\")\nm = Mutable 20\nwhile [half = quotient m 2, half > 2] {\n    print half\n    set m half\n}");
+    const loops = run("n = Mutable 0\nwhile [n < 3] {\n    print n\n    set n (n + 1)\n}\nbig = Mutable 0\nwhile [big < 100000] (set big (big + 1))\nprint big\nnever = False\nwhile [never] (print \"no\")\nm = Mutable 20\nwhile [half = quotient m 2, half > 2] {\n    print half\n    set m half\n}");
     if (loops.join(",") !== "0,1,2,100000,10,5") throw new Error(loops.join(","));
     fails("n = Mutable 0\nwhile (n < 3) (set n (n + 1))", "while takes code as written");
     const output: string[] = [];
@@ -118,11 +118,11 @@ for (const [name, source, expected] of [
     // do is Haskell's (do [e] = e; do (e :: es) = e >> do es); [] and bindings drop.
     ["do chains its statements; bindings and the unit yield nothing", 'print (do [x = 1, x + 1])\ng n = { []; m = n * 2; m }\nprint (g 3)\ndo [print "a", print "b"]',
         ["2", "6", "a", "b"]],
-    ["assert c x is x once c holds", "double n = assert (n > 0) (n * 2)\nprint (double 3)\nxs = {\n    x <- [1,2]\n    assert (x > 0) (return x)\n}\nprint xs\nassert true (print \"ran\")",
+    ["assert c x is x once c holds", "double n = assert (n > 0) (n * 2)\nprint (double 3)\nxs = {\n    x <- [1,2]\n    assert (x > 0) (return x)\n}\nprint xs\nassert True (print \"ran\")",
         ["6", "[1,2]", "ran"]],
-    ["guard stops a list, Option or Result block; empty is decided by its context", 'import ["option","number"]\nevens = {\n    x <- [1..6]\n    guard (x % 2 == 0)\n    return x\n}\nprint evens\npositive n = {\n    _ <- Some n\n    guard (n > 0)\n    return n\n}\nprint [positive 3, positive -1]\nprint (Option Int empty)\nprint (List Int empty)\nprint empty\ncheck n = {\n    _ <- Ok n\n    guard (n > 0)\n    return n\n}\nprint [check 1, check 0]\nhalf n = Result Int String {\n    guard (n % 2 == 0)\n    return (n / 2)\n}\nprint [half 4, half 3, Option Int { guard false; return 1 }]',
+    ["guard stops a list, Option or Result block; empty is decided by its context", 'import ["option","number"]\nevens = {\n    x <- [1..6]\n    guard (x % 2 == 0)\n    return x\n}\nprint evens\npositive n = {\n    _ <- Some n\n    guard (n > 0)\n    return n\n}\nprint [positive 3, positive -1]\nprint (Option Int empty)\nprint (List Int empty)\nprint empty\ncheck n = {\n    _ <- Ok n\n    guard (n > 0)\n    return n\n}\nprint [check 1, check 0]\nhalf n = Result Int String {\n    guard (n % 2 == 0)\n    return (n / 2)\n}\nprint [half 4, half 3, Option Int { guard False; return 1 }]',
         ["[2,4,6]", "[Some 3, None]", "None", "[]", '[]\nNone\nErr "empty"', '[Ok 1, Err "guard failed: n > 0"]', '[Ok 2, Err "guard failed: n % 2 == 0", None]']],
-    ["when and unless work in any monad", 'import "option"\nprint (unless false (Err "no"))\nprint (Option (when false (Some 1)))\nwhen true (print "ran")',
+    ["when and unless work in any monad", 'import "option"\nprint (unless False (Err "no"))\nprint (Option (when False (Some 1)))\nwhen True (print "ran")',
         ['Err "no"', "Some []", "ran"]],
     // As Haskell's: m (List x) in the elements' monad, each in turn.
     ["sequence and mapM work in any monad", 'import "option"\nprint (sequence [Some 1, Some "a"])\nprint (sequence [Some 1, None])\nprint (sequence [[1,2],[3,4]])\nprint (mapM (x -> x > 0 ? Ok x : Err x) [1,-2,-3])\nxs <- mapM (x -> return (x * 2)) [1,2]\nprint (xs 1 + 1)\nprint (typeOf sequence)',
@@ -172,7 +172,7 @@ for (const [source, message, kind] of [
 for (const [name, source, expected] of [
     ["throw in each monad", 'import "option"\nprint [Option Int (throw "x"), Result Int String (throw "x"), List Int (throw "x")]\nprint (throw 1)',
         ['[None, Err "x", []]', "[]\nNone\nErr 1"]],
-    ["guard names the condition its call wrote", 'import "option"\ng x = guard x\nb = false\nprint [\n    Result Int String { g (1 > 2); return 1 }\n    Result Int String { guard b; return 1 }\n    Result Int String { guard $ 1 == 2; return 1 }\n]',
+    ["guard names the condition its call wrote", 'import "option"\ng x = guard x\nb = False\nprint [\n    Result Int String { g (1 > 2); return 1 }\n    Result Int String { guard b; return 1 }\n    Result Int String { guard $ 1 == 2; return 1 }\n]',
         ['[Err "guard failed: x", Err "guard failed: b", Err "guard failed: 1 == 2"]']],
 ] as const) Deno.test(`monads: ${name}`, () => {
     const actual = run(source);
@@ -201,7 +201,7 @@ for (const [name, source, expected] of [
 });
 Deno.test("monads: an undecided >> chain prints as written", () => {
     for (const checked of [true, false]) {
-        const actual = run("print (return 1 >> return 2 >> return 3)\nprint (guard true >> return 5)", checked);
+        const actual = run("print (return 1 >> return 2 >> return 3)\nprint (guard True >> return 5)", checked);
         if (JSON.stringify(actual) !== JSON.stringify(["return 1 >> return 2 >> return 3", "return [] >> return 5"])) throw new Error(JSON.stringify(actual));
     }
 });

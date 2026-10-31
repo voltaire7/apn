@@ -29,12 +29,12 @@ get request = HttpGet request.url request.expect
 failure toMessage status reason = toMessage
     (Err (status == 0 ? NetworkError : (status == -1 ? BadBody reason : BadStatus status)))
 expectString toMessage = [
-    json: false
+    json: False
     success: body -> toMessage (Ok body)
     failure: failure toMessage
 ]
 expectJson toMessage decoder = [
-    json: true
+    json: True
     success: value -> toMessage (mapError BadBody (_decode.decodeValue decoder value))
     failure: failure toMessage
 ]

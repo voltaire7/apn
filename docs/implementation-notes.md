@@ -354,7 +354,7 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   (`STACK_LIMIT`). Tests: `tests/tail-call-test.ts`, `tests/repl-interrupt-pty.py`.
 - `load` rejects explicit extensions before any file access.
 - Versions: `Interpreter.bindNames` defines a name new to the scope in its
-  root (`Env.root`) and gives a rebound one a version (`new Env(env, true)`),
+  root (`Env.root`) and gives a rebound one a version (`new Env(env, True)`),
   which the statement loops (top level, blocks, do-blocks) go on in;
   `Env.bindings` reads a scope through its versions (module and load
   exports), and `newest` is the version `eval` runs in. An import, load or `use`

@@ -18,7 +18,7 @@ Deno.test("p5 example dispatches setup, animation, and mutable click events", ()
     sketch.dispatch("draw");
     if (!calls.some(c => JSON.stringify(c) === '["circle",320,180,60]')) throw new Error("first frame");
     if (!calls.some(c => JSON.stringify(c) === '["noStroke"]')) throw new Error("unit argument leaked to p5");
-    if (i.renderString(sketch.dispatch("mousePressed")) !== 'false') throw new Error("event return value");
+    if (i.renderString(sketch.dispatch("mousePressed")) !== 'False') throw new Error("event return value");
     p.frameCount = 40;
     sketch.dispatch("draw");
     const circles = calls.filter(c => c[0] === 'circle');

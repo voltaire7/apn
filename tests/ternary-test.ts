@@ -2,15 +2,15 @@ import { parse } from "../main.ts";
 import { Interpreter } from "../src/interp.ts";
 
 for (const [source, expected] of [
-    ['true ? "yes" : "no"', '"yes"'],
-    ['false ? "yes" : "no"', '"no"'],
-    ['true ? 1 : missing', '1'],
-    ['false ? missing : 2', '2'],
-    ['true ? (false ? 1 : 2) : 3', '2'],
-    ['false ? 1 : (true ? 2 : 3)', '2'],
-    ['true == false', 'false'],
-    ['false != true', 'true'],
-    ['(x -> !x) $ true', 'false'],
+    ['True ? "yes" : "no"', '"yes"'],
+    ['False ? "yes" : "no"', '"no"'],
+    ['True ? 1 : missing', '1'],
+    ['False ? missing : 2', '2'],
+    ['True ? (False ? 1 : 2) : 3', '2'],
+    ['False ? 1 : (True ? 2 : 3)', '2'],
+    ['True == False', 'False'],
+    ['False != True', 'True'],
+    ['(x -> !x) $ True', 'False'],
     ['match 1 [1 -> 2, _ -> 0] + 3', '5'],
 ]) {
     Deno.test(`keyword-led expression: ${source}`, () => {

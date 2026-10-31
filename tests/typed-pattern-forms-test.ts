@@ -48,7 +48,7 @@ Deno.test("x:xs as a list item is cons written the old way, and the error says s
 });
 
 Deno.test("a length the checker cannot find is located and explained", () => {
-    const source = "keep (Vect n a xs) = Vect n a (filter (_ -> true) xs)\n1";
+    const source = "keep (Vect n a xs) = Vect n a (filter (_ -> True) xs)\n1";
     const error = failure(source);
     if (!error.hint?.includes("mark it `Dynamic`") || error.pos !== source.indexOf("(filter")) throw new Error(`${error.pos}: ${error.message} ${error.hint}`);
 });

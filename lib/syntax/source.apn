@@ -36,7 +36,7 @@ _kind (function :: args) = contains function ["[]","[:]","{}",".","..","()"] ? "
 _digits (Number n) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) (to String n))
 _digits [".",_,key] = _digits key
 _digits (String text) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) text)
-_digits _ = false
+_digits _ = False
 _params [_,params,_] = length params
 # The loosest operator a piece of syntax holds at its top, and the loosest one
 # after it that it would take in (a lambda takes in everything).
@@ -111,7 +111,7 @@ _infix [_,_,follows] op [a,b] = {
 _application _ function args =
     joinWith " " (_shown ["head",0,-1] function :: map (_shown ["argument",0,-1]) args)
 _isOperator (String name) = _operator name
-_isOperator _ = false
+_isOperator _ = False
 # The heads that are syntax, not functions.
 _tag head = contains head ["[]","[:]","->","?:",".","{}","..","=","<-","()","import","|"]
 _operator name = contains (head (to (List Char) name)) (to (List Char) "!$%&*+-/<=>\\^|~:")
@@ -121,7 +121,7 @@ _operator name = contains (head (to (List Char) name)) (to (List Char) "!$%&*+-/
 _items xs = joinWith (any _spaced xs ? ", " : ",") xs
 _spaced text = _spacedChars (to (List Char) text)
 _spacedChars cs = match cs [
-    [] -> false
+    [] -> False
     '"' :: rest -> _spacedChars (_afterString rest)
     '\'' :: _ :: '\'' :: rest -> _spacedChars rest
     c :: rest -> contains c (to (List Char) " \t\n") || _spacedChars rest

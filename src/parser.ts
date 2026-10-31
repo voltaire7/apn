@@ -383,7 +383,7 @@ class Parser {
         if (t.k === "char") { this.next(); return { p: "char", v: t.v }; }
         if (t.k === "bool") { this.next(); return { p: "bool", v: t.v }; }
         // The lexer reads true and false as keywords.
-        if (t.k === "kw" && (t.v === "true" || t.v === "false")) { this.next(); return { p: "bool", v: t.v === "true" }; }
+        if (t.k === "kw" && (t.v === "True" || t.v === "False")) { this.next(); return { p: "bool", v: t.v === "True" }; }
         if (t.k === "str") { this.next(); return { p: "string", v: t.v }; }
         if (t.k === "sym" && (t.v === "(" || t.v === "{")) {
             const close = t.v === "(" ? ")" : "}";
@@ -708,7 +708,7 @@ class Parser {
         // unless the line ends a block or is the closing line of a bracket: a
         // stray indented statement after one stays an error.
         const argument = (t: Token) => t.k === "ident" || t.k === "int" || t.k === "float" || t.k === "bool" ||
-            (t.k === "kw" && (t.v === "true" || t.v === "false")) || t.k === "str" || t.k === "char" ||
+            (t.k === "kw" && (t.v === "True" || t.v === "False")) || t.k === "str" || t.k === "char" ||
             (t.k === "sym" && (t.v === "(" || t.v === "["));
         const closed = (t: Token | undefined) => t?.k === "sym" && (t.v === "}" ||
             (t.v === "]" || t.v === ")") && !this.source.slice(this.source.lastIndexOf("\n", t.pos - 1) + 1, t.pos).trim());
@@ -727,7 +727,7 @@ class Parser {
                 continue;
             }
             if (t.k === "ident" || t.k === "int" || t.k === "float" || t.k === "bool" ||
-                    (t.k === "kw" && (t.v === "true" || t.v === "false")) ||
+                    (t.k === "kw" && (t.v === "True" || t.v === "False")) ||
                     t.k === "str" || t.k === "char" ||
                     (t.k === "sym" && (t.v === "(" || t.v === "[" || t.v === "{"))) {
                 const a = this.parsePiece(e => primary(e) || e.t === "unop" && e.op === "neg" && primary(e.e));
@@ -1207,8 +1207,8 @@ class Parser {
                 if (module.k !== "str") throw new Error("Parser: import expects a module name string or a list of strings");
                 return { t: "import", module: module.v };
             }
-            case "true": this.next(); return { t: "bool", v: true };
-            case "false": this.next(); return { t: "bool", v: false };
+            case "True": this.next(); return { t: "bool", v: true };
+            case "False": this.next(); return { t: "bool", v: false };
             default:
                 this.next();
                 throw new Error(`Parser: unexpected keyword '${t.v}'`);
@@ -1306,7 +1306,7 @@ class Parser {
         if (t.k === "sym" && t.v === "[") return true;
         // A literal is a pattern too, as inside one: 1 = 1 matches, 1 = 2 fails.
         const after = this.peek(1);
-        if ((["int", "float", "char", "str"].includes(t.k) || t.k === "kw" && (t.v === "true" || t.v === "false")) && after.k === "sym" && after.v === "=") return true;
+        if ((["int", "float", "char", "str"].includes(t.k) || t.k === "kw" && (t.v === "True" || t.v === "False")) && after.k === "sym" && after.v === "=") return true;
         // A cons pattern: x :: xs = ..., (x :: xs) = ...
         const consAfter = (n: number) => { const c = this.peek(n); return c.k === "sym" && isConstructorOperator(c.v); };
         if (t.k === "sym" && (t.v === "(" || t.v === "{")) {
@@ -1672,7 +1672,7 @@ class Parser {
     startsParam(t: Token): boolean {
         if (t.k === "ident") return t.v !== "_" ? true : true;
         if (t.k === "int" || t.k === "float" || t.k === "char" || t.k === "bool" || t.k === "str") return true;
-        if (t.k === "kw" && (t.v === "true" || t.v === "false")) return true;
+        if (t.k === "kw" && (t.v === "True" || t.v === "False")) return true;
         if (t.k === "sym" && (t.v === "(" || t.v === "{" || t.v === "[")) return true;
         if (t.k === "sym" && t.v === "_") return true;
         return false;
@@ -2327,7 +2327,7 @@ function bareSource(e: Expr, where: Place): string {
         case "numeric": return numberText(e.v);
         case "int": return String(e.v);
         case "float": return numberText({ kind: "float", v: e.v });
-        case "bool": return e.v ? "true" : "false";
+        case "bool": return e.v ? "True" : "False";
         case "string": return stringLiteral(e.v);
         case "char": return charLiteral(e.v);
         case "placeholder": return "_";
@@ -2385,7 +2385,7 @@ export function patternSource(p: Pattern): string {
         case "wildcard": return "_";
         case "var": return p.name;
         case "int": return String(p.v);
-        case "bool": return String(p.v);
+        case "bool": return p.v ? "True" : "False";
         case "string": return stringLiteral(p.v);
         case "char": return charLiteral(p.v);
         case "float": return numberText({ kind: "float", v: p.v });

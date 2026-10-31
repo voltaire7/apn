@@ -187,8 +187,8 @@ print $ head $ [1,2,3]  # => 1
 print (tail [1,2,3])      # => [2,3]
 print (length "hello")        # => 5
 print (length [1,2,3])    # => 3
-print (null [])               # => true
-print (null [1])              # => false
+print (null [])               # => True
+print (null [1])              # => False
 
 # a bare-name list is ALWAYS a list — elements are (lazy) variable refs
 a = 100
@@ -307,7 +307,7 @@ print vec                        # => [x: 7, y: 8, z: 3, w: 99]
 # Applying a record of values to fields is the same update, as an expression:
 # vec [x: 1, y: 2] is { vec.x = 1; vec.y = 2; vec }.
 print (vec [x: 1, y: 2])         # => [x: 1, y: 2, z: 3, w: 99]
-print [vec [z: 0] == { vec.z = 0; vec }]  # => [true]
+print [vec [z: 0] == { vec.z = 0; vec }]  # => [True]
 # A type given types is edited the same way; given values, it builds one.
 Vec3 = [x: Float, y: Float, z: Float]
 print (Vec3 [x: Int])            # => [x: Int, y: Float, z: Float]   as Vec3.x = Int
@@ -315,7 +315,7 @@ print (Vec3 [x: 1])              # => [x: 1.0, y: 0.0, z: 0.0]
 # Every field has a type: the one it holds, or its value's (then its default).
 # A value given to it converts losslessly; Type fields take types as values.
 print ([x: 1.1] [10])            # => [x: 10.0]
-# [x: 1] [2.5] and [x: false] [1] are errors
+# [x: 1] [2.5] and [x: False] [1] are errors
 # [f: (* 2)] [1]               # type error: cannot use Int where a -> b is required
 print ([type: Type] [Int])       # => [type: Int]
 
@@ -345,8 +345,8 @@ print (smallest 7 2 9)     # => 2
 
 # lazy arguments make `if` just a function — only the TAKEN branch runs
 ifFn cond then else = cond ? then : else
-ifFn false (print "a") (print "b")     # prints: b
-print (ifFn true 1 2)                  # => 1
+ifFn False (print "a") (print "b")     # prints: b
+print (ifFn True 1 2)                  # => 1
 
 # ---------------------------------------------------------
 # 9. BINDINGS —  symbol = value  (the ONLY form; no let, no mutation)
@@ -446,7 +446,7 @@ print (map (- 2) [5,6])                   # => [3,4] (a spaced '-' subtracts: a 
 print ((+) 1 2)                           # => 3
 print (intrinsics.mul 6 7)                # => 42  (the intrinsic behind *)
 # (op) a b is a + b in every way, checking included; not x is !x, negate x is -x.
-print [not 0, !0]                         # => [true,true]
+print [not 0, !0]                         # => [True,True]
 
 # overloading: these clauses run first; anything else falls back to the
 # builtin +, as the inner (a + b) on two Ints does
@@ -496,13 +496,13 @@ print (quicksort [82,15,4,95,36,32])  # => [4,15,32,36,82,95]
 print "a string"
 print 'c'
 print 3.14
-print true
-print false
+print True
+print False
 print (to String 42)      # => 42       (strings print as raw text)
-print (true ? "yes" : "no")  # => yes   (the ternary yields a string)
-print (1 == 1)            # => true
-print (1 < 2)             # => true
-print ("a" != "b")        # => true
+print (True ? "yes" : "no")  # => yes   (the ternary yields a string)
+print (1 == 1)            # => True
+print (1 < 2)             # => True
+print ("a" != "b")        # => True
 
 # ---------------------------------------------------------
 # 13. TYPES COME FROM CONSTRUCTORS — there are no annotations
@@ -833,7 +833,7 @@ print actionResult          # => 4
 actionValue                 # => action (each run repeats the effect)
 keepFirst x _ = x
 print (keepFirst 7 (Dynamic missingEvaluationArg)) # => 7 (unused argument is deferred)
-print (true ? 8 : Dynamic missingEvaluationArg)    # => 8 (unselected branch is deferred)
+print (True ? 8 : Dynamic missingEvaluationArg)    # => 8 (unselected branch is deferred)
 # Lazy heads, tails, and recursive lists:
 ones = 1::ones
 fibs = 0 :: 1 :: zipWith (+) fibs (tail fibs)
@@ -1025,7 +1025,7 @@ incremented m = {
     return (x + 1)
 }
 print [incremented (Some 1), incremented [1,2]]  # => [Some 2, [2,3]]
-# As in Haskell, a discarded statement in a monad is chained, so a false
+# As in Haskell, a discarded statement in a monad is chained, so a False
 # guard (a throw: [] in a list, None in an Option) or a discarded Err stops the
 # block. Every statement that binds nothing is in the block's monad: a plain
 # value is an error there, as in Haskell.
@@ -1041,7 +1041,7 @@ positive n = {
     return n
 }
 print [positive 3, positive -1]            # => [Some 3, None]
-# A false guard throws its condition as written: in a Result block that is
+# A False guard throws its condition as written: in a Result block that is
 # Err "guard failed: ..."; unless (or when) names a specific error. check 2 runs only
 # returns; the checker finds the block's monad (Result) and the run uses it.
 check n = {
@@ -1153,7 +1153,7 @@ print (sqrt 2)                      # => 1.4142135623730951
 print (makeRectangular 1 2 * makeRectangular 3 4) # => -5+10i
 rectangular = makeRectangular 3 4
 print [realPart rectangular, imagPart rectangular, magnitude rectangular]  # => [3,4,5]
-print [isInteger 3.0, isExact 3.0, isExact (1 / 3)] # => [true,false,true]
+print [isInteger 3.0, isExact 3.0, isExact (1 / 3)] # => [True,False,True]
 print [exact .5, inexact (1 / 2)]   # => [1/2,0.5]
 print [round 2.5, round 3.5]        # => [2.0,4.0]
 print [floor (-3 / 2), ceiling (-3 / 2), truncate (-3 / 2)] # => [-2,-1,-1]
@@ -1165,12 +1165,12 @@ print [0,1/2..2]                   # => [0,1/2,1,3/2,2]
 print (expt 2 -3)                   # => 1/8
 print [1e3,.5e2,1.2e-3]         # => [1000.0,50.0,0.0012]
 print (from String (to String (makeRectangular 1 .5))) # => 1.0+0.5i
-print [isInfinite (1.0 / 0.0), isNaN (0.0 / 0.0)] # => [true,true]
+print [isInfinite (1.0 / 0.0), isNaN (0.0 / 0.0)] # => [True,True]
 
 # Keyword-led expressions parse their trailing operators in the REPL too:
-# true ? "yes" : "no" => "yes"
-print $ true ? "yes" : "no"  # => yes
-print $ false ? "yes" : "no" # => no
+# True ? "yes" : "no" => "yes"
+print $ True ? "yes" : "no"  # => yes
+print $ False ? "yes" : "no" # => no
 
 print (0+1i)  # => 0+1i
 print ((1+2i) * (3+4i))  # => -5+10i
@@ -1190,8 +1190,8 @@ print (10 - 1)        # => 9
 print ((x -> x * 2) -3) # => -6
 
 print 2@0 # => 2
-print (isExact 2@0) # => true
-print (isExact 2@3) # => false
+print (isExact 2@0) # => True
+print (isExact 2@3) # => False
 print 2@3 # => -1.9799849932008908+0.2822400161197344i
 
 # First-class checked numeric types and overloads.
@@ -1224,7 +1224,7 @@ print (Fraction (1/3))               # => Fraction 1/3
 print (Int $ truncate $ 3.7)         # => 3
 print (Float32 1 / 10)              # => Float32 0.1
 print (typeOf (Int32 1))             # => Int32
-print (isType Number (Int32 1))      # => true
+print (isType Number (Int32 1))      # => True
 print (take 3 (100 * _ -> Int 0))         # => [0,0,0]
 typedAdd (Int x) (Int y) = Int (x + y)
 typedAdd (Float x) (Float y) = Float (x + y)
@@ -1252,7 +1252,7 @@ print (Int (floor .2))               # => 0
 # Int .2 and Int (Float .2)          # error: round explicitly first
 print (Int (truncate (Float .2)))    # => 0
 print (Int $ floor $ Float .2)       # => 0
-print (.2 == Float .2)               # => true (numeric equality)
+print (.2 == Float .2)               # => True (numeric equality)
 numericPayload (_ value) = value      # _ discards the type, keeps the payload
 print (numericPayload (Int32 123))   # => 123
 retypedAdd (Int x) (Int y) = Int (x + y)
@@ -1265,10 +1265,10 @@ namedValues = [1,2]
 print namedTemplates.namedValues    # => [1,2.0]
 print [namedValues: 42].namedValues # => 42 (literal record field)
 print ([x: 0] [123])                 # => [x: 123] (record default override)
-# Scalars are not callable: 0 123, "old" "new", and false true all error.
-print [String,Bool,Char].["new",true,'b'] # => ["new",true,'b']
-# ["old"].["new"], [0].[1], and [false].[true] error: scalar slots cannot be applied.
-print ([name: "old", enabled: false] [name: "new", enabled: true])
+# Scalars are not callable: 0 123, "old" "new", and False True all error.
+print [String,Bool,Char].["new",True,'b'] # => ["new",True,'b']
+# ["old"].["new"], [0].[1], and [False].[True] error: scalar slots cannot be applied.
+print ([name: "old", enabled: False] [name: "new", enabled: True])
 print [Int].[floor .2]               # => [0]
 print ((* 2) * [1,2,3,4])     # => [2,4,6,8]
 print (cast String $ cast [Char,Char] $ "a😀") # => "a😀"
@@ -1280,7 +1280,7 @@ print (take 3 (map Int [0..]))         # => [0,1,2]
 print ([x: Int, y: 0] [x: 1, y: 2]) # => [x: 1, y: 2]
 print ([x: Int, y: Int] [x: 123])    # => [x: 123, y: 0]
 # [Int].[1,2] and [Int].[] error: one template slot requires one value.
-print [isType [Int] [1], isType [Int] [1,2]] # => [true,false]
+print [isType [Int] [1], isType [Int] [1,2]] # => [True,False]
 slots = [Int].[0]
 slots 0 = floor .2
 print slots                         # => [0]
@@ -1316,8 +1316,8 @@ typedMap = insert [x: 123] $ HashMap []
 print typedMap                      # => HashMap [["x",123]]
 print (typedMap "x")                 # => 123
 typedMapNext = insert [y: 456] $ typedMap
-print (has "y" typedMap)             # => false
-print (has "y" typedMapNext)         # => true
+print (has "y" typedMap)             # => False
+print (has "y" typedMapNext)         # => True
 print (keys typedMapNext)            # => ["x","y"]
 print (values typedMapNext)          # => [123,456]
 print (pairs typedMapNext)           # => [["x",123],["y",456]]
@@ -1325,9 +1325,9 @@ print (length typedMapNext)          # => 2
 print (remove "x" $ typedMapNext)    # => HashMap [["y",456]]
 print (HashMap [["a",1],["b",2]]) # => HashMap [["a",1],["b",2]]
 
-print (typeOf $ true) # => Bool
+print (typeOf $ True) # => Bool
 
-print (Bool true)        # => true
+print (Bool True)        # => True
 print (String "hi")      # => hi
 print (Char 'a')         # => 'a'
 print []                # => []
@@ -1337,7 +1337,7 @@ print (Function (x -> x + 1) 2) # => 3
 print (Type Bool)        # => Bool
 
 myTypeOf (t _) = print t
-myTypeOf true       # => Bool
+myTypeOf True       # => Bool
 myTypeOf (Int32 5)  # => Int32
 
 # HTTP and JSON. fetch url options returns the response as a record (status,
@@ -1352,7 +1352,7 @@ myTypeOf (Int32 5)  # => Int32
 #   ]
 import ["http","json"]
 reply <- fetch "data:application/json,{\"ids\":[\"jawed\"]}" [method: "GET"]
-print [reply.status,reply.ok]               # => [200,true]
+print [reply.status,reply.ok]               # => [200,True]
 print (from JSON reply.body).ids             # => ["jawed"]
 print (to JSON [ids: ["jawed"], count: 1])   # => {"ids":["jawed"], "count":1}
 header = [Content-Type: "json", my value: 1] # bare keys may hold '-' and spaces
@@ -1414,7 +1414,7 @@ print [perItem 300 2, perItem 300 3]  # [Err "share too large", Ok 200]
 import "meta"
 print (metaEval "id x = x; id 42")                 # 42
 print (metaEval "x = 1 :: x; take 4 x")           # [1,1,1,1]
-print (metaEval "true ? 7 : missing")              # 7
+print (metaEval "True ? 7 : missing")              # 7
 # It reads and runs toAST's lists, so toAST's output runs on it too:
 print (metaParse "f x = x * 2; f 21")   # => ["{}",["=",["f","x"],["*","x",2]],["f",21]]
 print (metaEvalSyntax (toAST [(x -> x * 2) 21] 1))  # 42
@@ -1461,10 +1461,10 @@ print (onlyOne (zeroOrPairOf 0))              # 0
 onlyOneOf n = onlyOne (zeroOrPairOf n)
 print (onlyOneOf 0)                           # 0
 # Booleans and strings too: the clause is chosen at each call of the wrapper.
-flagged true = [1]
+flagged True = [1]
 flagged _ = [0,0]
 onlyFlag b = onlyOne (flagged b)
-print (onlyFlag true)                         # 1
+print (onlyFlag True)                         # 1
 # Characters and floats are literal patterns too, compared as at runtime.
 describeLiteral 'a' = "letter a"
 describeLiteral 1.5 = "one and a half"
@@ -1480,9 +1480,9 @@ alwaysA _ = 'a'
 print (onlyOne (vowelOrPair (alwaysA 5)))     # 1
 # Results that depend on argument values are evaluated at each call.
 vowelIf b = b ? 'a' : 'z'
-print (onlyOne (vowelOrPair (vowelIf true)))  # 1
+print (onlyOne (vowelOrPair (vowelIf True)))  # 1
 onlyVowelIf b = onlyOne (vowelOrPair (vowelIf b))
-print (onlyVowelIf true)                      # 1
+print (onlyVowelIf True)                      # 1
 # Float and exact-rational conditions are evaluated as the runtime computes them.
 vowelBelowHalf x = x < 1 / 2 ? 'a' : 'z'
 print (onlyOne (vowelOrPair (vowelBelowHalf 0.25)))  # 1
@@ -1507,7 +1507,7 @@ leadingVowel limit = onlyOne (vowelOrPair (vowelIfShort (takeWhile (< limit) [1,
 print (leadingVowel 2)                                # 1
 # splitWhile splits where takeWhile stops (html's span is the HTML element).
 print (splitWhile (< 3) [1,2,3,1])                 # [[1,2],[3,1]]
-print (true ? 1 :: [] : [])                            # [1]
+print (True ? 1 :: [] : [])                            # [1]
 # Library code runs statically on known values: words, dropWhile, endless lists.
 wordVowel text = onlyOne (vowelOrPair (vowelIfShort (words text)))
 print (wordVowel "hello")                             # 1
@@ -1614,7 +1614,7 @@ print (typeOf (p5.sketch [draw: p -> p.background "black"])) # P5Program
 print (typeOf (p5.canvas [draw: p -> p.background "black"]))    # Html (a sketch inside a view)
 random = import "random"
 [roll,_] = random.step (random.int 1 6) (random.initialSeed 42)
-print (roll >= 1 && roll <= 6)                 # true
+print (roll >= 1 && roll <= 6)                 # True
 print (head (random.step (random.list 3 (random.uniform "a" ["b"])) 7))  # ["a","b","b"]
 decode = import "decode"
 pointDecoder = map2 (x, y -> [x: x, y: y])
@@ -1624,21 +1624,21 @@ print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1, \"y\": 2}"))  # Ok
 # Err "Expecting an OBJECT with a field named `y`"
 print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1}"))
 # A type decodes as it says, each field by name, wherever a decoder goes; a
-# record type made the result, so it keeps its fields (lamp.lti = true fails).
+# record type made the result, so it keeps its fields (lamp.lti = True fails).
 Pixel = [x: Int, y: Int, lit: Bool]
 pixelJson = from JSON "{\"y\": 2, \"x\": 1, \"lit\": true}"
-print (decode.decodeValue Pixel pixelJson)     # Ok [x: 1, y: 2, lit: true]
-print (decode.decodeValue (decode.list Pixel) [pixelJson])  # Ok [[x: 1, y: 2, lit: true]]
-print (to Pixel [lit: true])                   # [x: 0, y: 0, lit: true] (as Pixel [...])
+print (decode.decodeValue Pixel pixelJson)     # Ok [x: 1, y: 2, lit: True]
+print (decode.decodeValue (decode.list Pixel) [pixelJson])  # Ok [[x: 1, y: 2, lit: True]]
+print (to Pixel [lit: True])                   # [x: 0, y: 0, lit: True] (as Pixel [...])
 lamp = Pixel []
-lamp.lit = true
-print [_: lamp, size: 2]                       # [x: 0, y: 0, lit: true, size: 2] (a copy)
+lamp.lit = True
+print [_: lamp, size: 2]                       # [x: 0, y: 0, lit: True, size: 2] (a copy)
 asPixel value = Pixel value                    # converted when it runs
-print (asPixel [lit: true]).lit                # true
+print (asPixel [lit: True]).lit                # True
 clock = import "time"
 print (clock.toMinute clock.utc (clock.millisToPosix 754000))     # 12
 print (map2 (+) (Some 1) (Some 2))             # Some 3
-print (numbers.degrees 180 == numbers.pi)      # true
+print (numbers.degrees 180 == numbers.pi)      # True
 playground = import "playground"
 # Placed 0 10 30 1 1 (Rectangle (Rgb 52 101 164) 4 4)
 print (playground.rotate 30 $ playground.moveUp 10 $ playground.square playground.blue 4)
@@ -1694,7 +1694,7 @@ print (exampleParameter (ExampleOption Int)) # => Int
 
 # C interop is opt-in: importing it and declaring signatures runs no C code.
 ffiExample = import "ffi"
-print (isType Type Pointer)                   # => true
+print (isType Type Pointer)                   # => True
 print (ffiExample.function [Int32,Int32] Int32) # signature record
 # ./examples/c-interop/run-demo demonstrates C calls and mutable Pointer memory.
 # ./examples/c-interop/run-donut animates a C-rendered donut driven by APN.
@@ -1862,7 +1862,7 @@ print (AccountId 7)                  # => AccountId 7
 print (getAccountId (AccountId 7))   # => 7
 print (AccountId 2 + AccountId 3)    # => AccountId 5
 print (AccountId 1 + 1)              # => AccountId 2 (a plain Int joins it)
-print (AccountId == Int)            # => false
+print (AccountId == Int)            # => False
 idKind (AccountId _) = "account"
 idKind (Int _) = "int"
 print [idKind (AccountId 1), idKind (OtherId 1), idKind 1]  # => ["account","int","int"]
@@ -1895,10 +1895,10 @@ print (assert (compassName Up == "up") "up")  # => up (assert c x is x once c ho
 
 # Scoped cleanup runs after returned lazy data has been evaluated.
 import "function"
-released = Mutable false
-bracketed <- bracket 42 (_ -> set released true) (n -> [n, n + 1])
+released = Mutable False
+bracketed <- bracket 42 (_ -> set released True) (n -> [n, n + 1])
 print bracketed                    # => [42,43]
-print released                     # => true
+print released                     # => True
 import "io"
 # A read-only OS device keeps this program independent of its working directory.
 nothing <- withFile "/dev/null" (file -> file.read)
@@ -1928,10 +1928,10 @@ print (typeOf [1,"hello"])             # => List (Int | String)
 print (typeOf (1 :: ["hello"]))         # => List (Int | String)
 
 # Empty results are lists; conditions use truthiness.
-print ({} == [])                        # => true
-print (Bool * [0,1,"","hello",[],[0]])  # => [false,true,false,true,false,true]
-print (0 && Dynamic missingTruthinessName)          # => false; right side is skipped
-print (1 || Dynamic missingTruthinessName)          # => true
+print ({} == [])                        # => True
+print (Bool * [0,1,"","hello",[],[0]])  # => [False,True,False,True,False,True]
+print (0 && Dynamic missingTruthinessName)          # => False; right side is skipped
+print (1 || Dynamic missingTruthinessName)          # => True
 print (filter (x -> x) [0,1,2])      # => [1,2]
 print (match 42 [_ | [] -> 0, x | 1 -> x]) # => 42
 
@@ -2015,8 +2015,8 @@ print (countVect [7,8,9])              # => 3
 print (copySized 3 [1,2,3])            # => [1,2,3]
 print (typeOf (SizedInts 3 [1,2,3]))   # => Vect 3 Int
 SelectedType flag = flag ? Int : String
-print (SelectedType true 123)           # => 123
-print (SelectedType false "hello")      # => hello
+print (SelectedType True 123)           # => 123
+print (SelectedType False "hello")      # => hello
 # The checker evaluates the pure code a type needs, as the program would:
 # SelectedType (isEven 3) 5 and Vect (sizeFor 2) Int [1,2,3] are static errors.
 sizeFor n = n * 2
@@ -2132,20 +2132,20 @@ print ((Int value -> value) 123)           # => 123
 # Where a type is expected, a lambda is read as the function type it spells
 # out, as [Int] is a list and a positional type. A lowercase name not bound to
 # a type is a type variable; [Int] is one Int, List Int a list of any length.
-print ((a -> a) == typeOf (x -> x))        # => true
-print ((b -> b) == typeOf (x -> x))        # => true (variable names don't matter)
-print ((a -> a) == typeOf (x, _ -> x))      # => false
-print (List Int == typeOf [1,2,3])       # => true
-print ([Int] == typeOf [1])                # => false ([Int] is positional)
+print ((a -> a) == typeOf (x -> x))        # => True
+print ((b -> b) == typeOf (x -> x))        # => True (variable names don't matter)
+print ((a -> a) == typeOf (x, _ -> x))      # => False
+print (List Int == typeOf [1,2,3])       # => True
+print ([Int] == typeOf [1])                # => False ([Int] is positional)
 print (typeOf map)                         # => (a -> b) -> f a -> f b (f: any type map works on)
 print ((a -> a).(+ 1) 41)                  # => 42 (checked: the result is the input's type)
 applyTwice ((a -> a) f) x = f (f x)
 print (applyTwice (* 3) 2)                 # => 18
-print (isType (Int -> Int) (+ 1))          # => true
-print (((a -> b) -> List a -> List a) == typeOf filter)  # => true (a function type taking one)
+print (isType (Int -> Int) (+ 1))          # => True
+print (((a -> b) -> List a -> List a) == typeOf filter)  # => True (a function type taking one)
 # f a is a type variable applied to a type: any type holding an a (List a,
 # Option a). As a contract it accepts map and checks each use.
-print (((a -> b) -> f a -> f b) == typeOf map)        # => true
+print (((a -> b) -> f a -> f b) == typeOf map)        # => True
 twiceMapped (((a -> b) -> f a -> f b) m) xs = m (* 2) (m (+ 1) xs)
 print [twiceMapped map [1,2], twiceMapped map (Some 3)]  # => [[4,6], Some 8]
 # f a e fills a type's first two parameters (Result a e); as a parameter it
@@ -2162,14 +2162,14 @@ print (typeOf typedNamed)                 # => Int -> Int
 
 # A named definition also binds its name for repeated-name equality.
 selfOnly selfOnly = selfOnly
-print (selfOnly selfOnly == selfOnly)     # => true
+print (selfOnly selfOnly == selfOnly)     # => True
 # selfOnly 1                  # argument 'selfOnly' must equal the function 'selfOnly'; got Int
 
 # Wildcard schema fields accept any value without conversion.
 showField ([x: _] v) = print v.x
 showField [123]                          # => 123
 showField ["hello"]                      # => hello
-showField [x: true]                      # => true
+showField [x: True]                      # => True
 mixedFields ([x: _, y: Float] v) = [v.x,v.y]
 print (mixedFields ["hello",2])         # => ["hello",2.0]
 

@@ -52,8 +52,8 @@ for (
         ["f n ((Vect n Int) xs) = xs; f 3 [1,2,3]", "[1,2,3]"],
         ["typeOf (Vect 3 Int [1,2,3])", "Vect 3 Int"],
         ["v = Vect 2 Int [1,2]; v 0 = 3; [v, typeOf v]", "[[3,2], Vect 2 Int]"],
-        ["[isType (Vect 2 Int) [1,2], isType (Vect 2 Int) [1]]", "[true,false]"],
-        ["[Vect 2 Int == Vect 2 Int, Vect 2 Int == Vect 3 Int]", "[true,false]"],
+        ["[isType (Vect 2 Int) [1,2], isType (Vect 2 Int) [1]]", "[True,False]"],
+        ["[Vect 2 Int == Vect 2 Int, Vect 2 Int == Vect 3 Int]", "[True,False]"],
         ['f (Dynamic x) = x; f "hi"', '"hi"'],
     ]
 ) {
@@ -91,7 +91,7 @@ for (
         "f t n ((Vect n t) xs) = xs; f Int 2 [1,2]",
         "f (Type t) x = t x; f Int 1",
         "Option a = Some a | None; Option Int (Some 1)",
-        'Choice flag = flag ? Int : String; [Choice true 1, Choice false "hello"]',
+        'Choice flag = flag ? Int : String; [Choice True 1, Choice False "hello"]',
     ]
 ) {
     Deno.test(`gradual APN compatibility: ${source}`, () => {
@@ -103,7 +103,7 @@ for (
     const source of [
         'Vect 2 Int [1,"bad"]',
         'f n ((Vect n Int) xs) = xs; f 2 [1,"bad"]',
-        'Choice flag = flag ? Int : String; Choice true "bad"',
+        'Choice flag = flag ? Int : String; Choice True "bad"',
     ]
 ) {
     Deno.test(`dependent elements reject: ${source}`, () => {
@@ -111,7 +111,7 @@ for (
     });
 }
 Deno.test("type computations remain non-evaluating in checker", () => {
-    const source = 'Choice flag = { debug "must not run"; flag ? Int : String }; Choice true 1';
+    const source = 'Choice flag = { debug "must not run"; flag ? Int : String }; Choice True 1';
     const result = checkSource(source);
     if (result.issues.length) throw new Error(JSON.stringify(result));
 });
@@ -121,7 +121,7 @@ Deno.test("captured variables are not spuriously generalized", () => {
 });
 Deno.test("runtime value-dependent type selection", () => {
     const i = new Interpreter();
-    const source = 'Choice flag = flag ? Int : String; [Choice true 1, Choice false "hello"]';
+    const source = 'Choice flag = flag ? Int : String; [Choice True 1, Choice False "hello"]';
     if (i.renderString(i.run(parseDocument(source))) !== '[1,"hello"]') throw new Error("wrong selected type");
 });
 for (

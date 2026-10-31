@@ -18,6 +18,6 @@ export const textNatives = {
 // What parse reads from text: a Bool, a number literal, or null for neither.
 export function parseLiteral(text: string): boolean | Numeric | null {
     const s = text.trim();
-    if (s === "true" || s === "false") return s === "true";
+    if (s === "True" || s === "False") return s === "True";
     return parseNumberText(s);
 }

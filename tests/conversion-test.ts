@@ -20,7 +20,7 @@ const TEMPERATURE = "Celsius = | C Float\nFahrenheit = | F Float\nto Celsius = (
 for (const [source, expected] of [
     ["to String 1.5 ++ \"!\"", '"1.5!"'],
     ["Int (from String \"42\") + 1", "43"],
-    ["to JSON [a: 1, b: [true]]", '"{\\"a\\":1,\\"b\\":[true]}"'],
+    ["to JSON [a: 1, b: [True]]", '"{\\"a\\":1,\\"b\\":[true]}"'],
     ["from JSON \"[1,2]\"", "[1,2]"],
     ["to (List Char) \"a😀\"", "['a','😀']"],
     ["from (List Char) ['h','i']", '"hi"'],
@@ -73,7 +73,7 @@ for (const checked of [true, false]) {
         return i.renderString(i.run(parseDocument(source)));
     };
     for (const [source, expected] of [
-        [MONEY + "to Money (Float x) = Money x\n[Money 1.0 + 2.5, 2.5 + Money 1.0, Money 1.0 < 2.0]", "[Money 3.5, Money 3.5, true]"],
+        [MONEY + "to Money (Float x) = Money x\n[Money 1.0 + 2.5, 2.5 + Money 1.0, Money 1.0 < 2.0]", "[Money 3.5, Money 3.5, True]"],
         [MONEY + CENTS + "Money 1.0 + Cents 50", "Money 1.5"],
         // The other way round, where a built-in type is needed: an index,
         // arithmetic, a typed pattern; an enumeration's positions are such instances.

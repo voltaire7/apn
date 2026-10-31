@@ -56,7 +56,7 @@ meLast scope statements = null (tail statements)
         ? lookup (meName (head statements 1)) scope
         : meEval scope (head statements))
     : meLast scope (tail statements)
-meBinding statement = typeOf statement == List ? head statement == "=" : false
+meBinding statement = typeOf statement == List ? head statement == "=" : False
 meName left = typeOf left == typeOf "text" ? left : head left
 meValue left right = typeOf left == typeOf "text" ? right : ["->", tail left, right]
 meBindings statements scope = null statements
@@ -69,7 +69,7 @@ meScope statements parent = {
     scope = [insert (meBindings statements (head scope)) parent]
     head scope
 }
-meClosure parameters body scope = HashMap ([["__closure",true],["parameters",parameters]]
+meClosure parameters body scope = HashMap ([["__closure",True],["parameters",parameters]]
     ++ [["body",body],["scope",scope]])
 meZipTemplate functions values = null functions
     ? (null values ? [] : fail "list template and input must have the same length")

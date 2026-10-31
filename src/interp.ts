@@ -3984,7 +3984,7 @@ export class Interpreter {
             if (!this.truthy(condition)) {
                 const body = argument.kind === "thunk" ? argument.body : undefined;
                 const location = body && sourceLocations.get(body);
-                const expression = location ? location.source.slice(location.start, location.end).trim() : body ? exprToSource(body) : "false";
+                const expression = location ? location.source.slice(location.start, location.end).trim() : body ? exprToSource(body) : "False";
                 const line = location ? location.source.slice(0, location.start).split("\n").length : undefined;
                 const error = new APNError("runtime", `assertion failed: ${expression}${location ? ` (${location.file}:${line})` : ""}`,
                     location ? { pos: location.start, len: Math.max(1, location.end - location.start) } : {});

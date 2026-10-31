@@ -6,14 +6,14 @@ file = import "file"
 
 Msg = Pick | DragEnter | DragLeave | GotFiles file.File (List file.File)
 
-init = [[hover: false, files: []], browser.none]
+init = [[hover: False, files: []], browser.none]
 
 update msg model = match msg [
     Pick -> [model, file.selectFiles ["image/*"] GotFiles]
-    DragEnter -> { model.hover = true; [model,browser.none] }
-    DragLeave -> { model.hover = false; [model,browser.none] }
+    DragEnter -> { model.hover = True; [model,browser.none] }
+    DragLeave -> { model.hover = False; [model,browser.none] }
     GotFiles first others -> {
-        model.[files,hover] = [first :: others, false]
+        model.[files,hover] = [first :: others, False]
         [model,browser.none]
     }
 ]

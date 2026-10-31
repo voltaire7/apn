@@ -167,12 +167,12 @@ _toScreen width height = [
     bottom: 0 - height / 2
 ]
 _noKeys = [
-    up: false, down: false, left: false, right: false
-    space: false, enter: false, shift: false, backspace: false
+    up: False, down: False, left: False, right: False
+    space: False, enter: False, shift: False, backspace: False
     keys: List String []
 ]
 _computer = [
-    mouse: [x: 0.0, y: 0.0, down: false, click: false]
+    mouse: [x: 0.0, y: 0.0, down: False, click: False]
     keyboard: _noKeys
     screen: _toScreen 600 600
     time: 0
@@ -207,7 +207,7 @@ _advance updateMemory msg game = {
         GameTick time -> {
             game.memory = updateMemory computer game.memory
             computer.time = posixToMillis time
-            computer.mouse.click = false
+            computer.mouse.click = False
             game.computer = computer
             [game,browser.none]
         }
@@ -235,11 +235,11 @@ _advance updateMemory msg game = {
             ]
             [game,browser.none]
         }
-        GameClick -> { game.computer.mouse.click = true; [game,browser.none] }
+        GameClick -> { game.computer.mouse.click = True; [game,browser.none] }
         GameButton isDown -> { game.computer.mouse.down = isDown; [game,browser.none] }
         GameVisibility _ -> {
             game.computer.keyboard = _noKeys
-            game.computer.mouse.[down,click] = [false,false]
+            game.computer.mouse.[down,click] = [False,False]
             [game,browser.none]
         }
     ]
@@ -247,13 +247,13 @@ _advance updateMemory msg game = {
 _subscriptions = browser.batch [
     browser.onAnimationFrame GameTick
     browser.onVisibilityChange GameVisibility
-    browser.onKeyUp (GameKey false)
-    browser.onKeyDown (GameKey true)
+    browser.onKeyUp (GameKey False)
+    browser.onKeyDown (GameKey True)
     browser.onResize GameResized
     browser.onMouseMove GameMouseMove
     browser.onMouseClick (_, _ -> GameClick)
-    browser.onMouseDown (_, _ -> GameButton true)
-    browser.onMouseUp (_, _ -> GameButton false)
+    browser.onMouseDown (_, _ -> GameButton True)
+    browser.onMouseUp (_, _ -> GameButton False)
 ]
 
 # A game: view computer memory gives the shapes, update computer memory the

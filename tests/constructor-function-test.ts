@@ -21,7 +21,7 @@ for (const checked of [true, false]) {
         // = names a scalar type transparently: a Count is an Int wherever one
         // is accepted, and keeps its name when a result fits.
         ["Count = Int\n[Count 5, typeOf (Count 5)]", "[Count 5, Count]"],
-        ["Count = Int\n[Count 5 + 1, Count 5 * 2 == 10, Int (Count 5), sqrt (Count 4)]", "[Count 6, true, 5, 2]"],
+        ["Count = Int\n[Count 5 + 1, Count 5 * 2 == 10, Int (Count 5), sqrt (Count 4)]", "[Count 6, True, 5, 2]"],
         ['Count = Int\nf (Count c) = "count"\nf (Int n) = "int"\n[f (Count 1), f 1]', '["count","int"]'],
         ["Count = Int\ng (Int n) = n + 1\ng (Count 5)", "6"],
         ["Box a = a\n[Box 1, Box Int]", "[1,Int]"],
@@ -31,7 +31,7 @@ for (const checked of [true, false]) {
         // A type a capitalized function gives remembers how it was written,
         // and so do the values it makes; patterns read that back.
         [PAIRS + "xs = Pairs 2 Int [1,2,3,4]\n[typeOf xs, length xs, map (* 2) xs]", "[Pairs 2 Int, 4, [2,4,6,8]]"],
-        [PAIRS + "ys = [1,2,3,4]\nzs = Pairs 2 Int ys\n[typeOf ys, typeOf zs, ys == zs]", "[List Int, Pairs 2 Int, true]"],
+        [PAIRS + "ys = [1,2,3,4]\nzs = Pairs 2 Int ys\n[typeOf ys, typeOf zs, ys == zs]", "[List Int, Pairs 2 Int, True]"],
         [PAIRS + "f (Pairs n a xs) = [n + 1, a, xs]\nf (Pairs 2 Int [1,2,3,4])", "[3,Int,[1,2,3,4]]"],
         [PAIRS + "f (Pairs n a xs) = n\nf _ = 0\n[f [1,2,3,4], f (Pairs 1 Int [5,6])]", "[0,1]"],
         [PAIRS + "g (Pairs n a) = n\ng (Pairs 3 Int)", "3"],
@@ -41,7 +41,7 @@ for (const checked of [true, false]) {
         // what it is, and an updated copy keeps the name.
         ["Row = Vect 3 Int\n[Row, typeOf (Row [1,2,3]), typeOf [1,2,3]]", "[Row, Row, List Int]"],
         ["Point = [x: Float, y: Float]\np = Point [x: 1, y: 2]\nq = p\nq.x = 5\n[typeOf p, typeOf q, Type Point, p == [x: 1.0, y: 2.0]]",
-            "[Point, Point, [x: Float, y: Float], true]"],
+            "[Point, Point, [x: Float, y: Float], True]"],
         ["Point = [x: Float, y: Float]\ntypeOf ([pt: Point] []).pt", "Point"],
     ] as const) Deno.test(`capitalized definitions (checked=${checked}): ${source}`, () => {
         const actual = run(source, checked);

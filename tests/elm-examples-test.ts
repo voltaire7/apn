@@ -115,9 +115,9 @@ Deno.test("files: pickers, drops and previews", async () => {
     const { platform, flush } = fake();
     const drop = run("drag-and-drop", platform);
     drop.dispatch(0, {});
-    if (!content(drop.render()).includes("hover: true")) throw new Error("drag enter");
+    if (!content(drop.render()).includes("hover: True")) throw new Error("drag enter");
     drop.dispatch(3, { files: [{ name: "x.png", size: 1, mime: "image/png", url: "blob:x" }] });
-    if (!content(drop.render()).includes('name: "x.png"') || content(drop.render()).includes("hover: true")) throw new Error(content(drop.render()));
+    if (!content(drop.render()).includes('name: "x.png"') || content(drop.render()).includes("hover: True")) throw new Error(content(drop.render()));
     const previews = run("image-previews", platform);
     previews.dispatch(4);
     await flush();

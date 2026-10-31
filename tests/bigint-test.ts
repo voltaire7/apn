@@ -30,7 +30,7 @@ example("large multiplication is exact", "12345678901234567890 * 123456789012345
 example("signed division retains exact fractions", "[-7 / 3, 7 / -3, -7 / -3]", "[-7/3,-7/3,7/3]");
 example("large division is exact", "100000000000000000000000000001 / 3", "100000000000000000000000000001/3");
 example("signed remainder follows the dividend", "[-7 % 3, 7 % -3, -7 % -3]", "[-1,1,-1]");
-example("large comparisons do not subtract into a float", "[9007199254740993 > 9007199254740992, 9007199254740993 == 9007199254740992]", "[true,false]");
+example("large comparisons do not subtract into a float", "[9007199254740993 > 9007199254740992, 9007199254740993 == 9007199254740992]", "[True,False]");
 example("negative integer literals are exact", "-9007199254740993", "-9007199254740993");
 example("from String retains large integer digits", 'from String "9007199254740993"', "9007199254740993");
 example("integer string formatting has no BigInt suffix", 'format "% / %" [9007199254740993,-9007199254740993]', '"9007199254740993 / -9007199254740993"');
@@ -43,7 +43,7 @@ example("descending ranges retain exact endpoints", "[9007199254740995..90071992
 example("infinite ranges above 2^53 still advance", "take 3 [9007199254740993..]", "[9007199254740993,9007199254740994,9007199254740995]");
 example("range arithmetic is exact", "[9007199254740993..9007199254740993+2]", "[9007199254740993,9007199254740994,9007199254740995]");
 example("range integer division agrees with runtime division", "[0..5/2]", "[0,1,2]");
-example("range patterns compare exact integer bounds", "match 9007199254740993 [[9007199254740993..9007199254740995] -> true, _ -> false]", "true");
+example("range patterns compare exact integer bounds", "match 9007199254740993 [[9007199254740993..9007199254740995] -> True, _ -> False]", "True");
 example("literal patterns match exact large integers", "pick 9007199254740993 = 1\npick n = 0\npick 9007199254740992", "0");
 example("large record keys round-trip exactly", "r = [9007199254740993: 7]\n[r.9007199254740993, r \"9007199254740993\"]", "[7,7]");
 example("large take counts end at a finite list", "take 9007199254740993 [1,2]", "[1,2]");

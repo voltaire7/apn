@@ -67,7 +67,7 @@ return = intrinsics.return
 # throw e: the monad's failure, decided by the context as return is: [] in a
 # list, None in an Option, Err e in a Result, and in IO an action failing
 # with e. empty is throw "empty"; guard condition is return [] when it holds,
-# else a throw naming the condition: a false guard stops a do-block.
+# else a throw naming the condition: a False guard stops a do-block.
 throw = intrinsics.throw
 empty = throw "empty"
 guard condition = condition ? return [] : throw ("guard failed: " ++ intrinsics.source condition)

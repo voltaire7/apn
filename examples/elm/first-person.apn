@@ -7,7 +7,7 @@ browser = import "browser"
 p5 = import "p5"
 
 eyeLevel = 2
-noKeys = [up: false, left: false, down: false, right: false, space: false]
+noKeys = [up: False, left: False, down: False, right: False, space: False]
 
 Msg =
     | KeyChanged Bool String
@@ -69,8 +69,8 @@ stepVelocity dt keys person = {
 
 subscriptions _ = browser.batch [
     browser.onResize Resized
-    browser.onKeyUp (KeyChanged false)
-    browser.onKeyDown (KeyChanged true)
+    browser.onKeyUp (KeyChanged False)
+    browser.onKeyDown (KeyChanged True)
     browser.onAnimationFrameDelta TimeDelta
     browser.onVisibilityChange VisibilityChanged
 ]

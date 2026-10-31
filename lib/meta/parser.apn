@@ -99,9 +99,9 @@ mpPrec op = op == "$" ? 1 : (op == "?" ? 2 : (op == "::" ? 3
     : (contains op ["+","-"] ? 6 : (contains op ["*","/","%"] ? 7 : (op == "^" ? 8 : 0)))))))
 mpRightAssociative op = contains op ["$","::","^"]
 mpBinary op left right = [op,left,right]
-mpStarts tokens = null tokens ? false
-    : (head (head tokens) == "literal" ? true
-    : (head (head tokens) == "word" ? true
+mpStarts tokens = null tokens ? False
+    : (head (head tokens) == "literal" ? True
+    : (head (head tokens) == "word" ? True
     : contains (mpText tokens) ["(","[","{"]))
 
 mpExpr minimum stop tokens = {
@@ -164,8 +164,8 @@ mpValue tokens = {
     [token] = [head tokens]
     [text] = [snd token]
     head token == "literal" ? ["\"" ++ text ++ "\"", tail tokens]
-        : (text == "true" ? [true, tail tokens]
-        : (text == "false" ? [false, tail tokens]
+        : (text == "True" ? [True, tail tokens]
+        : (text == "False" ? [False, tail tokens]
         : (head token == "word" ? mpWord text tokens
         : fail ("meta reader: unexpected " ++ text))))
 }
@@ -198,7 +198,7 @@ mpItems tokens = mpText tokens == "]" ? [[], tail tokens] : {
 }
 mpDefinition tokens = {
     [names] = [mpNames tokens]
-    null names ? false : mpText (drop (length names) tokens) == "="
+    null names ? False : mpText (drop (length names) tokens) == "="
 }
 mpReadDefinition tokens = {
     [names] = [mpNames tokens]

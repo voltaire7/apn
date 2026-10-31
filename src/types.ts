@@ -113,7 +113,7 @@ export function valueToString(v: Value): string {
         }
         case "hashmap": return `HashMap [${itemsText([...v.entries.values()].map(([k, x]) => `[${itemsText([valueToString(k), valueToString(x)])}]`))}]`;
         case "rationalRange": return rangeText(v.lo, arithmetic("+", v.lo, v.step), v.hi);
-        case "bool": return String(v.v);
+        case "bool": return v.v ? "True" : "False";
         case "string": return stringLiteral(v.v);
         case "char": return charLiteral(v.v);
         case "list": return `[${itemsText(v.v.map(valueToString))}]`;

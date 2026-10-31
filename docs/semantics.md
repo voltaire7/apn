@@ -176,7 +176,7 @@ A function's clauses are a `match` on its arguments: `len` is
 `f a b = match [a,b] [[p,q] -> ...]`; either spelling runs and checks the same
 (the one exception: clauses with equivalent patterns and different result types
 are an overload the context chooses: [overloading on the result type](#overloading-on-the-result-type)).
-Literal patterns (integers, floats, strings, characters, `true`, `false`) are
+Literal patterns (integers, floats, strings, characters, `True`, `False`) are
 tried before other clauses ([ranking](#clause-ranking)); numeric literal patterns compare numerically, so
 `2` and `2.0` match each other. Integer ranges (`[1..9]`) are also patterns.
 Otherwise clauses run in source order, so after a clause taking any argument
@@ -191,9 +191,9 @@ use `match` with guarded pattern lambdas instead (see
 [pattern functions](pattern-functions.md)).
 
 There is no `if`/`then`/`else`; use the ternary `cond ? a : b`, which is
-`match (!cond) [false -> a, true -> b]`: the condition's
+`match (!cond) [False -> a, True -> b]`: the condition's
 [truthiness](#empty-results-and-truthiness) chooses. Only the
-selected branch runs, and the branches may differ in type (`x ? "yes" : false`;
+selected branch runs, and the branches may differ in type (`x ? "yes" : False`;
 see [choices](gradual-and-dependent-types.md), as for `match` and clauses).
 The ternary's `:` is not cons (`::`), so a branch may
 cons freely: `b ? x :: xs : []`. A ternary inside a ternary, in any of its
@@ -842,7 +842,7 @@ check n = {
     return (n * 2)       # check 2 is Ok 4, check 0 is Err "not positive"
 }
 half n = Result Int String {
-    guard (n % 2 == 0)   # a false guard throws its condition
+    guard (n % 2 == 0)   # a False guard throws its condition
     return (n / 2)       # half 4 is Ok 2, half 3 is Err "guard failed: n % 2 == 0"
 }
 ```
@@ -958,7 +958,7 @@ the constructor read the fields back:
 Box a = tag Box Box [a]
 Box 5                           # Box 5; typeOf (Box 5) is Box
 unbox (Box x) = x               # unbox (Box 5) is 5
-tag Option Some [5] == Some 5   # true: a declared constructor's own value
+tag Option Some [5] == Some 5   # True: a declared constructor's own value
 ```
 
 A type in a pattern takes its parameters, then a value. Applied to exactly its
@@ -1598,19 +1598,19 @@ operations with no useful result. Blocks remain executable expressions.
 The REPL displays an empty-list result as `[]`. Use `[]` for an explicitly
 ignored argument. C interop uses `ffi.function parameters []` for `void`.
 
-Falsy values are `false`, numeric zero (including complex zero), floating NaN,
+Falsy values are `False`, numeric zero (including complex zero), floating NaN,
 empty strings, empty lists, empty records, empty HashMaps, and null pointers.
 Everything else is truthy, including type constructors, non-nullary functions,
 and every variant constructor (`None` and zero-ordinal enum cases included).
 Mutable cells use their current contents, and a named subtype's value its base's
-(`Flag = Bool` makes `Flag false` falsy). Nullary actions run under the usual
+(`Flag = Bool` makes `Flag False` falsy). Nullary actions run under the usual
 demand rules. A list check inspects only its first cell, not its elements or
 remaining tail; infinite nonempty lists are truthy.
 
 `Bool x`, `!x`, ternary conditions, pattern guards, `assert`, `filter`, and
 standard-library predicate consumers share these rules. `&&` and `||` return
 Bool and short-circuit: `0 && missing` is false, `1 || missing` is true.
-Truthiness does not change equality or Bool pattern matching: `0 != false`,
+Truthiness does not change equality or Bool pattern matching: `0 != False`,
 and `(Bool x)` still matches booleans rather than every convertible value.
 
 Type variables preserve relationships: `typeOf (x, y -> x)` displays

@@ -12,14 +12,14 @@ for (const [source, expected] of [
     // A new type has only the operations its clauses define.
     ['Distance (Float x) = _\n(Distance a) + (Distance b) = Distance (a + b)\nDistance 2 + Distance 3', 'Distance 5.0'],
     ['UserId (Int x) = _\nf (t x) = [t,x]\nf (UserId 3)', '[UserId, UserId 3]'],
-    ['UserId (Int x) = _\nAlias = UserId\n[Alias == UserId, Alias 3 == UserId 3]', '[true,true]'],
-    ['UserId (Int x) = _\nOrderId (Int x) = _\n[UserId == OrderId, UserId 3 == OrderId 3, UserId 3 == 3]', '[false,false,false]'],
+    ['UserId (Int x) = _\nAlias = UserId\n[Alias == UserId, Alias 3 == UserId 3]', '[True,True]'],
+    ['UserId (Int x) = _\nOrderId (Int x) = _\n[UserId == OrderId, UserId 3 == OrderId 3, UserId 3 == 3]', '[False,False,False]'],
     ['Money (Float x) = _\nf (Float x) = "Float"\nf (Money x) = "Money"\n[f 1.2, f (Money 1.2)]', '["Float","Money"]'],
     ['UserId (Int x) = _\nunpack (UserId n) = n\nunpack (UserId 123)', '123'],
     ['UserId (Int x) = _\nOrderId (Int x) = _\nf (UserId n) = n\nf _ = 0\nf (OrderId 3)', '0'],
     ['UserId (Int x) = _\n[v: UserId] []', '[v: UserId 0]'],
     ['v = [x: Int] [y: 2]\nv', '[x: 0, y: 2]'],
-    ['assert true "kept"', '"kept"'],
+    ['assert True "kept"', '"kept"'],
     ['import "function"\ncount = Mutable 0\nbracket 42 (_ -> set count 1) (x -> x + 1)\ncount', '1'],
     ['import "function"\nbracket 42 (_ -> []) (x -> [x,x+1])', '[42,43]'],
     ['import "function"\ncount = Mutable 0\nv <- bracket 1 (_ -> set count 9) (_ -> [count + 1])\n[v,count]', '[[1],9]'],
@@ -37,7 +37,7 @@ for (const [source, error] of [
     ['Money (Float x) = _\nsqrt (Money 4.0)', 'sqrt expects numbers'],
     ['Distance (Int8 x) = _\nDistance 128', 'out of range'],
     ['assert (1 == 2) 0', 'assertion failed: (1 == 2)'],
-    ['check = assert\ncheck false 0', 'assertion failed: false'],
+    ['check = assert\ncheck False 0', 'assertion failed: False'],
     ['import "function"\nbracket 1 (_ -> []) (x -> y -> x)', 'must return data'],
     ['import "function"\nbracket 1 (x, y -> []) (x -> x)', 'release must take one remaining argument'],
     ['import "io"\nwithFile "lib/io.apn" 123', 'callback must take one remaining argument'],
@@ -105,9 +105,9 @@ Deno.test('bracket releases in reverse order on interruption', () => {
 });
 Deno.test('bracket does not release a resource that failed to acquire', () => {
     const i = new Interpreter();
-    i.run(parseDocument('import "function"; released = Mutable false'));
-    try { i.run(parseDocument('bracket missing (_ -> set released true) (x -> x)')); } catch { /* expected */ }
-    if (i.renderString(i.run(parseDocument('released'))) !== 'false') throw new Error('released absent resource');
+    i.run(parseDocument('import "function"; released = Mutable False'));
+    try { i.run(parseDocument('bracket missing (_ -> set released True) (x -> x)')); } catch { /* expected */ }
+    if (i.renderString(i.run(parseDocument('released'))) !== 'False') throw new Error('released absent resource');
 });
 Deno.test('assert reports its source with a piped value', () => {
     const i = new Interpreter();

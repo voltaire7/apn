@@ -14,9 +14,9 @@ for (const [source, expected] of [
     ['inspect (Vect n a xs) = [n,a,xs]; inspect (Vect 0 Int [])', '[0,Int,[]]'],
     ['inspect (Vect n a xs) = [n,a,xs]; inspect []', '[0,a,[]]'],
     ['inspect (Vect n a xs) (Vect m a ys) = [n,m,a]; inspect [] [1,2]', '[0,2,Int]'],
-    ['inspect (Vect n a xs) (Vect m a ys) = [n,m,a]; inspect [true] []', '[1,0,Bool]'],
+    ['inspect (Vect n a xs) (Vect m a ys) = [n,m,a]; inspect [True] []', '[1,0,Bool]'],
     ['f (Vect n Int xs) = xs; f [1,2]', '[1,2]'],
-    ['f (Vect 2 a xs) = xs; f [true,false]', '[true,false]'],
+    ['f (Vect 2 a xs) = xs; f [True,False]', '[True,False]'],
     [append + '\nappend [1,2] [3,4]', '[1,2,3,4]'],
     [append + '\nappend [] [3,4]', '[3,4]'],
     [append + '\nappend [1,2] []', '[1,2]'],
@@ -33,9 +33,9 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'f (Vect n a xs) = xs; f [1,true]',
-    'f (Vect n Int xs) = xs; f [true]',
-    'f (Vect n a xs) (Vect m a ys) = xs; f [1] [true]',
+    'f (Vect n a xs) = xs; f [1,True]',
+    'f (Vect n Int xs) = xs; f [True]',
+    'f (Vect n a xs) (Vect m a ys) = xs; f [1] [True]',
     'f (Vect n a xs) (Vect n a ys) = xs; f [1] [2,3]',
     'f (Vect 2 a xs) = xs; f [1]',
     'f (Vect n a xs) = xs; f 1',
@@ -62,12 +62,12 @@ for (const source of [
     'bad (Vect n a xs) = Vect (n + 1) a xs',
     'bad (Vect n a []) (Vect m a ys) = Vect (n + m + 1) a ys',
     'bad (Vect n a (x::xs)) = Vect n a xs',
-    'f (Vect n a xs) (Vect m a ys) = xs; f [1] [true]',
+    'f (Vect n a xs) (Vect m a ys) = xs; f [1] [True]',
     'f (Vect n a xs) (Vect n a ys) = xs; f [1] [2,3]',
     // A call checked before the clause's statement reads it the same way.
     'size = 2; h x = f x; f (Vect size Int xs) = xs; h [1,2,3]',
-    'f x x = x; f 1 true',
-    '(x, x -> x) 1 true',
+    'f x x = x; f 1 True',
+    '(x, x -> x) 1 True',
 ]) Deno.test(`Vect and equality patterns have static contradictions: ${source}`, () => {
     if (!checkSource(source, '<test>', { strict: true }).issues.length) throw new Error('expected static error');
 });

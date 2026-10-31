@@ -3,7 +3,7 @@
 import "p5"
 
 video = createVideo ["assets/fingers.mov","assets/fingers.webm"]
-playing = Mutable false
+playing = Mutable False
 
 setup (Sketch p) = {
     p.createCanvas 710 400

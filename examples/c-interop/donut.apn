@@ -10,6 +10,6 @@ ffi.withLibrary path [
     donut_finish: ffi.function [] []
 ] c -> c.donut_start 80 40 ? {
     renderFrame n = c.donut_frame (inexact n * .04) (inexact n * .02)
-    # length drives the lazy frames; C returns false after Ctrl+C.
+    # length drives the lazy frames; C returns False after Ctrl+C.
     seq (length (takeWhile id (map renderFrame frames))) c.donut_finish
 } : fail "could not initialize terminal donut"

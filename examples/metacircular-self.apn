@@ -9,4 +9,4 @@ evaluatorSource <- readFile (null args ? "lib/meta/evaluator.apn" : head args)
 # That interpreted evaluator then runs each of these programs.
 print (metaSelfEval evaluatorSource "20 + 22")
 print (metaSelfEval evaluatorSource "id x = x; id 42")
-print (metaSelfEval evaluatorSource "true ? 42 : missing")
+print (metaSelfEval evaluatorSource "True ? 42 : missing")

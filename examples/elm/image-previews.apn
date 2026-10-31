@@ -12,14 +12,14 @@ Msg =
     | GotFiles file.File (List file.File)
     | GotPreviews (List String)
 
-init = [[hover: false, previews: []], browser.none]
+init = [[hover: False, previews: []], browser.none]
 
 update msg model = match msg [
     Pick -> [model, file.selectFiles ["image/*"] GotFiles]
-    DragEnter -> { model.hover = true; [model,browser.none] }
-    DragLeave -> { model.hover = false; [model,browser.none] }
+    DragEnter -> { model.hover = True; [model,browser.none] }
+    DragLeave -> { model.hover = False; [model,browser.none] }
     GotFiles first others -> {
-        model.hover = false
+        model.hover = False
         [model, task.perform GotPreviews (sequence (map file.toUrl (first :: others)))]
     }
     GotPreviews urls -> { model.previews = urls; [model,browser.none] }

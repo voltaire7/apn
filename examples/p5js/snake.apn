@@ -10,7 +10,7 @@ direction = Mutable "right"
 fruit = Mutable [0,0]
 score = Mutable 0
 highScore = Mutable 0
-playing = Mutable false
+playing = Mutable False
 
 setup (Sketch p) = {
     p.createCanvas 500 500
@@ -72,7 +72,7 @@ startGame (Sketch p) = {
     set segments (map (n -> [startingSegments - 1 - n, 15]) [0..startingSegments - 1])
     set direction "right"
     set score 0
-    set playing true
+    set playing True
     p.loop
 }
 
@@ -106,7 +106,7 @@ gameOver (Sketch p) = {
     p.storeItem "high score" highScore
     p.text ("Game over!\nYour score: " ++ to String score ++ "\nHigh score: "
         ++ to String highScore ++ "\nClick to play again.") (gridWidth / 2) (gridHeight / 2)
-    set playing false
+    set playing False
     p.noLoop
 }
 

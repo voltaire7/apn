@@ -50,7 +50,7 @@ A constructed Float field keeps its type: assigning `Int` to it fails with
 | `Complex`, `ComplexExact` | `Complex 0`, `ComplexExact 0` |
 | `Number`, `Real`, `Integer`, `Exact` | Exact integer `0` |
 | `Inexact` | Inexact `0.0` |
-| `Bool` | `false` |
+| `Bool` | `False` |
 | `String` | `""` |
 | `Char` | `'\0'` (the NUL code point) |
 | `List` | `[]` |
@@ -71,9 +71,9 @@ retain their labels. All annotations participate in checked arithmetic.
 Int 123                # 123, typed Int
 typeOf (Int 123)        # Int
 typeOf Int              # Type
-isType Int Int         # false
-isType Type Int        # true
-Int == Float           # false
+isType Int Int         # False
+isType Type Int        # True
+Int == Float           # False
 Type Vector3           # [x: Float, y: Float, z: Float]
 3 * Int                # [0,1,2]
 Int * 3                # [0,1,2]

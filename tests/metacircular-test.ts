@@ -9,7 +9,7 @@ const sourcePrograms = [
     '[c -> c, c -> c, c -> c]."a😀é"', '[c -> 42, c -> 42]."hi"', '[c -> c, c -> c]."hi"',
      '[x -> x * 2, x -> x * 2, x -> x * 2].[1,2,3]', '[x -> x + 1, x -> x * 2].[3,4]',
     '42', '1 + 2 * 3', '(1 + 2) * 3', '-12 + 5', '1 / 3 + 1 / 6',
-    'true ? 42 : missing', 'false ? missing : 7', '!false', '[]',
+    'True ? 42 : missing', 'False ? missing : 7', '!False', '[]',
     '"hello" ++ " world"', '[1, 2 + 3, 7]', 'head [42,missing]',
     'id x = x; id 42', 'constant x y = x; constant 42 missing',
     '(x -> x + 1) 41', 'compose f g x = f (g x); compose (x -> x * 2) (x -> x + 1) 20',
@@ -18,7 +18,7 @@ const sourcePrograms = [
     'mapLocal f xs = null xs ? [] : f (head xs) :: mapLocal f (tail xs)\nmapLocal (x -> x * 2) [1,2,3]',
     'outer x = { inner y = x + y; inner }; outer 40 2',
     'x = 7; f ignored = x; { x = 99; f 0 }',
-    'even n = n == 0 ? true : odd (n - 1); odd n = n == 0 ? false : even (n - 1); even 4',
+    'even n = n == 0 ? True : odd (n - 1); odd n = n == 0 ? False : even (n - 1); even 4',
     '(x -> x + 40) $ 2',
     '(x -> x + 1) $ (x -> x * 2) $ 3',
     '# comment\nx = 41\nx + 1',
@@ -32,7 +32,7 @@ for (const source of sourcePrograms) Deno.test(`metacircular agrees with host: $
     const actual = meta.renderString(meta.run(parse('metaEval source')));
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
 });
-for (const source of ['["old"].["new"]', '[0].[123]', '[false].[true]', '"old" "new"', 'false true', '0 123', 'foo =', '1 +', '[1, 2', '"unterminated', '1.2', '1; 2', 'missing', 'head []']) {
+for (const source of ['["old"].["new"]', '[0].[123]', '[False].[True]', '"old" "new"', 'False True', '0 123', 'foo =', '1 +', '[1, 2', '"unterminated', '1.2', '1; 2', 'missing', 'head []']) {
     Deno.test(`metacircular rejects: ${source}`, () => {
         const i = new Interpreter(); i.run(parse('import "meta"'));
         i.env.setLocal("source", { kind: "string", v: source });
@@ -41,7 +41,7 @@ for (const source of ['["old"].["new"]', '[0].[123]', '[false].[true]', '"old" "
         throw new Error("Expected a syntax/runtime error");
     });
 }
-for (const source of ['20 + 22', 'id x = x; id 42', 'true ? 42 : missing', 'head [x -> x * 2].[21]', 'head [c -> 42, c -> 42]."hi"']) {
+for (const source of ['20 + 22', 'id x = x; id 42', 'True ? 42 : missing', 'head [x -> x * 2].[21]', 'head [c -> 42, c -> 42]."hi"']) {
     Deno.test(`evaluator evaluates its own source, then: ${source}`, () => {
         const i = new Interpreter(); i.run(parse('import "meta"'));
         i.env.setLocal("evaluatorSource", { kind: "string", v: Deno.readTextFileSync(new URL("../lib/meta/evaluator.apn", import.meta.url)) });
@@ -54,7 +54,7 @@ Deno.test("object environment exposes no host parser or evaluator", () => {
     const i = new Interpreter(); i.run(parse('import "meta"'));
     for (const name of ["parse", "eval", "toAST", "load", "metaEval", "meEval"]) {
         i.env.setLocal("name", { kind: "string", v: name });
-        if (i.renderString(i.run(parse('has name metaPrimitives'))) !== "false") throw new Error(`Leaked ${name}`);
+        if (i.renderString(i.run(parse('has name metaPrimitives'))) !== "False") throw new Error(`Leaked ${name}`);
     }
 });
 Deno.test("record access demands action chains without forcing unrelated fields", () => {

@@ -6,15 +6,15 @@ for (const [source, expected] of [
     ['m = insert [x: 123] $ HashMap []\nlookup "x" m', '123'],
     ['HashMap [["x",1],["y",2]]', 'HashMap [["x",1],["y",2]]'],
     ['m = HashMap [x: 1]\nm "x"', '1'],
-    ['m = HashMap [x: 1]\nn = insert [x: 2, y: 3] m\n[m "x", n "x", has "y" m, has "y" n]', '[1,2,false,true]'],
+    ['m = HashMap [x: 1]\nn = insert [x: 2, y: 3] m\n[m "x", n "x", has "y" m, has "y" n]', '[1,2,False,True]'],
     ['lookup 1 $ HashMap [[1,"first"],[1.0,"last"]]', '"last"'],
-    ['m = HashMap [x: 1]\n[pairs m, keys m, values m, length m, null m]', '[[["x",1]],["x"],[1],1,false]'],
+    ['m = HashMap [x: 1]\n[pairs m, keys m, values m, length m, null m]', '[[["x",1]],["x"],[1],1,False]'],
     ['remove "x" $ HashMap [x: 1]', 'HashMap []'],
     ['f (HashMap m) = length m\nf (HashMap [x: 1])', '1'],
-    ['HashMap [x: 1, y: 2] == HashMap [y: 2, x: 1]', 'true'],
+    ['HashMap [x: 1, y: 2] == HashMap [y: 2, x: 1]', 'True'],
     ['lookup "x" (HashMap [["x",1],["unused",missing]])', '1'],
     ['typeOf (HashMap [])', 'HashMap'],
-    ['isType HashMap (HashMap [])', 'true'],
+    ['isType HashMap (HashMap [])', 'True'],
 ]) {
     Deno.test(`HashMap: ${source}`, () => {
         const interp = new Interpreter();

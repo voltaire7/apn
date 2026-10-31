@@ -7,7 +7,7 @@ for (
         "self f = f f",
         "self f = f f; self self",
         "self f = f f; self (x -> x)",
-        "self f = f f; [self (x -> 123), self (x -> true)]",
+        "self f = f f; [self (x -> 123), self (x -> True)]",
         "omega = (x -> x x) (x -> x x)",
         "loop x = loop x",
         "forever x = forever; forever 1 2",
@@ -30,11 +30,11 @@ for (
 for (
     const source of [
         "self f = f f; self 123",
-        "self f = f f; Int (self (x -> true))",
+        "self f = f f; Int (self (x -> True))",
         'self f = f f; self (x -> x); self "bad"',
-        'self f = f f; [self (x -> 1), self (x -> true)]; Int (self (x -> "bad"))',
+        'self f = f f; [self (x -> 1), self (x -> True)]; Int (self (x -> "bad"))',
         'outer x = { self f = f f; self (ignored -> x) }; Int (outer "bad")',
-        "loop (Int x) = loop x; loop true",
+        "loop (Int x) = loop x; loop True",
         'xs = 1 :: xs; map (x -> x + 1) (xs ++ ["bad"])',
     ]
 ) {

@@ -33,9 +33,9 @@ for (const source of [
 
 for (const checked of [false, true]) {
     for (const [source, expected] of [
-        ['x x = x; x x == x', 'true'],
-        ['x x = x; alias = x; x alias == x', 'true'],
-        ['x x = x; x x x == x', 'true'],
+        ['x x = x; x x == x', 'True'],
+        ['x x = x; alias = x; x alias == x', 'True'],
+        ['x x = x; x x x == x', 'True'],
         ['x n x = 42; partial = x 1; partial x', '42'],
         ['x [x] = 42; x [x]', '42'],
         ['x [self: x] = 42; x [self: x]', '42'],

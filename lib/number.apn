@@ -28,6 +28,6 @@ median xs = null xs ? None : {
     mid = quotient n 2
     isOdd n ? Some (ordered mid) : Some ((ordered (mid - 1) + ordered mid) / 2)
 }
-isPrime n = n < 2 ? false : all (d -> n % d != 0) (takeWhile (d -> d * d <= n) [2..])
+isPrime n = n < 2 ? False : all (d -> n % d != 0) (takeWhile (d -> d * d <= n) [2..])
 primes = filter isPrime [2..]
 fibonacci = 0 :: 1 :: zipWith (+) fibonacci (tail fibonacci)

@@ -11,8 +11,8 @@ print (typeOf (Ints 3 [10,20,30]))
 
 # A type can depend on a Boolean value too.
 Choice flag = flag ? Int : String
-print (Choice true 123)
-print (Choice false "hello")
+print (Choice True 123)
+print (Choice False "hello")
 
 # Uncomment to get a static length error:
 # copy 3 [10,20]

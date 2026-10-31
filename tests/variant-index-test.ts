@@ -16,7 +16,7 @@ for (const [source, expected] of [
     ['xs = [[0,-1],[1,0]]\nxs North = [0,0]\nxs North', '[0,0]'],
     ['xs = [Int,Float]\nd = East\nxs (d) = 2\nxs', '[Int,2.0]'],
     ['Other = First | Second\n[10,20] Second', '20'],
-    ['[North == 0, typeOf North]', '[false,Direction]'],
+    ['[North == 0, typeOf North]', '[False,Direction]'],
 ] as const) Deno.test(`variant index: ${source}`, () => {
     const actual = result(direction + source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

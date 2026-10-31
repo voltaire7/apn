@@ -18,9 +18,9 @@ Concrete scalars (numbers, strings, characters, and booleans) are not callable.
 [x: 0] [x: 123]             # [x: 123]
 [x: 1.1] [10]               # [x: 10.0]: x is a Float
 [x: 1] [2.5]                # error: lossy conversion
-[x: false] [1]              # error: cannot use Int where Bool is required
+[x: False] [1]              # error: cannot use Int where Bool is required
 ["old"].["new"]             # error: cannot apply a string
-[Bool].[true]               # [true]
+[Bool].[True]               # [True]
 [Char].['b']                 # ['b']
 ```
 
@@ -30,7 +30,7 @@ number to the default's numeric type (`typeOf` of it, so `1` is an Int),
 rejecting overflow and nonzero imaginary-part loss; a string, character or
 Bool only from its own kind; a function or action only from its own kind. A
 function field is replaced, never applied: `[x: 0, y: (*2)] [1,2]` is an error.
-Standalone `"old" "new"`, `'a' 'b'`, and `false true` are application errors.
+Standalone `"old" "new"`, `'a' 'b'`, and `False True` are application errors.
 List templates apply their function slots, including effects (see [Lists](#lists)).
 
 Numeric parameter patterns always require lossless conversion, including for
@@ -392,7 +392,7 @@ Numbers.[1]                # [1]; Numbers.[1,2] errors
 Point [x: 1, y: 2]         # [x: 1.0, y: 2.0]
 cast [Int,Int] [1,2]        # [1,2]
 Type [Int]                # [Int]
-isType Type [(* 2)]        # false
+isType Type [(* 2)]        # False
 ```
 
 Aliases are shared type-level bindings, not repeatable zero-argument actions.

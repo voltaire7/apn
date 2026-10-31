@@ -6,7 +6,7 @@ import "p5"
 Bubble = [x: Float, y: Float, radius: Float, name: String]
 bubbles = Mutable (List Bubble [])
 pressed = Mutable [0.0,0.0]
-creating = Mutable false
+creating = Mutable False
 
 setup (Sketch p) = {
     p.createCanvas 640 360
@@ -54,12 +54,12 @@ display (Sketch p) bubble = {
 
 mousePressed (Sketch p) = {
     set pressed [Float p.mouseX, Float p.mouseY]
-    set creating true
+    set creating True
 }
 
 mouseReleased (Sketch p) = when creating {
     addBubble p
-    set creating false
+    set creating False
 }
 
 # A bubble with the name asked for (none if it is cancelled), kept.

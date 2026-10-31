@@ -16,8 +16,8 @@ map _ (Err error) = Err error
 (Err error) >>= _ = Err error
 return = Ok
 throw = Err
-isSome (Some _) = true
-isSome None = false
+isSome (Some _) = True
+isSome None = False
 isNone value = not (isSome value)
 withDefault _ (Some x) = x
 withDefault fallback None = fallback

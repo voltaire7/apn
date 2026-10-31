@@ -18,13 +18,13 @@ Deno.test("editor numbers distinguish prefixes, exponents, complex and polar mar
     ]);
 });
 Deno.test("editor ternary colons differ from record colons; cons is an operator", () => {
-    equal(colors('x = true ? [x: 1] : (1::[])').filter(([text]) => text === ":" || text === "::" || text === "="),
+    equal(colors('x = True ? [x: 1] : (1::[])').filter(([text]) => text === ":" || text === "::" || text === "="),
         [["=", "punctuation"], [":", "punctuation"], [":", "operator"], ["::", "operator"]]);
-    equal(colors('true ? false ? 1 : 2 : 3').filter(([text]) => text === ":"), [[":", "operator"], [":", "operator"]]);
+    equal(colors('True ? False ? 1 : 2 : 3').filter(([text]) => text === ":"), [[":", "operator"], [":", "operator"]]);
 });
 Deno.test("editor colors keywords, builtins, constructors, strings and comments", () => {
-    equal(colors('import print Some true "hello" # comment'), [
-        ["import", "keyword"], ["print", "function"], ["Some", "type"], ["true", "keyword"],
+    equal(colors('import print Some True "hello" # comment'), [
+        ["import", "keyword"], ["print", "function"], ["Some", "type"], ["True", "keyword"],
         ['"hello"', "string"], ["# comment", "comment"],
     ]);
     equal(colors("double' x = 'a'"), [["=", "punctuation"], ["'a'", "string"]]);

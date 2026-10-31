@@ -16,7 +16,7 @@ materials = ["color","emissive","normal","texture"]
 # The material chosen, and, by selector, whether each color applies and which it is.
 init = [[
     material: "color"
-    on: [true,true,false,false,true]
+    on: [True,True,False,False,True]
     colors: ["#ffffff","#000000","#ffffff","#ffffff","#ffffff"]
 ], browser.none]
 

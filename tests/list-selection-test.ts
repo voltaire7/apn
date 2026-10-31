@@ -83,7 +83,7 @@ for (const source of ['[Int].[]', '[Int].[1,2]', '[Int]."hi"', 'cast [Int] [1,2]
 Deno.test('singleton schema membership has exact length', () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument('[isType [Int] [], isType [Int] [1], isType [Int] [1,2]]')));
-    if (actual !== '[false,true,false]') throw new Error(actual);
+    if (actual !== '[False,True,False]') throw new Error(actual);
 });
 Deno.test('cast still requires types, not arbitrary functions', () => {
     const i = new Interpreter();

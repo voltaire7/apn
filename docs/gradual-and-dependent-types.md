@@ -28,7 +28,7 @@ Distinct typed input domains remain overloads. No `::` declaration is
 required.
 
 A choice between values has either type, as a list's items do (`[1,"a"]` is
-`List (Int | String)`): a conditional's branches (`x ? "yes" : false` is
+`List (Int | String)`): a conditional's branches (`x ? "yes" : False` is
 `String | Bool`), a `match`'s alternatives and a function's clauses. Such a
 value is used where every choice fits (`(c ? 1 : 2.5) + 1`, `func x == "yes"`,
 `print`), or narrowed by a pattern: a `match`, or clauses for each type, which
@@ -36,7 +36,7 @@ each choice reaches as the runtime dispatches it. So `func x ++ "!"` is an
 error, since a `Bool` cannot be appended, and so is a block statement that is
 an action on one branch only. Where the checker knows which is taken (a known
 condition, argument or scrutinee), the value has that one's type:
-`func true ++ "!"` checks. A conditional is a `match` on its condition (see
+`func True ++ "!"` checks. A conditional is a `match` on its condition (see
 [semantics](semantics.md)), so the two check alike, and choices that are lists of
 one type keep it, lengths included. Choices unify where they can without breaking
 another use: in `x > 0 ? x : "neg"`, `x` stays a number, as `x > 0` needs. Values
@@ -53,11 +53,11 @@ result type are instead an overload the context chooses
 ([overloading on the result type](semantics.md#overloading-on-the-result-type)).
 
 ```apn
-func x = x ? "yes" : false
-print (func true ++ "!")           # yes!
+func x = x ? "yes" : False
+print (func True ++ "!")           # yes!
 describe (String s) = s ++ "!"
 describe (Bool b) = b ? "T" : "F"
-print (describe (func false))      # F
+print (describe (func False))      # F
 # t <- currentTime; func (t > 0) ++ "!"   static error: cannot append Bool and String
 ```
 
@@ -191,7 +191,7 @@ This installs the stateful checker and runtime guards used by the CLI. The raw
 `Interpreter` API remains available for internal runtime tests and hosts that
 supply their own validation; it still infers each run's types, reporting no
 type errors, because typed patterns, result-type overloads and monads decide
-by them. `checkedExecution = true` alone enables runtime guards; it does not
+by them. `checkedExecution = True` alone enables runtime guards; it does not
 report type errors. A successful check involving Dynamic is not a promise that
 its runtime checks will succeed.
 
@@ -256,8 +256,8 @@ Type aliases can receive values as well as types:
 
 ```apn
 Choice flag = flag ? Int : String
-Choice true 123
-Choice false "hello"
+Choice True 123
+Choice False "hello"
 ```
 
 Generic variant declarations still use their existing type-parameter
@@ -275,7 +275,7 @@ SelectedType flag = flag ? Int : String
 sizeFor n = n * 2
 cellType 0 = Int
 cellType _ = String
-SelectedType (isEven 4) 5              # Int: isEven 4 is true
+SelectedType (isEven 4) 5              # Int: isEven 4 is True
 # SelectedType (isEven 3) 5            # static error: String is required
 # Vect (sizeFor 2) Int [1,2,3]         # static error: expected 4, got 3
 cellType 1 "text"                      # String
@@ -671,8 +671,8 @@ checker and its stricter acceptance rules.
 
 ## Editor diagnostics
 
-The LSP accepts `initializationOptions.typeChecking = true`. In Neovim's LSP
-configuration this is `init_options = { typeChecking = true }`. It is disabled
+The LSP accepts `initializationOptions.typeChecking = True`. In Neovim's LSP
+configuration this is `init_options = { typeChecking = True }`. It is disabled
 by default to preserve existing sessions. No editor configuration is modified
 by installing these language changes. Type diagnostics use the same inference
 engine in gradual mode; ordinary execution and `--check` additionally reject remaining

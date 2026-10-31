@@ -10,7 +10,7 @@ for (const [source, expected] of [
     ['loop 0 = 42; loop n = { unused = missing; loop (n - 1) }; loop 10000', '42'],
     ['loop 0 = 42; loop n = loop (n - 1); loop 10000', '42'],
     ['loop = n -> n == 0 ? 42 : loop (n - 1); loop 10000', '42'],
-    ['even n = n == 0 ? true : odd (n - 1); odd n = n == 0 ? false : even (n - 1); even 10001', 'false'],
+    ['even n = n == 0 ? True : odd (n - 1); odd n = n == 0 ? False : even (n - 1); even 10001', 'False'],
     ['loop n = n == 0 ? 42 : { next = n - 1; loop $ next }; loop 10000', '42'],
     ['loop n ignored = n == 0 ? 42 : loop (n - 1) missing; loop 10000 missing', '42'],
     ['loop n = n == 0 ? [42,missing] : loop (n - 1); head (loop 10000)', '42'],

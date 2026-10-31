@@ -14,8 +14,8 @@ Deno.test("REPL submissions extend clauses and replace matching clauses", () => 
 });
 Deno.test("Existing range patterns and list destructuring work on separate submissions", () => {
     const i = new Interpreter();
-    i.run(parse('within [0..10] = true')); i.run(parse('within x = false'));
-    if (value(i, 'within 0') !== 'true' || value(i, 'within 10') !== 'true' || value(i, 'within 11') !== 'false') throw new Error("range pattern failed");
+    i.run(parse('within [0..10] = True')); i.run(parse('within x = False'));
+    if (value(i, 'within 0') !== 'True' || value(i, 'within 10') !== 'True' || value(i, 'within 11') !== 'False') throw new Error("range pattern failed");
     if (value(i, 'first (x::xs) = x; first [3..]') !== '3') throw new Error("range destructuring failed");
 });
 for (const [source, expected] of [

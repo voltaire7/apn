@@ -18,7 +18,7 @@ Msg =
     | Released String Float
 
 init = [
-    [bubbles: List Bubble [], pressed: [0.0,0.0], creating: false]
+    [bubbles: List Bubble [], pressed: [0.0,0.0], creating: False]
     task.perform Loaded (readFile "assets/bubbles.json")
 ]
 
@@ -33,11 +33,11 @@ update msg model = match msg [
     Read (Ok text) -> [load text model, browser.none]
     Read (Err _) -> [model,browser.none]
     Download -> [model, file.download "bubbles.json" "application/json" (to JSON model.bubbles)]
-    Pressed x y -> { model.pressed = [x,y]; model.creating = true; [model,browser.none] }
+    Pressed x y -> { model.pressed = [x,y]; model.creating = True; [model,browser.none] }
     # A bubble with the name asked for (none if it was cancelled).
     Released name radius -> {
         [x,y] = model.pressed
-        model.creating = false
+        model.creating = False
         model.bubbles = model.bubbles ++ (name == ""
             ? [] : [[x: x, y: y, radius: radius, name: name]])
         [model,browser.none]

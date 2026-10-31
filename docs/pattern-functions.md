@@ -320,7 +320,7 @@ Use `_` for a field that accepts any type and preserves its value:
 func ([x: _] v) = print v.x
 func [1]                    # 1
 func ["hello"]              # hello
-func [x: true]              # true
+func [x: True]              # True
 ```
 
 The schema supplies field names and positional order; `v` receives a record.

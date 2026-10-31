@@ -93,7 +93,7 @@ v "\"x\"" = 123
 key = "\"" ++ "x" ++ "\""
 v key`, "123"],
     ["keys from iteration look up the original field", String.raw`v = [x: 1, "x": 2, "\"x\"": 3]
-v * [key,value] -> v key == value`, "[true,true,true]"],
+v * [key,value] -> v key == value`, "[True,True,True]"],
     ["HashMap preserves both strings", String.raw`m = HashMap [x: 1, "x": 2]
 [m "x", m "\"x\""]`, "[1,2]"],
 ]) Deno.test(`ordinary string keys: ${name}`, () => {

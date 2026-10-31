@@ -11,7 +11,7 @@ Deno.test("mutable reads do not replace cell with cached contents", () => check(
 Deno.test("aliases and function parameters share mutable identity", () => check('x = Mutable 0; y = x; increment ref = set ref $ ref + 1; increment y; increment x; y', '2'));
 Deno.test("argument-taking factories allocate distinct cells", () => check('make n = Mutable n; x = make 0; y = make 0; set x $ 9; y', '0'));
 Deno.test("mutable supports nonnumeric contents", () => check('x = Mutable "old"; set x "new"; x', '"new"'));
-Deno.test("mutable identity can be inspected", () => check('x = Mutable 0; [typeOf x, isType Mutable x]', '[Mutable,true]'));
+Deno.test("mutable identity can be inspected", () => check('x = Mutable 0; [typeOf x, isType Mutable x]', '[Mutable,True]'));
 Deno.test("failed set preserves old contents", () => {
     const i = new Interpreter();
     i.run(parse('x = Mutable 7'));

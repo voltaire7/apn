@@ -71,5 +71,5 @@ onSubmit message = HtmlSubmit message
 # onEvent name f (Elm's on): f gets the event as a record: value (the
 # target's), checked, key, pageX, pageY, and files (the target's or a drop's:
 # each a record of name, size, mime and url).
-onEvent name handler = HtmlOn name handler false
-preventDefaultOn name handler = HtmlOn name handler true
+onEvent name handler = HtmlOn name handler False
+preventDefaultOn name handler = HtmlOn name handler True

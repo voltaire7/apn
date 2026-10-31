@@ -118,8 +118,8 @@ greet
 `, ["2", "2"]);
 
 example("ternary evaluates only the selected branch", `
-print (true ? 7 : missing)
-print (false ? missing : 8)
+print (True ? 7 : missing)
+print (False ? missing : 8)
 `, ["7", "8"]);
 
 example("probe shows code as written, unevaluated", `
@@ -239,13 +239,13 @@ print (length [missing,missing])
 print (null (missing::missing))
 print ([1,2,3] -1)
 print (map [1..] [0,2,4])
-`, ["7", "2", "false", "3", "[1,3,5]"]);
+`, ["7", "2", "False", "3", "[1,3,5]"]);
 
 example("equality compares list representations and stops at a mismatch", `
 print (1::2::[] == [1,2])
 print ([1..3] == [1,2,3])
 print (1::missing == 2::missing)
-`, ["true", "true", "false"]);
+`, ["True", "True", "False"]);
 
 example("partial applications do not mutate other uses of a function", `
 add a b = a + b
@@ -400,11 +400,11 @@ print ((2 + 3) * 4)
 print (10 - 3 - 2)
 print (24 / 4 * 2)
 print (1 :: 2 :: [])
-print (1 < 2 == true)
-print (false ? 1 : (true ? 2 : 3))
+print (1 < 2 == True)
+print (False ? 1 : (True ? 2 : 3))
 print ((* 2) $ (+ 1) $ 3)
 print (-head [2,3])
-`, ["14", "20", "5", "12", "[1,2]", "true", "2", "8", "-2"]);
+`, ["14", "20", "5", "12", "[1,2]", "True", "2", "8", "-2"]);
 // v n = [key,value] writes entry n as v n reads it.
 example("a record's entry is written by position as a pair", `
 v = [x: 1, y: 2, z: 3]
@@ -465,10 +465,10 @@ one (x::[]) = x
 lam = (x::rest) -> rest
 print [f [1,2], g [3,4], one [5], lam [6,7]]`, ["[[2],[4],5,[7]]"]);
 example("boolean literal patterns", `
-h x = match x [false -> "f", true -> "t"]
-f true = 1
+h x = match x [False -> "f", True -> "t"]
+f True = 1
 f b = 2
-print [h false, h true, f true, f false]`, ['["f","t",1,2]']);
+print [h False, h True, f True, f False]`, ['["f","t",1,2]']);
 example("character and float literal patterns", `
 f 'a' = "letter a"
 f 1.5 = "one and a half"

@@ -28,7 +28,7 @@ for (const [name, source, expected] of [
     ["a statement runs its action", 'print "hi"', ["hi"]],
     ["naming an action runs nothing", 'greet = print "hi"\nprint "first"\ngreet\ngreet', ["first", "hi", "hi"]],
     ["<- runs an action and binds its result", 'x <- { print 5; return 5 }\nprint (x + 1)', ["5", "6"]],
-    ["print yields []", 'x <- print 5\nprint (null x)', ["5", "true"]],
+    ["print yields []", 'x <- print 5\nprint (null x)', ["5", "True"]],
     ["<- return x binds x, evaluated now", "x = 1\nx <- return (x + 1)\nprint x", ["2"]],
     ["IO T is a type that checks an action", 'sayHello = IO [] { print "hello" }\nsayHello', ["hello"]],
     ["return x is the action yielding x", "x <- return 42\nprint x", ["42"]],
@@ -52,7 +52,7 @@ for (const [name, source, expected] of [
     [">>= and >> chain actions", 'return 5 >>= print\nprint "a" >> print "b"\nprint =<< return 6', ["5", "a", "b", "6"]],
     [">>= on lists and Result", 'import "option"\nprint ([1,2] >>= x -> [x, x * 10])\nprint (Ok 3 >>= x -> Ok (x + 1))\nprint (Err "e" >>= x -> Ok (x + 1))',
         ["[1,10,2,20]", "Ok 4", 'Err "e"']],
-    ["sequence, mapM, when and unless", 'xs <- sequence [return 1, return 2]\nprint xs\nys <- mapM (x -> { print x; return (x * 2) }) [3,4]\nprint ys\nwhen true (print "yes")\nunless true (print "no")',
+    ["sequence, mapM, when and unless", 'xs <- sequence [return 1, return 2]\nprint xs\nys <- mapM (x -> { print x; return (x * 2) }) [3,4]\nprint ys\nwhen True (print "yes")\nunless True (print "no")',
         ["[1,2]", "3", "4", "[6,8]", "yes"]],
 ] as const) Deno.test(`IO: ${name}`, () => {
     for (const checked of [true, false]) {

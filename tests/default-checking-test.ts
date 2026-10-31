@@ -40,7 +40,7 @@ for (const [source, expected] of [
     // A known small Int converts to a Float operand losslessly.
     ['f r = r.y == 0 ? 5.0 : r.vy / 8; f [y: 1.0, vy: 2.0]', '0.25'],
     // Either branch's three numbers: a list of three numbers.
-    ['f c = c ? [1.0,2.0,3.0] : [0.0,0.0,0.0]; [1.0,1.0,1.0] + f true', '[2.0,3.0,4.0]'],
+    ['f c = c ? [1.0,2.0,3.0] : [0.0,0.0,0.0]; [1.0,1.0,1.0] + f True', '[2.0,3.0,4.0]'],
     // A record alias is a type argument (List Point, Result Point e); a field
     // may name another module's type (browser.Viewport).
     ['import "option"\nPoint = [x: Float, y: Float]\nMsg = | Got (Result Point String)\nGot (Ok [x: 1, y: 2])', 'Got (Ok [x: 1.0, y: 2.0])'],
@@ -63,7 +63,7 @@ for (const [source, expected] of [
     ['Quote = [quote: String, year: Int]\n(Quote (Dynamic [quote: "q", year: 1])).quote', '"q"'],
     // A record type is a type: to applies it, and a Type parameter takes it.
     ['Quote = [quote: String, year: Int]\n(to Quote [year: 1]).year', '1'],
-    ['f (Type t) = t\nisType (f [a: Int]) [a: 3]', 'true'],
+    ['f (Type t) = t\nisType (f [a: Int]) [a: 3]', 'True'],
     // A string iterates its characters.
     ['"ab" * c -> to String c', '["\'a\'","\'b\'"]'],
     // A record its type made takes updates to its fields, and a literal copy new ones.
@@ -115,24 +115,24 @@ for (const source of [
 // A choice between values (a ternary's branches, a match's arms, a function's
 // clauses) has either type, as a list's items do: used where every one fits,
 // or narrowed by a pattern. Where the checker knows which is taken, it is that.
-const choices = 'import "time"\nt <- currentTime\nfunc x = x ? "yes" : false\n' +
-    'h x = match x [\n    0 -> "zero"\n    _ -> false\n]\ng 0 = "zero"\ng _ = false\n';
+const choices = 'import "time"\nt <- currentTime\nfunc x = x ? "yes" : False\n' +
+    'h x = match x [\n    0 -> "zero"\n    _ -> False\n]\ng 0 = "zero"\ng _ = False\n';
 for (const [source, expected] of [
-    ['[func true, func false, h 0, h 1, g 0, g 1]', '["yes",false,"zero",false,"zero",false]'],
-    ['[func (t > 0) == "yes", (t > 0 ? 1 : 2.5) + 1 > 0]', '[true,true]'],
-    ['func true ++ "!"', '"yes!"'],
+    ['[func True, func False, h 0, h 1, g 0, g 1]', '["yes",False,"zero",False,"zero",False]'],
+    ['[func (t > 0) == "yes", (t > 0 ? 1 : 2.5) + 1 > 0]', '[True,True]'],
+    ['func True ++ "!"', '"yes!"'],
     ['d (String s) = s ++ "!"; d (Bool b) = b ? "T" : "F"; [d (func (t > 0)), d (h t), d (g t)]', '["yes!","F","F"]'],
     ['match (func (t > 0)) [\n    String s -> s ++ "!"\n    _ -> "no"\n]', '"yes!"'],
     ['[h 0 ++ "!", g 0 ++ "!"]', '["zero!","zero!"]'],
     ['xs = [1,"a"]; d (Int n) = n + 1; d (String s) = s ++ "!"; map d xs', '[2,"a!"]'],
     // A held value may be either: Pair 1 "a" or Pair true 'c' is Pair (Int | Bool) (String | Char).
-    ["Pair a b = | Pair a b; first (Pair x _) = x; to String (first (t > 0 ? Pair 1 \"a\" : Pair true 'c'))", '"1"'],
+    ["Pair a b = | Pair a b; first (Pair x _) = x; to String (first (t > 0 ? Pair 1 \"a\" : Pair True 'c'))", '"1"'],
     ['inc (Int n) = n + 1; dbl (Int n) = n * 2; (t > 0 ? inc : dbl) 5', '6'],
     ['Handler a = | Handler (a -> String)\napply (Handler f) x = f x\napply (Handler (s -> s ++ "!")) "x"', '"x!"'],
     // The branches do not decide x where its other uses do: x > 0 keeps it a number.
     ['k x = x > 0 ? x : "neg"; [k 1 + 1, k -1]', '[2,"neg"]'],
     // A ternary is a match: a value known to take one alternative checks only it.
-    ['match true [true -> 1, false -> "a" + 1]', '1'],
+    ['match True [True -> 1, False -> "a" + 1]', '1'],
     ['x = 2\nmatch x [1 -> "one", n -> n + 1] + 1', '4'],
     // The one it takes is the most specific that fits, as among clauses.
     ['match 0 [n -> "any", 0 -> 5] + 1', '6'],
@@ -144,7 +144,7 @@ for (const source of [
     'func (t > 0) ++ "!"', 'h t ++ "!"', 'g t ++ "!"',
     // Every choice must be accepted where it is used.
     'd (String s) = s ++ "!"; d (Bool b) = "b"; d [func (t > 0), 1] 1',
-    'xs = [1,"a",true]; d (Int n) = n + 1; d (String s) = s ++ "!"; map d xs',
+    'xs = [1,"a",True]; d (Int n) = n + 1; d (String s) = s ++ "!"; map d xs',
     // A function a field holds takes one type, not either: Handler Int and
     // Handler String stay apart, and a choice of functions takes what all do.
     'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\ninc (Int n) = to String n\n' +
@@ -158,11 +158,11 @@ for (const source of [
     'd = x -> match x [0 -> 1]\nd 5',
     'add x y = match [x,y] [[0,b] -> b, [a,b] -> a + b]\nadd 0 "a" + 1',
     // A statement of a do-block is an action whichever branch is taken.
-    'f x = x ? print "yes" : false\nk y = {\n    f y\n    print 2\n}',
+    'f x = x ? print "yes" : False\nk y = {\n    f y\n    print 2\n}',
     // Alternatives' lists of one type keep it, lengths included, as branches' do.
     'pick b a c = b ? [map (x -> x) a, c] : [map (x -> x) a, c]\nsum3 [[x],[y,z]] = x + y + z\n' +
         'k n = sum3 (pick (n > 0) [1,2] [1,2])',
-    'pick b a c = match b [true -> [map (x -> x) a, c], _ -> [map (x -> x) a, c]]\n' +
+    'pick b a c = match b [True -> [map (x -> x) a, c], _ -> [map (x -> x) a, c]]\n' +
         'sum3 [[x],[y,z]] = x + y + z\nk n = sum3 (pick (n > 0) [1,2] [1,2])',
 ]) Deno.test(`a choice is used as every type it may be: ${source}`, () => rejected(session(), choices + source));
 
@@ -197,7 +197,7 @@ Deno.test("REPL clauses and polymorphism survive separate submissions", () => {
     if (run(i, '[func 0, func 2]') !== '[2,"two"]') throw new Error('lost the new clause');
     rejected(i, 'import "time"; t <- currentTime; func t ++ "!"');
     run(i, 'id x = x');
-    if (run(i, 'id 1') !== '1' || run(i, 'id true') !== 'true') throw new Error('lost polymorphism');
+    if (run(i, 'id 1') !== '1' || run(i, 'id True') !== 'True') throw new Error('lost polymorphism');
 });
 Deno.test("runtime failure restores bindings and their checking state", () => {
     const i = session(); run(i, 'existing = 1');
@@ -355,8 +355,8 @@ for (const source of [
     'h a b = [map (x -> x) a, map (x -> x) b]; g [[x],[y,z]] = x + y + z; g (h [1,2] [1])',
     // A function value that flows through a ternary, list, variable, or partial
     // application shares its type with other functions: no length is assumed.
-    'keep xs = xs * x -> x\ndrop1 xs = tail xs\npick b = b ? keep : drop1\ng [a,b,c] = a\ng (pick false [1,2,3])',
-    'keep xs = xs * x -> x\ndrop1 xs = tail xs\nh = false ? keep : drop1\ng [a,b,c] = a\ng (h [1,2,3])',
+    'keep xs = xs * x -> x\ndrop1 xs = tail xs\npick b = b ? keep : drop1\ng [a,b,c] = a\ng (pick False [1,2,3])',
+    'keep xs = xs * x -> x\ndrop1 xs = tail xs\nh = False ? keep : drop1\ng [a,b,c] = a\ng (h [1,2,3])',
     'keep xs = xs * x -> x\ndrop1 xs = tail xs\nfs = [keep,drop1]\ng [a,b,c] = a\ng (fs 1 [1,2,3])',
     'import "sequence"; p = sortBy compare; g [a,b] = a; g (p [2,1])',
 ]) Deno.test(`checker does not assume lengths: ${source}`, () => rejected(session(), source));
@@ -394,7 +394,7 @@ for (const [source, expected] of [
     ['f xs 0 = [0]; f [] n = [1,2]; g [a,b] = a; g (f [] 1)', '1'],
     ['f n = [1,2]; f 0 = [0]; g [a] = a; g (f 0)', '0'],
     ['f "x" = [0]; f s = [1,2]; g [a] = a; g (f "x")', '0'],
-    ['f true = [0]; f b = [1,2]; g [a] = a; g (f true)', '0'],
+    ['f True = [0]; f b = [1,2]; g [a] = a; g (f True)', '0'],
 ] as const) Deno.test(`first matching clause wins: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -406,7 +406,7 @@ for (const source of [
     'f x x = [0]; f x y = [1,2]; g [a] = a; g (f 1 2)',
     'f xs 0 = [0]; f [] n = [1,2]; g [a] = a; g (f [] 1)',
     'f n = [1,2]; f 0 = [0]; g [a,b] = a; g (f 0)',
-    'f true = [0]; f b = [1,2]; g [a] = a; g (f false)',
+    'f True = [0]; f b = [1,2]; g [a] = a; g (f False)',
     // Unknown lengths keep every possible clause.
     // (Static evaluation is bounded in work: this filter scans a million elements.)
     'f [] = [0]; f xs = [1,2]; g [a] = a; g (f (tail (take 1 (filter (> 999999) [0..]))))',
@@ -482,11 +482,11 @@ for (const source of [
 ]) Deno.test(`literals through parameters stay checked: ${source}`, () => rejected(session(), source));
 // Boolean and string literals reach clauses through parameters too.
 for (const [source, expected] of [
-    ['f true = [0]; f b = [1,2]; h x = g (f x); g [a] = a; h true','0'],
-    ['f true = [0]; f b = [1,2]; h x = g (f x); g [a,b] = a; h false','1'],
+    ['f True = [0]; f b = [1,2]; h x = g (f x); g [a] = a; h True','0'],
+    ['f True = [0]; f b = [1,2]; h x = g (f x); g [a,b] = a; h False','1'],
     ['f "x" = [0]; f s = [1,2]; h x = g (f x); g [a] = a; h "x"','0'],
     ['f "x" = [0]; f s = [1,2]; h x = g (f x); g [a,b] = a; h "y"','1'],
-    ['f true = [0]; f b = [1,2]; h x = g (f x); k y = h y; g [a] = a; k true','0'],
+    ['f True = [0]; f b = [1,2]; h x = g (f x); k y = h y; g [a] = a; k True','0'],
     ['f "x" = [0]; f s = [1,2]; h x = g (f x); k y = h y; m z = k z; g [a] = a; m "x"','0'],
     ['f "x" = [0]; f s = [1,2]; h n s = g (f s); g [a] = a; h 1 "x"','0'],
     ['f "x" = [0]; f s = [1,2]; h x = { x = "y"; g (f x) }; g [a,b] = a; h "x"','1'],
@@ -495,11 +495,11 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'f true = [0]; f b = [1,2]; h x = g (f x); g [a] = a; h false',
-    'f true = [0]; f b = [1,2]; h x = g (f x); g [a,b] = a; h true',
+    'f True = [0]; f b = [1,2]; h x = g (f x); g [a] = a; h False',
+    'f True = [0]; f b = [1,2]; h x = g (f x); g [a,b] = a; h True',
     'f "x" = [0]; f s = [1,2]; h x = g (f x); g [a] = a; h "y"',
-    'f true = [0]; f b = [1,2]; h x = g (f x); k y = h y; g [a] = a; k false',
-    'f true = [0]; f b = [1,2]; h x = g (f x); g [a] = a; [h true, h false]',
+    'f True = [0]; f b = [1,2]; h x = g (f x); k y = h y; g [a] = a; k False',
+    'f True = [0]; f b = [1,2]; h x = g (f x); g [a] = a; [h True, h False]',
     'f "x" = [0]; f s = [1,2]; h x = { x = "y"; g (f x) }; g [a] = a; h "x"',
 ]) Deno.test(`boolean and string literals through parameters stay checked: ${source}`, () => rejected(session(), source));
 // Characters, floats, integer ranges and constructors select clauses too,
@@ -539,7 +539,7 @@ for (const [source, expected] of [
     ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nh v = g (f (mk v))\nh 3', '0'],
     ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; pass v = v; g (f (pass None))', '0'],
     ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nmk2 y = mk y\ng (f (mk2 1))', '0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : None\ng (f (pick true))', '0'],
+    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : None\ng (f (pick True))', '0'],
     ['f 0 = [0]; f x = [1,2]; g [a] = a; zero x = 0; g (f (zero 9))', '0'],
     ['f "x" = [0]; f s = [1,2]; g [a] = a; named x = "x"; g (f (named 1))', '0'],
     ["f 'a' = [0]; f s = [1,2]; g [a] = a; letter x = 'a'; g (f (letter 1))", '0'],
@@ -551,7 +551,7 @@ for (const source of [
     'import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = Some x; g (f (mk 1))',
     'import "option"; f None = [0]; f x = [1,2]; g [a] = a; pass v = v; g (f (pass (Some 2)))',
     // Results that depend on a value, or calls through a variable, stay unknown.
-    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nmk2 x = Some x\nmkv = false ? mk : mk2\ng (f (mkv 1))',
+    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nmk2 x = Some x\nmkv = False ? mk : mk2\ng (f (mkv 1))',
     'import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; mkv = mk; g (f (mkv 1))',
     // Code after a rebinding reads the new version.
     "f 'a' = [0]; f x = [1,2]; g [a] = a; c = 'a'; h u = g (f c); c = 'b'; g (f c)",
@@ -560,14 +560,14 @@ for (const source of [
 // called function's clauses and conditions with what is known about the
 // arguments, and decides calls through parameters at the enclosing calls.
 for (const [source, expected] of [
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : Some 1\ng (f (pick true))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a,b] = a\npick b = b ? None : Some 1\ng (f (pick false))','1'],
+    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : Some 1\ng (f (pick True))','0'],
+    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a,b] = a\npick b = b ? None : Some 1\ng (f (pick False))','1'],
     ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 0))','0'],
     ['import "option"\nf None = [0]\nf x = [1,2]\ng [a,b] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 5))','1'],
     ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\ng (f (safe -3))','0'],
     ['import "option"\nf None = [0]\nf x = [1,2]\ng [a,b] = a\nsafe n = n > 0 ? Some n : None\ng (f (safe 4))','1'],
     ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n - 1 > 0 ? Some n : None\ng (f (safe 1))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nboth p q = p && q ? Some 1 : None\ng (f (both true false))','0'],
+    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nboth p q = p && q ? Some 1 : None\ng (f (both True False))','0'],
     ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nz n = !n ? None : Some 1\ng (f (z 0))','0'],
     ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nis s = s == "x" ? None : Some 1\ng (f (is "x"))','0'],
     ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\ncount 0 = None\ncount n = count (n - 1)\ng (f (count 5))','0'],
@@ -581,7 +581,7 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : Some 1\ng (f (pick false))',
+    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : Some 1\ng (f (pick False))',
     'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 5))',
     'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 3',
     'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nk w = h w\nk 9',
@@ -812,7 +812,7 @@ for (const source of [
 const deepClauses = 'count n = n == 0 ? 0 : 1 + count (n - 1); upto n = n == 0 ? [] : n :: upto (n - 1)';
 for (const [source, expected] of [
     ['g (f (r (from String "12" == 12)))','0'],
-    ['g (f (r (from String " true ")))','0'],
+    ['g (f (r (from String " True ")))','0'],
     ['g (f (r (from String "1/2" == 0.5)))','0'],
     ['g (f (q (integers "4")))','0'],
     ['g (f (r (count 500 == 500)))','0'],
@@ -869,7 +869,7 @@ const effectPrelude = `${optionClauses}\n${sizeClauses}\n${textClauses}`;
 for (const [source, expected] of [
     ['v <- print 3; g (f (r (null v)))','0'],
     ['v <- emit 3; g (f (r (null v)))','0'],
-    ['g (f (r (assert true true)))','0'],
+    ['g (f (r (assert True True)))','0'],
     ['g (f (r (null (debug 4))))','0'],
     ['k y = { c = Mutable 5; c + 1 }; g (f (r (k 0 == 6)))','0'],
     ['c = Mutable 5; g (f (r (c + 1 == 6)))','0'],
@@ -1262,14 +1262,14 @@ for (const [source, expected] of [
     ['Dual = | Dual Float Float\nsin (Dual a b) = Dual (sin a) (b * cos a)\nsin 0.0', '0.0'],
     // Floats divide to a Float; a value of either of two types converts.
     ['x = 1.0 / 4.0\nr = [v: 0.5]\n{ r.v = x; r }', '[v: 0.25]'],
-    ['b = true\nFloat (b ? 1 : 2.5)', '1.0'],
+    ['b = True\nFloat (b ? 1 : 2.5)', '1.0'],
     // A recursive function of a sketch, whose methods yield [].
     ['import "p5"\nb (Sketch p) n = when (n > 2) (b p (n / 2))\nmain = sketch [draw: Sketch p -> b p 120]\ntypeOf main', 'P5Program'],
     ['pairs []', '[]'],
     // A block may start with a comment line.
     ['f = {\n    # first a comment\n    1\n}\nf', '1'],
     // Comparisons stay exact (a float against an integer beyond 2^53 too).
-    ['[2 ^ 53 + 1 > 9007199254740992.0, 0.5 < 1, 0.1 + 0.2 > 0.3]', '[true,true,true]'],
+    ['[2 ^ 53 + 1 > 9007199254740992.0, 0.5 < 1, 0.1 + 0.2 > 0.3]', '[True,True,True]'],
     // A cell holding a p5 object takes another, as itself.
     ['import "p5"\nc = Mutable (loadImage "a.png")\nset c (loadImage "b.png")\ntypeOf c', 'Mutable'],
     ['import "glsl"\nglsl (vec [Glsl "a", 1] * sin (Glsl "t"))', '"(vec2(a, 1.0) * sin(t))"'],
@@ -1282,5 +1282,5 @@ for (const [source, expected] of [
 for (const source of [
     'f w = Float (w - 20)\nf "a"',
     'f (List _ xs) = map (n -> xs n) ["a"]\nf [1]',
-    'f b = Int (b ? 1 : "a")\nf true',
+    'f b = Int (b ? 1 : "a")\nf True',
 ]) Deno.test(`p5.js-example typing rejects: ${source}`, () => rejected(session(), source));

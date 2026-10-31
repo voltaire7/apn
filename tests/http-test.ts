@@ -21,19 +21,19 @@ function fails(source: string, text: string, kind?: string): void {
 // JSON.stringify and JSON.parse: to JSON, prettyJson, from JSON.
 for (const [source, expected] of [
     ['import "json"; to JSON [ids: ["jawed"]]', '"{\\"ids\\":[\\"jawed\\"]}"'],
-    ['import "json"; to JSON [1,2.5,true,"a",\'c\',[]]', '"[1,2.5,true,\\"a\\",\\"c\\",[]]"'],
+    ['import "json"; to JSON [1,2.5,True,"a",\'c\',[]]', '"[1,2.5,true,\\"a\\",\\"c\\",[]]"'],
     ['import "json"; to JSON [Content-Type: "x", n: 123456789012345678901234567890]', '"{\\"Content-Type\\":\\"x\\",\\"n\\":123456789012345678901234567890}"'],
     ['import "json"; to JSON ["x": 1, x: 2]', '"{\\"\\\\\\"x\\\\\\"\\":1,\\"x\\":2}"'],
     ['import "json"; to JSON (HashMap [["k",1]])', '"{\\"k\\":1}"'],
     ['import "json"; to JSON [1..3]', '"[1,2,3]"'],
     ['import "json"; prettyJson [a: [1]]', '"{\\n  \\"a\\": [\\n    1\\n  ]\\n}"'],
-    ['import "json"; from JSON "{\\"status\\": 1, \\"odd-key\\": [true, null, 2.5]}"', '[status: 1, odd-key: [true,[],2.5]]'],
+    ['import "json"; from JSON "{\\"status\\": 1, \\"odd-key\\": [true, null, 2.5]}"', '[status: 1, odd-key: [True,[],2.5]]'],
     ['import "json"; from JSON "{\\"odd-key\\": 3}" "odd-key"', '3'],
-    ['import "json"; v = [a: [1,2], b c: "x", Content-Type: 1, "q": 2]; from JSON (to JSON v) == v', 'true'],
+    ['import "json"; v = [a: [1,2], b c: "x", Content-Type: 1, "q": 2]; from JSON (to JSON v) == v', 'True'],
     ['import "json"; from JSON "123456789012345678901234567890"', '123456789012345678901234567890'],
     ['import "json"; from JSON "\\"\\\\u00e9\\""', '"é"'],
     ['import "json"; from JSON "{\\"a\\": 1, \\"a\\": 2}"', '[a: 2]'],
-    ['import "json"; v = [a: [1,2], "b c": "x"]; from JSON (to JSON v) == v', 'true'],
+    ['import "json"; v = [a: [1,2], "b c": "x"]; from JSON (to JSON v) == v', 'True'],
 ] as const) Deno.test(`json: ${source}`, () => {
     const actual = run(source);
     if (actual !== expected) throw new Error(`${source}: got ${actual}`);
@@ -51,10 +51,10 @@ for (const [source, message] of [
 Deno.test("fetch returns a response record", () => {
     const i = session();
     run('import ["http","json"]; response <- fetch "data:application/json,{\\"a\\":[1,2]}" []; []', i);
-    if (run("[response.status,response.ok,response.body]", i) !== '[200,true,"{\\"a\\":[1,2]}"]') throw new Error(run("response", i));
+    if (run("[response.status,response.ok,response.body]", i) !== '[200,True,"{\\"a\\":[1,2]}"]') throw new Error(run("response", i));
     if (run('lookup "content-type" response.headers', i) !== '"application/json"') throw new Error("headers");
     if (run("(from JSON response.body).a", i) !== "[1,2]") throw new Error("json body");
-    if (run('fetchJson "data:application/json,[true]" []', i) !== "[true]") throw new Error("fetchJson");
+    if (run('fetchJson "data:application/json,[true]" []', i) !== "[True]") throw new Error("fetchJson");
     if (run('fetchText "data:text/plain,hi" [method: "GET", timeout: 5000]', i) !== '"hi"') throw new Error("fetchText");
 });
 for (const [source, message, kind] of [
@@ -100,7 +100,7 @@ data = from JSON response.body
 []`, i);
         if (run("[response.status,data.method,data.auth,data.type,data.body]", i) !== '[200,"POST","Basic token","application/json","{\\"ids\\":[\\"jawed\\"]}"]') throw new Error(run("data", i));
         if (run('lookup "x-echo" response.headers', i) !== '"yes"') throw new Error("response headers");
-        if (run(`missing <- fetch "${base}/missing" []\n[missing.status,missing.ok,missing.statusText,missing.body]`, i) !== '[404,false,"Not Found","nope"]') throw new Error("404");
+        if (run(`missing <- fetch "${base}/missing" []\n[missing.status,missing.ok,missing.statusText,missing.body]`, i) !== '[404,False,"Not Found","nope"]') throw new Error("404");
         if (run(`big <- fetchText "${base}/big" []; length big`, i) !== "3000000") throw new Error("big body");
         fails(`import "http"; fetchText "${base}/missing" []`, "answered 404 Not Found");
         fails(`import "http"; fetchText "${base}/slow" [timeout: 100]`, "timed out after 100 ms");

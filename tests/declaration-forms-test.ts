@@ -48,7 +48,7 @@ for (const [source, expected] of [
     ["Sized = n -> Vect n Int\nSized 2 [1,2]", "[1,2]"],
     ["Sized = n -> Vect n Int\ntypeOf (Sized 2 [1,2])", "Vect 2 Int"],
     ["Handler = a -> Int\nrun ((Handler) h) = h 1\nrun (x -> 2)", "2"],
-    ["Handler = a -> Int\nisType Handler (x -> 2)", "true"],
+    ["Handler = a -> Int\nisType Handler (x -> 2)", "True"],
 ] as const) {
     Deno.test(`a lambda-valued type name: ${JSON.stringify(source)}`, () => {
         const actual = run(source);

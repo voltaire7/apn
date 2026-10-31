@@ -35,7 +35,7 @@ satisfy what test = Parser (input -> match input [
     x :: _ -> Err ("expected " ++ what ++ ", got " ++ _parserShown x)
     [] -> Err ("expected " ++ what ++ ", got the end")
 ])
-item = satisfy "an item" (_ -> true)
+item = satisfy "an item" (_ -> True)
 char c = satisfy (_parserShown c) (== c)
 oneOf cs = satisfy ("one of " ++ cs) (c -> contains c (to (List Char) cs))
 string text = _parserString text (to (List Char) text)

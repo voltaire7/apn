@@ -9,7 +9,7 @@ video = createVideo ["assets/fingers.mov","assets/fingers.webm"]
 
 Msg = | Toggle
 
-init = [false,browser.none]
+init = [False,browser.none]
 
 update Toggle playing = [!playing,browser.none]
 

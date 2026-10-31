@@ -11,7 +11,7 @@ for (const [source, expected] of [
     ['[South * West, 2 * East, West / South, West % South, South ^ West]', '[6,2,3/2,1,8]'],
     ['[-North,-East,-West]', '[0,-1,-3]'],
     ['[East + .5, South * .5, South ^ 3]', '[1.5,1.0,8]'],
-    ['[typeOf (East + 1), typeOf North, North == 0]', '[Int,Direction,false]'],
+    ['[typeOf (East + 1), typeOf North, North == 0]', '[Int,Direction,False]'],
     ['Other = First | Second\nWest + Second', '4'],
     ['[North,East,South] + 1', '[1,2,3]'],
     ['2 * [East,South]', '[2,4]'],
