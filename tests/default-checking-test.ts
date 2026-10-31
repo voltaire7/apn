@@ -56,6 +56,9 @@ for (const [source, expected] of [
     ['xs <- return (Vect 2 Int [1,2]); xs = [3]; xs', '[3]'],
     ['Int x = 1; x = "a"; x', '"a"'],
     ['x = 1; y = x + 1; x = "a"; [x,y]', '["a",2]'],
+    // Its value reads the version before it, whatever its value is.
+    ['xs = [1,2]; xs = map (+ 1) xs; xs', '[2,3]'],
+    ['v = { xs = [1,2]; xs = get xs 1; xs }; v', '2'],
     // A definition written with lambdas is checked as the clause with those parameters.
     ['append = Vect n a xs -> Vect m a ys -> Vect (n + m) a {\n    match xs [\n        [] -> ys\n        x::xs -> x :: append xs ys\n    ]\n}\ntypeOf (append [] [3])', 'Vect 1 Int'],
     // A record schema applied to a value not known yet converts it at runtime.

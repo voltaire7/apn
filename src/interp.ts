@@ -657,10 +657,12 @@ export class Interpreter {
         // {}s, `f = print "hi"` == `f = { print "hi" }`) declares a 0-arg
         // FUNCTION: nothing runs at the definition, expression position yields
         // the function itself, statement position CALLS it (the bare name runs).
+        // As for a thunk below: a rebinding reads the version before it
+        // (xs = map f xs), a new name itself.
         if (value.t === "block" || value.t === "app" || value.t === "pipe") {
             const child = new Env(this.env);
             const clo: Value = { kind: "closure", params: [], body: value, env: child };
-            child.setLocal(name, clo);
+            if (this.env.get(name) === undefined) child.setLocal(name, clo);
             this.bindNames([[name, clo]]);
             return clo;
         }

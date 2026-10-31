@@ -356,6 +356,25 @@ is written; the static check reports it, except after code it cannot follow
 `toAST` gives code as lists and `toLambda` desugars it, as code (see
 [code as data](standard-library.md#code-as-data--syntax)).
 
+### Sugar
+
+These forms are their expansions, as if written in their place: each runs and
+checks as its expansion does, with what its names mean there (a program's own
+`+`, `not` or `get` is the one they use). Printing and `probe` show what was
+written. `tests/sugar-test.ts` holds each form beside its expansion.
+
+| Written | Is |
+| --- | --- |
+| `a + b` (any operator) | `(+) a b` |
+| `(+ 2)`, `(2 +)` | `x -> x + 2`, `x -> 2 + x` |
+| `f $ x` | `($) f x` |
+| `-x`, `!x` | `negate x`, `not x` |
+| `c ? a : b` | `Bool c a b` |
+| `v.x` | `get v "x"` |
+| `xs i = v`, `v.x = y` | `xs = with xs i v`, `v = with v "x" y` |
+| `f x = e` | `f = x -> e` |
+| `f p = a; f q = b` | `f x = match x [p -> a, q -> b]` |
+
 ## Operator precedence and associativity
 
 Every binary operator is an ordinary function defined in the language: the

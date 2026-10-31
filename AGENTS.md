@@ -144,7 +144,7 @@ Read the relevant doc and its tests before changing an area:
 
 | Area | Docs | Tests / extra checks |
 | --- | --- | --- |
-| Evaluation, laziness, operators, IO, records, indexing | `docs/semantics.md`, `docs/implementation-notes.md` | `tests/semantics-test.ts`, `tests/operators-test.ts`, `tests/io-test.ts` |
+| Evaluation, laziness, operators, IO, records, indexing, sugar | `docs/semantics.md`, `docs/implementation-notes.md` | `tests/semantics-test.ts`, `tests/operators-test.ts`, `tests/io-test.ts`, `tests/sugar-test.ts` |
 | Numbers and numeric types | `docs/semantics.md`, `docs/implementation-notes.md` | `tests/numeric-tower-test.ts`, `tests/bigint-test.ts`, `tests/type-system-test.ts` |
 | Static/gradual/dependent types, `Dynamic` | `docs/gradual-and-dependent-types.md`, `docs/type-and-resource-rules.md` | `tests/strict-checking-test.ts`, `tests/default-checking-test.ts`, `tests/dynamic-boundary-test.ts`, `tests/gradual-types-test.ts` |
 | Templates, type aliases, zero initialization | `docs/templates-and-types.md`, `docs/zero-initialization.md` | `tests/template-application-test.ts`, `tests/zero-initialization-test.ts` |
