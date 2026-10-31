@@ -178,7 +178,7 @@ export const METHODS = new Set(["map", ">>=", "<*>", "return", "throw", "to", "f
 // The math functions, get and with: clauses for one overload it, as clauses for an
 // operator do (sin (Dual a b) = ...); other arguments keep its previous meaning.
 export const OVERLOADED_FUNCTIONS = new Set(["sqrt", "exp", "log", "sin", "cos", "tan", "asin", "acos", "atan",
-    "atan2", "abs", "floor", "ceiling", "truncate", "round", "min", "max", "get", "with"]);
+    "atan2", "abs", "floor", "ceiling", "truncate", "round", "min", "max", "get", "with", "negate", "not"]);
 
 export type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "expr"; value: Expr }
     | { t: "type"; def: DataDef }
@@ -257,24 +257,27 @@ export function typedForm(p: Pattern, parameters: (name: string) => number | und
 export interface SourceLocation { source: string; file: string; start: number; end: number; }
 export const sourceLocations = new WeakMap<Expr, SourceLocation>();
 
-// A match of a value against written one-parameter alternatives, the core form
-// sugar expands into. The runtime and the checker run and type a sugar node as
-// its expansion; the written node stays for printing and tools.
+// Sugar is the core code it expands into, as if written in its place: the
+// runtime and the checker run and type a sugar node as its expansion, with
+// whatever its names (match, Bool) mean there; the written node stays for
+// printing and tools, and each part keeps its place in the source.
+const sugar = new WeakMap<Expr, Expr>();
+const placed = <E extends Expr>(x: E, source: Expr): E => { const place = sourceLocations.get(source); if (place) sourceLocations.set(x, place); return x; };
+// c ? a : b is match (Bool c) [True -> a, False -> b]: Bool gives the
+// condition's truthiness.
+export function ternaryExpansion(e: Extract<Expr, { t: "ternary" }>): Expr {
+    let core = sugar.get(e);
+    if (core) return core;
+    const branch = (v: boolean, body: Expr): Expr => placed({ t: "patternLambda", params: [{ p: "bool", v }], body }, body);
+    const value = placed({ t: "app", f: { t: "var", name: "Bool" }, a: e.cond }, e.cond);
+    core = placed({ t: "app", f: placed({ t: "app", f: { t: "var", name: "match" }, a: value }, e), a: { t: "list", v: [branch(true, e.then), branch(false, e.els)] } }, e);
+    sugar.set(e, core);
+    return core;
+}
+// A match of a value against written one-parameter alternatives.
 export type PatternLambda = Extract<Expr, { t: "patternLambda" }>;
 export type CoreMatch = { value: Expr; alternatives: PatternLambda[] };
 const expansions = new WeakMap<Expr, CoreMatch>();
-// c ? a : b is match (!c) [false -> a, true -> b]: ! gives the condition's
-// truthiness, as syntax no binding can shadow, and each part keeps its place
-// in the source.
-export function ternaryMatch(e: Extract<Expr, { t: "ternary" }>): CoreMatch {
-    let core = expansions.get(e);
-    if (core) return core;
-    const at = (x: Expr, source: Expr) => { const place = sourceLocations.get(source); if (place) sourceLocations.set(x, place); return x; };
-    const branch = (v: boolean, body: Expr): PatternLambda => at({ t: "patternLambda", params: [{ p: "bool", v }], body }, body) as PatternLambda;
-    core = { value: at({ t: "unop", op: "not", e: e.cond }, e.cond), alternatives: [branch(false, e.then), branch(true, e.els)] };
-    expansions.set(e, core);
-    return core;
-}
 // match x [alternatives] written with one-parameter lambdas, whose match the
 // caller has found to be the builtin one. A lambda's parameter is a pattern
 // that is a name (n -> n + 1).

@@ -717,10 +717,12 @@ class Parser {
             const t = this.peek();
             if (t.k === "newline" || t.k === "dedent" || t.k === "indent" || t.k === "eof") break;
             if (t.k === "sym" && t.v === ";") break;
-            // f -x passes -x: a '-' spaced before and not after negates.
-            if (this.negated(t)) {
+            // f -x passes -x, and f !x passes !x: a prefix operator spaced
+            // before and not after applies to what follows it.
+            const prefix = this.negated(t) ? "neg" : this.notted(t) ? "not" : undefined;
+            if (prefix) {
                 this.next();
-                const a: Expr = { t: "unop", op: "neg", e: this.parsePiece(primary) };
+                const a: Expr = { t: "unop", op: prefix, e: this.parsePiece(primary) };
                 sourceLocations.set(a, { source: this.source, file: this.file, start: t.pos, end: this.peek().pos });
                 f = { t: "app", f, a };
                 sourceLocations.set(f, { source: this.source, file: this.file, start, end: this.peek().pos });
@@ -730,7 +732,7 @@ class Parser {
                     (t.k === "kw" && (t.v === "True" || t.v === "False")) ||
                     t.k === "str" || t.k === "char" ||
                     (t.k === "sym" && (t.v === "(" || t.v === "[" || t.v === "{"))) {
-                const a = this.parsePiece(e => primary(e) || e.t === "unop" && e.op === "neg" && primary(e.e));
+                const a = this.parsePiece(e => primary(e) || e.t === "unop" && primary(e.e));
                 sourceLocations.set(a, { source: this.source, file: this.file, start: t.pos, end: this.peek().pos });
                 f = { t: "app", f, a };
                 sourceLocations.set(f, { source: this.source, file: this.file, start, end: this.peek().pos });
@@ -1575,6 +1577,9 @@ class Parser {
     // A '-' spaced before and not after: a negated argument (f -1), not subtraction.
     negated(t: Token): boolean {
         return t.k === "sym" && t.v === "-" && this.tightMinus(t) && /\s/.test(this.source[t.pos - 1] ?? "");
+    }
+    notted(t: Token): boolean {
+        return t.k === "sym" && t.v === "!" && this.source[t.pos + 1] !== undefined && !/\s/.test(this.source[t.pos + 1]) && /\s/.test(this.source[t.pos - 1] ?? "");
     }
     // A negative number as a definition's parameter, as an argument: f -1 = ...
     negativeLiteral(): boolean {

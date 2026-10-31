@@ -9,6 +9,7 @@ for (const source of [
     "a + (b * c)",
     "(f x) y",
     "print (-1)",
+    "print (!b)",
     "print (r.x)",
     "-(f x)",
     "y = (a + b)",

@@ -3,7 +3,7 @@ import type { TypeScope } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeType } from "./type-description.ts";
-import { OVERLOADED_FUNCTIONS, METHODS, sourceLocations, ternaryMatch, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
+import { OVERLOADED_FUNCTIONS, METHODS, sourceLocations, ternaryExpansion, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { isStringKey, keyText, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
@@ -94,7 +94,7 @@ export const NATIVES: Array<[string, number]> = [
     ["emit", 1], ["step", 2], ["intrinsics.syntax", 1], ["intrinsics.written", 1], ["intrinsics.binding", 1], ["intrinsics.yields", 1], ["intrinsics.runs", 1], ["intrinsics.bound", 2], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
-    ["intrinsics.bind", 2], ["intrinsics.ap", 2], ["intrinsics.return", 1], ["intrinsics.throw", 1], ["intrinsics.source", 1],
+    ["intrinsics.bind", 2], ["intrinsics.negate", 1], ["intrinsics.ap", 2], ["intrinsics.return", 1], ["intrinsics.throw", 1], ["intrinsics.source", 1],
     // Natural numbers are UInt: Z is UInt 0, S n the next one.
     ["S", 1],
     // to T x writes x as a T; from T x reads it back (methods, like map).
@@ -1438,12 +1438,18 @@ export class Interpreter {
                     }
                     case "binop": r = this.evalBinop(e); break;
                     case "unop": {
-                        const v = this.dataValue(this.eval(e.e));
-                        if (e.op === "neg") {
-                            r = this.arrayNegate(v);
-                        } else {
-                            r = mkBool(!this.truthy(v));
+                        // -x is negate x and !x is not x, with what those mean
+                        // here; the prelude's run in place.
+                        const name = e.op === "neg" ? "negate" : "not", bound = this.env.get(name);
+                        if (bound === undefined) throw new APNError("runtime", `unbound variable '${name}'`);
+                        const f = this.reference(bound);
+                        if (f !== this.preludeBindings.get(name)) {
+                            const result = this.apply(f, { kind: "thunk", body: e.e, env: this.env }, false, true, tailLoad);
+                            if (result instanceof TailCall) next = result; else r = result;
+                            break;
                         }
+                        const v = this.dataValue(this.eval(e.e));
+                        r = e.op === "neg" ? this.arrayNegate(v) : mkBool(!this.truthy(v));
                         break;
                     }
                     case "app": {
@@ -1459,7 +1465,11 @@ export class Interpreter {
                     }
                     case "patternLambda": r = { kind: "clauseFn", name: "<lambda>", clauses: [{ params: e.params, body: e.body, guard: e.guard }], arity: e.params.length, env: this.env, applied: [] }; break;
                     case "lambda": r = { kind: "closure", params: e.params, body: e.body, env: this.env }; break;
-                    case "ternary": next = this.coreMatch(ternaryMatch(e)); break;
+                    case "ternary": {
+                        const expansion = ternaryExpansion(e);
+                        next = this.isBuiltinMatch(this.env.get("match")) ? this.coreMatch(writtenMatch(expansion)!) : new TailCall(expansion, this.env);
+                        break;
+                    }
                     case "list": {
                         if (!e.v.some(x => x.t === "stmDef" || x.t === "patDef")) { r = { kind: "lazyList", exprs: e.v, env: this.env }; break; }
                         r = this.codeList(e.v, this.env);
@@ -2043,6 +2053,7 @@ export class Interpreter {
             case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
                 if (f.name === "$any" && !f.family && !f.alias) return arg;
+                if (f.name === "Bool" && !f.family && !f.alias && !f.choices) return mkBool(this.truthy(arg));
                 // Applying a union checks that the value is one of its types.
                 if (f.choices) {
                     const value = this.demand(arg);
@@ -2169,10 +2180,19 @@ export class Interpreter {
         }
         // A literal pattern tried first demands the value at once.
         const first = (ranked ?? alternatives)[0].params[0];
-        const argument: Value = LITERAL_PATTERNS.has(first.p) ? this.eval(value) : { kind: "thunk", body: value, env: this.env };
+        const argument: Value = LITERAL_PATTERNS.has(first.p) ? this.matchedValue(value) : { kind: "thunk", body: value, env: this.env };
         const chosen = this.choose(alternatives, [argument], this.env, undefined, ranked ?? undefined);
         if (chosen) return new TailCall(chosen.clause.body, chosen.child);
         throw new APNError("runtime", "non-exhaustive match: no alternative fits this value");
+    }
+    // A matched value demanded at once: Bool x with the builtin Bool is x's
+    // truth, taken in place.
+    private matchedValue(value: Expr): Value {
+        if (value.t === "app" && value.f.t === "var" && value.f.name === "Bool") {
+            const type = this.env.get("Bool");
+            if (type?.kind === "type" && type.name === "Bool" && !type.family && !type.alias && !type.choices) return mkBool(this.truthy(this.eval(value.a)));
+        }
+        return this.eval(value);
     }
     // The clause these arguments take (a match's alternatives are clauses of
     // one parameter): the most specific whose patterns and guard fit, written
@@ -4012,6 +4032,7 @@ export class Interpreter {
         const primitive = PRIMITIVE_OPERATORS.get(name);
         if (primitive) return this.operate(primitive, argsIn[0], argsIn[1]);
         if (name === "intrinsics.bind") return this.bind(argsIn[0], argsIn[1]);
+        if (name === "intrinsics.negate") return this.arrayNegate(this.dataValue(argsIn[0]));
         if (name === "intrinsics.ap") return this.apValue(argsIn[0], argsIn[1]);
         if (name === "intrinsics.return") return this.pendingReturn(argsIn[0]);
         if (name === "intrinsics.throw") return { kind: "pending", step: { op: "throw", value: argsIn[0] } };

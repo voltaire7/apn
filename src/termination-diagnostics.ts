@@ -63,7 +63,8 @@ function strictCalls(e: Expr, name: string, arity: number): Call[] {
         case "binop":
             if (STRICT.has(e.op)) return [...strictCalls(e.l, name, arity), ...strictCalls(e.r, name, arity)];
             return e.op === "++" ? strictCalls(e.l, name, arity) : [];
-        case "unop": return strictCalls(e.e, name, arity);
+        // -x is negate x and !x is not x.
+        case "unop": return [...strictCalls(e.e, name, arity), ...name === (e.op === "neg" ? "negate" : "not") && arity <= 1 ? [{ expr: e, args: [e.e] }] : []];
         case "pipe": return strictCalls({ t: "app", f: e.f, a: e.x }, name, arity).map(c => ({ ...c, expr: e }));
         case "app": {
             const args: Expr[] = [];

@@ -15,9 +15,9 @@ for (const [source, expected] of [
     ['loop n ignored = n == 0 ? 42 : loop (n - 1) missing; loop 10000 missing', '42'],
     ['loop n = n == 0 ? [42,missing] : loop (n - 1); head (loop 10000)', '42'],
     ['loop n = match n [0 -> 42, k | k > 0 -> loop (k - 1)]; loop 100000', '42'],
-    // A ternary is the builtin match on its condition's truthiness, whatever
-    // a block binds match or Bool to.
-    ['f n = { match = 0; Bool = 0; n ? "yes" : "no" }; [f 0, f [1]]', '["no","yes"]'],
+    // A ternary is match (Bool c) [True -> a, False -> b] as written there:
+    // a match or Bool the program binds is the one it uses.
+    ['f n = { match x alts = "mine"; n ? "yes" : "no" }; [f 0, f [1]]', '["mine","mine"]'],
     ['sum n total = n == 0 ? return total : { next <- return (total + n); sum (n - 1) next }\ns <- sum 10000 0\ns', '50005000'],
 ] as const) Deno.test(`tail call: ${source}`, () => {
     const actual = result(source);

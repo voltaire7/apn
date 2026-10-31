@@ -191,8 +191,9 @@ use `match` with guarded pattern lambdas instead (see
 [pattern functions](pattern-functions.md)).
 
 There is no `if`/`then`/`else`; use the ternary `cond ? a : b`, which is
-`match (!cond) [False -> a, True -> b]`: the condition's
-[truthiness](#empty-results-and-truthiness) chooses. Only the
+`match (Bool cond) [True -> a, False -> b]` as if written in its place: the
+condition's [truthiness](#empty-results-and-truthiness) chooses, and a `match`
+the program defines is the one a ternary there uses. Only the
 selected branch runs, and the branches may differ in type (`x ? "yes" : False`;
 see [choices](gradual-and-dependent-types.md), as for `match` and clauses).
 The ternary's `:` is not cons (`::`), so a branch may
@@ -202,7 +203,8 @@ places, is parenthesized: `c ? (d ? 1 : 2) : 3`, `n < 0 ? -1 : (n > 0 ? 1 : 0)`;
 
 Operator sections: `(+ 2)` is `x -> x + 2`, `(2 +)` is `x -> 2 + x`, and a lone
 operator `(+)` is the function `+` is bound to, so `(+) a b` is `a + b` in every
-way, its checking included (as `negate x` is `-x` and `not x` is `!x`). `-` works in the same positions:
+way, its checking included; likewise `-x` is `negate x` and `!x` is `not x`,
+with what those names mean where it is written. `-` works in the same positions:
 `(- 2)` is `x -> x - 2`, `(10 -)` is `x -> 10 - x` and `(-)` subtracts, while
 `-2` is the number (`(-2) ^ 2` is `4`).
 
@@ -389,8 +391,8 @@ is `20`. Comparison chains are ordinary left-associated operations, not
 mathematical chained comparisons.
 
 Backtick infix functions are not supported; write `f a b`. `=`, `<-`, `->`, `|`
-and prefix `!` are syntax, not operators: they cannot be defined or used as
-sections, and `=` and `<-` have no expression precedence. Range `..` belongs
+and prefix `!` are syntax, not operators: they cannot be defined (define `not`
+to change `!`) or used as sections, and `=` and `<-` have no expression precedence. Range `..` belongs
 inside range syntax, and `@` belongs to polar numeric literals. Inside function-contract patterns,
 arrows associate right: `Int -> Int -> Int` means `Int -> (Int -> Int)`.
 In expressions, arrows always form lambdas, including `Int -> Int`.
@@ -463,9 +465,10 @@ Level 2 * 5                             # 10
 ```
 
 The math functions (`sqrt`, `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`,
-`atan`, `atan2`, `abs`, `floor`, `ceiling`, `truncate`, `round`, `min`, `max`)
-and `get` and `with` ([indexing](#record-fields-string-keys-and-positions))
-overload the same way, so a type can give them meaning too:
+`atan`, `atan2`, `abs`, `floor`, `ceiling`, `truncate`, `round`, `min`, `max`),
+`get` and `with` ([indexing](#record-fields-string-keys-and-positions)), and
+`negate` and `not` (so `-x` and `!x`) overload the same way, so a type can give
+them meaning too:
 `sin (Dual a b) = Dual (sin a) (b * cos a)` leaves `sin 0.5` as it was (the
 `glsl` module writes GLSL this way). Clauses overload only a function taking
 as many arguments: `log b x = ...` and the `http` module's `get request = ...`

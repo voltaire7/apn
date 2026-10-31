@@ -25,7 +25,7 @@ draw (Sketch p) = {
 
 mousePressed _ = {
     playing ? video.pause : video.loop
-    set playing (!playing)
+    set playing !playing
 }
 
 main = sketch [setup: setup, draw: draw, mousePressed: mousePressed]

@@ -404,8 +404,7 @@ print (sumXY point)        # => 3
 #    f $ x            applies f to x; right associative
 #    (+ 2) / (2 +)    operator sections  ->  \x -> x + 2 / \x -> 2 + x
 # ---------------------------------------------------------
-negate x = -x
-print (negate $ 5)                        # => -5
+print (negate $ 5)                        # => -5 (-x is negate x)
 print (map (x -> x * 10) $ [1,2,3])   # => [10,20,30]
 print $ to String $ map (x -> x * 10) $ [1,2,3]  # => [10,20,30]
 

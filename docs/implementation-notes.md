@@ -82,8 +82,10 @@ intentional evaluation change.
   parameters is its alternatives as clauses (`matchedClauses`) wherever the
   checker or `typeOf` reads a definition.
 - Sugar keeps its written node (printing, `probe`, tools) and runs and checks
-  as its core expansion from `src/ast.ts` (`ternaryMatch`), built once with each part at
-  its source; the expansion names nothing a binding could shadow.
+  as its core expansion from `src/ast.ts` (`ternaryExpansion`), built once with
+  each part at its source. The expansion's names mean what they mean there
+  (no hygiene); the runtime and checker take the builtin `match`, `Bool`,
+  `not` and `negate` in place only while those names are still the prelude's.
 - Field/pluck assignment desugars to an eager pattern binding
   `vec = setFields(vec, entries, rhs)` that reads the old record and the RHS
   before rebinding (so `vec.[x,y] = vec.[y,x]` swaps).
@@ -161,7 +163,7 @@ native (`PRIMITIVE_OPERATORS` in `src/parser.ts`), forced at startup so a
 binop finds the native itself: `evalBinop` then runs `operate` directly
 (strict operands evaluated in place, `::`/`++`/`&&`/`||`/`$` over thunks) and
 applies any other binding as a function. A `clauseFn` defined for an operator
-or an `OVERLOADED_FUNCTIONS` name (math functions and `get`) with the previous
+or an `OVERLOADED_FUNCTIONS` name (math functions, `get`/`with`, `negate`/`not`) with the previous
 binding's arity (`arity`; the checker's `overloaded`) keeps it as
 `fallback`; a checked write accepts an imported one over the binding it
 extends. The checker gives operator names an intrinsic type per builtin; a

@@ -1,4 +1,4 @@
-import { type Alternative, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, ternaryMatch, writtenMatch, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, ternaryExpansion, writtenMatch, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -1465,10 +1465,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (e.t === "bool") return e.v;
         if (e.t === "int") return e.v !== 0n;
         if (e.t === "string") return e.v.length > 0;
-        if (e.t === "unop" && e.op === "not") {
+        if (e.t === "unop" && e.op === "not" && scope.get("not")?.builtin) {
             const b = boolean(e.e, scope);
             return b === undefined ? undefined : !b;
         }
+        // Bool x is x's truth.
+        if (e.t === "app" && e.f.t === "var" && e.f.name === "Bool" && scope.get("Bool")?.builtin) return boolean(e.a, scope);
         if (e.t === "binop" && ["==", "!=", "<", ">", "<=", ">="].includes(e.op) && builtinAt(e, scope)) {
             const a = index(e.l, scope), b = index(e.r, scope);
             if (a && b && !a.terms.size && !b.terms.size) {
@@ -2483,6 +2485,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (isExplicit(operand)) { runtimeChecks++; return explicitDynamic; }
         return operation("negate", [operand]);
     }
+    // -x and !x as the calls they are (negate x, not x), placed where written.
+    function prefixCall(e: Extract<Expr, { t: "unop" }>): Expr {
+        const call: Expr = { t: "app", f: { t: "var", name: e.op === "not" ? "not" : "negate" }, a: e.e };
+        const at = sourceLocations.get(e);
+        if (at) sourceLocations.set(call, at);
+        return call;
+    }
     // A prelude operator applied to its operands, written infix (a + b) or
     // called ((+) a b, intrinsics.add a b): one typing for both. An operand
     // known to be an Int a Float holds exactly keeps the arithmetic a Float.
@@ -3470,7 +3479,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (claimed?.k === "list" && claimed.length) {
                     let inner: Expr = a;
                     while (inner.t === "block" && inner.stmts.length === 1) inner = inner.stmts[0];
-                    matchClaims.set(inner, claimed.length);
+                    matchClaims.set(inner.t === "ternary" ? ternaryExpansion(inner) : inner, claimed.length);
                 }
                 let argumentType = infer(a, scope);
                 // A recursive call does not fix the length of a parameter whose
@@ -3731,7 +3740,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 return rec.fields.get(e.field)!;
             }
-            case "ternary": return inferMatch(ternaryMatch(e), e, scope);
+            case "ternary": return infer(ternaryExpansion(e), scope, expected);
             case "binop": {
                 // Against a type, a lambda written in place is read as one, as
                 // at runtime: (a -> b) == typeOf f.
@@ -3784,7 +3793,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (op === "$" && !isExplicit(a) && !isExplicit(b)) return application(a, { type: b, ...valueEntry(e.r, scope) }, e.r);
                 return operatorApplication(op, { type: a, index: index(e.l, scope) }, { type: b, index: index(e.r, scope) }, e);
             }
-            case "unop": return prefixApplication(e.op === "not" ? "not" : "negate", infer(e.e, scope), e);
+            // -x is negate x and !x is not x, with what those mean here.
+            case "unop": {
+                const name = e.op === "not" ? "not" : "negate";
+                return scope.get(name)?.builtin ? prefixApplication(name, infer(e.e, scope), e) : infer(prefixCall(e), scope, expected);
+            }
             case "block": {
                 const child: Scope = new BlockScope(scope);
                 let result: Ty = list(dynamic, constant(0n)), action = false;
@@ -5072,8 +5085,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return { index, size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };
             }
             case "block": return evaluateBlock(e, env, scope, depth);
-            case "ternary": return evaluateMatch(ternaryMatch(e), env, scope, depth);
+            case "ternary": {
+                const expansion = ternaryExpansion(e);
+                return !env.has("match") && scope.get("match")?.builtin ? evaluateMatch(writtenMatch(expansion)!, env, scope, depth) : evaluateKnown(expansion, env, scope, depth);
+            }
             case "unop": {
+                if (!scope.get(e.op === "not" ? "not" : "negate")?.builtin || env.has(e.op === "not" ? "not" : "negate")) return evaluateKnown(prefixCall(e), env, scope, depth);
                 const v = readMutable(value(e.e));
                 if (e.op === "not") { const t = truth(v); return t === undefined ? undefined : { boolean: !t }; }
                 const n = numericOf(v);
