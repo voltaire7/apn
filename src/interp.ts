@@ -17,7 +17,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericType, numericPayload, m
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, listExpansion, listPatternExpansion, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions } from "./ast.ts";
@@ -94,7 +94,7 @@ export const NATIVES: Array<[string, number]> = [
     ["emit", 1], ["step", 2], ["intrinsics.syntax", 1], ["intrinsics.written", 1], ["intrinsics.binding", 1], ["intrinsics.yields", 1], ["intrinsics.runs", 1], ["intrinsics.bound", 2], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
-    ["intrinsics.bind", 2], ["intrinsics.negate", 1], ["intrinsics.ap", 2], ["intrinsics.return", 1], ["intrinsics.throw", 1], ["intrinsics.source", 1],
+    ["intrinsics.bind", 2], ["intrinsics.negate", 1], ["intrinsics.range", 3], ["intrinsics.ap", 2], ["intrinsics.return", 1], ["intrinsics.throw", 1], ["intrinsics.source", 1],
     // Natural numbers are UInt: Z is UInt 0, S n the next one.
     ["S", 1],
     // to T x writes x as a T; from T x reads it back (methods, like map).
@@ -1421,22 +1421,14 @@ export class Interpreter {
                 let next: TailCall | undefined;
                 switch (e.t) {
                     case "range": {
-                        // A range of a type repeats it, as one of numbers counts:
-                        // [Int..] is [Int,Int,Int..], a list that is its own tail.
+                        // [a..] is enumFrom a, and so on: with the prelude's, a
+                        // range of numbers is made in place, and one of a type
+                        // repeats it (enumFrom's own clause).
+                        const name = rangeName(e), bound = this.loadingPrelude ? undefined : this.env.get(name);
+                        if (bound !== undefined && this.reference(bound) !== this.preludeBindings.get(name)) { next = new TailCall(rangeExpansion(e), this.env); break; }
                         const lo: Value = this.reference(this.dataValue(this.eval(e.lo)));
-                        if (this.isTypeValue(lo)) {
-                            if (e.second || e.hi) throw new APNError("runtime", TYPE_RANGE, { hint: "write [Int..] for Int repeated" });
-                            const repeated = { kind: "cons", head: lo } as Extract<Value, { kind: "cons" }>;
-                            repeated.tail = repeated;
-                            r = repeated;
-                            break;
-                        }
-                        const real = (value: Value): Real => {
-                            if (value.kind !== "int" && value.kind !== "float" && value.kind !== "rational") throw new APNError("runtime", "range bounds must be real numbers");
-                            return value;
-                        };
-                        const bound = (expression: Expr | null) => expression === null ? null : real(this.dataValue(this.eval(expression)));
-                        r = rangeValue(real(lo), bound(e.second), bound(e.hi));
+                        if (this.isTypeValue(lo) && bound && !e.second && !e.hi) { r = this.apply(this.reference(bound), lo); break; }
+                        r = this.range(lo, e.second && this.eval(e.second), e.hi && this.eval(e.hi));
                         break;
                     }
                     case "import": r = this.importStandard(e.module); break;
@@ -1482,7 +1474,7 @@ export class Interpreter {
                         // The builtin match with written alternatives runs here,
                         // its chosen body in place of the match.
                         const written = e.f.t === "app" && e.f.f.t === "var" ? writtenMatch(e) : undefined;
-                        if (written && this.isBuiltinMatch(this.env.get(((e.f as Extract<Expr, { t: "app" }>).f as Extract<Expr, { t: "var" }>).name))) { next = this.coreMatch(written); break; }
+                        if (written && this.preludeCons() && this.isBuiltinMatch(this.env.get(((e.f as Extract<Expr, { t: "app" }>).f as Extract<Expr, { t: "var" }>).name))) { next = this.coreMatch(written); break; }
                         // Arguments stay lazy; a completed call can hand its body
                         // straight back to this loop instead of nesting eval calls.
                         const result = this.apply(this.eval(e.f), { kind: "thunk", body: e.a, env: this.env }, false, true, tailLoad);
@@ -1499,10 +1491,7 @@ export class Interpreter {
                     case "list": {
                         // [a, b] is a :: b :: [], with what :: means here; the
                         // prelude's builds the list in place.
-                        if (e.v.length && !this.loadingPrelude && !e.v.some(x => x.t === "stmDef" || x.t === "patDef")) {
-                            const cons = this.env.get("::");
-                            if (cons !== undefined && this.reference(cons) !== this.preludeBindings.get("::")) { next = new TailCall(listExpansion(e), this.env); break; }
-                        }
+                        if (e.v.length && !this.preludeCons() && !e.v.some(x => x.t === "stmDef" || x.t === "patDef")) { next = new TailCall(listExpansion(e), this.env); break; }
                         if (!e.v.some(x => x.t === "stmDef" || x.t === "patDef")) { r = { kind: "lazyList", exprs: e.v, env: this.env }; break; }
                         r = this.codeList(e.v, this.env);
                         break;
@@ -3901,13 +3890,36 @@ export class Interpreter {
         const parameters = family.parameters ?? [], fields = family.fields?.get(family.name) ?? [];
         return fields.length === parameters.length && fields.every((f, n) => f.t === "var" && f.name === parameters[n]) ? parameters.length : -1;
     }
+    // A range of numbers ([1..], [0,0.5..2]); a type has no step or bound.
+    private range(lo: Value, second: Value | null, hi: Value | null): Value {
+        if (this.isTypeValue(lo)) throw new APNError("runtime", TYPE_RANGE, { hint: "write [Int..] for Int repeated" });
+        const real = (value: Value): Real => {
+            const v = this.reference(this.dataValue(value));
+            if (v.kind !== "int" && v.kind !== "float" && v.kind !== "rational") throw new APNError("runtime", "range bounds must be real numbers");
+            return v;
+        };
+        return rangeValue(real(lo), second && real(second), hi && real(hi));
+    }
+    // Whether :: here is the prelude's (or not bound yet), so a written list
+    // is the list it writes rather than its expansion (a :: b :: []).
+    private preludeCons(): boolean {
+        const cons = this.loadingPrelude ? undefined : this.env.get("::");
+        if (cons === undefined) return true;
+        const own = this.reference(cons);
+        return own === this.preludeBindings.get("::") || own.kind === "native" && own.name === "intrinsics.cons" && !own.applied.length;
+    }
     // [T..], a range of a type: T repeated, a list that is its own tail.
-    // Told without evaluating the tail.
+    // Told without evaluating the tail: a computed one, or a name for one
+    // (enumFrom's ts = t :: ts), is followed as far as it is known.
     repeatedType(value: Value): Value | undefined {
         const v = this.reference(value);
         if (v.kind !== "cons") return undefined;
         let tail: Value | undefined = v.tail;
-        while (tail && tail !== v && (tail.kind === "thunk" || tail.kind === "deferred")) tail = tail.value;
+        for (let steps = 0; tail && tail !== v && steps < 64; steps++) {
+            if (tail.kind === "deferred") tail = tail.value ?? tail.describes;
+            else if (tail.kind === "thunk") tail = tail.value ?? (tail.body.t === "var" ? tail.env?.get(tail.body.name) : undefined);
+            else break;
+        }
         return tail === v && this.isTypeValue(v.head) ? v.head : undefined;
     }
     isTypeValue(value: Value, seen = new Set<Value>()): boolean {
@@ -4155,6 +4167,11 @@ export class Interpreter {
         if (name === "intrinsics.negate") return this.arrayNegate(this.dataValue(argsIn[0]));
         if (name === "intrinsics.ap") return this.apValue(argsIn[0], argsIn[1]);
         if (name === "intrinsics.return") return this.pendingReturn(argsIn[0]);
+        if (name === "intrinsics.range") {
+            // [] is no bound (enumFrom a is intrinsics.range a [] []).
+            const given = (v: Value) => { const x = this.reference(this.dataValue(v)); return this.isList(x) && this.cell(x) === null ? null : x; };
+            return this.range(this.reference(this.dataValue(argsIn[0])), given(argsIn[1]), given(argsIn[2]));
+        }
         if (name === "intrinsics.throw") return { kind: "pending", step: { op: "throw", value: argsIn[0] } };
         // The source a parameter's argument was written as at the call (guard's
         // condition), as assert shows its expression.
@@ -5417,8 +5434,7 @@ export class Interpreter {
                     return true;
                 }
                 // [a, b] is a :: b :: [], with what :: means here.
-                const cons = p.v.length ? this.env.get("::") : undefined, own = cons && this.reference(cons);
-                if (own && !(own.kind === "native" && own.name === "intrinsics.cons" && !own.applied.length)) return this.matchPattern(listPatternExpansion(p), v, binds);
+                if (p.v.length && !this.preludeCons()) return this.matchPattern(listPatternExpansion(p), v, binds);
                 if (!this.isList(v)) return false;
                 let rest: Value = v;
                 for (const pattern of p.v) {

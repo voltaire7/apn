@@ -17,6 +17,10 @@ for (const [sugar, expansion] of [
     // A list is its items consed onto [], with what :: means there, in
     // values and patterns alike.
     ['[1,"a"]', '1 :: "a" :: []'],
+    // A range is enumFrom and its siblings: numbers count, a type repeats.
+    ["[take 3 [1..], [1,3..7], [1..3], [0,0.5..1]]", "[take 3 (enumFrom 1), enumFromThenTo 1 3 7, enumFromTo 1 3, enumFromThenTo 0 0.5 1]"],
+    ["take 2 [Int..]", "take 2 (enumFrom Int)"],
+    ["enumFrom = x -> [x,x]\n[5..]", "enumFrom = x -> [x,x]\nenumFrom 5"],
     ["f [a,b] = a + b\nf [1,2]", "f (a :: b :: []) = a + b\nf (1 :: 2 :: [])"],
     ["P a b = | MkP a b\n(::) = MkP\nsecond [x,y] = y\n[1,2]", "P a b = | MkP a b\n(::) = MkP\nsecond [x,y] = y\nMkP 1 (MkP 2 [])"],
     ["P a b = | MkP a b\n(::) = MkP\nsecond [x,y] = y\nsecond (MkP 1 (MkP 2 []))", "P a b = | MkP a b\n(::) = MkP\nsecond (x :: y :: []) = y\nsecond (MkP 1 (MkP 2 []))"],
@@ -57,6 +61,8 @@ for (const [sugar, expansion] of [
     ["v = {\n    x <- [1,2]\n    x\n}\nv", "v = [1,2] >>= x -> x\nv"],
     ["v = {\n    print 1\n    2\n}\nv", "v = print 1 >> 2\nv"],
     ["(::) = a, b -> a\nf [x] = x\nf 1", "(::) = a, b -> a\nf (x :: []) = x\nf 1"],
+    ["[Int..3]", "enumFromTo Int 3"],
+    ["(::) = a, b -> a\nmatch 1 [x -> 2]", "(::) = a, b -> a\nm = match\nm 1 [x -> 2]"],
     ['import "option"\nOption Int {\n    x <- Some 1\n    5\n}', 'import "option"\nSome 1 >>= x -> 5'],
 ] as const) for (const checked of [false, true]) {
     Deno.test(`sugar fails as its expansion does${checked ? ", checked" : ""}: ${JSON.stringify(sugar)}`, () => {

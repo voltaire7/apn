@@ -53,6 +53,17 @@ get False _ = b -> b
 # Prefix - and ! are these functions: -x is negate x, !x is not x.
 negate = intrinsics.negate
 not x = Bool x False True
+# [a..] is enumFrom a, [a,b..] enumFromThen a b, [a..c] enumFromTo a c and
+# [a,b..c] enumFromThenTo a b c: numbers count, and a type repeats, [Int..]
+# being [Int,Int,Int..], a list that is its own tail. ([] is no bound.)
+enumFrom a = intrinsics.range a [] []
+enumFrom (Type t) = {
+    ts = t :: ts
+    ts
+}
+enumFromThen a b = intrinsics.range a b []
+enumFromTo a c = intrinsics.range a [] c
+enumFromThenTo a b c = intrinsics.range a b c
 # A list keeps its items as written: it is code, edited as any list is (++
 # joins code, an item update replaces an item). probe shows the code, print
 # the values; reduce gives the values alone. toAST gives the code as lists

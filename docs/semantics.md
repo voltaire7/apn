@@ -370,6 +370,7 @@ written. `tests/sugar-test.ts` holds each form beside its expansion.
 | `f $ x` | `($) f x` |
 | `-x`, `!x` | `negate x`, `not x` |
 | `[a, b]` (a value or a pattern) | `a :: b :: []` |
+| `[a..]`, `[a,b..]`, `[a..c]`, `[a,b..c]` | `enumFrom a`, `enumFromThen a b`, `enumFromTo a c`, `enumFromThenTo a b c` |
 | `c ? a : b` | `Bool c a b` |
 | `v.x` | `get v "x"` |
 | `xs i = v`, `v.x = y` | `xs = with xs i v`, `v = with v "x" y` |
@@ -1587,7 +1588,8 @@ exact too (`typeOf ([1,2]::[3,4])` is `[[Int,Int],Int,Int]`, as for
 `[[1,2],3,4]`), reading its unevaluated tail without running it. An endless
 list is endlessly many of its elements' type: `typeOf [1..]` is `[Int..]`, and
 so is `typeOf ones` for `ones = 1 :: ones`. That is a range of a type, which
-repeats it as a range of numbers counts: `[Int..]` is the list
+repeats it as a range of numbers counts (a range is `enumFrom` and its
+siblings, whose prelude clauses do both; see [sugar](#sugar)): `[Int..]` is the list
 `[Int,Int,Int..]` (`head [Int..]` is `Int`), and as a type it is the type of
 endless lists of Ints, so `to [Int..] [1,2]` is a length mismatch and
 `isType [Int..] [1..]` is `True`. A type has no step or bound

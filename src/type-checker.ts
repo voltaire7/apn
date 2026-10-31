@@ -1,4 +1,4 @@
-import { type Alternative, listExpansion, listPatternExpansion, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -12,6 +12,7 @@ import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
 
 const PRELUDE_OPERATORS = new Set(PRIMITIVE_OPERATORS.values());
+const RANGE_FUNCTIONS = new Map([["enumFrom", 1], ["enumFromThen", 2], ["enumFromTo", 2], ["enumFromThenTo", 3]]);
 // The prelude's functions that read a list's code, not its values: an open
 // list may go to them (see closed).
 const READS_CODE = new Set(["probe", "toAST", "toLambda", "intrinsics.written", "intrinsics.syntax"]);
@@ -1028,6 +1029,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         const [a, b] = operands;
         // when c action: in the action's monad, whatever c is.
+        // enumFrom a and the like are [a..] and the like (see rangeType).
+        if (RANGE_FUNCTIONS.has(t.op)) {
+            if (operands.some(x => x.k === "var" || x.k === "operation")) return t;
+            const placeholder: Expr = activeExpression ?? { t: "placeholder" };
+            return rangeType(a, operands.slice(1).map(type => ({ at: placeholder, type })), t.op.includes("Then"), t.op.endsWith("To"), placeholder);
+        }
         if (t.op === "when") return b.k === "var" || b.k === "operation" ? t : monadicType("then", b, pendingTy(list(variable(), constant(0n))));
         if (t.args.some(x => { const v = resolve(x); return v.k === "var" || v.k === "operation"; })) return t;
         if (t.op === "run") return runType(a);
@@ -2064,7 +2071,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "list": {
                 // [a, b] is a :: b :: [], with what :: means here.
-                if (p.v.length && scope.has("::") && builtinOperator(scope.get("::")!.type) !== "::") return bind(listPatternExpansion(p), expected, scope, e, bound);
+                if (p.v.length && !preludeCons(scope)) return bind(listPatternExpansion(p), expected, scope, e, bound);
                 const items = p.v.map(() => variable());
                 const pattern: Ty = { k: "list", element: items.length ? union(items) : variable(), items, length: items.length ? constant(BigInt(items.length)) : undefined };
                 unify(pattern, expected, e);
@@ -3136,6 +3143,35 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const inferred = new WeakMap<Expr, Ty>();
     // The builtin operator an entry's type stands for (the prelude binds
     // each operator to its intrinsic), if any.
+    // A range's type, [a..] or enumFrom a alike (stepped: a second item is
+    // given; bounded: a last). size: its length, when the bounds are known.
+    function rangeType(start: Ty, bounds: { at: Expr; type: Ty }[], stepped: boolean, bounded: boolean, e: Expr, size?: () => bigint | undefined): Ty {
+        // A range of a type repeats it, as at runtime: [Int..] is an
+        // endless list of Int, so the type of endless lists of Ints.
+        if (describing(resolve(start))) {
+            if (stepped || bounded) return problem(TYPE_RANGE, e, "write [Int..] for Int repeated");
+            return { k: "list", element: start, endless: true };
+        }
+        // Numbers of different types make Floats if any bound is one, as at
+        // runtime ([0,0.5..100]), else exact numbers ([0,1/2..2]).
+        const named = (t: Ty) => { const r = resolve(t); return r.k === "atom" ? r.name : undefined; };
+        const kinds = new Set([start, ...bounds.map(b => b.type)].map(named));
+        if (kinds.size > 1 && !kinds.has(undefined) && [...kinds].every(k => NUMERIC_TYPES.includes(k!))) {
+            const element = atom(kinds.has("Float") ? "Float" : "Number");
+            return bounded ? list(element) : { k: "list", element, endless: true };
+        }
+        for (const { at, type } of bounds) unify(start, type, at);
+        const value = resolve(start);
+        if (value.k === "atom" && value.name === "Char") return atom("String");
+        unify(atom("Number"), start, e);
+        const length = bounded ? size?.() : undefined;
+        return bounded ? list(start, length === undefined ? undefined : constant(length)) : { k: "list", element: start, endless: true };
+    }
+    // Whether :: here is the prelude's (or not bound yet), so a written list is
+    // the list it writes rather than its expansion (a :: b :: []), as at runtime.
+    function preludeCons(scope: Scope): boolean {
+        return !scope.has("::") || builtinOperator(scope.get("::")!.type) === "::";
+    }
     function builtinOperator(type: Ty | undefined): string | undefined {
         const t = type && resolve(type);
         return t?.k === "intrinsic" && !t.args?.length && PRELUDE_OPERATORS.has(t.name) ? t.name : undefined;
@@ -3407,7 +3443,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return { k: "record", fields: new ModuleFields(copyTypeScope(options.imports(e.module))) };
             case "list": {
                 // [a, b] is a :: b :: [], with what :: means here, as at runtime.
-                if (e.v.length && !e.v.some(binding) && scope.has("::") && builtinOperator(scope.get("::")!.type) !== "::") return infer(listExpansion(e), scope, expected);
+                if (e.v.length && !e.v.some(binding) && !preludeCons(scope)) return infer(listExpansion(e), scope, expected);
                 const code = codeList(e.v.map(expr => ({ expr, scope })));
                 for (const [name, at] of (code as Extract<Ty, { k: "list" }>).open ?? []) openNames?.set(name, { ...at, name });
                 return code;
@@ -3421,30 +3457,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return result;
             }
             case "range": {
-                const start = infer(e.lo, scope), type = resolve(start);
-                // A range of a type repeats it, as at runtime: [Int..] is an
-                // endless list of Int, so the type of endless lists of Ints.
-                if (describing(type)) {
-                    if (e.second || e.hi) return problem(TYPE_RANGE, e, "write [Int..] for Int repeated");
-                    return { k: "list", element: start, endless: true };
-                }
-                // Numbers of different types make Floats if any bound is one, as at
-                // runtime ([0,0.5..100]), else exact numbers ([0,1/2..2]).
-                const bounds = [e.second, e.hi].flatMap(x => x ? [{ x, type: infer(x, scope) }] : []);
-                const named = (t: Ty) => { const r = resolve(t); return r.k === "atom" ? r.name : undefined; };
-                const kinds = new Set([start, ...bounds.map(b => b.type)].map(named));
-                if (kinds.size > 1 && !kinds.has(undefined) && [...kinds].every(k => NUMERIC_TYPES.includes(k!))) {
-                    const element = atom(kinds.has("Float") ? "Float" : "Number");
-                    return e.hi ? list(element) : { k: "list", element, endless: true };
-                }
-                for (const { x, type } of bounds) unify(start, type, x);
-                const value = resolve(start);
-                if (value.k === "atom" && value.name === "Char") return atom("String");
-                unify(atom("Number"), start, e);
+                // [a..] is enumFrom a, and so on, with what those mean here.
+                const name = rangeName(e);
+                if (scope.has(name) && !scope.get(name)!.builtin) return infer(rangeExpansion(e), scope, expected);
+                const bounds = [e.second, e.hi].flatMap(x => x ? [{ at: x, type: infer(x, scope) }] : []);
                 // Integer bounds known here give its length ([1..400] has 400).
-                const known = peek(() => computed(e, scope), {} as Known);
-                const size = known.items ? BigInt(known.items.length) : known.size;
-                return e.hi ? list(start, size === undefined ? undefined : constant(size)) : { k: "list", element: start, endless: true };
+                const size = () => { const known = peek(() => computed(e, scope), {} as Known); return known.items ? BigInt(known.items.length) : known.size; };
+                return rangeType(infer(e.lo, scope), bounds, !!e.second, !!e.hi, e, size);
             }
             case "lambda":
                 return functionType(e.params.map((name) => ({ p: "var", name })), e.body, scope);
@@ -3489,7 +3508,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     infer(e.a, inner);
                     return io(list(variable(), constant(0n)));
                 }
-                const written = e.t === "app" && e.f.t === "app" && e.f.f.t === "var" && e.f.f.name === "match" && scope.get("match")?.builtin ? writtenMatch(e) : undefined;
+                const written = e.t === "app" && e.f.t === "app" && e.f.f.t === "var" && e.f.f.name === "match" && scope.get("match")?.builtin && preludeCons(scope) ? writtenMatch(e) : undefined;
                 if (written) return inferMatch(written, e, scope);
                 const selection = boolSelection(e);
                 if (selection && preludeSelection(selection, scope)) return inferMatch(selection, e, scope);
@@ -5435,7 +5454,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (cell.program) programCells.add(cell);
             return { mutable: cell };
         }
-        if (head.name === "match" && builtin && args.length === 2 && args[1].t === "list") {
+        if (head.name === "match" && builtin && args.length === 2 && args[1].t === "list" && preludeCons(scope)) {
             const written = writtenMatch(e);
             return written && evaluateMatch(written, env, scope, depth);
         }
@@ -6636,6 +6655,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("intrinsics.yields", [variable()], list(variable()));
     native("intrinsics.bound", [variable(), variable()], list(variable()));
     native("intrinsics.syntax", [variable()], explicitDynamic);
+    // A range's bounds ([] none); [1..] and the like are typed where written.
+    { const n = variable(); native("intrinsics.range", [n, variable(), variable()], list(n)); }
     scope.set("toAST", { type: fn(variable(), explicitDynamic) });
     scope.set("probe", { type: fn(variable(), io(empty)) });
     { const item = variable(); scope.set("reduce", { type: fn(list(item), list(item)) }); }
@@ -6717,6 +6738,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     for (const [name, arity] of [["map2", 3], ["map3", 4], ["map4", 5]] as const) scope.set(name, { type: { k: "intrinsic", name, arity } });
     // when and unless: action >> return [], in the action's monad.
     for (const name of ["when", "unless"]) scope.set(name, { type: { k: "intrinsic", name: "when", arity: 2 } });
+    // [a..] is enumFrom a, [a,b..c] enumFromThenTo a b c, and so on.
+    for (const [name, arity] of RANGE_FUNCTIONS) scope.set(name, { type: { k: "intrinsic", name, arity } });
     // loop action never finishes: its result is the action's monad.
     { const action = variable(); scope.set("loop", { type: fn(action, action) }); }
     native("while", [list(variable()), variable()], io(empty));

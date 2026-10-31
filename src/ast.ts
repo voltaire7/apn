@@ -292,6 +292,17 @@ export function listExpansion(e: Extract<Expr, { t: "list" }>): Expr {
     sugar.set(e, core);
     return core;
 }
+// [a..] is enumFrom a, [a,b..c] enumFromThenTo a b c, and so on.
+export function rangeName(e: Extract<Expr, { t: "range" }>): string {
+    return e.second ? e.hi ? "enumFromThenTo" : "enumFromThen" : e.hi ? "enumFromTo" : "enumFrom";
+}
+export function rangeExpansion(e: Extract<Expr, { t: "range" }>): Expr {
+    let core = sugar.get(e);
+    if (core) return core;
+    core = [e.second, e.hi].reduce<Expr>((f, a) => a ? placed({ t: "app", f, a }, e) : f, placed({ t: "app", f: placed({ t: "var", name: rangeName(e) }, e), a: e.lo }, e));
+    sugar.set(e, core);
+    return core;
+}
 export function listPatternExpansion(p: Extract<Pattern, { p: "list" }>): Pattern {
     return p.v.reduceRight<Pattern>((tail, head) => ({ p: "cons", head, tail }), { p: "list", v: [] });
 }
