@@ -30,12 +30,12 @@ for (const [source, expected] of [
     ['typeOf ("a"::1::[2])', '[String,Int,Int]'],
     ['typeOf ([1]::[[3,4]])', '[[Int],[Int,Int]]'],
     ['typeOf (1::[2,3])', '[Int,Int,Int]'],
-    // Of unknown length, it is a List of what every element is.
-    ['xs = 1::xs; typeOf xs', 'List Int'],
+    // An endless list is endlessly many; one of unknown length a List.
+    ['xs = 1::xs; typeOf xs', '[Int..]'],
     ['typeOf (1::missing)', 'List Int'],
     ['typeOf [1,missing]', '[Int,a]'],
-    ['typeOf [1..]', 'List Int'],
-    ['typeOf [.1,.2..]', 'List Float'],
+    ['typeOf [1..]', '[Int..]'],
+    ['typeOf [.1,.2..]', '[Float..]'],
     ['f (Int x) = x; typeOf f', 'Int -> Int'],
     ['f (Int x) (String y) = y; typeOf f', 'Int -> String -> String'],
     ['f (Int x) (String y) = y; typeOf (f 1)', 'String -> String'],
@@ -50,7 +50,7 @@ for (const [source, expected] of [
     ['count = Mutable 0; action x = set count 1; typeOf action; count', '0'],
     ['count = Mutable 0; typeOf [set count 1]; count', '0'],
     ['f x = fail "do not call"; typeOf f', 'a -> b'],
-    ['xs = 1::xs; typeOf xs', 'List Int'],
+    ['xs = 1::xs; typeOf xs', '[Int..]'],
 ] as const) Deno.test(`type description: ${source}`, () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(source)));

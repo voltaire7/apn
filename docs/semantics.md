@@ -1568,19 +1568,23 @@ returns `[1,2.0]`, evaluating the input expression in the surrounding scope.
 
 ## Type descriptions
 
-A list value's type is exact: `typeOf [1,2,3]` displays `[Int,Int,Int]`, the
-positional type of exactly those items, `typeOf [1,"a"]` is `[Int,String]`, and
-`typeOf []` is `[]`, the empty list's type. A range of a type writes any number
-of them: `[Int..]` is `List Int`, possibly infinitely many, as `[0..]` is any
-number of integers; `[..]` repeats anything (`List a`), and a list type repeats
-one type (`[Int,String..]` is an error). A list built with `::` onto a written
-list is exact too (`typeOf ([1,2]::[3,4])` is `[[Int,Int],Int,Int]`, as for
-`[[1,2],3,4]`), reading its unevaluated tail without running it. Lists whose
-length is not written down (ranges, results of `map` and other computations)
-display `List` of the type every element has, `List a` when it is unknown;
-integer ranges display `List Int`, including infinite ranges, without
-traversing them. `(List a) xs` binds `a` to the type every item has: `Int |
-String` for `[1,"a"]`. Type errors use the same notation.
+A list value's type is exact, the list of its items' types: `typeOf [1,2,3]`
+displays `[Int,Int,Int]`, `typeOf [1,"a"]` is `[Int,String]`, and `typeOf []`
+is `[]`, the empty list's type. A list built with `::` onto a written list is
+exact too (`typeOf ([1,2]::[3,4])` is `[[Int,Int],Int,Int]`, as for
+`[[1,2],3,4]`), reading its unevaluated tail without running it. An endless
+list is endlessly many of its elements' type: `typeOf [1..]` is `[Int..]`, and
+so is `typeOf ones` for `ones = 1 :: ones`. That is a range of a type, which
+repeats it as a range of numbers counts: `[Int..]` is the list
+`[Int,Int,Int..]` (`head [Int..]` is `Int`), and as a type it is the type of
+endless lists of Ints, so `to [Int..] [1,2]` is a length mismatch and
+`isType [Int..] [1..]` is `True`. A type has no step or bound
+(`[Int,String..]` and `[Int..String]` are errors). `List Int` is any number of
+Ints, the type of each of these: lists whose length is not known (a finite
+range, the result of `filter` or `map`) display `List` of the type every
+element has, `List a` when it is unknown. `(List a) xs` binds `a` to the type
+every item has: `Int | String` for `[1,"a"]`. Type errors use the same
+notation.
 
 Functions display argument/result descriptions: `f (Int x) = x` gives
 `Int -> Int`; `x -> print x` gives `a -> []`. Clauses contribute to one
@@ -1596,8 +1600,9 @@ so `typeOf` describes its result.
 A described type compares equal to the type it describes: `[Int,Int] == typeOf
 [1,2]` and `(a -> a) == typeOf (x -> x)` are true. Compared with a bare
 constructor it keeps its broad identity: `typeOf [1] == List` and
-`typeOf f == Function` are true. A description is not an enforced schema; use a
-typed pattern or contract when you need validation.
+`typeOf f == Function` are true. A counted list type is the positional type it
+makes: `Vect 3 Int == [Int,Int,Int]` is true. A description is not an enforced
+schema; use a typed pattern or contract when you need validation.
 
 ## Function types
 

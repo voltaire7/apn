@@ -17,7 +17,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericType, numericPayload, m
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, claimedDeclaration, LIST_TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions } from "./ast.ts";
@@ -1024,7 +1024,7 @@ export class Interpreter {
                 return node(text("."), of(e.rec), e.entries.every(x => typeof x === "string")
                     ? node(text("[]"), ...(e.entries as string[]).map(text))
                     : node(text("[:]"), ...(e.entries as [string, string][]).map(([k, v]) => node(text(keySource(k)), text(v)))));
-            case "range": return e.lo ? range(of(e.lo), e.hi ? of(e.hi) : undefined, e.second ? of(e.second) : undefined) : node(text(".."));
+            case "range": return range(of(e.lo), e.hi ? of(e.hi) : undefined, e.second ? of(e.second) : undefined);
             // a single-statement ( ) group is transparent: toAST (1 + 2) is ["+",1,2]
             case "block":
                 if (e.stmts.length === 1 && e.style === "(") return of(e.stmts[0]);
@@ -1403,13 +1403,14 @@ export class Interpreter {
                 let next: TailCall | undefined;
                 switch (e.t) {
                     case "range": {
-                        // A range of a type is the list type: [Int..] is List Int,
-                        // any number of Ints, possibly infinitely many.
-                        // [..] repeats anything: List a, as typeOf [] is.
-                        const lo: Value = e.lo ? this.reference(this.dataValue(this.eval(e.lo))) : { kind: "type", name: "a", variable: true };
+                        // A range of a type repeats it, as one of numbers counts:
+                        // [Int..] is [Int,Int,Int..], a list that is its own tail.
+                        const lo: Value = this.reference(this.dataValue(this.eval(e.lo)));
                         if (this.isTypeValue(lo)) {
-                            if (e.second || e.hi) throw new APNError("runtime", LIST_TYPE_RANGE, { hint: "write [Int..] for any number of Ints" });
-                            r = { kind: "type", name: "List", arguments: [this.asType(lo) ?? lo] };
+                            if (e.second || e.hi) throw new APNError("runtime", TYPE_RANGE, { hint: "write [Int..] for Int repeated" });
+                            const repeated = { kind: "cons", head: lo } as Extract<Value, { kind: "cons" }>;
+                            repeated.tail = repeated;
+                            r = repeated;
                             break;
                         }
                         const real = (value: Value): Real => {
@@ -1961,6 +1962,8 @@ export class Interpreter {
             return canonicalTypeText(this.writtenType(x)) === canonicalTypeText(this.writtenType(y));
         }
         a = this.dataValue(a); b = this.dataValue(b);
+        // Endless lists of types ([Int..]) compare as types, so they end.
+        if ((this.repeatedType(a) || this.repeatedType(b)) && this.isTypeValue(a) && this.isTypeValue(b)) return this.sameType(a, b);
         if (this.isList(a) && this.isList(b)) {
             for (;;) {
                 checkInterrupt();
@@ -3242,6 +3245,10 @@ export class Interpreter {
             } else if (v.kind === "hashmap") {
                 emit("HashMap", "type"); emit(" ");
                 this.render(mkList([...v.entries.values()].map(([key, value]) => mkList([key, value]))), emit, false, ancestors);
+            } else if (this.repeatedType(v)) {
+                emit("[");
+                this.render(this.repeatedType(v)!, emit, false, ancestors);
+                emit("..]");
             } else if (this.isList(v)) {
                 // Its ',' takes a space when an item has one (itemsText), so the
                 // items are held until one does, the list ends, or sixteen
@@ -3551,6 +3558,8 @@ export class Interpreter {
             const from = this.reference(t.from);
             return `${from.kind === "functionType" ? `(${this.writtenType(from)})` : this.writtenType(from)} -> ${this.writtenType(t.to)}`;
         }
+        const repeated = this.repeatedType(t);
+        if (repeated) return `[${this.writtenType(repeated)}..]`;
         if (this.isList(t)) return `[${itemsText([...this.elements(t)].map(x => this.writtenType(x)))}]`;
         if (t.kind === "record") return `[${t.v.map(([key, x]) => `${keySource(key)}: ${this.writtenType(x)}`).join(", ")}]`;
         return valueToString(t);
@@ -3585,6 +3594,7 @@ export class Interpreter {
         const shared = this.sharedType(v);
         if (shared) return shared;
         if (v.kind === "closure" || v.kind === "clauseFn") return this.readFunctionType(v, variables);
+        if (this.repeatedType(v)) return v;
         if (this.isList(v)) {
             const items: Value[] = [];
             for (let rest: Value = v; ;) {
@@ -3699,10 +3709,22 @@ export class Interpreter {
         finally { this.env = caller; }
     }
 
-    sameType(a: Value, b: Value): boolean {
+    sameType(a: Value, b: Value, met = new Map<Value, Set<Value>>()): boolean {
         a = this.reference(a); b = this.reference(b);
         a = this.sharedType(a) ?? a; b = this.sharedType(b) ?? b;
         if (a === b) return true;
+        // A counted list type is the positional type it makes: Vect 2 Int is [Int,Int].
+        if (this.counted(a) && this.isList(b) || this.isList(a) && this.counted(b)) {
+            const [size, element] = this.vectorParts((this.counted(a) ? a : b) as Extract<Value, { kind: "type" }>);
+            let rest = this.counted(a) ? b : a;
+            for (let n = 0n; n < size; n++) {
+                checkInterrupt();
+                const cell = this.cell(rest);
+                if (!cell || !this.sameType(element, cell.head)) return false;
+                rest = cell.tail;
+            }
+            return this.cell(rest) === null;
+        }
         if (a.kind === "type" && b.kind === "type") {
             const other = b.arguments ?? [];
             return a.name === b.name && a.family === b.family && a.alias === b.alias &&
@@ -3717,10 +3739,16 @@ export class Interpreter {
             return a.v.length === b.v.length && a.v.every(([key, value]) => fields.has(key) && this.sameType(value, fields.get(key)!));
         }
         if (this.isList(a) && this.isList(b)) {
+            // Cells met again (endless types, [Int..]) are compared already.
             for (;;) {
+                checkInterrupt();
+                a = this.reference(a); b = this.reference(b);
+                if (met.get(a)?.has(b)) return true;
+                if (!met.has(a)) met.set(a, new Set());
+                met.get(a)!.add(b);
                 const left = this.cell(a), right = this.cell(b);
                 if (!left || !right) return left === right;
-                if (!this.sameType(left.head, right.head)) return false;
+                if (!this.sameType(left.head, right.head, met)) return false;
                 a = left.tail; b = right.tail;
             }
         }
@@ -3769,7 +3797,19 @@ export class Interpreter {
         }
         if (this.isList(type)) {
             if (!this.isList(value)) return false;
+            // An endless range has one type throughout: [1..] is an [Int..].
+            const repeated = this.repeatedType(type);
+            if (repeated && (value.kind === "range" || value.kind === "floatRange" || value.kind === "rationalRange") && value.hi === null) {
+                return this.belongsToType(repeated, this.cell(value)!.head);
+            }
+            // Cells met again (a list that is its own tail) are checked already.
+            const met = new Map<Value, Set<Value>>();
             for (;;) {
+                checkInterrupt();
+                type = this.reference(type); value = this.reference(value);
+                if (met.get(type)?.has(value)) return true;
+                if (!met.has(type)) met.set(type, new Set());
+                met.get(type)!.add(value);
                 const field = this.cell(type), element = this.cell(value);
                 if (!field || !element) return field === element;
                 if (!this.belongsToType(field.head, element.head)) return false;
@@ -3834,6 +3874,15 @@ export class Interpreter {
         const parameters = family.parameters ?? [], fields = family.fields?.get(family.name) ?? [];
         return fields.length === parameters.length && fields.every((f, n) => f.t === "var" && f.name === parameters[n]) ? parameters.length : -1;
     }
+    // [T..], a range of a type: T repeated, a list that is its own tail.
+    // Told without evaluating the tail.
+    repeatedType(value: Value): Value | undefined {
+        const v = this.reference(value);
+        if (v.kind !== "cons") return undefined;
+        let tail: Value | undefined = v.tail;
+        while (tail && tail !== v && (tail.kind === "thunk" || tail.kind === "deferred")) tail = tail.value;
+        return tail === v && this.isTypeValue(v.head) ? v.head : undefined;
+    }
     isTypeValue(value: Value, seen = new Set<Value>()): boolean {
         value = this.reference(value);
         if (value.kind === "type" || value.kind === "functionType" || this.sharedType(value)) return true;
@@ -3845,7 +3894,7 @@ export class Interpreter {
             let rest: Value = value;
             for (;;) {
                 rest = this.demand(rest);
-                if (spine.has(rest)) return false;
+                if (spine.has(rest)) return true;
                 spine.add(rest);
                 const cell = this.cell(rest);
                 if (!cell) return true;
@@ -5206,6 +5255,9 @@ export class Interpreter {
                 return captured !== null && this.matchPattern(p.value, captured, binds);
             }
             if ((this.isList(type) && !this.isList(this.demand(actual))) || (type.kind === "functionType" && !this.matchesValueType("Function", actual))) return false;
+            // An endless type ([Int..]) takes no list of written items: what the
+            // checker typed the value decides, as for (List Int xs).
+            if (this.repeatedType(type) && (this.demand(actual).kind === "list" || !this.staticallyFits(p.type, v))) return false;
             const converted = this.conform(type, actual);
             const captured = this.hasSchemaCapture(type) ? this.captureSchema(type, converted, binds) : converted;
             return captured !== null && this.matchPattern(p.value, captured, binds);

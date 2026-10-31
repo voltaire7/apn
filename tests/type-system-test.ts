@@ -10,7 +10,7 @@ for (const [source, expected] of [
     ['typeOf $ "hi"', "String"],
     ["typeOf $ 'a'", "Char"],
     ["typeOf $ []", "[]"],
-    ["typeOf $ [1..]", "List Int"],
+    ["typeOf $ [1..]", "[Int..]"],
     ["typeOf $ [x: 1]", "Record"],
     ["typeOf $ sqrt", "Number -> Number"],
     // Builtins show the checker's signatures.

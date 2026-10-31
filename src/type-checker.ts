@@ -1,4 +1,4 @@
-import { type Alternative, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, LIST_TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -59,7 +59,8 @@ type Ty =
     | { k: "fn"; input: Ty; output: Ty; shared?: boolean; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; summary?: Summary }
     // formula: a list literal's code; open: the names its code reads that are
     // bound nowhere yet (a list joined before it may bind them), by where read.
-    | { k: "list"; element: Ty; length?: Index; items?: Ty[]; contracted?: boolean; preserve?: Set<number>; formula?: Formula; open?: Map<string, { expr: Expr; within?: Expr }> }
+    // endless: infinitely many elements, [Int..] ([1..], a range of a type).
+    | { k: "list"; element: Ty; length?: Index; items?: Ty[]; endless?: boolean; contracted?: boolean; preserve?: Set<number>; formula?: Formula; open?: Map<string, { expr: Expr; within?: Expr }> }
     | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string>; closed?: boolean }
     // chosen: one of value's choices, picked by a condition known only at runtime.
     // given: an indexed family's index values written so far, by parameter (Vec 2 Int).
@@ -486,6 +487,7 @@ function text(
             case "list":
                 // The empty list's type is written []: IO [], m [].
                 if (t.length && !t.length.terms.size && t.length.constant === 0n) return "[]";
+                if (t.endless) return `[${operand(t.element)}..]`;
                 return t.length ? `Vect ${argument(indexText(t.length))} ${argument(show(t.element))}` : `List ${argument(show(t.element))}`;
             case "record":
                 return `[${[...t.fields].map(([k, v]) => `${k}: ${operand(v)}`).join(", ")}]`;
@@ -667,6 +669,7 @@ function copy(
                 element: go(t.element),
                 items: t.items?.map(go),
                 length,
+                ...t.endless ? { endless: true } : {},
             });
             break;
         }
@@ -1093,6 +1096,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (t.op === "to" || t.op === "from") {
             if (a.k === "var") return t;
+            // An endless list of types ([Int..]) is the type of endless lists.
+            if (a.k === "list" && a.endless && describing(a)) return evaluateOperation({ ...t, args: [{ k: "type", value: schemaValue(a, { t: "placeholder" }) }, t.args[1]] });
             // A program's instance first, as at runtime.
             const own = instanceFor(t.op, [a, b]);
             if (own && resolve(own).k !== "var") {
@@ -1409,6 +1414,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     problem(`length mismatch: expected ${zero === expected ? 0 : n}, got ${zero === expected ? n : 0}`, e);
                 }
             }
+            // An endless list ([Int..]) has no length a finite one has.
+            for (const [a, b, first] of [[expected, actual, true], [actual, expected, false]] as const) {
+                const n = knownLength(b);
+                if (a.endless && !b.endless && n !== undefined) problem(`length mismatch: expected ${first ? "an endless list" : n}, got ${first ? n : "an endless list"}`, e);
+            }
             if (expected.items && actual.items && expected.items.length === actual.items.length) expected.items.forEach((t, n) => unify(t, actual.items![n], e, seen));
             else unify(expected.element, actual.element, e, seen);
             if (expected.length && actual.length) {
@@ -1549,7 +1559,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.k === "dynamic") return unknown();
         if (seen.has(t)) return seen.get(t)!;
         if (t.k === "list") {
-            const result: Extract<Ty, { k: "list" }> = { k: "list", element: variable(), length: t.length };
+            const result: Extract<Ty, { k: "list" }> = { k: "list", element: variable(), length: t.length, ...t.endless ? { endless: true } : {} };
             seen.set(t, result);
             const items = t.items?.map(item => schemaValue(item, e, seen));
             result.element = items ? items.length ? union(items) : variable() : schemaValue(t.element, e, seen);
@@ -2405,7 +2415,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (!seen.has(t)) seen.set(t, new Set());
         seen.get(t)!.add(a);
         if (t.k === "list" && a.k === "list") {
-            unify(list(dynamic, t.length), list(dynamic, a.length), e);
+            const shape = (x: Extract<Ty, { k: "list" }>): Ty => ({ k: "list", element: dynamic, length: x.length, ...x.endless ? { endless: true } : {} });
+            unify(shape(t), shape(a), e);
             // An element type still to be found (List a) is the elements' type
             // together, as at runtime: Int | String for [1,"x"].
             if (!t.items && resolve(t.element).k === "var" && a.items) { unify(t.element, a.element, e); return target; }
@@ -3080,6 +3091,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function describing(x: Ty): boolean {
         return x.k === "type" || !!sharedType(x)
             || x.k === "list" && !!x.items?.length && x.items.every(item => describing(resolve(item)))
+            || x.k === "list" && !!x.endless && describing(resolve(x.element))
             || x.k === "record" && x.fields.size > 0 && [...x.fields.values()].every(field => describing(resolve(field)));
     }
     // A record a record schema made keeps its fields, as at runtime.
@@ -3377,12 +3389,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return result;
             }
             case "range": {
-                if (!e.lo) return { k: "type", value: list(variable()) };
                 const start = infer(e.lo, scope), type = resolve(start);
-                // A range of a type is the list type, as at runtime: [Int..] is List Int.
+                // A range of a type repeats it, as at runtime: [Int..] is an
+                // endless list of Int, so the type of endless lists of Ints.
                 if (describing(type)) {
-                    if (e.second || e.hi) return problem(LIST_TYPE_RANGE, e, "write [Int..] for any number of Ints");
-                    return { k: "type", value: list(schemaValue(type, e)) };
+                    if (e.second || e.hi) return problem(TYPE_RANGE, e, "write [Int..] for Int repeated");
+                    return { k: "list", element: start, endless: true };
                 }
                 // Numbers of different types make Floats if any bound is one, as at
                 // runtime ([0,0.5..100]), else exact numbers ([0,1/2..2]).
@@ -3390,7 +3402,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const named = (t: Ty) => { const r = resolve(t); return r.k === "atom" ? r.name : undefined; };
                 const kinds = new Set([start, ...bounds.map(b => b.type)].map(named));
                 if (kinds.size > 1 && !kinds.has(undefined) && [...kinds].every(k => NUMERIC_TYPES.includes(k!))) {
-                    return list(atom(kinds.has("Float") ? "Float" : "Number"));
+                    const element = atom(kinds.has("Float") ? "Float" : "Number");
+                    return e.hi ? list(element) : { k: "list", element, endless: true };
                 }
                 for (const { x, type } of bounds) unify(start, type, x);
                 const value = resolve(start);
@@ -3399,7 +3412,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // Integer bounds known here give its length ([1..400] has 400).
                 const known = peek(() => computed(e, scope), {} as Known);
                 const size = known.items ? BigInt(known.items.length) : known.size;
-                return list(start, size === undefined ? undefined : constant(size));
+                return e.hi ? list(start, size === undefined ? undefined : constant(size)) : { k: "list", element: start, endless: true };
             }
             case "lambda":
                 return functionType(e.params.map((name) => ({ p: "var", name })), e.body, scope);
@@ -5123,7 +5136,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "range": {
                 const bound = (x: Expr | null) => x && numericOf(value(x));
-                if (!e.lo) return undefined;
                 const lo = bound(e.lo), second = bound(e.second), hi = bound(e.hi);
                 if (!lo || e.second && !second || e.hi && !hi) return undefined;
                 if ([lo, second, hi].some(x => x && x.kind !== "int")) return undefined;

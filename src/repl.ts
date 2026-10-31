@@ -295,7 +295,7 @@ function helpText(): string {
         `  literal patterns: 0  1.5  "s"  'c'  True  [1..9]   (tried before other clauses)`,
         `  func ((Int -> Int) f) = Int { f 123 }   (checked function contract)`,
         `  ((a -> a) f), (a -> a).(+ 1), (a -> a) == typeOf f   a lambda read as a function type`,
-        `  List Int, or [Int..], is a list of any length; [Int] is exactly one Int; [..] any list`,
+        `  List Int is a list of any length; [Int] is exactly one Int; [Int..] endlessly many`,
         `  f x = 1; f x = "one"   overloads by result type: Int (f 0) is 1, String (f 0) "one"`,
         `  Option a = Some a | None`,
         `  Count = Int     (a named Int: an Int wherever one is accepted, keeps its name)`,

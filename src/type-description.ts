@@ -21,9 +21,10 @@ type Shape =
     | { tag: "var"; link?: Shape }
     | { tag: "name"; name: string; args: Shape[] }
     | { tag: "arrow"; from: Shape; to: Shape }
-    // items: a list of exactly these, [Int,String] ([] none); otherwise any
+    // items: a list of exactly these, [Int,String] ([] none); endless: of
+    // infinitely many elements, [Int..]; otherwise any
     // number of element.
-    | { tag: "list"; element: Shape; items?: Shape[] }
+    | { tag: "list"; element: Shape; items?: Shape[]; endless?: boolean }
     | { tag: "union"; choices: Shape[] }
     // A type constructor not known yet applied to a type: map's f a. Once
     // known, f is a name holding the type's other parameters (Result _ e).
@@ -86,6 +87,7 @@ function unify(a: Shape, b: Shape): Shape {
     if (a.tag === "arrow" && b.tag === "arrow") return arrow(unify(a.from, b.from), unify(a.to, b.to));
     if (a.tag === "list" && b.tag === "list") {
         if (a.items && b.items && a.items.length === b.items.length) return { tag: "list", element: fresh(), items: a.items.map((x, n) => unify(x, b.items![n])) };
+        if (a.endless && b.endless) return { tag: "list", element: unify(a.element, b.element), endless: true };
         return list(unify(elementOf(a), elementOf(b)));
     }
     if (a.tag === "name" && b.tag === "name" && a.name === b.name && a.args.length === b.args.length) {
@@ -101,10 +103,13 @@ export function describeType(value: Value, element = false): string {
     const active = new Map<Value, Shape>();
     const join = (ts: Shape[]) => ts.reduce(unify, fresh());
     const sequence = (ts: Shape[]): Shape => ({ tag: "list", element: fresh(), items: ts });
+    const endless = (element: Shape): Shape => ({ tag: "list", element, endless: true });
+    const ranged = (element: Shape, hi: unknown): Shape => hi === null ? endless(element) : list(element);
     // x :: xs onto a list of known items is one item longer; onto any other
     // list a different element makes a mixed list, as in a literal.
     const cons = (head: Shape, tail: Shape): Shape => {
         const t = resolve(tail);
+        if (t.tag === "list" && t.endless) return endless(unify(head, t.element));
         return t.tag === "list" && t.items ? sequence([head, ...t.items]) : unify(list(head), tail);
     };
     // A written type: a lowercase name not given is a type variable, the
@@ -246,8 +251,8 @@ export function describeType(value: Value, element = false): string {
             case "int": case "float": case "bool": case "string": case "char":
                 return named({ int: "Int", float: "Float", bool: "Bool", string: "String", char: "Char" }[e.t]);
             case "var": return locals.get(e.name) ?? (env.get(e.name) ? inspect(env.get(e.name)!) : fresh());
-            // [..] and [Int..] are list types; a range of numbers lists their type.
-            case "range": return e.lo ? list(expr(e.lo, env, locals)) : named("Type");
+            // A range without a bound is endless: [1..] is [Int..], [Int..] [Type..].
+            case "range": return ranged(expr(e.lo, env, locals), e.hi);
             case "list": return sequence(e.v.map(x => expr(x, env, locals)));
             case "record": return named("Record");
             case "lambda": return fn(e.params.map(name => ({ p: "var", name })), e.body, env, [], locals);
@@ -314,10 +319,14 @@ export function describeType(value: Value, element = false): string {
             case "deferred": return v.value ? inspect(v.value) : v.describes ? inspect(v.describes) : fresh();
             case "lazyList": return v.value ? inspect(v.value) : sequence(v.exprs.map(e => expr(e, v.env)));
             case "list": return sequence(v.v.map(inspect));
-            case "range": return list(named("Int"));
-            case "floatRange": return list(named("Float"));
-            case "rationalRange": return list(named("Fraction"));
-            case "cons": return cons(inspect(v.head), inspect(v.tail));
+            case "range": return ranged(named("Int"), v.hi);
+            case "floatRange": return ranged(named("Float"), v.hi);
+            case "rationalRange": return ranged(named("Fraction"), v.hi);
+            case "cons": {
+                // A list that is its own tail ([Int..], xs = 1 :: xs) is endless.
+                const head = inspect(v.head), tail = inspect(v.tail);
+                return tail === active.get(v) ? endless(head) : cons(head, tail);
+            }
             case "contract": return arrow(named(typeToString(v.from)), named(typeToString(v.to)));
             case "closure": return v.env ? clauses([{ params: v.params.map(name => ({ p: "var", name })), body: v.body }], v.env) : inspect(v.mutableValue!);
             case "clauseFn": return clauses(v.clauses, v.env, v.applied);
@@ -385,6 +394,7 @@ export function describeType(value: Value, element = false): string {
             // [Int,Float] is a positional type; a list of any length is List Int.
             case "list": {
                 if (t.items) return `[${itemsText(t.items.map(x => show(x)))}]`;
+                if (t.endless) return `[${resolve(t.element).tag === "union" ? `(${show(t.element)})` : show(t.element)}..]`;
                 const text = `List ${show(t.element, 2)}`;
                 return precedence > 1 ? `(${text})` : text;
             }

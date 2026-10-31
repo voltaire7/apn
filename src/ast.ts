@@ -12,7 +12,7 @@ export type UnOp = "neg" | "not";
 
 export type Expr =
     // lo null: [..], the list type of anything.
-    | { t: "range"; lo: Expr | null; second: Expr | null; hi: Expr | null }
+    | { t: "range"; lo: Expr; second: Expr | null; hi: Expr | null }
     | { t: "import"; module: string | string[] }
     | { t: "numeric"; v: Numeric }
     | { t: "int"; v: bigint }
@@ -67,9 +67,8 @@ export interface ConstructorLogic { params: Pattern[]; body: Expr; owner: { t: "
 export interface DataDef { name: string; parameters?: string[]; variants: DataVariant[]; claims?: boolean; }
 export type DataVariant = { tag: string; arity: number; fields?: Expr[]; result?: Expr; logic?: ConstructorLogic };
 
-// A range of a type is the list type, one type repeated: [Int..], not
-// [Int,String..] or [Int..String].
-export const LIST_TYPE_RANGE = "a list type is one type repeated, written [Int..]";
+// A range of a type repeats it ([Int..]); a type has no step or bound.
+export const TYPE_RANGE = "a range of a type repeats it, without a step or bound: [Int..]";
 // Whether an expression holds _ as a value (a constructor's logic does).
 export function holdsPlaceholder(e: unknown): boolean {
     if (!e || typeof e !== "object") return false;

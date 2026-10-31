@@ -1113,11 +1113,6 @@ class Parser {
                         // RANGE (speculative): [a..b] [a..] [a,b..c] [a,b..] — Haskell-style; the
                         // first two elements give the STEP; bounds may be runtime expressions;
                         // no upper bound = INFINITE. Falls back to a normal list literal.
-                        // [..]: anything repeated, the list type of any items.
-                        if (this.isSym("..") && this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === "]") {
-                            this.next(); this.next();
-                            return { t: "range", lo: null, second: null, hi: null };
-                        }
                         {
                             const save = this.i;
                             const loE = this.parseOperators(6);

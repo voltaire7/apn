@@ -147,15 +147,15 @@ for (const [application, block, expected] of [
         if (a !== b || a !== expected) throw new Error(`${checked ? "checked" : "unchecked"}: ${a} vs ${b}`);
     }
 });
-// A range of a type is the list type: [Int..] is List Int, any number of
-// Ints, possibly infinitely many; [..] repeats anything. Checked and unchecked
-// runs agree.
+// A range of a type repeats it, as one of numbers counts: [Int..] is
+// [Int,Int,Int..], the type of endless lists of Ints, as typeOf [1..] says.
+// Checked and unchecked runs agree.
 for (const checked of [true, false]) for (const [source, expected] of [
-    ['[[Int..], [Int..] == List Int, [..], typeOf []]', '[List Int, True, List a, []]'],
-    ['[[Int..] [1,2], isType [Int..] [1,2], isType [..] ["a",1], isType [Int..] 5]', '[[1,2],True,True,False]'],
-    ['f ([Int..] xs) = "ints"\nf ([..] xs) = "any"\nf _ = "other"\n[f [1,2], f ["a"], f [1..], f 5]', '["ints","any","ints","other"]'],
-    ['Point = [x: Float, y: Float]\n[Point..] [[x: 1, y: 2]]', '[[x: 1.0, y: 2.0]]'],
-    ['Ints = [Int..]\n[Ints, typeOf (Ints [1,2])]', '[Ints,Ints]'],
+    ['[[Int..], [Int..] == List Int, typeOf [1..], typeOf [1..] == [Int..]]', '[[Int..],False,[Int..],True]'],
+    ['[take 2 [Int..], head [Int..], isType [Int..] [1,2], isType [Int..] [1..], isType [Int..] 5]', '[[Int,Int],Int,False,True,False]'],
+    ['f ([Int..] xs) = "endless"\nf _ = "other"\n[f [1,2], f ["a"], f [1..], f 5]', '["other","other","endless","other"]'],
+    ['Point = [x: Float, y: Float]\nps = [x: 1, y: 2] :: ps\ntake 1 (to [Point..] ps)', '[[x: 1.0, y: 2.0]]'],
+    ['ones = 1 :: ones\n[typeOf ones, take 2 (to [Float..] ones)]', '[[Int..],[1.0,1.0]]'],
     ['[take 3 [1..], [1,3..9]]', '[[1,2,3],[1,3,5,7,9]]'],
 ] as const) Deno.test(`list type ranges (checked=${checked}): ${source}`, () => {
     const i = new Interpreter();
@@ -164,11 +164,11 @@ for (const checked of [true, false]) for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const checked of [true, false]) for (const source of ['[Int,String..]', '[Int..String]']) {
-    Deno.test(`a list type repeats one type (checked=${checked}): ${source}`, () => {
+    Deno.test(`a range of a type has no step or bound (checked=${checked}): ${source}`, () => {
         const i = new Interpreter();
         if (checked) i.enableChecking();
         try { i.run(parseDocument(source)); } catch (error) {
-            if ((error as Error).message.includes("a list type is one type repeated, written [Int..]")) return;
+            if ((error as Error).message.includes("a range of a type repeats it, without a step or bound")) return;
             throw error;
         }
         throw new Error("accepted");
