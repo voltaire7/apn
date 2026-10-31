@@ -86,7 +86,7 @@ for (
 for (
     const source of [
         "add (Int x) (Int y) = x + y; add (Float x) (Float y) = x + y; [add 1 2, add .1 .2]",
-        'x = 1; { x = "local"; x }; x',
+        'x = 1; [{ x = "local"; x }, x]',
         "f (Int32 x) = x; f 1",
         "f t n ((Vect n t) xs) = xs; f Int 2 [1,2]",
         "f (Type t) x = t x; f Int 1",

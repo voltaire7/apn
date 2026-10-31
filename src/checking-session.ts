@@ -40,10 +40,10 @@ export class CheckingSession {
     /** The program's input when checking right before a run (see CheckOptions.inputs). */
     inputs?: CheckOptions["inputs"];
 
-    prepare(program: TopLevel[], directory = ".", root = directory): TypeScope {
+    prepare(program: TopLevel[], directory = ".", root = directory, file = false): TypeScope {
         // The program's folder: imports search up to it (see resolveModule).
         this.root = root;
-        return this.check(program, directory, this.scope, false).scope;
+        return this.check(program, directory, this.scope, false, undefined, file).scope;
     }
     private root?: string;
 
@@ -59,7 +59,7 @@ export class CheckingSession {
     enter(program: TopLevel[], index: number, directory: string, visible: Set<string>, locals: Map<string, string | null>): () => void {
         const saved = this.scope;
         let before: TypeScope = new Map();
-        this.check(program, directory, saved, false, { index, scope: scope => { before = scope; } });
+        this.check(program, directory, saved, false, { index, scope: scope => { before = scope; } }, false);
         const scope = new Map([...before].filter(([name]) => visible.has(name)));
         for (const [name, source] of locals) scope.set(name, this.literal(name, source, scope) ?? dynamicEntry());
         this.scope = scope;
@@ -76,12 +76,12 @@ export class CheckingSession {
     /** Programs that used use on a record of unknown fields. */
     private opaqueUses = new Set<TopLevel[]>();
 
-    private check(program: TopLevel[], directory: string, initial: TypeScope, library: boolean, before?: CheckOptions["before"]): { scope: TypeScope; exports: TypeScope } {
+    private check(program: TopLevel[], directory: string, initial: TypeScope, library: boolean, before?: CheckOptions["before"], file = true): { scope: TypeScope; exports: TypeScope } {
         this.mutation ||= mayMutate(program);
         let scope: TypeScope = new Map();
         let exports: TypeScope = new Map();
         const result = checkTypes(program, {
-            strict: true, initial, library, before,
+            strict: true, initial, library, before, file,
             runtimeNames: !library && this.runtimeNames ? new Set(this.runtimeNames()) : undefined,
             inputs: library ? undefined : this.inputs,
             mutation: () => this.mutation,

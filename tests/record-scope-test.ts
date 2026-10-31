@@ -49,7 +49,7 @@ vec.{
     if (checkSource(source).issues.length) throw new Error('checker rejected scope');
 });
 for (const [source, expected] of [
-    ['vec = [x: 1]; vec.{ x = 10; x }; vec.x', '1'],
+    ['vec = [x: 1]; [vec.{ x = 10; x }, vec.x]', '[10,1]'],
     ['vec = [x: 1]; vec.{}', '[]'],
     ['vec = [x: 1]; f = vec.{ y -> x + y }; f 2', '3'],
     ['[Int,Float].{ [1,2] }', '[1,2.0]'],

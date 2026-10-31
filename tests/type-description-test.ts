@@ -47,8 +47,8 @@ for (const [source, expected] of [
     ['typeOf (typeOf [1])', 'Type'],
     ['[typeOf [1] == List, isType (typeOf [1]) ["hi"]]', '[True,True]'],
     ['f x = x; [typeOf f == Function, isType (typeOf f) (x -> 1)]', '[True,True]'],
-    ['count = Mutable 0; action x = set count 1; typeOf action; count', '0'],
-    ['count = Mutable 0; typeOf [set count 1]; count', '0'],
+    ['count = Mutable 0; action x = set count 1; t <- return (typeOf action); count', '0'],
+    ['count = Mutable 0; t <- return (typeOf [set count 1]); count', '0'],
     ['f x = fail "do not call"; typeOf f', 'a -> b'],
     ['xs = 1::xs; typeOf xs', '[Int..]'],
 ] as const) Deno.test(`type description: ${source}`, () => {

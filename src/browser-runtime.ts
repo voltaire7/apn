@@ -273,7 +273,7 @@ try {
     };
     interpreter.sourceDir = BUNDLE_APP;
     interpreter.enableChecking();
-    interpreter.run(parse(payload.source));
+    interpreter.run(parse(payload.source), false, true);
     const program = interpreter.env.get("main");
     if (!program) throw new Error("APN browser app must define main");
     const value = interpreter.demand(program);

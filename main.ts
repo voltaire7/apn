@@ -73,7 +73,7 @@ if (import.meta.main) {
         interp.sourceFile = file;
         interp.programArgs = _args.slice(1);
         try {
-            runSource(src, interp, true); // file mode executes effects without rendering the last value
+            runSource(src, interp, true, true); // a file is a block, run once
         } catch (err) {
             console.error(formatError(err, Deno.stderr.isTerminal()));
             Deno.exit(1);

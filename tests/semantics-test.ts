@@ -2,13 +2,14 @@ import { Interpreter, setInterruptFlag, resetInterrupt } from "../src/interp.ts"
 import { parse } from "../main.ts";
 import { runSource } from "../src/repl.ts";
 
-// Exercise APN source and observable output, without dependencies or runtime mocks.
+// Exercise APN source and observable output, without dependencies or runtime
+// mocks: each source is a file, a block run once.
 function execute(source: string): string[] {
     const output: string[] = [];
     const log = console.log;
     console.log = (...args: unknown[]) => output.push(args.map(String).join(" "));
     try {
-        new Interpreter().run(parse(source));
+        new Interpreter().run(parse(source), false, true);
     } finally {
         console.log = log;
     }
@@ -567,6 +568,21 @@ parts (Vect n a) = [n,a]
 print [shape (Vect 1 Int), parts (Vect 3 Float)]
 print [typeOf shape, typeOf parts]`, ["[Vect,Int]", "[Vect,3,Float]", "one", "[[Vect,Int],[3,Float]]", "[Type -> [Type,a], Type -> [Int,Type]]"]);
 
+// A file is a block, run once: the same statement rules, and a block holds
+// everything a file does, its types declared for it alone.
+example("a do-block may end in a binding, yielding what it binds",
+    "a = {\n    print 1\n    y = 5\n}\nx <- a\nprint x", ["1", "5"]);
+example("a file may end in a binding after its actions",
+    "print 1\nx = 5", ["1"]);
+failure("a file's statement that binds nothing is an action, as a block's",
+    "1 + 1\nprint 2", "its value would be dropped");
+failure("a file that ran an action ends in one, as a do-block does",
+    "print 1\n5", "its value would be dropped");
+example("a block declares types as a file does",
+    "f n = {\n    Color = Red | Green\n    n > 0 ? Red : Green\n}\nBox a = _\nb = {\n    Pair a b = _\n    Pair 1 2\n}\nprint [f 1, f 0]\nprint b", ["[Red,Green]", "Pair 1 2"]);
+failure("a block's types are its own",
+    "f = {\n    Color = Red | Green\n    Red\n}\nprint Red", "unbound variable 'Red'");
+
 // The tour and the former feature showcase (a regression program) check and
 // run as whole programs.
 for (const path of ["../examples/features.apn", "fixtures/showcase.apn"]) Deno.test(`program runs: ${path}`, () => {
@@ -577,6 +593,6 @@ for (const path of ["../examples/features.apn", "fixtures/showcase.apn"]) Deno.t
     const [log, write] = [console.log, Deno.stdout.writeSync];
     console.log = () => {};
     Deno.stdout.writeSync = (data: Uint8Array) => data.length;
-    try { runSource(Deno.readTextFileSync(url), i, true); }
+    try { runSource(Deno.readTextFileSync(url), i, true, true); }
     finally { [console.log, Deno.stdout.writeSync] = [log, write]; }
 });

@@ -914,7 +914,7 @@ for (const [source, expected] of [
     // Values a statement leaves unforced are harmless unless kept; a kept one
     // is forced (once) where a later statement forces it. An uncertain
     // statement only affects the cells and values it can reach.
-    ['counter = Mutable 0; [set counter 9, 1]; g (f (r (counter + 0 == 0)))', '0'],
+    ['counter = Mutable 0; xs <- return [set counter 9, 1]; g (f (r (counter + 0 == 0)))', '0'],
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nprint box\ng (f (r (counter + 0 == 0)))', '0'],
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nhead box\ng (f (r (counter + 0 == 3)))', '0'],
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nhead box\nset counter 8\nhead box\ng (f (r (counter + 0 == 3)))', '0'],
@@ -936,7 +936,7 @@ for (const [source, expected] of [
     // A name use opened reaches the field it was opened from.
     ['counter = Mutable 0\nother = Mutable 7\nns = [bump: x -> set counter 3]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))','0'],
     // A function held by a pattern binding runs its body where it is called.
-    ['counter = Mutable 0\nother = Mutable 7\nhb <- return (x -> 0)\nhb 0\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nhb <- return (x -> 0)\ny <- return (hb 0)\ng (f (r (other + 0 == 7)))','0'],
     // Keys bound locally, and views stored in records, lists and cells or
     // passed to functions, reach the bindings their uses name.
     // A top-level value (an application or pipe that is not an action too:
@@ -968,7 +968,7 @@ for (const source of [
     'counter = Mutable 0\nbump x = set counter (counter + 1)\nxs = map (x -> bump x) [1,2]\ndo xs\ndo xs\ng (f (r (counter + 0 == 2)))',
     'k y = { c = Mutable 1; xs = [c + 0]; set c 7; return (head xs) }\nw <- k 0\ng (f (r (w == 1)))',
     'counter = Mutable 0\nk y = { set counter 4; return (counter + 0) }\nw <- k 0\ng (f (r (w == 0)))',
-    'counter = Mutable 0; [set counter 9, 1]; g (f (r (counter + 0 == 9)))',
+    'counter = Mutable 0; xs <- return [set counter 9, 1]; g (f (r (counter + 0 == 9)))',
     // A statement whose run is uncertain leaves what it can reach unknown.
     'counter = Mutable 0\nm = HashMap [["a",1]]\nhas "a" m ? set counter 5 : return []\ng (f (r (counter + 0 == 5)))',
     // A function held by a pattern binding runs its body where it is called.

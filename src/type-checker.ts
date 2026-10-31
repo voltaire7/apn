@@ -204,6 +204,9 @@ type Formula = { items: FormulaItem[] };
 type FormulaItem = { expr?: Expr; scope?: Scope; type?: Ty; binds?: Map<string, Entry>; open?: Map<string, { expr: Expr; within?: Expr }>; slot?: Ty };
 export interface CheckOptions {
     strict?: boolean;
+    /** A whole file, a block run once: its last statement, once one ran, is
+     * in its monad too (a REPL input's is shown instead). */
+    file?: boolean;
     library?: boolean;
     loads?: (path: string, scope: TypeScope, tail?: boolean) => TypeScope;
     initial?: TypeScope;
@@ -1853,6 +1856,31 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return field;
         });
         return { k: "list", element: union(items), items, length: constant(BigInt(items.length)) };
+    }
+    // As in Haskell (do { e; ss } = e >> do { ss }), a statement that binds
+    // nothing, but the last, is in its block's monad, in any block and at the
+    // top level: a plain value would be computed and dropped. [] is the unit
+    // (what print yields); a module opens names.
+    function discarded(s: Expr, type: Ty, blockMonad?: Ty): void {
+        const fits = (t: Ty): boolean => {
+            const v = resolve(t);
+            if (["var", "operation", "dynamic", "intrinsic"].includes(v.k) || isIO(v) || isPending(v) || moduleOf(v)) return true;
+            // The block picks an overload (undecided); a value is any of its
+            // choices, each one in the block's monad.
+            if (v.k === "union") {
+                if (v.undecided) return v.choices.some(fits);
+                const monads = new Set(v.choices.map(resolve).filter(c => isIO(c) || c.k === "list" || c.k === "variant").map(monadKind));
+                if (blockMonad) monads.add(monadKind(blockMonad));
+                return monads.size <= 1 && v.choices.every(fits);
+            }
+            if (v.k === "list") return !!blockMonad && resolve(blockMonad).k === "list" || v.items?.length === 0 || !!v.length && !v.length.terms.size && v.length.constant === 0n;
+            return v.k === "variant" && !!instanceFor(">>=", [v]);
+        };
+        if (fits(type)) return;
+        const monad = blockMonad ? resolve(blockMonad) : undefined;
+        const wanted = !monad || isIO(monad) ? "an action" : `${withArticle(monadKind(monad))} value`;
+        problem(`a statement in a do-block must be ${wanted}, not ${text(type)}: its value would be dropped`, s,
+            resolve(type).k === "atom" && text(type) === "Bool" ? "to check a condition here, use `guard c`" : "bind it (`x = ...`), or remove it");
     }
     // The type of the value each pattern binding binds (see bindingValue).
     const boundValues = new WeakMap<Expr, Ty>();
@@ -3832,13 +3860,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 try {
                     for (const [n, s] of e.stmts.entries()) {
                         result = infer(s, child);
-                        if (s.t !== "patDef" && s.t !== "stmDef") opensModule(s, child, result);
+                        const binds = s.t === "patDef" || s.t === "stmDef" || s.t === "typeDef";
+                        if (!binds) opensModule(s, child, result);
                         // A <- binding, or a discarded statement in a monad, makes the
                         // block a do-block: its last statement is the action (or the
                         // Option, ...) whose result it yields, in the block's monad.
                         // A discarded list is pure ([] is also the unit value) unless
                         // the block is a list block.
-                        const discarded = s.t !== "patDef" && s.t !== "stmDef" && n < e.stmts.length - 1 ? resolve(result) : undefined;
+                        const discarded = !binds && n < e.stmts.length - 1 ? resolve(result) : undefined;
                         if (discarded) discards.push([s, discarded]);
                         const monadic = !!discarded && discarded.k === "variant" && !isIO(discarded) && !isPending(discarded) && !!instanceFor(">>=", [discarded]);
                         if (s.t === "patDef" ? s.eager : discarded && (isIO(discarded) || isPending(discarded) || monadic)) action = true;
@@ -3852,38 +3881,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         }
                     }
                 } finally { doBlocks.pop(); }
-                // As in Haskell (do { e; ss } = e >> do { ss }), each statement
-                // that binds nothing, but the last, is in the block's monad, in
-                // any block: a plain value would be computed and dropped. [] is
-                // the unit (what print yields); a module opens names.
-                for (const [s, type] of discards) {
-                    const fits = (t: Ty): boolean => {
-                        const v = resolve(t);
-                        if (["var", "operation", "dynamic", "intrinsic"].includes(v.k) || isIO(v) || isPending(v) || moduleOf(v)) return true;
-                        // The block picks an overload (undecided); a value is any of its
-                        // choices, each one in the block's monad.
-                        if (v.k === "union") {
-                            if (v.undecided) return v.choices.some(fits);
-                            const monads = new Set(v.choices.map(resolve).filter(c => isIO(c) || c.k === "list" || c.k === "variant").map(monadKind));
-                            if (block.monad) monads.add(monadKind(block.monad));
-                            return monads.size <= 1 && v.choices.every(fits);
-                        }
-                        if (v.k === "list") return !!block.monad && resolve(block.monad).k === "list" || v.items?.length === 0 || !!v.length && !v.length.terms.size && v.length.constant === 0n;
-                        return v.k === "variant" && !!instanceFor(">>=", [v]);
-                    };
-                    if (fits(type)) continue;
-                    const monad = block.monad ? resolve(block.monad) : undefined;
-                    const wanted = !monad || isIO(monad) ? "an action" : `${withArticle(monadKind(monad))} value`;
-                    problem(`a statement in a do-block must be ${wanted}, not ${text(type)}: its value would be dropped`, s,
-                        resolve(type).k === "atom" && text(type) === "Bool" ? "to check a condition here, use `guard c`" : "bind it (`x = ...`), or remove it");
-                }
+                for (const [s, type] of discards) discarded(s, type, block.monad);
                 if (!action) return bindingValue(e.stmts[e.stmts.length - 1], child) ?? result;
                 // The block's monad, for the run: a block of returns and guards
                 // takes it from here, as types decide in Haskell.
                 if (block.monad) recordMonad(e, monadKind(block.monad));
                 const last = e.stmts[e.stmts.length - 1];
-                if (last.t === "patDef" || last.t === "stmDef") return problem("the last statement of a do-block must be an action, not a binding", last, "end the block with an action, such as `return x`");
                 const final = resolve(result), monad = block.monad && resolve(block.monad);
+                // A binding last yields what it binds, as in a block of bindings.
+                if (last.t === "patDef" || last.t === "stmDef" || last.t === "typeDef") {
+                    const bound = bindingValue(last, child) ?? variable();
+                    if (!monad || isIO(monad)) return monad ? io(bound) : pendingTy(bound);
+                    if (monad.k === "list") return list(bound);
+                    const v = monad as Extract<Ty, { k: "variant" }>;
+                    return { k: "variant", name: v.name, args: v.args.map((_, n) => n ? variable() : bound) };
+                }
                 if (isExplicit(final)) return final;
                 const notAction = () => final.k === "variant" && monad && (isIO(final) || !!instanceFor(">>=", [final]))
                     ? problem(`${withArticle(monadKind(final))} value cannot run in ${withArticle(monadKind(monad))} do-block`, last)
@@ -3908,6 +3920,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "stmDef":
                 define(e.name, e.clauses, scope, e);
+                return list(dynamic, constant(0n));
+            case "typeDef":
+                declare(e.def, scope);
                 return list(dynamic, constant(0n));
             case "patDef": {
                 if (e.update && scope.has(e.update.name)) {
@@ -6753,17 +6768,73 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         },
         concrete: type => !variables(resolve(type as Ty)).size,
     });
+    // A type declaration (Color = Red | Green), at the top level or in a block
+    // (scope), as at runtime. Constructors declared with _ where the parser
+    // could not see them are claimed here.
+    function declare(written: DataDef, scope: Scope): void {
+        const def = unionKind(written, name => alternative(name, written.name, scope)) === "claim"
+            ? claimedDeclaration(written, tag => scope.get(tag)!.declaration!.variants[0]) : written;
+        // X = A | B of existing types is their union (see unionKind), as at runtime.
+        const kind = unionKind(def, name => alternative(name, def.name, scope));
+        if (kind !== "declaration") {
+            if (kind !== "union") problem(kind);
+            const clause = unionClause(def);
+            define(def.name, [clause], scope, clause.body);
+            return;
+        }
+        const d = def, parameters = new Map((d.parameters ?? []).map((p) => [p, variable()]));
+        const indexed = d.variants.some(v => v.result);
+        if (indexed) indexedFamilies.set(d.name, { def: d, scope });
+        invariance.set(d.name, invariantParameters(d));
+        const result: Ty = { k: "variant", name: d.name, args: [...parameters.values()], ...indexed ? { indexed } : {} };
+        scope.set(d.name, { type: { k: "type", value: result } });
+        const fieldsScope = new Map(scope);
+        for (const [name, t] of parameters) {
+            fieldsScope.set(name, { type: { k: "type", value: t }, mono: true });
+        }
+        for (const v of d.variants) {
+            // One sharing the type's name makes values whose type is marked
+            // shared too: applied to types it is that type (see sharedType).
+            let t = (v.tag === d.name ? { ...result, shared: true } : result) as Ty;
+            // An indexed constructor's own names (k in Cons a (Vec k a)) are
+            // fresh for it; its result keeps the family's parameters it
+            // names, and leaves a computed index (S k) to values.
+            const own: Scope = indexed ? new Map(fieldsScope) : fieldsScope, captures = indexed ? new Set<string>() : undefined;
+            if (v.result) {
+                const args: Expr[] = [];
+                let head = v.result;
+                while (head.t === "app") { args.unshift(head.a); head = head.f; }
+                t = { k: "variant", name: d.name, indexed, args: (d.parameters ?? []).map((_, n) => {
+                    const arg = args[n];
+                    return arg?.t === "var" && parameters.has(arg.name) ? parameters.get(arg.name)! : variable();
+                }) };
+            }
+            // A field of a concrete type converts its value as a typed
+            // parameter does (Circle 2 holds 2.0); a type parameter does not.
+            for (const field of [...v.fields ?? []].reverse()) {
+                const type = typeExpr(field, own, captures);
+                t = fn(type, t, undefined, !variables(type).size);
+            }
+            if (v.tag === d.name) t = { ...t, shared: true } as Ty;
+            scope.set(v.tag, { type: t, declaration: d });
+        }
+        // A constructor's logic is a clause of its fields giving a value
+        // of its type (Percent (Float x) = x > 100 ? Percent 100.0 : _).
+        for (const v of d.variants) {
+            if (!v.logic) continue;
+            let made = resolve(infer({ t: "patternLambda", params: v.logic.params, body: v.logic.body }, scope));
+            let own = resolve(scope.get(v.tag)!.type);
+            while (made.k === "fn" && own.k === "fn") { made = resolve(made.output); own = resolve(own.output); }
+            unify(own, made, v.logic.body);
+        }
+        const positions = enumerationPositions(d);
+        if (positions) define("to", positions, scope, positions[0].body);
+    }
+    // Whether a statement ran yet: a file's last statement then is in its monad.
+    let ran = false;
     for (const [index, written] of program.entries()) {
         if (options.before?.index === index) options.before.scope(new Map(scope));
-        // Constructors declared with _ where the parser could not see them are
-        // claimed here, as at runtime.
-        let statement = written;
-        if (statement.t === "type") {
-            const def = statement.def;
-            if (unionKind(def, name => alternative(name, def.name, scope)) === "claim") {
-                statement = { t: "type", def: claimedDeclaration(def, tag => scope.get(tag)!.declaration!.variants[0]) };
-            }
-        }
+        const statement = written;
         // Each top-level statement gets the same bounded work, so a long module
         // is not limited by its length.
         budget = STATEMENT_BUDGET;
@@ -6788,69 +6859,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     finally { topLevelDefinition = creatingTopLevel = false; }
                 }
             }
-            else if (statement.t === "type" && unionKind(statement.def, name => alternative(name, statement.def.name, scope)) !== "declaration") {
-                // X = A | B of existing types is their union (see unionKind), as at runtime.
-                const kind = unionKind(statement.def, name => alternative(name, statement.def.name, scope));
-                if (kind !== "union") problem(kind);
-                const clause = unionClause(statement.def);
-                define(statement.def.name, [clause], scope, clause.body);
-            }
-            else if (statement.t === "type") {
-                const d = statement.def, parameters = new Map((d.parameters ?? []).map((p) => [p, variable()]));
-                const indexed = d.variants.some(v => v.result);
-                if (indexed) indexedFamilies.set(d.name, { def: d, scope });
-                invariance.set(d.name, invariantParameters(d));
-                const result: Ty = { k: "variant", name: d.name, args: [...parameters.values()], ...indexed ? { indexed } : {} };
-                scope.set(d.name, { type: { k: "type", value: result } });
-                const fieldsScope = new Map(scope);
-                for (const [name, t] of parameters) {
-                    fieldsScope.set(name, { type: { k: "type", value: t }, mono: true });
-                }
-                for (const v of d.variants) {
-                    // One sharing the type's name makes values whose type is marked
-                    // shared too: applied to types it is that type (see sharedType).
-                    let t = (v.tag === d.name ? { ...result, shared: true } : result) as Ty;
-                    // An indexed constructor's own names (k in Cons a (Vec k a)) are
-                    // fresh for it; its result keeps the family's parameters it
-                    // names, and leaves a computed index (S k) to values.
-                    const own: Scope = indexed ? new Map(fieldsScope) : fieldsScope, captures = indexed ? new Set<string>() : undefined;
-                    if (v.result) {
-                        const args: Expr[] = [];
-                        let head = v.result;
-                        while (head.t === "app") { args.unshift(head.a); head = head.f; }
-                        t = { k: "variant", name: d.name, indexed, args: (d.parameters ?? []).map((_, n) => {
-                            const arg = args[n];
-                            return arg?.t === "var" && parameters.has(arg.name) ? parameters.get(arg.name)! : variable();
-                        }) };
-                    }
-                    // A field of a concrete type converts its value as a typed
-                    // parameter does (Circle 2 holds 2.0); a type parameter does not.
-                    for (const field of [...v.fields ?? []].reverse()) {
-                        const type = typeExpr(field, own, captures);
-                        t = fn(type, t, undefined, !variables(type).size);
-                    }
-                    if (v.tag === d.name) t = { ...t, shared: true } as Ty;
-                    scope.set(v.tag, { type: t, declaration: d });
-                }
-                // A constructor's logic is a clause of its fields giving a value
-                // of its type (Percent (Float x) = x > 100 ? Percent 100.0 : _).
-                for (const v of d.variants) {
-                    if (!v.logic) continue;
-                    let made = resolve(infer({ t: "patternLambda", params: v.logic.params, body: v.logic.body }, scope));
-                    let own = resolve(scope.get(v.tag)!.type);
-                    while (made.k === "fn" && own.k === "fn") { made = resolve(made.output); own = resolve(own.output); }
-                    unify(own, made, v.logic.body);
-                }
-                const positions = enumerationPositions(d);
-                if (positions) define("to", positions, scope, positions[0].body);
-            } else if (statement.t === "expr") {
+            else if (statement.t === "type") declare(statement.def, scope);
+            else if (statement.t === "expr") {
                 executeTopLevel(statement.value, scope);
                 const type = infer(statement.value, scope);
                 validate(type);
                 opensModule(statement.value, scope, type);
+                // The top level is a block: what binds nothing is an action.
+                const last = index === program.length - 1;
+                if (!last || options.file && ran) discarded(statement.value, type);
+                ran = true;
             } else {
                 // An eager binding (<-) runs where it stands; a lazy one when first used.
                 const eager = statement.t === "patDef" && !!statement.eager;
+                if (eager) ran = true;
                 // What a top-level x <- action binds: the action's known result.
                 eagerResult = undefined;
                 if (eager) {

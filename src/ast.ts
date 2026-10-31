@@ -37,6 +37,8 @@ export type Expr =
     | { t: "pipe"; x: Expr; f: Expr }
     | { t: "block"; stmts: Expr[]; style?: "(" | "{" }
     | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr }[] }
+    // A type declared in a block, as at the top level (Color = Red | Green).
+    | { t: "typeDef"; def: DataDef }
     | { t: "patDef"; pattern: Pattern; value: Expr; eager?: boolean; update?: { name: string; value: Expr; error?: string } };
 
 export type Pattern =

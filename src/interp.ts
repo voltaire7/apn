@@ -318,13 +318,59 @@ export class Interpreter {
         for (const [name, value] of this.preludeBindings) outer.setLocal(name, value);
     }
 
-    run(program: TopLevel[], tailLoad = false): Value {
+    // A type declaration (Color = Red | Green), at the top level or in a block,
+    // declared for its whole scope (scope), as a new name is. A union of
+    // existing types is a definition instead: the value it makes.
+    private declare(def: DataDef, scope: Env): Value | undefined {
+        if (def.variants.some(v => v.tag !== "[]" && v.tag !== "::")) {
+            const written = def, kind = unionKind(def, name => this.alternative(name, written.name));
+            if (kind === "union") return this.evalDef(def.name, [unionClause(def)]);
+            // Constructors declared with _ where the parser could not see
+            // them (an earlier input, a module, a block) are claimed here.
+            if (kind === "claim") def = claimedDeclaration(def, tag => this.declarations.get(this.constructorFamily(tag)!)!.variants[0]);
+            else if (kind !== "declaration") throw new APNError("runtime", kind);
+        }
+        // A type is declared for its whole scope, as a new name is.
+        for (const name of [def.name, ...def.variants.map(v => v.tag)]) {
+            const previous = this.scopeBinding(name);
+            if (previous && ((previous.kind === "native" && previous.tag) || previous.kind === "variant") && previous.family?.name !== def.name && !def.claims) {
+                throw new APNError("runtime", `cannot redeclare value constructor ${name}; it belongs to ${previous.family?.name}`);
+            }
+        }
+        const results = new Map(def.variants.flatMap(v => v.result ? [[v.tag, v.result] as [string, Expr]] : []));
+        const family = { name: def.name, parameters: def.parameters ?? [], fields: new Map(def.variants.map(v => [v.tag, v.fields ?? []])), env: new Env(this.env), ...results.size ? { results } : {} };
+        scope.setLocal(def.name, { kind: "type", name: def.name, family });
+        this.declarations.set(family, def);
+        for (const v of def.variants) {
+            if (v.arity === 0) {
+                // Nullary constructors are themselves the value.
+                scope.setLocal(v.tag, { kind: "variant", tag: v.tag, v: [], family });
+            } else {
+                // A constructor with logic runs it when applied; its _
+                // makes the raw value (see ConstructorLogic).
+                const logic = v.logic && { kind: "clauseFn" as const, name: v.tag, clauses: [{ params: v.logic.params, body: v.logic.body }], arity: v.arity, env: family.env, applied: [] };
+                scope.setLocal(v.tag, {
+                    kind: "native", name: "__constr", arity: v.arity, applied: [], tag: v.tag, family,
+                    ...logic ? { invoke: (args: Value[]) => args.reduce<Value>((f, arg) => this.apply(f, arg), logic) } : {},
+                });
+            }
+        }
+        for (const name of [def.name, ...def.variants.map(v => v.tag)]) family.env.setLocal(name, this.env.get(name)!);
+        const positions = enumerationPositions(def);
+        if (positions) this.evalDef("to", positions);
+        return undefined;
+    }
+
+    // A file (file) is a block run once: as in a block, a statement that binds
+    // nothing is an action, the last one too once one ran; a REPL input's last
+    // value is shown instead. A load runs a file.
+    run(program: TopLevel[], tailLoad = false, file = tailLoad): Value {
         // The outermost run's folder is the program's: imports search up to it.
         if (!this.runDepth && !this.dynamicDepth) this.moduleRoot = this.sourceDir;
         // Each checked top-level run takes a fresh input snapshot.
         if (this.checking && !this.runDepth && !this.dynamicDepth) this.inputFiles.clear();
         const top = !this.runDepth && !this.dynamicDepth;
-        const candidate = this.checking && top ? this.checking.prepare(program, this.sourceDir) : undefined;
+        const candidate = this.checking && top ? this.checking.prepare(program, this.sourceDir, this.sourceDir, file) : undefined;
         const inferred = !this.checking && top && !this.loadingPrelude ? this.typesOf(program) : undefined;
         // A check may decide more expressions' monads (see checkedMonad).
         if (top && this.types) this.checkedHeads = new WeakMap();
@@ -333,47 +379,12 @@ export class Interpreter {
         let succeeded = false;
         this.runDepth++;
         try {
-            let last: Value = { kind: "list", v: [] };
+            let last: Value = { kind: "list", v: [] }, ran = false;
             for (const [index, written] of program.entries()) {
                 if (this.runDepth === 1 && !this.dynamicDepth) this.running = { program, index };
-                let tl = written;
-                if (tl.t === "type" && tl.def.variants.some(v => v.tag !== "[]" && v.tag !== "::")) {
-                    const def = tl.def, kind = unionKind(def, name => this.alternative(name, def.name));
-                    if (kind === "union") { last = this.evalDef(def.name, [unionClause(def)]); continue; }
-                    // Constructors declared with _ where the parser could not see
-                    // them (an earlier input, a module) are claimed here.
-                    if (kind === "claim") tl = { t: "type", def: claimedDeclaration(def, tag => this.declarations.get(this.constructorFamily(tag)!)!.variants[0]) };
-                    else if (kind !== "declaration") throw new APNError("runtime", kind);
-                }
+                const tl = written;
                 if (tl.t === "type") {
-                    // A type is declared for its whole scope, as a new name is.
-                    for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) {
-                        const previous = this.scopeBinding(name);
-                        if (previous && ((previous.kind === "native" && previous.tag) || previous.kind === "variant") && previous.family?.name !== tl.def.name && !tl.def.claims) {
-                            throw new APNError("runtime", `cannot redeclare value constructor ${name}; it belongs to ${previous.family?.name}`);
-                        }
-                    }
-                    const results = new Map(tl.def.variants.flatMap(v => v.result ? [[v.tag, v.result] as [string, Expr]] : []));
-                    const family = { name: tl.def.name, parameters: tl.def.parameters ?? [], fields: new Map(tl.def.variants.map(v => [v.tag, v.fields ?? []])), env: new Env(this.env), ...results.size ? { results } : {} };
-                    this.env.root().setLocal(tl.def.name, { kind: "type", name: tl.def.name, family });
-                    this.declarations.set(family, tl.def);
-                    for (const v of tl.def.variants) {
-                        if (v.arity === 0) {
-                            // Nullary constructors are themselves the value.
-                            this.env.root().setLocal(v.tag, { kind: "variant", tag: v.tag, v: [], family });
-                        } else {
-                            // A constructor with logic runs it when applied; its _
-                            // makes the raw value (see ConstructorLogic).
-                            const logic = v.logic && { kind: "clauseFn" as const, name: v.tag, clauses: [{ params: v.logic.params, body: v.logic.body }], arity: v.arity, env: family.env, applied: [] };
-                            this.env.root().setLocal(v.tag, {
-                                kind: "native", name: "__constr", arity: v.arity, applied: [], tag: v.tag, family,
-                                ...logic ? { invoke: (args: Value[]) => args.reduce<Value>((f, arg) => this.apply(f, arg), logic) } : {},
-                            });
-                        }
-                    }
-                    for (const name of [tl.def.name, ...tl.def.variants.map(v => v.tag)]) family.env.setLocal(name, this.env.get(name)!);
-                    const positions = enumerationPositions(tl.def);
-                    if (positions) this.evalDef("to", positions);
+                    last = this.declare(tl.def, this.env.root()) ?? last;
                     continue;
                 }
                 if (tl.t === "def") {
@@ -381,6 +392,7 @@ export class Interpreter {
                     continue;
                 }
                 if (tl.t === "patDef") {
+                    if (tl.eager) ran = true;
                     last = this.evalPatBinding(tl);
                     continue;
                 }
@@ -388,7 +400,8 @@ export class Interpreter {
                 const tail = tailLoad && index === program.length - 1;
                 const value = this.eval(tl.value, tail);
                 this.ranAction = false;
-                last = this.runStmt(value, tail);
+                last = this.runStmt(value, tail, index < program.length - 1 || file && ran ? tl.value : undefined);
+                ran = true;
                 if (this.opens(last, tl.value)) last = { kind: "list", v: [] };
                 this.adoptPublished();
             }
@@ -1033,6 +1046,7 @@ export class Interpreter {
                 const binds = this.clauseNodes(e);
                 return binds.length === 1 ? binds[0] : node(text("{}"), ...binds);
             }
+            case "typeDef": throw new APNError("runtime", "a type declaration has no form as code");
             case "patDef":
                 if (e.value.t === "setItem" || e.value.t === "setFields") return of(e.value);
                 return node(text(e.eager ? "<-" : "="), pattern(e.pattern), of(e.value));
@@ -1305,8 +1319,10 @@ export class Interpreter {
     }
 
     // A statement runs its value when that is an IO action.
-    runStmt(v: Value, tailLoad = false): Value {
+    // statement: one whose value must be in the block's monad (see dropped).
+    runStmt(v: Value, tailLoad = false, statement?: Expr): Value {
         const value = this.demand(v, tailLoad);
+        if (statement) this.dropped(statement, value, false);
         const action = value.kind === "io" || value.kind === "pending";
         const result = action ? this.runIO(value) : value;
         this.ranAction = action;
@@ -1357,6 +1373,7 @@ export class Interpreter {
                     if (s.t !== "patDef") this.opens(result, s);
                 }
                 else if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
+                else if (s.t === "typeDef") r = this.declare(s.def, this.env) ?? r;
                 else if (s.t === "patDef") r = this.evalPatBinding(s);
                 else if (i < e.stmts.length - 1) {
                     const value = this.demand(this.eval(s));
@@ -1371,7 +1388,8 @@ export class Interpreter {
                     return new IOTail(last);
                 }
             }
-            throw new APNError("runtime", "the last statement of a do-block must be an action, not a binding", { hint: "end the block with an action, such as `return x`" });
+            // A binding last yields what it binds, as in a block of bindings.
+            return r;
         } finally { this.env = caller; }
     }
 
@@ -1641,6 +1659,7 @@ export class Interpreter {
                             for (let si = 0; si < e.stmts.length; si++) {
                                 const s = e.stmts[si];
                                 if (s.t === "stmDef") { r = this.evalDef(s.name, s.clauses); continue; }
+                                if (s.t === "typeDef") { r = this.declare(s.def, this.env) ?? r; continue; }
                                 if (s.t === "patDef" && !(s.eager && s.value.t !== "import" && !(s.update && this.env.get(s.update.name)))) { r = this.evalPatBinding(s); continue; }
                                 if (s.t !== "patDef" && si === e.stmts.length - 1) {
                                     forceResult = true;
@@ -2361,7 +2380,7 @@ export class Interpreter {
         try { program = parse(text, file); } finally { setLooseSpacing(loose); }
         return program.map(tl => {
             if (tl.t === "def") return { t: "stmDef", name: tl.name, clauses: tl.clauses };
-            if (tl.t === "type") throw new APNError("runtime", "source read as syntax cannot declare a type");
+            if (tl.t === "type") return { t: "typeDef", def: tl.def };
             return tl.t === "expr" ? tl.value : tl;
         });
     }
@@ -3146,15 +3165,17 @@ export class Interpreter {
         const lastAction = (what: string): never => {
             throw new APNError("runtime", `the last statement of a do-block must be an action, not ${what}`, { hint: "end the block with `return x`" });
         };
-        const go = (scope: Env, from: number, given?: Value): Value => {
+        // bound: what the statement before bound, which a binding last yields.
+        const go = (scope: Env, from: number, given?: Value, bound?: Value): Value => {
             const caller = this.env;
             this.env = scope;
             try {
                 for (let i = from; i < e.stmts.length; i++) {
                     const s = e.stmts[i], last = i === e.stmts.length - 1;
-                    if (s.t === "stmDef") { this.evalDef(s.name, s.clauses); continue; }
-                    if (s.t === "patDef" && !s.eager) { this.evalPatBinding(s); continue; }
-                    if (s.t === "patDef" && last) return lastAction("a binding");
+                    if (s.t === "stmDef") { bound = this.evalDef(s.name, s.clauses); continue; }
+                    if (s.t === "typeDef") { this.declare(s.def, this.env); continue; }
+                    if (s.t === "patDef" && !s.eager) { bound = this.evalPatBinding(s); continue; }
+                    bound = undefined;
                     const m = given ?? (s.t === "patDef" ? this.reference(this.eval(s.value)) : this.demand(this.eval(s)));
                     given = undefined;
                     if (last) {
@@ -3179,10 +3200,10 @@ export class Interpreter {
                             this.env = child;
                             try { this.bindResult(binding, x); child = this.env; } finally { this.env = old; }
                         }
-                        return go(child, next);
+                        return go(child, next, undefined, binding.t === "patDef" ? x : undefined);
                     } });
                 }
-                return lastAction("nothing");
+                return bound ? this.realize(this.pendingReturn(bound), target) : lastAction("nothing");
             } finally { this.env = caller; }
         };
         return go(new Env(env), start, first);

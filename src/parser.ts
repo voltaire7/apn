@@ -1074,6 +1074,11 @@ class Parser {
                             if (this.skipFixityDeclaration()) continue;
                             const operator = this.tryOperatorDefinition();
                             if (operator) { stmts.push({ t: "stmDef", ...operator }); continue; }
+                            // A block declares types as the top level does.
+                            if (this.isTypeDeclaration()) {
+                                for (const d of this.parseTypeDeclaration(tb)) stmts.push(d.t === "type" ? { t: "typeDef", def: d.def } : d.t === "def" ? { t: "stmDef", name: d.name, clauses: d.clauses } : d.value);
+                                continue;
+                            }
                             if (this.isEagerBinding()) {
                                 stmts.push(this.parseEagerBinding());
                             } else if (this.isFieldAssignStart()) {
@@ -1081,7 +1086,13 @@ class Parser {
                             } else if (this.isPatBinding()) {
                                 stmts.push(this.parsePatBinding());
                             } else {
-                                if (this.isDef()) joinClauses(stmts, this.parseBlockDef());
+                                if (this.isDef()) {
+                                    // Name params = _ declares a constructor, as at the top level.
+                                    const d = this.parseBlockDef(), [clause] = d.clauses;
+                                    if (/^[A-Z]/.test(d.name) && d.clauses.length === 1 && holdsPlaceholder(clause.body)) {
+                                        stmts.push({ t: "typeDef", def: constructorDeclaration(d.name, clause.params, tb.pos, clause.body.t === "placeholder" ? undefined : clause.body).def });
+                                    } else joinClauses(stmts, d);
+                                }
                                 else stmts.push(this.tryItemAssign() ?? this.parseDelimitedExpr());
                             }
                         }
@@ -1878,6 +1889,64 @@ class Parser {
         }
     }
 
+    // A type declaration (Color = Red | Green, Vec n a = ...), at the top level
+    // or in a block. Given the statements before it (out), a union of
+    // constructors declared with _ there claims them in place (and nothing is
+    // returned); elsewhere the run and the checker claim them.
+    parseTypeDeclaration(t: Token, out?: TopLevel[]): TopLevel[] {
+        const name = (this.next() as { v: string }).v;
+        const parameters: string[] = [];
+        while (this.peek().k === "ident") parameters.push((this.next() as { v: string }).v);
+        if (parameters.some(p => !/^[a-z]/.test(p)) || new Set(parameters).size !== parameters.length) throw new Error("Parser: type parameters must be distinct lowercase names");
+        this.expectSym("=");
+        // Vec = n, a -> (Nil -> ... | Cons ...) is Vec n a = ..., as
+        // f = x -> e is f x = e: the parameters, then the constructors in ( ).
+        let variants: ReturnType<Parser["parseConstructors"]>;
+        if (!parameters.length && this.lambdaDeclarationAt(this.i)) {
+            for (;;) {
+                parameters.push((this.next() as { v: string }).v);
+                if (this.eatSym(",")) continue;
+                this.expectSym("->");
+                if (this.isSym("(")) break;
+            }
+            if (new Set(parameters).size !== parameters.length) throw new Error("Parser: type parameters must be distinct lowercase names");
+            this.expectSym("(");
+            variants = this.parseConstructors(name, [name, ...parameters].join(" "));
+            this.skipNL();
+            this.expectSym(")");
+        } else variants = this.parseConstructors(name, [name, ...parameters].join(" "));
+        // A union of constructors declared with _ claims them: they
+        // become this type's, where the first of them was declared.
+        // The run and the checker claim those the parser cannot see.
+        const claimed = variants.map(v => out && this.unclaimed.get(v.tag));
+        if (out && claimed.some(Boolean)) {
+            const other = variants.find((_, n) => !claimed[n]);
+            if (other) throw new APNError("parse", unclaimedMix(name, other.tag), { pos: t.pos, hint: `declare it first: ${other.tag} = _, or ${other.tag} x = _ with a field` });
+            const at = Math.min(...claimed.map(c => out.indexOf(c!)));
+            const def = claimedDeclaration({ name, parameters, variants }, tag => claimed.find(c => c!.def.name === tag)!.def.variants[0]);
+            for (const c of claimed) { out.splice(out.indexOf(c!), 1); this.unclaimed.delete(c!.def.name); }
+            declaredTypes.add(name);
+            out.splice(at, 0, { t: "type", def });
+            return [];
+        }
+        // A family of lists is sugar for a type function's clauses.
+        if (variants.some(v => v.tag === "[]" || v.tag === "::")) {
+            return [{ t: "def", name, clauses: listClauses(variants) }];
+        }
+        if (new Set(variants.map(v => v.tag)).size !== variants.length) throw new Error("Parser: duplicate value constructor");
+        // Register only after the entire declaration has parsed successfully;
+        // alternatives that are types (Int | String) make a union, not constructors.
+        const types = variants.filter(v => v.tag !== name && declaredTypes.has(v.tag)).map(v => v.tag);
+        declaredTypes.add(name);
+        for (const { tag, arity } of variants) {
+            if (types.includes(tag)) continue;
+            if (tag === "[]" || tag === "::") continue;
+            declaredCtors.add(tag);
+            if (arity === 0) nullaryCtors.add(tag); else nullaryCtors.delete(tag);
+        }
+        return [{ t: "type", def: { name, parameters, variants } }];
+    }
+
     parseTopLevel(): TopLevel[] {
         const out: TopLevel[] = [];
         for (;;) {
@@ -1912,58 +1981,7 @@ class Parser {
             }
 
             if (this.isTypeDeclaration()) {
-                const name = (this.next() as { v: string }).v;
-                const parameters: string[] = [];
-                while (this.peek().k === "ident") parameters.push((this.next() as { v: string }).v);
-                if (parameters.some(p => !/^[a-z]/.test(p)) || new Set(parameters).size !== parameters.length) throw new Error("Parser: type parameters must be distinct lowercase names");
-                this.expectSym("=");
-                // Vec = n, a -> (Nil -> ... | Cons ...) is Vec n a = ..., as
-                // f = x -> e is f x = e: the parameters, then the constructors in ( ).
-                let variants: ReturnType<Parser["parseConstructors"]>;
-                if (!parameters.length && this.lambdaDeclarationAt(this.i)) {
-                    for (;;) {
-                        parameters.push((this.next() as { v: string }).v);
-                        if (this.eatSym(",")) continue;
-                        this.expectSym("->");
-                        if (this.isSym("(")) break;
-                    }
-                    if (new Set(parameters).size !== parameters.length) throw new Error("Parser: type parameters must be distinct lowercase names");
-                    this.expectSym("(");
-                    variants = this.parseConstructors(name, [name, ...parameters].join(" "));
-                    this.skipNL();
-                    this.expectSym(")");
-                } else variants = this.parseConstructors(name, [name, ...parameters].join(" "));
-                // A union of constructors declared with _ claims them: they
-                // become this type's, where the first of them was declared.
-                // The run and the checker claim those the parser cannot see.
-                const claimed = variants.map(v => this.unclaimed.get(v.tag));
-                if (claimed.some(Boolean)) {
-                    const other = variants.find((_, n) => !claimed[n]);
-                    if (other) throw new APNError("parse", unclaimedMix(name, other.tag), { pos: t.pos, hint: `declare it first: ${other.tag} = _, or ${other.tag} x = _ with a field` });
-                    const at = Math.min(...claimed.map(c => out.indexOf(c!)));
-                    const def = claimedDeclaration({ name, parameters, variants }, tag => claimed.find(c => c!.def.name === tag)!.def.variants[0]);
-                    for (const c of claimed) { out.splice(out.indexOf(c!), 1); this.unclaimed.delete(c!.def.name); }
-                    declaredTypes.add(name);
-                    out.splice(at, 0, { t: "type", def });
-                    continue;
-                }
-                // A family of lists is sugar for a type function's clauses.
-                if (variants.some(v => v.tag === "[]" || v.tag === "::")) {
-                    out.push({ t: "def", name, clauses: listClauses(variants) });
-                    continue;
-                }
-                if (new Set(variants.map(v => v.tag)).size !== variants.length) throw new Error("Parser: duplicate value constructor");
-                // Register only after the entire declaration has parsed successfully;
-                // alternatives that are types (Int | String) make a union, not constructors.
-                const types = variants.filter(v => v.tag !== name && declaredTypes.has(v.tag)).map(v => v.tag);
-                declaredTypes.add(name);
-                for (const { tag, arity } of variants) {
-                    if (types.includes(tag)) continue;
-                    if (tag === "[]" || tag === "::") continue;
-                    declaredCtors.add(tag);
-                    if (arity === 0) nullaryCtors.add(tag); else nullaryCtors.delete(tag);
-                }
-                out.push({ t: "type", def: { name, parameters, variants } });
+                out.push(...this.parseTypeDeclaration(t, out));
                 continue;
             }
 

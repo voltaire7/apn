@@ -318,7 +318,10 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
 
 - IO: an action is a `Value` of kind `io` whose `run` performs it. `IO_NATIVES`
   (and host natives) return actions from `callNative` instead of acting;
-  `runStmt` (top-level statements) and `runIO` run them. A do-block's last
+  `runStmt` (top-level statements) and `runIO` run them. A file runs with
+  `run(program, tailLoad, file = true)` (`main.ts`, `load`, the browser) and
+  checks with `CheckOptions.file`, so its last statement follows the block
+  rule; the REPL and tests run inputs without it, showing the last value. A do-block's last
   step returns an `IOTail` that `runIO`'s loop continues, so recursive actions
   use no stack; never run a tail action recursively. Block evaluation turns
   into a do-block at its first `<-` (always) or discarded statement whose value

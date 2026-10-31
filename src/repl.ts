@@ -61,7 +61,9 @@ export function formatError(err: unknown, color: boolean): string {
 
 // Run a source chunk; returns the forced value, or null for suppressed statements.
 // REPL echo uses this (it needs the Value for colored printing).
-function runSourceValue(src: string, interp: Interpreter, binding = false): Value | null {
+// A file (file) is a block run once: what it drops is checked as a block's
+// last statement is, where the REPL would show it.
+function runSourceValue(src: string, interp: Interpreter, binding = false, file = false): Value | null {
     let program: TopLevel[];
     try {
         program = parse(src, interp.sourceFile);
@@ -70,7 +72,7 @@ function runSourceValue(src: string, interp: Interpreter, binding = false): Valu
     }
     let val: Value;
     try {
-        val = interp.run(program);
+        val = interp.run(program, false, file);
     } catch (err) {
         if (err instanceof APNError) throw err;
         throw new APNError("runtime", (err as Error).message.replace(/^Runtime: /, ""));
@@ -127,8 +129,8 @@ function lastIsBinding(src: string): boolean {
     }
 }
 
-export function runSource(src: string, interp: Interpreter, binding = false): string {
-    const val = runSourceValue(src, interp, binding);
+export function runSource(src: string, interp: Interpreter, binding = false, file = false): string {
+    const val = runSourceValue(src, interp, binding, file);
     return val === null ? "" : interp.renderString(val);
 }
 

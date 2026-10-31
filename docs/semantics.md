@@ -382,8 +382,18 @@ written. `tests/sugar-test.ts` holds each form beside its expansion.
 A block's bindings are the one thing a lambda does not express: a name new to
 the block is bound for the whole block, so its value and earlier statements
 may read it (`{ ones = 1 :: ones; take 2 ones }`); a rebinding reads the
-version before it, as the lambda does. A program's top level is not a block:
-its statements run in order and its last may be any value.
+version before it, as the lambda does.
+
+A file is a block, run once: its top level follows every rule a block's
+statements do, and a block may hold everything a file does, a type
+declaration (`Color = Red | Green`, `Box a = _`) among them, declared for the
+block only. So a statement that binds nothing is an action (or another
+monadic value), and once one ran, the last is too: `print 1` then `5` is the
+error a block reports, since the 5 would be dropped (see
+[blocks are do-blocks](#blocks-are-do-blocks)). `load "file"` runs a file and
+gives its names, the module it defines. The REPL is a block still being
+written: each input is its next statement, and the last value of one is shown
+instead of dropped.
 
 ## Operator precedence and associativity
 
@@ -688,8 +698,8 @@ and an action whose result is not known before it runs prints `IO a`.
 
 Actions run in exactly two places:
 
-- **Statements.** A file's top-level statements, and each REPL input, form an
-  implicit do-block: a statement whose value is an action runs it, in order.
+- **Statements.** A file is a block, and each REPL input a statement of one: a
+  statement whose value is an action runs it, in order.
   `a = print 3; a; a` prints twice; `a` alone names the action.
 - **`<-` bindings.** `x <- action` runs the action now and binds its result:
   `text <- readFile "input.txt"`. The right side must be an action: `x <- 2 + 3`
@@ -747,8 +757,9 @@ holds, as Haskell's). Two statements are dropped instead: `[]`, the unit (what
 `print` yields; inside a list do-block it is chained), and one opening a
 module. What the check cannot decide (a parameter's result) is checked when
 the statement runs. A do-block's last statement must itself be an action,
-whose result the block yields: end with `return x` to yield a plain value. A
-block of bindings stays an ordinary value:
+whose result the block yields (end with `return x` to yield a plain value), or
+a binding, which yields what it binds, as in a block of bindings, which stays
+an ordinary value:
 
 ```apn
 area w h = {
