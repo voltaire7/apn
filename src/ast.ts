@@ -208,6 +208,8 @@ function readFlatTyped(p: Extract<Pattern, { p: "constr" }>): Pattern | undefine
         if (q.p === "var") return { t: "var", name: q.name };
         if (q.p === "wildcard") return { t: "placeholder" };
         if (q.p === "int") return { t: "int", v: q.v };
+        // A list of types is a type ([] the empty list's, as in IO []).
+        if (q.p === "list") { const items = q.v.map(typeArg); return items.every(a => a) ? { t: "list", v: items as Expr[] } : undefined; }
         if (q.p !== "constr") return undefined;
         const args = q.args.map(typeArg);
         return args.every(a => a) ? args.reduce<Expr>((f, a) => ({ t: "app", f, a: a! }), { t: "var", name: q.tag }) : undefined;

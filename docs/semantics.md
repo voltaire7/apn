@@ -1007,7 +1007,9 @@ parameters it matches a type value, each name binding the part in its place:
 Float` binds 3 and `Float`. One more pattern is a value of that type, the typed
 pattern `((Option t) x)`, whose names the value binds: `(Option t x)` given
 `Some "a"` binds `t` to `String` and `x` to the whole variant, and `(List _ xs)`
-takes any list. `(List Int xs)` and `(Option Int x)` decide by the type the
+takes any list. `IO` takes one parameter, as `List` does: `(IO t)` given `IO Int`
+binds `Int`, and `(IO [] a)` or `(IO _ a)` is an action, `a` the action itself,
+which the pattern does not run (`[]` is a type there, the empty list's). `(List Int xs)` and `(Option Int x)` decide by the type the
 checker gave the value, never by what its elements hold, so a run takes the
 clause the checker chose: `["a"]`, `map show xs` and `Some "a"` do not match,
 while `[1,2.5]` and `[1..]` do, their elements converted as they are used (2.5

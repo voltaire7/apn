@@ -4990,7 +4990,7 @@ export class Interpreter {
         const bound = this.env.get(name), t = bound && this.reference(bound);
         if (t?.kind !== "type" || t.arguments?.length || t.alias) return 0;
         if (t.family) return t.family.parameters?.length ?? 0;
-        return t.name === "List" ? 1 : this.counted(t) ? 2 : 0;
+        return t.name === "List" || t.name === "IO" ? 1 : this.counted(t) ? 2 : 0;
     }
 
     private typeBinding(p: Extract<Pattern, { p: "schema" }>, v: Value, binds: Map<string, Value>): boolean | undefined {
@@ -5086,6 +5086,8 @@ export class Interpreter {
         }
         if (expression.t === "list") return mkList(expression.v.map(value => this.schemaPatternType(value, capture)));
         if (expression.t === "block" && expression.stmts.length === 1) return this.schemaPatternType(expression.stmts[0], capture);
+        // A type applied to a pattern's types (IO _, IO []).
+        if (expression.t === "app") return this.reference(this.apply(this.schemaPatternType(expression.f, capture), this.schemaPatternType(expression.a, capture)));
         if (capture && expression.t === "var" && /^[a-z]/.test(expression.name) && !this.env.get(expression.name)) {
             const type: Value = { kind: "type", name: "$any" };
             this.schemaTypeCaptures.set(type, expression.name);
@@ -5183,6 +5185,13 @@ export class Interpreter {
                 if (this.isListType(type)) {
                     if (!this.isList(this.demand(actual)) || !this.staticallyFits(p.type, v)) return false;
                     return this.matchPattern(p.value, this.conform(type, actual), binds);
+                }
+                // (IO T a): an action, what it yields made a T when it runs; a
+                // return no context has decided yet is one.
+                if (this.isIOType(type)) {
+                    const action = this.demand(actual);
+                    if (action.kind !== "io" && action.kind !== "pending" || !this.staticallyFits(p.type, v)) return false;
+                    return this.matchPattern(p.value, this.conform(type, this.realize(action, type)), binds);
                 }
                 if (!type.family) return this.matchPattern({ p: "constr", tag: type.name, args: [p.value] }, actual, binds);
                 const variant = this.dataValue(actual);

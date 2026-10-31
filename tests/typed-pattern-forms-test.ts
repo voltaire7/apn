@@ -53,6 +53,26 @@ Deno.test("a length the checker cannot find is located and explained", () => {
     if (!error.hint?.includes("mark it `Dynamic`") || error.pos !== source.indexOf("(filter")) throw new Error(`${error.pos}: ${error.message} ${error.hint}`);
 });
 
+// IO is a type of one parameter, as List is: (IO t) takes the type apart and
+// (IO T a) is an action yielding a T, a the action itself, run only where it
+// is run. [] is a type there too, the empty list's.
+for (const checked of [false, true]) for (const [source, expected] of [
+    ['twice (IO [] a) = IO [] {\n    a\n    a\n}\ntwice (print "hi")\n1', "1"],
+    ['twice (IO _ a) = {\n    a\n    a\n}\nprint 0\ntwice (return 5)', "5"],
+    ["resultOf (IO t) = t\nresultOf (IO Int)", "Int"],
+    ['f (IO [] a) = "action"\nf (Int n) = "int"\n[f (print "not run"), f 3]', '["action","int"]'],
+    ["f (IO _ a) = a\nx <- f (return 5)\nx", "5"],
+] as const) {
+    Deno.test(`IO patterns${checked ? ", checked" : ""}: ${JSON.stringify(source)}`, () => {
+        const lines: string[] = [], log = console.log;
+        console.log = (...args: unknown[]) => lines.push(args.join(" "));
+        let actual: string;
+        try { actual = run(source, checked); } finally { console.log = log; }
+        const want = source.includes('"hi"') ? ["hi", "hi"] : source.includes("print 0") ? ["0"] : [];
+        if (actual !== expected || JSON.stringify(lines) !== JSON.stringify(want)) throw new Error(`${actual} ${JSON.stringify(lines)}`);
+    });
+}
+
 // A claim around a match (or a ternary, which is one) is checked in each
 // alternative, under its own facts: [] makes n zero, x :: rest gives rest n - 1.
 const APPEND = "append (Vect n a xs) (Vect m a ys) = Vect (n + m) a {\n    match xs [\n        [] -> ys\n        x :: rest -> x :: append rest ys\n    ]\n}\n";

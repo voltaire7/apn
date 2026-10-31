@@ -394,7 +394,7 @@ function typeParameters(type: Ty): number {
     if (t.k === "factory") return 2;
     if (t.k !== "type" || t.applied) return 0;
     const value = resolve(t.value);
-    return value.k === "variant" && !value.base ? value.args.length : value.k === "atom" && value.name === "List" ? 1 : 0;
+    return value.k === "variant" && !value.base ? value.args.length : value.k === "atom" && (value.name === "List" || value.name === "IO") ? 1 : 0;
 }
 const constant = (n: bigint): Index => ({ constant: n, terms: new Map() });
 const resolve = (t: Ty): Ty => t.k === "var" && t.link ? resolve(t.link) : t.k === "apply" ? appliedType(t) : t;
@@ -2140,7 +2140,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // type value: Option Int binds t to Int.
                 if (t.k === "type" && parameters && p.args.length === parameters) {
                     const parts = p.args.map(() => variable()), value = resolve(t.value);
-                    unify({ k: "type", value: value.k === "variant" ? { ...value, args: parts } : list(parts[0]) }, expected, e);
+                    unify({ k: "type", value: value.k === "variant" ? { ...value, args: parts } : value.k === "atom" && value.name === "IO" ? io(parts[0]) : list(parts[0]) }, expected, e);
                     p.args.forEach((x, n) => bind(x, { k: "type", value: parts[n] }, scope, e, bound));
                     return;
                 }
