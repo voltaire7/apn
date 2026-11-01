@@ -1,8 +1,9 @@
 import { Interpreter } from "../src/interp.ts";
 import { parse } from "../src/parser.ts";
 
-function result(code: string): string {
+function result(code: string, checked = false): string {
     const i = new Interpreter();
+    if (checked) i.enableChecking();
     return i.renderString(i.run(parse('import ["option","sequence"]; ' + code)));
 }
 for (const [code, expected] of [
@@ -80,6 +81,20 @@ Deno.test("constructor lambdas accept nested patterns", () => {
 
 Deno.test("guards can use nested lambda arguments", () => {
     if (result('[1,2] ~ [xs | all (n -> n > 0) xs -> 42, _ -> 0]') !== '42') throw new Error('nested lambda in guard');
+});
+
+// A type known only when it runs may be the one a bare type name names: the
+// checker leaves that to the run, which takes the alternative or fails.
+for (const [code, expected] of [
+    ['typeOf 123 ~ [Int -> "INT"]', '"INT"'],
+    ['f x = typeOf x ~ [Int -> "INT", _ -> "other"]\n[f 5, f "a"]', '["INT","other"]'],
+    ['d Int = 1\nd (typeOf 5)', '1'],
+    ['typeOf "s" ~ [Int -> "INT"]', 'non-exhaustive match'],
+    ['g (Int n) = n\ng (typeOf 5)', 'cannot use Type where Int is required'],
+]) Deno.test(`a bare type name, checked: ${code}`, () => {
+    let actual: string;
+    try { actual = result(code, true); } catch (error) { actual = (error as Error).message; }
+    if (!actual.includes(expected)) throw new Error(`Expected ${expected}, got ${actual}`);
 });
 
 Deno.test("~ is intrinsic and has no public attempt protocol", () => {

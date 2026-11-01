@@ -1386,6 +1386,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (
             expected.k === "atom" && expected.name === "Type" && (actual.k === "type" || describing(actual))
         ) return;
+        // A type known only when it runs (typeOf x) may be the one wanted
+        // (the pattern Int): the run decides.
+        if (expected.k === "type" && actual.k === "atom" && actual.name === "Type") { runtimeChecks++; return; }
         // A list or record of types ([quote: String, year: Int]) is a type, as at runtime.
         if (expected.k === "type" && (actual.k === "record" || actual.k === "list") && describing(actual)) {
             return unify(expected.value, schemaValue(actual, e ?? { t: "placeholder" }), e, seen);

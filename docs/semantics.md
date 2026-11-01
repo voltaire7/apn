@@ -816,8 +816,8 @@ return = Some                      # return in Option
 converts as applying it: `to Quote x` is `Quote x`),
 `from T x` reads one back. A bare type name in a pattern matches that type
 itself, as `==` compares types (`describe Int = "integer"` takes `Int` and
-`typeOf 5`, and `typeOf x ~ [Int -> ...]` asks for an Int), so an instance names
-its type:
+`typeOf 5`, and `typeOf x ~ [Int -> ...]` asks for an Int; a type the check
+knows only as some type is decided by the run), so an instance names its type:
 `to Celsius (F f) = C ((f - 32) * 5 / 9)`. A `to String` instance is also how
 its values show: `print`, `echo`, the REPL and `to String` of a value holding
 one write its text, wherever it is (with `to String (Point x y) = ...`,
