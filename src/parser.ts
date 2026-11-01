@@ -1,4 +1,4 @@
-import { claimedDeclaration, countingOf, fillPlaceholders, holdsPlaceholder, holdsSplice, sourceLocations, unclaimedMix } from "./ast.ts";
+import { claimedDeclaration, countingOf, fillPlaceholders, holdsPlaceholder, sourceLocations, unclaimedMix } from "./ast.ts";
 import { stringKey, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -960,19 +960,8 @@ class Parser {
         return false;
     }
 
-    // A range is no code: a splice in one is an error.
-    rangeNoSplice(range: Extract<Expr, { t: "range" }>): Expr {
-        if (holdsSplice(range)) throw new APNError("parse", "a splice `e belongs in code, a list's items", { hint: "a range is no code: write e itself" });
-        return range;
-    }
     parsePrimary(): Expr {
         const t = this.peek();
-        // `e: e's value fixed in code, which only a list's items are.
-        if (t.k === "sym" && t.v === "`") {
-            if (!this.codeDepth) throw new APNError("parse", "a splice `e belongs in code, a list's items", { pos: t.pos, hint: "outside code, write e itself" });
-            this.next();
-            return { t: "splice", e: this.parsePrimary() };
-        }
         if (!this.noLambda && this.startsParam(t) && this.arrowOnLine()) {
             const save = this.i;
             let header: { params: Pattern[]; guard?: Expr } | undefined;
@@ -1135,17 +1124,14 @@ class Parser {
                         // RANGE (speculative): [a..b] [a..] [a,b..c] [a,b..] — Haskell-style; the
                         // first two elements give the STEP; bounds may be runtime expressions;
                         // no upper bound = INFINITE. Falls back to a normal list literal.
-                        // Parsed as items would be (a splice is code's, so a range
-                        // holding one is rejected: see rangeNoSplice).
-                        this.codeDepth++;
-                        try {
+                        {
                             const save = this.i;
                             const loE = this.parseOperators(6);
                             if (this.isSym("..")) {
                                 this.next();
                                 if (this.isSym("]")) {
                                     this.next();
-                                    return this.rangeNoSplice({ t: "range", lo: loE, second: null, hi: null });
+                                    return { t: "range", lo: loE, second: null, hi: null };
                                 }
                                 const hi = this.parseOperators(6);
                                 this.expectSym("]");
@@ -1162,7 +1148,7 @@ class Parser {
 
                                 // implicit step ADAPTS to direction: [0..-100] descends;
                                 // an EXPLICIT step pointing the wrong way stays empty
-                                return this.rangeNoSplice({ t: "range", lo: loE, second: null, hi });
+                                return { t: "range", lo: loE, second: null, hi };
                             }
                             if (this.isSym(",") && this.peek(1).k !== "newline" &&
                                     this.peek(1).k !== "dedent" &&
@@ -1175,25 +1161,22 @@ class Parser {
 
                                     if (this.isSym("]")) {
                                         this.next();
-                                        return this.rangeNoSplice({ t: "range", lo: loE, second: sE, hi: null });
+                                        return { t: "range", lo: loE, second: sE, hi: null };
                                     }
                                     const hi = this.parseOperators(6);
                                     this.expectSym("]");
-                                    return this.rangeNoSplice({ t: "range", lo: loE, second: sE, hi });
+                                    return { t: "range", lo: loE, second: sE, hi };
                                 }
                                 this.i = save2; // [1, 2] — a plain list
                             }
                             this.i = save; // not a range at all
-                        } finally { this.codeDepth--; }
+                        }
                         // An item may be a binding, as a block's statement may: it is
                         // in scope for the items after it (x <- m when the code runs).
                         const es = [] as Expr[];
                         for (;;) {
-                            this.codeDepth++;
-                            try {
-                                es.push(this.item(this.peek(), () => this.isEagerBinding() ? this.parseEagerBinding()
-                                    : this.isPatBinding() ? this.parsePatBinding() : this.isDef() ? this.parseBlockDef() : this.parseDelimitedExpr()));
-                            } finally { this.codeDepth--; }
+                            es.push(this.item(this.peek(), () => this.isEagerBinding() ? this.parseEagerBinding()
+                                : this.isPatBinding() ? this.parsePatBinding() : this.isDef() ? this.parseBlockDef() : this.parseDelimitedExpr()));
                             this.skipListSeparators();
                             if (this.isSym("]")) { this.next(); return { t: "list", v: es }; }
                             if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside list literal");
@@ -1257,8 +1240,6 @@ class Parser {
     }
 
     noLambda = 0;
-    // How deep in a list's items (code) the parser is: a splice belongs there.
-    codeDepth = 0;
     // A lambda's parameters are patterns separated by ',' (x, y -> x + y);
     // juxtaposition is one pattern, as in a definition's parentheses ((t x)
     // binds a type, Some x a payload). Directly in a list, ',' separates the
@@ -2385,7 +2366,6 @@ function bareSource(e: Expr, where: Place): string {
         case "patternLambda": return `${e.params.map(patternSource).join(", ")}${e.guard ? " | " + of(e.guard, place("guard")) : ""} -> ${of(e.body)}`;
         case "lambda": return sectionSource(e.params, e.body, x => of(x, place("operand", 8))) ?? `${e.params.join(", ")} -> ${of(e.body)}`;
         case "list": return `[${itemsText(e.v.map(x => of(x, place("item"))))}]`;
-        case "splice": return `\`${of(e.e, place("argument"))}`;
         case "record": return `[${e.v.map(([k, x]) => `${keySource(k)}: ${of(x)}`).join(", ")}]`;
         case "ternary": {
             // A ternary inside a ternary is parenthesized: c ? (d ? 1 : 2) : 3.

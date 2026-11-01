@@ -144,8 +144,6 @@ export function lex(src: string): Token[] {
             continue;
         }
 
-        // ` splices a value into code (`n in a list's items).
-        if (c === "`") { toks.push({ k: "sym", v: c, pos: start }); pos++; continue; }
         // single-char symbols. `(`/`)` suppress layout inside parens (grouping);
         // `[`/`]` DO NOT: newlines and indentation inside a list literal are
         // significant, so elements can be separated just by being on their own

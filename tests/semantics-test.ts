@@ -392,6 +392,8 @@ print (SingleBar 7)
 `, ["42", "0", "SingleBar 7"]);
 
 
+failure("backtick infix syntax is rejected", "1 `add` 2", "unexpected character");
+failure("unterminated backtick syntax is rejected", "1 `add", "unexpected character");
 example("ordinary named calls replace backtick infix", "add a b = a + b\nprint (add 1 2)", ["3"]);
 example("operator precedence and associativity", `
 print (2 + 3 * 4)
@@ -547,17 +549,6 @@ probe (reduce [1 + 1])
 print (length edited)`, ["[x = 1, x + 1]", "[2]", "[11,5]", "[x = 10, x + 1, 5]", "[30,5]", "[2]",
     "[x = 10, x * 5]", "[50]", "[1,2,1,2,1]", "[2]", "3"]);
 failure("an open list's values need its names", "print [x + 1]", "unbound variable 'x'");
-example("a splice puts a value into code, read where the list is written", `
-make n = [x = 2, x * \`n]
-probe (make 3)
-print ([n = 100] ++ make 3)
-print (toAST (make 3))
-f n = [y -> y + \`n]
-print (head (f 4) 1)
-print (head [1, \`(missing + 1)])`, ["[x = 2, x * 3]", "[6]", '["[]",["=","x",2],["*","x",3]]', "5", "1"]);
-failure("a splice belongs in a list's items", "n = 3\nprint `n", "belongs in code");
-failure("backtick infix is no syntax: ` splices", "1 `add` 2", "belongs in code");
-failure("a range is no code: its bounds take no splice", "n = 3\nprint [`n..5]", "belongs in code");
 example("a list's bindings name its items", `
 code = [x = 1, y = 2, x + y]
 before = code

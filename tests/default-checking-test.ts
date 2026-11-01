@@ -28,8 +28,6 @@ for (const [source, expected] of [
     ['Direction = North | South; [10,20] South', '20'],
     ['templates = [String,Int]; values = ["x",1]; templates.values', '["x",1]'],
     ['xs = [1]; xs = [2,3]; xs', '[2,3]'],
-    // A splice is typed where its list is written, not by the list's own bindings.
-    ['make n = [n = "a", n ++ "!", `n * 2]; reduce (make 3)', '["a!",6]'],
     ['f x = x + 1; [f 1, f 2.0]', '[2,3.0]'],
     ['factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))\nfactorial 5', '120'],
     ['import "type"; cast Float32 (Float64 .2)', 'Float32 0.2'],
@@ -115,8 +113,6 @@ for (const source of [
     // An item after an x <- m item yields the block ending in it: { x <- m; x } is an error.
     'print [x <- return 1, x]',
     'print [x <- [1,2], 7]',
-    // A splice is typed where its list is written.
-    'n = "a"\nxs = [`n]\nhead xs + 1',
 ]) Deno.test(`default checking rejects before evaluation: ${source}`, () => rejected(session(), source));
 
 // A choice between values (a ternary's branches, a match's arms, a function's

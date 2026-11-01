@@ -335,18 +335,6 @@ y = 100
 print ([y = 1] ++ [y + 1])  # [2]
 ```
 
-A splice `` `e `` in an item puts a value into the code: `e` is read where the
-list is written, lazily, when the item first needs it, and the code holds its
-value, which code joined before can't change. A splice belongs only in a list's
-items (not in a range's bounds); anywhere else it is a parse error, as `e`
-alone means the same there:
-
-```apn
-make n = [x = 2, x * `n]
-probe (make 3)              # [x = 2, x * 3]
-print ([n = 100] ++ make 3) # [6]
-```
-
 An item update replaces the item with the code on its right, run in the list
 (a value it gives takes the replaced item's type): the items after it that
 read a name either item binds run again, and every other keeps its value. The

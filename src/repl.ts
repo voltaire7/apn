@@ -365,7 +365,6 @@ function helpText(): string {
         `debug x    shows the SOURCE as written;  step n v  descends v's body`,
         `probe [1 + 1] => [1 + 1]: a list is code; print shows values, reduce gives them`,
         `[x = 1] ++ [x + 1] joins code: [2]; code 0 = (x = 10) replaces an item`,
-        `make n = [x * \`n]: \`n splices n's value into code (probe (make 3) => [x * 3])`,
         `toAST [1 + 2] => ["[]",["+",1,2]]; import "syntax": fromAST, eval, toLambda`,
         `Mutable: x = Mutable 0; set x $ (x + 1); print x`,
         `Builtins: head tail take drop length null enumerate map filter zipWith`,

@@ -17,7 +17,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericType, numericPayload, m
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, holdsSplice, placedAs, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions } from "./ast.ts";
@@ -1047,8 +1047,6 @@ export class Interpreter {
                 return binds.length === 1 ? binds[0] : node(text("{}"), ...binds);
             }
             case "typeDef": throw new APNError("runtime", "a type declaration has no form as code");
-            // A splice is its value, written as code.
-            case "splice": return e.value ? this.sexprOf(this.valueToExpr(this.demand(e.value as Value))) : node(text("`"), of(e.e));
             case "patDef":
                 if (e.value.t === "setItem" || e.value.t === "setFields") return of(e.value);
                 return node(text(e.eager ? "<-" : "="), pattern(e.pattern), of(e.value));
@@ -1442,11 +1440,6 @@ export class Interpreter {
                     case "string": r = mkStr(e.v); break;
                     case "char": r = { kind: "char", v: e.v }; break;
                     case "placeholder": throw new APNError("runtime", "not implemented: '_' placeholder");
-                    // The value the list fixed when it was made (see spliced).
-                    case "splice":
-                        if (!e.value) throw new APNError("runtime", "a splice `e belongs in code, a list's items");
-                        r = this.reference(e.value as Value);
-                        break;
                     case "var": {
                         const v = this.env.get(e.name);
                         if (v === undefined) {
@@ -1504,12 +1497,11 @@ export class Interpreter {
                         break;
                     }
                     case "list": {
-                        const items = this.spliced(e.v);
                         // [a, b] is a :: b :: [], with what :: means here; the
                         // prelude's builds the list in place.
-                        if (items.length && !this.preludeCons() && !items.some(x => x.t === "stmDef" || x.t === "patDef")) { next = new TailCall(listExpansion(items === e.v ? e : { t: "list", v: items }), this.env); break; }
-                        if (!items.some(x => x.t === "stmDef" || x.t === "patDef")) { r = { kind: "lazyList", exprs: items, env: this.env }; break; }
-                        r = this.codeList(items, this.env);
+                        if (e.v.length && !this.preludeCons() && !e.v.some(x => x.t === "stmDef" || x.t === "patDef")) { next = new TailCall(listExpansion(e), this.env); break; }
+                        if (!e.v.some(x => x.t === "stmDef" || x.t === "patDef")) { r = { kind: "lazyList", exprs: e.v, env: this.env }; break; }
+                        r = this.codeList(e.v, this.env);
                         break;
                     }
                     case "record": {
@@ -2679,50 +2671,8 @@ export class Interpreter {
         const ITEM = { kind: "item", min: 0, follows: -1 } as const;
         return `[${itemsText(this.items(value).map(item => {
             const written = this.written(item);
-            return written ? exprToSource(this.withSpliceValues(written.expr), ITEM) : this.writtenText(item);
+            return written ? exprToSource(written.expr, ITEM) : this.writtenText(item);
         }))}]`;
-    }
-    // `e in a list's items: once the list is made, each is e's value, read
-    // lazily where the list is written, outside the scope its own bindings and
-    // joined code extend, so it stays fixed in the code (x * `n with n 3 is
-    // x * 3). A nested list fixes its own. The items are copied only along the
-    // way to a splice.
-    private splices = new WeakMap<Expr[], boolean>();
-    private spliced(items: Expr[]): Expr[] {
-        let any = this.splices.get(items);
-        if (any === undefined) this.splices.set(items, any = items.some(x => holdsSplice(x)));
-        if (!any) return items;
-        const env = this.env;
-        const fix = (x: unknown): unknown => {
-            if (!x || typeof x !== "object") return x;
-            if (Array.isArray(x)) { const ys = x.map(fix); return ys.some((y, n) => y !== x[n]) ? ys : x; }
-            const node = x as { t?: string; e?: Expr };
-            if (node.t === "list") return x;
-            if (node.t === "splice") return placedAs({ t: "splice", e: node.e!, value: { kind: "thunk", body: node.e!, env } as Value }, x as Expr);
-            let copy: Record<string, unknown> | undefined;
-            for (const [key, value] of Object.entries(x)) {
-                const fixed = fix(value);
-                if (fixed !== value) (copy ??= { ...x })[key] = fixed;
-            }
-            return copy ? placedAs(copy as unknown as Expr, x as Expr) : x;
-        };
-        return items.map(item => fix(item) as Expr);
-    }
-    // An item's code with its splices as the values they fixed.
-    private withSpliceValues(e: Expr): Expr {
-        const show = (x: unknown): unknown => {
-            if (!x || typeof x !== "object") return x;
-            if (Array.isArray(x)) { const ys = x.map(show); return ys.some((y, n) => y !== x[n]) ? ys : x; }
-            const node = x as { t?: string; value?: Value };
-            if (node.t === "splice" && node.value) return this.valueToExpr(this.demand(node.value));
-            let copy: Record<string, unknown> | undefined;
-            for (const [key, value] of Object.entries(x)) {
-                const shown = show(value);
-                if (shown !== value) (copy ??= { ...x })[key] = shown;
-            }
-            return copy ?? x;
-        };
-        return holdsSplice(e) ? show(e) as Expr : e;
     }
 
     // A copy of a list with an item replaced: by a value, or by an item as

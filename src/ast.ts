@@ -39,9 +39,6 @@ export type Expr =
     | { t: "stmDef"; name: string; clauses: { params: Pattern[]; body: Expr }[] }
     // A type declared in a block, as at the top level (Color = Red | Green).
     | { t: "typeDef"; def: DataDef }
-    // `e in code (a list's items): e's value, read where the list is written,
-    // fixed in the code (see Interpreter.spliced); value: once the list is made.
-    | { t: "splice"; e: Expr; value?: unknown }
     | { t: "patDef"; pattern: Pattern; value: Expr; eager?: boolean; update?: { name: string; value: Expr; error?: string } };
 
 export type Pattern =
@@ -309,27 +306,6 @@ export function rangeExpansion(e: Extract<Expr, { t: "range" }>): Expr {
 export function listPatternExpansion(p: Extract<Pattern, { p: "list" }>): Pattern {
     return p.v.reduceRight<Pattern>((tail, head) => ({ p: "cons", head, tail }), { p: "list", v: [] });
 }
-// Whether code holds a splice (`e) of its own: one not in a nested list.
-export function holdsSplice(x: unknown): boolean {
-    if (!x || typeof x !== "object") return false;
-    if (Array.isArray(x)) return x.some(holdsSplice);
-    const t = (x as { t?: string }).t;
-    if (t === "splice") return true;
-    if (t === "list") return false;
-    return Object.values(x).some(holdsSplice);
-}
-// Code's splices of its own, in written order.
-export function spliceNodes(x: unknown, out: Extract<Expr, { t: "splice" }>[] = []): Extract<Expr, { t: "splice" }>[] {
-    if (!x || typeof x !== "object") return out;
-    if (Array.isArray(x)) { for (const y of x) spliceNodes(y, out); return out; }
-    const node = x as Expr;
-    if (node.t === "splice") { out.push(node); return out; }
-    if (node.t === "list") return out;
-    for (const value of Object.values(x)) spliceNodes(value, out);
-    return out;
-}
-// The same place in the source as another node, for a copy of it.
-export const placedAs = <E extends Expr>(x: E, source: Expr): E => { const place = sourceLocations.get(source); if (place) sourceLocations.set(x, place); return x; };
 // A match of a value against written one-parameter alternatives.
 export type PatternLambda = Extract<Expr, { t: "patternLambda" }>;
 export type CoreMatch = { value: Expr; alternatives: PatternLambda[] };
