@@ -12,6 +12,12 @@ import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
 
 const PRELUDE_OPERATORS = new Set(PRIMITIVE_OPERATORS.values());
+// What evaluateBuiltinApp gives an application of no builtin.
+const NOT_BUILTIN = Symbol("not a builtin");
+// An expression left to evaluate in tail position (a clause's body): the
+// evaluator loops on it instead of nesting a call, so recursion in evaluated
+// code costs few JavaScript frames.
+class Tail { constructor(readonly e: Expr, readonly env: Map<string, Known>, readonly scope: Scope, readonly depth: number) {} }
 const RANGE_FUNCTIONS = new Map([["enumFrom", 1], ["enumFromThen", 2], ["enumFromTo", 2], ["enumFromThenTo", 3]]);
 // The prelude's functions that read a list's code, not its values: an open
 // list may go to them (see closed).
@@ -4898,6 +4904,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // base holds the bindings a local function closes over.
     let evaluations = 0;
     function evaluateCall(summary: Summary, args: Known[], depth: number, base = new Map<string, Known>()): Known | undefined {
+        return settle(callStep(summary, args, depth, base));
+    }
+    // The call, its body left in tail position when one clause can apply.
+    function callStep(summary: Summary, args: Known[], depth: number, base = new Map<string, Known>()): Known | Tail | undefined {
         if (!spendEvaluation(depth)) return undefined;
         // Matching a pattern that inspects an argument forces it, as at runtime.
         const inspects = (p: Pattern) => p.p !== "var" && p.p !== "wildcard";
@@ -4905,6 +4915,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const candidates = possibleClauses(summary.clauses, args.map(k => ({ type: knownType(k), ...k })));
         if (candidates.length !== 1) incomplete = true;
         if (!candidates.length) return undefined;
+        if (candidates.length === 1) {
+            const { clause } = candidates[0], env = new Map(base);
+            clause.params.forEach((p, i) => bindKnown(p, args[i], env, clause.refutable));
+            return new Tail(clause.body, env, summary.scope, depth + 1);
+        }
         let result: Known | undefined;
         for (const [n, { clause }] of candidates.entries()) {
             // Pattern-bound names shadow outer variables; refutable (repeated) names stay unknown.
@@ -5110,18 +5125,52 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return names;
     }
     // What e evaluates to, given known values of the names in env.
+    // Kept small, as each nested call is one of its frames: recursion in the
+    // evaluated code is as deep as the JavaScript stack allows (see evaluateOther).
+    // A body in tail position (Tail) is evaluated by looping here.
     function evaluateKnown(e: Expr, env: Map<string, Known>, scope: Scope, depth: number, fresh = false): Known | undefined {
-        // A compound expression over no local values is evaluated once for the
-        // same bindings of the names it mentions: nested arguments (f (g (h x)))
-        // are each checked as call arguments, in copies of one scope.
-        if (!fresh && env.size === 0 && (e.t === "app" || e.t === "binop" || e.t === "block")) {
-            // A part of a statement that writes top-level cells has the value the
-            // statement's static run computed for it, in the run's order.
-            if (!executing && statementWrote && executedParts.has(e)) { cellEvents++; return executedParts.get(e); }
-            const result = cachedEvaluation(e, scope, depth);
-            if (executing && !trial && !executedParts.has(e)) executedParts.set(e, result);
-            return result;
+        // An application nothing could evaluate leaves the result incomplete.
+        let app = false;
+        for (;;) {
+            let r: Known | Tail | undefined;
+            if (!fresh && env.size === 0 && (e.t === "app" || e.t === "binop" || e.t === "block")) r = evaluateShared(e, scope, depth);
+            else switch (e.t) {
+                case "binop": r = evaluateBinop(e, env, scope, depth); break;
+                case "app": app = true; r = evaluateAppExpr(e, env, scope, depth); break;
+                case "block": r = evaluateBlock(e, env, scope, depth); break;
+                case "ternary": r = evaluateTernary(e, env, scope, depth); break;
+                default: r = evaluateOther(e, env, scope, depth);
+            }
+            if (r instanceof Tail) { ({ e, env, scope, depth } = r); fresh = false; continue; }
+            if (app && r === undefined) incomplete = true;
+            return r;
         }
+    }
+    function settle(r: Known | Tail | undefined): Known | undefined {
+        return r instanceof Tail ? evaluateKnown(r.e, r.env, r.scope, r.depth) : r;
+    }
+    // A compound expression over no local values is evaluated once for the
+    // same bindings of the names it mentions: nested arguments (f (g (h x)))
+    // are each checked as call arguments, in copies of one scope.
+    function evaluateShared(e: Expr, scope: Scope, depth: number): Known | undefined {
+        // A part of a statement that writes top-level cells has the value the
+        // statement's static run computed for it, in the run's order.
+        if (!executing && statementWrote && executedParts.has(e)) { cellEvents++; return executedParts.get(e); }
+        const result = cachedEvaluation(e, scope, depth);
+        if (executing && !trial && !executedParts.has(e)) executedParts.set(e, result);
+        return result;
+    }
+    function evaluateTernary(e: Extract<Expr, { t: "ternary" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | Tail | undefined {
+        const expansion = ternaryExpansion(e), selection = boolSelection(expansion)!;
+        return preludeSelection(selection, scope) && !env.has("Bool") && !env.has("get") ? matchStep(selection, env, scope, depth) : new Tail(expansion, env, scope, depth);
+    }
+    function evaluateAppExpr(e: Extract<Expr, { t: "app" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | Tail | undefined {
+        // (op) a b is a op b here too.
+        const infix = e.f.t === "app" && e.f.f.t === "var" && !env.has(e.f.f.name) ? infixSpelling(e, scope) : undefined;
+        if (infix) return new Tail(infix, env, scope, depth);
+        return evaluateApp(e, env, scope, depth);
+    }
+    function evaluateOther(e: Expr, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
         const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
         switch (e.t) {
             case "int": return { index: constant(e.v) };
@@ -5155,11 +5204,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const index = entry.index && !entry.index.terms.size ? entry.index : undefined;
                 return { index, size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, boolean: entry.boolean, string: entry.string, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };
             }
-            case "block": return evaluateBlock(e, env, scope, depth);
-            case "ternary": {
-                const expansion = ternaryExpansion(e), selection = boolSelection(expansion)!;
-                return preludeSelection(selection, scope) && !env.has("Bool") && !env.has("get") ? evaluateMatch(selection, env, scope, depth) : evaluateKnown(expansion, env, scope, depth);
-            }
             case "unop": {
                 if (!scope.get(e.op === "not" ? "not" : "negate")?.builtin || env.has(e.op === "not" ? "not" : "negate")) return evaluateKnown(prefixCall(e), env, scope, depth);
                 const v = readMutable(value(e.e));
@@ -5187,15 +5231,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if ([lo, second, hi].some(x => x && x.kind !== "int")) return undefined;
                 const range = rangeValue(lo as Real, second as Real | null, hi as Real | null);
                 return range.kind === "range" ? rangeKnown(range.lo, range.step, range.hi) : undefined;
-            }
-            case "binop": return evaluateBinop(e, env, scope, depth);
-            case "app": {
-                // (op) a b is a op b here too.
-                const infix = e.f.t === "app" && e.f.f.t === "var" && !env.has(e.f.f.name) ? infixSpelling(e, scope) : undefined;
-                if (infix) return evaluateKnown(infix, env, scope, depth);
-                const result = evaluateApp(e, env, scope, depth);
-                if (result === undefined) incomplete = true;
-                return result;
             }
             // f $ x applies f to x.
             case "pipe": return evaluateKnown({ t: "app", f: e.f, a: e.x }, env, scope, depth);
@@ -5234,13 +5269,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A match against written alternatives: a function whose clauses are the
     // alternatives, called with the value (a guarded one is not evaluated here).
     // A value that leaves several possible gives only the facts all share.
-    function evaluateMatch({ value, alternatives }: CoreMatch, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
-        if (alternatives.some(x => x.guard)) return undefined;
-        const clauses = alternatives.map(({ params, body }, index) => {
+    function evaluateMatch(match: CoreMatch, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
+        return settle(matchStep(match, env, scope, depth));
+    }
+    function matchStep(match: CoreMatch, env: Map<string, Known>, scope: Scope, depth: number): Known | Tail | undefined {
+        const clauses = matchClauses(match);
+        return clauses && callStep({ scope, clauses }, [evaluateKnown(match.value, env, scope, depth) ?? {}], depth, new Map(env));
+    }
+    // A match's alternatives as clauses (none when one is guarded), made once.
+    const alternativeClauses = new WeakMap<CoreMatch, Summary["clauses"] | null>();
+    function matchClauses(match: CoreMatch): Summary["clauses"] | undefined {
+        if (!alternativeClauses.has(match)) alternativeClauses.set(match, match.alternatives.some(x => x.guard) ? null : match.alternatives.map(({ params, body }, index) => {
             const names = params.flatMap(patternNames);
             return { index, params, body, refutable: new Set(names.filter((name, i) => names.indexOf(name) !== i)) };
-        });
-        return evaluateCall({ scope, clauses }, [evaluateKnown(value, env, scope, depth) ?? {}], depth, new Map(env));
+        }));
+        return alternativeClauses.get(match) ?? undefined;
     }
     // A block: its local definitions, then its last expression.
     function evaluateBlock(e: Extract<Expr, { t: "block" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
@@ -5377,7 +5420,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const r = truth(value(right));
             return r === undefined ? undefined : { boolean: r };
         }
-        const l = readMutable(value(left)), r = readMutable(value(right));
+        const l = readMutable(evaluateKnown(left, env, scope, depth)), r = readMutable(evaluateKnown(right, env, scope, depth));
         const x = numericOf(l), y = numericOf(r);
         if (x !== undefined && y !== undefined) {
             if (["+", "-", "*", "/", "%"].includes(op)) return attempt(() => typedArithmetic(op, x, y));
@@ -5406,9 +5449,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return { boolean: op === "<" ? order < 0 : op === ">" ? order > 0 : op === "<=" ? order <= 0 : order >= 0 };
     }
     // An application: lambdas, function values, pure builtins, and calls by name.
-    function evaluateApp(e: Extract<Expr, { t: "app" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined {
+    // Kept small, as evaluateKnown is (each nested call is one of its frames):
+    // a Bool selecting, then any other application.
+    function evaluateApp(e: Extract<Expr, { t: "app" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | Tail | undefined {
         const selection = boolSelection(e);
-        if (selection && preludeSelection(selection, scope) && !env.has("Bool") && !env.has("get")) return evaluateMatch(selection, env, scope, depth);
+        if (selection && preludeSelection(selection, scope) && !env.has("Bool") && !env.has("get")) return matchStep(selection, env, scope, depth);
+        return evaluateApplication(e, env, scope, depth);
+    }
+    function evaluateApplication(e: Extract<Expr, { t: "app" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | Tail | undefined {
         const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
         const args: Expr[] = [];
         let head: Expr = e;
@@ -5448,6 +5496,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             for (let n = 0; n < args.length; n++) t = t?.k === "fn" ? resolve(t.output) : undefined;
             if (t?.k === "fn") return { fn: { e, env: [...env], scope } };
         }
+        if (entry?.builtin || /^[A-Z]/.test(head.name)) {
+            const made = evaluateBuiltinApp(e, head, args, entry, env, scope, depth);
+            if (made !== NOT_BUILTIN) return made;
+        }
+        return evaluateNamedCall(head, args, entry, env, scope, depth, apply);
+    }
+    // A builtin applied (or a capitalized name: a variant), as the run
+    // computes it; NOT_BUILTIN when it is none of these.
+    function evaluateBuiltinApp(e: Extract<Expr, { t: "app" }>, head: Extract<Expr, { t: "var" }>, args: Expr[], entry: Entry | undefined, env: Map<string, Known>, scope: Scope, depth: number): Known | undefined | typeof NOT_BUILTIN {
+        const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
         const builtin = !!entry?.builtin;
         if (builtin && EVALUATED_NATIVES.has(head.name)) {
             // Demanding builtins read their arguments where they stand; the rest
@@ -5547,15 +5605,22 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const numbers = values as Numeric[];
             return attempt(() => head.name === "expt" ? typedPower(numbers[0], numbers[1]) : numericNative(head.name, numbers));
         }
+        return NOT_BUILTIN;
+    }
+    // A named function applied: its clauses, or its result's shape.
+    function evaluateNamedCall(head: Extract<Expr, { t: "var" }>, args: Expr[], entry: Entry | undefined, env: Map<string, Known>, scope: Scope, depth: number, apply: (f: Known | undefined, given: Known[]) => Known | undefined): Known | Tail | undefined {
+        const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
         if (entry && args.length === 1 && gotten(resolve(entry.type))) return apply(value(head), [value(args[0]) ?? {}]);
         if (!trustsShape(entry)) return undefined;
         const values = args.map(a => lazyValue(() => value(a), { exprs: [a], env }));
         const summary = summaryAt(entry!.type, args.length);
+        // A builtin's (or inferred) result shape: an argument itself, or a
+        // list as long as a constant or as an argument. Without one, the
+        // call's body is the result, in tail position.
+        const shape = shapeAt(entry!.type, args.length);
+        if (!shape) return summary && callStep(summary, values, depth);
         const result = summary && evaluateCall(summary, values, depth);
         if (isList(result)) return result;
-        // A builtin's (or inferred) result shape: an argument itself, or a
-        // list as long as a constant or as an argument.
-        const shape = shapeAt(entry!.type, args.length);
         const size = shape?.arg !== undefined ? values[shape.arg]?.size
             : shape?.length ? "constant" in shape.length ? shape.length.constant : values[shape.length.param]?.size
             : undefined;

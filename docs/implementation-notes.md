@@ -634,10 +634,13 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   pure `EVALUATED_NATIVES`. Depth (`EVALUATION_DEPTH`) and work
   (`EVALUATION_BUDGET`, per root via `budgeted`) are bounded, and a
   JavaScript stack overflow (`RangeError`) in static evaluation leaves the
-  value unknown; keep the recursive path (`evaluateKnown` and its
-  `evaluateApp`/`evaluateBinop`/`evaluateBlock` cases) free of per-call
-  closures, so frames stay small and recursion reaches the runtime's own
-  depth. A ternary or clause set whose first result has no facts stops
+  value unknown. So recursion reaches the runtime's own depth with room to
+  spare, a call whose one possible clause is known leaves its body as a
+  `Tail` (`callStep`, `matchStep`, a ternary, a named call without a result
+  shape), which `evaluateKnown` evaluates by looping: an evaluated call costs
+  no frames of its own, only what is pending around it (`1 + f x`'s `+`).
+  Keep those steps returning a `Tail`, and the pending paths
+  (`evaluateBinop`, `evaluateOperator`) free of per-call closures. A ternary or clause set whose first result has no facts stops
   early, so recursion over unknown values stays cheap. A value over
   parameters gets only `SYMBOLIC_BUDGET` (it is decided again at each call);
   one over none gets `QUICK_BUDGET` at first, and if that runs out it waits
