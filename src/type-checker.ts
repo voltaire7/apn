@@ -1,4 +1,4 @@
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, spliceNodes, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -3179,6 +3179,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const length = bounded ? size?.() : undefined;
         return bounded ? list(start, length === undefined ? undefined : constant(length)) : { k: "list", element: start, endless: true };
     }
+    // Each splice's type, from where its list is written (see the list case).
+    const spliceTypes = new WeakMap<Expr, Ty>();
     // Whether :: here is the prelude's (or not bound yet), so a written list is
     // the list it writes rather than its expansion (a :: b :: []), as at runtime.
     function preludeCons(scope: Scope): boolean {
@@ -3454,6 +3456,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!options.imports) return unknown();
                 return { k: "record", fields: new ModuleFields(copyTypeScope(options.imports(e.module))) };
             case "list": {
+                // A splice is typed where the list is written, as the run reads it.
+                for (const splice of spliceNodes(e.v)) spliceTypes.set(splice, infer(splice.e, scope));
                 // [a, b] is a :: b :: [], with what :: means here, as at runtime.
                 if (e.v.length && !e.v.some(binding) && !preludeCons(scope)) return infer(listExpansion(e), scope, expected);
                 const code = codeList(e.v.map(expr => ({ expr, scope })));
@@ -3961,6 +3965,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "typeDef":
                 declare(e.def, scope);
                 return list(dynamic, constant(0n));
+            case "splice": return spliceTypes.get(e) ?? problem("a splice `e belongs in code, a list's items", e);
             case "patDef": {
                 if (e.update && scope.has(e.update.name)) {
                     if (e.update.error) return problem(e.update.error, e);
