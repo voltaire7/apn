@@ -549,6 +549,15 @@ probe (reduce [1 + 1])
 print (length edited)`, ["[x = 1, x + 1]", "[2]", "[11,5]", "[x = 10, x + 1, 5]", "[30,5]", "[2]",
     "[x = 10, x * 5]", "[50]", "[1,2,1,2,1]", "[2]", "3"]);
 failure("an open list's values need its names", "print [x + 1]", "unbound variable 'x'");
+example("List a = [] | a :: List a: each element an a, endless lists too", `
+print [isType (List Int) [], isType (List Int) [1,2], isType (List Int) [1,"a"]]
+ones = 1 :: ones
+print [isType (List Int) [1..], isType (List Int) ones, isType (List String) ones]
+print [isType (List Int) (0 :: [1..]), List Int == [Int], isType (List Int) 5]
+Seq a = [] | a :: Seq a
+print [Seq Int == List Int, isType (Seq Int) [1,2]]`, ["[True,True,False]", "[True,True,False]",
+    "[True,False,False]", "[True,True]"]);
+failure("a union of lists is the lists of a", "P a = [] | a :: a :: P a", "a union of lists is the lists of a");
 example("a list's bindings name its items", `
 code = [x = 1, y = 2, x + y]
 before = code

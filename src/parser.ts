@@ -1,4 +1,4 @@
-import { claimedDeclaration, countingOf, fillPlaceholders, holdsPlaceholder, sourceLocations, unclaimedMix } from "./ast.ts";
+import { claimedDeclaration, countingOf, fillPlaceholders, holdsPlaceholder, listUnion, sourceLocations, unclaimedMix } from "./ast.ts";
 import { stringKey, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -1821,8 +1821,9 @@ class Parser {
         }
         // A family of lists is a type function's clauses (see listClauses);
         // the list's own constructors are not declared again.
+        // A union of them alone (List a = [] | a :: List a) is a type of lists.
         const listed = variants.filter(v => v.tag === "[]" || v.tag === "::");
-        if (listed.length && (listed.length < variants.length || listed.some(v => !v.result))) {
+        if (listed.length && (listed.length < variants.length || listed.some(v => !v.result) && listed.some(v => v.result))) {
             throw new Error(`Parser: a family of lists has only [] and x :: rest, each saying its index: ${name} n a = [] -> ${name} Z a | a :: ${name} k a -> ${name} (S k) a`);
         }
         return variants;
@@ -1930,8 +1931,17 @@ class Parser {
             return [];
         }
         // A family of lists is sugar for a type function's clauses.
-        if (variants.some(v => v.tag === "[]" || v.tag === "::")) {
+        if (variants.some(v => v.result && (v.tag === "[]" || v.tag === "::"))) {
             return [{ t: "def", name, clauses: listClauses(variants) }];
+        }
+        if (variants.some(v => v.tag === "[]" || v.tag === "::")) {
+            const def = { name, parameters, variants };
+            if (!listUnion(def)) {
+                this.seen = t;
+                throw new Error(`Parser: a union of lists is the lists of a, ${name} a = [] | a :: ${name} a; for lists of one type, write ${name} = List Int`);
+            }
+            declaredTypes.add(name);
+            return [{ t: "type", def }];
         }
         if (new Set(variants.map(v => v.tag)).size !== variants.length) throw new Error("Parser: duplicate value constructor");
         // Register only after the entire declaration has parsed successfully;

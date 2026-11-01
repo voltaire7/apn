@@ -118,6 +118,18 @@ export function unionKind(def: DataDef, kind: (name: string) => Alternative): "d
 export function unclaimedMix(name: string, other: string): string {
     return `${name} unions constructors declared with _, and ${other} is not one`;
 }
+// A union of a list's own alternatives, X a = [] | a :: X a, is the type of
+// lists of a, endless ones among them (its unfoldings never end): the runtime
+// and the checker read it as their list type, as countingOf reads a family's
+// lengths. The prelude declares List so; any of this shape is the same type.
+export function listUnion(def: DataDef): boolean {
+    const [element] = def.parameters ?? [], unwrap = (e?: Expr): Expr | undefined => e?.t === "block" && e.stmts.length === 1 ? unwrap(e.stmts[0]) : e;
+    const is = (e: Expr | undefined, name: string) => unwrap(e)?.t === "var" && (unwrap(e) as { name: string }).name === name;
+    const empty = def.variants.find(v => v.tag === "[]"), cons = def.variants.find(v => v.tag === "::");
+    const rest = unwrap(cons?.fields?.[1]);
+    return def.parameters?.length === 1 && def.variants.length === 2 && !!empty && !!cons && def.variants.every(v => !v.result) &&
+        is(cons.fields?.[0], element) && rest?.t === "app" && is(rest.f, def.name) && is(rest.a, element);
+}
 // An enumeration (constructors without fields) gives each value its position
 // as an Int: Direction = North | East declares to Int North = 0 and
 // to Int East = 1 with it, so a value indexes and counts as that Int.

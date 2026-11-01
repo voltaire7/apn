@@ -131,6 +131,9 @@ tag = intrinsics.tag
 # Clauses for with extend it, as for get:
 #     with (Grid cells) [Int r, Int c] x = Grid (with cells (3 * r + c) x)
 with = intrinsics.with
+# A list is empty or an element on a list: endless lists, whose unfoldings
+# never end, are lists too ([Int..] is Int :: [Int..]).
+List a = [] | a :: List a
 # The length-indexed list: [] has length zero, and x :: xs one more than xs.
 # A family of lists is a type function's clauses (Vect Z a = [] and
 # Vect (S k) a = a :: Vect k a); any of this shape is the same type.

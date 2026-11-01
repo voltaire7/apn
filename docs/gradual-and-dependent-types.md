@@ -397,7 +397,9 @@ Vect (S k) a = a :: Vect k a
 
 and an index is a pattern (`Z` or `0`, `S k` or `k + 1`, a name).
 
-`Vect 3 Int` is the type of three `Int`s, and its values are ordinary lists.
+`Vect 3 Int` is the type of three `Int`s, and its values are ordinary lists:
+`Vect` is the prelude's `List a = [] | a :: List a` (see
+[type descriptions](semantics.md#type-descriptions)) with each alternative saying its index.
 Nothing about `Vect` is built in: its length, `n`, is read off its clauses by
 induction (the base clause gives `d` elements, each step `c` more, so the
 length is `c * n + d`), and the runtime and the checker follow any type

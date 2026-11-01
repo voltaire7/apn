@@ -17,7 +17,7 @@ import { TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericType, numericPayload, m
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, listUnion, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions } from "./ast.ts";
@@ -112,6 +112,9 @@ export const NATIVES: Array<[string, number]> = [
 // The names natives are bound by (each intrinsic is a field of intrinsics).
 export const NATIVE_NAMES = new Set(["cast", "do", ...NATIVES.map(([name]) => name.split(".")[0])]);
 const ZERO: Value = { kind: "int", v: 0n, typeName: "UInt" };
+// The types the prelude declares (Vect n a = ..., List a = [] | a :: List a);
+// a list union is bound to the list type (see listUnion).
+const PRELUDE_TYPES = new Set(["Vect", "List"]);
 
 export class Interpreter {
     // Enabled by normal CLI/REPL execution. Foreign name installation
@@ -266,8 +269,7 @@ export class Interpreter {
         const caller = this.env;
         const callerDir = this.sourceDir;
         const builtins = new Env();
-        // Vect is the prelude's declaration.
-        for (const type of TYPE_NAMES) if (type !== "Vect") builtins.setLocal(type, { kind: "type", name: type });
+        for (const type of TYPE_NAMES) if (!PRELUDE_TYPES.has(type)) builtins.setLocal(type, { kind: "type", name: type });
         builtins.setLocal("Z", ZERO);
         bindNatives(builtins, [...NATIVES, ...STANDARD_NATIVES]);
         for (const [name, value] of this.preludeBindings) builtins.setLocal(name, value);
@@ -301,7 +303,7 @@ export class Interpreter {
     sourceFile = "<repl>";
 
     constructor() {
-        for (const name of TYPE_NAMES) if (name !== "Vect") this.env.setLocal(name, { kind: "type", name });
+        for (const name of TYPE_NAMES) if (!PRELUDE_TYPES.has(name)) this.env.setLocal(name, { kind: "type", name });
         this.env.setLocal("Z", ZERO);
         bindNatives(this.env, NATIVES);
         const outer = this.env;
@@ -322,6 +324,7 @@ export class Interpreter {
     // declared for its whole scope (scope), as a new name is. A union of
     // existing types is a definition instead: the value it makes.
     private declare(def: DataDef, scope: Env): Value | undefined {
+        if (listUnion(def)) { scope.setLocal(def.name, { kind: "type", name: "List" }); return undefined; }
         if (def.variants.some(v => v.tag !== "[]" && v.tag !== "::")) {
             const written = def, kind = unionKind(def, name => this.alternative(name, written.name));
             if (kind === "union") return this.evalDef(def.name, [unionClause(def)]);
@@ -3808,6 +3811,24 @@ export class Interpreter {
                 rest = cell.tail;
             }
             return this.cell(rest) === null;
+        }
+        // List a = [] | a :: List a: each element an a, read as the list
+        // unfolds. A cell met again (ones = 1 :: ones) or an endless range,
+        // whose elements share one type, belongs: its unfoldings never end.
+        if (type.kind === "type" && this.isListType(type) && type.arguments?.length) {
+            const [element] = type.arguments, met = new Set<Value>();
+            for (value = this.dataValue(value); this.isList(value); value = this.reference(this.cell(value)!.tail)) {
+                checkInterrupt();
+                if ((value.kind === "range" || value.kind === "floatRange" || value.kind === "rationalRange") && value.hi === null) {
+                    return this.belongsToType(element, this.cell(value)!.head);
+                }
+                if (met.has(value)) return true;
+                met.add(value);
+                const cell = this.cell(value);
+                if (!cell) return true;
+                if (!this.belongsToType(element, cell.head)) return false;
+            }
+            return false;
         }
         if (type.kind === "type") {
             if (type.name === "$any") return true;

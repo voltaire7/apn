@@ -1,4 +1,4 @@
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -6689,7 +6689,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
     }
     const scope: Scope = new Map(TYPE_NAMES.map((name) => [name, { type: { k: "type", value: atom(name) } }]));
-    // The prelude declares Vect as the family of lists counting their elements.
+    // The prelude declares List a = [] | a :: List a, the list type (see
+    // listUnion), and Vect as the family of lists counting their elements.
     // The prelude's Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a.
     scope.set("Vect", { type: { k: "factory", args: [], counts: { scale: 1n, offset: 0n }, name: "Vect" } });
     const a = variable(), b = variable();
@@ -6872,6 +6873,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // (scope), as at runtime. Constructors declared with _ where the parser
     // could not see them are claimed here.
     function declare(written: DataDef, scope: Scope): void {
+        if (listUnion(written)) { scope.set(written.name, { type: { k: "type", value: atom("List") } }); return; }
         const def = unionKind(written, name => alternative(name, written.name, scope)) === "claim"
             ? claimedDeclaration(written, tag => scope.get(tag)!.declaration!.variants[0]) : written;
         // X = A | B of existing types is their union (see unionKind), as at runtime.

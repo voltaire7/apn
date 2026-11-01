@@ -1599,10 +1599,20 @@ siblings, whose prelude clauses do both; see [sugar](#sugar)): `[Int..]` is the 
 `[Int,Int,Int..]` (`head [Int..]` is `Int`), and as a type it is the type of
 endless lists of Ints, so `to [Int..] [1,2]` is a length mismatch and
 `isType [Int..] [1..]` is `True`. A type has no step or bound
-(`[Int,String..]` and `[Int..String]` are errors). `List Int` is any number of
-Ints, the type of each of these: lists whose length is not known (a finite
-range, the result of `filter` or `map`) display `List` of the type every
-element has, `List a` when it is unknown. `(List a) xs` binds `a` to the type
+(`[Int,String..]` and `[Int..String]` are errors). `List` is the prelude's
+recursive type, `List a = [] | a :: List a`: a list is empty or an element on a
+list. `List Int` is the union of its unfoldings, `[] | [Int] | [Int,Int] | ...`,
+each a different member (`List Int == [Int]` is `False`, as a union is none of
+its members), and endless lists belong too, as their unfoldings never end:
+`[Int..]` is `Int :: [Int..]`, so `isType (List Int) [1..]` is `True`, and
+`isType (List Int) [1,"a"]` is `False`. A type test reads a list as it
+unfolds, accepting a cell it meets again (`ones = 1 :: ones`) or an endless
+range, whose elements share one type. Any union of this shape
+(`Seq a = [] | a :: Seq a`) is the same type; another union of `[]` and `::`
+is an error (write `Ints = List Int`, or a [family](gradual-and-dependent-types.md#indexed-families)
+saying each index). Lists whose length is not known (a finite range, the
+result of `filter` or `map`) display `List` of the type every element has,
+`List a` when it is unknown. `(List a) xs` binds `a` to the type
 every item has: `Int | String` for `[1,"a"]`. Type errors use the same
 notation.
 

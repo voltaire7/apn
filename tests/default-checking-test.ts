@@ -28,6 +28,9 @@ for (const [source, expected] of [
     ['Direction = North | South; [10,20] South', '20'],
     ['templates = [String,Int]; values = ["x",1]; templates.values', '["x",1]'],
     ['xs = [1]; xs = [2,3]; xs', '[2,3]'],
+    // A union of this shape is the list type, as the prelude's List is.
+    ['Seq a = [] | a :: Seq a; f (Seq Int xs) = length xs; f [1,2]', '2'],
+    ['[isType (List Int) [1,"a"], isType (List Int) [1..]]', '[False,True]'],
     ['f x = x + 1; [f 1, f 2.0]', '[2,3.0]'],
     ['factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))\nfactorial 5', '120'],
     ['import "type"; cast Float32 (Float64 .2)', 'Float32 0.2'],
