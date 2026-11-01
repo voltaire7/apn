@@ -293,7 +293,7 @@ function helpText(): string {
         `  x -> expr; x, y -> expr; (Int x), y -> expr   (lambdas; t x -> t is one pattern)`,
         `  xs * x -> { expr } * y -> expr   (braces end the first lambda)`,
         `  cond ? a : b   (ternary)`,
-        `  match x [ pat -> expr, ... ]   (ordinary function; alternatives are pattern lambdas)`,
+        `  x ~ [ pat -> expr, ... ]   (match: an operator; alternatives are pattern lambdas)`,
         `  literal patterns: 0  1.5  "s"  'c'  True  [1..9]   (tried before other clauses)`,
         `  func ((Int -> Int) f) = Int { f 123 }   (checked function contract)`,
         `  ((a -> a) f), (a -> a).(+ 1), (a -> a) == typeOf f   a lambda read as a function type`,
@@ -682,7 +682,7 @@ export class ReplEditor {
     }
 
     completionCands(): string[] {
-        const s = new Set<string>(["match"]);
+        const s = new Set<string>();
         for (const n of NATIVE_NAMES) s.add(n);
         for (const n of envNames(this.interp.env)) s.add(n);
         return [...s].sort();

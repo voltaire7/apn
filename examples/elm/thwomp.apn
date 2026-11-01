@@ -10,7 +10,7 @@ Msg = GotViewport browser.Viewport | Resized Number Number | MouseMoved Number N
 
 init = [[width: 0, height: 0, x: 0, y: 0], browser.getViewport GotViewport]
 
-update msg model = match msg [
+update msg model = msg ~ [
     GotViewport viewport -> {
         model.[width,height] = [viewport.width,viewport.height]
         [model,browser.none]

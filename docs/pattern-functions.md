@@ -22,18 +22,19 @@ handlers = [
     Some y -> print y
     None -> []
 ]
-func x = match x handlers
+func x = x ~ handlers
 func (Some 123)
 ```
 
-Inline lists work identically. Lists can be constructed, passed, and reused;
-`match` itself can be passed or rebound. As with other function applications,
-parenthesize computed arguments: `match (head xs) handlers`.
+Inline lists work identically, and one alternative is a list of one
+(`typeOf x ~ [Int -> print "INT"]`). Lists can be constructed, passed, and
+reused; `~` itself can be passed (`(~)`) or rebound. Binding loosest, it takes
+a computed value as it is written: `head xs ~ handlers`.
 
 Literals, lists, constructors, type patterns, and wildcards can be lambda
 parameters. A guard follows the parameters, e.g. `n | n > 0 -> n`. A falsy guard
 is a mismatch; guards use the same truthiness rules as conditions. Multiple parameter lambdas are curried,
-but match alternatives must have exactly one remaining argument.
+but `~`'s alternatives must have exactly one remaining argument.
 
 ## Lists and records as arguments
 
@@ -186,7 +187,7 @@ later alternatives. `_ -> ...` and `x -> ...` remain ordinary unary functions
 and can serve as catch-all alternatives.
 
 A `[]` pattern tests the value it meets; it says nothing about the type of
-what the other alternatives or clauses accept. `match [xs,ys] [[[],r] -> r,
+what the other alternatives or clauses accept. `[xs,ys] ~ [[[],r] -> r,
 [(x::m),r] -> ...]` takes an `xs` of any length, and so do clauses `g [[],y]`
 and `g [(x::xs),y]`.
 
@@ -273,7 +274,7 @@ A declaration retains both the parent type and its constructors:
 
 ```apn
 Option a = Some a | None
-func (Option _ value) = match value [
+func (Option _ value) = value ~ [
     Some x -> print x
     None -> []
 ]

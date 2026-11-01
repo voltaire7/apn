@@ -68,9 +68,10 @@ intentional evaluation change.
   partial application); fallthrough shares those thunks so demanded effects
   never repeat.
 - Pattern lambdas are `patternLambda` nodes that evaluate to `clauseFn` values.
-  `match` is an intrinsic, not an AST node: it probes alternatives without
-  running bodies and uses `nomatch` only for mismatch, so runtime errors
-  propagate. The builtin `match` applied to written one-parameter lambdas
+  `~` is an operator over an intrinsic (`intrinsics.match`), not an AST node:
+  it probes alternatives without running bodies and uses `nomatch` only for
+  mismatch, so runtime errors propagate. The builtin `~` applied to written
+  one-parameter lambdas (`x ~ [...]`, or `(~) x [...]`)
   (`writtenMatch`; `n -> e` is the alternative whose pattern is `n`) runs
   directly (`coreMatch`): no alternative is made a function, and the chosen
   body is a tail call. The checker types it (`inferMatch`) where it stands when

@@ -37,7 +37,7 @@ load text model = {
 toCsv bubbles = unlines ("x,y,radius,name" :: map (b -> joinWith ","
     [to String b.x, to String b.y, to String b.radius, b.name]) bubbles)
 
-update msg model = match msg [
+update msg model = msg ~ [
     Loaded text -> [load text model, browser.none]
     # A file the visitor picked, read as text.
     Picked (picked :: _) -> [model, http.get [url: picked.url, expect: http.expectString Read]]

@@ -12,7 +12,7 @@ fonts = ["Sans-serif","Serif","Cursive"]
 
 init = [[name: "", food: "white", font: "Sans-serif"], browser.none]
 
-update msg model = match msg [
+update msg model = msg ~ [
     Named name -> { model.name = name; [model,browser.none] }
     Picked food -> { model.food = food; [model,browser.none] }
     Font font -> { model.font = font; [model,browser.none] }

@@ -88,7 +88,7 @@ Deno.test("LSP completion hover outline and lifecycle", () => {
     server.handle({ method: "textDocument/didOpen", params: { textDocument: { uri, version: 1, text: "double x = x * 2" } } });
     const request = (method: string): any => server.handle({ id: 2, method, params: { textDocument: { uri }, position: { line: 0, character: 2 } } })[0];
     const labels = request("textDocument/completion").result.items.map((x: any) => x.label);
-    for (const name of ["double", "x", "print", "Int", "match"]) if (!labels.includes(name)) throw new Error(`Missing ${name}`);
+    for (const name of ["double", "x", "print", "Int"]) if (!labels.includes(name)) throw new Error(`Missing ${name}`);
     equal(request("textDocument/hover").result.contents.value, "Top-level declarations in this document:\ndouble x = x * 2");
     equal(request("textDocument/documentSymbol").result[0].name, "double");
     equal(request("unknown").error.code, -32601);
@@ -179,7 +179,7 @@ Deno.test("lint reports a clause or alternative that never runs", () => {
     equal(opened('t <- load "cards"\nt = [x: 1]\nuse t\ns _ = 0\ns Hearts = 1'), 0);
     // match ranks its alternatives as clauses: a literal after an unconditional
     // one still runs, another name or list pattern never does.
-    equal(unreachable("v = match 3 [\n    x -> 0\n    1 -> 5\n]"), []);
-    equal(unreachable("v = match 3 [\n    x -> 0\n    [a] -> 5\n    y -> 1\n]"), [2, 3]);
-    equal(unreachable("v = match 3 [\n    1 -> 5\n    x -> 0\n]"), []);
+    equal(unreachable("v = 3 ~ [\n    x -> 0\n    1 -> 5\n]"), []);
+    equal(unreachable("v = 3 ~ [\n    x -> 0\n    [a] -> 5\n    y -> 1\n]"), [2, 3]);
+    equal(unreachable("v = 3 ~ [\n    1 -> 5\n    x -> 0\n]"), []);
 });

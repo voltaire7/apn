@@ -23,7 +23,7 @@ init = [[
     person: [position: [0.0, inexact eyeLevel, -10.0], velocity: [0.0,0.0,0.0]]
 ], browser.getViewport GotViewport]
 
-update msg model = match msg [
+update msg model = msg ~ [
     KeyChanged isDown key -> {
         model.keys = updateKeys isDown key model.keys
         [model,browser.none]
@@ -40,7 +40,7 @@ update msg model = match msg [
     VisibilityChanged _ -> { model.keys = noKeys; [model,browser.none] }
 ]
 
-updateKeys isDown key keys = match key [
+updateKeys isDown key keys = key ~ [
     " " -> keys [space: isDown]
     "ArrowUp" -> keys [up: isDown]
     "ArrowLeft" -> keys [left: isDown]

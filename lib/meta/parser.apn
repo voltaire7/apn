@@ -146,7 +146,7 @@ mpOperator minimum stop left tokens = {
 mpAtom tokens = null tokens
     ? fail "meta reader: expected expression"
     : mpAtomText (mpText tokens) tokens
-mpAtomText text tokens = match text [
+mpAtomText text tokens = text ~ [
     "(" -> mpGroup (tail tokens)
     "[" -> mpArray (tail tokens)
     "{" -> mpBlock (mpSkip (tail tokens)) []

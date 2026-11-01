@@ -49,7 +49,7 @@ for (const source of [
     "c ? 1 : 2", "c ? (d ? 1 : 2) : 3", "c ? 1 : (d ? 2 : 3)", "f (c ? 1 : 2)", "a $ b ? c : d",
     "c ? (a $ b) : d", "x, y -> x * y", "(Int n), [a,b] | n > 0 -> a", "{ a <- return 1; print a }",
     "[x = 1, x + 1]", "f n = n * 2", "x :: xs = ys", "!b", "map (+ 1) xs", "head $ [1,2]", "f $ g $ x",
-    "{}", 'import ["option","map"]', "Some (Some 1)", "-x ^ 2", "n -> match n [0 -> 1, _ -> 2]", "(+)",
+    "{}", 'import ["option","map"]', "Some (Some 1)", "-x ^ 2", "n -> n ~ [0 -> 1, _ -> 2]", "(+)",
     "(- 2)", "(10 -)", "xs >>= x -> f x", "xs >>= (x -> f x) >>= g", "(x -> x) 1", "f (x -> x) y",
     "run (x -> x)", "withFile path (file -> file.read)", 'withFile "notes" $ file -> file.read',
     "bracket 1 (_ -> []) (x -> y -> x)", "[(x, y -> x)]", "[x -> x]", "foo Bar (x -> x)",
@@ -101,7 +101,7 @@ for (const [source, expected] of [
     ["[{ ones = 1 :: ones; take 2 ones }]",
         "[(ones -> take 2 ones) ((f -> (x -> f (x x)) (x -> f (x x))) (ones -> 1 :: ones))]"],
     ["[{ first (x :: _) d = x; first [] d = d; first [] 0 }]",
-        "[(first -> first [] 0) (_1 -> _2 -> match [_1,_2] [[x :: _, d] -> x, [[],d] -> d])]"],
+        "[(first -> first [] 0) (_1 -> _2 -> [_1,_2] ~ [[x :: _, d] -> x, [[],d] -> d])]"],
     // A list's bindings scope over its later items, as a block's do.
     ["[x = 1, x + 1]", "[(x -> x + 1) 1]"],
     ["[x = 1, y = 2, x + y]", "[(x -> (y -> x + y) 2) 1]"],

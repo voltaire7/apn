@@ -31,7 +31,7 @@ updateSegments = set segments (advance segments)
 # A typed (List _ cells) parameter reads the cell's contents when called, so the
 # new snake is built from the old one.
 advance (List _ cells) = {
-    step = match direction [
+    step = direction ~ [
         "right" -> [1,0]
         "up" -> [0,-1]
         "left" -> [-1,0]

@@ -12,14 +12,14 @@ init = [Loading, http.get [
     expect: http.expectString GotText
 ]]
 
-update (GotText result) _ = match result [
+update (GotText result) _ = result ~ [
     Ok fullText -> [Success fullText, browser.none]
     Err _ -> [Failure,browser.none]
 ]
 
 subscriptions _ = browser.none
 
-view model = match model [
+view model = model ~ [
     Failure -> text "I was unable to load your book."
     Loading -> text "Loading..."
     Success fullText -> pre [] [text fullText]

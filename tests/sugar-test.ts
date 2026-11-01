@@ -37,8 +37,8 @@ for (const [sugar, expansion] of [
     ["xs = [1,2,3]\nxs 1 = 9\nxs", "xs = [1,2,3]\nxs = with xs 1 9\nxs"],
     ['r = [x: 1]\nr.x = 5\nr', 'r = [x: 1]\nr = with r "x" 5\nr'],
     ["f x = x + 1\nf 2", "f = x -> x + 1\nf 2"],
-    ['f 0 = "z"\nf n = "n"\n[f 0, f 1]', 'f = n -> match n [0 -> "z", m -> "n"]\n[f 0, f 1]'],
-    ["add 0 y = y\nadd x y = x + y\nadd 0 5 + add 2 3", "add = x -> y -> match [x,y] [[0,b] -> b, [a,b] -> a + b]\nadd 0 5 + add 2 3"],
+    ['f 0 = "z"\nf n = "n"\n[f 0, f 1]', 'f = n -> n ~ [0 -> "z", m -> "n"]\n[f 0, f 1]'],
+    ["add 0 y = y\nadd x y = x + y\nadd 0 5 + add 2 3", "add = x -> y -> [x,y] ~ [[0,b] -> b, [a,b] -> a + b]\nadd 0 5 + add 2 3"],
     // A block is its statements chained: x <- m is m >>= x -> ..., an action
     // statement m >> ..., a binding x = e (x -> ...) e.
     ["v = {\n    x <- [1,2]\n    return (x * 10)\n}\nv", "v = [1,2] >>= x -> return (x * 10)\nv"],
@@ -62,7 +62,7 @@ for (const [sugar, expansion] of [
     ["v = {\n    print 1\n    2\n}\nv", "v = print 1 >> 2\nv"],
     ["(::) = a, b -> a\nf [x] = x\nf 1", "(::) = a, b -> a\nf (x :: []) = x\nf 1"],
     ["[Int..3]", "enumFromTo Int 3"],
-    ["(::) = a, b -> a\nmatch 1 [x -> 2]", "(::) = a, b -> a\nm = match\nm 1 [x -> 2]"],
+    ["(::) = a, b -> a\n1 ~ [x -> 2]", "(::) = a, b -> a\nm = (~)\nm 1 [x -> 2]"],
     ['import "option"\nOption Int {\n    x <- Some 1\n    5\n}', 'import "option"\nSome 1 >>= x -> 5'],
 ] as const) for (const checked of [false, true]) {
     Deno.test(`sugar fails as its expansion does${checked ? ", checked" : ""}: ${JSON.stringify(sugar)}`, () => {

@@ -19,7 +19,7 @@ _field name value = {
         : Err ("Expecting an OBJECT with a field named `" ++ name ++ "`")
 }
 # The values of a list of Results, or the first error.
-_all results = match results [
+_all results = results ~ [
     [] -> Ok []
     result :: rest -> map2 (x, xs -> x :: xs) result (_all rest)
 ]
@@ -41,18 +41,18 @@ decodeValue (Type t) value = _decodeAs t value
 fromType t = Decoder (_decodeAs t)
 # Decoders are monads: map f d, d >>= f (Elm's andThen), return x (Elm's
 # succeed); map2 ... map4 come from the prelude.
-map f (Decoder decoder) = Decoder (value -> match (decoder value) [
+map f (Decoder decoder) = Decoder (value -> decoder value ~ [
     Ok x -> Ok (f x)
     Err error -> Err error
 ])
-(Decoder decoder) >>= f = Decoder (value -> match (decoder value) [
+(Decoder decoder) >>= f = Decoder (value -> decoder value ~ [
     Ok x -> decodeValue (f x) value
     Err error -> Err error
 ])
 return x = Decoder (_ -> Ok x)
 succeed x = Decoder (_ -> Ok x)
 field name decoder = Decoder (value -> _field name value >>= decodeValue decoder)
-at path decoder = match path [
+at path decoder = path ~ [
     [] -> Decoder (decodeValue decoder)
     name :: rest -> field name (at rest decoder)
 ]

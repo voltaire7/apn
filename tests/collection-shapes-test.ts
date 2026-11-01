@@ -8,8 +8,8 @@ for (const checked of [false, true]) {
             ["[Int] [x: 0]", "[x: Int]"],
             ["choose i = [10,20] [x: i]; choose 1", "[x: 20]"],
             ["[1] [x: Dynamic 0]", "[x: 1]"],
-            ["match [x: 1] [([t] [x]) -> x, _ -> 0]", "1"],
-            ["match [answer: 1] [([t] [x]) -> x, _ -> 0]", "0"],
+            ["[x: 1] ~ [([t] [x]) -> x, _ -> 0]", "1"],
+            ["[answer: 1] ~ [([t] [x]) -> x, _ -> 0]", "0"],
             [
                 "[10,20,30] [last: -1, first: 0, again: 0]",
                 "[last: 30, first: 10, again: 10]",

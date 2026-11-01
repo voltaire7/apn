@@ -7,34 +7,38 @@ function result(code: string): string {
 }
 for (const [code, expected] of [
     ['(Some x -> x) (Some 123)', '123'],
-    ['cases = [Some x -> x, None -> 0]; match (Some 123) cases', '123'],
-    ['cases = [Some x -> x, None -> 0]; match None cases', '0'],
-    ['dispatch = match; dispatch 3 [n | n < 0 -> 0, n -> n + 1]', '4'],
-    ['match x handlers = 42; match 123 []', '42'],
-    ['match missing [_ -> 42, x -> missing]', '42'],
-    ['match 2 [0 -> missing, 2 -> 42, x -> missing]', '42'],
-    ['match None [Some x -> missing, _ -> 42]', '42'],
-    ['match (Some 3) [Some x -> x]', '3'],
-    ['match 0 [x | x > 0 -> x, _ -> 42]', '42'],
+    ['cases = [Some x -> x, None -> 0]; Some 123 ~ cases', '123'],
+    // A type's bare name matches that type, as == compares it.
+    ['typeOf 5 ~ [Int -> "INT", _ -> "other"]', '"INT"'],
+    ['d Int = "int"; d (Int n) = "num"; d _ = "o"; [d Int, d (typeOf 5), d 5, d "s"]', '["int","int","num","o"]'],
+    ['Shape = Circle Float | Square Float\nd Shape = 1\nd _ = 0\n[d (typeOf (Circle 1)), d Int]', '[1,0]'],
+    ['cases = [Some x -> x, None -> 0]; None ~ cases', '0'],
+    ['dispatch = (~); dispatch 3 [n | n < 0 -> 0, n -> n + 1]', '4'],
+    ['x ~ handlers = 42; 123 ~ []', '42'],
+    ['missing ~ [_ -> 42, x -> missing]', '42'],
+    ['2 ~ [0 -> missing, 2 -> 42, x -> missing]', '42'],
+    ['None ~ [Some x -> missing, _ -> 42]', '42'],
+    ['Some 3 ~ [Some x -> x]', '3'],
+    ['0 ~ [x | x > 0 -> x, _ -> 42]', '42'],
     // The most specific alternative that fits wins, as among clauses; written
     // order breaks ties.
-    ['match 0 [n -> "any", 0 -> "zero"]', '"zero"'],
-    ['match 1 [Float x -> "float", Int x -> "int"]', '"int"'],
-    ['cases = [n -> "any", 0 -> "zero"]; match 0 cases', '"zero"'],
-    ['f 0 = "zero"; f n = "any"; match 0 [n -> "name", f]', '"zero"'],
+    ['0 ~ [n -> "any", 0 -> "zero"]', '"zero"'],
+    ['1 ~ [Float x -> "float", Int x -> "int"]', '"int"'],
+    ['cases = [n -> "any", 0 -> "zero"]; 0 ~ cases', '"zero"'],
+    ['f 0 = "zero"; f n = "any"; 0 ~ [n -> "name", f]', '"zero"'],
     // A function matching its parameters is described as its clauses.
-    ['d = x -> match x [Int n -> n + 1, String s -> s ++ "!"]; typeOf d', 'Int | String -> Int'],
-    ['dispatch = match 3; dispatch [(+ 1)]', '4'],
-    ['match [3] [head]', '3'],
-    ['f 0 = 9; f 1 = 8; match 1 [f, _ -> 0]', '8'],
+    ['d = x -> x ~ [Int n -> n + 1, String s -> s ++ "!"]; typeOf d', 'Int | String -> Int'],
+    ['dispatch = (3 ~); dispatch [(+ 1)]', '4'],
+    ['[3] ~ [head]', '3'],
+    ['f 0 = 9; f 1 = 8; 1 ~ [f, _ -> 0]', '8'],
     ['func ((Int -> Int) f) = Int { f 123 }; func (*2)', '246'],
     ['((Int -> Int) identity) <- return (x -> x)\nTransform = typeOf identity\nfunc (Transform f) = Int { f 123 }\nfunc (*2)', '246'],
     ['func ((Int -> Int) f) = 42; func (x -> missing)', '42'],
     ['func ((Int -> Int) f) = f 2.0; func (*2)', '4'],
     ['func ((Int -> Int -> Int) f) = f 2 3; func (x, y -> x + y)', '5'],
-    ['match 1 [((Int -> Int) f) -> f 0, x -> x]', '1'],
+    ['1 ~ [((Int -> Int) f) -> f 0, x -> x]', '1'],
     // An alternative's parameter is one pattern, as everywhere: t x binds the type.
-    ['match 1 [t x -> [t,x]]', '[Int,1]'],
+    ['1 ~ [t x -> [t,x]]', '[Int,1]'],
     ['(t x -> t) "a"', 'String'],
 ]) Deno.test(`pattern functions: ${code}`, () => {
     const actual = result(code);
@@ -42,17 +46,17 @@ for (const [code, expected] of [
 });
 for (const [code, error] of [
     ['(None -> missing) (Some 123)', 'no clause'],
-    ['match 2 [1 -> 0]', 'non-exhaustive match'],
-    ['match 1 [_ -> missing, _ -> 42]', 'unbound variable'],
-    ['match 1 [x | missing -> 0, _ -> 42]', 'unbound variable'],
-    ['match 1 [_ -> _, _ -> 42]', 'not implemented'],
-    ['match 1 [42]', 'one remaining argument'],
+    ['2 ~ [1 -> 0]', 'non-exhaustive match'],
+    ['1 ~ [_ -> missing, _ -> 42]', 'unbound variable'],
+    ['1 ~ [x | missing -> 0, _ -> 42]', 'unbound variable'],
+    ['1 ~ [_ -> _, _ -> 42]', 'not implemented'],
+    ['1 ~ [42]', 'one remaining argument'],
     // Ranking reads every alternative (not the bodies).
-    ['match 3 ((_ -> 42)::missing)', 'unbound variable'],
-    // A two-parameter lambda needs parentheses in a list; match gives it one argument.
-    ['match 1 [(x, y -> x)]', 'one remaining argument'],
-    ['match missing []', 'non-exhaustive match'],
-    ['match 1 42', 'expected a list'],
+    ['3 ~ (_ -> 42)::missing', 'unbound variable'],
+    // A two-parameter lambda needs parentheses in a list; ~ gives it one argument.
+    ['1 ~ [(x, y -> x)]', 'one remaining argument'],
+    ['missing ~ []', 'non-exhaustive match'],
+    ['1 ~ 42', 'expected a list'],
     ['func ((Int -> Int) f) = f (Float .5); func (*2)', 'lossy conversion'],
     ['func ((Int -> Int) f) = f 1; func (x -> "bad")', 'expects a number'],
 ]) Deno.test(`pattern functions reject: ${code}`, () => {
@@ -64,32 +68,33 @@ for (const [code, error] of [
 });
 Deno.test("pattern functions parse independently of prior constructor imports", () => {
     const i = new Interpreter();
-    const code = 'FreshOption = FreshSome a | FreshNone\nhandlers = [FreshSome x -> x, FreshNone -> 0]\nmatch FreshNone handlers';
+    const code = 'FreshOption = FreshSome a | FreshNone\nhandlers = [FreshSome x -> x, FreshNone -> 0]\nFreshNone ~ handlers';
     if (i.renderString(i.run(parse(code))) !== '0') throw new Error('nullary constructor treated as variable');
 });
 
 Deno.test("constructor lambdas accept nested patterns", () => {
-    if (result('match (Some 3) [Some (Int x) -> x]') !== '3') throw new Error('nested type pattern');
-    if (result('match (Some "no") [Some (Int x) -> x, _ -> 42]') !== '42') throw new Error('nested mismatch');
+    if (result('Some 3 ~ [Some (Int x) -> x]') !== '3') throw new Error('nested type pattern');
+    if (result('Some "no" ~ [Some (Int x) -> x, _ -> 42]') !== '42') throw new Error('nested mismatch');
     if (result('(Some [a,b] -> a + b) (Some [1,2])') !== '3') throw new Error('nested list pattern');
 });
 
 Deno.test("guards can use nested lambda arguments", () => {
-    if (result('match [1,2] [xs | all (n -> n > 0) xs -> 42, _ -> 0]') !== '42') throw new Error('nested lambda in guard');
+    if (result('[1,2] ~ [xs | all (n -> n > 0) xs -> 42, _ -> 0]') !== '42') throw new Error('nested lambda in guard');
 });
 
-Deno.test("match is intrinsic and has no public attempt protocol", () => {
+Deno.test("~ is intrinsic and has no public attempt protocol", () => {
     const i = new Interpreter();
-    if (i.env.get("match")?.kind !== "native") throw new Error("match must be intrinsic");
+    const match = i.env.get("~");
+    if (match?.kind !== "native" || match.name !== "intrinsics.match" || i.env.get("match")) throw new Error("~ must be intrinsics.match, and match unbound");
     for (const name of ["tryMatch", "MatchAttempt", "Matched", "Unmatched"]) {
         if (i.env.get(name)) throw new Error(`unexpected builtin ${name}`);
     }
 });
 
-Deno.test("match traverses many rejected alternatives without recursive dispatch", () => {
-    if (result('match 1 (map (n -> 0 -> 0) [1..10000] ++ [_ -> 42])') !== '42') throw new Error('dispatch failed');
+Deno.test("~ traverses many rejected alternatives without recursive dispatch", () => {
+    if (result('1 ~ map (n -> 0 -> 0) [1..10000] ++ [_ -> 42]') !== '42') throw new Error('dispatch failed');
 });
 
 Deno.test("guards accept truthy numbers", () => {
-    if (result("match 1 [x | 1 -> 0, _ -> 42]") !== "0") throw new Error("guard did not match");
+    if (result("1 ~ [x | 1 -> 0, _ -> 42]") !== "0") throw new Error("guard did not match");
 });

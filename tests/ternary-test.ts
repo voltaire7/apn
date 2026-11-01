@@ -11,7 +11,7 @@ for (const [source, expected] of [
     ['True == False', 'False'],
     ['False != True', 'True'],
     ['(x -> !x) $ True', 'False'],
-    ['match 1 [1 -> 2, _ -> 0] + 3', '5'],
+    ['(1 ~ [1 -> 2, _ -> 0]) + 3', '5'],
 ]) {
     Deno.test(`keyword-led expression: ${source}`, () => {
         const interp = new Interpreter();

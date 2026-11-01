@@ -40,12 +40,12 @@ _digits _ = False
 _params [_,params,_] = length params
 # The loosest operator a piece of syntax holds at its top, and the loosest one
 # after it that it would take in (a lambda takes in everything).
-_level syntax = match (_kind syntax) [
+_level syntax = _kind syntax ~ [
     "infix" -> _precedence syntax
     "ternary" -> 1
     _ -> 99
 ]
-_reach syntax = match (_kind syntax) [
+_reach syntax = _kind syntax ~ [
     "lambda" -> -1
     "negative" -> 8
     "ternary" -> min 1 (_reach (syntax 3))
@@ -120,13 +120,13 @@ _operator name = contains (head (to (List Char) name)) (to (List Char) "!$%&*+-/
 # and character literals), as the parser requires.
 _items xs = joinWith (any _spaced xs ? ", " : ",") xs
 _spaced text = _spacedChars (to (List Char) text)
-_spacedChars cs = match cs [
+_spacedChars cs = cs ~ [
     [] -> False
     '"' :: rest -> _spacedChars (_afterString rest)
     '\'' :: _ :: '\'' :: rest -> _spacedChars rest
     c :: rest -> contains c (to (List Char) " \t\n") || _spacedChars rest
 ]
-_afterString cs = match cs [
+_afterString cs = cs ~ [
     [] -> []
     '\\' :: _ :: rest -> _afterString rest
     '"' :: rest -> rest

@@ -261,7 +261,7 @@ for (const width of [80, 16]) {
         ["middle line", "\x1b[A\x1b[A", "\x1b[13;2u"],
         ["last line", "", "\r"],
     ]) Deno.test(`submission finishes below input from ${position}, width ${width}`, async () => {
-        const source = "match (Some 123) [\n    Some x -> print x\n    None\n]";
+        const source = "Some 123 ~ [\n    Some x -> print x\n    None\n]";
         const ed = editor("");
         let output = "";
         ed.width = () => width;

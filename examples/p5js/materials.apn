@@ -20,7 +20,7 @@ init = [[
     colors: ["#ffffff","#000000","#ffffff","#ffffff","#ffffff"]
 ], browser.none]
 
-update msg model = match msg [
+update msg model = msg ~ [
     Chose material -> { model.material = material; [model,browser.none] }
     Toggled which -> { model.on = toggle which model.on; [model,browser.none] }
     Picked which color -> { model.colors = put which color model.colors; [model,browser.none] }
@@ -91,7 +91,7 @@ draw model (Sketch p) = {
 }
 
 # The chosen material, in the chosen colors.
-material model (Sketch p) = match model.material [
+material model (Sketch p) = model.material ~ [
     "color" -> {
         ambientSpecular model p
         model.on Fill ? p.fill (model.colors Fill) : p.noFill

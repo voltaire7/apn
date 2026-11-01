@@ -13,6 +13,7 @@
 # Defining new operators is possible but not recommended: a named function is
 # easier to read and to search for.
 infixr 0 $
+infixl 0 ~
 infixl 1 >>= >>
 infixr 1 =<<
 infixl 2 ||
@@ -33,6 +34,9 @@ get = intrinsics.get
 get True a = _ -> a
 get False _ = b -> b
 ($) = intrinsics.apply
+# x ~ [p -> a, q -> b] matches x: the most specific alternative that fits, as
+# among a function's clauses (f p = a; f q = b is f x = x ~ [p -> a, q -> b]).
+(~) = intrinsics.match
 (||) = intrinsics.or
 (&&) = intrinsics.and
 (==) = intrinsics.eq

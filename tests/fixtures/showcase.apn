@@ -34,13 +34,13 @@ print (addTwo 10)             # => 12
 # ---------------------------------------------------------
 # 3. RECURSION
 # ---------------------------------------------------------
-recursiveFactorial n = match n [
+recursiveFactorial n = n ~ [
     0 -> 1
     _ -> n * recursiveFactorial (n - 1)
 ]
 print (recursiveFactorial 10)   # => 3628800
 
-fib n = match n [
+fib n = n ~ [
     0 -> 0
     1 -> 1
     _ -> fib (n - 1) + fib (n - 2)
@@ -51,14 +51,14 @@ print (fib 10)         # => 55
 # 4. PATTERN MATCHING (match) & PATTERN DEFINITIONS
 #    Patterns: literals, wildcard _, cons x:rest, lists, variants, guards.
 #    `match` is THE pattern-matching form (there is no `case`):
-#        match scrutinee [ pattern -> expr, ... ]
+#        scrutinee ~ [ pattern -> expr, ... ]
 #    A `[x,y]` pattern matches BOTH a list (positionally) and a record
 #    (by field name). A def can also be given as multiple clauses (equations)
 #    like Haskell, dispatched in order on its parameters:
 #         f pat1 = body1
 #         f pat2 = body2
 # ---------------------------------------------------------
-safeHead xs = match xs [
+safeHead xs = xs ~ [
     [] -> None
     x::_ -> Some x
 ]
@@ -70,14 +70,14 @@ len [] = 0
 len (_::rest) = 1 + len rest
 print (len [1,2,3])      # => 3
 
-sumList xs = match xs [
+sumList xs = xs ~ [
     [] -> 0
     x::rest -> x + sumList rest
 ]
 print (sumList [1,2,3,4,5])  # => 15
 
 # exact-length list pattern — binds each element
-pairSum xs = match xs [
+pairSum xs = xs ~ [
     [a,b] -> a + b
     _ -> 0
 ]
@@ -92,7 +92,7 @@ print (sumRec [x: 10, y: 20])  # => 30
 print (sumRec [10,20])       # => 30
 
 # guards
-classify n = match n [
+classify n = n ~ [
     x | x < 0 -> "negative"
     x | x == 0 -> "zero"
     _ -> "positive"
@@ -102,41 +102,41 @@ print (classify 0)      # => zero
 print (classify 7)      # => positive
 
 # ---------------------------------------------------------
-# 4b. MATCH LAYOUTS —  match scrutinee [ pattern -> expr, ... ]
+# 4b. MATCH LAYOUTS —  scrutinee ~ [ pattern -> expr, ... ]
 #     Alternatives are delimited with [ ], separated by `, ` OR a newline.
 #     PREFERRED STYLE for a function whose entire body is one match is the
 #     same-line-open form:
-#         f x = match x [
+#         f x = x ~ [
 #             pattern -> body
 #         ]
-#     (The block form `f x =\n    match x [ ... ]` also parses but is not
+#     (The block form `f x =\n    x ~ [ ... ]` also parses but is not
 #     used in this program.) The fully single-line form:
-#         f x = match x [ pat1 -> e1, pat2 -> e2 ]
+#         f x = x ~ [ pat1 -> e1, pat2 -> e2 ]
 # ---------------------------------------------------------
-factA n = match n [
+factA n = n ~ [
     0 -> 1
     _ -> n * factA (n - 1)
 ]
 print (factA 10)            # => 3628800
 
-factC n = match n [0 -> 1, _ -> n * factC (n - 1)]
+factC n = n ~ [0 -> 1, _ -> n * factC (n - 1)]
 print (factC 6)             # => 720
 
 # all patterns work here too: cons, literals, _ , guards, ...
-safeM xs = match xs [
+safeM xs = xs ~ [
     [] -> None
     x::_ -> Some x
 ]
 print (safeM [3,4])       # => Some 3
 print (safeM [])            # => None
 # A [] inside a pattern tests that part; the value it matches can be any list.
-joinM xs ys = match [xs,ys] [
+joinM xs ys = [xs,ys] ~ [
     [[],rest] -> rest
     [(x::more),rest] -> x :: joinM more rest
 ]
 print (joinM [1,2] [3])    # => [1,2,3]
 
-classM n = match n [
+classM n = n ~ [
     x | x < 0 -> "negative"
     x | x == 0 -> "zero"
     _ -> "positive"
@@ -146,7 +146,7 @@ print (classM 0)            # => zero
 print (classM 7)            # => positive
 
 # a def body may also start `match` on the SAME line as `=`
-matchInline n = match n [
+matchInline n = n ~ [
     0 -> "zero"
     _ -> "other"
 ]
@@ -589,7 +589,7 @@ print [0::[]]                                 # => [[0]]
 print (zipWith (+) [1,2,3] [10,20,30])  # => [11,22,33]
 
 # and ranges PATTERNS-match — [lo..hi] fits any int in the range:
-size n = match n [
+size n = n ~ [
     [0..5] -> "small"
     _ -> "big"
 ]
@@ -1652,16 +1652,16 @@ print [Walked [[x: 1, y: 2]], Stamped (clock.millisToPosix 0)]  # [Walked [[x: 1
 printFunction x = print x
 print printFunction                          # x -> print x
 
-# Alternatives are first-class functions, and match is an intrinsic callable function.
+# Alternatives are first-class functions, and ~ is an operator like any other.
 handlers = [
     Some y -> y
     None -> 0
 ]
-print (match (Some 123) handlers)              # 123
-print (match None handlers)                    # 0
-dispatch = match (Some 123)
+print (Some 123 ~ handlers)                    # 123
+print (None ~ handlers)                        # 0
+dispatch = (Some 123 ~)
 print (dispatch handlers)                     # 123
-print (match (Dynamic missing) [_ -> 42])               # 42; unused value stays lazy
+print (Dynamic missing ~ [_ -> 42])                     # 42; unused value stays lazy
 checkedApply ((Int -> Int) f) = Int { f 123 }
 print (checkedApply (*2))                     # 246 (typed Int)
 
@@ -1680,7 +1680,7 @@ print (editorDouble 21)                     # => 42
 # value of that type, which binds the parameters: (ExampleOption a value) takes
 # the whole variant, a its payload's type. Constructor patterns unpack it.
 ExampleOption a = ExampleSome a | ExampleNone
-exampleUnwrap (ExampleOption _ value) = match value [
+exampleUnwrap (ExampleOption _ value) = value ~ [
     ExampleSome x -> x
     ExampleNone -> 0
 ]
@@ -1711,7 +1711,7 @@ print (lazyCapture 1)                         # => 42
 
 # REPL regression: paste this expression, move after `match` on its first line,
 # and press Enter. Output must start below the closing ], preserving every line.
-match (Some 123) [
+Some 123 ~ [
     Some x -> print x
     None -> _
 ]
@@ -1884,7 +1884,7 @@ print (deltas (Down + 1))            # => [-1,0]
 
 # The linter warns if a known family's literal alternatives omit a case.
 # Guards do not count as unconditional coverage; dynamic lists stay runtime-checked.
-compassName (Compass direction) = match direction [
+compassName (Compass direction) = direction ~ [
     Up -> "up"
     Down -> "down"
     Left -> "left"
@@ -1933,7 +1933,7 @@ print (Bool * [0,1,"","hello",[],[0]])  # => [False,True,False,True,False,True]
 print (0 && Dynamic missingTruthinessName)          # => False; right side is skipped
 print (1 || Dynamic missingTruthinessName)          # => True
 print (filter (x -> x) [0,1,2])      # => [1,2]
-print (match 42 [_ | [] -> 0, x | 1 -> x]) # => 42
+print (42 ~ [_ | [] -> 0, x | 1 -> x]) # => 42
 
 # Type variables preserve relationships between inputs and outputs.
 print (typeOf (x, _ -> x))                # => a -> b -> a
@@ -1987,7 +1987,7 @@ print (revVec pairVec Nil)               # => Cons 2 (Cons 1 Nil)
 # takes the scrutinee's tail as one shorter, as a clause's does.
 vecSize (Vec n _ _) = n
 print (vecSize pairVec)                  # => 2
-countVect (Vect _ _ xs) = match xs [[] -> 0, (_::rest) -> 1 + countVect rest]
+countVect (Vect _ _ xs) = xs ~ [[] -> 0, (_::rest) -> 1 + countVect rest]
 # Vect is the prelude's family of lists counting their elements:
 # Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a, the clauses
 # Vect Z a = [] and Vect (S k) a = a :: Vect k a. A program's family of
@@ -1997,7 +1997,7 @@ print (typeOf (Lst 2 Int [5,6]))        # => Vect 2 Int
 # A claim around a match is checked in each alternative under its own facts
 # ([] makes n zero); claiming n + m + 1 here would be a static error.
 appendVect (Vect n a xs) (Vect m a ys) = Vect (n + m) a {
-    match xs [
+    xs ~ [
         [] -> ys
         x :: rest -> x :: appendVect rest ys
     ]
@@ -2005,7 +2005,7 @@ appendVect (Vect n a xs) (Vect m a ys) = Vect (n + m) a {
 print (typeOf (appendVect [1,2] [3]))  # => Vect 3 Int
 # Written with lambdas it is the same function, checked the same way.
 appendLambda = Vect n a xs -> Vect m a ys -> Vect (n + m) a {
-    match xs [
+    xs ~ [
         [] -> ys
         x :: rest -> x :: appendLambda rest ys
     ]
@@ -2109,7 +2109,7 @@ print ((x, x -> x) 4 4)                    # => 4
 # A lambda's parameters are patterns separated by ', '; t x is one pattern
 # binding the argument's type, as in f (t x) = t, match alternatives included.
 print ((t _ -> t) "a")                     # => String
-print (match 1 [t x -> [t,x]])            # => [Int,1]
+print (1 ~ [t x -> [t,x]])                # => [Int,1]
 print ((_, _ -> 1) 2 3)                    # => 1
 
 # Files and REPL submissions check by default; Dynamic marks runtime boundaries.

@@ -86,7 +86,7 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 // and for REPL tab completion.
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
-    ["assert", 2], ["match", 2], ["set", 2], ["while", 2], ["for", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
+    ["assert", 2], ["intrinsics.match", 2], ["set", 2], ["while", 2], ["for", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
     ["print", 1], ["echo", 1], ["repl", 0], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
@@ -1450,7 +1450,14 @@ export class Interpreter {
                         r = v;
                         break;
                     }
-                    case "binop": r = this.evalBinop(e); break;
+                    case "binop": {
+                        // The builtin ~ with written alternatives runs here, as
+                        // a call of it does, its chosen body in place of the match.
+                        const written = e.op === "~" ? writtenMatch(e) : undefined;
+                        if (written && this.preludeCons() && this.isBuiltinMatch(this.env.get("~"))) { next = this.coreMatch(written); break; }
+                        r = this.evalBinop(e);
+                        break;
+                    }
                     case "unop": {
                         // -x is negate x and !x is not x, with what those mean
                         // here; the prelude's run in place.
@@ -2189,7 +2196,7 @@ export class Interpreter {
     }
 
     private isBuiltinMatch(v: Value | undefined): boolean {
-        return v?.kind === "native" && v.name === "match" && v.applied.length === 0;
+        return v?.kind === "native" && v.name === "intrinsics.match" && v.applied.length === 0;
     }
     // A match against written alternatives: the most specific whose pattern and
     // guard fit, as among a function's clauses (written order breaks ties),
@@ -3343,8 +3350,20 @@ export class Interpreter {
 
     // How specifically a pattern accepts an argument, for choosing among
     // clauses: literals first, then exact types, then conversions.
+    // A type's bare name as a pattern matches that type, as == compares types
+    // (Int matches typeOf 5, a declared Shape typeOf (Circle 1)), as a literal
+    // matches its value; undefined for any other pattern.
+    private bareType(p: Pattern, v: Value): boolean | undefined {
+        if (p.p !== "constr" || p.args.length) return undefined;
+        const bound = TYPE_NAMES.includes(p.tag) ? { kind: "type", name: p.tag } as Value : this.env.get(p.tag), named = bound && this.reference(bound);
+        if (named?.kind !== "type") return undefined;
+        const given = this.demand(v);
+        return (given.kind === "type" || given.kind === "functionType" || this.isList(given)) && this.isTypeValue(given) && this.equals(given, named);
+    }
     private patternScore(pattern: Pattern, arg: Value): number {
         if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
+        const bare = this.bareType(pattern, arg);
+        if (bare !== undefined) return bare ? 40 : -1000;
         // A named subtype's own pattern outranks its base's: (Money x) first.
         // Only a constructor pattern looks at its argument.
         if (pattern.p !== "constr") return 0;
@@ -4146,7 +4165,7 @@ export class Interpreter {
             // assert c x is x, as Haskell's: a value, or an action, checked first.
             return argsIn[1];
         }
-        if (name === "match") {
+        if (name === "intrinsics.match") {
             // The most specific alternative that fits, as among a function's
             // clauses (one scores as its best clause; written order breaks ties).
             // Share the original lazy argument across probes; errors are never
@@ -5484,6 +5503,8 @@ export class Interpreter {
                 return this.matchPattern(p.tail, cell.tail, nm) && this.mergeBinds(binds, nm);
             }
             case "constr": {
+                const bare = this.bareType(p, v);
+                if (bare !== undefined) return bare;
                 if (TYPE_NAMES.includes(p.tag)) {
                     if (p.args.length !== 1) return false;
                     if (!NUMERIC_TYPES.includes(p.tag)) return this.matchesValueType(p.tag, v) && this.matchPattern(p.args[0], v, binds);

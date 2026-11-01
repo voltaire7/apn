@@ -419,7 +419,7 @@ constrains the length. For computed type expressions, the existing form
 
 The checker refines `n` to zero in the empty branch. In the cons branch the
 tail has length `n - 1`, and so does an `x::xs` alternative of a `match` on the
-vector (`match xs [[] -> 0, (x::rest) -> 1 + count rest]`): an alternative meets
+vector (`xs ~ [[] -> 0, (x::rest) -> 1 + count rest]`): an alternative meets
 the scrutinee as a clause meets its parameter. A parameter whose typed pattern
 binds its length takes a list of any length, so a recursive call may pass a
 shorter one. A claim around a `match` (or a ternary) is checked in each alternative under
@@ -430,7 +430,7 @@ differs by a constant is a static error:
 
 ```apn
 append (Vect n a xs) (Vect m a ys) = Vect (n + m) a {
-    match xs [
+    xs ~ [
         [] -> ys
         x :: rest -> x :: append rest ys
     ]

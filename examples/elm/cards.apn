@@ -12,7 +12,7 @@ init = [[card: Three], browser.none]
 cardGenerator = random.uniform Ace
     [Two,Three,Four,Five,Six,Seven,Eight,Nine,Ten,Jack,Queen,King]
 
-update msg model = match msg [
+update msg model = msg ~ [
     Draw -> [model, random.generate NewCard cardGenerator]
     NewCard newCard -> [[card: newCard], browser.none]
 ]
@@ -24,7 +24,7 @@ view model = div [] [
     div [style "font-size" "12em"] [text (viewCard model.card)]
 ]
 
-viewCard card = match card [
+viewCard card = card ~ [
     Ace -> "🂡"
     Two -> "🂢"
     Three -> "🂣"

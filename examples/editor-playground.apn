@@ -9,7 +9,7 @@ handlers = [
     Some y -> y
     None -> 0
 ]
-print (match (Some 42) handlers)          # 42
+print (Some 42 ~ handlers)                # 42
 
 print (double 21)                         # 42
 

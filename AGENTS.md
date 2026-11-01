@@ -101,8 +101,8 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   expansion can express the form.
 - Favor curried (point-free) definitions when parameters are only passed
   through or discarded: `return = Some`, not `return x = Some x`.
-- APN style in examples: whole-function `match` uses the same-line form
-  (`f x = match x [ ... ]`); a definition's `{` stays on the `=` line, with
+- APN style in examples: a whole-function match uses the same-line form
+  (`f x = x ~ [ ... ]`); a definition's `{` stays on the `=` line, with
   the body exactly +4 and `}` aligned with the opening line.
 
 ## Invariants that are easy to break

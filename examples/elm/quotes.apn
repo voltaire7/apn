@@ -15,7 +15,7 @@ getRandomQuote = http.get [
 
 init = [Loading,getRandomQuote]
 
-update msg _ = match msg [
+update msg _ = msg ~ [
     MorePlease -> [Loading,getRandomQuote]
     GotQuote (Ok quote) -> [Success quote, browser.none]
     GotQuote (Err _) -> [Failure,browser.none]
@@ -28,7 +28,7 @@ view model = div [] [
     viewQuote model
 ]
 
-viewQuote model = match model [
+viewQuote model = model ~ [
     Failure -> div [] [
         text "I could not load a random quote for some reason. "
         button [onClick MorePlease] [text "Try Again!"]

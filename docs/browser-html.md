@@ -40,7 +40,7 @@ browser = import "browser"
 
 Msg = Increment | Decrement
 
-update msg model = match msg [
+update msg model = msg ~ [
     Increment -> model + 1
     Decrement -> model - 1
 ]
@@ -76,7 +76,7 @@ Msg = Tick Posix | AdjustTimeZone Zone
 
 init = [[zone: utc, time: millisToPosix 0], task.perform AdjustTimeZone here]
 
-update msg model = match msg [
+update msg model = msg ~ [
     (Tick newTime) -> { model.time = newTime; [model,browser.none] }
     (AdjustTimeZone newZone) -> { model.zone = newZone; [model,browser.none] }
 ]

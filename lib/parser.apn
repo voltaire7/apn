@@ -12,25 +12,25 @@ _parserRun (Parser p) input = p input
 _parserInput text = isType String text ? to (List Char) text : text
 
 # Ok of the value a parser reads from all of the input, or Err.
-parse parser text = match (_parserRun parser (_parserInput text)) [
+parse parser text = _parserRun parser (_parserInput text) ~ [
     Ok [value,[]] -> Ok value
     Ok [_, (next :: _)] -> Err ("unexpected " ++ _parserShown next)
     Err message -> Err message
 ]
 _parserShown x = isType Char x ? "'" ++ from (List Char) [x] ++ "'" : to String x
 
-map f (Parser p) = Parser (input -> match (p input) [
+map f (Parser p) = Parser (input -> p input ~ [
     Ok [value,rest] -> Ok [f value, rest]
     Err message -> Err message
 ])
-(Parser p) >>= f = Parser (input -> match (p input) [
+(Parser p) >>= f = Parser (input -> p input ~ [
     Ok [value,rest] -> _parserRun (f value) rest
     Err message -> Err message
 ])
 return x = Parser (input -> Ok [x,input])
 
 # One item, if test accepts it.
-satisfy what test = Parser (input -> match input [
+satisfy what test = Parser (input -> input ~ [
     x :: rest | test x -> Ok [x,rest]
     x :: _ -> Err ("expected " ++ what ++ ", got " ++ _parserShown x)
     [] -> Err ("expected " ++ what ++ ", got the end")
@@ -52,7 +52,7 @@ end = Parser (input -> null input ? Ok [[],input]
 
 # p, or q if p fails.
 infixr 3 <|>
-(Parser p) <|> q = Parser (input -> match (p input) [
+(Parser p) <|> q = Parser (input -> p input ~ [
     Ok result -> Ok result
     Err _ -> _parserRun q input
 ])
@@ -62,7 +62,7 @@ many p = Parser (input -> {
     read = _parserMany p input []
     Ok [read.items,read.rest]
 })
-some p = Parser (input -> match (_parserRun p input) [
+some p = Parser (input -> _parserRun p input ~ [
     Ok [x,rest] -> {
         read = _parserMany p rest [x]
         Ok [read.items,read.rest]

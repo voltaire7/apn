@@ -218,9 +218,9 @@ export function describeType(value: Value, element = false): string {
         return unify(expected, result);
     }
     // A function's clauses: one whose body matches its parameters
-    // (x -> y -> match [x, y] alternatives) is the alternatives as clauses.
+    // (x -> y -> [x, y] ~ alternatives) is the alternatives as clauses.
     function clauses(written: { params: Pattern[]; body: Expr }[], env: Env, applied: Value[] = []): Shape {
-        const match = env.get("match"), builtin = match?.kind === "native" && match.name === "match";
+        const match = env.get("~"), builtin = match?.kind === "native" && match.name === "intrinsics.match";
         return join(written.flatMap(c => {
             let { params, body } = c;
             for (; body.t === "lambda"; body = body.body) params = [...params, ...body.params.map(name => ({ p: "var", name }) as Pattern)];

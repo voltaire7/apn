@@ -74,7 +74,7 @@ for (const [source, expected] of [
     ['Option a = Some a | None\nOptional a = Option a\nType (Optional Int)', 'Option Int'],
     ['Option a = Some a | None\nOptional a = Option a\nOptional Int (Some (floor .2))', 'Some 0'],
     ['Option a = Some a | None\nOption Int None', 'None'],
-    ['Option a = Some a | None\nf ((Option Int) x) = match x [Some v -> v, None -> Int 0]\nf (Some 123)', '123'],
+    ['Option a = Some a | None\nf ((Option Int) x) = x ~ [Some v -> v, None -> Int 0]\nf (Some 123)', '123'],
     ['Option a = Some a | None\nSome x = Some 123\nx', '123'],
     ['Option a = Some a | None\nNone = None\n123', '123'],
     ['UserId = | MkUserId Int\nMkUserId 123', 'MkUserId 123'],

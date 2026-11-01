@@ -171,9 +171,9 @@ len [] = 0
 len (x::rest) = 1 + len rest
 ```
 
-A function's clauses are a `match` on its arguments: `len` is
-`len xs = match xs [[] -> 0, x::rest -> 1 + len rest]`, and with two parameters
-`f a b = match [a,b] [[p,q] -> ...]`; either spelling runs and checks the same
+A function's clauses are a match (`~`) on its arguments: `len` is
+`len xs = xs ~ [[] -> 0, x::rest -> 1 + len rest]`, and with two parameters
+`f a b = [a,b] ~ [[p,q] -> ...]`; either spelling runs and checks the same
 (the one exception: clauses with equivalent patterns and different result types
 are an overload the context chooses: [overloading on the result type](#overloading-on-the-result-type)).
 Literal patterns (integers, floats, strings, characters, `True`, `False`) are
@@ -187,7 +187,7 @@ error names the function: `no clause of 'len'
 matches the given arguments`. When what is known of the arguments already
 rules out every clause (a literal, a constructor, a list's length: `pred 0`
 for `pred (S k) = k`), it is a static error. Guards are not allowed on definition clauses;
-use `match` with guarded pattern lambdas instead (see
+use `~` with guarded pattern lambdas instead (see
 [pattern functions](pattern-functions.md)).
 
 There is no `if`/`then`/`else`; use the ternary `cond ? a : b`, which is
@@ -375,7 +375,7 @@ written. `tests/sugar-test.ts` holds each form beside its expansion.
 | `v.x` | `get v "x"` |
 | `xs i = v`, `v.x = y` | `xs = with xs i v`, `v = with v "x" y` |
 | `f x = e` | `f = x -> e` |
-| `f p = a; f q = b` | `f x = match x [p -> a, q -> b]` |
+| `f p = a; f q = b` | `f x = x ~ [p -> a, q -> b]` |
 | `{ x <- m; rest }` | `m >>= x -> { rest }` |
 | `{ m; rest }` (`m` an action or other monadic value) | `m >> { rest }` |
 | `{ x = e; rest }` | `(x -> { rest }) e` |
@@ -815,7 +815,9 @@ return = Some                      # return in Option
 (`to String`, `to JSON`, `to (List Char)`; another type, a record type too,
 converts as applying it: `to Quote x` is `Quote x`),
 `from T x` reads one back. A bare type name in a pattern matches that type
-itself (`describe Int = "integer"`), so an instance names its type:
+itself, as `==` compares types (`describe Int = "integer"` takes `Int` and
+`typeOf 5`, and `typeOf x ~ [Int -> ...]` asks for an Int), so an instance names
+its type:
 `to Celsius (F f) = C ((f - 32) * 5 / 9)`. A `to String` instance is also how
 its values show: `print`, `echo`, the REPL and `to String` of a value holding
 one write its text, wherever it is (with `to String (Point x y) = ...`,
@@ -1321,7 +1323,7 @@ matches, which outrank conversion matches. Ties retain source order. Converting
 either a typed or an untyped input must be lossless; explicit floating-point
 construction is a separate operation and does not relax pattern matching. The same
 ranking chooses among any function's clauses and a `match`'s alternatives:
-`match 0 [n -> "any", 0 -> "zero"]` is `"zero"`. Numeric constructor patterns extract
+`0 ~ [n -> "any", 0 -> "zero"]` is `"zero"`. Numeric constructor patterns extract
 untyped payloads: `unwrap (Int32 x) = x` returns `5` for `Int32 5`. Return an explicit
 constructor, as above, when the result should retain a type. Patterns do not mutate
 the original argument or strip types from unrelated values.
@@ -1461,7 +1463,8 @@ IO and other built-in values do), then each instance's clauses, one per line. Af
 
 ## Pattern functions
 
-`match` is an intrinsic function over a list of unary functions; pattern lambdas
+`x ~ alternatives` (the prelude's `~`, `intrinsics.match`) matches `x` against a
+list of unary functions; pattern lambdas
 and runtime function contracts are described in [pattern functions](pattern-functions.md).
 It tries them as a function's clauses are tried, most specific first
 ([ranking](#clause-ranking)). Only pattern mismatch or a false guard selects the next

@@ -33,7 +33,7 @@ for (const [source, expected] of [
     ["identity (t x) = x\nidentity (Int32 5)", "5"],
     ["myTypeOf (t x) = t\nmyTypeOf [missing]", "[a]"],
     ["sameType (t x) (t y) = True\nsameType x y = False\n[sameType 1 2, sameType 1 True]", "[True,False]"],
-    ["match True [(t x) -> t]", "Bool"],
+    ["True ~ [(t x) -> t]", "Bool"],
     ["Int 123", "123"], ["Int32 123", "Int32 123"],
     ["UInt 123", "UInt 123"], ["UInt32 4294967295", "UInt32 4294967295"],
     ["Float 3", "3.0"], ["Float32 .5", "Float32 0.5"],

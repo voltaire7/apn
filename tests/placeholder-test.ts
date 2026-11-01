@@ -32,7 +32,7 @@ for (const [source, expected] of [
     ["foo =\n    42\nfoo", "42"],
     ["toAST [_]", '["[]","_"]'],
     ["head [1,_]", "1"],
-    ["match 1 [_ -> 7]", "7"],
+    ["1 ~ [_ -> 7]", "7"],
     ["f _ = 7\nf missing", "7"],
     ["(_ -> 7) missing", "7"],
 ]) {

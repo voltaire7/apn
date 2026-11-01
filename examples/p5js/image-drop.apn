@@ -10,7 +10,7 @@ Msg = Drop file.File | Hover
 
 init = [Message "Drag an image file onto the canvas.", browser.none]
 
-update msg shown = match msg [
+update msg shown = msg ~ [
     Drop f -> [
         startsWith "image/" f.mime ? Dropped f.url : Message "Not an image file!"
         browser.none
@@ -27,7 +27,7 @@ view shown = div [
 
 setup (Sketch p) = p.createCanvas 710 400
 
-draw shown (Sketch p) = match shown [
+draw shown (Sketch p) = shown ~ [
     Dropped url -> p.call "image" [url,0,0,p.width,p.height]
     Message message -> {
         p.background 100

@@ -31,7 +31,7 @@ Deno.test("event messages are lazy and failed updates leave the old model usable
     const counter = app(`import "html"
 import "browser"
 HtmlTestMsg = GoodEvent | BadEvent
-update msg model = match msg [GoodEvent -> model + 1, BadEvent -> missing]
+update msg model = msg ~ [GoodEvent -> model + 1, BadEvent -> missing]
 view model = div [] [
     button [onClick GoodEvent] [text (to String model)]
     button [onClick BadEvent] [text "bad"]

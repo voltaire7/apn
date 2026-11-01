@@ -28,7 +28,7 @@ _splitOn delimiter text = {
 }
 # Joined as strings, not characters: a string's ++ is one step.
 joinWith delimiter xs = String {
-    match xs [
+    xs ~ [
         [] -> ""
         first :: rest -> foldl (joined, x -> joined ++ delimiter ++ x) first rest
     ]

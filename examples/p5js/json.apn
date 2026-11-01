@@ -25,7 +25,7 @@ init = [
 # The bubbles a JSON file lists.
 load text model = { model.bubbles = List Bubble (from JSON text); model }
 
-update msg model = match msg [
+update msg model = msg ~ [
     Loaded text -> [load text model, browser.none]
     # A file the visitor picked, read as text.
     Picked (picked :: _) -> [model, http.get [url: picked.url, expect: http.expectString Read]]

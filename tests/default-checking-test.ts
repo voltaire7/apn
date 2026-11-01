@@ -47,7 +47,7 @@ for (const [source, expected] of [
     ['Point = [x: Float, y: Float]\nShape = | Path (List Point)\nPath [[x: 1, y: 2]]', 'Path [[x: 1.0, y: 2.0]]'],
     ['browser = import "browser"\nMsg = Resized browser.Viewport | Other\nResized [width: 1, height: 2]', 'Resized [width: 1, height: 2]'],
     // A constructor pattern on a Dynamic field is checked when it runs.
-    ['import "option"\nMsg = More | Got Dynamic\nf msg = match msg [More -> 0, (Got (Ok q)) -> q, (Got (Err _)) -> 1]\nf (Got (Ok 5))', '5'],
+    ['import "option"\nMsg = More | Got Dynamic\nf msg = msg ~ [More -> 0, (Got (Ok q)) -> q, (Got (Err _)) -> 1]\nf (Got (Ok 5))', '5'],
     // More clauses are a new version: label keeps the clauses it saw.
     ['describe 0 = "zero"; label x = describe x; describe 1 = "one"; [describe 1, label 0]', '["one","zero"]'],
     // h keeps the c it was written with; a later c is another version.
@@ -60,7 +60,7 @@ for (const [source, expected] of [
     ['xs = [1,2]; xs = map (+ 1) xs; xs', '[2,3]'],
     ['v = { xs = [1,2]; xs = get xs 1; xs }; v', '2'],
     // A definition written with lambdas is checked as the clause with those parameters.
-    ['append = Vect n a xs -> Vect m a ys -> Vect (n + m) a {\n    match xs [\n        [] -> ys\n        x::xs -> x :: append xs ys\n    ]\n}\ntypeOf (append [] [3])', 'Vect 1 Int'],
+    ['append = Vect n a xs -> Vect m a ys -> Vect (n + m) a {\n    xs ~ [\n        [] -> ys\n        x::xs -> x :: append xs ys\n    ]\n}\ntypeOf (append [] [3])', 'Vect 1 Int'],
     // A record schema applied to a value not known yet converts it at runtime.
     ['Quote = [quote: String, year: Int]\nconv r = Quote r\n(conv [year: 2]).year', '2'],
     ['Quote = [quote: String, year: Int]\n(Quote (Dynamic [quote: "q", year: 1])).quote', '"q"'],
@@ -92,7 +92,7 @@ for (const source of [
     'f x = x == 0 ? 1 : x * x; f (Dynamic 2)',
     'Vect 2 Int [1]',
     'f g = [g 1, g "a"]; f (x -> 0)',
-    'bad = Vect n a xs -> Vect m a ys -> Vect (n + m + 1) a {\n    match xs [\n        [] -> ys\n        x::xs -> x :: bad xs ys\n    ]\n}',
+    'bad = Vect n a xs -> Vect m a ys -> Vect (n + m + 1) a {\n    xs ~ [\n        [] -> ys\n        x::xs -> x :: bad xs ys\n    ]\n}',
     'Quote = [quote: String, year: Int]; from Quote [quote: "q", year: 1]',
     'Quote = [quote: String, year: Int]; to Quote [year: "x"]',
     '"ab" * c -> c + 1',
@@ -119,13 +119,13 @@ for (const source of [
 // clauses) has either type, as a list's items do: used where every one fits,
 // or narrowed by a pattern. Where the checker knows which is taken, it is that.
 const choices = 'import "time"\nt <- currentTime\nfunc x = x ? "yes" : False\n' +
-    'h x = match x [\n    0 -> "zero"\n    _ -> False\n]\ng 0 = "zero"\ng _ = False\n';
+    'h x = x ~ [\n    0 -> "zero"\n    _ -> False\n]\ng 0 = "zero"\ng _ = False\n';
 for (const [source, expected] of [
     ['[func True, func False, h 0, h 1, g 0, g 1]', '["yes",False,"zero",False,"zero",False]'],
     ['[func (t > 0) == "yes", (t > 0 ? 1 : 2.5) + 1 > 0]', '[True,True]'],
     ['func True ++ "!"', '"yes!"'],
     ['d (String s) = s ++ "!"; d (Bool b) = b ? "T" : "F"; [d (func (t > 0)), d (h t), d (g t)]', '["yes!","F","F"]'],
-    ['match (func (t > 0)) [\n    String s -> s ++ "!"\n    _ -> "no"\n]', '"yes!"'],
+    ['func (t > 0) ~ [\n    String s -> s ++ "!"\n    _ -> "no"\n]', '"yes!"'],
     ['[h 0 ++ "!", g 0 ++ "!"]', '["zero!","zero!"]'],
     ['xs = [1,"a"]; d (Int n) = n + 1; d (String s) = s ++ "!"; map d xs', '[2,"a!"]'],
     // A held value may be either: Pair 1 "a" or Pair true 'c' is Pair (Int | Bool) (String | Char).
@@ -135,10 +135,10 @@ for (const [source, expected] of [
     // The branches do not decide x where its other uses do: x > 0 keeps it a number.
     ['k x = x > 0 ? x : "neg"; [k 1 + 1, k -1]', '[2,"neg"]'],
     // A ternary is a match: a value known to take one alternative checks only it.
-    ['match True [True -> 1, False -> "a" + 1]', '1'],
-    ['x = 2\nmatch x [1 -> "one", n -> n + 1] + 1', '4'],
+    ['True ~ [True -> 1, False -> "a" + 1]', '1'],
+    ['x = 2\n(x ~ [1 -> "one", n -> n + 1]) + 1', '4'],
     // The one it takes is the most specific that fits, as among clauses.
-    ['match 0 [n -> "any", 0 -> 5] + 1', '6'],
+    ['(0 ~ [n -> "any", 0 -> 5]) + 1', '6'],
 ] as const) Deno.test(`a choice has either type: ${source}`, () => {
     const actual = run(session(), choices + source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -158,14 +158,14 @@ for (const source of [
     'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\napply (Handler (s -> s ++ "!")) 5',
     'Handler a = | Handler (a -> String)\nh = Handler (s -> s ++ "!")\nHandler f = h\nf 5',
     // A function matching its parameters is its alternatives as clauses.
-    'd = x -> match x [0 -> 1]\nd 5',
-    'add x y = match [x,y] [[0,b] -> b, [a,b] -> a + b]\nadd 0 "a" + 1',
+    'd = x -> x ~ [0 -> 1]\nd 5',
+    'add x y = [x,y] ~ [[0,b] -> b, [a,b] -> a + b]\nadd 0 "a" + 1',
     // A statement of a do-block is an action whichever branch is taken.
     'f x = x ? print "yes" : False\nk y = {\n    f y\n    print 2\n}',
     // Alternatives' lists of one type keep it, lengths included, as branches' do.
     'pick b a c = b ? [map (x -> x) a, c] : [map (x -> x) a, c]\nsum3 [[x],[y,z]] = x + y + z\n' +
         'k n = sum3 (pick (n > 0) [1,2] [1,2])',
-    'pick b a c = match b [True -> [map (x -> x) a, c], _ -> [map (x -> x) a, c]]\n' +
+    'pick b a c = b ~ [True -> [map (x -> x) a, c], _ -> [map (x -> x) a, c]]\n' +
         'sum3 [[x],[y,z]] = x + y + z\nk n = sum3 (pick (n > 0) [1,2] [1,2])',
 ]) Deno.test(`a choice is used as every type it may be: ${source}`, () => rejected(session(), choices + source));
 
@@ -266,8 +266,8 @@ for (const [source, expected] of [
     ['x (x::xs) = 42; x [x]', '42'],
     // A [] inside a pattern tests that part without making the argument empty.
     ['g [[],y] = y; g [(x::_),_] = x; g [[1,2],3]', '1'],
-    ['j xs ys = match [xs,ys] [[[],r] -> r, [(x::m),r] -> x :: j m r]; j [1,2] [3]', '[1,2,3]'],
-    ['f xs = match xs [[] -> 0, [_] -> 1, _ -> 2]; [f [], f [1], f [1,2]]', '[0,1,2]'],
+    ['j xs ys = [xs,ys] ~ [[[],r] -> r, [(x::m),r] -> x :: j m r]; j [1,2] [3]', '[1,2,3]'],
+    ['f xs = xs ~ [[] -> 0, [_] -> 1, _ -> 2]; [f [], f [1], f [1,2]]', '[0,1,2]'],
     // A free name in a typed pattern binds what the value has there.
     ['f ((List _) xs) = xs; f [1,2]', '[1,2]'],
     ['k ((List a) xs) = a; k [1,"x"]', 'Int | String'],

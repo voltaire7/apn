@@ -32,7 +32,7 @@ for (const checked of [false, true]) {
                 "f [x: first, _: rest] = [_: rest, x: first]; f [x: 1, y: 2]",
                 "[y: 2, x: 1]",
             ],
-            ["match [y: 2] [[x: a, _: r] -> a, _ -> 0]", "0"],
+            ["[y: 2] ~ [[x: a, _: r] -> a, _ -> 0]", "0"],
             ["f [x: a, _: r] = a; f [y: b, _: r] = b; f [y: 2]", "2"],
             ["f [x: first, _: rest] = rest; f [x: 1, y: 2]", "[y: 2]"],
             ["f [x: first, _: rest] = rest.y; f [x: 1, y: 2]", "2"],

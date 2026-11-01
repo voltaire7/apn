@@ -8,7 +8,7 @@ Msg = Pick | DragEnter | DragLeave | GotFiles file.File (List file.File)
 
 init = [[hover: False, files: []], browser.none]
 
-update msg model = match msg [
+update msg model = msg ~ [
     Pick -> [model, file.selectFiles ["image/*"] GotFiles]
     DragEnter -> { model.hover = True; [model,browser.none] }
     DragLeave -> { model.hover = False; [model,browser.none] }

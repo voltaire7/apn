@@ -112,7 +112,7 @@ _translate x y = "translate(" ++ _point x y ++ ")"
 _centered width height = svg.transform (_translate (0 - width / 2) (0 - height / 2))
 _placing x y angle size = _translate x (0 - y)
     ++ " rotate(" ++ _number (0 - angle) ++ ") scale(" ++ _number size ++ ")"
-_render shape = match shape [
+_render shape = shape ~ [
     Placed x y angle size alpha inner -> svg.g [
         svg.transform (_placing x y angle size)
         svg.opacity (_number (clamp 0 1 alpha))
@@ -189,7 +189,7 @@ GameMsg =
 _updateKeyboard isDown key keyboard = {
     others = filter (k -> k != key) keyboard.keys
     keyboard.keys = isDown ? key :: others : others
-    match key [
+    key ~ [
         " " -> keyboard [space: isDown]
         "Enter" -> keyboard [enter: isDown]
         "Shift" -> keyboard [shift: isDown]
@@ -203,7 +203,7 @@ _updateKeyboard isDown key keyboard = {
 }
 _advance updateMemory msg game = {
     computer = game.computer
-    match msg [
+    msg ~ [
         GameTick time -> {
             game.memory = updateMemory computer game.memory
             computer.time = posixToMillis time

@@ -108,17 +108,17 @@ Deno.test("functions echo as the interpreter renders them", () => {
     if (echo(interp, value).replace(/\x1b\[[0-9;]*m/g, "") !== "y -> 1 + y") throw new Error(echo(interp, value));
 });
 
-Deno.test("REPL colors match and return as it colors import, load and use", () => {
+Deno.test("REPL colors return as it colors import, load and use", () => {
     const color = (word: string) => highlightLine(word).match(/^\x1b\[[0-9;]*m/)?.[0];
-    for (const word of ["match", "return", "load", "use"]) {
+    for (const word of ["return", "load", "use"]) {
         if (color(word) !== color("import")) throw new Error(`${word}: ${JSON.stringify(highlightLine(word))}`);
     }
 });
 
 Deno.test("the web editor's HTML escapes tokens after coloring them", () => {
-    const html = highlightHtml('f x = match x [\n    1 -> "<b>"\n]', new Set());
+    const html = highlightHtml('f x = x ~ [\n    1 -> "<b>"\n]', new Set());
     if (!html.includes('<span class="t-operator">-&gt;</span>') || !html.includes('<span class="t-string">"&lt;b&gt;"</span>')) throw new Error(html);
-    if (!html.includes('<span class="t-keyword">match</span>') || html.split("\n").length !== 3) throw new Error(html);
+    if (!html.includes('<span class="t-operator">~</span>') || html.split("\n").length !== 3) throw new Error(html);
 });
 
 Deno.test("a type's numeric arguments are colored as numbers", () => {

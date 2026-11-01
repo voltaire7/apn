@@ -324,15 +324,21 @@ export function boolSelection(e: Expr): CoreMatch | undefined {
     expansions.set(e, core);
     return core;
 }
-// match x [alternatives] written with one-parameter lambdas, whose match the
-// caller has found to be the builtin one. A lambda's parameter is a pattern
-// that is a name (n -> n + 1).
+// x ~ [alternatives] (or (~) x [alternatives], or f x [...] for an f the
+// caller has found to be the builtin ~) written with one-parameter lambdas. A
+// lambda's parameter is a pattern that is a name (n -> n + 1).
 const namedAlternatives = new WeakMap<Expr, PatternLambda>();
+export function matchOperands(e: Expr): { head: string; value: Expr; alternatives: Expr } | undefined {
+    if (e.t === "binop" && e.op === "~") return { head: "~", value: e.l, alternatives: e.r };
+    if (e.t === "app" && e.f.t === "app" && e.f.f.t === "var") return { head: e.f.f.name, value: e.f.a, alternatives: e.a };
+    return undefined;
+}
 export function writtenMatch(e: Expr): CoreMatch | undefined {
-    if (e.t !== "app" || e.f.t !== "app" || e.f.f.t !== "var" || e.a.t !== "list" || !e.a.v.length) return undefined;
+    const operands = matchOperands(e);
+    if (!operands || operands.alternatives.t !== "list" || !operands.alternatives.v.length) return undefined;
     if (expansions.has(e)) return expansions.get(e);
     const alternatives: PatternLambda[] = [];
-    for (const x of e.a.v) {
+    for (const x of operands.alternatives.v) {
         if (x.t === "patternLambda" && x.params.length === 1) alternatives.push(x);
         else if (x.t === "lambda" && x.params.length === 1) {
             let named = namedAlternatives.get(x);
@@ -346,22 +352,22 @@ export function writtenMatch(e: Expr): CoreMatch | undefined {
             alternatives.push(named);
         } else return undefined;
     }
-    const core = { value: e.f.a, alternatives };
+    const core = { value: operands.value, alternatives };
     expansions.set(e, core);
     return core;
 }
 
-// A function whose body matches its parameters in order (x -> match x
-// alternatives, or match [x, y] for two) is the function of the
+// A function whose body matches its parameters in order (x -> x ~
+// alternatives, or [x, y] ~ ... for two) is the function of the
 // alternatives as clauses: clauses are a match on the arguments. Not when
 // an alternative is guarded or reads a parameter, nor when two have
 // equivalent patterns (the later never runs; as clauses they would overload).
-// builtinMatch: whether match there is the builtin one.
+// builtinMatch: whether ~ there is the builtin one.
 export function matchedClauses(params: Pattern[], body: Expr, builtinMatch: boolean): { params: Pattern[]; body: Expr }[] | undefined {
     const names = params.map(p => p.p === "var" ? p.name : "");
-    if (!names.length || names.includes("") || new Set(names).size !== names.length || names.includes("match")) return undefined;
+    if (!names.length || names.includes("") || new Set(names).size !== names.length) return undefined;
     while (body.t === "block" && body.stmts.length === 1) body = body.stmts[0];
-    const written = builtinMatch && body.t === "app" && body.f.t === "app" && body.f.f.t === "var" && body.f.f.name === "match" ? writtenMatch(body) : undefined;
+    const written = builtinMatch && matchOperands(body)?.head === "~" ? writtenMatch(body) : undefined;
     if (!written) return undefined;
     const { value } = written, parameter = (e: Expr, n: number) => e.t === "var" && e.name === names[n];
     if (!(names.length === 1 && parameter(value, 0)) && !(value.t === "list" && value.v.length === names.length && value.v.every(parameter))) return undefined;

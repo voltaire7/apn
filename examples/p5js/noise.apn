@@ -11,7 +11,7 @@ Msg = Gap String | Offset String
 
 init = [[gap: 20, offset: 0], browser.none]
 
-update msg model = match msg [
+update msg model = msg ~ [
     Gap gap -> { model.gap = parseInt gap; [model,browser.none] }
     Offset offset -> { model.offset = parseInt offset; [model,browser.none] }
 ]

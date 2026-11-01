@@ -9,7 +9,7 @@ Msg = Typed String | Greet
 
 init = [[typing: "", name: ""], browser.none]
 
-update msg model = match msg [
+update msg model = msg ~ [
     Typed typing -> { model.typing = typing; [model,browser.none] }
     Greet -> [[typing: "", name: model.typing], browser.none]
 ]

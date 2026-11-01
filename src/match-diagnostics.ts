@@ -1,4 +1,4 @@
-import { clauseKey, isLoadCall, METHODS, sourceLocations, type Expr, type Pattern, type TopLevel } from "./ast.ts";
+import { clauseKey, isLoadCall, matchOperands, METHODS, sourceLocations, type Expr, type Pattern, type TopLevel } from "./ast.ts";
 import type { Diagnostic } from "./lint.ts";
 import { loadPath, readLoad, resolveModule } from "./modules.ts";
 import { parseDocument } from "./parser.ts";
@@ -126,21 +126,23 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
         }
     };
     const visit = (e: Expr, scope: Scope) => {
-        if (e.t === "app" && e.f.t === "app" && e.f.f.t === "var" && e.f.f.name === "match" && !scope.has("match") && e.a.t === "list") {
+        const written = matchOperands(e);
+        if (written?.head === "~" && !scope.has("~") && written.alternatives.t === "list") {
+            const alternativesList = written.alternatives;
             // Alternatives rank as clauses do: one of only lowest-ranking patterns
             // after one that takes any value never runs.
-            const alternatives = e.a.v.flatMap<Clause & { at: Expr }>(a => a.t === "patternLambda" ? [{ params: a.params, guard: a.guard, body: a.body, at: a }]
+            const alternatives = alternativesList.v.flatMap<Clause & { at: Expr }>(a => a.t === "patternLambda" ? [{ params: a.params, guard: a.guard, body: a.body, at: a }]
                 : a.t === "lambda" ? [{ params: a.params.map(name => ({ p: "var", name })), body: a.body, at: a }] : []);
             const first = alternatives.findIndex(takesAny);
             if (first >= 0) for (const alt of alternatives.slice(first + 1)) {
                 if (alt.params.every(ranksLowest)) unreachable(lineOf(alt.body) ?? lineOf(alt.at), "This alternative never runs: an earlier one takes any value.");
             }
-            const family = familyOf(e.f.a, scope);
+            const family = familyOf(written.value, scope);
             const variants = family && families.get(family);
-            if (variants && e.a.v.every(a => (a.t === "patternLambda" || a.t === "lambda") && a.params.length === 1)) {
+            if (variants && alternativesList.v.every(a => (a.t === "patternLambda" || a.t === "lambda") && a.params.length === 1)) {
                 const covered = new Set<string>();
                 let catchAll = false;
-                for (const alt of e.a.v) {
+                for (const alt of alternativesList.v) {
                     if (alt.t === "lambda") { catchAll = true; break; }
                     if (alt.t !== "patternLambda" || alt.guard) continue;
                     const pattern = alt.params[0];

@@ -1140,11 +1140,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return problem(`no from instance for ${text(target)}`, undefined, `define one, such as \`from ${text(target)} x = ...\``);
         }
         if (t.op === "match") {
-            if (b.k !== "list") return problem("match expects a list of alternatives");
+            if (b.k !== "list") return problem("~ expects a list of alternatives", undefined, "write x ~ [p -> a], one alternative in [ ]");
             const outputs: Ty[] = [];
             for (const candidate of b.items ?? [b.element]) {
                 const f = resolve(candidate);
-                if (f.k !== "fn") return problem("match alternatives must be functions");
+                if (f.k !== "fn") return problem("~ alternatives must be functions");
                 try {
                     if (f.pattern?.p === "as" || f.pattern?.p === "schema" || f.pattern?.p === "recPat") application(copy(f), { type: copy(a) }, activeExpression ?? { t: "placeholder" });
                     else unify(copy(f.input), copy(a));
@@ -3508,7 +3508,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     infer(e.a, inner);
                     return io(list(variable(), constant(0n)));
                 }
-                const written = e.t === "app" && e.f.t === "app" && e.f.f.t === "var" && e.f.f.name === "match" && scope.get("match")?.builtin && preludeCons(scope) ? writtenMatch(e) : undefined;
+                const written = e.t === "app" && e.f.t === "app" && e.f.f.t === "var" && e.f.f.name === "~" && scope.get("~")?.builtin && preludeCons(scope) ? writtenMatch(e) : undefined;
                 if (written) return inferMatch(written, e, scope);
                 const selection = boolSelection(e);
                 if (selection && preludeSelection(selection, scope)) return inferMatch(selection, e, scope);
@@ -3840,6 +3840,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     // overloads a prelude operator falls back to its builtin
                     // meaning for operands its clauses do not accept.
                     const call = operatorCall(e);
+                    // A length claim around x ~ [...] is the call's.
+                    if (matchClaims.has(e)) matchClaims.set(call, matchClaims.get(e)!);
                     // (::) = Cons rebinds the operator; it does not overload it.
                     if (!PRELUDE_OPERATORS.has(e.op) || constructorOperators.has(e.op)) return infer(call, scope, expected);
                     const l = infer(e.l, scope), r = infer(e.r, scope);
@@ -5454,7 +5456,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (cell.program) programCells.add(cell);
             return { mutable: cell };
         }
-        if (head.name === "match" && builtin && args.length === 2 && args[1].t === "list" && preludeCons(scope)) {
+        if (head.name === "~" && builtin && args.length === 2 && args[1].t === "list" && preludeCons(scope)) {
             const written = writtenMatch(e);
             return written && evaluateMatch(written, env, scope, depth);
         }
@@ -6246,7 +6248,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : p.p === "constr" && p.args.length === 1 && p.args[0].p === "var" ? { name: p.args[0].name, exact: false }
             : { exact: false });
         const shape = shapeOf(body, named, scope);
-        const summary: Summary = { scope: parent, clauses: (matchedClauses(params, body, !!parent.get("match")?.builtin) ?? [{ params, body }]).map((c, index) => {
+        const summary: Summary = { scope: parent, clauses: (matchedClauses(params, body, !!parent.get("~")?.builtin) ?? [{ params, body }]).map((c, index) => {
             const all = c.params.flatMap(patternNames);
             return { index, params: c.params, body: c.body, refutable: new Set([...recursiveName ? [recursiveName] : [], ...all.filter((x, n) => all.indexOf(x) !== n)]) };
         }) };
@@ -6267,7 +6269,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return t.k === "variant";
     }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
-        clauses = clauses.flatMap(c => matchedClauses(c.params, c.body, !!scope.get("match")?.builtin) ?? [c]).map(c => ({ ...c, params: c.params.map(p => typed(p, scope)) }));
+        clauses = clauses.flatMap(c => matchedClauses(c.params, c.body, !!scope.get("~")?.builtin) ?? [c]).map(c => ({ ...c, params: c.params.map(p => typed(p, scope)) }));
         // Index claims (Vec (n + m) a ys) are proven by induction where they
         // can be; a wrong one is an error here, whether or not it is called.
         if (indexedFamilies.size) {
@@ -6751,7 +6753,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("Z", { type: atom("UInt"), number: { kind: "int", v: 0n, typeName: "UInt" } });
     scope.set("S", { type: fn(atom("UInt"), atom("UInt"), undefined, true) });
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
-    scope.set("match", { type: { k: "intrinsic", name: "match", arity: 2 } });
+    for (const name of ["~", "intrinsics.match"]) scope.set(name, { type: { k: "intrinsic", name: "match", arity: 2 } });
     for (const name of ["tag", "intrinsics.tag"]) scope.set(name, { type: { k: "intrinsic", name: "tag", arity: 3 } });
     scope.set("intrinsics.union", { type: { k: "intrinsic", name: "union", arity: 1 } });
     for (const name of ["get", "intrinsics.get"]) scope.set(name, { type: { k: "intrinsic", name: "get", arity: 2 } });

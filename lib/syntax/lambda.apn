@@ -79,7 +79,7 @@ _definition bound [["=",left,right]] = _isDefinition left
     : _lambda bound right
 _definition bound clauses = _function bound (map (["=",left,right] -> [tail left, right]) clauses)
 # One clause of plain names is a curried lambda; anything else matches its
-# arguments: f (Some x) y = ... is _1 -> _2 -> match [_1,_2] [[Some x, y] -> ...].
+# arguments: f (Some x) y = ... is _1 -> _2 -> ([_1,_2] ~ [[Some x, y] -> ...]).
 _function bound [[params,body]] = all _isPlain params
     ? _curry bound params body
     : _matching bound [[params,body]]
@@ -90,7 +90,7 @@ _matching bound clauses = {
     one = arity == 1
     subject = one ? head names : "[]" :: names
     cases = map ([params,body] -> ["->", [one ? head params : "[]" :: params], body]) clauses
-    _curry bound names ["match", subject, "[]" :: cases]
+    _curry bound names ["~", subject, "[]" :: cases]
 }
 _y = ["->",["f"],[["->",["x"],["f",["x","x"]]],["->",["x"],["f",["x","x"]]]]]
 

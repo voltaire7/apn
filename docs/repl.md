@@ -22,7 +22,7 @@ shares its terminal setup and the input typed ahead. Interactive features:
   load; needs `--allow-write` and `--allow-env=HOME`, else in-session only
   with a one-time hint).
 - **Tab**: completes the word before the cursor from bound names (env walk),
-  natives (`NATIVES` — same table that registers them), `match`, and
+  natives (`NATIVES` — same table that registers them), and
   `:commands`. One match completes; several extend the common prefix and a
   second Tab lists them. With no word (or no candidates) Tab inserts
   **4 spaces** — the indent unit; Backspace behind a full indent level
@@ -50,7 +50,7 @@ shares its terminal setup and the input typed ahead. Interactive features:
 - **Colors** (Catppuccin Frappé palette, truecolor): input is highlighted as
   typed, by the tokenizer the language server and the web editor share
   (`src/highlight.ts`) (comments overlay0, strings/chars green, numbers yellow,
-  keywords (`import`, `load`, `use`, `match`, `do`, `return`) and bools mauve,
+  keywords (`import`, `load`, `use`, `do`, `return`) and bools mauve,
   natives blue, capital idents sky,
   punctuation overlay1, operators peach); echoed values are colored by kind with
   gray structure (brackets, colons, commas; keys plain, variant tags sky);

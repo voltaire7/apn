@@ -14,7 +14,7 @@ for (const [source, expected] of [
     ['loop n = n == 0 ? 42 : { next = n - 1; loop $ next }; loop 10000', '42'],
     ['loop n ignored = n == 0 ? 42 : loop (n - 1) missing; loop 10000 missing', '42'],
     ['loop n = n == 0 ? [42,missing] : loop (n - 1); head (loop 10000)', '42'],
-    ['loop n = match n [0 -> 42, k | k > 0 -> loop (k - 1)]; loop 100000', '42'],
+    ['loop n = n ~ [0 -> 42, k | k > 0 -> loop (k - 1)]; loop 100000', '42'],
     // A ternary is Bool c a b as written there: clauses for get the program
     // adds for a Bool are the ones it uses.
     ['get True a = _ -> "mine"; f n = n ? "yes" : "no"; [f 0, f [1]]', '["no","mine"]'],

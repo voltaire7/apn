@@ -209,9 +209,9 @@ print (double v)
 example("cons and exact-list patterns inspect only needed structure", `
 first (x::xs) = x
 print (first (8::missing))
-print (match [1,missing] [[x,y] -> x])
-print (match (1::missing) [[] -> 0, x::xs -> x])
-print (match [1..] [[x] -> 0, x::xs -> x])
+print ([1,missing] ~ [[x,y] -> x])
+print (1::missing ~ [[] -> 0, x::xs -> x])
+print ([1..] ~ [[x] -> 0, x::xs -> x])
 `, ["8", "1", "1", "1"]);
 
 example("variant fields are lazy", `
@@ -328,7 +328,7 @@ for (const [name, source, prefix] of [
 }
 
 example("a wildcard match does not evaluate its scrutinee",
-    "print (match missing [_ -> 7])", ["7"]);
+    "print (missing ~ [_ -> 7])", ["7"]);
 
 example("cached partial applications can be interleaved and reused", `
 add a b = a + b
@@ -466,7 +466,7 @@ one (x::[]) = x
 lam = (x::rest) -> rest
 print [f [1,2], g [3,4], one [5], lam [6,7]]`, ["[[2],[4],5,[7]]"]);
 example("boolean literal patterns", `
-h x = match x [False -> "f", True -> "t"]
+h x = x ~ [False -> "f", True -> "t"]
 f True = 1
 f b = 2
 print [h False, h True, f True, f False]`, ['["f","t",1,2]']);
@@ -476,7 +476,7 @@ f 1.5 = "one and a half"
 f 2.0 = "two"
 f x = "other"
 print [f 'a', f 'b', f 1.5, f 2, f 2.0, f 7]
-print (match 'z' ['a' -> 1, 'z' -> 2, _ -> 3])`, ['["letter a","other","one and a half","two","two","other"]', "2"]);
+print ('z' ~ ['a' -> 1, 'z' -> 2, _ -> 3])`, ['["letter a","other","one and a half","two","two","other"]', "2"]);
 
 // A literal on the left of '=' is a pattern, as inside one; a failed match
 // is an error (before the run, when checking knows the value).
@@ -562,7 +562,7 @@ print (f 4)`, ["[[3],[12]]", "12", "[5,0]", "8"]);
 example("a typed pattern headed by a free name takes a type apart", `
 (t1 1 t2 -> print [t1,t2]) (Vect 1 Int)
 (t1 n t2 -> print [t1,n,t2]) (Vect 3 Float)
-print (match (Vect 1 Int) [t1 2 t2 -> "two", t1 1 t2 -> "one"])
+print (Vect 1 Int ~ [t1 2 t2 -> "two", t1 1 t2 -> "one"])
 shape (t1 1 t2) = [t1,t2]
 parts (Vect n a) = [n,a]
 print [shape (Vect 1 Int), parts (Vect 3 Float)]

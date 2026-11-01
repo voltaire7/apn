@@ -5,7 +5,7 @@ browser = import "browser"
 
 Msg = Name String | Password String | PasswordAgain String
 
-update msg model = match msg [
+update msg model = msg ~ [
     Name name -> model [name: name]
     Password password -> model [password: password]
     PasswordAgain password -> model [passwordAgain: password]

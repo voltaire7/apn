@@ -79,7 +79,7 @@ const builtins = new Map<string, string>([
     ["cast", "cast Type value — APN prelude compatibility wrapper for lossless Type application."],
     ["use", "use namespace — open a record or list of records in the current scope; later fields win; returns ()."],
     ["do", "do statements — the block with those statements: do [a, b] is { a; b }; do [] is {}."],
-    ["match", "match value alternatives — the most specific unary pattern function that fits."],
+    ["~", "value ~ [alternatives] — the most specific unary pattern function that fits, as among clauses."],
     ["assert", "assert c x — x once c holds, as Haskell's; a failure reports the expression of c and its source location."],
     ["bracket", "bracket acquire release use — action; finishes returned data before cleanup, even on failure (function)."],
     ["withFile", "withFile path use — action scoping a UTF-8 file reader; the callback receives the action file.read (io)."],
