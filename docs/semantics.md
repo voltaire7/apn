@@ -759,9 +759,12 @@ holds, as Haskell's). Two statements are dropped instead: `[]`, the unit (what
 `print` yields; inside a list do-block it is chained), and one opening a
 module. What the check cannot decide (a parameter's result) is checked when
 the statement runs. A do-block's last statement must itself be an action,
-whose result the block yields (end with `return x` to yield a plain value), or
-a binding, which yields what it binds, as in a block of bindings, which stays
-an ordinary value:
+whose result the block yields: end with `return x` to yield a plain value. The
+unit ends an action too (`print 1 >> []` prints and yields `[]`), so a block
+ending in a binding, which `{}` follows (`{ x = e }` is `(x -> {}) e`), yields
+`[]`: `{ x = 1 }` is `[]`, `{ print 1; x = 5 }` an action yielding `[]`, and a
+list block so ending is the empty list. A block of bindings stays an ordinary
+value:
 
 ```apn
 area w h = {

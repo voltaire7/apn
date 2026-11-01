@@ -570,8 +570,8 @@ print [typeOf shape, typeOf parts]`, ["[Vect,Int]", "[Vect,3,Float]", "one", "[[
 
 // A file is a block, run once: the same statement rules, and a block holds
 // everything a file does, its types declared for it alone.
-example("a do-block may end in a binding, yielding what it binds",
-    "a = {\n    print 1\n    y = 5\n}\nx <- a\nprint x", ["1", "5"]);
+example("a block ending in a binding is followed by {}: it yields []",
+    "a = {\n    print 1\n    y = 5\n}\nx <- a\nprint [x, { y = 1 }]", ["1", "[[],[]]"]);
 example("a file may end in a binding after its actions",
     "print 1\nx = 5", ["1"]);
 failure("a file's statement that binds nothing is an action, as a block's",

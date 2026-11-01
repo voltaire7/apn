@@ -50,7 +50,7 @@ for (const checked of [false, true]) {
             ["v = [x: 0]; v.x = 1; v", "[x: 1]"],
             ["v = [x: 1, y: 2]; v.[x,y] = v.[y,x]; v", "[x: 2, y: 1]"],
             ["v = [child: [x: 0]]; v.child.x = 1; v.child.x", "1"],
-            ["v = [x: 1]; [{ v.x = 2 }, v.x]", "[[x: 2], 1]"],
+            ["v = [x: 1]; [{ v.x = 2; v.x }, v.x]", "[2,1]"],
             ["f v.x = 42; f (Dynamic missing)", "42"],
             ["v.x = Dynamic missing; 42", "42"],
             ["f v.(x::xs) = x; f [1..]", "1"],

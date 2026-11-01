@@ -1003,6 +1003,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const next = op === "then" ? other : application(other, { type: value }, at);
         const shape = rebuild(container, variable());
         if (container.k === "list") { unify(list((shape as Extract<Ty, { k: "list" }>).element), next); return list(monadHeld(next) ?? variable()); }
+        // [], the unit (what print yields), ends an action: print 1 >> [].
+        const r = resolve(next);
+        if (isIO(container) && r.k === "list" && (r.items?.length === 0 || !!r.length && !r.length.terms.size && r.length.constant === 0n)) return io(r);
         unify(shape, next);
         return isPending(resolve(next)) ? io(monadHeld(next) ?? variable()) : next;
     }
@@ -3881,7 +3884,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "block": {
                 const child: Scope = new BlockScope(scope);
-                let result: Ty = list(dynamic, constant(0n)), action = false;
+                let result: Ty = list(variable(), constant(0n)), action = false;
                 const block: { monad?: Ty } = {};
                 const discards: Array<[Expr, Ty]> = [];
                 doBlocks.push(block);
@@ -3910,20 +3913,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     }
                 } finally { doBlocks.pop(); }
                 for (const [s, type] of discards) discarded(s, type, block.monad);
-                if (!action) return bindingValue(e.stmts[e.stmts.length - 1], child) ?? result;
+                // A binding last is followed by {}: { x = 1 } is (x -> {}) 1, [].
+                const last = e.stmts[e.stmts.length - 1], unit = list(variable(), constant(0n));
+                const endsInBinding = !!last && (last.t === "patDef" || last.t === "stmDef" || last.t === "typeDef");
+                if (!action) return endsInBinding ? unit : result;
                 // The block's monad, for the run: a block of returns and guards
                 // takes it from here, as types decide in Haskell.
                 if (block.monad) recordMonad(e, monadKind(block.monad));
-                const last = e.stmts[e.stmts.length - 1];
-                const final = resolve(result), monad = block.monad && resolve(block.monad);
-                // A binding last yields what it binds, as in a block of bindings.
-                if (last.t === "patDef" || last.t === "stmDef" || last.t === "typeDef") {
-                    const bound = bindingValue(last, child) ?? variable();
-                    if (!monad || isIO(monad)) return monad ? io(bound) : pendingTy(bound);
-                    if (monad.k === "list") return list(bound);
-                    const v = monad as Extract<Ty, { k: "variant" }>;
-                    return { k: "variant", name: v.name, args: v.args.map((_, n) => n ? variable() : bound) };
-                }
+                const monad = block.monad && resolve(block.monad);
+                // [], the unit (what print yields), ends an IO block, as a binding
+                // last does (followed by {}); a list block's [] holds nothing.
+                const empty = (t: Ty) => t.k === "list" && (t.items?.length === 0 || !!t.length && !t.length.terms.size && t.length.constant === 0n);
+                const final = endsInBinding ? unit : resolve(result);
+                if (empty(final) && (!monad || isIO(monad))) return monad ? io(unit) : pendingTy(unit);
+                if (endsInBinding && monad && monad.k !== "list") return problem("the last statement of a do-block must be an action, not a binding", last, "end the block with an action, such as `return x`");
                 if (isExplicit(final)) return final;
                 const notAction = () => final.k === "variant" && monad && (isIO(final) || !!instanceFor(">>=", [final]))
                     ? problem(`${withArticle(monadKind(final))} value cannot run in ${withArticle(monadKind(monad))} do-block`, last)

@@ -1364,17 +1364,16 @@ export class Interpreter {
         const caller = this.env;
         this.env = new Env(env);
         try {
-            let r: Value = { kind: "list", v: [] };
             for (let i = start; i < e.stmts.length; i++) {
                 const s = e.stmts[i];
                 if (i === start && first) {
                     const result = this.runIO(first);
-                    r = s.t === "patDef" ? this.bindResult(s, result) : result;
-                    if (s.t !== "patDef") this.opens(result, s);
+                    if (s.t === "patDef") this.bindResult(s, result);
+                    else this.opens(result, s);
                 }
-                else if (s.t === "stmDef") r = this.evalDef(s.name, s.clauses);
-                else if (s.t === "typeDef") r = this.declare(s.def, this.env) ?? r;
-                else if (s.t === "patDef") r = this.evalPatBinding(s);
+                else if (s.t === "stmDef") this.evalDef(s.name, s.clauses);
+                else if (s.t === "typeDef") this.declare(s.def, this.env);
+                else if (s.t === "patDef") this.evalPatBinding(s);
                 else if (i < e.stmts.length - 1) {
                     const value = this.demand(this.eval(s));
                     this.dropped(s, value, false);
@@ -1384,12 +1383,14 @@ export class Interpreter {
                 else {
                     // The last statement is the action whose result the block yields.
                     const last = this.realize(this.eval(s), { kind: "type", name: "IO" });
+                    // [], the unit (what print yields), ends it as {} does.
+                    if (this.isList(last) && this.cell(last) === null) return last;
                     if (last.kind !== "io") throw new APNError("runtime", `the last statement of a do-block must be an action, not a ${last.kind}`, { hint: "`return x` is the action yielding `x`" });
                     return new IOTail(last);
                 }
             }
-            // A binding last yields what it binds, as in a block of bindings.
-            return r;
+            // A binding last is followed by {}, the unit: [].
+            return mkList([]);
         } finally { this.env = caller; }
     }
 
@@ -1660,9 +1661,10 @@ export class Interpreter {
                             r = { kind: "list", v: [] };
                             for (let si = 0; si < e.stmts.length; si++) {
                                 const s = e.stmts[si];
-                                if (s.t === "stmDef") { r = this.evalDef(s.name, s.clauses); continue; }
-                                if (s.t === "typeDef") { r = this.declare(s.def, this.env) ?? r; continue; }
-                                if (s.t === "patDef" && !(s.eager && s.value.t !== "import" && !(s.update && this.env.get(s.update.name)))) { r = this.evalPatBinding(s); continue; }
+                                // A binding last is followed by {}: { x = 1 } is (x -> {}) 1, [].
+                                if (s.t === "stmDef") { this.evalDef(s.name, s.clauses); r = mkList([]); continue; }
+                                if (s.t === "typeDef") { this.declare(s.def, this.env); r = mkList([]); continue; }
+                                if (s.t === "patDef" && !(s.eager && s.value.t !== "import" && !(s.update && this.env.get(s.update.name)))) { this.evalPatBinding(s); r = mkList([]); continue; }
                                 if (s.t !== "patDef" && si === e.stmts.length - 1) {
                                     forceResult = true;
                                     next = new TailCall(s, this.env);
@@ -3130,6 +3132,8 @@ export class Interpreter {
     private inMonad(v: Value, target: Value): Value {
         const made = this.realize(v, target), monad = this.monadTypeOf(this.force(made));
         if (monad && this.headOf(monad) === this.headOf(target)) return made;
+        // [], the unit (what print yields), ends an action: print 1 >> [].
+        if (this.headOf(target) === "IO" && this.isList(made) && this.cell(made) === null) return made;
         const head = this.headOf(target) ?? "monad";
         throw new APNError("runtime", `'>>=' needs a function giving ${head === "IO" ? "an action" : withArticle(head)}, not ${this.typeText(made)}`, {
             hint: head === "IO" ? "end the chain or block with an action, such as `return x`" : `give ${withArticle(head)} value, such as \`return x\``,
@@ -3167,17 +3171,15 @@ export class Interpreter {
         const lastAction = (what: string): never => {
             throw new APNError("runtime", `the last statement of a do-block must be an action, not ${what}`, { hint: "end the block with `return x`" });
         };
-        // bound: what the statement before bound, which a binding last yields.
-        const go = (scope: Env, from: number, given?: Value, bound?: Value): Value => {
+        const go = (scope: Env, from: number, given?: Value): Value => {
             const caller = this.env;
             this.env = scope;
             try {
                 for (let i = from; i < e.stmts.length; i++) {
                     const s = e.stmts[i], last = i === e.stmts.length - 1;
-                    if (s.t === "stmDef") { bound = this.evalDef(s.name, s.clauses); continue; }
+                    if (s.t === "stmDef") { this.evalDef(s.name, s.clauses); continue; }
                     if (s.t === "typeDef") { this.declare(s.def, this.env); continue; }
-                    if (s.t === "patDef" && !s.eager) { bound = this.evalPatBinding(s); continue; }
-                    bound = undefined;
+                    if (s.t === "patDef" && !s.eager) { this.evalPatBinding(s); continue; }
                     const m = given ?? (s.t === "patDef" ? this.reference(this.eval(s.value)) : this.demand(this.eval(s)));
                     given = undefined;
                     if (last) {
@@ -3202,10 +3204,12 @@ export class Interpreter {
                             this.env = child;
                             try { this.bindResult(binding, x); child = this.env; } finally { this.env = old; }
                         }
-                        return go(child, next, undefined, binding.t === "patDef" ? x : undefined);
+                        return go(child, next);
                     } });
                 }
-                return bound ? this.realize(this.pendingReturn(bound), target) : lastAction("nothing");
+                // A binding last is followed by {}: [], a value of a list monad only.
+                const unit = mkList([]);
+                return this.sameMonad(unit, target) ? unit : lastAction(e.stmts.length ? "a binding" : "nothing");
             } finally { this.env = caller; }
         };
         return go(new Env(env), start, first);

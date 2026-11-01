@@ -49,6 +49,10 @@ for (const [sugar, expansion] of [
     ["xs = {\n    x <- [1,2]\n    y <- [10,20]\n    return (x + y)\n}\nxs", "xs = [1,2] >>= x -> [10,20] >>= y -> return (x + y)\nxs"],
     ["v = {\n    a = 1\n    b = a + 1\n    [a,b]\n}\nv", "v = (a -> (b -> [a,b]) (a + 1)) 1\nv"],
     ["v = {\n    x = 1\n    x = x + 1\n    x\n}\nv", "v = (x -> (x -> x) (x + 1)) 1\nv"],
+    // A binding last is followed by {}, which is [].
+    ["v = { x = 1 }\nv", "v = (x -> {}) 1\nv"],
+    ["a = {\n    print 1\n    y = 5\n}\nr <- a\nr", "a = print 1 >> (y -> {}) 5\nr <- a\nr"],
+    ["v = {\n    x <- [1,2]\n    y = x\n}\nv", "v = [1,2] >>= x -> (y -> {}) x\nv"],
     ["c = Mutable 0\n{\n    set c 5\n    print c\n}", "c = Mutable 0\nset c 5 >> print c"],
 ] as const) for (const checked of [false, true]) {
     Deno.test(`sugar is its expansion${checked ? ", checked" : ""}: ${JSON.stringify(sugar)}`, () => {
