@@ -7,6 +7,22 @@ export const NUMERIC_TYPES = ["Int", "UInt", ...[8, 16, 32, 64, 128].flatMap((n)
 export const SCALAR_TYPES = new Set([...NUMERIC_TYPES, "String", "Char", "Bool"]);
 export const TYPE_NAMES = [...NUMERIC_TYPES, "Dynamic", "Vect", "Mutable", "Pointer", "HashMap", "Bool", "String", "Char", "List", "Record", "Function", "Type", "Variant", "IO"];
 const canonical = (name: string) => name === "Float64" ? "Float" : name;
+// The numeric types that hold others, each with what it holds of the rest.
+const HOLDERS: Record<string, (name: string) => boolean> = {
+    Number: () => true,
+    Real: name => name !== "Complex" && name !== "ComplexExact",
+    Integer: name => /^U?Int\d*$/.test(name),
+    Exact: name => !/^(Float|Complex$)/.test(name),
+    Inexact: name => /^(Float|Complex$)/.test(name),
+};
+// Whether every value of numeric type a is one of b: Int is within Integer,
+// Real and Exact; Integer within Real.
+export function numericWithin(a: string, b: string): boolean {
+    if (canonical(a) === canonical(b) || b === "Number") return true;
+    const concrete = NUMERIC_TYPES.filter(name => !HOLDERS[name]);
+    if (HOLDERS[a]) return concrete.filter(HOLDERS[a]).every(name => numericWithin(name, b));
+    return !!HOLDERS[b]?.(a);
+}
 export function numericType(value: Numeric): string {
     return value.typeName ?? (value.kind === "int" ? "Int" : value.kind === "float" ? "Float" : value.kind === "rational" ? "Fraction" : "Complex");
 }

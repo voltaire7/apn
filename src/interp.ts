@@ -13,7 +13,7 @@ import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { NATIVE_EXPORTS, RETIRED_NATIVES } from "./native-exports.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { bundledText, loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
-import { TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
+import { TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
@@ -1854,10 +1854,17 @@ export class Interpreter {
                 if (l.kind === "string" && r.kind === "string") return mkStr(l.v + r.v);
                 return bad();
             case "*": case "-": case "/": case "%": return bad();
-            case "<": return this.compare(l, r) < 0 ? mkBool(true) : mkBool(false);
-            case ">": return this.compare(l, r) > 0 ? mkBool(true) : mkBool(false);
-            case "<=": return this.compare(l, r) <= 0 ? mkBool(true) : mkBool(false);
-            case ">=": return this.compare(l, r) >= 0 ? mkBool(true) : mkBool(false);
+            case "<": case ">": case "<=": case ">=": {
+                // Types compare as the sets of their values: a <= b when
+                // every value of a is one of b, a < b when b has more.
+                const x = this.isTypeValue(l) ? this.asType(l) : undefined, y = x && this.isTypeValue(r) ? this.asType(r) : undefined;
+                if (x && y) {
+                    const [small, large] = op[0] === "<" ? [x, y] : [y, x];
+                    return mkBool(this.within(small, large) && (op.length === 2 || !this.within(large, small)));
+                }
+                const order = this.compare(l, r);
+                return mkBool(op === "<" ? order < 0 : op === ">" ? order > 0 : op === "<=" ? order <= 0 : order >= 0);
+            }
         }
         throw new APNError("runtime", `'${op}' has no builtin meaning`);
     }
@@ -1973,7 +1980,7 @@ export class Interpreter {
             const x = this.asType(a), y = this.asType(b);
             if (!x || !y) return false;
             // A bare constructor names a kind of type: typeOf [1] == List.
-            const bare = (t: Value) => t.kind === "type" && !t.arguments?.length && !t.description && !t.variable;
+            const bare = (t: Value) => t.kind === "type" && !t.arguments?.length && !t.description && !t.variable && !t.choices;
             const kind = (t: Value) => t.kind === "functionType" ? "Function" : t.kind === "type" ? t.name : undefined;
             if ((bare(x) || bare(y)) && x.kind !== "list" && y.kind !== "list") {
                 if (x.kind === "type" && y.kind === "type" && x.family && y.family) return x.family === y.family;
@@ -1982,7 +1989,9 @@ export class Interpreter {
             // Types with variables, functions or only a description compare by
             // their text, variables renamed in order; others structurally.
             const loose = (t: Value) => t.kind === "functionType" || t.kind === "type" && !!t.description || this.hasVariables(t);
-            if (!loose(x) && !loose(y)) return this.sameType(x, y);
+            // Others are equal when they have the same values (Int | String
+            // == String | Int, List Int == [] | Int :: List Int).
+            if (!loose(x) && !loose(y)) return this.sameType(x, y) || this.within(x, y) && this.within(y, x);
             return canonicalTypeText(this.writtenType(x)) === canonicalTypeText(this.writtenType(y));
         }
         a = this.dataValue(a); b = this.dataValue(b);
@@ -3747,6 +3756,96 @@ export class Interpreter {
         try { return this.asType(this.eval(e), variables); }
         catch (error) { if (error instanceof APNError) return undefined; throw error; }
         finally { this.env = caller; }
+    }
+
+    // Whether every value of type a is one of b (a <= b): a type is the set
+    // of its values. A union is within b when each of its types is; a type
+    // is within a union one of whose types holds it. List types compare as
+    // they unfold: [] within an alternative [], and a :: as within those
+    // whose head holds its head, its rest within the union of their rests.
+    // A pair met again holds, as its unfoldings never end (List Int <= Seq
+    // Int); one that fails is withdrawn.
+    within(a: Value, b: Value, met = new Set<string>()): boolean {
+        a = this.described(this.reference(a)); b = this.described(this.reference(b));
+        a = this.sharedType(a) ?? a; b = this.sharedType(b) ?? b;
+        if (this.sameType(a, b)) return true;
+        if (b.kind === "type" && !b.family && !b.arguments?.length && (b.name === "$any" || b.name === "Dynamic")) return true;
+        if (this.listShaped(a) && this.listShaped(b)) {
+            const key = `${this.typeKey(a)} <= ${this.typeKey(b)}`;
+            if (met.has(key)) return true;
+            met.add(key);
+            const others = this.unfold(b);
+            const holds = this.unfold(a).every(cell => {
+                if (!cell) return others.includes(null);
+                const head = this.reference(cell.head);
+                const heads = head.kind === "type" && head.choices && !head.choices.some(c => this.isList(c)) ? head.choices : [head];
+                return heads.every(h => {
+                    const fits = others.flatMap(other => other && this.within(h, other.head, met) ? [this.reference(other.tail)] : []);
+                    return fits.length > 0 && this.within(cell.tail, fits.length === 1 ? fits[0] : this.unionOf(fits), met);
+                });
+            });
+            if (!holds) met.delete(key);
+            return holds;
+        }
+        if (a.kind === "type" && a.choices) return a.choices.every(choice => this.within(choice, b, met));
+        if (b.kind === "type" && b.choices) {
+            if (b.choices.some(choice => !this.listShaped(this.reference(choice)) && this.within(a, choice, met))) return true;
+            const lists = b.choices.map(choice => this.reference(choice)).filter(choice => this.listShaped(choice));
+            return this.listShaped(a) && lists.length > 0 && this.within(a, this.unionOf(lists), met);
+        }
+        return a.kind === "type" && b.kind === "type" && !a.family && !b.family && !a.arguments?.length && !b.arguments?.length &&
+            NUMERIC_TYPES.includes(a.name) && NUMERIC_TYPES.includes(b.name) && numericWithin(a.name, b.name);
+    }
+    // The type a list's description names (typeOf [1,2] is [Int,Int]), read
+    // back as written; a type variable in it (List a) is any type.
+    private describedTypes = new Map<string, Value | null>();
+    private described(t: Value): Value {
+        if (t.kind !== "type" || !t.inspect || !t.description || t.name !== "List") return t;
+        let read = this.describedTypes.get(t.description);
+        if (read === undefined) {
+            read = null;
+            const caller = this.env;
+            try {
+                const scope = new Env(this.programEnv);
+                for (const name of t.description.match(/\b[a-z]\w*/g) ?? []) scope.setLocal(name, { kind: "type", name: "$any" });
+                const [statement] = parse(t.description);
+                this.env = scope;
+                if (statement?.t === "expr") read = this.asType(this.eval(statement.value)) ?? null;
+            } catch { read = null; } finally { this.env = caller; }
+            this.describedTypes.set(t.description, read);
+        }
+        return read ?? t;
+    }
+    // A type of lists: a list of types ([], [Int], [Int..]), List a, Vect n
+    // a, or a union of them.
+    private listShaped(t: Value): boolean {
+        return this.isList(t) || t.kind === "type" && (this.isListType(t) || !!this.counted(t) || !!t.choices?.every(c => this.listShaped(this.reference(c))));
+    }
+    // A list type's alternatives, one step unfolded: null for [], else a
+    // head type and the rest's type.
+    private unfold(t: Value): Array<{ head: Value; tail: Value } | null> {
+        t = this.reference(t);
+        if (t.kind === "type" && t.choices) return t.choices.flatMap(c => this.unfold(c));
+        if (t.kind === "type" && this.counted(t)) {
+            const [size, element] = this.vectorParts(t);
+            return this.unfold(mkList(Array.from({ length: Number(size) }, () => element)));
+        }
+        if (t.kind === "type") return [null, { head: t.arguments?.[0] ?? { kind: "type", name: "$any" }, tail: t }];
+        const cell = this.cell(t);
+        return [cell && { head: cell.head, tail: cell.tail }];
+    }
+    // A union made while comparing, known by its types' keys.
+    private unionOf(types: Value[]): Value {
+        return { kind: "type", name: `(${[...new Set(types.map(t => this.typeKey(t)))].sort().join(" | ")})`, choices: types };
+    }
+    // What a type is known by while comparing: a named one by its name (an
+    // unfolding makes it anew), another by itself.
+    private typeKeys = new WeakMap<object, number>();
+    private typeKeyCount = 0;
+    private typeKey(t: Value): string {
+        if (t.kind === "type" && (t.choices ? t.name : this.isListType(t))) return t.choices ? t.name : this.renderString(t);
+        if (!this.typeKeys.has(t)) this.typeKeys.set(t, ++this.typeKeyCount);
+        return `#${this.typeKeys.get(t)}`;
     }
 
     sameType(a: Value, b: Value, met = new Map<Value, Set<Value>>()): boolean {

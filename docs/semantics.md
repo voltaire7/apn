@@ -1643,6 +1643,21 @@ constructor it keeps its broad identity: `typeOf [1] == List` and
 makes: `Vect 3 Int == [Int,Int,Int]` is true. A description is not an enforced
 schema; use a typed pattern or contract when you need validation.
 
+A type is the set of its values, and types compare as sets. `a <= b` is
+containment, every value of `a` being one of `b` (`Int <= Number`,
+`typeOf [1,2,3] <= List Int`, `[Int..] <= List Int`, `Pairs Int <= List Int`);
+`a < b` is containment where `b` has more, and `>=`, `>` are the same turned
+round. `==` is having the same values, `a <= b` and `b <= a`: the order of a
+union does not matter (`Int | String == String | Int`), nor how it is written
+(`List Int == E` for `E = [] | Int :: List Int`; `Seq Int == List Int`), but a
+union is none of its members (`List Int == [Int]` is `False`), so
+`isType t x` is `typeOf x <= t` where `typeOf` is exact. Containment is decided
+as a type test is: unions alternative by alternative, list types as they
+unfold (a head within the heads it may be, the rest within their rests), a
+pair of types met again holding, as their unfoldings never end. A type
+variable in a description (`List a`) is any type. A union of list types may
+list written lists, `Two = [Int] | [Int,Int]` being `Int :: [] | Int :: [Int]`.
+
 ## Function types
 
 Where a type is expected, a lambda is read as the function type it spells out,

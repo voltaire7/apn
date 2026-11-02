@@ -31,6 +31,8 @@ for (const [source, expected] of [
     // A union of this shape is the list type, as the prelude's List is.
     ['Seq a = [] | a :: Seq a; f (Seq Int xs) = length xs; f [1,2]', '2'],
     ['[isType (List Int) [1,"a"], isType (List Int) [1..]]', '[False,True]'],
+    // Types compare as the sets of their values.
+    ['U = Int | String; V = String | Int; [U == V, typeOf [1,2] <= List Int, Int < Number]', '[True,True,True]'],
     // Another union of list types is unfolded when it runs.
     ['Pairs a = [] | a :: a :: Pairs a; f (Pairs Int xs) = length xs; f [1,2]', '2'],
     // Clauses typed by their lists' element types are overloads, in either order.

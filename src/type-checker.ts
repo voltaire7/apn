@@ -1219,6 +1219,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (t.op === "compare") {
             if (numeric(a) && numeric(b) || a.k === "atom" && b.k === "atom" && a.name === b.name && ["String", "Char"].includes(a.name)) return atom("Bool");
+            // Types compare as the sets of their values (Int <= Number); a
+            // written list of types is one ([Int] <= List Int).
+            const typed = (x: Ty): boolean => x.k === "type" || x.k === "atom" && x.name === "Type" || x.k === "list" && (x.items ? x.items.every(item => typed(resolve(item))) : typed(resolve(x.element)));
+            if (typed(a) && typed(b)) return atom("Bool");
             return problem(`cannot compare ${text(a)} and ${text(b)}`);
         }
         if (t.op === "++") {

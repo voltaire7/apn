@@ -557,6 +557,21 @@ print [isType (List Int) (0 :: [1..]), List Int == [Int], isType (List Int) 5]
 Seq a = [] | a :: Seq a
 print [Seq Int == List Int, isType (Seq Int) [1,2]]`, ["[True,True,False]", "[True,True,False]",
     "[True,False,False]", "[True,True]"]);
+example("types compare as the sets of their values", `
+U = Int | String
+V = String | Int
+print [U == V, Int <= Number, Number <= Int, Int < Number, Integer <= Real]
+print [typeOf [1,2,3] <= List Int, typeOf [1,"a"] <= List Int, List Int <= typeOf [1,2]]
+print [[Int..] <= List Int, List Int == typeOf [1,2,3], List Int == [Int]]
+Seq a = [] | a :: Seq a
+E = [] | Int :: List Int
+print [Seq Int == List Int, E == List Int, List Int <= List Number, List Number <= List Int]
+Pairs a = [] | a :: a :: Pairs a
+print [Pairs Int <= List Int, List Int <= Pairs Int, Pairs Int < List Int]
+Two = [Int] | [Int,Int]
+print [[Int,Int] <= Two, [Int,Int,Int] <= Two, Two <= List Int]`, ["[True,True,False,True,True]",
+    "[True,False,False]", "[True,False,False]", "[True,True,True,False]", "[True,False,True]",
+    "[True,False,True]"]);
 example("a union of list types unfolds as a value is read", `
 Pairs a = [] | a :: a :: Pairs a
 print [isType (Pairs Int) [1,2], isType (Pairs Int) [1,2,3], isType (Pairs Int) [1,"a"]]

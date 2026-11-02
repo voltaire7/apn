@@ -1768,6 +1768,15 @@ class Parser {
             if (vt.k === "sym" && vt.v === "[" && this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === "]") {
                 this.next(); this.next();
                 tag = "[]";
+            } else if (vt.k === "sym" && vt.v === "[") {
+                // [Int,Int] is Int :: Int :: [], as a list is.
+                let list: Expr;
+                this.noLambda++;
+                try { list = this.parsePrimary(); } finally { this.noLambda--; }
+                if (list.t !== "list" || list.v.some(item => ["stmDef", "patDef", "typeDef"].includes(item.t))) throw new Error("Parser: a list type's alternative lists its elements' types: [Int,String]");
+                const [first, ...rest] = list.v;
+                fields.push(first, rest.reduceRight<Expr>((tail, item) => ({ t: "binop", op: "::", l: item, r: tail }), { t: "list", v: [] }));
+                tag = "::";
             } else if (vt.k === "ident" && /^[A-Z]/.test(vt.v)) {
                 this.next();
                 tag = vt.v;
@@ -1880,8 +1889,9 @@ class Parser {
         if (leading.k === "sym" && leading.v === "|") return true;
         if (j === 2 && this.lambdaDeclarationAt(this.i + j)) return true;
         const ctor = this.peek(j), after = this.peek(j + 1);
-        // A family of lists starts with [] or x :: rest.
-        const listed = ctor.k === "sym" && ctor.v === "[" && after.k === "sym" && after.v === "]" ||
+        // A family of lists, or a union of list types, starts with [], a
+        // written list or x :: rest.
+        const listed = ctor.k === "sym" && ctor.v === "[" ||
             ctor.k === "ident" && /^[a-z]/.test(ctor.v) && after.k === "sym" && after.v === "::";
         if (!listed && (ctor.k !== "ident" || !/^[A-Z]/.test(ctor.v))) return false;
         let depth = 0;
