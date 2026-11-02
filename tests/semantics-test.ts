@@ -572,6 +572,14 @@ Two = [Int] | [Int,Int]
 print [[Int,Int] <= Two, [Int,Int,Int] <= Two, Two <= List Int]`, ["[True,True,False,True,True]",
     "[True,False,False]", "[True,False,False]", "[True,True,True,False]", "[True,False,True]",
     "[True,False,True]"]);
+example("| is the union of types, written anywhere", `
+print (Int | String)
+print [isType (Int | String) "a", (Int | String) == (String | Int)]
+print (typeOf [1,2,3] <= ([Int] | [Int,Int] | [Int,Int,Int]))
+print (([] | Int :: List Int) == List Int)
+f = x | x > 0 -> x
+print (f 5)`, ["Int | String", "[True,True]", "True", "True", "5"]);
+failure("operators of one level and two associativities need parentheses", "print ([Int] | [Int,Int] == typeOf [1])", "share a level but not an associativity");
 example("a union of list types unfolds as a value is read", `
 Pairs a = [] | a :: a :: Pairs a
 print [isType (Pairs Int) [1,2], isType (Pairs Int) [1,2,3], isType (Pairs Int) [1,"a"]]

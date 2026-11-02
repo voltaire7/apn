@@ -347,6 +347,7 @@ function helpText(): string {
         `  describe Int = ...  (a bare type name in a pattern matches that type)`,
         `  do [print "hi", return 42] — the block { print "hi"; return 42 }`,
         `  Int32 123; Int (truncate 3.7); typeOf value; Type [x: Float]`,
+        `  types are sets: Int | String; Int <= Number; typeOf [1,2] <= List Int; == same values`,
         `  myTypeOf (t x) = print t   (bind the runtime type and value)`,
         `  f (Int x) = ...; f (Number x) = ... (typed overloads)`,
         `  100 * _ -> Int 0 repeats; 100 * Int 0 multiplies`,

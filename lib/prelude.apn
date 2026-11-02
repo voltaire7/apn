@@ -19,6 +19,7 @@ infixr 1 =<<
 infixl 2 ||
 infixl 3 &&
 infixl 4 == != < > <= >= <$> <*>
+infixr 4 |
 infixr 5 ::
 infixl 6 + - ++
 infixl 7 * / %
@@ -46,6 +47,8 @@ get False _ = b -> b
 (<=) = intrinsics.le
 (>=) = intrinsics.ge
 (::) = intrinsics.cons
+# The union of two types: a value of either is one of it (Int | String).
+a | b = intrinsics.union [a,b]
 (+) = intrinsics.add
 (-) = intrinsics.sub
 (++) = intrinsics.append

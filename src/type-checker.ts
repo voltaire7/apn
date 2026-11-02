@@ -2592,6 +2592,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // elements makes a mixed list, as in a literal
             // ([1,2]:[3,4] is [[1,2],3,4]; [1]:[[3,4]] is [[1],[3,4]]).
             const before = resolve(b);
+            // A type onto a type of lists (Int :: List Int) is a list type
+            // whose rest is that type, known when it runs.
+            if (before.k === "type" && resolve(a).k === "type") { runtimeChecks++; return explicitDynamic; }
             if (before.k === "list" && !fits(list(a), before)) {
                 return list(union([a, before.element]), before.length ? indexAdd(before.length, constant(1n)) : undefined);
             }
@@ -2682,6 +2685,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // checked (a requirement) once their types are known.
             if (f.name === "set") { operation(f.name, args); return io(list(variable(), constant(0n))); }
             // A union of types (Mixed = Int | String).
+            // a | b: the union of two types; a written list of types is one ([Int] | [Int,Int]).
+            if (f.name === "either") {
+                const asType = (x: Ty): Ty | undefined => {
+                    const r = resolve(x);
+                    if (r.k === "type") return r.value;
+                    if (r.k !== "list" || !r.items) return sharedType(r);
+                    const items = r.items.map(asType);
+                    return items.every(Boolean) ? { k: "list", element: items.length ? union(items as Ty[]) : variable(), items: items as Ty[], length: constant(BigInt(items.length)) } : undefined;
+                };
+                const types = args.map(asType);
+                if (!types.every(Boolean)) { runtimeChecks++; return explicitDynamic; }
+                return { k: "type", value: union(types as Ty[]) };
+            }
             if (f.name === "union") {
                 const list = resolve(args[0]), items = list.k === "list" ? list.items?.map(resolve) : undefined;
                 const types = items?.map(item => item.k === "type" ? item.value : sharedType(item));
@@ -6832,6 +6848,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     for (const name of ["~", "intrinsics.match"]) scope.set(name, { type: { k: "intrinsic", name: "match", arity: 2 } });
     for (const name of ["tag", "intrinsics.tag"]) scope.set(name, { type: { k: "intrinsic", name: "tag", arity: 3 } });
     scope.set("intrinsics.union", { type: { k: "intrinsic", name: "union", arity: 1 } });
+    // The prelude's a | b = intrinsics.union [a,b].
+    scope.set("|", { type: { k: "intrinsic", name: "either", arity: 2 } });
     for (const name of ["get", "intrinsics.get"]) scope.set(name, { type: { k: "intrinsic", name: "get", arity: 2 } });
     for (const name of ["with", "intrinsics.with"]) scope.set(name, { type: { k: "intrinsic", name: "with", arity: 3 } });
     // to T x writes x as a T, from T x reads it back (to String, to JSON, to (List Char)).

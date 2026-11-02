@@ -416,6 +416,7 @@ binding; operators in the same row have equal precedence.
 | `+`, `-`, `++` | `infixl 6` | Left | `a - b - c` → `(a - b) - c` |
 | Cons `::` | `infixr 5` | Right | `a :: b :: xs` → `a :: (b :: xs)` |
 | `==`, `!=`, `<`, `>`, `<=`, `>=` | `infixl 4` | Left | `a < b == c` → `(a < b) == c` |
+| Type union `\|` | `infixr 4` | Right | `A \| B \| C` → `A \| (B \| C)`; `(A \| B) == C` needs its parentheses |
 | Logical `&&` | `infixl 3` | Left | `a && b && c` → `(a && b) && c` |
 | Logical `\|\|` | `infixl 2` | Left | `a \|\| b \|\| c` → `(a \|\| b) \|\| c` |
 | Ternary `? :` | syntax | — | a nested one is parenthesized: `a ? b : (c ? d : e)` |
@@ -466,7 +467,9 @@ A fixity declaration stands on its own line, anywhere at the top level of the
 file that uses the operator; it applies to the whole file and to later REPL
 input. An operator without one is `infixl 9`. `infix` operators do not chain:
 `a == b == c` is fine (`==` is `infixl`), but two `infix` operators of the
-same precedence side by side need parentheses.
+same precedence side by side need parentheses, as do two of one precedence
+and different associativity (`Int | String == t` is an error; write
+`(Int | String) == t`).
 
 Overloading an existing operator is fine and is the recommended way to give
 your own types arithmetic or comparison. Clauses defined for an operator are
@@ -1643,7 +1646,9 @@ constructor it keeps its broad identity: `typeOf [1] == List` and
 makes: `Vect 3 Int == [Int,Int,Int]` is true. A description is not an enforced
 schema; use a typed pattern or contract when you need validation.
 
-A type is the set of its values, and types compare as sets. `a <= b` is
+A type is the set of its values: `a | b` is their union (the prelude's
+`a | b = intrinsics.union [a,b]`, which `X = A | B` declares too), and types
+compare as sets. `a <= b` is
 containment, every value of `a` being one of `b` (`Int <= Number`,
 `typeOf [1,2,3] <= List Int`, `[Int..] <= List Int`, `Pairs Int <= List Int`);
 `a < b` is containment where `b` has more, and `>=`, `>` are the same turned

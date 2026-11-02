@@ -20,9 +20,19 @@ const fixities = new Map<string, Fixity>();
 export function fixityOf(op: string): Fixity {
     return fixities.get(op) ?? { prec: 9, assoc: "left" };
 }
+// Operators of one level and two associativities group only as parentheses
+// say: (Int | String) == t, as Int | String == t is neither grouping.
+function mixable(first: { op: string; fixity: Fixity }, second: Extract<Token, { k: "sym" }>): void {
+    const next = fixityOf(second.v), kind = (f: Fixity) => `infix${f.assoc === "none" ? "" : f.assoc[0]} ${f.prec}`;
+    if (next.prec !== first.fixity.prec || next.assoc === first.fixity.assoc) return;
+    throw new APNError("parse", `'${first.op}' (${kind(first.fixity)}) and '${second.v}' (${kind(next)}) share a level but not an associativity`,
+        { pos: second.pos, hint: "add parentheses" });
+}
 // Tokens that are syntax, not operators, though made of operator characters.
-// ":" writes a record field and separates a ternary; "::" is cons.
-const RESERVED_OPERATORS = new Set(["=", ":=", "|", ":", "->", "<-", "!"]);
+// ":" writes a record field and separates a ternary; "::" is cons. "|" is
+// both: the union of types (Int | String), and a lambda's guard after its
+// parameters (x | x > 0 -> x), which a declaration's alternatives are too.
+const RESERVED_OPERATORS = new Set(["=", ":=", ":", "->", "<-", "!"]);
 // The intrinsics behind the prelude's operators (lib/prelude.apn binds
 // each symbol to one), keyed by name.
 export const PRIMITIVE_OPERATORS = new Map<string, string>([
@@ -627,7 +637,9 @@ class Parser {
         return j;
     }
 
-    parseOperators(minPrec: number): Expr {
+    // outer: the operator whose right operand this is, which one of its
+    // level and another associativity cannot follow without parentheses.
+    parseOperators(minPrec: number, outer?: { op: string; fixity: Fixity }): Expr {
         const start = this.peek().pos;
         const at = this.nextToken();
         let left = this.parseOperand();
@@ -660,10 +672,11 @@ class Parser {
             if (after.k === "sym" && (after.v === ")" || after.v === "}")) break;
             const fixity = fixityOf(t.v);
             if (fixity.prec < minPrec) break;
+            if (outer) mixable(outer, t);
             this.next();
             this.skipContinuation();
             const rightStart = this.peek().pos;
-            const right = this.parseOperators(fixity.assoc === "right" ? fixity.prec : fixity.prec + 1);
+            const right = this.parseOperators(fixity.assoc === "right" ? fixity.prec : fixity.prec + 1, { op: t.v, fixity });
             if (t.v === "$") {
                 sourceLocations.set(left, { source: this.source, file: this.file, start, end: t.pos });
                 sourceLocations.set(right, { source: this.source, file: this.file, start: rightStart, end: this.peek().pos });
@@ -677,6 +690,7 @@ class Parser {
             if (fixity.assoc === "none" && following.k === "sym" && isOperatorName(following.v) && fixityOf(following.v).prec === fixity.prec) {
                 throw new Error(`Parser: '${t.v}' is non-associative (infix ${fixity.prec}); add parentheses`);
             }
+            if (following.k === "sym" && isOperatorName(following.v)) mixable({ op: t.v, fixity }, following);
         }
         return left;
     }
