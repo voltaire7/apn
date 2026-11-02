@@ -557,7 +557,19 @@ print [isType (List Int) (0 :: [1..]), List Int == [Int], isType (List Int) 5]
 Seq a = [] | a :: Seq a
 print [Seq Int == List Int, isType (Seq Int) [1,2]]`, ["[True,True,False]", "[True,True,False]",
     "[True,False,False]", "[True,True]"]);
-failure("a union of lists is the lists of a", "P a = [] | a :: a :: P a", "a union of lists is the lists of a");
+example("a union of list types unfolds as a value is read", `
+Pairs a = [] | a :: a :: Pairs a
+print [isType (Pairs Int) [1,2], isType (Pairs Int) [1,2,3], isType (Pairs Int) [1,"a"]]
+ones = 1 :: ones
+print [isType (Pairs Int) ones, isType (Pairs Int) [1..], isType (Pairs String) [1..]]
+print [Pairs Int == Pairs Int, Pairs Int == Pairs String]
+f (Pairs Int xs) = length xs
+print (f [1,2,3,4])
+Ints = [] | Int :: Ints
+print [isType Ints [1,2], isType Ints ["a"]]
+Tree = [] | Tree :: Tree
+print [isType Tree [[],[[]]], isType Tree [1]]`, ["[True,False,False]", "[True,True,False]",
+    "[True,False]", "4", "[True,False]", "[True,False]"]);
 example("a list's bindings name its items", `
 code = [x = 1, y = 2, x + y]
 before = code

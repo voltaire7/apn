@@ -859,7 +859,10 @@ applied to types is named `f`, `g`, ...; the others `a`, `b`, ....
 ### Overloading on the result type
 
 Clauses with the same patterns but a different inferred result type overload
-each other; ones with the same result type rebind, as usual. A call that
+each other; ones with the same result type rebind, as usual. Patterns are the
+same when only the names they bind differ (`f (Int x)` and `f (Int y)`); the
+types they name count (`f (List Int xs)` and `f (List String xs)` are two
+clauses). A call that
 reaches such clauses is undecided until a context names the type its result
 should have: a type applied to it (`Int (f 0)`), a typed pattern it is passed
 to (`g (Int n)`), an annotation, or a monad context.
@@ -1608,11 +1611,17 @@ its members), and endless lists belong too, as their unfoldings never end:
 `isType (List Int) [1,"a"]` is `False`. A type test reads a list as it
 unfolds, accepting a cell it meets again (`ones = 1 :: ones`) or an endless
 range, whose elements share one type. Any union of this shape
-(`Seq a = [] | a :: Seq a`) is the same type; another union of `[]` and `::`
-is an error (write `Ints = List Int`, or a [family](gradual-and-dependent-types.md#indexed-families)
-saying each index). Lists whose length is not known (a finite range, the
-result of `filter` or `map`) display `List` of the type every element has,
-`List a` when it is unknown. `(List a) xs` binds `a` to the type
+(`Seq a = [] | a :: Seq a`) is the same type. Any other union of list types is
+a union too, unfolded the same way: `Pairs a = [] | a :: a :: Pairs a` holds
+the even-length lists of `a` (`isType (Pairs Int) [1,2,3]` is `False`),
+`Ints = [] | Int :: Ints` is `List Int`'s members, and `Tree = [] | Tree :: Tree`
+lists of trees; `(Pairs Int xs)` matches a value of it, and the static check
+leaves such a union to the run. A [family](gradual-and-dependent-types.md#indexed-families)
+is the same alternatives, each saying its index. `typeOf` gives the most exact
+type it knows without evaluating: lists whose length is not known yet (a
+finite range, the result of `filter` or `map`) display `List` of the type every
+element has, `List a` when it is unknown, so `typeOf [1,2,3]` is
+`[Int,Int,Int]` and `typeOf (filter (> 0) [1,2,3])` is `List Int`. `(List a) xs` binds `a` to the type
 every item has: `Int | String` for `[1,"a"]`. Type errors use the same
 notation.
 

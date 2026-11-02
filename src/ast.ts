@@ -100,7 +100,9 @@ export function fillPlaceholders(e: Expr, by: Expr): Expr {
 export type Alternative = "new" | "type" | "constructor" | "unclaimed";
 export function unionKind(def: DataDef, kind: (name: string) => Alternative): "declaration" | "union" | "claim" | string {
     if (def.claims) return "declaration";
-    const kinds = def.variants.map(v => v.tag === "[]" || v.tag === "::" ? "new" : kind(v.tag));
+    // A list's own alternatives are list types (Pairs a = [] | a :: a :: Pairs a);
+    // in a family of lists, where each says its index, they are its clauses.
+    const kinds = def.variants.map(v => v.tag === "[]" || v.tag === "::" ? v.result ? "new" : "type" : kind(v.tag));
     if (kinds.every(k => k === "new")) return "declaration";
     // The first union listing constructors declared with _ owns them.
     const unclaimed = kinds.filter(k => k === "unclaimed").length;
@@ -118,10 +120,12 @@ export function unionKind(def: DataDef, kind: (name: string) => Alternative): "d
 export function unclaimedMix(name: string, other: string): string {
     return `${name} unions constructors declared with _, and ${other} is not one`;
 }
-// A union of a list's own alternatives, X a = [] | a :: X a, is the type of
-// lists of a, endless ones among them (its unfoldings never end): the runtime
-// and the checker read it as their list type, as countingOf reads a family's
-// lengths. The prelude declares List so; any of this shape is the same type.
+// A union of a list's own alternatives is a union of list types, unfolded as
+// a value is read (see Interpreter.belongsToType). One of this shape,
+// X a = [] | a :: X a, is the type of lists of a, endless ones among them (its
+// unfoldings never end): the runtime and the checker read it as their list
+// type, as countingOf reads a family's lengths. The prelude declares List so;
+// any of this shape is the same type.
 export function listUnion(def: DataDef): boolean {
     const [element] = def.parameters ?? [], unwrap = (e?: Expr): Expr | undefined => e?.t === "block" && e.stmts.length === 1 ? unwrap(e.stmts[0]) : e;
     const is = (e: Expr | undefined, name: string) => unwrap(e)?.t === "var" && (unwrap(e) as { name: string }).name === name;
@@ -151,9 +155,12 @@ export function claimedDeclaration(def: DataDef, own: (tag: string) => DataVaria
     });
     return { name: def.name, parameters: def.parameters, variants, claims: true };
 }
-// A union of existing types, as the definition X params = intrinsics.union [A, B].
+// A union of existing types, as the definition X params = intrinsics.union [A, B];
+// a list's own alternatives are the list types they write ([], a :: X a).
 export function unionClause(def: DataDef): DefClause {
-    const alternatives = def.variants.map(v => (v.fields ?? []).reduce<Expr>((f, a) => ({ t: "app", f, a }), { t: "var", name: v.tag }));
+    const alternatives = def.variants.map((v): Expr => v.tag === "[]" ? { t: "list", v: [] }
+        : v.tag === "::" ? { t: "binop", op: "::", l: v.fields![0], r: v.fields![1] }
+        : (v.fields ?? []).reduce<Expr>((f, a) => ({ t: "app", f, a }), { t: "var", name: v.tag }));
     const union: Expr = { t: "recordAccess", rec: { t: "var", name: "intrinsics" }, field: "union" };
     return { params: (def.parameters ?? []).map(name => ({ p: "var", name })), body: { t: "app", f: union, a: { t: "list", v: alternatives } } };
 }
@@ -412,9 +419,11 @@ export function patternNames(p: Pattern): string[] {
 export function clauseKey(name: string, clause: { params: Pattern[]; guard?: Expr }): string {
     const names = new Map<string, number>([[name, -1]]);
     let unused = 0;
-    return JSON.stringify([clause.params, clause.guard ?? null], (field, value) => {
+    // A name a pattern binds is renamed in order; a name a type in it reads
+    // (Int in (List Int xs)) is kept.
+    return JSON.stringify([clause.params, clause.guard ?? null], function (this: Record<string, unknown>, field, value) {
         if (value && typeof value === "object" && value.p === "wildcard") return { p: "var", name: `\0${unused++}` };
-        if (field === "name") { if (!names.has(value)) names.set(value, names.size); return names.get(value); }
+        if (field === "name" && (typeof this.p === "string" || names.has(value))) { if (!names.has(value)) names.set(value, names.size); return names.get(value); }
         return typeof value === "bigint" ? `${value}n` : value;
     });
 }

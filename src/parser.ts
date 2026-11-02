@@ -1,4 +1,4 @@
-import { claimedDeclaration, countingOf, fillPlaceholders, holdsPlaceholder, listUnion, sourceLocations, unclaimedMix } from "./ast.ts";
+import { claimedDeclaration, countingOf, fillPlaceholders, holdsPlaceholder, sourceLocations, unclaimedMix } from "./ast.ts";
 import { stringKey, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -1776,6 +1776,18 @@ class Parser {
                     this.noLambda++;
                     try { fields.push(this.parsePostfix(this.parsePrimary())); } finally { this.noLambda--; }
                 }
+                // Int :: Ints: a list type whose first element is that type.
+                if (this.isSym("::")) {
+                    const element = fields.splice(0).reduce<Expr>((f, a) => ({ t: "app", f, a }), { t: "var", name: tag });
+                    this.next();
+                    this.noLambda++;
+                    try {
+                        const items = [this.parseApp()];
+                        while (this.eatSym("::")) items.push(this.parseApp());
+                        fields.push(element, items.reduceRight((rest, item) => ({ t: "binop", op: "::", l: item, r: rest })));
+                    } finally { this.noLambda--; }
+                    tag = "::";
+                }
             } else {
                 if (!(vt.k === "ident" && /^[a-z]/.test(vt.v) || vt.k === "sym" && vt.v === "(")) throw new Error("Parser: expected a constructor: a capitalized name, [] or x :: rest");
                 this.noLambda++;
@@ -1934,14 +1946,10 @@ class Parser {
         if (variants.some(v => v.result && (v.tag === "[]" || v.tag === "::"))) {
             return [{ t: "def", name, clauses: listClauses(variants) }];
         }
+        // A union of list types (Pairs a = [] | a :: a :: Pairs a) is a union.
         if (variants.some(v => v.tag === "[]" || v.tag === "::")) {
-            const def = { name, parameters, variants };
-            if (!listUnion(def)) {
-                this.seen = t;
-                throw new Error(`Parser: a union of lists is the lists of a, ${name} a = [] | a :: ${name} a; for lists of one type, write ${name} = List Int`);
-            }
             declaredTypes.add(name);
-            return [{ t: "type", def }];
+            return [{ t: "type", def: { name, parameters, variants } }];
         }
         if (new Set(variants.map(v => v.tag)).size !== variants.length) throw new Error("Parser: duplicate value constructor");
         // Register only after the entire declaration has parsed successfully;

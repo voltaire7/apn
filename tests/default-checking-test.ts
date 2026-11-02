@@ -31,6 +31,11 @@ for (const [source, expected] of [
     // A union of this shape is the list type, as the prelude's List is.
     ['Seq a = [] | a :: Seq a; f (Seq Int xs) = length xs; f [1,2]', '2'],
     ['[isType (List Int) [1,"a"], isType (List Int) [1..]]', '[False,True]'],
+    // Another union of list types is unfolded when it runs.
+    ['Pairs a = [] | a :: a :: Pairs a; f (Pairs Int xs) = length xs; f [1,2]', '2'],
+    // Clauses typed by their lists' element types are overloads, in either order.
+    ['f (List Int xs) = "ints"; f (List String xs) = "strings"; [f [1], f ["a"]]', '["ints","strings"]'],
+    ['f (List String xs) = "strings"; f (List Int xs) = "ints"; [f [1], f ["a"]]', '["ints","strings"]'],
     ['f x = x + 1; [f 1, f 2.0]', '[2,3.0]'],
     ['factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))\nfactorial 5', '120'],
     ['import "type"; cast Float32 (Float64 .2)', 'Float32 0.2'],

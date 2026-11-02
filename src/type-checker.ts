@@ -6874,6 +6874,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // could not see them are claimed here.
     function declare(written: DataDef, scope: Scope): void {
         if (listUnion(written)) { scope.set(written.name, { type: { k: "type", value: atom("List") } }); return; }
+        // Another union of list types (Pairs a = [] | a :: a :: Pairs a) is
+        // unfolded as a value is read, when it runs: here, lists whose
+        // elements are decided then.
+        if (written.variants.some(v => v.tag === "[]" || v.tag === "::")) {
+            runtimeChecks++;
+            const clause = unionClause(written), params = written.parameters ?? [];
+            scope.set(written.name, { type: params.length
+                ? { k: "alias", name: written.name, params, body: clause.body, scope: new Map(scope), args: [], clauses: [clause] }
+                : { k: "type", value: list(explicitDynamic) } });
+            return;
+        }
         const def = unionKind(written, name => alternative(name, written.name, scope)) === "claim"
             ? claimedDeclaration(written, tag => scope.get(tag)!.declaration!.variants[0]) : written;
         // X = A | B of existing types is their union (see unionKind), as at runtime.

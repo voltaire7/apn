@@ -325,14 +325,12 @@ export class Interpreter {
     // existing types is a definition instead: the value it makes.
     private declare(def: DataDef, scope: Env): Value | undefined {
         if (listUnion(def)) { scope.setLocal(def.name, { kind: "type", name: "List" }); return undefined; }
-        if (def.variants.some(v => v.tag !== "[]" && v.tag !== "::")) {
-            const written = def, kind = unionKind(def, name => this.alternative(name, written.name));
-            if (kind === "union") return this.evalDef(def.name, [unionClause(def)]);
-            // Constructors declared with _ where the parser could not see
-            // them (an earlier input, a module, a block) are claimed here.
-            if (kind === "claim") def = claimedDeclaration(def, tag => this.declarations.get(this.constructorFamily(tag)!)!.variants[0]);
-            else if (kind !== "declaration") throw new APNError("runtime", kind);
-        }
+        const written = def, kind = unionKind(def, name => this.alternative(name, written.name));
+        if (kind === "union") return this.evalDef(def.name, [unionClause(def)]);
+        // Constructors declared with _ where the parser could not see
+        // them (an earlier input, a module, a block) are claimed here.
+        if (kind === "claim") def = claimedDeclaration(def, tag => this.declarations.get(this.constructorFamily(tag)!)!.variants[0]);
+        else if (kind !== "declaration") throw new APNError("runtime", kind);
         // A type is declared for its whole scope, as a new name is.
         for (const name of [def.name, ...def.variants.map(v => v.tag)]) {
             const previous = this.scopeBinding(name);
@@ -1776,7 +1774,7 @@ export class Interpreter {
                     kind: "deferred", describes: tail,
                     compute: () => {
                         const value = this.dataValue(tail);
-                        if (!this.isList(value)) throw new APNError("runtime", `cons tail expected a list, got ${value.kind}`);
+                        if (!this.isList(value) && !this.ofLists(value)) throw new APNError("runtime", `cons tail expected a list, got ${value.kind}`);
                         return value;
                     },
                 },
@@ -3797,9 +3795,23 @@ export class Interpreter {
         return false;
     }
 
-    belongsToType(type: Value, value: Value): boolean {
+    // met: the unions of list types being tested, each with the values it is
+    // tested on (see unfolded).
+    belongsToType(type: Value, value: Value, met = new Map<unknown, Set<unknown>>()): boolean {
         type = this.reference(type); value = this.reference(value);
-        if (type.kind === "type" && type.choices) return type.choices.some(choice => this.belongsToType(choice, value));
+        if (type.kind === "type" && type.choices) {
+            if (!type.choices.some(choice => this.isList(choice))) return type.choices.some(choice => this.belongsToType(choice, value, met));
+            // A union of list types unfolds as the value is read: met again on
+            // the same value (a list that is its own tail, an endless range,
+            // whose elements share one type), it belongs, as its unfoldings
+            // never end. An assumption that fails is withdrawn.
+            const at = type.name || type, seen = met.get(at) ?? new Set(), key = this.unfolded(value);
+            if (seen.has(key)) return true;
+            met.set(at, seen.add(key));
+            const belongs = type.choices.some(choice => this.belongsToType(choice, value, met));
+            if (!belongs) seen.delete(key);
+            return belongs;
+        }
         if (type.kind === "type" && this.counted(type)) {
             const [size, element] = this.vectorParts(type);
             if (!this.isList(value)) return false;
@@ -3863,20 +3875,35 @@ export class Interpreter {
                 return this.belongsToType(repeated, this.cell(value)!.head);
             }
             // Cells met again (a list that is its own tail) are checked already.
-            const met = new Map<Value, Set<Value>>();
+            // A rest that is no list (a union: a :: Pairs a) tests the rest.
+            const cells = new Map<Value, Set<Value>>();
             for (;;) {
                 checkInterrupt();
                 type = this.reference(type); value = this.reference(value);
-                if (met.get(type)?.has(value)) return true;
-                if (!met.has(type)) met.set(type, new Set());
-                met.get(type)!.add(value);
+                if (!this.isList(type)) return this.belongsToType(type, value, met);
+                if (cells.get(type)?.has(value)) return true;
+                if (!cells.has(type)) cells.set(type, new Set());
+                cells.get(type)!.add(value);
                 const field = this.cell(type), element = this.cell(value);
                 if (!field || !element) return field === element;
-                if (!this.belongsToType(field.head, element.head)) return false;
+                if (!this.belongsToType(field.head, element.head, met)) return false;
                 type = field.tail; value = element.tail;
             }
         }
         return false;
+    }
+
+    // A type whose values are lists, which ends a list type as a list does
+    // (a :: Pairs a, Int :: List Int): List a, or a union of list types.
+    private ofLists(t: Value): boolean {
+        return t.kind === "type" && (this.isListType(t) || !!t.choices?.every(c => this.isList(c) || this.ofLists(this.reference(c))));
+    }
+    // A value as a union of list types meets it again: itself, or for an
+    // endless range, whose rests differ only in where they start, its type.
+    private unfolded(value: Value): unknown {
+        const v = this.dataValue(value);
+        return (v.kind === "range" || v.kind === "floatRange" || v.kind === "rationalRange") && v.hi === null
+            ? `[${this.typeText(this.cell(v)!.head)}..]` : v;
     }
 
     // Whether a slot is a Type field's, whose values are types.
@@ -4939,7 +4966,10 @@ export class Interpreter {
         const remembers = made.kind === "type" ? !made.variable && !(NAMED_BASES.has(made.name) && !made.arguments?.length && !made.family)
             : (made.kind === "record" || this.isList(made)) && this.isTypeValue(made);
         if (!remembers) return made;
-        const named = { ...made } as Value;
+        // A union of list types is known by its name (Pairs Int), not its unread choices.
+        const named = (made.kind === "type" && made.choices && !made.name
+            ? { ...made, name: [name, ...args.map(arg => this.renderString(arg))].map(text => /\s/.test(text) ? `(${text})` : text).join(" ") }
+            : { ...made }) as Value;
         this.asWritten.set(named, { name, args, made });
         return named;
     }
@@ -5053,15 +5083,20 @@ export class Interpreter {
         return parameters.map(name => found.get(name) ?? { kind: "type", name, variable: true });
     }
     // A union of types: a value of any of them is one of it. Unions inside
-    // flatten and a type given twice counts once.
+    // flatten and a type given twice counts once. A list type is kept as
+    // written, its rest unread (Pairs a = [] | a :: a :: Pairs a holds itself):
+    // a type test unfolds it (see belongsToType), and the union is known by
+    // the name it is given (see remembered).
     private union(types: Value[]): Value {
         const choices: Value[] = [];
+        let unfolds = false;
         for (const type of types.flatMap(t => t.kind === "type" && t.choices ? t.choices : [t])) {
+            if (this.isList(type)) { unfolds = true; choices.push(type); continue; }
             if (!this.isTypeValue(type)) throw new APNError("runtime", `a union lists types, and ${this.renderString(type)} is not one`);
-            if (!choices.some(c => this.sameType(c, type))) choices.push(this.sharedType(this.reference(type)) ?? type);
+            if (!choices.some(c => !this.isList(c) && this.sameType(c, type))) choices.push(this.sharedType(this.reference(type)) ?? type);
         }
         if (choices.length === 1) return choices[0];
-        const name = choices.map(c => this.renderString(c)).join(" | ");
+        const name = unfolds ? "" : choices.map(c => this.renderString(c)).join(" | ");
         return { kind: "type", name, choices };
     }
     // What a name in X = A | B is bound to here (see unionKind).
@@ -5364,6 +5399,13 @@ export class Interpreter {
                 const run = alias!.kind === "type" ? alias!.alias!.run : undefined;
                 const args = written?.name === p.tag ? written.args
                     : p.args.length > count && run?.kind === "clauseFn" ? this.readBack(run, given) : undefined;
+                // A union of list types reads nothing back: given its types
+                // ((Pairs Int xs)), the value is tested against it.
+                if (!args && p.args.length > count) {
+                    const types = p.args.slice(0, count).map(arg => arg.p === "constr" && !arg.args.length ? this.env.get(arg.tag) : undefined);
+                    const made = types.every(Boolean) ? this.reference(this.construct(alias as Extract<Value, { kind: "type" }>, types as Value[])) : undefined;
+                    if (made?.kind === "type" && made.choices) return this.belongsToType(made, given) && this.matchPattern(p.args[count], given, binds);
+                }
                 if (written || args) {
                     return !!args && p.args.slice(0, count).every((arg, n) => this.matchPattern(arg, args[n], binds))
                         && (p.args.length === count || this.matchPattern(p.args[count], given, binds));
