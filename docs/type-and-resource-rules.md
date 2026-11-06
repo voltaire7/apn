@@ -11,7 +11,7 @@ accepted, and keeps its name when a result fits.
 ```apn
 Count = Int
 
-(5 : Count) + 1             # Count 6: a Count and a plain Int give a Count
+(5 : Count) + 1             # 6, a Count: a Count and a plain Int give a Count
 ((5 : Count) : Int)         # 5
 sqrt (4 : Count)            # 2: builtins and (Int x) patterns see the Int
 (5 : Count) == 5            # True

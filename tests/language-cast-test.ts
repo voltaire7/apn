@@ -11,7 +11,7 @@ for (const [source, expected] of [
     ['cast String []', '""'],
     ["(['h','i'] : String)", '"hi"'],
     ['("hi" : String)', '"hi"'],
-    ["Text = String\n(['h','i'] : Text)", 'Text "hi"'],
+    ["Text = String\n(['h','i'] : Text)", '"hi"'],
     ["xs = 'a'::xs\n(take 3 xs : String)", '"aaa"'],
     ['((2 : Float) : Int)', '2'],
     ['payload (x : t) = [t,x]\npayload (5 : Int32)', '[Int32,5]'],

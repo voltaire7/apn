@@ -130,7 +130,9 @@ export function valueToString(v: Value): string {
         }
         case "record":
             return `[${v.v.map(([k, val]) => `${keySource(k)}: ${valueToString(val)}`).join(", ")}]`;
-        case "variant": return v.tag + v.v.map(argumentText).join("");
+        // A named subtype's value is its base's (5 : Count prints 5); a
+        // constructor's shows it (UserId 5).
+        case "variant": return v.family?.base && v.v.length === 1 ? valueToString(v.v[0]) : v.tag + v.v.map(argumentText).join("");
         case "closure": return functionSource(v);
         case "thunk": return "...";
         case "native": return functionSource(v);

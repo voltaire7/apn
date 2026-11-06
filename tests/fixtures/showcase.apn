@@ -1869,7 +1869,7 @@ print [idKind (1 : AccountId), idKind (1 : OtherId), idKind 1] # => ["account","
 # AccountId 1 + OtherId 1           # error: cannot combine AccountId and OtherId
 # Applying a base type unwraps: OtherId (Int (AccountId 4)) moves between names.
 print ((4 : AccountId) : Float)      # => 4.0
-print (((4 : AccountId) : Int) : OtherId) # => OtherId 4
+print (((4 : AccountId) : Int) : OtherId) # => 4, an OtherId
 
 # Nullary variants index lists in declaration order.
 Compass = Up | Down | Left | Right

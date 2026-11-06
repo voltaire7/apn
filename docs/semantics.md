@@ -271,7 +271,7 @@ to all its parameters, a type that remembers how it was written (`Point`,
 `Pairs 2 Int`), as do the values made with it (`typeOf p` is `Point`), which
 patterns read back (`(Pairs n a xs)`). A scalar
 type (`Count = Int`) makes a named subtype: a `Count` is an `Int` wherever one is accepted and keeps its name when
-a result fits (`(5 : Count) + 1` is `Count 6`). A constructor (`UserId (Int id) =
+a result fits (`(5 : Count) + 1` is `6`, a `Count`). A constructor (`UserId (Int id) =
 _`) makes a distinct type: `UserId 1` has none of an Int's operations, builtins
 and `(x : Int)` patterns reject it, its clauses give it what it needs
 (`(UserId a) + (UserId b) = UserId (a + b)`), and `(UserId x)` takes it apart.
@@ -1287,7 +1287,8 @@ variants. `Float` is flexible floating precision, using binary64 by default.
 `Fraction` holds an exact rational, `Complex` any numeric complex value, and
 `ComplexExact` an exact one. A value is given one by ascription (`5 : Int32`),
 and `to T` is the conversion as a function (`map (to Int) [1.0,2.0]`). A number prints as its value whatever its type (`(123 : Int32)`
-prints `123`); `typeOf` gives the type.
+prints `123`), as a named subtype's value does (`5 : Count` prints `5`); `typeOf`
+gives the type.
 
 `UInt` is the natural numbers, with built-in constructors `Z` (`(0 : UInt)`) and
 `S` (`S n` is `n + 1`, converting `n` as `(n : UInt)` does). The patterns `Z` and

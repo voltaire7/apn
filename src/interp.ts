@@ -3317,18 +3317,14 @@ export class Interpreter {
             } else if (v.kind === "pending") {
                 // Inside another value it shows as its source (return "a").
                 emit(this.undecidedText(v, ancestors.size > 1), "pending");
+            } else if (v.kind === "variant" && v.family?.base && v.v.length === 1) {
+                // A named subtype's value is its base's (5 : Count prints 5).
+                this.render(v.v[0], emit, raw, ancestors);
             } else if (v.kind === "variant") {
                 // Arguments show as source writes them: Some (Some 1).
                 emit(v.tag, "variant");
                 for (const arg of v.v) {
                     const shown = this.demand(arg);
-                    // A named subtype's payload shows without its base's name:
-                    // F 0.1 for F = Float32, not F (Float32 0.1).
-                    if (v.family?.base && isNumeric(shown) && shown.typeName) {
-                        emit(" ");
-                        emit(numberText(shown), shown.kind);
-                        continue;
-                    }
                     const wrap = compoundArgument(shown);
                     emit(wrap ? " (" : " ");
                     this.render(shown, emit, false, ancestors);

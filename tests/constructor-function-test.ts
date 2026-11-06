@@ -20,8 +20,8 @@ for (const checked of [true, false]) {
     for (const [source, expected] of [
         // = names a scalar type transparently: a Count is an Int wherever one
         // is accepted, and keeps its name when a result fits.
-        ["Count = Int\n[(5 : Count), typeOf (5 : Count)]", "[Count 5, Count]"],
-        ["Count = Int\n[(5 : Count) + 1, (5 : Count) * 2 == 10, ((5 : Count) : Int), sqrt (4 : Count)]", "[Count 6, True, 5, 2]"],
+        ["Count = Int\n[(5 : Count), typeOf (5 : Count)]", "[5,Count]"],
+        ["Count = Int\n[(5 : Count) + 1, (5 : Count) * 2 == 10, ((5 : Count) : Int), sqrt (4 : Count)]", "[6,True,5,2]"],
         ['Count = Int\nf (c : Count) = "count"\nf (n : Int) = "int"\n[f (1 : Count), f 1]', '["count","int"]'],
         ["Count = Int\ng (n : Int) = n + 1\ng (5 : Count)", "6"],
         ["Box a = a\n[Box 1, Box Int]", "[1,Int]"],
