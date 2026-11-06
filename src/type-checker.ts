@@ -6273,8 +6273,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return { k: "type", value: union([(resolve(a) as Extract<Ty, { k: "type" }>).value, (resolve(b) as Extract<Ty, { k: "type" }>).value]), chosen: true };
         }
         const left = resolve(a), right = resolve(b);
-        if (left.k === "list" && right.k === "var") { unify(list(left.element), right, e); return list(left.element); }
-        if (right.k === "list" && left.k === "var") { unify(list(right.element), left, e); return list(right.element); }
+        // Beside a list, a type not known yet (a call still waiting for its
+        // argument) is a list of the same elements, of a length the run finds.
+        const open = (t: Ty) => t.k === "var" || t.k === "operation";
+        if (left.k === "list" && open(right)) { unify(list(left.element), right, e); return list(left.element); }
+        if (right.k === "list" && open(left)) { unify(list(right.element), left, e); return list(right.element); }
         if (left.k === "list" && right.k === "list") {
             const join = (a: Ty, b: Ty): Ty => {
                 const x = resolve(a), y = resolve(b);

@@ -11,6 +11,8 @@ function session(): Interpreter {
 function run(i: Interpreter, source: string): string {
     return i.renderString(i.run(parse(source)));
 }
+// A take written in APN, and a function of a two-item list.
+const TK2 = "tk2 0 _ = []; tk2 _ [] = []; tk2 n (x :: rest) = x :: tk2 (n - 1) rest; f [a,b] = a\n";
 function rejected(i: Interpreter, source: string): void {
     try { run(i, source); } catch (error) {
         if ((error as { kind?: string }).kind === "type") return;
@@ -51,8 +53,10 @@ for (const [source, expected] of [
     ...["(+) 1 1", "negate -2", "Int 2", "id 2"].map(count => [`id x = x; tk 0 _ = []; tk _ [] = []; tk n (x :: rest) = x :: tk (n - 1) rest\n` +
         `f [a,b] = a\nf (tk (${count}) [1,2,3])`, '1'] as const),
     // Through a wrapper too: (+) 1 1's value is known, as 1 + 1's is.
-    ...["(+) 1 1", "1 + 1", "id 2"].map(count => [`id x = x; tk2 0 _ = []; tk2 _ [] = []\n` +
-        `tk2 n (x :: rest) = x :: tk2 (n - 1) rest; tk n xs = tk2 n xs\nf [a,b] = a\nf (tk (${count}) [1,2,3])`, '1'] as const),
+    ...["(+) 1 1", "1 + 1", "id 2"].map(count => [`id x = x; ${TK2}tk n xs = tk2 n xs\nf (tk (${count}) [1,2,3])`, '1'] as const),
+    // A branch beside a call still waiting for its argument is a list of a
+    // length the call decides, never the branch's own: [] is not length 0 here.
+    ...["n < 0 ? [] : tk2 n xs", "n > 0 ? tk2 n xs : []"].map(body => [`${TK2}tk n xs = ${body}\nf (tk 2 [1,2,3])`, '1'] as const),
     // A result's shape comes from every choice that may take a list, the
     // count before the list too: en2's (Int n) (x :: rest), not [] alone.
     ['en xs = en2 0 xs; en2 _ [] = []; en2 (Int n) (x :: rest) = [n,x] :: en2 (n + 1) rest\n' +
@@ -329,6 +333,8 @@ for (const source of [
     'f ((List _) xs) = xs; f 5',
     'toList Z = []; toList (S k) = k :: toList k; Vect 2 UInt (toList 3)',
     'g [a,b] = tail [0, b, a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1,2]',
+    `${TK2}tk n xs = n < 0 ? [] : tk2 n xs\nf (tk 1 [1,2,3])`,
+    `${TK2}tk n xs = n > 0 ? tk2 n xs : []\nf (tk 0 [1,2,3])`,
 ]) Deno.test(`checker still rejects: ${source}`, () => rejected(session(), source));
 // Length-preserving builtins carry their input's length, and separate uses of
 // one generic function keep independent lengths.
