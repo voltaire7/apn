@@ -646,7 +646,8 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   takes every step it would repeat at once (`skipRange`): up to the first
   step an earlier clause may take, at a `[]` or at a count's literal, for
   any function so written, not only the prelude's. `evaluateNative` runs the
-  pure `EVALUATED_NATIVES`. Depth (`EVALUATION_DEPTH`) and work
+  pure `EVALUATED_NATIVES`. Depth (`EVALUATION_DEPTH`, which a tail call
+  continuing in `evaluateKnown`'s loop does not add to) and work
   (`EVALUATION_BUDGET`, per root via `budgeted`) are bounded, and a
   JavaScript stack overflow (`RangeError`) in static evaluation leaves the
   value unknown. So recursion reaches the runtime's own depth with room to

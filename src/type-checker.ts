@@ -5311,6 +5311,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function evaluateKnown(e: Expr, env: Map<string, Known>, scope: Scope, depth: number, fresh = false): Known | undefined {
         // An application nothing could evaluate leaves the result incomplete.
         let app = false;
+        // A tail call continues in this loop, not deeper: as at runtime, a
+        // tail-recursive walk keeps one depth however many steps it takes.
+        const nested = depth + 1;
         for (;;) {
             let r: Known | Tail | undefined;
             if (!fresh && env.size === 0 && (e.t === "app" || e.t === "binop" || e.t === "block")) r = evaluateShared(e, scope, depth);
@@ -5321,7 +5324,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 case "ternary": r = evaluateTernary(e, env, scope, depth); break;
                 default: r = evaluateOther(e, env, scope, depth);
             }
-            if (r instanceof Tail) { ({ e, env, scope, depth } = r); fresh = false; continue; }
+            if (r instanceof Tail) { ({ e, env, scope } = r); depth = Math.min(r.depth, nested); fresh = false; continue; }
             if (app && r === undefined) incomplete = true;
             return r;
         }

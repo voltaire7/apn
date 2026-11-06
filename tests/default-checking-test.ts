@@ -916,9 +916,10 @@ for (const source of [
     'g (f (q (takeWhile (< 300) [1..])))',
     'g (f (q (take 2 (repeat 0))))',
 ]) Deno.test(`parse and deep recursion stay checked: ${source}`, () => rejected(session(), `${optionClauses}\n${sizeClauses}\n${textClauses}\n${deepClauses}\n${source}`));
-// A count and a drop written in APN, walking a list cell by cell.
+// A count, a drop and a left fold written in APN, walking a list cell by cell.
 const WALKS = 'cn [] n = n; cn (_ :: rest) (Int n) = cn rest (n + 1)\n' +
-    'dr _ [] = []; dr 0 (x :: rest) = x :: rest; dr (Int n) (_ :: rest) = dr (n - 1) rest\n';
+    'dr _ [] = []; dr 0 (x :: rest) = x :: rest; dr (Int n) (_ :: rest) = dr (n - 1) rest\n' +
+    'fs f acc [] = acc; fs f acc (x :: rest) = fs f (f acc x) rest\n';
 // A name a block binds twice is one binding: lazy definitions and closures
 // see its latest value, eager ones (<-) the value where they stand. Long lists
 // are walked within the work budget; ranges are cut arithmetically.
@@ -945,6 +946,9 @@ for (const [source, expected] of [
     [`${WALKS}checked = g (f (r (cn [1..10000000000] 0 == 10000000000)))\n0`, '0'],
     [`${WALKS}checked = g (f (r (cn [1,3..2000001] 0 == 1000001)))\n0`, '0'],
     [`${WALKS}checked = g (f (r (head (dr 1000000 [0..]) == 1000000)))\n0`, '0'],
+    // A fold looks at each element, but its tail calls take no depth: as at
+    // runtime, a tail-recursive walk of any length stays at one depth.
+    [`${WALKS}checked = g (f (r (fs (+) 0 [1..20000] == 200010000)))\n0`, '0'],
 ] as const) Deno.test(`rebinding blocks and long lists: ${source}`, () => {
     const actual = run(session(), `${optionClauses}\n${sizeClauses}\n${textClauses}\n${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -961,6 +965,7 @@ for (const source of [
 for (const source of [
     `${WALKS}g (f (r (cn [1..10000000000] 0 == 9999999999)))`,
     `${WALKS}g (f (r (head (dr 1000000 [0..]) == 0)))`,
+    `${WALKS}g (f (r (fs (+) 0 [1..20000] == 1)))`,
 ]) Deno.test(`a walk skipped through is decided: ${source}`, () => {
     try { run(session(), `${optionClauses}\n${sizeClauses}\n${textClauses}\n${source}`); } catch (error) {
         if ((error as Error).message.includes("length mismatch")) return;
