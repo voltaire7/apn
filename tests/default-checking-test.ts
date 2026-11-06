@@ -36,6 +36,8 @@ for (const [source, expected] of [
     // A type pattern matches each type within the one it names, the type itself first.
     ['describe Int = "int"; describe Number = "number"; [describe Int, describe Float]', '["int","number"]'],
     ['typeOf [1,2] ~ [List Int -> 1, _ -> 0]', '1'],
+    // An endless list never matches [], also through a call made in a function's body.
+    ['z [] = []; z (x :: r) = [x]; w xs = z xs; f [a] = a; f (w [1..])', '1'],
     // Another union of list types is unfolded when it runs.
     ['Pairs a = [] | a :: a :: Pairs a; f (Pairs Int xs) = length xs; f [1,2]', '2'],
     // Clauses typed by their lists' element types are overloads, in either order.

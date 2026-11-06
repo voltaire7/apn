@@ -5885,6 +5885,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Is the argument a list of exactly this length? From its type, or its known value.
     function listLength(argument: Entry, count: number): boolean | undefined {
+        // An endless list ([1..]) is no list of any length.
+        const t = resolve(argument.type);
+        if (t.k === "list" && t.endless) return false;
         const n = sizeOf(argument.type) ?? argument.size;
         if (n !== undefined) return n === BigInt(count);
         if (!argument.items && !argument.cell) return undefined;
