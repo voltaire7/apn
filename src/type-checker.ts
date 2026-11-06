@@ -2812,14 +2812,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             if (!outputs.length && builtinError) throw builtinError;
             if (!outputs.length) return problem(`no overload accepts ${text(argument.type)}`, e);
-            if (outputs.length === 1 || outputs.every((x) => text(x) === text(outputs[0]))) return outputs[0];
-            // A complete call no ranking decides (a partial one's choices are
-            // functions, which its next argument decides):
+            // A complete call (a partial one's choices are functions, which its
+            // next argument decides) whose result no input decides (a recursive
+            // call's) has the function's type as a whole (see principalOf), of
+            // lengths the run finds: the recursion may change one (x :: acc).
             const complete = !outputs.some(x => ["fn", "intrinsic", "overload"].includes(resolve(x).k));
-            // with a result no input decides (a recursive call's), the
-            // function's type as a whole decides it (see principalOf);
             const whole = complete && accepted.some(a => a.free) ? principalOf(f) : undefined;
-            if (whole) return application(whole, argument, e);
+            if (whole) return withoutLengths(application(whole, argument, e));
+            if (outputs.length === 1 || outputs.every((x) => text(x) === text(outputs[0]))) return outputs[0];
+            // A complete call no ranking decides:
             // with results that differ only in their lengths (tk 0 _ = [] and
             // tk n (x :: r) = ...), it is a list whose length the run finds.
             if (complete && outputs.every(x => resolve(x).k === "list" && succeeds(() => unify(withoutLengths(copy(outputs[0])), withoutLengths(copy(x)), e)))) {

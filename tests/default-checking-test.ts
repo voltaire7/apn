@@ -13,6 +13,8 @@ function run(i: Interpreter, source: string): string {
 }
 // A take written in APN, and a function of a two-item list.
 const TK2 = "tk2 0 _ = []; tk2 _ [] = []; tk2 n (x :: rest) = x :: tk2 (n - 1) rest; f [a,b] = a\n";
+// A left fold written in APN, and a function of a two-item list.
+const FL = "fl f acc [] = acc; fl f acc (x :: rest) = fl f (f acc x) rest; g [a,b] = a + b\n";
 function rejected(i: Interpreter, source: string): void {
     try { run(i, source); } catch (error) {
         if ((error as { kind?: string }).kind === "type") return;
@@ -46,8 +48,9 @@ for (const [source, expected] of [
         'm left right = nl left ? right : (nl right ? left : [hd left])\nm [1] [2]', '[1]'],
     // A call no clause ranking decides, its recursive clause's result free,
     // has the definition's type as a whole: fl's is (a -> b -> a) -> a -> List b -> a.
-    ['fl f acc [] = acc; fl f acc (x :: rest) = fl f (f acc x) rest\n' +
-        'rv (List _ xs) = fl (acc, x -> x :: acc) [] xs\nf xs = map (x -> x) (rv xs)\nf [1,2]', '[2,1]'],
+    [`${FL}rv (List _ xs) = fl (acc, x -> x :: acc) [] xs\nf xs = map (x -> x) (rv xs)\nf [1,2]`, '[2,1]'],
+    // Its lengths are the run's: a fold that keeps its accumulator keeps [1,2].
+    [`${FL}g (fl (acc, x -> acc) [1,2] [3])`, '3'],
     // Clauses that differ only in their results' lengths, a call no ranking
     // decides: a list whose length the run finds, never one choice's [].
     ...["(+) 1 1", "negate -2", "Int 2", "id 2"].map(count => [`id x = x; tk 0 _ = []; tk _ [] = []; tk n (x :: rest) = x :: tk (n - 1) rest\n` +
@@ -379,6 +382,10 @@ for (const [source, expected] of [
 for (const source of [
     'import "sequence"; g [a,b] = a + b; g (reverse [1,2,3])',
     'f xs = foldl (acc, x -> x :: acc) xs [1,2]; g [a,b] = a + b; g (f [1,2])',
+    // A recursive clause's result is the function's type as a whole, its
+    // lengths found by the run: fl's x :: acc makes [1,2] three long.
+    `${FL}g (fl (acc, x -> x :: acc) [1,2] [3])`,
+    `${FL}h ys = g (fl (acc, x -> x :: acc) [1,2] ys); h [3]`,
     'f xs = 0 :: xs; g [a,b] = a + b; g (f [1,2])',
     'f xs = xs ++ xs; g [a,b] = a + b; g (f [1,2])',
     'f xs = { xs = [1,2,3]; xs }; g [a,b] = a + b; g (f [1,2])',
