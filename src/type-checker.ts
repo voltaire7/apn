@@ -2512,8 +2512,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const shape = (x: Extract<Ty, { k: "list" }>): Ty => ({ k: "list", element: dynamic, length: x.length, ...x.endless ? { endless: true } : {} });
             unify(shape(t), shape(a), e);
             // An element type still to be found (List a) is the elements' type
-            // together, as at runtime: Int | String for [1,"x"].
-            if (!t.items && resolve(t.element).k === "var" && a.items) { unify(t.element, a.element, e); return target; }
+            // together, as at runtime: Int | String for [1,"x"] and 1 :: ["x"].
+            if (!t.items && resolve(t.element).k === "var") { unify(t.element, a.element, e); return target; }
             if (a.items) {
                 a.items.forEach((item, n) =>
                     t.preserve?.has(n) ? unify(t.items?.[n] ?? t.element, item, e) : convert(
@@ -5060,6 +5060,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (n !== undefined && n > 0n) bindKnown(p.args[0], { number: { kind: "int", v: n - 1n, typeName: "UInt" } }, env, refutable);
         } else if (wholeList(p)) {
             bindKnown(p.value, value, env, refutable);
+        } else if (p.p === "typeBind") {
+            // (t x): x is the value, a number without its explicit type.
+            const number = value.number && { ...value.number, typeName: undefined };
+            bindKnown(p.value, number ? { ...value, number } : value, env, refutable);
         } else if (p.p === "constr" && TYPE_NAMES.includes(p.tag) && p.args.length === 1 && plain(p.args[0])) {
             if (!NUMERIC_TYPES.includes(p.tag)) { env.set(p.args[0].name, value); return; }
             const n = numericOf(value);
@@ -5950,6 +5954,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return (score === 30 || score === 10 || score === 1) && irrefutable(p.args[0]);
         }
         if (wholeList(p)) return score === 30 && irrefutable(p.value);
+        // (t x) takes any value; a repeated t ((t x) (t y)) requires one type.
+        if (p.p === "typeBind") return (p.name === "_" || !refutable.has(p.name)) && irrefutable(p.value);
         if (p.p === "list") return p.v.every(irrefutable) && listLength(argument, p.v.length) === true;
         if (p.p === "cons") return irrefutable(p.head) && irrefutable(p.tail) && listLength(argument, 0) === false;
         return false;

@@ -859,6 +859,10 @@ for (const [source, expected] of [
     ['g (f (r (isPrime 7)))', '0'],
     ['g (f (q (sort [3])))', '0'],
     ['local n = { k = n + 1; twice x = x * 2; twice k }; g (f (r (local 1 == 4)))', '0'],
+    // (t x) takes any value, a number without its explicit type: a strict
+    // accumulator, as a fold reads it each step.
+    ['h (_ x) = x + 1; g (f (r (h 2 == 3 && h (Int32 2) == 3)))', '0'],
+    ['fs f (_ acc) [] = acc; fs f (_ acc) (x :: rest) = fs f (f acc x) rest\ng (f (r (fs (+) 0 [1,2] == 3)))', '0'],
 ] as const) Deno.test(`builtins and std evaluated: ${source}`, () => {
     const actual = run(session(), `${optionClauses}\n${sizeClauses}\n${textClauses}\n${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -870,6 +874,7 @@ for (const source of [
     'g (f (r (trim "  a " == "b")))',
     'g (f (r (any (> 5) [1,2])))',
     'g (f (r (isPrime 8)))',
+    'fs f (_ acc) [] = acc; fs f (_ acc) (x :: rest) = fs f (f acc x) rest\ng (f (r (fs (+) 0 [1,2] == 4)))',
     // enumerate pairs each element with its index: [0, 7] has two elements.
     'g (f (q (head (enumerate [7]))))',
     'g (f (q (sort [3,1])))',

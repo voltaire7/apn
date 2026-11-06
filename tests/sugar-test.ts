@@ -17,6 +17,7 @@ for (const [sugar, expansion] of [
     // A list is its items consed onto [], with what :: means there, in
     // values and patterns alike.
     ['[1,"a"]', '1 :: "a" :: []'],
+    ['f (List a xs) = a\nf [1,"a"]', 'f (List a xs) = a\nf (1 :: ["a"])'],
     // A range is enumFrom and its siblings: numbers count, a type repeats.
     ["[take 3 [1..], [1,3..7], [1..3], [0,0.5..1]]", "[take 3 (enumFrom 1), enumFromThenTo 1 3 7, enumFromTo 1 3, enumFromThenTo 0 0.5 1]"],
     ["take 2 [Int..]", "take 2 (enumFrom Int)"],
