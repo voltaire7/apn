@@ -9,18 +9,18 @@ function run(source: string, checked = true): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['x = Dynamic 123; Int x + 1', '124'],
-    ['D = Dynamic; x = D 123; Int x', '123'],
-    ['f (Dynamic x) = x x; Int (f (y -> 42))', '42'],
-    ['f (Int x) = x + 1; f (Dynamic 2)', '3'],
-    ['cast Int (Dynamic 42)', '42'],
-    ['((Int -> Int) f) <- return (Dynamic (x -> x + 1)); f 2', '3'],
-    ['((Int -> Int) f) <- return (x -> x); f (Dynamic 2)', '2'],
-    ['Vect 2 Int (Dynamic [1,2])', '[1,2]'],
-    ['xs <- return (Vect 2 Int (Dynamic [1,missing])); head xs', '1'],
-    ['Vect 2 Int [Dynamic 1, Dynamic 2]', '[1,2]'],
-    ['Dynamic (import "function"); 123', '123'],
-    ['Dynamic (import ["text","type"]); 123', '123'],
+    ['x = 123 : Dynamic; (x : Int) + 1', '124'],
+    ['D = Dynamic; x = 123 : D; (x : Int)', '123'],
+    ['f (x : Dynamic) = x x; (f (y -> 42) : Int)', '42'],
+    ['f (x : Int) = x + 1; f (2 : Dynamic)', '3'],
+    ['cast Int (42 : Dynamic)', '42'],
+    ['(f : Int -> Int) <- return (x -> x + 1 : Dynamic); f 2', '3'],
+    ['(f : Int -> Int) <- return (x -> x); f (2 : Dynamic)', '2'],
+    ['(([1,2] : Dynamic) : Vect 2 Int)', '[1,2]'],
+    ['xs <- return (([1,missing] : Dynamic) : Vect 2 Int); head xs', '1'],
+    ['([(1 : Dynamic), (2 : Dynamic)] : Vect 2 Int)', '[1,2]'],
+    ['(import "function" : Dynamic); 123', '123'],
+    ['(import ["text","type"] : Dynamic); 123', '123'],
     ['x = 1; Dynamic $ use [x: 2]; x', '2'],
 ] as const) Deno.test(`explicit Dynamic boundary: ${source}`, () => {
     const result = requireChecked(source);
@@ -30,21 +30,21 @@ for (const [source, expected] of [
 });
 
 for (const source of [
-    'x = Dynamic 1; missing',
-    'f x = x == 0 ? 1 : x * x; f (Dynamic 2)',
-    'f (Dynamic x) = missing x',
-    'Option a = Some a | None; f (Some x) = x == 0 ? 0 : x * x; f (Dynamic (Some "bad"))',
+    'x = 1 : Dynamic; missing',
+    'f x = x == 0 ? 1 : x * x; f (2 : Dynamic)',
+    'f (x : Dynamic) = missing x',
+    'Option a = Some a | None; f (Some x) = x == 0 ? 0 : x * x; f (Some "bad" : Dynamic)',
 ]) Deno.test(`Dynamic does not silence unrelated static checks: ${source}`, () => {
     if (!checkSource(source, '<test>', { strict: true }).issues.length) throw new Error('unexpectedly checked');
 });
 
 for (const [source, message] of [
-    ['Int (Dynamic "bad")', 'Int expects a number'],
-    ['((Int -> Int) f) <- return (x -> x); f (Dynamic "bad")', 'Int expects a number'],
-    ['((Int -> Int) f) <- return (Dynamic (x -> "bad")); f 1', 'Int expects a number'],
-    ['Vect 2 Int (Dynamic [1])', 'length mismatch'],
-    ['Vect 2 Int (Dynamic [1,"bad"])', 'Int expects a number'],
-    ['x = "old"; Dynamic (use [x: 123]); x', 'cannot replace string with int'],
+    ['(("bad" : Dynamic) : Int)', 'Int expects a number'],
+    ['(f : Int -> Int) <- return (x -> x); f ("bad" : Dynamic)', 'Int expects a number'],
+    ['(f : Int -> Int) <- return (x -> "bad" : Dynamic); f 1', 'Int expects a number'],
+    ['(([1] : Dynamic) : Vect 2 Int)', 'length mismatch'],
+    ['(([1,"bad"] : Dynamic) : Vect 2 Int)', 'Int expects a number'],
+    ['x = "old"; (use [x: 123] : Dynamic); x', 'cannot replace string with int'],
 ]) Deno.test(`Dynamic runtime boundary rejects: ${source}`, () => {
     requireChecked(source);
     try { run(source); } catch (error) {
@@ -55,12 +55,12 @@ for (const [source, message] of [
 });
 
 Deno.test('Dynamic construction and patterns preserve Mutable identity', () => {
-    const actual = run('x <- return (Mutable 1)\nf (Dynamic v) = v\nd <- return (Dynamic x)\nalias <- return (f d)\nset alias 2\nx', false);
+    const actual = run('x <- return (Mutable 1)\nf (v : Dynamic) = v\nd <- return (x : Dynamic)\nalias <- return (f d)\nset alias 2\nx', false);
     if (actual !== '2') throw new Error(actual);
 });
 
 Deno.test('load exports cannot invalidate checked bindings', () => {
-    const source = 'x = "old"; Dynamic (load "dynamic-overwrite"); x';
+    const source = 'x = "old"; (load "dynamic-overwrite" : Dynamic); x';
     requireChecked(source);
     const i = new Interpreter(); i.checkedExecution = true;
     i.sourceDir = new URL('./fixtures/', import.meta.url).pathname;
@@ -95,7 +95,7 @@ Deno.test("a checked import replaces a builtin function", () => {
     if (actual !== "[1,0]") throw new Error(actual);
 });
 Deno.test("set on an explicit Dynamic target is checked at runtime", () => {
-    const value = run("cell = Dynamic (Mutable 1); set cell 2; Int (Dynamic cell) + 1");
+    const value = run("cell = Mutable 1 : Dynamic; set cell 2; ((cell : Dynamic) : Int) + 1");
     if (value !== "3") throw new Error(`expected 3, got ${value}`);
 });
 

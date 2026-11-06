@@ -518,11 +518,11 @@ Float typedRatio = 1                # it converts as an argument would: 1.0
 print [typedCount,typedRatio]      # => [3,1.0]
 typedInc (Int x) = x + 1            # a constructor pattern requires an Int
 print (typedInc 1)                  # => 2
-typedFn ((Int -> Int) k) = k 2      # a function contract
+typedFn (k : Int -> Int) = k 2      # a function contract
 print (typedFn (+ 1))               # => 3
 typedLam = (Int x) -> x + 1         # lambdas take constructor patterns too
 print (typedLam 5)                  # => 6
-bytePair [UInt8 a, UInt8 b] = a + b  # typed elements convert like a typed parameter
+bytePair [(a : UInt8), (b : UInt8)] = a + b # typed elements convert like a typed parameter
 print (bytePair [3,4])             # => 7 (bytePair [3,300] is a static range error)
 someFloat (Some (Float x)) = x      # so do variant payloads
 print (someFloat (Some 1))          # => 1.0
@@ -534,9 +534,9 @@ Heading =
     | Northward
     | Southward
 print [Northward,Southward]        # => [Northward,Southward]
-spanEnd (Span2 _ (UInt8 b)) = b     # spanEnd (Span2 1 300) is a static range error
+spanEnd (Span2 _ (b : UInt8)) = b   # spanEnd (Span2 1 300) is a static range error
 print (spanEnd (Span2 1 3))         # => 3
-byteField ([x: UInt8] r) = r.x      # record fields are checked by value too
+byteField (r : [x: UInt8]) = r.x    # record fields are checked by value too
 scaled v = byteField [x: v * 100]   # scaled 3 is a static range error
 print (scaled 1)                    # => UInt8 100
 print (byteField [x: 300, _: [x: 3]])  # => UInt8 3 (a later spread wins, as at runtime)
@@ -831,15 +831,15 @@ actionResult <- actionValue # => action (<- runs it and binds its result)
 print actionResult          # => 4
 actionValue                 # => action (each run repeats the effect)
 keepFirst x _ = x
-print (keepFirst 7 (Dynamic missingEvaluationArg)) # => 7 (unused argument is deferred)
-print (True ? 8 : Dynamic missingEvaluationArg)    # => 8 (unselected branch is deferred)
+print (keepFirst 7 (missingEvaluationArg : Dynamic)) # => 7 (unused argument is deferred)
+print (True ? 8 : (missingEvaluationArg : Dynamic)) # => 8 (unselected branch is deferred)
 # Lazy heads, tails, and recursive lists:
 ones = 1::ones
 fibs = 0 :: 1 :: zipWith (+) fibs (tail fibs)
 print (take 5 ones)          # => [1,1,1,1,1]
 print (take 12 fibs)         # => [0,1,1,2,3,5,8,13,21,34,55,89]
 print (take 4 (drop 5 fibs)) # => [5,8,13,21]
-print (head [1, Dynamic missingEvaluationArg]) # => 1 (unused element stays deferred)
+print (head [1, (missingEvaluationArg : Dynamic)]) # => 1 (unused element stays deferred)
 print (take 4 (map (+ 1) [0..]))       # => [1,2,3,4]
 print (take 4 (filter (n -> n % 2 == 0) [0..])) # => [0,2,4,6]
 # In the REPL, entering ones or fibs streams until Ctrl+C.
@@ -946,7 +946,7 @@ lazyNote = {
 }
 noted <- lazyNote          # => lazyNote WAS called
 print (noted * 2)          # => 84
-sayHello = IO [] { print "hello" }   # IO { ... } is an error: IO needs a type
+sayHello = { print "hello" } : IO [] # IO { ... } is an error: IO needs a type
 sayHello                   # => hello
 sayHello                   # => hello (each run repeats the effect)
 unused = print "never"     # naming an action does not run it
@@ -1001,16 +1001,16 @@ print ""                                   # => 012
 # => [42], Some 42, Ok 42 (undecided: the list's, then each instance, one per line)
 print (return 42)
 print (Option Int { return 42 })           # => Some 42
-print (List Int { return 43 })             # => [43]
-fromIO <- IO Int { return 44 }
+print ({ return 43 } : List Int)           # => [43]
+fromIO <- ({ return 44 } : IO Int)
 print fromIO                               # => 44
 # A do-block over any monad: a List block tries every combination, an
 # Option block stops at the first None.
-sums = List Int {
+sums = {
     a <- [1,2]
     b <- [10,20]
     return (a + b)
-}
+} : List Int
 print sums                                 # => [11,21,12,22]
 noSum = Option Int {
     a <- Some 1
@@ -1058,7 +1058,7 @@ print [checkChain 2, checkChain 0, checkChain 200]
 checkTernary n = n > 0 ? return n : Err "not positive"
 print [checkTernary 2, checkTernary 0]    # => [Ok 2, Err "not positive"]
 # throw e is the failure in whatever monad the context names.
-print [Option Int (throw "x"), Result Int String (throw "x")]  # => [None, Err "x"]
+print [Option Int (throw "x"), (throw "x" : Result Int String)] # => [None, Err "x"]
 # A monad of your own: a counter threading a number through each step.
 Counter s a = | MkCounter (s -> [a,s])
 runCounter (MkCounter f) s = f s
@@ -1068,11 +1068,11 @@ runCounter (MkCounter f) s = f s
 })
 return x = MkCounter (s -> [x,s])
 tick = MkCounter (s -> [s, s + 1])
-twoTicks = Counter Int Int {
+twoTicks = {
     a <- tick
     b <- tick
     return (a * 100 + b)
-}
+} : Counter Int Int
 print (runCounter twoTicks 5)              # => [506,7]
 print (runCounter (map (* 2) tick) 3)     # => [6,4] (map from >>= and return)
 # A parameter passed to map accepts whatever map has an instance for; the
@@ -1087,7 +1087,7 @@ print (doubleAll (Some 4))                 # => Some 8
 Label a = | MkLabel a
 (MkLabel x) >>= f = f x
 return = MkLabel
-print (Label Int { return 9 })             # => MkLabel 9
+print ({ return 9 } : Label Int)           # => MkLabel 9
 # to T x writes x as a T and from T x reads it back; they are methods too.
 print (to String 1.5 ++ "!")               # => 1.5!
 print (Int (from String "41") + 1)         # => 42
@@ -1112,7 +1112,7 @@ print return                               # => return,Some,Ok,x -> MkCounter (s
 blank _ = 0
 blank _ = ""
 print (Int (blank []))                     # => 0
-print [String (blank [])]                  # => [""]
+print [(blank [] : String)]                # => [""]
 print (blank [])                           # => 0 and "" (undecided: each overload)
 print (typeOf (blank []))                  # => Int | String
 afterBlank (Int n) = n + 1
@@ -1198,7 +1198,7 @@ print (take 3 (100 * Int))           # => [0,1,2]
 print (take 3 ([1..100] * Int))      # => [1,2,3]
 print (100 * Int 0)                  # => 0
 print (Int 123)                      # => 123
-print (UInt32 4294967295)             # => UInt32 4294967295
+print (4294967295 : UInt32)           # => UInt32 4294967295
 # UInt is the natural numbers: Z is UInt 0, S n the next one. The patterns
 # Z and S k take a number apart (k is one less), on plain integers.
 naturalFactorial Z = 1
@@ -1210,24 +1210,24 @@ naturalsBelow Z = []
 naturalsBelow (S k) = k :: naturalsBelow k
 print (naturalsBelow 3)              # => [UInt 2, UInt 1, UInt 0]
 # The checker evaluates the list to learn its length: Vect 2 is a static error.
-print (Vect 3 UInt (naturalsBelow 3))  # => [UInt 2, UInt 1, UInt 0]
+print (naturalsBelow 3 : Vect 3 UInt)  # => [UInt 2, UInt 1, UInt 0]
 # naturalFactorial (-1)               # static error: UInt cannot represent a negative integer
 # A literal in a typed pattern is a value of that type: (UInt 0) matches 0.
 # (UInt k) binds the untyped payload, so these are plain integers, while
 # naturalsBelow's S k binds the predecessor, a UInt.
-belowTyped (UInt 0) = []
-belowTyped (UInt k) = k - 1 :: belowTyped (k - 1)
+belowTyped (0 : UInt) = []
+belowTyped (k : UInt) = k - 1 :: belowTyped (k - 1)
 print (belowTyped 3)                 # => [2,1,0]
-print (Float32 .5)                   # => Float32 0.5
-print (Fraction (1/3))               # => Fraction 1/3
+print (.5 : Float32)                 # => Float32 0.5
+print (1/3 : Fraction)               # => Fraction 1/3
 print (Int $ truncate $ 3.7)         # => 3
-print (Float32 1 / 10)              # => Float32 0.1
-print (typeOf (Int32 1))             # => Int32
-print (isType Number (Int32 1))      # => True
+print ((1 : Float32) / 10)          # => Float32 0.1
+print (typeOf (1 : Int32))           # => Int32
+print (isType Number (1 : Int32))    # => True
 print (take 3 (100 * _ -> Int 0))         # => [0,0,0]
 typedAdd (Int x) (Int y) = Int (x + y)
 typedAdd (Float x) (Float y) = Float (x + y)
-typedAdd (Number x) (Number y) = x + y
+typedAdd (x : Number) (y : Number) = x + y
 print (typedAdd (Int 2) (Int 3))      # => 5
 print (typedAdd (Float 2) (Float 3))  # => 5.0
 print (typedAdd (1/3) (1/6))          # => 1/2
@@ -1252,8 +1252,8 @@ print (Int (floor .2))               # => 0
 print (Int (truncate (Float .2)))    # => 0
 print (Int $ floor $ Float .2)       # => 0
 print (.2 == Float .2)               # => True (numeric equality)
-numericPayload (_ value) = value      # _ discards the type, keeps the payload
-print (numericPayload (Int32 123))   # => 123
+numericPayload (value : _) = value    # _ discards the type, keeps the payload
+print (numericPayload (123 : Int32)) # => 123
 retypedAdd (Int x) (Int y) = Int (x + y)
 print (retypedAdd (Int 2) (Int 3))   # => 5
 print cast                          # => its clauses, one pattern lambda per line
@@ -1299,14 +1299,14 @@ print ([10] 0)                      # => 10 (integer indexing)
 Count = Int
 Numbers = [Int]
 Point = [x: Float, y: Float]
-print (Count 123)                   # => Count 123 (an alias of Int names a subtype)
+print (123 : Count)                 # => Count 123 (an alias of Int names a subtype)
 print Numbers.[1]                  # => [1]
 print (Point [x: 1, y: 2])          # => [x: 1.0, y: 2.0]
 firstNumber (Numbers values) = head values
 print (firstNumber [123])           # => 123
 print (cast [Int,Int] [1,2])         # => [1,2]
 NumericOption a = Option a
-print (NumericOption Int (Some 123)) # => Some 123
+print (Some 123 : NumericOption Int) # => Some 123
 UserId = | MkUserId Int
 print (MkUserId 123)                # => MkUserId 123
 
@@ -1327,18 +1327,18 @@ print (HashMap [["a",1],["b",2]]) # => HashMap [["a",1],["b",2]]
 
 print (typeOf $ True) # => Bool
 
-print (Bool True)        # => True
-print (String "hi")      # => hi
-print (Char 'a')         # => 'a'
+print (to Bool True)     # => True
+print ("hi" : String)    # => hi
+print ('a' : Char)       # => 'a'
 print []                # => []
 print (List [1,2])      # => [1,2]
-print (Record [x: 1])    # => [x: 1]
+print ([x: 1] : Record)  # => [x: 1]
 print (Function (x -> x + 1) 2) # => 3
-print (Type Bool)        # => Bool
+print (Bool : Type)      # => Bool
 
-myTypeOf (t _) = print t
+myTypeOf (_ : t) = print t
 myTypeOf True       # => Bool
-myTypeOf (Int32 5)  # => Int32
+myTypeOf (5 : Int32) # => Int32
 
 # HTTP and JSON. fetch url options returns the response as a record (status,
 # ok, statusText, url, headers, body); fetchText and fetchJson return a
@@ -1377,7 +1377,7 @@ print (reverse [1,2,3])           # [3,2,1]
 print (reverse "a😀b")              # b😀a
 # The checker runs the same text functions: to (List Char) counts code points here too,
 # so Vect 3 Char (to (List Char) "a😀") would be a static length error.
-print (Vect 2 Char (to (List Char) "a😀"))  # => ['a','😀']
+print (to (List Char) "a😀" : Vect 2 Char)  # => ['a','😀']
 print (take 6 primes)                 # [2,3,5,7,11,13]
 print (mean [1,2])                   # Some 3/2
 print (frequencies $ words $ "one two one")
@@ -1487,12 +1487,12 @@ print (onlyVowelIf True)                      # 1
 vowelBelowHalf x = x < 1 / 2 ? 'a' : 'z'
 print (onlyOne (vowelOrPair (vowelBelowHalf 0.25)))  # 1
 # Fixed-width numbers keep their precision: in Float32, .1 + .2 == .3.
-vowelIfSingle x = Float32 x + Float32 .2 == Float32 .3 ? 'a' : 'z'
+vowelIfSingle x = (x : Float32) + (.2 : Float32) == (.3 : Float32) ? 'a' : 'z'
 print (onlyOne (vowelOrPair (vowelIfSingle .1)))     # 1
 # A known value that converts losslessly selects a typed clause, as at runtime.
 vowelIfInt (Int _) = 'a'
 vowelIfInt _ = 'z'
-print (onlyOne (vowelOrPair (vowelIfInt (UInt 3))))  # 1
+print (onlyOne (vowelOrPair (vowelIfInt (3 : UInt)))) # 1
 # Lengths count too, through parameters, map, and recursion.
 vowelIfShort xs = length xs < 2 ? 'a' : 'z'
 shortVowel ys = onlyOne (vowelOrPair (vowelIfShort (map (+ 1) ys)))
@@ -1661,8 +1661,8 @@ print (Some 123 ~ handlers)                    # 123
 print (None ~ handlers)                        # 0
 dispatch = (Some 123 ~)
 print (dispatch handlers)                     # 123
-print (Dynamic missing ~ [_ -> 42])                     # 42; unused value stays lazy
-checkedApply ((Int -> Int) f) = Int { f 123 }
+print ((missing : Dynamic) ~ [_ -> 42])                 # 42; unused value stays lazy
+checkedApply (f : Int -> Int) = Int { f 123 }
 print (checkedApply (*2))                     # 246 (typed Int)
 
 # Editor tooling checks this file without executing these actions:
@@ -1680,14 +1680,14 @@ print (editorDouble 21)                     # => 42
 # value of that type, which binds the parameters: (ExampleOption a value) takes
 # the whole variant, a its payload's type. Constructor patterns unpack it.
 ExampleOption a = ExampleSome a | ExampleNone
-exampleUnwrap (ExampleOption _ value) = value ~ [
+exampleUnwrap (value : ExampleOption _) = value ~ [
     ExampleSome x -> x
     ExampleNone -> 0
 ]
 print (exampleUnwrap (ExampleSome 123))      # => 123
 print (exampleUnwrap ExampleNone)        # => 0
 print (typeOf (ExampleSome 123))             # => ExampleOption
-examplePayload (ExampleOption a _) = a
+examplePayload (_ : ExampleOption a) = a
 print (examplePayload (ExampleSome "x"))     # => String
 exampleParameter (ExampleOption a) = a
 print (exampleParameter (ExampleOption Int)) # => Int
@@ -1705,7 +1705,7 @@ captured <- { print "captured now"; return "kept" } # => captured now
 print captured                               # => kept (the stored result)
 eagerArgs <- getArgs
 print eagerArgs                              # => [] without CLI arguments
-lazyCapture <- return [Dynamic missing, 42]   # return v: <- binds v now (outer value only)
+lazyCapture <- return [(missing : Dynamic), 42] # return v: <- binds v now (outer value only)
 print (lazyCapture 1)                         # => 42
 # x <- 42 is an error: <- runs an action; bind a value with = (or <- return v).
 
@@ -1772,9 +1772,9 @@ print (useFirst + useSecond)              # => 30
 
 # Record-template patterns accept positional lists just like template application.
 VectorForPattern = [x: Float, y: Float, z: Float]
-showVector (VectorForPattern v) = print v
+showVector (v : VectorForPattern) = print v
 showVector [1,2,3]  # => [x: 1.0, y: 2.0, z: 3.0]
-vectorPatternX (VectorForPattern v) = v.x
+vectorPatternX (v : VectorForPattern) = v.x
 print (vectorPatternX [1,2,3])        # => 1.0 (also checked before execution)
 
 # REPL: typing ) on an indent-only line dedents one level, like ] and }.
@@ -1834,7 +1834,7 @@ print (ZeroVector [1,2,3])        # => [x: 1.0, y: 2.0, z: 3.0]
 # ZeroVector [1,2]                  # error: positional fields must be complete
 # Int + 1 and sqrt Float are errors; constructors are not numbers.
 print (typeOf (Int 1))               # => Int
-print (Type ZeroVector)              # => [x: Float, y: Float, z: Float]
+print (ZeroVector : Type)            # => [x: Float, y: Float, z: Float]
 DefaultChoice a = Present a | Absent
 print ([choice: DefaultChoice Int] []) # => [choice: Absent]
 DefaultUser = | MakeDefaultUser Int String
@@ -1857,19 +1857,19 @@ print indexedObject                 # => [x: 3]
 # wherever its base is, and two names do not mix.
 AccountId = Int
 OtherId = Int
-getAccountId (AccountId n) = n
-print (AccountId 7)                  # => AccountId 7
-print (getAccountId (AccountId 7))   # => 7
-print (AccountId 2 + AccountId 3)    # => AccountId 5
-print (AccountId 1 + 1)              # => AccountId 2 (a plain Int joins it)
+getAccountId (n : AccountId) = n
+print (7 : AccountId)                # => AccountId 7
+print (getAccountId (7 : AccountId)) # => 7
+print ((2 : AccountId) + (3 : AccountId)) # => AccountId 5
+print ((1 : AccountId) + 1)          # => AccountId 2 (a plain Int joins it)
 print (AccountId == Int)            # => False
-idKind (AccountId _) = "account"
+idKind (_ : AccountId) = "account"
 idKind (Int _) = "int"
-print [idKind (AccountId 1), idKind (OtherId 1), idKind 1]  # => ["account","int","int"]
+print [idKind (1 : AccountId), idKind (1 : OtherId), idKind 1] # => ["account","int","int"]
 # AccountId 1 + OtherId 1           # error: cannot combine AccountId and OtherId
 # Applying a base type unwraps: OtherId (Int (AccountId 4)) moves between names.
-print (Float $ AccountId 4)          # => 4.0
-print (OtherId (Int (AccountId 4)))  # => OtherId 4
+print (Float $ (4 : AccountId))      # => 4.0
+print (Int (4 : AccountId) : OtherId) # => OtherId 4
 
 # Nullary variants index lists in declaration order.
 Compass = Up | Down | Left | Right
@@ -1884,7 +1884,7 @@ print (deltas (Down + 1))            # => [-1,0]
 
 # The linter warns if a known family's literal alternatives omit a case.
 # Guards do not count as unconditional coverage; dynamic lists stay runtime-checked.
-compassName (Compass direction) = direction ~ [
+compassName (direction : Compass) = direction ~ [
     Up -> "up"
     Down -> "down"
     Left -> "left"
@@ -1930,8 +1930,8 @@ print (typeOf (1 :: ["hello"]))         # => List (Int | String)
 # Empty results are lists; conditions use truthiness.
 print ({} == [])                        # => True
 print (Bool * [0,1,"","hello",[],[0]])  # => [False,True,False,True,False,True]
-print (0 && Dynamic missingTruthinessName)          # => False; right side is skipped
-print (1 || Dynamic missingTruthinessName)          # => True
+print (0 && (missingTruthinessName : Dynamic))      # => False; right side is skipped
+print (1 || (missingTruthinessName : Dynamic))      # => True
 print (filter (x -> x) [0,1,2])      # => [1,2]
 print (42 ~ [_ | [] -> 0, x | 1 -> x]) # => 42
 
@@ -1942,13 +1942,13 @@ print (typeOf (x -> [x,x]))             # => a -> List a
 
 # Value-dependent types; the same constraints run at dynamic boundaries.
 SizedInts n = Vect n Int
-copySized n ((SizedInts n) xs) = xs
+copySized n (xs : SizedInts n) = xs
 # A typed pattern binds the names its type does not know yet: n and a here.
-appendSized ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys)
+appendSized (xs : Vect n a) (ys : Vect m a) = xs ++ ys : Vect (n + m) a
 print (typeOf (appendSized [1,2] [3]))  # => Vect 3 Int
 # A length keeps a name bound to a value (n above, an earlier parameter's); one
 # bound to a function, which no length is, binds there, even one defined later.
-extentOf (Vect extent a xs) = extent
+extentOf (xs : Vect extent a) = extent
 extent xs = length xs
 print (extentOf [7,8,9])                # => 3
 # An indexed family: each constructor says the type it makes.
@@ -1971,7 +1971,7 @@ print (typeOf pairVec)                   # => Vec 2 Int
 joinVec Nil ys = ys
 joinVec (Cons x rest) ys = Cons x (joinVec rest ys)
 print (typeOf (joinVec pairVec pairVec)) # => Vec 4 Int
-vecLength ((Vec n _) _) = n
+vecLength (_ : Vec n _) = n
 print (vecLength pairVec + 1)            # => 3
 firstVec (Cons x _) = x
 print (firstVec pairVec)                 # => 1
@@ -1980,59 +1980,59 @@ print (firstVec pairVec)                 # => 1
 # induction: Nil makes n 0, Cons x r makes it one more than r's, and the
 # recursive call on the smaller r meets its own clause's claim. Claiming
 # n + m + 1 in the second clause is a static error at the definition.
-revVec ((Vec n a) Nil) ((Vec m a) acc) = Vec (n + m) a acc
-revVec ((Vec n a) (Cons x r)) ((Vec m a) acc) = Vec (n + m) a (revVec r (Cons x acc))
+revVec (Nil : Vec n a) (acc : Vec m a) = acc : Vec (n + m) a
+revVec (Cons x r : Vec n a) (acc : Vec m a) = revVec r (Cons x acc) : Vec (n + m) a
 print (revVec pairVec Nil)               # => Cons 2 (Cons 1 Nil)
 # (Vec n a xs) is ((Vec n a) xs), as for Vect. A match alternative's x:xs
 # takes the scrutinee's tail as one shorter, as a clause's does.
-vecSize (Vec n _ _) = n
+vecSize (_ : Vec n _) = n
 print (vecSize pairVec)                  # => 2
-countVect (Vect _ _ xs) = xs ~ [[] -> 0, (_::rest) -> 1 + countVect rest]
+countVect (xs : Vect _ _) = xs ~ [[] -> 0, (_::rest) -> 1 + countVect rest]
 # Vect is the prelude's family of lists counting their elements:
 # Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a, the clauses
 # Vect Z a = [] and Vect (S k) a = a :: Vect k a. A program's family of
 # the same shape is the same length-indexed list.
 Lst n a = [] -> Lst 0 a | a :: Lst k a -> Lst (k + 1) a
-print (typeOf (Lst 2 Int [5,6]))        # => Vect 2 Int
+print (typeOf ([5,6] : Lst 2 Int))      # => Vect 2 Int
 # A claim around a match is checked in each alternative under its own facts
 # ([] makes n zero); claiming n + m + 1 here would be a static error.
-appendVect (Vect n a xs) (Vect m a ys) = Vect (n + m) a {
+appendVect (xs : Vect n a) (ys : Vect m a) = {
     xs ~ [
         [] -> ys
         x :: rest -> x :: appendVect rest ys
     ]
-}
+} : Vect (n + m) a
 print (typeOf (appendVect [1,2] [3]))  # => Vect 3 Int
 # Written with lambdas it is the same function, checked the same way.
-appendLambda = Vect n a xs -> Vect m a ys -> Vect (n + m) a {
+appendLambda = (xs : Vect n a) -> (ys : Vect m a) -> ({
     xs ~ [
         [] -> ys
         x :: rest -> x :: appendLambda rest ys
     ]
-}
+} : Vect (n + m) a)
 print (appendLambda [] [3])              # => [3]
 print (countVect [7,8,9])              # => 3
 print (copySized 3 [1,2,3])            # => [1,2,3]
-print (typeOf (SizedInts 3 [1,2,3]))   # => Vect 3 Int
+print (typeOf ([1,2,3] : SizedInts 3)) # => Vect 3 Int
 SelectedType flag = flag ? Int : String
-print (SelectedType True 123)           # => 123
-print (SelectedType False "hello")      # => hello
+print (123 : SelectedType True)         # => 123
+print ("hello" : SelectedType False)    # => hello
 # The checker evaluates the pure code a type needs, as the program would:
 # SelectedType (isEven 3) 5 and Vect (sizeFor 2) Int [1,2,3] are static errors.
 sizeFor n = n * 2
-print (Vect (sizeFor 2) Int [1,2,3,4])  # => [1,2,3,4]
+print ([1,2,3,4] : Vect (sizeFor 2) Int) # => [1,2,3,4]
 # A type name bound to a lambda is used as it is used: applied, it runs;
 # where a type is expected, it is the function type it spells.
 SizedFloats = n -> Vect n Float
 print (SizedFloats 2 [1,2])            # => [1.0,2.0]
 IntMaker = _ -> Int
-makeOne ((IntMaker) k) = k []
+makeOne (k : IntMaker) = k []
 print (makeOne (_ -> 7))                # => 7
 cellType 0 = Int
 cellType _ = String
 print (cellType 1 "text")               # => text
 # A type chosen by a parameter is decided at each run: a runtime check.
-labelled n = SelectedType (n > 3) "few"
+labelled n = "few" : SelectedType (n > 3)
 print (labelled 2 ++ "!")               # => few!
 # labelled 5 fails when run: Int expects a number.
 # apn --check examples/types/dependent-vectors.apn checks without executing.
@@ -2068,17 +2068,17 @@ print ([x: 1, y: 2, z: 3].[x,y] ^ 10) # => [1,1024]
 # In the REPL: vec.[x,y] ^ 100000000 can be stopped with Ctrl+C.
 
 # Explicit floating constructors round; implicit narrowing remains lossless.
-print (Float32 .1)                    # => Float32 0.1
-print (Float32 .1 + .2)               # => Float32 0.3
-print (Float32 .1 + Float32 .2)       # => Float32 0.3
+print (.1 : Float32)                  # => Float32 0.1
+print ((.1 : Float32) + .2)           # => Float32 0.3
+print ((.1 : Float32) + (.2 : Float32)) # => Float32 0.3
 # Int .2 still errors; use Int (floor .2) to choose integer rounding.
 
 # Float is flexible; Float32 and Float64 commit to a precision.
 flexibleValue = .2
-print (Float32 .1 + flexibleValue)   # => Float32 0.3
-print (Float .2 + Float32 .1)        # => Float32 0.3
+print ((.1 : Float32) + flexibleValue) # => Float32 0.3
+print (Float .2 + (.1 : Float32))    # => Float32 0.3
 # Float32 .1 + Float64 .2 errors: choose a precision with a cast.
-print (Float32 .1 + cast Float32 (Float64 .2)) # => Float32 0.3
+print ((.1 : Float32) + cast Float32 (.2 : Float64)) # => Float32 0.3
 
 print scopedPoint.{
     result = x + y
@@ -2098,9 +2098,9 @@ print (inferredFactorial 5)                 # => 120
 # loop x = loop x and x = x remain legal; checking never executes them.
 
 # Dependent pattern binders; repeated names require agreement.
-vectAppend (Vect n a []) (Vect m a ys) = Vect (n + m) a ys
-vectAppend (Vect n a (x::xs)) (Vect m a ys) =
-    Vect (n + m) a (x :: vectAppend xs ys)
+vectAppend ([] : Vect n a) (ys : Vect m a) = ys : Vect (n + m) a
+vectAppend (x::xs : Vect n a) (ys : Vect m a) =
+    (x :: vectAppend xs ys : Vect (n + m) a)
 print (vectAppend [1,2] [3,4])            # => [1,2,3,4]
 print (typeOf (vectAppend [] [3,4]))       # => Vect 2 Int
 sameArguments x x = x
@@ -2113,9 +2113,9 @@ print (1 ~ [t x -> [t,x]])                # => [Int,1]
 print ((_, _ -> 1) 2 3)                    # => 1
 
 # Files and REPL submissions check by default; Dynamic marks runtime boundaries.
-dynamicNumber = Dynamic 41
+dynamicNumber = 41 : Dynamic
 print (Int dynamicNumber + 1)              # => 42
-((Int -> Int) checkedIncrement) <- return (Dynamic (x -> x + 1))
+(checkedIncrement : Int -> Int) <- return (x -> x + 1 : Dynamic)
 print (checkedIncrement 41)                # => 42
 # Int (Dynamic "bad") fails at runtime; unknowns outside Dynamic still fail checking.
 
@@ -2139,18 +2139,18 @@ print (List Int == typeOf [1,2,3])       # => True
 print ([Int] == typeOf [1])                # => False ([Int] is positional)
 print (typeOf map)                         # => (a -> b) -> f a -> f b (f: any type map works on)
 print ((a -> a).(+ 1) 41)                  # => 42 (checked: the result is the input's type)
-applyTwice ((a -> a) f) x = f (f x)
+applyTwice (f : a -> a) x = f (f x)
 print (applyTwice (* 3) 2)                 # => 18
 print (isType (Int -> Int) (+ 1))          # => True
 print (((a -> b) -> List a -> List a) == typeOf filter)  # => True (a function type taking one)
 # f a is a type variable applied to a type: any type holding an a (List a,
 # Option a). As a contract it accepts map and checks each use.
 print (((a -> b) -> f a -> f b) == typeOf map)        # => True
-twiceMapped (((a -> b) -> f a -> f b) m) xs = m (* 2) (m (+ 1) xs)
+twiceMapped (m : (a -> b) -> f a -> f b) xs = m (* 2) (m (+ 1) xs)
 print [twiceMapped map [1,2], twiceMapped map (Some 3)]  # => [[4,6], Some 8]
 # f a e fills a type's first two parameters (Result a e); as a parameter it
 # is the flat typed pattern ((f a) e), as (Vec n a xs) is.
-doubleOk (((a -> b) -> f a e -> f b e) m) r = m (* 2) r
+doubleOk (m : (a -> b) -> f a e -> f b e) r = m (* 2) r
 print [doubleOk map (Ok 4), doubleOk map (Err "no")]  # => [Ok 8, Err "no"]
 
 typedLambda = (Int value) -> Int { value + value }
@@ -2166,11 +2166,11 @@ print (selfOnly selfOnly == selfOnly)     # => True
 # selfOnly 1                  # argument 'selfOnly' must equal the function 'selfOnly'; got Int
 
 # Wildcard schema fields accept any value without conversion.
-showField ([x: _] v) = print v.x
+showField (v : [x: _]) = print v.x
 showField [123]                          # => 123
 showField ["hello"]                      # => hello
 showField [x: True]                      # => True
-mixedFields ([x: _, y: Float] v) = [v.x,v.y]
+mixedFields (v : [x: _, y: Float]) = [v.x,v.y]
 print (mixedFields ["hello",2])         # => ["hello",2.0]
 
 # Dotted patterns retain the same argument while destructuring it.
@@ -2193,7 +2193,7 @@ updateRecord._ = [y: 2]
 print updateRecord                       # => [x: 1, y: 2]
 
 # Type and value shapes can be captured together.
-inspectSingle ([elementType] [item]) = [elementType,item]
+inspectSingle ([item] : [elementType]) = [elementType,item]
 print (inspectSingle [123])              # => [Int,123]
 print (inspectSingle ["hello"])          # => [String,"hello"]
 
@@ -2202,10 +2202,10 @@ print ([10,20,30] [first: 0, last: 2])  # [first: 10, last: 30]
 print ([Int] [x: 0])                   # [x: Int]
 print [Float].[x: 1]                   # [x: 1.0]
 print [String,Int].[name: "a", age: 2] # [name: "a", age: 2]
-inspectNamedSlot ([t] [x]) = [t,x]
+inspectNamedSlot ([x] : [t]) = [t,x]
 print (inspectNamedSlot [1])           # [Int,1]
 print (inspectNamedSlot [other: 2, x: 1]) # [Int,1]
-convertNamedSlot ([Float] [x]) = x
+convertNamedSlot ([x] : [Float]) = x
 print (convertNamedSlot [x: 1])        # 1.0
 
 # Selection read/write symmetry and record remainders.

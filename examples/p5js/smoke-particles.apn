@@ -5,7 +5,7 @@ import "p5"
 texture = loadImage "assets/particle_texture.png"
 # A particle: where it is, its velocity, its life left and its hue.
 Particle = [position: [Float,Float], velocity: [Float,Float], life: Float, hue: Int]
-particles = Mutable (List Particle [])
+particles = Mutable ([] : List Particle)
 
 setup (Sketch p) = {
     p.createCanvas 720 400
@@ -17,7 +17,7 @@ setup (Sketch p) = {
 draw (Sketch p) = {
     p.background 20
     # The wind, from the mouse's x.
-    wind = [Float (remap p.mouseX 0 p.width -0.2 0.2), 0.0]
+    wind = [(remap p.mouseX 0 p.width -0.2 0.2 : Float), 0.0]
     set particles (filter (particle -> particle.life > 0) (map (blow wind) particles))
     mapM (render p) particles
     # Two new particles a frame.
@@ -30,8 +30,8 @@ newParticle (Sketch p) = {
     xSpeed <- p.randomGaussian
     ySpeed <- p.randomGaussian
     return [
-        position: [Float (p.width / 2), Float (p.height - 60)]
-        velocity: [Float (xSpeed * 0.3), Float (ySpeed * 0.3 - 1)], life: 100.0
+        position: [(p.width / 2 : Float), (p.height - 60 : Float)]
+        velocity: [(xSpeed * 0.3 : Float), (ySpeed * 0.3 - 1 : Float)], life: 100.0
         hue: p.frameCount % 256
     ]
 }

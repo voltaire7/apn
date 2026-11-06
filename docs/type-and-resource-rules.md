@@ -11,11 +11,11 @@ accepted, and keeps its name when a result fits.
 ```apn
 Count = Int
 
-Count 5 + 1                 # Count 6: a Count and a plain Int give a Count
-Int (Count 5)               # 5
-sqrt (Count 4)              # 2: builtins and (Int x) patterns see the Int
-Count 5 == 5                # True
-Count 1 + Age 2             # error: cannot combine Count and Age (Age = Int)
+(5 : Count) + 1             # Count 6: a Count and a plain Int give a Count
+((5 : Count) : Int)         # 5
+sqrt (4 : Count)            # 2: builtins and (Int x) patterns see the Int
+(5 : Count) == 5            # True
+(1 : Count) + Age 2         # error: cannot combine Count and Age (Age = Int)
 ```
 
 Its own pattern, `(Count c)`, is chosen before `(Int n)` and accepts only a
@@ -28,8 +28,8 @@ A constructor makes a distinct type instead (see
 none of an `Int`'s operations, only those its clauses define.
 
 ```apn
-UserId (Int id) = _
-OrderId (Int id) = _
+UserId (id : Int) = _
+OrderId (id : Int) = _
 
 UserId 123                  # UserId 123
 UserId 3 == UserId 3        # True: every value has equality and printing

@@ -6,9 +6,9 @@ Glsl = | Glsl String
 
 # A value's GLSL code.
 glsl (Glsl code) = code
-glsl (List _ items) = "vec" ++ to String (length items) ++ "(" ++ joinWith ", " (map glsl items)
+glsl (items : List _) = "vec" ++ to String (length items) ++ "(" ++ joinWith ", " (map glsl items)
     ++ ")"
-glsl (Number n) = to String (Float n)
+glsl (n : Number) = to String (n : Float)
 
 # A list as one GLSL vector, for arithmetic as a whole: vec [x,y] * 0.5.
 vec items = Glsl (glsl items)

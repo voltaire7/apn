@@ -6,11 +6,11 @@ function result(source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['Vector3 = [x: Float, y: Float, z: Float]\nf (Vector3 v) = v\nf [1,2,3]', '[x: 1.0, y: 2.0, z: 3.0]'],
-    ['f ([x: Float] v) = v.x\nf [1]', '1.0'],
-    ['V = [x: Float, y: Float]\nf (V v) = v.x\nf [1,missing]', '1.0'],
-    ['V = [x: Float, y: Float]\nf (V v) = 1\nf _ = 2\n[f [], f [1], f [1,2], f [1,2,3], f [0..]]', '[2,2,1,2,2]'],
-    ['A = [x: Float]\nB = [y: Float]\nf (A v) = 1\nf (B v) = 2\nf [1]', '1'],
+    ['Vector3 = [x: Float, y: Float, z: Float]\nf (v : Vector3) = v\nf [1,2,3]', '[x: 1.0, y: 2.0, z: 3.0]'],
+    ['f (v : [x: Float]) = v.x\nf [1]', '1.0'],
+    ['V = [x: Float, y: Float]\nf (v : V) = v.x\nf [1,missing]', '1.0'],
+    ['V = [x: Float, y: Float]\nf (v : V) = 1\nf _ = 2\n[f [], f [1], f [1,2], f [1,2,3], f [0..]]', '[2,2,1,2,2]'],
+    ['A = [x: Float]\nB = [y: Float]\nf (v : A) = 1\nf (v : B) = 2\nf [1]', '1'],
 
     ['[Char,Char,Char,Char,Char]."hello"', "['h','e','l','l','o']"],
     ['[].""', '[]'],
@@ -22,7 +22,7 @@ for (const [source, expected] of [
     ['Characters = [Char,Char]\nCharacters."hi"', "['h','i']"],
     ['cast [Char,Char] "hi"', "['h','i']"],
     ['typeOf [Char,Char]."hi"', 'List a'],
-    ['[x: 0] [123]', '[x: 123]'], ['[x: Int 0] [floor .2]', '[x: 0]'], ['[x: Int32 0] [123]', '[x: 123]'],
+    ['[x: 0] [123]', '[x: 123]'], ['[x: (0 : Int)] [floor .2]', '[x: 0]'], ['[x: (0 : Int32)] [123]', '[x: 123]'],
     ['[x: "old"] ["new"]', '[x: "new"]'], ['[x: False] [True]', '[x: True]'], ["[x: 'a'] ['b']", "[x: 'b']"],
     ['(* 2) * [1,2,3,4]', '[2,4,6,8]'],
     ['Int * [1,2,3,4]', '[1,2,3,4]'],
@@ -51,30 +51,30 @@ for (const [source, expected] of [
     ['xs = [0,missing]\nxs 0 = 1\nxs 0', '1'],
     ['xs = [0..]\nxs 2 = 99\ntake 4 xs', '[0,1,99,3]'],
     ['[] []', '[]'], ['[].[]', '[]'], ['[Int].[0]', '[0]'], ['[10] 0', '10'],
-    ['Count (Int x) = _\nCount 123', 'Count 123'],
-    ['Count (Int x) = _\nf (Count x) = x\nf (Count 123)', '123'],
-    ['Option a = Some a | None\n[Type (Option Int) == Type (Option Int), Type (Option Int) == Type (Option Float)]', '[True,False]'],
+    ['Count (x : Int) = _\nCount 123', 'Count 123'],
+    ['Count (x : Int) = _\nf (Count x) = x\nf (Count 123)', '123'],
+    ['Option a = Some a | None\n[(Option Int : Type) == (Option Int : Type), (Option Int : Type) == (Option Float : Type)]', '[True,False]'],
     ['Option a = Some a | None\n[isType (Option Int) (Some 1), isType (Option Int) (Some "hi")]', '[True,False]'],
     ['[isType [Int,Int] [1,2], isType [Int] [1,"hi"], isType [x: Int] [x: 1]]', '[True,False,True]'],
-    ['Option a = Some a | None\nf ((Option Int) x) = 1\nf _ = 0\nf 123', '0'],
-    ['Many a = Packed [a,a] | Empty\nMany Int (Packed [1,2])', 'Packed [1,2]'],
+    ['Option a = Some a | None\nf (x : Option Int) = 1\nf _ = 0\nf 123', '0'],
+    ['Many a = Packed [a,a] | Empty\n(Packed [1,2] : Many Int)', 'Packed [1,2]'],
     ['Many a = Packed [a,a] | Empty\nPacked [1,2]', 'Packed [1,2]'],
-    ['Product a b = | MakeProduct a b\nProduct Int String (MakeProduct 123 "hi")', 'MakeProduct 123 "hi"'],
+    ['Product a b = | MakeProduct a b\n(MakeProduct 123 "hi" : Product Int String)', 'MakeProduct 123 "hi"'],
     ['Point = [x: Float, y: Float]\nPoints = [Point]\nPoints.[[x: 1, y: 2]]', '[[x: 1.0, y: 2.0]]'],
-    ['Option a = Some a | None\n[Type (Option [Int]) == Type (Option [Int]), Type (Option [Int]) == Type (Option [Float])]', '[True,False]'],
+    ['Option a = Some a | None\n[(Option [Int] : Type) == (Option [Int] : Type), (Option [Int] : Type) == (Option [Float] : Type)]', '[True,False]'],
     ['UserId = | MkUserId Int\n[isType UserId (MkUserId 123), isType UserId 123]', '[True,False]'],
 
     ['Point = [x: Float, y: Float]\nPoint [x: 1]', '[x: 1.0, y: 0.0]'],
     ['Numbers = [Int]\nNumbers.[1]', '[1]'],
     ['Numbers = [Int]\nf (Numbers xs) = head xs\nf [123]', '123'],
-    ['f ([Int] xs) = head xs\nf [123]', '123'],
-    ['f ([x: Int] p) = p.x\nf [x: 123]', '123'],
+    ['f (xs : [Int]) = head xs\nf [123]', '123'],
+    ['f (p : [x: Int]) = p.x\nf [x: 123]', '123'],
     ['cast [Int,Int] [1,2]', '[1,2]'],
-    ['[isType Type [Int], isType Type [(*2)], Type [Int]]', '[True,False,[Int]]'],
-    ['Option a = Some a | None\nOptional a = Option a\nType (Optional Int)', 'Option Int'],
-    ['Option a = Some a | None\nOptional a = Option a\nOptional Int (Some (floor .2))', 'Some 0'],
+    ['[isType Type [Int], isType Type [(*2)], ([Int] : Type)]', '[True,False,[Int]]'],
+    ['Option a = Some a | None\nOptional a = Option a\n(Optional Int : Type)', 'Option Int'],
+    ['Option a = Some a | None\nOptional a = Option a\n(Some (floor .2) : Optional Int)', 'Some 0'],
     ['Option a = Some a | None\nOption Int None', 'None'],
-    ['Option a = Some a | None\nf ((Option Int) x) = x ~ [Some v -> v, None -> Int 0]\nf (Some 123)', '123'],
+    ['Option a = Some a | None\nf (x : Option Int) = x ~ [Some v -> v, None -> (0 : Int)]\nf (Some 123)', '123'],
     ['Option a = Some a | None\nSome x = Some 123\nx', '123'],
     ['Option a = Some a | None\nNone = None\n123', '123'],
     ['UserId = | MkUserId Int\nMkUserId 123', 'MkUserId 123'],
@@ -86,8 +86,8 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const [source, error] of [
-    ['[x: Int 0] [Float .2]', 'lossy conversion'],
-    ['[x: Int8 0] [128]', 'out of range'],
+    ['[x: (0 : Int)] [(.2 : Float)]', 'lossy conversion'],
+    ['[x: (0 : Int8)] [128]', 'out of range'],
     ['[x: 0] ["hi"]', 'cannot use String where Int is required'],
     ['[x: False] [1]', 'cannot use Int where Bool is required'],
     ['[x: 1] [2.5]', 'lossy conversion'],
@@ -103,7 +103,7 @@ for (const [source, error] of [
     ['[Int]."hi"', 'expects a number'],
     ['xs = [].[]\nxs 0 = 1', 'out of range'],
     ['xs = [Int]\nxs 1 = 1', 'out of range'],
-    ['Option a = Some a | None\nOption Int (Some (Float .2))', 'lossy conversion'],
+    ['Option a = Some a | None\nOption Int (Some (.2 : Float))', 'lossy conversion'],
     ['Option a = Some a | None\nOption Int (Some "hi")', 'expects a number'],
     ['Option a = Some a | None\nNone = Some 1', 'pattern'],
     ['Option a = Some a | None\nSome a = | Replacement a', 'cannot redeclare value constructor'],
@@ -119,10 +119,10 @@ for (const [source, error] of [
     }
     throw new Error(`Expected ${error}`);
 });
-for (const assignment of ['v.x = Float .2', 'v "x" = Float .2', 'v.[x,y] = [2, Float .2]']) {
+for (const assignment of ['v.x = .2 : Float', 'v "x" = .2 : Float', 'v.[x,y] = [2, (.2 : Float)]']) {
     Deno.test(`failed template update preserves binding: ${assignment}`, () => {
         const i = new Interpreter();
-        i.run(parseDocument('v = [x: Int 1, y: Int 2]'));
+        i.run(parseDocument('v = [x: (1 : Int), y: (2 : Int)]'));
         let failed = false;
         try { i.run(parseDocument(assignment)); } catch { failed = true; }
         const actual = i.renderString(i.run(parseDocument('v')));
@@ -135,7 +135,7 @@ for (const [application, block, expected] of [
     ['model = [name: "a", n: 1]\nmodel [name: "b"]', 'model = [name: "a", n: 1]\n{ model.name = "b"; model }', '[name: "b", n: 1]'],
     ['r = [f: (* 2)]\n(r [f: (+ 1)]).f 1', 'r = [f: (* 2)]\n{ r.f = (+ 1); r }.f 1', '2'],
     ['Vector3 = [x: Float, y: Float, z: Float]\nVector3 [x: Int]', 'Vector3 = [x: Float, y: Float, z: Float]\n{ Vector3.x = Int; Vector3 }', '[x: Int, y: Float, z: Float]'],
-    ['Vector3 = [x: Float, y: Float, z: Float]\nV2 = Vector3 [z: Int]\nV2 [x: 1, z: 2]', 'Vector3 = [x: Float, y: Float, z: Float]\nV2 = { Vector3.z = Int; Vector3 }\nV2 [x: 1, z: 2]', '[x: 1.0, y: 0.0, z: 2]'],
+    ['Vector3 = [x: Float, y: Float, z: Float]\nV2 = Vector3 [z: Int]\n([x: 1, z: 2] : V2)', 'Vector3 = [x: Float, y: Float, z: Float]\nV2 = { Vector3.z = Int; Vector3 }\n([x: 1, z: 2] : V2)', '[x: 1.0, y: 0.0, z: 2]'],
 ] as const) Deno.test(`record application is field assignment: ${application}`, () => {
     for (const checked of [false, true]) {
         const run = (source: string) => {
@@ -153,7 +153,7 @@ for (const [application, block, expected] of [
 for (const checked of [true, false]) for (const [source, expected] of [
     ['[[Int..], [Int..] == List Int, typeOf [1..], typeOf [1..] == [Int..]]', '[[Int..],False,[Int..],True]'],
     ['[take 2 [Int..], head [Int..], isType [Int..] [1,2], isType [Int..] [1..], isType [Int..] 5]', '[[Int,Int],Int,False,True,False]'],
-    ['f ([Int..] xs) = "endless"\nf _ = "other"\n[f [1,2], f ["a"], f [1..], f 5]', '["other","other","endless","other"]'],
+    ['f (xs : [Int..]) = "endless"\nf _ = "other"\n[f [1,2], f ["a"], f [1..], f 5]', '["other","other","endless","other"]'],
     ['Point = [x: Float, y: Float]\nps = [x: 1, y: 2] :: ps\ntake 1 (to [Point..] ps)', '[[x: 1.0, y: 2.0]]'],
     ['ones = 1 :: ones\n[typeOf ones, take 2 (to [Float..] ones)]', '[[Int..],[1.0,1.0]]'],
     ['[take 3 [1..], [1,3..9]]', '[[1,2,3],[1,3,5,7,9]]'],

@@ -36,7 +36,7 @@ draw shown (Sketch p) = {
     [centerX,centerY] = [p.width / 2, p.height / 2]
     p.translate -centerX -centerY
     # The sketch's values are Dynamic: Number converts one for round.
-    count = Int (round (Number (remap p.mouseX 0 p.width 6 60)))
+    count = round (remap p.mouseX 0 p.width 6 60 : Number) : Int
     when (count != shown) (p.send (Counted count))
     step = 180 / count
     p.call "beginShape" [p.TRIANGLE_STRIP]

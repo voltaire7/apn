@@ -14,10 +14,10 @@ for (const source of [
 });
 
 for (const source of [
-    "func ((Int -> Int) f) = f 123; func (+ 1)",
+    "func (f : Int -> Int) = f 123; func (+ 1)",
     "func { { Int -> Int } f } = f 123; func { + 1 }",
-    "((Int -> Int) f) <- return (Dynamic (x -> x + 1)); f 123",
-    "(Int x -> x + 1) 123",
+    "(f : Int -> Int) <- return (x -> x + 1 : Dynamic); f 123",
+    "((x : Int) -> x + 1) 123",
 ]) Deno.test(`pattern contracts and typed lambdas: ${source}`, () => {
     const i = new Interpreter();
     i.enableChecking();

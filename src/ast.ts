@@ -24,7 +24,8 @@ export type Expr =
     | { t: "var"; name: string }
     | { t: "binop"; op: BinOp; l: Expr; r: Expr }
     | { t: "unop"; op: UnOp; e: Expr }
-    | { t: "app"; f: Expr; a: Expr }
+    // ascribed: e : T as the parser expands it, the one application of a type to a value.
+    | { t: "app"; f: Expr; a: Expr; ascribed?: true }
     | { t: "patternLambda"; params: Pattern[]; body: Expr; guard?: Expr }
     | { t: "lambda"; params: string[]; body: Expr }
     | { t: "ternary"; cond: Expr; then: Expr; els: Expr }

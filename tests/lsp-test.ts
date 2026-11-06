@@ -25,21 +25,21 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     equal(unused("xs = [0,0]\ni = 0\nxs i = 1\nSome v = Some 1"), []);
     // A field update reads the record and binds no new names.
     equal(unused("f model t = {\n    model.time = t\n    model.[width,height] = [t,t]\n    model\n}"), []);
-    equal(unused("copy n ((Vect n Int) xs) = xs\nk = x, y -> x"), [[1, 7, "'y' is never used; write _ to discard it"]]);
+    equal(unused("copy n (xs : Vect n Int) = xs\nk = x, y -> x"), [[1, 7, "'y' is never used; write _ to discard it"]]);
     // A lambda where a type is expected is a function type, not code.
-    equal(unused("f ((a -> b) g) = g\nt = ((a -> b) -> List a -> List b) == typeOf map\nu = isType (a -> b) 5\nv = (a -> b).(x -> x)\nC a = | MkC (a -> b)"), []);
+    equal(unused("f (g : a -> b) = g\nt = ((a -> b) -> List a -> List b) == typeOf map\nu = isType (a -> b) 5\nv = (a -> b).(x -> x)\nC a = | MkC (a -> b)"), []);
     equal(lint("handlers = [\n    Some y -> print y\n    None -> []\n]"), []);
     // (t x) binds t as well; (_ x) discards it.
-    equal(unused("f (t x) = x\ng (_ x) = x").map(d => d[2]), ["'t' is never used; write _ to discard it"]);
+    equal(unused("f (x : t) = x\ng (x : _) = x").map(d => d[2]), ["'t' is never used; write _ to discard it"]);
     // name k = v on a parameter assigns an item; on another name it defines a function.
     equal(unused("put k v xs = { xs k = v; xs }"), []);
     equal(unused("f x = { g k = 1; x }").map(d => d[2]), ["'k' is never used; write _ to discard it"]);
     // A name a typed pattern's type binds is a parameter too; repeating it is a use.
-    equal(unused("first ((List a) (x::_)) = x\ng ((Vect n a) _) = n").map(d => d[2]), ["'a' is never used; write _ to discard it", "'a' is never used; write _ to discard it"]);
-    equal(unused("h ((Vect n a) _) ((Vect n a) _) = n\nk ((List _) (x::_)) = x\ncopy n ((Vect n Int) xs) = xs"), []);
+    equal(unused("first (x::_ : List a) = x\ng (_ : Vect n a) = n").map(d => d[2]), ["'a' is never used; write _ to discard it", "'a' is never used; write _ to discard it"]);
+    equal(unused("h (_ : Vect n a) (_ : Vect n a) = n\nk (x::_ : List _) = x\ncopy n (xs : Vect n Int) = xs"), []);
     // So in the shorthand Vect n a xs, also when a lambda's pattern repeats it.
-    equal(unused("f (Vect n a xs) (Vect m a ys) = [n,m,xs,ys]\ng = Vect n a xs -> Vect m a ys -> [n,m,xs,ys]"), []);
-    equal(unused("f (Vect n a xs) = [n,xs]").map(d => d[2]), ["'a' is never used; write _ to discard it"]);
+    equal(unused("f (xs : Vect n a) (ys : Vect m a) = [n,m,xs,ys]\ng = (xs : Vect n a) -> (ys : Vect m a) -> [n,m,xs,ys]"), []);
+    equal(unused("f (xs : Vect n a) = [n,xs]").map(d => d[2]), ["'a' is never used; write _ to discard it"]);
     // A literal zero divisor warns, except IEEE division with a Float on either side.
     const zero = (source: string) => lint(source).filter(d => d.code === "zeroDivisor").map(d => [d.range.start.line, d.range.start.character, d.range.end.character]);
     equal(zero("a = 1 / 0\nb = (/ 0)\nc = quotient 7 -0\nd = 7 % 0.0\ne = modulo 7 0"), [[0, 8, 9], [1, 7, 8], [2, 15, 17], [3, 8, 11], [4, 13, 14]]);
@@ -117,7 +117,7 @@ Deno.test("outline supports apostrophes and excludes comparison expressions", ()
     equal(symbols("double' x = x * 2\ndouble' 1 == 2\ndouble' \"=\"\n").map((s) => s.name), ["double'"]);
 });
 Deno.test("optional type diagnostics share the checker", () => {
-    const source = 'f (Int x) = x\nf "bad"';
+    const source = 'f (x : Int) = x\nf "bad"';
     equal(lint(source).filter(d => d.code === 'type').length, 0);
     equal(lint(source, true).filter(d => d.code === 'type').length, 1);
     const server = new LanguageServer();
@@ -157,7 +157,7 @@ Deno.test("lint reports a clause or alternative that never runs", () => {
     // A literal or a built-in type outranks a name; an equivalent clause
     // replaces the earlier one; a guard or a repeated name takes not everything;
     // a rebinding starts a new version.
-    equal(unreachable("f x = 0\nf 1 = 2\ng x = 0\ng (Int n) = n\nk x = 0\nk y = 9"), []);
+    equal(unreachable("f x = 0\nf 1 = 2\ng x = 0\ng (n : Int) = n\nk x = 0\nk y = 9"), []);
     equal(unreachable("n x x = 0\nn [a] b = 1\nw = x | x > 0 -> 1\nw [a] = 2\nr x = 0\nr = 5\nr [a] = 1"), []);
     // Constructors of imported modules, standard or the program's own, rank no
     // higher either; one the linter cannot resolve is left alone.

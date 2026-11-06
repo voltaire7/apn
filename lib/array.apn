@@ -15,7 +15,7 @@ matmul left right = {
         ? map (row -> map (dot row) columns) left
         : fail "matrix dimensions do not match")
 }
-shape (Number _) = []
+shape (_ : Number) = []
 shape [] = [0]
 shape (x::xs) = {
     dimensions = shape x

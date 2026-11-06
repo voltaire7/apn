@@ -81,7 +81,7 @@ for (const source of [
 for (const source of [
     "Option a = Some a | None\nf (Some x) = x\nf None = 0",
     "len (_ :: rest) = 1",
-    "f (Int x) y = x",
+    "f (x : Int) y = x",
     "Option a = Some a | None\ng = Some x -> x",
     "Option a = Some a | None\nSome v = Some 1",
     "Money = | Money Int\nMoney a + Money b = Money (a + b)",

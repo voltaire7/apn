@@ -11,7 +11,7 @@ setup (Sketch p) = {
 draw (Sketch p) = {
     p.background 0
     # The branches' angle, from the mouse's x: up to 90 degrees.
-    angle = min (Number (p.mouseX / p.width * 90)) 90
+    angle = min (p.mouseX / p.width * 90 : Number) 90
     # The trunk, then the branches from its top.
     p.translate (p.width / 2) p.height
     p.stroke [0,255,255]

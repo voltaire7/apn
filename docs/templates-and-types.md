@@ -13,8 +13,8 @@ Concrete scalars (numbers, strings, characters, and booleans) are not callable.
 ```apn
 0 123                       # error: cannot apply a number
 [0].[123]                   # error: cannot apply a number
-[x: Int 0] [floor .2]       # [x: 0]
-[x: Int 0] [Float .2]       # error: lossy conversion
+[x: (0 : Int)] [floor .2]   # [x: 0]
+[x: (0 : Int)] [(.2 : Float)] # error: lossy conversion
 [x: 0] [x: 123]             # [x: 123]
 [x: 1.1] [10]               # [x: 10.0]: x is a Float
 [x: 1] [2.5]                # error: lossy conversion
@@ -90,8 +90,8 @@ with the record fields in scope.
 ```apn
 cast String $ to (List Char) "hello"  # "hello"
 cast String $ cast [Char,Char] $ "hi"  # "hi"
-String ['h','i']                   # "hi"
-String []                            # ""
+(['h','i'] : String)               # "hi"
+([] : String)                        # ""
 ```
 
 Every element must be a `Char`; lists of strings or numbers are rejected.
@@ -328,7 +328,7 @@ continues to require a list.
 ### Nested records
 
 ```apn
-obj = [child: [x: Float 1, y: 2], label: "kept"]
+obj = [child: [x: (1 : Float), y: 2], label: "kept"]
 obj.child.x = 10
 # [child: [x: 10.0, y: 2], label: "kept"]
 obj.child.[x,y] = [20,30]
@@ -387,11 +387,11 @@ Numbers = [Int]
 Point = [x: Float, y: Float]
 Points = [Point]
 
-Count 123                  # 123
+(123 : Count)              # 123
 Numbers.[1]                # [1]; Numbers.[1,2] errors
 Point [x: 1, y: 2]         # [x: 1.0, y: 2.0]
 cast [Int,Int] [1,2]        # [1,2]
-Type [Int]                # [Int]
+([Int] : Type)            # [Int]
 isType Type [(* 2)]        # False
 ```
 
@@ -405,8 +405,8 @@ Patterns accept aliases and inline descriptions:
 ```apn
 firstNumber (Numbers xs) = head xs
 firstNumber [123]             # 123
-firstInline ([Int] xs) = head xs
-getX ([x: Int] p) = p.x
+firstInline (xs : [Int]) = head xs
+getX (p : [x: Int]) = p.x
 ```
 
 These are lazy runtime conversion contracts, not a static type checker.
@@ -447,10 +447,10 @@ clauses that build their result from `[]` and `::`, run backwards
 ```apn
 Pairs n a = Vect (n * 2) a
 Pairs 2 Int                 # Pairs 2 Int, which is Vect 4 Int
-xs = Pairs 2 Int [1,2,3,4]
+xs = [1,2,3,4] : Pairs 2 Int
 typeOf xs                   # Pairs 2 Int
 length xs                   # 4; map (* 2) xs is [2,4,6,8], a plain list
-size (Pairs n a xs) = n     # size xs is 2
+size (xs : Pairs n a) = n   # size xs is 2
 size [1,2,3,4]              # no clause: nothing remembers an n for a plain list
 kind (Pairs n a) = n        # kind (Pairs 3 Int) is 3
 ```
@@ -478,7 +478,7 @@ field as a typed parameter does. A lowercase definition's `_` stays unfinished.
 
 ```apn
 Box x = _                     # the same as Box a = | Box a
-Rect (Float w) (Float h) = _  # Rect 3 4 is Rect 3.0 4.0
+Rect (w : Float) (h : Float) = _ # Rect 3 4 is Rect 3.0 4.0
 Nothing = _                   # a constructor without fields
 unbox (Box x) = x             # unbox (Box 5) is 5
 ```
@@ -490,11 +490,11 @@ it can normalize a value, fail, or build another one, and a pattern reads back
 only what it stored.
 
 ```apn
-Percent (Float x) = x > 100 ? Percent 100.0 : _
+Percent (x : Float) = x > 100 ? Percent 100.0 : _
 Percent 150                   # Percent 100.0
 (Percent a) + (Percent b) = Percent (a + b)
 Percent 90 + Percent 20       # Percent 100.0: the clause calls Percent, so its logic runs
-Span (Int lo) (Int hi) = lo > hi ? fail "empty span" : _
+Span (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _
 ```
 
 Every way of making one runs it, a record slot's default too (`[s: Span] []`
@@ -515,8 +515,8 @@ before it keep their own type.
 Just x = _
 Nada = _
 Maybe a = Just a | Nada       # the same as Maybe a = Just a | Nada declaring both
-Circle (Float r) = _
-Square (Float s) = _
+Circle (r : Float) = _
+Square (s : Float) = _
 Shape = Circle | Square       # typeOf (Circle 1) is Shape
 ```
 
@@ -530,8 +530,8 @@ names the odd one out.
 
 ```apn
 Mixed = Int | String          # Type Mixed is Int | String
-f (Mixed m) = m               # takes 1 and "a", not 2.5
-Mixed 2.5                     # error: Float is not one of Int | String
+f (m : Mixed) = m             # takes 1 and "a", not 2.5
+(2.5 : Mixed)                 # error: Float is not one of Int | String
 OptOrList a = Option a | List a
 ```
 
@@ -551,7 +551,7 @@ Option a = Some a | None
 Optional a = Option a
 UserId = | MkUserId Int
 
-Optional Int (Some 123)    # Some 123
+(Some 123 : Optional Int)  # Some 123
 Option Int None            # None
 MkUserId 123               # MkUserId 123
 Some value = Some 123      # destructures; value is 123

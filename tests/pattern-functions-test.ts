@@ -11,7 +11,7 @@ for (const [code, expected] of [
     ['cases = [Some x -> x, None -> 0]; Some 123 ~ cases', '123'],
     // A type's bare name matches that type, as == compares it.
     ['typeOf 5 ~ [Int -> "INT", _ -> "other"]', '"INT"'],
-    ['d Int = "int"; d (Int n) = "num"; d _ = "o"; [d Int, d (typeOf 5), d 5, d "s"]', '["int","int","num","o"]'],
+    ['d Int = "int"; d (n : Int) = "num"; d _ = "o"; [d Int, d (typeOf 5), d 5, d "s"]', '["int","int","num","o"]'],
     ['Shape = Circle Float | Square Float\nd Shape = 1\nd _ = 0\n[d (typeOf (Circle 1)), d Int]', '[1,0]'],
     ['cases = [Some x -> x, None -> 0]; None ~ cases', '0'],
     ['dispatch = (~); dispatch 3 [n | n < 0 -> 0, n -> n + 1]', '4'],
@@ -24,20 +24,20 @@ for (const [code, expected] of [
     // The most specific alternative that fits wins, as among clauses; written
     // order breaks ties.
     ['0 ~ [n -> "any", 0 -> "zero"]', '"zero"'],
-    ['1 ~ [Float x -> "float", Int x -> "int"]', '"int"'],
+    ['1 ~ [(x : Float) -> "float", (x : Int) -> "int"]', '"int"'],
     ['cases = [n -> "any", 0 -> "zero"]; 0 ~ cases', '"zero"'],
     ['f 0 = "zero"; f n = "any"; 0 ~ [n -> "name", f]', '"zero"'],
     // A function matching its parameters is described as its clauses.
-    ['d = x -> x ~ [Int n -> n + 1, String s -> s ++ "!"]; typeOf d', 'Int | String -> Int'],
+    ['d = x -> x ~ [(n : Int) -> n + 1, (s : String) -> s ++ "!"]; typeOf d', 'Int | String -> Int'],
     ['dispatch = (3 ~); dispatch [(+ 1)]', '4'],
     ['[3] ~ [head]', '3'],
     ['f 0 = 9; f 1 = 8; 1 ~ [f, _ -> 0]', '8'],
-    ['func ((Int -> Int) f) = Int { f 123 }; func (*2)', '246'],
-    ['((Int -> Int) identity) <- return (x -> x)\nTransform = typeOf identity\nfunc (Transform f) = Int { f 123 }\nfunc (*2)', '246'],
-    ['func ((Int -> Int) f) = 42; func (x -> missing)', '42'],
-    ['func ((Int -> Int) f) = f 2.0; func (*2)', '4'],
-    ['func ((Int -> Int -> Int) f) = f 2 3; func (x, y -> x + y)', '5'],
-    ['1 ~ [((Int -> Int) f) -> f 0, x -> x]', '1'],
+    ['func (f : Int -> Int) = { f 123 } : Int; func (*2)', '246'],
+    ['(identity : Int -> Int) <- return (x -> x)\nTransform = typeOf identity\nfunc (Transform f) = { f 123 } : Int\nfunc (*2)', '246'],
+    ['func (f : Int -> Int) = 42; func (x -> missing)', '42'],
+    ['func (f : Int -> Int) = f 2.0; func (*2)', '4'],
+    ['func (f : Int -> Int -> Int) = f 2 3; func (x, y -> x + y)', '5'],
+    ['1 ~ [(f : Int -> Int) -> f 0, x -> x]', '1'],
     // An alternative's parameter is one pattern, as everywhere: t x binds the type.
     ['1 ~ [t x -> [t,x]]', '[Int,1]'],
     ['(t x -> t) "a"', 'String'],
@@ -58,8 +58,8 @@ for (const [code, error] of [
     ['1 ~ [(x, y -> x)]', 'one remaining argument'],
     ['missing ~ []', 'non-exhaustive match'],
     ['1 ~ 42', 'expected a list'],
-    ['func ((Int -> Int) f) = f (Float .5); func (*2)', 'lossy conversion'],
-    ['func ((Int -> Int) f) = f 1; func (x -> "bad")', 'expects a number'],
+    ['func (f : Int -> Int) = f (.5 : Float); func (*2)', 'lossy conversion'],
+    ['func (f : Int -> Int) = f 1; func (x -> "bad")', 'expects a number'],
 ]) Deno.test(`pattern functions reject: ${code}`, () => {
     try { result(code); } catch (e) {
         if (String(e).includes(error)) return;
@@ -74,8 +74,8 @@ Deno.test("pattern functions parse independently of prior constructor imports", 
 });
 
 Deno.test("constructor lambdas accept nested patterns", () => {
-    if (result('Some 3 ~ [Some (Int x) -> x]') !== '3') throw new Error('nested type pattern');
-    if (result('Some "no" ~ [Some (Int x) -> x, _ -> 42]') !== '42') throw new Error('nested mismatch');
+    if (result('Some 3 ~ [Some (x : Int) -> x]') !== '3') throw new Error('nested type pattern');
+    if (result('Some "no" ~ [Some (x : Int) -> x, _ -> 42]') !== '42') throw new Error('nested mismatch');
     if (result('(Some [a,b] -> a + b) (Some [1,2])') !== '3') throw new Error('nested list pattern');
 });
 
@@ -90,7 +90,7 @@ for (const [code, expected] of [
     ['f x = typeOf x ~ [Int -> "INT", _ -> "other"]\n[f 5, f "a"]', '["INT","other"]'],
     ['d Int = 1\nd (typeOf 5)', '1'],
     ['typeOf "s" ~ [Int -> "INT"]', 'non-exhaustive match'],
-    ['g (Int n) = n\ng (typeOf 5)', 'cannot use Type where Int is required'],
+    ['g (n : Int) = n\ng (typeOf 5)', 'cannot use Type where Int is required'],
 ]) Deno.test(`a bare type name, checked: ${code}`, () => {
     let actual: string;
     try { actual = result(code, true); } catch (error) { actual = (error as Error).message; }

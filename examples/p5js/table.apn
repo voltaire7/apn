@@ -18,7 +18,7 @@ Msg =
     | Released String Float
 
 init = [
-    [bubbles: List Bubble [], pressed: [0.0,0.0], creating: False]
+    [bubbles: ([] : List Bubble), pressed: [0.0,0.0], creating: False]
     task.perform Loaded (readFile "assets/bubbles.csv")
 ]
 
@@ -28,7 +28,7 @@ load text model = {
     bubble row = {
         # The row's cells, by column (an association list).
         cells = zip (head header) row
-        number column = Float (from String (cells column))
+        number column = from String (cells column) : Float
         [x: number "x", y: number "y", radius: number "radius", name: cells "name"]
     }
     model.bubbles = map bubble rows
@@ -117,7 +117,7 @@ mousePressed (Sketch p) = p.send (Pressed (Float p.mouseX) (Float p.mouseY))
 mouseReleased model (Sketch p) = when model.creating {
     [x,y] = model.pressed
     name <- p.prompt "Enter a name for the new bubble"
-    p.send (Released (String name) (Float (dist x y p.mouseX p.mouseY)))
+    p.send (Released (name : String) (dist x y p.mouseX p.mouseY : Float))
 }
 
 main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]

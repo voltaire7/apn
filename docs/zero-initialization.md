@@ -68,16 +68,16 @@ retain their labels. All annotations participate in checked arithmetic.
 ## Constructors and type inspection
 
 ```apn
-Int 123                # 123, typed Int
-typeOf (Int 123)        # Int
+(123 : Int)            # 123, typed Int
+typeOf (123 : Int)      # Int
 typeOf Int              # Type
 isType Int Int         # False
 isType Type Int        # True
 Int == Float           # False
-Type Vector3           # [x: Float, y: Float, z: Float]
+(Vector3 : Type)       # [x: Float, y: Float, z: Float]
 3 * Int                # [0,1,2]
 Int * 3                # [0,1,2]
-3 * Int 0              # 0
+3 * (0 : Int)          # 0
 ```
 
 Types remain first-class callable values. Reflection and generic `(t x)` patterns
@@ -112,11 +112,11 @@ allocate mutable cells. Use `Mutable (Int 0)` for an explicit cell.
 Constructors now apply the same checks to bare and annotated numbers:
 
 ```apn
-Int .2                       # error: lossy conversion
-Int (Float .2)               # error: lossy conversion
-Int (floor .2)               # 0
-Int (truncate -1.7)          # -1
-Float (inexact 9007199254740993) # 9007199254740992.0
+(.2 : Int)                   # error: lossy conversion
+((.2 : Float) : Int)         # error: lossy conversion
+(floor .2 : Int)             # 0
+(truncate -1.7 : Int)        # -1
+(inexact 9007199254740993 : Float) # 9007199254740992.0
 ```
 
 Overflow and imaginary-part loss still error. `.2` remains an inexact binary64
@@ -126,7 +126,7 @@ Numeric patterns remain lossless and do not match `.2` as an Int.
 `cast` stays APN-defined as a compatibility wrapper:
 
 ```apn
-cast (Type target) value = target value
+cast (target : Type) value = target value
 ```
 
 It is now equivalent to direct application, including rejection of lossy inputs.

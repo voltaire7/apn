@@ -13,12 +13,12 @@ function failure(source: string): string {
     throw new Error(`accepted: ${source}`);
 }
 const VEC = "Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a\n(::) = Cons\n";
-const APP = "app ((Vec n a) Nil) ((Vec m a) ys) = Vec (n + m) a ys\napp ((Vec n a) (x :: r)) ((Vec m a) ys) = ";
+const APP = "app (Nil : Vec n a) (ys : Vec m a) = ys : Vec (n + m) a\napp (x :: r : Vec n a) (ys : Vec m a) = ";
 for (const [source, expected] of [
     ["f (x :: _) = x; f [1,2]", "1"],
     [VEC + "first (x :: _) = x\nfirst (1 :: 2 :: Nil)", "1"],
     [VEC + "typeOf (1 :: 2 :: Nil)", "Vec 2 Int"],
-    [VEC + APP + "Vec (n + m) a (x :: app r ys)\ntypeOf (app (1 :: Nil) (2 :: Nil))", "Vec 2 Int"],
+    [VEC + APP + "(x :: app r ys : Vec (n + m) a)\ntypeOf (app (1 :: Nil) (2 :: Nil))", "Vec 2 Int"],
     ["P a b = | MkP a b\n(:+) = MkP\nswap (x :+ y) = y :+ x\nswap (1 :+ \"a\")", 'MkP "a" 1'],
     ["P a b = | MkP a b\n(:+) = MkP\n1 :+ 2 ~ [(x :+ y) -> x + y]", "3"],
 ] as const) {
@@ -31,7 +31,7 @@ for (const [source, expected] of [
 }
 for (const [source, message] of [
     // The proofs follow x :: xs as Cons x xs.
-    [VEC + APP + "Vec (n + m + 1) a (x :: app r ys)", "when r is Nil, n + m + 1 is m + 2 but the body's index is m + 1"],
+    [VEC + APP + "(x :: app r ys : Vec (n + m + 1) a)", "when r is Nil, n + m + 1 is m + 2 but the body's index is m + 1"],
     ["(:-) = 3\nf (x :- _) = x\n1", "':-' is not a constructor"],
     ["f (x :- _) = x\n1", "':-' is not a constructor"],
 ] as const) {

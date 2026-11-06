@@ -166,15 +166,15 @@ print ([1,2,3] + [10,20,30])             # => [11,22,33]
 print (2 * [x: 1, y: 2])                 # => [x: 2, y: 4]
 
 # A clause for some arguments overloads an operator; others reach the rest.
-Cents (Int c) = _
+Cents (c : Int) = _
 (Cents a) + (Cents b) = Cents (a + b)
 print [Cents 150 + Cents 75, 1 + 2]      # => [Cents 225, 3]
 
 # A constructor's body holding _ is its logic: it runs whenever one is made,
 # and _ is the value itself. A to instance lets other types join an operator.
-Mod7 (Int n) = 0 <= n && n < 7 ? _ : Mod7 (modulo n 7)
+Mod7 (n : Int) = 0 <= n && n < 7 ? _ : Mod7 (modulo n 7)
 (Mod7 a) + (Mod7 b) = Mod7 (a + b)
-to Mod7 (Int n) = Mod7 n
+to Mod7 (n : Int) = Mod7 n
 print [Mod7 12, Mod7 5 + 4, Mod7 -3]     # => [Mod7 5, Mod7 2, Mod7 4]
 
 # ---------------------------------------------------------
@@ -222,7 +222,7 @@ print (typeOf (x -> [x,x]))              # => a -> [a,a]
 
 # A type is a function: applied, it converts a value without losing
 # anything, and given nothing it makes its zero value.
-print [Float 1, UInt8 200, Int 0]        # => [1.0,200,0]
+print [(1 : Float), (200 : UInt8), (0 : Int)] # => [1.0,200,0]
 Point = [x: Float, y: Float]
 print [Point [1,2], Point []]            # => [[x: 1.0, y: 2.0], [x: 0.0, y: 0.0]]
 
@@ -245,7 +245,7 @@ print (withDefault 0 (safeDiv 1 0))      # => 0
 
 # A name given _ stands for itself: it declares a new type, one constructor
 # with typed fields, which does not mix with others. Its name is also the type.
-UserId (Int id) = _
+UserId (id : Int) = _
 print [UserId 7, isType UserId 7]        # => [UserId 7, False]
 
 # Types may depend on values: Vect n a is a list of n elements of type a.
@@ -257,8 +257,8 @@ print (typeOf (appendSized [1,2] [3]))   # => Vect 3 Int
 
 # What the checker cannot know becomes a check when the program runs:
 # Dynamic marks such a boundary.
-dynamicNumber = Dynamic 41
-print (Int dynamicNumber + 1)            # => 42
+dynamicNumber = 41 : Dynamic
+print ((dynamicNumber : Int) + 1)        # => 42
 
 # ---------------------------------------------------------
 # Effects
@@ -285,17 +285,17 @@ print total                              # => 6
 # ---------------------------------------------------------
 # A do-block runs in any monad, not just IO: in a list it tries every
 # combination, in an Option it stops at the first None.
-pairs3 = List Int {
+pairs3 = {
     a <- [1,2]
     b <- [10,20]
     return (a + b)
-}
+} : List Int
 print pairs3                             # => [11,21,12,22]
-both = Option Int {
+both = {
     a <- safeDiv 1 2
     b <- safeDiv 1 0
     return (a + b)
-}
+} : Option Int
 print both                               # => None
 print (Some 3 >>= x -> Some (x * 10))    # => Some 30
 

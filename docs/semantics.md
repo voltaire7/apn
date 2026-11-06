@@ -315,7 +315,7 @@ append (x :: xs) ys = x :: append xs ys
 ```
 
 Each clause is checked against the declaration: each parameter's type is
-the typed pattern around it (`append ((Vect n a) [])`), and the result's type
+the typed pattern around it (`append ([] : Vect n a)`), and the result's type
 the claim of its body, proved per clause (see
 [pattern functions](pattern-functions.md)), so declaring `Vect (n + m + 1) a`
 above is a length mismatch. A clause with fewer parameters than the type
@@ -515,7 +515,7 @@ tried first; arguments no clause matches fall back to the operator's previous
 meaning, so the builtin behavior stays available:
 
 ```apn
-Money (Int m) = _
+Money (m : Int) = _
 (Money a) + (Money b) = Money (a + b)   # the inner + is the builtin one
 Money 3 + Money 4                       # Money 7
 1 + 2                                   # 3
@@ -528,7 +528,7 @@ If both could convert into each other's type, the operator is ambiguous and an
 error; if neither can, it fails as before:
 
 ```apn
-to Money (Int n) = Money n
+to Money (n : Int) = Money n
 Money 3 + 4                             # Money 7: 4 is to Money 4 first
 4 + Money 3                             # Money 7
 ```
@@ -541,7 +541,7 @@ only when no pattern of its own type does. An enumeration has these
 instances by declaration ([variant list indexes](type-and-resource-rules.md#variant-list-indexes)):
 
 ```apn
-Level (Int n) = _
+Level (n : Int) = _
 to Int (Level n) = n
 [10,20,30] (Level 2)                    # 30
 Level 2 * 5                             # 10
@@ -637,9 +637,9 @@ On a value that is not a record, `v.x` is `get v "x"` and `v.x = y` is
 `with v "x" y`:
 
 ```apn
-Grid (List Int cells) = _
-get (Grid cells) [Int r, Int c] = cells (3 * r + c)
-with (Grid cells) [Int r, Int c] (Int x) = Grid (with cells (3 * r + c) x)
+Grid (cells : List Int) = _
+get (Grid cells) [(r : Int), (c : Int)] = cells (3 * r + c)
+with (Grid cells) [(r : Int), (c : Int)] (x : Int) = Grid (with cells (3 * r + c) x)
 g = Grid [1,2,3,4,5,6,7,8,9]
 g [1,2] = 60
 g [1,2]                                 # 60
@@ -814,8 +814,8 @@ area w h = {
 }
 size <- area 3 4              # prints, then binds 12
 double n = assert (n > 0) (n * 2)      # a plain function: double 3 is 6
-answer = Int { 42 }           # an Int
-action = IO Int { return 42 } # an action yielding an Int
+answer = { 42 } : Int         # an Int
+action = { return 42 } : IO Int # an action yielding an Int
 ```
 
 Each run of a do-block starts a fresh scope for the statements from that point
@@ -919,8 +919,8 @@ to (`g (Int n)`), an annotation, or a monad context.
 ```apn
 blank _ = 0
 blank _ = ""
-Int (blank [])               # 0
-String (blank [])            # ""
+(blank [] : Int)             # 0
+(blank [] : String)          # ""
 print (blank [])             # 0 and "" (each overload, one per line)
 blank [] + 1                 # error: ambiguous: nothing decides which blank
 ```
@@ -937,11 +937,11 @@ chained with `>>=`, and its last statement must be a value in the same monad
 (`return x`):
 
 ```apn
-pairs = List Int {
+pairs = {
     a <- [1,2]
     b <- [10,20]
     return (a + b)       # [11,21,12,22]
-}
+} : List Int
 evens = {
     x <- [1..6]
     guard (x % 2 == 0)   # [] (a throw in a list) when odd: that x yields nothing
@@ -951,10 +951,10 @@ check n = {
     unless (n > 0) (Err "not positive")   # a specific error
     return (n * 2)       # check 2 is Ok 4, check 0 is Err "not positive"
 }
-half n = Result Int String {
+half n = {
     guard (n % 2 == 0)   # a False guard throws its condition
     return (n / 2)       # half 4 is Ok 2, half 3 is Err "guard failed: n % 2 == 0"
-}
+} : Result Int String
 ```
 
 A block whose statements can all be undecided at run time (`check 2` above
@@ -1320,7 +1320,7 @@ a prefix; specialized types such as Int32, Float32 and Float64 retain theirs.
 `cast` remains a compatibility helper in the APN prelude and `type`:
 
 ```apn
-cast (Type target) value = target value
+cast (target : Type) value = target value
 ```
 
 It has the same behavior as applying the type directly: floating constructors
@@ -1337,12 +1337,12 @@ not mutated. This is runtime precision selection, not backwards type inference.
 
 ```apn
 .1 + .2                       # 0.30000000000000004
-Float32 .1 + .2               # 0.3, a Float32
-Float .2 + Float32 .1         # 0.3, a Float32
+(.1 : Float32) + .2           # 0.3, a Float32
+(.2 : Float) + (.1 : Float32) # 0.3, a Float32
 x = .2
-Float32 .1 + x                # 0.3, a Float32
+(.1 : Float32) + x            # 0.3, a Float32
 # Float32 .1 + Float64 .2     # error: explicit cast required
-Float32 .1 + cast Float32 (Float64 .2) # 0.3, a Float32
+(.1 : Float32) + cast Float32 (.2 : Float64) # 0.3, a Float32
 ```
 
 Different fixed precisions require a cast even if a particular conversion would
@@ -1369,9 +1369,9 @@ numeric guards. For example `isType Number (Int32 1)` is true.
 Typed overloads use constructor patterns:
 
 ```apn
-add (Int x) (Int y) = Int (x + y)
-add (Float x) (Float y) = Float (x + y)
-add (Number x) (Number y) = x + y
+add (x : Int) (y : Int) = x + y : Int
+add (x : Float) (y : Float) = x + y : Float
+add (x : Number) (y : Number) = x + y
 ```
 
 Literal matches outrank exact concrete type matches, which outrank aggregate

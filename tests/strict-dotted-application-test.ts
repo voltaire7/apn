@@ -1,6 +1,6 @@
 import { Interpreter } from "../src/interp.ts";
 import { parseDocument } from "../src/parser.ts";
-for (const source of ['["old"].["new"]', '[0].[1]', "['a'].['b']", '[Int32 0].[1]', '[[0]].[[1]]', 'values = [0]; values.([1])']) {
+for (const source of ['["old"].["new"]', '[0].[1]', "['a'].['b']", '[(0 : Int32)].[1]', '[[0]].[[1]]', 'values = [0]; values.([1])']) {
     Deno.test(`dot rejects scalar slots: ${source}`, () => {
         const i = new Interpreter();
         try { i.renderString(i.run(parseDocument(source))); } catch (e) {

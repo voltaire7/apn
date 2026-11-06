@@ -64,7 +64,7 @@ not x = Bool x False True
 # [a,b..c] enumFromThenTo a b c: numbers count, and a type repeats, [Int..]
 # being [Int,Int,Int..], a list that is its own tail. ([] is no bound.)
 enumFrom a = intrinsics.range a [] []
-enumFrom (Type t) = {
+enumFrom (t : Type) = {
     ts = t :: ts
     ts
 }

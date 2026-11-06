@@ -21,7 +21,7 @@ setup (Sketch p) = {
     p.createCanvas 710 400
     frequencies <- mapM (_ -> p.random 5 12) [1..nodeCount]
     set body (Body [
-        center: [Float (p.width / 2), Float (p.height / 2)], acceleration: [0.0,0.0]
+        center: [(p.width / 2 : Float), (p.height / 2 : Float)], acceleration: [0.0,0.0]
         nodes: replicate nodeCount [0.0,0.0], angles: replicate nodeCount 0.0
         frequencies: map Float frequencies, organic: 1.0
     ])

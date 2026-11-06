@@ -23,7 +23,7 @@ drawSnake (Sketch p) = {
     p.call "translate" [0,0,50]
     # The body, a segment at a time, each turned a little.
     length <- p.random 10 30
-    segments = Int (ceiling (Number length))
+    segments = ceiling (length : Number) : Int
     mapM (segment -> {
         turn <- p.random -60 60
         p.rotateY turn

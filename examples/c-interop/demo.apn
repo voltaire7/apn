@@ -2,7 +2,7 @@
 import "io"
 ffi = import "ffi"
 args <- getArgs
-ffi.withLibrary (head args) [
+ffi.withLibrary (args : head) [
     add: ffi.function [Int32,Int32] Int32
     greeting: ffi.function [] String
     text_length: ffi.function [String] Int32

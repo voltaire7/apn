@@ -3,9 +3,9 @@ import { Interpreter } from "../src/interp.ts";
 import { APNError } from "../src/errors.ts";
 
 for (const [source, expected] of [
-    ["xs = [Int32 1 + Int64 2, Int8 1 + Int 2]; [xs, map typeOf xs]", "[[3,3],[Int64,Int]]"],
+    ["xs = [(1 : Int32) + (2 : Int64), (1 : Int8) + (2 : Int)]; [xs, map typeOf xs]", "[[3,3],[Int64,Int]]"],
     ["[1,2] * Int", "[1,2]"],
-    ['f (Number x) = 1\nf 0 = 2\nf 0', '2'],
+    ['f (x : Number) = 1\nf 0 = 2\nf 0', '2'],
     ["typeOf $ True", "Bool"],
     ['typeOf $ "hi"', "String"],
     ["typeOf $ 'a'", "Char"],
@@ -19,49 +19,49 @@ for (const [source, expected] of [
     ["typeOf $ foldl", "(a -> b -> a) -> a -> List b -> a"],
     ["typeOf $ take 2", "List a -> List a"],
     ["typeOf $ Int", "Type"],
-    ["Bool True", "True"], ['String "hi"', '"hi"'],
-    ["Char 'a'", "'a'"], ["[] []", "[]"],
+    ["to Bool True", "True"], ['("hi" : String)', '"hi"'],
+    ["('a' : Char)", "'a'"], ["[] []", "[]"],
     ["List [1,2]", "[1,2]"], ["take 3 (List [1..])", "[1,2,3]"],
-    ["Record [x: 1]", "[x: 1]"],
-    ["Function (x -> x + 1) 2", "3"], ["Type Int", "Int"],
-    ["Choice = | Chosen x\nVariant (Chosen 1)", "Chosen 1"],
+    ["([x: 1] : Record)", "[x: 1]"],
+    ["Function (x -> x + 1) 2", "3"], ["(Int : Type)", "Int"],
+    ["Choice = | Chosen x\n(Chosen 1 : Variant)", "Chosen 1"],
     ["[isType Bool True, isType String 1, isType List [1..], isType Type Bool]", "[True,False,True,True]"],
-    ['f (Bool x) = "bool"\nf (String x) = "string"\nf (List _ x) = "list"\n[f True, f "hi", f [1]]', '["bool","string","list"]'],
+    ['f (x : Bool) = "bool"\nf (x : String) = "string"\nf (x : List _) = "list"\n[f True, f "hi", f [1]]', '["bool","string","list"]'],
     ["value = True\ncast Bool $ value", "True"],
-    ["myTypeOf (t x) = t\nmyTypeOf True", "Bool"],
-    ["myTypeOf (t x) = t\nmyTypeOf (Int32 5)", "Int32"],
-    ["identity (t x) = x\nidentity (Int32 5)", "5"],
-    ["myTypeOf (t x) = t\nmyTypeOf [missing]", "[a]"],
-    ["sameType (t x) (t y) = True\nsameType x y = False\n[sameType 1 2, sameType 1 True]", "[True,False]"],
-    ["True ~ [(t x) -> t]", "Bool"],
-    ["Int 123", "123"], ["x = Int32 123; [x, typeOf x]", "[123,Int32]"],
-    ["x = UInt 123; [x, typeOf x]", "[123,UInt]"], ["x = UInt32 4294967295; [x, typeOf x]", "[4294967295,UInt32]"],
-    ["Float 3", "3.0"], ["x = Float32 .5; [x, typeOf x]", "[0.5,Float32]"],
-    ["x = Fraction (1/3); [x, typeOf x]", "[1/3,Fraction]"], ["x = Complex (1+2i); [x, typeOf x]", "[1+2i,Complex]"],
-    ["Int (truncate 3.7)", "3"], ["Int $ truncate $ 3.7", "3"],
-    ["x = Float32 1 / 10; [x, typeOf x]", "[0.1,Float32]"],
-    ["Int 3.0", "3"],
-    ["typeOf (Int32 123)", "Int32"], ["isType Number (Int32 1)", "True"],
-    ["xs = [Int32 1 + Int32 2, Int32 1 + 2]; [xs, map typeOf xs]", "[[3,3],[Int32,Int32]]"],
-    ["x = Int32 1 / Int32 2; [x, typeOf x]", "[1/2,Fraction]"],
-    ["take 3 (100 * _ -> Int 0)", "[0,0,0]"],
-    ["length (100 * _ -> Int 0)", "100"],
+    ["myTypeOf (x : t) = t\nmyTypeOf True", "Bool"],
+    ["myTypeOf (x : t) = t\nmyTypeOf (5 : Int32)", "Int32"],
+    ["identity (x : t) = x\nidentity (5 : Int32)", "5"],
+    ["myTypeOf (x : t) = t\nmyTypeOf [missing]", "[a]"],
+    ["sameType (x : t) (y : t) = True\nsameType x y = False\n[sameType 1 2, sameType 1 True]", "[True,False]"],
+    ["True ~ [(x : t) -> t]", "Bool"],
+    ["(123 : Int)", "123"], ["x = 123 : Int32; [x, typeOf x]", "[123,Int32]"],
+    ["x = 123 : UInt; [x, typeOf x]", "[123,UInt]"], ["x = 4294967295 : UInt32; [x, typeOf x]", "[4294967295,UInt32]"],
+    ["(3 : Float)", "3.0"], ["x = .5 : Float32; [x, typeOf x]", "[0.5,Float32]"],
+    ["x = 1/3 : Fraction; [x, typeOf x]", "[1/3,Fraction]"], ["x = 1+2i : Complex; [x, typeOf x]", "[1+2i,Complex]"],
+    ["(truncate 3.7 : Int)", "3"], ["Int $ truncate $ 3.7", "3"],
+    ["x = (1 : Float32) / 10; [x, typeOf x]", "[0.1,Float32]"],
+    ["(3.0 : Int)", "3"],
+    ["typeOf (123 : Int32)", "Int32"], ["isType Number (1 : Int32)", "True"],
+    ["xs = [(1 : Int32) + (2 : Int32), (1 : Int32) + 2]; [xs, map typeOf xs]", "[[3,3],[Int32,Int32]]"],
+    ["x = (1 : Int32) / (2 : Int32); [x, typeOf x]", "[1/2,Fraction]"],
+    ["take 3 (100 * _ -> (0 : Int))", "[0,0,0]"],
+    ["length (100 * _ -> (0 : Int))", "100"],
     ["take 3 (100 * Int)", "[0,1,2]"],
     ["(100 * Int) -1", "99"],
     ["([1..100] * Int) -1", "100"],
     ["length (100 * Int)", "100"],
-    ["100 * Int 0", "0"],
-    ["3 * Int 2", "6"],
-    ["Int 3 * Int 2", "6"],
-    ['add (Int x) (Int y) = x + y\nadd (Float x) (Float y) = x + y\nadd (Number x) (Number y) = 99\n[add (Int 2) (Int 3), add (Float 2) (Float 3), add (1/3) (1/4)]', '[5,5.0,99]'],
-    ['pick (Number x) = "number"\npick (Int32 x) = "int32"\npick (Float x) = "float"\n[pick (Int32 1), pick (Float 1), pick (1/3)]', '["int32","float","number"]'],
-    ['f (Float x) = x\nf 2', '2.0'],
-    ['f (Int32 x) = x + 1\nf 2', '3'],
-    ['same (Number x) (Number x) = True\nsame a b = False\n[same 1 1, same 1 2]', '[True,False]'],
+    ["100 * (0 : Int)", "0"],
+    ["3 * (2 : Int)", "6"],
+    ["(3 : Int) * (2 : Int)", "6"],
+    ['add (x : Int) (y : Int) = x + y\nadd (x : Float) (y : Float) = x + y\nadd (x : Number) (y : Number) = 99\n[add (2 : Int) (3 : Int), add (2 : Float) (3 : Float), add (1/3) (1/4)]', '[5,5.0,99]'],
+    ['pick (x : Number) = "number"\npick (x : Int32) = "int32"\npick (x : Float) = "float"\n[pick (1 : Int32), pick (1 : Float), pick (1/3)]', '["int32","float","number"]'],
+    ['f (x : Float) = x\nf 2', '2.0'],
+    ['f (x : Int32) = x + 1\nf 2', '3'],
+    ['same (x : Number) (x : Number) = True\nsame a b = False\n[same 1 1, same 1 2]', '[True,False]'],
     ['map (Int \\ truncate) [1.5,2.5]', '[1,2]'],
     ['f = Int32\nx = f 5; [x, typeOf x]', '[5,Int32]'],
-    ['x = Int64 9223372036854775807; [x, typeOf x]', '[9223372036854775807,Int64]'],
-    ['x = UInt128 340282366920938463463374607431768211455; [x, typeOf x]', '[340282366920938463463374607431768211455,UInt128]'],
+    ['x = 9223372036854775807 : Int64; [x, typeOf x]', '[9223372036854775807,Int64]'],
+    ['x = 340282366920938463463374607431768211455 : UInt128; [x, typeOf x]', '[340282366920938463463374607431768211455,UInt128]'],
 ]) {
     Deno.test(`type system: ${source}`, () => {
         const interp = new Interpreter();
@@ -69,7 +69,7 @@ for (const [source, expected] of [
         if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
     });
 }
-for (const source of ["String 123", "Char True", "List 1", "Record []", "Function 2", "Type 1", "[] 1", "Variant 1", "Int (Float 3.7)", "Int32 2147483648", "UInt -1", "UInt32 4294967296", "Int8 127 + Int8 1", "cast UInt -1", "cast Int8 128", "1/3 + .5", "f (Float32 x) = x\nf (Float .1)"]) {
+for (const source of ["(123 : String)", "(True : Char)", "List 1", "([] : Record)", "(2 : Function)", "(1 : Type)", "[] 1", "(1 : Variant)", "((3.7 : Float) : Int)", "(2147483648 : Int32)", "(-1 : UInt)", "(4294967296 : UInt32)", "(127 : Int8) + (1 : Int8)", "cast UInt -1", "cast Int8 128", "1/3 + .5", "f (x : Float32) = x\nf (.1 : Float)"]) {
     Deno.test(`checked type conversion: ${source}`, () => {
         try { const interp = new Interpreter(); interp.renderString(interp.run(parse(source))); }
         catch (e) { if (e instanceof APNError) return; throw e; }
@@ -82,7 +82,7 @@ Deno.test("type binding prints the captured type", () => {
     const original = console.log;
     console.log = (...args: unknown[]) => { output.push(args.join(" ")); };
     try {
-        new Interpreter().run(parse("myTypeOf (t x) = print t\nmyTypeOf True"));
+        new Interpreter().run(parse("myTypeOf (x : t) = print t\nmyTypeOf True"));
         if (output.join("\n") !== "Bool") throw new Error("Expected Bool");
     } finally { console.log = original; }
 });

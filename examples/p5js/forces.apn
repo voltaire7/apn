@@ -4,7 +4,7 @@ import "p5"
 
 # A ball: its mass, where it is, its velocity and its hue.
 Mover = [mass: Float, position: [Float,Float], velocity: [Float,Float], hue: Int]
-movers = Mutable (List Mover [])
+movers = Mutable ([] : List Mover)
 # The liquid fills the canvas's lower half, and drags by this coefficient.
 drag = 0.1
 
@@ -22,7 +22,7 @@ initializeMovers (Sketch p) = {
     made <- mapM (n -> {
         mass <- p.random 0.5 3
         return [
-            mass: Float mass, position: [Float (spacing * n + spacing / 2), 0.0]
+            mass: (mass : Float), position: [(spacing * n + spacing / 2 : Float), 0.0]
             velocity: [0.0,0.0], hue: n
         ]
     }) [0..8]

@@ -19,13 +19,13 @@ const TEMPERATURE = "Celsius = | C Float\nFahrenheit = | F Float\nto Celsius = (
 
 for (const [source, expected] of [
     ["to String 1.5 ++ \"!\"", '"1.5!"'],
-    ["Int (from String \"42\") + 1", "43"],
+    ["(from String \"42\" : Int) + 1", "43"],
     ["to JSON [a: 1, b: [True]]", '"{\\"a\\":1,\\"b\\":[true]}"'],
     ["from JSON \"[1,2]\"", "[1,2]"],
     ["to (List Char) \"a😀\"", "['a','😀']"],
     ["from (List Char) ['h','i']", '"hi"'],
     // Any other type converts as applying it does.
-    ["Money (Float x) = _\nto Float (Money m) = m\nto Float (Money 1.2)", "1.2"],
+    ["Money (x : Float) = _\nto Float (Money m) = m\nto Float (Money 1.2)", "1.2"],
     // A bare type name in a pattern matches that type, as a value.
     ["describe Int = \"integer\"\ndescribe String = \"text\"\n[describe Int, describe String]", '["integer","text"]'],
     [TEMPERATURE + "to Celsius (F 212)", "C 100.0"],
@@ -36,8 +36,8 @@ for (const [source, expected] of [
     ["to [Float] [1]", "[1.0]"],
     ["to [Int,String] [x: 1, y: \"a\"]", '[x: 1, y: "a"]'],
     // The checker evaluates to and from as the run does, beside a program's own instances.
-    [TEMPERATURE + "Vect 2 Char (to (List Char) \"a😀\")", "['a','😀']"],
-    ["Money (Float x) = _\nto Float (Money m) = m\nVect 1 Float [to Float (Money 1.2)]", "[1.2]"],
+    [TEMPERATURE + "(to (List Char) \"a😀\" : Vect 2 Char)", "['a','😀']"],
+    ["Money (x : Float) = _\nto Float (Money m) = m\n([to Float (Money 1.2)] : Vect 1 Float)", "[1.2]"],
 ] as const) {
     Deno.test(`conversions: ${source}`, () => {
         const actual = run(source);
@@ -51,7 +51,7 @@ for (const [source, kind, message] of [
     ["to 5 1", "type", "to expects a type"],
     ["to [Char] \"hello\"", "runtime", "list template and input must have the same length"],
     ["from [Char] \"h\"", "type", "no from instance for a list template"],
-    [TEMPERATURE + "Vect 3 Char (to (List Char) \"a😀\")", "type", "length mismatch: expected 3, got 2"],
+    [TEMPERATURE + "(to (List Char) \"a😀\" : Vect 3 Char)", "type", "length mismatch: expected 3, got 2"],
     // The old names are gone, with a hint to the new spelling.
     ["chars \"hi\"", "type", "to (List Char)"],
     ["toString 1", "type", "to String"],
@@ -64,8 +64,8 @@ for (const [source, kind, message] of [
 // An operand of a type the program defines, met by one of another type that no
 // clause of the operator takes, converts the other through a to instance, and
 // the operator runs again. Checked and unchecked runs agree.
-const MONEY = "Money (Float m) = _\n(Money a) + (Money b) = Money (a + b)\n(Money a) < (Money b) = a < b\n";
-const CENTS = "Cents (Int c) = _\n(Cents a) + (Cents b) = Cents (a + b)\nto Money (Cents c) = Money (Float c / 100)\n";
+const MONEY = "Money (m : Float) = _\n(Money a) + (Money b) = Money (a + b)\n(Money a) < (Money b) = a < b\n";
+const CENTS = "Cents (c : Int) = _\n(Cents a) + (Cents b) = Cents (a + b)\nto Money (Cents c) = Money ((c : Float) / 100)\n";
 for (const checked of [true, false]) {
     const each = (source: string) => {
         const i = new Interpreter();
@@ -73,14 +73,14 @@ for (const checked of [true, false]) {
         return i.renderString(i.run(parseDocument(source)));
     };
     for (const [source, expected] of [
-        [MONEY + "to Money (Float x) = Money x\n[Money 1.0 + 2.5, 2.5 + Money 1.0, Money 1.0 < 2.0]", "[Money 3.5, Money 3.5, True]"],
+        [MONEY + "to Money (x : Float) = Money x\n[Money 1.0 + 2.5, 2.5 + Money 1.0, Money 1.0 < 2.0]", "[Money 3.5, Money 3.5, True]"],
         [MONEY + CENTS + "Money 1.0 + Cents 50", "Money 1.5"],
         // The other way round, where a built-in type is needed: an index,
         // arithmetic, a typed pattern; an enumeration's positions are such instances.
-        ["Level (Int n) = _\nto Int (Level n) = n\nf (Int i) = i + 1\n[[10,20,30] (Level 2), Level 2 * 5, f (Level 4)]", "[30,10,5]"],
-        ["Direction = North | East | South\ng (Int i) = i * 10\n[to Int South, g South, [5,6] East, East + 1]", "[2,20,6,2]"],
+        ["Level (n : Int) = _\nto Int (Level n) = n\nf (i : Int) = i + 1\n[[10,20,30] (Level 2), Level 2 * 5, f (Level 4)]", "[30,10,5]"],
+        ["Direction = North | East | South\ng (i : Int) = i * 10\n[to Int South, g South, [5,6] East, East + 1]", "[2,20,6,2]"],
         // A pattern of the value's own type comes before a conversion.
-        ["Level (Int n) = _\nto Int (Level n) = n\nf (Level n) = 9\nf (Int i) = i\n[f (Level 4), f 7]", "[9,7]"],
+        ["Level (n : Int) = _\nto Int (Level n) = n\nf (Level n) = 9\nf (i : Int) = i\n[f (Level 4), f 7]", "[9,7]"],
     ] as const) Deno.test(`operators promote through to (checked=${checked}): ${source}`, () => {
         const actual = each(source);
         if (actual !== expected) throw new Error(`${actual} != ${expected}`);

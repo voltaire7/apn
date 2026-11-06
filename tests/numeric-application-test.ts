@@ -16,10 +16,10 @@ for (const [source, expected] of [
     ['[x: 0] [x: 123]', '[x: 123]'],
     ['[x: 0] [123]', '[x: 123]'],
     ['[x: 0] [123]', '[x: 123]'],
-    ['[x: Int32 0] [123]', '[x: 123]'],
+    ['[x: (0 : Int32)] [123]', '[x: 123]'],
     ['[x: [0]] [[123]]', '[x: [123]]'],
     ['[x: 0] []', '[x: 0]'],
-    ['Int 1', '1'],
+    ['(1 : Int)', '1'],
 ] as const) Deno.test(`numeric template default: ${source}`, () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(source)));

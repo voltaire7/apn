@@ -21,9 +21,9 @@ _fits [kind,minimum,follows] syntax = _level syntax >= minimum
     && !(_kind syntax == "infix" && _fixity (head syntax) == [follows,"none"])
 
 # What a piece of syntax is, as the parser reads it.
-_kind (String _) = "piece"
-_kind (Bool _) = "piece"
-_kind (Number n) = {
+_kind (_ : String) = "piece"
+_kind (_ : Bool) = "piece"
+_kind (n : Number) = {
     text = to String n
     head (to (List Char) text) == '-' ? "negative" : (_digits n ? "piece" : "infix")
 }
@@ -33,9 +33,9 @@ _kind (function :: args) = contains function ["[]","[:]","{}",".","..","()"] ? "
     : (contains function ["=","<-","import"] ? function
     : (_isOperator function && length args == 2 ? "infix"
     : "call"))))
-_digits (Number n) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) (to String n))
+_digits (n : Number) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) (to String n))
 _digits [".",_,key] = _digits key
-_digits (String text) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) text)
+_digits (text : String) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) text)
 _digits _ = False
 _params [_,params,_] = length params
 # The loosest operator a piece of syntax holds at its top, and the loosest one
@@ -52,9 +52,9 @@ _reach syntax = _kind syntax ~ [
     "infix" -> _infixReach syntax
     _ -> 99
 ]
-_infixReach (Number _) = 8
+_infixReach (_ : Number) = 8
 _infixReach [op,_,right] = min (_binding op) (_reach right)
-_precedence (Number _) = 7
+_precedence (_ : Number) = 7
 _precedence (op :: _) = head (_fixity op)
 _fixity op = intrinsics.fixity op
 # The least precedence an operator's right operand takes.
@@ -63,9 +63,9 @@ _binding op = {
     associativity == "right" ? precedence : precedence + 1
 }
 
-_bare _ (String leaf) = _operator leaf ? "(" ++ leaf ++ ")" : leaf
-_bare _ (Bool b) = to String b
-_bare _ (Number n) = to String n
+_bare _ (leaf : String) = _operator leaf ? "(" ++ leaf ++ ")" : leaf
+_bare _ (b : Bool) = to String b
+_bare _ (n : Number) = to String n
 _bare place (function :: args) = _node place function args
 
 _node _ "[]" items = "[" ++ _items (map (_shown ["item",0,-1]) items) ++ "]"
@@ -75,7 +75,7 @@ _node _ "->" [params,body] = joinWith ", " (map _parameter params) ++ _arrow bod
 _node [_,_,follows] "?:" [c,yes,no] =
     _branch ["operand",0,1] c ++ " ? " ++ _branch ["operand",1,-1] yes ++ " : "
         ++ _branch ["operand",1,follows] no
-_node _ "." [r, (String key)] = _shown ["selected",0,0] r ++ "." ++ key
+_node _ "." [r, (key : String)] = _shown ["selected",0,0] r ++ "." ++ key
 _node _ "." [r,selected] = _shown ["selected",0,0] r ++ "." ++ _bare _end selected
 _node _ "{}" [] = "{}"
 _node _ "{}" statements = "{ " ++ joinWith "; " (map (_shown _end) statements) ++ " }"
@@ -110,7 +110,7 @@ _infix [_,_,follows] op [a,b] = {
 # them parenthesized).
 _application _ function args =
     joinWith " " (_shown ["head",0,-1] function :: map (_shown ["argument",0,-1]) args)
-_isOperator (String name) = _operator name
+_isOperator (name : String) = _operator name
 _isOperator _ = False
 # The heads that are syntax, not functions.
 _tag head = contains head ["[]","[:]","->","?:",".","{}","..","=","<-","()","import","|"]

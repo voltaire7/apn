@@ -5,7 +5,7 @@ import ["number","p5"]
 # A snowflake: its height, its starting angle about the middle (it swings
 # from side to side as the angle turns), its size and its color.
 Flake = [y: Float, angle: Float, size: Float, radius: Float, color: [Float,Float,Float]]
-flakes = Mutable (List Flake [])
+flakes = Mutable ([] : List Flake)
 
 setup (Sketch p) = {
     p.createCanvas 400 600
@@ -23,8 +23,9 @@ newFlake (Sketch p) = {
     green <- p.random 200 256
     blue <- p.random 200 256
     return [
-        y: Float y, angle: Float angle, size: Float size, radius: sqrt (Number spread)
-        color: [Float red, Float green, Float blue]
+        y: (y : Float), angle: (angle : Float), size: (size : Float)
+        radius: sqrt (spread : Number)
+        color: [(red : Float), (green : Float), (blue : Float)]
     ]
 }
 
@@ -42,7 +43,7 @@ draw (Sketch p) = {
 }
 
 # Small flakes fall faster; one past the bottom starts again at the top.
-fall height (List _ flakes) = map (flake -> {
+fall height (flakes : List _) = map (flake -> {
     y = flake.y + 8 / flake.size
     flake.y = y > height ? -50.0 : y
     flake

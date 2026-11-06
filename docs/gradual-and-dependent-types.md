@@ -55,8 +55,8 @@ result type are instead an overload the context chooses
 ```apn
 func x = x ? "yes" : False
 print (func True ++ "!")           # yes!
-describe (String s) = s ++ "!"
-describe (Bool b) = b ? "T" : "F"
+describe (s : String) = s ++ "!"
+describe (b : Bool) = b ? "T" : "F"
 print (describe (func False))      # F
 # t <- currentTime; func (t > 0) ++ "!"   static error: cannot append Bool and String
 ```
@@ -109,7 +109,7 @@ Input patterns and result constructors can make a function's inferred type
 explicit in its definition:
 
 ```apn
-twice (Int x) = Int { x + x }
+twice (x : Int) = { x + x } : Int
 # Equivalent lambda: twice = (Int x) -> Int { x + x }
 print (typeOf twice)                   # Int -> Int
 ```
@@ -127,16 +127,16 @@ elsewhere still fail ordinary execution and `--check`; a boundary does not disab
 checking for the rest of the file.
 
 ```apn
-value = Dynamic 41
-Int value + 1                         # 42; Int validates at runtime
-Int (Dynamic "hello")                 # runtime error
+value = 41 : Dynamic
+(value : Int) + 1                     # 42; Int validates at runtime
+(("hello" : Dynamic) : Int)           # runtime error
 
-((Int -> Int) increment) <- Dynamic (x -> x + 1)
+(increment : Int -> Int) <- (x -> x + 1 : Dynamic)
 increment 41                          # 42
-((Int -> Int) bad) <- Dynamic (x -> "hello")
+(bad : Int -> Int) <- (x -> "hello" : Dynamic)
 bad 1                                 # runtime error: result is not an Int
 
-accept (Dynamic x) = x                 # explicit dynamic parameter
+accept (x : Dynamic) = x               # explicit dynamic parameter
 accept "hello"
 ```
 
@@ -149,7 +149,7 @@ An ordinary parameter whose type was inferred does not gain a hidden conversion:
 ```apn
 square x = x == 0 ? 0 : x * x
 # square (Dynamic 2)                  # static error
-square (Int (Dynamic 2))              # 4
+square ((2 : Dynamic) : Int)          # 4
 ```
 
 A `(Dynamic x)` parameter changes how `x` is checked, but does not hide unrelated
@@ -206,15 +206,15 @@ conversion rules.
 
 ```apn
 Ints n = Vect n Int
-xs = Ints 3 [10,20,30]
+xs = [10,20,30] : Ints 3
 print (typeOf xs)                 # Vect 3 Int
 xs 0 = 40                        # still Int, still length 3
 
-copy n ((Ints n) values) = values
+copy n (values : Ints n) = values
 copy 3 [10,20,30]
 # copy 3 [10,20]                 # static length error in checked mode
 
-appendOne n ((Ints n) values) (Int value) = Ints (n + 1) (values ++ [value])
+appendOne n (values : Ints n) (value : Int) = values ++ [value] : Ints (n + 1)
 ```
 
 A name a typed pattern's type does not know yet is bound by the value:
@@ -231,7 +231,7 @@ the reverse: it keeps a name bound to a value, and binds any other, such as a
 function's name (even one defined later), which no length is.
 
 ```apn
-app ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys)
+app (xs : Vect n a) (ys : Vect m a) = xs ++ ys : Vect (n + m) a
 typeOf (app [1,2] [3])           # Vect 3 Int
 ```
 
@@ -256,8 +256,8 @@ Type aliases can receive values as well as types:
 
 ```apn
 Choice flag = flag ? Int : String
-Choice True 123
-Choice False "hello"
+(123 : Choice True)
+("hello" : Choice False)
 ```
 
 Generic variant declarations still use their existing type-parameter
@@ -275,7 +275,7 @@ SelectedType flag = flag ? Int : String
 sizeFor n = n * 2
 cellType 0 = Int
 cellType _ = String
-SelectedType (isEven 4) 5              # Int: isEven 4 is True
+(5 : SelectedType (isEven 4))          # Int: isEven 4 is True
 # SelectedType (isEven 3) 5            # static error: String is required
 # Vect (sizeFor 2) Int [1,2,3]         # static error: expected 4, got 3
 cellType 1 "text"                      # String
@@ -298,7 +298,7 @@ not finish within the step budget.
   uses never fails.
 
 ```apn
-labelled n = SelectedType (n > 3) "few"
+labelled n = "few" : SelectedType (n > 3)
 labelled 2 ++ "!"                      # "few!"
 # labelled 5                           # runtime error: Int expects a number
 ```
@@ -314,13 +314,13 @@ Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a
 xs = Cons 1 (Cons 2 Nil)
 typeOf xs                         # Vec 2 Int
 typeOf Nil                        # Vec 0 a
-Vec 2 Int xs                      # checks; Vec 3 Int xs is a static error
+(xs : Vec 2 Int)                  # checks; Vec 3 Int xs is a static error
 
 append Nil ys = ys
 append (Cons x rest) ys = Cons x (append rest ys)
 typeOf (append xs xs)             # Vec 4 Int
 
-len ((Vec n _) _) = n             # binds the index: len xs is 2
+len (_ : Vec n _) = n             # binds the index: len xs is 2
 first (Cons x _) = x              # first Nil is a static error
 ```
 
@@ -339,8 +339,8 @@ them, otherwise when the program runs. A clause may state its result's
 indices, checked the same way:
 
 ```apn
-app ((Vec n a) Nil) ((Vec m a) ys) = Vec (n + m) a ys
-app ((Vec n a) (Cons x r)) ((Vec m a) ys) = Vec (n + m) a (Cons x (app r ys))
+app (Nil : Vec n a) (ys : Vec m a) = ys : Vec (n + m) a
+app (Cons x r : Vec n a) (ys : Vec m a) = Cons x (app r ys) : Vec (n + m) a
 ```
 
 The checker proves such claims by induction, as Idris does. Indices are sums
@@ -354,8 +354,8 @@ A claim that differs from its body by a constant, in a case that can happen,
 is a static error at the definition, whether or not anything calls it:
 
 ```apn
-app ((Vec n a) Nil) ((Vec m a) ys) = Vec (n + m) a ys
-app ((Vec n a) (Cons x r)) ((Vec m a) ys) = Vec (n + m + 1) a (Cons x (app r ys))
+app (Nil : Vec n a) (ys : Vec m a) = ys : Vec (n + m) a
+app (Cons x r : Vec n a) (ys : Vec m a) = Cons x (app r ys) : Vec (n + m + 1) a
 # the claim Vec (n + m + 1) a does not hold: when r is Nil, n + m + 1 is
 # m + 2 but the body's index is m + 1
 ```
@@ -371,9 +371,9 @@ parameters (see [patterns](semantics.md#patterns-variants-and-scope)).
 ## Inferring arguments from a vector pattern
 
 ```apn
-append (Vect n a []) (Vect m a ys) = Vect (n + m) a ys
-append (Vect n a (x::xs)) (Vect m a ys) =
-    Vect (n + m) a (x :: append xs ys)
+append ([] : Vect n a) (ys : Vect m a) = ys : Vect (n + m) a
+append (x::xs : Vect n a) (ys : Vect m a) =
+    (x :: append xs ys : Vect (n + m) a)
 
 append [1,2] [3,4]              # [1,2,3,4]
 ```
@@ -431,12 +431,12 @@ Every alternative meeting the claim gives the `match` that length; one that
 differs by a constant is a static error:
 
 ```apn
-append (Vect n a xs) (Vect m a ys) = Vect (n + m) a {
+append (xs : Vect n a) (ys : Vect m a) = {
     xs ~ [
         [] -> ys
         x :: rest -> x :: append rest ys
     ]
-}
+} : Vect (n + m) a
 ``` An explicit result constructor supplies a recursive
 signature before the body is checked; affine arithmetic establishes the sum.
 The example passes strict checking without executing either branch.

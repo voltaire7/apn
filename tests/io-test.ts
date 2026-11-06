@@ -30,7 +30,7 @@ for (const [name, source, expected] of [
     ["<- runs an action and binds its result", 'x <- { print 5; return 5 }\nprint (x + 1)', ["5", "6"]],
     ["print yields []", 'x <- print 5\nprint (null x)', ["5", "True"]],
     ["<- return x binds x, evaluated now", "x = 1\nx <- return (x + 1)\nprint x", ["2"]],
-    ["IO T is a type that checks an action", 'sayHello = IO [] { print "hello" }\nsayHello', ["hello"]],
+    ["IO T is a type that checks an action", 'sayHello = { print "hello" } : IO []\nsayHello', ["hello"]],
     ["return x is the action yielding x", "x <- return 42\nprint x", ["42"]],
     ["IO types describe actions", "print (IO [])\nprint (IO Int)", ["IO []", "IO Int"]],
     ["a block with an action statement is an action", 'f n = { print n; return (n * 2) }\ny <- f 3\nprint y', ["3", "6"]],
@@ -65,13 +65,13 @@ for (const [name, source, expected] of [
 for (const [source, message, kind] of [
     ["x = print 5\nprint (x + 1)", "bind its result first", "type"],
     ["f n = { print n; return n }\ny = f 1 + 1", "cannot use an action", "type"],
-    ['f = IO Int { print "hi"; 42 }', "the last statement of a do-block must be an action", "type"],
+    ['f = { print "hi"; 42 } : IO Int', "the last statement of a do-block must be an action", "type"],
     ["x = print 1 >>= v -> 5", "IO", "type"],
     ["x = (+ 1) <$> 5", "map needs an action", "type"],
     ["x <- 2 + 3", "<- runs an action, not Int", "type"],
     ['sayHello = IO { print "hello" }', "IO is a type constructor", "type"],
     ["x = IO 5", "IO is a type constructor", "type"],
-    ['x = IO Int (print 1)', "where Int is required", "type"],
+    ['x = print 1 : IO Int', "where Int is required", "type"],
 ] as const) Deno.test(`IO rejects: ${JSON.stringify(source)}`, () => fails(source, message, kind));
 Deno.test("IO: an action is not a condition", () => {
     try { run("x = print 1\nprint (x ? 1 : 2)", false); } catch (e) { if (String(e).includes("not a condition")) return; throw e; }

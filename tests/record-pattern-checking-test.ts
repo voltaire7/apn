@@ -2,7 +2,7 @@ import { Interpreter } from "../src/interp.ts";
 import { parse } from "../src/parser.ts";
 
 const schema = "Vector3 = [x: Float, y: Float, z: Float]";
-const definition = "func (Vector3 v) = v.x";
+const definition = "func (v : Vector3) = v.x";
 for (const argument of ["[1,2,3]", "[x: 1, y: 2, z: 3]"]) {
     for (const incremental of [false, true]) Deno.test(`checked record pattern: ${argument}, incremental=${incremental}`, () => {
         const interpreter = new Interpreter();
@@ -31,7 +31,7 @@ for (const argument of ["[]", "[1,2]", "[1,2,3,4]", '[1,"bad",3]', "[x: 1, y: 2]
 
 for (const [source, expected] of [
     [`${schema}; Alias = Vector3; f (Alias v) = v.z; f [1,2,3]`, "3.0"],
-    ['Shape = [point: [x: Float], label: String]; f (Shape v) = v.point.x; f [point: [x: 1], label: "a"]', "1.0"],
+    ['Shape = [point: [x: Float], label: String]; f (v : Shape) = v.point.x; f [point: [x: 1], label: "a"]', "1.0"],
     ['Pair = [String,Int]; f (Pair xs) = xs 1; f ["x",2]', "2"],
 ] as const) Deno.test(`checked structural schema preserves payload types: ${source}`, () => {
     const interpreter = new Interpreter();

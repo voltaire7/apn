@@ -18,12 +18,12 @@ Msg =
     | Released String Float
 
 init = [
-    [bubbles: List Bubble [], pressed: [0.0,0.0], creating: False]
+    [bubbles: ([] : List Bubble), pressed: [0.0,0.0], creating: False]
     task.perform Loaded (readFile "assets/bubbles.json")
 ]
 
 # The bubbles a JSON file lists.
-load text model = { model.bubbles = List Bubble (from JSON text); model }
+load text model = { model.bubbles = from JSON text : List Bubble; model }
 
 update msg model = msg ~ [
     Loaded text -> [load text model, browser.none]
@@ -105,7 +105,7 @@ mousePressed (Sketch p) = p.send (Pressed (Float p.mouseX) (Float p.mouseY))
 mouseReleased model (Sketch p) = when model.creating {
     [x,y] = model.pressed
     name <- p.prompt "Enter a name for the new bubble"
-    p.send (Released (String name) (Float (dist x y p.mouseX p.mouseY)))
+    p.send (Released (name : String) (dist x y p.mouseX p.mouseY : Float))
 }
 
 main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]

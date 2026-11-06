@@ -5,7 +5,7 @@ import ["html","number","p5"]
 
 # A boid: where it is, its velocity and its hue.
 Boid = [position: [Float,Float], velocity: [Float,Float], hue: Float]
-boids = Mutable (List Boid [])
+boids = Mutable ([] : List Boid)
 # A boid's size, and its greatest speed and steering force.
 size = 3.0
 maxSpeed = 3.0
@@ -26,7 +26,11 @@ newBoid (Sketch p) x y = {
     dx <- p.random -1 1
     dy <- p.random -1 1
     hue <- p.random 0 256
-    return [position: [Float x, Float y], velocity: [Float dx, Float dy], hue: Float hue]
+    return [
+        position: [(x : Float), (y : Float)]
+        velocity: [(dx : Float), (dy : Float)]
+        hue: (hue : Float)
+    ]
 }
 
 draw (Sketch p) = {
@@ -42,7 +46,7 @@ mouseDragged (Sketch p) = {
 
 # Each boid flies, among the boids as they were (a typed (List _ flock) parameter
 # reads the cell's contents when called, before set replaces them).
-flyAll width height (List _ flock) = map (fly width height flock) flock
+flyAll width height (flock : List _) = map (fly width height flock) flock
 
 # A boid steered by its neighbors, then moved, wrapping around the edges.
 fly width height flock boid = {
@@ -82,7 +86,7 @@ align boid near =
 
 # Toward the neighbors' center.
 cohere boid near = {
-    center = total (map ([_,_,other] -> other.position) near) / Float (length near)
+    center = total (map ([_,_,other] -> other.position) near) / (length near : Float)
     near == [] ? [0.0,0.0] : steer boid (center - boid.position)
 }
 

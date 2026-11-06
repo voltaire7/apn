@@ -10,18 +10,18 @@ for (const [source, expected] of [
     ['[Bool,String,Char,[],List,Record,HashMap,Pointer]', '[Bool,String,Char,[],List,Record,HashMap,Pointer]'],
     ['[Int == 0, Float == 0, Int == Float, Int == Int]', '[False,False,False,True]'],
     ['[isType Int Int, isType Bool Bool, isType Type Int]', '[False,False,True]'],
-    ['[typeOf Int, typeOf (Int 1), typeOf (Float 1), typeOf (Int32 1)]', '[Type,Int,Float,Int32]'],
-    ['((Int -> Float) identity) <- return (x -> x)\n[Type Int, Type [Int], Type [x: Float], typeOf identity]', '[Int, [Int], [x: Float], Int -> Float]'],
-    ['Count (Int x) = _\n[Count, Count 3]', '[Count, Count 3]'],
-    ['f (Type t) = t 123\nf Int', '123'],
-    ['f (t x) = [t,x]\nf (Int32 7)', '[Int32,7]'],
+    ['[typeOf Int, typeOf (1 : Int), typeOf (1 : Float), typeOf (1 : Int32)]', '[Type,Int,Float,Int32]'],
+    ['(identity : Int -> Float) <- return (x -> x)\n[(Int : Type), ([Int] : Type), ([x: Float] : Type), typeOf identity]', '[Int, [Int], [x: Float], Int -> Float]'],
+    ['Count (x : Int) = _\n[Count, Count 3]', '[Count, Count 3]'],
+    ['f (t : Type) = t 123\nf Int', '123'],
+    ['f (x : t) = [t,x]\nf (7 : Int32)', '[Int32,7]'],
     ['[Int]', '[Int]'],
     ['xs = [Int].[0]\nxs 0 = 2\nxs', '[2]'],
     ['Int * [1,2,3]', '[1,2,3]'],
     ['[].[]', '[]'],
     ['take 2 (map Int [1,2,missing])', '[1,2]'],
-    ['[Int * 3, 3 * Int, 3 * Int 0]', '[[0,1,2],[0,1,2],0]'],
-    ['V = [x: Float, y: Float, z: Float]\nv = V []\nv.x = 1\n[v, Type V]', '[[x: 1.0, y: 0.0, z: 0.0], [x: Float, y: Float, z: Float]]'],
+    ['[Int * 3, 3 * Int, 3 * (0 : Int)]', '[[0,1,2],[0,1,2],0]'],
+    ['V = [x: Float, y: Float, z: Float]\nv = V []\nv.x = 1\n[v, (V : Type)]', '[[x: 1.0, y: 0.0, z: 0.0], [x: Float, y: Float, z: Float]]'],
     ['V = [x: Float, y: Float]\nV [x: 1]', '[x: 1.0, y: 0.0]'],
     ['V = [x: Float, y: Float]\nV [1,2]', '[x: 1.0, y: 2.0]'],
     ['v = [x: Float] []\nv.x = 2\ntypeOf v.x', 'Float'],
@@ -39,7 +39,7 @@ for (const [source, expected] of [
     ['Node = | Next Node\nNode', 'Node'],
     ['[fn: Function] [x -> x]', '[fn: x -> x]'],
     ['(v -> v.fn 2) $ [fn: (+ 1)] []', '3'],
-    ['[Int (floor .2), Int (truncate -1.7), Float (inexact 9007199254740993)]', '[0,-1,9007199254740992.0]'],
+    ['[(floor .2 : Int), (truncate -1.7 : Int), (inexact 9007199254740993 : Float)]', '[0,-1,9007199254740992.0]'],
 ] as const) Deno.test(`construction defaults: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -58,8 +58,8 @@ for (const [type, expected] of [
 for (const source of [
     'Int + 1', 'sqrt Float', '-Int', 'Int ^ 2', 'Int < 1',
  'String ++ "hi"', 'length List', '[Int,Float] + [1,2]',
-    'f (Int x) = x + 1\nf Int', 'f (Bool x) = x\nf Bool',
-    'Int .2', 'cast Int .2', '[Int].[.2]',
+    'f (x : Int) = x + 1\nf Int', 'f (x : Bool) = x\nf Bool',
+    '(.2 : Int)', 'cast Int .2', '[Int].[.2]',
     'v = [x: Int] []\nv.x = .2',
     'v = [x: Int8] []\nv.x = 128',
     '[x: Int] [1,2]',
@@ -105,14 +105,14 @@ for (const values of ['[1]', '[1,2]', '[1,2,3,4]']) {
 }
 
 for (const [source, expected] of [
-    ['Vector3 = [x: Float, y: Float, z: Float]\nvec = Vector3\nvec.x = 123\n[vec, Type Vector3]', '[[x: 123.0, y: Float, z: Float], [x: Float, y: Float, z: Float]]'],
+    ['Vector3 = [x: Float, y: Float, z: Float]\nvec = Vector3\nvec.x = 123\n[vec, (Vector3 : Type)]', '[[x: 123.0, y: Float, z: Float], [x: Float, y: Float, z: Float]]'],
     ['v = [x: Int]\nv "x" = 1\nv', '[x: 1]'],
     ['v = [x: Int, y: Float]\nv.[x,y] = [1,2]\nv', '[x: 1, y: 2.0]'],
     ['xs = [Int]\nxs 0 = 1\nxs', '[1]'],
     ['xs = [Int,Float]\nxs (-1) = 2\nxs', '[Int,2.0]'],
     ['xs = [Int]\ni = 0\nxs (i + 0) = 1\nxs', '[1]'],
-    ['UserId (Int x) = _\nv = [id: UserId]\nv.id = UserId 3\nv', '[id: UserId 3]'],
-    ['((Int -> Int) identity) <- return (x -> x); v = [f: typeOf identity]\nv.f = (+ 1)\nv.f 2', '3'],
+    ['UserId (x : Int) = _\nv = [id: UserId]\nv.id = UserId 3\nv', '[id: UserId 3]'],
+    ['(identity : Int -> Int) <- return (x -> x); v = [f: typeOf identity]\nv.f = (+ 1)\nv.f 2', '3'],
 ] as const) Deno.test(`assignment gives a type field a default: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

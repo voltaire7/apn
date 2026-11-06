@@ -46,8 +46,8 @@ modify hooks shader = p5Object "modify" [shader,hooks]
 # pixel's color.
 _input field = _glsl.Glsl ("inputs." ++ field)
 # The hooks by key, and the uniforms as p5 takes them ("float time": value).
-_hooks uniforms code = Dynamic (HashMap (["uniforms", HashMap (map ([name,[type,value]] ->
-    [type ++ " " ++ name, value]) (pairs uniforms))] :: code))
+_hooks uniforms code = (HashMap (["uniforms", HashMap (map ([name,[type,value]] ->
+    [type ++ " " ++ name, value]) (pairs uniforms))] :: code)) : Dynamic
 buildFilterShader uniforms hook = {
     color = hook [
         texCoord: _input "texCoord", canvasSize: _input "canvasSize"
@@ -76,11 +76,11 @@ _pixel = [
 ]
 _structHooks uniforms hooks = _hooks uniforms (map ([name,hook] -> {
     pixel = name == "pixelInputs"
-    [struct,inputs] = pixel ? ["Inputs", Dynamic _pixel] : ["Vertex", Dynamic _vertex]
+    [struct,inputs] = pixel ? ["Inputs", (_pixel : Dynamic)] : ["Vertex", (_vertex : Dynamic)]
     assign [field,value] = "inputs." ++ field ++ " = " ++ _glsl.glsl value ++ "; "
     body = foldl (++) "" (map assign (pairs (hook inputs)))
-    [_hookKeys (String name), "(" ++ struct ++ " inputs) { " ++ body ++ "return inputs; }"]
-}) (pairs (Dynamic hooks)))
+    [_hookKeys (name : String), "(" ++ struct ++ " inputs) { " ++ body ++ "return inputs; }"]
+}) (pairs (hooks : Dynamic)))
 buildColorShader uniforms hooks = modify (_structHooks uniforms hooks) baseColorShader
 buildMaterialShader uniforms hooks = modify (_structHooks uniforms hooks) baseMaterialShader
 
@@ -90,11 +90,11 @@ remap value start1 stop1 start2 stop2 =
     start2 + (value - start1) * (stop2 - start2) / (stop1 - start1)
 lerp start stop amount = start + (stop - start) * amount
 constrain value low high = value < low ? low : (value > high ? high : value)
-dist x1 y1 x2 y2 = sqrt (Number ((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1)))
+dist x1 y1 x2 y2 = sqrt ((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1) : Number)
 
 # Vectors are lists ([x,y] or [x,y,z]): + - * / work on them (and with a
 # number) element by element, so these complete p5.Vector.
-mag v = Float (sqrt (_array.dot v v))
+mag v = sqrt (_array.dot v v) : Float
 normalize v = v / (mag v == 0 ? 1.0 : mag v)
 setMag length v = normalize v * length
 limit most v = v * (mag v > most ? most / mag v : 1.0)

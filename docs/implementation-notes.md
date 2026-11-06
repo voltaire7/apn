@@ -60,9 +60,17 @@ intentional evaluation change.
   writes a record entry (directly inside `[ ]`), closes a ternary (pairing a
   `?` at the same bracket depth), or, spaced, declares or ascribes; any other
   is reported. Declarations and ascription are expanded as they are parsed,
-  so nothing after the parser sees them: `e : T` is `T e` (a function type,
-  which applied would call its argument, is `((T r) -> r) e`), `(p : T)` the
-  typed pattern `((T) p)` (`(t p)` for a type variable), and a declaration
+  so nothing after the parser sees them: `e : T` is `T e` marked `ascribed`
+  (a function type, which applied would call its argument, is
+  `((T r) -> r) e`), which the printers show as `(e : T)`. `(p : T)` is the
+  type pattern `(T args.. p)` for a type's name given names, literals and
+  types, which dispatches and binds as type patterns do; a schema for any
+  other type, a constructor's name, or a function type's (`functionTypes`);
+  `(t p)` for a type variable. `knownArguments` makes a computed type's
+  pattern a schema once its arguments are all known (`copy n (xs : Sized n)`
+  tests `xs` against `Sized n`; `(xs : Pairs n a)` reads `n` back from the
+  value). A lone ascription's parentheses are its own: the group is the
+  ascription, not a block around it. A declaration
   (`parseDeclaration`) a marker that `applyDeclarations` replaces, typing the
   parameters of the clauses after it and claiming their results. Application
   statements such as `print $ head $ [1,2,3]` lack `=`, so they stay

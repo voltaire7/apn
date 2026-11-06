@@ -22,26 +22,26 @@ for (const [source, expected] of [
     [FACTORIAL + "factorial 20", "2432902008176640000"],
     [TO_LIST + "toList 3", "[2,1,0]"],
     // A bare Z takes no fields, so a second parameter stays a parameter.
-    ["plus Z m = m; plus (S k) m = S (plus k m); plus 2 (UInt 3)", "5"],
+    ["plus Z m = m; plus (S k) m = S (plus k m); plus 2 (3 : UInt)", "5"],
     ["fib Z = 0; fib (S Z) = 1; fib (S (S k)) = fib (S k) + fib k; fib 20", "6765"],
     // The checker evaluates them in types.
-    [FACTORIAL + "Vect (factorial 3) Int [1,2,3,4,5,6]", "[1,2,3,4,5,6]"],
+    [FACTORIAL + "([1,2,3,4,5,6] : Vect (factorial 3) Int)", "[1,2,3,4,5,6]"],
     // A program's own constructor named Z is its variant.
     ["W = | Z Int; f (Z n) = n; f (Z 3)", "3"],
     // A literal in a typed pattern is a value of that type; a sized integer
     // with a plain one keeps its type in the checker, as at runtime.
-    ["h (UInt 0) = []; h (UInt k) = [k]; [h 0, h 4]", "[[],[4]]"],
-    ["toList (UInt k) = k == 0 ? [] : k - 1 :: toList (k - 1); toList 3", "[2,1,0]"],
+    ["h (0 : UInt) = []; h (k : UInt) = [k]; [h 0, h 4]", "[[],[4]]"],
+    ["toList (k : UInt) = k == 0 ? [] : k - 1 :: toList (k - 1); toList 3", "[2,1,0]"],
     // A numeric type pattern binds the untyped payload, in the checker as at
     // runtime; S k binds the predecessor, a UInt.
-    ["widen (UInt8 x) = x + 300; widen 5", "305"],
-    ["down (UInt8 x) = x == 0 ? 0 : down (x - 1); down 3", "0"],
+    ["widen (x : UInt8) = x + 300; widen 5", "305"],
+    ["down (x : UInt8) = x == 0 ? 0 : down (x - 1); down 3", "0"],
     ["pred (S k) = k; pred 5 - 1", "3"],
     // (_ x) takes the payload and discards the type.
-    ["payload (_ x) = x; payload (Int32 5)", "5"],
+    ["payload (x : _) = x; payload (5 : Int32)", "5"],
     // A new type's value is taken apart with its pattern, not by its base type.
-    ["Money (Float x) = _; amount (Money m) = m; Float $ amount $ Money 1.2", "1.2"],
-    ["Money (Float x) = _; Cents (Int x) = _; amount (Money m) = m; Cents (Int (amount (Money 3.0)))", "Cents 3"],
+    ["Money (x : Float) = _; amount (Money m) = m; Float $ amount $ Money 1.2", "1.2"],
+    ["Money (x : Float) = _; Cents (x : Int) = _; amount (Money m) = m; Cents (amount (Money 3.0) : Int)", "Cents 3"],
 ] as const) {
     Deno.test(`natural numbers: ${source}`, () => {
         const actual = run(source);
@@ -51,10 +51,10 @@ for (const [source, expected] of [
 
 for (const [source, kind, message] of [
     [FACTORIAL + "factorial -1", "type", "UInt cannot represent a negative integer"],
-    [FACTORIAL + "Vect (factorial 3) Int [1,2]", "type", "length mismatch: expected 6, got 2"],
+    [FACTORIAL + "([1,2] : Vect (factorial 3) Int)", "type", "length mismatch: expected 6, got 2"],
     ["S -1", "type", "UInt cannot represent a negative integer"],
-    ["h (UInt (-1)) = 1; h 1", "type", "UInt cannot represent a negative integer"],
-    ["h (UInt8 300) = 1; h 1", "type", "value out of range for UInt8"],
+    ["h (-1 : UInt) = 1; h 1", "type", "UInt cannot represent a negative integer"],
+    ["h (300 : UInt8) = 1; h 1", "type", "value out of range for UInt8"],
     ["pred (S k) = k; pred 0", "type", "no clause of 'pred' matches these arguments"],
 ] as const) {
     Deno.test(`natural numbers reject: ${source}`, () => {

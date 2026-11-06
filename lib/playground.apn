@@ -87,7 +87,7 @@ black = Rgb 0 0 0
 # Time, in milliseconds: spin turns once per period (in seconds), wave and
 # zigzag go between lo and hi and back once per period.
 _fraction period time = inexact
-    (modulo (Int (round time)) (Int (round (period * 1000))) / (period * 1000))
+    (modulo (round time : Int) (round (period * 1000) : Int) / (period * 1000))
 spin period time = 360 * _fraction period time
 wave lo hi period time = lo + (hi - lo) * (1 + cos (turns (_fraction period time))) / 2
 zigzag lo hi period time = lo + (hi - lo) * abs (2 * _fraction period time - 1)
@@ -102,7 +102,7 @@ toXY keyboard = {
 }
 
 # Shapes as SVG, as Elm's Playground draws them.
-_number x = isInteger x ? to String (Int (round x)) : to String (inexact x)
+_number x = isInteger x ? to String (round x : Int) : to String (inexact x)
 _point x y = _number x ++ "," ++ _number y
 _colorText (Rgb r g b) = "rgb(" ++ strings.joinWith "," (map (to String) [r,g,b]) ++ ")"
 _corner radius angle = _point (radius * cos angle) (radius * sin angle)
@@ -169,7 +169,7 @@ _toScreen width height = [
 _noKeys = [
     up: False, down: False, left: False, right: False
     space: False, enter: False, shift: False, backspace: False
-    keys: List String []
+    keys: ([] : List String)
 ]
 _computer = [
     mouse: [x: 0.0, y: 0.0, down: False, click: False]

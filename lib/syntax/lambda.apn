@@ -7,9 +7,9 @@
 # e >>= (x -> rest), and an action statement s; rest is s >> rest. A list's
 # bindings scope over its later items as a block's do. Other syntax (?:,
 # lists, records, ranges, patterns) stays, its parts desugared.
-_lambda bound (String leaf) = leaf
-_lambda bound (Bool b) = b
-_lambda bound (Number n) = n
+_lambda bound (leaf : String) = leaf
+_lambda bound (b : Bool) = b
+_lambda bound (n : Number) = n
 _lambda bound [] = []
 _lambda bound (head :: rest) = _core bound head rest
 
@@ -96,15 +96,15 @@ _y = ["->",["f"],[["->",["x"],["f",["x","x"]]],["->",["x"],["f",["x","x"]]]]]
 
 # What a binding binds: its name, or the pattern it takes apart.
 _bindingPattern left = _isDefinition left ? head left : left
-_name (String name) = name
+_name (name : String) = name
 _name (name :: _) = _isName name ? name : ""
-_binders (String name) = _isName name ? [name] : []
+_binders (name : String) = _isName name ? [name] : []
 _binders (first :: rest) = foldr (pattern, names -> _binders pattern ++ names) [] (first :: rest)
 _binders _ = []
-_isPlain (String name) = _isName name
+_isPlain (name : String) = _isName name
 _isPlain _ = False
 _isName name = name != "" && name != "_" && contains (head (to (List Char) name)) _nameStarts
 _nameStarts = to (List Char) "abcdefghijklmnopqrstuvwxyz_"
-_mentions name (String leaf) = leaf == name
+_mentions name (leaf : String) = leaf == name
 _mentions name (first :: rest) = any (_mentions name) (first :: rest)
 _mentions _ _ = False

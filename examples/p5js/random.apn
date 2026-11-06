@@ -19,8 +19,8 @@ choose (Sketch p) = {
     g <- p.random 100 256
     b <- p.random 100 256
     # The sketch's values are Dynamic: Float converts them for the cells.
-    set position [Float x, Float y]
-    set color [Float r, Float g, Float b]
+    set position [(x : Float), (y : Float)]
+    set color [(r : Float), (g : Float), (b : Float)]
 }
 
 draw (Sketch p) = {

@@ -8,7 +8,7 @@ Ball = [
     x: Float, y: Float, diameter: Float, xspeed: Float, yspeed: Float, direction: Float
     restX: Float, restY: Float
 ]
-balls = Mutable (List Ball [])
+balls = Mutable ([] : List Ball)
 # How much the device's acceleration must change to shake the balls.
 threshold = 30
 
@@ -28,8 +28,8 @@ newBall (Sketch p) = {
     xspeed <- p.random -2 2
     yspeed <- p.random -2 2
     return [
-        x: Float x, y: Float y, diameter: Float diameter, xspeed: Float xspeed
-        yspeed: Float yspeed, direction: 0.7, restX: Float xspeed, restY: Float yspeed
+        x: (x : Float), y: (y : Float), diameter: (diameter : Float), xspeed: (xspeed : Float)
+        yspeed: (yspeed : Float), direction: 0.7, restX: (xspeed : Float), restY: (yspeed : Float)
     ]
 }
 
@@ -58,8 +58,8 @@ move ball = {
 # Off an edge, a ball comes back to it and turns around.
 turn width height ball = {
     edge = ball.x < 0 || ball.y < 0 || ball.x > width - 20 || ball.y > height - 20
-    ball.x = constrain ball.x 0.0 (Float (width - 20))
-    ball.y = constrain ball.y 0.0 (Float (height - 20))
+    ball.x = constrain ball.x 0.0 (width - 20 : Float)
+    ball.y = constrain ball.y 0.0 (height - 20 : Float)
     ball.direction = edge ? -ball.direction : ball.direction
     ball
 }
@@ -67,8 +67,8 @@ turn width height ball = {
 shake (Sketch p) change ball = {
     dx <- p.random 5 (change / 3)
     dy <- p.random 5 (change / 3)
-    ball.xspeed = ball.xspeed + Float dx
-    ball.yspeed = ball.yspeed + Float dy
+    ball.xspeed = ball.xspeed + (dx : Float)
+    ball.yspeed = ball.yspeed + (dy : Float)
     return ball
 }
 

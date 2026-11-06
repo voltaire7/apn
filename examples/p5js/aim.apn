@@ -16,7 +16,7 @@ draw (Sketch p) = {
 
 # An eye at x, y whose pupil turns toward the mouse.
 eye (Sketch p) x y = {
-    angle = atan2 (Number (p.mouseY - y)) (Number (p.mouseX - x))
+    angle = atan2 (p.mouseY - y : Number) (p.mouseX - x : Number)
     p.push
     p.translate x y
     p.fill 255

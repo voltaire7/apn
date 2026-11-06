@@ -13,7 +13,7 @@ float = Decoder (value -> isNumber value ? Ok (inexact value) : Err "Expecting a
 bool = expecting "a BOOL" (isType Bool)
 # The value an object holds under name, or the error saying it has none.
 _field name value = {
-    fields = isType Record value ? HashMap (pairs (Record value)) : HashMap []
+    fields = isType Record value ? HashMap (pairs (value : Record)) : HashMap []
     has name fields
         ? Ok (lookup name fields)
         : Err ("Expecting an OBJECT with a field named `" ++ name ++ "`")
@@ -28,14 +28,14 @@ _all results = results ~ [
 # dotted template keeps its input's keys), a decoder as itself (tags: list
 # string), String, Int, Float and Bool as string, int, float and bool, and
 # any other type the values isType accepts.
-_decodeAs (Record schema) value = map (values -> (map (v -> _ -> v) values).schema)
+_decodeAs (schema : Record) value = map (values -> (map (v -> _ -> v) values).schema)
     (_all (map ([name,t] -> _field name value >>= _decodeAs t) (pairs schema)))
 _decodeAs (Decoder decoder) value = map Dynamic (decoder value)
 _decodeAs t value = _decodeAs (_basic t) value
 _basic t = t == String ? string : (t == Int ? int : (t == Float ? float : (t == Bool ? bool
     : expecting (to String t) (isType t))))
 decodeValue (Decoder decoder) value = decoder value
-decodeValue (Type t) value = _decodeAs t value
+decodeValue (t : Type) value = _decodeAs t value
 # A type's decoder, for what takes only a decoder (map f (fromType Quote)), or
 # a record's whose fields may be decoders ([name: String, tags: list string]).
 fromType t = Decoder (_decodeAs t)

@@ -16,17 +16,17 @@ function failure(source: string, checked: boolean): string {
 const BOX = "Box a = tag Box Box [a]\n";
 // Name params = _ declares a constructor: an application that stands for
 // nothing but itself, one field per parameter.
-const CTOR = "Box x = _\nRect (Float w) (Float h) = _\nNothing = _\n";
+const CTOR = "Box x = _\nRect (w : Float) (h : Float) = _\nNothing = _\n";
 // A union of such constructors claims them: one type, as a declaration makes.
 const MAYBE = "Just x = _\nNada = _\nMaybe a = Just a | Nada\n";
-const SHAPE = "Circle (Float r) = _\nSquare (Float s) = _\nShape = Circle | Square\n";
+const SHAPE = "Circle (r : Float) = _\nSquare (s : Float) = _\nShape = Circle | Square\n";
 const OPTION = 'import "option"\n';
 // A union of existing types is a type of its own values: made of nothing new.
 const MIXED = "Mixed = Int | String\n";
-const ID = "UserId (Int x) = _\n";
+const ID = "UserId (x : Int) = _\n";
 // A body holding _ is the constructor's logic: it runs whenever one is made,
 // and its _ is the value itself, the fields as the parameters bound them.
-const PERCENT = "Percent (Float x) = x > 100 ? Percent 100.0 : _\n";
+const PERCENT = "Percent (x : Float) = x > 100 ? Percent 100.0 : _\n";
 for (const checked of [true, false]) {
     for (const [source, expected] of [
         [BOX + "Box 5", "Box 5"],
@@ -45,13 +45,13 @@ for (const checked of [true, false]) {
         ["Pair a b = _\nPair 1 \"x\" ~ [Pair n s -> s]", '"x"'],
         [MAYBE + "[Just 5, Nada, typeOf (Just 5)]", "[Just 5, Nada, Maybe Int]"],
         [MAYBE + "f (Just x) = x\nf Nada = 0\n[f (Just 3), f Nada]", "[3,0]"],
-        [MAYBE + "Maybe Int (Just 2)", "Just 2"],
-        [MAYBE + "return = Just\n(Just x) >>= f = f x\nNada >>= f = Nada\nMaybe Int { x <- Just 2; return (x * 3) }", "Just 6"],
+        [MAYBE + "(Just 2 : Maybe Int)", "Just 2"],
+        [MAYBE + "return = Just\n(Just x) >>= f = f x\nNada >>= f = Nada\n({ x <- Just 2; return (x * 3) } : Maybe Int)", "Just 6"],
         [SHAPE + "area (Circle r) = 3 * r * r\narea (Square s) = s * s\nmap area [Circle 1, Square 2]", "[3.0,4.0]"],
-        [SHAPE + 'g (Shape s) = "shape"\n[typeOf (Circle 1), g (Square 1)]', '[Shape,"shape"]'],
-        [MIXED + "[Mixed, Type Mixed]", "[Mixed, Int | String]"],
-        [MIXED + 'f (Mixed m) = "mixed"\nf _ = "other"\n[f 1, f "a", f 2.5]', '["mixed","mixed","other"]'],
-        [MIXED + '[Mixed 5, isType Mixed "s"]', "[5,True]"],
+        [SHAPE + 'g (s : Shape) = "shape"\n[typeOf (Circle 1), g (Square 1)]', '[Shape,"shape"]'],
+        [MIXED + "[Mixed, (Mixed : Type)]", "[Mixed, Int | String]"],
+        [MIXED + 'f (m : Mixed) = "mixed"\nf _ = "other"\n[f 1, f "a", f 2.5]', '["mixed","mixed","other"]'],
+        [MIXED + '[(5 : Mixed), isType Mixed "s"]', "[5,True]"],
         [OPTION + "OptOrList a = Option a | List a\n[OptOrList Int, isType (OptOrList Int) [1]]", "[OptOrList Int, True]"],
         [CTOR + "map (Rect 1) [2,3]", "[Rect 1.0 2.0, Rect 1.0 3.0]"],
         [CTOR + 'f (Rect w h) = "rect"\nf _ = "other"\n[f (Rect 1 2), f [1,2]]', '["rect","other"]'],
@@ -59,17 +59,17 @@ for (const checked of [true, false]) {
         [ID + "(UserId a) + (UserId b) = UserId (a + b)\nUserId 2 + UserId 3", "UserId 5"],
         // A constructor sharing its type's name is the type where one is
         // expected: a field's or a slot's type, isType, a type's argument.
-        [ID + "Order (UserId u) (Int n) = _\nOrder (UserId 5) 3", "Order (UserId 5) 3"],
+        [ID + "Order (UserId u) (n : Int) = _\nOrder (UserId 5) 3", "Order (UserId 5) 3"],
         [ID + "[[v: UserId] [], isType UserId (UserId 1), typeOf (UserId 1) == UserId]", "[[v: UserId 0], True, True]"],
         [ID + "v = [id: UserId 1]\nv.id = UserId 2\nv.id", "UserId 2"],
-        [CTOR + "List Box [Box 1]", "[Box 1]"],
+        [CTOR + "([Box 1] : List Box)", "[Box 1]"],
         // Applied to types it is that type applied to them, where a type is
         // expected: a typed pattern (flat too), a field, isType, a slot. Its own
         // pattern, with as many arguments as fields, still takes it apart.
-        [CTOR + 'f ((Box Int) b) = b\nf _ = 0\ng (Box Int b) = b\ng _ = 0\nunbox (Box x) = x\n[f (Box 5), f (Box "a"), g (Box 5), g (Box "a"), unbox (Box 5)]',
+        [CTOR + 'f (b : Box Int) = b\nf _ = 0\ng (Box Int b) = b\ng _ = 0\nunbox (Box x) = x\n[f (Box 5), f (Box "a"), g (Box 5), g (Box "a"), unbox (Box 5)]',
             "[Box 5, 0, Box 5, 0, 5]"],
         [CTOR + "Wrap (Box Int b) = _\n[Wrap (Box 1), isType (Box Int) (Box 1), isType (Box Int) (Box 1.5)]", "[Wrap (Box 1), True, False]"],
-        [CTOR + "[[b: Box Int] [], List (Box Int) [Box 1], Box Int, typeOf (Box 1) == Box Int]", "[[b: Box 0], [Box 1], Box Int, True]"],
+        [CTOR + "[[b: Box Int] [], ([Box 1] : List (Box Int)), Box Int, typeOf (Box 1) == Box Int]", "[[b: Box 0], [Box 1], Box Int, True]"],
         [CTOR + "kind (Box t x) = t\nkind (Box 2)", "Int"],
         // typeOf gives the narrowest type: its fields decide its parameters,
         // and one nothing decides is a type variable.
@@ -81,9 +81,9 @@ for (const checked of [true, false]) {
         [PERCENT + "(Percent a) + (Percent b) = Percent (a + b)\nPercent 90 + Percent 20", "Percent 100.0"],
         [PERCENT + "g (Percent v) = v\n[g (Percent 150), g (tag Percent Percent [150.0])]", "[100.0,150.0]"],
         [PERCENT + "map Percent [1,200]", "[Percent 1.0, Percent 100.0]"],
-        ["Low (Int x) = x > 5 ? Low 5 : _\n[l: Low] [l: Low 9]", "[l: Low 5]"],
-        ["Even (Int n) = n % 2 == 0 ? _ : Even (n + 1)\n[Even 3, Even 4]", "[Even 4, Even 4]"],
-        ["Circle (Float r) = r < 0 ? Circle (0 - r) : _\nSquare (Float s) = _\nShape = Circle | Square\n[Circle -2, typeOf (Circle 1)]", "[Circle 2.0, Shape]"],
+        ["Low (x : Int) = x > 5 ? Low 5 : _\n[l: Low] [l: Low 9]", "[l: Low 5]"],
+        ["Even (n : Int) = n % 2 == 0 ? _ : Even (n + 1)\n[Even 3, Even 4]", "[Even 4, Even 4]"],
+        ["Circle (r : Float) = r < 0 ? Circle (0 - r) : _\nSquare (s : Float) = _\nShape = Circle | Square\n[Circle -2, typeOf (Circle 1)]", "[Circle 2.0, Shape]"],
     ] as const) Deno.test(`core (checked=${checked}): ${source}`, () => {
         const actual = run(source, checked);
         if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -96,21 +96,21 @@ for (const checked of [true, false]) {
         [CTOR + 'Rect "a" 2', checked ? "cannot use String where Float is required" : "Float expects a number"],
         [CTOR + "Box 5 + 1", checked ? "cannot combine Box Int and Int" : "cannot apply '+'"],
         ["Bad [x] = _\n1", "a constructor's field is a name or a typed name"],
-        [MAYBE + 'Maybe Int (Just "a")', checked ? "cannot use String where Int is required" : "Int expects a number"],
+        [MAYBE + '(Just "a" : Maybe Int)', checked ? "cannot use String where Int is required" : "Int expects a number"],
         ["Just x = _\nMaybe a = Just a | Nope\n1", "Maybe unions constructors declared with _, and Nope is not one"],
-        [MIXED + "Mixed 2.5", checked ? "cannot use Float where Int | String is required" : "Float is not one of Int | String"],
+        [MIXED + "(2.5 : Mixed)", checked ? "cannot use Float where Int | String is required" : "Float is not one of Int | String"],
         ["Foo = Int | Bar\n1", "Foo mixes a type (Int) and a new constructor (Bar)"],
         [OPTION + "Two = Some | Int\n1", "Two's alternative Some is a constructor of another type"],
         [CTOR + "length (Rect 3 4)", checked ? "Rect" : "expected a list"],
         [CTOR + "area (Rect w h) = w * h\narea 5", checked ? "cannot use Int where Rect is required" : "no clause"],
         // A new type has only the operations its clauses define; a
         // constructor is not a conversion.
-        [ID + "Int (UserId 5)", checked ? "cannot use UserId where Int is required" : "Int expects a number"],
+        [ID + "(UserId 5 : Int)", checked ? "cannot use UserId where Int is required" : "Int expects a number"],
         [ID + "f (UserId u) = u\nf 5", checked ? "cannot use Int where UserId is required" : "no clause"],
-        [ID + "Order (UserId u) (Int n) = _\nOrder 5 3", checked ? "cannot use Int where UserId is required" : "UserId expects a UserId variant"],
+        [ID + "Order (UserId u) (n : Int) = _\nOrder 5 3", checked ? "cannot use Int where UserId is required" : "UserId expects a UserId variant"],
         [PERCENT + "Percent 50 + 1", checked ? "cannot combine Percent and Int" : "cannot apply '+'"],
-        ['import "function"\nSpan (Int lo) (Int hi) = lo > hi ? fail "empty span" : _\n[s: Span] [s: Span 2 1]', "empty span"],
-        ["Low (Float _) = 1 > 0 ? Low 1 : _\n1", "a constructor with logic names each field"],
+        ['import "function"\nSpan (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _\n[s: Span] [s: Span 2 1]', "empty span"],
+        ["Low (_ : Float) = 1 > 0 ? Low 1 : _\n1", "a constructor with logic names each field"],
         // A lowercase definition's _ stays unfinished.
         ["f x = _\nf 1", "not implemented"],
     ] as const) Deno.test(`core rejects (checked=${checked}): ${source}`, () => {
@@ -133,7 +133,7 @@ for (const checked of [true, false]) for (const [source, expected] of [
 for (const [source, message] of [
     [CTOR + "f (Rect w h d) = w\n1", "'Rect' in a pattern takes 2 fields"],
     [CTOR + 'f (Rect w h) = w ++ "x"\nf (Rect 1 2)', "cannot append Float and String"],
-    ['Bad (Int x) = x > 0 ? "no" : _\n1', "cannot use String where Bad is required"],
+    ['Bad (x : Int) = x > 0 ? "no" : _\n1', "cannot use String where Bad is required"],
 ] as const) Deno.test(`constructors are checked: ${source}`, () => {
     const actual = failure(source, true);
     if (!actual.includes(message)) throw new Error(actual);
@@ -147,7 +147,7 @@ for (const checked of [true, false]) Deno.test(`a later union claims constructor
     const each = (source: string) => i.renderString(i.run(parseDocument(source)));
     each("Just x = _\nNada = _");
     each("Maybe a = Just a | Nada\nreturn = Just\n(Just x) >>= f = f x\nNada >>= f = Nada");
-    const shown = each("[typeOf (Just 5), typeOf Nada, Maybe Int { x <- Just 2; return (x * 3) }]");
+    const shown = each("[typeOf (Just 5), typeOf Nada, ({ x <- Just 2; return (x * 3) } : Maybe Int)]");
     if (shown !== "[Maybe Int, Maybe a, Just 6]") throw new Error(shown);
     each("Box x = _");
     let message = "";

@@ -5,18 +5,18 @@ import { parseDocument } from "../src/parser.ts";
 for (
     const source of [
         'id x = x; [id 1, id "hi"]',
-        "f (Int x) = x; f 1",
+        "f (x : Int) = x; f 1",
         // Clauses may give different types: a call gives the clause's that runs.
         'f 0 = 1; f 1 = "one"; f 0 + 1',
         'f x = x.x; f [x: 1, y: "extra"]',
         "Option a = Some a | None; f (Some x) = x; f None = 0; f (Some 1)",
-        "Vect 3 Int [1,2,3]",
-        "V n = Vect (n + 0) Int; V 3 [1,2,3]",
-        "f n ((Vect n Int) xs) = xs; f 3 [1,2,3]",
-        "f n ((Vect (n + 1) Int) xs) = xs; f 2 [1,2,3]",
-        "f n ((Vect n Int) xs) ((Vect n Int) ys) = xs; f 2 [1,2] [3,4]",
-        "f n ((Vect n Int) xs) ((Vect 1 Int) ys) = Vect (n + 1) Int (xs ++ ys)",
-        "f (Dynamic x) = x x; f (y -> y)",
+        "([1,2,3] : Vect 3 Int)",
+        "V n = Vect (n + 0) Int; ([1,2,3] : V 3)",
+        "f n (xs : Vect n Int) = xs; f 3 [1,2,3]",
+        "f n (xs : Vect (n + 1) Int) = xs; f 2 [1,2,3]",
+        "f n (xs : Vect n Int) (ys : Vect n Int) = xs; f 2 [1,2] [3,4]",
+        "f n (xs : Vect n Int) (ys : Vect 1 Int) = xs ++ ys : Vect (n + 1) Int",
+        "f (x : Dynamic) = x x; f (y -> y)",
         "Vector3 = [x: Float, y: Float, z: Float]; vec = Vector3 [1,2,3]",
     ]
 ) {
@@ -27,17 +27,17 @@ for (
 }
 for (
     const [source, message] of [
-        ['f (Int x) = x; f "bad"', "cannot use String"],
+        ['f (x : Int) = x; f "bad"', "cannot use String"],
         ['f 0 = 1; f 1 = "bad"; f 1 + 1', "cannot combine String and Int"],
         ["f x = x.x; f [y: 2]", "missing field"],
-        ["Vect 3 Int [1,2]", "length mismatch"],
-        ["Vect 2 Int [1,2,3]", "length mismatch"],
-        ["Vect -1 Int []", "nonnegative"],
-        ["Vect 2 123 [1,2]", "element must be a type"],
-        ["f n ((Vect n Int) xs) = xs; f 3 [1,2]", "length mismatch"],
-        ["f n ((Vect (n + 1) Int) xs) = xs; f 2 [1,2]", "length mismatch"],
-        ["f n ((Vect n Int) xs) ((Vect n Int) ys) = xs; f 2 [1,2] [3]", "length mismatch"],
-        ["Int .2", "lossy"],
+        ["([1,2] : Vect 3 Int)", "length mismatch"],
+        ["([1,2,3] : Vect 2 Int)", "length mismatch"],
+        ["([] : Vect -1 Int)", "nonnegative"],
+        ["([1,2] : Vect 2 123)", "element must be a type"],
+        ["f n (xs : Vect n Int) = xs; f 3 [1,2]", "length mismatch"],
+        ["f n (xs : Vect (n + 1) Int) = xs; f 2 [1,2]", "length mismatch"],
+        ["f n (xs : Vect n Int) (ys : Vect n Int) = xs; f 2 [1,2] [3]", "length mismatch"],
+        ["(.2 : Int)", "lossy"],
     ]
 ) {
     Deno.test(`gradual check rejects: ${source}`, () => {
@@ -47,14 +47,14 @@ for (
 }
 for (
     const [source, expected] of [
-        ["Vect 3 Int [1,2,3]", "[1,2,3]"],
-        ["V n = Vect (n + 1) Int; V 2 [1,2,3]", "[1,2,3]"],
-        ["f n ((Vect n Int) xs) = xs; f 3 [1,2,3]", "[1,2,3]"],
-        ["typeOf (Vect 3 Int [1,2,3])", "Vect 3 Int"],
-        ["v = Vect 2 Int [1,2]; v 0 = 3; [v, typeOf v]", "[[3,2], Vect 2 Int]"],
+        ["([1,2,3] : Vect 3 Int)", "[1,2,3]"],
+        ["V n = Vect (n + 1) Int; ([1,2,3] : V 2)", "[1,2,3]"],
+        ["f n (xs : Vect n Int) = xs; f 3 [1,2,3]", "[1,2,3]"],
+        ["typeOf ([1,2,3] : Vect 3 Int)", "Vect 3 Int"],
+        ["v = [1,2] : Vect 2 Int; v 0 = 3; [v, typeOf v]", "[[3,2], Vect 2 Int]"],
         ["[isType (Vect 2 Int) [1,2], isType (Vect 2 Int) [1]]", "[True,False]"],
         ["[Vect 2 Int == Vect 2 Int, Vect 2 Int == Vect 3 Int]", "[True,False]"],
-        ['f (Dynamic x) = x; f "hi"', '"hi"'],
+        ['f (x : Dynamic) = x; f "hi"', '"hi"'],
     ]
 ) {
     Deno.test(`dependent runtime: ${source}`, () => {
@@ -65,10 +65,10 @@ for (
 }
 for (
     const source of [
-        "Vect 2 Int [1]",
-        "Vect 2 Int [1..]",
-        "f n ((Vect n Int) xs) = xs; f 2 [1]",
-        "v = Vect 1 Int [1]; v 0 = .2",
+        "([1] : Vect 2 Int)",
+        "([1..] : Vect 2 Int)",
+        "f n (xs : Vect n Int) = xs; f 2 [1]",
+        "v = [1] : Vect 1 Int; v 0 = .2",
     ]
 ) {
     Deno.test(`dependent runtime rejects: ${source}`, () => {
@@ -76,7 +76,8 @@ for (
         try {
             i.renderString(i.run(parseDocument(source)));
         } catch (error) {
-            if (String(error).includes("length mismatch") || String(error).includes("lossy")) return;
+            // A typed Vect parameter rejects by not matching.
+            if (["length mismatch", "lossy", "no clause"].some(m => String(error).includes(m))) return;
             throw error;
         }
         throw new Error("expected error");
@@ -85,13 +86,13 @@ for (
 
 for (
     const source of [
-        "add (Int x) (Int y) = x + y; add (Float x) (Float y) = x + y; [add 1 2, add .1 .2]",
+        "add (x : Int) (y : Int) = x + y; add (x : Float) (y : Float) = x + y; [add 1 2, add .1 .2]",
         'x = 1; [{ x = "local"; x }, x]',
-        "f (Int32 x) = x; f 1",
-        "f t n ((Vect n t) xs) = xs; f Int 2 [1,2]",
-        "f (Type t) x = t x; f Int 1",
-        "Option a = Some a | None; Option Int (Some 1)",
-        'Choice flag = flag ? Int : String; [Choice True 1, Choice False "hello"]',
+        "f (x : Int32) = x; f 1",
+        "f t n (xs : Vect n t) = xs; f Int 2 [1,2]",
+        "f (t : Type) x = t x; f Int 1",
+        "Option a = Some a | None; (Some 1 : Option Int)",
+        'Choice flag = flag ? Int : String; [(1 : Choice True), ("hello" : Choice False)]',
     ]
 ) {
     Deno.test(`gradual APN compatibility: ${source}`, () => {
@@ -101,9 +102,9 @@ for (
 }
 for (
     const source of [
-        'Vect 2 Int [1,"bad"]',
-        'f n ((Vect n Int) xs) = xs; f 2 [1,"bad"]',
-        'Choice flag = flag ? Int : String; Choice True "bad"',
+        '([1,"bad"] : Vect 2 Int)',
+        'f n (xs : Vect n Int) = xs; f 2 [1,"bad"]',
+        'Choice flag = flag ? Int : String; ("bad" : Choice True)',
     ]
 ) {
     Deno.test(`dependent elements reject: ${source}`, () => {
@@ -111,23 +112,23 @@ for (
     });
 }
 Deno.test("type computations remain non-evaluating in checker", () => {
-    const source = 'Choice flag = { debug "must not run"; flag ? Int : String }; Choice True 1';
+    const source = 'Choice flag = { debug "must not run"; flag ? Int : String }; (1 : Choice True)';
     const result = checkSource(source);
     if (result.issues.length) throw new Error(JSON.stringify(result));
 });
 Deno.test("captured variables are not spuriously generalized", () => {
-    const result = checkSource('f x = { g y = x; g 1 }; Int (f "bad")');
+    const result = checkSource('f x = { g y = x; g 1 }; (f "bad" : Int)');
     if (!result.issues.length) throw new Error("capture relationship was lost");
 });
 Deno.test("runtime value-dependent type selection", () => {
     const i = new Interpreter();
-    const source = 'Choice flag = flag ? Int : String; [Choice True 1, Choice False "hello"]';
+    const source = 'Choice flag = flag ? Int : String; [(1 : Choice True), ("hello" : Choice False)]';
     if (i.renderString(i.run(parseDocument(source))) !== '[1,"hello"]') throw new Error("wrong selected type");
 });
 for (
     const source of [
         'v = [x: Float] []; v.x = "bad"',
-        'v = Vect 2 Int [1,2]; i = 0; v i = "bad"',
+        'v = [1,2] : Vect 2 Int; i = 0; v i = "bad"',
         "v = [x: 1]; v.x = .2",
         "v = [1,2]; v 2 = 3",
     ]
@@ -140,7 +141,7 @@ for (
     const source of [
         "v = [x: Float] []; v.x = 1",
         "v = [x: Float]; v.x = 123",
-        "v = Vect 2 Int [1,2]; i = 0; v i = 3",
+        "v = [1,2] : Vect 2 Int; i = 0; v i = 3",
     ]
 ) {
     Deno.test(`checked assignment accepts: ${source}`, () => {
@@ -149,12 +150,12 @@ for (
     });
 }
 Deno.test("vector checking follows lossless element conversion", () => {
-    if (checkSource("Vect 2 Float [1,2]").issues.length) throw new Error("lossless conversion rejected");
-    if (!checkSource("Vect 2 Int [1,.2]").issues.length) throw new Error("lossy conversion accepted");
+    if (checkSource("([1,2] : Vect 2 Float)").issues.length) throw new Error("lossless conversion rejected");
+    if (!checkSource("([1,.2] : Vect 2 Int)").issues.length) throw new Error("lossy conversion accepted");
 });
 Deno.test("first-class builtin constructors remain checkable", () => {
     const source =
-        "a = List [1,2]\nb = Record [x: 1]\nc = Function (x -> x)\nv = Vect 2 (Type Int) [1,2]\nm = Mutable 1";
+        "a = List [1,2]\nb = [x: 1] : Record\nc = x -> x : Function\nv = [1,2] : Vect 2 (Int : Type)\nm = Mutable 1";
     const result = checkSource(source);
     if (result.issues.length) throw new Error(JSON.stringify(result));
 });
@@ -163,15 +164,15 @@ Deno.test("known primitive arithmetic errors are static", () => {
     if (checkSource('"a" + "b"').issues.length) throw new Error("string addition was rejected");
 });
 Deno.test("affine indices substitute multiple arguments", () => {
-    const definition = "f n m ((Vect (n + m) Int) xs) = xs; ";
+    const definition = "f n m (xs : Vect (n + m) Int) = xs; ";
     if (checkSource(definition + "f 1 2 [1,2,3]").issues.length) throw new Error("valid sum rejected");
     if (!checkSource(definition + "f 1 2 [1,2]").issues.length) throw new Error("invalid sum accepted");
-    if (checkSource("Vect 0 Int [1,3..0]").issues.length) throw new Error("empty range miscounted");
+    if (checkSource("([1,3..0] : Vect 0 Int)").issues.length) throw new Error("empty range miscounted");
 });
 Deno.test("constant index predicates select a dependent type", () => {
     const definition = "Choice n = n == 0 ? Int : String; ";
-    if (checkSource(definition + "Choice 0 123").issues.length) throw new Error("selection rejected");
-    if (!checkSource(definition + 'Choice 0 "bad"').issues.length) throw new Error("selection ignored");
+    if (checkSource(definition + "(123 : Choice 0)").issues.length) throw new Error("selection rejected");
+    if (!checkSource(definition + '("bad" : Choice 0)').issues.length) throw new Error("selection ignored");
 });
 Deno.test("rebound indices keep lazy aliases dynamic", () => {
     // V keeps the size it was written with.

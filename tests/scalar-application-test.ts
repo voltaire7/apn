@@ -31,7 +31,7 @@ for (const [source, expected] of [
     ['[name: "old", enabled: False] [name: "new", enabled: True]', '[name: "new", enabled: True]'],
     ['[name: "old", enabled: False] ["new",True]', '[name: "new", enabled: True]'],
     ['[name: "old", enabled: False] []', '[name: "old", enabled: False]'],
-    ['[String "hi", Char \'x\', Bool 1]', '["hi",\'x\',True]'],
+    ['[("hi" : String), (\'x\' : Char), to Bool 1]', '["hi",\'x\',True]'],
 ] as const) Deno.test(`scalar template replacement: ${source}`, () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(source)));

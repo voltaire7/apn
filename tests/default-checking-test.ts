@@ -33,7 +33,7 @@ for (const [source, expected] of [
     ['templates = [String,Int]; values = ["x",1]; templates.values', '["x",1]'],
     ['xs = [1]; xs = [2,3]; xs', '[2,3]'],
     // A union of this shape is the list type, as the prelude's List is.
-    ['Seq a = [] | a :: Seq a; f (Seq Int xs) = length xs; f [1,2]', '2'],
+    ['Seq a = [] | a :: Seq a; f (xs : Seq Int) = length xs; f [1,2]', '2'],
     ['[isType (List Int) [1,"a"], isType (List Int) [1..]]', '[False,True]'],
     // Types compare as the sets of their values.
     ['U = Int | String; V = String | Int; [U == V, typeOf [1,2] <= List Int, Int < Number]', '[True,True,True]'],
@@ -58,17 +58,17 @@ for (const [source, expected] of [
     ['ks (HashMap m) = keys m; ks (HashMap [["a",1]])', '["a"]'],
     // Clauses typed by different types recurse through the finished function:
     // ln (keys m) is a List String, ln (to (List Char) s) a List Char.
-    ['ln (String s) = ln (to (List Char) s); ln (HashMap m) = ln (keys m); ln (List _ xs) = 7\n' +
+    ['ln (s : String) = ln (to (List Char) s); ln (HashMap m) = ln (keys m); ln (xs : List _) = 7\n' +
         '[ln (HashMap [["a",1]]), ln "ab", ln [1]]', '[7,7,7]'],
     // Typed clauses recursing at different types (ln [1] beside ln ["a"]):
     // each call takes the clause the run takes, not the first call's type.
-    ['ln (Int n) = ln [1]; ln (String s) = ln ["a"]; ln (List _ xs) = 7; [ln 5, ln "ab", ln [2]]', '[7,7,7]'],
+    ['ln (n : Int) = ln [1]; ln (s : String) = ln ["a"]; ln (xs : List _) = 7; [ln 5, ln "ab", ln [2]]', '[7,7,7]'],
     // A recursive call has the function's type as a whole: f rest gives what
     // f [] = 0 gives, a number, which a Float element adds to.
     ['f [] = 0; f (x :: rest) = x + f rest; f [1.5,2]', '3.5'],
     // Clauses that differ only in their results' lengths, a call no ranking
     // decides: a list whose length the run finds, never one choice's [].
-    ...["(+) 1 1", "negate -2", "Int 2", "id 2"].map(count => [`id x = x; tk 0 _ = []; tk _ [] = []; tk n (x :: rest) = x :: tk (n - 1) rest\n` +
+    ...["(+) 1 1", "negate -2", "2 : Int", "id 2"].map(count => [`id x = x; tk 0 _ = []; tk _ [] = []; tk n (x :: rest) = x :: tk (n - 1) rest\n` +
         `f [a,b] = a\nf (tk (${count}) [1,2,3])`, '1'] as const),
     // Through a wrapper too: (+) 1 1's value is known, as 1 + 1's is.
     ...["(+) 1 1", "1 + 1", "id 2"].map(count => [`id x = x; ${TK2}tk n xs = tk2 n xs\nf (tk (${count}) [1,2,3])`, '1'] as const),
@@ -77,18 +77,18 @@ for (const [source, expected] of [
     ...["n < 0 ? [] : tk2 n xs", "n > 0 ? tk2 n xs : []"].map(body => [`${TK2}tk n xs = ${body}\nf (tk 2 [1,2,3])`, '1'] as const),
     // A result's shape comes from every choice that may take a list, the
     // count before the list too: en2's (Int n) (x :: rest), not [] alone.
-    ['en xs = en2 0 xs; en2 _ [] = []; en2 (Int n) (x :: rest) = [n,x] :: en2 (n + 1) rest\n' +
+    ['en xs = en2 0 xs; en2 _ [] = []; en2 (n : Int) (x :: rest) = [n,x] :: en2 (n + 1) rest\n' +
         'g [p,q] = p\ng (en [10,20])', '[0,10]'],
     // Another union of list types is unfolded when it runs.
-    ['Pairs a = [] | a :: a :: Pairs a; f (Pairs Int xs) = length xs; f [1,2]', '2'],
+    ['Pairs a = [] | a :: a :: Pairs a; f (xs : Pairs Int) = length xs; f [1,2]', '2'],
     // A value of either list type takes each one's clause, [] among them.
     ['nl [] = True; nl (_ :: _) = False; [nl (head [[],[1]]), nl (head [[1],[]])]', '[True,False]'],
     // Clauses typed by their lists' element types are overloads, in either order.
-    ['f (List Int xs) = "ints"; f (List String xs) = "strings"; [f [1], f ["a"]]', '["ints","strings"]'],
-    ['f (List String xs) = "strings"; f (List Int xs) = "ints"; [f [1], f ["a"]]', '["ints","strings"]'],
+    ['f (xs : List Int) = "ints"; f (xs : List String) = "strings"; [f [1], f ["a"]]', '["ints","strings"]'],
+    ['f (xs : List String) = "strings"; f (xs : List Int) = "ints"; [f [1], f ["a"]]', '["ints","strings"]'],
     ['f x = x + 1; [f 1, f 2.0]', '[2,3.0]'],
     ['factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))\nfactorial 5', '120'],
-    ['import "type"; cast Float32 (Float64 .2)', '0.2'],
+    ['import "type"; cast Float32 (.2 : Float64)', '0.2'],
     // A parameter's record is known from the fields code uses, also when it assigns them.
     ['f r = { r.a = 5; r }; f [a: 1, b: 2]', '[a: 5, b: 2]'],
     ['g r = { r.p.q = 3; r }; g [p: [q: 1, z: 0]]', '[p: [q: 3, z: 0]]'],
@@ -111,20 +111,20 @@ for (const [source, expected] of [
     // h keeps the c it was written with; a later c is another version.
     ["f 'a' = [0]; f x = [1,2]; g [a] = a; c = 'a'; h u = g (f c); c = 'b'; h 0", '0'],
     // A rebinding is a new version, of any type: what was written before keeps the old.
-    ['xs <- return (Vect 2 Int [1,2]); xs = [3]; xs', '[3]'],
+    ['xs <- return ([1,2] : Vect 2 Int); xs = [3]; xs', '[3]'],
     ['Int x = 1; x = "a"; x', '"a"'],
     ['x = 1; y = x + 1; x = "a"; [x,y]', '["a",2]'],
     // Its value reads the version before it, whatever its value is.
     ['xs = [1,2]; xs = map (+ 1) xs; xs', '[2,3]'],
     ['v = { xs = [1,2]; xs = get xs 1; xs }; v', '2'],
     // A definition written with lambdas is checked as the clause with those parameters.
-    ['append = Vect n a xs -> Vect m a ys -> Vect (n + m) a {\n    xs ~ [\n        [] -> ys\n        x::xs -> x :: append xs ys\n    ]\n}\ntypeOf (append [] [3])', 'Vect 1 Int'],
+    ['append = (xs : Vect n a) -> (ys : Vect m a) -> ({\n    xs ~ [\n        [] -> ys\n        x::xs -> x :: append xs ys\n    ]\n} : Vect (n + m) a)\ntypeOf (append [] [3])', 'Vect 1 Int'],
     // A record schema applied to a value not known yet converts it at runtime.
     ['Quote = [quote: String, year: Int]\nconv r = Quote r\n(conv [year: 2]).year', '2'],
-    ['Quote = [quote: String, year: Int]\n(Quote (Dynamic [quote: "q", year: 1])).quote', '"q"'],
+    ['Quote = [quote: String, year: Int]\n(Quote ([quote: "q", year: 1] : Dynamic)).quote', '"q"'],
     // A record type is a type: to applies it, and a Type parameter takes it.
     ['Quote = [quote: String, year: Int]\n(to Quote [year: 1]).year', '1'],
-    ['f (Type t) = t\nisType (f [a: Int]) [a: 3]', 'True'],
+    ['f (t : Type) = t\nisType (f [a: Int]) [a: 3]', 'True'],
     // A string iterates its characters.
     ['"ab" * c -> to String c', '["\'a\'","\'b\'"]'],
     // A record its type made takes updates to its fields, and a literal copy new ones.
@@ -147,17 +147,17 @@ for (const source of [
     'f x = x + 1; f "bad"',
     'apply f x = f x; apply (x -> x + 1) "bad"',
     'x | missingGuard -> x',
-    'f x = x == 0 ? 1 : x * x; f (Dynamic 2)',
-    'Vect 2 Int [1]',
+    'f x = x == 0 ? 1 : x * x; f (2 : Dynamic)',
+    '([1] : Vect 2 Int)',
     'f g = [g 1, g "a"]; f (x -> 0)',
-    'bad = Vect n a xs -> Vect m a ys -> Vect (n + m + 1) a {\n    xs ~ [\n        [] -> ys\n        x::xs -> x :: bad xs ys\n    ]\n}',
+    'bad = (xs : Vect n a) -> (ys : Vect m a) -> ({\n    xs ~ [\n        [] -> ys\n        x::xs -> x :: bad xs ys\n    ]\n} : Vect (n + m + 1) a)',
     'Quote = [quote: String, year: Int]; from Quote [quote: "q", year: 1]',
     'Quote = [quote: String, year: Int]; to Quote [year: "x"]',
     '"ab" * c -> c + 1',
     // A record its type made keeps its fields.
     'Quote = [quote: String, year: Int]; q = Quote []; q.yaer = 1',
     'Quote = [quote: String, year: Int]; q = Quote []; q "yaer" = 1',
-    'Quote = [quote: String, year: Int]; f (Quote q) = { q.x = 1; q }',
+    'Quote = [quote: String, year: Int]; f (q : Quote) = { q.x = 1; q }',
     'Quote = [quote: String, year: Int]; conv r = Quote r; (conv [year: "x"]).year',
     // Only a statement opens a module: not a field of it, a binding, or a block's statement.
     'numbers = import "number"\nnumbers.sq 2\nsq 3',
@@ -182,10 +182,10 @@ for (const [source, expected] of [
     ['[func True, func False, h 0, h 1, g 0, g 1]', '["yes",False,"zero",False,"zero",False]'],
     ['[func (t > 0) == "yes", (t > 0 ? 1 : 2.5) + 1 > 0]', '[True,True]'],
     ['func True ++ "!"', '"yes!"'],
-    ['d (String s) = s ++ "!"; d (Bool b) = b ? "T" : "F"; [d (func (t > 0)), d (h t), d (g t)]', '["yes!","F","F"]'],
-    ['func (t > 0) ~ [\n    String s -> s ++ "!"\n    _ -> "no"\n]', '"yes!"'],
+    ['d (s : String) = s ++ "!"; d (b : Bool) = b ? "T" : "F"; [d (func (t > 0)), d (h t), d (g t)]', '["yes!","F","F"]'],
+    ['func (t > 0) ~ [\n    (s : String) -> s ++ "!"\n    _ -> "no"\n]', '"yes!"'],
     ['[h 0 ++ "!", g 0 ++ "!"]', '["zero!","zero!"]'],
-    ['xs = [1,"a"]; d (Int n) = n + 1; d (String s) = s ++ "!"; map d xs', '[2,"a!"]'],
+    ['xs = [1,"a"]; d (Int n) = n + 1; d (s : String) = s ++ "!"; map d xs', '[2,"a!"]'],
     // A held value may be either: Pair 1 "a" or Pair true 'c' is Pair (Int | Bool) (String | Char).
     ["Pair a b = | Pair a b; first (Pair x _) = x; to String (first (t > 0 ? Pair 1 \"a\" : Pair True 'c'))", '"1"'],
     ['inc (Int n) = n + 1; dbl (Int n) = n * 2; (t > 0 ? inc : dbl) 5', '6'],
@@ -204,13 +204,13 @@ for (const [source, expected] of [
 for (const source of [
     'func (t > 0) ++ "!"', 'h t ++ "!"', 'g t ++ "!"',
     // Every choice must be accepted where it is used.
-    'd (String s) = s ++ "!"; d (Bool b) = "b"; d [func (t > 0), 1] 1',
-    'xs = [1,"a",True]; d (Int n) = n + 1; d (String s) = s ++ "!"; map d xs',
+    'd (s : String) = s ++ "!"; d (b : Bool) = "b"; d [func (t > 0), 1] 1',
+    'xs = [1,"a",True]; d (Int n) = n + 1; d (s : String) = s ++ "!"; map d xs',
     // A function a field holds takes one type, not either: Handler Int and
     // Handler String stay apart, and a choice of functions takes what all do.
     'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\ninc (Int n) = to String n\n' +
-        'bang (String s) = s\napply (t > 0 ? Handler inc : Handler bang) 5',
-    'inc (Int n) = n + 1; bang (String s) = s; (t > 0 ? inc : bang) 5',
+        'bang (s : String) = s\napply (t > 0 ? Handler inc : Handler bang) 5',
+    'inc (Int n) = n + 1; bang (s : String) = s; (t > 0 ? inc : bang) 5',
     // A lambda a field holds is checked where the field's type is decided,
     // however far the value travels first.
     'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\napply (Handler (s -> s ++ "!")) 5',
@@ -289,7 +289,7 @@ Deno.test("all standard modules check without evaluation", () => {
 
 Deno.test("Dynamic writes cannot invalidate a checked Mutable payload", () => {
     const i = session(); run(i, 'cell = Mutable 1');
-    try { run(i, 'Dynamic (set cell "bad")'); } catch (error) {
+    try { run(i, '(set cell "bad" : Dynamic)'); } catch (error) {
         if (!String(error).includes('cannot use String where Int is required')) throw error;
         if (run(i, 'cell + 1') !== '2') throw new Error('cell was corrupted');
         return;
@@ -317,7 +317,7 @@ Deno.test("default checking reports an unbound name with a suggestion", () => {
 for (const [source, expected] of [
     ['import "sequence"; g [a,b] = forceList [b, a + b]; repeatApply 3 g [1,2]', '[5,8]'],
     ['import "sequence"\ntick [a,b,c,d,e,f,g,h,i] = forceList [b, c, d, e, f, g, h + a, i, a]\nsum (repeatApply 80 tick [0,1,1,2,1,0,0,0,0])', '5934'],
-    ['f (List _ xs) = xs; g [a,b] = f [b, a + b]; g (g [1,2])', '[3,5]'],
+    ['f (xs : List _) = xs; g [a,b] = f [b, a + b]; g (g [1,2])', '[3,5]'],
     ['import "sequence"; g [a,b] = a + b; g (forceList [1,2])', '3'],
     ['g [a,b] = a + b; g (map (x -> x * 2) [1,2])', '6'],
     ['xs = map (x -> x + 1) [1,2]\nys = map (x -> x * 2) [1,2,3]\ng [a,b] = a + b\n[g xs, length ys]', '[5,3]'],
@@ -327,19 +327,19 @@ for (const [source, expected] of [
     ['j xs ys = [xs,ys] ~ [[[],r] -> r, [(x::m),r] -> x :: j m r]; j [1,2] [3]', '[1,2,3]'],
     ['f xs = xs ~ [[] -> 0, [_] -> 1, _ -> 2]; [f [], f [1], f [1,2]]', '[0,1,2]'],
     // A free name in a typed pattern binds what the value has there.
-    ['f ((List _) xs) = xs; f [1,2]', '[1,2]'],
-    ['k ((List a) xs) = a; k [1,"x"]', 'Int | String'],
-    ['first ((List _) (x::_)) = x; first [1..]', '1'],
-    ['len ((Vect n _) _) = n; len [1,2]', '2'],
-    ['g ((Vect n a) xs) = [n,a]; g [1,2]', '[2,Int]'],
-    ['app ((Vect n a) xs) ((Vect m a) ys) = Vect (n + m) a (xs ++ ys); typeOf (app [1,2] [3])', 'Vect 3 Int'],
+    ['f (xs : List _) = xs; f [1,2]', '[1,2]'],
+    ['k (xs : List a) = a; k [1,"x"]', 'Int | String'],
+    ['first (x::_ : List _) = x; first [1..]', '1'],
+    ['len (_ : Vect n _) = n; len [1,2]', '2'],
+    ['g (xs : Vect n a) = [n,a]; g [1,2]', '[2,Int]'],
+    ['app (xs : Vect n a) (ys : Vect m a) = xs ++ ys : Vect (n + m) a; typeOf (app [1,2] [3])', 'Vect 3 Int'],
     // A length the type leaves open is the one evaluation finds.
     ['g [a,b] = a + b; g (map (x -> x) (tail [1,2,3]))', '5'],
     ['g [a,b] = a + b; g (tail [0,1,2])', '3'],
     ['f xs = foldl (acc, x -> x :: acc) xs [1,2]; g [a,b,c,d] = a + b; g (f [1,2])', '3'],
     ['f xs = filter (x -> x > 0) xs; g [a,b] = a + b; g (f [1,2])', '3'],
     ['toList 0 = []; toList k = k - 1 :: toList (k - 1); xs = toList 3; g [a,_,_] = a; g xs', '2'],
-    ['toList Z = []; toList (S k) = k :: toList k; Vect 3 UInt (toList 3)', '[2,1,0]'],
+    ['toList Z = []; toList (S k) = k :: toList k; (toList 3 : Vect 3 UInt)', '[2,1,0]'],
 ] as const) Deno.test(`checker infers recursive steps and list sizes: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -349,9 +349,9 @@ for (const source of [
     'import "sequence"; g [a,b] = a + b; g (forceList [1,2,3])',
     'g [a,b] = a + b; g (map (x -> x) [1,2,3])',
     'toList 0 = []; toList k = k - 1 :: toList (k - 1); g [a,_] = a; g (toList 3)',
-    'h ((Vect n a) _) ((Vect n a) _) = n; h [1,2] [3]',
-    'f ((List _) xs) = xs; f 5',
-    'toList Z = []; toList (S k) = k :: toList k; Vect 2 UInt (toList 3)',
+    'h (_ : Vect n a) (_ : Vect n a) = n; h [1,2] [3]',
+    'f (xs : List _) = xs; f 5',
+    'toList Z = []; toList (S k) = k :: toList k; (toList 3 : Vect 2 UInt)',
     'g [a,b] = tail [0, b, a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1,2]',
     `${TK2}tk n xs = n < 0 ? [] : tk2 n xs\nf (tk 1 [1,2,3])`,
     `${TK2}tk n xs = n > 0 ? tk2 n xs : []\nf (tk 0 [1,2,3])`,
@@ -373,7 +373,7 @@ for (const [source, expected] of [
     ['twice xs = xs * x -> x * 2; g [p,q] = p + q; g (twice [1,2])','6'],
     ['number xs = enumerate xs; g [p,q] = p; [g (number [1,2]), length (number [1,2,3])]','[[0,1],3]'],
     ['h a b = [map (x -> x) a, map (x -> x) b]; h [1] [1,2]','[[1],[1,2]]'],
-    ['f (List _ xs) = xs; h a b = [f a, f b]; h [1] [1,2]','[[1],[1,2]]'],
+    ['f (xs : List _) = xs; h a b = [f a, f b]; h [1] [1,2]','[[1],[1,2]]'],
 ] as const) Deno.test(`checker keeps builtin list lengths: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -500,11 +500,11 @@ for (const [source, expected] of [
     ['f (Int n) = [0]; f xs = [1,2]; g [a] = a; g (f 3)', '0'],
     ['f xs = [1,2]; f (Int n) = [0]; g [a] = a; g (f 3)', '0'],
     ['f (Int n) = [0]; f xs = [1,2]; g [a,b] = a; g (f "s")', '1'],
-    ['f (Int n) = [0]; f (String s) = [1,2]; g [a] = a; g (f 3)', '0'],
-    ['f (Int n) = [0]; f (String s) = [1,2]; g [a,b] = a; g (f "x")', '1'],
-    ['f (Number n) = [0]; f xs = [1,2]; g [a] = a; g (f 2.5)', '0'],
-    ['f (Exact n) = [0]; f xs = [1,2]; g [a,b] = a; g (f 2.5)', '1'],
-    ['f (List _ xs) = [0]; f other = [1,2]; g [a] = a; g (f [5,6])', '0'],
+    ['f (Int n) = [0]; f (s : String) = [1,2]; g [a] = a; g (f 3)', '0'],
+    ['f (Int n) = [0]; f (s : String) = [1,2]; g [a,b] = a; g (f "x")', '1'],
+    ['f (n : Number) = [0]; f xs = [1,2]; g [a] = a; g (f 2.5)', '0'],
+    ['f (n : Exact) = [0]; f xs = [1,2]; g [a,b] = a; g (f 2.5)', '1'],
+    ['f (xs : List _) = [0]; f other = [1,2]; g [a] = a; g (f [5,6])', '0'],
     ['f (Int n) = [0]; f xs = [1,2]; h x = g (f x); g [a] = a; h 3', '0'],
 ] as const) Deno.test(`typed clauses rank like the runtime: ${source}`, () => {
     const actual = run(session(), source);
@@ -515,7 +515,7 @@ for (const source of [
     'f (Int n) = [0]; f xs = [1,2]; g [a] = a; g (f "s")',
     'f (Int n) = [0]; f xs = [1,2]; h x = g (f x); g [a] = a; h "s"',
     // Whether a Float converts to Int8 depends on its value: 2.5 does not.
-    'f (Int8 n) = [0]; f xs = [1,2]; g [a] = a; h x = g (f (x * 1.0)); h 2.5',
+    'f (n : Int8) = [0]; f xs = [1,2]; g [a] = a; h x = g (f (x * 1.0)); h 2.5',
 ]) Deno.test(`typed clauses keep possible clauses: ${source}`, () => rejected(session(), source));
 // Clauses of the same input type whose results differ only in list lengths
 // become separate overload choices instead of a definition error; any other
@@ -548,7 +548,7 @@ for (const [source, expected] of [
     ['f (Int n) = [1,2]; f 0 = [0]; h s x = g (f x); g [a] = a; h "s" 0','0'],
     ['f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); k y = h y; g [a] = a; k 0','0'],
     ['f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); k y = h y; m z = k z; g [a] = a; m 0','0'],
-    ['f (Int n) = [0]; f (String s) = [1]; h x = g (f x); k y = h y; g [a] = a; k 0','0'],
+    ['f (Int n) = [0]; f (s : String) = [1]; h x = g (f x); k y = h y; g [a] = a; k 0','0'],
 ] as const) Deno.test(`literals through parameters: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -559,7 +559,7 @@ for (const source of [
     'f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); g [a] = a; [h 0, h 5]',
     'f (Int n) = [1,2]; f 0 = [0]; h x = g (f (x - 1)); g [a] = a; h 2',
     'f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); k y = h y; g [a] = a; k 4',
-    'f (Int n) = [0]; f (String s) = [1,2]; h x = g (f x); k y = h y; g [a] = a; k "s"',
+    'f (Int n) = [0]; f (s : String) = [1,2]; h x = g (f x); k y = h y; g [a] = a; k "s"',
     'f (Int n) = 1; h x = f x + 1; k y = h y; k "s"',
 ]) Deno.test(`literals through parameters stay checked: ${source}`, () => rejected(session(), source));
 // Boolean and string literals reach clauses through parameters too.
@@ -712,39 +712,39 @@ for (const source of [
 // Fixed-width numbers keep their type: Float32 rounds to single precision and
 // Int8 overflow is a runtime error, so it gives no value.
 for (const [source, expected] of [
-    ['g [a] = a; s x = Float32 x < Float32 0.5 ? None : Some x; g (f (s 0.25))', '0'],
-    ['g [a] = a; e3 x = Float32 x + Float32 0.2 == Float32 0.3 ? None : Some x; g (f (e3 0.1))', '0'],
-    ['g [a] = a; b x = Int8 x + Int8 100 > Int8 0 ? None : Some x; g (f (b 20))', '0'],
-    ['g [a,b] = a; b x = -Int8 x < Int8 0 ? Some x : None; g (f (b 5))', '1'],
-    ['g [a] = a; s x = Float32 x < Float32 0.5 ? None : Some x; h v = g (f (s v)); h 0.25', '0'],
-    ['g [a] = a; k (Float32 x) = None; k x = Some x; h v = g (f (k (Float32 v))); h 0.5', '0'],
-    ['g [a] = a; z = Int32 7; s x = x == Int32 7 ? None : Some x; g (f (s z))', '0'],
-    ['h v = Int8 v; h 5', '5'],
+    ['g [a] = a; s x = (x : Float32) < (0.5 : Float32) ? None : Some x; g (f (s 0.25))', '0'],
+    ['g [a] = a; e3 x = (x : Float32) + (0.2 : Float32) == (0.3 : Float32) ? None : Some x; g (f (e3 0.1))', '0'],
+    ['g [a] = a; b x = (x : Int8) + (100 : Int8) > (0 : Int8) ? None : Some x; g (f (b 20))', '0'],
+    ['g [a,b] = a; b x = -(x : Int8) < (0 : Int8) ? Some x : None; g (f (b 5))', '1'],
+    ['g [a] = a; s x = (x : Float32) < (0.5 : Float32) ? None : Some x; h v = g (f (s v)); h 0.25', '0'],
+    ['g [a] = a; k (x : Float32) = None; k x = Some x; h v = g (f (k (v : Float32))); h 0.5', '0'],
+    ['g [a] = a; z = 7 : Int32; s x = x == (7 : Int32) ? None : Some x; g (f (s z))', '0'],
+    ['h v = v : Int8; h 5', '5'],
 ] as const) Deno.test(`fixed-width conditions: ${source}`, () => {
     const actual = run(session(), `${optionClauses}\n${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'g [a] = a; e3 x = Float32 x + Float32 0.2 == Float32 0.3 ? Some x : None; g (f (e3 0.1))',
-    'g [a] = a; s x = Float32 x + Float64 0.5 < Float32 1.0 ? None : Some x; g (f (s 0.25))',
-    'g [a] = a; b x = Int8 x + Int8 100 > Int8 0 ? None : Some x; g (f (b 100))',
-    'g [a] = a; b x = -Int8 x > Int8 0 ? None : Some x; g (f (b -128))',
-    'g [a] = a; b x = UInt8 x - UInt8 1 > UInt8 0 ? None : Some x; g (f (b 0))',
-    'g [a] = a; b x = Int8 x > Int8 0 ? None : Some x; g (f (b 2.5))',
-    'h v = Int8 v; h "x"',
+    'g [a] = a; e3 x = (x : Float32) + (0.2 : Float32) == (0.3 : Float32) ? Some x : None; g (f (e3 0.1))',
+    'g [a] = a; s x = (x : Float32) + (0.5 : Float64) < (1.0 : Float32) ? None : Some x; g (f (s 0.25))',
+    'g [a] = a; b x = (x : Int8) + (100 : Int8) > (0 : Int8) ? None : Some x; g (f (b 100))',
+    'g [a] = a; b x = -(x : Int8) > (0 : Int8) ? None : Some x; g (f (b -128))',
+    'g [a] = a; b x = (x : UInt8) - (1 : UInt8) > (0 : UInt8) ? None : Some x; g (f (b 0))',
+    'g [a] = a; b x = (x : Int8) > (0 : Int8) ? None : Some x; g (f (b 2.5))',
+    'h v = v : Int8; h "x"',
 ]) Deno.test(`fixed-width conditions stay checked: ${source}`, () => rejected(session(), `${optionClauses}\n${source}`));
 // A known value decides a typed clause as at runtime: its own type (30), a
 // lossless conversion (1), or no match.
 const intClauses = 'g [a] = a; k (Int x) = None; k x = Some x';
 for (const [source, expected] of [
-    ['g (f (k (UInt 3)))', '0'],
-    ['g (f (k (Int8 3)))', '0'],
-    ['g (f (k (Float32 2)))', '0'],
-    ['k8 (Int8 x) = None; k8 x = Some x; g (f (k8 2.0))', '0'],
-    ['z = UInt 2; g (f (k z))', '0'],
-    ['h v = g (f (k (UInt v))); h 4', '0'],
-    ['k8 (Int8 x) = None; k8 x = Some x; g (f (k8 4))', '0'],
-    ['m (Int8 x) = x + Int8 1; m x = Int8 0; g (f (m 4 > Int8 4 ? None : Some 1))', '0'],
+    ['g (f (k (3 : UInt)))', '0'],
+    ['g (f (k (3 : Int8)))', '0'],
+    ['g (f (k (2 : Float32)))', '0'],
+    ['k8 (x : Int8) = None; k8 x = Some x; g (f (k8 2.0))', '0'],
+    ['z = 2 : UInt; g (f (k z))', '0'],
+    ['h v = g (f (k (v : UInt))); h 4', '0'],
+    ['k8 (x : Int8) = None; k8 x = Some x; g (f (k8 4))', '0'],
+    ['m (x : Int8) = x + (1 : Int8); m x = 0 : Int8; g (f (m 4 > (4 : Int8) ? None : Some 1))', '0'],
 ] as const) Deno.test(`lossless typed clauses: ${source}`, () => {
     const actual = run(session(), `${optionClauses}\n${intClauses}\n${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -753,7 +753,7 @@ for (const source of [
     'g (f (k 2.5))',
     'g (f (k (1 / 2)))',
     'g (f (k "s"))',
-    'k8 (Int8 x) = None; k8 x = Some x; g (f (k8 300))',
+    'k8 (x : Int8) = None; k8 x = Some x; g (f (k8 300))',
 ]) Deno.test(`lossless typed clauses stay checked: ${source}`, () => rejected(session(), `${optionClauses}\n${intClauses}\n${source}`));
 // The builtin length of a list or String is known when its size is: from a
 // literal, a parameter at its calls, cons, append, shaped builtins (map, sort)
@@ -775,7 +775,7 @@ for (const [source, expected] of [
     ['g (f (sm (len [1])))', '0'],
     ['hh ys = g (f (sm (len ys))); hh [3]', '0'],
     // A known value has its own type: "a" a String, though it is also true.
-    ['ln (String s) = 1; ln xs = 3; hh s = g (f (sm (ln s))); hh "a"', '0'],
+    ['ln (s : String) = 1; ln xs = 3; hh s = g (f (sm (ln s))); hh "a"', '0'],
 ] as const) Deno.test(`length calls: ${source}`, () => {
     const actual = run(session(), `${optionClauses}\n${sizeClauses}\n${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -788,7 +788,7 @@ for (const source of [
     'hh ys = g (f (q ys)); hh [1,2]',
     'hh ys = g (f (q (1 :: ys))); hh [2]',
     'hh ys = g (f (q (ys ++ ys))); hh [2]',
-    'ln (Bool b) = 1; ln xs = 3; hh s = g (f (sm (ln s))); hh "a"',
+    'ln (b : Bool) = 1; ln xs = 3; hh s = g (f (sm (ln s))); hh "a"',
     'hh ys = g (f (q (map (+ 1) ys))); hh [1,2]',
     'g (f (sm (len [1,2])))',
     // A predicate whose value stays unknown decides nothing: both clauses count.
@@ -879,8 +879,8 @@ for (const [source, expected] of [
     ['local n = { k = n + 1; twice x = x * 2; twice k }; g (f (r (local 1 == 4)))', '0'],
     // (t x) takes any value, a number without its explicit type: a strict
     // accumulator, as a fold reads it each step.
-    ['h (_ x) = x + 1; g (f (r (h 2 == 3 && h (Int32 2) == 3)))', '0'],
-    ['fs f (_ acc) [] = acc; fs f (_ acc) (x :: rest) = fs f (f acc x) rest\ng (f (r (fs (+) 0 [1,2] == 3)))', '0'],
+    ['h (x : _) = x + 1; g (f (r (h 2 == 3 && h (2 : Int32) == 3)))', '0'],
+    ['fs f (acc : _) [] = acc; fs f (acc : _) (x :: rest) = fs f (f acc x) rest\ng (f (r (fs (+) 0 [1,2] == 3)))', '0'],
     // A list's tail is computed when read: the [] three steps in is found
     // before the fourth step, tl [], which fails, is ever taken.
     ['nl [] = True; nl (_ :: _) = False; tl (_ :: r) = r; it h x = x :: it h (h x)\n' +
@@ -896,7 +896,7 @@ for (const source of [
     'g (f (r (trim "  a " == "b")))',
     'g (f (r (any (> 5) [1,2])))',
     'g (f (r (isPrime 8)))',
-    'fs f (_ acc) [] = acc; fs f (_ acc) (x :: rest) = fs f (f acc x) rest\ng (f (r (fs (+) 0 [1,2] == 4)))',
+    'fs f (acc : _) [] = acc; fs f (acc : _) (x :: rest) = fs f (f acc x) rest\ng (f (r (fs (+) 0 [1,2] == 4)))',
     // enumerate pairs each element with its index: [0, 7] has two elements.
     'g (f (q (head (enumerate [7]))))',
     'g (f (q (sort [3,1])))',
@@ -1211,9 +1211,9 @@ for (const source of [
 // A deferred typed numeric call reports at the call that supplies the value,
 // or where it was written when its own definition decides it.
 for (const [source, line, column] of [
-    ['g (UInt n) = n\nh x = g -x\nprint (h 2)', 3, 8],
-    ['g (UInt n) = n\nh x = g x\nd y = h "a"', 3, 7],
-    ['import "text"\ng (UInt n) = n\nh x = {\n    y = g x\n    z = upper x\n    y\n}', 4, 11],
+    ['g (n : UInt) = n\nh x = g -x\nprint (h 2)', 3, 8],
+    ['g (n : UInt) = n\nh x = g x\nd y = h "a"', 3, 7],
+    ['import "text"\ng (n : UInt) = n\nh x = {\n    y = g x\n    z = upper x\n    y\n}', 4, 11],
 ] as const) Deno.test(`a deferred numeric call reports at line ${line}: ${source}`, () => {
     try { run(session(), source); } catch (error) {
         const { pos } = error as { pos: number };
@@ -1266,20 +1266,20 @@ for (const [source, expected] of [
     ['g (Int n) = n; g -1', '-1'],
     ['sqrt -1 + 2', '2+1i'],
     ['g (Int n) = n; k = 1; g -k', '-1'],
-    ['g (UInt n) = n; k = 1; g k', '1'],
-    ['g (UInt n) = n; h x = g -x; h -2', '2'],
+    ['g (n : UInt) = n; k = 1; g k', '1'],
+    ['g (n : UInt) = n; h x = g -x; h -2', '2'],
     ['g (Int n) = n; h x = g -x; h 2', '-2'],
     ['h x = sqrt -x; h 1', '0+1i'],
     ['h x y = x - y; h 5 2', '3'],
-    ['g (UInt n) = n; h x = g -x; h -2', '2'],
-    ['g (UInt n) = n; h x = g x; h 2', '2'],
+    ['g (n : UInt) = n; h x = g -x; h -2', '2'],
+    ['g (n : UInt) = n; h x = g x; h 2', '2'],
     ['g (Int n) = n; h x = g x + 1; h 2', '3'],
     ['g (Float n) = n; h x = g x; h 1', '1.0'],
-    ['g (UInt n) = n; h x = g -x; d y = h y; 1', '1'],
-    ['Pt = [x: Float, y: Float]; g (Pt p) = p.x; h x = g x; h [1,2]', '1.0'],
-    ['Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g [x,-x]; h 0', '0'],
-    ['Pt = [x: Float, y: Float]; g (Pt p) = p.y; h x = g [x,x]; h 2', '2.0'],
-    ['g ((Int -> Int) f) = f 1; h x = g x; h (+ 1)', '2'],
+    ['g (n : UInt) = n; h x = g -x; d y = h y; 1', '1'],
+    ['Pt = [x: Float, y: Float]; g (p : Pt) = p.x; h x = g x; h [1,2]', '1.0'],
+    ['Pt = [x: UInt, y: UInt]; g (p : Pt) = p.x; h x = g [x,-x]; h 0', '0'],
+    ['Pt = [x: Float, y: Float]; g (p : Pt) = p.y; h x = g [x,x]; h 2', '2.0'],
+    ['g (f : Int -> Int) = f 1; h x = g x; h (+ 1)', '2'],
     ['g [UInt8 a, UInt8 b] = a + b; g [3,3]', '6'],
     ['g [Float a, b] = a; g [1,"x"]', '1.0'],
     ['g ((Float x)::rest) = x; g [1,2]', '1.0'],
@@ -1304,14 +1304,14 @@ for (const [source, expected] of [
     ['P = P2 Int Int | P0; g (P2 a (UInt8 y)) = y; g (P2 1 3)', '3'],
     ['P = P2 Int Int | P0; g (P2 a (UInt8 y)) = y; h v = g (P2 1 v); h 3', '3'],
     ['P = P2 Int Int | P0; (P2 a (UInt8 y)) = P2 1 3; y', '3'],
-    ['g ([x: UInt8] r) = r.x; k = [x: 3]; g k', '3'],
-    ['g ([x: UInt8] r) = r.x; h r = g r; h [x: 3]', '3'],
-    ['g ([x: UInt8] r) = r.x; h v = g [x: v * 100]; h 1', '100'],
-    ['Pt = [x: Float, y: Float]; g (Pt p) = p.y; h v = g [x: v, y: v]; h 2', '2.0'],
-    ['g ([x: UInt8, y: UInt8] r) = r.y; b = [x: 1, y: 300]; g [_: b, y: 2]', '2'],
-    ['g ([x: UInt8] r) = r.x; g [x: 300, _: [x: 3]]', '3'],
-    ['g ([x: UInt8, y: UInt8] r) = r.x; h b = g [_: b, x: 3]; h [x: 1, y: 2]', '3'],
-    ['g ([x: UInt8] r) = r.x; h v = g [_: [x: v]]; h 3', '3'],
+    ['g (r : [x: UInt8]) = r.x; k = [x: 3]; g k', '3'],
+    ['g (r : [x: UInt8]) = r.x; h r = g r; h [x: 3]', '3'],
+    ['g (r : [x: UInt8]) = r.x; h v = g [x: v * 100]; h 1', '100'],
+    ['Pt = [x: Float, y: Float]; g (p : Pt) = p.y; h v = g [x: v, y: v]; h 2', '2.0'],
+    ['g (r : [x: UInt8, y: UInt8]) = r.y; b = [x: 1, y: 300]; g [_: b, y: 2]', '2'],
+    ['g (r : [x: UInt8]) = r.x; g [x: 300, _: [x: 3]]', '3'],
+    ['g (r : [x: UInt8, y: UInt8]) = r.x; h b = g [_: b, x: 3]; h [x: 1, y: 2]', '3'],
+    ['g (r : [x: UInt8]) = r.x; h v = g [_: [x: v]]; h 3', '3'],
     ['f y = { Float x = y; x * 2 }; f 1.5', '3.0'],
 ] as const) Deno.test(`typed binding: ${source}`, () => {
     if (run(session(), source) !== expected) throw new Error(source);
@@ -1325,8 +1325,8 @@ for (const source of ['Int x = "a"', 'Int x = 2.5', 'Int8 x = 300',
     'g (Int n) = n; h x = g x; h 2.5', 'g (UInt n) = n; h x = g -x; d y = h (y * 2); d 1',
     'g (UInt n) = n; h x = g -x; d y = h 2; 1', 'g (UInt n) = n; h x = g x; d y = h "a"; 1',
     'import "text"; g (UInt n) = n; h x = { y = g x; z = upper x; y }; 1',
-    'Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g [x,-x]; h 2', 'Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g x; h [2,-2]',
-    'Pt = [x: Float, y: Float]; g (Pt p) = p.x; h x = g x; h [1]', 'g ((Int -> Int) f) = f 1; h x = g x; h 5', 'g (String s) = s; h x = g x; h 1',
+    'Pt = [x: UInt, y: UInt]; g (p : Pt) = p.x; h x = g [x,-x]; h 2', 'Pt = [x: UInt, y: UInt]; g (p : Pt) = p.x; h x = g x; h [2,-2]',
+    'Pt = [x: Float, y: Float]; g (p : Pt) = p.x; h x = g x; h [1]', 'g (f : Int -> Int) = f 1; h x = g x; h 5', 'g (String s) = s; h x = g x; h 1',
     'g [UInt8 a, UInt8 b] = a; g [3,300]', 'g [UInt8 a, UInt8 b] = a; g [3,-1]', 'g [UInt8 a, UInt8 b] = a; h x = g [x, x * 100]; h 3',
     '[UInt8 a, UInt8 b] = [3,300]', 'g [String s, Int n] = s; g [1,2]',
     'import "option"; g (Some (UInt8 x)) = x; g (Some 300)', 'import "option"; g (Some (UInt8 x)) = x; g (Some -1)',
@@ -1339,11 +1339,11 @@ for (const source of ['Int x = "a"', 'Int x = 2.5', 'Int8 x = 300',
     'P = P2 Int Int | P0; g (P2 a (UInt8 y)) = y; g (P2 1 300)', 'P = P2 Int Int | P0; g (P2 a (UInt8 y)) = y; k = P2 1 300; g k',
     'P = P2 Int Int | P0; g (P2 a (UInt8 y)) = y; h v = g (P2 1 v); h 300', 'P = P2 Int Int | P0; (P2 a (UInt8 y)) = P2 1 300',
     'Pair a b = MkPair a b | NoPair\ng (MkPair (Float x) (UInt8 y)) = y\nh x = g x\nh (MkPair 1 300)',
-    'g ([x: UInt8] r) = r.x; g [x: 300]', 'g ([x: UInt8] r) = r.x; k = [x: 300]; g k', 'g ([x: UInt8] r) = r.x; h r = g r; h [x: 300]',
-    'g ([x: UInt8] r) = r.x; h v = g [x: v * 100]; h 3', 'Pt = [x: UInt8, y: UInt8]; g (Pt p) = p.y; g [x: 1, y: 300]',
-    'g ([x: UInt8, y: UInt8] r) = r.y; b = [x: 1, y: 300]; g [_: b, x: 2]', 'g ([x: UInt8] r) = r.x; g [_: [x: 300]]',
-    'g ([x: UInt8] r) = r.x; g [x: 3, _: [x: 300]]', 'g ([x: UInt8, y: UInt8] r) = r.x; h b = g [_: b, x: 300]; h [x: 1, y: 2]',
-    'g ([x: UInt8, y: UInt8] r) = r.y; h b = g [_: b, x: 3]; h [x: 1, y: 300]', 'g ([x: UInt8] r) = r.x; h v = g [_: [x: v]]; h 300']) {
+    'g (r : [x: UInt8]) = r.x; g [x: 300]', 'g (r : [x: UInt8]) = r.x; k = [x: 300]; g k', 'g (r : [x: UInt8]) = r.x; h r = g r; h [x: 300]',
+    'g (r : [x: UInt8]) = r.x; h v = g [x: v * 100]; h 3', 'Pt = [x: UInt8, y: UInt8]; g (p : Pt) = p.y; g [x: 1, y: 300]',
+    'g (r : [x: UInt8, y: UInt8]) = r.y; b = [x: 1, y: 300]; g [_: b, x: 2]', 'g (r : [x: UInt8]) = r.x; g [_: [x: 300]]',
+    'g (r : [x: UInt8]) = r.x; g [x: 3, _: [x: 300]]', 'g (r : [x: UInt8, y: UInt8]) = r.x; h b = g [_: b, x: 300]; h [x: 1, y: 2]',
+    'g (r : [x: UInt8, y: UInt8]) = r.y; h b = g [_: b, x: 3]; h [x: 1, y: 300]', 'g (r : [x: UInt8]) = r.x; h v = g [_: [x: v]]; h 300']) {
     Deno.test(`typed binding rejects: ${source}`, () => rejected(session(), source));
 }
 for (const source of ['Int = 5', 'Int x y = 5']) Deno.test(`a built-in type name is not redefined: ${source}`, () => {
@@ -1368,13 +1368,13 @@ Deno.test("an unknown name in a type is reported as unbound", () => {
 // What the p5.js examples rely on, checked and run.
 for (const [source, expected] of [
     // A record schema's List fields hold any length, in a list cell or a record cell.
-    ['Pt = [x: Float, c: [Float,Float]]\nps = Mutable (List Pt [])\nset ps [[x: 1.0, c: [1.0,2.0]]]\nlength ps', '1'],
+    ['Pt = [x: Float, c: [Float,Float]]\nps = Mutable ([] : List Pt)\nset ps [[x: 1.0, c: [1.0,2.0]]]\nlength ps', '1'],
     ['B = [ns: List Int]\nb = Mutable (B [ns: []])\nset b [ns: [1,2]]\nb.ns', '[1,2]'],
     // A conversion of arithmetic on a parameter waits for its value.
-    ['f w = Float (w - 20)\nf (Number 3)', '-17.0'],
-    ['f r = List Int (from JSON r)\nf "[1, 2]"', '[1,2]'],
+    ['f w = Float (w - 20)\nf (3 : Number)', '-17.0'],
+    ['f r = from JSON r : List Int\nf "[1, 2]"', '[1,2]'],
     // A list indexed by a lambda's parameter.
-    ['f (List _ xs) = map (n -> xs n) [0..1]\nf [5,6]', '[5,6]'],
+    ['f (xs : List _) = map (n -> xs n) [0..1]\nf [5,6]', '[5,6]'],
     // An overloaded operator in a function whose operands are parameters.
     ['Money = | Money Int\n(Money a) + (Money b) = Money (a + b)\nf x y = x + y\nf (Money 1) (Money 2)', 'Money 3'],
     ['Money = | Money Int\n(Money a) + (Money b) = Money (a + b)\nf x y = x + y\nf 1 2', '3'],
@@ -1409,7 +1409,7 @@ for (const [source, expected] of [
 }
 for (const source of [
     'f w = Float (w - 20)\nf "a"',
-    'f (List _ xs) = map (n -> xs n) ["a"]\nf [1]',
+    'f (xs : List _) = map (n -> xs n) ["a"]\nf [1]',
     'f b = Int (b ? 1 : "a")\nf True',
 ]) Deno.test(`p5.js-example typing rejects: ${source}`, () => rejected(session(), source));
 // The checker reads the prelude's names by checking lib/prelude.apn itself.

@@ -136,7 +136,7 @@ A template pattern converts an argument before binding its local name:
 
 ```apn
 Vector3 = [x: Float, y: Float, z: Float]
-lengthSquared (Vector3 v) = v.x ^ 2 + v.y ^ 2 + v.z ^ 2
+lengthSquared (v : Vector3) = v.x ^ 2 + v.y ^ 2 + v.z ^ 2
 lengthSquared [1,2,3]    # 14.0
 ```
 
@@ -206,8 +206,8 @@ application such as `1 2`.
 Constrain inputs with patterns and results with ordinary constructor application:
 
 ```apn
-func = (Int x) -> Int { x + x }
-twice (Int x) = Int { x + x }
+func = (x : Int) -> ({ x + x } : Int)
+twice (x : Int) = { x + x } : Int
 
 func 21                       # 42
 twice 21                      # 42
@@ -231,12 +231,12 @@ still infers a result type from the body.
 Function contracts are written in patterns:
 
 ```apn
-func ((Int -> Int) f) = Int {
+func (f : Int -> Int) = {
     f 123
-}
+} : Int
 func (*2)                       # 246 (typed Int)
 
-((Int -> Int) increment) <- x -> x + 1
+(increment : Int -> Int) <- x -> x + 1
 increment 123                  # 124
 ```
 
@@ -273,7 +273,7 @@ A declaration retains both the parent type and its constructors:
 
 ```apn
 Option a = Some a | None
-func (Option _ value) = value ~ [
+func (value : Option _) = value ~ [
     Some x -> print x
     None -> []
 ]
@@ -319,7 +319,7 @@ function identity at runtime, because sharing a type does not imply equality.
 Use `_` for a field that accepts any type and preserves its value:
 
 ```apn
-func ([x: _] v) = print v.x
+func (v : [x: _]) = print v.x
 func [1]                    # 1
 func ["hello"]              # hello
 func [x: True]              # True
@@ -381,11 +381,11 @@ A lowercase name not already bound in a schema pattern captures the supplied
 value's type. Concrete type names retain their existing checking/conversion role.
 
 ```apn
-inspect ([t] [x]) = print [t,x]
+inspect ([x] : [t]) = print [t,x]
 inspect [1]                       # [Int,1]
 inspect ["hello"]                 # [String,"hello"]
 
-inspectPair ([a,b] [x,y]) = print [a,b,x,y]
+inspectPair ([x,y] : [a,b]) = print [a,b,x,y]
 inspectPair [1,"hi"]             # [Int,String,1,"hi"]
 ```
 
@@ -406,16 +406,16 @@ the selected fields' types. Record order does not matter, and extra fields are
 allowed, just as for ordinary `[x,y]` record destructuring.
 
 ```apn
-inspect ([t] [x]) = print [t,x]
+inspect ([x] : [t]) = print [t,x]
 inspect [1]                       # [Int,1]
 inspect [x: 1]                    # [Int,1]
 inspect [answer: 1]               # no match: missing x
 
-integer ([Int] [x]) = print x
+integer ([x] : [Int]) = print x
 integer [x: 1]                    # 1
 integer [x: .2]                   # rejected: lossy Int conversion
 
-pairTypes ([a,b] [x,y]) = [a,b,x,y]
+pairTypes ([x,y] : [a,b]) = [a,b,x,y]
 pairTypes [y: "hi", x: 1]         # [Int,String,1,"hi"]
 ```
 

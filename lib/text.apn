@@ -27,12 +27,12 @@ _splitOn delimiter text = {
     reverse (from (List Char) (reverse (snd state)) :: fst state)
 }
 # Joined as strings, not characters: a string's ++ is one step.
-joinWith delimiter xs = String {
+joinWith delimiter xs = {
     xs ~ [
         [] -> ""
         first :: rest -> foldl (joined, x -> joined ++ delimiter ++ x) first rest
     ]
-}
+} : String
 replaceAll search replacement text = joinWith replacement (splitOn search text)
 
 # Unicode WhiteSpace plus line terminators (the same set as ECMAScript \s).
@@ -44,10 +44,10 @@ trim text = from (List Char)
 
 # Common puzzle-input shapes; CRLF and trailing blank lines are accepted.
 nonEmptyLines text = filter (line -> line != "") (map trim (lines text))
-parseInt (String text) = {
-    [value] = [Dynamic (from String text)]
-    isInteger value && isExact (Number value)
-        ? Int value
+parseInt (text : String) = {
+    [value] = [(from String text : Dynamic)]
+    isInteger value && isExact (value : Number)
+        ? (value : Int)
         : fail "parseInt expects an exact integer"
 }
 integers text = map parseInt (words text)

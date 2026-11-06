@@ -44,16 +44,16 @@ for (const [name, source, expected] of [
     ["a local infix definition", "f x = {\n    a <+> b = a * 10 + b\n    x <+> 1 <+> 2\n}\nprint (f 5)", ["512"]],
     ["$ is an operator", "print (head $ tail [1,2,3])\nprint ((+ 1) \\ (* 2) $ 3)", ["2", "7"]],
     // Applying a value that is not a function is get, which clauses extend.
-    ["clauses for get index a type", "Grid (List Int cells) = _\nget (Grid cells) [Int r, Int c] = cells (3 * r + c)\n" +
+    ["clauses for get index a type", "Grid (cells : List Int) = _\nget (Grid cells) [(r : Int), (c : Int)] = cells (3 * r + c)\n" +
         "g = Grid [1,2,3,4,5,6,7,8,9]\nprint (g [1,2])\nprint (map g [[0,0],[2,2]])\nprint ([10,20] 1)\nprint (get [5,6] 0)",
         ["6", "[1,9]", "20", "5"]],
     // xs i = x binds xs to with xs i x, which clauses extend too; v.x is get v "x".
-    ["clauses for with assign to a type", "Grid (List Int cells) = _\nget (Grid cells) [Int r, Int c] = cells (3 * r + c)\n" +
-        "with (Grid cells) [Int r, Int c] (Int x) = Grid (with cells (3 * r + c) x)\n" +
+    ["clauses for with assign to a type", "Grid (cells : List Int) = _\nget (Grid cells) [(r : Int), (c : Int)] = cells (3 * r + c)\n" +
+        "with (Grid cells) [(r : Int), (c : Int)] (x : Int) = Grid (with cells (3 * r + c) x)\n" +
         "g = Grid [1,2,3,4,5,6,7,8,9]\nold = g\ng [1,2] = 60\nprint [g [1,2], old [1,2]]\nxs = [1,2]\nxs 0 = 5\nprint [xs, with xs 1 7]",
         ["[60,6]", "[[5,2],[5,7]]"]],
-    ["clauses for get and with give a type fields", "Point (Float x) (Float y) = _\nget (Point x y) \"x\" = x\nget (Point x y) \"y\" = y\n" +
-        "with (Point x y) \"x\" (Float v) = Point v y\nwith (Point x y) \"y\" (Float v) = Point x v\n" +
+    ["clauses for get and with give a type fields", "Point (x : Float) (y : Float) = _\nget (Point x y) \"x\" = x\nget (Point x y) \"y\" = y\n" +
+        "with (Point x y) \"x\" (v : Float) = Point v y\nwith (Point x y) \"y\" (v : Float) = Point x v\n" +
         "p = Point 1 2\nprint (p.x + p.y)\np.x = 5\na = [p: p]\na.p.y = 3\nprint a",
         ["3.0", "[p: Point 5.0 3.0]"]],
     // Clauses taking another number of arguments define a new function.
@@ -71,7 +71,7 @@ for (const [source, message, kind] of [
     ["print (1 <%%> 2)", "unbound operator '<%%>'", "type"],
     ["print (1+-2)", "unbound operator '+-'", "type"],
     ["print (get (x -> x) 1)", "get takes a value, not a function", "type"],
-    ["Grid (List Int cells) = _\nprint (Grid [1] 0)", "cannot apply Grid", "type"],
+    ["Grid (cells : List Int) = _\nprint (Grid [1] 0)", "cannot apply Grid", "type"],
 ] as const) Deno.test(`operators reject: ${source}`, () => fails(source, message, kind));
 
 // An operator written infix, as (op) or as its intrinsic is checked the same
@@ -97,7 +97,7 @@ for (const [source, expected] of [
 // checks only when the take count, and so the list's length, is known, also
 // through a take written in APN, which passes the count on.
 const TK = 'import "function"; tk2 0 _ = []; tk2 _ [] = []; tk2 n (x :: rest) = x :: tk2 (n - 1) rest\n' +
-    'tk (Int n) xs = n < 0 ? fail "negative" : tk2 n xs\n';
+    'tk (n : Int) xs = n < 0 ? fail "negative" : tk2 n xs\n';
 for (const count of ["1 + 1", "(+) 1 1", "intrinsics.add 1 1", "(1 +) 1", "($) id 2", "intrinsics.apply id 2",
     "(-) 3 1", "intrinsics.sub 3 1", "length ((++) [1] [2])", "length (intrinsics.cons 1 [5])", "negate -2"]) {
     for (const [take, prefix] of [["take", ""], ["tk", TK]]) Deno.test(`the checker evaluates each spelling (${take}): ${count}`, () => {

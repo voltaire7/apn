@@ -34,16 +34,18 @@ export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" 
     }
     // Each clause is a pattern lambda, one per line, with the arguments
     // applied so far after each:
-    //     ((Int x) y -> 1) 1
-    //     ((Float x) y -> 2) 1
+    //     ((x : Int), y -> 1) 1
+    //     ((x : Float), y -> 2) 1
     const args = v.applied.map(a => ` ${argument(a)}`).join("");
     return v.clauses.map(c => args ? `(${clauseSource(c)})${args}` : clauseSource(c)).join("\n");
 }
 // A clause as a pattern lambda. A lone constructor pattern needs no
-// parentheses (Int x -> x); among several parameters it keeps them ((Int x), y -> x).
+// parentheses (Some x -> x); among several parameters it keeps them
+// ((Some x), y -> x). A typed one keeps them: (x : Int) -> x.
 function clauseSource(c: { params: Pattern[]; body: Expr; guard?: Expr }): string {
-    const lone = c.params.length === 1 && c.params[0].p === "constr" && c.params[0].args.length;
-    const params = lone ? pattern(c.params[0]).slice(1, -1) : c.params.map(pattern).join(", ");
+    const [first] = c.params, written = c.params.map(pattern);
+    const lone = c.params.length === 1 && first.p === "constr" && first.args.length && written[0].startsWith(`(${first.tag} `);
+    const params = lone ? written[0].slice(1, -1) : written.join(", ");
     return `${params}${c.guard ? " | " + exprToSource(c.guard, { kind: "guard", min: 0, follows: -1 }) : ""} -> ${source(c.body)}`;
 }
 

@@ -20,18 +20,18 @@ for (const [sugar, expansion] of [
     // A declaration or an ascription is the typed pattern or application it
     // states: e : T is T e, (p : T) is ((T) p), and a declared type types the
     // clauses after it, their parameters and the claim of their results.
-    ["x = 123 : Int32\ntypeOf x", "x = Int32 123\ntypeOf x"],
-    ["x : Int32\nx = 1.0\nx", "x = Int32 1.0\nx"],
-    ["x = 1.5 : Int", "x = Int 1.5"],
-    ["f (n : Int) = n + 1\nf 1.0", "f ((Int) n) = n + 1\nf 1.0"],
-    ["f (x : t) = t\nf 1.5", "f (t x) = t\nf 1.5"],
-    ["(5 : Int32) + 1", "Int32 5 + 1"],
-    ["inc : Int -> Int\ninc = (+ 1)\ninc \"a\"", "inc = (((Int -> Int) f) -> f) (+ 1)\ninc \"a\""],
+    ["x = 123 : Int32\ntypeOf x", "x = 123 : Int32\ntypeOf x"],
+    ["x : Int32\nx = 1.0\nx", "x = 1.0 : Int32\nx"],
+    ["x = 1.5 : Int", "x = 1.5 : Int"],
+    ["f (n : Int) = n + 1\nf 1.0", "f (n : Int) = n + 1\nf 1.0"],
+    ["f (x : t) = t\nf 1.5", "f (x : t) = t\nf 1.5"],
+    ["(5 : Int32) + 1", "(5 : Int32) + 1"],
+    ["inc : Int -> Int\ninc = (+ 1)\ninc \"a\"", "inc = ((f : Int -> Int) -> f) (+ 1)\ninc \"a\""],
     ["append : Vect n a -> Vect m a -> Vect (n + m) a\nappend [] ys = ys\nappend (x :: xs) ys = x :: append xs ys\n" +
         "typeOf (append [1] [2,3])",
-        "append ((Vect n a) []) ((Vect m a) ys) = Vect (n + m) a ys\n" +
-        "append ((Vect n a) (x :: xs)) ((Vect m a) ys) = Vect (n + m) a (x :: append xs ys)\ntypeOf (append [1] [2,3])"],
-    ['f (List a xs) = a\nf [1,"a"]', 'f (List a xs) = a\nf (1 :: ["a"])'],
+        "append ([] : Vect n a) (ys : Vect m a) = ys : Vect (n + m) a\n" +
+        "append (x :: xs : Vect n a) (ys : Vect m a) = x :: append xs ys : Vect (n + m) a\ntypeOf (append [1] [2,3])"],
+    ['f (xs : List a) = a\nf [1,"a"]', 'f (xs : List a) = a\nf (1 :: ["a"])'],
     // A range is enumFrom and its siblings: numbers count, a type repeats.
     ["[take 3 [1..], [1,3..7], [1..3], [0,0.5..1]]", "[take 3 (enumFrom 1), enumFromThenTo 1 3 7, enumFromTo 1 3, enumFromThenTo 0 0.5 1]"],
     ["take 2 [Int..]", "take 2 (enumFrom Int)"],
@@ -46,7 +46,7 @@ for (const [sugar, expansion] of [
     ["x = 3\n-x", "x = 3\nnegate x"],
     ["!0", "not 0"],
     ['3 > 2 ? "y" : "n"', 'Bool (3 > 2) "y" "n"'],
-    ["b = True\nFloat (b ? 1 : 2.5)", "b = True\nFloat (Bool b 1 2.5)"],
+    ["b = True\n((b ? 1 : 2.5) : Float)", "b = True\n(Bool b 1 2.5 : Float)"],
     ['r = [x: 1]\nr.x', 'r = [x: 1]\nget r "x"'],
     ['P = | P Int Int\nget (P a b) "x" = a\np = P 1 2\np.x', 'P = | P Int Int\nget (P a b) "x" = a\np = P 1 2\nget p "x"'],
     ["xs = [1,2,3]\nxs 1 = 9\nxs", "xs = [1,2,3]\nxs = with xs 1 9\nxs"],
@@ -58,8 +58,8 @@ for (const [sugar, expansion] of [
     // statement m >> ..., a binding x = e (x -> ...) e.
     ["v = {\n    x <- [1,2]\n    return (x * 10)\n}\nv", "v = [1,2] >>= x -> return (x * 10)\nv"],
     ["{\n    print 1\n    print 2\n}", "print 1 >> print 2"],
-    ['import "option"\nOption Int {\n    x <- Some 1\n    return (x + 1)\n}', 'import "option"\nOption Int (Some 1 >>= x -> return (x + 1))'],
-    ['import "option"\nOption Int {\n    None\n    return 1\n}', 'import "option"\nOption Int (None >> return 1)'],
+    ['import "option"\n({\n    x <- Some 1\n    return (x + 1)\n} : Option Int)', 'import "option"\n(Some 1 >>= x -> return (x + 1) : Option Int)'],
+    ['import "option"\n({\n    None\n    return 1\n} : Option Int)', 'import "option"\n(None >> return 1 : Option Int)'],
     ["v = {\n    x <- [1,2,3]\n    guard (x > 1)\n    return x\n}\nv", "v = [1,2,3] >>= x -> guard (x > 1) >> return x\nv"],
     ["xs = {\n    x <- [1,2]\n    y <- [10,20]\n    return (x + y)\n}\nxs", "xs = [1,2] >>= x -> [10,20] >>= y -> return (x + y)\nxs"],
     ["v = {\n    a = 1\n    b = a + 1\n    [a,b]\n}\nv", "v = (a -> (b -> [a,b]) (a + 1)) 1\nv"],
@@ -82,7 +82,7 @@ for (const [sugar, expansion] of [
     ["(::) = a, b -> a\nf [x] = x\nf 1", "(::) = a, b -> a\nf (x :: []) = x\nf 1"],
     ["[Int..3]", "enumFromTo Int 3"],
     ["(::) = a, b -> a\n1 ~ [x -> 2]", "(::) = a, b -> a\nm = (~)\nm 1 [x -> 2]"],
-    ['import "option"\nOption Int {\n    x <- Some 1\n    5\n}', 'import "option"\nSome 1 >>= x -> 5'],
+    ['import "option"\n({\n    x <- Some 1\n    5\n} : Option Int)', 'import "option"\nSome 1 >>= x -> 5'],
 ] as const) for (const checked of [false, true]) {
     Deno.test(`sugar fails as its expansion does${checked ? ", checked" : ""}: ${JSON.stringify(sugar)}`, () => {
         const a = result(sugar, checked), b = result(expansion, checked);

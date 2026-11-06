@@ -19,7 +19,7 @@ Deno.test("a library file loaded through .. shares the library's modules", () =>
     const i = new Interpreter();
     i.sourceDir = new URL("fixtures", import.meta.url).pathname;
     i.run(parse('import "option"\nsix = { load "../../lib/number"; sq 6 }\nsix'));
-    if (i.renderString(i.run(parse("Option Int { return 1 }"))) !== "Some 1") throw new Error("a second Option");
+    if (i.renderString(i.run(parse("({ return 1 } : Option Int)"))) !== "Some 1") throw new Error("a second Option");
 });
 Deno.test("extensionless load reports the resolved APN path", () => {
     const i = new Interpreter();

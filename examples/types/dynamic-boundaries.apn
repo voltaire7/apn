@@ -1,9 +1,9 @@
 # Run with: apn examples/types/dynamic-boundaries.apn
 # Dynamic explicitly moves these operations to runtime.
-value = Dynamic 41
-print (Int value + 1)                     # 42
+value = 41 : Dynamic
+print ((value : Int) + 1)                 # 42
 
-((Int -> Int) increment) <- return (Dynamic (x -> x + 1))
+(increment : Int -> Int) <- return (x -> x + 1 : Dynamic)
 print (increment 41)                     # 42
 
 # These pass checking, but fail when evaluated:

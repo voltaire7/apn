@@ -11,7 +11,7 @@ for (const checked of [false, true]) {
             ["x = 1; r = [x: x, _: [y: 2]]; r.y", "2"],
             ["base = [x: 1]; r = [_: base]; r.x = 2; [base.x,r.x]", "[1,2]"],
             [
-                "unused = Dynamic missing; base = [x: unused]; r = [_: base, y: 2]; r.y",
+                "unused = missing : Dynamic; base = [x: unused]; r = [_: base, y: 2]; r.y",
                 "2",
             ],
             ['v = [x: 1]; v._ = [x: "hi", y: 2]; v', '[x: "hi", y: 2]'],

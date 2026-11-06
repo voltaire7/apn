@@ -6,9 +6,9 @@ import ["sequence","text"]
 # fromAST writes such data as source; eval runs it at the program's top level.
 Dynamic $ load "syntax/source"
 Dynamic $ load "syntax/lambda"
-fromAST syntax = String (Dynamic (_fromAST syntax))
+fromAST syntax = (_fromAST syntax : Dynamic) : String
 eval syntax = intrinsics.eval (fromAST syntax)
 # toLambda gives code desugared to lambdas and application, as code: each
 # item of [x = 10, y = x + 1, y] is the block of the bindings before it, so
 # its last is (x -> (y -> y) (x + 1)) 10 (see syntax/lambda). probe shows it.
-toLambda code = eval (Dynamic (_lambda [] (intrinsics.syntax code)))
+toLambda code = eval (_lambda [] (intrinsics.syntax code) : Dynamic)

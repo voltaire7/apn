@@ -30,11 +30,11 @@ for (
 for (
     const source of [
         "self f = f f; self 123",
-        "self f = f f; Int (self (x -> True))",
+        "self f = f f; (self (x -> True) : Int)",
         'self f = f f; self (x -> x); self "bad"',
-        'self f = f f; [self (x -> 1), self (x -> True)]; Int (self (x -> "bad"))',
-        'outer x = { self f = f f; self (ignored -> x) }; Int (outer "bad")',
-        "loop (Int x) = loop x; loop True",
+        'self f = f f; [self (x -> 1), self (x -> True)]; (self (x -> "bad") : Int)',
+        'outer x = { self f = f f; self (ignored -> x) }; (outer "bad" : Int)',
+        "loop (x : Int) = loop x; loop True",
         'xs = 1 :: xs; map (x -> x + 1) (xs ++ ["bad"])',
     ]
 ) {

@@ -2,25 +2,25 @@
 # Check, then execute:   apn examples/types/dependent-vectors.apn
 
 Ints n = Vect n Int
-copy n ((Ints n) values) = values
-appendOne n ((Ints n) values) (Int value) = Ints (n + 1) (values ++ [value])
+copy n (values : Ints n) = values
+appendOne n (values : Ints n) (value : Int) = values ++ [value] : Ints (n + 1)
 
 print (copy 3 [10,20,30])
 print (appendOne 3 [10,20,30] 40)
-print (typeOf (Ints 3 [10,20,30]))
+print (typeOf ([10,20,30] : Ints 3))
 
 # A type can depend on a Boolean value too.
 Choice flag = flag ? Int : String
-print (Choice True 123)
-print (Choice False "hello")
+print (123 : Choice True)
+print ("hello" : Choice False)
 
 # Uncomment to get a static length error:
 # copy 3 [10,20]
 
 # Infer both lengths and the shared element type from the arguments.
-append (Vect n a []) (Vect m a ys) = Vect (n + m) a ys
-append (Vect n a (x::xs)) (Vect m a ys) =
-    Vect (n + m) a (x :: append xs ys)
+append ([] : Vect n a) (ys : Vect m a) = ys : Vect (n + m) a
+append (x::xs : Vect n a) (ys : Vect m a) =
+    (x :: append xs ys : Vect (n + m) a)
 print (append [1,2] [3,4])
 print (append [] [3,4])
 print (typeOf (append [1,2] [3,4]))

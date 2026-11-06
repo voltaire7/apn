@@ -18,7 +18,7 @@ factorial n = isInteger n
     : fail "factorial expects an integer"
 mean xs = null xs ? None : Some (sum xs / length xs)
 variance xs = null xs ? None : {
-    m = 0 + withDefault (Number 0) (mean xs)
+    m = 0 + withDefault (0 : Number) (mean xs)
     Some (sum (map (x -> sq (x - m)) xs) / length xs)
 }
 standardDeviation xs = map sqrt (variance xs)

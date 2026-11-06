@@ -5,7 +5,7 @@ import ["p5","sequence"]
 [gridWidth,gridHeight,startingSegments] = [30,30,10]
 # The snake's cells from its head (a list of any length), its direction, the
 # fruit, the scores and whether a game is on.
-segments = Mutable (List [Int,Int] [])
+segments = Mutable ([] : List [Int,Int])
 direction = Mutable "right"
 fruit = Mutable [0,0]
 score = Mutable 0
@@ -18,7 +18,7 @@ setup (Sketch p) = {
     p.call "textAlign" [p.CENTER,p.CENTER]
     p.textSize 2
     stored <- p.getItem "high score"
-    set highScore (stored == [] ? 0 : Int stored)
+    set highScore (stored == [] ? 0 : (stored : Int))
     p.describe ("A reproduction of the arcade game Snake, in which a snake, represented by a "
         ++ "green line on a black background, is controlled by the arrow keys. Users move the "
         ++ "snake toward a fruit, represented by a red dot, but the snake must not hit the "
@@ -30,7 +30,7 @@ updateSegments = set segments (advance segments)
 
 # A typed (List _ cells) parameter reads the cell's contents when called, so the
 # new snake is built from the old one.
-advance (List _ cells) = {
+advance (cells : List _) = {
     step = direction ~ [
         "right" -> [1,0]
         "up" -> [0,-1]
@@ -39,7 +39,7 @@ advance (List _ cells) = {
     ]
     head cells + step :: take (length cells - 1) cells
 }
-grow (List _ cells) = cells ++ [cells (length cells - 1)]
+grow (cells : List _) = cells ++ [cells (length cells - 1)]
 
 draw (Sketch p) = {
     p.background 0
@@ -120,7 +120,7 @@ checkForFruit (Sketch p) = when (head segments == fruit) {
 updateFruitCoordinates (Sketch p) = {
     x <- p.random 0 gridWidth
     y <- p.random 0 gridHeight
-    set fruit [floor (Number x), floor (Number y)]
+    set fruit [floor (x : Number), floor (y : Number)]
 }
 
 # The arrow keys turn the snake, but not back on itself.

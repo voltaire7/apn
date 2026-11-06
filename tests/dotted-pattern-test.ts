@@ -29,13 +29,13 @@ for (const checked of [false, true]) {
                 "Option a = Some a | None; f whole.(Some x) = [whole,x]; f (Some 1)",
                 "[Some 1, 1]",
             ],
-            ["f original.(Float x) = [original,x]; f 1", "[1,1.0]"],
+            ["f original.(x : Float) = [original,x]; f 1", "[1,1.0]"],
             [
-                "f original.alias.(Float x) = [original,alias,x]; f 1",
+                "f original.alias.(x : Float) = [original,alias,x]; f 1",
                 "[1,1,1.0]",
             ],
             [
-                "f original.([x: Float] converted) = [original,converted]; f [1]",
+                "f original.(converted : [x: Float]) = [original,converted]; f [1]",
                 "[[1], [x: 1.0]]",
             ],
             [
@@ -51,8 +51,8 @@ for (const checked of [false, true]) {
             ["v = [x: 1, y: 2]; v.[x,y] = v.[y,x]; v", "[x: 2, y: 1]"],
             ["v = [child: [x: 0]]; v.child.x = 1; v.child.x", "1"],
             ["v = [x: 1]; [{ v.x = 2; v.x }, v.x]", "[2,1]"],
-            ["f v.x = 42; f (Dynamic missing)", "42"],
-            ["v.x = Dynamic missing; 42", "42"],
+            ["f v.x = 42; f (missing : Dynamic)", "42"],
+            ["v.x = missing : Dynamic; 42", "42"],
             ["f v.(x::xs) = x; f [1..]", "1"],
             ["v.x <- return (Mutable 1); set x 2; v", "2"],
         ]
@@ -107,7 +107,7 @@ Deno.test("failed dotted destructuring installs neither binding", () => {
 Deno.test("nested dotted converting patterns retain static checks", () => {
     const i = new Interpreter();
     i.enableChecking();
-    i.run(parseDocument("f original.alias.(Int x) = x"));
+    i.run(parseDocument("f original.alias.(x : Int) = x"));
     try {
         i.run(parseDocument('f "bad"'));
     } catch (error) {

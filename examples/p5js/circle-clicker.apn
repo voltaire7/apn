@@ -19,7 +19,7 @@ setup (Sketch p) = {
     p.textSize 36
     # The high score kept from an earlier visit (where the page may keep one).
     stored <- p.getItem "high score"
-    set highScore (stored == [] ? 0 : Int stored)
+    set highScore (stored == [] ? 0 : (stored : Int))
 }
 
 draw (Sketch p) = {
@@ -40,7 +40,7 @@ draw (Sketch p) = {
 
 startGame (Sketch p) = {
     set score 0
-    set largest (Float (min (Number p.height) (Number p.width) / 2))
+    set largest (min (Number p.height) (Number p.width) / 2 : Float)
     resetCircle p
 }
 
@@ -64,14 +64,14 @@ resetCircle (Sketch p) = {
     h <- p.random 240 360
     s <- p.random 40 80
     b <- p.random 50 90
-    set center [Float x, Float y]
-    set color [Float h, Float s, Float b]
+    set center [(x : Float), (y : Float)]
+    set color [(h : Float), (s : Float), (b : Float)]
 }
 
 # A click on the circle scores, and the next circle starts smaller; a click
 # on the start screen starts a game.
 mousePressed (Sketch p) = {
-    Bool looping <- p.isLooping
+    (looping : Bool) <- p.isLooping
     looping ? {
         [x,y] = center
         when (dist p.mouseX p.mouseY x y < radius) {

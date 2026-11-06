@@ -5,19 +5,19 @@ function result(source: string): string {
     return interpreter.renderString(interpreter.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['Option x = Some x | None\nf (Option _ x) = x ~ [Some y -> y, None -> 0]\n[f (Some 123), f None]', '[123,0]'],
-    ['Option x = Some x | None\nf (Option _ x) = True\nf _ = False\n[f (Some missing), f None, f 123]', '[True,True,False]'],
-    ['Option x = Some x | None\nOther x = | Else x\nf (Option _ x) = True\nf _ = False\nf (Else 1)', 'False'],
-    ['Option x = Some x | None\nSome 3 ~ [Option _ x -> x]', 'Some 3'],
-    ['Option x = Some x | None\n[None ~ [Option _ x -> 1, _ -> 0], 2 ~ [Option _ x -> 1, _ -> 0]]', '[1,0]'],
+    ['Option x = Some x | None\nf (x : Option _) = x ~ [Some y -> y, None -> 0]\n[f (Some 123), f None]', '[123,0]'],
+    ['Option x = Some x | None\nf (x : Option _) = True\nf _ = False\n[f (Some missing), f None, f 123]', '[True,True,False]'],
+    ['Option x = Some x | None\nOther x = | Else x\nf (x : Option _) = True\nf _ = False\nf (Else 1)', 'False'],
+    ['Option x = Some x | None\nSome 3 ~ [(x : Option _) -> x]', 'Some 3'],
+    ['Option x = Some x | None\n[None ~ [(x : Option _) -> 1, _ -> 0], 2 ~ [(x : Option _) -> 1, _ -> 0]]', '[1,0]'],
     ['Option x = Some x | None\n[Option (Some 1), cast Option None, isType Option (Some missing), isType Option 1, typeOf (Some 1)]', '[Some 1, None, True, False, Option Int]'],
     ['Option x = Some x | None\nf (Some x) = x\nf (Some 123)', '123'],
     ['Box x = | Box x\nf (Box x) = x\nf (Box 123)', '123'],
     // A type applied to its parameters is a type; one more pattern, a value of it.
     ['Option x = Some x | None\nf (Option t) = t\nf (Option Int)', 'Int'],
-    ['Option x = Some x | None\nf (Option t x) = [t,x]\nf (Some "a")', '[String, Some "a"]'],
+    ['Option x = Some x | None\nf (x : Option t) = [t,x]\nf (Some "a")', '[String, Some "a"]'],
     ['f (List t) = t\nf (List Int)', 'Int'],
-    ['f (List _ xs) = xs\nf [1]', '[1]'],
+    ['f (xs : List _) = xs\nf [1]', '[1]'],
 ] as const) {
     Deno.test(`declared variant types: ${source}`, () => {
         const actual = result(source);
@@ -25,12 +25,12 @@ for (const [source, expected] of [
     });
 }
 Deno.test("parent type checks leave fields of partially-applied constructors lazy", () => {
-    const actual = result('Pairish a b = | PairishValue a b\npartial = PairishValue missing\nf (Pairish _ _ x) = 42\nf (partial missing)');
+    const actual = result('Pairish a b = | PairishValue a b\npartial = PairishValue missing\nf (x : Pairish _ _) = 42\nf (partial missing)');
     if (actual !== '42') throw new Error(actual);
 });
 Deno.test("parent type pattern resolves in the function's module scope", () => {
     const interpreter = new Interpreter();
-    interpreter.moduleSources = { "/lib/option.apn": 'Option x = Some x | None\nf (Option _ x) = 42' };
+    interpreter.moduleSources = { "/lib/option.apn": 'Option x = Some x | None\nf (x : Option _) = 42' };
     interpreter.sourceDir = "/app/";
     const actual = interpreter.renderString(interpreter.run(parseDocument('m = import "option"\nOption x = | Other x\nm.f (m.Some missing)')));
     if (actual !== '42') throw new Error(actual);
@@ -39,7 +39,7 @@ Deno.test("user's original pattern dispatch prints the payload", () => {
     const output: string[] = [];
     const log = console.log;
     console.log = (value) => output.push(String(value));
-    try { result('Option x = Some x | None\nfunc (Option _ x) = x ~ [\n    Some x -> print x\n    None -> _\n]\nfunc (Some 123)'); }
+    try { result('Option x = Some x | None\nfunc (x : Option _) = x ~ [\n    Some x -> print x\n    None -> _\n]\nfunc (Some 123)'); }
     finally { console.log = log; }
     if (output.join() !== '123') throw new Error(JSON.stringify(output));
 });

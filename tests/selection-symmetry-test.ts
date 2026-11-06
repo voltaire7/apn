@@ -17,11 +17,11 @@ for (const checked of [false, true]) {
                 "v = [child: [x: 1, y: 2]]; v.child.[x: a] = [a: 3]; v",
                 "[child: [x: 3, y: 2]]",
             ],
-            ["v = [x: Float 1]; v.[x: a] = [a: 3]; v", "[x: 3.0]"],
+            ["v = [x: (1 : Float)]; v.[x: a] = [a: 3]; v", "[x: 3.0]"],
             ['a = [["x",1],["y",2]]; a "x" = 10; a', '[["x",10],["y",2]]'],
             ['a = [["x",1],["y","hi"]]; a "x" = 10; a', '[["x",10],["y","hi"]]'],
             ['a = [["x",1],["x",2]]; a "x" = 10; a', '[["x",10],["x",2]]'],
-            ['a = [["x", Float 1]]; k = "x"; a k = 2; a', '[["x",2.0]]'],
+            ['a = [["x", (1 : Float)]]; k = "x"; a k = 2; a', '[["x",2.0]]'],
             [
                 "[x: first, _: rest] = [x: 1, y: 2, z: 3]; [first,rest]",
                 "[1, [y: 2, z: 3]]",
@@ -41,7 +41,7 @@ for (const checked of [false, true]) {
                 "[[1, [y: 2]], [3, [z: 4]]]",
             ],
             [
-                "unused = Dynamic missing; [x: first, _: rest] = [x: 1, y: unused]; first",
+                "unused = missing : Dynamic; [x: first, _: rest] = [x: 1, y: unused]; first",
                 "1",
             ],
             ["[x: first, _: rest] = [x: 1, y: 2]; [_: rest, x: first]", "[y: 2, x: 1]"],

@@ -4,12 +4,12 @@ import ["p5","sequence"]
 
 cellSize = 20
 # The board, a row of 0s (dead) and 1s (alive) each, wrapping around its edges.
-board = Mutable (List (List Int) [])
+board = Mutable ([] : List (List Int))
 
 setup (Sketch p) = {
     p.frameRate 10
     p.createCanvas 720 400
-    set board (replicate (Int (p.height / cellSize)) (replicate (Int (p.width / cellSize)) 0))
+    set board (replicate (p.height / cellSize : Int) (replicate (p.width / cellSize : Int) 0))
     p.noLoop
     p.describe ("Grid of squares that switch between white and black, demonstrating a "
         ++ "simulation of John Conway's Game of Life. When clicked, the simulation resets.")
@@ -33,7 +33,7 @@ mousePressed (Sketch p) = {
 # The next generation: a cell with 3 living neighbors lives, and a living one
 # with 2 stays alive. The neighbors are counted all at once, adding the
 # board's 8 shifts (+ adds lists element by element).
-generate (List _ cells) = {
+generate (cells : List _) = {
     shift [dx,dy] = map (rotate dx) (rotate dy cells)
     offsets = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]]
     neighbors = foldl (+) (map (map (_ -> 0)) cells) (map shift offsets)

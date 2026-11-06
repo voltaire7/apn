@@ -9,8 +9,8 @@ zipWithIndex xs = zipWith pair [0..] xs
 concat xss = foldr (++) [] xss
 concatMap f xs = concat (map f xs)
 flatten xss = concat xss
-sum xs = foldl (+) (Number 0) xs
-product xs = foldl (*) (Number 1) xs
+sum xs = foldl (+) (0 : Number) xs
+product xs = foldl (*) (1 : Number) xs
 contains x xs = any (y -> x == y) xs
 findIndex predicate xs = map fst (find (entry -> predicate (snd entry)) (zipWithIndex xs))
 headOption xs = null xs ? None : Some (head xs)
@@ -32,13 +32,13 @@ minimum xs = null xs ? None : Some (foldl min (head xs) (tail xs))
 maximum xs = null xs ? None : Some (foldl max (head xs) (tail xs))
 
 # Prepending into a strict left fold reverses in linear time.
-reverse (List _ xs) = foldl (acc, x -> x :: acc) [] xs
-reverse (String text) = from (List Char) (reverse (to (List Char) text))
+reverse (xs : List _) = foldl (acc, x -> x :: acc) [] xs
+reverse (text : String) = from (List Char) (reverse (to (List Char) text))
 
 _prepend x xs = x :: xs
 
 # Predicate consumers keep their skipping loop in the primitive lazy filter.
-_predicate value = Bool value
+_predicate value = to Bool value
 dropWhile predicate xs = head
     (filter (rest -> null rest || not (_predicate (predicate (head rest)))) (iterate tail xs))
 takeWhile predicate xs = null xs ? []
@@ -49,7 +49,7 @@ find predicate xs = headOption (dropWhile (x -> not (_predicate (predicate x))) 
 scanl f seed xs = seed :: (null xs ? [] : scanl f (f seed (head xs)) (tail xs))
 
 # Stable merge sort; equal keys always take the earlier (left) element.
-_order (Integer value) = value
+_order (value : Integer) = value
 _order _ = fail "sortBy comparator must return an integer"
 _mergeSorted compare left right = null left ? right : (null right ? left
     : (_order (compare (head left) (head right)) <= 0

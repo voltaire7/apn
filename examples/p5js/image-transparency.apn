@@ -20,7 +20,7 @@ draw (Sketch p) = {
     p.image photo 0 0
     width <- photo.width
     # The sketch's values are dynamic: Float converts the new offset to the cell's type.
-    set offset (Float (offset + (p.mouseX - width / 2 - offset) * easing))
+    set offset (offset + (p.mouseX - width / 2 - offset) * easing : Float)
     p.tint [255,127]
     p.image photo offset 0
 }

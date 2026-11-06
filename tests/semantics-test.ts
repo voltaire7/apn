@@ -450,10 +450,10 @@ print ((- 2) 10)
 print -2
 print (10 - 2)`, ["7", "7", "94", "[99,98]", "8", "-2", "8"]);
 example("types come from constructor patterns, not annotations", `
-f (Int x) = x + 1
-h ((Int -> Int) k) = k 2
-lam = (Int x) -> x + 1
-v = Int 5
+f (x : Int) = x + 1
+h (k : Int -> Int) = k 2
+lam = (x : Int) -> x + 1
+v = 5 : Int
 print [f 1, h (+ 1), lam 5, v]`, ["[2,3,6,5]"]);
 // A declaration or ascription spaces its ':', and a definition's type is
 // declared on a line of its own.
@@ -512,12 +512,12 @@ l.from.x = 4
 print l`, ['[quote: "x", year: 3]', '[quote: "x", year: 3, more: 1, again: 2]', "[from: [x: 4, y: 0], to: [x: 0, y: 0]]"]);
 for (const source of [
     "q = Quote []\nq.yaer = 1", 'q = Quote ["a",1]\nq "yaer" = 1', "q = Quote []\nq._ = [yaer: 1]",
-    "f (Quote q) = { q.yaer = 1; q }\nprint (f [quote: \"a\", year: 1])",
+    "f (q : Quote) = { q.yaer = 1; q }\nprint (f [quote: \"a\", year: 1])",
     "Line = [from: Quote, to: Quote]\nl = Line []\nl.from.yaer = 1",
 ]) failure(`a new field on a record its type made: ${source}`, `Quote = [quote: String, year: Int]\n${source}`, "has no field 'yaer'");
 
 example("an empty vector's open element type is bound by an inner lambda's pattern", `
-f = Vect n a xs -> Vect m a ys -> [n,m,a]
+f = (xs : Vect n a) -> (ys : Vect m a) -> [n,m,a]
 print (f [] [3])
 print (f [] [])`, ["[0,1,Int]", "[0,0,a]"]);
 
@@ -593,7 +593,7 @@ IS = Int | String
 print [typeOf "s" ~ [IS -> "either", _ -> "other"], typeOf 1.5 ~ [IS -> "either", _ -> "other"]]`,
     ["ints", "other", '["int","number","number"]', "list", "pairs", '["either","other"]']);
 example("a union in parentheses matches a value of one of its types", `
-f ((Int | String) x) = x
+f (x : Int | String) = x
 f _ = "no"
 print [f 1, f "a", f 1.5]
 kind x = x ~ [(Int | String) -> "either", _ -> "other"]
@@ -617,7 +617,7 @@ print [isType (Pairs Int) [1,2], isType (Pairs Int) [1,2,3], isType (Pairs Int) 
 ones = 1 :: ones
 print [isType (Pairs Int) ones, isType (Pairs Int) [1..], isType (Pairs String) [1..]]
 print [Pairs Int == Pairs Int, Pairs Int == Pairs String]
-f (Pairs Int xs) = length xs
+f (xs : Pairs Int) = length xs
 print (f [1,2,3,4])
 Ints = [] | Int :: Ints
 print [isType Ints [1,2], isType Ints ["a"]]

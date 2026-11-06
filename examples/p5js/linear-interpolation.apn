@@ -14,8 +14,8 @@ setup (Sketch p) = {
 
 draw (Sketch p) = {
     p.background 51
-    set x (Float (lerp x p.mouseX 0.05))
-    set y (Float (lerp y p.mouseY 0.05))
+    set x (lerp x p.mouseX 0.05 : Float)
+    set y (lerp y p.mouseY 0.05 : Float)
     p.fill 255
     p.stroke 255
     p.ellipse x y 66 66

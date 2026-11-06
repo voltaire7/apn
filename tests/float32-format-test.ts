@@ -21,6 +21,6 @@ Deno.test('Float32 decimal text preserves sampled bit patterns', () => {
 });
 Deno.test('widening Float32 still reveals its actual stored value', () => {
     const i = new Interpreter();
-    const value = i.renderString(i.run(parseDocument('Float (Float32 .1)')));
+    const value = i.renderString(i.run(parseDocument('((.1 : Float32) : Float)')));
     if (value !== '0.10000000149011612') throw new Error(value);
 });

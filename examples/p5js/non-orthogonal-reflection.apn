@@ -17,21 +17,21 @@ circleColor = Mutable [0.0,90.0,90.0]
 setup (Sketch p) = {
     p.createCanvas 710 400
     p.call "colorMode" [p.HSB,360,100,100]
-    set baseLeft [0.0, Float (p.height - 150)]
+    set baseLeft [0.0, (p.height - 150 : Float)]
     set baseRight [Float p.width, Float p.height]
     setColors p
-    set position [Float (p.width / 2), Float (p.height / 2)]
+    set position [(p.width / 2 : Float), (p.height / 2 : Float)]
     # A random direction.
     angle <- p.random 0 (2 * pi)
-    set velocity (fromAngle (Float angle) * speed)
+    set velocity (fromAngle (angle : Float) * speed)
     p.describe "A simulation of a ball bouncing on slanted surfaces."
 }
 
 setColors (Sketch p) = {
     baseHue <- p.random 30 180
     circleHue <- p.random 30 180
-    set baseColor [Float baseHue, 70.0, 70.0]
-    set circleColor [Float circleHue, 90.0, 90.0]
+    set baseColor [(baseHue : Float), 70.0, 70.0]
+    set circleColor [(circleHue : Float), 90.0, 90.0]
 }
 
 draw (Sketch p) = {
@@ -58,7 +58,7 @@ handleBaseCollision (Sketch p) = {
     [dx,dy] = normalize (baseRight - baseLeft)
     normal = [dy,-dx]
     when (dot position normal < dot baseLeft normal) {
-        set velocity (velocity - normal * Float (2 * dot velocity normal))
+        set velocity (velocity - normal * (2 * dot velocity normal : Float))
         p.stroke 255
         p.strokeWeight 5
         [x,y] = position
@@ -75,8 +75,8 @@ handleBoundaryCollision (Sketch p) = {
         set velocity (velocity * [1.0,-1.0])
         left <- p.random (p.height - 100) p.height
         right <- p.random (p.height - 100) p.height
-        set baseLeft [0.0, Float left]
-        set baseRight [Float p.width, Float right]
+        set baseLeft [0.0, (left : Float)]
+        set baseRight [Float p.width, (right : Float)]
         setColors p
     }
 }

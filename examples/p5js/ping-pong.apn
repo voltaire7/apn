@@ -65,15 +65,15 @@ move (Sketch p) up down y = {
     downHeld <- p.keyIsDown down
     upHeld <- p.keyIsDown up
     step = (downHeld ? paddleSpeed : 0) - (upHeld ? paddleSpeed : 0)
-    return (Float (constrain (y + step) (paddleHeight / 2) (p.height - paddleHeight / 2)))
+    return (constrain (y + step) (paddleHeight / 2) (p.height - paddleHeight / 2) : Float)
 }
 
 # The ball at the center, moving a random way.
 resetBall (Sketch p) = {
-    set ball [Float (p.width / 2), Float (p.height / 2)]
+    set ball [(p.width / 2 : Float), (p.height / 2 : Float)]
     dx <- p.call "random" [[-3,3]]
     dy <- p.call "random" [[-1,1]]
-    set speed [Float dx, Float dy]
+    set speed [(dx : Float), (dy : Float)]
 }
 
 mousePressed (Sketch p) = {

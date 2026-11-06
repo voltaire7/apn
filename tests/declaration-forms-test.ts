@@ -47,7 +47,7 @@ for (const [source, message] of [
 for (const [source, expected] of [
     ["Sized = n -> Vect n Int\nSized 2 [1,2]", "[1,2]"],
     ["Sized = n -> Vect n Int\ntypeOf (Sized 2 [1,2])", "Vect 2 Int"],
-    ["Handler = a -> Int\nrun ((Handler) h) = h 1\nrun (x -> 2)", "2"],
+    ["Handler = a -> Int\nrun (h : Handler) = h 1\nrun (x -> 2)", "2"],
     ["Handler = a -> Int\nisType Handler (x -> 2)", "True"],
 ] as const) {
     Deno.test(`a lambda-valued type name: ${JSON.stringify(source)}`, () => {
@@ -57,7 +57,7 @@ for (const [source, expected] of [
 }
 for (const [source, message] of [
     ["Sized = n -> Vect n Int\nSized 2 [1,2,3]", "length mismatch: expected 2, got 3"],
-    ["Handler = a -> Int\nrun ((Handler) h) = h 1\nrun (x -> \"s\")", "cannot use String where Int is required"],
+    ["Handler = a -> Int\nrun (h : Handler) = h 1\nrun (x -> \"s\")", "cannot use String where Int is required"],
 ] as const) {
     Deno.test(`a lambda-valued type name rejects: ${JSON.stringify(source)}`, () => {
         const actual = failure(source);
@@ -65,7 +65,7 @@ for (const [source, message] of [
     });
 }
 Deno.test("a type name bound to a pattern lambda is a lambda too", () => {
-    if (run("Maker = _ -> Int\nmake ((Maker) k) = k []\nmake (_ -> 7)") !== "7") throw new Error("Maker");
+    if (run("Maker = _ -> Int\nmake (k : Maker) = k []\nmake (_ -> 7)") !== "7") throw new Error("Maker");
 });
 // A left side that is neither a name to define nor a pattern says so.
 for (const [source, message] of [

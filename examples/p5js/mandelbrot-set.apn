@@ -19,12 +19,12 @@ setup (Sketch p) = {
 
 draw (Sketch p) = {
     viewHeight = viewWidth * p.height / p.width
-    y = Float (-viewHeight / 2 + viewHeight * row * size / p.height)
+    y = -viewHeight / 2 + viewHeight * row * size / p.height : Float
     mapM (column -> {
-        x = Float (-viewWidth / 2 + viewWidth * column * size / p.width)
+        x = -viewWidth / 2 + viewWidth * column * size / p.width : Float
         p.fill (color (escape x y))
         p.rect (column * size) (row * size) size size
-    }) [0..Int (p.width / size)]
+    }) [0..(p.width / size : Int)]
     set row (row + 1)
     when (row * size >= p.height) p.noLoop
 }
@@ -45,6 +45,6 @@ escape x y = {
 
 # Black for the set; outside it, blue to yellow the longer a point stays.
 color iterations = iterations == maxIterations ? [0.0,0.0,0.0]
-    : lerp [47.0,68.0,159.0] [255.0,255.0,128.0] (Float (sqrt (iterations / maxIterations)))
+    : lerp [47.0,68.0,159.0] [255.0,255.0,128.0] (sqrt (iterations / maxIterations) : Float)
 
 main = sketch [setup: setup, draw: draw]

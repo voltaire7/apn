@@ -89,7 +89,8 @@ declareFixities(lex(preludeSource));
 // (Infinity: none, so any operand place takes it); reach is the loosest
 // operator after it that it would take in (a lambda's body takes everything).
 const isLambda = (e: Expr) => e.t === "lambda" || e.t === "patternLambda";
-const primary = (e: Expr) => !["binop", "pipe", "unop", "app", "ternary", "lambda", "patternLambda", "import"].includes(e.t);
+// An ascription is written in its own parentheses: (x : T).
+const primary = (e: Expr) => e.t === "app" && !!e.ascribed || !["binop", "pipe", "unop", "app", "ternary", "lambda", "patternLambda", "import"].includes(e.t);
 // (r.1).2 is not r.1.2, which reads the float 1.2.
 const postfixHead = (e: Expr) => primary(e) && !["int", "float", "numeric"].includes(e.t) && !(e.t === "recordAccess" && /^\d/.test(e.field));
 function level(e: Expr): number {
@@ -972,6 +973,8 @@ class Parser {
             if (t.v === "(" || t.v === "[" || t.v === "{") depth++;
             else if (t.v === ")" || t.v === "]" || t.v === "}") { if (depth-- === 0) return false; }
             else if (t.v === symbol && depth === 0) return true;
+            // (x : a -> b) and (x : Int | String) type a name.
+            else if (t.v === ":" && depth === 0) return false;
         }
         return false;
     }
@@ -1086,9 +1089,9 @@ class Parser {
                                 this.next();
                                 this.applyDeclarations(stmts);
                                 const block: Expr = { t: "block", stmts, style: close === ")" ? "(" : "{" };
-                                // An ascription's parentheses are its own.
-                                if (ascribing) this.unnecessary.set(open, false);
-                                else if (close === ")" && stmts.length === 1 && !["stmDef", "patDef", "setItem", "setFields"].includes(stmts[0].t)) {
+                                // An ascription's parentheses are its own syntax: (e : T) is e : T.
+                                if (ascribing) { this.unnecessary.set(open, false); return stmts[0] as Expr; }
+                                if (close === ")" && stmts.length === 1 && !["stmDef", "patDef", "setItem", "setFields"].includes(stmts[0].t)) {
                                     this.groups.set(block, open);
                                     this.unnecessary.set(open, false);
                                 }
@@ -1107,7 +1110,7 @@ class Parser {
                                 throw new Error("Parser: tuples are not supported; use a list [a, b, ...] instead");
                             }
                             if (this.skipFixityDeclaration()) continue;
-                            if (this.isDeclaration()) {
+                                                    if (this.isDeclaration(t.v === "(" && !stmts.length)) {
                                 const declared = this.parseDeclaration();
                                 stmts.push(declared.t === "def" ? { t: "stmDef", name: declared.name, clauses: declared.clauses } : declared.value);
                                 continue;
@@ -1450,7 +1453,7 @@ class Parser {
                 if (pattern?.p === "as" && patternEnd !== undefined) {
                     this.i = patternEnd;
                     this.expectSym("=");
-                    const value = this.parseExpr();
+                    const value = this.parseDefBody();
                     return { t: "patDef", pattern, value, update: { name, value, error } };
                 }
                 throw new Error(`Parser: ${error}`);
@@ -1479,7 +1482,7 @@ class Parser {
             entries.push(this.parseKey());
         }
         this.expectSym("=");
-        const rhs = this.parseExpr();
+        const rhs = this.parseDefBody();
         // Unnamed bracketed selection takes a list; renamed selection takes a record.
         // Only direct field assignment wraps its scalar RHS.
         if (aliases.length && aliases.length !== entries.length) throw new Error("Parser: cannot mix renamed and unnamed assignment entries");
@@ -1535,7 +1538,7 @@ class Parser {
     parsePatBinding(): Expr {
         const pattern = this.parseConsPattern();
         this.expectSym("=");
-        const value = this.parseExpr();
+        const value = this.parseDefBody();
         const update = pattern.p === "as" && pattern.left.p === "var"
             ? { name: pattern.left.name, value, error: "this dotted pattern is not a field-update target" } : undefined;
         return { t: "patDef", pattern, value, ...(update ? { update } : {}) };
@@ -1761,6 +1764,8 @@ class Parser {
         }
         if (guard) return { name, clauses: [{ params, body, guard }] };
         if (name === "return" && params.length > 1) throw new APNError("parse", "return takes one argument", { pos: equals.pos, hint: "`return = Some`" });
+        if (/^[A-Z]/.test(name) && !params.length && isFunctionType(body)) functionTypes.add(name);
+        if (/^[A-Z]/.test(name) && params.length) computedTypes.add(name);
         return { name, clauses: [{ params, body }] };
     }
 
@@ -1837,10 +1842,12 @@ class Parser {
         return ascribed(e, type, this.freshName());
     }
     // name : T at the start of a statement.
-    isDeclaration(): boolean {
+    // A group's first statement that runs to its end, (x : T) or (f x : T), is
+    // an ascription instead.
+    isDeclaration(grouped = false): boolean {
         const name = this.peek(), colon = this.peek(1);
         if (name.k !== "ident" || !/^[a-z_]/.test(name.v)) return false;
-        if (colon.k === "sym" && colon.v === ":") return true;
+        if (colon.k === "sym" && colon.v === ":") return !grouped || !this.ascribesGroup();
         // f x : T = ... types a definition where its own line would: say so.
         let depth = 0;
         for (let j = this.i + 1; ; j++) {
@@ -1851,10 +1858,18 @@ class Parser {
             else if ([")", "]", "}"].includes(t.v)) { if (!depth--) return false; }
             else if (!depth && ["=", "?", ";", "<-", "->"].includes(t.v)) return false;
             else if (!depth && t.v === ":") {
+                if (grouped) return false;
                 this.seen = t;
                 throw new Error(`Parser: declare ${name.v}'s type on a line of its own, before its definition: ${name.v} : A -> B`);
             }
         }
+    }
+    // (name : T), the type running to the group's end.
+    ascribesGroup(): boolean {
+        const save = this.i;
+        this.i += 2;
+        try { const end = this.toks[this.typeEnd("group").end]; return end?.k === "sym" && end.v === ")"; }
+        finally { this.i = save; }
     }
     // name : T declares the definition after it; name : T = value is both.
     // A declaration alone stays a marker until applyDeclarations meets the
@@ -1912,7 +1927,7 @@ class Parser {
                     const bound = new Set(params.flatMap(typedNames));
                     const free = freeLowercase(result).filter(x => !bound.has(x));
                     const body = k < arity || isFunctionType(result) ? ascribed(clause.body, result, this.freshName())
-                        : free.length ? clause.body : { t: "app" as const, f: result, a: clause.body };
+                        : free.length ? clause.body : { t: "app" as const, f: result, a: clause.body, ascribed: true as const };
                     return { ...clause, params, body };
                 });
             }
@@ -2323,10 +2338,16 @@ const nullaryCtors = new Set<string>();
 // Type names (built in or declared): in a pattern their arguments are types
 // and indices, so a capitalized one takes nothing after it (Vect n Int xs).
 const declaredTypes = new Set<string>(TYPE_NAMES);
+// Capitalized names defined as function types (Handler = a -> Int): a typed
+// pattern of one is a schema, (h : Handler) a function of that type.
+const functionTypes = new Set<string>();
+// Capitalized names defined with parameters (SizedInts n = Vect n Int): types
+// a definition computes (see knownArguments).
+const computedTypes = new Set<string>();
 
 // Tooling parses each document independently, without leaking REPL declarations.
 export function parseDocument(src: string): TopLevel[] {
-    const sets = [declaredCtors, nullaryCtors, declaredTypes];
+    const sets = [declaredCtors, nullaryCtors, declaredTypes, functionTypes, computedTypes];
     const saved = sets.map((set) => [...set]);
     sets.forEach((set) => set.clear());
     TYPE_NAMES.forEach((name) => declaredTypes.add(name));
@@ -2408,6 +2429,7 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
         p.applyDeclarations(out);
         if (!looseSpacing) p.reportUnnecessary();
         const grouped = groupClauses(out);
+        knownArguments(grouped);
         for (const tl of grouped) {
             // (Vect may be defined only as the list of n elements.)
             const counts = tl.t === "def" ? countingOf(tl.name, tl.clauses) : undefined;
@@ -2477,15 +2499,75 @@ function isFunctionType(type: Expr): boolean {
 // collapses it (Int 1.0 is 1). A function type applied to a value would call
 // it, so a value of one is checked as a typed parameter's: ((T r) -> r) e.
 function ascribed(e: Expr, type: Expr, fresh: string): Expr {
-    if (!isFunctionType(type)) return { t: "app", f: type, a: e };
+    if (!isFunctionType(type)) return { t: "app", f: type, a: e, ascribed: true };
     const check: Expr = { t: "patternLambda", params: [{ p: "schema", type, value: { p: "var", name: fresh } }], body: { t: "var", name: fresh } };
-    return { t: "app", f: check, a: e };
+    return { t: "app", f: check, a: e, ascribed: true };
 }
 // (p : T): T's typed pattern around p; a type variable (or _) binds the type.
+// (p : T) is the typed pattern the type takes: (x : t) binds its type, and
+// a type's name given names, literals and types as its arguments
+// (x : Vect n Int) checks and dispatches as a type pattern does; any other
+// type, a constructor's name or a function type's, is a schema.
 function typedPattern(p: Pattern, type: Expr): Pattern {
     const t = bareType(type);
     if (t.t === "var" && /^[a-z_]/.test(t.name)) return { p: "typeBind", name: t.name, value: p };
+    if (t.t === "placeholder") return { p: "typeBind", name: "_", value: p };
+    const named = typeArguments(t);
+    if (named?.p === "constr" && !declaredCtors.has(named.tag) && !functionTypes.has(named.tag)) return { ...named, args: [...named.args, p] };
     return { p: "schema", type, value: p };
+}
+// A computed type's pattern whose arguments are all known, bound by an
+// earlier parameter or written as literals (copy n (xs : SizedInts n)), tests
+// the value against the type they compute (a schema); one with an argument to
+// bind reads it back from the value (Pairs n a xs). Each parameter list, left
+// to right, in place.
+function knownArguments(node: unknown): void {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) { node.forEach(knownArguments); return; }
+    const record = node as Record<string, unknown>;
+    if (Array.isArray(record.params) && record.params.every(p => p && typeof p === "object" && "p" in p)) {
+        const bound = new Set<string>();
+        record.params = (record.params as Pattern[]).map(p => {
+            const known = withKnownArguments(p, bound);
+            for (const name of patternNames(known)) bound.add(name);
+            return known;
+        });
+    }
+    for (const value of Object.values(record)) knownArguments(value);
+}
+function withKnownArguments(p: Pattern, bound: Set<string>): Pattern {
+    if (p.p === "constr" && computedTypes.has(p.tag) && !declaredCtors.has(p.tag) && p.args.length > 1) {
+        const args = p.args.slice(0, -1).map(typeOfPattern);
+        if (args.every(a => a && freeLowercase(a).every(name => bound.has(name)))) {
+            const type = (args as Expr[]).reduce<Expr>((f, a) => ({ t: "app", f, a }), { t: "var", name: p.tag });
+            return { p: "schema", type, value: withKnownArguments(p.args[p.args.length - 1], bound) };
+        }
+    }
+    const copy: Record<string, unknown> = { ...p };
+    for (const [key, value] of Object.entries(p)) {
+        if (Array.isArray(value)) copy[key] = value.map(x => x && typeof x === "object" && "p" in x ? withKnownArguments(x as Pattern, bound) : x);
+        else if (value && typeof value === "object" && "p" in value) copy[key] = withKnownArguments(value as Pattern, bound);
+    }
+    return copy as Pattern;
+}
+// A type argument written as a pattern, as the expression it is.
+function typeOfPattern(q: Pattern): Expr | undefined {
+    if (q.p === "var") return { t: "var", name: q.name };
+    if (q.p === "int") return { t: "int", v: q.v };
+    if (q.p === "constr") {
+        const args = q.args.map(typeOfPattern);
+        return args.every(Boolean) ? (args as Expr[]).reduce<Expr>((f, a) => ({ t: "app", f, a }), { t: "var", name: q.tag }) : undefined;
+    }
+    return undefined;
+}
+function typeArguments(e: Expr): Pattern | undefined {
+    const t = bareType(e);
+    if (t.t === "var") return t.name === "_" ? { p: "wildcard" } : /^[A-Z]/.test(t.name) ? { p: "constr", tag: t.name, args: [] } : { p: "var", name: t.name };
+    if (t.t === "int") return { p: "int", v: t.v };
+    if (t.t === "placeholder") return { p: "wildcard" };
+    if (t.t !== "app") return undefined;
+    const head = typeArguments(t.f), arg = typeArguments(t.a);
+    return head?.p === "constr" && arg ? { ...head, args: [...head.args, arg] } : undefined;
 }
 // The names a typed parameter binds: its pattern's, and its type's
 // parameters ((Vect n a) xs binds n and a; a function type binds none).
@@ -2606,6 +2688,7 @@ function bareSource(e: Expr, where: Place): string {
             return `${e.op === "neg" ? "-" : "!"}${operand.t === "unop" ? `(${of(operand)})` : of(operand, at)}`;
         }
         case "app": {
+            if (e.ascribed) return `(${of(e.a)} : ${of(e.f.t === "patternLambda" && e.f.params[0].p === "schema" ? e.f.params[0].type : e.f)})`;
             const args: Expr[] = [];
             let head: Expr = e;
             for (; head.t === "app"; head = ungrouped(head.f)) args.unshift(head.a);
@@ -2654,7 +2737,7 @@ export function patternSource(p: Pattern): string {
             while (written.t === "block" && written.style === "(" && written.stmts.length === 1) written = written.stmts[0];
             const type = exprToSource(written), spelled = ["binop", "lambda", "patternLambda"].includes(written.t);
             if (spelled && p.value.p === "wildcard") return `(${type})`;
-            return spelled ? `((${type}) ${patternSource(p.value)})` : `(${type} ${patternSource(p.value)})`;
+            return `(${patternSource(p.value)} : ${type})`;
         }
         case "wildcard": return "_";
         case "var": return p.name;
@@ -2666,8 +2749,12 @@ export function patternSource(p: Pattern): string {
         // An item stands alone up to its ',': [x :: _, d], [Some x, y].
         case "list": return `[${itemsText(p.v.map(q => q.p === "cons" || q.p === "constr" && q.args.length ? patternSource(q).slice(1, -1) : patternSource(q)))}]`;
         case "cons": return `(${patternSource(p.head)} ${p.op ?? "::"} ${patternSource(p.tail)})`;
-        case "constr": return p.args.length ? `(${p.tag} ${p.args.map(patternSource).join(" ")})` : p.tag;
-        case "typeBind": return `(${p.name} ${patternSource(p.value)})`;
+        // A type's pattern is written as the value it types: (xs : Vect n a).
+        case "constr":
+            if (!p.args.length) return p.tag;
+            if (!declaredCtors.has(p.tag)) return `(${patternSource(p.args[p.args.length - 1])} : ${[p.tag, ...p.args.slice(0, -1).map(patternSource)].join(" ")})`;
+            return `(${p.tag} ${p.args.map(patternSource).join(" ")})`;
+        case "typeBind": return `(${patternSource(p.value)} : ${p.name})`;
         case "recPat": return `[${p.v.map(([k, v]) => `${keySource(k)}: ${v}`).join(", ")}]`;
         case "range": return `[${p.lo}..${p.hi}]`;
     }

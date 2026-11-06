@@ -28,11 +28,11 @@ float lo hi = Generator (seed -> {
     [lo + (hi - lo) * inexact (s / 4294967296), s]
 })
 # One of the values, each as likely; weighted takes [weight,value] pairs.
-uniform first others = map (Int index -> (first :: others) index) (int 0 (length others))
+uniform first others = map ((index : Int) -> (first :: others) index) (int 0 (length others))
 weighted first others = {
     choices = first :: others
     # A pair's parts may differ in type ([1,"rare"]): its weight is a Number.
-    weight choice = Number (Dynamic (head choice))
+    weight choice = (head choice : Dynamic) : Number
     pick options roll = {
         choice = head options
         null (tail options) || roll < weight choice

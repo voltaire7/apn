@@ -5,16 +5,16 @@ function result(source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['Vector3 = [x: Float, y: Float, z: Float]\nCustomVector = Vector3\nCustomVector.x = 123\nCustomVector []', '[x: 123.0, y: 0.0, z: 0.0]'],
+    ['Vector3 = [x: Float, y: Float, z: Float]\nCustomVector = Vector3\nCustomVector.x = 123\n([] : CustomVector)', '[x: 123.0, y: 0.0, z: 0.0]'],
     ['v = [x: Float]; v.x = Int; v []', '[x: 0]'],
-    ['v = [x: Float]; v.x = Float 123; v.x = 456; v', '[x: 456.0]'],
+    ['v = [x: Float]; v.x = 123 : Float; v.x = 456; v', '[x: 456.0]'],
     ['v = [nested: [x: 1]]; v.nested = [y: 2]; v', '[nested: [y: 2]]'],
     ['count = Mutable 0; action = { set count 1 }; v = [f: action]; v.f = { set count 2 }; count', '0'],
     ['v = [type: Float, value: 123]; v.type = Int; v', '[type: Int, value: 123]'],
     ['xs = [Float]; xs 0 = .2; xs 0 = 1; xs', '[1.0]'],
     ['v = [x: Float] []; v "x" = 123; v.[x] = [456]; v.x', '456.0'],
-    ['Id = Int; v = [id: Id 1]; v.id = 2; v.id', 'Id 2'],
-    ['((Int -> Int) identity) <- return (x -> x); v = [f: identity]; v.f = x -> x + 1; v.f 2', '3'],
+    ['Id = Int; v = [id: (1 : Id)]; v.id = 2; v.id', 'Id 2'],
+    ['(identity : Int -> Int) <- return (x -> x); v = [f: identity]; v.f = x -> x + 1; v.f 2', '3'],
     ['[x: 1] [y: 2]', '[x: 1, y: 2]'],
 ] as const) Deno.test(`slot replacement: ${source}`, () => {
     const actual = result(source);
