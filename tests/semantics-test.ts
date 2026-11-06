@@ -584,6 +584,10 @@ print (typeOf [1,2] ~ [Pairs Int -> "pairs", _ -> "other"])
 IS = Int | String
 print [typeOf "s" ~ [IS -> "either", _ -> "other"], typeOf 1.5 ~ [IS -> "either", _ -> "other"]]`,
     ["ints", "other", '["int","number","number"]', "list", "pairs", '["either","other"]']);
+example("a typed pattern of a union takes a value of one of its types", `
+f ((Int | String) x) = x
+f _ = "no"
+print [f 1, f "a", f 1.5]`, ['[1,"a","no"]']);
 example("| is the union of types, written anywhere", `
 print (Int | String)
 print [isType (Int | String) "a", (Int | String) == (String | Int)]

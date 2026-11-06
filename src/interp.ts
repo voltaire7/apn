@@ -5486,6 +5486,8 @@ export class Interpreter {
             }
             if (type.kind === "type") {
                 if (type.alias) return false;
+                // ((Int | String) x): a value of one of the union's types.
+                if (type.choices) return this.belongsToType(type, actual) && this.matchPattern(p.value, actual, binds);
                 // (List Int xs): a list, its elements converted as they are used
                 // (as a variant's payload is), so an infinite one matches too.
                 if (this.isListType(type)) {
