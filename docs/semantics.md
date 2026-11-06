@@ -277,9 +277,11 @@ and `(Int x)` patterns reject it, its clauses give it what it needs
 (`(UserId a) + (UserId b) = UserId (a + b)`), and `(UserId x)` takes it apart.
 See [named and distinct types](type-and-resource-rules.md#distinct-types).
 
-There are no type annotations or signatures: `:` only writes record entries
-and a ternary's else; cons is `::`. State types with constructors, `x = Int 5` or `f (Int x) = ...`; see
-[pattern functions](pattern-functions.md). A type pattern is also a binding,
+A declaration or an ascription states a type (see
+[declarations and ascription](#declarations-and-ascription)); otherwise `:`
+writes a record entry or a ternary's else, and cons is `::`. The constructor
+forms `x = Int 5` and `f (Int x) = ...` mean what `x = 5 : Int` and
+`f (x : Int) = ...` do; see [pattern functions](pattern-functions.md). A type pattern is also a binding,
 so `Int x = 1` (or `x <- ...` with `Int x <- ...`) declares a typed name: the
 value converts as an argument converts for `f (Int x)`, so `Float y = 1`
 binds `1.0` and `Int z = 2.5` is a lossy-conversion error. A value the
@@ -293,6 +295,42 @@ cannot be redefined, so `Int x = ...` is always this binding; `Int = 5` and
 In file mode, bare expressions run for their effects but are not printed; use
 `print`. The REPL echoes expression results but not assignments, so `x = x`
 never hangs the prompt.
+
+### Declarations and ascription
+
+`name : T` declares the definition of `name` right after it in the same
+block; `name : T = value` declares and defines at once. A declaration no
+definition follows is an error, and a definition's type is declared on a line
+of its own (`f x : Int = x` is an error). Lowercase names in the type that
+nothing binds are its variables, the same name the same type throughout:
+
+```apn
+x : Int32 = 123
+y : Int32
+y = 123
+
+append : Vect n a -> Vect m a -> Vect (n + m) a
+append [] ys = ys
+append (x :: xs) ys = x :: append xs ys
+```
+
+Each clause is checked against the declaration: each parameter's type is
+the typed pattern around it (`append ((Vect n a) [])`), and the result's type
+the claim of its body, proved per clause (see
+[pattern functions](pattern-functions.md)), so declaring `Vect (n + m + 1) a`
+above is a length mismatch. A clause with fewer parameters than the type
+takes (`inc : Int -> Int` then `inc = (+ 1)`) has the rest of the type as its
+body's. A result naming a type variable no parameter binds (`List b` beside
+`(a -> b)`) is left to inference.
+
+`e : T` is `e` as a value of `T`: a member of it, collapsed to it (`1.0 : Int`
+is the Int `1`; `1.5 : Int` is a lossy-conversion error; `123 : Int32` is an
+`Int32`). It is written outermost on a definition's right side
+(`x = 123 : Int32`) or in parentheses (`(5 : Int32) + 1`); a ternary ascribed
+is parenthesized, `(c ? a : b) : T`, and `x = c ? a : b : T` is an error.
+`(p : T)` in a pattern matches a value of `T`, as one, then `p`:
+`f (n : Int) = n + 1` takes `1.0` as `1`, and `(x : t)` binds the value's
+type `t`.
 
 ### Code
 

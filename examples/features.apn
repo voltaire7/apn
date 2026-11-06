@@ -216,7 +216,7 @@ person * print \ format "%: %"           # => name: Ada, then age: 37
 # Types
 # ---------------------------------------------------------
 # Every value has a type. The checker infers types before a program runs
-# and reports what would fail; there are no annotations to write.
+# and reports what would fail; a declaration states one where you want to.
 print [typeOf 1, typeOf [1,2], typeOf "a"]  # => [Int,[Int,Int],String]
 print (typeOf (x -> [x,x]))              # => a -> [a,a]
 
@@ -226,9 +226,10 @@ print [Float 1, UInt8 200, Int 0]        # => [1.0, UInt8 200, 0]
 Point = [x: Float, y: Float]
 print [Point [1,2], Point []]            # => [[x: 1.0, y: 2.0], [x: 0.0, y: 0.0]]
 
-# A type in a pattern requires it, converting as above.
-halve (Int n) = n / 2
-Int dozen = 12
+# A type in a pattern requires it, converting as above, and e : T is e as
+# a value of T.
+halve (n : Int) = n / 2
+dozen = 12 : Int
 print [halve 3, halve dozen]             # => [3/2,6]
 
 # A variant type lists its constructors.
@@ -247,9 +248,11 @@ print (withDefault 0 (safeDiv 1 0))      # => 0
 UserId (Int id) = _
 print [UserId 7, isType UserId 7]        # => [UserId 7, False]
 
-# Types may depend on values: Vect n a is a list of n elements of type a,
-# and the checker computes n.
-appendSized (Vect n a xs) (Vect m a ys) = Vect (n + m) a (xs ++ ys)
+# Types may depend on values: Vect n a is a list of n elements of type a.
+# A declaration types the clauses after it, and the checker proves each
+# result has the length declared.
+appendSized : Vect n a -> Vect m a -> Vect (n + m) a
+appendSized xs ys = xs ++ ys
 print (typeOf (appendSized [1,2] [3]))   # => Vect 3 Int
 
 # What the checker cannot know becomes a check when the program runs:

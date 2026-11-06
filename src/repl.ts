@@ -348,6 +348,8 @@ function helpText(): string {
         `  do [print "hi", return 42] — the block { print "hi"; return 42 }`,
         `  Int32 123; Int (truncate 3.7); typeOf value; Type [x: Float]`,
         `  types are sets: Int | String; Int <= Number; typeOf [1,2] <= List Int; == same values`,
+        `  x : Int32 = 123; x = 123 : Int32; f (n : Int) = ...  (declare, ascribe, type a pattern)`,
+        `  append : Vect n a -> Vect m a -> Vect (n + m) a  (declares the clauses after it)`,
         `  myTypeOf (t x) = print t   (bind the runtime type and value)`,
         `  f (Int x) = ...; f (Number x) = ... (typed overloads)`,
         `  100 * _ -> Int 0 repeats; 100 * Int 0 multiplies`,

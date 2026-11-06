@@ -1,4 +1,4 @@
-import { claimedDeclaration, countingOf, fillPlaceholders, holdsPlaceholder, sourceLocations, unclaimedMix } from "./ast.ts";
+import { claimedDeclaration, countingOf, fillPlaceholders, holdsPlaceholder, patternNames, sourceLocations, unclaimedMix } from "./ast.ts";
 import { stringKey, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -450,6 +450,12 @@ class Parser {
             if (this.eatSym(",")) {
                 throw new Error("Parser: tuple patterns are not supported; use a list pattern [a, b, ...] instead");
             }
+            // (p : T) matches a value of T, as T, then p.
+            if (close === ")" && this.eatSym(":")) {
+                const type = this.typeExpr(this.typeEnd("group").end);
+                this.expectSym(close);
+                return typedPattern(p, type);
+            }
             this.expectSym(close);
             return p;
         }
@@ -548,10 +554,12 @@ class Parser {
             if (t.v !== ":") continue;
             if (open[open.length - 1] === "[") continue;
             if (pending[pending.length - 1] > 0) { pending[pending.length - 1]--; continue; }
+            // A declaration or an ascription, x : Int: the parser places it.
+            if (/\s/.test(this.source[t.pos - 1] ?? "") && /\s/.test(this.source[t.pos + 1] ?? "")) continue;
             const next = this.toks[this.toks.indexOf(t) + 1];
             this.seen = t;
             if (next?.k === "ident" && /^[A-Z]/.test(next.v)) {
-                throw new Error(`Parser: APN has no type annotations; type with the constructor instead: (${next.v} x) in a pattern, ${next.v} value in an expression`);
+                throw new Error(`Parser: a declaration or an ascription spaces its ':' (x : ${next.v})`);
             }
             throw new Error("Parser: cons is '::' (x :: xs); ':' writes a record field ([x: 1]) or a ternary's else (c ? a : b)");
         }
@@ -1065,6 +1073,7 @@ class Parser {
                             this.next(); // the one indent that opens the block body
                         }
                         const outerIndent = this.statementIndent;
+                        let ascribing = false;
                         for (;;) {
                             if (this.isSym(";")) { this.next(); continue; }
                             while (this.peek().k === "newline") this.next();
@@ -1075,8 +1084,11 @@ class Parser {
                                 }
                                 this.statementIndent = outerIndent;
                                 this.next();
+                                this.applyDeclarations(stmts);
                                 const block: Expr = { t: "block", stmts, style: close === ")" ? "(" : "{" };
-                                if (close === ")" && stmts.length === 1 && !["stmDef", "patDef", "setItem", "setFields"].includes(stmts[0].t)) {
+                                // An ascription's parentheses are its own.
+                                if (ascribing) this.unnecessary.set(open, false);
+                                else if (close === ")" && stmts.length === 1 && !["stmDef", "patDef", "setItem", "setFields"].includes(stmts[0].t)) {
                                     this.groups.set(block, open);
                                     this.unnecessary.set(open, false);
                                 }
@@ -1095,6 +1107,11 @@ class Parser {
                                 throw new Error("Parser: tuples are not supported; use a list [a, b, ...] instead");
                             }
                             if (this.skipFixityDeclaration()) continue;
+                            if (this.isDeclaration()) {
+                                const declared = this.parseDeclaration();
+                                stmts.push(declared.t === "def" ? { t: "stmDef", name: declared.name, clauses: declared.clauses } : declared.value);
+                                continue;
+                            }
                             const operator = this.tryOperatorDefinition();
                             if (operator) { stmts.push({ t: "stmDef", ...operator }); continue; }
                             // A block declares types as the top level does.
@@ -1117,6 +1134,12 @@ class Parser {
                                     } else joinClauses(stmts, d);
                                 }
                                 else stmts.push(this.tryItemAssign() ?? this.parseDelimitedExpr());
+                            }
+                            // (e : T): e as a value of T.
+                            if (close === ")" && stmts.length === 1 && this.isSym(":")) {
+                                const colon = this.next();
+                                stmts[0] = this.ascription(stmts[0], colon, "group");
+                                ascribing = true;
                             }
                         }
                     }
@@ -1763,7 +1786,137 @@ class Parser {
             this.isSym(";") || this.isSym("}") || this.isSym(")") || this.isSym("]")) {
             throw new Error(`Parser: expected an expression after '${operator}'; use '_' for an unfinished definition`);
         }
-        return this.parseExpr();
+        const body = this.parseExpr();
+        // x = e : T, outermost.
+        if (operator === "=" && this.isSym(":")) return this.ascription(body, this.next(), "statement");
+        return body;
+    }
+
+    // ---- Declarations and ascription (name : T, e : T, (p : T)) ----
+    // A declaration's or an ascription's type ends at the end of its statement
+    // (or its value's =), or at its group's ). Its top-level arrows split it.
+    typeEnd(until: "statement" | "group"): { end: number; arrows: number[] } {
+        const arrows: number[] = [];
+        let depth = 0;
+        for (let j = this.i; ; j++) {
+            const t = this.toks[j];
+            if (!t || t.k === "eof" || t.k === "dedent") return { end: j, arrows };
+            if (t.k === "newline" && !depth && until === "statement") return { end: j, arrows };
+            if (t.k !== "sym") continue;
+            if (["(", "[", "{"].includes(t.v)) { depth++; continue; }
+            if ([")", "]", "}"].includes(t.v)) { if (!depth) return { end: j, arrows }; depth--; continue; }
+            if (depth) continue;
+            if (t.v === "->") arrows.push(j);
+            else if (t.v === ";" || t.v === "=" && until === "statement" || t.v === ":" && until === "group") return { end: j, arrows };
+        }
+    }
+    // The type written between this.i and end, read as an expression is (a
+    // lambda reads as the function type it spells out); this.i moves to end.
+    typeExpr(end: number): Expr {
+        if (end === this.i) throw new Error("Parser: expected a type after ':'");
+        const last = this.toks[end - 1];
+        const sub = new Parser([...this.toks.slice(this.i, end), { k: "eof", pos: last.pos + tokLen(last) } as Token], this.source, this.file);
+        let type: Expr;
+        try { type = sub.parseExpr(); } catch (error) { this.seen = sub.seen; throw error; }
+        if (sub.peek().k !== "eof") { this.seen = sub.peek(); throw new Error("Parser: unexpected token in a type"); }
+        this.i = end;
+        return type;
+    }
+    // e : T, after its ':'. A ternary is ascribed in parentheses.
+    ascription(e: Expr, colon: Token, until: "statement" | "group"): Expr {
+        if (e.t === "ternary") { this.seen = colon; throw new Error("Parser: parenthesize a ternary to ascribe it: (c ? a : b) : T"); }
+        // Parentheses around what is ascribed are needed: (c ? a : b) : T.
+        const group = this.groups.get(e);
+        if (group !== undefined) { this.groups.delete(e); this.unnecessary.set(group, false); }
+        const type = this.typeExpr(this.typeEnd(until).end), list = bareType(type);
+        // A list of values is no type: 1 : [2] is cons written ':'.
+        if (list.t === "list" && list.v.some(x => ["int", "float", "numeric", "string", "char", "bool"].includes(bareType(x as Expr).t))) {
+            this.seen = colon;
+            throw new Error("Parser: cons is '::' (x :: xs); ': T' ascribes a type");
+        }
+        return ascribed(e, type, this.freshName());
+    }
+    // name : T at the start of a statement.
+    isDeclaration(): boolean {
+        const name = this.peek(), colon = this.peek(1);
+        if (name.k !== "ident" || !/^[a-z_]/.test(name.v)) return false;
+        if (colon.k === "sym" && colon.v === ":") return true;
+        // f x : T = ... types a definition where its own line would: say so.
+        let depth = 0;
+        for (let j = this.i + 1; ; j++) {
+            const t = this.toks[j];
+            if (!t || t.k === "eof" || t.k === "newline" || t.k === "dedent") return false;
+            if (t.k !== "sym") continue;
+            if (["(", "[", "{"].includes(t.v)) depth++;
+            else if ([")", "]", "}"].includes(t.v)) { if (!depth--) return false; }
+            else if (!depth && ["=", "?", ";", "<-", "->"].includes(t.v)) return false;
+            else if (!depth && t.v === ":") {
+                this.seen = t;
+                throw new Error(`Parser: declare ${name.v}'s type on a line of its own, before its definition: ${name.v} : A -> B`);
+            }
+        }
+    }
+    // name : T declares the definition after it; name : T = value is both.
+    // A declaration alone stays a marker until applyDeclarations meets the
+    // definition it declares.
+    parseDeclaration(): Extract<TopLevel, { t: "def" | "expr" }> {
+        const nameToken = this.next() as Extract<Token, { k: "ident" }>, name = nameToken.v;
+        this.next();
+        const start = this.i, { end, arrows } = this.typeEnd("statement");
+        const pieces = [start, ...arrows.map(a => a + 1)].map((from, n) => {
+            this.i = from;
+            return this.typeExpr(n < arrows.length ? arrows[n] : end);
+        });
+        const whole = () => { this.i = start; return this.typeExpr(end); };
+        if (this.isSym("=")) {
+            const type = whole(), equals = this.next() as { v: string };
+            return { t: "def", name, clauses: [{ params: [], body: ascribed(this.parseDefBody(equals.v), type, this.freshName()) }] };
+        }
+        const marker: Extract<TopLevel, { t: "expr" }> = { t: "expr", value: { t: "placeholder" } };
+        // The function type after the first k pieces, for a clause with k parameters.
+        const rest = (k: number): Expr => {
+            this.i = k ? arrows[k - 1] + 1 : start;
+            const type = this.typeExpr(end);
+            this.i = end;
+            return type;
+        };
+        // (A block keeps the marker's value as its statement.)
+        const declaration = { name, pos: nameToken.pos, pieces, rest };
+        this.declarations.set(marker, declaration);
+        this.declarations.set(marker.value, declaration);
+        return marker;
+    }
+    declarations = new WeakMap<object, { name: string; pos: number; pieces: Expr[]; rest: (k: number) => Expr }>();
+    // Each declaration types the clauses of the definition right after it:
+    // its parameters' types are typed patterns, and its result type the
+    // claim of each clause's body (a function type, when fewer parameters
+    // are written than the type takes, ascribes the body instead).
+    applyDeclarations(items: (TopLevel | Expr)[]): void {
+        for (let n = 0; n < items.length; n++) {
+            const declaration = this.declarations.get(items[n]);
+            if (!declaration) continue;
+            items.splice(n, 1);
+            const { name, pos, pieces } = declaration, arity = pieces.length - 1;
+            const defines = (item: TopLevel | Expr | undefined): item is Extract<TopLevel, { t: "def" }> | Extract<Expr, { t: "stmDef" }> =>
+                !!item && (item.t === "def" || item.t === "stmDef") && item.name === name;
+            if (!defines(items[n])) throw new APNError("parse", `the declaration of ${name} is not followed by its definition`, { pos, len: name.length });
+            for (let m = n; defines(items[m]); m++) {
+                const item = items[m] as Extract<TopLevel, { t: "def" }>;
+                item.clauses = item.clauses.map(clause => {
+                    const k = clause.params.length;
+                    if (k > arity) throw new APNError("parse", `${name} is declared with ${arity} parameter${arity === 1 ? "" : "s"}, but a clause takes ${k}`, { pos, len: name.length });
+                    const params = clause.params.map((p, i) => typedPattern(p, pieces[i]));
+                    const result = k === arity ? pieces[arity] : declaration.rest(k);
+                    // A result naming a type variable no parameter binds is
+                    // checked by inference, not by a claim the clause can read.
+                    const bound = new Set(params.flatMap(typedNames));
+                    const free = freeLowercase(result).filter(x => !bound.has(x));
+                    const body = k < arity || isFunctionType(result) ? ascribed(clause.body, result, this.freshName())
+                        : free.length ? clause.body : { t: "app" as const, f: result, a: clause.body };
+                    return { ...clause, params, body };
+                });
+            }
+        }
     }
 
     // A declaration's constructors, after its '=' (or inside the ( ) of the
@@ -2021,6 +2174,10 @@ class Parser {
             this.statementIndent = 0;
 
             if (this.skipFixityDeclaration()) continue;
+            if (this.isDeclaration()) {
+                out.push(this.parseDeclaration());
+                continue;
+            }
             const operator = this.tryOperatorDefinition();
             if (operator) {
                 out.push({ t: "def", ...operator });
@@ -2248,6 +2405,7 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
         p.checkColons();
         if (!looseSpacing) p.checkBracketSpacing();
         const out = p.parseTopLevel();
+        p.applyDeclarations(out);
         if (!looseSpacing) p.reportUnnecessary();
         const grouped = groupClauses(out);
         for (const tl of grouped) {
@@ -2307,6 +2465,45 @@ function continues(last: { name: string; clauses: DefClause[] }, next: { name: s
     const [a, b] = [last.clauses[0], next.clauses[0]];
     return last.name === next.name && !!b?.params.length && a.params.length === b.params.length;
 }
+// What a type written in parentheses is: (a -> b) is a -> b.
+function bareType(type: Expr): Expr {
+    return type.t === "block" && type.style === "(" && type.stmts.length === 1 ? bareType(type.stmts[0] as Expr) : type;
+}
+function isFunctionType(type: Expr): boolean {
+    const t = bareType(type);
+    return t.t === "lambda" || t.t === "patternLambda";
+}
+// e : T as the language reads it: a type applied to a value checks it and
+// collapses it (Int 1.0 is 1). A function type applied to a value would call
+// it, so a value of one is checked as a typed parameter's: ((T r) -> r) e.
+function ascribed(e: Expr, type: Expr, fresh: string): Expr {
+    if (!isFunctionType(type)) return { t: "app", f: type, a: e };
+    const check: Expr = { t: "patternLambda", params: [{ p: "schema", type, value: { p: "var", name: fresh } }], body: { t: "var", name: fresh } };
+    return { t: "app", f: check, a: e };
+}
+// (p : T): T's typed pattern around p; a type variable (or _) binds the type.
+function typedPattern(p: Pattern, type: Expr): Pattern {
+    const t = bareType(type);
+    if (t.t === "var" && /^[a-z_]/.test(t.name)) return { p: "typeBind", name: t.name, value: p };
+    return { p: "schema", type, value: p };
+}
+// The names a typed parameter binds: its pattern's, and its type's
+// parameters ((Vect n a) xs binds n and a; a function type binds none).
+function typedNames(p: Pattern): string[] {
+    if (p.p === "schema") return [...isFunctionType(p.type) ? [] : freeLowercase(p.type), ...typedNames(p.value)];
+    if (p.p === "typeBind") return [p.name, ...typedNames(p.value)];
+    return patternNames(p);
+}
+// The lowercase names a type mentions: its variables.
+function freeLowercase(e: unknown, found: string[] = []): string[] {
+    if (!e || typeof e !== "object") return found;
+    if (Array.isArray(e)) { for (const x of e) freeLowercase(x, found); return found; }
+    const node = e as { t?: string; name?: string };
+    if (node.t === "var" && node.name && /^[a-z]/.test(node.name)) found.push(node.name);
+    for (const value of Object.values(e)) if (value && typeof value === "object") freeLowercase(value, found);
+    return found;
+}
+
 export function groupClauses(program: TopLevel[]): TopLevel[] {
     const result: TopLevel[] = [];
     for (const tl of program) {

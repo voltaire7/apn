@@ -261,11 +261,10 @@ constructor field, `(a -> a).(+ 1)`, `isType`, or beside a type in `==`).
 `(Int -> Int) function` therefore applies a pattern-matching lambda; it does not
 construct a function contract. `a -> a` is the identity lambda.
 
-Constructor patterns and contracts are the only way to state a type. There are
-no type annotations: `:` only writes a record entry (`[x: 1]`) or a ternary's
-else (`c ? a : b`), and cons is `::` (`x :: rest`). So `f x: Int = x`,
-`(x: Int) -> x`, and `x: Int = 5` are syntax errors that point to the
-constructor form (`f (Int x) = x`, `x = Int 5`).
+A type is stated by a declaration, an ascription or a typed pattern
+(see [declarations and ascription](semantics.md#declarations-and-ascription));
+`(x : Int)` is the typed pattern `(Int x)`, and `x = 5 : Int` is `x = Int 5`.
+Their `:` is spaced: `f x: Int = x` and `(x: Int) -> x` are syntax errors.
 
 
 ## Declared variant types in patterns

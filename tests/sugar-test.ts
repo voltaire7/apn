@@ -17,6 +17,20 @@ for (const [sugar, expansion] of [
     // A list is its items consed onto [], with what :: means there, in
     // values and patterns alike.
     ['[1,"a"]', '1 :: "a" :: []'],
+    // A declaration or an ascription is the typed pattern or application it
+    // states: e : T is T e, (p : T) is ((T) p), and a declared type types the
+    // clauses after it, their parameters and the claim of their results.
+    ["x = 123 : Int32\ntypeOf x", "x = Int32 123\ntypeOf x"],
+    ["x : Int32\nx = 1.0\nx", "x = Int32 1.0\nx"],
+    ["x = 1.5 : Int", "x = Int 1.5"],
+    ["f (n : Int) = n + 1\nf 1.0", "f ((Int) n) = n + 1\nf 1.0"],
+    ["f (x : t) = t\nf 1.5", "f (t x) = t\nf 1.5"],
+    ["(5 : Int32) + 1", "Int32 5 + 1"],
+    ["inc : Int -> Int\ninc = (+ 1)\ninc \"a\"", "inc = (((Int -> Int) f) -> f) (+ 1)\ninc \"a\""],
+    ["append : Vect n a -> Vect m a -> Vect (n + m) a\nappend [] ys = ys\nappend (x :: xs) ys = x :: append xs ys\n" +
+        "typeOf (append [1] [2,3])",
+        "append ((Vect n a) []) ((Vect m a) ys) = Vect (n + m) a ys\n" +
+        "append ((Vect n a) (x :: xs)) ((Vect m a) ys) = Vect (n + m) a (x :: append xs ys)\ntypeOf (append [1] [2,3])"],
     ['f (List a xs) = a\nf [1,"a"]', 'f (List a xs) = a\nf (1 :: ["a"])'],
     // A range is enumFrom and its siblings: numbers count, a type repeats.
     ["[take 3 [1..], [1,3..7], [1..3], [0,0.5..1]]", "[take 3 (enumFrom 1), enumFromThenTo 1 3 7, enumFromTo 1 3, enumFromThenTo 0 0.5 1]"],

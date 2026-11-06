@@ -455,9 +455,17 @@ h ((Int -> Int) k) = k 2
 lam = (Int x) -> x + 1
 v = Int 5
 print [f 1, h (+ 1), lam 5, v]`, ["[2,3,6,5]"]);
-for (const source of ["x: Int = 5", "f x: Int = x", "f (x: Int) = x", "g = (x: Int) -> x", "f x y : Int = x + y", "print { x: Int = 20; x }"]) {
-    failure(`':' is not a type annotation: ${source}`, source, "APN has no type annotations");
+// A declaration or ascription spaces its ':', and a definition's type is
+// declared on a line of its own.
+for (const source of ["x: Int = 5", "f x: Int = x", "f (x: Int) = x", "g = (x: Int) -> x", "print { x: Int = 20; x }"]) {
+    failure(`an unspaced ':' is no declaration: ${source}`, source, "spaces its ':'");
 }
+failure("a definition's type is declared on its own line", "f x y : Int = x + y", "declare f's type on a line of its own");
+failure("a declaration is followed by its definition", "x : Int\ny = 2\nprint y", "not followed by its definition");
+failure("a clause takes no more parameters than declared", "f : Int -> Int\nf a b = a\nprint 1", "declared with 1 parameter");
+failure("an ascribed ternary is parenthesized", "x = True ? 1 : 2 : Int\nprint x", "parenthesize a ternary");
+failure("a declared result is proved per clause", "app : Vect n a -> Vect m a -> Vect (n + m + 1) a\n" +
+    "app [] ys = ys\napp (x :: xs) ys = x :: app xs ys\nprint (app [1] [2])", "length mismatch");
 failure("':' is not cons", "print (1 : [2])", "cons is '::'");
 example("cons parameters parse", `
 f (x::rest) = rest

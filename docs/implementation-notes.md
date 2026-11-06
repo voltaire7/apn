@@ -56,11 +56,15 @@ intentional evaluation change.
   `{ t: "stmDef" }` binds into it.
 - The parser detects `f x = ...` definitions by lookahead (`isDef`): it scans
   parameter patterns, then requires `=`.
-- There are no type annotations, and cons is `::`. `checkColons` runs on
-  the tokens before parsing: a `:` must write a record entry (directly inside
-  `[ ]`) or close a ternary (pairing a `?` at the same bracket depth); any
-  other is reported as an annotation (before a capitalized name) or as cons
-  written `:`. Application
+- Cons is `::`. `checkColons` runs on the tokens before parsing: a `:`
+  writes a record entry (directly inside `[ ]`), closes a ternary (pairing a
+  `?` at the same bracket depth), or, spaced, declares or ascribes; any other
+  is reported. Declarations and ascription are expanded as they are parsed,
+  so nothing after the parser sees them: `e : T` is `T e` (a function type,
+  which applied would call its argument, is `((T r) -> r) e`), `(p : T)` the
+  typed pattern `((T) p)` (`(t p)` for a type variable), and a declaration
+  (`parseDeclaration`) a marker that `applyDeclarations` replaces, typing the
+  parameters of the clauses after it and claiming their results. Application
   statements such as `print $ head $ [1,2,3]` lack `=`, so they stay
   expressions. `skipContinuation` handles indented definition bodies.
 - `groupClauses` merges consecutive same-name, same-arity definitions into one
