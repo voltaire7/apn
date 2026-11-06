@@ -54,6 +54,12 @@ for (const [source, expected] of [
     [`${FL}rv (List _ xs) = fl (acc, x -> x :: acc) [] xs\nf xs = map (x -> x) (rv xs)\nf [1,2]`, '[2,1]'],
     // Its lengths are the run's: a fold that keeps its accumulator keeps [1,2].
     [`${FL}g (fl (acc, x -> acc) [1,2] [3])`, '3'],
+    // (HashMap m) binds a map, of any keys and values.
+    ['ks (HashMap m) = keys m; ks (HashMap [["a",1]])', '["a"]'],
+    // Clauses typed by different types recurse through the finished function:
+    // ln (keys m) is a List String, ln (to (List Char) s) a List Char.
+    ['ln (String s) = ln (to (List Char) s); ln (HashMap m) = ln (keys m); ln (List _ xs) = 7\n' +
+        '[ln (HashMap [["a",1]]), ln "ab", ln [1]]', '[7,7,7]'],
     // Typed clauses recursing at different types (ln [1] beside ln ["a"]):
     // each call takes the clause the run takes, not the first call's type.
     ['ln (Int n) = ln [1]; ln (String s) = ln ["a"]; ln (List _ xs) = 7; [ln 5, ln "ab", ln [2]]', '[7,7,7]'],

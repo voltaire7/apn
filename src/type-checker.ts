@@ -896,7 +896,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The functions whose clauses are being inferred: the type a recursive
     // call first gave each, and the calls that type does not fit, which take
     // the function's finished type instead (see defineClauses).
-    const definingSelf: { pending: Ty; targets: Ty[] }[] = [];
+    // byType: clauses typed by different types at one parameter ((String s),
+    // (HashMap m), (List _ xs)), whose recursive calls all wait for it.
+    const definingSelf: { pending: Ty; targets: Ty[]; byType: boolean }[] = [];
+    // A recursive call the finished function decides (see definingSelf).
+    function selfCall(self: { targets: Ty[] }, argument: Entry): Ty {
+        const target = variable();
+        self.targets.push(target);
+        return deferredCall(target, argument);
+    }
     // Two of a call's results that are one: alike, and if partial calls, of the
     // same clauses (f [] and f (x :: rest), both a -> List b -> a, are two).
     function sameChoice(a: Ty, b: Ty): boolean {
@@ -2276,7 +2284,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return;
                 }
                 if (t.k === "type") {
-                    const value = t.value.k === "atom" && t.value.name === "List" ? list(variable()) : t.value;
+                    // A collection's pattern takes one of any elements: (List xs), (HashMap m).
+                    const value = t.value.k === "atom" && t.value.name === "List" ? list(variable())
+                        : t.value.k === "atom" && t.value.name === "HashMap" ? { k: "map", key: variable(), value: variable() } as Ty : t.value;
                     unify(value, expected, e);
                     // A numeric constructor pattern binds the untyped payload, as at
                     // runtime: (UInt8 x) binds 5 for UInt8 5, a plain integer. A
@@ -3009,6 +3019,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // record it updates (model [name: n]): decided once its type is known.
             // (Any other argument keeps a function being defined inferable.)
             if (e.t === "record") return deferredCall(f, argument);
+            const self = !choosing ? definingSelf.find(d => d.byType && resolve(d.pending) === f) : undefined;
+            if (self) return selfCall(self, argument);
             const result = variable();
             unify(f, fn(argument.type, result), e);
             return result;
@@ -3017,11 +3029,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // A recursive call another clause's call has not typed for (ln [1]
             // in ln (String s) after ln ["a"]): the finished function decides it.
             const self = !choosing ? definingSelf.find(d => resolve(d.pending) === f) : undefined;
-            if (self && !succeeds(() => unify(copy(f.input), copy(argument.type), e))) {
-                const target = variable();
-                self.targets.push(target);
-                return deferredCall(target, argument);
-            }
+            if (self && (self.byType || !succeeds(() => unify(copy(f.input), copy(argument.type), e)))) return selfCall(self, argument);
             const selection = f.pattern?.p === "schema" && resolve(f.input).k === "list" ? f.pattern.value : f.pattern;
             const selected = selection ? recordSelection(selection, argument.type, e) : argument.type;
             if (selected !== argument.type) return application({ ...f, pattern: undefined }, { ...argument, type: selected }, e);
@@ -6773,7 +6781,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // previous meaning too (sin (Dual a b) = Dual (sin a) ...).
         const fallback = previous && !previous.recursive ? overloaded(name, clauses[0].params.length, previous) : undefined;
         scope.set(name, { type: fallback ? { k: "overload", choices: [pending, fallback], name } : pending, mono: true, recursive: true });
-        const self = { pending, targets: [] as Ty[] };
+        const typeTag = (p: Pattern | undefined) => p?.p === "constr" && TYPE_NAMES.includes(p.tag) ? p.tag : undefined;
+        const byType = clauses[0].params.some((_, i) => new Set(clauses.map(c => typeTag(c.params[i])).filter(Boolean)).size > 1);
+        const self = { pending, targets: [] as Ty[], byType };
         definingSelf.push(self);
         try { defineGroups(); } finally { definingSelf.splice(definingSelf.indexOf(self), 1); }
         function defineGroups(): void {
