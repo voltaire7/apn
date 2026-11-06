@@ -42,6 +42,10 @@ for (const [source, expected] of [
     // elements are what hd gives, in a branch of what left is.
     ['import "function"; hd (x :: _) = x; hd [] = fail "empty"; nl [] = True; nl (_ :: _) = False\n' +
         'm left right = nl left ? right : (nl right ? left : [hd left])\nm [1] [2]', '[1]'],
+    // A call no clause ranking decides, its recursive clause's result free,
+    // has the definition's type as a whole: fl's is (a -> b -> a) -> a -> List b -> a.
+    ['fl f acc [] = acc; fl f acc (x :: rest) = fl f (f acc x) rest\n' +
+        'rv (List _ xs) = fl (acc, x -> x :: acc) [] xs\nf xs = map (x -> x) (rv xs)\nf [1,2]', '[2,1]'],
     // Another union of list types is unfolded when it runs.
     ['Pairs a = [] | a :: a :: Pairs a; f (Pairs Int xs) = length xs; f [1,2]', '2'],
     // Clauses typed by their lists' element types are overloads, in either order.

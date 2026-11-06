@@ -1764,6 +1764,22 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const inputs = e.t === "lambda" ? e.params.map(typeVariable) : e.params.map(pattern);
         return inputs.reduceRight((output: Ty, input) => fn(input, output, undefined, true), read(e.body));
     }
+    // A clause overload's type as a whole: its choices' types unified, their
+    // list lengths left open, where they agree. That is the type HM gives the
+    // definition (fl f acc [] = acc; fl f acc (x :: r) = fl f (f acc x) r is
+    // (a -> b -> a) -> a -> List b -> a), which ranking its clauses refines.
+    function principalOf(f: Extract<Ty, { k: "overload" }>): Ty | undefined {
+        if (f.undecided || f.choices.length < 2) return undefined;
+        choosing++;
+        try {
+            const whole = withoutLengths(copy(f.choices[0]));
+            for (const other of f.choices.slice(1)) unify(whole, withoutLengths(copy(other)), { t: "placeholder" });
+            return whole;
+        } catch (error) {
+            if (!error || typeof error !== "object" || !("message" in error)) throw error;
+            return undefined;
+        } finally { choosing--; }
+    }
     // An undecided call used where no type is named.
     function ambiguous(t: Extract<Ty, { k: "union" }>, e?: Expr): never {
         return problem(`ambiguous: nothing decides which ${t.name ?? "overload"}`, e, `name the type it should have, as in \`Int (${t.name ?? "f"} ...)\``);
@@ -2743,7 +2759,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return union(input.choices.map(choice => application(f, { ...argument, type: choice }, e)));
             }
             let outputs: Ty[] = [];
-            const accepted: { clauses?: ClauseOrder[]; call?: Entry[] }[] = [];
+            const accepted: { clauses?: ClauseOrder[]; call?: Entry[]; free?: boolean }[] = [];
             // The builtin meaning clauses extend (get's), last, says why it fails.
             let builtinError: unknown;
             for (const choice of f.choices) {
@@ -2759,7 +2775,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         if (next.k === "fn" && next.clauses === node.clauses) next.callArgs = args;
                         else call = args;
                     }
-                    accepted.push({ clauses: node.k === "fn" ? node.clauses : undefined, call });
+                    // A result no input decides (a recursive call's, or fail's).
+                    const result = resolve(out);
+                    const free = node.k === "fn" && result.k === "var" && !variables(resolve(node.input)).has(result);
+                    accepted.push({ clauses: node.k === "fn" ? node.clauses : undefined, call, free });
                 } catch (error) {
                     if (!error || typeof error !== "object" || !("message" in error)) throw error;
                     if (node.k === "intrinsic") builtinError = error;
@@ -2776,7 +2795,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // (an undecided overload): neither hides the other.
                 const samePatterns = (a: typeof ranked[number], b: typeof ranked[number]) => !!f.undecided && clauseKey("", a.clause) === clauseKey("", b.clause);
                 const runs = (r: typeof ranked[number]) => !r.fails && !sure.some(d => d !== r && before(d, r) && !samePatterns(d, r));
-                outputs = outputs.filter((_, n) => accepted[n].clauses!.some(c => runs(ranked.find(r => r.clause === c)!)));
+                const kept = accepted.map(a => a.clauses!.some(c => runs(ranked.find(r => r.clause === c)!)));
+                outputs = outputs.filter((_, n) => kept[n]);
+                accepted.splice(0, accepted.length, ...accepted.filter((_, n) => kept[n]));
                 // Still ambiguous, and the arguments depend on an enclosing function's
                 // parameters: decide at that function's calls, where they are known.
                 if (!deciding && outputs.length > 1 && outputs.some(x => text(x) !== text(outputs[0])) && accepted.some(a => a.call!.some(symbolic))) {
@@ -2786,6 +2807,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (!outputs.length && builtinError) throw builtinError;
             if (!outputs.length) return problem(`no overload accepts ${text(argument.type)}`, e);
             if (outputs.length === 1 || outputs.every((x) => text(x) === text(outputs[0]))) return outputs[0];
+            // Undecided, with a result no input decides (a recursive call's):
+            // the function's type as a whole decides it (see principalOf).
+            const whole = accepted.some(a => a.free) ? principalOf(f) : undefined;
+            if (whole) return application(whole, argument, e);
             // Partial calls (an intrinsic's too) stay choices the next argument decides.
             if (outputs.every((x) => ["fn", "intrinsic"].includes(resolve(x).k))) return { k: "overload", choices: outputs, undecided: f.undecided, name: f.name };
             if (f.undecided) return { k: "union", choices: outputs, undecided: true, name: f.name };
