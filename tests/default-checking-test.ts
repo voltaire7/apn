@@ -69,6 +69,8 @@ for (const [source, expected] of [
         'g [p,q] = p\ng (en [10,20])', '[0,10]'],
     // Another union of list types is unfolded when it runs.
     ['Pairs a = [] | a :: a :: Pairs a; f (Pairs Int xs) = length xs; f [1,2]', '2'],
+    // A value of either list type takes each one's clause, [] among them.
+    ['nl [] = True; nl (_ :: _) = False; [nl (head [[],[1]]), nl (head [[1],[]])]', '[True,False]'],
     // Clauses typed by their lists' element types are overloads, in either order.
     ['f (List Int xs) = "ints"; f (List String xs) = "strings"; [f [1], f ["a"]]', '["ints","strings"]'],
     ['f (List String xs) = "strings"; f (List Int xs) = "ints"; [f [1], f ["a"]]', '["ints","strings"]'],
@@ -863,6 +865,10 @@ for (const [source, expected] of [
     // accumulator, as a fold reads it each step.
     ['h (_ x) = x + 1; g (f (r (h 2 == 3 && h (Int32 2) == 3)))', '0'],
     ['fs f (_ acc) [] = acc; fs f (_ acc) (x :: rest) = fs f (f acc x) rest\ng (f (r (fs (+) 0 [1,2] == 3)))', '0'],
+    // A list's tail is computed when read: the [] three steps in is found
+    // before the fourth step, tl [], which fails, is ever taken.
+    ['nl [] = True; nl (_ :: _) = False; tl (_ :: r) = r; it h x = x :: it h (h x)\n' +
+        'fi p (x :: rest) = p x ? x :: fi p rest : fi p rest; g (f (q (head (fi nl (it tl [1,2])))))', '0'],
 ] as const) Deno.test(`builtins and std evaluated: ${source}`, () => {
     const actual = run(session(), `${optionClauses}\n${sizeClauses}\n${textClauses}\n${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

@@ -2767,7 +2767,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (input.k === "var" || input.k === "operation") return deferredCall(f, argument);
             // A value of a union of known types is one of them: each takes the
             // clause that accepts it, as the runtime dispatches, and every one must.
-            if (input.k === "union" && !input.undecided && input.choices.every(choice => !variables(choice).size && resolve(choice).k !== "operation")) {
+            // An empty list's element type is not one to know ([] | Vect 1 Int).
+            const known = (choice: Ty) => { const c = resolve(choice); return c.k === "list" && c.items?.length === 0 || !variables(c).size; };
+            if (input.k === "union" && !input.undecided && input.choices.every(choice => known(choice) && resolve(choice).k !== "operation")) {
                 return union(input.choices.map(choice => application(f, { ...argument, type: choice }, e)));
             }
             let outputs: Ty[] = [];
@@ -5498,7 +5500,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // The tail is evaluated only when an element past the head is needed.
         if (op === "::") {
             const h = lazyValue(() => value(left), { exprs: [left], env });
-            return lazyList(() => ({ head: h, tail: value(right) ?? {} }), { exprs: [left, right], env });
+            // The tail is computed when read, as at runtime: x :: filter p rest
+            // has its head before filter looks at rest.
+            const tail = lazyList(() => cellOf(value(right)), { exprs: [right], env });
+            return lazyList(() => ({ head: h, tail }), { exprs: [left, right], env });
         }
         if (op === "++") {
             const l = value(left), r = value(right);
