@@ -1278,7 +1278,8 @@ variants. `Float` is flexible floating precision, using binary64 by default.
 `Float32` and `Float64` commit to binary32 and binary64 respectively.
 `Fraction` holds an exact rational, `Complex` any numeric complex value, and
 `ComplexExact` an exact one. Constructors are first-class functions, e.g.
-`map Int [1,2]`. Constructed values print their type: `Int32 123`.
+`map Int [1,2]`. A number prints as its value whatever its type (`Int32 123`
+prints `123`); `typeOf` gives the type.
 
 `UInt` is the natural numbers, with built-in constructors `Z` (`UInt 0`) and
 `S` (`S n` is `n + 1`, converting `n` as `UInt n` does). The patterns `Z` and
@@ -1290,8 +1291,8 @@ for a literal).
 ```apn
 factorial Z = 1
 factorial (S k) = (k + 1) * factorial k
-factorial 20                     # UInt 2432902008176640000
-S (S Z)                          # UInt 2
+factorial 20                     # 2432902008176640000, a UInt
+S (S Z)                          # 2, a UInt
 ```
 
 `S k` destructures, it does not unwrap: `k` is the predecessor, itself a `UInt`,
@@ -1336,12 +1337,12 @@ not mutated. This is runtime precision selection, not backwards type inference.
 
 ```apn
 .1 + .2                       # 0.30000000000000004
-Float32 .1 + .2               # Float32 0.3
-Float .2 + Float32 .1         # Float32 0.3
+Float32 .1 + .2               # 0.3, a Float32
+Float .2 + Float32 .1         # 0.3, a Float32
 x = .2
-Float32 .1 + x                # Float32 0.3
+Float32 .1 + x                # 0.3, a Float32
 # Float32 .1 + Float64 .2     # error: explicit cast required
-Float32 .1 + cast Float32 (Float64 .2) # Float32 0.3
+Float32 .1 + cast Float32 (Float64 .2) # 0.3, a Float32
 ```
 
 Different fixed precisions require a cast even if a particular conversion would

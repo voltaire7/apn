@@ -103,7 +103,8 @@ export class IOTail { constructor(public next: Value) {} }
 
 export function valueToString(v: Value): string {
     switch (v.kind) {
-        case "int": case "float": case "rational": case "complex": return (v.typeName && v.typeName !== "Int" && v.typeName !== "Float" ? v.typeName + " " : "") + numberText(v);
+        // A number shows its value; typeOf shows its type (Int32 5 prints 5).
+        case "int": case "float": case "rational": case "complex": return numberText(v);
         case "mutable": return valueToString(v.v);
         case "functionType": return `${v.from.kind === "functionType" ? "(" + typeToString(v.from) + ")" : typeToString(v.from)} -> ${typeToString(v.to)}`;
         case "contract": return `((${valueToString({ kind: "functionType", from: v.from, to: v.to })}) (${valueToString(v.target)}))`;

@@ -7,7 +7,7 @@ ffi = import "ffi"
 ffi.withLibrary "./libmath.dylib" [
     add: ffi.function [Int32,Int32] Int32
 ] c -> {
-    print (c.add 20 22)  # Int32 42
+    print (c.add 20 22)  # 42
 }
 ```
 
@@ -111,9 +111,9 @@ or memory with an explicit native ownership protocol.
 ffi = import "ffi"
 p = ffi.allocate Int32 2
 set p $ 41
-ffi.peek Int32 p                # Int32 41
+ffi.peek Int32 p                # 41
 ffi.poke Int32 99 (ffi.offset 4 p)
-ffi.peek Int32 (ffi.offset 4 p) # Int32 99
+ffi.peek Int32 (ffi.offset 4 p) # 99
 ```
 
 `p = ffi.allocate ...` retains the same allocation on repeated use, like a

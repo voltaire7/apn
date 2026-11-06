@@ -9,12 +9,12 @@ ffi.withLibrary (head args) [
     echo_u64: ffi.function [UInt64] UInt64
     increment: ffi.function [Pointer] []
 ] c -> {
-    print (c.add 20 22)                       # Int32 42
+    print (c.add 20 22)                       # 42
     print c.greeting                     # hello from C
-    print (c.text_length "hé😀")               # Int32 7 (UTF-8 bytes)
-    print (c.echo_u64 18446744073709551615)    # UInt64 18446744073709551615
+    print (c.text_length "hé😀")               # 7 (UTF-8 bytes)
+    print (c.echo_u64 18446744073709551615)    # 18446744073709551615
     p = ffi.allocate Int32 1
     set p $ 41
     c.increment p
-    print (ffi.peek Int32 p)                  # Int32 42
+    print (ffi.peek Int32 p)                  # 42
 }

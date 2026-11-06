@@ -25,7 +25,7 @@ for (const [source, expected] of [
     ['V = [x: Float, y: Float]\nV [x: 1]', '[x: 1.0, y: 0.0]'],
     ['V = [x: Float, y: Float]\nV [1,2]', '[x: 1.0, y: 2.0]'],
     ['v = [x: Float] []\nv.x = 2\ntypeOf v.x', 'Float'],
-    ['v = [x: Int8] []\nv.x = 12\nv', '[x: Int8 12]'],
+    ['v = [x: Int8] []\nv.x = 12\nv', '[x: 12]'],
     ['[x: Float, label: "origin", count: 7] []', '[x: 0.0, label: "origin", count: 7]'],
     ['[x: Int, y: Int] [extra: 3]', '[x: 0, y: 0, extra: 3]'],
     ['[nested: [x: Float], xs: [Int]] []', '[nested: [x: 0.0], xs: [0]]'],
@@ -45,9 +45,9 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const [type, expected] of [
-    ['Int', '0'], ['Float', '0.0'], ['Int8', 'Int8 0'], ['UInt', 'UInt 0'],
-    ['Float32', 'Float32 0.0'], ['Float64', 'Float64 0.0'],
-    ['Fraction', 'Fraction 0'], ['Complex', 'Complex 0'], ['ComplexExact', 'ComplexExact 0'],
+    ['Int', '0'], ['Float', '0.0'], ['Int8', '0'], ['UInt', '0'],
+    ['Float32', '0.0'], ['Float64', '0.0'],
+    ['Fraction', '0'], ['Complex', '0'], ['ComplexExact', '0'],
     ['Number', '0'], ['Real', '0'], ['Integer', '0'], ['Exact', '0'], ['Inexact', '0.0'],
     ['Bool', 'False'], ['String', '""'], ['Char', "'\\0'"], ['[]', '[]'],
     ['List', '[]'], ['Record', '[]'], ['HashMap', 'HashMap []'], ['Pointer', 'Pointer 0x0'],

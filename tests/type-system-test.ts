@@ -3,7 +3,7 @@ import { Interpreter } from "../src/interp.ts";
 import { APNError } from "../src/errors.ts";
 
 for (const [source, expected] of [
-    ["[Int32 1 + Int64 2, Int8 1 + Int 2]", "[Int64 3, 3]"],
+    ["xs = [Int32 1 + Int64 2, Int8 1 + Int 2]; [xs, map typeOf xs]", "[[3,3],[Int64,Int]]"],
     ["[1,2] * Int", "[1,2]"],
     ['f (Number x) = 1\nf 0 = 2\nf 0', '2'],
     ["typeOf $ True", "Bool"],
@@ -34,16 +34,16 @@ for (const [source, expected] of [
     ["myTypeOf (t x) = t\nmyTypeOf [missing]", "[a]"],
     ["sameType (t x) (t y) = True\nsameType x y = False\n[sameType 1 2, sameType 1 True]", "[True,False]"],
     ["True ~ [(t x) -> t]", "Bool"],
-    ["Int 123", "123"], ["Int32 123", "Int32 123"],
-    ["UInt 123", "UInt 123"], ["UInt32 4294967295", "UInt32 4294967295"],
-    ["Float 3", "3.0"], ["Float32 .5", "Float32 0.5"],
-    ["Fraction (1/3)", "Fraction 1/3"], ["Complex (1+2i)", "Complex 1+2i"],
+    ["Int 123", "123"], ["x = Int32 123; [x, typeOf x]", "[123,Int32]"],
+    ["x = UInt 123; [x, typeOf x]", "[123,UInt]"], ["x = UInt32 4294967295; [x, typeOf x]", "[4294967295,UInt32]"],
+    ["Float 3", "3.0"], ["x = Float32 .5; [x, typeOf x]", "[0.5,Float32]"],
+    ["x = Fraction (1/3); [x, typeOf x]", "[1/3,Fraction]"], ["x = Complex (1+2i); [x, typeOf x]", "[1+2i,Complex]"],
     ["Int (truncate 3.7)", "3"], ["Int $ truncate $ 3.7", "3"],
-    ["Float32 1 / 10", "Float32 0.1"],
+    ["x = Float32 1 / 10; [x, typeOf x]", "[0.1,Float32]"],
     ["Int 3.0", "3"],
     ["typeOf (Int32 123)", "Int32"], ["isType Number (Int32 1)", "True"],
-    ["[Int32 1 + Int32 2, Int32 1 + 2]", "[Int32 3, Int32 3]"],
-    ["Int32 1 / Int32 2", "Fraction 1/2"],
+    ["xs = [Int32 1 + Int32 2, Int32 1 + 2]; [xs, map typeOf xs]", "[[3,3],[Int32,Int32]]"],
+    ["x = Int32 1 / Int32 2; [x, typeOf x]", "[1/2,Fraction]"],
     ["take 3 (100 * _ -> Int 0)", "[0,0,0]"],
     ["length (100 * _ -> Int 0)", "100"],
     ["take 3 (100 * Int)", "[0,1,2]"],
@@ -59,9 +59,9 @@ for (const [source, expected] of [
     ['f (Int32 x) = x + 1\nf 2', '3'],
     ['same (Number x) (Number x) = True\nsame a b = False\n[same 1 1, same 1 2]', '[True,False]'],
     ['map (Int \\ truncate) [1.5,2.5]', '[1,2]'],
-    ['f = Int32\nf 5', 'Int32 5'],
-    ['Int64 9223372036854775807', 'Int64 9223372036854775807'],
-    ['UInt128 340282366920938463463374607431768211455', 'UInt128 340282366920938463463374607431768211455'],
+    ['f = Int32\nx = f 5; [x, typeOf x]', '[5,Int32]'],
+    ['x = Int64 9223372036854775807; [x, typeOf x]', '[9223372036854775807,Int64]'],
+    ['x = UInt128 340282366920938463463374607431768211455; [x, typeOf x]', '[340282366920938463463374607431768211455,UInt128]'],
 ]) {
     Deno.test(`type system: ${source}`, () => {
         const interp = new Interpreter();

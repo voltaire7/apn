@@ -16,13 +16,13 @@ const FACTORIAL = "factorial Z = 1; factorial (S k) = (k + 1) * factorial k; ";
 const TO_LIST = "toList Z = []; toList (S k) = k :: toList k; ";
 
 for (const [source, expected] of [
-    ["Z", "UInt 0"],
-    ["S (S Z)", "UInt 2"],
-    ["S 5", "UInt 6"],
-    [FACTORIAL + "factorial 20", "UInt 2432902008176640000"],
-    [TO_LIST + "toList 3", "[UInt 2, UInt 1, UInt 0]"],
+    ["Z", "0"],
+    ["S (S Z)", "2"],
+    ["S 5", "6"],
+    [FACTORIAL + "factorial 20", "2432902008176640000"],
+    [TO_LIST + "toList 3", "[2,1,0]"],
     // A bare Z takes no fields, so a second parameter stays a parameter.
-    ["plus Z m = m; plus (S k) m = S (plus k m); plus 2 (UInt 3)", "UInt 5"],
+    ["plus Z m = m; plus (S k) m = S (plus k m); plus 2 (UInt 3)", "5"],
     ["fib Z = 0; fib (S Z) = 1; fib (S (S k)) = fib (S k) + fib k; fib 20", "6765"],
     // The checker evaluates them in types.
     [FACTORIAL + "Vect (factorial 3) Int [1,2,3,4,5,6]", "[1,2,3,4,5,6]"],
@@ -36,7 +36,7 @@ for (const [source, expected] of [
     // runtime; S k binds the predecessor, a UInt.
     ["widen (UInt8 x) = x + 300; widen 5", "305"],
     ["down (UInt8 x) = x == 0 ? 0 : down (x - 1); down 3", "0"],
-    ["pred (S k) = k; pred 5 - 1", "UInt 3"],
+    ["pred (S k) = k; pred 5 - 1", "3"],
     // (_ x) takes the payload and discards the type.
     ["payload (_ x) = x; payload (Int32 5)", "5"],
     // A new type's value is taken apart with its pattern, not by its base type.

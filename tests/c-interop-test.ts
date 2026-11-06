@@ -23,36 +23,38 @@ function run(source: string): string {
     const interpreter = new Interpreter();
     // The library's path on a line of its own: a temporary directory's may be long.
     const prelude = `ffi = import "ffi"\nlibrary = ${JSON.stringify(library ?? "")}\n`;
-    return interpreter.renderString(interpreter.run(parseDocument(prelude + source)));
+    // The value and its type: what C returns is the subject.
+    const value = interpreter.run(parseDocument(prelude + source));
+    return `${interpreter.renderString(value)} : ${interpreter.typeText(value)}`;
 }
 function call(body: string): string {
     return `ffi.withLibrary library ${signatures} c -> {\n${body.split('\n').map((s) => '    ' + s).join('\n')}\n}`;
 }
 for (const [name, body, expected] of [
-    ['signed integers', 'c.add 12 30', 'Int32 42'],
-    ['partial application', 'addTen = c.add 10\naddTen 32', 'Int32 42'],
-    ['uint64 stays exact', 'c.echo_u64 18446744073709551615', 'UInt64 18446744073709551615'],
-    ['float64', 'c.half 5', '2.5'],
-    ['numeric defaults', 'v = [a: Int32, b: Int32] []\nc.add v.a v.b', 'Int32 0'],
-    ['pointer default', 'p = [value: Pointer] []\nc.echo_pointer p.value == p.value', 'True'],
-    ['boolean default', 'v = [flag: Bool] []\nc.invert v.flag', 'True'],
-    ['string default', 'v = [text: String] []\nc.text_length v.text', 'Int32 0'],
-    ['float32', 'c.half_f32 .5', 'Float32 0.25'],
-    ['booleans', 'c.invert True', 'False'],
-    ['no C arguments', 'c.answer', 'Int32 42'],
-    ['optional explicit unit', 'c.answer []', 'Int32 42'],
-    ['bare C action repeats', 'c.tick_void\nc.tick_void\nc.cell_value', 'Int32 2'],
-    ['bare C calls in arithmetic', 'c.tick + c.tick', 'Int32 3'],
-    ['bare C call shares an argument thunk', 'twice x = x + x\ntwice c.tick', 'Int32 2'],
-    ['unused bare C calls remain lazy', 'unused = [c.tick]\nc.cell_value', 'Int32 0'],
-    ['UTF8 input', 'c.text_length "hé😀"', 'Int32 7'],
-    ['UTF8 result', 'c.greeting', '"hello from C"'],
-    ['null pointer', 'isType Pointer (c.null_pointer [])', 'True'],
-    ['managed pointer mutation', 'p = ffi.allocate Int32 1\nset p $ 41\nc.increment p\nreturn (ffi.peek Int32 p)', 'Int32 42'],
-    ['byte offset', 'p = ffi.allocate Int32 2\nffi.poke Int32 9 (ffi.offset 4 p)\nffi.peek Int32 (ffi.offset 4 p)', 'Int32 9'],
-    ['pointer identity through C', 'p = ffi.allocate Int32 1\nc.echo_pointer p == p', 'True'],
-    ['external C memory writes', 'p = c.cell_pointer []\nffi.poke Int32 42 p\nc.cell_value []', 'Int32 42'],
-    ['pointer keeps argument alive', 'p = c.echo_pointer (ffi.allocate Int32 1)\nc.increment p\nffi.peek Int32 p', 'Int32 1'],
+    ['signed integers', 'c.add 12 30', '42 : Int32'],
+    ['partial application', 'addTen = c.add 10\naddTen 32', '42 : Int32'],
+    ['uint64 stays exact', 'c.echo_u64 18446744073709551615', '18446744073709551615 : UInt64'],
+    ['float64', 'c.half 5', '2.5 : Float'],
+    ['numeric defaults', 'v = [a: Int32, b: Int32] []\nc.add v.a v.b', '0 : Int32'],
+    ['pointer default', 'p = [value: Pointer] []\nc.echo_pointer p.value == p.value', 'True : Bool'],
+    ['boolean default', 'v = [flag: Bool] []\nc.invert v.flag', 'True : Bool'],
+    ['string default', 'v = [text: String] []\nc.text_length v.text', '0 : Int32'],
+    ['float32', 'c.half_f32 .5', '0.25 : Float32'],
+    ['booleans', 'c.invert True', 'False : Bool'],
+    ['no C arguments', 'c.answer', '42 : Int32'],
+    ['optional explicit unit', 'c.answer []', '42 : Int32'],
+    ['bare C action repeats', 'c.tick_void\nc.tick_void\nc.cell_value', '2 : Int32'],
+    ['bare C calls in arithmetic', 'c.tick + c.tick', '3 : Int32'],
+    ['bare C call shares an argument thunk', 'twice x = x + x\ntwice c.tick', '2 : Int32'],
+    ['unused bare C calls remain lazy', 'unused = [c.tick]\nc.cell_value', '0 : Int32'],
+    ['UTF8 input', 'c.text_length "hé😀"', '7 : Int32'],
+    ['UTF8 result', 'c.greeting', '"hello from C" : String'],
+    ['null pointer', 'isType Pointer (c.null_pointer [])', 'True : Bool'],
+    ['managed pointer mutation', 'p = ffi.allocate Int32 1\nset p $ 41\nc.increment p\nreturn (ffi.peek Int32 p)', '42 : Int32'],
+    ['byte offset', 'p = ffi.allocate Int32 2\nffi.poke Int32 9 (ffi.offset 4 p)\nffi.peek Int32 (ffi.offset 4 p)', '9 : Int32'],
+    ['pointer identity through C', 'p = ffi.allocate Int32 1\nc.echo_pointer p == p', 'True : Bool'],
+    ['external C memory writes', 'p = c.cell_pointer []\nffi.poke Int32 42 p\nc.cell_value []', '42 : Int32'],
+    ['pointer keeps argument alive', 'p = c.echo_pointer (ffi.allocate Int32 1)\nc.increment p\nffi.peek Int32 p', '1 : Int32'],
 ] as const) {
     Deno.test({ name: `C interop: ${name}`, ignore: !library, fn() {
         const actual = run(call(body));

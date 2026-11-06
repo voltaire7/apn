@@ -88,7 +88,7 @@ for (const [source, expected] of [
     ['f (List String xs) = "strings"; f (List Int xs) = "ints"; [f [1], f ["a"]]', '["ints","strings"]'],
     ['f x = x + 1; [f 1, f 2.0]', '[2,3.0]'],
     ['factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))\nfactorial 5', '120'],
-    ['import "type"; cast Float32 (Float64 .2)', 'Float32 0.2'],
+    ['import "type"; cast Float32 (Float64 .2)', '0.2'],
     // A parameter's record is known from the fields code uses, also when it assigns them.
     ['f r = { r.a = 5; r }; f [a: 1, b: 2]', '[a: 5, b: 2]'],
     ['g r = { r.p.q = 3; r }; g [p: [q: 1, z: 0]]', '[p: [q: 3, z: 0]]'],
@@ -339,7 +339,7 @@ for (const [source, expected] of [
     ['f xs = foldl (acc, x -> x :: acc) xs [1,2]; g [a,b,c,d] = a + b; g (f [1,2])', '3'],
     ['f xs = filter (x -> x > 0) xs; g [a,b] = a + b; g (f [1,2])', '3'],
     ['toList 0 = []; toList k = k - 1 :: toList (k - 1); xs = toList 3; g [a,_,_] = a; g xs', '2'],
-    ['toList Z = []; toList (S k) = k :: toList k; Vect 3 UInt (toList 3)', '[UInt 2, UInt 1, UInt 0]'],
+    ['toList Z = []; toList (S k) = k :: toList k; Vect 3 UInt (toList 3)', '[2,1,0]'],
 ] as const) Deno.test(`checker infers recursive steps and list sizes: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -719,7 +719,7 @@ for (const [source, expected] of [
     ['g [a] = a; s x = Float32 x < Float32 0.5 ? None : Some x; h v = g (f (s v)); h 0.25', '0'],
     ['g [a] = a; k (Float32 x) = None; k x = Some x; h v = g (f (k (Float32 v))); h 0.5', '0'],
     ['g [a] = a; z = Int32 7; s x = x == Int32 7 ? None : Some x; g (f (s z))', '0'],
-    ['h v = Int8 v; h 5', 'Int8 5'],
+    ['h v = Int8 v; h 5', '5'],
 ] as const) Deno.test(`fixed-width conditions: ${source}`, () => {
     const actual = run(session(), `${optionClauses}\n${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -1277,7 +1277,7 @@ for (const [source, expected] of [
     ['g (Float n) = n; h x = g x; h 1', '1.0'],
     ['g (UInt n) = n; h x = g -x; d y = h y; 1', '1'],
     ['Pt = [x: Float, y: Float]; g (Pt p) = p.x; h x = g x; h [1,2]', '1.0'],
-    ['Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g [x,-x]; h 0', 'UInt 0'],
+    ['Pt = [x: UInt, y: UInt]; g (Pt p) = p.x; h x = g [x,-x]; h 0', '0'],
     ['Pt = [x: Float, y: Float]; g (Pt p) = p.y; h x = g [x,x]; h 2', '2.0'],
     ['g ((Int -> Int) f) = f 1; h x = g x; h (+ 1)', '2'],
     ['g [UInt8 a, UInt8 b] = a + b; g [3,3]', '6'],
@@ -1296,7 +1296,7 @@ for (const [source, expected] of [
     ['import "option"; g (Some (UInt8 x)) = x; h x = g x; h (Some 3)', '3'],
     ['Shape = Circle Float | Sq Float; Circle 2', 'Circle 2.0'],
     ['P = P2 Float Int | P0; P2 1 2', 'P2 1.0 2'],
-    ['B = Byte UInt8 | NoByte; mk x = Byte x; mk 3', 'Byte (UInt8 3)'],
+    ['B = Byte UInt8 | NoByte; mk x = Byte x; mk 3', 'Byte 3'],
     ['Shape = Circle Float | Sq Float; area (Circle r) = r * r; area (Circle 2)', '4.0'],
     ['M = Named String | Clear; applyTo f = f "a"; applyTo Named', 'Named "a"'],
     ['Pair a b = MkPair a b | NoPair; g (MkPair (Float x) (UInt8 y)) = y; g (MkPair 1 3)', '3'],
@@ -1304,14 +1304,14 @@ for (const [source, expected] of [
     ['P = P2 Int Int | P0; g (P2 a (UInt8 y)) = y; g (P2 1 3)', '3'],
     ['P = P2 Int Int | P0; g (P2 a (UInt8 y)) = y; h v = g (P2 1 v); h 3', '3'],
     ['P = P2 Int Int | P0; (P2 a (UInt8 y)) = P2 1 3; y', '3'],
-    ['g ([x: UInt8] r) = r.x; k = [x: 3]; g k', 'UInt8 3'],
-    ['g ([x: UInt8] r) = r.x; h r = g r; h [x: 3]', 'UInt8 3'],
-    ['g ([x: UInt8] r) = r.x; h v = g [x: v * 100]; h 1', 'UInt8 100'],
+    ['g ([x: UInt8] r) = r.x; k = [x: 3]; g k', '3'],
+    ['g ([x: UInt8] r) = r.x; h r = g r; h [x: 3]', '3'],
+    ['g ([x: UInt8] r) = r.x; h v = g [x: v * 100]; h 1', '100'],
     ['Pt = [x: Float, y: Float]; g (Pt p) = p.y; h v = g [x: v, y: v]; h 2', '2.0'],
-    ['g ([x: UInt8, y: UInt8] r) = r.y; b = [x: 1, y: 300]; g [_: b, y: 2]', 'UInt8 2'],
-    ['g ([x: UInt8] r) = r.x; g [x: 300, _: [x: 3]]', 'UInt8 3'],
-    ['g ([x: UInt8, y: UInt8] r) = r.x; h b = g [_: b, x: 3]; h [x: 1, y: 2]', 'UInt8 3'],
-    ['g ([x: UInt8] r) = r.x; h v = g [_: [x: v]]; h 3', 'UInt8 3'],
+    ['g ([x: UInt8, y: UInt8] r) = r.y; b = [x: 1, y: 300]; g [_: b, y: 2]', '2'],
+    ['g ([x: UInt8] r) = r.x; g [x: 300, _: [x: 3]]', '3'],
+    ['g ([x: UInt8, y: UInt8] r) = r.x; h b = g [_: b, x: 3]; h [x: 1, y: 2]', '3'],
+    ['g ([x: UInt8] r) = r.x; h v = g [_: [x: v]]; h 3', '3'],
     ['f y = { Float x = y; x * 2 }; f 1.5', '3.0'],
 ] as const) Deno.test(`typed binding: ${source}`, () => {
     if (run(session(), source) !== expected) throw new Error(source);
