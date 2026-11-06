@@ -20,7 +20,7 @@ const TEMPERATURE = "Celsius = | C Float\nFahrenheit = | F Float\nto Celsius = (
 for (const [source, expected] of [
     ["to String 1.5 ++ \"!\"", '"1.5!"'],
     ["(from String \"42\" : Int) + 1", "43"],
-    ["to JSON [a: 1, b: [True]]", '"{\\"a\\":1,\\"b\\":[true]}"'],
+    ["to JSON [a = 1, b = [True]]", '"{\\"a\\":1,\\"b\\":[true]}"'],
     ["from JSON \"[1,2]\"", "[1,2]"],
     ["to (List Char) \"a😀\"", "['a','😀']"],
     ["from (List Char) ['h','i']", '"hi"'],
@@ -34,7 +34,7 @@ for (const [source, expected] of [
     ["to [Char] \"h\"", "['h']"],
     ["to [Char,Char] \"hi\"", "['h','i']"],
     ["to [Float] [1]", "[1.0]"],
-    ["to [Int,String] [x: 1, y: \"a\"]", '[x: 1, y: "a"]'],
+    ["to [Int,String] [x = 1, y = \"a\"]", '[x = 1, y = "a"]'],
     // The checker evaluates to and from as the run does, beside a program's own instances.
     [TEMPERATURE + "(to (List Char) \"a😀\" : Vect 2 Char)", "['a','😀']"],
     ["Money (x : Float) = _\nto Float (Money m) = m\n([to Float (Money 1.2)] : Vect 1 Float)", "[1.2]"],

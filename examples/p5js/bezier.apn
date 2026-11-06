@@ -20,4 +20,4 @@ draw (p : Sketch) = {
     }) [0,20..180]
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

@@ -22,4 +22,4 @@ setup (p : Sketch) = {
     p.text "All images loaded!" (p.width / 2) 50
 }
 
-main = sketch [preload: [image1,image2,image3], setup: setup]
+main = sketch [preload = [image1,image2,image3], setup = setup]

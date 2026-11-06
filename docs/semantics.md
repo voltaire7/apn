@@ -63,7 +63,7 @@ list elements on separate lines remain separate elements.
 List literals separate elements with commas or newlines, so a multi-line list
 needs no commas. Juxtaposition on one line is application: `[f 2]` is a
 one-element list. Cons is `::`, so it needs no parentheses inside a list
-literal: `[0 :: []]` is `[[0]]`, while `[0: []]` is a record.
+literal: `[0 :: []]` is `[[0]]`.
 
 `::` always adds one element, the mirror of the cons pattern `x::xs`, which binds
 one element. Like a list literal, the result may mix element types:
@@ -84,7 +84,7 @@ Spacing is part of the syntax (a parse error otherwise):
 - A `,` follows its item directly. When no item it separates has a space in
   it (outside string and character literals), it takes nothing after it:
   `[1,2,3]`, `[0,-1,1/2,v.x]`, `["a b","c"]`; otherwise it takes one space:
-  `[1 + 1, 2]`, `[Some 1, None]`, `[x: 1, y: 2]`. The items are a line's in one
+  `[1 + 1, 2]`, `[Some 1, None]`, `[x = 1, y = 2]`. The items are a line's in one
   bracket, so `[[1,2],[3]]` but `[[1 + 1], [3]]`, and `[1, 2]` or `[1 + 1,2]` is
   an error. This covers list items and patterns, record fields, bare
   selections (`v.[x,y]`), ranges (`[1,3..9]`), `match` clause lists and import
@@ -106,8 +106,8 @@ Spacing is part of the syntax (a parse error otherwise):
   `a == -1`); a spaced one always subtracts, so `y = - 3` is an error and
   `(- 2)` a section. Before a closing bracket an operator ends a section
   (`(1 +)`).
-- A record field is `key: value`, not `key:value`: `[x: 1]`, not `[x:1]`;
-  likewise keyed patterns and selections (`[x: a, y: b]`).
+- A record field is `key: value`, not `key:value`: `[x = 1]`, not `[x:1]`;
+  likewise keyed patterns and selections (`[x = a, y = b]`).
 - `( )` and `[ ]` take no space inside (`(f x)`, `[1,2]`); a `{ }` block on one
   line takes exactly one (`{ 123 }`, not `{123}` or `{ 123  }`). Empty groups
   are `()`, `[]` and `{}`.
@@ -133,9 +133,7 @@ something else:
   parameter (as `f a e -> ...` is), which takes a type apart;
 - `f = (x -> e)` binds a value, while `f = x -> e` is a clause of `f`;
 - `[(x, y -> e)]`: in a list, the `,` would separate two items;
-- `xs (i) = v` sets an item, while `xs i = v` defines `xs`;
-- `obj.[(k)]` selects the computed key `k`, and `(r.1).2` is not `r.1.2`, which
-  reads the number `1.2`.
+- `xs (i) = v` sets an item, while `xs i = v` defines `xs`.
 
 A definition's parameters read as arguments do: each juxtaposed piece is one
 parameter, so `f Int x = ...` takes the type `Int`, then `x` (called `f Int 3`,
@@ -148,7 +146,7 @@ take a whole pattern, as an operand does: `Some x -> x`,
 `(Money a) + Money b = ...`, `Some v = m`.
 
 Lists print the same way: `print [1,2,[3]]` shows `[1,2,[3]]` and records show
-`[x: 1, y: 2]`. A list prints its items once its `,` is decided: when an item
+`[x = 1, y = 2]`. A list prints its items once its `,` is decided: when an item
 has a space, the list ends, or sixteen items are held, so an infinite one
 streams after its first sixteen (whose spacing it then keeps). `apn --loose` (or the language server's `looseSpacing` option)
 turns every spacing rule off, and lets a definition's `{` start on the next,
@@ -193,7 +191,7 @@ use `~` with guarded pattern lambdas instead (see
 There is no `if`/`then`/`else`; use the ternary `cond ? a : b`, which is
 `Bool cond a b` as if written in its place: the condition's
 [truthiness](#empty-results-and-truthiness) is a Bool, which applied to the two
-branches is one of them ([get](#record-fields-string-keys-and-positions)); clauses
+branches is one of them ([get](#records)); clauses
 for `get` a program adds for a Bool are the ones a ternary there uses. Only the
 selected branch runs, and the branches may differ in type (`x ? "yes" : False`;
 see [choices](gradual-and-dependent-types.md), as for `match` and clauses).
@@ -258,7 +256,7 @@ rebinding may have another type. The left side may be a pattern:
 `[a,b] = [1,2]`, a cons pattern `x::xs = [1,2,3,4]` (or `x :: y :: rest`),
 `Some x = optionValue` (parentheses optional, also for an imported
 constructor), a literal (`1 = n` asserts that `n` is 1), or a keyed
-record pattern `[x: a] = record`. A failed match is an error: before the
+record pattern `[x = a] = record`. A failed match is an error: before the
 run when the value is known (`1 = 2`, `None = Some 1`), otherwise when the
 binding runs. A bare `[x,y]`
 pattern also matches a record, selecting the fields named `x` and `y` (extra
@@ -356,7 +354,8 @@ print [1 + 1, 2]            # [2,2]
 
 A list item may be a binding, as a group's statement may: it binds for the
 items after it and, as in a block, yields no value of its own (`print [x = 1,
-x + 1]` prints `[2]`, and `do [x = 1, x + 1]` is 2). An `x <- m` item is a
+x + 1]` prints `[2]`, and `do [x = 1, x + 1]` is 2). A list of bindings alone
+is a [record](#records), which keeps them as its code. An `x <- m` item is a
 statement too: its value is the action `m`, and `do` runs it, binding `x` for
 the items after it, in any monad (`do [x <- [1,2], return (x * 10)]` is
 `[10,20]`). What such code yields item by item (`print`, `reduce`) is, for an
@@ -558,7 +557,7 @@ Level 2 * 5                             # 10
 
 The math functions (`sqrt`, `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`,
 `atan`, `atan2`, `abs`, `floor`, `ceiling`, `truncate`, `round`, `min`, `max`),
-`get` and `with` ([indexing](#record-fields-string-keys-and-positions)), and
+`get` and `with` ([indexing](#records)), and
 `negate` and `not` (so `-x` and `!x`) overload the same way, so a type can give
 them meaning too:
 `sin (Dual a b) = Dual (sin a) (b * cos a)` leaves `sin 0.5` as it was (the
@@ -604,35 +603,39 @@ without evaluating its head. Computed tails are checked when demanded, preservin
 `head (1::missing)`. Displaying a value nested inside itself also raises a clear
 error; ordinary recursive list spines such as `x = 1::x` still stream.
 
-## Record fields, string keys, and positions
+## Records
 
-Every record key is an ordinary string. Bare field names hide the quotes; quoted
-field syntax includes literal quote characters in the key. Both may coexist:
+A list literal whose items are all fields is a record. A field is a binding
+(`x = 1`, or a function, `f n = n * 2`), a declaration (`x : Float`, a field
+holding the type, or `x : Float = 1`, a typed value), or `use r`, which spreads
+`r`'s fields. Fields are code, as a block's statements are: each is in scope
+for those after it (`[x = 1, y = x + 1]`), and `x = x + 1` reads the `x` before
+it. The record keeps that code, so code joins and reads it as a list:
+`[x = 1] ++ [x + 1]` is the code `[x = 1, x + 1]` (see [code](#code)). A field
+holding a type prints as its declaration (`[x : Float]`), any other as its
+binding (`[x = 1]`).
+
+A field's name is its key: a name, or any text in backticks, which printing
+writes when the key is not a name. A string names a field too:
 
 ```apn
-obj = [field: 123, "field": 456, 1: 10, "1": 100]
+obj = [field = 123, `my value` = 1]
 ```
 
 | Access | Selects | Result above |
 | --- | --- | --- |
-| `obj.field` or `obj "field"` | Named field `field` | `123` |
-| `obj."field"` or `obj "\"field\""` | String containing `"field"`, quotes included | `456` |
-| `obj.1` or `obj "1"` | Numeric-named field `1` | `10` |
-| `obj."1"` or `obj "\"1\""` | String containing `"1"`, quotes included | `100` |
-| `obj 1` | Entry at position 1 | `["\"field\"",456]` |
+| `obj.field` or `obj "field"` | Field `field` | `123` |
+| ``obj.`my value` `` or `obj "my value"` | Field `my value` | `1` |
+| `obj 1` | Entry at position 1 | `["my value",1]` |
 
-A bare key in a record literal or keyed pattern may be several names, numbers
-and `-`s on one line, up to its `:`, kept as written: `[my value: 123]` and
-`[Content-Type: "json"]` have the keys `my value` and `Content-Type`, which are
-not the quoted keys `"my value"` and `"Content-Type"`. Select them with a
-string, `obj "Content-Type"` (after `.`, `obj.Content-Type` would subtract).
+After `.`, a string is applied (`obj."my value"` is `obj "my value"`), and a
+number is no field: `obj.1` is an error (write ``obj.`1` `` or `obj 1`).
 
 Application evaluates its argument: `key = "field"; obj key` selects a named
-field. Include quote characters in the argument to select a quoted field.
-`pairs`, iteration, and conversion to HashMap preserve the entire key string;
+field. `pairs`, iteration, and conversion to HashMap give each key's text;
 `pairs []` is `[]`, as `[]` is the empty record too.
 `obj.(expression)` evaluates with the record fields in scope; use `obj key` for computed lookup. Missing keys
-raise an error. Numeric field names retain their existing normalized spelling.
+raise an error.
 Applying a value that is not a function is `get`: `xs 2` is `get xs 2`, the
 prelude's `intrinsics.get`, which indexes lists, records and HashMaps as
 described here, and the prelude's clauses `get True a = _ -> a` and
@@ -661,15 +664,11 @@ enumeration's values do (their positions). A string argument performs
 Ordinary scalar lists such as `[10,20]` are not association lists and reject string lookup.
 HashMap application likewise keeps numeric `0` and string `"0"` distinct keys.
 
-Printing preserves key quotation. Field updates (`obj.field = value`,
-`obj."field" = value`), record cloning, and plucks (`obj.[field,"field"]`)
-preserve both identities. On an existing record, `obj "field" = value` updates
-or adds the key string `field`, just like `obj.field = value`. Strings containing
-quotes likewise update the corresponding quoted field. The key may be a string
-literal, variable, or expression: `obj key = value` and `obj (prefix ++ key) = value`.
-`obj "1" = value` updates numeric-named field `1`. An integer writes the entry
-at that position as reading it gives it, a `[key,value]` pair: for `v = [x: 1,
-y: 2]`, `v 0 = ["x1",22]` makes `[x1: 22, y: 2]` (a key another entry has is an
+On an existing record, `obj "field" = value` updates or adds the field `field`,
+just like `obj.field = value`. The key may be a string literal, variable, or
+expression: `obj key = value` and `obj (prefix ++ key) = value`. An integer
+writes the entry at that position as reading it gives it, a `[key,value]` pair:
+for `v = [x = 1, y = 2]`, `v 0 = ["x1",22]` makes `[x1 = 22, y = 2]` (a key another entry has is an
 error, as is a new one on a record a schema made). Assignment evaluates the key
 once before the RHS, replaces the selected slot with conversion checks for existing
 numeric values, variants, and function contracts, and rebinds a scoped copy.
@@ -678,17 +677,17 @@ inserted unchanged. On an unbound name or an existing function, `f "x" = value`
 remains a string-pattern function clause.
 
 A record a record schema made (`Quote [...]` or `Quote []` for
-`Quote = [quote: String, year: Int]`, a `(Quote q)` parameter, a nested
-schema's field) keeps the schema's fields: adding one, by `.`, a string key or
-`_`, is an error (`[quote: String, year: Int] has no field 'yaer'`), before
+`Quote = [quote : String, year : Int]`, a `(Quote q)` parameter, a nested
+schema's field) keeps the schema's fields: adding one, by `.` or a string
+key, is an error (`[quote : String, year : Int] has no field 'yaer'`), before
 the run when the checker knows the record, otherwise when the assignment runs.
-An update's copy keeps the type; a literal copy (`[_: q, extra: 1]`) is an
+An update's copy keeps the type; a literal copy (`[use q, extra = 1]`) is an
 ordinary record, open to new fields.
 
-A record applied to a record of fields is the same update: `r [f: v, g: w]`
+A record applied to a record of fields is the same update: `r [f = v, g = w]`
 is `{ r.f = v; r.g = w; r }` in every way, as Elm's `{ r | f = v, g = w }`,
-for a record of values and for a type given types (`Vector3 [x: Int]` is
-`Vector3.x = Int`). A type given values builds one instead (`Vector3 [x: 1]`;
+for a record of values and for a type given types (`Vector3 [x : Int]` is
+`Vector3.x = Int`). A type given values builds one instead (`Vector3 [x = 1]`;
 see [templates](templates-and-types.md)).
 
 An empty list `[]` becomes a record on its first field assignment.
@@ -697,13 +696,10 @@ An empty list `[]` becomes a record on its first field assignment.
 See the [access and assignment reference](templates-and-types.md#access-and-assignment-reference)
 for forms, conversion rules, scoping, and failure behavior.
 
-Destructuring `[field: a, "field": b]` selects each
-key explicitly; the bare pattern `[field]` selects only the named field.
-Renamed plucks such as `obj.["field": value]` create named destination fields.
-
-`pairs`, positional record access, record iteration, and conversion to `HashMap`
-preserve the full key string, including quote characters. The keys `x` and `"x"`
-therefore remain distinct in those views and conversions.
+Destructuring `[x = a, y = b]` binds each field to a name, the bare pattern
+`[x]` binds the field `x` to `x`, and `_ = rest` binds the record of the
+remaining fields. Renamed plucks such as `obj.[value = field]` create named
+destination fields.
 
 ## Definitions and actions
 
@@ -1257,8 +1253,8 @@ The checker checks a negated argument as written, so `g -1` (or `g -k` with
 where the value is known only at the call. A typed parameter (a numeric type, a schema, a contract) given a
 value that depends on an enclosing function's parameter is checked at that
 function's calls, by value, as a direct call would be: with
-`Pt = [x: Float, y: Float]` and `g (Pt p)`, `h x = g x` accepts `h [1,2]` as
-`g [1,2]` does, and `h x = g [x,-x]` rejects `h 2` for `[x: UInt, y: UInt]`
+`Pt = [x : Float, y : Float]` and `g (Pt p)`, `h x = g x` accepts `h [1,2]` as
+`g [1,2]` does, and `h x = g [x,-x]` rejects `h 2` for `[x : UInt, y : UInt]`
 but accepts `h 0`. For numbers: `h -2` passes `2` to `g`, and `h x = g x` accepts `h 2` and rejects
 `h -2` and `h "a"`. Such calls are checked even if `h` is never called: a
 call of `h` inside another, uncalled function (`d y = h 2`) is checked with
@@ -1401,14 +1397,14 @@ and `(3 : Int) * (2 : Int)` returns `6`, both still typed Int.
 
 ## HashMap
 
-`HashMap [["x",123]]` constructs from an association list; `HashMap [x: 123]`
+`HashMap [["x",123]]` constructs from an association list; `HashMap [x = 123]`
 constructs from a record. Empty construction is `HashMap []`. Keys may be finite
 numbers, strings, chars, or booleans. Numerically equal keys share an entry
 regardless of exactness or numeric type; distinct strings/chars stay distinct.
 Duplicate keys keep the last value. Insertion order is preserved for traversal,
 and replacing an existing key keeps its position.
 
-`insert [x: 123] $ HashMap []` returns a map containing x. `insert` accepts a
+`insert [x = 123] $ HashMap []` returns a map containing x. `insert` accepts a
 record or association list; `remove key map` returns a map without the key.
 Updates preserve the old map. `lookup key map` or `map key` retrieves a value,
 raising an error when absent; use `has key map` when absence is expected.
@@ -1598,12 +1594,6 @@ arguments raise an error before any argument is rendered. For example,
 `print $ format "vec = %" [vec]` prints one formatted record. Passing `vec`
 directly instead of `[vec]` is invalid when `vec` is a record.
 
-Negative dot keys remain literal: `obj.-1` means `obj "-1"`.
-Parenthesized keys remain literal inside record literals, plucks, and record
-patterns: `[(x): 2]`, `obj.[(x)]`, and `obj.[(x)] = [3]`. Use `obj "(x)"`
-for direct lookup. Parentheses immediately after a record dot now evaluate an
-expression in the record's scope; they no longer quote a field name.
-
 `enumerate xs` returns a lazy list of `[index,value]` pairs. Indices are exact
 integers starting at zero, so `enumerate [10,20]` is `[[0,10],[1,20]]`. It supports
 infinite lists, and enumerating an element does not force its value.
@@ -1615,7 +1605,7 @@ record's fields. Fields shadow outer names; other names resolve in the surroundi
 lexical scope, including functions such as `sqrt`.
 
 ```apn
-point = [x: 3, y: 4]
+point = [x = 3, y = 4]
 point.(x + y)                # 7
 point.([x,y])              # [3,4]
 point.(x = 10; x + y)        # 14
@@ -1637,13 +1627,13 @@ they do not implicitly update the original record. Returned functions and deferr
 values retain this local scope. Explicit side effects, including `Mutable` updates
 or writes through an environment view, keep their normal behavior.
 
-Only keys that are valid binding identifiers are exposed as local names. Quoted,
-numeric, and parenthesized key spellings are not converted to identifiers. Fields
-are installed without demanding their values or invoking stored actions. Existing
+Only fields whose keys are names are exposed as local names (`` `my value` ``
+is not). Fields are installed without demanding their values or invoking stored
+actions. Existing
 record-construction evaluation rules still apply.
 
-`record.(expression) = value` is not an assignment target. To update a literal
-field named `(x)`, use `record "(x)" = value` or `record.[(x)] = [value]`.
+`record.(expression) = value` is not an assignment target; `record key = value`
+updates a computed key.
 List operands retain dotted template application: `[Int,Float].([1] ++ [2])`
 returns `[1,2.0]`, evaluating the input expression in the surrounding scope.
 

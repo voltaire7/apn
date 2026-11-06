@@ -5,8 +5,8 @@ import ["p5","sequence"]
 # A ball: where it is, its size, its speed and direction along the way, and
 # its speed at rest.
 Ball = [
-    x: Float, y: Float, diameter: Float, xspeed: Float, yspeed: Float, direction: Float
-    restX: Float, restY: Float
+    x : Float, y : Float, diameter : Float, xspeed : Float, yspeed : Float, direction : Float
+    restX : Float, restY : Float
 ]
 balls = Mutable ([] : List Ball)
 # How much the device's acceleration must change to shake the balls.
@@ -28,8 +28,9 @@ newBall (p : Sketch) = {
     xspeed <- p.random -2 2
     yspeed <- p.random -2 2
     return [
-        x: (x : Float), y: (y : Float), diameter: (diameter : Float), xspeed: (xspeed : Float)
-        yspeed: (yspeed : Float), direction: 0.7, restX: (xspeed : Float), restY: (yspeed : Float)
+        x = (x : Float), y = (y : Float), diameter = (diameter : Float)
+        xspeed = (xspeed : Float), yspeed = (yspeed : Float), direction = 0.7
+        restX = (xspeed : Float), restY = (yspeed : Float)
     ]
 }
 
@@ -78,4 +79,4 @@ slowDown ball = {
     ball
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

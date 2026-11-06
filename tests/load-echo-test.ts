@@ -18,7 +18,7 @@ for (const command of ['load "main"', 'load $ "main"', 'load "main"']) {
                 if (runSource('take 5 infinite', i) !== '[0,1,2,3,4]') throw new Error('lazy export lost');
             }
             runSource('module <- load "main"', i, true);
-            if (runSource('module.v', i) !== '[x: 1, y: 2, z: 3]') throw new Error('module record lost');
+            if (runSource('module.v', i) !== '[x = 1, y = 2, z = 3]') throw new Error('module record lost');
         } finally { console.log = log; }
     });
 }

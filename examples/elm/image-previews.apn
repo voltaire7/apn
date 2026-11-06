@@ -12,7 +12,7 @@ Msg =
     | GotFiles file.File (List file.File)
     | GotPreviews (List String)
 
-init = [[hover: False, previews: []], browser.none]
+init = [[hover = False, previews = []], browser.none]
 
 update msg model = msg ~ [
     Pick -> [model, file.selectFiles ["image/*"] GotFiles]
@@ -63,4 +63,4 @@ viewPreview url = div [
 # A drop of one file or more (Elm's oneOrMore): no files is a drag leaving.
 dropped event = null event.files ? DragLeave : GotFiles (head event.files) (tail event.files)
 
-main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]
+main = browser.element [init = init, update = update, subscriptions = subscriptions, view = view]

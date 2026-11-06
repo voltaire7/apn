@@ -1,2 +1,2 @@
 # Native ABI declarations use APN type constructors.
-function parameters result = [parameters: parameters, result: result]
+function parameters result = [parameters = parameters, result = result]

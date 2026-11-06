@@ -43,4 +43,4 @@ limb (p : Sketch) angle h level turn = {
     p.pop
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

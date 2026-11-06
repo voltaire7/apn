@@ -22,10 +22,10 @@ for (const [source, expected] of [
     ['templates = [Int,Float]; values = [1,2]; templates.(values)', '[1,2.0]'],
     ['[Char,Char]."hi"', "['h','i']"],
     ['[Int] [0]', '[Int]'],
-    ['Vector3 = [x: Float, y: Float, z: Float]; Vector3 [1,2,3]', '[x: 1.0, y: 2.0, z: 3.0]'],
-    ['vec = [x: 1, y: 2]; vec.[y,x]', '[2,1]'],
-    ['vec = [x: 1, y: 2]; vec.[x,y] = vec.[y,x]; vec', '[x: 2, y: 1]'],
-    ['vec = [x: 1, y: 2]; vec.[x: a, y: b]', '[a: 1, b: 2]'],
+    ['Vector3 = [x : Float, y : Float, z : Float]; Vector3 [1,2,3]', '[x = 1.0, y = 2.0, z = 3.0]'],
+    ['vec = [x = 1, y = 2]; vec.[y,x]', '[2,1]'],
+    ['vec = [x = 1, y = 2]; vec.[x,y] = vec.[y,x]; vec', '[x = 2, y = 1]'],
+    ['vec = [x = 1, y = 2]; vec.[a = x, b = y]', '[a = 1, b = 2]'],
 ] as const) Deno.test(`list selection / template: ${source}`, () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(source)));
@@ -73,7 +73,7 @@ Deno.test('selection rejects nested indices when consumed', () => {
     throw new Error('expected invalid index');
 });
 
-for (const source of ['[Int].[]', '[Int].[1,2]', '[Int]."hi"', 'cast [Int] [1,2]', '[x: [Int]] [x: [1,2]]']) {
+for (const source of ['[Int].[]', '[Int].[1,2]', '[Int]."hi"', 'cast [Int] [1,2]', '[x : [Int]] [x = [1,2]]']) {
     Deno.test(`one template slot never broadcasts: ${source}`, () => {
         const i = new Interpreter();
         try { i.renderString(i.run(parseDocument(source))); } catch { return; }

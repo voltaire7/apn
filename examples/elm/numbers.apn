@@ -6,11 +6,11 @@ random = import "random"
 
 Msg = Roll | NewFace Int
 
-init = [[dieFace: 1], browser.none]
+init = [[dieFace = 1], browser.none]
 
 update msg model = msg ~ [
     Roll -> [model, random.generate NewFace (random.int 1 6)]
-    NewFace newFace -> [[dieFace: newFace], browser.none]
+    NewFace newFace -> [[dieFace = newFace], browser.none]
 ]
 
 subscriptions _ = browser.none
@@ -20,4 +20,4 @@ view model = div [] [
     button [onClick Roll] [text "Roll"]
 ]
 
-main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]
+main = browser.element [init = init, update = update, subscriptions = subscriptions, view = view]

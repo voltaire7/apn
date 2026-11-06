@@ -46,8 +46,8 @@ parameters are curried:
 identity value = value
 add x y = x + y
 first x y = x
-[identity [1,2], identity [x: 1, y: 2], add 1 2, first [1,2] 99]
-# [[1,2], [x: 1, y: 2], 3, [1,2]]
+[identity [1,2], identity [x = 1, y = 2], add 1 2, first [1,2] 99]
+# [[1,2], [x = 1, y = 2], 3, [1,2]]
 ```
 
 `add [1,2]` supplies only `x` and returns a function awaiting `y`. It does not
@@ -59,7 +59,7 @@ mean `add 1 2`. A collection variable works the same way as a literal.
 | --- | --- | --- |
 | `value` | Binds the entire list | Binds the entire record |
 | `[x,y]` | Binds exactly two elements by position | Binds fields named `x` and `y` |
-| `[x: a, y: b]` | Does not match | Binds fields `x` and `y` as `a` and `b` |
+| `[x = a, y = b]` | Does not match | Binds fields `x` and `y` as `a` and `b` |
 | `(x::xs)` | Binds the head and tail of a nonempty list | Does not match |
 
 `x :: xs` matches the constructor `::` names, as any infix pattern with an
@@ -73,7 +73,7 @@ consed onto `[]` ([sugar](semantics.md#sugar)), so it follows `::` too: after
 
 ```apn
 sumPair [x,y] = x + y
-[sumPair [1,2], sumPair [y: 2, x: 1, extra: 99]]
+[sumPair [1,2], sumPair [y = 2, x = 1, extra = 99]]
 # [3,3]
 ```
 
@@ -95,11 +95,11 @@ a constructor with several: with `P = P2 Int Int | P0`, `g (P2 a (y : UInt8))`
 accepts `g (P2 1 3)` and rejects `g (P2 1 300)`, and with
 `Pair a b = MkPair a b | NoPair`, `g (MkPair (x : Float) (y : UInt8))` rejects
 `g (MkPair 1 300)`. Record literals are checked by field the same way: for
-`g ([x: UInt8] r)`, `g [x: 300]` is a static range error, as are
-`k = [x: 300]; g k`, `h r = g r; h [x: 300]` and `h v = g [x: v * 100]; h 3`,
-while `h 1` passes. A spread (`_: other`) contributes its fields in order, as
-at runtime, so `g [x: 300, _: [x: 3]]` passes (the spread's `x` wins) and
-`g [x: 3, _: [x: 300]]` is rejected; with `h b = g [_: b, x: 3]`, a field of
+`g ([x : UInt8] r)`, `g [x = 300]` is a static range error, as are
+`k = [x = 300]; g k`, `h r = g r; h [x = 300]` and `h v = g [x = v * 100]; h 3`,
+while `h 1` passes. A spread (`use other`) contributes its fields in order, as
+at runtime, so `g [x = 300, use [x = 3]]` passes (the spread's `x` wins) and
+`g [x = 3, use [x = 300]]` is rejected; with `h b = g [use b, x = 3]`, a field of
 `b` is checked at each call of `h`.
 
 For records, the bare-name pattern
@@ -109,8 +109,8 @@ variable name. Renaming those variables also changes which fields it selects.
 Use a keyed pattern when local variable names should differ from field names:
 
 ```apn
-sumFields [x: a, y: b] = a + b
-sumFields [y: 2, x: 1]       # 3
+sumFields [x = a, y = b] = a + b
+sumFields [y = 2, x = 1]     # 3
 ```
 
 Missing fields or a wrong list length cause pattern mismatch; another clause
@@ -123,11 +123,11 @@ A record argument supplies named inputs without separate named-call syntax:
 
 ```apn
 area [width,height] = width * height
-area [height: 20, width: 10] # 200
+area [height = 20, width = 10] # 200
 ```
 
 This function also accepts `area [10,20]`. To require a record, write
-`area [width: w, height: h] = w * h`. Required fields must be present;
+`area [width = w, height = h] = w * h`. Required fields must be present;
 destructuring does not itself supply defaults for omitted names.
 
 ### Record-template parameters
@@ -135,7 +135,7 @@ destructuring does not itself supply defaults for omitted names.
 A template pattern converts an argument before binding its local name:
 
 ```apn
-Vector3 = [x: Float, y: Float, z: Float]
+Vector3 = [x : Float, y : Float, z : Float]
 lengthSquared (v : Vector3) = v.x ^ 2 + v.y ^ 2 + v.z ^ 2
 lengthSquared [1,2,3]    # 14.0
 ```
@@ -154,7 +154,7 @@ change obj = {
     obj.child.x = 10
     obj
 }
-original = [child: [x: 1]]
+original = [child = [x = 1]]
 changed = change original
 [original.child.x,changed.child.x] # [1,10]
 ```
@@ -317,10 +317,10 @@ function identity at runtime, because sharing a type does not imply equality.
 Use `_` for a field that accepts any type and preserves its value:
 
 ```apn
-func (v : [x: _]) = print v.x
+func (v : [x : _]) = print v.x
 func [1]                    # 1
 func ["hello"]              # hello
-func [x: True]              # True
+func [x = True]             # True
 ```
 
 The schema supplies field names and positional order; `v` receives a record.
@@ -328,12 +328,12 @@ Named records may include extra fields. Positional lists must supply exactly the
 schema's field count. A wildcard field has no default and must be supplied.
 
 Wildcards can be mixed with explicit types or nested in record/list schemas:
-`([x: _, y: Float] v)` preserves `x` and converts `y` as usual. Each `_` is
+`([x : _, y : Float] v)` preserves `x` and converts `y` as usual. Each `_` is
 independent. Inference can constrain how the body uses a field, but `_` adds no
 conversion and does not opt out of static checking like `Dynamic`.
 
 This meaning applies in schema patterns. Ordinary expressions such as
-`value = _` and `[x: _]` still contain unfinished code; `_` remains a wildcard
+`value = _` and `[x : _]` still contain unfinished code; `_` remains a wildcard
 in ordinary matching patterns.
 
 ## Dotted patterns: keep the whole value
@@ -346,7 +346,7 @@ func v.x = print [v,x]
 func 1                            # [1,1]
 
 show whole.[x,y] = print [whole,x,y]
-show [x: 1, y: 2, z: 3]           # [[x: 1, y: 2, z: 3], 1, 2]
+show [x = 1, y = 2, z = 3]        # [[x = 1, y = 2, z = 3], 1, 2]
 show [1,2]                       # [[1,2],1,2]
 
 first whole.(x::xs) = x
@@ -406,15 +406,15 @@ allowed, just as for ordinary `[x,y]` record destructuring.
 ```apn
 inspect ([x] : [t]) = print [t,x]
 inspect [1]                       # [Int,1]
-inspect [x: 1]                    # [Int,1]
-inspect [answer: 1]               # no match: missing x
+inspect [x = 1]                   # [Int,1]
+inspect [answer = 1]              # no match: missing x
 
 integer ([x] : [Int]) = print x
-integer [x: 1]                    # 1
-integer [x: .2]                   # rejected: lossy Int conversion
+integer [x = 1]                   # 1
+integer [x = .2]                  # rejected: lossy Int conversion
 
 pairTypes ([x,y] : [a,b]) = [a,b,x,y]
-pairTypes [y: "hi", x: 1]         # [Int,String,1,"hi"]
+pairTypes [y = "hi", x = 1]       # [Int,String,1,"hi"]
 ```
 
 Unlike dotted template application, this selects by the value pattern's names,
@@ -422,15 +422,15 @@ not record order. Use `whole.([t] [x])` to retain the complete original record.
 
 ## Record remainder patterns
 
-`_: rest` in a keyed record pattern captures the fields not explicitly selected:
+`_ = rest` in a keyed record pattern captures the fields not explicitly selected:
 
 ```apn
-[x: first, _: rest] = [x: 1, y: 2, z: 3]
-# first = 1; rest = [y: 2, z: 3]
+[x = first, _ = rest] = [x = 1, y = 2, z = 3]
+# first = 1; rest = [y = 2, z = 3]
 
-withoutX [x: first, _: rest] = rest
-withoutX [x: 1, y: 2]              # [y: 2]
-[_: rest, x: first]                # rebuild: [y: 2, z: 3, x: 1]
+withoutX [x = first, _ = rest] = rest
+withoutX [x = 1, y = 2]            # [y = 2]
+[use rest, x = first]              # rebuild: [y = 2, z = 3, x = 1]
 ```
 
 There may be one remainder entry, anywhere in the pattern. Explicit fields must

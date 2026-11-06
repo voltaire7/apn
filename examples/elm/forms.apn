@@ -6,9 +6,9 @@ browser = import "browser"
 Msg = Name String | Password String | PasswordAgain String
 
 update msg model = msg ~ [
-    Name name -> model [name: name]
-    Password password -> model [password: password]
-    PasswordAgain password -> model [passwordAgain: password]
+    Name name -> model [name = name]
+    Password password -> model [password = password]
+    PasswordAgain password -> model [passwordAgain = password]
 ]
 
 view model = div [] [
@@ -26,7 +26,7 @@ viewValidation model = model.password == model.passwordAgain
     : div [style "color" "red"] [text "Passwords do not match!"]
 
 main = browser.sandbox [
-    init: [name: "", password: "", passwordAgain: ""]
-    update: update
-    view: view
+    init = [name = "", password = "", passwordAgain = ""]
+    update = update
+    view = view
 ]

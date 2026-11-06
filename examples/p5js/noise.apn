@@ -4,12 +4,12 @@ import ["html","text","p5"]
 browser = import "browser"
 
 # The dots' spacing and the noise's offset, from the sliders.
-Model = [gap: Int, offset: Int]
+Model = [gap : Int, offset : Int]
 # The canvas's width and height.
 size = 400
 Msg = Gap String | Offset String
 
-init = [[gap: 20, offset: 0], browser.none]
+init = [[gap = 20, offset = 0], browser.none]
 
 update msg model = msg ~ [
     Gap gap -> { model.gap = parseInt gap; [model,browser.none] }
@@ -17,7 +17,7 @@ update msg model = msg ~ [
 ]
 
 view model = div [] [
-    canvas [setup: setup, draw: draw model]
+    canvas [setup = setup, draw = draw model]
     slider 2 40 model.gap Gap
     slider 0 1000 model.offset Offset
 ]
@@ -48,4 +48,6 @@ draw model (p : Sketch) = {
     }) [gap / 2, gap * 3 / 2..size]) [gap / 2, gap * 3 / 2..size]
 }
 
-main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]
+main = browser.element [
+    init = init, update = update, subscriptions = _ -> browser.none, view = view
+]

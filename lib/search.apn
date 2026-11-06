@@ -3,7 +3,7 @@ import "map"
 # Breadth-first traversal with level frontiers; keys must be HashMap scalar keys.
 # Mark on insertion so cycles and duplicate edges cannot enqueue a node twice.
 bfsDistances neighbors starts = {
-    initial = [frontier: unique starts, distances: HashMap (map (x -> [x,0]) starts), depth: 0]
+    initial = [frontier = unique starts, distances : HashMap (map (x -> [x,0]) starts), depth = 0]
     step state = {
         depth = state.depth + 1
         seq depth []
@@ -12,7 +12,7 @@ bfsDistances neighbors starts = {
             : [insert [[node,depth]] (fst acc), _prepend node (snd acc)]
         [next] = [foldl visit [state.distances,[]] (concatMap neighbors state.frontier)]
         seq (fst next)
-            (seq (snd next) [frontier: reverse (snd next), distances: fst next, depth: depth])
+            (seq (snd next) [frontier = reverse (snd next), distances = fst next, depth = depth])
     }
     [finished] = [head (filter (state -> null state.frontier) (iterate step initial))]
     finished.distances

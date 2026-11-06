@@ -8,8 +8,8 @@ Model = Failure | Loading | Success String
 Msg = | GotText (Result String http.HttpError)
 
 init = [Loading, http.get [
-    url: "https://elm-lang.org/assets/public-opinion.txt"
-    expect: http.expectString GotText
+    url = "https://elm-lang.org/assets/public-opinion.txt"
+    expect = http.expectString GotText
 ]]
 
 update (GotText result) _ = result ~ [
@@ -25,4 +25,4 @@ view model = model ~ [
     Success fullText -> pre [] [text fullText]
 ]
 
-main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]
+main = browser.element [init = init, update = update, subscriptions = subscriptions, view = view]

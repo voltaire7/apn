@@ -56,8 +56,6 @@ for (const source of [
     "(x -> x) (y -> y)",
     "[(x, y -> x)]",
     "xs (i) = 2",
-    "obj.[(key)]",
-    "(r.1).2",
     "c ? (a $ b) : d",
 ]) Deno.test(`necessary parentheses: ${source}`, () => { parse(source); });
 
@@ -127,10 +125,10 @@ function tree(x: unknown): unknown {
 }
 for (const source of [
     "f x + 1", "(1 + 2) * 3", "a - (b - c)", "(a :: b) :: c", "a ^ b ^ c", "(a ^ b) ^ c", "f (g x) -1",
-    "f -(a + b)", "-(-x)", "!f x", "-x ^ 2", "(-x) ^ 2", "r.x.y", "xs.(i + 1)", "(r.1).2", "(f x).y",
+    "f -(a + b)", "-(-x)", "!f x", "-x ^ 2", "(-x) ^ 2", "r.x.y", "xs.(i + 1)", "(f x).y",
     "c ? (d ? 1 : 2) : 3", "c ? 1 : (d ? 2 : 3)", "(c ? 1 : 2) + 3", "a $ b ? c : d", "c ? (a $ b) : d", "f $ g $ x",
     "xs >>= x -> f x", "xs >>= (x -> f x) >>= g", "(x -> x) 1", "f (x -> x) y", "run (x -> x)",
-    "[(x, y -> x)]", "[x -> x]", "map (+ 1) xs", "(+)", "(10 -)", "[1 + 1, 2]", "[x: f 1]",
+    "[(x, y -> x)]", "[x -> x]", "map (+ 1) xs", "(+)", "(10 -)", "[1 + 1, 2]", "[x = f 1]",
     "x | x > 0 -> y -> y", "{ a <- return 1; print (a + 1) }", "a && (b || c)", "[a + 1..b]",
 ]) Deno.test(`exprToSource round trip: ${source}`, () => {
     const [top] = parse(source);

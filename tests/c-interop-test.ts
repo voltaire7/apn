@@ -3,21 +3,21 @@ import { parseDocument } from "../src/parser.ts";
 
 const library = Deno.args[0];
 const signatures = `[
-    add: ffi.function [Int32,Int32] Int32
-    echo_u64: ffi.function [UInt64] UInt64
-    half: ffi.function [Float] Float
-    half_f32: ffi.function [Float32] Float32
-    invert: ffi.function [Bool] Bool
-    answer: ffi.function [] Int32
-    text_length: ffi.function [String] Int32
-    greeting: ffi.function [] String
-    increment: ffi.function [Pointer] []
-    echo_pointer: ffi.function [Pointer] Pointer
-    tick: ffi.function [] Int32
-    tick_void: ffi.function [] []
-    cell_pointer: ffi.function [] Pointer
-    cell_value: ffi.function [] Int32
-    null_pointer: ffi.function [] Pointer
+    add = ffi.function [Int32,Int32] Int32
+    echo_u64 = ffi.function [UInt64] UInt64
+    half = ffi.function [Float] Float
+    half_f32 = ffi.function [Float32] Float32
+    invert = ffi.function [Bool] Bool
+    answer = ffi.function [] Int32
+    text_length = ffi.function [String] Int32
+    greeting = ffi.function [] String
+    increment = ffi.function [Pointer] []
+    echo_pointer = ffi.function [Pointer] Pointer
+    tick = ffi.function [] Int32
+    tick_void = ffi.function [] []
+    cell_pointer = ffi.function [] Pointer
+    cell_value = ffi.function [] Int32
+    null_pointer = ffi.function [] Pointer
 ]`;
 function run(source: string): string {
     const interpreter = new Interpreter();
@@ -35,10 +35,10 @@ for (const [name, body, expected] of [
     ['partial application', 'addTen = c.add 10\naddTen 32', '42 : Int32'],
     ['uint64 stays exact', 'c.echo_u64 18446744073709551615', '18446744073709551615 : UInt64'],
     ['float64', 'c.half 5', '2.5 : Float'],
-    ['numeric defaults', 'v = [a: Int32, b: Int32] []\nc.add v.a v.b', '0 : Int32'],
-    ['pointer default', 'p = [value: Pointer] []\nc.echo_pointer p.value == p.value', 'True : Bool'],
-    ['boolean default', 'v = [flag: Bool] []\nc.invert v.flag', 'True : Bool'],
-    ['string default', 'v = [text: String] []\nc.text_length v.text', '0 : Int32'],
+    ['numeric defaults', 'v = [a : Int32, b : Int32] []\nc.add v.a v.b', '0 : Int32'],
+    ['pointer default', 'p = [value : Pointer] []\nc.echo_pointer p.value == p.value', 'True : Bool'],
+    ['boolean default', 'v = [flag : Bool] []\nc.invert v.flag', 'True : Bool'],
+    ['string default', 'v = [text : String] []\nc.text_length v.text', '0 : Int32'],
     ['float32', 'c.half_f32 .5', '0.25 : Float32'],
     ['booleans', 'c.invert True', 'False : Bool'],
     ['no C arguments', 'c.answer', '42 : Int32'],
@@ -89,7 +89,7 @@ Deno.test({ name: 'escaped C pointers cannot access unloaded storage', ignore: !
     throw new Error('Expected closed-library error');
 } });
 Deno.test('C interop rejects ambiguous Int ABI before loading a library', () => {
-    try { run('ffi.withLibrary "missing" [f: ffi.function [Int] []] (c -> [])'); }
+    try { run('ffi.withLibrary "missing" [f = ffi.function [Int] []] (c -> [])'); }
     catch (e) { if (String(e).includes('fixed-width')) return; throw e; }
     throw new Error('Expected a fixed-width ABI error');
 });
@@ -100,12 +100,7 @@ Deno.test({ name: 'escaped lazy nullary C action rejects use after library closu
     throw new Error('Expected closed-library error');
 } });
 
-Deno.test({ name: "C interop: quote characters are part of the symbol name", ignore: !library, fn() {
-    try {
-        run(`ffi.withLibrary library ["add": ffi.function [Int32,Int32] Int32] c -> c."add" 20 22`);
-    } catch (error) {
-        if (String(error).includes("cannot open") && String(error).includes("add")) return;
-        throw error;
-    }
-    throw new Error("Quoted key unexpectedly resolved the unquoted C symbol");
+Deno.test({ name: "C interop: a field's name is its symbol's, backticked or read by a string", ignore: !library, fn() {
+    const result = run('ffi.withLibrary library [`add` = ffi.function [Int32,Int32] Int32] c -> c "add" 20 22');
+    if (result !== "42 : Int32") throw new Error(result);
 } });

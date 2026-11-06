@@ -16,4 +16,4 @@ view model = div [] [
     button [onClick Increment] [text "+"]
 ]
 
-main = browser.sandbox [init: 0, update: update, view: view]
+main = browser.sandbox [init = 0, update = update, view = view]

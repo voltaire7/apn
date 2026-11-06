@@ -17,4 +17,4 @@ mouseDragged (p : Sketch) = {
     p.line p.pmouseX p.pmouseY p.mouseX p.mouseY
 }
 
-main = sketch [setup: setup, mouseDragged: mouseDragged]
+main = sketch [setup = setup, mouseDragged = mouseDragged]

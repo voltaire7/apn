@@ -28,20 +28,20 @@ fix f = {
 
 # Conventional capital names are fields, respecting APN constructor naming.
 combinators = [
-    I: identity
-    K: kestrel
-    KI: kite
-    S: starling
-    B: bluebird
-    C: cardinal
-    W: warbler
-    M: mockingbird
-    T: thrush
-    V: vireo
-    B1: blackbird
-    Q: queer
-    U: uCombinator
-    Y: yCombinator
-    Z: zCombinator
-    Theta: thetaCombinator
+    I = identity
+    K = kestrel
+    KI = kite
+    S = starling
+    B = bluebird
+    C = cardinal
+    W = warbler
+    M = mockingbird
+    T = thrush
+    V = vireo
+    B1 = blackbird
+    Q = queer
+    U = uCombinator
+    Y = yCombinator
+    Z = zCombinator
+    Theta = thetaCombinator
 ]

@@ -21,4 +21,4 @@ view model = div [] [
     div [] [text (to String model)]
 ]
 
-main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]
+main = browser.element [init = init, update = update, subscriptions = subscriptions, view = view]

@@ -30,4 +30,4 @@ drawWords (p : Sketch) x = {
 }
 
 # The font loads before setup.
-main = sketch [preload: [font], setup: setup]
+main = sketch [preload = [font], setup = setup]

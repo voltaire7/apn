@@ -4,13 +4,13 @@ import ["html","option","decode"]
 browser = import "browser"
 http = import "http"
 
-Quote = [quote: String, source: String, author: String, year: Int]
+Quote = [quote : String, source : String, author : String, year : Int]
 Model = Failure | Loading | Success Quote
 Msg = MorePlease | GotQuote (Result Quote http.HttpError)
 
 getRandomQuote = http.get [
-    url: "https://elm-lang.org/api/random-quotes"
-    expect: http.expectJson GotQuote Quote
+    url = "https://elm-lang.org/api/random-quotes"
+    expect = http.expectJson GotQuote Quote
 ]
 
 init = [Loading,getRandomQuote]
@@ -45,4 +45,4 @@ viewQuote model = model ~ [
     ]
 ]
 
-main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]
+main = browser.element [init = init, update = update, subscriptions = subscriptions, view = view]

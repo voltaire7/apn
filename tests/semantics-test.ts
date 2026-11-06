@@ -259,11 +259,11 @@ print (zipWith add [1,2] [10,20])
 
 example("finite formatting still resolves nested list data", `
 print (enumerate [10,20])
-proto = [x: 0, y: 0]
+proto = [x = 0, y = 0]
 print (proto [1,2])
 print (to String [[1 + 1], [3]])
 print (format "% %" [1 + 2, [4 + 5]])
-`, ["[[0,10],[1,20]]", "[x: 1, y: 2]", "[[2],[3]]", "3 [9]"]);
+`, ["[[0,10],[1,20]]", "[x = 1, y = 2]", "[[2],[3]]", "3 [9]"]);
 
 failure("a demanded invalid tail reports a list error",
     "print (take 2 (1::2))", "expected a list");
@@ -392,8 +392,8 @@ print (SingleBar 7)
 `, ["42", "0", "SingleBar 7"]);
 
 
-failure("backtick infix syntax is rejected", "1 `add` 2", "unexpected character");
-failure("unterminated backtick syntax is rejected", "1 `add", "unexpected character");
+failure("a backticked name is a name, not infix", "1 `add` 2", "cannot apply a number");
+failure("an unterminated backticked name is rejected", "1 `add", "ends on its line");
 example("ordinary named calls replace backtick infix", "add a b = a + b\nprint (add 1 2)", ["3"]);
 example("operator precedence and associativity", `
 print (2 + 3 * 4)
@@ -408,15 +408,14 @@ print (-head [2,3])
 `, ["14", "20", "5", "12", "[1,2]", "True", "2", "8", "-2"]);
 // v n = [key,value] writes entry n as v n reads it.
 example("a record's entry is written by position as a pair", `
-v = [x: 1, y: 2, z: 3]
+v = [x = 1, y = 2, z = 3]
 v 0 = ["x1",22]
 print v
 v -1 = ["z",30]
-print [v 0, v -1]`, ["[x1: 22, y: 2, z: 3]", '[["x1",22],["z",30]]']);
-failure("a record's entry is a pair", "v = [x: 1]\nv 0 = [x1: 22]", "an entry is a [key,value] pair");
-failure("a record's entry keeps keys distinct", 'v = [x: 1, y: 2]\nv 0 = ["y",22]', "the record already has a field 'y'");
+print [v 0, v -1]`, ["[x1 = 22, y = 2, z = 3]", '[["x1",22],["z",30]]']);
+failure("a record's entry is a pair", "v = [x = 1]\nv 0 = [x1 = 22]", "an entry is a [key,value] pair");
+failure("a record's entry keeps keys distinct", 'v = [x = 1, y = 2]\nv 0 = ["y",22]', "the record already has a field 'y'");
 example("a list item may be a binding, in scope for the items after it", `
-print [x = 1]
 print [x = 1, x + 1]
 print (do [x = 1, x + 1])
 print [f n = n * 2, f 3]
@@ -424,7 +423,7 @@ print [[a,b] = [1,2], a + b]
 x = 7
 print [x + 1, x = 1, x]
 print x
-probe [x = 1, x + 1]`, ["[]", "[2]", "2", "[6]", "[3]", "[8,1]", "7",
+probe [x = 1, x + 1]`, ["[2]", "2", "[6]", "[3]", "[8,1]", "7",
     "[x = 1, x + 1]"]);
 // x <- m is a list item as a block's statement: do runs m and binds x for the
 // items after it, in any monad; it yields nothing, and x is bound only then.
@@ -514,23 +513,23 @@ for (const source of ["1 = 2", "[a,1] = [5,2]", 'import "option"\nNone = Some 1'
 }
 
 example("a record its type made keeps its fields; a copy takes new ones", `
-Quote = [quote: String, year: Int]
+Quote = [quote : String, year : Int]
 q = Quote []
 q.year = 3
 q "quote" = "x"
 print q
-r = [_: q, more: 1]
+r = [use q, more = 1]
 r.again = 2
 print r
-Line = [from: [x: Int, y: Int], to: [x: Int, y: Int]]
+Line = [from : [x : Int, y : Int], to : [x : Int, y : Int]]
 l = Line []
 l.from.x = 4
-print l`, ['[quote: "x", year: 3]', '[quote: "x", year: 3, more: 1, again: 2]', "[from: [x: 4, y: 0], to: [x: 0, y: 0]]"]);
+print l`, ['[quote = "x", year = 3]', '[quote = "x", year = 3, more = 1, again = 2]', "[from = [x = 4, y = 0], to = [x = 0, y = 0]]"]);
 for (const source of [
-    "q = Quote []\nq.yaer = 1", 'q = Quote ["a",1]\nq "yaer" = 1', "q = Quote []\nq._ = [yaer: 1]",
-    "f (q : Quote) = { q.yaer = 1; q }\nprint (f [quote: \"a\", year: 1])",
-    "Line = [from: Quote, to: Quote]\nl = Line []\nl.from.yaer = 1",
-]) failure(`a new field on a record its type made: ${source}`, `Quote = [quote: String, year: Int]\n${source}`, "has no field 'yaer'");
+    "q = Quote []\nq.yaer = 1", 'q = Quote ["a",1]\nq "yaer" = 1', "q = Quote []\nq._ = [yaer = 1]",
+    "f (q : Quote) = { q.yaer = 1; q }\nprint (f [quote = \"a\", year = 1])",
+    "Line = [from : Quote, to : Quote]\nl = Line []\nl.from.yaer = 1",
+]) failure(`a new field on a record its type made: ${source}`, `Quote = [quote : String, year : Int]\n${source}`, "has no field 'yaer'");
 
 example("an empty vector's open element type is bound by an inner lambda's pattern", `
 f = (xs : Vect n a) -> (ys : Vect m a) -> [n,m,a]

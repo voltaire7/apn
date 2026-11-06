@@ -83,7 +83,7 @@ export class BrowserApp {
         if (v.kind !== "variant" || (v.tag !== "BrowserSandbox" && v.tag !== "BrowserElement")) fail("main must be a view or a browser program (browser.sandbox or browser.element)");
         const element = (v as Extract<Value, { kind: "variant" }>).tag === "BrowserElement";
         const spec = i.demand((v as Extract<Value, { kind: "variant" }>).v[0]);
-        if (spec.kind !== "record") fail(`${element ? "element" : "sandbox"} expects [init: ..., update: ..., view: ...${element ? ", subscriptions: ..." : ""}]`);
+        if (spec.kind !== "record") fail(`${element ? "element" : "sandbox"} expects [init = ..., update = ..., view = ...${element ? ", subscriptions = ..." : ""}]`);
         const fields = new Map((spec as Extract<Value, { kind: "record" }>).v);
         const get = (key: string): Value => fields.get(key) ?? fail(`${element ? "element" : "sandbox"} is missing '${key}'`);
         this.update = i.demand(get("update"));

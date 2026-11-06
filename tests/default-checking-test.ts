@@ -26,8 +26,8 @@ for (const [source, expected] of [
     ['import "sequence"; sum [1,2,3]', '6'],
     ['seqs = import "sequence"; seqs.sum (Int * [1,2,3])', '6'],
     ['import ["function","number"]; id (sq 3)', '9'],
-    ['ns = [double: x -> x * 2]; use ns; double 3', '6'],
-    ['use [[one: 1], [two: 2]]; one + two', '3'],
+    ['ns = [double = x -> x * 2]; use ns; double 3', '6'],
+    ['use [[one = 1], [two = 2]]; one + two', '3'],
     ['x = Mutable 1; set x 2; x + 1', '3'],
     ['Direction = North | South; [10,20] South', '20'],
     ['templates = [String,Int]; values = ["x",1]; templates.values', '["x",1]'],
@@ -90,20 +90,20 @@ for (const [source, expected] of [
     ['factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))\nfactorial 5', '120'],
     ['import "type"; cast Float32 (.2 : Float64)', '0.2'],
     // A parameter's record is known from the fields code uses, also when it assigns them.
-    ['f r = { r.a = 5; r }; f [a: 1, b: 2]', '[a: 5, b: 2]'],
-    ['g r = { r.p.q = 3; r }; g [p: [q: 1, z: 0]]', '[p: [q: 3, z: 0]]'],
+    ['f r = { r.a = 5; r }; f [a = 1, b = 2]', '[a = 5, b = 2]'],
+    ['g r = { r.p.q = 3; r }; g [p = [q = 1, z = 0]]', '[p = [q = 3, z = 0]]'],
     // A function known only from its uses does not fix its list argument's length.
     ['f g = [g [1], g [1,2,3]]; f length', '[1,3]'],
-    ['f r = [r.g [1], r.g [1,2,3]]; f [g: length]', '[1,3]'],
+    ['f r = [r.g [1], r.g [1,2,3]]; f [g = length]', '[1,3]'],
     // A known small Int converts to a Float operand losslessly.
-    ['f r = r.y == 0 ? 5.0 : r.vy / 8; f [y: 1.0, vy: 2.0]', '0.25'],
+    ['f r = r.y == 0 ? 5.0 : r.vy / 8; f [y = 1.0, vy = 2.0]', '0.25'],
     // Either branch's three numbers: a list of three numbers.
     ['f c = c ? [1.0,2.0,3.0] : [0.0,0.0,0.0]; [1.0,1.0,1.0] + f True', '[2.0,3.0,4.0]'],
     // A record alias is a type argument (List Point, Result Point e); a field
     // may name another module's type (browser.Viewport).
-    ['import "option"\nPoint = [x: Float, y: Float]\nMsg = | Got (Result Point String)\nGot (Ok [x: 1, y: 2])', 'Got (Ok [x: 1.0, y: 2.0])'],
-    ['Point = [x: Float, y: Float]\nShape = | Path (List Point)\nPath [[x: 1, y: 2]]', 'Path [[x: 1.0, y: 2.0]]'],
-    ['browser = import "browser"\nMsg = Resized browser.Viewport | Other\nResized [width: 1, height: 2]', 'Resized [width: 1, height: 2]'],
+    ['import "option"\nPoint = [x : Float, y : Float]\nMsg = | Got (Result Point String)\nGot (Ok [x = 1, y = 2])', 'Got (Ok [x = 1.0, y = 2.0])'],
+    ['Point = [x : Float, y : Float]\nShape = | Path (List Point)\nPath [[x = 1, y = 2]]', 'Path [[x = 1.0, y = 2.0]]'],
+    ['browser = import "browser"\nMsg = Resized browser.Viewport | Other\nResized [width = 1, height = 2]', 'Resized [width = 1, height = 2]'],
     // A constructor pattern on a Dynamic field is checked when it runs.
     ['import "option"\nMsg = More | Got Dynamic\nf msg = msg ~ [More -> 0, (Got (Ok q)) -> q, (Got (Err _)) -> 1]\nf (Got (Ok 5))', '5'],
     // More clauses are a new version: label keeps the clauses it saw.
@@ -120,15 +120,15 @@ for (const [source, expected] of [
     // A definition written with lambdas is checked as the clause with those parameters.
     ['append = (xs : Vect n a) -> (ys : Vect m a) -> ({\n    xs ~ [\n        [] -> ys\n        x::xs -> x :: append xs ys\n    ]\n} : Vect (n + m) a)\ntypeOf (append [] [3])', 'Vect 1 Int'],
     // A record schema applied to a value not known yet converts it at runtime.
-    ['Quote = [quote: String, year: Int]\nconv r = Quote r\n(conv [year: 2]).year', '2'],
-    ['Quote = [quote: String, year: Int]\n(Quote ([quote: "q", year: 1] : Dynamic)).quote', '"q"'],
+    ['Quote = [quote = String, year = Int]\nconv r = Quote r\n(conv [year = 2]).year', '2'],
+    ['Quote = [quote = String, year = Int]\n(Quote ([quote = "q", year = 1] : Dynamic)).quote', '"q"'],
     // A record type is a type: to applies it, and a Type parameter takes it.
-    ['Quote = [quote: String, year: Int]\n(to Quote [year: 1]).year', '1'],
-    ['f (t : Type) = t\nisType (f [a: Int]) [a: 3]', 'True'],
+    ['Quote = [quote = String, year = Int]\n(to Quote [year = 1]).year', '1'],
+    ['f (t : Type) = t\nisType (f [a = Int]) [a = 3]', 'True'],
     // A string iterates its characters.
     ['"ab" * c -> to String c', '["\'a\'","\'b\'"]'],
     // A record its type made takes updates to its fields, and a literal copy new ones.
-    ['Quote = [quote: String, year: Int]\nq = Quote []\nq.year = 3\nq "quote" = "x"\n[_: q, more: 1]', '[quote: "x", year: 3, more: 1]'],
+    ['Quote = [quote = String, year = Int]\nq = Quote []\nq.year = 3\nq "quote" = "x"\n[use q, more = 1]', '[quote = "x", year = 3, more = 1]'],
     // A name defined as an import opens the module where it is a statement.
     // A list item may take a value apart with a constructor, as a block's statement may.
     ['import "option"\n[Some v = Some 3, v + 1]', '[4]'],
@@ -151,23 +151,23 @@ for (const source of [
     '([1] : Vect 2 Int)',
     'f g = [g 1, g "a"]; f (x -> 0)',
     'bad = (xs : Vect n a) -> (ys : Vect m a) -> ({\n    xs ~ [\n        [] -> ys\n        x::xs -> x :: bad xs ys\n    ]\n} : Vect (n + m + 1) a)',
-    'Quote = [quote: String, year: Int]; from Quote [quote: "q", year: 1]',
-    'Quote = [quote: String, year: Int]; to Quote [year: "x"]',
+    'Quote = [quote = String, year = Int]; from Quote [quote = "q", year = 1]',
+    'Quote = [quote = String, year = Int]; to Quote [year = "x"]',
     '"ab" * c -> c + 1',
     // A record its type made keeps its fields.
-    'Quote = [quote: String, year: Int]; q = Quote []; q.yaer = 1',
-    'Quote = [quote: String, year: Int]; q = Quote []; q "yaer" = 1',
-    'Quote = [quote: String, year: Int]; f (q : Quote) = { q.x = 1; q }',
-    'Quote = [quote: String, year: Int]; conv r = Quote r; (conv [year: "x"]).year',
+    'Quote = [quote = String, year = Int]; q = Quote []; q.yaer = 1',
+    'Quote = [quote = String, year = Int]; q = Quote []; q "yaer" = 1',
+    'Quote = [quote = String, year = Int]; f (q : Quote) = { q.x = 1; q }',
+    'Quote = [quote = String, year = Int]; conv r = Quote r; (conv [year = "x"]).year',
     // Only a statement opens a module: not a field of it, a binding, or a block's statement.
     'numbers = import "number"\nnumbers.sq 2\nsq 3',
     'numbers = import "number"\n{ numbers; 1 }\nsq 3',
     'numbers = import "number"\nf _ = numbers\nm = f []\nsq 3',
     'random = { import "number" }\nsq 3',
     // A record's entry is written as a [key,value] pair, within the record.
-    'v = [x: 1]\nv 0 = [x1: 22]',
-    'v = [x: 1]\nv 1 = ["a",1]',
-    'P = [x: Float, y: Float]\np = P [1,2]\np 1 = ["w",1]',
+    'v = [x = 1]\nv 0 = [x1 = 22]',
+    'v = [x = 1]\nv 1 = ["a",1]',
+    'P = [x : Float, y : Float]\np = P [1,2]\np 1 = ["w",1]',
     // An item after an x <- m item yields the block ending in it: { x <- m; x } is an error.
     'print [x <- return 1, x]',
     'print [x <- [1,2], 7]',
@@ -230,8 +230,8 @@ for (const source of [
 // A ternary's branch is checked as the expression alone is: a lossy mix the
 // checker types as Number fails when it runs, in a branch as outside one.
 for (const source of [
-    'f r = r.vy * 9007199254740993; f [y: 1.0, vy: 2.0]',
-    'f r = r.y == 0 ? 5.0 : r.vy * 9007199254740993; f [y: 1.0, vy: 2.0]',
+    'f r = r.vy * 9007199254740993; f [y = 1.0, vy = 2.0]',
+    'f r = r.y == 0 ? 5.0 : r.vy * 9007199254740993; f [y = 1.0, vy = 2.0]',
 ]) Deno.test(`a lossy mix fails when it runs: ${source}`, () => {
     try { run(session(), source); } catch (error) {
         if ((error as Error).message === "lossy implicit numeric conversion; use inexact explicitly") return;
@@ -296,7 +296,7 @@ Deno.test("Dynamic writes cannot invalidate a checked Mutable payload", () => {
     }
     throw new Error('unchecked Mutable write');
 });
-for (const source of ['cast (x -> x) 1', 'isExact "bad"', 'keys [x: 1]', 'values [x: 1]']) {
+for (const source of ['cast (x -> x) 1', 'isExact "bad"', 'keys [x = 1]', 'values [x = 1]']) {
     Deno.test(`native signatures reject incompatible values: ${source}`, () => rejected(session(), source));
 }
 
@@ -369,7 +369,7 @@ for (const [source, expected] of [
     ['g [p,q] = p + q; g -[1,2]','-3'],
     ['g [p,q] = p + q; g ([1,2] + [3,4])','10'],
     ['g [p,q] = p + q; g ([1,2] * 3)','9'],
-    ['g [[k,v],[k2,w]] = w ++ "!"; g (pairs [x: 1, y: "s"])','"s!"'],
+    ['g [[k,v],[k2,w]] = w ++ "!"; g (pairs [x = 1, y = "s"])','"s!"'],
     ['twice xs = xs * x -> x * 2; g [p,q] = p + q; g (twice [1,2])','6'],
     ['number xs = enumerate xs; g [p,q] = p; [g (number [1,2]), length (number [1,2,3])]','[[0,1],3]'],
     ['h a b = [map (x -> x) a, map (x -> x) b]; h [1] [1,2]','[[1],[1,2]]'],
@@ -382,7 +382,7 @@ for (const source of [
     'g [p,q] = p; g (enumerate [10,20,30])',
     'g [p,q] = p + q; g ([1,2,3] * x -> x * 10)',
     '[1,2] + [3,4,5]',
-    'g [p,q] = p; g (pairs [x: 1])',
+    'g [p,q] = p; g (pairs [x = 1])',
     'h a b = [map (x -> x) a, map (x -> x) b]; g [[x],[y,z]] = x + y + z; g (h [1,2] [1])',
     'g [p,q] = p + q; g (tail [1,2,3] * x -> x)',
 ]) Deno.test(`checker rejects mismatched builtin list lengths: ${source}`, () => rejected(session(), source));
@@ -1051,7 +1051,7 @@ for (const [source, expected] of [
     // A load reaches only what the loaded file's source names.
     ['counter = Mutable 0\nother = Mutable 7\nset other 8\nload "examples/advent-of-code/lanternfish"\ng (f (r (other + 0 == 8)))','0'],
     // A name use opened reaches the field it was opened from.
-    ['counter = Mutable 0\nother = Mutable 7\nns = [bump: x -> set counter 3]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set counter 3]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))','0'],
     // A function held by a pattern binding runs its body where it is called.
     ['counter = Mutable 0\nother = Mutable 7\nhb <- return (x -> 0)\ny <- return (hb 0)\ng (f (r (other + 0 == 7)))','0'],
     // Keys bound locally, and views stored in records, lists and cells or
@@ -1094,8 +1094,8 @@ for (const source of [
     'counter = Mutable 0\nother = Mutable 7\npick n = n > 0 ? x -> { set other 1; 0 } : x -> 0\nhb <- return (pick 1)\nm = HashMap [["a",1]]\nhas "a" m ? hb 0 : 0\ng (f (r (other + 0 == 7)))',
     'counter = Mutable 0\nother = Mutable 7\n[ha,hb] <- return [x -> return 0, x -> { set other 1; return 0 }]\nhb 0\ng (f (r (other + 0 == 7)))',
     // A name use opened reaches the field it was opened from.
-    'counter = Mutable 0\nother = Mutable 7\nns = [bump: x -> set other 3]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nns = [bump: x -> set counter 3]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set other 3]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set counter 3]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (counter + 0 == 0)))',
     'counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 0)))',
     'counter = Mutable 0\nsnap = counter + 0\nset counter 4\nprint snap\nset counter 9\ng (f (r (snap + 0 == 9)))',
     'counter = Mutable 0\ninit = set counter 5\ninit\nset counter 1\ninit\ng (f (r (counter + 0 == 1)))',
@@ -1276,9 +1276,9 @@ for (const [source, expected] of [
     ['g (n : Int) = n; h x = g x + 1; h 2', '3'],
     ['g (n : Float) = n; h x = g x; h 1', '1.0'],
     ['g (n : UInt) = n; h x = g -x; d y = h y; 1', '1'],
-    ['Pt = [x: Float, y: Float]; g (p : Pt) = p.x; h x = g x; h [1,2]', '1.0'],
-    ['Pt = [x: UInt, y: UInt]; g (p : Pt) = p.x; h x = g [x,-x]; h 0', '0'],
-    ['Pt = [x: Float, y: Float]; g (p : Pt) = p.y; h x = g [x,x]; h 2', '2.0'],
+    ['Pt = [x : Float, y : Float]; g (p : Pt) = p.x; h x = g x; h [1,2]', '1.0'],
+    ['Pt = [x : UInt, y : UInt]; g (p : Pt) = p.x; h x = g [x,-x]; h 0', '0'],
+    ['Pt = [x : Float, y : Float]; g (p : Pt) = p.y; h x = g [x,x]; h 2', '2.0'],
     ['g (f : Int -> Int) = f 1; h x = g x; h (+ 1)', '2'],
     ['g [(a : UInt8), (b : UInt8)] = a + b; g [3,3]', '6'],
     ['g [(a : Float), b] = a; g [1,"x"]', '1.0'],
@@ -1304,14 +1304,14 @@ for (const [source, expected] of [
     ['P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; g (P2 1 3)', '3'],
     ['P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; h v = g (P2 1 v); h 3', '3'],
     ['P = P2 Int Int | P0; (P2 a (y : UInt8)) = P2 1 3; y', '3'],
-    ['g (r : [x: UInt8]) = r.x; k = [x: 3]; g k', '3'],
-    ['g (r : [x: UInt8]) = r.x; h r = g r; h [x: 3]', '3'],
-    ['g (r : [x: UInt8]) = r.x; h v = g [x: v * 100]; h 1', '100'],
-    ['Pt = [x: Float, y: Float]; g (p : Pt) = p.y; h v = g [x: v, y: v]; h 2', '2.0'],
-    ['g (r : [x: UInt8, y: UInt8]) = r.y; b = [x: 1, y: 300]; g [_: b, y: 2]', '2'],
-    ['g (r : [x: UInt8]) = r.x; g [x: 300, _: [x: 3]]', '3'],
-    ['g (r : [x: UInt8, y: UInt8]) = r.x; h b = g [_: b, x: 3]; h [x: 1, y: 2]', '3'],
-    ['g (r : [x: UInt8]) = r.x; h v = g [_: [x: v]]; h 3', '3'],
+    ['g (r : [x : UInt8]) = r.x; k = [x = 3]; g k', '3'],
+    ['g (r : [x : UInt8]) = r.x; h r = g r; h [x = 3]', '3'],
+    ['g (r : [x : UInt8]) = r.x; h v = g [x = v * 100]; h 1', '100'],
+    ['Pt = [x : Float, y : Float]; g (p : Pt) = p.y; h v = g [x = v, y = v]; h 2', '2.0'],
+    ['g (r : [x : UInt8, y : UInt8]) = r.y; b = [x = 1, y = 300]; g [use b, y = 2]', '2'],
+    ['g (r : [x : UInt8]) = r.x; g [x = 300, use [x = 3]]', '3'],
+    ['g (r : [x : UInt8, y : UInt8]) = r.x; h b = g [use b, x = 3]; h [x = 1, y = 2]', '3'],
+    ['g (r : [x : UInt8]) = r.x; h v = g [use [x = v]]; h 3', '3'],
     ['f y = { x : Float = y; x * 2 }; f 1.5', '3.0'],
 ] as const) Deno.test(`typed binding: ${source}`, () => {
     if (run(session(), source) !== expected) throw new Error(source);
@@ -1325,8 +1325,8 @@ for (const source of ['x : Int = "a"', 'x : Int = 2.5', 'x : Int8 = 300',
     'g (n : Int) = n; h x = g x; h 2.5', 'g (n : UInt) = n; h x = g -x; d y = h (y * 2); d 1',
     'g (n : UInt) = n; h x = g -x; d y = h 2; 1', 'g (n : UInt) = n; h x = g x; d y = h "a"; 1',
     'import "text"; g (n : UInt) = n; h x = { y = g x; z = upper x; y }; 1',
-    'Pt = [x: UInt, y: UInt]; g (p : Pt) = p.x; h x = g [x,-x]; h 2', 'Pt = [x: UInt, y: UInt]; g (p : Pt) = p.x; h x = g x; h [2,-2]',
-    'Pt = [x: Float, y: Float]; g (p : Pt) = p.x; h x = g x; h [1]', 'g (f : Int -> Int) = f 1; h x = g x; h 5', 'g (s : String) = s; h x = g x; h 1',
+    'Pt = [x : UInt, y : UInt]; g (p : Pt) = p.x; h x = g [x,-x]; h 2', 'Pt = [x : UInt, y : UInt]; g (p : Pt) = p.x; h x = g x; h [2,-2]',
+    'Pt = [x : Float, y : Float]; g (p : Pt) = p.x; h x = g x; h [1]', 'g (f : Int -> Int) = f 1; h x = g x; h 5', 'g (s : String) = s; h x = g x; h 1',
     'g [(a : UInt8), (b : UInt8)] = a; g [3,300]', 'g [(a : UInt8), (b : UInt8)] = a; g [3,-1]', 'g [(a : UInt8), (b : UInt8)] = a; h x = g [x, x * 100]; h 3',
     '[(a : UInt8), (b : UInt8)] = [3,300]', 'g [(s : String), (n : Int)] = s; g [1,2]',
     'import "option"; g (Some (x : UInt8)) = x; g (Some 300)', 'import "option"; g (Some (x : UInt8)) = x; g (Some -1)',
@@ -1339,11 +1339,11 @@ for (const source of ['x : Int = "a"', 'x : Int = 2.5', 'x : Int8 = 300',
     'P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; g (P2 1 300)', 'P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; k = P2 1 300; g k',
     'P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; h v = g (P2 1 v); h 300', 'P = P2 Int Int | P0; (P2 a (y : UInt8)) = P2 1 300',
     'Pair a b = MkPair a b | NoPair\ng (MkPair (x : Float) (y : UInt8)) = y\nh x = g x\nh (MkPair 1 300)',
-    'g (r : [x: UInt8]) = r.x; g [x: 300]', 'g (r : [x: UInt8]) = r.x; k = [x: 300]; g k', 'g (r : [x: UInt8]) = r.x; h r = g r; h [x: 300]',
-    'g (r : [x: UInt8]) = r.x; h v = g [x: v * 100]; h 3', 'Pt = [x: UInt8, y: UInt8]; g (p : Pt) = p.y; g [x: 1, y: 300]',
-    'g (r : [x: UInt8, y: UInt8]) = r.y; b = [x: 1, y: 300]; g [_: b, x: 2]', 'g (r : [x: UInt8]) = r.x; g [_: [x: 300]]',
-    'g (r : [x: UInt8]) = r.x; g [x: 3, _: [x: 300]]', 'g (r : [x: UInt8, y: UInt8]) = r.x; h b = g [_: b, x: 300]; h [x: 1, y: 2]',
-    'g (r : [x: UInt8, y: UInt8]) = r.y; h b = g [_: b, x: 3]; h [x: 1, y: 300]', 'g (r : [x: UInt8]) = r.x; h v = g [_: [x: v]]; h 300']) {
+    'g (r : [x : UInt8]) = r.x; g [x = 300]', 'g (r : [x : UInt8]) = r.x; k = [x = 300]; g k', 'g (r : [x : UInt8]) = r.x; h r = g r; h [x = 300]',
+    'g (r : [x : UInt8]) = r.x; h v = g [x = v * 100]; h 3', 'Pt = [x : UInt8, y : UInt8]; g (p : Pt) = p.y; g [x = 1, y = 300]',
+    'g (r : [x : UInt8, y : UInt8]) = r.y; b = [x = 1, y = 300]; g [use b, x = 2]', 'g (r : [x : UInt8]) = r.x; g [use [x = 300]]',
+    'g (r : [x : UInt8]) = r.x; g [x = 3, use [x = 300]]', 'g (r : [x : UInt8, y : UInt8]) = r.x; h b = g [use b, x = 300]; h [x = 1, y = 2]',
+    'g (r : [x : UInt8, y : UInt8]) = r.y; h b = g [use b, x = 3]; h [x = 1, y = 300]', 'g (r : [x : UInt8]) = r.x; h v = g [use [x = v]]; h 300']) {
     Deno.test(`typed binding rejects: ${source}`, () => rejected(session(), source));
 }
 for (const source of ['Int = 5', 'Int x y = 5']) Deno.test(`a built-in type name is not redefined: ${source}`, () => {
@@ -1368,8 +1368,8 @@ Deno.test("an unknown name in a type is reported as unbound", () => {
 // What the p5.js examples rely on, checked and run.
 for (const [source, expected] of [
     // A record schema's List fields hold any length, in a list cell or a record cell.
-    ['Pt = [x: Float, c: [Float,Float]]\nps = Mutable ([] : List Pt)\nset ps [[x: 1.0, c: [1.0,2.0]]]\nlength ps', '1'],
-    ['B = [ns: List Int]\nb = Mutable (B [ns: []])\nset b [ns: [1,2]]\nb.ns', '[1,2]'],
+    ['Pt = [x : Float, c : [Float,Float]]\nps = Mutable ([] : List Pt)\nset ps [[x = 1.0, c = [1.0,2.0]]]\nlength ps', '1'],
+    ['B = [ns : List Int]\nb = Mutable (B [ns = []])\nset b [ns = [1,2]]\nb.ns', '[1,2]'],
     // A conversion of arithmetic on a parameter waits for its value.
     ['f w = w - 20 : Float\nf (3 : Number)', '-17.0'],
     ['f r = from JSON r : List Int\nf "[1, 2]"', '[1,2]'],
@@ -1383,16 +1383,16 @@ for (const [source, expected] of [
     ['Q a b = _\n(Q a b) + (Q c d) = Q (a * d + c * b) (b * d)\nf k acc = k > 3 ? acc : f (k + 1) (acc + Q 1 k)\nf 1 (Q 0 1)', 'Q 11 6'],
     // The checker knows what indexing gives: a list's item, a record's field,
     // or what clauses for get give.
-    ['f 20 = "x"\nf n = 5\nxs = [10,20,30]\nr = [a: 20]\nf (xs 1) ++ f (xs -2) ++ f (r "a") ++ f r.a', '"xxxx"'],
+    ['f 20 = "x"\nf n = 5\nxs = [10,20,30]\nr = [a = 20]\nf (xs 1) ++ f (xs -2) ++ f (r "a") ++ f r.a', '"xxxx"'],
     ['P (x : Float) (y : Float) = _\nget (P x y) "x" = x\nget (P x y) "y" = y\nf 2.0 = "two"\nf n = 5\np = P 1 2\nf p.y ++ f (p "x" + 1)', '"twotwo"'],
     // Clauses for a math function overload it, as for an operator.
     ['Dual = | Dual Float Float\nsin (Dual a b) = Dual (sin a) (b * cos a)\nsin (Dual 0.0 1.0)', 'Dual 0.0 1.0'],
     ['Dual = | Dual Float Float\nsin (Dual a b) = Dual (sin a) (b * cos a)\nsin 0.0', '0.0'],
     // Floats divide to a Float; a value of either of two types converts.
-    ['x = 1.0 / 4.0\nr = [v: 0.5]\n{ r.v = x; r }', '[v: 0.25]'],
+    ['x = 1.0 / 4.0\nr = [v = 0.5]\n{ r.v = x; r }', '[v = 0.25]'],
     ['b = True\n((b ? 1 : 2.5) : Float)', '1.0'],
     // A recursive function of a sketch, whose methods yield [].
-    ['import "p5"\nb (p : Sketch) n = when (n > 2) (b p (n / 2))\nmain = sketch [draw: (p : Sketch) -> b p 120]\ntypeOf main', 'P5Program'],
+    ['import "p5"\nb (p : Sketch) n = when (n > 2) (b p (n / 2))\nmain = sketch [draw = (p : Sketch) -> b p 120]\ntypeOf main', 'P5Program'],
     ['pairs []', '[]'],
     // A block may start with a comment line.
     ['f = {\n    # first a comment\n    1\n}\nf', '1'],

@@ -6,7 +6,7 @@ export type Token =
     | { k: "bool"; v: boolean; pos: number }
     | { k: "str"; v: string; pos: number }
     | { k: "char"; v: string; pos: number }
-    | { k: "ident"; v: string; pos: number }
+    | { k: "ident"; v: string; pos: number; quoted?: true }
     | { k: "kw"; v: string; pos: number }             // keywords
     | { k: "sym"; v: string; pos: number }             // symbols incl. multi-char
     | { k: "newline"; pos: number } | { k: "indent"; pos: number } | { k: "dedent"; pos: number }
@@ -231,6 +231,16 @@ export function lex(src: string): Token[] {
             while (pos < src.length && /[A-Za-z0-9_']/.test(src[pos])) id += src[pos++];
             if (KEYWORDS.has(id)) toks.push({ k: "kw", v: id, pos: start });
             else toks.push({ k: "ident", v: id, pos: start });
+            continue;
+        }
+
+        // A name that is any text in backticks: `Content-Type`, `my value`.
+        if (c === "`") {
+            const end = src.indexOf("`", pos + 1);
+            if (end < 0 || src.slice(pos + 1, end).includes("\n")) throw new APNError("lex", "a backticked name ends on its line with '`'", { pos: start });
+            if (end === pos + 1) throw new APNError("lex", "a backticked name is not empty", { pos: start });
+            toks.push({ k: "ident", v: src.slice(pos + 1, end), pos: start, quoted: true });
+            pos = end + 1;
             continue;
         }
 

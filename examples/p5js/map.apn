@@ -16,4 +16,4 @@ draw (p : Sketch) = {
     p.circle (p.width / 2) (p.height / 2) (remap p.mouseY 0 p.height 20 300)
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

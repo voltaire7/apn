@@ -1,3 +1,4 @@
+import { fieldSource } from "./record-keys.ts";
 import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
@@ -69,7 +70,8 @@ type Ty =
     // bound nowhere yet (a list joined before it may bind them), by where read.
     // endless: infinitely many elements, [Int..] ([1..], a range of a type).
     | { k: "list"; element: Ty; length?: Index; items?: Ty[]; endless?: boolean; contracted?: boolean; preserve?: Set<number>; formula?: Formula; open?: Map<string, { expr: Expr; within?: Expr }> }
-    | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string>; closed?: boolean }
+    // code: the items a record written as a list literal keeps (see asCode).
+    | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string>; closed?: boolean; code?: FormulaItem[] }
     // chosen: one of value's choices, picked by a condition known only at runtime.
     // given: an indexed family's index values written so far, by parameter (Vec 2 Int).
     // applied: how many of a family's arguments are given (Pair a, Vec 2).
@@ -134,7 +136,7 @@ interface Known {
     expr?: { e: Expr; env: [string, Known][]; scope: Scope };
     // payload: a constructor application's fields (Some 300).
     payload?: Known[];
-    // fields: a record literal's field values ([x: 300]).
+    // fields: a record literal's field values ([x = 300]).
     fields?: [string, Known][];
     // action: an IO action, run (statically) where the program runs it.
     action?: () => Known | undefined;
@@ -516,7 +518,7 @@ function text(
                 if (t.endless) return `[${operand(t.element)}..]`;
                 return t.length ? `Vect ${argument(indexText(t.length))} ${argument(show(t.element))}` : `List ${argument(show(t.element))}`;
             case "record":
-                return `[${[...t.fields].map(([k, v]) => `${k}: ${operand(v)}`).join(", ")}]`;
+                return `[${[...t.fields].map(([k, v]) => fieldSource(k, operand(v), true)).join(", ")}]`;
             case "type":
                 return `Type (${show(t.value)})`;
             // An undecided return: m T, for the monad a context will name.
@@ -1175,7 +1177,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (t.op === "to") return template(a, b, activeExpression ?? { t: "placeholder" });
                 return problem("no from instance for a list template", undefined, "join characters with `from (List Char) cs`; convert with `to`, as in `to [Char,Char] \"hi\"`");
             }
-            // So does a record schema ([quote: String, year: Int]), a type too.
+            // So does a record schema ([quote : String, year : Int]), a type too.
             if (a.k === "record" && describing(a)) {
                 if (t.op === "to") return application(a, { type: b }, activeExpression ?? { t: "placeholder" });
                 const shown = text(schemaValue(a, { t: "placeholder" }));
@@ -1452,7 +1454,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A type known only when it runs (typeOf x) may be the one wanted
         // (the pattern Int): the run decides.
         if (expected.k === "type" && actual.k === "atom" && actual.name === "Type") { runtimeChecks++; return; }
-        // A list or record of types ([quote: String, year: Int]) is a type, as at runtime.
+        // A list or record of types ([quote : String, year : Int]) is a type, as at runtime.
         if (expected.k === "type" && (actual.k === "record" || actual.k === "list") && describing(actual)) {
             return unify(expected.value, schemaValue(actual, e ?? { t: "placeholder" }), e, seen);
         }
@@ -1991,6 +1993,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // winning over the names there), as a block's statements are; a binding's
     // item is the value it binds. An item reading a name in changed is
     // inferred again, any other keeps its type. A name bound nowhere is open.
+    // A record's code, where code is read: [x = 1] ++ [x + 1] joins code.
+    function asCode(t: Ty): Ty { return t.k === "record" && t.code ? resolve(codeList(t.code)) : t; }
     function codeList(items: FormulaItem[], changed = new Set<string>()): Ty {
         changed = new Set(changed);
         const before = new Map<string, Entry>();
@@ -2448,7 +2452,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             });
             return;
         }
-        // A record's fields, by name ([x: 300] for [x: UInt8]).
+        // A record's fields, by name ([x = 300] for [x : UInt8]).
         if (t.k === "record" && known.fields) {
             for (const [key, value] of known.fields) {
                 const type = t.fields.get(key);
@@ -2683,7 +2687,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return list(a, tail.k === "list" && tail.length ? indexAdd(tail.length, constant(1n)) : undefined);
         }
         if (op === "++") {
-            const x = resolve(a), y = resolve(b);
+            const x = asCode(resolve(a)), y = asCode(resolve(b));
             // Code joins code: the right's items see the left's bindings.
             if (x.k === "list" && y.k === "list" && x.formula && (y.formula || y.items)) {
                 const right = y.formula?.items ?? y.items!.map((type): FormulaItem => ({ type }));
@@ -2717,7 +2721,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return operation(op, [a, b], lossless);
     }
     // The record with these fields set: r.f = v, r.[f, g] = [v, w], and
-    // r [f: v, g: w], which is the same update. A field it has converts its new
+    // r [f = v, g = w], which is the same update. A field it has converts its new
     // value as its old one requires; a new one is added unless a record type
     // made the record. A copy of an open record stays open.
     function assignFields(rec: Extract<Ty, { k: "record" }>, entries: Array<[string, Ty, Expr]>, e: Expr): Ty {
@@ -2945,9 +2949,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             const t = resolve(f.value);
             let a = resolve(argument.type);
-            // A list or record of types (Point = [x: Float, y: Float]) given as a
+            // A list or record of types (Point = [x : Float, y : Float]) given as a
             // type's argument is the type it describes: List Point, Option Point.
-            // (Nested ones too: [x: Float, color: [Float, Float]].)
+            // (Nested ones too: [x : Float, color = [Float, Float]].)
             const describes = a.k !== "type" && describing(a);
             if (describes && (t.k === "atom" && t.name === "List" || t.k === "variant" && t.args.length > (f.applied ?? 0))) {
                 a = { k: "type", value: schemaValue(a, e) };
@@ -3055,7 +3059,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (f.k === "var") {
             // Given a record literal, the unknown value may be a function or a
-            // record it updates (model [name: n]): decided once its type is known.
+            // record it updates (model [name = n]): decided once its type is known.
             // (Any other argument keeps a function being defined inferable.)
             if (e.t === "record") return deferredCall(f, argument);
             const self = !choosing ? definingSelf.find(d => d.byType && resolve(d.pending) === f) : undefined;
@@ -3218,9 +3222,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return union([...f.fields.values()]);
             }
             // Given fields, a record is updated exactly as by field assignment:
-            // a record of values (model [name: n]), or a type given types
-            // (Vector3 [x: Int] is Vector3.x = Int). A type given values builds one.
-            // Fields given by name, or all of them in order (r [10] is r [x: 10]).
+            // a record of values (model [name = n]), or a type given types
+            // (Vector3 [x : Int] is Vector3.x = Int). A type given values builds one.
+            // Fields given by name, or all of them in order (r [10] is r [x = 10]).
             const given: Array<[string, Ty, Expr]> | undefined = a.k === "record" ? [...a.fields].map(([key, type]) => [key, type, fieldExpr(e, key)])
                 : a.k === "list" && a.items?.length === f.fields.size ? [...f.fields.keys()].map((key, n) => [key, a.items![n], e.t === "list" ? e.v[n] ?? e : e])
                 : undefined;
@@ -3620,12 +3624,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return code;
             }
             case "record": {
-                let result: Ty = { k: "record", fields: new Map() };
+                // Each field is in scope for those after it, as at runtime.
+                let result: Ty = { k: "record", fields: new Map() }, fieldScope: Scope = scope;
                 for (const [key, value] of e.v) {
-                    const type = infer(value, scope);
+                    const type = infer(value, fieldScope);
                     result = operation("merge-record", [result, key === "_" ? type : { k: "record", fields: new Map([[key, type]]) }]);
+                    fieldScope = new Map(fieldScope);
+                    if (key !== "_") fieldScope.set(key, { type });
+                    else { const opened = resolve(type); if (opened.k === "record") for (const [name, field] of opened.fields) fieldScope.set(name, { type: field }); }
                 }
-                return result;
+                const record = resolve(result);
+                return e.items && record.k === "record" ? { ...record, code: e.items.map(expr => ({ expr, scope })) } : result;
             }
             case "range": {
                 // [a..] is enumFrom a, and so on, with what those mean here.
@@ -3760,7 +3769,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const holder = resolve(inferred.get(head.rec) ?? dynamic);
                     return holder.k === "record" && !!holder.open;
                 })()) argumentType = withoutLengths(copy(argumentType, new Map([...variables(argumentType)].map(v => [v, v]))), true);
-                if (!(head.t === "var" && READS_CODE.has(head.name))) closed(argumentType);
+                if (head.t === "var" && READS_CODE.has(head.name)) argumentType = asCode(resolve(argumentType));
+                else closed(argumentType);
                 closed(callee);
                 const result = application(callee, { type: argumentType, ...valueEntry(a, scope) }, a);
                 if (!callees.has(e)) noClauseMatches(e, scope);

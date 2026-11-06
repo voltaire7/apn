@@ -8,15 +8,15 @@ const decoded = (type: string, json: string) =>
     `import ["option","decode"]\njson = from JSON ${JSON.stringify(json)}\ndecodeValue ${type} json`;
 const cases: [string, string][] = [
     // A type decodes each field by name, as it says, wherever a decoder goes.
-    [decoded("(list [n: Int])", '[{"n": 1}, {"n": 2}]'), "Ok [[n: 1], [n: 2]]"],
+    [decoded("(list [n : Int])", '[{"n": 1}, {"n": 2}]'), "Ok [[n = 1], [n = 2]]"],
     [decoded('(field "n" Int)', '{"n": "x"}'), 'Err "Expecting an INT"'],
     [decoded('(at ["a","b"] String)', '{"a": {"b": "x"}}'), 'Ok "x"'],
-    [decoded("(map (r -> r.n) (fromType [n: Int]))", '{"n": 7}'), "Ok 7"],
-    [decoded("[quote: String, year: Int]", '{"year": 1843, "quote": "q", "x": 0}'), 'Ok [quote: "q", year: 1843]'],
-    [decoded("[quote: String, year: Int]", '{"quote": "q"}'), 'Err "Expecting an OBJECT with a field named `year`"'],
-    [decoded("[quote: String, year: Int]", '{"quote": "q", "year": "1843"}'), 'Err "Expecting an INT"'],
-    [decoded("(fromType [at: [x: Float, y: Float], tags: list string])", '{"at": {"x": 1, "y": 2.5}, "tags": ["a"]}'), 'Ok [at: [x: 1.0, y: 2.5], tags: ["a"]]'],
-    [decoded("(fromType [tags: list string])", '{"tags": ["a",1]}'), 'Err "Expecting a STRING"'],
+    [decoded("(map (r -> r.n) (fromType [n : Int]))", '{"n": 7}'), "Ok 7"],
+    [decoded("[quote : String, year : Int]", '{"year": 1843, "quote": "q", "x": 0}'), 'Ok [quote = "q", year = 1843]'],
+    [decoded("[quote : String, year : Int]", '{"quote": "q"}'), 'Err "Expecting an OBJECT with a field named `year`"'],
+    [decoded("[quote : String, year : Int]", '{"quote": "q", "year": "1843"}'), 'Err "Expecting an INT"'],
+    [decoded("(fromType [at : [x : Float, y : Float], tags = list string])", '{"at": {"x": 1, "y": 2.5}, "tags": ["a"]}'), 'Ok [at = [x = 1.0, y = 2.5], tags = ["a"]]'],
+    [decoded("(fromType [tags = list string])", '{"tags": ["a",1]}'), 'Err "Expecting a STRING"'],
     [decoded("Bool", "true"), "Ok True"],
     // Parsers read their input in order, as do-blocks (Parsec's way).
     ['import "parser"\ndate = {\n    y <- number\n    char \'-\'\n    m <- number\n    return [y,m]\n}\nparse date "2026-10"', "Ok [2026,10]"],
@@ -95,11 +95,11 @@ const cases: [string, string][] = [
     ['endsWith "😀" "a😀"', 'True'],
     ['getOr 9 "x" (HashMap [])', '9'],
     ['getOption "x" (HashMap [])', 'None'],
-    ['getOr missing "x" (HashMap [x: 2])', '2'],
+    ['getOr missing "x" (HashMap [x = 2])', '2'],
     ['lookup "a" (frequencies ["a","b","a"])', '2'],
-    ['lookup "a" (mergeWith (+) (HashMap [a: 2]) (HashMap [a: 3]))', '5'],
+    ['lookup "a" (mergeWith (+) (HashMap [a = 2]) (HashMap [a = 3]))', '5'],
     ['lookup 1 (groupBy (x -> x % 2) [1..5])', '[1,3,5]'],
-    ['pairs (filterMap (key, value -> value > 2) (HashMap [a: 1, b: 3]))', '[["b",3]]'],
+    ['pairs (filterMap (key, value -> value > 2) (HashMap [a = 1, b = 3]))', '[["b",3]]'],
 ];
 for (const [source, expected] of cases) Deno.test(`std: ${source}`, () => {
     const i = new Interpreter();
@@ -189,7 +189,7 @@ for (const eager of ['=', '<-']) {
 }
 Deno.test('selective imports rename fields and preserve unselected bindings', () => {
     const i = new Interpreter();
-    i.run(parse('fibonacci = 123; [halt: stop] = import "system"'));
+    i.run(parse('fibonacci = 123; [halt = stop] = import "system"'));
     if (!i.env.get('stop') || i.env.get('halt')) throw new Error('wrong selected names');
     if (i.renderString(i.run(parse('fibonacci'))) !== '123') throw new Error('overwrote unselected binding');
 });

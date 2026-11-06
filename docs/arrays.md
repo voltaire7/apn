@@ -10,7 +10,7 @@ records. Unary `-` negates every numeric leaf. Concatenation remains `++`.
 [1,2,3] / 2              # [1/2,1,3/2]
 2 ^ [1,2,3]              # [2,4,8]
 [[1,2],[3,4]] * 2       # [[2,4],[6,8]]
-[x: 1, y: 2] + [y: 20, x: 10] # [x: 11, y: 22]
+[x = 1, y = 2] + [y = 20, x = 10] # [x = 11, y = 22]
 ```
 
 Two collections must have matching structure: lists pair by position and require

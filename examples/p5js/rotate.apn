@@ -34,4 +34,4 @@ draw (p : Sketch) = {
     p.line 0 0 150 0
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

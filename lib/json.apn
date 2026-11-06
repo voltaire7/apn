@@ -1,5 +1,5 @@
 # JSON text. toJson value encodes a value: records (and HashMaps with string
 # keys) become objects keyed by each key's text, lists arrays, Bool True/False,
 # integers exact numbers, Floats numbers; prettyJson encodes it indented by two
-# spaces. fromJson text decodes one: objects become records of bare keys
-# (r.status, r "Content-Type"), arrays lists, numbers Int or Float, null [].
+# spaces. fromJson text decodes one: objects become records named by their keys
+# (r.status, r.`Content-Type`), arrays lists, numbers Int or Float, null [].

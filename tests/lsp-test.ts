@@ -16,7 +16,7 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     equal(lint('print "do not execute"\nx = x\nload "missing-file"\n'), []);
     equal(lint("foo =")[0].code, "parse");
     equal(lint("f = {\n  1\n}")[0].code, "lex");
-    equal(lint("1 `add` 2")[0].range.start, { line: 0, character: 2 });
+    equal(lint("x = `add")[0].range.start, { line: 0, character: 4 });
     // Unused parameters warn; _ and _-prefixed names discard.
     const unused = (source: string) => lint(source).filter(d => d.code === "unused").map(d => [d.range.start.line, d.range.start.character, d.message]);
     equal(unused("f x y = x"), [[0, 4, "'y' is never used; write _ to discard it"]]);
@@ -176,7 +176,7 @@ Deno.test("lint reports a clause or alternative that never runs", () => {
     equal(opened('t <- load "cards"\nuse [t]\ns _ = 0\ns Hearts = 1'), 1);
     equal(opened('use (import "cards")\ns _ = 0\ns Hearts = 1'), 1);
     equal(opened('opt = import "option"\nf _ = 0\nf (Some x) = x'), 0);
-    equal(opened('t <- load "cards"\nt = [x: 1]\nuse t\ns _ = 0\ns Hearts = 1'), 0);
+    equal(opened('t <- load "cards"\nt = [x = 1]\nuse t\ns _ = 0\ns Hearts = 1'), 0);
     // match ranks its alternatives as clauses: a literal after an unconditional
     // one still runs, another name or list pattern never does.
     equal(unreachable("v = 3 ~ [\n    x -> 0\n    1 -> 5\n]"), []);

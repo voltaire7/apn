@@ -135,4 +135,4 @@ keyPressed (p : Sketch) = {
         (set direction way)) turn
 }
 
-main = sketch [setup: setup, draw: draw, mousePressed: mousePressed, keyPressed: keyPressed]
+main = sketch [setup = setup, draw = draw, mousePressed = mousePressed, keyPressed = keyPressed]

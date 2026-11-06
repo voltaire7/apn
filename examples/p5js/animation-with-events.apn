@@ -31,4 +31,4 @@ mousePressed (p : Sketch) = {
 }
 keyPressed (p : Sketch) = p.redraw
 
-main = sketch [setup: setup, draw: draw, mousePressed: mousePressed, keyPressed: keyPressed]
+main = sketch [setup = setup, draw = draw, mousePressed = mousePressed, keyPressed = keyPressed]

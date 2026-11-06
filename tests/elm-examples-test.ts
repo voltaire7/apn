@@ -115,9 +115,9 @@ Deno.test("files: pickers, drops and previews", async () => {
     const { platform, flush } = fake();
     const drop = run("drag-and-drop", platform);
     drop.dispatch(0, {});
-    if (!content(drop.render()).includes("hover: True")) throw new Error("drag enter");
+    if (!content(drop.render()).includes("hover = True")) throw new Error("drag enter");
     drop.dispatch(3, { files: [{ name: "x.png", size: 1, mime: "image/png", url: "blob:x" }] });
-    if (!content(drop.render()).includes('name: "x.png"') || content(drop.render()).includes("hover: True")) throw new Error(content(drop.render()));
+    if (!content(drop.render()).includes('name = "x.png"') || content(drop.render()).includes("hover = True")) throw new Error(content(drop.render()));
     const previews = run("image-previews", platform);
     previews.dispatch(4);
     await flush();
@@ -184,7 +184,7 @@ Deno.test("First Person keeps walking for a thousand frames", async () => {
     }
     // Each update ran (a failed one throws), and walked back where it began.
     const shown = game.interpreter.renderString(game.model);
-    const [x, y, z] = /position: \[([^\]]*)\]/.exec(shown)![1].split(",").map(Number);
+    const [x, y, z] = /position = \[([^\]]*)\]/.exec(shown)![1].split(",").map(Number);
     if (Math.abs(x) > 1e-9 || y !== 2 || Math.abs(z + 10) > 1e-9) throw new Error(shown);
 });
 // A field nobody reads (the keys) once chained every repeat's pending update,

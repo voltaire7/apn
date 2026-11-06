@@ -59,7 +59,7 @@ Deno.test("object environment exposes no host parser or evaluator", () => {
 });
 Deno.test("record access demands action chains without forcing unrelated fields", () => {
     const i = new Interpreter();
-    const actual = i.renderString(i.run(parse('make x = [answer: x, unused: [missing]]; a = make 42; b = a; b.answer')));
+    const actual = i.renderString(i.run(parse('make x = [answer = x, unused = [missing]]; a = make 42; b = a; b.answer')));
     if (actual !== "42") throw new Error(actual);
 });
 Deno.test("nested module loads restore the caller's source directory", () => {

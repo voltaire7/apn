@@ -1,5 +1,5 @@
 import type { Counting } from "./ast.ts";
-import { keySource } from "./record-keys.ts";
+import { fieldSource } from "./record-keys.ts";
 import { functionSource } from "./function-source.ts";
 import { type Numeric, type Real, arithmetic, asFloat, compareNumbers, integer, numberText } from "./numbers.ts";
 import { APNError } from "./errors.ts";
@@ -101,6 +101,10 @@ export type PendingStep =
 // What an IO action continues with: its last step, run by the caller's loop.
 export class IOTail { constructor(public next: Value) {} }
 
+// A record field holding a type prints as its declaration (x : Float); any
+// other value, a list of types included, as its binding (x = [Int,Int]).
+export function holdsType(v: Value): boolean { return v.kind === "type" || v.kind === "functionType"; }
+
 export function valueToString(v: Value): string {
     switch (v.kind) {
         // A number shows its value; typeOf shows its type (Int32 5 prints 5).
@@ -129,7 +133,7 @@ export function valueToString(v: Value): string {
             return `[${itemsText(out.map(valueToString))}]`;
         }
         case "record":
-            return `[${v.v.map(([k, val]) => `${keySource(k)}: ${valueToString(val)}`).join(", ")}]`;
+            return `[${v.v.map(([k, val]) => fieldSource(k, valueToString(val), holdsType(val))).join(", ")}]`;
         // A named subtype's value is its base's (5 : Count prints 5); a
         // constructor's shows it (UserId 5).
         case "variant": return v.family?.base && v.v.length === 1 ? valueToString(v.v[0]) : v.tag + v.v.map(argumentText).join("");
@@ -254,7 +258,7 @@ export function canonicalTypeText(text: string): string {
 export function typeToString(v: Value): string {
     if (v.kind === "type") return valueToString({ ...v, inspect: true });
     if (v.kind === "list") return `[${itemsText(v.v.map(typeToString))}]`;
-    if (v.kind === "record") return `[${v.v.map(([k, x]) => `${keySource(k)}: ${typeToString(x)}`).join(", ")}]`;
+    if (v.kind === "record") return `[${v.v.map(([k, x]) => fieldSource(k, typeToString(x), true)).join(", ")}]`;
     return valueToString(v);
 }
 

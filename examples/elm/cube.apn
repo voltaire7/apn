@@ -32,7 +32,7 @@ cubeMesh = {
     ]
 }
 
-view angle = p5.canvas [setup: setup, draw: draw angle]
+view angle = p5.canvas [setup = setup, draw = draw angle]
 
 setup p = p.call "createCanvas" [400,400,p.WEBGL]
 
@@ -58,4 +58,4 @@ triangle p [color,a,b,c] = {
 
 face color a b c d = [[color,a,b,c],[color,c,d,a]]
 
-main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]
+main = browser.element [init = init, update = update, subscriptions = subscriptions, view = view]

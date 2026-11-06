@@ -1,7 +1,7 @@
 # Templates and type aliases
 
-Every record field has a type: the type it holds (`[x: Float]`), or the type of
-the value it holds, which is then that type's default (`[x: 1.1]` is a Float
+Every record field has a type: the type it holds (`[x : Float]`), or the type of
+the value it holds, which is then that type's default (`[x = 1.1]` is a Float
 field defaulting to `1.1`). A record holding a type, given values, builds one;
 any other record given fields is updated, exactly as by field assignment (see
 [slot assignment](#slot-assignment)). Either way a given value converts to its
@@ -13,12 +13,12 @@ Concrete scalars (numbers, strings, characters, and booleans) are not callable.
 ```apn
 0 123                       # error: cannot apply a number
 [0].[123]                   # error: cannot apply a number
-[x: (0 : Int)] [floor .2]   # [x: 0]
-[x: (0 : Int)] [(.2 : Float)] # error: lossy conversion
-[x: 0] [x: 123]             # [x: 123]
-[x: 1.1] [10]               # [x: 10.0]: x is a Float
-[x: 1] [2.5]                # error: lossy conversion
-[x: False] [1]              # error: cannot use Int where Bool is required
+[x = (0 : Int)] [floor .2]  # [x = 0]
+[x = (0 : Int)] [(.2 : Float)] # error: lossy conversion
+[x = 0] [x = 123]           # [x = 123]
+[x = 1.1] [10]              # [x = 10.0]: x is a Float
+[x = 1] [2.5]               # error: lossy conversion
+[x = False] [1]             # error: cannot use Int where Bool is required
 ["old"].["new"]             # error: cannot apply a string
 [Bool].[True]               # [True]
 [Char].['b']                 # ['b']
@@ -29,7 +29,7 @@ losslessly to the field's type, whether or not the program is checked: a
 number to the default's numeric type (`typeOf` of it, so `1` is an Int),
 rejecting overflow and nonzero imaginary-part loss; a string, character or
 Bool only from its own kind; a function or action only from its own kind. A
-function field is replaced, never applied: `[x: 0, y: (*2)] [1,2]` is an error.
+function field is replaced, never applied: `[x = 0, y = (*2)] [1,2]` is an error.
 Standalone `"old" "new"`, `'a' 'b'`, and `False True` are application errors.
 List templates apply their function slots, including effects (see [Lists](#lists)).
 
@@ -67,9 +67,9 @@ record's keys and order, and the template must have exactly as many slots as
 the record has fields. Converted fields remain lazy:
 
 ```apn
-[Float].[x: 1]                        # [x: 1.0]
-[String,Int].[name: "a", age: 2]     # [name: "a", age: 2]
-[(+ 1), (* 2)].[b: 3, a: 4]          # [b: 4, a: 8]
+[Float].[x = 1]                       # [x = 1.0]
+[String,Int].[name = "a", age = 2]   # [name = "a", age = 2]
+[(+ 1), (* 2)].[b = 3, a = 4]        # [b = 4, a = 8]
 ```
 
 Strings supply Unicode code-point characters using the same positional rules:
@@ -102,20 +102,20 @@ A list argument selects multiple indices: `[10,20,30] [2,0]` returns `[30,10]`.
 A record argument names the selected indices and returns a record:
 
 ```apn
-[10,20,30] [first: 0, last: 2]     # [first: 10, last: 30]
-[Int] [x: 0]                       # [x: Int]
-[Int] [x: 1]                       # error: index out of bounds
+[10,20,30] [first = 0, last = 2]   # [first = 10, last = 30]
+[Int] [x = 0]                      # [x : Int]
+[Int] [x = 1]                      # error: index out of bounds
 ```
 
 Each record value must be an integer or enumeration index. Selection preserves
 its field names and order. This is indexing, not template conversion;
-`[Int].[x: 1]` instead converts the record's value and returns `[x: 1]`.
+`[Int].[x = 1]` instead converts the record's value and returns `[x = 1]`.
 Named selections support assignment with exactly the same field names on the
 right; replacement order does not matter:
 
 ```apn
 arr = [10,20,30]
-arr [first: 0, last: 2] = [last: 300, first: 100]
+arr [first = 0, last = 2] = [last = 300, first = 100]
 # arr = [100,20,300]
 ```
 
@@ -166,10 +166,10 @@ a list; it does not acquire record fields or record construction behavior.
 ## Records
 
 ```apn
-[x: Int, y: 0] [x: 1, y: 2]    # [x: 1, y: 2]
-[x: Int, y: Int] [x: 123]        # [x: 123, y: 0]
-[x: Int] [x: 123, z: "extra"]    # [x: 123, z: "extra"]
-[x: Int, y: (* 2)] [1,2]      # [x: 1, y: 4]
+[x : Int, y = 0] [x = 1, y = 2] # [x = 1, y = 2]
+[x : Int, y : Int] [x = 123]     # [x = 123, y = 0]
+[x : Int] [x = 123, z = "extra"] # [x = 123, z = "extra"]
+[x : Int, y = (* 2)] [1,2]    # [x = 1, y = 4]
 ```
 
 Supplied existing fields are applied, omitted type slots are initialized,
@@ -177,10 +177,10 @@ and extra fields are appended unchanged. An omitted `Int` becomes typed zero;
 omitted concrete values and functions retain their defaults. See [zero initialization](zero-initialization.md).
 A nonempty list argument must supply exactly one value per record field.
 The empty list `[]` explicitly initializes all fields from their defaults. Record results defer field transformations until demanded.
-A schema's result keeps its fields; see [record fields](semantics.md#record-fields-string-keys-and-positions).
+A schema's result keeps its fields; see [record fields](semantics.md#records).
 
 Keys retain their full string contents, including any quote characters, through application.
-`[x: Int, "x": Int] ["x": 1]` produces `[x: 0, "x": 1]`.
+`[x : Int, x : Int] [x = 1]` produces `[x = 0, x = 1]`.
 
 For passing collections to functions, destructuring parameters, and records as
 named arguments, see [lists and records as arguments](pattern-functions.md#lists-and-records-as-arguments).
@@ -198,14 +198,13 @@ named arguments, see [lists and records as arguments](pattern-functions.md#lists
 | Record, one-field selection | `obj.[x]` returns a one-element list | `obj.[x] = [value]` |
 | Nested record | `obj.child.x` | `obj.child.x = value` |
 | Nested field selection | `obj.child.[x,y]` | `obj.child.[x,y] = [a,b]` |
-| Record, positional entry | `obj 0` returns `[key,value]` | Not supported; assign by field name |
-| Record, renamed selection | `obj.[x: a, y: b]` | `obj.[x: a, y: b] = [a: 10, b: 20]` |
+| Record, positional entry | `obj 0` returns `[key,value]` | `obj 0 = [key,value]` |
+| Record, renamed selection | `obj.[a = x, b = y]` | `obj.[x = a, y = b] = [a = 10, b = 20]` |
 
-Bare dot field names are literal strings. Use `obj key` for a computed name
-and `obj "(key)"` for a key containing parentheses. `obj.(expression)` performs
-[scoped evaluation](semantics.md#record-scoped-expressions). Quoted field syntax includes the
-quote characters: `obj."x"` is equivalent to `obj "\"x\""`.
-See [record key identity](semantics.md#record-fields-string-keys-and-positions) for the full rules.
+A field after `.` is a name, in backticks when it is not one (``obj.`my value` ``).
+Use `obj key` for a computed name. `obj.(expression)` performs
+[scoped evaluation](semantics.md#record-scoped-expressions).
+See [records](semantics.md#records) for the full rules.
 
 List dot syntax performs template application, not indexing or assignment:
 `templates.values`, `templates.(expression)`, and `[Int,Float].[1,2]`.
@@ -222,7 +221,7 @@ arr = [1,2]
 arr 0 = 3.0                # stores integer 3
 # arr 0 = 3.5              # error: lossy conversion
 
-v = [x: Float, y: Int] []
+v = [x : Float, y : Int] []
 v.x = 123                  # stores 123.0
 v "y" = 321                # stores integer 321
 ```
@@ -231,39 +230,39 @@ A slot holding a type takes a type, which changes it, or a value, which
 becomes a default of that type (as `x: (123 : Float)` would be written):
 
 ```apn
-v = [x: Float]
-v.x = 123                  # [x: 123.0]
-v = [x: Float]
-v.x = Int                  # [x: Int]
+v = [x : Float]
+v.x = 123                  # [x = 123.0]
+v = [x : Float]
+v.x = Int                  # [x : Int]
 xs = [Int]
 # xs 0 = .2                # error: lossy conversion
 ```
 
-A `Type` field's values are types: `[type: Type] [Int]` and
-`[type: Type] [type: Int]` are both `[type: Int]`. Records are replaced, never
+A `Type` field's values are types: `[type : Type] [Int]` and
+`[type : Type] [type : Int]` are both `[type : Int]`. Records are replaced, never
 merged; a function is replaced by a function, never called:
 
 ```apn
-v = [f: (* 2), child: [x: 1]]
+v = [f = (* 2), child = [x = 1]]
 v.f = (+ 1)                # replaces (* 2); does not call it
-v.child = [y: 2]           # replaces the whole child
+v.child = [y = 2]          # replaces the whole child
 # v.f = 3                  # error: cannot use Int where a -> b is required
 ```
 
-A record applied to a record of fields is field assignment, `r [f: v, g: w]`
+A record applied to a record of fields is field assignment, `r [f = v, g = w]`
 being `{ r.f = v; r.g = w; r }` in every way (a field keeps its number type or
 variant family, a schema's record takes no new field, nothing else is
 evaluated), when the record holds values or the fields hold types. So
-`[f: (* 2)] [f: (+ 1)]` is `[f: (+ 1)]`, `[x: 1] [y: 2]` is `[x: 1, y: 2]`, a
-model is updated as Elm's `{ model | name = n }` (`model [name: n]`), and a
-type is edited as `Vector3.x = Int` edits it: `Vector3 [x: Int]` is
-`[x: Int, y: Float, z: Float]`. A record holding a type given values builds
+`[f = (* 2)] [f = (+ 1)]` is `[f = (+ 1)]`, `[x = 1] [y = 2]` is `[x = 1, y = 2]`, a
+model is updated as Elm's `{ model | name = n }` (`model [name = n]`), and a
+type is edited as `Vector3.x = Int` edits it: `Vector3 [x : Int]` is
+`[x : Int, y : Float, z : Float]`. A record holding a type given values builds
 one: given fields take their values as by assignment and the others their
-defaults, so `Vector3 [x: 1]` is `[x: 1.0, y: 0.0, z: 0.0]`. (Assigning a
+defaults, so `Vector3 [x = 1]` is `[x = 1.0, y = 0.0, z = 0.0]`. (Assigning a
 value into a type's field sets that field's default instead: `Vector3.x = 1`
-is the type `[x: 1.0, y: Float, z: Float]`, and `Vector3 []` is then
-`[x: 1.0, y: 0.0, z: 0.0]`.) A list gives values in field order, exactly as by
-name: `r [10,20]` is `r [x: 10, y: 20]`. Whether a record holds a type is told
+is the type `[x = 1.0, y : Float, z : Float]`, and `Vector3 []` is then
+`[x = 1.0, y = 0.0, z = 0.0]`.) A list gives values in field order, exactly as by
+name: `r [10,20]` is `r [x = 10, y = 20]`. Whether a record holds a type is told
 from what it was built with and the fields it is given, without evaluating the
 others. A parameter given a record literal may be a function or
 such a record; the checker decides once its type is known.
@@ -277,10 +276,10 @@ arr i = 11
 arr (i + 1) = 22
 arr [1,2] = arr [2,1]   # swaps the old values
 
-obj = [x: 0]
+obj = [x = 0]
 key = "x"
 obj key = 3
-obj (key ++ "y") = 4       # [x: 3, xy: 4]
+obj (key ++ "y") = 4       # [x = 3, xy = 4]
 ```
 
 The index or key is evaluated once before the RHS, against the old binding.
@@ -300,7 +299,7 @@ New record fields are allowed; `obj = []; obj.x = 1` seeds a record.
 Unnamed bracketed selections require a list with one value per selected field, even for one field:
 
 ```apn
-obj = [x: 1, y: 2]
+obj = [x = 1, y = 2]
 obj.[x] = [10]             # assigns 10 to x
 # obj.[x] = 10             # error: RHS must be a list
 obj.[x,y] = obj.[y,x]  # swaps the old values
@@ -314,34 +313,34 @@ obj.items = [3,4]        # direct assignment takes the value itself
 ### Renamed field assignment
 
 ```apn
-obj = [x: 1, y: 2]
-obj.[x: a, y: b] = [b: 20, a: 10]  # [x: 10, y: 20]
-obj.[x: a, y: b] = obj.[y: a, x: b] # swap
+obj = [x = 1, y = 2]
+obj.[x = a, y = b] = [b = 20, a = 10] # [x = 10, y = 20]
+obj.[x = a, y = b] = obj.[a = y, b = x] # swap
 ```
 
 Every entry must be renamed; the RHS must be a record with exactly the selected
 output names. Targets must already exist. Updates use the original slots'
 conversion rules and publish only after all replacements pass. Nested targets
-such as `obj.child.[x: a]` follow the same rule. Ordinary `obj.[x,y]` assignment
+such as `obj.child.[a = x]` follow the same rule. Ordinary `obj.[x,y]` assignment
 continues to require a list.
 
 ### Nested records
 
 ```apn
-obj = [child: [x: (1 : Float), y: 2], label: "kept"]
+obj = [child = [x = (1 : Float), y = 2], label = "kept"]
 obj.child.x = 10
-# [child: [x: 10.0, y: 2], label: "kept"]
+# [child = [x = 10.0, y = 2], label = "kept"]
 obj.child.[x,y] = [20,30]
 ```
 
 The update rebuilds the parent records and rebinds `obj`, preserving sibling
 fields and the selected slot's conversion checks. Paths may contain any number
-of literal record fields, including quoted keys. Intermediate fields must exist
+of literal record fields, backticked ones included. Intermediate fields must exist
 and contain records; an empty list at the final parent can seed a record:
 
 ```apn
-obj = [child: []]
-obj.child.x = 10            # [child: [x: 10]]
+obj = [child = []]
+obj.child.x = 10            # [child = [x = 10]]
 # obj.missing.x = 10       # error: missing intermediate field
 # obj.child.x.y = 10       # error: x is a number
 ```
@@ -352,7 +351,7 @@ list index or a computed string at an intermediate path segment.
 ### Scope, sharing, and failures
 
 ```apn
-obj = [child: [x: 1]]
+obj = [child = [x = 1]]
 snapshot <- obj
 obj.child.x = 10
 print snapshot.child.x     # 1
@@ -384,12 +383,12 @@ accepted in type positions. Ordinary transformation functions are not types.
 ```apn
 Count = Int
 Numbers = [Int]
-Point = [x: Float, y: Float]
+Point = [x : Float, y : Float]
 Points = [Point]
 
 (123 : Count)              # 123
 Numbers.[1]                # [1]; Numbers.[1,2] errors
-Point [x: 1, y: 2]         # [x: 1.0, y: 2.0]
+Point [x = 1, y = 2]       # [x = 1.0, y = 2.0]
 cast [Int,Int] [1,2]        # [1,2]
 ([Int] : Type)            # [Int]
 isType Type [(* 2)]        # False
@@ -398,7 +397,7 @@ isType Type [(* 2)]        # False
 Aliases are shared type-level bindings, not repeatable zero-argument actions.
 They introduce no new nominal identity. `Type` accepts descriptions while their
 ordinary container representation remains inspectable.
-Mixed defaults such as `[x: Int, y: 0]` are templates, not type descriptions.
+Mixed defaults such as `[x : Int, y = 0]` are templates, not type descriptions.
 
 Patterns accept aliases and inline descriptions:
 
@@ -406,7 +405,7 @@ Patterns accept aliases and inline descriptions:
 firstNumber (Numbers xs) = head xs
 firstNumber [123]             # 123
 firstInline (xs : [Int]) = head xs
-getX (p : [x: Int]) = p.x
+getX (p : [x : Int]) = p.x
 ```
 
 These are lazy runtime conversion contracts, not a static type checker.
@@ -433,7 +432,7 @@ type it names is kept as a
 
 One that gives any other type (a type or a schema, not a constructor) gives,
 applied to all its parameters, a type that remembers how it was written:
-`Point = [x: Float, y: Float]` is `Point`, `Pairs 2 Int` is `Pairs 2 Int`. It
+`Point = [x : Float, y : Float]` is `Point`, `Pairs 2 Int` is `Pairs 2 Int`. It
 is that type wherever a type is used (`(Point : Type)` shows what it is), and the
 values it makes, by applying it or by a conversion to it (`List (Pairs 1 Int)`,
 a field, a slot's default), remember it too, as does an updated copy of one.
@@ -497,7 +496,7 @@ Percent 90 + Percent 20       # Percent 100.0: the clause calls Percent, so its 
 Span (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _
 ```
 
-Every way of making one runs it, a record slot's default too (`[s: Span] []`
+Every way of making one runs it, a record slot's default too (`[s = Span] []`
 runs it on `Span 0 0`), and the checker checks that it gives the constructor's
 type. Its fields are named, since `_` holds them.
 
@@ -574,7 +573,7 @@ parameter (`mk x = MkByte x` rejects `mk 300`). A field that is a type
 parameter (`Some value`) holds its value unchanged. Grouped and structural payload types compose:
 `Tree a = Branch [a] | Leaf a`. A record alias is a type like any other, also as
 a type's argument (`Path (List Point)`, `Got (Result Point String)` with
-`Point = [x: Float, y: Float]`), and a field may name a module's type
+`Point = [x : Float, y : Float]`), and a field may name a module's type
 (`Resized browser.Viewport`).
 
 `func (value : Option Int) = ...` checks parent membership and applies the
@@ -588,12 +587,12 @@ An unspecialized parent pattern `(value : Option _)` still binds the whole varia
 A constructor pattern `(Some value)` extracts its field. A constructor sharing
 its type's name (`Box x = _`, `Box a = | Box a`) is the constructor where a
 value is expected and the type where one is expected: a field's type
-(`Wrap (Box b) = _`), a record slot (`[b: Box] []` is `[b: Box 0]` for
+(`Wrap (Box b) = _`), a record slot (`[b = Box] []` is `[b = Box 0]` for
 `Box (x : Int) = _`), `isType Box`, a type's argument (`List Box`), a union.
 Applied to a type for each of its type's parameters, it is likewise a value
 (`Box Int`, a `Box` holding `Int`) that reads as that type applied to them
 where a type is expected, as a lambda reads as a function type:
-`Wrap a = | Wrap (Box a)`, `isType (Box Int) (Box 1)`, `[b: Box Int] []`. So
+`Wrap a = | Wrap (Box a)`, `isType (Box Int) (Box 1)`, `[b = Box Int] []`. So
 `f (b : Box Int) = ...`, or `f (Box Int b)`, takes a `Box Int` whole, while
 `unbox (Box x) = x`, with as many arguments as `Box` has fields, still takes it
 apart. This needs its fields to be exactly its parameters (`Box x = _`, not
@@ -606,7 +605,7 @@ inference are not part of this change.
 
 Record-template patterns also accept positional lists with exactly as many
 items as the template has fields: `f (Vector3 v) = v` accepts `f [1,2,3]`
-when `Vector3 = [x: Float, y: Float, z: Float]`. Conversion is the same lazy
+when `Vector3 = [x : Float, y : Float, z : Float]`. Conversion is the same lazy
 conversion as `Vector3 [1,2,3]`. Wrong lengths do not match; shape checking
 reads at most one cell beyond the required count, including infinite inputs.
 Field conversion errors remain deferred until those fields are demanded.
@@ -614,13 +613,13 @@ Equally matching record templates retain source-order dispatch.
 
 ## Flattening record fields
 
-An anonymous `_: record` entry merges that record's fields into the literal:
+A `use record` field merges that record's fields into the literal:
 
 ```apn
-base = [x: 1]
-v = [_: base, y: 2, z: 3]         # [x: 1, y: 2, z: 3]
-[_: base, x: "new"]              # [x: "new"]
-[x: "new", _: base]              # [x: 1]
+base = [x = 1]
+v = [use base, y = 2, z = 3]      # [x = 1, y = 2, z = 3]
+[use base, x = "new"]            # [x = "new"]
+[x = "new", use base]            # [x = 1]
 ```
 
 Entries are processed in source order. New names are appended at that point;

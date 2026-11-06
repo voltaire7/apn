@@ -147,4 +147,4 @@ draw (p : Sketch) = {
     p.call "ellipse" [260,0,200,200,100]
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

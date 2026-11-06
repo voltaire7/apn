@@ -18,4 +18,4 @@ setup (p : Sketch) = {
 mouseDragged (p : Sketch) =
     p.copy colorImage p.mouseX p.mouseY 20 20 p.mouseX p.mouseY 20 20
 
-main = sketch [preload: [colorImage,grayImage], setup: setup, mouseDragged: mouseDragged]
+main = sketch [preload = [colorImage,grayImage], setup = setup, mouseDragged = mouseDragged]

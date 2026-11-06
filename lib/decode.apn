@@ -37,7 +37,7 @@ _basic t = t == String ? string : (t == Int ? int : (t == Float ? float : (t == 
 decodeValue (Decoder decoder) value = decoder value
 decodeValue (t : Type) value = _decodeAs t value
 # A type's decoder, for what takes only a decoder (map f (fromType Quote)), or
-# a record's whose fields may be decoders ([name: String, tags: list string]).
+# a record's whose fields may be decoders ([name : String, tags = list string]).
 fromType t = Decoder (_decodeAs t)
 # Decoders are monads: map f d, d >>= f (Elm's andThen), return x (Elm's
 # succeed); map2 ... map4 come from the prelude.

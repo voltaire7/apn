@@ -3,7 +3,7 @@
 import "p5"
 
 # Bubbles, each a circle with a name; and the press a new one starts from.
-Bubble = [x: Float, y: Float, radius: Float, name: String]
+Bubble = [x : Float, y : Float, radius : Float, name : String]
 bubbles = Mutable ([] : List Bubble)
 pressed = Mutable [0.0,0.0]
 creating = Mutable False
@@ -68,9 +68,11 @@ addBubble (p : Sketch) = {
     radius = dist x y p.mouseX p.mouseY : Float
     name <- p.prompt "Enter a name for the new bubble"
     when (name != "") {
-        set bubbles (bubbles ++ [[x: x, y: y, radius: radius, name: (name : String)]])
+        set bubbles (bubbles ++ [[x = x, y = y, radius = radius, name = (name : String)]])
         p.storeItem "bubbles" bubbles
     }
 }
 
-main = sketch [setup: setup, draw: draw, mousePressed: mousePressed, mouseReleased: mouseReleased]
+main = sketch [
+    setup = setup, draw = draw, mousePressed = mousePressed, mouseReleased = mouseReleased
+]

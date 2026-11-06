@@ -15,7 +15,7 @@ update Toggle playing = [!playing,browser.none]
 
 # The sketch shows the video and keeps it playing or paused, as the button says.
 view playing = div [] [
-    canvas [setup: setup, draw: draw playing]
+    canvas [setup = setup, draw = draw playing]
     button [onClick Toggle] [text (playing ? "pause" : "play")]
 ]
 
@@ -24,8 +24,8 @@ setup (p : Sketch) = p.noCanvas
 draw playing _ = playing ? video.loop : video.pause
 
 main = browser.element [
-    init: init
-    update: update
-    subscriptions: _ -> browser.none
-    view: view
+    init = init
+    update = update
+    subscriptions = _ -> browser.none
+    view = view
 ]

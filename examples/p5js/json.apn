@@ -8,7 +8,7 @@ task = import "task"
 
 # Bubbles, each a circle with a name; and the press a new one starts from,
 # while one is being made.
-Bubble = [x: Float, y: Float, radius: Float, name: String]
+Bubble = [x : Float, y : Float, radius : Float, name : String]
 Msg =
     | Loaded String
     | Picked (List file.File)
@@ -18,7 +18,7 @@ Msg =
     | Released String Float
 
 init = [
-    [bubbles: ([] : List Bubble), pressed: [0.0,0.0], creating: False]
+    [bubbles = ([] : List Bubble), pressed = [0.0,0.0], creating = False]
     task.perform Loaded (readFile "assets/bubbles.json")
 ]
 
@@ -28,7 +28,7 @@ load text model = { model.bubbles = from JSON text : List Bubble; model }
 update msg model = msg ~ [
     Loaded text -> [load text model, browser.none]
     # A file the visitor picked, read as text.
-    Picked (picked :: _) -> [model, http.get [url: picked.url, expect: http.expectString Read]]
+    Picked (picked :: _) -> [model, http.get [url = picked.url, expect = http.expectString Read]]
     Picked [] -> [model,browser.none]
     Read (Ok text) -> [load text model, browser.none]
     Read (Err _) -> [model,browser.none]
@@ -39,15 +39,15 @@ update msg model = msg ~ [
         [x,y] = model.pressed
         model.creating = False
         model.bubbles = model.bubbles ++ (name == ""
-            ? [] : [[x: x, y: y, radius: radius, name: name]])
+            ? [] : [[x = x, y = y, radius = radius, name = name]])
         [model,browser.none]
     }
 ]
 
 view model = div [] [
     canvas [
-        setup: setup, draw: draw model
-        mousePressed: mousePressed, mouseReleased: mouseReleased model
+        setup = setup, draw = draw model
+        mousePressed = mousePressed, mouseReleased = mouseReleased model
     ]
     div [] [
         button [onClick Download] [text "Download bubble data"]
@@ -108,4 +108,6 @@ mouseReleased model (p : Sketch) = when model.creating {
     p.send (Released (name : String) (dist x y p.mouseX p.mouseY : Float))
 }
 
-main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]
+main = browser.element [
+    init = init, update = update, subscriptions = _ -> browser.none, view = view
+]

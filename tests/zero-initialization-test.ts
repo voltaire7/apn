@@ -11,7 +11,7 @@ for (const [source, expected] of [
     ['[Int == 0, Float == 0, Int == Float, Int == Int]', '[False,False,False,True]'],
     ['[isType Int Int, isType Bool Bool, isType Type Int]', '[False,False,True]'],
     ['[typeOf Int, typeOf (1 : Int), typeOf (1 : Float), typeOf (1 : Int32)]', '[Type,Int,Float,Int32]'],
-    ['(identity : Int -> Float) <- return (x -> x)\n[(Int : Type), ([Int] : Type), ([x: Float] : Type), typeOf identity]', '[Int, [Int], [x: Float], Int -> Float]'],
+    ['(identity : Int -> Float) <- return (x -> x)\n[(Int : Type), ([Int] : Type), ([x : Float] : Type), typeOf identity]', '[Int, [Int], [x : Float], Int -> Float]'],
     ['Count (x : Int) = _\n[Count, Count 3]', '[Count, Count 3]'],
     ['f (t : Type) = 123 : t\nf Int', '123'],
     ['f (x : t) = [t,x]\nf (7 : Int32)', '[Int32,7]'],
@@ -21,24 +21,24 @@ for (const [source, expected] of [
     ['[].[]', '[]'],
     ['take 2 (map Int [1,2,missing])', '[1,2]'],
     ['[Int * 3, 3 * Int, 3 * (0 : Int)]', '[[0,1,2],[0,1,2],0]'],
-    ['V = [x: Float, y: Float, z: Float]\nv = V []\nv.x = 1\n[v, (V : Type)]', '[[x: 1.0, y: 0.0, z: 0.0], [x: Float, y: Float, z: Float]]'],
-    ['V = [x: Float, y: Float]\nV [x: 1]', '[x: 1.0, y: 0.0]'],
-    ['V = [x: Float, y: Float]\nV [1,2]', '[x: 1.0, y: 2.0]'],
-    ['v = [x: Float] []\nv.x = 2\ntypeOf v.x', 'Float'],
-    ['v = [x: Int8] []\nv.x = 12\nv', '[x: 12]'],
-    ['[x: Float, label: "origin", count: 7] []', '[x: 0.0, label: "origin", count: 7]'],
-    ['[x: Int, y: Int] [extra: 3]', '[x: 0, y: 0, extra: 3]'],
-    ['[nested: [x: Float], xs: [Int]] []', '[nested: [x: 0.0], xs: [0]]'],
-    ['v = [x: Int, bad: Function] []\nv.x', '0'],
-    ['cell = Mutable 1\nv = [cell: cell] []\nset v.cell $ 2\ncell', '2'],
+    ['V = [x : Float, y : Float, z : Float]\nv = V []\nv.x = 1\n[v, (V : Type)]', '[[x = 1.0, y = 0.0, z = 0.0], [x : Float, y : Float, z : Float]]'],
+    ['V = [x : Float, y : Float]\nV [x = 1]', '[x = 1.0, y = 0.0]'],
+    ['V = [x : Float, y : Float]\nV [1,2]', '[x = 1.0, y = 2.0]'],
+    ['v = [x : Float] []\nv.x = 2\ntypeOf v.x', 'Float'],
+    ['v = [x : Int8] []\nv.x = 12\nv', '[x = 12]'],
+    ['[x : Float, label = "origin", count = 7] []', '[x = 0.0, label = "origin", count = 7]'],
+    ['[x : Int, y : Int] [extra = 3]', '[x = 0, y = 0, extra = 3]'],
+    ['[nested : [x : Float], xs : [Int]] []', '[nested = [x = 0.0], xs = [0]]'],
+    ['v = [x : Int, bad : Function] []\nv.x', '0'],
+    ['cell = Mutable 1\nv = [cell = cell] []\nset v.cell $ 2\ncell', '2'],
     ['Option a = Some a | None\n[Option, Option Int]', '[Option, Option Int]'],
-    ['Option a = Some a | None\n[choice: Option Int] []', '[choice: None]'],
-    ['User = | MkUser Int String\n[user: User] []', '[user: MkUser 0 ""]'],
-    ['BoxType a = | MkBox a\n[box: BoxType (BoxType Int)] []', '[box: MkBox (MkBox 0)]'],
-    ['Node = Next Node | End\n[node: Node] []', '[node: End]'],
+    ['Option a = Some a | None\n[choice : Option Int] []', '[choice = None]'],
+    ['User = | MkUser Int String\n[user = User] []', '[user = MkUser 0 ""]'],
+    ['BoxType a = | MkBox a\n[box = BoxType (BoxType Int)] []', '[box = MkBox (MkBox 0)]'],
+    ['Node = Next Node | End\n[node : Node] []', '[node = End]'],
     ['Node = | Next Node\nNode', 'Node'],
-    ['[fn: Function] [x -> x]', '[fn: x -> x]'],
-    ['(v -> v.fn 2) $ [fn: (+ 1)] []', '3'],
+    ['[fn : Function] [x -> x]', '[fn = x -> x]'],
+    ['(v -> v.fn 2) $ [fn = (+ 1)] []', '3'],
     ['[(floor .2 : Int), (truncate -1.7 : Int), (inexact 9007199254740993 : Float)]', '[0,-1,9007199254740992.0]'],
 ] as const) Deno.test(`construction defaults: ${source}`, () => {
     const actual = result(source);
@@ -52,20 +52,20 @@ for (const [type, expected] of [
     ['Bool', 'False'], ['String', '""'], ['Char', "'\\0'"], ['[]', '[]'],
     ['List', '[]'], ['Record', '[]'], ['HashMap', 'HashMap []'], ['Pointer', 'Pointer 0x0'],
 ]) Deno.test(`omitted ${type} slot initializes`, () => {
-    const actual = result(`[value: ${type}] []`);
-    if (actual !== `[value: ${expected}]`) throw new Error(actual);
+    const actual = result(`[value = ${type}] []`);
+    if (actual !== `[value = ${expected}]`) throw new Error(actual);
 });
 for (const source of [
     'Int + 1', 'sqrt Float', '-Int', 'Int ^ 2', 'Int < 1',
  'String ++ "hi"', 'length List', '[Int,Float] + [1,2]',
     'f (x : Int) = x + 1\nf Int', 'f (x : Bool) = x\nf Bool',
     '(.2 : Int)', 'cast Int .2', '[Int].[.2]',
-    'v = [x: Int] []\nv.x = .2',
-    'v = [x: Int8] []\nv.x = 128',
-    '[x: Int] [1,2]',
-    'Node = | Next Node\n[node: Node] []',
-    'BoxType a = | MkBox a\n[box: BoxType] []',
-    '[fn: Function] []', '[cell: Mutable] []', '[ty: Type] []',
+    'v = [x : Int] []\nv.x = .2',
+    'v = [x : Int8] []\nv.x = 128',
+    '[x : Int] [1,2]',
+    'Node = | Next Node\n[node = Node] []',
+    'BoxType a = | MkBox a\n[box = BoxType] []',
+    '[fn : Function] []', '[cell : Mutable] []', '[ty : Type] []',
 ]) Deno.test(`reject invalid construction or bare-type data: ${source}`, () => {
     try { result(source); } catch { return; }
     throw new Error('Expected error');
@@ -74,19 +74,19 @@ for (const source of [
 Deno.test("failed typed-value conversion preserves the record", () => {
     for (const assignment of ['v.x = .2', 'v "x" = .2', 'v.[x,y] = [.2,2]']) {
         const i = new Interpreter();
-        i.run(parseDocument('v = [x: Int, y: Int] []'));
+        i.run(parseDocument('v = [x : Int, y : Int] []'));
         let rejected = false;
         try { i.run(parseDocument(assignment)); } catch (e) {
             if (!String(e).includes('lossy conversion')) throw e;
             rejected = true;
         }
-        if (!rejected || i.renderString(i.env.get('v')!) !== '[x: 0, y: 0]') throw new Error(assignment);
+        if (!rejected || i.renderString(i.env.get('v')!) !== '[x = 0, y = 0]') throw new Error(assignment);
     }
 });
 
 Deno.test("omitted concrete actions stay callable without running during inspection", () => {
     const i = new Interpreter();
-    i.run(parseDocument('count = Mutable 0; action = { set count $ count + 1 }; v <- return ([action: action] [])'));
+    i.run(parseDocument('count = Mutable 0; action = { set count $ count + 1 }; v <- return ([action = action] [])'));
     i.renderString(i.env.get('v')!);
     if (i.renderString(i.run(parseDocument('count'))) !== '0') throw new Error('inspection executed action');
     i.run(parseDocument('v.action'));
@@ -95,7 +95,7 @@ Deno.test("omitted concrete actions stay callable without running during inspect
 
 for (const values of ['[1]', '[1,2]', '[1,2,3,4]']) {
     Deno.test(`positional construction requires all fields: ${values}`, () => {
-        try { result(`Vector3 = [x: Float, y: Float, z: Float]\nVector3 ${values}`); }
+        try { result(`Vector3 = [x : Float, y : Float, z : Float]\nVector3 ${values}`); }
         catch (e) {
             if (String(e).includes('field count')) return;
             throw e;
@@ -105,14 +105,14 @@ for (const values of ['[1]', '[1,2]', '[1,2,3,4]']) {
 }
 
 for (const [source, expected] of [
-    ['Vector3 = [x: Float, y: Float, z: Float]\nvec = Vector3\nvec.x = 123\n[vec, (Vector3 : Type)]', '[[x: 123.0, y: Float, z: Float], [x: Float, y: Float, z: Float]]'],
-    ['v = [x: Int]\nv "x" = 1\nv', '[x: 1]'],
-    ['v = [x: Int, y: Float]\nv.[x,y] = [1,2]\nv', '[x: 1, y: 2.0]'],
+    ['Vector3 = [x : Float, y : Float, z : Float]\nvec = Vector3\nvec.x = 123\n[vec, (Vector3 : Type)]', '[[x = 123.0, y : Float, z : Float], [x : Float, y : Float, z : Float]]'],
+    ['v = [x : Int]\nv "x" = 1\nv', '[x = 1]'],
+    ['v = [x : Int, y : Float]\nv.[x,y] = [1,2]\nv', '[x = 1, y = 2.0]'],
     ['xs = [Int]\nxs 0 = 1\nxs', '[1]'],
     ['xs = [Int,Float]\nxs (-1) = 2\nxs', '[Int,2.0]'],
     ['xs = [Int]\ni = 0\nxs (i + 0) = 1\nxs', '[1]'],
-    ['UserId (x : Int) = _\nv = [id: UserId]\nv.id = UserId 3\nv', '[id: UserId 3]'],
-    ['(identity : Int -> Int) <- return (x -> x); v = [f: typeOf identity]\nv.f = (+ 1)\nv.f 2', '3'],
+    ['UserId (x : Int) = _\nv = [id = UserId]\nv.id = UserId 3\nv', '[id = UserId 3]'],
+    ['(identity : Int -> Int) <- return (x -> x); v = [f = typeOf identity]\nv.f = (+ 1)\nv.f 2', '3'],
 ] as const) Deno.test(`assignment gives a type field a default: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

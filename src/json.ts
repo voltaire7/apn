@@ -1,8 +1,7 @@
 // JSON text and APN values (the json module): toJson and prettyJson encode,
-// fromJson decodes. Integers stay exact both ways; null becomes []. A record
-// key is a string, and a JSON object's keys are its text as it is: a JSON key
-// becomes a bare key (r.status, r "Content-Type"), and a quoted key's text
-// keeps its quotes, so x and "x" never collide.
+// fromJson decodes. Integers stay exact both ways; null becomes []. A record's
+// key is a name, any text, so a JSON object's keys are its fields' names
+// (r.status, r.`Content-Type`, r "Content-Type").
 import { APNError } from "./errors.ts";
 import type { Interpreter } from "./interp.ts";
 import { type Value, mkBool, mkList, mkStr } from "./types.ts";

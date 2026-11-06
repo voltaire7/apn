@@ -35,4 +35,4 @@ label (p : Sketch) name y = {
     p.call "text" [name,margin,y,boxWidth,boxHeight]
 }
 
-main = sketch [setup: setup]
+main = sketch [setup = setup]

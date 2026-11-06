@@ -5,12 +5,12 @@ import ["number","p5"]
 # Around the center, five nodes, each wobbling at its own frequency (degrees a
 # frame) as the body accelerates; organic is how loosely the curve bends.
 Body = [
-    center: [Float,Float], acceleration: [Float,Float], nodes: List [Float,Float]
-    angles: List Float, frequencies: List Float, organic: Float
+    center : [Float,Float], acceleration : [Float,Float], nodes : List [Float,Float]
+    angles : List Float, frequencies : List Float, organic : Float
 ]
 body = Mutable (Body [
-    center: [0.0,0.0], acceleration: [0.0,0.0], nodes: [], angles: [], frequencies: []
-    organic: 1.0
+    center = [0.0,0.0], acceleration = [0.0,0.0], nodes = [], angles = [], frequencies = []
+    organic = 1.0
 ])
 radius = 45
 springing = 0.0009
@@ -21,9 +21,9 @@ setup (p : Sketch) = {
     p.createCanvas 710 400
     frequencies <- mapM (_ -> p.random 5 12) [1..nodeCount]
     set body (Body [
-        center: [(p.width / 2 : Float), (p.height / 2 : Float)], acceleration: [0.0,0.0]
-        nodes: replicate nodeCount [0.0,0.0], angles: replicate nodeCount 0.0
-        frequencies: map Float frequencies, organic: 1.0
+        center = [(p.width / 2 : Float), (p.height / 2 : Float)], acceleration = [0.0,0.0]
+        nodes = replicate nodeCount [0.0,0.0], angles = replicate nodeCount 0.0
+        frequencies = map Float frequencies, organic = 1.0
     ])
     p.noStroke
 }
@@ -63,4 +63,4 @@ move mouse (Body body) = {
     body
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

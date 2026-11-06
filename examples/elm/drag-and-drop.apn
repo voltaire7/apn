@@ -6,7 +6,7 @@ file = import "file"
 
 Msg = Pick | DragEnter | DragLeave | GotFiles file.File (List file.File)
 
-init = [[hover: False, files: []], browser.none]
+init = [[hover = False, files = []], browser.none]
 
 update msg model = msg ~ [
     Pick -> [model, file.selectFiles ["image/*"] GotFiles]
@@ -43,4 +43,4 @@ view model = div [
 # A drop of one file or more (Elm's oneOrMore): no files is a drag leaving.
 dropped event = null event.files ? DragLeave : GotFiles (head event.files) (tail event.files)
 
-main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]
+main = browser.element [init = init, update = update, subscriptions = subscriptions, view = view]

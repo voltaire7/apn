@@ -6,7 +6,7 @@ task = import "task"
 
 Msg = Tick Posix | AdjustTimeZone Zone
 
-init = [[zone: utc, time: millisToPosix 0], task.perform AdjustTimeZone here]
+init = [[zone = utc, time = millisToPosix 0], task.perform AdjustTimeZone here]
 
 update msg model = msg ~ [
     Tick newTime -> { model.time = newTime; [model,browser.none] }
@@ -22,4 +22,4 @@ view model = {
     h1 [] [text (hour ++ ":" ++ minute ++ ":" ++ second)]
 }
 
-main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]
+main = browser.element [init = init, update = update, subscriptions = subscriptions, view = view]

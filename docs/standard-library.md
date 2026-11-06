@@ -65,7 +65,7 @@ Like other lazy definitions, this form takes effect when `s` is demanded.
 `use record` brings its fields into the current scope without forcing their
 values. `use [recordA,recordB]` opens a finite list of records in order; later
 fields replace earlier bindings. It returns `()`. Fields must be valid binding
-identifiers (not quoted keys, numeric keys, `_`, or keywords). Invalid input is
+identifiers (not backticked keys that are not names, or keywords). Invalid input is
 rejected before any fields are installed. Bindings inside a block stay local.
 
 ```apn
@@ -73,7 +73,7 @@ combinators = import "combinator"
 use combinators
 identity 123
 
-use [[first: 10], [second: 20]]
+use [[first = 10], [second = 20]]
 first + second                         # 30
 ```
 
@@ -84,7 +84,7 @@ List imports support the same selection: `[id,sum] = import ["function","sequenc
 
 Destructuring imports select only the requested exports: `[halt] = import "system"`
 binds `halt` without introducing the module's other names.
-Renaming works too: `[halt: stop] = import "system"` binds only `stop`. Unselected
+Renaming works too: `[halt = stop] = import "system"` binds only `stop`. Unselected
 local bindings remain unchanged, including when the module is already cached.
 
 `load "file"` remains file execution (the `.apn` extension must be omitted): paths are relative to the source file,
@@ -127,7 +127,7 @@ See [zero initialization](zero-initialization.md) for type defaults and inspecti
 | `to String x`, `from String text` | Display text; read a `Bool` or number literal back (`Dynamic`) |
 | `to JSON x`, `from JSON text` | JSON text; decode it (`Dynamic`) |
 | `to (List Char) text`, `from (List Char) chars` | A string's characters (code points); join them |
-| `to T x` for another type | Applies `T`, as a conversion: `to Float (Money 1.2)`, `to Quote [year: 1]` |
+| `to T x` for another type | Applies `T`, as a conversion: `to Float (Money 1.2)`, `to Quote [year = 1]` |
 | `to [T1,T2] x` | A list template converts position by position, as `cast` does: `to [Char,Char] "hi"`; `[Char]` is exactly one `Char` |
 
 They are methods, like `map`: a program adds a type by defining an instance,
@@ -421,19 +421,18 @@ response, whatever its status, as a record:
 
 `options` is a record whose fields are all optional, or `[]` for none: `method`
 (`"GET"` by default), `headers` (a record or a `HashMap` of strings), `body`
-(a `String`) and `timeout` (milliseconds). Any other field is an error. Options
-and header names are bare keys (`Content-Type: "application/json"`); a quoted
-key (`"Content-Type": ...`) is a different key and an error here.
+(a `String`) and `timeout` (milliseconds). Any other field is an error. A header
+name that is not a name is in backticks (`` `Content-Type` = "application/json" ``).
 
 ```apn
 import ["http","json"]
 response <- fetch "https://www.youtube-transcript.io/api/channels" [
-    method: "POST"
-    headers: [
-        Authorization: "Basic <your-api-token>"
-        Content-Type: "application/json"
+    method = "POST"
+    headers = [
+        Authorization = "Basic <your-api-token>"
+        `Content-Type` = "application/json"
     ]
-    body: to JSON [ids: ["jawed"]]
+    body = to JSON [ids = ["jawed"]]
 ]
 channels = from JSON response.body
 ```
@@ -448,7 +447,7 @@ a script. Network access
 needs Deno's `--allow-net` (the `apn` launcher grants it). Static checking
 never sends a request; `data:` URLs need no network. In a browser build,
 `fetch` uses a synchronous request, subject to the page's CORS rules, and
-`get [url: ..., expect: ...]` is a [command](browser-html.md#elements-commands-and-subscriptions)
+`get [url = ..., expect = ...]` is a [command](browser-html.md#elements-commands-and-subscriptions)
 sending one without blocking.
 
 ## JSON — `json`
@@ -465,10 +464,9 @@ indented by two spaces, and `from JSON text` (prelude) is `JSON.parse`:
 | `Bool` | `True`, `False` |
 
 A fraction, complex number, variant or function has no JSON form and is an
-error; convert it first. A record key's text is the JSON key, so a bare key
-`status` writes `"status"` and a quoted key `"status"` keeps its quotes; they
-never collide. `from JSON` returns an object as a record of bare keys with the
-JSON keys' text (`r.status`, `r "odd-key"`), an integer as an exact `Int`,
+error; convert it first. A record key's text is the JSON key, so `status`
+writes `"status"`. `from JSON` returns an object as a record named by the JSON
+keys (`r.status`, ``r.`odd-key` ``), an integer as an exact `Int`,
 other numbers as `Float`, and `null` as `[]`, so `from JSON (to JSON v)` gives
 back `v`. Its result is `Dynamic`; give it a type with a
 pattern or `cast` where the program needs one.

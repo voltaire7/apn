@@ -26,4 +26,4 @@ draw (p : Sketch) = {
     p.image graphic 150 75
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

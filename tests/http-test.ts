@@ -20,20 +20,19 @@ function fails(source: string, text: string, kind?: string): void {
 
 // JSON.stringify and JSON.parse: to JSON, prettyJson, from JSON.
 for (const [source, expected] of [
-    ['import "json"; to JSON [ids: ["jawed"]]', '"{\\"ids\\":[\\"jawed\\"]}"'],
+    ['import "json"; to JSON [ids = ["jawed"]]', '"{\\"ids\\":[\\"jawed\\"]}"'],
     ['import "json"; to JSON [1,2.5,True,"a",\'c\',[]]', '"[1,2.5,true,\\"a\\",\\"c\\",[]]"'],
-    ['import "json"; to JSON [Content-Type: "x", n: 123456789012345678901234567890]', '"{\\"Content-Type\\":\\"x\\",\\"n\\":123456789012345678901234567890}"'],
-    ['import "json"; to JSON ["x": 1, x: 2]', '"{\\"\\\\\\"x\\\\\\"\\":1,\\"x\\":2}"'],
+    ['import "json"; to JSON [`Content-Type` = "x", n = 123456789012345678901234567890]', '"{\\"Content-Type\\":\\"x\\",\\"n\\":123456789012345678901234567890}"'],
     ['import "json"; to JSON (HashMap [["k",1]])', '"{\\"k\\":1}"'],
     ['import "json"; to JSON [1..3]', '"[1,2,3]"'],
-    ['import "json"; prettyJson [a: [1]]', '"{\\n  \\"a\\": [\\n    1\\n  ]\\n}"'],
-    ['import "json"; from JSON "{\\"status\\": 1, \\"odd-key\\": [true, null, 2.5]}"', '[status: 1, odd-key: [True,[],2.5]]'],
+    ['import "json"; prettyJson [a = [1]]', '"{\\n  \\"a\\": [\\n    1\\n  ]\\n}"'],
+    ['import "json"; from JSON "{\\"status\\": 1, \\"odd-key\\": [true, null, 2.5]}"', '[status = 1, `odd-key` = [True,[],2.5]]'],
     ['import "json"; from JSON "{\\"odd-key\\": 3}" "odd-key"', '3'],
-    ['import "json"; v = [a: [1,2], b c: "x", Content-Type: 1, "q": 2]; from JSON (to JSON v) == v', 'True'],
+    ['import "json"; v = [a = [1,2], `b c` = "x", `Content-Type` = 1, q = 2]; from JSON (to JSON v) == v', 'True'],
     ['import "json"; from JSON "123456789012345678901234567890"', '123456789012345678901234567890'],
     ['import "json"; from JSON "\\"\\\\u00e9\\""', '"é"'],
-    ['import "json"; from JSON "{\\"a\\": 1, \\"a\\": 2}"', '[a: 2]'],
-    ['import "json"; v = [a: [1,2], "b c": "x"]; from JSON (to JSON v) == v', 'True'],
+    ['import "json"; from JSON "{\\"a\\": 1, \\"a\\": 2}"', '[a = 2]'],
+    ['import "json"; v = [a = [1,2], `b c` = "x"]; from JSON (to JSON v) == v', 'True'],
 ] as const) Deno.test(`json: ${source}`, () => {
     const actual = run(source);
     if (actual !== expected) throw new Error(`${source}: got ${actual}`);
@@ -55,14 +54,12 @@ Deno.test("fetch returns a response record", () => {
     if (run('lookup "content-type" response.headers', i) !== '"application/json"') throw new Error("headers");
     if (run("(from JSON response.body).a", i) !== "[1,2]") throw new Error("json body");
     if (run('fetchJson "data:application/json,[true]" []', i) !== "[True]") throw new Error("fetchJson");
-    if (run('fetchText "data:text/plain,hi" [method: "GET", timeout: 5000]', i) !== '"hi"') throw new Error("fetchText");
+    if (run('fetchText "data:text/plain,hi" [method = "GET", timeout = 5000]', i) !== '"hi"') throw new Error("fetchText");
 });
 for (const [source, message, kind] of [
-    ['import "http"; fetch "data:text/plain,x" [methd: "GET"]', "unknown option 'methd'", "runtime"],
-    ['import "http"; fetch "data:text/plain,x" [headers: [a: 1]]', "a header value must be a string", "runtime"],
-    ['import "http"; fetch "data:text/plain,x" [timeout: 0]', "timeout must be a positive Int", "runtime"],
-    ['import "http"; fetch "data:text/plain,x" [headers: ["Content-Type": "x"]]', 'the header "Content-Type" must be a bare key', "runtime"],
-    ['import "http"; fetch "data:text/plain,x" ["method": "GET"]', 'the option "method" must be a bare key', "runtime"],
+    ['import "http"; fetch "data:text/plain,x" [methd = "GET"]', "unknown option 'methd'", "runtime"],
+    ['import "http"; fetch "data:text/plain,x" [headers = [a = 1]]', "a header value must be a string", "runtime"],
+    ['import "http"; fetch "data:text/plain,x" [timeout = 0]', "timeout must be a positive Int", "runtime"],
     ['import "http"; fetch "data:text/plain,x" 5', "options must be a record", "runtime"],
     ['import "http"; r <- fetch "data:text/plain,x" []; r.missing', "missing field", "type"],
     ['import "http"; fetch 5 []', "", "type"],
@@ -89,12 +86,12 @@ Deno.test({ name: "fetch sends method, headers and body to a server", ignore: !n
         const i = session();
         run(`import ["http","json"]
 response <- fetch "${base}/api/channels" [
-    method: "POST"
-    headers: [
-        Authorization: "Basic token"
-        Content-Type: "application/json"
+    method = "POST"
+    headers = [
+        Authorization = "Basic token"
+        \`Content-Type\` = "application/json"
     ]
-    body: to JSON [ids: ["jawed"]]
+    body = to JSON [ids = ["jawed"]]
 ]
 data = from JSON response.body
 []`, i);
@@ -103,7 +100,7 @@ data = from JSON response.body
         if (run(`missing <- fetch "${base}/missing" []\n[missing.status,missing.ok,missing.statusText,missing.body]`, i) !== '[404,False,"Not Found","nope"]') throw new Error("404");
         if (run(`big <- fetchText "${base}/big" []; length big`, i) !== "3000000") throw new Error("big body");
         fails(`import "http"; fetchText "${base}/missing" []`, "answered 404 Not Found");
-        fails(`import "http"; fetchText "${base}/slow" [timeout: 100]`, "timed out after 100 ms");
+        fails(`import "http"; fetchText "${base}/slow" [timeout = 100]`, "timed out after 100 ms");
     } finally {
         await new Promise(resolve => { server.onmessage = resolve; server.postMessage("stop"); });
         server.terminate();

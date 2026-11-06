@@ -88,7 +88,7 @@ print (pairSum [1])        # => 0
 
 # the same `[x,y]` pattern also destructures a RECORD by field name
 sumRec [x,y] = x + y
-print (sumRec [x: 10, y: 20])  # => 30
+print (sumRec [x = 10, y = 20]) # => 30
 print (sumRec [10,20])       # => 30
 
 # guards
@@ -157,7 +157,7 @@ print (matchInline 9)       # => other
 # 5. LISTS — heterogeneous, like JS arrays, but almost lazy.
 #    Literal lists stay in an unevaluated (lazy) state until used. A list of
 #    bare names is still a list — the names resolve to the variables' values.
-#    (An OBJECT is a record literal: [x: 1, y: 2, z: 3].)
+#    (An OBJECT is a record literal: [x = 1, y = 2, z = 3].)
 # ---------------------------------------------------------
 print [213,"hello"]         # => [213,"hello"]
 print [1,2,3]             # => [1,2,3]
@@ -222,41 +222,31 @@ print ([[1,2],[3,4]] 1 0)   # => 3    (nested indexing, left-assoc)
 # ---------------------------------------------------------
 # 6. RECORDS — [name: value, ...] and field access
 # ---------------------------------------------------------
-person = [name: "Alice", age: 30]
+person = [name = "Alice", age = 30]
 print person.name        # => Alice
 print person.age         # => 30
-print person             # => [name: "Alice", age: 30]
+print person             # => [name = "Alice", age = 30]
 
-# All keys are strings; quoted field syntax includes the quote characters.
-keyKinds = [field: 123, "field": 456, 1: 10, "1": 100]
-print keyKinds.field          # => 123
-print (keyKinds "field")      # => 123
-print keyKinds."field"        # => 456
-print (keyKinds "\"field\"")  # => 456
-print keyKinds.1              # => 10
-print (keyKinds "1")          # => 10
-print keyKinds."1"            # => 100
-print (keyKinds 0)            # => ["field",123] (positional entry)
-print keyKinds               # => [field: 123, "field": 456, 1: 10, "1": 100]
-[field: namedValue, "field": stringValue] = keyKinds
-print [namedValue,stringValue] # => [123,456]
-keyKinds."field" = 789
-print keyKinds.[field,"field"] # => [123,789]
-keyKinds "field" = 10
-print keyKinds.[field,"field"] # => [10,789]
-keyKinds "1" = 20
-print keyKinds.1              # => 20
+# A key is a name; one that is not written as a name is in backticks.
+headers = [`Content-Type` = "json", count = 2]
+print headers.`Content-Type`   # => json
+print (headers "count")       # => 2 (a string reads the field it names)
+print (headers 0)             # => ["Content-Type","json"] (positional entry)
+print headers                 # => [`Content-Type` = "json", count = 2]
+[count = counted] = headers
+print counted                 # => 2
+headers "count" = 3
+print headers.count           # => 3
 # A list's integer index and a string are not interchangeable:
 # nums "0" is an error; nums 0 indexes its first element.
 
 # nested records + chained access
-nestedRecord = [inner: [z: 99]]
+nestedRecord = [inner = [z = 99]]
 print nestedRecord.inner.z     # => 99
 
-# Keys may be quoted strings or numbers; dot access uses literal keys.
-weird = ["my field": 1, 123: 2]
-print weird."my field"           # => 1
-print weird.123                  # => 2
+# Any text is a key in backticks; a string reads the field it names.
+weird = [`my field` = 1, `123` = 2]
+print weird.`my field`           # => 1
 key = "123"
 print (weird key)                # => 2 (computed named field)
 # weird.(expression)             # evaluates expression with fields in scope
@@ -266,26 +256,26 @@ print (take 3 (enumerate [10..])) # => [[0,10],[1,11],[2,12]]
 
 # ---------------------------------------------------------
 # 7. PROTOTYPE-BASED OBJECTS —  APPLYING a record clones it:  vec [1,2,3]
-#    positional (one value per field) or  vec [z: 3, x: 1]  named (override/
+#    positional (one value per field) or  vec [z = 3, x = 1]  named (override/
 #    add, any order). An int argument indexes positionally -> [field,value].
 #    The prototype is any RECORD (LOWERCASE name — capital names are
 #    constructors); a bare-name list is a LIST, never an object.
 # ---------------------------------------------------------
-vector3 = [x: 0, y: 0, z: 0]        # prototype with defaults
-print vector3                       # => [x: 0, y: 0, z: 0]
-print (vector3 [1,2,3])         # => [x: 1, y: 2, z: 3]   positional clone
-print (vector3 [x: 1, y: 2, z: 3])  # => [x: 1, y: 2, z: 3]   named override
-print (vector3 [z: 3, x: 1])        # => [x: 1, y: 0, z: 3]  reorder — y keeps default
-print (vector3 [x: 1, y: 2, z: 3, a: 0])  # => [x: 1, y: 2, z: 3, a: 0]  new field
-print vector3                       # => [x: 0, y: 0, z: 0]   prototype untouched
+vector3 = [x = 0, y = 0, z = 0]     # prototype with defaults
+print vector3                       # => [x = 0, y = 0, z = 0]
+print (vector3 [1,2,3])         # => [x = 1, y = 2, z = 3]   positional clone
+print (vector3 [x = 1, y = 2, z = 3]) # => [x = 1, y = 2, z = 3]   named override
+print (vector3 [z = 3, x = 1])      # => [x: 1, y: 0, z: 3]  reorder — y keeps default
+print (vector3 [x = 1, y = 2, z = 3, a = 0]) # => [x = 1, y = 2, z = 3, a = 0]  new field
+print vector3                       # => [x = 0, y = 0, z = 0]   prototype untouched
 print (vector3 [1,2,3]).z       # => 3     (.z chains over the clone)
 print (vector3 1)                   # => ["y",0]   int index -> [field,value]
 
 # .[...] still exists, but as the QUOTED PLUCK:  a.[x,y]  gathers values
-# into a LIST;  a.[x: v1, y: v2]  keeps the fields under NEW keys.
+# into a LIST;  a.[v1 = x, v2 = y]  keeps the fields under NEW keys.
 print vector3.[x,y]               # => [0,0]
 print vector3.[z,x,y]           # => [0,0,0]     reorder
-print vector3.[x: first, y: second]     # => [first: 0, second: 0]  renamed
+print vector3.[first = x, second = y]   # => [first = 0, second = 0]  renamed
 
 # ---------------------------------------------------------
 # 7b. RECORD UPDATE —  vec.x = 10  rebinds vec to a MODIFIED COPY
@@ -294,45 +284,45 @@ print vector3.[x: first, y: second]     # => [first: 0, second: 0]  renamed
 #     outer name. Pluck assignment sets several fields from a list —
 #     the right side is evaluated FIRST, so the classic swap works.
 # ---------------------------------------------------------
-vec = [x: 1, y: 2, z: 3]
+vec = [x = 1, y = 2, z = 3]
 vec.x = 10
-print vec                        # => [x: 10, y: 2, z: 3]
+print vec                        # => [x = 10, y = 2, z = 3]
 vec.w = 99
-print vec                        # => [x: 10, y: 2, z: 3, w: 99]   new field
+print vec                        # => [x = 10, y = 2, z = 3, w = 99]   new field
 
 vec.[x,y] = vec.[y,x]
-print vec                        # => [x: 2, y: 10, z: 3, w: 99]  swap!
+print vec                        # => [x = 2, y = 10, z = 3, w = 99]  swap!
 vec.[x,y] = [7,8]
-print vec                        # => [x: 7, y: 8, z: 3, w: 99]
+print vec                        # => [x = 7, y = 8, z = 3, w = 99]
 # Applying a record of values to fields is the same update, as an expression:
-# vec [x: 1, y: 2] is { vec.x = 1; vec.y = 2; vec }.
-print (vec [x: 1, y: 2])         # => [x: 1, y: 2, z: 3, w: 99]
-print [vec [z: 0] == { vec.z = 0; vec }]  # => [True]
+# vec [x = 1, y = 2] is { vec.x = 1; vec.y = 2; vec }.
+print (vec [x = 1, y = 2])       # => [x = 1, y = 2, z = 3, w = 99]
+print [vec [z = 0] == { vec.z = 0; vec }] # => [True]
 # A type given types is edited the same way; given values, it builds one.
-Vec3 = [x: Float, y: Float, z: Float]
-print (Vec3 [x: Int])            # => [x: Int, y: Float, z: Float]   as Vec3.x = Int
-print (Vec3 [x: 1])              # => [x: 1.0, y: 0.0, z: 0.0]
+Vec3 = [x : Float, y : Float, z : Float]
+print (Vec3 [x : Int])           # => [x : Int, y : Float, z : Float]   as Vec3.x = Int
+print (Vec3 [x = 1])             # => [x = 1.0, y = 0.0, z = 0.0]
 # Every field has a type: the one it holds, or its value's (then its default).
 # A value given to it converts losslessly; Type fields take types as values.
-print ([x: 1.1] [10])            # => [x: 10.0]
-# [x: 1] [2.5] and [x: False] [1] are errors
-# [f: (* 2)] [1]               # type error: cannot use Int where a -> b is required
-print ([type: Type] [Int])       # => [type: Int]
+print ([x = 1.1] [10])           # => [x = 10.0]
+# [x = 1] [2.5] and [x = False] [1] are errors
+# [f = (* 2)] [1]              # type error: cannot use Int where a -> b is required
+print ([type : Type] [Int])      # => [type : Int]
 
 # block scope: the update shadows obj only INSIDE the { }  (a bare block
 # statement runs eagerly — a 0-arg DEF like  w = { ... } declares a
 # function and does not run here)
-obj = [field: 1]
+obj = [field = 1]
 {
     obj.field = 10
-    print obj                   # => [field: 10]
+    print obj                   # => [field = 10]
 }
-print obj                        # => [field: 1]
+print obj                        # => [field = 1]
 
 # an empty list seeds a record on first assignment
 fresh = []
 fresh.field = 1
-print fresh                      # => [field: 1]
+print fresh                      # => [field = 1]
 
 # ---------------------------------------------------------
 # 8. TERNARY — cond ? a : b  (replaces if/then/else)
@@ -368,7 +358,7 @@ greeting = {
 print greeting             # => Hello, world!
 
 greeting = {
-    [name,hello] = [hello: "Hello", name: "record"]  # fields by name
+    [name,hello] = [hello = "Hello", name = "record"] # fields by name
     hello ++ ", " ++ name ++ "!"
 }
 print greeting             # => Hello, record!
@@ -390,13 +380,13 @@ print others               # => [3,4]
 Some v = Some 123
 print v                    # => 123
 
-# RENAME destructuring (Rust-style):  [srcKey: name, ...]  pulls those fields
+# RENAME destructuring (Rust-style):  [srcKey = name, ...]  pulls those fields
 # OUT of a record and binds name — [x: val1, y: val2] = [x: 1, y: 2, z: 3]
-point = [x: 1, y: 2, z: 3]
-[x: val1, y: val2] = point
+point = [x = 1, y = 2, z = 3]
+[x = val1, y = val2] = point
 print [val1,val2]        # => [1,2]
 # works in function params and match alternatives too:
-sumXY ([x: xv, y: yv]) = xv + yv
+sumXY ([x = xv, y = yv]) = xv + yv
 print (sumXY point)        # => 3
 
 # ---------------------------------------------------------
@@ -536,10 +526,10 @@ Heading =
 print [Northward,Southward]        # => [Northward,Southward]
 spanEnd (Span2 _ (b : UInt8)) = b   # spanEnd (Span2 1 300) is a static range error
 print (spanEnd (Span2 1 3))         # => 3
-byteField (r : [x: UInt8]) = r.x    # record fields are checked by value too
-scaled v = byteField [x: v * 100]   # scaled 3 is a static range error
+byteField (r : [x : UInt8]) = r.x   # record fields are checked by value too
+scaled v = byteField [x = v * 100]  # scaled 3 is a static range error
 print (scaled 1)                    # => 100, a UInt8
-print (byteField [x: 300, _: [x: 3]])  # => 3, a UInt8 (a later spread wins, as at runtime)
+print (byteField [x = 300, use [x = 3]]) # => 3, a UInt8 (a later spread wins, as at runtime)
 print ([1,2] :: [3,4])            # => [[1,2],3,4]  ('::' adds one element; joining is ++)
 tailOf (_ :: rest) = rest           # '::' in a pattern is cons too
 print [0 :: []]                     # => [[0]]  (no parentheses needed in a list)
@@ -555,10 +545,10 @@ print (tailOf [1,2,3])          # => [2,3]
 
 # records iterate as [field,value] pairs — destructure with a pattern-lambda;
 # `format` builds a string, so `print` emits it as raw text
-[name: "Alice", age: 30] * [f,v] -> print $ format "%: %" [f,v]
+[name = "Alice", age = 30] * [f,v] -> print $ format "%: %" [f,v]
                                              # prints name: Alice, age: 30
 
-[x: 1, y: 2, z: 3] * [field,value] -> print $ format "%: %" [field,value]
+[x = 1, y = 2, z = 3] * [field,value] -> print $ format "%: %" [field,value]
                                              # prints x: 1, y: 2, z: 3
 
 # `*` is OVERLOADED: numbers multiply, but seq * fn ITERATES (and returns
@@ -596,11 +586,11 @@ size n = n ~ [
 print (size 7)                               # => big
 print (size 3)                               # => small
 
-print $ format "vec = % (100%%)" [[x: 1, y: 2]]
+print $ format "vec = % (100%%)" [[x = 1, y = 2]]
 # format "% %" [1]                  # error: missing argument
 # format "%" [1,2]                 # error: extra argument
-# format "%" [x: 1]                 # error: arguments must be a list
-print $ pairs [a: 1, b: 2]                   # => [["a",1],["b",2]]
+# format "%" [x = 1]                # error: arguments must be a list
+print $ pairs [a = 1, b = 2]                 # => [["a",1],["b",2]]
 
 print (format "% / %" [1,2])               # => 1 / 2
 print (format "last: %" [9])                 # => last: 9
@@ -614,7 +604,7 @@ print (format "100%%" [])                    # => 100%  (%% is a literal %)
 print 123                     # => 123
 print "hello"                 # => hello
 print [1,2,3,4]         # => [1,2,3,4]
-print [name: "Alice", age: 30]   # => [name: "Alice", age: 30]
+print [name = "Alice", age = 30] # => [name = "Alice", age = 30]
 
 # emit is print WITHOUT the newline (also returns its value)
 emit "same"; emit " line"; print ""     # prints: same line
@@ -701,7 +691,7 @@ print (x = 2; x * 6)         # => 12            (parens group like braces)
 print (4 * 3)                # => 12
 print { 4 * 3 }              # => 12
 # print {5}, print { 5  }    # parse errors: exactly one space inside each brace
-# Spacing is syntax: x = 1, [1,2,3], [x: 1, y: 2], (f x), { x }. A comma takes a
+# Spacing is syntax: x = 1, [1,2,3], [x = 1, y = 2], (f x), { x }. A comma takes a
 # space after it only when an item it separates has one: [1,2], but [1 + 1, 2];
 # lambda parameters always take one: x, y -> x. So x=1, [1, 2], [1 + 1,2],
 # x,y -> x, [x:1] and ( 1 ) are parse errors, as are f(x), f[1] and f{ x }
@@ -713,7 +703,7 @@ layoutItems = [
 ]
 print layoutItems            # => [1,2,3]
 print [1 + 1, 2]             # => [2,2]       (values print by the same rule)
-print [[x: 1], [y: 2]]       # => [[x: 1], [y: 2]]
+print [[x = 1], [y = 2]]     # => [[x = 1], [y = 2]]
 # A line is at most 99 characters, each literal and comment counting as one:
 print (123456789012345678901234567890123456789012345678901234567890 + 987654321098765432109876543210987654321098765432109876543210)  # => 1111111110111111111011111111101111111110111111111011111111100
 # Parentheses appear only where they change how code reads: print (5), (a * b) + c,
@@ -874,7 +864,7 @@ print (foldl (_, b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 #              fires (exits 0) when it is actually USED.
 # ---------------------------------------------------------
 # Selective imports bind only the requested names.
-[halt: selectedHalt] = import "system"
+[halt = selectedHalt] = import "system"
 # selectedHalt is available; other exports are not introduced by this binding.
 {
     load "../../lib/number"           # extensionless name; sq joins this block
@@ -1091,7 +1081,7 @@ print ({ return 9 } : Label Int)           # => MkLabel 9
 # to T x writes x as a T and from T x reads it back; they are methods too.
 print (to String 1.5 ++ "!")               # => 1.5!
 print ((from String "41" : Int) + 1)       # => 42
-print (to JSON [n: 1])                     # => {"n":1}
+print (to JSON [n = 1])                    # => {"n":1}
 print (from (List Char) (to (List Char) "abc"))        # => abc
 # A list template converts position by position, as cast does ([Char] is one Char).
 print (to [Char,Char] "hi")             # => ['h','i']
@@ -1120,7 +1110,7 @@ print (afterBlank (blank []))              # => 1 (a typed parameter names Int)
 # blank [] + 1 is an error: ambiguous: nothing decides which blank
 
 # Explicit braces end a lambda body, so maps can chain after the closing brace.
-[x: 1, y: 2, z: 3] * [field,value] -> {
+[x = 1, y = 2, z = 3] * [field,value] -> {
     format "%: %" [field,value]
 } * x -> print x  # => x: 1, y: 2, z: 3 (one per line)
 
@@ -1183,7 +1173,7 @@ print (sqrt -1 * 4)   # => 0+4i  ((sqrt -1) * 4)
 #                     negated x = natural -x; negated 2   # and at the call that supplies it
 #                     negated x = natural (-x); negated 2 # likewise; negated (-2) is natural 2
 #                     unused y = negated 2                # an error even if unused is never called
-# Schemas too: with Pt = [x: Float, y: Float] and g (Pt p), h x = g x accepts h [1,2] as
+# Schemas too: with Pt = [x : Float, y : Float] and g (Pt p), h x = g x accepts h [1,2] as
 # g [1,2] does.
 print (10 - 1)        # => 9
 print ((x -> x * 2) -3) # => -6
@@ -1262,13 +1252,13 @@ print cast                          # => its clauses, one pattern lambda per lin
 namedTemplates = [Int,Float]
 namedValues = [1,2]
 print namedTemplates.namedValues    # => [1,2.0]
-print [namedValues: 42].namedValues # => 42 (literal record field)
-print ([x: 0] [123])                 # => [x: 123] (record default override)
+print [namedValues = 42].namedValues # => 42 (literal record field)
+print ([x = 0] [123])                # => [x = 123] (record default override)
 # Numbers, strings and characters are not callable: 0 123 and "old" "new" error.
 # A Bool applied to two values is one of them: True "yes" "no" is "yes".
 print [String,Bool,Char].["new",True,'b'] # => ["new",True,'b']
 # ["old"].["new"] and [0].[1] error: scalar slots cannot be applied.
-print ([name: "old", enabled: False] [name: "new", enabled: True])
+print ([name = "old", enabled = False] [name = "new", enabled = True])
 print [Int].[floor .2]               # => [0]
 print ((* 2) * [1,2,3,4])     # => [2,4,6,8]
 print (cast String $ cast [Char,Char] $ "a😀") # => "a😀"
@@ -1277,8 +1267,8 @@ print [Char,Char]."a😀"                  # => ['a','😀']
 print (Int * [1,2,3,4])       # => [1,2,3,4]
 print [Int,String].[123,"hello"] # => [123,"hello"]
 print (take 3 (map Int [0..]))         # => [0,1,2]
-print ([x: Int, y: 0] [x: 1, y: 2]) # => [x: 1, y: 2]
-print ([x: Int, y: Int] [x: 123])    # => [x: 123, y: 0]
+print ([x : Int, y = 0] [x = 1, y = 2]) # => [x = 1, y = 2]
+print ([x : Int, y : Int] [x = 123]) # => [x = 123, y = 0]
 # [Int].[1,2] and [Int].[] error: one template slot requires one value.
 print [isType [Int] [1], isType [Int] [1,2]] # => [True,False]
 slots = [Int].[0]
@@ -1286,9 +1276,9 @@ slots 0 = floor .2
 print slots                         # => [0]
 slots 0 = 123
 print slots                         # => [123]
-recordSlots = [x: Int, y: Int] []
+recordSlots = [x : Int, y : Int] []
 recordSlots.y = 321
-print recordSlots                   # => [x: 0, y: 321]
+print recordSlots                   # => [x = 0, y = 321]
 recordSlots "y" = floor .2
 print recordSlots.y                 # => 0
 # recordSlots.y = Float .2           # error: lossy typed conversion
@@ -1298,10 +1288,10 @@ print [Int].[0]                     # => [0] (constructor application)
 print ([10] 0)                      # => 10 (integer indexing)
 Count = Int
 Numbers = [Int]
-Point = [x: Float, y: Float]
+Point = [x : Float, y : Float]
 print (123 : Count)                 # => Count 123 (an alias of Int names a subtype)
 print Numbers.[1]                  # => [1]
-print (Point [x: 1, y: 2])          # => [x: 1.0, y: 2.0]
+print (Point [x = 1, y = 2])        # => [x = 1.0, y = 2.0]
 firstNumber (Numbers values) = head values
 print (firstNumber [123])           # => 123
 print (cast [Int,Int] [1,2])         # => [1,2]
@@ -1312,10 +1302,10 @@ print (MkUserId 123)                # => MkUserId 123
 
 
 # Persistent HashMap, accepting records or association lists.
-typedMap = insert [x: 123] $ HashMap []
+typedMap = insert [x = 123] $ HashMap []
 print typedMap                      # => HashMap [["x",123]]
 print (typedMap "x")                 # => 123
-typedMapNext = insert [y: 456] $ typedMap
+typedMapNext = insert [y = 456] $ typedMap
 print (has "y" typedMap)             # => False
 print (has "y" typedMapNext)         # => True
 print (keys typedMapNext)            # => ["x","y"]
@@ -1332,7 +1322,7 @@ print ("hi" : String)    # => hi
 print ('a' : Char)       # => 'a'
 print []                # => []
 print ([1,2] : List)    # => [1,2]
-print ([x: 1] : Record)  # => [x: 1]
+print ([x = 1] : Record) # => [x = 1]
 print ((x -> x + 1 : Function) 2) # => 3
 print (Bool : Type)      # => Bool
 
@@ -1347,15 +1337,15 @@ myTypeOf (5 : Int32) # => Int32
 # A data: URL needs no network; ./apn grants network access for real requests:
 #   fetch "https://www.youtube-transcript.io/api/channels" [
 #       method: "POST"
-#       headers: [Authorization: "Basic <token>", Content-Type: "application/json"]
-#       body: to JSON [ids: ["jawed"]]
+#       headers: [Authorization = "Basic <token>", `Content-Type` = "application/json"]
+#       body: to JSON [ids = ["jawed"]]
 #   ]
 import ["http","json"]
-reply <- fetch "data:application/json,{\"ids\":[\"jawed\"]}" [method: "GET"]
+reply <- fetch "data:application/json,{\"ids\":[\"jawed\"]}" [method = "GET"]
 print [reply.status,reply.ok]               # => [200,True]
 print (from JSON reply.body).ids             # => ["jawed"]
-print (to JSON [ids: ["jawed"], count: 1])   # => {"ids":["jawed"], "count":1}
-header = [Content-Type: "json", my value: 1] # bare keys may hold '-' and spaces
+print (to JSON [ids = ["jawed"], count = 1]) # => {"ids":["jawed"], "count":1}
+header = [`Content-Type` = "json", `my value` = 1] # bare keys may hold '-' and spaces
 print (header "Content-Type")                # => json  (not the quoted key "Content-Type")
 decoded <- fetchJson "data:application/json,[1,2.5,null]" []
 print decoded                                 # => [1,2.5,[]]
@@ -1565,9 +1555,9 @@ print browserPreview
 
 # A cell made from a schema's value holds that type: List fields take any
 # length. Field access reads its contents.
-Trail = [head: [Float,Float], points: List [Float,Float]]
-trail = Mutable (Trail [head: [0.0,0.0], points: []])
-set trail [head: [1.0,2.0], points: [[0.0,0.0],[1.0,2.0]]]
+Trail = [head : [Float,Float], points : List [Float,Float]]
+trail = Mutable (Trail [head = [0.0,0.0], points = []])
+set trail [head = [1.0,2.0], points = [[0.0,0.0],[1.0,2.0]]]
 print trail.points                            # [[0.0,0.0],[1.0,2.0]]
 
 # Mutable references retain identity across scopes and aliases.
@@ -1605,36 +1595,36 @@ print (onlyOne (vowelOrPair (vowelIfShort (take mutableCounter [7,8,9]))))  # 1
 
 # p5 sketches are descriptions until built for the browser.
 p5 = import "p5"
-print (typeOf (p5.sketch [draw: p -> p.background "black"])) # P5Program
+print (typeOf (p5.sketch [draw = p -> p.background "black"])) # P5Program
 # apn --html examples/browser/p5-sketch.apn p5-sketch.html
 
 # Elm-style programs (examples/elm; apn --site examples/elm site builds them
 # with an editor): commands and subscriptions are data the page runs, and
 # generators, decoders, times and shapes are ordinary values.
-print (typeOf (p5.canvas [draw: p -> p.background "black"]))    # Html (a sketch inside a view)
+print (typeOf (p5.canvas [draw = p -> p.background "black"]))   # Html (a sketch inside a view)
 random = import "random"
 [roll,_] = random.step (random.int 1 6) (random.initialSeed 42)
 print (roll >= 1 && roll <= 6)                 # True
 print (head (random.step (random.list 3 (random.uniform "a" ["b"])) 7))  # ["a","b","b"]
 decode = import "decode"
-pointDecoder = map2 (x, y -> [x: x, y: y])
+pointDecoder = map2 (x, y -> [x = x, y = y])
     (decode.field "x" decode.int)
     (decode.field "y" decode.int)
-print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1, \"y\": 2}"))  # Ok [x: 1, y: 2]
+print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1, \"y\": 2}"))  # Ok [x = 1, y = 2]
 # Err "Expecting an OBJECT with a field named `y`"
 print (decode.decodeValue pointDecoder (from JSON "{\"x\": 1}"))
 # A type decodes as it says, each field by name, wherever a decoder goes; a
 # record type made the result, so it keeps its fields (lamp.lti = True fails).
-Pixel = [x: Int, y: Int, lit: Bool]
+Pixel = [x : Int, y : Int, lit : Bool]
 pixelJson = from JSON "{\"y\": 2, \"x\": 1, \"lit\": true}"
-print (decode.decodeValue Pixel pixelJson)     # Ok [x: 1, y: 2, lit: True]
-print (decode.decodeValue (decode.list Pixel) [pixelJson])  # Ok [[x: 1, y: 2, lit: True]]
-print (to Pixel [lit: True])                   # [x: 0, y: 0, lit: True] (as Pixel [...])
+print (decode.decodeValue Pixel pixelJson)     # Ok [x = 1, y = 2, lit = True]
+print (decode.decodeValue (decode.list Pixel) [pixelJson])  # Ok [[x = 1, y = 2, lit = True]]
+print (to Pixel [lit = True])                  # [x = 0, y = 0, lit = True] (as Pixel [...])
 lamp = Pixel []
 lamp.lit = True
-print [_: lamp, size: 2]                       # [x: 0, y: 0, lit: True, size: 2] (a copy)
+print [use lamp, size = 2]                     # [x = 0, y = 0, lit = True, size = 2] (a copy)
 asPixel value = Pixel value                    # converted when it runs
-print (asPixel [lit: True]).lit                # True
+print (asPixel [lit = True]).lit               # True
 clock = import "time"
 print (clock.toMinute clock.utc (clock.millisToPosix 754000))     # 12
 print (map2 (+) (Some 1) (Some 2))             # Some 3
@@ -1644,9 +1634,9 @@ playground = import "playground"
 print (playground.rotate 30 $ playground.moveUp 10 $ playground.square playground.blue 4)
 # Message types say what they carry: a record alias is a type argument, and a
 # field may name a module's type (clock.Posix here; browser.Viewport, file.File).
-Spot = [x: Float, y: Float]
+Spot = [x : Float, y : Float]
 Trail = Walked (List Spot) | Stamped clock.Posix
-print [Walked [[x: 1, y: 2]], Stamped (clock.millisToPosix 0)]  # [Walked [[x: 1.0, y: 2.0]], ...
+print [Walked [[x = 1, y = 2]], Stamped (clock.millisToPosix 0)] # [Walked [[x = 1.0, y = 2.0]], ...
 
 # Functions display their source without running their bodies.
 printFunction x = print x
@@ -1754,7 +1744,7 @@ print $ map (x -> {
 }) [1,2,3,4]           # => [4,16,36,64]
 
 # Composition binds tighter than iteration and pipes.
-[x: 1, y: 2, z: 3] * print \ format "%: %"  # x: 1, y: 2, z: 3
+[x = 1, y = 2, z = 3] * print \ format "%: %" # x: 1, y: 2, z: 3
 print ([1,2,3] * (+ 1) \ (* 2))         # => [3,5,7]
 print ((+ 1) \ (* 2) $ 3)                 # => 7
 
@@ -1767,13 +1757,13 @@ print (combinedNamespace.id 42)           # => 42
 standardNamespace = import "combinator"
 use standardNamespace
 print (identity 123)                     # => 123
-use [[useFirst: 10], [useSecond: 20]]
+use [[useFirst = 10], [useSecond = 20]]
 print (useFirst + useSecond)              # => 30
 
 # Record-template patterns accept positional lists just like template application.
-VectorForPattern = [x: Float, y: Float, z: Float]
+VectorForPattern = [x : Float, y : Float, z : Float]
 showVector (v : VectorForPattern) = print v
-showVector [1,2,3]  # => [x: 1.0, y: 2.0, z: 3.0]
+showVector [1,2,3]  # => [x = 1.0, y = 2.0, z = 3.0]
 vectorPatternX (v : VectorForPattern) = v.x
 print (vectorPatternX [1,2,3])        # => 1.0 (also checked before execution)
 
@@ -1793,10 +1783,10 @@ print (10 - [1,2,3])                   # => [9,8,7]
 print ([1,2,3] / 2)                    # => [1/2,1,3/2]
 print -[1,2,3]                         # => [-1,-2,-3]
 print (take 3 ([0..] + [10..]))           # => [10,12,14]
-print ([x: 1, y: 2] + [y: 20, x: 10])   # => [x: 11, y: 22]
-ArrayVector = [x: Float, y: Float, z: Float]
+print ([x = 1, y = 2] + [y = 20, x = 10]) # => [x = 11, y = 22]
+ArrayVector = [x : Float, y : Float, z : Float]
 # (ArrayVector[1,2,3], without the space, is an error)
-print (ArrayVector [1,2,3] * 2)         # => [x: 2.0, y: 4.0, z: 6.0]
+print (ArrayVector [1,2,3] * 2)         # => [x = 2.0, y = 4.0, z = 6.0]
 print ([1,2] ++ [3,4])                 # => [1,2,3,4]
 import "array"
 print (shape [[1,2],[3,4]])            # => [2,2]
@@ -1814,31 +1804,31 @@ print (Int * 3)                          # => [0,1,2]
 
 # Zero initialization happens at construction; bare types stay constructors.
 print [Int,Float,Int32,Bool,String] # => [Int,Float,Int32,Bool,String]
-ZeroVector = [x: Float, y: Float, z: Float]
+ZeroVector = [x : Float, y : Float, z : Float]
 zeroVector = ZeroVector []
 zeroVector.x = 123
-print zeroVector                     # => [x: 123.0, y: 0.0, z: 0.0]
-print ZeroVector                     # => [x: Float, y: Float, z: Float]
+print zeroVector                     # => [x = 123.0, y = 0.0, z = 0.0]
+print ZeroVector                     # => [x : Float, y : Float, z : Float]
 template = ZeroVector
 template.x = 123
-print template                       # => [x: 123.0, y: Float, z: Float]   a Float 123.0
-print (template [])                  # => [x: 123.0, y: 0.0, z: 0.0]
+print template                       # => [x = 123.0, y : Float, z : Float]   a Float 123.0
+print (template [])                  # => [x = 123.0, y = 0.0, z = 0.0]
 typeTemplate = ZeroVector
 typeTemplate.x = Int
-print typeTemplate                       # => [x: Int, y: Float, z: Float]
-replacement = [nested: [x: 1]]
-replacement.nested = [y: 2]
-print replacement                    # => [nested: [y: 2]]
+print typeTemplate                       # => [x : Int, y : Float, z : Float]
+replacement = [nested = [x = 1]]
+replacement.nested = [y = 2]
+print replacement                    # => [nested = [y = 2]]
 print (Int * [1,2,3])            # => [1,2,3]
-print (ZeroVector [1,2,3])        # => [x: 1.0, y: 2.0, z: 3.0]
+print (ZeroVector [1,2,3])        # => [x = 1.0, y = 2.0, z = 3.0]
 # ZeroVector [1,2]                  # error: positional fields must be complete
 # Int + 1 and sqrt Float are errors; constructors are not numbers.
 print (typeOf (1 : Int))             # => Int
-print (ZeroVector : Type)            # => [x: Float, y: Float, z: Float]
+print (ZeroVector : Type)            # => [x : Float, y : Float, z : Float]
 DefaultChoice a = Present a | Absent
-print ([choice: DefaultChoice Int] []) # => [choice: Absent]
+print ([choice : DefaultChoice Int] []) # => [choice = Absent]
 DefaultUser = | MakeDefaultUser Int String
-print ([user: DefaultUser] [])        # => [user: MakeDefaultUser 0 ""]
+print ([user = DefaultUser] [])       # => [user = MakeDefaultUser 0 ""]
 # Int .2, cast Int .2 and [Int].[.2] reject lossy conversion.
 print (floor .2 : Int)               # => 0
 
@@ -1848,10 +1838,10 @@ selectedIndex = 0
 indexedValues selectedIndex = 1
 indexedValues (selectedIndex + 1) = indexedValues selectedIndex + 1
 print indexedValues                 # => [1,2]
-indexedObject = [x: Int] []
+indexedObject = [x : Int] []
 selectedKey = "x"
 indexedObject selectedKey = 3
-print indexedObject                 # => [x: 3]
+print indexedObject                 # => [x = 3]
 
 # An alias of a scalar type names a subtype: it keeps its name, is accepted
 # wherever its base is, and two names do not mix.
@@ -1904,17 +1894,17 @@ import "io"
 nothing <- withFile "/dev/null" (file -> file.read)
 print nothing                      # => empty line
 
-# Dot field spellings are literal string keys, including punctuation.
+# A field that is not a name is written in backticks; a string names it too.
 oddKeys = []
-oddKeys.-1 = 1
+oddKeys.`-1` = 1
 oddKeys "(x)" = 2
-print [oddKeys.-1, oddKeys "-1"]       # => [1,1]
-print [oddKeys "(x)", oddKeys "(x)"]     # => [2,2]
+print [oddKeys.`-1`, oddKeys "-1"]     # => [1,1]
+print oddKeys                          # => [`-1` = 1, `(x)` = 2]
 
 # Implicit numeric types constrain assignment too.
-implicitNumber = [x: 1]
+implicitNumber = [x = 1]
 implicitNumber.x = 1.0
-print implicitNumber                  # => [x: 1]
+print implicitNumber                  # => [x = 1]
 # implicitNumber.x = 1.5               # error: lossy conversion to Int
 
 # Rich type descriptions inspect lazy elements and function bodies without running them.
@@ -2039,16 +2029,16 @@ print (labelled 2 ++ "!")               # => few!
 # apn examples/types/dependent-vectors.apn checks, then runs by default.
 
 # Bracketed field assignment always takes a matching list of values.
-singlePluck = [x: 1]
+singlePluck = [x = 1]
 singlePluck.[x] = [10]
-print singlePluck                    # => [x: 10]
+print singlePluck                    # => [x = 10]
 # singlePluck.[x] = 10 errors: the RHS must be a list.
 
-nestedUpdate = [child: [x: (1 : Float), y: 2]]
+nestedUpdate = [child = [x = (1 : Float), y = 2]]
 nestedUpdate.child.x = 10
-print nestedUpdate                  # => [child: [x: 10.0, y: 2]]
+print nestedUpdate                  # => [child = [x = 10.0, y = 2]]
 nestedUpdate.child.[x,y] = [20,30]
-print nestedUpdate.child            # => [x: 20.0, y: 30]
+print nestedUpdate.child            # => [x = 20.0, y = 30]
 
 # String arguments look up association lists; integer arguments index them.
 associations = [["x",1],["y",2]]
@@ -2057,14 +2047,14 @@ print (associations 0)               # => ["x",1]
 print ([["x",1],["x",2]] "x")   # => 1 (first matching key)
 
 # Evaluate expressions with record fields in a local scope.
-scopedPoint = [x: 3, y: 4]
+scopedPoint = [x = 3, y = 4]
 print scopedPoint.(x + y)            # => 7
 print scopedPoint.([x,y])          # => [3,4]
 print scopedPoint.(x = 10; x + y)    # => 14
 print scopedPoint.x                 # => 3
 
 # Numeric powers retain exact arithmetic; Ctrl+C interrupts large REPL powers.
-print ([x: 1, y: 2, z: 3].[x,y] ^ 10) # => [1,1024]
+print ([x = 1, y = 2, z = 3].[x,y] ^ 10) # => [1,1024]
 # In the REPL: vec.[x,y] ^ 100000000 can be stopped with Ctrl+C.
 
 # Explicit floating constructors round; implicit narrowing remains lossless.
@@ -2166,31 +2156,31 @@ print (selfOnly selfOnly == selfOnly)     # => True
 # selfOnly 1                  # argument 'selfOnly' must equal the function 'selfOnly'; got Int
 
 # Wildcard schema fields accept any value without conversion.
-showField (v : [x: _]) = print v.x
+showField (v : [x : _]) = print v.x
 showField [123]                          # => 123
 showField ["hello"]                      # => hello
-showField [x: True]                      # => True
-mixedFields (v : [x: _, y: Float]) = [v.x,v.y]
+showField [x = True]                     # => True
+mixedFields (v : [x : _, y : Float]) = [v.x,v.y]
 print (mixedFields ["hello",2])         # => ["hello",2.0]
 
 # Dotted patterns retain the same argument while destructuring it.
 retainRecord whole.[x,y] = [whole,x,y]
-print (retainRecord [x: 1, y: 2, z: 3])      # => [[x: 1, y: 2, z: 3], 1, 2]
+print (retainRecord [x = 1, y = 2, z = 3])   # => [[x = 1, y = 2, z = 3], 1, 2]
 sharedValue.aliasValue = 123
 print [sharedValue,aliasValue]          # => [123,123]
 wholePair.[firstItem,secondItem] = [1,2]
 print [wholePair,firstItem,secondItem]  # => [[1,2],1,2]
 # Existing roots still update fields, without creating local field-name bindings.
-updateRecord = [x: 0]
+updateRecord = [x = 0]
 updateRecord.x = 1
-print updateRecord                       # => [x: 1]
+print updateRecord                       # => [x = 1]
 
 # Anonymous record entries merge fields; later entries replace earlier values.
-baseRecord = [x: 1]
-print [_: baseRecord, y: 2, z: 3]        # => [x: 1, y: 2, z: 3]
-print [_: baseRecord, x: "new"]          # => [x: "new"]
-updateRecord._ = [y: 2]
-print updateRecord                       # => [x: 1, y: 2]
+baseRecord = [x = 1]
+print [use baseRecord, y = 2, z = 3]     # => [x = 1, y = 2, z = 3]
+print [use baseRecord, x = "new"]        # => [x = "new"]
+updateRecord._ = [y = 2]
+print updateRecord                       # => [x = 1, y = 2]
 
 # Type and value shapes can be captured together.
 inspectSingle ([item] : [elementType]) = [elementType,item]
@@ -2198,26 +2188,26 @@ print (inspectSingle [123])              # => [Int,123]
 print (inspectSingle ["hello"])          # => [String,"hello"]
 
 # Named list selection, positional templates, and named schema-pattern input.
-print ([10,20,30] [first: 0, last: 2])  # [first: 10, last: 30]
-print ([Int] [x: 0])                   # [x: Int]
-print [Float].[x: 1]                   # [x: 1.0]
-print [String,Int].[name: "a", age: 2] # [name: "a", age: 2]
+print ([10,20,30] [first = 0, last = 2]) # [first = 10, last = 30]
+print ([Int] [x = 0])                  # [x : Int]
+print [Float].[x = 1]                  # [x = 1.0]
+print [String,Int].[name = "a", age = 2] # [name = "a", age = 2]
 inspectNamedSlot ([x] : [t]) = [t,x]
 print (inspectNamedSlot [1])           # [Int,1]
-print (inspectNamedSlot [other: 2, x: 1]) # [Int,1]
+print (inspectNamedSlot [other = 2, x = 1]) # [Int,1]
 convertNamedSlot ([x] : [Float]) = x
-print (convertNamedSlot [x: 1])        # 1.0
+print (convertNamedSlot [x = 1])       # 1.0
 
 # Selection read/write symmetry and record remainders.
 symmetryArray = [10,20,30]
-symmetryArray [first: 0, last: 2] = [last: 300, first: 100]
+symmetryArray [first = 0, last = 2] = [last = 300, first = 100]
 print symmetryArray                  # [100,20,300]
-symmetryRecord = [x: 1, y: 2]
-symmetryRecord.[x: a, y: b] = [b: 20, a: 10]
+symmetryRecord = [x = 1, y = 2]
+symmetryRecord.[x = a, y = b] = [b = 20, a = 10]
 print symmetryRecord                 # [x:10,y:20]
 symmetryPairs = [["x",1],["y",2]]
 symmetryPairs "x" = 10
 print symmetryPairs                  # [["x",10],["y",2]]
-[x: symmetryFirst, _: symmetryRest] = [x: 1, y: 2, z: 3]
+[x = symmetryFirst, _ = symmetryRest] = [x = 1, y = 2, z = 3]
 print [symmetryFirst,symmetryRest]   # [1,[y:2,z:3]]
 

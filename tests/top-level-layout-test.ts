@@ -54,7 +54,7 @@ for (const [source, expected] of [
     ['f a b c = a + b + c\nf 1\n    2\n    3', '6'],
     ['f a b c = a + b + c\n{\n    x = f 1\n        2 3\n    x\n}', '6'],
     ['f a b = a * b\n[\n    f 2\n        3\n    4\n]', '[6,4]'],
-    ['f a b = a * b\n[\n    x: f 2\n        3\n    y: 4\n]', '[x: 6, y: 4]'],
+    ['f a b = a * b\n[\n    x = f 2\n        3\n    y = 4\n]', '[x = 6, y = 4]'],
     ['xs = map (n -> n + 1)\n    [1,2]\nxs', '[2,3]'],
 ]) Deno.test(`a deeper line continues an application: ${source}`, () => {
     const interpreter = new Interpreter();

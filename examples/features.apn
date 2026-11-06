@@ -46,7 +46,7 @@ print greeting                           # => Hello, world!
 # ---------------------------------------------------------
 # Each level indents exactly 4 spaces. A newline at the same level ends a
 # statement and a line indented 4 more continues it; ; puts two statements
-# on one line. Spacing is part of the syntax: x = 1, [1,2], [x: 1], f x and
+# on one line. Spacing is part of the syntax: x = 1, [1,2], [x = 1], f x and
 # { x }, where a comma takes a space only when the items have one
 # ([1 + 1, 2]). A line is at most 99 characters.
 sum3 = 1
@@ -163,7 +163,7 @@ print (take 3 (filter isPrime [100..]))  # => [101,103,107]
 print [7 % 3, 2 ^ -3, -2 ^ 2]            # => [1,1/8,-4]
 print [1 < 2 && "a" != "b", !True]       # => [True,False]
 print ([1,2,3] + [10,20,30])             # => [11,22,33]
-print (2 * [x: 1, y: 2])                 # => [x: 2, y: 4]
+print (2 * [x = 1, y = 2])               # => [x = 2, y = 4]
 
 # A clause for some arguments overloads an operator; others reach the rest.
 Cents (c : Int) = _
@@ -196,18 +196,18 @@ print (foldl (+) 0 xs)                   # => 65
 # Records
 # ---------------------------------------------------------
 # A record is a list with named fields.
-person = [name: "Ada", age: 36]
+person = [name = "Ada", age = 36]
 print person.name                        # => Ada
 person.age = 37
-print person                             # => [name: "Ada", age: 37]
+print person                             # => [name = "Ada", age = 37]
 [name,age] = person                      # fields by name
 print age                                # => 37
 
 # Applying a record to values makes a copy with those fields set, so any
 # record is a prototype.
-origin = [x: 0, y: 0, z: 0]
-print (origin [z: 3])                    # => [x: 0, y: 0, z: 3]
-print (origin [1,2,3])                   # => [x: 1, y: 2, z: 3]
+origin = [x = 0, y = 0, z = 0]
+print (origin [z = 3])                   # => [x = 0, y = 0, z = 3]
+print (origin [1,2,3])                   # => [x = 1, y = 2, z = 3]
 
 # A record iterates as [field,value] pairs.
 person * print \ format "%: %"           # => name: Ada, then age: 37
@@ -223,8 +223,8 @@ print (typeOf (x -> [x,x]))              # => a -> [a,a]
 # A type is a function: applied, it converts a value without losing
 # anything, and given nothing it makes its zero value.
 print [(1 : Float), (200 : UInt8), (0 : Int)] # => [1.0,200,0]
-Point = [x: Float, y: Float]
-print [Point [1,2], Point []]            # => [[x: 1.0, y: 2.0], [x: 0.0, y: 0.0]]
+Point = [x : Float, y : Float]
+print [Point [1,2], Point []]            # => [[x = 1.0, y = 2.0], [x = 0.0, y = 0.0]]
 
 # A type in a pattern requires it, converting as above, and e : T is e as
 # a value of T.

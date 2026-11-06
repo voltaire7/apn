@@ -85,4 +85,4 @@ mousePressed (p : Sketch) = {
     }
 }
 
-main = sketch [setup: setup, draw: draw, mousePressed: mousePressed]
+main = sketch [setup = setup, draw = draw, mousePressed = mousePressed]

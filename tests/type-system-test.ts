@@ -11,7 +11,7 @@ for (const [source, expected] of [
     ["typeOf $ 'a'", "Char"],
     ["typeOf $ []", "[]"],
     ["typeOf $ [1..]", "[Int..]"],
-    ["typeOf $ [x: 1]", "Record"],
+    ["typeOf $ [x = 1]", "Record"],
     ["typeOf $ sqrt", "Number -> Number"],
     // Builtins show the checker's signatures.
     ["typeOf $ S", "UInt -> UInt"],
@@ -22,7 +22,7 @@ for (const [source, expected] of [
     ["to Bool True", "True"], ['("hi" : String)', '"hi"'],
     ["('a' : Char)", "'a'"], ["[] []", "[]"],
     ["([1,2] : List)", "[1,2]"], ["take 3 ([1..] : List)", "[1,2,3]"],
-    ["([x: 1] : Record)", "[x: 1]"],
+    ["([x = 1] : Record)", "[x = 1]"],
     ["(x -> x + 1 : Function) 2", "3"], ["(Int : Type)", "Int"],
     ["Choice = | Chosen x\n(Chosen 1 : Variant)", "Chosen 1"],
     ["[isType Bool True, isType String 1, isType List [1..], isType Type Bool]", "[True,False,True,True]"],

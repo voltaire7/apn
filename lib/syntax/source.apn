@@ -70,7 +70,7 @@ _bare place (function :: args) = _node place function args
 
 _node _ "[]" items = "[" ++ _items (map (_shown ["item",0,-1]) items) ++ "]"
 _node _ "[:]" fields = "["
-    ++ joinWith ", " (map ([key,value] -> key ++ ": " ++ _shown _end value) fields) ++ "]"
+    ++ joinWith ", " (map ([key,value] -> key ++ " = " ++ _shown _end value) fields) ++ "]"
 _node _ "->" [params,body] = joinWith ", " (map _parameter params) ++ _arrow body
 _node [_,_,follows] "?:" [c,yes,no] =
     _branch ["operand",0,1] c ++ " ? " ++ _branch ["operand",1,-1] yes ++ " : "

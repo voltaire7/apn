@@ -26,4 +26,4 @@ draw (p : Sketch) = {
     p.circle x y radius
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

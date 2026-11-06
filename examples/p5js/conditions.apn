@@ -47,4 +47,4 @@ draw (p : Sketch) = {
     ]
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

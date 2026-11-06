@@ -25,4 +25,4 @@ draw (p : Sketch) = {
     p.image photo offset 0
 }
 
-main = sketch [preload: [photo], setup: setup, draw: draw]
+main = sketch [preload = [photo], setup = setup, draw = draw]

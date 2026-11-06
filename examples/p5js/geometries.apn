@@ -47,4 +47,4 @@ rotateWithFrameCount (p : Sketch) = {
     p.rotateY p.frameCount
 }
 
-main = sketch [preload: [astronaut], setup: setup, draw: draw]
+main = sketch [preload = [astronaut], setup = setup, draw = draw]

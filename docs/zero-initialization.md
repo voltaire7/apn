@@ -5,13 +5,13 @@ is an error, and `Int == 0` is false. Initialization happens when applying a
 record template to a list or record of supplied fields:
 
 ```apn
-Vector3 = [x: Float, y: Float, z: Float]
-vec = Vector3 []        # [x: 0.0, y: 0.0, z: 0.0]
-vec.x = 1              # [x: 1.0, y: 0.0, z: 0.0]
-Vector3 [1,2,3]    # [x: 1.0, y: 2.0, z: 3.0]
+Vector3 = [x : Float, y : Float, z : Float]
+vec = Vector3 []        # [x = 0.0, y = 0.0, z = 0.0]
+vec.x = 1              # [x = 1.0, y = 0.0, z = 0.0]
+Vector3 [1,2,3]    # [x = 1.0, y = 2.0, z = 3.0]
 # Vector3 [1,2]       # error: positional fields must be complete
-Vector3 [z: 3]         # [x: 0.0, y: 0.0, z: 3.0]
-Vector3                # Vector3; Type Vector3 is [x: Float, y: Float, z: Float]
+Vector3 [z = 3]        # [x = 0.0, y = 0.0, z = 3.0]
+Vector3                # Vector3; Type Vector3 is [x : Float, y : Float, z : Float]
 typeOf vec             # Vector3
 ```
 
@@ -31,8 +31,8 @@ remain type descriptors; the shared template is unchanged:
 
 ```apn
 vec = Vector3
-vec.x = 1              # [x: 1.0, y: Float, z: Float]
-vec []                 # [x: 1.0, y: 0.0, z: 0.0]
+vec.x = 1              # [x = 1.0, y : Float, z : Float]
+vec []                 # [x = 1.0, y = 0.0, z = 0.0]
 ```
 
 A constructed Float field keeps its type: assigning `Int` to it fails with
@@ -74,7 +74,7 @@ typeOf Int              # Type
 isType Int Int         # False
 isType Type Int        # True
 Int == Float           # False
-(Vector3 : Type)       # [x: Float, y: Float, z: Float]
+(Vector3 : Type)       # [x : Float, y : Float, z : Float]
 3 * Int                # [0,1,2]
 Int * 3                # [0,1,2]
 3 * (0 : Int)          # 0
@@ -93,9 +93,9 @@ initializing the payload fields:
 
 ```apn
 Option a = Some a | None
-[choice: Option Int] []     # [choice: None]
+[choice : Option Int] []    # [choice = None]
 User = | MkUser Int String
-[user: User] []             # [user: MkUser 0 ""]
+[user = User] []            # [user = MkUser 0 ""]
 User                       # User, the type descriptor
 ```
 
@@ -135,4 +135,4 @@ or `inexact` explicitly when the value needs rounding first. Float32 arithmetic
 continues to round its results to binary32, but `(.1 : Float32)` now errors.
 
 Numeric assignment uses the same type as `typeOf`, including for literals:
-`v = [x: 1]; v.x = 1.0` keeps Int 1, while `v.x = 1.5` fails.
+`v = [x = 1]; v.x = 1.0` keeps Int 1, while `v.x = 1.5` fails.

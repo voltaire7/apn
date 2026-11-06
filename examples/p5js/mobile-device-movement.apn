@@ -22,4 +22,4 @@ deviceMoved (p : Sketch) = {
     p.circle x y diameter
 }
 
-main = sketch [setup: setup, deviceMoved: deviceMoved]
+main = sketch [setup = setup, deviceMoved = deviceMoved]

@@ -51,7 +51,7 @@ view model = div [] [
     button [onClick Increment] [text "+"]
 ]
 
-main = browser.sandbox [init: 0, update: update, view: view]
+main = browser.sandbox [init = 0, update = update, view = view]
 ```
 
 `init` is the initial model. A click sends its message to `update msg model`;
@@ -74,7 +74,7 @@ task = import "task"
 
 Msg = Tick Posix | AdjustTimeZone Zone
 
-init = [[zone: utc, time: millisToPosix 0], task.perform AdjustTimeZone here]
+init = [[zone = utc, time = millisToPosix 0], task.perform AdjustTimeZone here]
 
 update msg model = msg ~ [
     (Tick newTime) -> { model.time = newTime; [model,browser.none] }
@@ -88,7 +88,7 @@ view model = h1 [] [
         ++ ":" ++ to String (toMinute model.zone model.time))
 ]
 
-main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]
+main = browser.element [init = init, update = update, subscriptions = subscriptions, view = view]
 ```
 
 Commands and subscriptions are ordinary APN data (variants) that the page
@@ -102,10 +102,10 @@ that returned it, and each resulting message is another update.
 | `task.perform toMsg action` | `toMsg` of the action's result (a task is any action: `time.now`, `time.here`, `file.toUrl f`, `sequence [...]`) |
 | `task.attempt toMsg action` | `toMsg (Ok result)`, or `toMsg (Err message)` when the action fails |
 | `random.generate toMsg generator` | a value drawn from a fresh seed |
-| `http.get [url: ..., expect: ...]` | `http.expectString toMsg` sends `toMsg (Ok body)`; `http.expectJson toMsg decoder` decodes the body |
+| `http.get [url = ..., expect = ...]` | `http.expectString toMsg` sends `toMsg (Ok body)`; `http.expectJson toMsg decoder` decodes the body |
 | `file.selectFile mimes toMsg`, `file.selectFiles mimes toMsg` | the picked file, or the first and the rest |
 | `file.download name mime text` | nothing: the browser saves `text` as a file (Elm's `File.Download.string`) |
-| `browser.getViewport toMsg` | the window's size, a `browser.Viewport` (`[width: Number, height: Number]`) |
+| `browser.getViewport toMsg` | the window's size, a `browser.Viewport` (`[width : Number, height : Number]`) |
 
 A failed request sends `Err` of `NetworkError`, `BadStatus status` or
 `BadBody reason` (`http.HttpError`). Requests are subject to the page's CORS
@@ -186,17 +186,17 @@ These follow Elm's modules of the same names; the
   `decode.at path d`, `decode.list d`, `decode.succeed x`; decoders are
   monads too (`map4 (a, b, c, d -> ...) d1 d2 d3 d4`). A type decodes as it
   says, wherever a decoder goes: Quotes's `http.expectJson GotQuote Quote`
-  reads each field of `Quote = [quote: String, ...]` by name, and fails, as
+  reads each field of `Quote = [quote : String, ...]` by name, and fails, as
   `field` does, on a missing or mistyped one (also `field "year" Int`,
   `list Quote`). `String`, `Int`, `Float` and `Bool` decode as `string`, `int`,
   `float` and `bool`; a record type field by field; other types take what
   `isType` accepts, which checks a list's shape, not its elements (`list Int`
   checks those). `decode.fromType t` is a type's decoder, for `map` and `>>=`,
   and takes a record whose fields may also be decoders, which is not a type:
-  `fromType [name: String, tags: list string]`.
+  `fromType [name : String, tags = list string]`.
 - `file`: pickers and downloads (above), and `file.toUrl f`, the action
   yielding a file's URL (`http.get` reads its text from there).
-  A file is a `file.File`: `[name: String, size: Int, mime: String, url: String]`.
+  A file is a `file.File`: `[name : String, size : Int, mime : String, url : String]`.
 
 Messages carry these types like any others, as Elm's do:
 `Msg = | GotText (Result String http.HttpError)` (APN's `Result` holds its value

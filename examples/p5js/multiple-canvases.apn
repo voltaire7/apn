@@ -5,19 +5,19 @@ import ["html","p5"]
 
 # Circles on black.
 circles = [
-    setup: (p : Sketch) -> { p.createCanvas 720 200; p.background 0 }
-    draw: (p : Sketch) -> p.circle p.mouseX p.mouseY 50
+    setup = (p : Sketch) -> { p.createCanvas 720 200; p.background 0 }
+    draw = (p : Sketch) -> p.circle p.mouseX p.mouseY 50
 ]
 
 # Black squares outlined in white, on white.
 squares = [
-    setup: (p : Sketch) -> {
+    setup = (p : Sketch) -> {
         p.createCanvas 720 200
         p.background 255
         p.fill 0
         p.stroke 255
     }
-    draw: (p : Sketch) -> p.square p.mouseX p.mouseY 50
+    draw = (p : Sketch) -> p.square p.mouseX p.mouseY 50
 ]
 
 main = div [] [canvas circles, canvas squares]

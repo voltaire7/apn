@@ -46,4 +46,4 @@ hand (p : Sketch) angle weight length = {
     p.pop
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

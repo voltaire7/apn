@@ -13,7 +13,7 @@ update (Counted count) _ = [count,browser.none]
 
 # The canvas, and a label showing how many points the ring has.
 view count = div [style "position" "relative"] [
-    canvas [setup: setup, draw: draw count]
+    canvas [setup = setup, draw = draw count]
     div [
         style "position" "absolute"
         style "left" "20px"
@@ -53,4 +53,6 @@ corner (p : Sketch) angle radius centerX centerY = {
     p.vertex (centerX + cos (degrees angle) * radius) (centerY + sin (degrees angle) * radius)
 }
 
-main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]
+main = browser.element [
+    init = init, update = update, subscriptions = _ -> browser.none, view = view
+]

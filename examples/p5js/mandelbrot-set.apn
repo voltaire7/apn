@@ -47,4 +47,4 @@ escape x y = {
 color iterations = iterations == maxIterations ? [0.0,0.0,0.0]
     : lerp [47.0,68.0,159.0] [255.0,255.0,128.0] (sqrt (iterations / maxIterations) : Float)
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

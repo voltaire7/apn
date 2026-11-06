@@ -5,7 +5,7 @@ export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts
 import { describeElementType, describeType } from "./type-description.ts";
 import { OVERLOADED_FUNCTIONS, METHODS, sourceLocations, boolSelection, ternaryExpansion, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
-import { isStringKey, keyText, keySource } from "./record-keys.ts";
+import { fieldSource, keySource } from "./record-keys.ts";
 import typeSource from "../lib/type.apn" with { type: "text" };
 import doSource from "../lib/do.apn" with { type: "text" };
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
@@ -21,7 +21,7 @@ import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, 
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions } from "./ast.ts";
-import { canonicalTypeText, compoundArgument, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
+import { canonicalTypeText, compoundArgument, holdsType, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
 import { parse, exprToSource, patternSource, patternVariables, isOperatorName, PRIMITIVE_OPERATORS, fixityOf, getLooseSpacing, setLooseSpacing } from "./parser.ts";
@@ -510,7 +510,7 @@ export class Interpreter {
                 case "record": {
                     if (v.shared || !v.v.length || this.declaredTypes.has(v)) return undefined;
                     const fields = v.v.map(([key, x]) => [key, source(x)] as const);
-                    return fields.every(([, text]) => text !== undefined) ? `[${fields.map(([key, text]) => `${keySource(key)}: ${text}`).join(", ")}]` : undefined;
+                    return fields.every(([, text]) => text !== undefined) ? `[${fields.map(([key, text]) => fieldSource(key, text!, true)).join(", ")}]` : undefined;
                 }
                 case "variant": {
                     const named = this.programEnv.get(v.tag), args = v.v.map(source);
@@ -1196,7 +1196,7 @@ export class Interpreter {
                 out.push(result);
             }
         } else if (seq.kind === "record") {
-            for (const [k, x] of seq.v) out.push(this.apply(f, mkList([mkStr(keyText(k)), x])));
+            for (const [k, x] of seq.v) out.push(this.apply(f, mkList([mkStr(k), x])));
 
         } else if (seq.kind === "int") {
             const n = seq.v < 0n ? -seq.v : seq.v;
@@ -1518,14 +1518,20 @@ export class Interpreter {
                         break;
                     }
                     case "record": {
-                        const fields = new Map<string, Value>();
-                        for (const [key, expression] of e.v) {
-                            if (key !== "_") { fields.set(key, this.eval(expression)); continue; }
-                            const spread = this.dataValue(this.eval(expression));
-                            if (spread.kind !== "record") throw new APNError("runtime", "record flattening expects a record");
-                            for (const [name, value] of spread.v) fields.set(name, value);
-                        }
+                        // Fields are code: each is in scope for those after it, and
+                        // x = x + 1 reads the x before it, as in a block.
+                        const fields = new Map<string, Value>(), outer = this.env;
+                        const bind = (name: string, value: Value) => { fields.set(name, value); this.env = new Env(this.env); this.env.setLocal(name, value); };
+                        try {
+                            for (const [key, expression] of e.v) {
+                                if (key !== "_") { bind(key, this.eval(expression)); continue; }
+                                const spread = this.dataValue(this.eval(expression));
+                                if (spread.kind !== "record") throw new APNError("runtime", "use in a record opens a record");
+                                for (const [name, value] of spread.v) bind(name, value);
+                            }
+                        } finally { this.env = outer; }
                         r = { kind: "record", v: [...fields] };
+                        if (e.items) this.recordCode.set(r, { exprs: e.items, env: outer });
                         break;
                     }
                     case "recordAccess": {
@@ -1795,7 +1801,7 @@ export class Interpreter {
             };
         }
         if (op === "++") {
-            const l = this.dataValue(lThunk);
+            const l = this.code(this.dataValue(lThunk));
             const r = rThunk;
             if (this.isList(l)) return this.appendCode(l, r);
             const right = this.dataValue(r);
@@ -1930,7 +1936,7 @@ export class Interpreter {
     }
 
     // The record with these fields set: r.f = v, r.[f, g] = [v, w], and
-    // r [f: v, g: w], which is the same update. A field it has keeps what its
+    // r [f = v, g = w], which is the same update. A field it has keeps what its
     // old value requires (a number's type, a variant's family); a new one is
     // added, unless a record type made the record.
     private assignFields(rec: Extract<Value, { kind: "record" }>, fields: Array<[string, Value]>): Value {
@@ -1953,7 +1959,7 @@ export class Interpreter {
         if (key?.kind !== "string") throw new APNError("runtime", "an entry is a [key,value] pair, as reading it gives: [\"x1\",22]");
         const [old, held] = rec.v[n];
         const other = rec.v.findIndex(([k], i) => k === key.v && i !== n);
-        if (other >= 0) throw new APNError("runtime", `the record already has a field '${keyText(key.v)}' (entry ${other})`);
+        if (other >= 0) throw new APNError("runtime", `the record already has a field '${key.v}' (entry ${other})`);
         const out = rec.v.slice();
         out[n] = key.v === old ? [old, this.assignSlot(held, field)] : [this.newField(rec, key.v), field];
         return this.keepType(rec, { kind: "record", v: out });
@@ -1964,9 +1970,9 @@ export class Interpreter {
     private newField(rec: Extract<Value, { kind: "record" }>, key: string): string {
         const type = this.declaredTypes.get(rec);
         if (type?.kind !== "record") return key;
-        const near = didYouMean(keyText(key), rec.v.map(([k]) => keyText(k)));
-        throw new APNError("runtime", `${valueToString(type)} has no field '${keyText(key)}'`, {
-            hint: near ? `did you mean '${near}'?` : `a record its type made keeps its fields; copy it to add one: [_: record, ${keyText(key)}: value]`,
+        const near = didYouMean(key, rec.v.map(([k]) => k));
+        throw new APNError("runtime", `${valueToString(type)} has no field '${key}'`, {
+            hint: near ? `did you mean '${near}'?` : `a record its type made keeps its fields; copy it to add one: [_: record, ${key}: value]`,
         });
     }
     private keepType(from: Value, to: Value): Value {
@@ -1975,8 +1981,8 @@ export class Interpreter {
         return to;
     }
     private missingField(rec: Extract<Value, { kind: "record" }>, key: string): never {
-        const near = didYouMean(keyText(key), rec.v.map(([k]) => keyText(k)));
-        throw new APNError("runtime", `record has no field '${keyText(key)}'`, {
+        const near = didYouMean(key, rec.v.map(([k]) => k));
+        throw new APNError("runtime", `record has no field '${key}'`, {
             hint: near ? `did you mean '${near}'?` : undefined,
         });
     }
@@ -2321,7 +2327,7 @@ export class Interpreter {
                     return this.recordField(f, carg.v);
                 }
                 if (carg.kind === "list" || carg.kind === "record") {
-                    // Fields given by name, or all of them in order (r [10] is r [x: 10]).
+                    // Fields given by name, or all of them in order (r [10] is r [x = 10]).
                     if (carg.kind === "list" && carg.v.length !== 0 && carg.v.length !== f.v.length) {
                         throw new Error(`Runtime: field count (${f.v.length}) does not match list size (${carg.v.length})`);
                     }
@@ -2329,7 +2335,7 @@ export class Interpreter {
                     const slots = new Map(f.v);
                     // A record holding a type, given values (not types, unless for a
                     // Type field), builds one; any other is updated exactly as by
-                    // field assignment (model [name: n]; Vector3 [x: Int] is
+                    // field assignment (model [name = n]; Vector3 [x : Int] is
                     // Vector3.x = Int).
                     // (A given field's slot is forced to tell, as assigning it would.)
                     const building = !given.some(([key, value]) => this.holdsType(value) && !this.typeOfTypes(slots.get(key)))
@@ -2357,7 +2363,7 @@ export class Interpreter {
                     if (i < 0 || i >= f.v.length) {
                         throw new Error(`Runtime: index ${carg.v} out of range (len ${f.v.length})`);
                     }
-                    return mkList([mkStr(keyText(f.v[Number(i)][0])), f.v[Number(i)][1]]);
+                    return mkList([mkStr(f.v[Number(i)][0]), f.v[Number(i)][1]]);
                 }
                 throw new Error("Runtime: applying an object needs a field-name string, a list, a record, or an int index");
             }
@@ -2644,13 +2650,20 @@ export class Interpreter {
             }
         });
     }
+    // A record keeps the code it was written as ([x = 1] is the code x = 1,
+    // and its value the record): code joins and reads it as a list.
+    private recordCode = new WeakMap<Value, { exprs: Expr[]; env: Env; code?: Value }>();
+    private code(value: Value): Value {
+        const written = value.kind === "record" ? this.recordCode.get(value) : undefined;
+        return written ? written.code ??= this.codeList(written.exprs, written.env) : value;
+    }
     // xs ++ ys: xs's items, then ys's, which see the bindings xs's make (see
     // rerun): [x = 1] ++ [x + 1] is the code [x = 1, x + 1].
     private appendCode(xs: Value, ys: Value, before = new Map<string, Value>()): Value {
         return this.defer(() => {
             const cell = this.cell(xs);
             if (cell === null) {
-                const right = this.dataValue(ys);
+                const right = this.code(this.dataValue(ys));
                 if (!this.isList(right)) throw new APNError("runtime", "list append expects a list");
                 return this.rerun(right, { before, changed: new Set(before.keys()) });
             }
@@ -3226,7 +3239,7 @@ export class Interpreter {
         return this.defer(() => {
             const cell = this.cell(xs);
             if (cell === null) {
-                const right = this.dataValue(ys);
+                const right = this.code(this.dataValue(ys));
                 if (!this.isList(right)) throw new APNError("runtime", "list append expects a list");
                 return right;
             }
@@ -3305,11 +3318,11 @@ export class Interpreter {
                 emit("[");
                 v.v.forEach(([key, val], i) => {
                     if (i) emit(", ");
-                    emit(keySource(key), isStringKey(key) ? "string" : "key");
-                    emit(": ");
+                    emit(keySource(key), "key");
                     // Inspect module actions without running halt; ordinary data
                     // fields still render their memoized values.
                     const field = this.force(val);
+                    emit(holdsType(field) ? " : " : " = ");
                     if (field.kind === "closure" && !field.params.length) emit(valueToString(field), field.kind);
                     else this.render(field, emit, false, ancestors);
                 });
@@ -3615,7 +3628,7 @@ export class Interpreter {
         const repeated = this.repeatedType(t);
         if (repeated) return `[${this.writtenType(repeated)}..]`;
         if (this.isList(t)) return `[${itemsText([...this.elements(t)].map(x => this.writtenType(x)))}]`;
-        if (t.kind === "record") return `[${t.v.map(([key, x]) => `${keySource(key)}: ${this.writtenType(x)}`).join(", ")}]`;
+        if (t.kind === "record") return `[${t.v.map(([key, x]) => fieldSource(key, this.writtenType(x), true)).join(", ")}]`;
         return valueToString(t);
     }
 
@@ -4018,7 +4031,7 @@ export class Interpreter {
         return type?.kind === "type" && type.name === "Type" && !type.family;
     }
 
-    // Whether a value holds a type (a template: [x: Int, y: 0], [xs: [Int]]),
+    // Whether a value holds a type (a template: [x : Int, y = 0], [xs = [Int]]),
     // told without evaluating anything, so a record of values is never forced
     // to tell: only what is evaluated, and what a list literal is written with.
     private holdsType(value: Value, depth = 0): boolean {
@@ -4275,7 +4288,7 @@ export class Interpreter {
 
     associations(value: Value): Array<[Value, Value]> {
         if (value.kind === "hashmap") return [...value.entries.values()];
-        if (value.kind === "record") return value.v.map(([key, item]) => [mkStr(keyText(key)), item]);
+        if (value.kind === "record") return value.v.map(([key, item]) => [mkStr(key), item]);
         if (!this.isList(value)) throw new APNError("runtime", "HashMap expects a record or association list");
         const items = this.items(value);
         return items.map((item) => {
@@ -4515,7 +4528,7 @@ export class Interpreter {
         // Code as data: a list's items as written (or source text), as lists
         // (see lib/syntax.apn).
         if (name === "intrinsics.syntax") {
-            const code = this.dataValue(argsIn[0]);
+            const code = this.code(this.dataValue(argsIn[0]));
             // Source text reads as the program's code does.
             if (code.kind === "string") {
                 const stmts = this.readSource(code.v, "<syntax>");
@@ -4682,7 +4695,7 @@ export class Interpreter {
                 // [] is the empty record too (it becomes one when a field is assigned).
                 if (this.isList(a) && !this.cell(a)) return mkList([]);
                 if (a.kind !== "record") throw new APNError("runtime", "pairs expects a record");
-                return mkList(a.v.map(([k, v]) => mkList([mkStr(keyText(k)), v])));
+                return mkList(a.v.map(([k, v]) => mkList([mkStr(k), v])));
             case "format": {
                 const fmt = this.dataValue(args[0]);
                 if (fmt.kind !== "string") throw new Error("Runtime: format expects a string");
@@ -5710,7 +5723,7 @@ export class Interpreter {
             case "list": {
                 if (v.kind === "record") {
                     // A var-only list pattern destructures a record by field name:
-                    //   [x, y]  matches  [x: 1, y: 2]  binding x=1, y=2
+                    //   [x, y]  matches  [x = 1, y = 2]  binding x=1, y=2
                     const fields = new Map<string, Value>();
                     for (const [k, val] of v.v) fields.set(k, val);
                     for (const el of p.v) {
@@ -5736,7 +5749,7 @@ export class Interpreter {
                 // [0..10] matches any int in the range, inclusive
                 return v.kind === "int" && v.v >= p.lo && v.v <= p.hi;
             case "recPat": {
-                // Keyed record pattern (Rust-style):  [x: a, y: b]  extracts fields x, y
+                // Keyed record pattern:  [x = a, y = b]  extracts fields x, y
                 // from a record and binds a, b to their values.
                 if (v.kind !== "record") return false;
                 const fields = new Map<string, Value>();

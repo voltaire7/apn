@@ -4,7 +4,7 @@
 import ["html","number","p5"]
 
 # A boid: where it is, its velocity and its hue.
-Boid = [position: [Float,Float], velocity: [Float,Float], hue: Float]
+Boid = [position : [Float,Float], velocity : [Float,Float], hue : Float]
 boids = Mutable ([] : List Boid)
 # A boid's size, and its greatest speed and steering force.
 size = 3.0
@@ -27,9 +27,9 @@ newBoid (p : Sketch) x y = {
     dy <- p.random -1 1
     hue <- p.random 0 256
     return [
-        position: [(x : Float), (y : Float)]
-        velocity: [(dx : Float), (dy : Float)]
-        hue: (hue : Float)
+        position = [(x : Float), (y : Float)]
+        velocity = [(dx : Float), (dy : Float)]
+        hue = (hue : Float)
     ]
 }
 
@@ -103,6 +103,6 @@ render (p : Sketch) boid = {
 }
 
 main = div [] [
-    canvas [setup: setup, draw: draw, mouseDragged: mouseDragged]
+    canvas [setup = setup, draw = draw, mouseDragged = mouseDragged]
     p [] [text "Drag the mouse to generate new boids."]
 ]

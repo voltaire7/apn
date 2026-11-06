@@ -26,4 +26,4 @@ draw (p : Sketch) = {
     p.text "Mask" 360 10
 }
 
-main = sketch [preload: [photo,cutout], setup: setup, draw: draw]
+main = sketch [preload = [photo,cutout], setup = setup, draw = draw]

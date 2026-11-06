@@ -4,13 +4,13 @@ import ["html","p5"]
 browser = import "browser"
 
 # The name typed, the food chosen (its color) and the form's font.
-Model = [name: String, food: String, font: String]
+Model = [name : String, food : String, font : String]
 Msg = Named String | Picked String | Font String
 
 foods = [["#F7F5BC","Cranberries"],["#B8E3FF","Almonds"],["#C79A9A","Gouda"]]
 fonts = ["Sans-serif","Serif","Cursive"]
 
-init = [[name: "", food: "white", font: "Sans-serif"], browser.none]
+init = [[name = "", food = "white", font = "Sans-serif"], browser.none]
 
 update msg model = msg ~ [
     Named name -> { model.name = name; [model,browser.none] }
@@ -19,7 +19,7 @@ update msg model = msg ~ [
 ]
 
 view model = div [style "position" "relative"] [
-    canvas [setup: setup, draw: draw model]
+    canvas [setup = setup, draw = draw model]
     input (onInput Named :: at 25 115) []
     div (at 25 215) (map ([color,food] -> label [] [
         input [typeAttribute "radio", attribute "name" "food", onClick (Picked color)] []
@@ -54,4 +54,6 @@ draw model (p : Sketch) = {
     p.text "What is your favorite food?" 25 200
 }
 
-main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]
+main = browser.element [
+    init = init, update = update, subscriptions = _ -> browser.none, view = view
+]

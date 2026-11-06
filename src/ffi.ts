@@ -1,4 +1,3 @@
-import { keyText } from "./record-keys.ts";
 import type { Interpreter } from "./interp.ts";
 import { type Value, type NativePointer, mkStr, mkBool } from "./types.ts";
 import { APNError } from "./errors.ts";
@@ -145,7 +144,7 @@ export function ffiNative(i: Interpreter, name: string, args: Value[]): Value {
     const signatures = new Map<string, { parameters: string[]; result: string }>();
     const foreign: Record<string, Deno.ForeignFunction> = Object.create(null);
     for (const [key, raw] of definitions.v) {
-        const symbol = keyText(key);
+        const symbol = key;
         if (Object.hasOwn(foreign, symbol)) return fail(`duplicate C symbol ${JSON.stringify(symbol)}`);
         const definition = i.demand(raw);
         if (definition.kind !== "record") return fail(`${symbol}: expected ffi.function parameters result`);
@@ -163,7 +162,7 @@ export function ffiNative(i: Interpreter, name: string, args: Value[]): Value {
     catch (error) { return fail(`cannot open ${JSON.stringify(path.v)}: ${error instanceof Error ? error.message : error}`); }
     const owner = { closed: false };
     const bindings: Value = { kind: "record", v: [...signatures].map(([key, signature]) => {
-        const symbol = keyText(key);
+        const symbol = key;
         const fn: Value = { kind: "native", name: symbol, arity: signature.parameters.length, applied: [], invoke: (values) => {
             if (owner.closed) return fail(`cannot call ${symbol}: library is closed`);
             if (!signature.parameters.length && values.length && (!i.isList(i.demand(values[0])) || i.cell(i.demand(values[0])) !== null)) return fail(`${symbol} takes no arguments (an explicit [] is also accepted)`);

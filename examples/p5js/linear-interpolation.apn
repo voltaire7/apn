@@ -21,4 +21,4 @@ draw (p : Sketch) = {
     p.ellipse x y 66 66
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

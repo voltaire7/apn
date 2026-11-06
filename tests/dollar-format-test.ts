@@ -10,7 +10,7 @@ for (const [source, expected] of [
     ['(+ 1) $ 2 * 3', '7'],
     ['(x -> 42) $ missing', '42'],
     ['head $ [42,missing]', '42'],
-    ['format "vec = %" [[x: 1]]', '"vec = [x: 1]"'],
+    ['format "vec = %" [[x = 1]]', '"vec = [x = 1]"'],
     ['format "100%%" []', '"100%"'],
     ['format "%%%" [42]', '"%42"'],
     ['format "" []', '""'],
@@ -26,7 +26,7 @@ for (const [source, error] of [
     ['format "%" [1,2]', 'expected 1 arguments, got at least 2'],
     ['format "%%" [1]', 'expected 0 arguments'],
     ['format "%" [1..]', 'expected 1 arguments'],
-    ['format "%" [x: 1]', 'expects a list'],
+    ['format "%" [x = 1]', 'expects a list'],
     ['format "%" 1', 'expects a list'],
     ['format "%" [missing,missing]', 'expected 1 arguments'],
 ] as const) Deno.test(`format rejects: ${source}`, () => {
@@ -40,9 +40,9 @@ Deno.test('print accepts a dollar-applied formatted value', () => {
     const log = console.log;
     const output: unknown[] = [];
     console.log = value => { output.push(value); };
-    try { new Interpreter().run(parseDocument('vec = [x: 1]; print $ format "vec = %" [vec]')); }
+    try { new Interpreter().run(parseDocument('vec = [x = 1]; print $ format "vec = %" [vec]')); }
     finally { console.log = log; }
-    if (JSON.stringify(output) !== '["vec = [x: 1]"]') throw new Error(String(output));
+    if (JSON.stringify(output) !== '["vec = [x = 1]"]') throw new Error(String(output));
 });
 
 Deno.test('printed dollar function reparses with the same grouping', () => {

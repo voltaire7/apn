@@ -30,4 +30,4 @@ draw (p : Sketch) = {
     p.circle x y 100
 }
 
-main = sketch [setup: setup, draw: draw, mousePressed: choose]
+main = sketch [setup = setup, draw = draw, mousePressed = choose]

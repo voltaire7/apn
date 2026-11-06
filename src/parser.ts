@@ -1,5 +1,5 @@
 import { claimedDeclaration, countingOf, fillPlaceholders, holdsPlaceholder, patternNames, sourceLocations, unclaimedMix } from "./ast.ts";
-import { stringKey, keySource } from "./record-keys.ts";
+import { fieldSource, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
 import { lex, OPERATOR_CHARS } from "./lexer.ts";
@@ -216,7 +216,7 @@ class Parser {
         if (/\s$/.test(before) || !/^ \S/.test(after)) throw new Error("Parser: separate statements on one line with '; ' (write print 1; print 2)");
     }
 
-    // Whether the [ at index opens record fields ([x: 1], keyed patterns and
+    // Whether the [ at index opens record fields ([x = 1], keyed patterns and
     // selections) rather than list items.
     opensRecord(index: number): boolean {
         let i = index + 1;
@@ -238,7 +238,7 @@ class Parser {
     }
 
     // A ',' follows its item directly, and takes nothing after it when no
-    // item it separates has a space ([1,2,3]), one space otherwise ([x: 1, y: 2],
+    // item it separates has a space ([1,2,3]), one space otherwise ([x = 1, y = 2],
     // [1 + 1, 2], and always between lambda parameters: x, y -> x). A newline already separates items, so a
     // ',' ending its line is redundant.
     checkCommaSpacing(t: Token, holds: "record" | "list" | "params", tight: boolean): void {
@@ -246,14 +246,11 @@ class Parser {
         this.seen = t;
         if (/^\s*(#.*)?$/.test(after)) throw new Error("Parser: a newline already separates items; remove the ',' at the end of the line");
         if (!/\s/.test(this.source[t.pos - 1] ?? " ") && (tight ? /^\S/ : /^ \S/).test(after)) return;
-        // x:xs (cons written the old way) right after '[' read as a field: the item is a cons.
-        const item = this.source.slice(this.source.lastIndexOf("[", t.pos) + 1, t.pos);
-        if (holds === "record" && /^\s*[\w']+:\S/.test(item)) throw new Error(`Parser: cons is '::': write [${item.trim().replace(":", " :: ")}, ...]`);
         if (holds === "params") throw new Error("Parser: separate lambda parameters by ', ' (write x, y -> x + y)");
         const what = holds === "record" ? "record fields" : "list items";
         throw new Error(tight
             ? `Parser: separate ${what} with no spaces in them by ',' alone (write [1,2,3])`
-            : `Parser: separate ${what} by ', ' when one has a space (write ${holds === "record" ? "[x: 1, y: 2]" : "[1 + 1, 2]"})`);
+            : `Parser: separate ${what} by ', ' when one has a space (write ${holds === "record" ? "[x = 1, y = 2]" : "[1 + 1, 2]"})`);
     }
 
     // The commas whose items have no space in them (outside strings and
@@ -305,16 +302,6 @@ class Parser {
         return tight;
     }
 
-    // A record key's ':' follows the key directly, with one space after it
-    // (x: 1); a ':' ending its line leaves the value to the next.
-    keyColon(): void {
-        if (looseSpacing) return;
-        const t = this.peek();
-        const after = this.source.slice(t.pos + 1).split("\n", 1)[0];
-        if (!/\s/.test(this.source[t.pos - 1] ?? " ") && (/^ \S/.test(after) || /^\s*(#.*)?$/.test(after))) return;
-        this.seen = t;
-        throw new Error(/^\S/.test(after) ? "Parser: cons is '::' (x :: xs); a record field is key: value, with one space after ':'" : "Parser: write a record field as key: value (no space before ':', one after)");
-    }
 
     lineIndent(token: Token): number {
         const start = this.source.lastIndexOf("\n", token.pos - 1) + 1;
@@ -491,17 +478,16 @@ class Parser {
             let mode: "bare" | "keyed" | undefined;
             while (!this.isSym("]")) {
                 if (this.isKeyedEntry()) {
-                    if (mode === "bare") throw new Error("Parser: pattern cannot mix bare names and 'key: name' entries");
+                    if (mode === "bare") throw new Error("Parser: a pattern cannot mix bare names and 'field = name' entries");
                     mode = "keyed";
                     const key = this.parseEntryKey();
-                    this.keyColon();
-                    this.next(); // :
+                    this.next(); // =
                     const nm = this.next();
-                    if (nm.k !== "ident") throw new Error("Parser: expected a binding name after ':' in record pattern");
+                    if (nm.k !== "ident") throw new Error("Parser: expected a name after '=' in a record pattern");
                     if (key === "_" && keyed.some(([k]) => k === "_")) throw new Error("Parser: record pattern permits only one remainder");
                     keyed.push([key, nm.v]);
                 } else {
-                    if (mode === "keyed") throw new Error("Parser: pattern cannot mix bare names and 'key: name' entries");
+                    if (mode === "keyed") throw new Error("Parser: a pattern cannot mix bare names and 'field = name' entries");
                     mode = "bare";
                     ps.push(this.parseConsPattern());
                 }
@@ -544,9 +530,9 @@ class Parser {
         throw new Error(`Parser: bad pattern '${this.tokenStr(t)}'`);
     }
 
-    // ':' writes a record field ([x: 1], inside [ ]) or a ternary's else
-    // (c ? a : b); anything else is cons written the old way or a type
-    // annotation, which APN does not have.
+    // A spaced ':' writes a type (x : Int, a field's [x : Int] included), an
+    // unspaced one a ternary's else (c ? a : b); anything else is cons or a
+    // record field written the old way.
     checkColons(): void {
         const open: string[] = [], pending = [0];
         for (const t of this.toks) {
@@ -555,16 +541,18 @@ class Parser {
             if ([")", "]", "}"].includes(t.v)) { open.pop(); if (pending.length > 1) pending.pop(); continue; }
             if (t.v === "?") { pending[pending.length - 1]++; continue; }
             if (t.v !== ":") continue;
-            if (open[open.length - 1] === "[") continue;
             if (pending[pending.length - 1] > 0) { pending[pending.length - 1]--; continue; }
-            // A declaration or an ascription, x : Int: the parser places it.
+            // A declaration, an ascription or a field's type, x : Int: the parser places it.
             if (/\s/.test(this.source[t.pos - 1] ?? "") && /\s/.test(this.source[t.pos + 1] ?? "")) continue;
             const next = this.toks[this.toks.indexOf(t) + 1];
             this.seen = t;
+            if (open[open.length - 1] === "[" && /\s/.test(this.source[t.pos + 1] ?? "")) {
+                throw new Error("Parser: a record's field is written x = 1, or x : T for its type");
+            }
             if (next?.k === "ident" && /^[A-Z]/.test(next.v)) {
                 throw new Error(`Parser: a declaration or an ascription spaces its ':' (x : ${next.v})`);
             }
-            throw new Error("Parser: cons is '::' (x :: xs); ':' writes a record field ([x: 1]) or a ternary's else (c ? a : b)");
+            throw new Error("Parser: cons is '::' (x :: xs); ': T' writes a type (x : T) and ':' a ternary's else (c ? a : b)");
         }
     }
 
@@ -822,10 +810,10 @@ class Parser {
         return prec < reach(e) && !(top && fixityOf(top).assoc === "none" && fixityOf(top).prec === prec);
     }
 
-    // Postfix:  quoted OBJECT access  a.b, a."b", a.123  and the
-    // quoted record PLUCK, or evaluated list-template inputs
+    // Postfix:  field access  a.b, a.`b c`, a."b"  and the
+    // record PLUCK, or evaluated list-template inputs
     //   a.[x, y]            -> list of those fields' values
-    //   a.[x: v1, y: v2]    -> smaller object: field x kept under the key v1
+    //   a.[v1 = x, v2 = y]  -> smaller record: field x kept as v1
     parsePostfix(e: Expr): Expr {
         while (this.isSym(".")) {
             this.next();
@@ -844,13 +832,10 @@ class Parser {
                 const entries: Array<string | [string, string]> = [];
                 try {
                     while (!this.isSym("]")) {
-                        const key = this.parseKey();
-                        if (this.isSym(":")) {
-                            this.next();
-                            const dst = this.next();
-                            if (dst.k !== "ident") throw new Error("Parser: expected a name after ':' in pluck");
-                            entries.push([key, dst.v]);
-                        } else {
+                        const key = this.parseEntryKey();
+                        // v.[total = count]: a record whose total is v.count.
+                        if (this.eatSym("=")) entries.push([this.parseEntryKey(), key]);
+                        else {
                             entries.push(key);
                         }
                         this.skipListSeparators();
@@ -859,15 +844,14 @@ class Parser {
                     }
                     this.next(); // ]
                     const mixed = new Set(entries.map((x) => typeof x));
-                    if (mixed.size > 1) throw new Error("Parser: pluck cannot mix bare names and 'key: name' pairs");
+                    if (mixed.size > 1) throw new Error("Parser: a selection cannot mix bare names and 'name = field' pairs");
                 } catch { quoted = false; entries.length = 0; }
-                // Quoted, the bracket holds keys: (x) there is a computed key.
-                if (quoted) for (let k = bracketStart; k < bracketEnd; k++) this.unnecessary.delete(k);
                 this.i = bracketEnd;
                 e = { t: "pluck", rec: e, entries, values, quoted };
             } else {
                 const keyStart = this.i;
-                const field = this.parseKey();
+                // T."text": a list type applied to a string, as T.("text") is.
+                const field = t.k === "str" ? (this.next(), t.v) : this.parseKey();
                 const keyEnd = this.i;
                 let argument: Expr | undefined;
                 if (t.k === "ident" || t.k === "str" || (t.k === "sym" && t.v === "(")) {
@@ -884,11 +868,6 @@ class Parser {
     // Parentheses quote their complete spelling, rather than evaluating an expression.
     parseKey(): string {
         const t = this.next();
-        if (t.k === "sym" && t.v === "-") {
-            const number = this.next();
-            if (number.k !== "int" && number.k !== "float") throw new Error("Parser: expected a numeric field name after '-'");
-            return "-" + this.keyTok(number);
-        }
         if (t.k === "sym" && t.v === "(") {
             const closes = [")"];
             const pairs: Record<string, string> = { "(": ")", "[": "]", "{": "}" };
@@ -906,42 +885,26 @@ class Parser {
         return this.keyTok(t);
     }
 
-    // A record entry's key: one key as after '.' (x, "x", 1, -1, (expr)), or a
-    // bare key of several names, numbers and '-'s on one line, up to its ':'
-    // ([my value: 1], [Content-Type: "json"]), keeping its source spelling.
-    // A bare key is not a quoted one: Content-Type and "Content-Type" differ.
+    // A keyed pattern's or selection's key: a name (or one in backticks).
     parseEntryKey(): string {
-        const first = this.peek();
-        if (first.k === "ident" || first.k === "int" || first.k === "float") {
-            let j = this.i;
-            for (;;) {
-                const t = this.toks[j];
-                if (t.k === "sym" && t.v === ":") break;
-                if (!(t.k === "ident" || t.k === "int" || t.k === "float" || t.k === "sym" && t.v === "-")) { j = -1; break; }
-                j++;
-            }
-            if (j > this.i + 1) {
-                const key = this.source.slice(first.pos, this.toks[j].pos).trimEnd();
-                this.i = j;
-                this.seen = this.toks[j - 1];
-                return key;
-            }
-        }
-        return this.parseKey();
+        const t = this.next();
+        if (t.k !== "ident") throw new Error("Parser: expected a field name");
+        return t.v;
     }
 
+    // key = ..., in a keyed pattern ([x = a]) or selection (r.[a = x]).
     isKeyedEntry(): boolean {
-        const saved = this.i;
-        try { this.parseEntryKey(); return this.isSym(":"); }
-        catch { return false; }
-        finally { this.i = saved; }
+        return this.peek().k === "ident" && this.peek(1).k === "sym" && (this.peek(1) as { v: string }).v === "=";
     }
 
-    // Preserve identifier versus string-key identity; numeric fields retain their spelling.
+    // A field after '.': a name, in backticks when it is not one.
     keyTok(t: Token): string {
         if (t.k === "ident") return t.v;
-        if (t.k === "str") return stringKey(t.v);
-        if (t.k === "int" || t.k === "float") return String(t.v);
+        if (t.k === "str") throw new Error(`Parser: a field that is not a name is written in backticks: \`${t.v}\``);
+        if (t.k === "int" || t.k === "float") {
+            const n = this.tokenStr(t);
+            throw new Error(`Parser: a field is a name: write .\`${n}\` for the field named ${n}, or apply to ${n} for an index`);
+        }
         throw new Error(`Parser: expected a field name after '.' (got '${this.tokenStr(t)}')`);
     }
 
@@ -1155,20 +1118,6 @@ class Parser {
                         this.skipListLeading();
                         // Empty list: []
                         if (this.isSym("]")) { this.next(); return { t: "list", v: [] }; }
-                        // Record entries are key/value pairs.
-                        if (this.isKeyedEntry()) {
-                            const fs: Array<[string, Expr]> = [];
-                            for (;;) {
-                                const keyToken = this.peek();
-                                const key = this.parseEntryKey();
-                                if (this.isSym(":")) this.keyColon();
-                                this.expectSym(":");
-                                fs.push([key, this.item(keyToken, () => this.parseDelimitedExpr())]);
-                                this.skipListSeparators();
-                                if (this.isSym("]")) { this.next(); return { t: "record", v: fs }; }
-                                if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside record literal");
-                            }
-                        }
                         // Otherwise it's a list literal: [a, b, ...] — elements separate on
                         // `,` OR a newline (commas are optional when each element is on its
                         // own line;  [1 2] on ONE line is still a single element = 1 applied to 2).
@@ -1226,10 +1175,11 @@ class Parser {
                         // in scope for the items after it (x <- m when the code runs).
                         const es = [] as Expr[];
                         for (;;) {
-                            es.push(this.item(this.peek(), () => this.isEagerBinding() ? this.parseEagerBinding()
+                            es.push(this.item(this.peek(), () => this.isFieldDeclaration() ? this.parseFieldDeclaration()
+                                : this.isEagerBinding() ? this.parseEagerBinding()
                                 : this.isPatBinding() ? this.parsePatBinding() : this.isDef() ? this.parseBlockDef() : this.parseDelimitedExpr()));
                             this.skipListSeparators();
-                            if (this.isSym("]")) { this.next(); return { t: "list", v: es }; }
+                            if (this.isSym("]")) { this.next(); return recordOf(es) ?? { t: "list", v: es }; }
                             if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside list literal");
                         }
                     }
@@ -1415,8 +1365,8 @@ class Parser {
             if (this.eatSym("[")) {
                 this.skipListLeading();
                 while (!this.isSym("]")) {
-                    this.parseKey();
-                    if (this.eatSym(":")) this.parseKey();
+                    this.parseEntryKey();
+                    if (this.eatSym("=")) this.parseEntryKey();
                     this.skipListSeparators();
                 }
                 this.next();
@@ -1425,7 +1375,7 @@ class Parser {
                 while (this.eatSym(".")) {
                     if (this.eatSym("[")) {
                         this.skipListLeading();
-                        while (!this.isSym("]")) { this.parseKey(); if (this.eatSym(":")) this.parseKey(); this.skipListSeparators(); }
+                        while (!this.isSym("]")) { this.parseEntryKey(); if (this.eatSym("=")) this.parseEntryKey(); this.skipListSeparators(); }
                         this.next();
                         break;
                     }
@@ -1471,9 +1421,8 @@ class Parser {
             this.next();
             this.skipListLeading();
             while (!this.isSym("]")) {
-                entries.push(this.parseKey());
-                if (this.isSym(":")) this.keyColon();
-                if (this.eatSym(":")) aliases.push(this.parseKey());
+                entries.push(this.parseEntryKey());
+                if (this.eatSym("=")) aliases.push(this.parseEntryKey());
                 this.skipListSeparators();
                 if (this.isSym("]")) break;
                 if (this.peek().k === "eof") {
@@ -1803,19 +1752,19 @@ class Parser {
     // ---- Declarations and ascription (name : T, e : T, (p : T)) ----
     // A declaration's or an ascription's type ends at the end of its statement
     // (or its value's =), or at its group's ). Its top-level arrows split it.
-    typeEnd(until: "statement" | "group"): { end: number; arrows: number[] } {
+    typeEnd(until: "statement" | "group" | "item"): { end: number; arrows: number[] } {
         const arrows: number[] = [];
         let depth = 0;
         for (let j = this.i; ; j++) {
             const t = this.toks[j];
             if (!t || t.k === "eof" || t.k === "dedent") return { end: j, arrows };
-            if (t.k === "newline" && !depth && until === "statement") return { end: j, arrows };
+            if (t.k === "newline" && !depth && until !== "group") return { end: j, arrows };
             if (t.k !== "sym") continue;
             if (["(", "[", "{"].includes(t.v)) { depth++; continue; }
             if ([")", "]", "}"].includes(t.v)) { if (!depth) return { end: j, arrows }; depth--; continue; }
             if (depth) continue;
             if (t.v === "->") arrows.push(j);
-            else if (t.v === ";" || t.v === "=" && until === "statement" || t.v === ":" && until === "group") return { end: j, arrows };
+            else if (t.v === ";" || t.v === "=" && until !== "group" || t.v === ":" && until === "group" || t.v === "," && until === "item") return { end: j, arrows };
         }
     }
     // The type written between this.i and end, read as an expression is (a
@@ -1866,6 +1815,20 @@ class Parser {
                 throw new Error(`Parser: declare ${name.v}'s type on a line of its own, before its definition: ${name.v} : A -> B`);
             }
         }
+    }
+    // A record's field declared with its type, x : T, or x : T = default.
+    isFieldDeclaration(): boolean {
+        const name = this.peek(), colon = this.peek(1);
+        return name.k === "ident" && colon.k === "sym" && colon.v === ":";
+    }
+    parseFieldDeclaration(): Expr {
+        const name = (this.next() as Extract<Token, { k: "ident" }>).v;
+        this.next();
+        const type = this.typeExpr(this.typeEnd("item").end);
+        const value = this.eatSym("=") ? ascribed(this.parseDelimitedExpr(), type, this.freshName()) : type;
+        const field: Expr = { t: "stmDef", name, clauses: [{ params: [], body: value }] };
+        declaredFields.add(field);
+        return field;
     }
     // (name : T), the type running to the group's end.
     ascribesGroup(): boolean {
@@ -2333,7 +2296,7 @@ function joinClauses<T extends { t: string }>(statements: T[], definition: T & {
 
 // Constructors declared via capitalized bindings. This is what makes an Uppercase LHS with
 // args ambiguous: `Some v = ...` destructures only when `Some` was DECLARED a
-// constructor; otherwise `Vector3 x y z = [x: x, y: y, z: z]` stays a plain
+// constructor; otherwise `Vector3 x y z = [x = x, y = y, z = z]` stays a plain
 // (record-constructor) function def. Module-level so declarations persist
 // across REPL lines (each line is re-parsed standalone).
 let declaredCtors = new Set<string>();
@@ -2507,6 +2470,38 @@ function bareType(type: Expr): Expr {
 function isFunctionType(type: Expr): boolean {
     const t = bareType(type);
     return t.t === "lambda" || t.t === "patternLambda";
+}
+// A record's fields as they were written: x = 1, x : T, x : T = 1, use base,
+// f x = ...
+function recordFieldsSource(e: Extract<Expr, { t: "record" }>, of: (x: Expr) => string): string[] {
+    const declared = declaredKeys.get(e);
+    return e.v.map(([key, x]) => {
+        if (key === "_") return `use ${of(x)}`;
+        if (x.t === "block" && x.stmts.length === 2 && x.stmts[0].t === "stmDef" && x.stmts[0].name === key) return of(x.stmts[0] as Expr);
+        if (!declared?.has(key)) return fieldSource(key, of(x));
+        const typed = x.t === "app" && x.ascribed ? x : undefined;
+        return typed ? `${fieldSource(key, of(typed.f), true)} = ${of(typed.a)}` : fieldSource(key, of(x), true);
+    });
+}
+// A list whose items are all fields is a record: [x = 1, y = x + 1] (each
+// field in scope for those after it), [x : Float, y : Float = 1.0] (a declared
+// field holds its type, or its default as one), [use base, x = 1] (a spread).
+const declaredFields = new WeakSet<Expr>();
+export const declaredKeys = new WeakMap<Expr, Set<string>>();
+function recordOf(items: Expr[]): Expr | undefined {
+    if (!items.length) return undefined;
+    const fields: Array<[string, Expr]> = [], declared = new Set<string>();
+    for (const item of items) {
+        if (item.t === "app" && item.f.t === "var" && item.f.name === "use") { fields.push(["_", item.a]); continue; }
+        if (item.t !== "stmDef") return undefined;
+        const [clause] = item.clauses;
+        const simple = item.clauses.length === 1 && !clause.params.length;
+        fields.push([item.name, simple ? clause.body : { t: "block", style: "{", stmts: [item, { t: "var", name: item.name }] }]);
+        if (declaredFields.has(item)) declared.add(item.name);
+    }
+    const record: Expr = { t: "record", v: fields, items };
+    if (declared.size) declaredKeys.set(record, declared);
+    return record;
 }
 // e : T as the language reads it: a type applied to a value checks it and
 // collapses it (Int 1.0 is 1). A function type applied to a value would call
@@ -2727,7 +2722,7 @@ function bareSource(e: Expr, where: Place): string {
         case "patternLambda": return `${e.params.map(patternSource).join(", ")}${e.guard ? " | " + of(e.guard, place("guard")) : ""} -> ${of(e.body)}`;
         case "lambda": return sectionSource(e.params, e.body, x => of(x, place("operand", 8))) ?? `${e.params.join(", ")} -> ${of(e.body)}`;
         case "list": return `[${itemsText(e.v.map(x => of(x, place("item"))))}]`;
-        case "record": return `[${e.v.map(([k, x]) => `${keySource(k)}: ${of(x)}`).join(", ")}]`;
+        case "record": return `[${recordFieldsSource(e, x => of(x)).join(", ")}]`;
         case "ternary": {
             // A ternary inside a ternary is parenthesized: c ? (d ? 1 : 2) : 3.
             const branch = (x: Expr, at: Place) => ungrouped(x).t === "ternary" ? `(${of(ungrouped(x))})` : of(x, at);
@@ -2741,10 +2736,10 @@ function bareSource(e: Expr, where: Place): string {
         }
         case "pluck":
             if (e.values) return `${of(e.rec, place("selected"))}.${of(e.values)}`;
-            return `${of(e.rec, place("selected"))}.[${itemsText(e.entries.map((x) => typeof x === "string" ? keySource(x) : `${keySource(x[0])}: ${x[1]}`))}]`;
+            return `${of(e.rec, place("selected"))}.[${itemsText(e.entries.map((x) => typeof x === "string" ? keySource(x) : fieldSource(x[1], keySource(x[0]))))}]`;
         case "setItem": return `${of(e.rec, place("head"))} (${of(e.index)}) = ${of(e.value)}`;
         case "setFields":
-            return `${of(e.rec, place("selected"))}.${(e.path ?? []).map(keySource).map(key => key + ".").join("")}[${itemsText(e.entries.map((key, n) => keySource(key) + (e.aliases ? ": " + keySource(e.aliases[n]) : "")))}] = ${of(e.value)}`;
+            return `${of(e.rec, place("selected"))}.${(e.path ?? []).map(keySource).map(key => key + ".").join("")}[${itemsText(e.entries.map((key, n) => e.aliases ? fieldSource(key, keySource(e.aliases[n])) : keySource(key)))}] = ${of(e.value)}`;
         case "block": {
             const body = e.stmts.map(x => of(x)).join("; ");
             return e.style === "(" ? `(${body})` : e.stmts.length ? `{ ${body} }` : "{}";
@@ -2785,7 +2780,7 @@ export function patternSource(p: Pattern): string {
             if (!declaredCtors.has(p.tag)) return `(${patternSource(p.args[p.args.length - 1])} : ${[p.tag, ...p.args.slice(0, -1).map(patternSource)].join(" ")})`;
             return `(${p.tag} ${p.args.map(patternSource).join(" ")})`;
         case "typeBind": return `(${patternSource(p.value)} : ${p.name})`;
-        case "recPat": return `[${p.v.map(([k, v]) => `${keySource(k)}: ${v}`).join(", ")}]`;
+        case "recPat": return `[${p.v.map(([k, v]) => fieldSource(k, v)).join(", ")}]`;
         case "range": return `[${p.lo}..${p.hi}]`;
     }
 }

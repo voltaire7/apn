@@ -1,9 +1,9 @@
 import { Interpreter } from "../src/interp.ts";
 import { parse } from "../src/parser.ts";
 
-const schema = "Vector3 = [x: Float, y: Float, z: Float]";
+const schema = "Vector3 = [x : Float, y : Float, z : Float]";
 const definition = "func (v : Vector3) = v.x";
-for (const argument of ["[1,2,3]", "[x: 1, y: 2, z: 3]"]) {
+for (const argument of ["[1,2,3]", "[x = 1, y = 2, z = 3]"]) {
     for (const incremental of [false, true]) Deno.test(`checked record pattern: ${argument}, incremental=${incremental}`, () => {
         const interpreter = new Interpreter();
         interpreter.enableChecking();
@@ -15,7 +15,7 @@ for (const argument of ["[1,2,3]", "[x: 1, y: 2, z: 3]"]) {
         if (result !== "1.0") throw new Error(`expected Float 1.0, got ${result}`);
     });
 }
-for (const argument of ["[]", "[1,2]", "[1,2,3,4]", '[1,"bad",3]', "[x: 1, y: 2]"]) {
+for (const argument of ["[]", "[1,2]", "[1,2,3,4]", '[1,"bad",3]', "[x = 1, y = 2]"]) {
     Deno.test(`checked record pattern rejects ${argument}`, () => {
         const interpreter = new Interpreter();
         interpreter.enableChecking();
@@ -31,7 +31,7 @@ for (const argument of ["[]", "[1,2]", "[1,2,3,4]", '[1,"bad",3]', "[x: 1, y: 2]
 
 for (const [source, expected] of [
     [`${schema}; Alias = Vector3; f (Alias v) = v.z; f [1,2,3]`, "3.0"],
-    ['Shape = [point: [x: Float], label: String]; f (v : Shape) = v.point.x; f [point: [x: 1], label: "a"]', "1.0"],
+    ['Shape = [point : [x : Float], label : String]\nf (v : Shape) = v.point.x\nf [point = [x = 1], label = "a"]', "1.0"],
     ['Pair = [String,Int]; f (Pair xs) = xs 1; f ["x",2]', "2"],
 ] as const) Deno.test(`checked structural schema preserves payload types: ${source}`, () => {
     const interpreter = new Interpreter();
@@ -54,11 +54,11 @@ Deno.test("record-pattern printing converts positional input before the body run
     if (lines.join("\n") !== "1.0") throw new Error(JSON.stringify(lines));
 });
 for (const [source, expected] of [
-    ["[x,y] = [y: 2, x: 10]; x - y", "8"],
-    ['[x,y] = [y: "b", x: 1]; [x + 1, y ++ "c"]', '[2,"bc"]'],
-    ["[x,y] <- return [y: 2, x: 10]; x - y", "8"],
-    ["r = { [x,y] = [y: 2, x: 10]; x - y }; r", "8"],
-    ["[x] = [x: 1, y: 2]; x", "1"],
+    ["[x,y] = [y = 2, x = 10]; x - y", "8"],
+    ['[x,y] = [y = "b", x = 1]; [x + 1, y ++ "c"]', '[2,"bc"]'],
+    ["[x,y] <- return [y = 2, x = 10]; x - y", "8"],
+    ["r = { [x,y] = [y = 2, x = 10]; x - y }; r", "8"],
+    ["[x] = [x = 1, y = 2]; x", "1"],
     ["[a,b] = [1,2]; a + b", "3"],
 ] as const) Deno.test(`checked standalone list pattern: ${source}`, () => {
     const interpreter = new Interpreter();
@@ -66,7 +66,7 @@ for (const [source, expected] of [
     const result = interpreter.renderString(interpreter.run(parse(source)));
     if (result !== expected) throw new Error(`expected ${expected}, got ${result}`);
 });
-for (const source of ["[x,z] = [y: 2, x: 1]; x", '[x,y] = [y: "b", x: 1]; y + 1']) {
+for (const source of ["[x,z] = [y = 2, x = 1]; x", '[x,y] = [y = "b", x = 1]; y + 1']) {
     Deno.test(`checked standalone list pattern rejects: ${source}`, () => {
         const interpreter = new Interpreter();
         interpreter.enableChecking();

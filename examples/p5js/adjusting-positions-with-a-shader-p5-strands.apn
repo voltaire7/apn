@@ -6,11 +6,11 @@ import ["glsl","p5"]
 # Each vertex moved up and down over time, a little later along the ribbon.
 wiggle inputs = {
     [x,y,z] = map (axis -> swizzle axis inputs.position) ["x","y","z"]
-    [position: vec [x, y + 20 * sin (Glsl "time" * 0.01 + y * 0.1), z]]
+    [position = vec [x, y + 20 * sin (Glsl "time" * 0.01 + y * 0.1), z]]
 }
 
 # time is the sketch's milliseconds, set each frame.
-wiggleShader = buildColorShader [time: ["float", (p : Sketch) -> p.millis]] [objectInputs: wiggle]
+wiggleShader = buildColorShader [time = ["float", (p : Sketch) -> p.millis]] [objectInputs = wiggle]
 
 # A ribbon of vertices, red to blue along its length.
 ribbon = buildGeometry ((p : Sketch) -> {
@@ -42,4 +42,4 @@ draw (p : Sketch) = {
     p.model ribbon
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

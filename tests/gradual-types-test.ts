@@ -8,7 +8,7 @@ for (
         "f (x : Int) = x; f 1",
         // Clauses may give different types: a call gives the clause's that runs.
         'f 0 = 1; f 1 = "one"; f 0 + 1',
-        'f x = x.x; f [x: 1, y: "extra"]',
+        'f x = x.x; f [x = 1, y = "extra"]',
         "Option a = Some a | None; f (Some x) = x; f None = 0; f (Some 1)",
         "([1,2,3] : Vect 3 Int)",
         "V n = Vect (n + 0) Int; ([1,2,3] : V 3)",
@@ -17,7 +17,7 @@ for (
         "f n (xs : Vect n Int) (ys : Vect n Int) = xs; f 2 [1,2] [3,4]",
         "f n (xs : Vect n Int) (ys : Vect 1 Int) = xs ++ ys : Vect (n + 1) Int",
         "f (x : Dynamic) = x x; f (y -> y)",
-        "Vector3 = [x: Float, y: Float, z: Float]; vec = Vector3 [1,2,3]",
+        "Vector3 = [x : Float, y : Float, z : Float]; vec = Vector3 [1,2,3]",
     ]
 ) {
     Deno.test(`gradual check accepts: ${source}`, () => {
@@ -29,7 +29,7 @@ for (
     const [source, message] of [
         ['f (x : Int) = x; f "bad"', "cannot use String"],
         ['f 0 = 1; f 1 = "bad"; f 1 + 1', "cannot combine String and Int"],
-        ["f x = x.x; f [y: 2]", "missing field"],
+        ["f x = x.x; f [y = 2]", "missing field"],
         ["([1,2] : Vect 3 Int)", "length mismatch"],
         ["([1,2,3] : Vect 2 Int)", "length mismatch"],
         ["([] : Vect -1 Int)", "nonnegative"],
@@ -127,9 +127,9 @@ Deno.test("runtime value-dependent type selection", () => {
 });
 for (
     const source of [
-        'v = [x: Float] []; v.x = "bad"',
+        'v = [x : Float] []; v.x = "bad"',
         'v = [1,2] : Vect 2 Int; i = 0; v i = "bad"',
-        "v = [x: 1]; v.x = .2",
+        "v = [x = 1]; v.x = .2",
         "v = [1,2]; v 2 = 3",
     ]
 ) {
@@ -139,8 +139,8 @@ for (
 }
 for (
     const source of [
-        "v = [x: Float] []; v.x = 1",
-        "v = [x: Float]; v.x = 123",
+        "v = [x : Float] []; v.x = 1",
+        "v = [x : Float]; v.x = 123",
         "v = [1,2] : Vect 2 Int; i = 0; v i = 3",
     ]
 ) {
@@ -155,7 +155,7 @@ Deno.test("vector checking follows lossless element conversion", () => {
 });
 Deno.test("first-class builtin constructors remain checkable", () => {
     const source =
-        "a = [1,2] : List\nb = [x: 1] : Record\nc = x -> x : Function\nv = [1,2] : Vect 2 (Int : Type)\nm = Mutable 1";
+        "a = [1,2] : List\nb = [x = 1] : Record\nc = x -> x : Function\nv = [1,2] : Vect 2 (Int : Type)\nm = Mutable 1";
     const result = checkSource(source);
     if (result.issues.length) throw new Error(JSON.stringify(result));
 });

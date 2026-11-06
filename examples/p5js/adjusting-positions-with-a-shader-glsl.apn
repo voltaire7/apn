@@ -79,4 +79,4 @@ draw (p : Sketch) = {
     p.model ribbon
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

@@ -46,7 +46,7 @@ Deno.test("composition formats record entries in order", () => {
     const original = console.log;
     console.log = (...args: unknown[]) => { lines.push(args.join(" ")); };
     try {
-        new Interpreter().run(parseDocument(String.raw`vec = [x: 1, y: 2, z: 3]
+        new Interpreter().run(parseDocument(String.raw`vec = [x = 1, y = 2, z = 3]
 vec * [f,v] -> {
     (print \ format "%: %") [f,v]
 }`));
@@ -70,7 +70,7 @@ Deno.test("composition binds tighter than record iteration", () => {
     const original = console.log;
     console.log = (...args: unknown[]) => { lines.push(args.join(" ")); };
     try {
-        new Interpreter().run(parseDocument(String.raw`vec = [x: 1, y: 2, z: 3]
+        new Interpreter().run(parseDocument(String.raw`vec = [x = 1, y = 2, z = 3]
 vec * print \ format "%: %"`));
         if (lines.join("\n") !== "x: 1\ny: 2\nz: 3") throw new Error(JSON.stringify(lines));
     } finally { console.log = original; }

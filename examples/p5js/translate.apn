@@ -30,4 +30,4 @@ shapes (p : Sketch) = {
     p.circle 225 25 50
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

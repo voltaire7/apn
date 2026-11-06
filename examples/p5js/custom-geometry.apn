@@ -74,4 +74,4 @@ draw (p : Sketch) = {
 
 mousePressed _ = newSnake
 
-main = sketch [setup: setup, draw: draw, mousePressed: mousePressed]
+main = sketch [setup = setup, draw = draw, mousePressed = mousePressed]

@@ -54,8 +54,8 @@ for (const [name, source, expected] of [
         ["[60,6]", "[[5,2],[5,7]]"]],
     ["clauses for get and with give a type fields", "Point (x : Float) (y : Float) = _\nget (Point x y) \"x\" = x\nget (Point x y) \"y\" = y\n" +
         "with (Point x y) \"x\" (v : Float) = Point v y\nwith (Point x y) \"y\" (v : Float) = Point x v\n" +
-        "p = Point 1 2\nprint (p.x + p.y)\np.x = 5\na = [p: p]\na.p.y = 3\nprint a",
-        ["3.0", "[p: Point 5.0 3.0]"]],
+        "p = Point 1 2\nprint (p.x + p.y)\np.x = 5\na = [p = p]\na.p.y = 3\nprint a",
+        ["3.0", "[p = Point 5.0 3.0]"]],
     // Clauses taking another number of arguments define a new function.
     ["an overload takes as many arguments", "log b x = b\nprint (log 2 8)\nget k = k\nprint (get 3)\nprint ([4,5] 1)", ["2", "3", "5"]],
 ] as const) Deno.test(`operators: ${name}`, () => {

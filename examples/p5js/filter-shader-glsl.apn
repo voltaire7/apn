@@ -48,4 +48,4 @@ draw (p : Sketch) = {
     p.filter displaceColors
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

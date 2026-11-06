@@ -1,9 +1,9 @@
 # HTTP requests. fetch url options sends one and returns its response, whatever
-# its status, as [status: Int, ok: Bool, statusText: String, url: String,
-# headers: HashMap, body: String] (headers by lowercase name). options is a
+# its status, as [status : Int, ok : Bool, statusText : String, url : String,
+# headers : HashMap, body : String] (headers by lowercase name). options is a
 # record of method (default "GET"), headers (a record or HashMap of strings),
-# body (a String) and timeout (milliseconds), each optional; [] for none.
-# Options and header names are bare keys: [headers: [Content-Type: "..."]].
+# body (a String) and timeout (milliseconds), each optional; [] for none:
+# [method = "POST", headers = [`Content-Type` = "text/plain"]].
 
 # The body of a successful (2xx) response; any other status fails.
 fetchText url options = {
@@ -29,12 +29,12 @@ get request = HttpGet request.url request.expect
 failure toMessage status reason = toMessage
     (Err (status == 0 ? NetworkError : (status == -1 ? BadBody reason : BadStatus status)))
 expectString toMessage = [
-    json: False
-    success: body -> toMessage (Ok body)
-    failure: failure toMessage
+    json = False
+    success = body -> toMessage (Ok body)
+    failure = failure toMessage
 ]
 expectJson toMessage decoder = [
-    json: True
-    success: value -> toMessage (mapError BadBody (_decode.decodeValue decoder value))
-    failure: failure toMessage
+    json = True
+    success = value -> toMessage (mapError BadBody (_decode.decodeValue decoder value))
+    failure = failure toMessage
 ]

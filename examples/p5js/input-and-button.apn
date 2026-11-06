@@ -4,19 +4,19 @@ import ["html","p5"]
 browser = import "browser"
 
 # The name being typed, and the one submitted last.
-Model = [typing: String, name: String]
+Model = [typing : String, name : String]
 Msg = Typed String | Greet
 
-init = [[typing: "", name: ""], browser.none]
+init = [[typing = "", name = ""], browser.none]
 
 update msg model = msg ~ [
     Typed typing -> { model.typing = typing; [model,browser.none] }
-    Greet -> [[typing: "", name: model.typing], browser.none]
+    Greet -> [[typing = "", name = model.typing], browser.none]
 ]
 
 # A heading, a field and a button over the canvas, which shows the name.
 view model = div [style "position" "relative"] [
-    canvas [setup: setup, draw: draw model.name]
+    canvas [setup = setup, draw = draw model.name]
     h2 (at 20 5) [text (model.name == "" ? "What is your name?" : "Hello, " ++ model.name ++ "!")]
     form (onSubmit Greet :: at 20 65) [
         input [value model.typing, onInput Typed] []
@@ -42,4 +42,6 @@ draw name (p : Sketch) = {
     p.describe ("The name " ++ name ++ " in large black text on a white background.")
 }
 
-main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]
+main = browser.element [
+    init = init, update = update, subscriptions = _ -> browser.none, view = view
+]

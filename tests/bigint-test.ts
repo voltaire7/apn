@@ -45,15 +45,15 @@ example("range arithmetic is exact", "[9007199254740993..9007199254740993+2]", "
 example("range integer division agrees with runtime division", "[0..5/2]", "[0,1,2]");
 example("range patterns compare exact integer bounds", "9007199254740993 ~ [[9007199254740993..9007199254740995] -> True, _ -> False]", "True");
 example("literal patterns match exact large integers", "pick 9007199254740993 = 1\npick n = 0\npick 9007199254740992", "0");
-example("large record keys round-trip exactly", "r = [9007199254740993: 7]\n[r.9007199254740993, r \"9007199254740993\"]", "[7,7]");
+example("large record keys round-trip exactly", "r = [`9007199254740993` = 7]\n[r.`9007199254740993`, r \"9007199254740993\"]", "[7,7]");
 example("large take counts end at a finite list", "take 9007199254740993 [1,2]", "[1,2]");
 example("large drop counts end at a finite list", "drop 9007199254740993 [1,2]", "[]");
-example("negative list and record indexes still work", '[[1,2] -1, [a: 1, b: 2] -1]', '[2,["b",2]]');
+example("negative list and record indexes still work", '[[1,2] -1, [a = 1, b = 2] -1]', '[2,["b",2]]');
 example("negative integer iteration still counts down", "-3 * x -> x", "[0,-1,-2]");
 example("floats keep fractional arithmetic", "[7.0 / 2.0, 0.5 + 0.25]", "[3.5,0.75]");
 failure("huge positive indexes fail without rounding", "[1,2] 9007199254740993", "index 9007199254740993 out of range");
 failure("huge negative indexes fail without rounding", "[1,2] -9007199254740993", "index -9007199254740993 out of range");
-failure("huge record indexes fail without rounding", "[a: 1] 9007199254740993", "index 9007199254740993 out of range");
+failure("huge record indexes fail without rounding", "[a = 1] 9007199254740993", "index 9007199254740993 out of range");
 failure("integer division by zero has an APN error", "1 / 0", "division by zero");
 failure("integer remainder by zero has an APN error", "1 % 0", "remainder by zero");
 failure("huge exit codes are rejected before host conversion", "exit 9007199254740993", "signed 32-bit integer");

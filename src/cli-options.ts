@@ -14,7 +14,7 @@ export const CLI_HELP = `Usage:
   apn --version                   Show the version
   apn --help, -h                   Show this help
   apn --loose ...                 Any of the above without the spacing rules
-                                  ([1, 2], [x: 1, y: 2], x = 1, { x }, (x))
+                                  ([1, 2], [x = 1, y = 2], x = 1, { x }, (x))
 
 Files and REPL submissions are statically checked by default.
 Use -- before a filename beginning with '-'. Options after FILE.apn are

@@ -7,10 +7,10 @@ for (const [source, expected] of [
     ['templates = [(* 2)]; values = [3]; templates.values', '[6]'],
     ['templates = [Char,Char]; values = "hi"; templates.values', "['h','i']"],
     ['templates = [Int]; values = [42]; { values = [7]; templates.values }', '[7]'],
-    ['values = missing; obj = [values: 42]; obj.values', '42'],
-    ['obj = [unbound: 42]; obj.unbound', '42'],
+    ['values = missing; obj = [values = 42]; obj.values', '42'],
+    ['obj = [unbound = 42]; obj.unbound', '42'],
     ['values = [42]; templates = [Int]; templates.values 0', '42'],
-    ['obj = [child: [x: 42]]; obj.child.x', '42'],
+    ['obj = [child = [x = 42]]; obj.child.x', '42'],
 ] as const) Deno.test(`named dot: ${source}`, () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(source)));
@@ -28,7 +28,7 @@ for (const source of [
 });
 
 Deno.test('checker distinguishes named list application from record fields', () => {
-    for (const source of ['templates = [Int]; values = [1]; templates.values', 'obj = [unbound: 42]; obj.unbound']) {
+    for (const source of ['templates = [Int]; values = [1]; templates.values', 'obj = [unbound = 42]; obj.unbound']) {
         const result = checkSource(source);
         if (result.issues.length) throw new Error(JSON.stringify(result.issues));
     }

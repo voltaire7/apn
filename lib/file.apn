@@ -1,6 +1,6 @@
 # Files the user picks or drops, as in Elm's File and File.Select. A file is a
 # record of name, size (bytes), mime and url (an object URL for its contents).
-File = [name: String, size: Int, mime: String, url: String]
+File = [name : String, size : Int, mime : String, url : String]
 FileEffect = FileSelect Dynamic Dynamic Dynamic | FileDownload String String String
 # Commands opening the browser's file picker for these MIME types.
 selectFile mimes toMessage = FileSelect mimes False (files -> toMessage (head files))

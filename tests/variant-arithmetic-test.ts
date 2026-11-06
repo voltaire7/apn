@@ -16,7 +16,7 @@ for (const [source, expected] of [
     ['[North,East,South] + 1', '[1,2,3]'],
     ['2 * [East,South]', '[2,4]'],
     ['-[East,South]', '[-1,-2]'],
-    ['[x: East, y: South] + 1', '[x: 2, y: 3]'],
+    ['[x = East, y = South] + 1', '[x = 2, y = 3]'],
     ['xs = [10,20,30,40]\nxs (East + 1)', '30'],
     ['xs = [10,20,30,40]\nxs (East + 1) = 99\nxs South', '99'],
     ['[1,2] * (+ East)', '[2,3]'],

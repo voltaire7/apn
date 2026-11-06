@@ -71,7 +71,7 @@ some p = Parser (input -> _parserRun p input ~ [
 ])
 _parserMany p input items = _parserNext p (_parserRun p input) input items
 _parserNext p (Ok [x,rest]) _ items = _parserMany p rest (x :: items)
-_parserNext _ (Err _) input items = [items: reverse items, rest: input]
+_parserNext _ (Err _) input items = [items = reverse items, rest = input]
 optional p = map Some p <|> return None
 # p's, separated by sep's.
 sepBy p sep = sepBy1 p sep <|> return []

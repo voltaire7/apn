@@ -21,7 +21,7 @@ leaderboard * [word,count] -> {
 
 # Persistent grouping: original encounter order survives within every group.
 print (groupBy (x -> x % 3) [1..9])
-print (mergeWith (+) (HashMap [apples: 3]) (HashMap [apples: 4, pears: 2]))
+print (mergeWith (+) (HashMap [apples = 3]) (HashMap [apples = 4, pears = 2]))
 
 # Absence and failure are values you can transform.
 print (map sq $ find (>100) $ [1..])  # Some 10201

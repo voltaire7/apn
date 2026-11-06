@@ -18,7 +18,7 @@ Deno.test("editor numbers distinguish prefixes, exponents, complex and polar mar
     ]);
 });
 Deno.test("editor ternary colons differ from record colons; cons is an operator", () => {
-    equal(colors('x = True ? [x: 1] : (1::[])').filter(([text]) => text === ":" || text === "::" || text === "="),
+    equal(colors('x = True ? [x : Int] : (1::[])').filter(([text]) => text === ":" || text === "::" || text === "="),
         [["=", "punctuation"], [":", "punctuation"], [":", "operator"], ["::", "operator"]]);
     equal(colors('True ? False ? 1 : 2 : 3').filter(([text]) => text === ":"), [[":", "operator"], [":", "operator"]]);
 });

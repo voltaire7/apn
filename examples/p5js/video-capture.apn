@@ -19,4 +19,4 @@ draw (p : Sketch) = {
     p.filter p.INVERT
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

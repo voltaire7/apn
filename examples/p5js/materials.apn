@@ -15,9 +15,9 @@ materials = ["color","emissive","normal","texture"]
 
 # The material chosen, and, by selector, whether each color applies and which it is.
 init = [[
-    material: "color"
-    on: [True,True,False,False,True]
-    colors: ["#ffffff","#000000","#ffffff","#ffffff","#ffffff"]
+    material = "color"
+    on = [True,True,False,False,True]
+    colors = ["#ffffff","#000000","#ffffff","#ffffff","#ffffff"]
 ], browser.none]
 
 update msg model = msg ~ [
@@ -32,7 +32,7 @@ toggle index flags = put index (not (flags index)) flags
 
 # The canvas, the material's radio buttons, and the color selectors it uses.
 view model = div [style "width" "400px", style "font-family" "sans-serif"] [
-    canvas [preload: [astronaut,venus], setup: setup, draw: draw model]
+    canvas [preload = [astronaut,venus], setup = setup, draw = draw model]
     div [style "background" "#f0f0f0"] [
         label [] (text "Material type" :: map (material -> label [] [
             input [
@@ -114,4 +114,6 @@ ambientSpecular model (p : Sketch) = {
     when (model.on Specular) (p.specularMaterial (model.colors Specular))
 }
 
-main = browser.element [init: init, update: update, subscriptions: _ -> browser.none, view: view]
+main = browser.element [
+    init = init, update = update, subscriptions = _ -> browser.none, view = view
+]

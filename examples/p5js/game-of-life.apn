@@ -48,4 +48,4 @@ rotate n xs = {
     drop k xs ++ take k xs
 }
 
-main = sketch [setup: setup, draw: draw, mousePressed: mousePressed]
+main = sketch [setup = setup, draw = draw, mousePressed = mousePressed]

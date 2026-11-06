@@ -30,7 +30,7 @@ for (const [source, expected] of [
     ["[(x, y -> x)]", '["[]",["->",["x","y"],"x"]]'],
     ["[[1..]]", '["[]",["..",1,[]]]'],
     ["[r.x]", '["[]",[".","r","x"]]'],
-    ["[[x: 1]]", '["[]",["[:]",["x",1]]]'],
+    ["[[x = 1]]", '["[]",["[:]",["x",1]]]'],
     ["[(+)]", '["[]","+"]'],
     ["[(+ 1)]", '["[]",["()","+",1]]'],
     ["[(2 +)]", '["[]",["+",2]]'],
@@ -44,8 +44,8 @@ for (const [source, expected] of [
 // only where they are needed (it parses with every rule on).
 for (const source of [
     "f x + 1", "1 + 2 * 3", "(1 + 2) * 3", "a - (b - c)", "a - b - c", "(a :: b) :: c", "a ^ b ^ c",
-    "(a ^ b) ^ c", "f (g x) -1", '"a\\"b\\n"', "'c'", "[1,2,[3]]", "[1 + 1, 2]", "[x: 1, y: [2,3]]",
-    "r.x.y", "xs.(i + 1)", "r.[a,b]", "(r.1).2", "(f x).y", "[1,3..9]", "[0..]", "[a + 1..b]",
+    "(a ^ b) ^ c", "f (g x) -1", '"a\\"b\\n"', "'c'", "[1,2,[3]]", "[1 + 1, 2]", "[x = 1, y = [2,3]]",
+    "r.x.y", "xs.(i + 1)", "r.[a,b]", "(f x).y", "[1,3..9]", "[0..]", "[a + 1..b]",
     "c ? 1 : 2", "c ? (d ? 1 : 2) : 3", "c ? 1 : (d ? 2 : 3)", "f (c ? 1 : 2)", "a $ b ? c : d",
     "c ? (a $ b) : d", "x, y -> x * y", "(n : Int), [a,b] | n > 0 -> a", "{ a <- return 1; print a }",
     "[x = 1, x + 1]", "f n = n * 2", "x :: xs = ys", "!b", "map (+ 1) xs", "head $ [1,2]", "f $ g $ x",
@@ -68,7 +68,7 @@ for (const [source, expected] of [
     ['double e = ["*",e,2]\neval (double (toAST [3 + 1]))', "[8]"],
     ["square n = n * n\neval (toAST [square 7])", "[49]"],
     ["eval (toAST [x = 1, x + 1])", "[2]"],
-    ["y = eval (toAST [x = 1])\nx = 5\n[y,x]", "[[],5]"],
+    ["y = eval (toAST [x = 1])\nx = 5\n[y,x]", "[[x = 1], 5]"],
     ["action = eval (toAST [print 1])\n2", "2"],
     ['eval "head" [4,5]', "4"],
 ] as const) Deno.test(`eval: ${JSON.stringify(source)}`, () => {

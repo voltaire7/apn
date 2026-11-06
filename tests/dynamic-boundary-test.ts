@@ -21,7 +21,7 @@ for (const [source, expected] of [
     ['([(1 : Dynamic), (2 : Dynamic)] : Vect 2 Int)', '[1,2]'],
     ['(import "function" : Dynamic); 123', '123'],
     ['(import ["text","type"] : Dynamic); 123', '123'],
-    ['x = 1; (use [x: 2] : Dynamic); x', '2'],
+    ['x = 1; (use [x = 2] : Dynamic); x', '2'],
 ] as const) Deno.test(`explicit Dynamic boundary: ${source}`, () => {
     const result = requireChecked(source);
     if (result.dynamicBoundaries || !result.runtimeChecks) throw new Error(JSON.stringify(result));
@@ -44,7 +44,7 @@ for (const [source, message] of [
     ['(f : Int -> Int) <- return (x -> "bad" : Dynamic); f 1', 'Int expects a number'],
     ['(([1] : Dynamic) : Vect 2 Int)', 'length mismatch'],
     ['(([1,"bad"] : Dynamic) : Vect 2 Int)', 'Int expects a number'],
-    ['x = "old"; (use [x: 123] : Dynamic); x', 'cannot replace string with int'],
+    ['x = "old"; (use [x = 123] : Dynamic); x', 'cannot replace string with int'],
 ]) Deno.test(`Dynamic runtime boundary rejects: ${source}`, () => {
     requireChecked(source);
     try { run(source); } catch (error) {

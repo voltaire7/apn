@@ -5,18 +5,18 @@ import "text"
 # source, escapes and all, which the evaluator reads.
 mpToken kind value = [kind,value]
 mpFlush state = state.buffer == "" ? state : [
-    mode: "code"
-    buffer: ""
-    tokens: _prepend (mpToken state.kind state.buffer) state.tokens
-    kind: ""
-    depth: state.depth
+    mode = "code"
+    buffer = ""
+    tokens = _prepend (mpToken state.kind state.buffer) state.tokens
+    kind = ""
+    depth = state.depth
 ]
 mpState mode buffer tokens kind depth = [
-    mode: mode
-    buffer: buffer
-    tokens: tokens
-    kind: kind
-    depth: depth
+    mode = mode
+    buffer = buffer
+    tokens = tokens
+    kind = kind
+    depth = depth
 ]
 mpWordChars = to (List Char) "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
 mpNesting c = c == "(" ? 1 : (c == "[" ? 1 : (c == ")" ? -1 : (c == "]" ? -1 : 0)))

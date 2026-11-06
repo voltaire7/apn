@@ -61,8 +61,8 @@ for (const [source, message] of [
     ['nope (h : f Int -> f Int) = h\nprint (nope (x -> x) "s")', "cannot use String where f Int is required"],
     ["two (h : f a e -> f a e) = h\nprint (two (x -> x) [1])", "where f a b is required"],
     ['import "option"\ntwo (h : (f a e) -> f a e) = h\nprint (two (x -> x) (Some 1))', "cannot use Option Int where f a b is required"],
-    ["v = [f: (* 2)]\nv.f = 1", "cannot use Int where a -> b is required"],
-    ["v = [f: g -> g 1]\nv.f = 1", "cannot use Int where (Int -> a) -> a is required"],
+    ["v = [f = (* 2)]\nv.f = 1", "cannot use Int where a -> b is required"],
+    ["v = [f = g -> g 1]\nv.f = 1", "cannot use Int where (Int -> a) -> a is required"],
     ["print ([x -> x] ++ 1)", "cannot append Vect 1 (a -> a) and Int"],
 ] as const) Deno.test(`function types: the checker rejects ${JSON.stringify(source)}`, () => {
     try { run(source, true); }

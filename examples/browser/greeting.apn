@@ -18,4 +18,4 @@ view model = div [style "font-family" "system-ui", style "padding" "2rem"] [
     button [onClick ClearName, disabled (model == "")] [text "Clear"]
 ]
 
-main = browser.sandbox [init: "", update: update, view: view]
+main = browser.sandbox [init = "", update = update, view = view]

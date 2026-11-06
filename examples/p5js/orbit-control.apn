@@ -28,4 +28,4 @@ draw (p : Sketch) = {
     }) [0,30..330]) [0,30..150]
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

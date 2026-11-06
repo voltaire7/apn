@@ -5,16 +5,16 @@ APN calls shared C libraries through Deno FFI. No new call syntax is required:
 ```apn
 ffi = import "ffi"
 ffi.withLibrary "./libmath.dylib" [
-    add: ffi.function [Int32,Int32] Int32
+    add = ffi.function [Int32,Int32] Int32
 ] c -> {
     print (c.add 20 22)  # 42
 }
 ```
 
-The full record key string must match the exported C symbol name. Use `add:`
-for the C symbol `add`, accessed with `c.add` or `c "add"`. Quoted field syntax
-includes literal quotes in the symbol name. `ffi.function` is written in
-APN; it builds `[parameters: ..., result: ...]`. `withLibrary` is an action:
+A field's name is the exported C symbol's: `add = ...` for the C symbol `add`,
+accessed with `c.add` or `c "add"` (a symbol that is not a name is backticked,
+`` `my sym` = ... ``). `ffi.function` is written in
+APN; it builds `[parameters = ..., result = ...]`. `withLibrary` is an action:
 running it loads the library, passes a record of curried functions to its
 callback, runs the callback's result if that is an action, and closes the
 library in `finally`, including after an APN error. C calls themselves are not

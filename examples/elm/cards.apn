@@ -7,14 +7,14 @@ random = import "random"
 Card = Ace | Two | Three | Four | Five | Six | Seven | Eight | Nine | Ten | Jack | Queen | King
 Msg = Draw | NewCard Card
 
-init = [[card: Three], browser.none]
+init = [[card = Three], browser.none]
 
 cardGenerator = random.uniform Ace
     [Two,Three,Four,Five,Six,Seven,Eight,Nine,Ten,Jack,Queen,King]
 
 update msg model = msg ~ [
     Draw -> [model, random.generate NewCard cardGenerator]
-    NewCard newCard -> [[card: newCard], browser.none]
+    NewCard newCard -> [[card = newCard], browser.none]
 ]
 
 subscriptions _ = browser.none
@@ -40,4 +40,4 @@ viewCard card = card ~ [
     King -> "🂮"
 ]
 
-main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]
+main = browser.element [init = init, update = update, subscriptions = subscriptions, view = view]

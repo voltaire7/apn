@@ -169,9 +169,7 @@ Behavior: `docs/standard-library.md` (`http`, `json`).
   `convertTo`; none is in `EVALUATED_NATIVES`, so static checking never sends
   a request. The retired names (`RETIRED_NATIVES`) are bound nowhere.
 - `src/json.ts` parses JSON itself so integers stay exact `bigint`s; record
-  keys and JSON keys are the same strings both ways (a quoted key's text keeps
-  its quotes), so nothing is renamed and `x`/`"x"` never collide. `fetch`
-  rejects quoted option and header keys (`isStringKey`).
+  keys and JSON keys are the same strings both ways, so nothing is renamed.
   Tests: `tests/http-test.ts` (its server test needs `--allow-net`),
   `tests/repl-interrupt-pty.py` (Ctrl+C during a slow request).
 
@@ -242,16 +240,17 @@ exported by `function`. Tests: `tests/language-cast-test.ts`,
   names to it, and the checker re-infers the items the same way; an update at
   an index known only at run time makes the items' type unknown.
 
-- `Parser.parseEntryKey` reads a record literal's or keyed pattern's key: a
-  run of names, numbers and `-` up to `:` is one bare key spelled as in the
-  source; elsewhere (`.field`, selections) `parseKey` reads a single token.
-  `isKeyedEntry` uses it, so such an entry starts a record, not a cons.
-
-- `src/record-keys.ts` stores ordinary strings without hidden prefixes.
-  `keyText` is identity; `keySource` escapes quoted-field contents for source
-  rendering. Pairs, iteration, HashMap conversion, and FFI symbol names
-  preserve the full key string. Quote characters and NUL have no special
-  lookup/update encoding.
+- A record's key is a name: the lexer reads a backticked one as an `ident`
+  token (`quoted`), so every key is one token. The parser's `recordOf` makes a
+  list literal of fields alone a `record` node: each binding's name and value
+  (a function's clauses wrapped in a block), `use e` as the key `_`, keeping
+  the items as `items`, from which the interpreter's `recordCode` and the
+  checker's record `code` give its code where code is read (`++`, `toAST`).
+  Both evaluate fields in order, each in scope for those after it. Declared
+  fields (`x : T`) are kept in `declaredKeys` for printing the literal back.
+  `src/record-keys.ts` writes a key back (`keySource`, backticks when it is
+  not a name) and a field (`fieldSource`); pairs, iteration, HashMap
+  conversion and FFI symbol names give the key's text.
 - All slot assignment paths share `assignSlot`. Expression-only keys use
   `setItem`, parsed by `tryItemAssign`, which shares `assignItem` with the
   definition path. Pattern-compatible parameters are treated as expressions only

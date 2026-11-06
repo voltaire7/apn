@@ -83,4 +83,4 @@ curve (p : Sketch) color f = {
     p.endShape
 }
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

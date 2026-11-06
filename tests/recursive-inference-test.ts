@@ -16,7 +16,7 @@ for (
         "Y f = (x -> f (x x)) (x -> f (x x))",
     "Option a = Some a | None; self f = f f; a = self (x -> Some x); [a, self (x -> Some x)]",
     "self f = f f; a = self (x -> [x]); b = self (x -> [x]); a ++ b",
-    "self f = f f; a = self (x -> [next: x]); b = self (x -> [next: x]); [a,b]",
+    "self f = f f; a = self (x -> [next = x]); b = self (x -> [next = x]); [a,b]",
     ]
 ) {
     Deno.test(`recursive inference terminates without Dynamic: ${source}`, () => {

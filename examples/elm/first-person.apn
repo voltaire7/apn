@@ -7,7 +7,7 @@ browser = import "browser"
 p5 = import "p5"
 
 eyeLevel = 2
-noKeys = [up: False, left: False, down: False, right: False, space: False]
+noKeys = [up = False, left = False, down = False, right = False, space = False]
 
 Msg =
     | KeyChanged Bool String
@@ -17,10 +17,10 @@ Msg =
     | VisibilityChanged browser.Visibility
 
 init = [[
-    keys: noKeys
-    width: 400
-    height: 400
-    person: [position: [0.0, inexact eyeLevel, -10.0], velocity: [0.0,0.0,0.0]]
+    keys = noKeys
+    width = 400
+    height = 400
+    person = [position = [0.0, inexact eyeLevel, -10.0], velocity = [0.0,0.0,0.0]]
 ], browser.getViewport GotViewport]
 
 update msg model = msg ~ [
@@ -41,11 +41,11 @@ update msg model = msg ~ [
 ]
 
 updateKeys isDown key keys = key ~ [
-    " " -> keys [space: isDown]
-    "ArrowUp" -> keys [up: isDown]
-    "ArrowLeft" -> keys [left: isDown]
-    "ArrowDown" -> keys [down: isDown]
-    "ArrowRight" -> keys [right: isDown]
+    " " -> keys [space = isDown]
+    "ArrowUp" -> keys [up = isDown]
+    "ArrowLeft" -> keys [left = isDown]
+    "ArrowDown" -> keys [down = isDown]
+    "ArrowRight" -> keys [right = isDown]
     _ -> keys
 ]
 
@@ -54,8 +54,8 @@ updatePerson dt keys person = {
     [vx,_,vz] = velocity
     [x,y,z] = person.position + velocity * (dt / 500)
     y < eyeLevel
-        ? [position: [x, inexact eyeLevel, z], velocity: [vx,0.0,vz]]
-        : [position: [x,y,z], velocity: velocity]
+        ? [position = [x, inexact eyeLevel, z], velocity = [vx,0.0,vz]]
+        : [position = [x,y,z], velocity = velocity]
 }
 
 stepVelocity dt keys person = {
@@ -85,7 +85,7 @@ view model = div [
     style "width" (to String model.width ++ "px")
     style "height" (to String model.height ++ "px")
 ] [
-    p5.canvas [setup: setup, draw: draw model]
+    p5.canvas [setup = setup, draw = draw model]
     keyboardInstructions model.keys
 ]
 
@@ -140,4 +140,4 @@ wood g = {
     g.rect 2 2 252 252
 }
 
-main = browser.element [init: init, update: update, subscriptions: subscriptions, view: view]
+main = browser.element [init = init, update = update, subscriptions = subscriptions, view = view]

@@ -37,7 +37,7 @@ Deno.test("system exposes halt as a deferred action", () => {
     if (i.env.get("halt")) throw new Error("namespaced import opened halt");
     const record = i.force(module.v[0]);
     if (record.kind !== "record" || !record.v.some(([key]) => key === "halt")) throw new Error("halt was not exported in the module");
-    if (!i.renderString(record).includes("halt:")) throw new Error("module inspection lost halt");
+    if (!i.renderString(record).includes("halt =")) throw new Error("module inspection lost halt");
 });
 
 // A module opens its names where a statement runs it, however it gets it (the

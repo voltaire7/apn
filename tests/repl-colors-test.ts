@@ -10,7 +10,7 @@ function echo(interp: Interpreter, value: import("../src/types.ts").Value): stri
     return output;
 }
 
-for (const source of ["[1]", "[x: 1]", '[x: [1,"hi",True]]', "take 3 [1..]"]) {
+for (const source of ["[1]", "[x = 1]", '[x = [1,"hi",True]]', "take 3 [1..]"]) {
     Deno.test(`streamed REPL colors: ${source}`, () => {
         const interp = new Interpreter();
         const value = interp.run(parse(source));
@@ -54,7 +54,7 @@ Deno.test("fraction slashes are peach in scalar and nested echoes", () => {
     const value = interp.run(parse("1/3"));
     const expected = "\x1b[38;2;229;200;144m1\x1b[0m\x1b[38;2;239;159;118m/\x1b[0m\x1b[38;2;229;200;144m3\x1b[0m";
     if (echo(interp, value) !== expected) throw new Error("Wrong scalar fraction colors");
-    for (const source of ["[1/3]", "[x: 1/3]"]) {
+    for (const source of ["[1/3]", "[x = 1/3]"]) {
         let output = "";
         renderColored(interp, interp.run(parse(source)), (text) => { output += text; });
         if (!output.includes(expected)) throw new Error("Wrong nested fraction colors");
@@ -76,7 +76,7 @@ Deno.test("complex signs are peach in scalar and nested echoes", () => {
 
 Deno.test("ternary colons are peach, record colons and assignment are gray", () => {
     const peach = "\x1b[38;2;239;159;118m", gray = "\x1b[38;2;131;139;167m";
-    const text = highlightLine('x = True ? [field: 1] : False ? 2 : 3');
+    const text = highlightLine('x = True ? [field : Int] : False ? 2 : 3');
     if (text.split(peach + ":").length - 1 !== 2) throw new Error("Missing ternary color");
     if (!text.includes(gray + ":") || !text.includes(gray + "=")) throw new Error("Wrong punctuation color");
     for (const op of ["==", "!=", "<=", ">="]) {

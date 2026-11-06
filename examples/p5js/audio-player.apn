@@ -16,4 +16,4 @@ setup (p : Sketch) = {
 # Faster further right.
 draw (p : Sketch) = player.speed (1 + p.mouseX / p.windowWidth)
 
-main = sketch [setup: setup, draw: draw]
+main = sketch [setup = setup, draw = draw]

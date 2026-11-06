@@ -11,17 +11,17 @@ for (const checked of [false, true]) {
                 "[Some 1, 1]",
             ],
             [
-                "whole.[x: a, y: b] = [x: 1, y: 2]; [whole,a,b]",
-                "[[x: 1, y: 2], 1, 2]",
+                "whole.[x = a, y = b] = [x = 1, y = 2]; [whole,a,b]",
+                "[[x = 1, y = 2], 1, 2]",
             ],
             ["v.[x,y] = [1,2]; [v,x,y]", "[[1,2],1,2]"],
-            ["v.[x,y] = [x: 1, y: 2, z: 3]; [v,x,y]", "[[x: 1, y: 2, z: 3], 1, 2]"],
+            ["v.[x,y] = [x = 1, y = 2, z = 3]; [v,x,y]", "[[x = 1, y = 2, z = 3], 1, 2]"],
             ["f v.x = [v,x]; f 1", "[1,1]"],
             ["f v.[x] = x; f v.[x,y] = y; f [1,2]", "2"],
             ["f v.[x,y] = [v,x,y]; f [1,2]", "[[1,2],1,2]"],
             [
-                "f v.[x,y] = [v,x,y]; f [x: 1, y: 2, z: 3]",
-                "[[x: 1, y: 2, z: 3], 1, 2]",
+                "f v.[x,y] = [v,x,y]; f [x = 1, y = 2, z = 3]",
+                "[[x = 1, y = 2, z = 3], 1, 2]",
             ],
             ["f _.[x,y] = [x,y]; f [1,2]", "[1,2]"],
             ["f whole.(x::xs) = [whole,x]; f [1,2]", "[[1,2],1]"],
@@ -35,22 +35,22 @@ for (const checked of [false, true]) {
                 "[1,1,1.0]",
             ],
             [
-                "f original.(converted : [x: Float]) = [original,converted]; f [1]",
-                "[[1], [x: 1.0]]",
+                "f original.(converted : [x : Float]) = [original,converted]; f [1]",
+                "[[1], [x = 1.0]]",
             ],
             [
-                "f whole.[x: a, y: b] = [whole,a,b]; f [x: 1, y: 2]",
-                "[[x: 1, y: 2], 1, 2]",
+                "f whole.[x = a, y = b] = [whole,a,b]; f [x = 1, y = 2]",
+                "[[x = 1, y = 2], 1, 2]",
             ],
             ["f x.x = x; f 1", "1"],
             ["f v.[x,x] = x; f [1,1]", "1"],
             ["v.x.y = 1; [v,x,y]", "[1,1,1]"],
             ["(v.x -> [v,x]) 1", "[1,1]"],
             ["[1,2] ~ [v.[x] -> 0, v.[x,y] -> y]", "2"],
-            ["v = [x: 0]; v.x = 1; v", "[x: 1]"],
-            ["v = [x: 1, y: 2]; v.[x,y] = v.[y,x]; v", "[x: 2, y: 1]"],
-            ["v = [child: [x: 0]]; v.child.x = 1; v.child.x", "1"],
-            ["v = [x: 1]; [{ v.x = 2; v.x }, v.x]", "[2,1]"],
+            ["v = [x = 0]; v.x = 1; v", "[x = 1]"],
+            ["v = [x = 1, y = 2]; v.[x,y] = v.[y,x]; v", "[x = 2, y = 1]"],
+            ["v = [child = [x = 0]]; v.child.x = 1; v.child.x", "1"],
+            ["v = [x = 1]; [{ v.x = 2; v.x }, v.x]", "[2,1]"],
             ["f v.x = 42; f (missing : Dynamic)", "42"],
             ["v.x = missing : Dynamic; 42", "42"],
             ["f v.(x::xs) = x; f [1..]", "1"],
@@ -71,7 +71,7 @@ for (const checked of [false, true]) {
             "f v.[x,x] = x; f [1,2]",
             "f v.[x,y] = x; f [1]",
             "v = 1; v.x = 2",
-            "v = [x: 1]; v.[x] = 10",
+            "v = [x = 1]; v.[x] = 10",
         ]
     ) {
         Deno.test(`dotted pattern rejects checked=${checked}: ${source}`, () => {
@@ -90,7 +90,7 @@ Deno.test("dotted parameter shadows outer variable instead of updating it", () =
     const i = new Interpreter();
     i.enableChecking();
     const actual = i.renderString(
-        i.run(parseDocument("v = [x: 0]; f v.x = x; [f 1, v.x]")),
+        i.run(parseDocument("v = [x = 0]; f v.x = x; [f 1, v.x]")),
     );
     if (actual !== "[1,0]") throw new Error(actual);
 });

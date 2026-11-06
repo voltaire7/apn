@@ -17,4 +17,4 @@ mousePressed _ = {
     set clicks (clicks + 1)
     return False
 }
-main = sketch [setup: setup, draw: draw, mousePressed: mousePressed]
+main = sketch [setup = setup, draw = draw, mousePressed = mousePressed]
