@@ -8,7 +8,7 @@ movers = Mutable ([] : List Mover)
 # The liquid fills the canvas's lower half, and drags by this coefficient.
 drag = 0.1
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 720 400
     p.call "colorMode" [p.HSB,9,100,100]
     initializeMovers p
@@ -17,7 +17,7 @@ setup (Sketch p) = {
 }
 
 # Nine balls of random masses, spaced along the top.
-initializeMovers (Sketch p) = {
+initializeMovers (p : Sketch) = {
     spacing = p.width / 9
     made <- mapM (n -> {
         mass <- p.random 0.5 3
@@ -29,14 +29,14 @@ initializeMovers (Sketch p) = {
     set movers made
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 20
     p.noStroke
     p.fill 50
     p.rect 0 (p.height / 2) p.width (p.height / 2)
     moved = map (fall p.height) movers
     mapM (display p) moved
-    set movers (map (bounce (Float p.height)) moved)
+    set movers (map (bounce (p.height : Float)) moved)
 }
 
 # Gravity, and in the liquid its drag (against the velocity, growing with
@@ -58,7 +58,7 @@ bounce height mover = {
     y > floor ? { mover.velocity = [vx, vy * -0.9]; mover.position = [x,floor]; mover } : mover
 }
 
-display (Sketch p) mover = {
+display (p : Sketch) mover = {
     [x,y] = mover.position
     p.stroke 0
     p.strokeWeight 2
@@ -66,6 +66,6 @@ display (Sketch p) mover = {
     p.ellipse x y (mover.mass * 16) (mover.mass * 16)
 }
 
-mousePressed (Sketch p) = initializeMovers p
+mousePressed (p : Sketch) = initializeMovers p
 
 main = sketch [setup: setup, draw: draw, mousePressed: mousePressed]

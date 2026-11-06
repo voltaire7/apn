@@ -90,7 +90,7 @@ for (
         'x = 1; [{ x = "local"; x }, x]',
         "f (x : Int32) = x; f 1",
         "f t n (xs : Vect n t) = xs; f Int 2 [1,2]",
-        "f (t : Type) x = t x; f Int 1",
+        "f (t : Type) x = x : t; f Int 1",
         "Option a = Some a | None; (Some 1 : Option Int)",
         'Choice flag = flag ? Int : String; [(1 : Choice True), ("hello" : Choice False)]',
     ]
@@ -155,7 +155,7 @@ Deno.test("vector checking follows lossless element conversion", () => {
 });
 Deno.test("first-class builtin constructors remain checkable", () => {
     const source =
-        "a = List [1,2]\nb = [x: 1] : Record\nc = x -> x : Function\nv = [1,2] : Vect 2 (Int : Type)\nm = Mutable 1";
+        "a = [1,2] : List\nb = [x: 1] : Record\nc = x -> x : Function\nv = [1,2] : Vect 2 (Int : Type)\nm = Mutable 1";
     const result = checkSource(source);
     if (result.issues.length) throw new Error(JSON.stringify(result));
 });
@@ -176,7 +176,7 @@ Deno.test("constant index predicates select a dependent type", () => {
 });
 Deno.test("rebound indices keep lazy aliases dynamic", () => {
     // V keeps the size it was written with.
-    const source = "size = 2; V = Vect size Int; size = 3; V [1,2]";
+    const source = "size = 2; V = Vect size Int; size = 3; ([1,2] : V)";
     const result = checkSource(source);
     if (result.issues.length) throw new Error(JSON.stringify(result));
     const i = new Interpreter();

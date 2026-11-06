@@ -10,7 +10,7 @@ for (const [source, expected] of [
     ['lookup 1 $ HashMap [[1,"first"],[1.0,"last"]]', '"last"'],
     ['m = HashMap [x: 1]\n[pairs m, keys m, values m, length m, null m]', '[[["x",1]],["x"],[1],1,False]'],
     ['remove "x" $ HashMap [x: 1]', 'HashMap []'],
-    ['f (HashMap m) = length m\nf (HashMap [x: 1])', '1'],
+    ['f (m : HashMap) = length m\nf (HashMap [x: 1])', '1'],
     ['HashMap [x: 1, y: 2] == HashMap [y: 2, x: 1]', 'True'],
     ['lookup "x" (HashMap [["x",1],["unused",missing]])', '1'],
     ['typeOf (HashMap [])', 'HashMap'],

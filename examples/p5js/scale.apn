@@ -2,12 +2,12 @@
 # Modify the coordinate system scale.
 import "p5"
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 720 400
     p.textOutput
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 0
     # A blue square twice the size.
     p.push

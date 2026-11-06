@@ -17,7 +17,7 @@ springing = 0.0009
 damping = 0.98
 nodeCount = 5
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 710 400
     frequencies <- mapM (_ -> p.random 5 12) [1..nodeCount]
     set body (Body [
@@ -28,14 +28,14 @@ setup (Sketch p) = {
     p.noStroke
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background [0,50]
     drawShape p
-    set body (move [Float p.mouseX, Float p.mouseY] body)
+    set body (move [(p.mouseX : Float), (p.mouseY : Float)] body)
 }
 
 # A closed curve through the nodes, red when still and yellow when moving fast.
-drawShape (Sketch p) = {
+drawShape (p : Sketch) = {
     p.splineProperty "tightness" body.organic
     red <- p.color "red"
     yellow <- p.color "yellow"

@@ -110,7 +110,7 @@ Deno.test("a browser build bundles the files a program loads", () => {
         if (checked) i.enableChecking();
         i.run(parse(source));
         if (i.renderString(i.run(parse("answer"))) !== '"clicked 0!"') throw new Error(`checked=${checked}`);
-        try { i.run(parse('Dynamic $ load "unused"')); } catch (error) {
+        try { i.run(parse('(load "unused" : Dynamic)')); } catch (error) {
             if (error instanceof Error && error.message.includes("not bundled")) continue;
             throw error;
         }
@@ -119,7 +119,7 @@ Deno.test("a browser build bundles the files a program loads", () => {
 });
 Deno.test("a browser build bundles the whole folder for a computed load", () => {
     const directory = new URL("./fixtures/bundle-load/", import.meta.url).pathname;
-    const source = 'part = "suffix"\nanswer = Dynamic $ load ("parts/" ++ part)';
+    const source = 'part = "suffix"\nanswer = load ("parts/" ++ part) : Dynamic';
     const bundle = bundleProgram(source, directory);
     const local = Object.keys(bundle).filter(path => path.startsWith("/app/")).sort();
     if (JSON.stringify(local) !== '["/app/helpers.apn","/app/parts/extra.apn","/app/parts/suffix.apn","/app/unused.apn"]') throw new Error(JSON.stringify(local));
@@ -130,7 +130,7 @@ Deno.test("a browser build bundles the whole folder for a computed load", () => 
         if (checked) i.enableChecking();
         i.run(parse(source));
         if (i.renderString(i.run(parse("answer.mark"))) !== '"!"') throw new Error(`checked=${checked}`);
-        try { i.run(parse('Dynamic $ load ("../" ++ "outside")')); } catch (error) {
+        try { i.run(parse('(load ("../" ++ "outside") : Dynamic)')); } catch (error) {
             if (error instanceof Error && error.message.includes("not bundled")) continue;
             throw error;
         }

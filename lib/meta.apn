@@ -1,7 +1,7 @@
 import "text"
-Dynamic $ load "meta/parser"
-Dynamic $ load "meta/evaluator"
-Dynamic $ load "meta/primitives"
+(load "meta/parser" : Dynamic)
+(load "meta/evaluator" : Dynamic)
+(load "meta/primitives" : Dynamic)
 
 # The reader's output is toAST's lists; their shape is not statically typed.
 metaParse source = mpParse source : Dynamic

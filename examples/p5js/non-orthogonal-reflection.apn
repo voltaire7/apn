@@ -14,11 +14,11 @@ velocity = Mutable [0.0,0.0]
 baseColor = Mutable [0.0,70.0,70.0]
 circleColor = Mutable [0.0,90.0,90.0]
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 710 400
     p.call "colorMode" [p.HSB,360,100,100]
     set baseLeft [0.0, (p.height - 150 : Float)]
-    set baseRight [Float p.width, Float p.height]
+    set baseRight [(p.width : Float), (p.height : Float)]
     setColors p
     set position [(p.width / 2 : Float), (p.height / 2 : Float)]
     # A random direction.
@@ -27,14 +27,14 @@ setup (Sketch p) = {
     p.describe "A simulation of a ball bouncing on slanted surfaces."
 }
 
-setColors (Sketch p) = {
+setColors (p : Sketch) = {
     baseHue <- p.random 30 180
     circleHue <- p.random 30 180
     set baseColor [(baseHue : Float), 70.0, 70.0]
     set circleColor [(circleHue : Float), 90.0, 90.0]
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background [30,50]
     p.frameRate 30
     # The base.
@@ -54,7 +54,7 @@ draw (Sketch p) = {
 
 # Below the base's top, the ball turns back about the base's normal (and a
 # line shows the normal).
-handleBaseCollision (Sketch p) = {
+handleBaseCollision (p : Sketch) = {
     [dx,dy] = normalize (baseRight - baseLeft)
     normal = [dy,-dx]
     when (dot position normal < dot baseLeft normal) {
@@ -68,7 +68,7 @@ handleBaseCollision (Sketch p) = {
 }
 
 # Off a side, the ball turns back; off the top too, and the base and colors change.
-handleBoundaryCollision (Sketch p) = {
+handleBoundaryCollision (p : Sketch) = {
     [x,y] = position
     when (x < radius || x > p.width - radius) (set velocity (velocity * [-1.0,1.0]))
     when (y < radius) {
@@ -76,7 +76,7 @@ handleBoundaryCollision (Sketch p) = {
         left <- p.random (p.height - 100) p.height
         right <- p.random (p.height - 100) p.height
         set baseLeft [0.0, (left : Float)]
-        set baseRight [Float p.width, (right : Float)]
+        set baseRight [(p.width : Float), (right : Float)]
         setColors p
     }
 }

@@ -5,7 +5,7 @@ import ["number","p5"]
 [circleX,circleY,circleRadius] = [200,150,75]
 [graphX,graphY,graphAmplitude,graphPeriod] = [50,300,50,300]
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 400 400
     p.describe ("Animated demonstration of a point moving around the unit circle, together "
         ++ "with the corresponding sine and cosine values moving along their graphs.")
@@ -16,7 +16,7 @@ wave f t = graphY - graphAmplitude * f (degrees t)
 # A graph's x for an angle.
 along t = remap t 0 360 graphX (graphX + graphPeriod)
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 0
     # The angle, a degree further each frame.
     angle = p.frameCount % 360 : Int
@@ -75,7 +75,7 @@ draw (Sketch p) = {
     p.circle lineX (wave sin angle) 10
 }
 
-curve (Sketch p) color f = {
+curve (p : Sketch) color f = {
     p.noFill
     p.stroke color
     p.beginShape

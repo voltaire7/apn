@@ -12,7 +12,7 @@ score = Mutable 0
 highScore = Mutable 0
 playing = Mutable False
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 500 500
     p.frameRate 10
     p.call "textAlign" [p.CENTER,p.CENTER]
@@ -41,7 +41,7 @@ advance (cells : List _) = {
 }
 grow (cells : List _) = cells ++ [cells (length cells - 1)]
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 0
     # A grid of cells, one unit each.
     p.call "scale" [p.width / gridWidth, p.height / gridHeight]
@@ -55,7 +55,7 @@ draw (Sketch p) = {
     } : showStartScreen p
 }
 
-showStartScreen (Sketch p) = {
+showStartScreen (p : Sketch) = {
     p.noStroke
     p.fill 32
     p.call "rect" [2, gridHeight / 2 - 5, gridWidth - 4, 10, 2]
@@ -64,9 +64,9 @@ showStartScreen (Sketch p) = {
     p.noLoop
 }
 
-mousePressed (Sketch p) = unless playing (startGame p)
+mousePressed (p : Sketch) = unless playing (startGame p)
 
-startGame (Sketch p) = {
+startGame (p : Sketch) = {
     updateFruitCoordinates p
     # Ten cells along row 15, the head at the right.
     set segments (map (n -> [startingSegments - 1 - n, 15]) [0..startingSegments - 1])
@@ -76,13 +76,13 @@ startGame (Sketch p) = {
     p.loop
 }
 
-showFruit (Sketch p) = {
+showFruit (p : Sketch) = {
     p.stroke [255,64,32]
     [x,y] = fruit
     p.point x y
 }
 
-showSegments (Sketch p) = {
+showSegments (p : Sketch) = {
     p.noFill
     p.stroke [96,255,64]
     p.beginShape
@@ -91,13 +91,13 @@ showSegments (Sketch p) = {
 }
 
 # Off the grid, or into itself, ends the game.
-checkForCollision (Sketch p) = {
+checkForCollision (p : Sketch) = {
     [x,y] = head segments
     when (x >= gridWidth || x < 0 || y >= gridHeight || y < 0 || contains [x,y] (tail segments))
         (gameOver p)
 }
 
-gameOver (Sketch p) = {
+gameOver (p : Sketch) = {
     p.noStroke
     p.fill 32
     p.call "rect" [2, gridHeight / 2 - 5, gridWidth - 4, 12, 2]
@@ -111,20 +111,20 @@ gameOver (Sketch p) = {
 }
 
 # Eating the fruit scores and grows the tail by a cell.
-checkForFruit (Sketch p) = when (head segments == fruit) {
+checkForFruit (p : Sketch) = when (head segments == fruit) {
     set score (score + 1)
     set segments (grow segments)
     updateFruitCoordinates p
 }
 
-updateFruitCoordinates (Sketch p) = {
+updateFruitCoordinates (p : Sketch) = {
     x <- p.random 0 gridWidth
     y <- p.random 0 gridHeight
     set fruit [floor (x : Number), floor (y : Number)]
 }
 
 # The arrow keys turn the snake, but not back on itself.
-keyPressed (Sketch p) = {
+keyPressed (p : Sketch) = {
     turn = [
         [p.LEFT_ARROW,"left","right"]
         [p.RIGHT_ARROW,"right","left"]

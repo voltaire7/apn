@@ -165,8 +165,8 @@ Deno.test("lint reports a clause or alternative that never runs", () => {
     const cards = new URL("./fixtures/lint/", import.meta.url).pathname;
     equal(lint("import \"cards\"\ns _ = 0\ns Hearts = 1", false, cards).filter(d => d.code === "unreachable-clause").map(d => d.range.start.line), [2]);
     equal(unreachable("import \"cards\"\ns _ = 0\ns Hearts = 1"), []);
-    // So are those of a file a statement loads (load "f", Dynamic $ load "f").
-    for (const load of ['load "cards"', 'Dynamic $ load "cards"', 'load "missing"']) {
+    // So are those of a file a statement loads (load "f", (load "f" : Dynamic)).
+    for (const load of ['load "cards"', '(load "cards" : Dynamic)', 'load "missing"']) {
         equal(lint(`${load}\ns _ = 0\ns Hearts = 1`, false, cards).filter(d => d.code === "unreachable-clause").length, load.includes("cards") ? 1 : 0);
     }
     // And of a record use opens: one bound to an import or a load, written in

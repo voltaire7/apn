@@ -5,7 +5,7 @@ import "p5"
 symmetry = 6
 angle = 360 / symmetry
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.describe ("Dark grey canvas that reflects the lines drawn within it in "
         ++ to String symmetry ++ " sections.")
     p.createCanvas 720 400
@@ -13,7 +13,7 @@ setup (Sketch p) = {
     p.background 50
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.translate (p.width / 2) (p.height / 2)
     inside = p.mouseX > 0 && p.mouseX < p.width && p.mouseY > 0 && p.mouseY < p.height
     # While the mouse is pressed on the canvas, the stroke from its last

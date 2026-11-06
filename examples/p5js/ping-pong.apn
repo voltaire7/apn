@@ -10,7 +10,7 @@ ball = Mutable [200.0,200.0]
 speed = Mutable [0.0,0.0]
 [leftX,rightX] = [20,380]
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 400 400
     p.rectMode p.CENTER
     p.fill 255
@@ -24,7 +24,7 @@ setup (Sketch p) = {
         ++ "and initially text reads \"Click to start\"")
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 0
     [leftY,rightY] = paddles
     [ballX,ballY] = ball
@@ -61,7 +61,7 @@ bounce paddleX paddleY = {
 }
 
 # A paddle's next height, moved by the keys held, kept on the canvas.
-move (Sketch p) up down y = {
+move (p : Sketch) up down y = {
     downHeld <- p.keyIsDown down
     upHeld <- p.keyIsDown up
     step = (downHeld ? paddleSpeed : 0) - (upHeld ? paddleSpeed : 0)
@@ -69,14 +69,14 @@ move (Sketch p) up down y = {
 }
 
 # The ball at the center, moving a random way.
-resetBall (Sketch p) = {
+resetBall (p : Sketch) = {
     set ball [(p.width / 2 : Float), (p.height / 2 : Float)]
     dx <- p.call "random" [[-3,3]]
     dy <- p.call "random" [[-1,1]]
     set speed [(dx : Float), (dy : Float)]
 }
 
-mousePressed (Sketch p) = {
+mousePressed (p : Sketch) = {
     looping <- p.isLooping
     unless looping {
         resetBall p

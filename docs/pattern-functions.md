@@ -78,22 +78,22 @@ sumPair [x,y] = x + y
 ```
 
 A literal inside a type pattern is a value of that type, compared numerically
-after the argument converts: `h (UInt 0) = []` matches `h 0`, while
-`h (UInt (-1))` and `h (UInt8 300)` are static errors, since no argument could
+after the argument converts: `h (0 : UInt) = []` matches `h 0`, while
+`h (-1 : UInt)` and `h (300 : UInt8)` are static errors, since no argument could
 match them.
 
 List patterns require the exact length. Their elements may be type
 patterns, which convert as a whole-argument type pattern does:
-`pair [UInt8 a, UInt8 b] = a + b` accepts `pair [3,3]` (and
-`[UInt8 a, UInt8 b] = [3,3]` as a binding), while `pair [3,300]` is a static
-range error; `firstFloat ((Float x)::rest) = x` returns `1.0` for `[1,2]`.
-Variant payloads convert the same way: `g (Some (Float x)) = x` returns `1.0`
+`pair [(a : UInt8), (b : UInt8)] = a + b` accepts `pair [3,3]` (and
+`[(a : UInt8), (b : UInt8)] = [3,3]` as a binding), while `pair [3,300]` is a static
+range error; `firstFloat ((x : Float)::rest) = x` returns `1.0` for `[1,2]`.
+Variant payloads convert the same way: `g (Some (x : Float)) = x` returns `1.0`
 for `g (Some 1)`, and `g (Some 300)` is a static range error for
-`g (Some (UInt8 x))`, also through a variable (`k = Some 300`) or another
+`g (Some (x : UInt8))`, also through a variable (`k = Some 300`) or another
 function (`h x = g (Some x)` rejects `h 300`). This holds for every field of
-a constructor with several: with `P = P2 Int Int | P0`, `g (P2 a (UInt8 y))`
+a constructor with several: with `P = P2 Int Int | P0`, `g (P2 a (y : UInt8))`
 accepts `g (P2 1 3)` and rejects `g (P2 1 300)`, and with
-`Pair a b = MkPair a b | NoPair`, `g (MkPair (Float x) (UInt8 y))` rejects
+`Pair a b = MkPair a b | NoPair`, `g (MkPair (x : Float) (y : UInt8))` rejects
 `g (MkPair 1 300)`. Record literals are checked by field the same way: for
 `g ([x: UInt8] r)`, `g [x: 300]` is a static range error, as are
 `k = [x: 300]; g k`, `h r = g r; h [x: 300]` and `h v = g [x: v * 100]; h 3`,
@@ -215,16 +215,14 @@ typeOf func                   # Int -> Int
 typeOf twice                  # Int -> Int
 ```
 
-Both definitions describe the same input and result types. `(Int x)` checks or
-losslessly converts the argument and binds its payload to `x`. `Int { x + x }`
-applies `Int` to the body's result. The checker infers the function's type from
+Both definitions describe the same input and result types. `(x : Int)` checks or
+losslessly converts the argument and binds its payload to `x`. `({ x + x } : Int)`
+ascribes the body's result. The checker infers the function's type from
 these existing patterns and expressions; no separate signature is needed.
 The function itself remains a callable value, not a type descriptor.
 
-`(Int x) -> Int x + x` is also valid, but application binds more tightly than
-addition: its body is `(Int x) + x`. Use `Int { x + x }` or `Int (x + x)` to
-explicitly constrain the whole result. Without a result constructor, the checker
-still infers a result type from the body.
+A lambda ascribes its result in parentheses: `(x : Int) -> (x + x : Int)`.
+Without one, the checker still infers a result type from the body.
 
 ## Function contracts
 
@@ -246,7 +244,7 @@ result. Numeric inputs require lossless conversion, whether bare or explicitly t
 function contract. Consequently a callable can match and later fail its contract;
 that failure is an error, not a reason to try another handler.
 
-`Int { ... }` independently constrains the enclosing function's result. A
+`({ ... } : Int)` independently constrains the enclosing function's result. A
 contract is an ordinary typed pattern whose type is a lambda, read as the
 function type it spells out; arrows associate right, so `Int -> Int -> Int`
 describes a curried function. A lowercase name not bound to a type is a type
@@ -263,7 +261,7 @@ construct a function contract. `a -> a` is the identity lambda.
 
 A type is stated by a declaration, an ascription or a typed pattern
 (see [declarations and ascription](semantics.md#declarations-and-ascription));
-`(x : Int)` is the typed pattern `(Int x)`, and `x = 5 : Int` is `x = Int 5`.
+`(x : Int)` is the typed pattern `(x : Int)`, and `x = 5 : Int` is `x = 5 : Int`.
 Their `:` is spaced: `f x: Int = x` and `(x: Int) -> x` are syntax errors.
 
 
@@ -280,8 +278,8 @@ func (value : Option _) = value ~ [
 func (Some 123)
 ```
 
-`(Option _ value)` accepts either `Some ...` or `None`, binding the entire
-variant to `value` without forcing its fields (`(Option t value)` also binds
+`(value : Option _)` accepts either `Some ...` or `None`, binding the entire
+variant to `value` without forcing its fields (`(value : Option t)` also binds
 `t` to its payload's type; see [type patterns](semantics.md#patterns-variants-and-scope)).
 `(Some x)` instead binds the payload. Unrelated values fail the parent type
 pattern and may fall through to another clause. `Option value`, `cast Option
@@ -359,7 +357,7 @@ unwrap whole.(Some x) = x
 `_.[x,y]` discards the whole-value binding. Repeated names impose equality;
 both patterns must match before the function body runs. Both views share the
 same lazy argument and references. A converting subpattern only converts its
-own view: `original.(Float x)` keeps the original input as `original`.
+own view: `original.(x : Float)` keeps the original input as `original`.
 
 The same patterns work in bindings:
 
@@ -396,7 +394,7 @@ type in each position. Existing lowercase type bindings are used as schemas;
 capitalized constructors such as `Int` are never new capture names.
 
 Like `(t x)`, a captured numeric type exposes its numeric payload separately:
-`inspect [Int32 1]` prints `[Int32,1]`. `_` accepts a value without capturing
+`inspect [(1 : Int32)]` prints `[Int32,1]`. `_` accepts a value without capturing
 its type or stripping its annotation. These patterns still participate in static
 inference; they are not `Dynamic` boundaries.
 

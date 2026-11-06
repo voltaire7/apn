@@ -2,7 +2,7 @@
 # Combine 3D shapes into a model, and draw it again and again.
 import "p5"
 
-drawSnake (Sketch p) = {
+drawSnake (p : Sketch) = {
     p.call "colorMode" [p.HSB,100]
     hue <- p.random 0 100
     p.fill [hue,50,100]
@@ -46,14 +46,14 @@ newSnake = {
     snake.normalize
 }
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.call "createCanvas" [700,400,p.WEBGL]
     p.angleMode p.DEGREES
     p.describe "A tiled plane of snake models"
     newSnake
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 255
     p.noStroke
     p.scale 1.5

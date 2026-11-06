@@ -23,7 +23,7 @@ for (const [source, expected] of [
     [append + '\nappend [] []', '[]'],
     [append + '\ntypeOf (append [1,2] [3,4])', 'Vect 4 Int'],
     ['f (xs : Vect n a) (ys : Vect m a) = a; f ([] : Vect 0 Int) []', 'Int'],
-    ['VectAlias = Vect; f (VectAlias n a xs) = n; f [1,2]', '2'],
+    ['VectAlias = Vect; f (xs : VectAlias n a) = n; f [1,2]', '2'],
     ['f (xs : Vect n a) = n; f _ = 123; f [1,2]', '2'],
     // A length keeps a name bound to a value; a function's name binds there.
     ['size = 2; f (xs : Vect size a) = 1; f _ = 0; [f [1], f [1,2]]', '[0,1]'],

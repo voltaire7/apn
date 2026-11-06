@@ -44,8 +44,8 @@ for (const [source, error] of [
     ['cast Int (1/3 : Fraction)', 'lossy conversion'],
     ['cast Int (.2 : Complex)', 'lossy conversion'],
     ['x = .2 : Float\ny = cast Int x\n[y,x]', 'lossy conversion'],
-    ['mine t x = x ~ [(value : source) -> t value]\nmine Int (.2 : Float)', 'lossy conversion'],
-    ['mine t (x : source) = t x\nmine Int (.2 : Complex)', 'lossy conversion'],
+    ['mine t x = x ~ [(value : source) -> (value : t)]\nmine Int (.2 : Float)', 'lossy conversion'],
+    ['mine t (x : source) = x : t\nmine Int (.2 : Complex)', 'lossy conversion'],
     ['types = import "type"\ntypes.cast Int (.2 : Float)', 'lossy conversion'],
     ['import "type"\ncast Int (.2 : Float)', 'lossy conversion'],
     ['cast String [1]', 'list of Char'],
@@ -74,5 +74,5 @@ Deno.test("cast is the APN prelude definition, not a native", () => {
     if (NATIVES.some(([name]) => name === 'cast')) throw new Error('cast is still native');
     if (i.env.get('cast')?.kind !== 'clauseFn') throw new Error('cast is not a pattern function');
     const source = i.renderString(i.run(parseDocument('cast')));
-    if (source !== '(target : List _), value -> (target : Type).(value)\n(target : Type), value -> target value') throw new Error(source);
+    if (source !== '(target : List _), value -> (target : Type).(value)\n(target : Type), value -> (value : target)') throw new Error(source);
 });

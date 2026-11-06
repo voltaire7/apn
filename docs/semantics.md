@@ -89,7 +89,7 @@ Spacing is part of the syntax (a parse error otherwise):
   an error. This covers list items and patterns, record fields, bare
   selections (`v.[x,y]`), ranges (`[1,3..9]`), `match` clause lists and import
   lists. Lambda parameters, which start a spaced lambda, always take one space:
-  `x, y -> x + y`, `(Int x), y -> x`.
+  `x, y -> x + y`, `(x : Int), y -> x`.
 - A `,` separates two items on one line. A newline already separates items,
   so a `,` ending a line is an error, as is a trailing one (`[1,2,]`); a
   multi-line list or record puts one item per line without commas (or several
@@ -160,7 +160,7 @@ indented line (`func =` then `    {`, with the `}` aligned under the `{`).
 `add 2` is a partial application. A lambda's parameters are patterns
 separated by `, ` (as in Idris); juxtaposition is one pattern, as inside a
 definition's parentheses: `t x -> t` takes one argument and binds its type,
-like `f (t x) = t`, and `f a e -> …` is the flat typed pattern `((f a) e)`, as
+like `f (x : t) = t`, and `f a e -> …` is the flat typed pattern `((f a) e)`, as
 `(Vec n a xs)` is `((Vec n a) xs)`. This holds everywhere, `match` alternatives included.
 Directly inside `[ ]`, a `,` separates the list's items, so a lambda with
 several parameters there is parenthesized: `[(x, y -> x), f]`. A function may be written as several
@@ -271,25 +271,25 @@ to all its parameters, a type that remembers how it was written (`Point`,
 `Pairs 2 Int`), as do the values made with it (`typeOf p` is `Point`), which
 patterns read back (`(Pairs n a xs)`). A scalar
 type (`Count = Int`) makes a named subtype: a `Count` is an `Int` wherever one is accepted and keeps its name when
-a result fits (`Count 5 + 1` is `Count 6`). A constructor (`UserId (Int id) =
+a result fits (`(5 : Count) + 1` is `Count 6`). A constructor (`UserId (Int id) =
 _`) makes a distinct type: `UserId 1` has none of an Int's operations, builtins
-and `(Int x)` patterns reject it, its clauses give it what it needs
+and `(x : Int)` patterns reject it, its clauses give it what it needs
 (`(UserId a) + (UserId b) = UserId (a + b)`), and `(UserId x)` takes it apart.
 See [named and distinct types](type-and-resource-rules.md#distinct-types).
 
 A declaration or an ascription states a type (see
 [declarations and ascription](#declarations-and-ascription)); otherwise `:`
 writes a record entry or a ternary's else, and cons is `::`. The constructor
-forms `x = Int 5` and `f (Int x) = ...` mean what `x = 5 : Int` and
+forms `x = 5 : Int` and `f (x : Int) = ...` mean what `x = 5 : Int` and
 `f (x : Int) = ...` do; see [pattern functions](pattern-functions.md). A type pattern is also a binding,
-so `Int x = 1` (or `x <- ...` with `Int x <- ...`) declares a typed name: the
-value converts as an argument converts for `f (Int x)`, so `Float y = 1`
-binds `1.0` and `Int z = 2.5` is a lossy-conversion error. A value the
+so `x : Int = 1` (or `x <- ...` with `(x : Int) <- ...`) declares a typed name: the
+value converts as an argument converts for `f (x : Int)`, so `y : Float = 1`
+binds `1.0` and `z : Int = 2.5` is a lossy-conversion error. A value the
 checker knows (a negated or parenthesized literal, or a constant such as
-`0 - 1` or `k * 3`) is converted statically, so `UInt n = -1` is a static
-error, and so is a call such as `g -1` or `g (k * 3)` for `g (UInt n)`. Later
+`0 - 1` or `k * 3`) is converted statically, so `n : UInt = -1` is a static
+error, and so is a call such as `g -1` or `g (k * 3)` for `g (n : UInt)`. Later
 assignments keep the type (`x = "a"` is a type error). Built-in type names
-cannot be redefined, so `Int x = ...` is always this binding; `Int = 5` and
+cannot be redefined, so `x : Int = ...` is always this binding; `Int = 5` and
 `Int x y = 5` remain errors.
 
 In file mode, bare expressions run for their effects but are not printed; use
@@ -331,6 +331,15 @@ is parenthesized, `(c ? a : b) : T`, and `x = c ? a : b : T` is an error.
 `(p : T)` in a pattern matches a value of `T`, as one, then `p`:
 `f (n : Int) = n + 1` takes `1.0` as `1`, and `(x : t)` binds the value's
 type `t`.
+
+A type is given a value only by ascription: `Int 5`, `Int $ x` and a type
+passed where a function goes (`f t = t 1`) are errors, `5 : Int` ascribes and
+`to Int x` converts. A type still takes its parameters (`Vect 2 Int`,
+`Option Int`, a computed `Sized 2`), and `HashMap`, `Mutable` and `Pointer`,
+types that are their own constructors, build their values (`HashMap [...]`,
+`Mutable 0`). A typed pattern writes its type after the value: `(Int x)`,
+`((T) p)` and `(t x)` are errors whose hint is `(x : Int)`. A type's missing
+parameters are any (`(xs : List)` is `(xs : List _)`).
 
 ### Code
 
@@ -536,7 +545,7 @@ Money 3 + 4                             # Money 7: 4 is to Money 4 first
 The other way round, a value of a type the program defines converts through
 its `to` instance wherever a built-in type is needed: an index (`to Int`), an
 operand of arithmetic no clause takes (`to Int`, else `to Float`), and a typed
-pattern of a scalar type (`(Int i)`, `(Float x)`, `(String s)`), which takes it
+pattern of a scalar type (`(i : Int)`, `(x : Float)`, `(s : String)`), which takes it
 only when no pattern of its own type does. An enumeration has these
 instances by declaration ([variant list indexes](type-and-resource-rules.md#variant-list-indexes)):
 
@@ -719,10 +728,10 @@ More clauses for a function in the same scope extend it, as a rebinding: code
 written before them keeps the clauses it saw (after `describe 0 = "hi"`,
 `label x = describe x` and `describe 1 = "hello"`, `label 1` matches no
 clause). A clause with a new pattern overloads it, and one with an equivalent
-pattern rebinds that clause in place (`f (Int x) = 1` then `f (Int y) = 2`
+pattern rebinds that clause in place (`f (x : Int) = 1` then `f (y : Int) = 2`
 rebinds; parameter names do not matter, and `_` is a name nothing uses).
-`f = Int x -> ...` is the curried spelling of `f (Int x) = ...`: the same
-clause, so `f = Float x -> ...` after it overloads `f` exactly as a second
+`f = (x : Int) -> ...` is the curried spelling of `f (x : Int) = ...`: the same
+clause, so `f = (x : Float) -> ...` after it overloads `f` exactly as a second
 clause would. A lambda whose parameter has the definition's own name
 (`x = x -> x`) stays a lambda, since as a clause that parameter would mean
 equality with `x`.
@@ -735,7 +744,7 @@ until the action runs. The effectful builtins all return actions: `print`,
 `echo`, `emit` and `repl` (yielding `[]`), `readFile`, `readStdin`, `getArgs`, `fetch`, `exit`,
 `set` (writing a `Mutable` cell), `bracket`, `withFile` and
 `ffi.withLibrary`. An action prints as its type, since only running it shows its result:
-`print (print 1)` prints `IO []`, an annotated `IO Int { ... }` prints `IO Int`,
+`print (print 1)` prints `IO []`, an annotated `({ ... } : IO Int)` prints `IO Int`,
 and an action whose result is not known before it runs prints `IO a`.
 `typeOf` gives the same type.
 
@@ -772,9 +781,9 @@ f 3                    # >>> n + 1 shows 4; >>> n ++ "a" is a type error
 
 `IO` is a type constructor, like `Option`: `IO []` is the type of an action
 yielding `[]` (what `print` builds), `IO Int` of one yielding an `Int`.
-Applying such a type to a value checks it as `Int 5` converts: the value must
+Applying such a type to a value checks it as `(5 : Int)` converts: the value must
 be an action, and its result is converted to the type when it runs, so
-`sayHello = IO [] { print "hello" }` is an action and `IO Int (print 1)`
+`sayHello = { print "hello" } : IO []` is an action and `(print 1 : IO Int)`
 is an error. `IO` applied to anything but a type (`IO { ... }`, `IO 5`) is an
 error. `return x` yields `x` in whatever monad the context needs (see below), as in
 `check n = n > 0 ? return n : fail "negative"`.
@@ -887,8 +896,8 @@ instance of its own. A type used where no instance accepts it is an error
 `return x` is a value in a monad not decided yet (its type is `m T`). It
 takes the monad of the first context that names one:
 
-- an annotation: `Option Int { return 42 }` is `Some 42`, `List Int { return 43 }`
-  is `[43]`, `IO Int { return 44 }` an action yielding 44;
+- an annotation: `({ return 42 } : Option Int)` is `Some 42`, `({ return 43 } : List Int)`
+  is `[43]`, `({ return 44 } : IO Int)` an action yielding 44;
 - a `>>=` with a concrete value: `Some 3 >>= x -> return (x * 2)` is `Some 6`;
 - running it: a statement or `<-` runs it as IO.
 
@@ -909,12 +918,12 @@ applied to types is named `f`, `g`, ...; the others `a`, `b`, ....
 
 Clauses with the same patterns but a different inferred result type overload
 each other; ones with the same result type rebind, as usual. Patterns are the
-same when only the names they bind differ (`f (Int x)` and `f (Int y)`); the
-types they name count (`f (List Int xs)` and `f (List String xs)` are two
+same when only the names they bind differ (`f (x : Int)` and `f (y : Int)`); the
+types they name count (`f (xs : List Int)` and `f (xs : List String)` are two
 clauses). A call that
 reaches such clauses is undecided until a context names the type its result
-should have: a type applied to it (`Int (f 0)`), a typed pattern it is passed
-to (`g (Int n)`), an annotation, or a monad context.
+should have: a type applied to it (`(f 0 : Int)`), a typed pattern it is passed
+to (`g (n : Int)`), an annotation, or a monad context.
 
 ```apn
 blank _ = 0
@@ -1075,11 +1084,11 @@ A type in a pattern takes its parameters, then a value. Applied to exactly its
 parameters it matches a type value, each name binding the part in its place:
 `(Option t)` given `Option Int` binds `t` to `Int`, `(Vect n a)` given `Vect 3
 Float` binds 3 and `Float`. One more pattern is a value of that type, the typed
-pattern `((Option t) x)`, whose names the value binds: `(Option t x)` given
-`Some "a"` binds `t` to `String` and `x` to the whole variant, and `(List _ xs)`
+pattern `((Option t) x)`, whose names the value binds: `(x : Option t)` given
+`Some "a"` binds `t` to `String` and `x` to the whole variant, and `(xs : List _)`
 takes any list. `IO` takes one parameter, as `List` does: `(IO t)` given `IO Int`
-binds `Int`, and `(IO [] a)` or `(IO _ a)` is an action, `a` the action itself,
-which the pattern does not run (`[]` is a type there, the empty list's). `(List Int xs)` and `(Option Int x)` decide by the type the
+binds `Int`, and `(a : IO [])` or `(a : IO _)` is an action, `a` the action itself,
+which the pattern does not run (`[]` is a type there, the empty list's). `(xs : List Int)` and `(x : Option Int)` decide by the type the
 checker gave the value, never by what its elements hold, so a run takes the
 clause the checker chose: `["a"]`, `map show xs` and `Some "a"` do not match,
 while `[1,2.5]` and `[1..]` do, their elements converted as they are used (2.5
@@ -1087,10 +1096,9 @@ fails only when used). A run infers these types even when it reports no type
 errors, so the choice never depends on checking; code no check reaches
 (`Dynamic`) has none, and there the pattern takes any list or that variant.
 Any other count is a static error (`(Pair x)` for `Pair a b`).
-A type without parameters takes its value at once (`(Int x)`, `(Color c)`), and
-a constructor sharing its type's name (`Box x = _`) is the constructor;
-with one more argument it is a typed pattern, `(Box Int b)` being `((Box Int)
-b)`.
+A type without parameters takes its value at once (`(x : Int)`, `(c : Color)`), and
+a constructor sharing its type's name (`Box x = _`) is the constructor
+there, and its type is written after a value: `(b : Box Int)`.
 
 Destructuring definitions immediately perform the pattern match, but bound
 variables remain deferred. Blocks create child scopes. Environments are
@@ -1116,14 +1124,14 @@ Values render as source writes them: strings and characters escaped
 compound is parenthesized (`Some (Some 1)`, but `Distance -2`), operators show
 as sections (`(+)`, `(+ 1)`, and `(1 +)` for `(+)` applied to 1). A function
 with several clauses shows each as a pattern lambda on its own line:
-`f (Int x) = 1; f (Float x) = 2` prints `Int x -> 1` and `Float x -> 2`
+`f (x : Int) = 1; f (x : Float) = 2` prints `(x : Int) -> 1` and `(x : Float) -> 2`
 (with several parameters, constructor patterns keep their parentheses:
-`(Int x), y -> 1`).
+`(x : Int), y -> 1`).
 
 A partly applied function shows what is left of it: the clauses its arguments
 match, as a call would choose them, without the matched parameters and with
-the names they bound shown as the arguments. With `g (Int x) y = x + y` and
-`g (Float x) y = 0`, `g 1` prints `y -> 1 + y`; `(a, b -> a + b) 1` prints
+the names they bound shown as the arguments. With `g (x : Int) y = x + y` and
+`g (x : Float) y = 0`, `g 1` prints `y -> 1 + y`; `(a, b -> a + b) 1` prints
 `b -> 1 + b`. A clause a call could still reach stays (`h x 0 = x` alongside
 adds the line `0 -> 1`). Printing evaluates an argument only as far as
 matching a pattern needs; one not evaluated yet shows as its source.
@@ -1202,7 +1210,7 @@ language.
 `arr 0 = 10` rebinds an existing list to a modified copy in the current scope,
 like record field assignment, converting the value to the element's type:
 `arr = [Float]; arr 0 = 1` produces `[1.0]`, and `arr = [Int]; arr 0 = .2`
-errors, as `arr = [Int 0]; arr 0 = .2` does. `arr -1 = 10` updates its final element, as `arr -1` reads it (`arr - 1 = 10`
+errors, as `arr = [(0 : Int)]; arr 0 = .2` does. `arr -1 = 10` updates its final element, as `arr -1` reads it (`arr - 1 = 10`
 defines `-`); likewise `f -1 = ...` is a clause of `f` for the argument `-1`.
 A single index must evaluate to an integer or a value whose `to Int` makes one
 (an enumeration's position); a finite list of these indices selects multiple
@@ -1245,7 +1253,7 @@ nested deferred computations, skipping many unevaluated elements then demanding
 a value that depends on all of them can hit the evaluator's stack limit.
 
 The checker checks a negated argument as written, so `g -1` (or `g -k` with
-`k = 1`) for `g (UInt n)` is a static error; so is `h 2` for `h x = g -x`,
+`k = 1`) for `g (n : UInt)` is a static error; so is `h 2` for `h x = g -x`,
 where the value is known only at the call. A typed parameter (a numeric type, a schema, a contract) given a
 value that depends on an enclosing function's parameter is checked at that
 function's calls, by value, as a direct call would be: with
@@ -1255,7 +1263,7 @@ but accepts `h 0`. For numbers: `h -2` passes `2` to `g`, and `h x = g x` accept
 `h -2` and `h "a"`. Such calls are checked even if `h` is never called: a
 call of `h` inside another, uncalled function (`d y = h 2`) is checked with
 its value, and `h`'s own definition is checked by type, so a parameter `h`
-also uses as a String cannot reach `g (UInt n)`. The error points at the call
+also uses as a String cannot reach `g (n : UInt)`. The error points at the call
 that supplies the value, or at `g x` when `h`'s definition alone decides it.
 Numeric subtraction is unchanged. Precedence and associativity are unchanged:
 `sqrt -1 * 4` means `(sqrt -1) * 4`, as `sqrt -1 + 2` means
@@ -1273,18 +1281,18 @@ An inexact radius stays inexact; an inexact angle still uses trigonometry.
 ## First-class types
 
 `Int` and `UInt` are arbitrary-precision signed/unsigned integers. Fixed-width
-constructors are `Int8`, `Int16`, `Int32`, `Int64`, `Int128` and matching `UInt`
+types are `Int8`, `Int16`, `Int32`, `Int64`, `Int128` and matching `UInt`
 variants. `Float` is flexible floating precision, using binary64 by default.
 `Float32` and `Float64` commit to binary32 and binary64 respectively.
 `Fraction` holds an exact rational, `Complex` any numeric complex value, and
-`ComplexExact` an exact one. Constructors are first-class functions, e.g.
-`map Int [1,2]`. A number prints as its value whatever its type (`Int32 123`
+`ComplexExact` an exact one. A value is given one by ascription (`5 : Int32`),
+and `to T` is the conversion as a function (`map (to Int) [1.0,2.0]`). A number prints as its value whatever its type (`(123 : Int32)`
 prints `123`); `typeOf` gives the type.
 
-`UInt` is the natural numbers, with built-in constructors `Z` (`UInt 0`) and
-`S` (`S n` is `n + 1`, converting `n` as `UInt n` does). The patterns `Z` and
+`UInt` is the natural numbers, with built-in constructors `Z` (`(0 : UInt)`) and
+`S` (`S n` is `n + 1`, converting `n` as `(n : UInt)` does). The patterns `Z` and
 `S k` take a number apart: `Z` matches 0, and `S k` matches any number from 1
-up, binding `k` to one less, as a `UInt`. Like a `(UInt n)` pattern, they accept
+up, binding `k` to one less, as a `UInt`. Like a `(n : UInt)` pattern, they accept
 a plain integer that converts; a negative one matches neither (a static error
 for a literal).
 
@@ -1296,25 +1304,25 @@ S (S Z)                          # 2, a UInt
 ```
 
 `S k` destructures, it does not unwrap: `k` is the predecessor, itself a `UInt`,
-while `(UInt k)` binds the untyped payload like any numeric constructor pattern.
+while `(k : UInt)` binds the untyped payload like any numeric constructor pattern.
 A bare `Z` in a pattern takes no fields (`plus Z m = m`). A program that declares
 its own constructor named `Z` or `S` gets it in that scope, matched as a variant;
 a number never matches a variant pattern.
 
-Explicit `Float`, `Float32`, and `Float64` construction rounds to the target
-floating-point precision, for bare or annotated inputs. `Float32 .1` produces
-`Float32 0.1` (the nearest binary32 value, displayed with the shortest
-round-tripping decimal); `Float (Int 9007199254740993)` rounds to
-`9007199254740992.0`. This also applies through aliases and `cast`.
+Ascribing `Float`, `Float32`, or `Float64` rounds to the target floating-point
+precision, for bare or annotated inputs: `(.1 : Float32)` is `0.1` as a Float32
+(the nearest binary32 value, displayed with the shortest round-tripping
+decimal); `((9007199254740993 : Int) : Float)` rounds to `9007199254740992.0`.
+This also applies through aliases and `cast`.
 
-Integer constructors remain lossless: `Int .2` and `Int (Float .2)` both error.
-Choose integer rounding explicitly: `Int (floor .2)` is `0`, while
-`Int (truncate -1.7)` is `-1`. Fixed-width integer overflow and nonzero
+Integer ascription stays lossless: `(.2 : Int)` and `((.2 : Float) : Int)` both error.
+Choose integer rounding explicitly: `(floor .2 : Int)` is `0`, while
+`(truncate -1.7 : Int)` is `-1`. Fixed-width integer overflow and nonzero
 imaginary-part loss remain errors. Typed parameter matching, function contracts,
 and assignment to existing numeric slots remain lossless. Floating arithmetic
 adapts flexible Float operands as described below.
 Numeric equality ignores
-annotations: `.2 == Float .2` remains true. Int and Float values display without
+annotations: `.2 == (.2 : Float)` remains true. Int and Float values display without
 a prefix; specialized types such as Int32, Float32 and Float64 retain theirs.
 
 `cast` remains a compatibility helper in the APN prelude and `type`:
@@ -1328,7 +1336,7 @@ round to their precision, while integer construction still rejects truncation.
 
 ### Flexible and fixed floating precision
 
-A decimal literal such as `.2` behaves like `Float .2`. Both are flexible values,
+A decimal literal such as `.2` behaves like `(.2 : Float)`. Both are flexible values,
 including after binding to a variable, passing through a function, or storing in a
 collection. Two flexible operands use binary64. A flexible operand paired with
 Float32 or Float64 rounds to that fixed precision before arithmetic; the result
@@ -1362,7 +1370,7 @@ impose a specific width on them.
 
 `typeOf value` returns a type descriptor. `isType Type value` tests membership
 without casting. `Number`, `Real`, `Integer`, `Exact`, and `Inexact` are aggregate
-numeric guards. For example `isType Number (Int32 1)` is true.
+numeric guards. For example `isType Number (1 : Int32)` is true.
 
 ### Clause ranking
 
@@ -1380,15 +1388,15 @@ either a typed or an untyped input must be lossless; explicit floating-point
 construction is a separate operation and does not relax pattern matching. The same
 ranking chooses among any function's clauses and a `match`'s alternatives:
 `0 ~ [n -> "any", 0 -> "zero"]` is `"zero"`. Numeric constructor patterns extract
-untyped payloads: `unwrap (Int32 x) = x` returns `5` for `Int32 5`. Return an explicit
+untyped payloads: `unwrap (x : Int32) = x` returns `5` for `(5 : Int32)`. Return an explicit
 constructor, as above, when the result should retain a type. Patterns do not mutate
 the original argument or strip types from unrelated values.
-Repeated variable names assert equality, so `(Number x) (Number x)` is not a
+Repeated variable names assert equality, so `(x : Number) (x : Number)` is not a
 catch-all for two different numbers.
 
-`100 * _ -> Int 0` repeats the typed value using the existing function iteration
-overload. Two numeric operands always multiply: `100 * Int 0` returns `0`
-and `Int 3 * Int 2` returns `6`, both still typed Int.
+`100 * _ -> (0 : Int)` repeats the typed value using the existing function iteration
+overload. Two numeric operands always multiply: `100 * (0 : Int)` returns `0`
+and `(3 : Int) * (2 : Int)` returns `6`, both still typed Int.
 
 ## HashMap
 
@@ -1409,21 +1417,21 @@ existing record evaluation rules. `(HashMap m)` is a type pattern.
 
 Type constructors also work directly with function iteration: `100 * Int`
 returns typed integers `0` through `99`; `[1..100] * Int` returns `1` through
-`100`. This differs from `100 * Int 0`, which multiplies and returns typed zero.
+`100`. This differs from `100 * (0 : Int)`, which multiplies and returns typed zero.
 
 The nonnumeric types returned by `typeOf` are also first-class constructors:
 `Bool`, `String`, `Char`, `List`, `Record`, `Function`, `Type`, and
 `Variant`. Except for `Bool`, they validate and return a value of the corresponding
 kind without forcing list elements or coercing unrelated values. `Bool` converts
 using truthiness. Their constructor patterns
-work in overloads, e.g. `f (Bool x) = x`. `isType` and identity `cast` support
+work in overloads, e.g. `f (x : Bool) = x`. `isType` and identity `cast` support
 these types too. Use declared constructors to create a particular variant;
 `Variant` validates any such value.
 
 A lowercase pair pattern `(t x)` captures the runtime type descriptor in `t`
 and the numeric payload without its explicit type annotation in `x`. Nonnumeric
-values are returned unchanged. For example, `myTypeOf (t _) = print t` still prints
-`Int32` for `Int32 5`, while `payload (_ x) = x` returns `5`: `_` discards the
+values are returned unchanged. For example, `myTypeOf (_ : t) = print t` still prints
+`Int32` for `(5 : Int32)`, while `payload (x : _) = x` returns `5`: `_` discards the
 type, as it discards a value.
 It inspects the outer value without forcing list contents. Repeating the type
 variable, as in `(t x) (t y)`, requires both arguments to have the same type.
@@ -1488,7 +1496,7 @@ loading retains its existing definition behavior.
 `x = Mutable 0` allocates a shared cell when first used (an IORef); functions
 taking arguments can create independent cells. A cell holds values of its
 first contents' type (`Mutable [0,0]` holds pairs); one made from a
-conversion holds that type's values, so `Mutable (List [Int,Int] [])`, or a
+conversion holds that type's values, so `Mutable ([] : List [Int,Int])`, or a
 record schema's value (`Mutable (Body [...])`), holds lists of any length where
 the type says `List`. Like a cell, a stateful object a definition makes (a
 [p5](p5.md) object such as `loadImage "a.png"`) is made once, where the
@@ -1622,7 +1630,7 @@ f 2                         # 5
 Brace blocks use the usual four-space indentation and aligned closing brace.
 Both forms return the last expression; empty blocks return `[]`. Grouping also
 accepts either delimiter for operator sections (`{ + 2 }` or `(+ 2)`), parameter
-patterns (`f { Int x }` or `f (Int x)`), and grouped function contracts.
+patterns (`f {x : Int}` or `f (x : Int)`), and grouped function contracts.
 Definitions and ordinary field/index updates inside the expression are local;
 they do not implicitly update the original record. Returned functions and deferred
 values retain this local scope. Explicit side effects, including `Mutable` updates
@@ -1665,7 +1673,7 @@ range, whose elements share one type. Any union of this shape
 a union too, unfolded the same way: `Pairs a = [] | a :: a :: Pairs a` holds
 the even-length lists of `a` (`isType (Pairs Int) [1,2,3]` is `False`),
 `Ints = [] | Int :: Ints` is `List Int`'s members, and `Tree = [] | Tree :: Tree`
-lists of trees; `(Pairs Int xs)` matches a value of it, and the static check
+lists of trees; `(xs : Pairs Int)` matches a value of it, and the static check
 leaves such a union to the run. A [family](gradual-and-dependent-types.md#indexed-families)
 is the same alternatives, each saying its index. `typeOf` gives the most exact
 type it knows without evaluating: lists whose length is not known yet (a
@@ -1675,7 +1683,7 @@ element has, `List a` when it is unknown, so `typeOf [1,2,3]` is
 every item has: `Int | String` for `[1,"a"]`. Type errors use the same
 notation.
 
-Functions display argument/result descriptions: `f (Int x) = x` gives
+Functions display argument/result descriptions: `f (x : Int) = x` gives
 `Int -> Int`; `x -> print x` gives `a -> []`. Clauses contribute to one
 combined description, with alternatives where their known types differ.
 Explicit function contracts still return their declared arrow type.
@@ -1758,15 +1766,15 @@ empty strings, empty lists, empty records, empty HashMaps, and null pointers.
 Everything else is truthy, including type constructors, non-nullary functions,
 and every variant constructor (`None` and zero-ordinal enum cases included).
 Mutable cells use their current contents, and a named subtype's value its base's
-(`Flag = Bool` makes `Flag False` falsy). Nullary actions run under the usual
+(`Flag = Bool` makes `(False : Flag)` falsy). Nullary actions run under the usual
 demand rules. A list check inspects only its first cell, not its elements or
 remaining tail; infinite nonempty lists are truthy.
 
-`Bool x`, `!x`, ternary conditions, pattern guards, `assert`, `filter`, and
+`to Bool x`, `!x`, ternary conditions, pattern guards, `assert`, `filter`, and
 standard-library predicate consumers share these rules. `&&` and `||` return
 Bool and short-circuit: `0 && missing` is false, `1 || missing` is true.
 Truthiness does not change equality or Bool pattern matching: `0 != False`,
-and `(Bool x)` still matches booleans rather than every convertible value.
+and `(x : Bool)` still matches booleans rather than every convertible value.
 
 Type variables preserve relationships: `typeOf (x, y -> x)` displays
 `a -> b -> a`, `typeOf (f, x -> f x)` displays `(a -> b) -> a -> b`, and

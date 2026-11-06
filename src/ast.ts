@@ -57,7 +57,8 @@ export type Pattern =
     // starting with ':' (op, when not ::), matching the constructor op names.
     | { p: "cons"; head: Pattern; tail: Pattern; op?: string }
     | { p: "typeBind"; name: string; value: Pattern }
-    | { p: "constr"; tag: string; args: Pattern[] }
+    // typed: a type's pattern the parser made from (p : T), the one way to write it.
+    | { p: "constr"; tag: string; args: Pattern[]; typed?: true }
     | { p: "recPat"; v: Array<[string, string]> }
     | { p: "range"; lo: bigint; hi: bigint };
 
@@ -299,7 +300,7 @@ const placed = <E extends Expr>(x: E, source: Expr): E => { const place = source
 export function ternaryExpansion(e: Extract<Expr, { t: "ternary" }>): Expr {
     let core = sugar.get(e);
     if (core) return core;
-    const truth = placed({ t: "app", f: { t: "var", name: "Bool" }, a: e.cond }, e.cond);
+    const truth = placed({ t: "app", f: { t: "var", name: "Bool" }, a: e.cond, ascribed: true }, e.cond);
     core = placed({ t: "app", f: placed({ t: "app", f: truth, a: e.then }, e), a: e.els }, e);
     sugar.set(e, core);
     return core;

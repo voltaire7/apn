@@ -5,7 +5,7 @@ import "p5"
 colorImage = loadImage "assets/parrot-color.png"
 grayImage = loadImage "assets/parrot-bw.png"
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.describe ("Black-and-white photograph of a parrot. The cursor, when dragged across "
         ++ "the canvas, adds color to the photograph.")
     p.createCanvas 720 400
@@ -15,7 +15,7 @@ setup (Sketch p) = {
 }
 
 # Copy a 20 by 20 square of the color image under the mouse.
-mouseDragged (Sketch p) =
+mouseDragged (p : Sketch) =
     p.copy colorImage p.mouseX p.mouseY 20 20 p.mouseX p.mouseY 20 20
 
 main = sketch [preload: [colorImage,grayImage], setup: setup, mouseDragged: mouseDragged]

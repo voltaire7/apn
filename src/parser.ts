@@ -404,6 +404,7 @@ class Parser {
             // A typed pattern: ((Int -> Int) f), ([Int] xs). Its type is any
             // expression read as a type, a lambda included.
             if (this.isSym("[") || this.isSym("(") || this.isSym("{")) {
+                let typed: Pattern | undefined;
                 try {
                     this.noLambda++;
                     let type: Expr;
@@ -411,9 +412,10 @@ class Parser {
                     if (this.startsParam(this.peek())) {
                         const value = this.parsePattern();
                         this.expectSym(close);
-                        return { p: "schema", type, value };
+                        typed = { p: "schema", type, value };
                     }
                 } catch { /* ordinary grouped pattern */ }
+                if (typed) return writtenTypeFirst(typed, t.pos);
                 this.i = signatureStart;
             }
             // A function type with no name, (a -> b), matches a function of
@@ -445,14 +447,14 @@ class Parser {
                 this.next();
                 const value = this.parsePattern();
                 this.expectSym(close);
-                return { p: "typeBind", name: typeName.v, value };
+                return writtenTypeFirst({ p: "typeBind", name: typeName.v, value }, t.pos);
             }
             const p = this.parseConsPattern();
             if (this.eatSym(",")) {
                 throw new Error("Parser: tuple patterns are not supported; use a list pattern [a, b, ...] instead");
             }
             // (p : T) matches a value of T, as T, then p.
-            if (close === ")" && this.eatSym(":")) {
+            if (this.eatSym(":")) {
                 const type = this.typeExpr(this.typeEnd("group").end);
                 this.expectSym(close);
                 return typedPattern(p, type);
@@ -1367,8 +1369,9 @@ class Parser {
         // A cons pattern: x :: xs = ..., (x :: xs) = ...
         const consAfter = (n: number) => { const c = this.peek(n); return c.k === "sym" && isConstructorOperator(c.v); };
         if (t.k === "sym" && (t.v === "(" || t.v === "{")) {
-            const n1 = this.peek(1);
-            return n1.k === "ident" && (/^[A-Z]/.test(n1.v) || consAfter(2));
+            const n1 = this.peek(1), n2 = this.peek(2);
+            // ... or a typed one: (x : Float) :: rest = ...
+            return n1.k === "ident" && (/^[A-Z]/.test(n1.v) || consAfter(2) || n2.k === "sym" && n2.v === ":");
         }
         const next = this.peek(1);
         return t.k === "ident" && (/^[A-Z]/.test(t.v) || (next.k === "sym" && (next.v === "." || isConstructorOperator(next.v))));
@@ -2139,7 +2142,7 @@ class Parser {
             const at = Math.min(...claimed.map(c => out.indexOf(c!)));
             const def = claimedDeclaration({ name, parameters, variants }, tag => claimed.find(c => c!.def.name === tag)!.def.variants[0]);
             for (const c of claimed) { out.splice(out.indexOf(c!), 1); this.unclaimed.delete(c!.def.name); }
-            declaredTypes.add(name);
+            declaredTypes.add(name); typeArity.set(name, parameters.length);
             out.splice(at, 0, { t: "type", def });
             return [];
         }
@@ -2149,14 +2152,14 @@ class Parser {
         }
         // A union of list types (Pairs a = [] | a :: a :: Pairs a) is a union.
         if (variants.some(v => v.tag === "[]" || v.tag === "::")) {
-            declaredTypes.add(name);
+            declaredTypes.add(name); typeArity.set(name, parameters.length);
             return [{ t: "type", def: { name, parameters, variants } }];
         }
         if (new Set(variants.map(v => v.tag)).size !== variants.length) throw new Error("Parser: duplicate value constructor");
         // Register only after the entire declaration has parsed successfully;
         // alternatives that are types (Int | String) make a union, not constructors.
         const types = variants.filter(v => v.tag !== name && declaredTypes.has(v.tag)).map(v => v.tag);
-        declaredTypes.add(name);
+        declaredTypes.add(name); typeArity.set(name, parameters.length);
         for (const { tag, arity } of variants) {
             if (types.includes(tag)) continue;
             if (tag === "[]" || tag === "::") continue;
@@ -2344,12 +2347,19 @@ const functionTypes = new Set<string>();
 // Capitalized names defined with parameters (SizedInts n = Vect n Int): types
 // a definition computes (see knownArguments).
 const computedTypes = new Set<string>();
+// The parameters a type takes, where the parser knows them: (xs : List) is
+// a list of anything, (List _ xs).
+const BUILTIN_ARITY: [string, number][] = [["List", 1], ["IO", 1], ["Vect", 2]];
+const typeArity = new Map<string, number>(BUILTIN_ARITY);
 
 // Tooling parses each document independently, without leaking REPL declarations.
 export function parseDocument(src: string): TopLevel[] {
     const sets = [declaredCtors, nullaryCtors, declaredTypes, functionTypes, computedTypes];
     const saved = sets.map((set) => [...set]);
+    const arities = [...typeArity];
     sets.forEach((set) => set.clear());
+    typeArity.clear();
+    BUILTIN_ARITY.forEach(([name, count]) => typeArity.set(name, count));
     TYPE_NAMES.forEach((name) => declaredTypes.add(name));
     try { return parse(src); }
     finally {
@@ -2357,6 +2367,8 @@ export function parseDocument(src: string): TopLevel[] {
             set.clear();
             saved[i].forEach((name) => set.add(name));
         });
+        typeArity.clear();
+        arities.forEach(([name, count]) => typeArity.set(name, count));
     }
 }
 
@@ -2429,6 +2441,7 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
         p.applyDeclarations(out);
         if (!looseSpacing) p.reportUnnecessary();
         const grouped = groupClauses(out);
+        rejectOldSpellings(grouped);
         knownArguments(grouped);
         for (const tl of grouped) {
             // (Vect may be defined only as the list of n elements.)
@@ -2513,7 +2526,10 @@ function typedPattern(p: Pattern, type: Expr): Pattern {
     if (t.t === "var" && /^[a-z_]/.test(t.name)) return { p: "typeBind", name: t.name, value: p };
     if (t.t === "placeholder") return { p: "typeBind", name: "_", value: p };
     const named = typeArguments(t);
-    if (named?.p === "constr" && !declaredCtors.has(named.tag) && !functionTypes.has(named.tag)) return { ...named, args: [...named.args, p] };
+    if (named?.p === "constr" && !declaredCtors.has(named.tag) && !functionTypes.has(named.tag)) {
+        const missing = Math.max(0, (typeArity.get(named.tag) ?? 0) - named.args.length);
+        return { ...named, args: [...named.args, ...Array.from({ length: missing }, (): Pattern => ({ p: "wildcard" })), p], typed: true };
+    }
     return { p: "schema", type, value: p };
 }
 // A computed type's pattern whose arguments are all known, bound by an
@@ -2559,6 +2575,20 @@ function typeOfPattern(q: Pattern): Expr | undefined {
         return args.every(Boolean) ? (args as Expr[]).reduce<Expr>((f, a) => ({ t: "app", f, a }), { t: "var", name: q.tag }) : undefined;
     }
     return undefined;
+}
+// The old spelling of a typed pattern, the type before the value (((T) p),
+// (t x)): an error once it is part of the program (parses that try a pattern
+// and give it up do not count), its type written after the value.
+const oldSpellings = new WeakMap<object, number>();
+function writtenTypeFirst(p: Pattern, pos: number): Pattern {
+    oldSpellings.set(p, pos);
+    return p;
+}
+function rejectOldSpellings(node: unknown): void {
+    if (!node || typeof node !== "object") return;
+    const pos = oldSpellings.get(node);
+    if (pos !== undefined) throw new APNError("parse", "a typed pattern writes its type after the value", { pos, hint: `write ${patternSource(node as Pattern)}` });
+    for (const value of Object.values(node)) rejectOldSpellings(value);
 }
 function typeArguments(e: Expr): Pattern | undefined {
     const t = bareType(e);

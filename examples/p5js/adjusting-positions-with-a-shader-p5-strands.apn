@@ -10,10 +10,10 @@ wiggle inputs = {
 }
 
 # time is the sketch's milliseconds, set each frame.
-wiggleShader = buildColorShader [time: ["float", Sketch p -> p.millis]] [objectInputs: wiggle]
+wiggleShader = buildColorShader [time: ["float", (p : Sketch) -> p.millis]] [objectInputs: wiggle]
 
 # A ribbon of vertices, red to blue along its length.
-ribbon = buildGeometry (Sketch p -> {
+ribbon = buildGeometry ((p : Sketch) -> {
     startColor <- p.color "#F55"
     endColor <- p.color "#55F"
     p.noStroke
@@ -29,12 +29,12 @@ ribbon = buildGeometry (Sketch p -> {
     p.endShape
 })
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.call "createCanvas" [700,400,p.WEBGL]
     p.describe "A red-to-blue ribbon that waves over time"
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 255
     p.noStroke
     p.rotateX (p.PI * 0.1)

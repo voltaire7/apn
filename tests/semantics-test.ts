@@ -467,6 +467,22 @@ failure("an ascribed ternary is parenthesized", "x = True ? 1 : 2 : Int\nprint x
 failure("a declared result is proved per clause", "app : Vect n a -> Vect m a -> Vect (n + m + 1) a\n" +
     "app [] ys = ys\napp (x :: xs) ys = x :: app xs ys\nprint (app [1] [2])", "length mismatch");
 failure("':' is not cons", "print (1 : [2])", "cons is '::'");
+// A type is given a value only ascribed (e : T), and a typed pattern writes
+// its type after the value ((x : Int)); the old spellings are errors.
+for (const source of ["print (Int 5)", "print (Dynamic 1)", "print (Int $ 1.0)", "print (List [1])",
+        "f t = t 1\nprint (f Int)", "import \"option\"\nprint (Option Int None)"]) {
+    failure(`a type is not a function: ${source}`, source, "is a type, not a function");
+}
+for (const source of ["f (Int x) = x\nprint (f 1)", "f ((Int) x) = x\nprint 1", "f (t x) = t\nprint 1",
+        "Int x = 1\nprint x", "g = (Int x) -> x\nprint (g 1)", "f (Vect n a xs) = n\nprint (f [1])"]) {
+    failure(`a typed pattern writes its type after the value: ${source}`, source, "writes its type after the value");
+}
+example("types that construct, and typed patterns of any parameters", `
+m = HashMap [["a",1]]
+c = Mutable 0
+f (xs : List) = length xs
+g { x : Int } = x + 1
+print [m "a", f [1,2], g 2, (2.0 : Int), to Int 3.0]`, ["[1,2,3,2,3]"]);
 example("cons parameters parse", `
 f (x::rest) = rest
 g (x :: rest) = rest

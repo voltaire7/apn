@@ -6,7 +6,7 @@ radius = 24
 edge = 100
 inner = edge + radius
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 720 400
     p.noStroke
     p.ellipseMode p.RADIUS
@@ -15,7 +15,7 @@ setup (Sketch p) = {
         ++ "the pink rectangle.")
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 230
     p.fill [237,34,93]
     p.rect edge edge (p.width - edge) (p.height - edge)

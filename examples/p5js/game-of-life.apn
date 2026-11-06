@@ -6,7 +6,7 @@ cellSize = 20
 # The board, a row of 0s (dead) and 1s (alive) each, wrapping around its edges.
 board = Mutable ([] : List (List Int))
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.frameRate 10
     p.createCanvas 720 400
     set board (replicate (p.height / cellSize : Int) (replicate (p.width / cellSize : Int) 0))
@@ -15,7 +15,7 @@ setup (Sketch p) = {
         ++ "simulation of John Conway's Game of Life. When clicked, the simulation resets.")
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     set board (generate board)
     mapM ([y,row] -> mapM ([x,cell] -> {
         p.fill ((1 - cell) * 255)
@@ -24,7 +24,7 @@ draw (Sketch p) = {
     }) (enumerate row)) (enumerate board)
 }
 
-mousePressed (Sketch p) = {
+mousePressed (p : Sketch) = {
     cells <- mapM (row -> mapM (_ -> p.call "random" [[0,1]]) row) board
     set board (map (map Int) cells)
     p.loop

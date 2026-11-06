@@ -35,10 +35,10 @@ at x y = [
     style "top" (to String y ++ "px")
 ]
 
-setup (Sketch p) = p.createCanvas 720 400
+setup (p : Sketch) = p.createCanvas 720 400
 
 # The food's color is the background, and the font the text's.
-draw model (Sketch p) = {
+draw model (p : Sketch) = {
     p.describe ("A form with \"Welcome to p5.js!\" for a header, a text input with the label "
         ++ "\"What is your name?\", and a set of radio buttons with the label \"What is your "
         ++ "favorite food?\", with the options of \"Cranberries,\" \"Almonds,\" or \"Gouda.\" "

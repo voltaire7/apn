@@ -40,7 +40,7 @@ for (const [source, expected] of [
     // (_ x) takes the payload and discards the type.
     ["payload (x : _) = x; payload (5 : Int32)", "5"],
     // A new type's value is taken apart with its pattern, not by its base type.
-    ["Money (x : Float) = _; amount (Money m) = m; Float $ amount $ Money 1.2", "1.2"],
+    ["Money (x : Float) = _; amount (Money m) = m; (amount $ Money 1.2 : Float)", "1.2"],
     ["Money (x : Float) = _; Cents (x : Int) = _; amount (Money m) = m; Cents (amount (Money 3.0) : Int)", "Cents 3"],
 ] as const) {
     Deno.test(`natural numbers: ${source}`, () => {

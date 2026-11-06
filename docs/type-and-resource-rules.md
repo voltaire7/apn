@@ -18,13 +18,13 @@ sqrt (4 : Count)            # 2: builtins and (Int x) patterns see the Int
 (1 : Count) + Age 2         # error: cannot combine Count and Age (Age = Int)
 ```
 
-Its own pattern, `(Count c)`, is chosen before `(Int n)` and accepts only a
+Its own pattern, `(Count c)`, is chosen before `(n : Int)` and accepts only a
 `Count` (a plain `5` is not one); applying `Count` or a list type
-(`List Count [1,2]`) makes one.
+(`([1,2] : List Count)`) makes one.
 
 A constructor makes a distinct type instead (see
 [variants](templates-and-types.md#variants-parameters-and-distinct-wrappers)):
-`UserId (Int id) = _` declares `UserId`, whose one field is an `Int`. It has
+`UserId (id : Int) = _` declares `UserId`, whose one field is an `Int`. It has
 none of an `Int`'s operations, only those its clauses define.
 
 ```apn
@@ -40,7 +40,7 @@ UserId 2 + 1                # error: + cannot combine UserId and Int
 UserId 2 + UserId 1         # UserId 3
 ```
 
-A `UserId` is not an `Int`: `(Int x)` patterns, builtins (`sqrt`) and `Int (UserId
+A `UserId` is not an `Int`: `(x : Int)` patterns, builtins (`sqrt`) and `Int (UserId
 3)` reject it, and it equals no plain number (`UserId 3 == 3` is false). Its own
 pattern, `(UserId x)`, takes it apart and binds the `Int` to `x`; that pattern
 accepts only a `UserId`. Applying `UserId` makes one from an `Int`, checking the
@@ -48,7 +48,7 @@ value as `Int` would (`UserId .2` is a lossy conversion); nothing else converts
 to one (`UserId (OrderId 3)` and assigning `3` to a `UserId` slot are errors).
 Its name is also its type where a type is expected: an omitted record slot
 (`[id: UserId] []` is `[id: UserId 0]`), another constructor's field
-(`Order (UserId u) (Int n) = _`), `isType UserId`, `List UserId`.
+(`Order (UserId u) (n : Int) = _`), `isType UserId`, `List UserId`.
 
 ## Variant list indexes
 
@@ -72,7 +72,7 @@ scoped copy updates. Computed variant values work too. Lists have no key-family
 annotation: any eligible family's second constructor selects index 1. Families
 with payload constructors are not eligible, even for their nullary cases.
 Arithmetic operators `+`, `-`, `*`, `/`, `%`, `^`, and unary negation use these
-same positions and return ordinary numbers, and an `(Int i)` parameter takes
+same positions and return ordinary numbers, and an `(i : Int)` parameter takes
 them. For example, `East + 1` is
 `2`, `West / South` is `3/2`, and `-East` is `-1`. Numeric collection arithmetic
 uses the same rule for elements. APN's existing numeric rules still apply.

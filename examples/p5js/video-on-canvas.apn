@@ -5,13 +5,13 @@ import "p5"
 video = createVideo ["assets/fingers.mov","assets/fingers.webm"]
 playing = Mutable False
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 710 400
     # The video draws on the canvas, not as its own element.
     video.hide
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.describe ("Two videos in the top right and bottom center of the canvas, with the text "
         ++ "\"Click the canvas to start and pause the video feed.\" in the top left corner.")
     p.background 240

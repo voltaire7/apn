@@ -2,7 +2,7 @@ import { Interpreter } from "../src/interp.ts";
 import { parseDocument } from "../src/parser.ts";
 import { checkSource } from "../src/type-checker.ts";
 
-for (const source of ['0 1', '1.5 2', '(1/3) 2', '(0+1i) 2', 'Int 0 1', 'Int32 0 1', 'x = 0; x 1', '(x -> x 1) 0', '0 missing']) {
+for (const source of ['0 1', '1.5 2', '(1/3) 2', '(0+1i) 2', '(0 : Int) 1', '(0 : Int32) 1', 'x = 0; x 1', '(x -> x 1) 0', '0 missing']) {
     Deno.test(`numeric application rejects: ${source}`, () => {
         const i = new Interpreter();
         try { i.renderString(i.run(parseDocument(source))); } catch (e) {

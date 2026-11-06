@@ -2,7 +2,7 @@
 # Create a visualization of the color spectrum.
 import "p5"
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 400 400
     p.background 255
     p.colorMode p.HSB

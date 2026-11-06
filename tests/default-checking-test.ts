@@ -51,14 +51,14 @@ for (const [source, expected] of [
         'm left right = nl left ? right : (nl right ? left : [hd left])\nm [1] [2]', '[1]'],
     // A call no clause ranking decides, its recursive clause's result free,
     // has the definition's type as a whole: fl's is (a -> b -> a) -> a -> List b -> a.
-    [`${FL}rv (List _ xs) = fl (acc, x -> x :: acc) [] xs\nf xs = map (x -> x) (rv xs)\nf [1,2]`, '[2,1]'],
+    [`${FL}rv (xs : List _) = fl (acc, x -> x :: acc) [] xs\nf xs = map (x -> x) (rv xs)\nf [1,2]`, '[2,1]'],
     // Its lengths are the run's: a fold that keeps its accumulator keeps [1,2].
     [`${FL}g (fl (acc, x -> acc) [1,2] [3])`, '3'],
-    // (HashMap m) binds a map, of any keys and values.
-    ['ks (HashMap m) = keys m; ks (HashMap [["a",1]])', '["a"]'],
+    // (m : HashMap) binds a map, of any keys and values.
+    ['ks (m : HashMap) = keys m; ks (HashMap [["a",1]])', '["a"]'],
     // Clauses typed by different types recurse through the finished function:
     // ln (keys m) is a List String, ln (to (List Char) s) a List Char.
-    ['ln (s : String) = ln (to (List Char) s); ln (HashMap m) = ln (keys m); ln (xs : List _) = 7\n' +
+    ['ln (s : String) = ln (to (List Char) s); ln (m : HashMap) = ln (keys m); ln (xs : List _) = 7\n' +
         '[ln (HashMap [["a",1]]), ln "ab", ln [1]]', '[7,7,7]'],
     // Typed clauses recursing at different types (ln [1] beside ln ["a"]):
     // each call takes the clause the run takes, not the first call's type.
@@ -112,7 +112,7 @@ for (const [source, expected] of [
     ["f 'a' = [0]; f x = [1,2]; g [a] = a; c = 'a'; h u = g (f c); c = 'b'; h 0", '0'],
     // A rebinding is a new version, of any type: what was written before keeps the old.
     ['xs <- return ([1,2] : Vect 2 Int); xs = [3]; xs', '[3]'],
-    ['Int x = 1; x = "a"; x', '"a"'],
+    ['x : Int = 1; x = "a"; x', '"a"'],
     ['x = 1; y = x + 1; x = "a"; [x,y]', '["a",2]'],
     // Its value reads the version before it, whatever its value is.
     ['xs = [1,2]; xs = map (+ 1) xs; xs', '[2,3]'],
@@ -185,10 +185,10 @@ for (const [source, expected] of [
     ['d (s : String) = s ++ "!"; d (b : Bool) = b ? "T" : "F"; [d (func (t > 0)), d (h t), d (g t)]', '["yes!","F","F"]'],
     ['func (t > 0) ~ [\n    (s : String) -> s ++ "!"\n    _ -> "no"\n]', '"yes!"'],
     ['[h 0 ++ "!", g 0 ++ "!"]', '["zero!","zero!"]'],
-    ['xs = [1,"a"]; d (Int n) = n + 1; d (s : String) = s ++ "!"; map d xs', '[2,"a!"]'],
+    ['xs = [1,"a"]; d (n : Int) = n + 1; d (s : String) = s ++ "!"; map d xs', '[2,"a!"]'],
     // A held value may be either: Pair 1 "a" or Pair true 'c' is Pair (Int | Bool) (String | Char).
     ["Pair a b = | Pair a b; first (Pair x _) = x; to String (first (t > 0 ? Pair 1 \"a\" : Pair True 'c'))", '"1"'],
-    ['inc (Int n) = n + 1; dbl (Int n) = n * 2; (t > 0 ? inc : dbl) 5', '6'],
+    ['inc (n : Int) = n + 1; dbl (n : Int) = n * 2; (t > 0 ? inc : dbl) 5', '6'],
     ['Handler a = | Handler (a -> String)\napply (Handler f) x = f x\napply (Handler (s -> s ++ "!")) "x"', '"x!"'],
     // The branches do not decide x where its other uses do: x > 0 keeps it a number.
     ['k x = x > 0 ? x : "neg"; [k 1 + 1, k -1]', '[2,"neg"]'],
@@ -205,12 +205,12 @@ for (const source of [
     'func (t > 0) ++ "!"', 'h t ++ "!"', 'g t ++ "!"',
     // Every choice must be accepted where it is used.
     'd (s : String) = s ++ "!"; d (b : Bool) = "b"; d [func (t > 0), 1] 1',
-    'xs = [1,"a",True]; d (Int n) = n + 1; d (s : String) = s ++ "!"; map d xs',
+    'xs = [1,"a",True]; d (n : Int) = n + 1; d (s : String) = s ++ "!"; map d xs',
     // A function a field holds takes one type, not either: Handler Int and
     // Handler String stay apart, and a choice of functions takes what all do.
-    'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\ninc (Int n) = to String n\n' +
+    'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\ninc (n : Int) = to String n\n' +
         'bang (s : String) = s\napply (t > 0 ? Handler inc : Handler bang) 5',
-    'inc (Int n) = n + 1; bang (s : String) = s; (t > 0 ? inc : bang) 5',
+    'inc (n : Int) = n + 1; bang (s : String) = s; (t > 0 ? inc : bang) 5',
     // A lambda a field holds is checked where the field's type is decided,
     // however far the value travels first.
     'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\napply (Handler (s -> s ++ "!")) 5',
@@ -497,23 +497,23 @@ for (const source of [
 // before a numeric aggregate (10) before a lossless conversion (1) before other
 // patterns (0); literals (40) first. Value-dependent cases keep both clauses.
 for (const [source, expected] of [
-    ['f (Int n) = [0]; f xs = [1,2]; g [a] = a; g (f 3)', '0'],
-    ['f xs = [1,2]; f (Int n) = [0]; g [a] = a; g (f 3)', '0'],
-    ['f (Int n) = [0]; f xs = [1,2]; g [a,b] = a; g (f "s")', '1'],
-    ['f (Int n) = [0]; f (s : String) = [1,2]; g [a] = a; g (f 3)', '0'],
-    ['f (Int n) = [0]; f (s : String) = [1,2]; g [a,b] = a; g (f "x")', '1'],
+    ['f (n : Int) = [0]; f xs = [1,2]; g [a] = a; g (f 3)', '0'],
+    ['f xs = [1,2]; f (n : Int) = [0]; g [a] = a; g (f 3)', '0'],
+    ['f (n : Int) = [0]; f xs = [1,2]; g [a,b] = a; g (f "s")', '1'],
+    ['f (n : Int) = [0]; f (s : String) = [1,2]; g [a] = a; g (f 3)', '0'],
+    ['f (n : Int) = [0]; f (s : String) = [1,2]; g [a,b] = a; g (f "x")', '1'],
     ['f (n : Number) = [0]; f xs = [1,2]; g [a] = a; g (f 2.5)', '0'],
     ['f (n : Exact) = [0]; f xs = [1,2]; g [a,b] = a; g (f 2.5)', '1'],
     ['f (xs : List _) = [0]; f other = [1,2]; g [a] = a; g (f [5,6])', '0'],
-    ['f (Int n) = [0]; f xs = [1,2]; h x = g (f x); g [a] = a; h 3', '0'],
+    ['f (n : Int) = [0]; f xs = [1,2]; h x = g (f x); g [a] = a; h 3', '0'],
 ] as const) Deno.test(`typed clauses rank like the runtime: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'f xs = [1,2]; f (Int n) = [0]; g [a,b] = a; g (f 3)',
-    'f (Int n) = [0]; f xs = [1,2]; g [a] = a; g (f "s")',
-    'f (Int n) = [0]; f xs = [1,2]; h x = g (f x); g [a] = a; h "s"',
+    'f xs = [1,2]; f (n : Int) = [0]; g [a,b] = a; g (f 3)',
+    'f (n : Int) = [0]; f xs = [1,2]; g [a] = a; g (f "s")',
+    'f (n : Int) = [0]; f xs = [1,2]; h x = g (f x); g [a] = a; h "s"',
     // Whether a Float converts to Int8 depends on its value: 2.5 does not.
     'f (n : Int8) = [0]; f xs = [1,2]; g [a] = a; h x = g (f (x * 1.0)); h 2.5',
 ]) Deno.test(`typed clauses keep possible clauses: ${source}`, () => rejected(session(), source));
@@ -521,46 +521,46 @@ for (const source of [
 // become separate overload choices instead of a definition error; any other
 // result conflict is still rejected.
 for (const [source, expected] of [
-    ['f (Int n) = [1,2]; f 0 = [0]; g [a] = a; g (f 0)', '0'],
-    ['f (Int n) = [1,2]; f 0 = [0]; g [a,b] = a; g (f 3)', '1'],
-    ['f (Int n) = [[1],[2,3]]; f 0 = [[0]]; g [[a]] = a; g (f 0)', '0'],
+    ['f (n : Int) = [1,2]; f 0 = [0]; g [a] = a; g (f 0)', '0'],
+    ['f (n : Int) = [1,2]; f 0 = [0]; g [a,b] = a; g (f 3)', '1'],
+    ['f (n : Int) = [[1],[2,3]]; f 0 = [[0]]; g [[a]] = a; g (f 0)', '0'],
 ] as const) Deno.test(`clauses with different result lengths: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'f (Int n) = [1,2]; f 0 = [0]; g [a,b] = a; g (f 0)',
-    'f (Int n) = [1,2]; f 0 = [0]; g [a] = a; g (f 3)',
+    'f (n : Int) = [1,2]; f 0 = [0]; g [a,b] = a; g (f 0)',
+    'f (n : Int) = [1,2]; f 0 = [0]; g [a] = a; g (f 3)',
     // Clauses with different result types: where the call cannot tell which
     // runs (the time is not known), the result is either, used as both.
-    'import "time"; f (Int n) = "a"; f 0 = 1; t <- currentTime; f t ++ "b"',
-    'import "time"; f (Int n) = ["a","b"]; f 0 = [1]; t <- currentTime; head (f t) + 1',
-    'f (Int n) = "a"; f 0 = 1; f 0 ++ "b"',
+    'import "time"; f (n : Int) = "a"; f 0 = 1; t <- currentTime; f t ++ "b"',
+    'import "time"; f (n : Int) = ["a","b"]; f 0 = [1]; t <- currentTime; head (f t) + 1',
+    'f (n : Int) = "a"; f 0 = 1; f 0 ++ "b"',
 ]) Deno.test(`clauses with different results stay checked: ${source}`, () => rejected(session(), source));
 // A literal passed through function parameters still selects clauses: a
 // deferred call keeps its argument's (symbolic) value, and each call
 // substitutes the actual one, through any number of levels.
 for (const [source, expected] of [
-    ['f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); g [a] = a; h 0','0'],
-    ['f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); g [a,b] = a; h 3','1'],
-    ['f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); g [a] = a; [h 0, h 0]','[0,0]'],
-    ['f (Int n) = [1,2]; f 0 = [0]; h x = g (f (x - 1)); g [a] = a; h 1','0'],
-    ['f (Int n) = [1,2]; f 0 = [0]; h s x = g (f x); g [a] = a; h "s" 0','0'],
-    ['f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); k y = h y; g [a] = a; k 0','0'],
-    ['f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); k y = h y; m z = k z; g [a] = a; m 0','0'],
-    ['f (Int n) = [0]; f (s : String) = [1]; h x = g (f x); k y = h y; g [a] = a; k 0','0'],
+    ['f (n : Int) = [1,2]; f 0 = [0]; h x = g (f x); g [a] = a; h 0','0'],
+    ['f (n : Int) = [1,2]; f 0 = [0]; h x = g (f x); g [a,b] = a; h 3','1'],
+    ['f (n : Int) = [1,2]; f 0 = [0]; h x = g (f x); g [a] = a; [h 0, h 0]','[0,0]'],
+    ['f (n : Int) = [1,2]; f 0 = [0]; h x = g (f (x - 1)); g [a] = a; h 1','0'],
+    ['f (n : Int) = [1,2]; f 0 = [0]; h s x = g (f x); g [a] = a; h "s" 0','0'],
+    ['f (n : Int) = [1,2]; f 0 = [0]; h x = g (f x); k y = h y; g [a] = a; k 0','0'],
+    ['f (n : Int) = [1,2]; f 0 = [0]; h x = g (f x); k y = h y; m z = k z; g [a] = a; m 0','0'],
+    ['f (n : Int) = [0]; f (s : String) = [1]; h x = g (f x); k y = h y; g [a] = a; k 0','0'],
 ] as const) Deno.test(`literals through parameters: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); g [a] = a; h 3',
-    'f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); g [a,b] = a; h 0',
-    'f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); g [a] = a; [h 0, h 5]',
-    'f (Int n) = [1,2]; f 0 = [0]; h x = g (f (x - 1)); g [a] = a; h 2',
-    'f (Int n) = [1,2]; f 0 = [0]; h x = g (f x); k y = h y; g [a] = a; k 4',
-    'f (Int n) = [0]; f (s : String) = [1,2]; h x = g (f x); k y = h y; g [a] = a; k "s"',
-    'f (Int n) = 1; h x = f x + 1; k y = h y; k "s"',
+    'f (n : Int) = [1,2]; f 0 = [0]; h x = g (f x); g [a] = a; h 3',
+    'f (n : Int) = [1,2]; f 0 = [0]; h x = g (f x); g [a,b] = a; h 0',
+    'f (n : Int) = [1,2]; f 0 = [0]; h x = g (f x); g [a] = a; [h 0, h 5]',
+    'f (n : Int) = [1,2]; f 0 = [0]; h x = g (f (x - 1)); g [a] = a; h 2',
+    'f (n : Int) = [1,2]; f 0 = [0]; h x = g (f x); k y = h y; g [a] = a; k 4',
+    'f (n : Int) = [0]; f (s : String) = [1,2]; h x = g (f x); k y = h y; g [a] = a; k "s"',
+    'f (n : Int) = 1; h x = f x + 1; k y = h y; k "s"',
 ]) Deno.test(`literals through parameters stay checked: ${source}`, () => rejected(session(), source));
 // Boolean and string literals reach clauses through parameters too.
 for (const [source, expected] of [
@@ -656,7 +656,7 @@ for (const [source, expected] of [
     ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 0','0'],
     ['import "option"\nf None = [0]\nf x = [1,2]\ng [a,b] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 5','1'],
     ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nk w = h w\nk -1','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh (Int v) = g (f (safe v))\nh 0','0'],
+    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh (v : Int) = g (f (safe v))\nh 0','0'],
     ['fib 0 = 0\nfib 1 = 1\nfib n = fib (n - 1) + fib (n - 2)\nf 6765 = [0]\nf x = [1,2]\ng [a] = a\ng (f (fib 20))','0'],
 ] as const) Deno.test(`value-dependent results: ${source}`, () => {
     const actual = run(session(), source);
@@ -735,7 +735,7 @@ for (const source of [
 ]) Deno.test(`fixed-width conditions stay checked: ${source}`, () => rejected(session(), `${optionClauses}\n${source}`));
 // A known value decides a typed clause as at runtime: its own type (30), a
 // lossless conversion (1), or no match.
-const intClauses = 'g [a] = a; k (Int x) = None; k x = Some x';
+const intClauses = 'g [a] = a; k (x : Int) = None; k x = Some x';
 for (const [source, expected] of [
     ['g (f (k (3 : UInt)))', '0'],
     ['g (f (k (3 : Int8)))', '0'],
@@ -762,7 +762,7 @@ const sizeClauses = 'import ["option","sequence","number"]; g [a] = a; sm n = n 
     + 'q xs = length xs < 2 ? None : Some 1; len [] = 0; len (x::xs) = 1 + len xs';
 for (const [source, expected] of [
     ['g (f (sm (length [1])))', '0'],
-    ['k (Int x) = None; k x = Some x; g (f (k (length [1])))', '0'],
+    ['k (x : Int) = None; k x = Some x; g (f (k (length [1])))', '0'],
     ['n = [1]; g (f (sm (length n)))', '0'],
     ['g (f (sm (length "a")))', '0'],
     ['hh xs = g (f (sm (length xs))); hh [5]', '0'],
@@ -927,8 +927,8 @@ for (const source of [
     'g (f (q (take 2 (repeat 0))))',
 ]) Deno.test(`parse and deep recursion stay checked: ${source}`, () => rejected(session(), `${optionClauses}\n${sizeClauses}\n${textClauses}\n${deepClauses}\n${source}`));
 // A count, a drop and a left fold written in APN, walking a list cell by cell.
-const WALKS = 'cn [] n = n; cn (_ :: rest) (Int n) = cn rest (n + 1)\n' +
-    'dr _ [] = []; dr 0 (x :: rest) = x :: rest; dr (Int n) (_ :: rest) = dr (n - 1) rest\n' +
+const WALKS = 'cn [] n = n; cn (_ :: rest) (n : Int) = cn rest (n + 1)\n' +
+    'dr _ [] = []; dr 0 (x :: rest) = x :: rest; dr (n : Int) (_ :: rest) = dr (n - 1) rest\n' +
     'fs f acc [] = acc; fs f acc (x :: rest) = fs f (f acc x) rest\n';
 // A name a block binds twice is one binding: lazy definitions and closures
 // see its latest value, eager ones (<-) the value where they stand. Long lists
@@ -1255,55 +1255,55 @@ Deno.test("a later REPL input or load rebinds a name for what comes after it", (
 });
 // A built-in type name on the left declares a typed binding.
 for (const [source, expected] of [
-    ['Int x = 1; x', '1'],
-    ['Float y = 1; y', '1.0'],
-    ['String s = "hi"; s ++ "!"', '"hi!"'],
-    ['Int x <- return 5; x + 1', '6'],
-    ['Int x = 2.0; x', '2'],
-    ['Int n = -1; n', '-1'],
-    ['UInt8 n = 2 * 100; n', '200'],
-    ['Float x = -1; x', '-1.0'],
-    ['g (Int n) = n; g -1', '-1'],
+    ['x : Int = 1; x', '1'],
+    ['y : Float = 1; y', '1.0'],
+    ['s : String = "hi"; s ++ "!"', '"hi!"'],
+    ['(x : Int) <- return 5; x + 1', '6'],
+    ['x : Int = 2.0; x', '2'],
+    ['n : Int = -1; n', '-1'],
+    ['n : UInt8 = 2 * 100; n', '200'],
+    ['x : Float = -1; x', '-1.0'],
+    ['g (n : Int) = n; g -1', '-1'],
     ['sqrt -1 + 2', '2+1i'],
-    ['g (Int n) = n; k = 1; g -k', '-1'],
+    ['g (n : Int) = n; k = 1; g -k', '-1'],
     ['g (n : UInt) = n; k = 1; g k', '1'],
     ['g (n : UInt) = n; h x = g -x; h -2', '2'],
-    ['g (Int n) = n; h x = g -x; h 2', '-2'],
+    ['g (n : Int) = n; h x = g -x; h 2', '-2'],
     ['h x = sqrt -x; h 1', '0+1i'],
     ['h x y = x - y; h 5 2', '3'],
     ['g (n : UInt) = n; h x = g -x; h -2', '2'],
     ['g (n : UInt) = n; h x = g x; h 2', '2'],
-    ['g (Int n) = n; h x = g x + 1; h 2', '3'],
-    ['g (Float n) = n; h x = g x; h 1', '1.0'],
+    ['g (n : Int) = n; h x = g x + 1; h 2', '3'],
+    ['g (n : Float) = n; h x = g x; h 1', '1.0'],
     ['g (n : UInt) = n; h x = g -x; d y = h y; 1', '1'],
     ['Pt = [x: Float, y: Float]; g (p : Pt) = p.x; h x = g x; h [1,2]', '1.0'],
     ['Pt = [x: UInt, y: UInt]; g (p : Pt) = p.x; h x = g [x,-x]; h 0', '0'],
     ['Pt = [x: Float, y: Float]; g (p : Pt) = p.y; h x = g [x,x]; h 2', '2.0'],
     ['g (f : Int -> Int) = f 1; h x = g x; h (+ 1)', '2'],
-    ['g [UInt8 a, UInt8 b] = a + b; g [3,3]', '6'],
-    ['g [Float a, b] = a; g [1,"x"]', '1.0'],
-    ['g ((Float x)::rest) = x; g [1,2]', '1.0'],
-    ['[UInt8 a, UInt8 b] = [3,3]; a + b', '6'],
-    ['(Float x)::rest = [1,2]; x', '1.0'],
-    ['g [UInt8 a, UInt8 b] = a; h x = g [x, x * 100]; h 1', '1'],
-    ['import "option"; g (Some (UInt8 x)) = x; g (Some 3)', '3'],
-    ['import "option"; g (Some (Float x)) = x; g (Some 1)', '1.0'],
-    ['import "option"; (Some (Float x)) = Some 1; x', '1.0'],
+    ['g [(a : UInt8), (b : UInt8)] = a + b; g [3,3]', '6'],
+    ['g [(a : Float), b] = a; g [1,"x"]', '1.0'],
+    ['g ((x : Float)::rest) = x; g [1,2]', '1.0'],
+    ['[(a : UInt8), (b : UInt8)] = [3,3]; a + b', '6'],
+    ['(x : Float)::rest = [1,2]; x', '1.0'],
+    ['g [(a : UInt8), (b : UInt8)] = a; h x = g [x, x * 100]; h 1', '1'],
+    ['import "option"; g (Some (x : UInt8)) = x; g (Some 3)', '3'],
+    ['import "option"; g (Some (x : Float)) = x; g (Some 1)', '1.0'],
+    ['import "option"; (Some (x : Float)) = Some 1; x', '1.0'],
     // An imported constructor destructures without parentheses, as a declared one does.
-    ['import "option"; Some v = Some 123; f (Some (Float x)) = x; [v, f (Some 1)]', '[123,1.0]'],
-    ['import "option"; g (Some (UInt8 x)) = x; k = Some 3; g k', '3'],
-    ['import "option"; g (Some (UInt8 x)) = x; h x = g (Some x); h 3', '3'],
-    ['import "option"; g (Some (UInt8 x)) = x; h x = g x; h (Some 3)', '3'],
+    ['import "option"; Some v = Some 123; f (Some (x : Float)) = x; [v, f (Some 1)]', '[123,1.0]'],
+    ['import "option"; g (Some (x : UInt8)) = x; k = Some 3; g k', '3'],
+    ['import "option"; g (Some (x : UInt8)) = x; h x = g (Some x); h 3', '3'],
+    ['import "option"; g (Some (x : UInt8)) = x; h x = g x; h (Some 3)', '3'],
     ['Shape = Circle Float | Sq Float; Circle 2', 'Circle 2.0'],
     ['P = P2 Float Int | P0; P2 1 2', 'P2 1.0 2'],
     ['B = Byte UInt8 | NoByte; mk x = Byte x; mk 3', 'Byte 3'],
     ['Shape = Circle Float | Sq Float; area (Circle r) = r * r; area (Circle 2)', '4.0'],
     ['M = Named String | Clear; applyTo f = f "a"; applyTo Named', 'Named "a"'],
-    ['Pair a b = MkPair a b | NoPair; g (MkPair (Float x) (UInt8 y)) = y; g (MkPair 1 3)', '3'],
-    ['Pair a b = MkPair a b | NoPair; g (MkPair (Float x) (UInt8 y)) = x; g (MkPair 1 3)', '1.0'],
-    ['P = P2 Int Int | P0; g (P2 a (UInt8 y)) = y; g (P2 1 3)', '3'],
-    ['P = P2 Int Int | P0; g (P2 a (UInt8 y)) = y; h v = g (P2 1 v); h 3', '3'],
-    ['P = P2 Int Int | P0; (P2 a (UInt8 y)) = P2 1 3; y', '3'],
+    ['Pair a b = MkPair a b | NoPair; g (MkPair (x : Float) (y : UInt8)) = y; g (MkPair 1 3)', '3'],
+    ['Pair a b = MkPair a b | NoPair; g (MkPair (x : Float) (y : UInt8)) = x; g (MkPair 1 3)', '1.0'],
+    ['P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; g (P2 1 3)', '3'],
+    ['P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; h v = g (P2 1 v); h 3', '3'],
+    ['P = P2 Int Int | P0; (P2 a (y : UInt8)) = P2 1 3; y', '3'],
     ['g (r : [x: UInt8]) = r.x; k = [x: 3]; g k', '3'],
     ['g (r : [x: UInt8]) = r.x; h r = g r; h [x: 3]', '3'],
     ['g (r : [x: UInt8]) = r.x; h v = g [x: v * 100]; h 1', '100'],
@@ -1312,33 +1312,33 @@ for (const [source, expected] of [
     ['g (r : [x: UInt8]) = r.x; g [x: 300, _: [x: 3]]', '3'],
     ['g (r : [x: UInt8, y: UInt8]) = r.x; h b = g [_: b, x: 3]; h [x: 1, y: 2]', '3'],
     ['g (r : [x: UInt8]) = r.x; h v = g [_: [x: v]]; h 3', '3'],
-    ['f y = { Float x = y; x * 2 }; f 1.5', '3.0'],
+    ['f y = { x : Float = y; x * 2 }; f 1.5', '3.0'],
 ] as const) Deno.test(`typed binding: ${source}`, () => {
     if (run(session(), source) !== expected) throw new Error(source);
 });
-for (const source of ['Int x = "a"', 'Int x = 2.5', 'Int8 x = 300',
-    'UInt n = -1', 'UInt n = -1', 'Int n = -2.5', 'UInt n = 0 - 1', 'k = 100; UInt8 n = k * 3', 'g (UInt n) = n; g -1',
-    'g (UInt n) = n; g -1', 'g (UInt n) = n; g - 1', 'g (Int n) = n; g -2.5',
-    'g (UInt8 n) = n; k = 1; g -k', 'g (UInt n) = n; k = 1; g -k', 'g (UInt n) = n; g (0 - 1)', 'g (UInt8 n) = n; k = 100; g (k * 3)',
-    'g (UInt n) = n; h x = g -x; h 2', 'g (UInt n) = n; h x = g -x; d y = h (y * 2); d 1',
-    'g (UInt n) = n; h x = g -x; h 2', 'g (UInt n) = n; h x = g x; h -2', 'g (UInt n) = n; h x = g x; h "a"',
-    'g (Int n) = n; h x = g x; h 2.5', 'g (UInt n) = n; h x = g -x; d y = h (y * 2); d 1',
-    'g (UInt n) = n; h x = g -x; d y = h 2; 1', 'g (UInt n) = n; h x = g x; d y = h "a"; 1',
-    'import "text"; g (UInt n) = n; h x = { y = g x; z = upper x; y }; 1',
+for (const source of ['x : Int = "a"', 'x : Int = 2.5', 'x : Int8 = 300',
+    'n : UInt = -1', 'n : UInt = -1', 'n : Int = -2.5', 'n : UInt = 0 - 1', 'k = 100; n : UInt8 = k * 3', 'g (n : UInt) = n; g -1',
+    'g (n : UInt) = n; g -1', 'g (n : UInt) = n; g - 1', 'g (n : Int) = n; g -2.5',
+    'g (n : UInt8) = n; k = 1; g -k', 'g (n : UInt) = n; k = 1; g -k', 'g (n : UInt) = n; g (0 - 1)', 'g (n : UInt8) = n; k = 100; g (k * 3)',
+    'g (n : UInt) = n; h x = g -x; h 2', 'g (n : UInt) = n; h x = g -x; d y = h (y * 2); d 1',
+    'g (n : UInt) = n; h x = g -x; h 2', 'g (n : UInt) = n; h x = g x; h -2', 'g (n : UInt) = n; h x = g x; h "a"',
+    'g (n : Int) = n; h x = g x; h 2.5', 'g (n : UInt) = n; h x = g -x; d y = h (y * 2); d 1',
+    'g (n : UInt) = n; h x = g -x; d y = h 2; 1', 'g (n : UInt) = n; h x = g x; d y = h "a"; 1',
+    'import "text"; g (n : UInt) = n; h x = { y = g x; z = upper x; y }; 1',
     'Pt = [x: UInt, y: UInt]; g (p : Pt) = p.x; h x = g [x,-x]; h 2', 'Pt = [x: UInt, y: UInt]; g (p : Pt) = p.x; h x = g x; h [2,-2]',
-    'Pt = [x: Float, y: Float]; g (p : Pt) = p.x; h x = g x; h [1]', 'g (f : Int -> Int) = f 1; h x = g x; h 5', 'g (String s) = s; h x = g x; h 1',
-    'g [UInt8 a, UInt8 b] = a; g [3,300]', 'g [UInt8 a, UInt8 b] = a; g [3,-1]', 'g [UInt8 a, UInt8 b] = a; h x = g [x, x * 100]; h 3',
-    '[UInt8 a, UInt8 b] = [3,300]', 'g [String s, Int n] = s; g [1,2]',
-    'import "option"; g (Some (UInt8 x)) = x; g (Some 300)', 'import "option"; g (Some (UInt8 x)) = x; g (Some -1)',
-    'import "option"; g (Some (Int x)) = x; g (Some 2.5)', 'import "option"; (Some (UInt8 x)) = Some 300',
-    'import "option"; g (Some (String x)) = x; g (Some 1)', 'import "option"; g (Some (UInt8 x)) = x; k = Some 300; g k',
-    'import "option"; g (Some (UInt8 x)) = x; h x = g (Some x); h 300', 'import "option"; g (Some (UInt8 x)) = x; h x = g x; h (Some 300)',
+    'Pt = [x: Float, y: Float]; g (p : Pt) = p.x; h x = g x; h [1]', 'g (f : Int -> Int) = f 1; h x = g x; h 5', 'g (s : String) = s; h x = g x; h 1',
+    'g [(a : UInt8), (b : UInt8)] = a; g [3,300]', 'g [(a : UInt8), (b : UInt8)] = a; g [3,-1]', 'g [(a : UInt8), (b : UInt8)] = a; h x = g [x, x * 100]; h 3',
+    '[(a : UInt8), (b : UInt8)] = [3,300]', 'g [(s : String), (n : Int)] = s; g [1,2]',
+    'import "option"; g (Some (x : UInt8)) = x; g (Some 300)', 'import "option"; g (Some (x : UInt8)) = x; g (Some -1)',
+    'import "option"; g (Some (x : Int)) = x; g (Some 2.5)', 'import "option"; (Some (x : UInt8)) = Some 300',
+    'import "option"; g (Some (x : String)) = x; g (Some 1)', 'import "option"; g (Some (x : UInt8)) = x; k = Some 300; g k',
+    'import "option"; g (Some (x : UInt8)) = x; h x = g (Some x); h 300', 'import "option"; g (Some (x : UInt8)) = x; h x = g x; h (Some 300)',
     'B = Byte UInt8 | NoByte; Byte 300', 'B = Byte UInt8 | NoByte; Byte -1', 'B = Byte UInt8 | NoByte; Byte "a"',
     'P = P2 Float Int | P0; P2 1 2.5', 'B = Byte UInt8 | NoByte; mk x = Byte x; mk 300', 'B = Byte UInt8 | NoByte; k = 300; Byte k',
-    'Pair a b = MkPair a b | NoPair; g (MkPair (Float x) (UInt8 y)) = y; g (MkPair 1 300)',
-    'P = P2 Int Int | P0; g (P2 a (UInt8 y)) = y; g (P2 1 300)', 'P = P2 Int Int | P0; g (P2 a (UInt8 y)) = y; k = P2 1 300; g k',
-    'P = P2 Int Int | P0; g (P2 a (UInt8 y)) = y; h v = g (P2 1 v); h 300', 'P = P2 Int Int | P0; (P2 a (UInt8 y)) = P2 1 300',
-    'Pair a b = MkPair a b | NoPair\ng (MkPair (Float x) (UInt8 y)) = y\nh x = g x\nh (MkPair 1 300)',
+    'Pair a b = MkPair a b | NoPair; g (MkPair (x : Float) (y : UInt8)) = y; g (MkPair 1 300)',
+    'P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; g (P2 1 300)', 'P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; k = P2 1 300; g k',
+    'P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; h v = g (P2 1 v); h 300', 'P = P2 Int Int | P0; (P2 a (y : UInt8)) = P2 1 300',
+    'Pair a b = MkPair a b | NoPair\ng (MkPair (x : Float) (y : UInt8)) = y\nh x = g x\nh (MkPair 1 300)',
     'g (r : [x: UInt8]) = r.x; g [x: 300]', 'g (r : [x: UInt8]) = r.x; k = [x: 300]; g k', 'g (r : [x: UInt8]) = r.x; h r = g r; h [x: 300]',
     'g (r : [x: UInt8]) = r.x; h v = g [x: v * 100]; h 3', 'Pt = [x: UInt8, y: UInt8]; g (p : Pt) = p.y; g [x: 1, y: 300]',
     'g (r : [x: UInt8, y: UInt8]) = r.y; b = [x: 1, y: 300]; g [_: b, x: 2]', 'g (r : [x: UInt8]) = r.x; g [_: [x: 300]]',
@@ -1371,7 +1371,7 @@ for (const [source, expected] of [
     ['Pt = [x: Float, c: [Float,Float]]\nps = Mutable ([] : List Pt)\nset ps [[x: 1.0, c: [1.0,2.0]]]\nlength ps', '1'],
     ['B = [ns: List Int]\nb = Mutable (B [ns: []])\nset b [ns: [1,2]]\nb.ns', '[1,2]'],
     // A conversion of arithmetic on a parameter waits for its value.
-    ['f w = Float (w - 20)\nf (3 : Number)', '-17.0'],
+    ['f w = w - 20 : Float\nf (3 : Number)', '-17.0'],
     ['f r = from JSON r : List Int\nf "[1, 2]"', '[1,2]'],
     // A list indexed by a lambda's parameter.
     ['f (xs : List _) = map (n -> xs n) [0..1]\nf [5,6]', '[5,6]'],
@@ -1379,20 +1379,20 @@ for (const [source, expected] of [
     ['Money = | Money Int\n(Money a) + (Money b) = Money (a + b)\nf x y = x + y\nf (Money 1) (Money 2)', 'Money 3'],
     ['Money = | Money Int\n(Money a) + (Money b) = Money (a + b)\nf x y = x + y\nf 1 2', '3'],
     // ... and one whose result is the parameter of a recursive call.
-    ['Q (Int a) (Int b) = _\n(Q a b) + (Q c d) = Q (a * d + c * b) (b * d)\nf k acc = k > 3 ? acc : f (k + 1) (acc + Q 1 2)\nf 1 (Q 0 1)', 'Q 12 8'],
+    ['Q (a : Int) (b : Int) = _\n(Q a b) + (Q c d) = Q (a * d + c * b) (b * d)\nf k acc = k > 3 ? acc : f (k + 1) (acc + Q 1 2)\nf 1 (Q 0 1)', 'Q 12 8'],
     ['Q a b = _\n(Q a b) + (Q c d) = Q (a * d + c * b) (b * d)\nf k acc = k > 3 ? acc : f (k + 1) (acc + Q 1 k)\nf 1 (Q 0 1)', 'Q 11 6'],
     // The checker knows what indexing gives: a list's item, a record's field,
     // or what clauses for get give.
     ['f 20 = "x"\nf n = 5\nxs = [10,20,30]\nr = [a: 20]\nf (xs 1) ++ f (xs -2) ++ f (r "a") ++ f r.a', '"xxxx"'],
-    ['P (Float x) (Float y) = _\nget (P x y) "x" = x\nget (P x y) "y" = y\nf 2.0 = "two"\nf n = 5\np = P 1 2\nf p.y ++ f (p "x" + 1)', '"twotwo"'],
+    ['P (x : Float) (y : Float) = _\nget (P x y) "x" = x\nget (P x y) "y" = y\nf 2.0 = "two"\nf n = 5\np = P 1 2\nf p.y ++ f (p "x" + 1)', '"twotwo"'],
     // Clauses for a math function overload it, as for an operator.
     ['Dual = | Dual Float Float\nsin (Dual a b) = Dual (sin a) (b * cos a)\nsin (Dual 0.0 1.0)', 'Dual 0.0 1.0'],
     ['Dual = | Dual Float Float\nsin (Dual a b) = Dual (sin a) (b * cos a)\nsin 0.0', '0.0'],
     // Floats divide to a Float; a value of either of two types converts.
     ['x = 1.0 / 4.0\nr = [v: 0.5]\n{ r.v = x; r }', '[v: 0.25]'],
-    ['b = True\nFloat (b ? 1 : 2.5)', '1.0'],
+    ['b = True\n((b ? 1 : 2.5) : Float)', '1.0'],
     // A recursive function of a sketch, whose methods yield [].
-    ['import "p5"\nb (Sketch p) n = when (n > 2) (b p (n / 2))\nmain = sketch [draw: Sketch p -> b p 120]\ntypeOf main', 'P5Program'],
+    ['import "p5"\nb (p : Sketch) n = when (n > 2) (b p (n / 2))\nmain = sketch [draw: (p : Sketch) -> b p 120]\ntypeOf main', 'P5Program'],
     ['pairs []', '[]'],
     // A block may start with a comment line.
     ['f = {\n    # first a comment\n    1\n}\nf', '1'],
@@ -1408,9 +1408,9 @@ for (const [source, expected] of [
     });
 }
 for (const source of [
-    'f w = Float (w - 20)\nf "a"',
+    'f w = w - 20 : Float\nf "a"',
     'f (xs : List _) = map (n -> xs n) ["a"]\nf [1]',
-    'f b = Int (b ? 1 : "a")\nf True',
+    'f b = (b ? 1 : "a") : Int\nf True',
 ]) Deno.test(`p5.js-example typing rejects: ${source}`, () => rejected(session(), source));
 // The checker reads the prelude's names by checking lib/prelude.apn itself.
 Deno.test("the checker accepts the prelude it reads", async () => {

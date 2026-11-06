@@ -19,7 +19,7 @@ view playing = div [] [
     button [onClick Toggle] [text (playing ? "pause" : "play")]
 ]
 
-setup (Sketch p) = p.noCanvas
+setup (p : Sketch) = p.noCanvas
 
 draw playing _ = playing ? video.loop : video.pause
 

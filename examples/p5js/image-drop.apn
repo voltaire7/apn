@@ -25,9 +25,9 @@ view shown = div [
     preventDefaultOn "drop" (event -> null event.files ? Hover : Drop (head event.files))
 ] [canvas [setup: setup, draw: draw shown]]
 
-setup (Sketch p) = p.createCanvas 710 400
+setup (p : Sketch) = p.createCanvas 710 400
 
-draw shown (Sketch p) = shown ~ [
+draw shown (p : Sketch) = shown ~ [
     Dropped url -> p.call "image" [url,0,0,p.width,p.height]
     Message message -> {
         p.background 100

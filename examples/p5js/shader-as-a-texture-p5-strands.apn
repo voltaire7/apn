@@ -30,19 +30,19 @@ tiles inputs = {
 
 # The canvas's size, the mouse and the time are set each frame.
 theShader = buildMaterialShader [
-    size: ["vec2", Sketch p -> return [p.width,p.height]]
-    mouse: ["vec2", Sketch p -> return [p.mouseX,p.mouseY]]
-    time: ["float", Sketch p -> p.millis]
+    size: ["vec2", (p : Sketch) -> return [p.width,p.height]]
+    mouse: ["vec2", (p : Sketch) -> return [p.mouseX,p.mouseY]]
+    time: ["float", (p : Sketch) -> p.millis]
 ] [pixelInputs: tiles]
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.call "createCanvas" [710,400,p.WEBGL]
     p.noStroke
     p.angleMode p.DEGREES
     p.describe "Sphere broken up into a square grid with a gradient in each grid."
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 255
     p.shader theShader
     # A sphere and a circle, painted by the shader.

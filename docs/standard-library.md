@@ -97,10 +97,10 @@ used literally. `load` parses file contents as APN regardless of their extension
 
 ## Types — `type`
 
-`cast Type value` is an ordinary APN compatibility wrapper for `Type value`,
+`cast Type value` is an ordinary APN compatibility wrapper for `(value : Type)`,
 implemented in `lib/type.apn` and loaded by the default prelude. Both require
-lossless conversion. Use `Int (floor value)`, `Int (truncate value)`, or
-`Float (inexact value)` to choose the intended rounding explicitly.
+lossless conversion. Use `(floor value : Int)`, `(truncate value : Int)`, or
+`(inexact value : Float)` to choose the intended rounding explicitly.
 See [zero initialization](zero-initialization.md) for type defaults and inspection.
 
 ## Functions — `function`

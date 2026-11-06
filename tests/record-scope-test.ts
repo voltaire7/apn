@@ -76,7 +76,7 @@ Deno.test('braces and parentheses share grouped expression and pattern behavior'
         ['f { (x : Int) } = x + 1; f 2', '3'],
         ['f { x::xs } = x; f [1,2]', '1'],
         ['{ { (x : Int) } -> x + 1 } 2', '3'],
-        ['f { { Int -> Int } g } = g 2; f { + 1 }', '3'],
+        ['f { g : Int -> Int } = g 2; f { + 1 }', '3'],
         ['obj = [x: 1]; obj.({ x + 1 })', '2'],
     ]) {
         const i = new Interpreter();

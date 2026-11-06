@@ -4,9 +4,9 @@ import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
 import { standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
-import { castNumeric, matchesType, NUMERIC_TYPES, numericType, SCALAR_TYPES, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
+import { castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, numericType, SCALAR_TYPES, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
-import { APNError, didYouMean, formatFileReadError, withArticle } from "./errors.ts";
+import { APNError, didYouMean, formatFileReadError, typeApplied, withArticle } from "./errors.ts";
 import { parse, parseDocument, patternSource, PRIMITIVE_OPERATORS } from "./parser.ts";
 import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
@@ -403,6 +403,19 @@ function wholeList(p: Pattern): p is Extract<Pattern, { p: "schema" }> {
 }
 // How many parameters a type takes: List a one, Option a one, Vect n a two;
 // none for Int, a record type or a type already applied.
+// A type value given all its parameters (Int, List Int, Option Int), which
+// an argument would be the value of, unless it constructs its own.
+function takesValue(f: Extract<Ty, { k: "type" }>): boolean {
+    const value = resolve(f.value);
+    if (value.k === "atom" && CONSTRUCTING_TYPES.has(value.name)) return false;
+    const count = value.k === "variant" && !value.base ? value.args.length : value.k === "atom" && (value.name === "List" || value.name === "IO") ? 1 : 0;
+    return (f.applied ?? 0) >= count;
+}
+// List takes only a type (IO has its own message for a value).
+function takesOnlyTypes(f: Extract<Ty, { k: "type" }>): boolean {
+    const value = resolve(f.value);
+    return value.k === "atom" && value.name === "List" && !f.applied;
+}
 function typeParameters(type: Ty): number {
     const t = resolve(type);
     if (t.k === "factory") return 2;
@@ -2195,6 +2208,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "constr": {
                 const entry = scope.get(p.tag), t = entry ? copy(entry.type) : dynamic;
+                // A type's pattern around a value is written (x : Int); (Int x),
+                // the type first, is the old spelling.
+                const takes = t.k === "factory" ? 2 : t.k === "type" ? typeParameters(t) : t.k === "alias" ? t.params.length : undefined;
+                if (takes !== undefined && !p.typed && p.args.length > takes) {
+                    problem("a typed pattern writes its type after the value", e, `write ${patternSource({ ...p, typed: true })}`);
+                }
                 if (!entry && !firstUnbound && options.runtimeNames && !options.runtimeNames.has(p.tag)) {
                     const module = standardModule(p.tag);
                     const near = didYouMean(p.tag, [...scope.keys()].filter(name => /^[A-Z]/.test(name)));
@@ -2971,6 +2990,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // arithmetic on one) is checked once the value's type is known, not
             // forced to the target.
             // So is a schema's ((List P) x) of a value still to be decided.
+            // A value the checker knows converts as a literal does: 0 - 1 : UInt.
+            const known = argument.index;
+            if (t.k === "atom" && NUMERIC_TYPES.includes(t.name) && known && !known.terms.size) {
+                try { castNumeric(t.name, { kind: "int", v: known.constant }, true); }
+                catch (error) { if (error instanceof APNError) return problem(error.message, e); throw error; }
+            }
             if (t.k === "atom" && NUMERIC_TYPES.includes(t.name) && (a.k === "var" || a.k === "operation")
                 || (t.k === "list" || t.k === "record") && a.k === "operation") {
                 requirements.push({ k: "operation", op: "construct", args: [f, argument.type] });
@@ -3690,6 +3715,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     open(infer(a, scope));
                     return list(variable(), constant(0n));
                 }
+                // A type with no parameter left to take is given a value only
+                // ascribed, (x : T): T x as written is the old spelling.
+                if (resolved.k === "type" && !(e.t === "app" && e.ascribed) && !resolved.chosen && takesValue(resolved)) {
+                    const { message, hint } = typeApplied(text(resolve(resolved.value)));
+                    return problem(message, e, hint);
+                }
                 if (resolved.k === "type" && isExplicit(resolved.value)) {
                     // The argument is an explicit runtime-checked island. Its
                     // effects may not invalidate protected checked bindings.
@@ -3704,6 +3735,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     matchClaims.set(inner.t === "ternary" ? ternaryExpansion(inner) : inner, claimed.length);
                 }
                 let argumentType = infer(a, scope);
+                // List takes only a type: given anything else, it is the value.
+                const value = (given: Ty) => !["type", "var", "factory", "alias", "dynamic"].includes(given.k) && !describing(given)
+                    && !(given.k === "list" && given.items?.length === 0) && !isExplicit(given);
+                if (resolved.k === "type" && !(e.t === "app" && e.ascribed) && takesOnlyTypes(resolved) && value(resolve(argumentType))) {
+                    const { message, hint } = typeApplied(text(resolve(resolved.value)));
+                    return problem(message, e, hint);
+                }
                 // A recursive call does not fix the length of a parameter whose
                 // pattern leaves it open (go xs = ... go [] ...).
                 let head: Expr = e.f, position = 0;

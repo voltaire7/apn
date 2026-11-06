@@ -34,9 +34,9 @@ Standalone `"old" "new"`, `'a' 'b'`, and `False True` are application errors.
 List templates apply their function slots, including effects (see [Lists](#lists)).
 
 Numeric parameter patterns always require lossless conversion, including for
-bare literals. `f (Int x) = x` accepts `2.0` but does not match `.2`; another
+bare literals. `f (x : Int) = x` accepts `2.0` but does not match `.2`; another
 clause may handle it, otherwise application reports no matching clause. Direct
-construction `Int .2` also errors; use `Int (floor .2)` to round down explicitly.
+construction `(.2 : Int)` also errors; use `(floor .2 : Int)` to round down explicitly.
 
 ## Lists
 
@@ -228,7 +228,7 @@ v "y" = 321                # stores integer 321
 ```
 
 A slot holding a type takes a type, which changes it, or a value, which
-becomes a default of that type (as `x: Float 123` would be written):
+becomes a default of that type (as `x: (123 : Float)` would be written):
 
 ```apn
 v = [x: Float]
@@ -419,7 +419,7 @@ A capitalized name may also be bound to a lambda, as any name may: how it is
 used decides what it is. Applied, it runs, so `Sized = n -> Vect n Int` makes
 `Sized 2` the type `Vect 2 Int`, as `Sized n = Vect n Int` does. Where a type
 is expected, it reads as the function type it spells: after
-`Handler = a -> Int`, `run ((Handler) h) = h 1` accepts functions returning
+`Handler = a -> Int`, `run (h : Handler) = h 1` accepts functions returning
 an `Int`.
 
 ## Constructor functions
@@ -427,14 +427,14 @@ an `Int`.
 A capitalized definition computes: applied, it gives what its body gives, a
 type (`Sized n = Vect n Int`: `Sized 2` is `Vect 2 Int`) or any value. A scalar
 type it names is kept as a
-[named subtype](type-and-resource-rules.md#distinct-types) (`Count = Int`
-makes `Count 5`). A body of `_` makes a constructor instead (see
+[named subtype](type-and-resource-rules.md#distinct-types) (`Count = Int`:
+`5 : Count` is a `Count`). A body of `_` makes a constructor instead (see
 [variants](#variants-parameters-and-distinct-wrappers)).
 
 One that gives any other type (a type or a schema, not a constructor) gives,
 applied to all its parameters, a type that remembers how it was written:
 `Point = [x: Float, y: Float]` is `Point`, `Pairs 2 Int` is `Pairs 2 Int`. It
-is that type wherever a type is used (`Type Point` shows what it is), and the
+is that type wherever a type is used (`(Point : Type)` shows what it is), and the
 values it makes, by applying it or by a conversion to it (`List (Pairs 1 Int)`,
 a field, a slot's default), remember it too, as does an updated copy of one.
 They are still what the type makes, so everything that takes one takes them,
@@ -524,7 +524,7 @@ What `X = A | B` is depends on what its alternatives' names are bound to
 where it runs. All new names declare them as constructors of `X`; all
 constructors declared with `_` that no union owns yet are claimed, as above.
 All existing types make `X` their union, which makes nothing: a value of any of
-them is one of it, `(X v)` matches it, and applying `X` checks membership. A
+them is one of it, `(v : X)` matches it, and applying `X` checks membership. A
 mix (a type and a new name, or another type's constructor) is an error that
 names the odd one out.
 
@@ -562,7 +562,7 @@ Type parameters are retained and supplied by type application. `typeOf` reports 
 value's narrowest type: its fields decide the parameters they name, demanding
 them (`typeOf (Some 123)` is `Option Int`, `typeOf (Box [1])` is `Box [Int]`),
 and one nothing decides is a type variable (`typeOf None` is `Option a`).
-Explicit specialization retains its arguments: `typeOf (Option Int None)` is
+Explicit specialization retains its arguments: `typeOf (None : Option Int)` is
 `Option Int`. Against a bare type it still compares by name: `typeOf (Some 1) == Option`. Different type arguments produce
 different type descriptions. Payload conversions are deferred until used.
 Concrete fields such as `Int` in `MkUserId Int` are enforced on construction,
@@ -577,29 +577,29 @@ a type's argument (`Path (List Point)`, `Got (Result Point String)` with
 `Point = [x: Float, y: Float]`), and a field may name a module's type
 (`Resized browser.Viewport`).
 
-`func ((Option Int) value) = ...` checks parent membership and applies the
+`func (value : Option Int) = ...` checks parent membership and applies the
 specialized payload contract. An unrelated outer value falls through to the
 next clause. A deferred payload failure is a runtime error when demanded, not
 an invitation to rerun another clause.
 
 Existing value constructor names on the left destructure and cannot be
 redefined (see [constructor functions](#constructor-functions)).
-An unspecialized parent pattern `(Option _ value)` still binds the whole variant.
+An unspecialized parent pattern `(value : Option _)` still binds the whole variant.
 A constructor pattern `(Some value)` extracts its field. A constructor sharing
 its type's name (`Box x = _`, `Box a = | Box a`) is the constructor where a
 value is expected and the type where one is expected: a field's type
 (`Wrap (Box b) = _`), a record slot (`[b: Box] []` is `[b: Box 0]` for
-`Box (Int x) = _`), `isType Box`, a type's argument (`List Box`), a union.
+`Box (x : Int) = _`), `isType Box`, a type's argument (`List Box`), a union.
 Applied to a type for each of its type's parameters, it is likewise a value
 (`Box Int`, a `Box` holding `Int`) that reads as that type applied to them
 where a type is expected, as a lambda reads as a function type:
 `Wrap a = | Wrap (Box a)`, `isType (Box Int) (Box 1)`, `[b: Box Int] []`. So
-`f ((Box Int) b) = ...`, or `f (Box Int b)`, takes a `Box Int` whole, while
+`f (b : Box Int) = ...`, or `f (Box Int b)`, takes a `Box Int` whole, while
 `unbox (Box x) = x`, with as many arguments as `Box` has fields, still takes it
 apart. This needs its fields to be exactly its parameters (`Box x = _`, not
-`Box (Int x) = _`).
+`Box (x : Int) = _`).
 
-Nominal wrappers are single-constructor types (`UserId (Int id) = _`); see
+Nominal wrappers are single-constructor types (`UserId (id : Int) = _`); see
 [distinct types](type-and-resource-rules.md#distinct-types). No automatic
 cross-type conversion or zero-cost representation is implied. Class/instance syntax and static type
 inference are not part of this change.

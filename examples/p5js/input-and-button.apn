@@ -32,9 +32,9 @@ at x y = [
     style "margin" "0"
 ]
 
-setup (Sketch p) = p.createCanvas 710 400
+setup (p : Sketch) = p.createCanvas 710 400
 
-draw name (Sketch p) = {
+draw name (p : Sketch) = {
     p.background 255
     p.textSize 100
     p.call "textAlign" [p.CENTER,p.CENTER]

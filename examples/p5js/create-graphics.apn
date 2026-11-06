@@ -5,14 +5,14 @@ import "p5"
 # The graphic, drawn into the canvas's middle.
 graphic = createGraphics 405 250
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.describe ("Black canvas with a very dark grey rectangle in the middle. When the cursor is "
         ++ "hovered over the canvas, a white circle follows the cursor in the black areas of the "
         ++ "canvas, but not over the dark grey rectangle.")
     p.createCanvas 720 400
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     # A see-through black, so the circle following the cursor slowly fades.
     p.background [0,12]
     p.fill 255

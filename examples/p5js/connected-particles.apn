@@ -11,7 +11,7 @@ nextParticleFrame = Mutable 0
 previous = Mutable [0.0,0.0]
 [framesBetweenParticles,particleFadeFrames] = [5,300]
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 720 400
     p.colorMode p.HSB
     p.describe ("When the cursor drags along the black background, it draws a pattern of "
@@ -19,14 +19,14 @@ setup (Sketch p) = {
         ++ "and lines fade out over time.")
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 0
     set paths (map (path -> filter (particle -> particle.frames > 0) (map move path)) paths)
     mapM (display p) paths
 }
 
 # Each particle, and a line to the next, both fading; drawn last to first.
-display (Sketch p) (path : List _) = mapM (n -> {
+display (p : Sketch) (path : List _) = mapM (n -> {
     particle = path n
     opacity = particle.frames / particleFadeFrames
     [x,y] = particle.position
@@ -48,18 +48,18 @@ move particle = {
 }
 
 # A press starts a path.
-mousePressed (Sketch p) = {
+mousePressed (p : Sketch) = {
     set nextParticleFrame p.frameCount
     set paths (paths ++ [[]])
-    set previous [Float p.mouseX, Float p.mouseY]
+    set previous [(p.mouseX : Float), (p.mouseY : Float)]
     createParticle p
 }
 
-mouseDragged (Sketch p) = when (p.frameCount >= nextParticleFrame) (createParticle p)
+mouseDragged (p : Sketch) = when (p.frameCount >= nextParticleFrame) (createParticle p)
 
 # A particle where the mouse is, moving the way it went.
-createParticle (Sketch p) = {
-    mouse = [Float p.mouseX, Float p.mouseY]
+createParticle (p : Sketch) = {
+    mouse = [(p.mouseX : Float), (p.mouseY : Float)]
     set paths (addParticle mouse ((mouse - previous) * 0.05) paths)
     set nextParticleFrame (p.frameCount + framesBetweenParticles)
     set previous mouse

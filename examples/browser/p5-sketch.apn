@@ -1,11 +1,11 @@
 import "p5"
 clicks = Mutable 0
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 640 360
     p.describe "An animated peach circle. Click to change its size."
     p.noStroke
 }
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background "#232634"
     p.fill "#ef9f76"
     p.circle (320 + 160 * sin (p.frameCount / 40)) 180 (60 + clicks * 10)

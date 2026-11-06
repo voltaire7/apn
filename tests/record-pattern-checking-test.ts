@@ -47,7 +47,7 @@ Deno.test("record-pattern printing converts positional input before the body run
     const log = console.log;
     console.log = (...values: unknown[]) => { lines.push(values.join(" ")); };
     try {
-        interpreter.run(parse(`${schema}; func (Vector3 v) = print v.x; func [1,2,3]`));
+        interpreter.run(parse(`${schema}; func (v : Vector3) = print v.x; func [1,2,3]`));
     } finally {
         console.log = log;
     }

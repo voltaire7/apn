@@ -114,13 +114,13 @@ twice (x : Int) = { x + x } : Int
 print (typeOf twice)                   # Int -> Int
 ```
 
-Here `Int { ... }` is ordinary constructor application. The displayed
+Here `({ ... } : Int)` is ordinary constructor application. The displayed
 `Int -> Int` describes the function's type; writing that arrow in an expression
 creates a lambda. See [typed definitions and function contracts](pattern-functions.md#typing-a-function-through-its-definition).
 
 ## Explicit runtime boundaries
 
-`Dynamic expression` explicitly opts that expression out of static checking.
+`(expression : Dynamic)` explicitly opts that expression out of static checking.
 Parsing still applies; unknown names and invalid operations inside it fail if
 execution reaches them. Its result has static type `Dynamic`. Unmarked unknowns
 elsewhere still fail ordinary execution and `--check`; a boundary does not disable
@@ -142,7 +142,7 @@ accept "hello"
 
 Operations on a Dynamic value remain dynamic. To return to a concrete type,
 apply its constructor or a function contract. Existing converting patterns,
-such as `(Int x)`, also perform this runtime check. A variant pattern such as
+such as `(x : Int)`, also perform this runtime check. A variant pattern such as
 `Some x` does not validate an inferred payload type merely by matching its tag.
 An ordinary parameter whose type was inferred does not gain a hidden conversion:
 
@@ -152,7 +152,7 @@ square x = x == 0 ? 0 : x * x
 square ((2 : Dynamic) : Int)          # 4
 ```
 
-A `(Dynamic x)` parameter changes how `x` is checked, but does not hide unrelated
+A `(x : Dynamic)` parameter changes how `x` is checked, but does not hide unrelated
 errors in the function body. Self-application does not need Dynamic; recursive
 inference already supports it.
 
@@ -179,7 +179,7 @@ references by different references. `set` also guards existing `Mutable` payload
 types in checked execution, including writes inside Dynamic expressions.
 
 A function can be replaced only where it was captured with an explicit contract
-(`((Int -> Int) f) <- return (x -> x)`), and the replacement retains it.
+(`(f : Int -> Int) <- return (x -> x)`), and the replacement retains it.
 Replacing an uncontracted function is rejected. A deferred action declared with
 `=` is also a function: the guard does not run it to discover its result type.
 Use `<-` when the binding should hold the evaluated value or contract. These
@@ -219,8 +219,8 @@ appendOne n (values : Ints n) (value : Int) = values ++ [value] : Ints (n + 1)
 
 A name a typed pattern's type does not know yet is bound by the value:
 `(Vect n a) xs` binds `n` to the length and `a` to the element type (the same
-as `Vect n a xs`), and `(List a) xs` binds `a` to the elements' type, computed
-only if it is used, so `first ((List _) (x::_)) = x` works on `[1..]` (`_` binds
+as `(xs : Vect n a)`), and `(List a) xs` binds `a` to the elements' type, computed
+only if it is used, so `first (x::_ : List _) = x` works on `[1..]` (`_` binds
 nothing, as in any pattern; lint warns about a bound name nothing uses). A name
 bound earlier must agree: `h ((Vect n a) xs) ((Vect n a) ys)` requires equal
 lengths, statically where they are known. Which names a pattern binds follows
@@ -291,9 +291,9 @@ not finish within the step budget.
   result is checked at runtime, like a `Dynamic` one.
 - A `Vect` length evaluation cannot decide is validated when the list is built.
 - A list a recursive function builds has the length evaluation finds:
-  `Vect 3 UInt (toList 3)` checks, and `Vect 2 UInt (toList 3)` is a static
+  `(toList 3 : Vect 3 UInt)` checks, and `(toList 3 : Vect 2 UInt)` is a static
   length error.
-- An expression a type needs that fails (`Vect (1/0) Int xs`) fails where the
+- An expression a type needs that fails (`(xs : Vect (1/0) Int)`) fails where the
   program demands it, as any other value does: laziness means a type nothing
   uses never fails.
 
@@ -414,8 +414,8 @@ length no `c * n + d` gives) is run backwards in a pattern instead: each
 clause's result is matched as a pattern, the elements' types binding its type
 variables and its parameters (`Z`, `S k`) built back; a value that no clause
 describes does not match, and the checker leaves its parameters to the run. In a typed pattern a type's arguments take nothing after them,
-so `(Vect n Int xs)` and a program's own `(Lst n Int xs)` read alike.
-`(Vect n Int xs)` constrains the element type explicitly, and `(Vect 3 a xs)`
+so `(xs : Vect n Int)` and a program's own `(Lst n Int xs)` read alike.
+`(xs : Vect n Int)` constrains the element type explicitly, and `(xs : Vect 3 a)`
 constrains the length. For computed type expressions, the existing form
 `((Vect (n + 1) Int) xs)` remains available.
 
@@ -440,7 +440,7 @@ append (xs : Vect n a) (ys : Vect m a) = {
 ``` An explicit result constructor supplies a recursive
 signature before the body is checked; affine arithmetic establishes the sum.
 The example passes strict checking without executing either branch.
-Returning `Vect (n + m + 1) a ys` in the empty branch is a static error.
+Returning `(ys : Vect (n + m + 1) a)` in the empty branch is a static error.
 Written with lambdas, `append = Vect n a xs -> Vect m a ys -> Vect (n + m) a
 {...}`, it is checked the same way, and an empty first list leaves `a` for the
 second pattern to bind.
@@ -455,7 +455,7 @@ list cannot finish, but remains interruptible.
 An empty unannotated list provides no element-type evidence. Its type binder
 stays open for another vector argument to determine. If every argument is
 empty, it remains a polymorphic empty-vector element type, displayed with the
-binder name. `Vect 0 Int []` supplies explicit evidence instead.
+binder name. `([] : Vect 0 Int)` supplies explicit evidence instead.
 
 ## Repeated names
 
@@ -513,18 +513,18 @@ The runtime ranks clauses by a score, then source order: literal patterns 40,
 a typed pattern 30 for the argument's exact type, 10 for a matching numeric
 aggregate (`Number`, `Real`, `Integer`, `Exact`, `Inexact`), 1 for a lossless
 conversion, and other patterns 0. The checker computes the same ranking from
-argument types and, where the value is known, from the value: `UInt 3`
+argument types and, where the value is known, from the value: `(3 : UInt)`
 converts losslessly to `Int`, `300` does not fit `Int8`, and `2.5` is not an
 integer. Where only an unknown value decides, it keeps both possibilities. A clause definitely matches when every argument fits
 its pattern for certain: a variable or `_` (not a repeated name), a list
 pattern of variables with a list of that known length, `[]` or `(x::xs)` with a
 known empty or non-empty list, a literal pattern with that same literal, or a
 typed pattern with its exact type (or a known value that converts losslessly). So with `f [] = [0]` before `f xs = [1,2]`,
-`f []` is a one-element list, and with `f xs = [1,2]` before `f (Int n) = [0]`,
+`f []` is a one-element list, and with `f xs = [1,2]` before `f (n : Int) = [0]`,
 `f 3` is too. A clause whose literal, length, or type definitely differs from
 the argument is skipped. Clauses for the same kind of input must agree on their
 result type, but may return lists of different lengths: with
-`f (Int n) = [1,2]` and `f 0 = [0]`, `f 0` is a one-element list and `f 3` a
+`f (n : Int) = [1,2]` and `f 0 = [0]`, `f 0` is a one-element list and `f 3` a
 two-element one. This also works through function parameters, at any depth:
 with `h x = g (f x)`, the checker decides `f x` at each call of `h`, so `h 0`
 uses the literal clause (as does `h 1` for `f (x - 1)`). Every literal kind
@@ -543,7 +543,7 @@ as at runtime (`0.1 + 0.2 == 0.3` is false), comparisons with NaN are false,
 and an operation the runtime rejects (a lossy exact/float mix, exact division by
 zero) gives no value. Fixed-width numbers keep their type: `Float32` rounds to
 single precision, and fixed-width integer overflow gives no value. A numeric
-conversion of a parameter (`h v = Float32 v`) is checked at each call, so
+conversion of a parameter (`h v = v : Float32`) is checked at each call, so
 `h 0.25` is accepted while `h "x"` is not. The builtin `length` of a list or String is
 evaluated when its size is known: from a literal, an argument at the call,
 `x :: xs`, `xs ++ ys`, builtins that keep a list's length (`map`, `sort`), and

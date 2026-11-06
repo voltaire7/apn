@@ -10,14 +10,14 @@ viewWidth = 4.0
 size = 2
 row = Mutable 0
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 710 400
     p.describe "Colorful rendering of the Mandelbrot set."
     p.background 0
     p.noStroke
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     viewHeight = viewWidth * p.height / p.width
     y = -viewHeight / 2 + viewHeight * row * size / p.height : Float
     mapM (column -> {

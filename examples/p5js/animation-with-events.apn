@@ -6,7 +6,7 @@ import "p5"
 # The circle's horizontal position.
 x = Mutable 25
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 720 400
     p.colorMode p.HSB
     p.textSize 20
@@ -14,7 +14,7 @@ setup (Sketch p) = {
     p.noLoop
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 0
     # A circle whose hue follows its position.
     p.fill [x / 3, 90, 90]
@@ -25,10 +25,10 @@ draw (Sketch p) = {
 }
 
 # A click starts or stops the animation; a key draws one frame.
-mousePressed (Sketch p) = {
+mousePressed (p : Sketch) = {
     looping <- p.isLooping
     looping ? p.noLoop : p.loop
 }
-keyPressed (Sketch p) = p.redraw
+keyPressed (p : Sketch) = p.redraw
 
 main = sketch [setup: setup, draw: draw, mousePressed: mousePressed, keyPressed: keyPressed]

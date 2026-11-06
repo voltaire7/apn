@@ -4,7 +4,7 @@ import "p5"
 
 stripeCount = 12
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 400 400
     p.colorMode p.HSB
     p.noStroke
@@ -26,7 +26,7 @@ setup (Sketch p) = {
     label p "Color B" (p.height - stripeHeight + 5)
 }
 
-label (Sketch p) name y = {
+label (p : Sketch) name y = {
     [margin,boxWidth,cornerRadius] = [5,60,5]
     boxHeight = p.height / stripeCount - margin * 2
     p.fill 255

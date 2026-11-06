@@ -6,13 +6,13 @@ import "p5"
 position = Mutable [0.0,0.0]
 color = Mutable [0.0,0.0,0.0]
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 710 400
     choose p
     p.describe "A circle whose position and color change randomly when the user clicks the canvas."
 }
 
-choose (Sketch p) = {
+choose (p : Sketch) = {
     x <- p.random 0 p.width
     y <- p.random 0 p.height
     r <- p.random 100 256
@@ -23,7 +23,7 @@ choose (Sketch p) = {
     set color [(r : Float), (g : Float), (b : Float)]
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 10
     [x,y] = position
     p.fill color

@@ -16,7 +16,7 @@ for (const [source, expected] of [
     ['True "yes" "no"', '"yes"'],
     ['False missing 7', '7'],
     ['(x -> x 1 2) False', '2'],
-    ['map (b -> Bool b "t" "f") [0,1]', '["f","t"]'],
+    ['map (b -> (b : Bool) "t" "f") [0,1]', '["f","t"]'],
     ['get x k = "http"; True 1 2', '1'],
 ] as const) Deno.test(`a Bool selects: ${source}`, () => {
     for (const checked of [false, true]) {

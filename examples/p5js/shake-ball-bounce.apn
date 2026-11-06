@@ -12,7 +12,7 @@ balls = Mutable ([] : List Ball)
 # How much the device's acceleration must change to shake the balls.
 threshold = 30
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.describe ("Twenty circles that bounce around in the canvas whenever the mobile device is "
         ++ "tilted.")
     # The whole screen.
@@ -21,7 +21,7 @@ setup (Sketch p) = {
     set balls made
 }
 
-newBall (Sketch p) = {
+newBall (p : Sketch) = {
     x <- p.random 0 p.width
     y <- p.random 0 p.height
     diameter <- p.random 10 30
@@ -33,7 +33,7 @@ newBall (Sketch p) = {
     ]
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 0
     set balls (map move balls)
     mapM (ball -> p.ellipse ball.x ball.y ball.diameter ball.diameter) balls
@@ -41,7 +41,7 @@ draw (Sketch p) = {
 }
 
 # A shake speeds the balls up; otherwise they slow down to their resting speed.
-checkForShake (Sketch p) = {
+checkForShake (p : Sketch) = {
     change = abs (p.accelerationX - p.pAccelerationX)
     total = change + abs (p.accelerationY - p.pAccelerationY)
     shaken <- total >= threshold ? mapM (shake p change) balls
@@ -64,7 +64,7 @@ turn width height ball = {
     ball
 }
 
-shake (Sketch p) change ball = {
+shake (p : Sketch) change ball = {
     dx <- p.random 5 (change / 3)
     dy <- p.random 5 (change / 3)
     ball.xspeed = ball.xspeed + (dx : Float)

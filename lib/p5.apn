@@ -8,7 +8,7 @@ sketch callbacks = P5Sketch callbacks
 # renders with the newest callbacks, which may read the model, and p.send msg
 # sends a message to update.
 canvas callbacks = _html.HtmlSketch callbacks
-# A callback's p, the running sketch: setup (Sketch p) = ... Its properties
+# A callback's p, the running sketch: setup (p : Sketch) = ... Its properties
 # are typed (width, mouseX: Number; mouseIsPressed: Bool; key: String), and
 # its methods Dynamic, as p5's take many kinds of arguments (a color is a
 # number, a string or a list), so they are checked as they run.

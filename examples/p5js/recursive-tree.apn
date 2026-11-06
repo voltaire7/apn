@@ -2,13 +2,13 @@
 # Draw a tree using a function that calls itself.
 import "p5"
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 710 400
     p.colorMode p.HSB
     p.angleMode p.DEGREES
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 0
     # The branches' angle, from the mouse's x: up to 90 degrees.
     angle = min (p.mouseX / p.width * 90 : Number) 90
@@ -24,7 +24,7 @@ draw (Sketch p) = {
 
 # Two branches, 2/3 as long as this one, turned each way, each with its own
 # two branches, until they are 2 pixels long.
-branch (Sketch p) angle size level = {
+branch (p : Sketch) angle size level = {
     p.stroke [level * 25, 255, 255]
     h = size * 0.66
     when (h > 2) {
@@ -34,7 +34,7 @@ branch (Sketch p) angle size level = {
 }
 
 # A branch turned by turn, with its own branches.
-limb (Sketch p) angle h level turn = {
+limb (p : Sketch) angle h level turn = {
     p.push
     p.rotate turn
     p.line 0 0 0 -h

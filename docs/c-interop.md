@@ -80,7 +80,7 @@ and signatures you trust. See [Deno FFI](https://docs.deno.com/runtime/fundament
 | `String` | `const char *` | NUL-terminated UTF-8 |
 | `[]` | `void` return | Result only; use `[]` for no parameters |
 
-Native numeric results retain their APN type: `add` above returns `Int32 42`.
+Native numeric results retain their APN type: `add` above returns `42`, an `Int32`.
 Arguments convert only without loss. Out-of-range integers and lossy float
 conversions fail before the C function is called. Float32 arithmetic rounds to binary32;
 constructors and `cast` require lossless conversion even for bare literals. Unbounded `Int`, `UInt`, fractions, complex

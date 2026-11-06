@@ -14,7 +14,7 @@ words = [
     "HTML5","objects","for","text","input","video","webcam","and","sound"
 ]
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.describe "A random series of words related to p5.js scattered onto the canvas."
     p.textFont "Space Mono"
     p.createCanvas 720 400

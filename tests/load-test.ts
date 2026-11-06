@@ -51,7 +51,7 @@ for (const [source, opened] of [
     ['system = import "system"\n{ system; 1 }', false],
     ['system = import "system"\nhaltAction = system.halt', false],
     ['system = import "system"\nmodule _ = system\nm = module []', false],
-    ['Dynamic $ import "system"', true],
+    ['(import "system" : Dynamic)', true],
     ['numbers = load "../lib/number"\nnumbers', true],
     ['numbers = load "../lib/number"\nnumbers.sq 2', false],
 ] as const) Deno.test(`a statement opens a module: ${JSON.stringify(source)}`, () => {

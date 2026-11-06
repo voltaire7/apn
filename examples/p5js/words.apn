@@ -4,7 +4,7 @@ import "p5"
 
 font = loadFont "assets/SourceSansPro-Regular.otf"
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.describe ("Three columns of the words “ichi,” “ni,” “san,” and “shi” on a white "
         ++ "background. The first column is right aligned, the middle column is center "
         ++ "aligned, and the left column is left aligned.")
@@ -21,7 +21,7 @@ setup (Sketch p) = {
     drawWords p (p.width * 0.75)
 }
 
-drawWords (Sketch p) x = {
+drawWords (p : Sketch) x = {
     p.fill 80
     p.text "ichi" x 80
     p.text "ni" x 150

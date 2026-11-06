@@ -21,7 +21,7 @@ for (const [source, expected] of [
     ['([(1 : Dynamic), (2 : Dynamic)] : Vect 2 Int)', '[1,2]'],
     ['(import "function" : Dynamic); 123', '123'],
     ['(import ["text","type"] : Dynamic); 123', '123'],
-    ['x = 1; Dynamic $ use [x: 2]; x', '2'],
+    ['x = 1; (use [x: 2] : Dynamic); x', '2'],
 ] as const) Deno.test(`explicit Dynamic boundary: ${source}`, () => {
     const result = requireChecked(source);
     if (result.dynamicBoundaries || !result.runtimeChecks) throw new Error(JSON.stringify(result));
@@ -73,7 +73,7 @@ Deno.test('load exports cannot invalidate checked bindings', () => {
 
 for (const module of ['"function"', '["type","function"]']) {
     Deno.test(`import protects existing bindings: ${module}`, () => {
-        const source = `x = "old"; Dynamic (import ${module}); x`;
+        const source = `x = "old"; (import ${module} : Dynamic); x`;
         requireChecked(source);
         const i = new Interpreter(); i.checkedExecution = true;
         i.moduleSources = { "/lib/function.apn": 'x = 123', "/lib/type.apn": '' };
@@ -111,7 +111,7 @@ Deno.test('loading a file again replaces its definitions', () => {
     if (j.renderString(j.run(parseDocument('double 5'))) !== '10') throw new Error('rebound reload');
     // An unchecked (Dynamic) load still cannot replace it.
     const k = new Interpreter(); k.enableChecking(); k.sourceDir = fixtures;
-    try { k.run(parseDocument('load "reload"\ndouble n = n + 1\nDynamic $ load "reload"')); } catch (error) {
+    try { k.run(parseDocument('load "reload"\ndouble n = n + 1\n(load "reload" : Dynamic)')); } catch (error) {
         if (String(error).includes("Dynamic write to 'double'")) return;
         throw error;
     }

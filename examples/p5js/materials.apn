@@ -69,14 +69,14 @@ selector model [which,name] = span [] [
 
 shown visible = style "display" (visible ? "" : "none")
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.call "createCanvas" [400,400,p.WEBGL]
     p.angleMode p.DEGREES
     p.describe ("Astronaut 3D model displayed with a user-selected material using the "
         ++ "selectors below the canvas.")
 }
 
-draw model (Sketch p) = {
+draw model (p : Sketch) = {
     p.background 0
     p.push
     material model p
@@ -91,7 +91,7 @@ draw model (Sketch p) = {
 }
 
 # The chosen material, in the chosen colors.
-material model (Sketch p) = model.material ~ [
+material model (p : Sketch) = model.material ~ [
     "color" -> {
         ambientSpecular model p
         model.on Fill ? p.fill (model.colors Fill) : p.noFill
@@ -109,7 +109,7 @@ material model (Sketch p) = model.material ~ [
     }
 ]
 
-ambientSpecular model (Sketch p) = {
+ambientSpecular model (p : Sketch) = {
     when (model.on Ambient) (p.ambientMaterial (model.colors Ambient))
     when (model.on Specular) (p.specularMaterial (model.colors Specular))
 }

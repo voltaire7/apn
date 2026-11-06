@@ -5,7 +5,7 @@ import "p5"
 photo = loadImage "assets/image.jpg"
 cutout = loadImage "assets/mask.png"
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.describe ("Two photos, the one on the left labeled with \"Masked Image\" and the one "
         ++ "on the right labeled with \"Mask.\"")
     p.createCanvas 710 400
@@ -14,7 +14,7 @@ setup (Sketch p) = {
     p.call "textAlign" [p.LEFT,p.TOP]
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 255
     p.describeElement "Masked Image" "A photo of yellow flowers masked by a photo of two leaves."
     p.call "image" [photo,0,0,350,350]

@@ -25,7 +25,7 @@ Deno.test("failed set preserves old contents", () => {
 });
 
 Deno.test("mutable containers support application", () => check('x = Mutable [10,20]; x 1', '20'));
-Deno.test("mutable parameter patterns preserve reference", () => check('x = Mutable 0; increment (Mutable ref) = set ref (ref + 1); increment x; x', '1'));
+Deno.test("mutable parameter patterns preserve reference", () => check('x = Mutable 0; increment (ref : Mutable) = set ref (ref + 1); increment x; x', '1'));
 
 Deno.test("target-first set supports partial application and dollar", () => {
     check('x = Mutable 0; put = set x; put 1; set x $ x + 1; x', '2');

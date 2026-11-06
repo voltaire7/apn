@@ -32,7 +32,7 @@ for (const [source, expected] of [
     [PAIRS + "f (xs : Pairs n a) = [n,a]\n[f [1,2,3,4], f []]", "[[2,Int],[0,a]]"],
     [PAIRS + "h (xs : Pairs n Int) = 0 :: 0 :: xs : Pairs (n + 1) Int\nh [5,6]", "[0,0,5,6]"],
     // Another shape runs its clauses backwards.
-    ["Mixed Z a = []\nMixed (S k) a = a :: Int :: Mixed k a\nf (Mixed n a xs) = [n,a]\nf [\"x\",1,\"y\",2]", "[2,String]"],
+    ["Mixed Z a = []\nMixed (S k) a = a :: Int :: Mixed k a\nf (xs : Mixed n a) = [n,a]\nf [\"x\",1,\"y\",2]", "[2,String]"],
     [PAIRS + "g (xs : Pairs n a) = \"pairs\"\ng xs = \"other\"\n[g [1,2,3], g [\"a\",\"b\"], g [1,\"b\"]]", '["other","pairs","other"]'],
 ] as const) {
     Deno.test(`families of lists: ${JSON.stringify(source)}`, () => {

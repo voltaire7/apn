@@ -2,7 +2,7 @@
 # Draw 2D shapes.
 import "p5"
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     # A description of the canvas for screen readers.
     p.textOutput
     p.createCanvas 720 400

@@ -8,7 +8,7 @@ speed = Mutable [2,3]
 hue = Mutable 0
 radius = 25
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 400 400
     p.background 255
     # Ellipses are drawn by their radius.
@@ -26,7 +26,7 @@ setup (Sketch p) = {
         ++ "white, and its outline fades between colors, leaving a rainbow trail.")
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     [x,y] = position
     p.stroke [hue,80,90]
     # Black between the rectangles, white over them.

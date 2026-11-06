@@ -67,14 +67,14 @@ first parse/lex error in each file, because the parser does not yet recover afte
 an error. It does not claim to detect undefined variables, runtime
 errors or general type errors. It warns about a parameter its body never uses
 (`f x y = x` warns about `y`; write `_` to discard it), including a name a
-typed pattern's type binds (`a` in `first ((List a) (x::_)) = x`; a name
+typed pattern's type binds (`a` in `first (x::_ : List a) = x`; a name
 repeated in another parameter's type is a use). Names starting with `_`
 are exempt. It warns about a clause that
 [never runs](semantics.md#functions-and-conditionals) because an earlier one
 takes any argument (`f xs = 0` then `f [a,b] = a + b`), and about a `match`
 alternative after one that takes any value. The constructors it knows are
 the program's and those its imports, `load` statements (`load "f"`, also
-`Dynamic $ load "f"`) and `use` statements declare, where `use` opens a record
+`(load "f" : Dynamic)`) and `use` statements declare, where `use` opens a record
 bound to an import or a load (`opt = import "option"; use opt`), written in
 place, or a list of them: it resolves each from the file's folder as the
 interpreter does and reads (never runs) it, so a file it cannot read declares

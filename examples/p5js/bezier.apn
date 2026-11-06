@@ -2,14 +2,14 @@
 # Draw a set of curves.
 import "p5"
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 720 400
     p.noFill
     p.strokeWeight 2
     p.colorMode p.HSB
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.describe ("Ten rainbow-colored lines in a bezier curve formation. The top anchors of the "
         ++ "curves move with the cursor as it hovers over the black canvas.")
     p.background 5

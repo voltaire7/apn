@@ -11,7 +11,7 @@ largest = Mutable 0.0
 score = Mutable 0
 highScore = Mutable 0
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 720 400
     p.colorMode p.HSB
     p.noStroke
@@ -22,7 +22,7 @@ setup (Sketch p) = {
     set highScore (stored == [] ? 0 : (stored : Int))
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 20
     radius > 0 ? {
         # The circle, shrinking, and the score.
@@ -38,13 +38,13 @@ draw (Sketch p) = {
     } : endGame p
 }
 
-startGame (Sketch p) = {
+startGame (p : Sketch) = {
     set score 0
-    set largest (min (Number p.height) (Number p.width) / 2 : Float)
+    set largest (min (p.height : Number) (p.width : Number) / 2 : Float)
     resetCircle p
 }
 
-endGame (Sketch p) = {
+endGame (p : Sketch) = {
     p.noLoop
     set highScore (max highScore score)
     p.storeItem "high score" highScore
@@ -57,7 +57,7 @@ endGame (Sketch p) = {
 }
 
 # A new circle, as large as it may be now, somewhere it fits, in a random color.
-resetCircle (Sketch p) = {
+resetCircle (p : Sketch) = {
     set radius largest
     x <- p.random radius (p.width - radius)
     y <- p.random radius (p.height - radius)
@@ -70,7 +70,7 @@ resetCircle (Sketch p) = {
 
 # A click on the circle scores, and the next circle starts smaller; a click
 # on the start screen starts a game.
-mousePressed (Sketch p) = {
+mousePressed (p : Sketch) = {
     (looping : Bool) <- p.isLooping
     looping ? {
         [x,y] = center

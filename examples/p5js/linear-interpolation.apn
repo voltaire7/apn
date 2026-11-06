@@ -6,13 +6,13 @@ import "p5"
 x = Mutable 0.0
 y = Mutable 0.0
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 720 400
     p.noStroke
     p.textOutput
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 51
     set x (lerp x p.mouseX 0.05 : Float)
     set y (lerp y p.mouseY 0.05 : Float)

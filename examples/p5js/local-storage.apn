@@ -8,7 +8,7 @@ bubbles = Mutable ([] : List Bubble)
 pressed = Mutable [0.0,0.0]
 creating = Mutable False
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 640 360
     # The bubbles kept from an earlier visit ([] if none).
     saved <- p.getItem "bubbles"
@@ -21,7 +21,7 @@ setup (Sketch p) = {
         ++ "over it.")
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 255
     mapM (display p) bubbles
     # The bubble being made, as large as the drag.
@@ -39,7 +39,7 @@ draw (Sketch p) = {
 }
 
 # A bubble, and its name while the mouse is over it.
-display (Sketch p) bubble = {
+display (p : Sketch) bubble = {
     p.stroke 0
     p.noFill
     p.strokeWeight 4
@@ -52,18 +52,18 @@ display (Sketch p) bubble = {
     }
 }
 
-mousePressed (Sketch p) = {
-    set pressed [Float p.mouseX, Float p.mouseY]
+mousePressed (p : Sketch) = {
+    set pressed [(p.mouseX : Float), (p.mouseY : Float)]
     set creating True
 }
 
-mouseReleased (Sketch p) = when creating {
+mouseReleased (p : Sketch) = when creating {
     addBubble p
     set creating False
 }
 
 # A bubble with the name asked for (none if it is cancelled), kept.
-addBubble (Sketch p) = {
+addBubble (p : Sketch) = {
     [x,y] = pressed
     radius = dist x y p.mouseX p.mouseY : Float
     name <- p.prompt "Enter a name for the new bubble"

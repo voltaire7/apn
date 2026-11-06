@@ -30,7 +30,7 @@ _all results = results ~ [
 # any other type the values isType accepts.
 _decodeAs (schema : Record) value = map (values -> (map (v -> _ -> v) values).schema)
     (_all (map ([name,t] -> _field name value >>= _decodeAs t) (pairs schema)))
-_decodeAs (Decoder decoder) value = map Dynamic (decoder value)
+_decodeAs (Decoder decoder) value = map (v -> (v : Dynamic)) (decoder value)
 _decodeAs t value = _decodeAs (_basic t) value
 _basic t = t == String ? string : (t == Int ? int : (t == Float ? float : (t == Bool ? bool
     : expecting (to String t) (isType t))))

@@ -13,7 +13,7 @@ for (const [source, expected] of [
     ['[typeOf Int, typeOf (1 : Int), typeOf (1 : Float), typeOf (1 : Int32)]', '[Type,Int,Float,Int32]'],
     ['(identity : Int -> Float) <- return (x -> x)\n[(Int : Type), ([Int] : Type), ([x: Float] : Type), typeOf identity]', '[Int, [Int], [x: Float], Int -> Float]'],
     ['Count (x : Int) = _\n[Count, Count 3]', '[Count, Count 3]'],
-    ['f (t : Type) = t 123\nf Int', '123'],
+    ['f (t : Type) = 123 : t\nf Int', '123'],
     ['f (x : t) = [t,x]\nf (7 : Int32)', '[Int32,7]'],
     ['[Int]', '[Int]'],
     ['xs = [Int].[0]\nxs 0 = 2\nxs', '[2]'],

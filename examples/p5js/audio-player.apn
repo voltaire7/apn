@@ -4,7 +4,7 @@ import "p5"
 
 player = createAudio "assets/piano-loop.mp3"
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.noCanvas
     player.attribute "aria-description" ("The playback speed of this audio player is "
         ++ "controlled by the position of the mouse. The further to the right the mouse is, "
@@ -14,6 +14,6 @@ setup (Sketch p) = {
 }
 
 # Faster further right.
-draw (Sketch p) = player.speed (1 + p.mouseX / p.windowWidth)
+draw (p : Sketch) = player.speed (1 + p.mouseX / p.windowWidth)
 
 main = sketch [setup: setup, draw: draw]

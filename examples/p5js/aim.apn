@@ -2,20 +2,20 @@
 # Rotate toward a point.
 import "p5"
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 400 400
     p.colorMode p.HSB
     p.describe "Two eyes that follow the cursor."
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 0
     eye p 150 200
     eye p 250 200
 }
 
 # An eye at x, y whose pupil turns toward the mouse.
-eye (Sketch p) x y = {
+eye (p : Sketch) x y = {
     angle = atan2 (p.mouseY - y : Number) (p.mouseX - x : Number)
     p.push
     p.translate x y

@@ -13,9 +13,9 @@ import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { NATIVE_EXPORTS, RETIRED_NATIVES } from "./native-exports.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { bundledText, loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
-import { TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
+import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
-import { APNError, didYouMean, withArticle } from "./errors.ts";
+import { APNError, didYouMean, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, listUnion, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
@@ -703,8 +703,14 @@ export class Interpreter {
             case "float": return { t: "float", v: pattern.v };
             case "list": return { t: "list", v: pattern.v.map(p => this.assignmentKey(p)) };
             case "recPat": return { t: "record", v: pattern.v.map(([key, name]) => [key, { t: "var", name }]) };
-            case "typeBind": return { t: "app", f: { t: "var", name: pattern.name }, a: this.assignmentKey(pattern.value) };
-            case "constr": return pattern.args.reduce<Expr>((f, arg) => ({ t: "app", f, a: this.assignmentKey(arg) }), { t: "var", name: pattern.tag });
+            // A typed pattern reads as the ascription it was written as: (i : Int32).
+            case "typeBind": return { t: "app", f: { t: "var", name: pattern.name }, a: this.assignmentKey(pattern.value), ascribed: true };
+            case "schema": return { t: "app", f: pattern.type, a: this.assignmentKey(pattern.value), ascribed: true };
+            case "constr": {
+                const args = pattern.typed ? pattern.args.slice(0, -1) : pattern.args;
+                const head = args.reduce<Expr>((f, arg) => ({ t: "app", f, a: this.assignmentKey(arg) }), { t: "var", name: pattern.tag });
+                return pattern.typed ? { t: "app", f: head, a: this.assignmentKey(pattern.args[pattern.args.length - 1]), ascribed: true } : head;
+            }
             default: throw new APNError("runtime", "collection assignment needs an index expression, not a destructuring pattern");
         }
     }
@@ -955,6 +961,7 @@ export class Interpreter {
     // Evaluates the RHS, matches the pattern, and binds the destructured names
     // in the CURRENT environment (top level or the enclosing block's env).
     evalPatBinding(b: { pattern: Pattern; value: Expr; eager?: boolean; update?: { name: string; value: Expr; error?: string } }): Value {
+        this.typesAfterValues([b.pattern], this.env, b);
         if (b.update && this.env.get(b.update.name)) {
             if (b.update.error) throw new APNError("runtime", b.update.error);
             return this.evalPatBinding({ pattern: { p: "var", name: b.update.name }, value: b.update.value });
@@ -1486,7 +1493,12 @@ export class Interpreter {
                         if (written && this.preludeCons() && this.isBuiltinMatch(this.env.get(((e.f as Extract<Expr, { t: "app" }>).f as Extract<Expr, { t: "var" }>).name))) { next = this.coreMatch(written); break; }
                         // Arguments stay lazy; a completed call can hand its body
                         // straight back to this loop instead of nesting eval calls.
-                        const result = this.apply(this.eval(e.f), { kind: "thunk", body: e.a, env: this.env }, false, true, tailLoad);
+                        const head = this.eval(e.f), argument: Value = { kind: "thunk", body: e.a, env: this.env };
+                        // e : T: a type applied to a value, as a member of it.
+                        const type = e.ascribed ? this.force(head) : undefined;
+                        if (type?.kind === "type") { r = this.typeValue(type, argument); break; }
+                        this.writtenApplication = !e.ascribed;
+                        const result = this.apply(head, argument, false, true, tailLoad);
                         if (result instanceof TailCall) next = result; else r = result;
                         break;
                     }
@@ -1650,7 +1662,9 @@ export class Interpreter {
                             r = this.evalBinop({ t: "binop", op: "$", l: e.f, r: e.x });
                             break;
                         }
-                        const result = this.apply(this.eval(e.f), { kind: "thunk", body: e.x, env: this.env }, false, true, tailLoad);
+                        const head = this.eval(e.f);
+                        this.writtenApplication = true;
+                        const result = this.apply(head, { kind: "thunk", body: e.x, env: this.env }, false, true, tailLoad);
                         if (result instanceof TailCall) next = result; else r = result;
                         break;
                     }
@@ -2061,11 +2075,18 @@ export class Interpreter {
     apply(f: Value, arg: Value, probe?: boolean): Value;
     apply(f: Value, arg: Value, probe: boolean, tail: true, tailLoad: boolean): Value | TailCall;
     apply(f: Value, arg: Value, probe = false, tail = false, tailLoad = false): Value | TailCall {
+        // Applied as written (f x in the program), a type takes only its
+        // parameters: a value is ascribed (x : T).
+        const written = this.writtenApplication;
+        this.writtenApplication = false;
         // A lazy 0-param def used as a function (`f = g; f 1`) is a thunk — run it.
         f = this.force(f);
-        const written = this.asWritten.get(f);
+        const made = this.asWritten.get(f);
         // A written list of types makes a list of them, as .[ ] does.
-        if (written) return this.writtenValue(f, this.isList(written.made) ? this.templateList(written.made, arg) : this.apply(written.made, arg));
+        if (made) {
+            this.writtenApplication = written && !this.isList(made.made);
+            return this.writtenValue(f, this.isList(made.made) ? this.templateList(made.made, arg) : this.apply(made.made, arg));
+        }
         // A value that is not a function applies as get gives it (xs 2 is
         // get xs 2); clauses for get in scope extend it.
         if (!CALLABLE_KINDS.has(f.kind)) {
@@ -2096,50 +2117,13 @@ export class Interpreter {
             });
             case "mutable": return this.apply(this.demand(f), arg);
             case "type": {
-                if (f.name === "$any" && !f.family && !f.alias) return arg;
-                if (f.name === "Bool" && !f.family && !f.alias && !f.choices) return mkBool(this.truthy(arg));
-                // Applying a union checks that the value is one of its types.
-                if (f.choices) {
-                    const value = this.demand(arg);
-                    if (this.belongsToType(f, value)) return value;
-                    throw new APNError("runtime", `${this.typeText(value)} is not one of ${f.name}`);
+                const parameter = this.typeParameter(f, arg);
+                if (parameter) return parameter;
+                if (written && !CONSTRUCTING_TYPES.has(f.name)) {
+                    const { message, hint } = typeApplied(typeToString(f));
+                    throw new APNError("runtime", message, { hint });
                 }
-                if (f.name === "Dynamic" && !f.family && !f.alias) {
-                    this.dynamicDepth++;
-                    try { return this.constructType("Dynamic", this.reference(arg)); }
-                    finally { this.dynamicDepth--; }
-                }
-                if (f.alias) {
-                    const args = [...f.arguments ?? [], arg];
-                    return args.length < f.alias.parameters.length ? { ...f, arguments: args } : this.construct(f, args);
-                }
-                let value = this.demand(arg);
-                // A type variable applied to a type: f a, any type holding a.
-                if (f.variable && f.name !== "_" && this.isTypeValue(value)) return { ...f, arguments: [...f.arguments ?? [], value] };
-                // A base type applied to a named value unwraps it: Float (Money 1.2).
-                if (!f.family && !f.alias && NAMED_BASES.has(f.name)) value = this.baseValue(value);
-                if (this.counted(f) && (f.arguments?.length ?? 0) < 2) {
-                    const args = [...f.arguments ?? []];
-                    if (!args.length && (value.kind !== "int" || value.v < 0n)) throw new APNError("runtime", `${f.name} length must be a nonnegative Int`);
-                    if (args.length === 1 && !this.isTypeValue(value)) throw new APNError("runtime", `${f.name} element must be a type`);
-                    return { ...f, arguments: [...args, value] };
-                }
-                const parameters = f.family?.parameters ?? [];
-                // An indexed family takes values as arguments too (Vec 2 Int).
-                const indexed = !!f.family?.results && !(value.kind === "variant" && value.family === f.family);
-                if ((f.arguments?.length ?? 0) < parameters.length && (indexed || this.isTypeValue(value))) {
-                    return { ...f, arguments: [...f.arguments ?? [], isNumeric(value) ? numericPayload(value) : value] };
-                }
-                if (!f.family && ["Float", "Float32", "Float64"].includes(f.name)) {
-                    if (!isNumeric(value)) throw new APNError("runtime", `${f.name} expects a number`);
-                    return castNumeric(f.name, value, true);
-                }
-                // Applying a named subtype applies its base, as written:
-                // F .1 with F = Float32 is F (Float32 .1).
-                if (f.family?.base && !(value.kind === "variant" && value.family?.base)) {
-                    return this.conform(f, this.apply(f.family.base, value));
-                }
-                return this.conform(f, value);
+                return this.typeValue(f, arg);
             }
             case "closure": {
                 if (f.params.length === 0) {
@@ -2249,6 +2233,7 @@ export class Interpreter {
     // order breaking ties, and the scope its body runs in. Patterns are ranked
     // and matched in the scope they were written in.
     private choose<C extends { params: Pattern[]; guard?: Expr }>(clauses: C[], args: Value[], scope: Env, self?: [string, Value], ranked?: C[]): { clause: C; child: Env } | undefined {
+        for (const clause of clauses) this.typesAfterValues(clause.params, scope, clause);
         const caller = this.env;
         this.env = scope;
         try {
@@ -5283,8 +5268,92 @@ export class Interpreter {
 
     // How many parameters the type a name is bound to takes: List a one,
     // Option a one, Vect n a two; none for Int or a record type.
-    private typeParameters(name: string): number {
-        const bound = this.env.get(name), t = bound && this.reference(bound);
+    // A type given one of its parameters: Vect 2, Option Int, an alias's
+    // argument, a variable type given a type. Undefined when the argument is
+    // instead the value it types (see typeValue).
+    private typeParameter(f: Extract<Value, { kind: "type" }>, arg: Value): Value | undefined {
+        const plain = !f.family && !f.alias;
+        if (plain && (f.name === "$any" || f.name === "Dynamic" || f.name === "Bool" && !f.choices) || f.choices) return undefined;
+        if (f.alias) {
+            const args = [...f.arguments ?? [], arg];
+            return args.length < f.alias.parameters.length ? { ...f, arguments: args } : this.construct(f, args);
+        }
+        const value = this.demand(arg);
+        // List T and IO T: their element and result types (see listType).
+        if (plain && (f.name === "List" || f.name === "IO") && !f.arguments?.length && this.isTypeValue(value)) return this.conform(f, value);
+        // A type variable applied to a type: f a, any type holding a.
+        if (f.variable && f.name !== "_" && this.isTypeValue(value)) return { ...f, arguments: [...f.arguments ?? [], value] };
+        if (this.counted(f) && (f.arguments?.length ?? 0) < 2) {
+            const args = [...f.arguments ?? []];
+            if (!args.length && (value.kind !== "int" || value.v < 0n)) throw new APNError("runtime", `${f.name} length must be a nonnegative Int`);
+            if (args.length === 1 && !this.isTypeValue(value)) throw new APNError("runtime", `${f.name} element must be a type`);
+            return { ...f, arguments: [...args, value] };
+        }
+        const parameters = f.family?.parameters ?? [];
+        // An indexed family takes values as arguments too (Vec 2 Int).
+        const indexed = !!f.family?.results && !(value.kind === "variant" && value.family === f.family);
+        if ((f.arguments?.length ?? 0) < parameters.length && (indexed || this.isTypeValue(value))) {
+            return { ...f, arguments: [...f.arguments ?? [], isNumeric(value) ? numericPayload(value) : value] };
+        }
+        return undefined;
+    }
+    // A type applied to a value, as e : T is: the value as a member of it,
+    // collapsed to it (1.0 : Int is 1), Bool its truthiness, Dynamic a boundary.
+    typeValue(f: Extract<Value, { kind: "type" }>, arg: Value): Value {
+        if (f.name === "$any" && !f.family && !f.alias) return arg;
+        if (f.name === "Bool" && !f.family && !f.alias && !f.choices) return mkBool(this.truthy(arg));
+        // Applying a union checks that the value is one of its types.
+        if (f.choices) {
+            const value = this.demand(arg);
+            if (this.belongsToType(f, value)) return value;
+            throw new APNError("runtime", `${this.typeText(value)} is not one of ${f.name}`);
+        }
+        if (f.name === "Dynamic" && !f.family && !f.alias) {
+            this.dynamicDepth++;
+            try { return this.constructType("Dynamic", this.reference(arg)); }
+            finally { this.dynamicDepth--; }
+        }
+        let value = this.demand(arg);
+        // A base type applied to a named value unwraps it: Float (Money 1.2).
+        if (!f.family && !f.alias && NAMED_BASES.has(f.name)) value = this.baseValue(value);
+        if (!f.family && ["Float", "Float32", "Float64"].includes(f.name)) {
+            if (!isNumeric(value)) throw new APNError("runtime", `${f.name} expects a number`);
+            return castNumeric(f.name, value, true);
+        }
+        // Applying a named subtype applies its base, as written:
+        // F .1 with F = Float32 is F (Float32 .1).
+        if (f.family?.base && !(value.kind === "variant" && value.family?.base)) {
+            return this.conform(f, this.apply(f.family.base, value));
+        }
+        return this.conform(f, value);
+    }
+    // A type's pattern around a value is written (x : Int), which the parser
+    // marks typed; (Int x), with the type first, is the old spelling. Checked
+    // once for each place patterns are written (a clause, a binding).
+    private readonly spellingChecked = new WeakSet<object>();
+    // Set by an application as written, for the apply it makes (see apply).
+    private writtenApplication = false;
+    private typesAfterValues(patterns: Pattern[], scope: Env, place: object): void {
+        if (this.spellingChecked.has(place)) return;
+        this.spellingChecked.add(place);
+        const visit = (p: Pattern): void => {
+            if (p.p === "constr" && p.args.length && !p.typed) {
+                const bound = TYPE_NAMES.includes(p.tag) && !PRELUDE_TYPES.has(p.tag) ? { kind: "type", name: p.tag } as Value : scope.get(p.tag);
+                const type = bound && this.reference(bound);
+                const count = type?.kind === "type" ? type.alias?.parameters.length ?? this.typeParameters(p.tag, scope) : undefined;
+                if (count !== undefined && p.args.length > count) {
+                    throw new APNError("runtime", "a typed pattern writes its type after the value", { hint: `write ${patternSource({ ...p, typed: true })}` });
+                }
+            }
+            for (const value of Object.values(p)) {
+                if (Array.isArray(value)) value.forEach(x => x && typeof x === "object" && "p" in x && visit(x));
+                else if (value && typeof value === "object" && "p" in value) visit(value as Pattern);
+            }
+        };
+        patterns.forEach(visit);
+    }
+    private typeParameters(name: string, scope = this.env): number {
+        const bound = scope.get(name), t = bound && this.reference(bound);
         if (t?.kind !== "type" || t.arguments?.length || t.alias) return 0;
         if (t.family) return t.family.parameters?.length ?? 0;
         return t.name === "List" || t.name === "IO" ? 1 : this.counted(t) ? 2 : 0;

@@ -6,6 +6,9 @@ export const NUMERIC_TYPES = ["Int", "UInt", ...[8, 16, 32, 64, 128].flatMap((n)
 // its to instance where one is needed: an index, arithmetic, a typed pattern.
 export const SCALAR_TYPES = new Set([...NUMERIC_TYPES, "String", "Char", "Bool"]);
 export const TYPE_NAMES = [...NUMERIC_TYPES, "Dynamic", "Vect", "Mutable", "Pointer", "HashMap", "Bool", "String", "Char", "List", "Record", "Function", "Type", "Variant", "IO"];
+// Types that are their own constructors: HashMap [...] builds a map, Mutable 0 a
+// cell, Pointer an address. Every other type is given a value only ascribed.
+export const CONSTRUCTING_TYPES = new Set(["HashMap", "Mutable", "Pointer"]);
 const canonical = (name: string) => name === "Float64" ? "Float" : name;
 // The numeric types that hold others, each with what it holds of the rest.
 const HOLDERS: Record<string, (name: string) => boolean> = {

@@ -31,13 +31,13 @@ slider low high current toMessage = input [
 ] []
 
 # The canvas draws once each time the sliders change.
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas size size
     p.noLoop
 }
 
 # A grid of dots, each as big as the noise at its place.
-draw model (Sketch p) = {
+draw model (p : Sketch) = {
     p.background 255
     p.noStroke
     p.fill 0

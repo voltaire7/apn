@@ -7,14 +7,14 @@ texture = loadImage "assets/particle_texture.png"
 Particle = [position: [Float,Float], velocity: [Float,Float], life: Float, hue: Int]
 particles = Mutable ([] : List Particle)
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 720 400
     p.colorMode p.HSB
     p.describe ("White circle gives off smoke in the middle of the canvas, with wind force "
         ++ "determined by the cursor position.")
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 20
     # The wind, from the mouse's x.
     wind = [(remap p.mouseX 0 p.width -0.2 0.2 : Float), 0.0]
@@ -26,7 +26,7 @@ draw (Sketch p) = {
     drawVector p wind [p.width / 2, 50] 500
 }
 
-newParticle (Sketch p) = {
+newParticle (p : Sketch) = {
     xSpeed <- p.randomGaussian
     ySpeed <- p.randomGaussian
     return [
@@ -44,7 +44,7 @@ blow wind particle = {
 }
 
 # The texture, tinted with the particle's hue, fading as its life runs out.
-render (Sketch p) particle = {
+render (p : Sketch) particle = {
     [x,y] = particle.position
     p.imageMode p.CENTER
     p.call "tint" [particle.hue,255,255,particle.life]
@@ -52,7 +52,7 @@ render (Sketch p) particle = {
 }
 
 # An arrow showing a vector, from a point, scaled.
-drawVector (Sketch p) vector [x,y] scale = {
+drawVector (p : Sketch) vector [x,y] scale = {
     p.push
     p.translate x y
     p.stroke 255

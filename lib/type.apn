@@ -1,3 +1,3 @@
-# Compatibility spelling for lossless type application. Rounding is explicit.
+# cast T x is x : T as a function (map (cast Int) xs). Rounding is explicit.
 cast (target : List _) value = (target : Type).(value)
-cast (target : Type) value = target value
+cast (target : Type) value = value : target

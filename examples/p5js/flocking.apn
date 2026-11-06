@@ -11,7 +11,7 @@ size = 3.0
 maxSpeed = 3.0
 maxForce = 0.05
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 640 360
     p.colorMode p.HSB
     # 30 boids to start, where p5's has 100: each boid looks at every other each
@@ -22,7 +22,7 @@ setup (Sketch p) = {
         ++ "canvas, modeling flocking behavior.")
 }
 
-newBoid (Sketch p) x y = {
+newBoid (p : Sketch) x y = {
     dx <- p.random -1 1
     dy <- p.random -1 1
     hue <- p.random 0 256
@@ -33,13 +33,13 @@ newBoid (Sketch p) x y = {
     ]
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 0
-    set boids (flyAll (Float p.width) (Float p.height) boids)
+    set boids (flyAll (p.width : Float) (p.height : Float) boids)
     mapM (render p) boids
 }
 
-mouseDragged (Sketch p) = {
+mouseDragged (p : Sketch) = {
     boid <- newBoid p p.mouseX p.mouseY
     set boids (boids ++ [boid])
 }
@@ -91,7 +91,7 @@ cohere boid near = {
 }
 
 # A triangle pointing the way the boid flies.
-render (Sketch p) boid = {
+render (p : Sketch) boid = {
     [x,y] = boid.position
     p.fill [boid.hue,255,255]
     p.stroke 255

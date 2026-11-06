@@ -2,7 +2,7 @@
 # Add color to your sketch.
 import "p5"
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.textOutput
     p.createCanvas 720 400
     p.angleMode p.DEGREES

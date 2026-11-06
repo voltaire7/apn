@@ -85,3 +85,10 @@ export function formatFileReadError(file: string, error: unknown): string {
 export function withArticle(noun: string): string {
     return `${/^[AEIOUaeiou]/.test(noun) ? "an" : "a"} ${noun}`;
 }
+
+// A type applied to a value as written (Int x): the message and the
+// spellings that say it.
+export function typeApplied(type: string): { message: string; hint: string } {
+    const convert = type === "Dynamic" ? "" : `, or convert it (to ${type} x)`;
+    return { message: `${type} is a type, not a function`, hint: `ascribe a value (x : ${type})${convert}` };
+}

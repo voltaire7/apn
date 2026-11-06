@@ -73,14 +73,14 @@ for (const [source, expected] of [
     ['[isType Type [Int], isType Type [(*2)], ([Int] : Type)]', '[True,False,[Int]]'],
     ['Option a = Some a | None\nOptional a = Option a\n(Optional Int : Type)', 'Option Int'],
     ['Option a = Some a | None\nOptional a = Option a\n(Some (floor .2) : Optional Int)', 'Some 0'],
-    ['Option a = Some a | None\nOption Int None', 'None'],
+    ['Option a = Some a | None\n(None : Option Int)', 'None'],
     ['Option a = Some a | None\nf (x : Option Int) = x ~ [Some v -> v, None -> (0 : Int)]\nf (Some 123)', '123'],
     ['Option a = Some a | None\nSome x = Some 123\nx', '123'],
     ['Option a = Some a | None\nNone = None\n123', '123'],
     ['UserId = | MkUserId Int\nMkUserId 123', 'MkUserId 123'],
     ['UserId = | MkUserId Int\nget (MkUserId x) = x\nget (MkUserId 123)', '123'],
-    ['Option a = Some a | None\nx = Option Int (Some missing)\nf (Option _ v) = 42\nf x', '42'],
-    ['Option a = Some a | None\ntypeOf (Option Int None)', 'Option Int'],
+    ['Option a = Some a | None\nx = Some missing : Option Int\nf (v : Option _) = 42\nf x', '42'],
+    ['Option a = Some a | None\ntypeOf (None : Option Int)', 'Option Int'],
 ] as const) Deno.test(`templates: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -103,8 +103,8 @@ for (const [source, error] of [
     ['[Int]."hi"', 'expects a number'],
     ['xs = [].[]\nxs 0 = 1', 'out of range'],
     ['xs = [Int]\nxs 1 = 1', 'out of range'],
-    ['Option a = Some a | None\nOption Int (Some (.2 : Float))', 'lossy conversion'],
-    ['Option a = Some a | None\nOption Int (Some "hi")', 'expects a number'],
+    ['Option a = Some a | None\n(Some (.2 : Float) : Option Int)', 'lossy conversion'],
+    ['Option a = Some a | None\n(Some "hi" : Option Int)', 'expects a number'],
     ['Option a = Some a | None\nNone = Some 1', 'pattern'],
     ['Option a = Some a | None\nSome a = | Replacement a', 'cannot redeclare value constructor'],
     ['Bad a a = One a | Two a', 'distinct lowercase'],

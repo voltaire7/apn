@@ -9,7 +9,7 @@ image2 = loadImage "https://picsum.photos/100/100?random=2"
 image3 = loadImage "https://picsum.photos/100/100?random=3"
 
 # Setup waits for preload's images, as for Promise.all's.
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.textOutput
     p.createCanvas 600 400
     p.background 220

@@ -120,7 +120,7 @@ theShader = createShader "
     }
 "
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     # Shaders need WEBGL.
     p.call "createCanvas" [710,400,p.WEBGL]
     p.noStroke
@@ -128,7 +128,7 @@ setup (Sketch p) = {
     p.describe "Sphere broken up into a square grid with a gradient in each grid."
 }
 
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 255
     # The shader's inputs.
     time <- p.millis

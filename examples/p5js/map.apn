@@ -2,7 +2,7 @@
 # Convert a number from one range to another range.
 import "p5"
 
-setup (Sketch p) = {
+setup (p : Sketch) = {
     p.createCanvas 720 400
     p.colorMode p.HSB
     p.noStroke
@@ -10,7 +10,7 @@ setup (Sketch p) = {
 }
 
 # The mouse's x is the circle's hue (0 to 360), its y the circle's size.
-draw (Sketch p) = {
+draw (p : Sketch) = {
     p.background 0
     p.fill [remap p.mouseX 0 p.width 0 360, 80, 90]
     p.circle (p.width / 2) (p.height / 2) (remap p.mouseY 0 p.height 20 300)

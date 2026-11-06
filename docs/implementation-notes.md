@@ -70,7 +70,17 @@ intentional evaluation change.
   pattern a schema once its arguments are all known (`copy n (xs : Sized n)`
   tests `xs` against `Sized n`; `(xs : Pairs n a)` reads `n` back from the
   value). A lone ascription's parentheses are its own: the group is the
-  ascription, not a block around it. A declaration
+  ascription, not a block around it. The old spellings are rejected where each is
+  known: `((T) p)` and `(t x)` by the parser once part of the program
+  (`rejectOldSpellings`; parses that try a pattern and give it up do not
+  count); a type's pattern the parser did not mark `typed` that has one
+  argument more than the type's parameters by the checker's `constr`
+  binding and, once per clause, the run (`typesAfterValues`); a type
+  applied to a value as written by the checker's application and the run,
+  where `apply` reads `writtenApplication` (set by an app or pipe as
+  written) and lets a type take only its parameters (`typeParameter`), a
+  value going through `typeValue` from an ascription alone.
+  `CONSTRUCTING_TYPES` (HashMap, Mutable, Pointer) build their values. A declaration
   (`parseDeclaration`) a marker that `applyDeclarations` replaces, typing the
   parameters of the clauses after it and claiming their results. Application
   statements such as `print $ head $ [1,2,3]` lack `=`, so they stay
@@ -219,7 +229,7 @@ mirrors both: a program's `get` clauses that take the inferred types, else the
 builtin on a known list or record. Tests: `tests/operators-test.ts`,
 `tests/default-checking-test.ts`. `cast` is a `clauseFn`, not a native:
 its clauses validate list templates with `Type` and dispatch to
-`(Type target).(value)`, other types to `target value`. Expose `type`
+`(target : Type).(value)`, other types to `target value`. Expose `type`
 through module loading and browser bundles. `do` is an ordinary function
 exported by `function`. Tests: `tests/language-cast-test.ts`,
 `tests/do-test.ts`.
@@ -298,7 +308,7 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   is (`instanceIn`): `[]` for a list, a failing action for IO, else the
   `throw` instance whose head is the target's. `intrinsics.source` reads a
   parameter's argument expression one step back, as `assert` reads its own.
-- Typed list and variant patterns (`(List Int xs)`, `(Option Int x)`): the
+- Typed list and variant patterns (`(xs : List Int)`, `(x : Option Int)`): the
   checker records list and variant types in the session's `valueTypes`, keyed
   by source position (a disagreement stores `null`), and each schema pattern's
   type in `patternTypes`, keyed by the type `Expr` (so `flatTypedPattern` is
@@ -431,7 +441,7 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
 - `reference()` preserves cell identity; `demand()` reads the contents without
   memoizing the read over the cell. Tests: `tests/mutable-test.ts`.
 - A cell keeps the type a conversion declared for its first contents
-  (`declaredTypes`: `List T x`, a record schema's value) as `schema`, and `set`
+  (`declaredTypes`: `(x : List T)`, a record schema's value) as `schema`, and `set`
   conforms to it. A record marked `shared` (a p5 object) is cached by its
   zero-argument definition like a cell, and a checked write replaces it with
   another shared record of the same fields as itself. Tests:
@@ -577,7 +587,7 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   definition's clauses (`define`) or a function's parameters (`inferFunction`),
   and `bind` reads one met anywhere else, so every checker pass sees one form;
   the runtime applies the same `flatTypedPattern` when it matches, except that
-  it takes `(Vect n a xs)` apart itself (a mismatch fails the match).
+  it takes `(xs : Vect n a)` apart itself (a mismatch fails the match).
   `tests/vect-pattern-test.ts`.
 - A `match` alternative's input starts from `patternInput` (the scrutinee's
   length at cons positions, fresh elsewhere), so its patterns still only test.
@@ -595,7 +605,7 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   constructor pattern's payload untyped (`untypedPayload`), as the runtime
   binds it, but checks a literal payload against the type; unifying function
   types converts at a converting parameter (a recursive `f (k - 1)` for an
-  `(UInt k)` clause). `tests/natural-numbers-test.ts`.
+  `(k : UInt)` clause). `tests/natural-numbers-test.ts`.
 - Binding a variable to a union drops the variable's own occurrences, after
   expanding nested unions: `v = v | t` has the least solution `v = t`. A union
   is not a structural node, so keeping the self-reference never terminates.

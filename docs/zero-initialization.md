@@ -22,7 +22,7 @@ nonempty positional lists must supply exactly one value per field. Only `[]`
 initializes every field from its default. Default fields remain lazy.
 
 Assignments rebind a scoped copy and preserve numeric annotations. The displayed
-`0.0` above is internally `Float 0.0`, so later assignments remain checked Float
+`0.0` above is internally `(0.0 : Float)`, so later assignments remain checked Float
 conversions. The original template remains unchanged.
 
 Assigning a value to a type slot makes it that type's default
@@ -44,10 +44,10 @@ A constructed Float field keeps its type: assigning `Int` to it fails with
 | --- | --- |
 | `Int` | `0` |
 | `Float` | `0.0` |
-| `UInt`, fixed-width integers | Typed zero, e.g. `UInt32 0` |
-| `Float32`, `Float64` | `Float32 0.0`, `Float64 0.0` |
-| `Fraction` | `Fraction 0` (mathematical zero, never 0/0) |
-| `Complex`, `ComplexExact` | `Complex 0`, `ComplexExact 0` |
+| `UInt`, fixed-width integers | Typed zero, e.g. `(0 : UInt32)` |
+| `Float32`, `Float64` | `(0.0 : Float32)`, `(0.0 : Float64)` |
+| `Fraction` | `(0 : Fraction)` (mathematical zero, never 0/0) |
+| `Complex`, `ComplexExact` | `(0 : Complex)`, `(0 : ComplexExact)` |
 | `Number`, `Real`, `Integer`, `Exact` | Exact integer `0` |
 | `Inexact` | Inexact `0.0` |
 | `Bool` | `False` |
@@ -82,7 +82,7 @@ Int * 3                # [0,1,2]
 
 Types remain first-class callable values. Reflection and generic `(t x)` patterns
 return the same callable type descriptions. Function iteration and composition
-are unchanged. Passing `Int` to an `(Int x)` pattern fails: the descriptor is
+are unchanged. Passing `Int` to an `(x : Int)` pattern fails: the descriptor is
 not an integer.
 
 ## Variant defaults
@@ -105,7 +105,7 @@ is bounded to 128 levels. Supplied fields bypass default initialization.
 
 `Type`, `Function`, function contracts, `Mutable`, and the abstract `Variant`
 guard require explicit values; initialization does not invent functions or
-allocate mutable cells. Use `Mutable (Int 0)` for an explicit cell.
+allocate mutable cells. Use `Mutable (0 : Int)` for an explicit cell.
 
 ## Lossless construction
 
@@ -132,7 +132,7 @@ cast (target : Type) value = target value
 It is now equivalent to direct application, including rejection of lossy inputs.
 Prefer the constructor directly; choose `floor`, `ceiling`, `round`, `truncate`,
 or `inexact` explicitly when the value needs rounding first. Float32 arithmetic
-continues to round its results to binary32, but `Float32 .1` now errors.
+continues to round its results to binary32, but `(.1 : Float32)` now errors.
 
 Numeric assignment uses the same type as `typeOf`, including for literals:
 `v = [x: 1]; v.x = 1.0` keeps Int 1, while `v.x = 1.5` fails.
