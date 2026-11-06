@@ -913,6 +913,9 @@ for (const source of [
     'g (f (q (takeWhile (< 300) [1..])))',
     'g (f (q (take 2 (repeat 0))))',
 ]) Deno.test(`parse and deep recursion stay checked: ${source}`, () => rejected(session(), `${optionClauses}\n${sizeClauses}\n${textClauses}\n${deepClauses}\n${source}`));
+// A count and a drop written in APN, walking a list cell by cell.
+const WALKS = 'cn [] n = n; cn (_ :: rest) (Int n) = cn rest (n + 1)\n' +
+    'dr _ [] = []; dr 0 (x :: rest) = x :: rest; dr (Int n) (_ :: rest) = dr (n - 1) rest\n';
 // A name a block binds twice is one binding: lazy definitions and closures
 // see its latest value, eager ones (<-) the value where they stand. Long lists
 // are walked within the work budget; ranges are cut arithmetically.
@@ -933,6 +936,12 @@ for (const [source, expected] of [
     ['g (f (r (sum [1..20000] == 200010000)))','0'],
     ['g (f (r (length (filter (> 15000) [1..20000]) == 5000)))','0'],
     ['g (f (r ([5,3..0] == [5,3,1])))','0'],
+    // A function that walks a range, counting, skips through it: cn counts,
+    // dr drops until its count reaches 0, both written in APN. (Checked, not
+    // run: the run, lazy, never needs checked.)
+    [`${WALKS}checked = g (f (r (cn [1..10000000000] 0 == 10000000000)))\n0`, '0'],
+    [`${WALKS}checked = g (f (r (cn [1,3..2000001] 0 == 1000001)))\n0`, '0'],
+    [`${WALKS}checked = g (f (r (head (dr 1000000 [0..]) == 1000000)))\n0`, '0'],
 ] as const) Deno.test(`rebinding blocks and long lists: ${source}`, () => {
     const actual = run(session(), `${optionClauses}\n${sizeClauses}\n${textClauses}\n${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -944,6 +953,18 @@ for (const source of [
     'g (f (r (length [1..1000000] == 999999)))',
     'g (f (r (sum [1..20000] == 0)))',
 ]) Deno.test(`rebinding blocks and long lists stay checked: ${source}`, () => rejected(session(), `${optionClauses}\n${sizeClauses}\n${textClauses}\n${source}`));
+// Skipped through, a wrong count is a length mismatch the checker finds, not
+// a value it cannot decide.
+for (const source of [
+    `${WALKS}g (f (r (cn [1..10000000000] 0 == 9999999999)))`,
+    `${WALKS}g (f (r (head (dr 1000000 [0..]) == 0)))`,
+]) Deno.test(`a walk skipped through is decided: ${source}`, () => {
+    try { run(session(), `${optionClauses}\n${sizeClauses}\n${textClauses}\n${source}`); } catch (error) {
+        if ((error as Error).message.includes("length mismatch")) return;
+        throw error;
+    }
+    throw new Error(`accepted: ${source}`);
+});
 // Effects are not performed, but their results are known. Mutable cells keep
 // their contents unless code in the session can write one (set, load, use).
 const effectPrelude = `${optionClauses}\n${sizeClauses}\n${textClauses}`;

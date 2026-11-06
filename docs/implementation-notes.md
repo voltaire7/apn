@@ -641,7 +641,11 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   `dropKnown`), never by recursion over indexes, and never materialize one
   eagerly; `elementsOf` and `dropKnown` spend one unit of work per element,
   and `Known.range` (`rangeKnown`, `rangeElement`) indexes, drops and takes
-  integer ranges arithmetically. `evaluateNative` runs the
+  integer ranges arithmetically. A clause that walks a range by a tail call
+  to itself, its other arguments passed on or moved by a constant (a count),
+  takes every step it would repeat at once (`skipRange`): up to the first
+  step an earlier clause may take, at a `[]` or at a count's literal, for
+  any function so written, not only the prelude's. `evaluateNative` runs the
   pure `EVALUATED_NATIVES`. Depth (`EVALUATION_DEPTH`) and work
   (`EVALUATION_BUDGET`, per root via `budgeted`) are bounded, and a
   JavaScript stack overflow (`RangeError`) in static evaluation leaves the

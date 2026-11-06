@@ -5003,6 +5003,68 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function evaluateCall(summary: Summary, args: Known[], depth: number, base = new Map<string, Known>()): Known | undefined {
         return settle(callStep(summary, args, depth, base));
     }
+    // A clause f ... (_ :: rest) ... = f ... rest ... whose other arguments
+    // are passed on or move by a constant (n + 1), over a range: each step is
+    // the same clause until a clause before it can match, at a [] or at a
+    // count's literal, or the range ends. Those steps are taken at once, the
+    // range cut and each count moved arithmetically, as running them would.
+    function skipRange(summary: Summary, clause: Summary["clauses"][number], args: Known[]): Known[] | undefined {
+        const bare = (x: Expr): Expr => x.t === "block" && x.stmts.length === 1 && x.style === "(" ? bare(x.stmts[0] as Expr) : x;
+        const body = bare(clause.body);
+        const callArgs: Expr[] = [];
+        let head: Expr = body;
+        while (head.t === "app") { callArgs.unshift(bare(head.a)); head = head.f; }
+        const arity = clause.params.length;
+        if (head.t !== "var" || callArgs.length !== arity || clause.params.some(p => patternNames(p).includes(head.name))) return undefined;
+        const entry = summary.scope.get(head.name);
+        if (!entry || summaryAt(entry.type, arity) !== summary) return undefined;
+        // What a parameter binds the whole argument to: x, or (Int x).
+        const whole = (p: Pattern) => p.p === "var" ? p.name : p.p === "constr" && p.tag === "Int" && p.args.length === 1 && p.args[0].p === "var" ? p.args[0].name : undefined;
+        let list = -1, range: KnownRange | undefined;
+        const moves: (bigint | undefined)[] = [];
+        for (const [i, p] of clause.params.entries()) {
+            const a = callArgs[i], value = demand(args[i]);
+            if (p.p === "cons" && (p.head.p === "wildcard" || p.head.p === "var" && !mentions(body, new Set([p.head.name]))) && p.tail.p === "var" && a.t === "var" && a.name === p.tail.name) {
+                if (list >= 0 || !value?.range) return undefined;
+                list = i; range = value.range; moves.push(undefined);
+                continue;
+            }
+            const name = whole(p);
+            if (!name) return undefined;
+            if (a.t === "var" && a.name === name) { moves.push(0n); continue; }
+            const n = numericOf(value);
+            if (a.t !== "binop" || !["+", "-"].includes(a.op) || !builtinAt(a, summary.scope) || a.l.t !== "var" || a.l.name !== name || a.r.t !== "int" || n?.kind !== "int") return undefined;
+            moves.push(a.op === "+" ? a.r.v : -a.r.v);
+        }
+        if (list < 0 || !range) return undefined;
+        const length = range.hi === null ? undefined : (range.step > 0n ? range.hi >= range.lo : range.hi <= range.lo) ? (range.hi - range.lo) / range.step + 1n : 0n;
+        // The steps before the first one some earlier clause may take.
+        let steps = length;
+        for (const other of summary.clauses) {
+            if (other === clause || other.index > clause.index) continue;
+            let at: bigint | undefined, never = false;
+            for (const [i, p] of other.params.entries()) {
+                if (p.p === "wildcard" || p.p === "var" && !other.refutable.has(p.name)) continue;
+                if (i === list && p.p === "list" && !p.v.length) { if (length === undefined) never = true; else at = at === undefined || at === length ? length : -1n; continue; }
+                if (i === list && p.p === "cons" && (p.head.p === "wildcard" || p.head.p === "var") && (p.tail.p === "wildcard" || p.tail.p === "var")) continue;
+                const move = moves[i], n = numericOf(demand(args[i]));
+                if (p.p !== "int" || move === undefined || n?.kind !== "int") return undefined;
+                const distance = p.v - n.v;
+                const when = move === 0n ? (distance === 0n ? 0n : undefined) : distance % move === 0n && distance / move >= 0n ? distance / move : undefined;
+                if (when === undefined) { never = true; continue; }
+                at = at === undefined || at === when ? when : -1n;
+            }
+            if (never || at === -1n) continue;
+            if (at === undefined) return undefined;
+            if (steps === undefined || at < steps) steps = at;
+        }
+        if (steps === undefined || steps < 16n) return undefined;
+        return args.map((k, i) => {
+            if (i === list) return rangeKnown(range!.lo + steps! * range!.step, range!.step, range!.hi) ?? {};
+            if (moves[i] === 0n) return k;
+            return { index: constant((numericOf(demand(k)) as { v: bigint }).v + steps! * moves[i]!) };
+        });
+    }
     // The call, its body left in tail position when one clause can apply.
     function callStep(summary: Summary, args: Known[], depth: number, base = new Map<string, Known>()): Known | Tail | undefined {
         if (!spendEvaluation(depth)) return undefined;
@@ -5014,6 +5076,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (!candidates.length) return undefined;
         if (candidates.length === 1) {
             const { clause } = candidates[0], env = new Map(base);
+            // A clause that walks a range, counting, is taken all the steps it
+            // will take at once (see skipRange).
+            const skipped = base.size ? undefined : skipRange(summary, clause, args);
+            if (skipped) return callStep(summary, skipped, depth + 1, base);
             clause.params.forEach((p, i) => bindKnown(p, args[i], env, clause.refutable));
             return new Tail(clause.body, env, summary.scope, depth + 1);
         }
