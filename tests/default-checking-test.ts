@@ -51,6 +51,9 @@ for (const [source, expected] of [
     [`${FL}rv (List _ xs) = fl (acc, x -> x :: acc) [] xs\nf xs = map (x -> x) (rv xs)\nf [1,2]`, '[2,1]'],
     // Its lengths are the run's: a fold that keeps its accumulator keeps [1,2].
     [`${FL}g (fl (acc, x -> acc) [1,2] [3])`, '3'],
+    // A recursive call has the function's type as a whole: f rest gives what
+    // f [] = 0 gives, a number, which a Float element adds to.
+    ['f [] = 0; f (x :: rest) = x + f rest; f [1.5,2]', '3.5'],
     // Clauses that differ only in their results' lengths, a call no ranking
     // decides: a list whose length the run finds, never one choice's [].
     ...["(+) 1 1", "negate -2", "Int 2", "id 2"].map(count => [`id x = x; tk 0 _ = []; tk _ [] = []; tk n (x :: rest) = x :: tk (n - 1) rest\n` +
@@ -338,6 +341,9 @@ for (const source of [
     'g [a,b] = tail [0, b, a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1,2]',
     `${TK2}tk n xs = n < 0 ? [] : tk2 n xs\nf (tk 1 [1,2,3])`,
     `${TK2}tk n xs = n > 0 ? tk2 n xs : []\nf (tk 0 [1,2,3])`,
+    // A recursive call has the whole function's type: f rest is a number.
+    'f [] = 0; f (x :: rest) = x + f rest; f ["a"]',
+    'f [] = 0; f (x :: rest) = f rest + x; f ["a"]',
 ]) Deno.test(`checker still rejects: ${source}`, () => rejected(session(), source));
 // Length-preserving builtins carry their input's length, and separate uses of
 // one generic function keep independent lengths.
@@ -390,6 +396,17 @@ for (const source of [
     'f xs = xs ++ xs; g [a,b] = a + b; g (f [1,2])',
     'f xs = { xs = [1,2,3]; xs }; g [a,b] = a + b; g (f [1,2])',
 ]) Deno.test(`length changes stay unknown: ${source}`, () => rejected(session(), source));
+// A call only one clause may run fails as that clause does, not as a call no
+// clause accepts: f [] cannot take ["a"], so f (x :: rest)'s + is the error.
+for (const source of ['f [] = 0; f (x :: rest) = x + 1; f ["a"]', `${FL}fl (+) 0 ["a"]`]) {
+    Deno.test(`the one clause that may run reports: ${source}`, () => {
+        try { run(session(), source); } catch (error) {
+            if (/cannot combine (String and Int|Int and String)/.test((error as Error).message)) return;
+            throw error;
+        }
+        throw new Error(`accepted: ${source}`);
+    });
+}
 // Nested lengths: a function's result shape is described in terms of its
 // arguments, and is trusted only where the function is called directly by name.
 for (const [source, expected] of [

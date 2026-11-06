@@ -893,6 +893,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Trying an overload's choices, which defers a call on its own (see application).
     let choosing = 0;
+    // Two of a call's results that are one: alike, and if partial calls, of the
+    // same clauses (f [] and f (x :: rest), both a -> List b -> a, are two).
+    function sameChoice(a: Ty, b: Ty): boolean {
+        const x = resolve(a), y = resolve(b);
+        return text(x) === text(y) && (x.k !== "fn" || y.k !== "fn" || x.clauses === y.clauses);
+    }
     // An argument whose value, or an element's, depends on an enclosing parameter.
     function symbolicArgument(argument: Known): boolean {
         return symbolic({ index: argument.index, ref: argument.ref, call: argument.call, expr: argument.expr, fn: argument.fn }) ||
@@ -2768,6 +2774,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const accepted: { clauses?: ClauseOrder[]; call?: Entry[]; free?: boolean }[] = [];
             // The builtin meaning clauses extend (get's), last, says why it fails.
             let builtinError: unknown;
+            // The errors of complete calls a clause of may match, as the run
+            // tries them: when only one may, its error is the call's (x + 1 in
+            // f (x :: rest) = x + 1, given ["a"]; f [] cannot match it).
+            const taking: unknown[] = [];
             for (const choice of f.choices) {
                 const instance = copy(choice), node = resolve(instance);
                 choosing++;
@@ -2788,6 +2798,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 } catch (error) {
                     if (!error || typeof error !== "object" || !("message" in error)) throw error;
                     if (node.k === "intrinsic") builtinError = error;
+                    else if (node.k === "fn" && node.clauses) {
+                        const args = [...node.callArgs ?? [], argument];
+                        if (node.clauses.some(c => c.params.length === args.length && !rankClause(c, args).fails)) taking.push(error);
+                    }
                 } finally { choosing--; }
             }
             // A complete call: drop choices none of whose clauses can run, because
@@ -2806,11 +2820,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 accepted.splice(0, accepted.length, ...accepted.filter((_, n) => kept[n]));
                 // Still ambiguous, and the arguments depend on an enclosing function's
                 // parameters: decide at that function's calls, where they are known.
-                if (!deciding && outputs.length > 1 && outputs.some(x => text(x) !== text(outputs[0])) && accepted.some(a => a.call!.some(symbolic))) {
+                if (!deciding && outputs.length > 1 && !outputs.every(x => sameChoice(x, outputs[0])) && accepted.some(a => a.call!.some(symbolic))) {
                     return evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument);
                 }
             }
             if (!outputs.length && builtinError) throw builtinError;
+            if (!outputs.length && taking.length === 1) throw taking[0];
             if (!outputs.length) return problem(`no overload accepts ${text(argument.type)}`, e);
             // A complete call (a partial one's choices are functions, which its
             // next argument decides) whose result no input decides (a recursive
@@ -2819,7 +2834,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const complete = !outputs.some(x => ["fn", "intrinsic", "overload"].includes(resolve(x).k));
             const whole = complete && accepted.some(a => a.free) ? principalOf(f) : undefined;
             if (whole) return withoutLengths(application(whole, argument, e));
-            if (outputs.length === 1 || outputs.every((x) => text(x) === text(outputs[0]))) return outputs[0];
+            if (outputs.length === 1 || outputs.every(x => sameChoice(x, outputs[0]))) return outputs[0];
             // A complete call no ranking decides:
             // with results that differ only in their lengths (tk 0 _ = [] and
             // tk n (x :: r) = ...), it is a list whose length the run finds.
@@ -6776,6 +6791,22 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             scope.set(name, { type, nonGeneric, clauses });
         } else {
             if (pending.k === "var" && !pending.link) pending.link = type;
+            // A recursive call has the function's type as a whole, as in a
+            // single clause: f rest in x + f rest gives what f [] = 0 gives.
+            // Its parameters and result are the whole's; the call keeps its
+            // own node, its clauses evaluating it.
+            else if (type.k === "overload") {
+                const whole = principalOf(type), arity = clauses[0].params.length;
+                const share = (call: Ty, of: Ty) => {
+                    let c = resolve(call), w = resolve(of);
+                    for (let n = 0; n < arity && c.k === "fn" && w.k === "fn"; n++, c = resolve(c.output), w = resolve(w.output)) {
+                        // The whole, without lengths, is the less specific side.
+                        unify(w.input, c.input, location);
+                        if (n === arity - 1) unify(w.output, c.output, location);
+                    }
+                };
+                if (whole && succeeds(() => { const vars = new Map<Ty, Ty>(); share(copy(pending, vars), copy(whole, vars)); })) share(pending, whole);
+            }
             scope.set(name, { type, nonGeneric, clauses });
         }
     }
