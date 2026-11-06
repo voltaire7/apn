@@ -94,11 +94,14 @@ for (const [source, expected] of [
 });
 
 // The checker's evaluator knows an operator's result in each spelling: f
-// checks only when the take count, and so the list's length, is known.
+// checks only when the take count, and so the list's length, is known, also
+// through a take written in APN, which passes the count on.
+const TK = 'import "function"; tk2 0 _ = []; tk2 _ [] = []; tk2 n (x :: rest) = x :: tk2 (n - 1) rest\n' +
+    'tk (Int n) xs = n < 0 ? fail "negative" : tk2 n xs\n';
 for (const count of ["1 + 1", "(+) 1 1", "intrinsics.add 1 1", "(1 +) 1", "($) id 2", "intrinsics.apply id 2",
     "(-) 3 1", "intrinsics.sub 3 1", "length ((++) [1] [2])", "length (intrinsics.cons 1 [5])", "negate -2"]) {
-    Deno.test(`the checker evaluates each spelling: ${count}`, () => {
-        const actual = run(`id x = x\nf [a,b] = a\nprint (f (take (${count}) [1,2,3]))`);
+    for (const [take, prefix] of [["take", ""], ["tk", TK]]) Deno.test(`the checker evaluates each spelling (${take}): ${count}`, () => {
+        const actual = run(`${prefix}id x = x\nf [a,b] = a\nprint (f (${take} (${count}) [1,2,3]))`);
         if (actual.join() !== "1") throw new Error(actual.join());
     });
 }

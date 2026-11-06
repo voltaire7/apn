@@ -4892,7 +4892,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const args: Expr[] = [];
             let head: Expr = e;
             while (head.t === "app") { args.unshift(head.a); head = head.f; }
-            if (head.t !== "var") return {};
+            // A call of a section or a field ((1 +) 1, intrinsics.add 1 1) is
+            // computed, as its other spellings are.
+            if (head.t !== "var") return computed(e, scope);
             const entry = scope.get(head.name);
             if ((NUMERIC_TYPES.includes(head.name) || EVALUATED_NATIVES.has(head.name) || ["Bool", "Mutable", "to", "from", "S"].includes(head.name)) && entry?.builtin) return computed(e, scope);
             if (/^[A-Z]/.test(head.name)) {
