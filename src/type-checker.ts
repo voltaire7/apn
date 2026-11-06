@@ -6050,8 +6050,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function shapeAt(type: Ty, count: number): Shape | undefined {
         let t = resolve(type);
         if (t.k === "overload") {
-            // Choices that cannot take a list (such as reverse's String clause) are excluded.
-            const choices = t.choices.filter(choice => { const c = resolve(choice); return c.k === "fn" && resolve(c.input).k !== "atom"; });
+            // Choices that take no list in any parameter (such as reverse's
+            // String clause) are excluded; en2 (Int n) (x :: rest) takes one.
+            const takesList = (choice: Ty): boolean => {
+                let c = resolve(choice);
+                for (let n = 0; n < count && c.k === "fn"; n++, c = resolve(c.output)) if (resolve(c.input).k !== "atom") return true;
+                return false;
+            };
+            const choices = t.choices.filter(choice => resolve(choice).k === "fn" && takesList(choice));
             return choices.length ? choices.map(c => shapeAt(c, count)).reduce((x, y) => meetShapes(x, y)) : undefined;
         }
         for (let n = 1; n < count; n++) {

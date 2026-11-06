@@ -50,6 +50,10 @@ for (const [source, expected] of [
     // decides: a list whose length the run finds, never one choice's [].
     ...["(+) 1 1", "negate -2", "Int 2", "id 2"].map(count => [`id x = x; tk 0 _ = []; tk _ [] = []; tk n (x :: rest) = x :: tk (n - 1) rest\n` +
         `f [a,b] = a\nf (tk (${count}) [1,2,3])`, '1'] as const),
+    // A result's shape comes from every choice that may take a list, the
+    // count before the list too: en2's (Int n) (x :: rest), not [] alone.
+    ['en xs = en2 0 xs; en2 _ [] = []; en2 (Int n) (x :: rest) = [n,x] :: en2 (n + 1) rest\n' +
+        'g [p,q] = p\ng (en [10,20])', '[0,10]'],
     // Another union of list types is unfolded when it runs.
     ['Pairs a = [] | a :: a :: Pairs a; f (Pairs Int xs) = length xs; f [1,2]', '2'],
     // Clauses typed by their lists' element types are overloads, in either order.
