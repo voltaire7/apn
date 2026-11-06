@@ -42,6 +42,9 @@ for (const [source, expected] of [
     ['typeOf [1,2] ~ [List Int -> 1, _ -> 0]', '1'],
     // An endless list never matches [], also through a call made in a function's body.
     ['z [] = []; z (x :: r) = [x]; w xs = z xs; f [a] = a; f (w [1..])', '1'],
+    // An operation reads its operands once its calls are decided: hd x with a
+    // fail clause is the element there, compared as one.
+    ['import "function"; hd (x :: _) = x; hd [] = fail "e"; h x = hd x > 1; h [1]', 'False'],
     // A call whose argument holds the call itself stays undecided: left's
     // elements are what hd gives, in a branch of what left is.
     ['import "function"; hd (x :: _) = x; hd [] = fail "empty"; nl [] = True; nl (_ :: _) = False\n' +
@@ -346,6 +349,7 @@ for (const source of [
     'g [a,b] = tail [0, b, a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1,2]',
     `${TK2}tk n xs = n < 0 ? [] : tk2 n xs\nf (tk 1 [1,2,3])`,
     `${TK2}tk n xs = n > 0 ? tk2 n xs : []\nf (tk 0 [1,2,3])`,
+    'import "function"; hd (x :: _) = x; hd [] = fail "e"; h x = hd x > 1; h ["a"]',
     // A recursive call has the whole function's type: f rest is a number.
     'f [] = 0; f (x :: rest) = x + f rest; f ["a"]',
     'f [] = 0; f (x :: rest) = f rest + x; f ["a"]',

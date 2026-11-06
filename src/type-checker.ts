@@ -1048,16 +1048,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return held === undefined ? v : held ?? variable();
     }
     function evaluateOperation(t: Extract<Ty, { k: "operation" }>): Ty {
-        const operands = t.args.map(resolve);
-        // A Mutable cell is read for its contents, as at runtime.
-        if (["+", "-", "*", "/", "%", "^", "++", "compare", "negate", "length", "pairs", "keys", "values", "enumerate"].includes(t.op)) {
-            for (let n = 0; n < operands.length; n++) {
-                while (operands[n].k === "mutable") operands[n] = resolve((operands[n] as Extract<Ty, { k: "mutable" }>).value);
-                // A value of the program's own type is the number its to instance makes.
-                if (operands[n].k === "variant") operands[n] = resolve(builtinTyped("Int", operands[n]) ?? builtinTyped("Float", operands[n]) ?? operands[n]);
+        // Read when used: resolving an argument may decide a call it holds,
+        // so the waiting check below can find more than a first reading did.
+        const read = (): Ty[] => {
+            const operands = t.args.map(resolve);
+            // A Mutable cell is read for its contents, as at runtime.
+            if (["+", "-", "*", "/", "%", "^", "++", "compare", "negate", "length", "pairs", "keys", "values", "enumerate"].includes(t.op)) {
+                for (let n = 0; n < operands.length; n++) {
+                    while (operands[n].k === "mutable") operands[n] = resolve((operands[n] as Extract<Ty, { k: "mutable" }>).value);
+                    // A value of the program's own type is the number its to instance makes.
+                    if (operands[n].k === "variant") operands[n] = resolve(builtinTyped("Int", operands[n]) ?? builtinTyped("Float", operands[n]) ?? operands[n]);
+                }
             }
-        }
-        const [a, b] = operands;
+            return operands;
+        };
+        let operands = read(), [a, b] = operands;
         // when c action: in the action's monad, whatever c is.
         // enumFrom a and the like are [a..] and the like (see rangeType).
         if (RANGE_FUNCTIONS.has(t.op)) {
@@ -1067,6 +1072,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (t.op === "when") return b.k === "var" || b.k === "operation" ? t : monadicType("then", b, pendingTy(list(variable(), constant(0n))));
         if (t.args.some(x => { const v = resolve(x); return v.k === "var" || v.k === "operation"; })) return t;
+        operands = read(); [a, b] = operands;
         if (t.op === "run") return runType(a);
         if (["map", "ap", "bind", "then", "bindFlip", "sequence", "mapM"].includes(t.op)) return monadicType(t.op, a, b);
         if (t.op === "merge-record") {
