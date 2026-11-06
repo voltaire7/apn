@@ -38,6 +38,10 @@ for (const [source, expected] of [
     ['typeOf [1,2] ~ [List Int -> 1, _ -> 0]', '1'],
     // An endless list never matches [], also through a call made in a function's body.
     ['z [] = []; z (x :: r) = [x]; w xs = z xs; f [a] = a; f (w [1..])', '1'],
+    // A call whose argument holds the call itself stays undecided: left's
+    // elements are what hd gives, in a branch of what left is.
+    ['import "function"; hd (x :: _) = x; hd [] = fail "empty"; nl [] = True; nl (_ :: _) = False\n' +
+        'm left right = nl left ? right : (nl right ? left : [hd left])\nm [1] [2]', '[1]'],
     // Another union of list types is unfolded when it runs.
     ['Pairs a = [] | a :: a :: Pairs a; f (Pairs Int xs) = length xs; f [1,2]', '2'],
     // Clauses typed by their lists' element types are overloads, in either order.

@@ -565,6 +565,14 @@ function variables(
     else children(t).forEach((x) => variables(x, found, seen));
     return found;
 }
+// Whether t holds the node op, following links and deciding nothing.
+function holds(t: Ty, op: Ty, seen = new Set<Ty>()): boolean {
+    while (t.k === "var" && t.link) t = t.link;
+    if (t === op) return true;
+    if (seen.has(t)) return false;
+    seen.add(t);
+    return children(t).some(x => holds(x, op, seen));
+}
 function captured(scope: Scope): Set<Ty> {
     const found = new Set<Ty>();
     for (const entry of scope.values()) {
@@ -1211,6 +1219,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const numeric = (x: Ty) => x.k === "atom" && NUMERIC_TYPES.includes(x.name);
         const callable = (x: Ty) => ["fn", "type", "overload"].includes(x.k);
         if (t.op === "call") {
+            // An argument holding the call itself (left in f (hd left), its
+            // elements what hd gives) cannot decide it: it stays deferred.
+            if (holds(t.args[1], t)) return t;
             const outer = evaluatingCall, active = activeExpression;
             evaluatingCall = t;
             // Decided while its own definition is checked (not at a call that
