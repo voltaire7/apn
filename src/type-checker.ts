@@ -5077,10 +5077,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (k.number?.typeName) return atom(k.number.typeName);
         if (k.float !== undefined) return atom("Float");
         if (k.index && !k.index.terms.size) return atom("Int");
-        if (k.boolean !== undefined) return atom("Bool");
         if (k.string !== undefined) return atom("String");
         if (k.char !== undefined) return atom("Char");
         if (isList(k)) return list(dynamic);
+        // Last: any other value's truthiness is known too ("a" is true).
+        if (k.boolean !== undefined) return atom("Bool");
         return dynamic;
     }
     // Whether two known values are equal, as the runtime compares them.

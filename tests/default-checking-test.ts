@@ -761,6 +761,8 @@ for (const [source, expected] of [
     ['hh ys = g (f (q (sort ys))); hh [1]', '0'],
     ['g (f (sm (len [1])))', '0'],
     ['hh ys = g (f (sm (len ys))); hh [3]', '0'],
+    // A known value has its own type: "a" a String, though it is also true.
+    ['ln (String s) = 1; ln xs = 3; hh s = g (f (sm (ln s))); hh "a"', '0'],
 ] as const) Deno.test(`length calls: ${source}`, () => {
     const actual = run(session(), `${optionClauses}\n${sizeClauses}\n${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -773,6 +775,7 @@ for (const source of [
     'hh ys = g (f (q ys)); hh [1,2]',
     'hh ys = g (f (q (1 :: ys))); hh [2]',
     'hh ys = g (f (q (ys ++ ys))); hh [2]',
+    'ln (Bool b) = 1; ln xs = 3; hh s = g (f (sm (ln s))); hh "a"',
     'hh ys = g (f (q (map (+ 1) ys))); hh [1,2]',
     'g (f (sm (len [1,2])))',
     // A predicate whose value stays unknown decides nothing: both clauses count.
