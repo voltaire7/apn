@@ -429,6 +429,14 @@ class Parser {
                 } catch { /* an ordinary grouped pattern */ } finally { this.noLambda = noLambda; }
                 this.i = signatureStart;
             }
+            // A union of types with no name, (Int | String), matches a value of
+            // one of them, as (a -> b) matches a function.
+            if (close === ")" && this.arrowBefore(close, "|")) {
+                const type = this.parseExpr();
+                if (type.t !== "binop" || type.op !== "|" || !this.isSym(close)) throw new Error("Parser: a union in a pattern is types joined by '|': (Int | String)");
+                this.next();
+                return { p: "schema", type, value: { p: "wildcard" } };
+            }
             const typeName = this.peek(), valueName = this.peek(1), closing = this.peek(2);
             // (t x) binds the value's type and payload; (_ x) only the payload.
             if (typeName.k === "ident" && (/^[a-z]/.test(typeName.v) || typeName.v === "_") &&
@@ -947,14 +955,15 @@ class Parser {
 
     // Whether a -> comes before the bracket closing the current group, at
     // its own level (a cheap look before trying to parse a lambda).
-    arrowBefore(close: string): boolean {
+    // Whether this symbol (-> by default) stands at this level before the group closes.
+    arrowBefore(close: string, symbol = "->"): boolean {
         for (let j = this.i, depth = 0; j < this.toks.length; j++) {
             const t = this.toks[j];
             if (t.k === "eof") return false;
             if (t.k !== "sym") continue;
             if (t.v === "(" || t.v === "[" || t.v === "{") depth++;
             else if (t.v === ")" || t.v === "]" || t.v === "}") { if (depth-- === 0) return false; }
-            else if (t.v === "->" && depth === 0) return true;
+            else if (t.v === symbol && depth === 0) return true;
         }
         return false;
     }
@@ -2441,7 +2450,15 @@ function bareSource(e: Expr, where: Place): string {
 export function patternSource(p: Pattern): string {
     switch (p.p) {
         case "as": return `${patternSource(p.left)}.${patternSource(p.right)}`;
-        case "schema": return `(${exprToSource(p.type)} ${patternSource(p.value)})`;
+        case "schema": {
+            // A type spelled with an operator (Int | String, a -> a) is grouped
+            // before its value's name, and stands alone for no name.
+            let written = p.type;
+            while (written.t === "block" && written.style === "(" && written.stmts.length === 1) written = written.stmts[0];
+            const type = exprToSource(written), spelled = ["binop", "lambda", "patternLambda"].includes(written.t);
+            if (spelled && p.value.p === "wildcard") return `(${type})`;
+            return spelled ? `((${type}) ${patternSource(p.value)})` : `(${type} ${patternSource(p.value)})`;
+        }
         case "wildcard": return "_";
         case "var": return p.name;
         case "int": return String(p.v);

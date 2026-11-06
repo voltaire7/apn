@@ -104,3 +104,11 @@ Deno.test('a fixed Vect pattern rejects an infinite list without consuming it', 
     if (run('f (Vect 2 a xs) = 1; f _ = 0; f [1..]') !== '0') throw new Error('wrong clause');
     if (run('f n (Vect n a xs) = 1; f _ _ = 0; f 2 [1..]') !== '0') throw new Error('wrong repeated-index clause');
 });
+// A type spelled with an operator is grouped before its value's name, and
+// stands alone for none: each prints as it parses back.
+for (const source of ["(Int | String)", "((Int | String) x)", "(a -> a)", "((a -> a) f)", "([Int] xs)"]) {
+    Deno.test(`typed pattern source round-trips: ${source}`, () => {
+        const pattern = (parseDocument(`g ${source} = 1`)[0] as Extract<ReturnType<typeof parseDocument>[number], { t: "def" }>).clauses[0].params[0];
+        if (patternSource(pattern) !== source) throw new Error(patternSource(pattern));
+    });
+}

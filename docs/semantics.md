@@ -825,9 +825,13 @@ alone, matches each type within the one it names, as `<=` compares types
 (`describe Int = "integer"` takes `Int` and `typeOf 5`; `describe Number` takes
 `Float` too, after `describe Int` for `Int`, the type itself ranking first;
 `typeOf [1,2,3] ~ [List Int -> ...]` matches, as `Pairs Int` does `typeOf [1,2]`;
-a type the check knows only as some type is decided by the run). A union is
-named to be a pattern (`IS = Int | String`, then `IS -> ...`), as `Int | String
--> e` is the parameter `Int` with the guard `String`. So an instance names its type:
+a type the check knows only as some type is decided by the run). In
+parentheses, a union matches a value instead, as `(a -> a)` matches a
+function: `x ~ [(Int | String) -> e]` takes an Int or a String, and
+`((Int | String) n)` names it; a union of types matches by its name
+(`IS = Int | String`, then `typeOf x ~ [IS -> e]`), and unparenthesized,
+`Int | String -> e` is the parameter `Int` with the guard `String`. So an
+instance names its type:
 `to Celsius (F f) = C ((f - 32) * 5 / 9)`. A `to String` instance is also how
 its values show: `print`, `echo`, the REPL and `to String` of a value holding
 one write its text, wherever it is (with `to String (Point x y) = ...`,
