@@ -1142,6 +1142,14 @@ Deno.test("a set from an earlier REPL input keeps later cell reads unknown", () 
 // input; the run reads the same snapshot. Lint and editor checks do not.
 const fish = "examples/advent-of-code/samples/fish.input", hill = "examples/advent-of-code/samples/hill.input";
 const inputPrelude = `import "io"; ${effectPrelude}`;
+// Over input the checker cannot know, a fold keeps the length its step keeps:
+// splitOn's state is [fields, current] at every step.
+Deno.test("a fold keeps a length its step keeps, over unknown input", () => {
+    const source = `import "io"\n${FL}fst [a,b] = a; step [a,b] x = [x :: a, b]\n` +
+        'input <- readInput\nprint (fst (fl step [[],[]] (to (List Char) input)))';
+    // Checked as an example is, without the input it will read.
+    new CheckingSession().prepare(parse(source, "fold.apn"), Deno.cwd(), Deno.cwd());
+});
 Deno.test("readFile is read when checking before a run", () => {
     const actual = run(session(), `${inputPrelude}\ntext <- readFile "${fish}"; g (f (q (words text)))`);
     if (actual !== "0") throw new Error(actual);
