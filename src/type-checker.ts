@@ -4887,8 +4887,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             if (!trustsShape(entry)) return {};
             const summary = summaryAt(entry!.type, args.length);
-            // A builtin with a result shape (map keeps its list's length).
-            if (!summary) return shapeAt(entry!.type, args.length) ? computed(e, scope) : {};
+            // Without clauses to call (map's result shape, (+) = intrinsics.add),
+            // the value is computed, as the operator spelling's is.
+            if (!summary) return computed(e, scope);
             const values = args.map(a => valueEntry(a, scope));
             // Over no parameters, evaluate (and cache) the whole application.
             if (!values.some(symbolic)) return computed(e, scope);
