@@ -158,6 +158,17 @@ Behavior: `docs/standard-library.md` (`http`, `json`).
 The default prelude embeds `lib/prelude.apn`, `lib/type.apn` and `lib/do.apn`
 as text imports, so editor launchers must let Deno read them.
 
+The checker reads the prelude too: its own scope holds only what TypeScript
+implements (the natives and `intrinsics.*`), and `preludeScope` checks
+`lib/prelude.apn` over it once (`prelude: true`), each check copying the names
+it binds (`copyTypeScope`). A method's first definition binds it
+(`(>>=) = intrinsics.bind`); later clauses are instances (the prelude's are its
+own, which the intrinsic's typing covers). Where inference cannot derive a
+prelude function's type (`sequence`'s recursion over any monad, `not` of an
+action, the `enum*` functions a range is), `PRELUDE_TYPINGS` types it by a
+rule, as an intrinsic is; the prelude still defines it. A prelude change needs
+no checker change unless it adds such a function.
+
 Operators: the lexer reads a maximal run of operator characters as one token;
 the parser seeds its fixity table from `lib/prelude.apn` at module load and
 pre-scans every parsed source for fixity declarations, which persist across
@@ -169,8 +180,8 @@ applies any other binding as a function. A `clauseFn` defined for an operator
 or an `OVERLOADED_FUNCTIONS` name (math functions, `get`/`with`, `negate`/`not`) with the previous
 binding's arity (`arity`; the checker's `overloaded`) keeps it as
 `fallback`; a checked write accepts an imported one over the binding it
-extends. The checker gives operator names an intrinsic type per builtin; a
-binop on another binding is inferred as the call `(op l) r`, and an overload
+extends. In the checker an operator name has its intrinsic's type, through
+the prelude's alias ((+) = intrinsics.add); a binop on another binding is inferred as the call `(op l) r`, and an overload
 of a prelude operator falls back to the builtin rule when its clauses do not
 accept known operand types; operands not known yet make an `overloaded:op`
 operation that chooses once they are. `(op)` parses as the name `op`;

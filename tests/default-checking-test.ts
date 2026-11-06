@@ -1300,3 +1300,10 @@ for (const source of [
     'f (List _ xs) = map (n -> xs n) ["a"]\nf [1]',
     'f b = Int (b ? 1 : "a")\nf True',
 ]) Deno.test(`p5.js-example typing rejects: ${source}`, () => rejected(session(), source));
+// The checker reads the prelude's names by checking lib/prelude.apn itself.
+Deno.test("the checker accepts the prelude it reads", async () => {
+    const { checkTypes } = await import("../src/type-checker.ts");
+    const source = await Deno.readTextFile(new URL("../lib/prelude.apn", import.meta.url));
+    const issues = checkTypes(parse(source), { prelude: true }).issues;
+    if (issues.length) throw new Error(issues[0].message);
+});

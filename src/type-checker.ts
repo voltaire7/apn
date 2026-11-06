@@ -10,6 +10,7 @@ import { APNError, didYouMean, formatFileReadError, withArticle } from "./errors
 import { parse, parseDocument, patternSource, PRIMITIVE_OPERATORS } from "./parser.ts";
 import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
+import preludeSource from "../lib/prelude.apn" with { type: "text" };
 
 const PRELUDE_OPERATORS = new Set(PRIMITIVE_OPERATORS.values());
 // What evaluateBuiltinApp gives an application of no builtin.
@@ -225,6 +226,8 @@ export interface CheckOptions {
      * would read (undefined when unreadable) and getArgs. The runtime must see
      * the same snapshot. Lint and editor checks leave it unset. */
     inputs?: { readFile(path: string): string | undefined; args(): string[]; readStdin?(): string | undefined };
+    /** Checking the prelude itself: its names are not read from it yet. */
+    prelude?: boolean;
     /** Receives the scope before the program's statement at index (see CheckingSession.enter). */
     before?: { index: number; scope: (scope: TypeScope) => void };
     /** The variable names a file loaded by this path mentions, if the session checked it. */
@@ -1048,7 +1051,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.args.some(x => { const v = resolve(x); return v.k === "var" || v.k === "operation"; })) return t;
         if (t.op === "run") return runType(a);
         if (["map", "ap", "bind", "then", "bindFlip", "sequence", "mapM"].includes(t.op)) return monadicType(t.op, a, b);
-        if (["map2", "map3", "map4"].includes(t.op)) return operands.slice(2).reduce((mf: Ty, m) => monadicType("ap", mf, m), monadicType("map", a, b));
         if (t.op === "merge-record") {
             if (isExplicit(a) || isExplicit(b)) return explicitDynamic;
             if (a.k !== "record" || b.k !== "record") return problem("record flattening expects a record");
@@ -2685,8 +2687,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // checked (a requirement) once their types are known.
             if (f.name === "set") { operation(f.name, args); return io(list(variable(), constant(0n))); }
             // A union of types (Mixed = Int | String).
-            // a | b: the union of two types; a written list of types is one ([Int] | [Int,Int]).
-            if (f.name === "either") {
+            // The union of the types listed (a | b is intrinsics.union [a,b]); a
+            // written list of types is one ([Int] | [Int,Int]).
+            if (f.name === "union") {
                 const asType = (x: Ty): Ty | undefined => {
                     const r = resolve(x);
                     if (r.k === "type") return r.value;
@@ -2694,13 +2697,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const items = r.items.map(asType);
                     return items.every(Boolean) ? { k: "list", element: items.length ? union(items as Ty[]) : variable(), items: items as Ty[], length: constant(BigInt(items.length)) } : undefined;
                 };
-                const types = args.map(asType);
-                if (!types.every(Boolean)) { runtimeChecks++; return explicitDynamic; }
-                return { k: "type", value: union(types as Ty[]) };
-            }
-            if (f.name === "union") {
-                const list = resolve(args[0]), items = list.k === "list" ? list.items?.map(resolve) : undefined;
-                const types = items?.map(item => item.k === "type" ? item.value : sharedType(item));
+                const list = resolve(args[0]), types = list.k === "list" ? list.items?.map(asType) : undefined;
                 if (!types?.every(t => t)) { runtimeChecks++; return explicitDynamic; }
                 return { k: "type", value: union(types as Ty[]) };
             }
@@ -2736,9 +2733,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             let outputs: Ty[] = [];
             const accepted: { clauses?: ClauseOrder[]; call?: Entry[] }[] = [];
+            // The builtin meaning clauses extend (get's), last, says why it fails.
+            let builtinError: unknown;
             for (const choice of f.choices) {
                 const instance = copy(choice), node = resolve(instance);
                 choosing++;
+                builtinError = undefined;
                 try {
                     const out = application(instance, { ...argument, type: copy(argument.type) }, e);
                     outputs.push(out);
@@ -2751,6 +2751,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     accepted.push({ clauses: node.k === "fn" ? node.clauses : undefined, call });
                 } catch (error) {
                     if (!error || typeof error !== "object" || !("message" in error)) throw error;
+                    if (node.k === "intrinsic") builtinError = error;
                 } finally { choosing--; }
             }
             // A complete call: drop choices none of whose clauses can run, because
@@ -2771,6 +2772,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument);
                 }
             }
+            if (!outputs.length && builtinError) throw builtinError;
             if (!outputs.length) return problem(`no overload accepts ${text(argument.type)}`, e);
             if (outputs.length === 1 || outputs.every((x) => text(x) === text(outputs[0]))) return outputs[0];
             // Partial calls (an intrinsic's too) stay choices the next argument decides.
@@ -2827,6 +2829,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (describes && (t.k === "atom" && t.name === "List" || t.k === "variant" && t.args.length > (f.applied ?? 0))) {
                 a = { k: "type", value: schemaValue(a, e) };
             }
+            // Bool x takes x's truth (not x is Bool x False True); an action has none.
+            if (t.k === "atom" && t.name === "Bool" && isIO(a)) return problem("an action is not a condition", e, "bind its result first: `x <- action`");
             // List T: the type of lists of T.
             if (t.k === "atom" && t.name === "List" && a.k === "type") return { k: "type", value: list(a.value) };
             // IO T: the type of actions yielding T.
@@ -6370,9 +6374,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         // Definitions of map, >>=, <*> or return define an instance: inferred on
         // their own and recorded for the session; the method stays as it is.
-        if (isInstance(name, clauses) && options.instances) {
+        // Its first definition (the prelude's (>>=) = intrinsics.bind) binds it.
+        if (isInstance(name, clauses) && instances && scope.has(name) && scope.get(name)!.type !== forward.get(name)) {
             const forward = variable();
-            options.instances.set(name, [...options.instances.get(name) ?? [], forward]);
+            instances.set(name, [...instances.get(name) ?? [], forward]);
             const own: Scope = new Map(scope);
             defineClauses(name, clauses, own, location);
             (forward as Extract<Ty, { k: "var" }>).link = own.get(name)!.type;
@@ -6708,11 +6713,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             scope.set(name, { type, nonGeneric, clauses });
         }
     }
-    const scope: Scope = new Map(TYPE_NAMES.map((name) => [name, { type: { k: "type", value: atom(name) } }]));
-    // The prelude declares List a = [] | a :: List a, the list type (see
-    // listUnion), and Vect as the family of lists counting their elements.
-    // The prelude's Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a.
-    scope.set("Vect", { type: { k: "factory", args: [], counts: { scale: 1n, offset: 0n }, name: "Vect" } });
+    // The built-in types; the prelude declares List and Vect (read below).
+    const scope: Scope = new Map(TYPE_NAMES.filter(name => name !== "List" && name !== "Vect").map((name) => [name, { type: { k: "type", value: atom(name) } }]));
     const a = variable(), b = variable();
     for (
         const [name, type] of Object.entries({
@@ -6751,9 +6753,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("intrinsics.syntax", [variable()], explicitDynamic);
     // A range's bounds ([] none); [1..] and the like are typed where written.
     { const n = variable(); native("intrinsics.range", [n, variable(), variable()], list(n)); }
-    scope.set("toAST", { type: fn(variable(), explicitDynamic) });
-    scope.set("probe", { type: fn(variable(), io(empty)) });
-    { const item = variable(); scope.set("reduce", { type: fn(list(item), list(item)) }); }
     native("exit", [int], io(empty));
     native("null", [variable()], bool);
     native("length", [list(variable())], int);
@@ -6811,50 +6810,29 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     scope.set("set", { type: { k: "intrinsic", name: "set", arity: 2 } });
     scope.set("insert", { type: { k: "intrinsic", name: "insert", arity: 2 } });
-    // The prelude's operators and their intrinsics (one per operator).
-    for (const [name, op] of PRIMITIVE_OPERATORS) {
-        const t: Ty = { k: "intrinsic", name: op, arity: 2 };
-        scope.set(name, { type: t });
-        scope.set(op, { type: t });
-    }
-    // The prelude's Functor/Applicative/Monad functions (see lib/prelude.apn).
-    for (const [names, op, arity] of [[["map", "<$>"], "map", 2], [["<*>", "intrinsics.ap"], "ap", 2], [[">>=", "intrinsics.bind"], "bind", 2],
-        [[">>"], "then", 2], [["=<<"], "bindFlip", 2], [["sequence"], "sequence", 1], [["mapM"], "mapM", 2]] as const) {
-        for (const name of names) scope.set(name, { type: { k: "intrinsic", name: op, arity } });
-    }
-    for (const name of ["return", "intrinsics.return"]) { const t = variable(); scope.set(name, { type: fn(t, pendingTy(t)) }); }
-    scope.set("empty", { type: pendingTy(variable()) });
-    for (const name of ["throw", "intrinsics.throw"]) { const t = variable(); scope.set(name, { type: fn(t, pendingTy(variable())) }); }
+    // The operators' intrinsics (intrinsics.add, ...), which the prelude binds.
+    for (const [name, op] of PRIMITIVE_OPERATORS) scope.set(name, { type: { k: "intrinsic", name: op, arity: 2 } });
+    // Functor, Applicative and Monad: map is a native; the rest is the prelude's.
+    for (const [name, op] of [["map", "map"], ["intrinsics.ap", "ap"], ["intrinsics.bind", "bind"]] as const) scope.set(name, { type: { k: "intrinsic", name: op, arity: 2 } });
+    { const t = variable(); scope.set("intrinsics.return", { type: fn(t, pendingTy(t)) }); }
+    { const t = variable(); scope.set("intrinsics.throw", { type: fn(t, pendingTy(variable())) }); }
     scope.set("intrinsics.source", { type: fn(variable(), atom("String")) });
-    // Prefix - and ! as the prelude's functions (toAST writes -x as ["negate","x"]).
-    for (const name of ["negate", "not"]) scope.set(name, { type: { k: "intrinsic", name, arity: 1 } });
-    // map2 f a b ... map4: map then <*>, in any monad (the prelude's).
-    for (const [name, arity] of [["map2", 3], ["map3", 4], ["map4", 5]] as const) scope.set(name, { type: { k: "intrinsic", name, arity } });
-    // when and unless: action >> return [], in the action's monad.
-    for (const name of ["when", "unless"]) scope.set(name, { type: { k: "intrinsic", name: "when", arity: 2 } });
-    // [a..] is enumFrom a, [a,b..c] enumFromThenTo a b c, and so on.
-    for (const [name, arity] of RANGE_FUNCTIONS) scope.set(name, { type: { k: "intrinsic", name, arity } });
-    // loop action never finishes: its result is the action's monad.
-    { const action = variable(); scope.set("loop", { type: fn(action, action) }); }
+    // Prefix - is the prelude's negate (toAST writes -x as ["negate","x"]).
+    scope.set("intrinsics.negate", { type: { k: "intrinsic", name: "negate", arity: 1 } });
     native("while", [list(variable()), variable()], io(empty));
     native("for", [list(variable()), variable()], io(empty));
-    // guard condition: return [] or empty, in the monad the context decides.
-    scope.set("guard", { type: fn(variable(), pendingTy(list(variable(), constant(0n)))) });
     scope.set("cast", { type: { k: "intrinsic", name: "cast", arity: 2 } });
     // Natural numbers are UInt: Z is UInt 0, S n the next one (converting n as UInt n does).
     scope.set("Z", { type: atom("UInt"), number: { kind: "int", v: 0n, typeName: "UInt" } });
     scope.set("S", { type: fn(atom("UInt"), atom("UInt"), undefined, true) });
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
-    for (const name of ["~", "intrinsics.match"]) scope.set(name, { type: { k: "intrinsic", name: "match", arity: 2 } });
-    for (const name of ["tag", "intrinsics.tag"]) scope.set(name, { type: { k: "intrinsic", name: "tag", arity: 3 } });
+    scope.set("intrinsics.match", { type: { k: "intrinsic", name: "match", arity: 2 } });
+    scope.set("intrinsics.tag", { type: { k: "intrinsic", name: "tag", arity: 3 } });
     scope.set("intrinsics.union", { type: { k: "intrinsic", name: "union", arity: 1 } });
-    // The prelude's a | b = intrinsics.union [a,b].
-    scope.set("|", { type: { k: "intrinsic", name: "either", arity: 2 } });
-    for (const name of ["get", "intrinsics.get"]) scope.set(name, { type: { k: "intrinsic", name: "get", arity: 2 } });
-    for (const name of ["with", "intrinsics.with"]) scope.set(name, { type: { k: "intrinsic", name: "with", arity: 3 } });
+    scope.set("intrinsics.get", { type: { k: "intrinsic", name: "get", arity: 2 } });
+    scope.set("intrinsics.with", { type: { k: "intrinsic", name: "with", arity: 3 } });
     // to T x writes x as a T, from T x reads it back (to String, to JSON, to (List Char)).
     for (const name of ["to", "from"]) scope.set(name, { type: { k: "intrinsic", name, arity: 2 } });
-    scope.set("JSON", { type: { k: "type", value: { k: "variant", name: "JSON", args: [], base: atom("String") } } });
     if (options.library) {
         const a = variable(), b = variable(), c = variable();
         native("bracket", [a, fn(a, b), fn(a, c)], io(runType(c)));
@@ -6864,8 +6842,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const intrinsics = [...scope].filter(([name]) => name.startsWith("intrinsics."));
     for (const [name] of intrinsics) scope.delete(name);
     scope.set("intrinsics", { type: { k: "record", fields: new Map(intrinsics.map(([name, entry]) => [name.slice("intrinsics.".length), entry.type])) } });
+    // The prelude's names, as the checker reads lib/prelude.apn itself. A
+    // definition whose type inference cannot derive (sequence's recursion
+    // over any monad) is typed by its rule instead (see PRELUDE_TYPINGS).
+    if (!options.prelude) for (const [name, entry] of copyTypeScope(preludeScope())) {
+        const rule = PRELUDE_TYPINGS.get(name);
+        scope.set(name, rule ? { ...entry, type: { k: "intrinsic", name: rule[0], arity: rule[1] } } : entry);
+    }
     for (const entry of scope.values()) { entry.inherited = true; entry.builtin = true; }
     if (options.initial) for (const [name, entry] of copyTypeScope(options.initial)) scope.set(name, entry);
+    // The prelude's own instances (lists' >>=) are its own: the intrinsics
+    // the checker types already cover them.
+    const instances = options.instances ?? (options.prelude ? new Map<string, unknown[]>() : undefined);
     const originalScope = new Map(scope);
     const forward = new Map<string, Ty>();
     const forwardDefinitions = new Map<string, Extract<TopLevel, { t: "def" }>>();
@@ -7104,6 +7092,27 @@ function signatureText(type: Ty): string | undefined {
         }
     };
     return write(type, 0);
+}
+// Prelude functions the checker types by a rule, as an intrinsic would be,
+// where inferring their definitions could not decide their monad: the
+// prelude still defines each (>> is m >>= _ -> k). Name: [rule, arity].
+const PRELUDE_TYPINGS = new Map<string, [string, number]>([
+    [">>", ["then", 2]], ["=<<", ["bindFlip", 2]], ["sequence", ["sequence", 1]], ["mapM", ["mapM", 2]],
+    ["when", ["when", 2]], ["unless", ["when", 2]],
+    // not x is Bool x False True, which an action never reaches (as !x).
+    ["not", ["not", 1]],
+    // enumFrom a and the rest are [a..] and the rest (see rangeType).
+    ...[...RANGE_FUNCTIONS].map(([name, arity]): [string, [string, number]] => [name, [name, arity]]),
+]);
+// The prelude's names, read once by checking lib/prelude.apn over the
+// natives and intrinsics; each check copies them (see copyTypeScope).
+let prelude: TypeScope | undefined;
+function preludeScope(): TypeScope {
+    if (prelude) return prelude;
+    let read: TypeScope = new Map();
+    const result = checkTypes(parse(preludeSource), { prelude: true, result: (_, exports) => { read = exports; } });
+    if (result.issues.length) throw new Error(`the checker rejects the prelude: ${result.issues[0].message}`);
+    return prelude = read;
 }
 // The builtin functions' types as the checker writes them (S is UInt -> UInt),
 // read once from its initial scope: what typeOf shows for them.
