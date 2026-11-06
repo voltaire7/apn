@@ -46,6 +46,10 @@ for (const [source, expected] of [
     // has the definition's type as a whole: fl's is (a -> b -> a) -> a -> List b -> a.
     ['fl f acc [] = acc; fl f acc (x :: rest) = fl f (f acc x) rest\n' +
         'rv (List _ xs) = fl (acc, x -> x :: acc) [] xs\nf xs = map (x -> x) (rv xs)\nf [1,2]', '[2,1]'],
+    // Clauses that differ only in their results' lengths, a call no ranking
+    // decides: a list whose length the run finds, never one choice's [].
+    ...["(+) 1 1", "negate -2", "Int 2", "id 2"].map(count => [`id x = x; tk 0 _ = []; tk _ [] = []; tk n (x :: rest) = x :: tk (n - 1) rest\n` +
+        `f [a,b] = a\nf (tk (${count}) [1,2,3])`, '1'] as const),
     // Another union of list types is unfolded when it runs.
     ['Pairs a = [] | a :: a :: Pairs a; f (Pairs Int xs) = length xs; f [1,2]', '2'],
     // Clauses typed by their lists' element types are overloads, in either order.

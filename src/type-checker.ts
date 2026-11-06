@@ -1774,6 +1774,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try {
             const whole = withoutLengths(copy(f.choices[0]));
             for (const other of f.choices.slice(1)) unify(whole, withoutLengths(copy(other)), { t: "placeholder" });
+            // A type, not one choice's clauses or result shape (tk 0 _ = []'s
+            // length 0): none of them decides its calls.
+            for (let t = resolve(whole), seen = new Set<Ty>(); t.k === "fn" && !seen.has(t); t = resolve(t.output)) {
+                seen.add(t);
+                t.clauses = undefined; t.summary = undefined; t.callArgs = undefined; t.shape = undefined;
+            }
             return whole;
         } catch (error) {
             if (!error || typeof error !== "object" || !("message" in error)) throw error;
@@ -2807,10 +2813,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (!outputs.length && builtinError) throw builtinError;
             if (!outputs.length) return problem(`no overload accepts ${text(argument.type)}`, e);
             if (outputs.length === 1 || outputs.every((x) => text(x) === text(outputs[0]))) return outputs[0];
-            // Undecided, with a result no input decides (a recursive call's):
-            // the function's type as a whole decides it (see principalOf).
-            const whole = accepted.some(a => a.free) ? principalOf(f) : undefined;
+            // A complete call no ranking decides (a partial one's choices are
+            // functions, which its next argument decides):
+            const complete = !outputs.some(x => ["fn", "intrinsic", "overload"].includes(resolve(x).k));
+            // with a result no input decides (a recursive call's), the
+            // function's type as a whole decides it (see principalOf);
+            const whole = complete && accepted.some(a => a.free) ? principalOf(f) : undefined;
             if (whole) return application(whole, argument, e);
+            // with results that differ only in their lengths (tk 0 _ = [] and
+            // tk n (x :: r) = ...), it is a list whose length the run finds.
+            if (complete && outputs.every(x => resolve(x).k === "list" && succeeds(() => unify(withoutLengths(copy(outputs[0])), withoutLengths(copy(x)), e)))) {
+                const merged = withoutLengths(outputs[0]);
+                for (const other of outputs.slice(1)) unify(merged, withoutLengths(other), e);
+                return merged;
+            }
             // Partial calls (an intrinsic's too) stay choices the next argument decides.
             if (outputs.every((x) => ["fn", "intrinsic"].includes(resolve(x).k))) return { k: "overload", choices: outputs, undecided: f.undecided, name: f.name };
             if (f.undecided) return { k: "union", choices: outputs, undecided: true, name: f.name };
