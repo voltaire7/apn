@@ -572,6 +572,18 @@ Two = [Int] | [Int,Int]
 print [[Int,Int] <= Two, [Int,Int,Int] <= Two, Two <= List Int]`, ["[True,True,False,True,True]",
     "[True,False,False]", "[True,False,False]", "[True,True,True,False]", "[True,False,True]",
     "[True,False,True]"]);
+example("a type pattern matches each type within the one it names", `
+print (typeOf [1,2,3] ~ [List Int -> "ints", _ -> "other"])
+print (typeOf [1,"a"] ~ [List Int -> "ints", _ -> "other"])
+describe Int = "int"
+describe Number = "number"
+print [describe Int, describe Float, describe Number]
+print (typeOf [1] ~ [List -> "list", _ -> "other"])
+Pairs a = [] | a :: a :: Pairs a
+print (typeOf [1,2] ~ [Pairs Int -> "pairs", _ -> "other"])
+IS = Int | String
+print [typeOf "s" ~ [IS -> "either", _ -> "other"], typeOf 1.5 ~ [IS -> "either", _ -> "other"]]`,
+    ["ints", "other", '["int","number","number"]', "list", "pairs", '["either","other"]']);
 example("| is the union of types, written anywhere", `
 print (Int | String)
 print [isType (Int | String) "a", (Int | String) == (String | Int)]

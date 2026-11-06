@@ -3364,20 +3364,44 @@ export class Interpreter {
 
     // How specifically a pattern accepts an argument, for choosing among
     // clauses: literals first, then exact types, then conversions.
-    // A type's bare name as a pattern matches that type, as == compares types
-    // (Int matches typeOf 5, a declared Shape typeOf (Circle 1)), as a literal
-    // matches its value; undefined for any other pattern.
-    private bareType(p: Pattern, v: Value): boolean | undefined {
+    // A type's bare name as a pattern matches each type within it, as <=
+    // compares types (Int matches typeOf 5, List typeOf [1,2], Number Int, a
+    // declared Shape typeOf (Circle 1)): "same" for the type itself, "within"
+    // for one it holds; undefined for any other pattern.
+    private bareType(p: Pattern, v: Value): "same" | "within" | false | undefined {
         if (p.p !== "constr" || p.args.length) return undefined;
         const bound = TYPE_NAMES.includes(p.tag) ? { kind: "type", name: p.tag } as Value : this.env.get(p.tag), named = bound && this.reference(bound);
         if (named?.kind !== "type") return undefined;
         const given = this.demand(v);
-        return (given.kind === "type" || given.kind === "functionType" || this.isList(given)) && this.isTypeValue(given) && this.equals(given, named);
+        if (!(given.kind === "type" || given.kind === "functionType" || this.isList(given)) || !this.isTypeValue(given)) return false;
+        return this.equals(given, named) ? "same" : this.within(given, named) ? "within" : false;
+    }
+    // The type a pattern of a type applied to exactly its parameters, each
+    // a type itself ((List Int), (Pairs (List Int)), _ any type), names;
+    // undefined where the pattern binds a name or is no such type.
+    private closedType(p: Pattern): Value | undefined {
+        if (p.p === "wildcard") return { kind: "type", name: "$any" };
+        if (p.p !== "constr") return undefined;
+        const bound = TYPE_NAMES.includes(p.tag) && !PRELUDE_TYPES.has(p.tag) ? { kind: "type", name: p.tag } as Value : this.env.get(p.tag);
+        const head = bound && this.reference(bound);
+        if (head?.kind !== "type" || head.arguments?.length) return undefined;
+        if (p.args.length && p.args.length !== (head.alias?.parameters.length ?? this.typeParameters(p.tag))) return undefined;
+        const args = p.args.map(arg => this.closedType(arg));
+        if (args.some(arg => !arg)) return undefined;
+        try { return this.reference(args.reduce<Value>((t, arg) => this.apply(t, arg!), head)); }
+        catch (error) { if (error instanceof APNError) return undefined; throw error; }
     }
     private patternScore(pattern: Pattern, arg: Value): number {
         if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
+        // The type itself before a type holding it (describe Int, then describe Number).
         const bare = this.bareType(pattern, arg);
-        if (bare !== undefined) return bare ? 40 : -1000;
+        if (bare !== undefined) return bare === "same" ? 40 : bare ? 38 : -1000;
+        // Only a pattern naming a type reads whether its argument is one.
+        const closed = pattern.p === "constr" && pattern.args.length ? this.closedType(pattern) : undefined;
+        const given = closed && this.reference(arg);
+        if (given && (given.kind === "type" || given.kind === "functionType" || this.isList(given) && this.isTypeValue(given))) {
+            return this.sameType(closed!, given) ? 40 : this.within(given, closed!) ? 38 : -1000;
+        }
         // A named subtype's own pattern outranks its base's: (Money x) first.
         // Only a constructor pattern looks at its argument.
         if (pattern.p !== "constr") return 0;
@@ -3882,6 +3906,8 @@ export class Interpreter {
             for (;;) {
                 checkInterrupt();
                 a = this.reference(a); b = this.reference(b);
+                // A rest that is a type of lists (a :: Pairs a) is compared as a type.
+                if (!this.isList(a) || !this.isList(b)) return this.isList(a) === this.isList(b) && this.sameType(a, b, met);
                 if (met.get(a)?.has(b)) return true;
                 if (!met.has(a)) met.set(a, new Set());
                 met.get(a)!.add(b);
@@ -5418,6 +5444,15 @@ export class Interpreter {
             if (binds.has(p.name)) return this.equals(binds.get(p.name)!, v);
             binds.set(p.name, v); return true;
         }
+        // A type applied to types alone ((List Int), (Pairs Int)) given a
+        // type matches each type within the one it makes, as <= compares.
+        const closed = p.p === "constr" && p.args.length ? this.closedType(p) : undefined;
+        if (closed) {
+            const given = this.reference(v);
+            if (given.kind === "type" || given.kind === "functionType" || this.isList(given) && this.isTypeValue(given)) {
+                return this.sameType(closed, given) || this.within(given, closed);
+            }
+        }
         if (p.p === "constr" && p.tag === "Dynamic" && p.args.length === 1) {
             const type = this.reference(this.env.get(p.tag)!);
             if (type.kind === "type" && type.name === "Dynamic" && !type.family && !type.alias) {
@@ -5549,12 +5584,12 @@ export class Interpreter {
                 catch (error) { if (error instanceof APNError) return false; throw error; }
             }
         }
-        // A bare type name matches that type itself, as a value: describe Int.
+        // A bare type name matches a type within it, as a value: describe Int.
         if (p.p === "constr" && !p.args.length) {
             const bound = this.env.get(p.tag), named = bound && this.reference(bound);
             if (named && this.isTypeValue(named) && !(named.kind === "type" && named.name === "$any")) {
                 const given = this.reference(v);
-                return this.isTypeValue(given) && this.sameType(named, given);
+                return this.isTypeValue(given) && (this.sameType(named, given) || this.within(given, named));
             }
         }
         if (p.p === "constr" && (!TYPE_NAMES.includes(p.tag) || p.tag === "Vect")) {
@@ -5670,7 +5705,7 @@ export class Interpreter {
             }
             case "constr": {
                 const bare = this.bareType(p, v);
-                if (bare !== undefined) return bare;
+                if (bare !== undefined) return !!bare;
                 if (TYPE_NAMES.includes(p.tag)) {
                     if (p.args.length !== 1) return false;
                     if (!NUMERIC_TYPES.includes(p.tag)) return this.matchesValueType(p.tag, v) && this.matchPattern(p.args[0], v, binds);

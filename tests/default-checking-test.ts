@@ -33,6 +33,9 @@ for (const [source, expected] of [
     ['[isType (List Int) [1,"a"], isType (List Int) [1..]]', '[False,True]'],
     // Types compare as the sets of their values.
     ['U = Int | String; V = String | Int; [U == V, typeOf [1,2] <= List Int, Int < Number]', '[True,True,True]'],
+    // A type pattern matches each type within the one it names, the type itself first.
+    ['describe Int = "int"; describe Number = "number"; [describe Int, describe Float]', '["int","number"]'],
+    ['typeOf [1,2] ~ [List Int -> 1, _ -> 0]', '1'],
     // Another union of list types is unfolded when it runs.
     ['Pairs a = [] | a :: a :: Pairs a; f (Pairs Int xs) = length xs; f [1,2]', '2'],
     // Clauses typed by their lists' element types are overloads, in either order.

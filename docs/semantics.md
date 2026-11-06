@@ -820,10 +820,14 @@ return = Some                      # return in Option
 `to` and `from` are methods the same way: `to T x` writes `x` as a `T`
 (`to String`, `to JSON`, `to (List Char)`; another type, a record type too,
 converts as applying it: `to Quote x` is `Quote x`),
-`from T x` reads one back. A bare type name in a pattern matches that type
-itself, as `==` compares types (`describe Int = "integer"` takes `Int` and
-`typeOf 5`, and `typeOf x ~ [Int -> ...]` asks for an Int; a type the check
-knows only as some type is decided by the run), so an instance names its type:
+`from T x` reads one back. A type name in a pattern, bare or applied to types
+alone, matches each type within the one it names, as `<=` compares types
+(`describe Int = "integer"` takes `Int` and `typeOf 5`; `describe Number` takes
+`Float` too, after `describe Int` for `Int`, the type itself ranking first;
+`typeOf [1,2,3] ~ [List Int -> ...]` matches, as `Pairs Int` does `typeOf [1,2]`;
+a type the check knows only as some type is decided by the run). A union is
+named to be a pattern (`IS = Int | String`, then `IS -> ...`), as `Int | String
+-> e` is the parameter `Int` with the guard `String`. So an instance names its type:
 `to Celsius (F f) = C ((f - 32) * 5 / 9)`. A `to String` instance is also how
 its values show: `print`, `echo`, the REPL and `to String` of a value holding
 one write its text, wherever it is (with `to String (Point x y) = ...`,
