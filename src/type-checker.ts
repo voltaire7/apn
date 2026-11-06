@@ -893,6 +893,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Trying an overload's choices, which defers a call on its own (see application).
     let choosing = 0;
+    // The functions whose clauses are being inferred: the type a recursive
+    // call first gave each, and the calls that type does not fit, which take
+    // the function's finished type instead (see defineClauses).
+    const definingSelf: { pending: Ty; targets: Ty[] }[] = [];
     // Two of a call's results that are one: alike, and if partial calls, of the
     // same clauses (f [] and f (x :: rest), both a -> List b -> a, are two).
     function sameChoice(a: Ty, b: Ty): boolean {
@@ -3004,6 +3008,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return result;
         }
         if (f.k === "fn") {
+            // A recursive call another clause's call has not typed for (ln [1]
+            // in ln (String s) after ln ["a"]): the finished function decides it.
+            const self = !choosing ? definingSelf.find(d => resolve(d.pending) === f) : undefined;
+            if (self && !succeeds(() => unify(copy(f.input), copy(argument.type), e))) {
+                const target = variable();
+                self.targets.push(target);
+                return deferredCall(target, argument);
+            }
             const selection = f.pattern?.p === "schema" && resolve(f.input).k === "list" ? f.pattern.value : f.pattern;
             const selected = selection ? recordSelection(selection, argument.type, e) : argument.type;
             if (selected !== argument.type) return application({ ...f, pattern: undefined }, { ...argument, type: selected }, e);
@@ -6752,6 +6764,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // previous meaning too (sin (Dual a b) = Dual (sin a) ...).
         const fallback = previous && !previous.recursive ? overloaded(name, clauses[0].params.length, previous) : undefined;
         scope.set(name, { type: fallback ? { k: "overload", choices: [pending, fallback], name } : pending, mono: true, recursive: true });
+        const self = { pending, targets: [] as Ty[] };
+        definingSelf.push(self);
+        try { defineGroups(); } finally { definingSelf.splice(definingSelf.indexOf(self), 1); }
+        function defineGroups(): void {
         const groups = new Map<string, Ty>();
         const domain = (t: Ty, seen = new Set<Ty>()): string => {
             t = resolve(t);
@@ -6888,6 +6904,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (whole && succeeds(() => { const vars = new Map<Ty, Ty>(); share(copy(pending, vars), copy(whole, vars)); })) share(pending, whole);
             }
             scope.set(name, { type, nonGeneric, clauses });
+        }
+        for (const target of self.targets) unify(target, type, location);
         }
     }
     // The built-in types; the prelude declares List and Vect (read below).
