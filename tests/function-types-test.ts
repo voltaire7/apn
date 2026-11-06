@@ -22,6 +22,9 @@ for (const [name, source, expected] of [
         ["True", "True", "False", "True"]],
     ["a function type taking a function", "print (((a -> b) -> List a -> List a) == typeOf filter)\nprint (typeOf filter)",
         ["True", "(a -> b) -> List a -> List a"]],
+    // A condition's call types its function, as a branch's does.
+    ["a condition that calls a parameter", "fi p [] = []\nfi p (x :: rest) = p x ? x :: fi p rest : fi p rest\nprint (typeOf fi)",
+        ["(a -> b) -> List a -> List a"]],
     // map works on any type with a map instance: f a is that type holding a.
     ["map's type maps any functor", "print (typeOf map)\nd m = map (* 2) m\nprint (typeOf d)",
         ["(a -> b) -> f a -> f b", "f a -> f b"]],

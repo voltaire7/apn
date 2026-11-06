@@ -264,7 +264,8 @@ export function describeType(value: Value, element = false): string {
                 }
                 return apply(expr(e.f, env, locals), expr(e.t === "app" ? e.a : e.x, env, locals));
             }
-            case "ternary": return unify(expr(e.then, env, locals), expr(e.els, env, locals));
+            // The condition is typed too: p x in p x ? a : b makes p a function.
+            case "ternary": expr(e.cond, env, locals); return unify(expr(e.then, env, locals), expr(e.els, env, locals));
             case "unop": return e.op === "not" ? named("Bool") : expr(e.e, env, locals);
             case "binop": {
                 if (["==", "!=", "<", ">", "<=", ">=", "&&", "||"].includes(e.op)) return named("Bool");
