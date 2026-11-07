@@ -92,10 +92,7 @@ export class CheckingSession {
                 const fields = this.module(module, directory);
                 return fields;
             },
-            loads: (path, caller, tail) => {
-                const fields = this.load(path, directory, caller, tail);
-                return fields;
-            },
+            loads: (path, caller) => this.load(path, directory, caller),
             result: (value, published) => { scope = value; exports = published; },
         });
         // A module's use opens names in its own scope, which no other program shares.
@@ -158,15 +155,11 @@ export class CheckingSession {
         walk(parse(source, path));
         return names;
     }
-    // A tail load (a program's last statement) may load a file already being
-    // checked: the runtime replaces the running file with it, so it binds
-    // nothing new where it stands.
-    load(name: string, directory: string, caller = this.scope, tail = false): TypeScope {
-        const base = name.slice(name.lastIndexOf("/") + 1);
-        if (!base || base.includes(".")) throw new APNError("type", "load expects an extensionless file name");
+    // A loaded file's bindings, checked in the caller's scope. A load reads
+    // code: one of a file being checked (a file loading itself) adds nothing.
+    load(name: string, directory: string, caller = this.scope): TypeScope {
         const key = loadPath(name, directory, this.moduleSources);
-        if (this.loading.has(key) && tail) return new Map();
-        if (this.loading.has(key)) throw new APNError("type", `cyclic load '${name}'; use an explicit Dynamic boundary for runtime loading`);
+        if (this.loading.has(key)) return new Map();
         this.loading.add(key);
         try {
             const source = readLoad(key, this.moduleSources);

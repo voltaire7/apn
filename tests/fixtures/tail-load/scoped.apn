@@ -1,4 +1,5 @@
 outside = 1
 {
-    load "repeat"
+    repeat <- load "repeat"
+    use repeat
 }

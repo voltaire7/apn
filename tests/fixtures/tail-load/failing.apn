@@ -1,2 +1,3 @@
 set counter $ counter - 1
-counter > 0 ? load "failing" : load "missing-tail-target"
+again <- counter > 0 ? load "failing" : load "missing-tail-target"
+use again

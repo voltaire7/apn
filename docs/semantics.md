@@ -1506,16 +1506,19 @@ library, a bare name is a module beside the file. A module is evaluated in a
 scope of its own, with the prelude and what it imports; the caller's bindings
 do not reach it. A method it defines (`map`, `>>=`, `return`, ...) is an
 instance from the moment it runs, opened or not (see "Monads and instances").
-`load "file"` is an action too: running it runs the file (found relative to the
-current source file, and run again each time) in the caller's scope, and
-yields the file's record as an import yields a module's. It opens nothing:
-`numbers <- load "number"; use numbers`. `numbers = load "number"` names the
-action, so each `<-` of it loads the file again. The check follows a load with
-a literal path outside `Dynamic`, in the caller's scope; `use` of its record
-rebinds the file's definitions as a definition would, even names the program
-rebound in between, while a `Dynamic` load's record may replace only what the
-same file (with unchanged text) published, plus what its usual write checks
-allow.
+`load` is the prelude's `load file = map parse (intrinsics.readFileFrom (file ++
+".apn"))`: an action reading `file.apn` beside the running file (again each time
+it runs), yielding its [code](#code). `parse source` is the code source writes,
+its statements as items, in the scope `parse` runs in. Running a load runs none
+of the file: `m.x` reads a binding the code makes, `do m` runs it, and `use m`,
+as a statement, runs the file's statements where it stands, in that scope, as
+if written there, and binds what they bind (its imports, definitions and
+effects), so `m <- load "f"; use m` includes a file. Code a file wrote reads
+files beside that file. The check follows a load with a literal path outside
+`Dynamic`, in the caller's scope; `use` of its code rebinds the file's
+definitions as a definition would, even names the program rebound in between,
+while a `Dynamic` load's may replace only what the same file (with unchanged
+text) published, plus what its usual write checks allow.
 See [the standard library reference](standard-library.md) for APIs and limits.
 
 ## REPL clauses
@@ -1590,16 +1593,13 @@ Calls with work remaining (such as `1 + recurse n`) still consume stack, and a
 large deferred accumulator can still overflow when finally forced. Use `<-` to
 compute an accumulator on each iteration when appropriate.
 
-A loaded file may finish with `load "itself"`, directly or through a tail-called
-function/action: that load runs in place of the file's last statement, as a
-tail call, so it repeats without growing the host call stack; Ctrl+C stops it
-and restores the REPL's scope and source directory. Each load still reads and
-runs the file and resolves paths relative to it. The record is the first
-file's, as its top level bound it before the tail, and a tail-loaded file's
-record is dropped. Each file runs in a scope over the one before, so recursive
-loading is stack-safe but not constant-memory. `load` before another statement
-returns normally before that statement executes; circular loads are not
-rejected.
+Code a `use` runs may end with another `use` of code, a file loading itself
+(`again <- load "itself"; use again`): that use runs in place of the last
+statement, as a tail call, so it repeats without growing the host call stack;
+Ctrl+C stops it and restores the REPL's scope and source directory. What each
+file binds joins what the one before bound, each in a scope over the one
+before, so recursive loading is stack-safe but not constant-memory. Circular
+loads are not rejected.
 
 ## Sequencing expression lists
 

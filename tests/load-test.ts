@@ -63,22 +63,3 @@ for (const [source, opened] of [
     if (!!i.env.get(name) !== opened) throw new Error(`${name} ${opened ? "not opened" : "opened"}`);
 });
 
-for (const path of ['number.apn', 'number.APN', 'number.txt', '../lib/std/number.apn', '/tmp/number.apn', '', 'folder/']) {
-    Deno.test(`load rejects explicit extensions or missing names: ${path}`, () => {
-        const i = new Interpreter();
-        const scope = i.env, directory = i.sourceDir;
-        let rejected = false;
-        try { i.run(parse(`load ${JSON.stringify(path)}`)); }
-        catch (error) {
-            if (error instanceof Error && error.message.includes('extensionless file name')) rejected = true;
-            else throw error;
-        }
-        if (!rejected || i.env !== scope || i.sourceDir !== directory) throw new Error('expected clean rejection');
-    });
-}
-Deno.test('load validates computed paths too', () => {
-    const i = new Interpreter();
-    try { i.run(parse('path = "number" ++ ".apn"; load path')); }
-    catch (error) { if (error instanceof Error && error.message.includes('extensionless file name')) return; throw error; }
-    throw new Error('explicit extension accepted');
-});

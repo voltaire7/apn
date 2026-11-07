@@ -2,4 +2,5 @@ vec = [x = 1, y = 2, z = 3]
 vec * [field,value] -> {
     print $ format "%: %" [field,value]
 }
-load "forever"
+again <- load "forever"
+use again

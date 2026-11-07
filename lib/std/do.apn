@@ -2,8 +2,8 @@
 #     do [e] = e
 #     do (x <- m :: es) = m >>= x -> do es
 #     do (e :: es) = e >> do es
-# A block is that chain ({ e; ss } is e >> { ss }), [] (the unit) and a
-# statement opening a module aside, so do (e :: es) is { e; do es }. An x <- m
+# A block is that chain ({ e; ss } is e >> { ss }), [] (the unit) aside, so
+# do (e :: es) is { e; do es }. An x <- m
 # item's value is m: do runs it and joins x = its result before the items
 # after it. A binding has already put its name in scope for them, and yields
 # nothing.

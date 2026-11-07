@@ -1,3 +1,4 @@
 set counter $ counter - 1
-again = { counter > 0 ? load "action" : () }
-again
+again = { counter > 0 ? load "action" : return [] }
+code <- again
+use code

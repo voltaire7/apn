@@ -52,11 +52,11 @@ def read_for(seconds):
 try:
     assert b">>>" in read_for(3), "REPL failed to start"
     for source in (b"[0..]", b"x = x", b"x",
-                   b'load "tests/fixtures/tail-load/forever"',
+                   b'forever <- load "tests/fixtures/tail-load/forever"', b"use forever",
                    b"loop n = loop n", b"loop 0", b'std <- import "std"', b"use std.http", slow):
         os.write(terminal, source + b"\r")
         read_for(0.25)
-        if source in (b"x = x", b"loop n = loop n", b'std <- import "std"', b"use std.http"):
+        if source in (b"x = x", b"loop n = loop n", b'forever <- load "tests/fixtures/tail-load/forever"', b'std <- import "std"', b"use std.http"):
             continue
         os.write(terminal, b"\x03")
         output = read_for(0.7)

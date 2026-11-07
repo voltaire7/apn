@@ -1,2 +1,3 @@
 outerValue = 10
-load "nested/inner"
+inner <- load "nested/inner"
+use inner

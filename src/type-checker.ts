@@ -220,7 +220,7 @@ export interface CheckOptions {
      * in its monad too (a REPL input's is shown instead). */
     file?: boolean;
     library?: boolean;
-    loads?: (path: string, scope: TypeScope, tail?: boolean) => TypeScope;
+    loads?: (path: string, scope: TypeScope) => TypeScope;
     initial?: TypeScope;
     imports?: (module: string) => TypeScope;
     result?: (scope: TypeScope, exports: TypeScope) => void;
@@ -1178,6 +1178,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // do xs is the block whose statements are the elements, so its type is
         // the last one's ([] for none); a literal list is checked as that block.
         if (t.op === "do") {
+            // A file's code (what load gives) runs its statements, as the run checks.
+            if (a.k === "record" && a.fields instanceof ModuleFields) { runtimeChecks++; return explicitDynamic; }
             if (a.k !== "list") return problem("do expects a list of statements");
             return a.items ? a.items.at(-1) ?? list(dynamic, constant(0n)) : a.element;
         }
@@ -3735,7 +3737,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 if (resolved.k === "intrinsic" && resolved.name === "load" && a.t === "string" && options.loads) {
                     // load "file": an action running the file here, yielding its record.
-                    return io({ k: "record", fields: new ModuleFields(options.loads(a.v, scope, e === tailStatement)) });
+                    return io({ k: "record", fields: new ModuleFields(options.loads(a.v, scope)) });
                 }
                 if (resolved.k === "intrinsic" && resolved.name === "do" && a.t === "list") {
                     return infer({ t: "block", stmts: a.v, style: "{" }, scope);
@@ -4496,9 +4498,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const executedParts = new Map<Expr, Known | undefined>();
     const unforced = new Set<Known>();
     let touchedTopLevel = false, opaqueUse = false;
-    // The program's last statement, where a load replaces the running file (a tail load).
-    const lastStatement = program[program.length - 1];
-    const tailStatement = lastStatement?.t === "expr" ? lastStatement.value : undefined;
     function bodiesOf(clauses: { params: Pattern[]; body: Expr }[] | undefined): Expr[] {
         return (clauses ?? []).map(c => c.body);
     }
@@ -7093,7 +7092,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("parse", [str], explicitDynamic);
     native("step", [int, variable()], explicitDynamic);
     for (const name of ["debug", "intrinsics.eval", "use"]) scope.set(name, { type: { k: "intrinsic", name } });
-    scope.set("intrinsics.load", { type: { k: "intrinsic", name: "load" } });
+    // Code parse makes is read at runtime (a literal load's is checked: see PRELUDE_TYPINGS).
+    native("intrinsics.parse", [str], explicitDynamic);
+    native("intrinsics.readFileFrom", [str], io(str));
     // A list's code: probe shows it, toAST gives it as lists; reduce gives
     // the values alone (a plain list, not code).
     native("intrinsics.written", [variable()], str);
@@ -7450,6 +7451,8 @@ function signatureText(type: Ty): string | undefined {
 const PRELUDE_TYPINGS = new Map<string, [string, number]>([
     [">>", ["then", 2]], ["=<<", ["bindFlip", 2]], ["sequence", ["sequence", 1]], ["mapM", ["mapM", 2]],
     ["when", ["when", 2]], ["unless", ["when", 2]],
+    // load "file": the file's code, checked in the caller's scope when its path is written.
+    ["load", ["load", 1]],
     // not x is Bool x False True, which an action never reaches (as !x).
     ["not", ["not", 1]],
     // enumFrom a and the rest are [a..] and the rest (see rangeType).

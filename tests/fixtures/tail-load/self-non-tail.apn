@@ -1,3 +1,0 @@
-x = 1
-load "self-non-tail"
-print x

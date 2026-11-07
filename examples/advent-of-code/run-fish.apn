@@ -1,5 +1,6 @@
 std <- import "std"
 use std.io
 fish <- load "lanternfish"
+use fish
 input <- readInput
-print (fish.solveFish input)
+print (solveFish input)

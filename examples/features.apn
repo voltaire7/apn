@@ -77,7 +77,7 @@ print (to (List Char) "hi")              # => ['h','i']
 # A module is a record of what its file binds. import "path" is an action
 # yielding one (std, the library, is a record of its modules), and use opens a
 # record's names into the block it is in. Your own files and folders import
-# the same way; load "file" runs a file by its path, its record the result.
+# the same way; load "file" reads a file as code, which use runs where it stands.
 std <- import "std"
 use std.[option,number,syntax]
 parser <- import "std/parser"

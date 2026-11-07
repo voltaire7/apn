@@ -1,3 +1,4 @@
 set counter $ counter - 1
-again n = n > 0 ? load "function" : ()
-again counter
+again n = n > 0 ? load "function" : return []
+code <- again counter
+use code

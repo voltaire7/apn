@@ -1,5 +1,8 @@
 # Files are UTF-8; relative paths are relative to the process working directory.
 # Read one path from the command line, or all stdin when no path (or '-') is given.
+# readFileFrom path: readFile, beside the running file instead of the working
+# directory (as load reads code).
+readFileFrom = intrinsics.readFileFrom
 readInput = {
     args <- getArgs
     null args ? readStdin : (head args == "-" ? readStdin : readFile (head args))

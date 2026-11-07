@@ -145,8 +145,12 @@ export function unknownModule(spec: string, bundled = false): { message: string;
  * (or absolute), normalised; a virtual path when reading from a bundle.
  */
 export function loadPath(name: string, directory: string, bundle?: Record<string, string>): string {
+    return sourcePath(`${name}.apn`, directory, bundle);
+}
+/** A file path relative to directory (or absolute), normalised; a virtual one in a bundle. */
+export function sourcePath(path: string, directory: string, bundle?: Record<string, string>): string {
     const files = bundle ? bundleFiles(bundle) : disk;
-    return normal(name.startsWith("/") ? `${name}.apn` : `${absolute(directory, files)}${name}.apn`);
+    return normal(path.startsWith("/") ? path : `${absolute(directory, files)}${path}`);
 }
 /** A loaded file's source, from the disk or a bundle. */
 export function readLoad(path: string, bundle?: Record<string, string>): string | undefined {

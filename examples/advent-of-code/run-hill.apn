@@ -1,5 +1,6 @@
 std <- import "std"
 use std.io
 hill <- load "hill-climbing"
+use hill
 input <- readInput
-print (hill.solveHill input)
+print (solveHill input)

@@ -391,24 +391,27 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   Tests: `tests/eager-binding-test.ts`.
 - `Interpreter.eval` consumes internal `TailCall` transfers for fully applied
   functions, chosen `match` alternatives (a ternary's branches), and block
-  tails. `TailLoad` transfers propagate only from a loaded program's final
-  expression. `loadFile` owns the iterative loop, keeps the first file's
-  record, and restores caller scope/`sourceDir` on success, error, or
-  interruption. `load` and `intrinsics.import` actions keep the `dynamicDepth`
-  they were made at, so one written inside `Dynamic` runs unchecked. Non-tail
-  calls keep the depth guard
+  tails. `TailLoad` transfers propagate only from a `use` of code that is a
+  spliced program's final expression. `spliceCode` (what `use` of code runs)
+  owns the iterative loop, splices into the scope `use` was written in, and
+  restores `sourceDir` (set to the code's file's folder, `codeSources`; code's
+  own reads use `codeDirs`) on success, error, or interruption.
+  `intrinsics.import` and `intrinsics.readFileFrom` actions keep the
+  `dynamicDepth` they were made at, so one written inside `Dynamic` runs
+  unchecked; `parse` keeps whether the text it reads was (`sourcePaths`), as
+  `verifyLoad` checks. The checker types the prelude's `load` by its rule
+  (`PRELUDE_TYPINGS`). Non-tail calls keep the depth guard
   (`STACK_LIMIT`). Tests: `tests/tail-call-test.ts`, `tests/repl-interrupt-pty.py`.
 - `load` rejects explicit extensions before any file access.
 - Versions: `Interpreter.bindNames` defines a name new to the scope in its
   root (`Env.root`) and gives a rebound one a version (`new Env(env, True)`),
   which the statement loops (top level, blocks, do-blocks) go on in;
-  `Env.bindings` reads a scope through its versions (module and load
-  exports), and `newest` is the version `eval` runs in. A load or `use`
-  publishes the same way, and its statement adopts the version
-  (`adoptPublished`). The runtime tags the records `importStandard` and
-  `loadFile` make (`moduleValues`, with their origin; the REPL echoes none),
-  and the checker types both as `ModuleFields` (kept through `copy`); no
-  statement opens one. `use` of a module
+  `Env.bindings` reads a scope through its versions (module exports), and
+  `newest` is the version `eval` runs in. `use` publishes the same way, and its
+  statement adopts the version (`adoptPublished`). The runtime tags the
+  records `importStandard` makes and the code `parse` makes of a file
+  (`moduleValues`, with their origin; the REPL echoes none), and the checker
+  types both as `ModuleFields` (kept through `copy`); no statement opens one. `use` of a module
   record publishes its names with the module's origin; the checker opens the
   module's scope entries (clauses too) and settles each type (`validate`) as a
   statement's value is, so later code meets its calls decided; a module

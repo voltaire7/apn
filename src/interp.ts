@@ -12,7 +12,7 @@ import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { NATIVE_EXPORTS, RETIRED_NATIVES } from "./native-exports.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
-import { bundledText, IMPORT_ONE, loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
+import { bundledText, IMPORT_ONE, loadPath, type ModuleFile, readLoad, resolveModule, sourcePath, unknownModule } from "./modules.ts";
 import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, typeApplied, withArticle } from "./errors.ts";
@@ -57,15 +57,16 @@ const rankedAlternatives = new WeakMap<object, PatternLambda[] | null>();
 class TailCall {
     constructor(readonly body: Expr, readonly env: Env) {}
 }
+// A tail use of code (see spliceCode): the code, and the scope it runs over.
 class TailLoad {
-    constructor(readonly path: Value, readonly env: Env) {}
+    constructor(readonly code: Value, readonly env: Env) {}
 }
 
 // Natives with effects: applying one builds an IO action; running it performs them.
-export const IO_NATIVES = new Set(["intrinsics.import", "intrinsics.load", "print", "echo", "emit", "repl", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
+export const IO_NATIVES = new Set(["intrinsics.import", "intrinsics.readFileFrom", "print", "echo", "emit", "repl", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
 // What the actions of IO builtins yield, for showing their types (IO []).
 const IO_RESULTS: Record<string, string> = {
-    "intrinsics.import": "Module", "intrinsics.load": "Module", print: "[]", echo: "[]", emit: "[]", repl: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
+    "intrinsics.import": "Module", "intrinsics.readFileFrom": "String", print: "[]", echo: "[]", emit: "[]", repl: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
     entropy: "Int", currentTime: "Int", zoneOffset: "Int",
 };
 
@@ -107,9 +108,11 @@ export const NATIVES: Array<[string, number]> = [
     ["intrinsics.with", 3],
     // A union of types (Mixed = Int | String).
     ["intrinsics.union", 1],
-    // import path: an action reading a module, its record the result; load
-    // path one running a file in the caller's scope.
-    ["intrinsics.import", 1], ["intrinsics.load", 1],
+    // import path: an action reading a module, its record the result.
+    ["intrinsics.import", 1],
+    // readFileFrom path: an action reading a file beside the running one;
+    // parse source: the code it writes, its items in the scope parse runs in.
+    ["intrinsics.readFileFrom", 1], ["intrinsics.parse", 1],
 ];
 // The names editors color as built-in functions (the natives, cast and do).
 // The names natives are bound by (each intrinsic is a field of intrinsics).
@@ -216,6 +219,35 @@ export class Interpreter {
     private moduleValues = new WeakMap<Value, { origin?: string; checked?: boolean }>();
     /** Whether a value is a module's record (what import and load yield). */
     isModule(v: Value): boolean { return this.moduleValues.has(v); }
+    // Text readFileFrom read: its file, and whether the static check could
+    // follow it (read outside Dynamic, while checking).
+    private sourcePaths = new WeakMap<Value, { path: string; checked: boolean }>();
+    // Code parse made from a file's text: the file's folder, which reads in
+    // the code (a load there) are beside.
+    private codeDirs = new WeakMap<Env, string>();
+    private codeSources = new WeakMap<Value, string>();
+    private runningDir(): string {
+        for (let e: Env | null = this.env; e; e = e.parent) { const dir = this.codeDirs.get(e); if (dir !== undefined) return dir; }
+        return this.sourceDir;
+    }
+    // Source text as code: its statements as items, written in the scope parse
+    // runs in. Text a readFileFrom read keeps its file: errors name it, and the
+    // code is that file's module (use publishes its names as the file's).
+    private parseCode(source: Extract<Value, { kind: "string" }>): Value {
+        const file = this.sourcePaths.get(source);
+        let program: TopLevel[];
+        try { program = parse(source.v, file?.path ?? "<parse>"); }
+        catch (err) { throw err instanceof APNError ? err : new APNError("parse", (err as Error).message); }
+        if (file?.checked && file.path.endsWith(".apn")) this.checking!.verifyLoad(file.path.slice(0, -".apn".length), "/", source.v);
+        const scope = new Env(this.env);
+        if (file) this.codeDirs.set(scope, dirname(file.path));
+        const code = this.codeList(this.statementItems(program), scope);
+        if (file) {
+            this.moduleValues.set(code, { origin: `${file.path}\0${source.v}`, checked: file.checked });
+            this.codeSources.set(code, dirname(file.path));
+        }
+        return code;
+    }
 
     importStandard(module: string): Value {
         // The static check follows an import outside Dynamic, so it typed what
@@ -2169,7 +2201,10 @@ export class Interpreter {
                 if (args.length < f.arity) return { ...f, applied: args };
                 if (f.invoke) return f.invoke(args);
                 if (f.name === "__constr") return this.variantValue(f.tag!, args, f.family);
-                if (f.name === "intrinsics.load" && tailLoad) throw new TailLoad(this.demand(args[0]), this.env);
+                if (f.name === "use" && tailLoad) {
+                    const code = this.dataValue(args[0]);
+                    if (this.isList(code) && this.codeItems(code)) throw new TailLoad(code, this.env);
+                }
                 return this.callNative(f.name, args, f.tag);
             }
             case "clauseFn": {
@@ -2398,6 +2433,10 @@ export class Interpreter {
         setLooseSpacing(true);
         let program: TopLevel[];
         try { program = parse(text, file); } finally { setLooseSpacing(loose); }
+        return this.statementItems(program);
+    }
+    // A program's statements as a block's (or code's items).
+    private statementItems(program: TopLevel[]): Expr[] {
         return program.map(tl => {
             if (tl.t === "def") return { t: "stmDef", name: tl.name, clauses: tl.clauses };
             if (tl.t === "type") return { t: "typeDef", def: tl.def };
@@ -2567,6 +2606,15 @@ export class Interpreter {
         this.env = state.scope;
         try {
             const { expr } = item;
+            // A type declaration binds its type and constructors, as a block's does.
+            if (expr.t === "typeDef") {
+                this.declare(expr.def, this.env);
+                state.scope = this.env;
+                const names = [expr.def.name, ...expr.def.variants.map(v => v.tag)].filter(name => this.env.map.has(name));
+                const binds = new Map(names.map(name => [name, this.env.get(name)!]));
+                for (const [name, bound] of binds) { state.before.set(name, bound); state.changed.add(name); }
+                return this.writtenAs(mkList([]), { expr, env: item.env, binds, joined });
+            }
             if (expr.t !== "stmDef" && expr.t !== "patDef") return this.writtenAs(this.delay(expr), { expr, env: item.env, joined });
             // x <- m: its value is the action m; x is bound when the code runs
             // (do runs m and joins x = its result before the items after it).
@@ -4354,7 +4402,7 @@ export class Interpreter {
         if (!perform && IO_NATIVES.has(name)) {
             const fresh = (v: Value): Value => v.kind === "thunk" && v.env ? { kind: "thunk", body: v.body, env: v.env } : v;
             // A module read inside Dynamic is read unchecked wherever it runs.
-            if (name === "intrinsics.load" || name === "intrinsics.import") {
+            if (name === "intrinsics.import" || name === "intrinsics.readFileFrom") {
                 const depth = this.dynamicDepth;
                 return { kind: "io", result: IO_RESULTS[name], run: () => {
                     const outer = this.dynamicDepth;
@@ -4420,10 +4468,15 @@ export class Interpreter {
         }
         if (name === "use") {
             const value = this.dataValue(argsIn[0]);
-            const records = this.isList(value) ? this.items(value).map(v => this.dataValue(v)) : [value];
+            // Code is spliced where use stands: an action running its statements.
+            // (into the scope use stands in, wherever its action runs).
+            if (this.isList(value) && this.codeItems(value)) { const here = this.env; return { kind: "io", result: "[]", run: () => this.spliceCode(value, here) }; }
+            const given = this.isList(value) ? this.items(value).map(v => this.dataValue(v)) : [value];
             const opened: Array<{ bindings: Array<[string, Value]>; module?: { origin?: string; checked?: boolean } }> = [];
-            for (const record of records) {
-                if (record.kind !== "record") throw new APNError("runtime", "use expects a record or a list of records");
+            for (const written of given) {
+                const record = written;
+                if (this.isList(record) && this.codeItems(record)) throw new APNError("runtime", "use runs code on its own, not in a list", { hint: "use each code in turn: use a; use b" });
+                if (record.kind !== "record") throw new APNError("runtime", "use expects a record, code, or a list of records");
                 const bindings: Array<[string, Value]> = [];
                 for (const [key, field] of record.v) {
                     // A field is a name or an operator (a module's <|>).
@@ -4432,7 +4485,7 @@ export class Interpreter {
                     }
                     bindings.push([key, field]);
                 }
-                opened.push({ bindings, module: this.moduleValues.get(record) });
+                opened.push({ bindings, module: this.moduleValues.get(written) });
             }
             // Validate the whole input before publishing; keep the field values lazy.
             // A module's names are published as its own (as the static check typed them).
@@ -4691,6 +4744,24 @@ export class Interpreter {
             case "intrinsics.get": return this.builtinGet(this.force(args[0]), args[1]);
             case "intrinsics.with": return this.assignItem(this.dataValue(args[0]), this.dataValue(args[1]), args[2]);
             case "intrinsics.union": return this.union([...this.elements(args[0])].map(x => this.reference(x)));
+            case "intrinsics.readFileFrom": {
+                const path = this.force(args[0]);
+                if (path.kind !== "string") throw new APNError("runtime", "readFileFrom expects a file path string");
+                const full = sourcePath(path.v, this.runningDir(), this.moduleSources);
+                const text = this.moduleSources ? readLoad(full, this.moduleSources) : (() => { try { return Deno.readTextFileSync(full); } catch { return undefined; } })();
+                if (text === undefined) {
+                    throw new APNError("runtime", this.moduleSources ? `'${path.v}' is not bundled` : `readFileFrom: cannot read '${path.v}' (looked in '${full}')`,
+                        this.moduleSources ? { hint: "a browser build bundles only files inside the program's folder" } : {});
+                }
+                const read = mkStr(text);
+                this.sourcePaths.set(read, { path: full, checked: !!this.checking && !this.dynamicDepth });
+                return read;
+            }
+            case "intrinsics.parse": {
+                const source = this.force(args[0]);
+                if (source.kind !== "string") throw new APNError("runtime", "parse expects source text");
+                return this.parseCode(source);
+            }
             case "intrinsics.import": {
                 const path = this.force(args[0]);
                 if (path.kind !== "string") throw new APNError("runtime", IMPORT_ONE.message, { hint: IMPORT_ONE.hint });
@@ -4790,76 +4861,67 @@ export class Interpreter {
                     throw new APNError("runtime", "exit status must fit a signed 32-bit integer");
                 }
                 return Deno.exit(Number(a.v));
-            case "intrinsics.load": return this.loadFile(a);
 
         }
         throw new Error(`Runtime: unknown native '${name}'`);
     }
 
-    // Running load "file" runs the file in the caller's scope; its record (the
-    // module) is what the file's top level bound, as its newest version has it.
-    // A file whose last statement loads another (a tail load) ends there: the
-    // other runs in its place, as a tail call, and its record is dropped.
-    loadFile(pathValue: Value): Value {
-        const caller = this.env, callerDir = this.sourceDir;
-        // The first file's scope, and its record once its tail is reached (a
-        // tail load from a block leaves the block's scope; the file's is below it).
-        let first: { loaded: Env; origin: string; checked: boolean; record?: Extract<Value, { kind: "record" }> } | undefined;
-        const recordOf = (env: Env, scope: Env): Extract<Value, { kind: "record" }> => {
-            let newest = scope;
-            for (let e: Env | null = env; e; e = e.parent) if (e.root() === scope) { newest = e; break; }
-            return { kind: "record", v: [...newest.bindings()] };
-        };
+    // use code, run as a statement: the code's statements run where use stands,
+    // in this scope, as written there (a loaded file's imports, definitions and
+    // effects), reading files beside the code's own file; then what they bound
+    // is this scope's, as the file's (see moduleValues). Code whose last
+    // statement uses other code (a file loading itself) ends there: the other
+    // runs in its place, as a tail call, its bindings joining the first's.
+    private spliceCode(code: Value, caller: Env): Value {
+        const running = this.env, callerDir = this.sourceDir, module = this.moduleValues.get(code);
+        this.env = caller;
         try {
             for (;;) {
                 checkInterrupt();
-                if (pathValue.kind !== "string") throw new APNError("runtime", "load expects a file path string");
-                const filename = pathValue.v.slice(pathValue.v.lastIndexOf("/") + 1);
-                if (!filename || filename.includes(".")) {
-                    throw new APNError("runtime", "load expects an extensionless file name", {
-                        hint: `use \`load "file"\`, not \`load "file.apn"\`; .apn is added automatically`,
-                    });
-                }
-                const p = `${pathValue.v}.apn`;
-                // A browser build reads the bundle (see bundleProgram in modules.ts).
-                const path = this.moduleSources ? loadPath(pathValue.v, this.sourceDir, this.moduleSources)
-                    : this.sourceDir === "." || p.startsWith("/") ? p : `${this.sourceDir}/${p}`;
-                let src: string;
-                if (this.moduleSources) {
-                    const bundled = readLoad(path, this.moduleSources);
-                    if (bundled === undefined) throw new APNError("runtime", `load: '${p}' is not bundled`, { hint: "a browser build bundles only files inside the program's folder" });
-                    src = bundled;
-                } else {
-                    try { src = Deno.readTextFileSync(path); }
-                    catch (err) { throw new APNError("runtime", `load: can't read '${p}' (looked in '${path}'): ${(err as Error).message}`); }
-                }
-                let program: TopLevel[];
-                try { program = parse(src, path); }
-                catch (err) { throw new APNError("runtime", `load: parse error in '${path}': ${(err as Error).message}`); }
-                const checked = !!this.checking && !this.dynamicDepth;
-                if (checked) this.checking!.verifyLoad(pathValue.v, this.sourceDir, src);
-                const loaded = new Env(this.env);
-                first ??= { loaded, origin: `${path}\0${src}`, checked };
-                this.env = loaded;
-                this.sourceDir = dirname(path);
+                const program = this.codeItems(code)!.map((expr): TopLevel => expr.t === "stmDef" ? { t: "def", name: expr.name, clauses: expr.clauses }
+                    : expr.t === "typeDef" ? { t: "type", def: expr.def } : expr.t === "patDef" ? expr : { t: "expr", value: expr });
+                this.env = new Env(this.env);
+                const dir = this.codeSources.get(code);
+                if (dir !== undefined) this.sourceDir = dir;
                 try {
                     this.runDepth++;
                     try { this.run(program, true); } finally { this.runDepth--; }
                 }
                 catch (step) {
                     if (!(step instanceof TailLoad)) throw step;
-                    pathValue = step.path;
-                    first.record ??= recordOf(step.env, first.loaded);
+                    code = step.code;
                     this.env = step.env;
                     continue;
                 }
-                const result = first.record ?? recordOf(this.env, first.loaded);
-                this.moduleValues.set(result, { origin: first.origin, checked: first.checked });
-                return result;
+                break;
             }
-        } finally {
-            this.env = caller;
+            // What it bound, each tail's scope over the one before it.
+            const scopes: Env[] = [];
+            for (let e: Env | null = this.env; e && e !== caller; e = e.parent) scopes.unshift(e);
+            const bindings = new Map<string, Value>();
+            for (const scope of scopes) for (const [name, value] of scope.map) bindings.set(name, value);
+            this.env = running;
             this.sourceDir = callerDir;
+            // The statement running use adopts the scope this publishes.
+            this.publishForeignBindings(caller, [...bindings], module?.origin, module?.checked ?? (!!this.checking && !this.dynamicDepth));
+            return mkList([]);
+        } catch (error) {
+            this.env = running;
+            this.sourceDir = callerDir;
+            throw error;
+        }
+    }
+    // The items of code, as written; undefined for a list that is no code
+    // (code binds a name, or parse wrote it).
+    private codeItems(code: Value): Expr[] | undefined {
+        const items: Expr[] = [];
+        for (let rest = code;;) {
+            const cell = this.cell(rest);
+            if (!cell) return this.codeSources.has(code) || items.some(e => ["stmDef", "patDef", "typeDef"].includes(e.t)) ? items : undefined;
+            const item = this.written(cell.head);
+            if (!item) return undefined;
+            items.push(item.expr);
+            rest = cell.tail;
         }
     }
 

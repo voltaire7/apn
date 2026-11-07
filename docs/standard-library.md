@@ -13,8 +13,8 @@ operator (`(+) = intrinsics.add`, ...; the `intrinsics` record holds the
 functions APN cannot define) and its fixity, `negate` and `not` (the functions
 `-x` and `!x` are), `enumFrom`, `enumFromThen`, `enumFromTo` and
 `enumFromThenTo` (the functions ranges are: `[a..]` is `enumFrom a`),
-`probe`, `reduce` and `toAST` (see [code](semantics.md#code)), `import`
-(see [module imports](semantics.md#module-imports)),
+`probe`, `reduce`, `toAST` and `parse` (see [code](semantics.md#code)), `import`
+and `load` (see [module imports](semantics.md#module-imports)),
 and the Functor, Applicative
 and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
 `sequence`, `mapM`, `map2`–`map4`, `when`, `unless`, `loop`, `while`, `for`, `return`, `throw`, `empty`, `guard`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).
@@ -59,12 +59,12 @@ A record pattern takes some names of a module and leaves the rest:
 `[halt] <- import "std/system"` binds `halt`, and `[halt = stop] <- import
 "std/system"` binds only `stop`.
 
-`load "file"` is file execution (the `.apn` extension must be omitted): an
-action that runs the file in the caller's scope, again each time it runs, with
-paths relative to the source file, and yields its record; `import` runs a
-module once, in its own scope (see [module imports](semantics.md#module-imports)).
-Names without an extension receive `.apn`; explicitly supplied extensions are
-used literally. `load` parses file contents as APN regardless of their extension.
+`load "file"` reads `file.apn` beside the running file as code, again each time
+it runs; `use` of that code runs the file there, in the caller's scope, while
+`import` runs a module once, in its own scope (see
+[module imports](semantics.md#module-imports)). `parse` turns any source text
+into code, and `std.io`'s `readFileFrom` reads a file beside the running one,
+as `load` does (`readFile` reads from the working directory).
 `sq` lives in `number`; `halt` lives in `system`.
 
 ## Types — `type`
@@ -509,10 +509,10 @@ It selects the first matching unary function from a lazy list of alternatives.
 See [pattern functions and contracts](pattern-functions.md).
 
 A bare `load "file"` (or `import "path"`) in the REPL runs it without displaying
-the module it yields. This avoids forcing unused exports such as infinite lists.
-Explicit output in the file still prints. Use `module <- load "file"` to keep
-the record, then inspect selected fields or `use module`. Printing the whole
-record (`print module`) can stream indefinitely if it holds infinite lists.
+the code or module it yields. This avoids forcing unused exports such as
+infinite lists. Use `module <- load "file"` to keep the code, then read
+selected fields, or `use module` to run the file there. Printing the whole
+module (`print module`) can stream indefinitely if it holds infinite lists.
 
 ## Resource scopes and type utilities
 
