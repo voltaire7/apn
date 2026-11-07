@@ -53,7 +53,10 @@ export type Value =
     // so a value never keeps the scope that made it alive.
     | { kind: "deferred"; compute?: () => Value; value?: Value; busy?: boolean; describes?: Value }
     // shared: a stateful object (a p5 object), which a definition allocates once, as a Mutable.
-    | { kind: "record"; v: Array<[string, Value]>; shared?: boolean }
+    // bound: fields bound to their value (x = Float), which holds no slot
+    // even when it is a type; any other field holding a type is a slot
+    // (x : Float), as a record of types is.
+    | { kind: "record"; v: Array<[string, Value]>; shared?: boolean; bound?: Set<string> }
     | { kind: "variant"; tag: string; v: Value[]; family?: VariantFamily; arguments?: Value[] }
     // A partly applied closure keeps its whole parameter list and the arguments
     // applied so far, for showing it: (a b -> a + b) 1.
@@ -101,9 +104,11 @@ export type PendingStep =
 // What an IO action continues with: its last step, run by the caller's loop.
 export class IOTail { constructor(public next: Value) {} }
 
-// A record field holding a type prints as its declaration (x : Float); any
-// other value, a list of types included, as its binding (x = [Int,Int]).
-export function holdsType(v: Value): boolean { return v.kind === "type" || v.kind === "functionType"; }
+// A record's field that is a slot, holding a type it was not bound to,
+// prints as its declaration (x : Float); any other as its binding (x = Float).
+export function slotField(record: Extract<Value, { kind: "record" }>, key: string, v: Value): boolean {
+    return (v.kind === "type" || v.kind === "functionType") && !record.bound?.has(key);
+}
 
 export function valueToString(v: Value): string {
     switch (v.kind) {
@@ -133,7 +138,7 @@ export function valueToString(v: Value): string {
             return `[${itemsText(out.map(valueToString))}]`;
         }
         case "record":
-            return `[${v.v.map(([k, val]) => fieldSource(k, valueToString(val), holdsType(val))).join(", ")}]`;
+            return `[${v.v.map(([k, val]) => fieldSource(k, valueToString(val), slotField(v, k, val))).join(", ")}]`;
         // A named subtype's value is its base's (5 : Count prints 5); a
         // constructor's shows it (UserId 5).
         case "variant": return v.family?.base && v.v.length === 1 ? valueToString(v.v[0]) : v.tag + v.v.map(argumentText).join("");

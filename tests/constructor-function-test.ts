@@ -36,7 +36,7 @@ for (const checked of [true, false]) {
         [PAIRS + "f (xs : Pairs n a) = n\nf _ = 0\n[f [1,2,3,4], f ([5,6] : Pairs 1 Int)]", "[0,1]"],
         [PAIRS + "g (Pairs n a) = n\ng (Pairs 3 Int)", "3"],
         [PAIRS + "map typeOf ([[1,2]] : List (Pairs 1 Int))", "[Pairs 1 Int]"],
-        ["P a = [x = a, y = a]\np = P Float [x = 1, y = 2]\n[typeOf p, p.x]", "[P Float, 1.0]"],
+        ["P a = [x : a, y : a]\np = P Float [x = 1, y = 2]\n[typeOf p, p.x]", "[P Float, 1.0]"],
         // So does a name without parameters for a type or a schema; Type shows
         // what it is, and an updated copy keeps the name.
         ["Row = Vect 3 Int\n[Row, typeOf ([1,2,3] : Row), typeOf [1,2,3]]", "[Row,Row,[Int,Int,Int]]"],

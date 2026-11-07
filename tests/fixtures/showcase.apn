@@ -1828,7 +1828,7 @@ print (ZeroVector : Type)            # => [x : Float, y : Float, z : Float]
 DefaultChoice a = Present a | Absent
 print ([choice : DefaultChoice Int] []) # => [choice = Absent]
 DefaultUser = | MakeDefaultUser Int String
-print ([user = DefaultUser] [])       # => [user = MakeDefaultUser 0 ""]
+print ([user : DefaultUser] [])       # => [user = MakeDefaultUser 0 ""]
 # Int .2, cast Int .2 and [Int].[.2] reject lossy conversion.
 print (floor .2 : Int)               # => 0
 

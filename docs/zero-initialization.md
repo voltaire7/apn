@@ -95,7 +95,7 @@ initializing the payload fields:
 Option a = Some a | None
 [choice : Option Int] []    # [choice = None]
 User = | MkUser Int String
-[user = User] []            # [user = MkUser 0 ""]
+[user : User] []            # [user = MkUser 0 ""]
 User                       # User, the type descriptor
 ```
 

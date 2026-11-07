@@ -2474,11 +2474,11 @@ function isFunctionType(type: Expr): boolean {
 // A record's fields as they were written: x = 1, x : T, x : T = 1, use base,
 // f x = ...
 function recordFieldsSource(e: Extract<Expr, { t: "record" }>, of: (x: Expr) => string): string[] {
-    const declared = declaredKeys.get(e);
+    const declared = new Set(e.declared);
     return e.v.map(([key, x]) => {
         if (key === "_") return `use ${of(x)}`;
         if (x.t === "block" && x.stmts.length === 2 && x.stmts[0].t === "stmDef" && x.stmts[0].name === key) return of(x.stmts[0] as Expr);
-        if (!declared?.has(key)) return fieldSource(key, of(x));
+        if (!declared.has(key)) return fieldSource(key, of(x));
         const typed = x.t === "app" && x.ascribed ? x : undefined;
         return typed ? `${fieldSource(key, of(typed.f), true)} = ${of(typed.a)}` : fieldSource(key, of(x), true);
     });
@@ -2487,7 +2487,6 @@ function recordFieldsSource(e: Extract<Expr, { t: "record" }>, of: (x: Expr) => 
 // field in scope for those after it), [x : Float, y : Float = 1.0] (a declared
 // field holds its type, or its default as one), [use base, x = 1] (a spread).
 const declaredFields = new WeakSet<Expr>();
-export const declaredKeys = new WeakMap<Expr, Set<string>>();
 function recordOf(items: Expr[]): Expr | undefined {
     if (!items.length) return undefined;
     const fields: Array<[string, Expr]> = [], declared = new Set<string>();
@@ -2499,9 +2498,7 @@ function recordOf(items: Expr[]): Expr | undefined {
         fields.push([item.name, simple ? clause.body : { t: "block", style: "{", stmts: [item, { t: "var", name: item.name }] }]);
         if (declaredFields.has(item)) declared.add(item.name);
     }
-    const record: Expr = { t: "record", v: fields, items };
-    if (declared.size) declaredKeys.set(record, declared);
-    return record;
+    return { t: "record", v: fields, items, ...declared.size ? { declared: [...declared] } : {} };
 }
 // e : T as the language reads it: a type applied to a value checks it and
 // collapses it (Int 1.0 is 1). A function type applied to a value would call

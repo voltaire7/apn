@@ -30,8 +30,9 @@ export type Expr =
     | { t: "lambda"; params: string[]; body: Expr }
     | { t: "ternary"; cond: Expr; then: Expr; els: Expr }
     | { t: "list"; v: Expr[] }
-    // items: a record written as a list literal keeps its items as code.
-    | { t: "record"; v: Array<[string, Expr]>; items?: Expr[] }
+    // items: a record written as a list literal keeps its items as code;
+    // declared: its fields written with their type (x : T, x : T = v).
+    | { t: "record"; v: Array<[string, Expr]>; items?: Expr[]; declared?: string[] }
     | { t: "recordAccess"; rec: Expr; field: string; argument?: Expr; scoped?: boolean }
     | { t: "pluck"; rec: Expr; entries: Array<string | [string, string]>; values?: Expr; quoted?: boolean }
     | { t: "setItem"; rec: Expr; index: Expr; value: Expr }

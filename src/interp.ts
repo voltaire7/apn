@@ -21,7 +21,7 @@ import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, 
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions } from "./ast.ts";
-import { canonicalTypeText, compoundArgument, holdsType, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
+import { canonicalTypeText, compoundArgument, slotField, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
 import { parse, exprToSource, patternSource, patternVariables, isOperatorName, PRIMITIVE_OPERATORS, fixityOf, getLooseSpacing, setLooseSpacing } from "./parser.ts";
@@ -721,10 +721,10 @@ export class Interpreter {
     // of that type (Vector3.x = 1 is x: Float 1). Holding a value, it is given
     // one of that value's type: a number converted losslessly, a string,
     // character or Bool of its kind, a function.
-    private assignSlot(slot: Value, value: Value): Value {
+    private assignSlot(slot: Value, value: Value, bound = false): Value {
         // Inspect the old slot without invoking an action stored there.
         slot = this.force(slot);
-        if (this.holdsType(slot)) return this.holdsType(value) ? value : this.applyTemplateSlot(slot, value);
+        if (!bound && this.holdsType(slot)) return this.holdsType(value) ? value : this.applyTemplateSlot(slot, value);
         const mismatch = (): never => {
             const source = this.renderString(this.callNative("typeOf", [value]));
             throw new APNError("runtime", `cannot use ${source} where ${this.renderString(this.callNative("typeOf", [slot]))} is required`);
@@ -1520,17 +1520,26 @@ export class Interpreter {
                     case "record": {
                         // Fields are code: each is in scope for those after it, and
                         // x = x + 1 reads the x before it, as in a block.
-                        const fields = new Map<string, Value>(), outer = this.env;
-                        const bind = (name: string, value: Value) => { fields.set(name, value); this.env = new Env(this.env); this.env.setLocal(name, value); };
+                        // A field is bound to its value (x = Float), except one
+                        // declared with only its type, a slot (x : Float).
+                        const fields = new Map<string, Value>(), bound = new Set<string>(), outer = this.env;
+                        const written = e.v;
+                        const slots = new Set(e.declared?.filter(key => !written.some(([k, x]) => k === key && x.t === "app" && x.ascribed)));
+                        const bind = (name: string, value: Value, isBound: boolean) => {
+                            fields.set(name, value);
+                            if (isBound) bound.add(name); else bound.delete(name);
+                            this.env = new Env(this.env);
+                            this.env.setLocal(name, value);
+                        };
                         try {
                             for (const [key, expression] of e.v) {
-                                if (key !== "_") { bind(key, this.eval(expression)); continue; }
+                                if (key !== "_") { bind(key, this.eval(expression), !slots.has(key)); continue; }
                                 const spread = this.dataValue(this.eval(expression));
                                 if (spread.kind !== "record") throw new APNError("runtime", "use in a record opens a record");
-                                for (const [name, value] of spread.v) bind(name, value);
+                                for (const [name, value] of spread.v) bind(name, value, !!spread.bound?.has(name));
                             }
                         } finally { this.env = outer; }
-                        r = { kind: "record", v: [...fields] };
+                        r = { kind: "record", v: [...fields], ...bound.size ? { bound } : {} };
                         if (e.items) this.recordCode.set(r, { exprs: e.items, env: outer });
                         break;
                     }
@@ -1940,13 +1949,16 @@ export class Interpreter {
     // old value requires (a number's type, a variant's family); a new one is
     // added, unless a record type made the record.
     private assignFields(rec: Extract<Value, { kind: "record" }>, fields: Array<[string, Value]>): Value {
-        const out = rec.v.slice();
+        const out = rec.v.slice(), bound = new Set(rec.bound);
         for (const [key, value] of fields) {
             const index = out.findIndex(([field]) => field === key);
-            if (index < 0) out.push([this.newField(rec, key), value]);
-            else out[index] = [key, this.assignSlot(out[index][1], value)];
+            // A new field is bound to its value, as assignment binds.
+            if (index < 0) { out.push([this.newField(rec, key), value]); bound.add(key); }
+            else out[index] = [key, this.assignSlot(out[index][1], value, bound.has(key))];
         }
-        return this.keepType(rec, { kind: "record", v: out });
+        const result = this.keepType(rec, { kind: "record", v: out });
+        if (result.kind === "record") result.bound = bound.size ? bound : undefined;
+        return result;
     }
 
     // v 0 = ["x1",22]: entry n replaced by a [key,value] pair, as v 0 reads it;
@@ -1961,8 +1973,10 @@ export class Interpreter {
         const other = rec.v.findIndex(([k], i) => k === key.v && i !== n);
         if (other >= 0) throw new APNError("runtime", `the record already has a field '${key.v}' (entry ${other})`);
         const out = rec.v.slice();
-        out[n] = key.v === old ? [old, this.assignSlot(held, field)] : [this.newField(rec, key.v), field];
-        return this.keepType(rec, { kind: "record", v: out });
+        const bound = new Set(rec.bound);
+        if (key.v === old) out[n] = [old, this.assignSlot(held, field, bound.has(old))];
+        else { out[n] = [this.newField(rec, key.v), field]; bound.delete(old); bound.add(key.v); }
+        return this.keepType(rec, { kind: "record", v: out, ...bound.size ? { bound } : {} });
     }
 
     // A record a record type made keeps that type's fields: a new one is an
@@ -1975,9 +1989,11 @@ export class Interpreter {
             hint: near ? `did you mean '${near}'?` : `a record its type made keeps its fields; copy it to add one: [_: record, ${key}: value]`,
         });
     }
+    // A copy keeps the record's type and which of its fields are bound.
     private keepType(from: Value, to: Value): Value {
         const type = this.declaredTypes.get(from);
         if (type) this.declaredTypes.set(to, type);
+        if (from.kind === "record" && from.bound && to.kind === "record" && !to.bound) to.bound = from.bound;
         return to;
     }
     private missingField(rec: Extract<Value, { kind: "record" }>, key: string): never {
@@ -2338,8 +2354,10 @@ export class Interpreter {
                     // field assignment (model [name = n]; Vector3 [x : Int] is
                     // Vector3.x = Int).
                     // (A given field's slot is forced to tell, as assigning it would.)
-                    const building = !given.some(([key, value]) => this.holdsType(value) && !this.typeOfTypes(slots.get(key)))
-                        && (!given.length || this.holdsType(f) || given.some(([key]) => slots.has(key) && this.holdsType(this.force(slots.get(key)!))));
+                    // (A field bound to a type, x = Int, is a value, not a slot.)
+                    const typeGiven = (key: string, value: Value) => this.holdsType(value) && !(carg.kind === "record" && carg.bound?.has(key));
+                    const building = !given.some(([key, value]) => typeGiven(key, value) && !this.typeOfTypes(slots.get(key)))
+                        && (!given.length || this.holdsType(f) || given.some(([key]) => slots.has(key) && !f.bound?.has(key) && this.holdsType(this.force(slots.get(key)!))));
                     if (!building) return this.assignFields(f, given.map(([key, value]) => [key, this.demand(value)]));
                     const supplied = new Map(given);
                     for (const [key, slot] of f.v) {
@@ -2352,7 +2370,8 @@ export class Interpreter {
                     const out: [string, Value][] = f.v.map(([key, slot]) => [key, this.defer(() => supplied.has(key)
                         ? this.assignSlot(slot, this.reference(supplied.get(key)!)) : this.defaultField(slot, []))]);
                     for (const [key, value] of given) if (!slots.has(key)) out.push([key, value]);
-                    const result: Value = { kind: "record", v: out };
+                    // What it builds holds values: every field is bound.
+                    const result: Value = { kind: "record", v: out, bound: new Set(out.map(([key]) => key)) };
                     // A schema's value (Body [...]) is declared its type, as List T's.
                     if (this.isTypeValue(f)) this.declaredTypes.set(result, f);
                     return result;
@@ -3322,7 +3341,7 @@ export class Interpreter {
                     // Inspect module actions without running halt; ordinary data
                     // fields still render their memoized values.
                     const field = this.force(val);
-                    emit(holdsType(field) ? " : " : " = ");
+                    emit(slotField(v, key, field) ? " : " : " = ");
                     if (field.kind === "closure" && !field.params.length) emit(valueToString(field), field.kind);
                     else this.render(field, emit, false, ancestors);
                 });
@@ -4038,7 +4057,7 @@ export class Interpreter {
         while ((value.kind === "thunk" || value.kind === "deferred") && value.value) value = value.value;
         if (value.kind === "type" || value.kind === "functionType" || this.sharedType(value)) return true;
         if (depth > 3) return false;
-        if (value.kind === "record") return value.v.some(([, field]) => this.holdsType(field, depth + 1));
+        if (value.kind === "record") return value.v.some(([key, field]) => !value.bound?.has(key) && this.holdsType(field, depth + 1));
         if (value.kind === "list") return value.v.length > 0 && this.holdsType(value.v[0], depth + 1);
         if (value.kind === "lazyList") {
             if (value.value) return this.holdsType(value.value, depth);
@@ -4117,7 +4136,7 @@ export class Interpreter {
         if (value.kind === "type" || value.kind === "functionType" || this.sharedType(value)) return true;
         if (seen.has(value)) return false;
         const path = new Set(seen); path.add(value);
-        if (value.kind === "record") return value.v.every(([, field]) => this.isTypeValue(field, path));
+        if (value.kind === "record") return value.v.every(([key, field]) => !value.bound?.has(key) && this.isTypeValue(field, path));
         if (this.isList(value)) {
             const spine = new Set<Value>();
             let rest: Value = value;

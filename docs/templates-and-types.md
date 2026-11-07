@@ -1,8 +1,10 @@
 # Templates and type aliases
 
-Every record field has a type: the type it holds (`[x : Float]`), or the type of
-the value it holds, which is then that type's default (`[x = 1.1]` is a Float
-field defaulting to `1.1`). A record holding a type, given values, builds one;
+Every record field has a type: the type it declares (`[x : Float]`, a slot), or
+the type of the value it is bound to, which is then that type's default
+(`[x = 1.1]` is a Float field defaulting to `1.1`). A field bound to a type is
+a value like any other, not a slot: `[x = Float]` holds the type `Float`, and
+is no template and no type. A record with a slot, given values, builds one;
 any other record given fields is updated, exactly as by field assignment (see
 [slot assignment](#slot-assignment)). Either way a given value converts to its
 field's type. Dotted list application applies its slots and rejects scalar slots.
@@ -227,7 +229,7 @@ v "y" = 321                # stores integer 321
 ```
 
 A slot holding a type takes a type, which changes it, or a value, which
-becomes a default of that type (as `x: (123 : Float)` would be written):
+becomes a default of that type (as `x : Float = 123` would be written):
 
 ```apn
 v = [x : Float]
@@ -262,7 +264,7 @@ defaults, so `Vector3 [x = 1]` is `[x = 1.0, y = 0.0, z = 0.0]`. (Assigning a
 value into a type's field sets that field's default instead: `Vector3.x = 1`
 is the type `[x = 1.0, y : Float, z : Float]`, and `Vector3 []` is then
 `[x = 1.0, y = 0.0, z = 0.0]`.) A list gives values in field order, exactly as by
-name: `r [10,20]` is `r [x = 10, y = 20]`. Whether a record holds a type is told
+name: `r [10,20]` is `r [x = 10, y = 20]`. Whether a record has a slot is told
 from what it was built with and the fields it is given, without evaluating the
 others. A parameter given a record literal may be a function or
 such a record; the checker decides once its type is known.
@@ -496,7 +498,7 @@ Percent 90 + Percent 20       # Percent 100.0: the clause calls Percent, so its 
 Span (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _
 ```
 
-Every way of making one runs it, a record slot's default too (`[s = Span] []`
+Every way of making one runs it, a record slot's default too (`[s : Span] []`
 runs it on `Span 0 0`), and the checker checks that it gives the constructor's
 type. Its fields are named, since `_` holds them.
 
@@ -587,7 +589,7 @@ An unspecialized parent pattern `(value : Option _)` still binds the whole varia
 A constructor pattern `(Some value)` extracts its field. A constructor sharing
 its type's name (`Box x = _`, `Box a = | Box a`) is the constructor where a
 value is expected and the type where one is expected: a field's type
-(`Wrap (Box b) = _`), a record slot (`[b = Box] []` is `[b = Box 0]` for
+(`Wrap (Box b) = _`), a record slot (`[b : Box] []` is `[b = Box 0]` for
 `Box (x : Int) = _`), `isType Box`, a type's argument (`List Box`), a union.
 Applied to a type for each of its type's parameters, it is likewise a value
 (`Box Int`, a `Box` holding `Int`) that reads as that type applied to them

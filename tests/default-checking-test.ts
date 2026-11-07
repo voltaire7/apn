@@ -120,15 +120,15 @@ for (const [source, expected] of [
     // A definition written with lambdas is checked as the clause with those parameters.
     ['append = (xs : Vect n a) -> (ys : Vect m a) -> ({\n    xs ~ [\n        [] -> ys\n        x::xs -> x :: append xs ys\n    ]\n} : Vect (n + m) a)\ntypeOf (append [] [3])', 'Vect 1 Int'],
     // A record schema applied to a value not known yet converts it at runtime.
-    ['Quote = [quote = String, year = Int]\nconv r = Quote r\n(conv [year = 2]).year', '2'],
-    ['Quote = [quote = String, year = Int]\n(Quote ([quote = "q", year = 1] : Dynamic)).quote', '"q"'],
+    ['Quote = [quote : String, year : Int]\nconv r = Quote r\n(conv [year = 2]).year', '2'],
+    ['Quote = [quote : String, year : Int]\n(Quote ([quote = "q", year = 1] : Dynamic)).quote', '"q"'],
     // A record type is a type: to applies it, and a Type parameter takes it.
-    ['Quote = [quote = String, year = Int]\n(to Quote [year = 1]).year', '1'],
-    ['f (t : Type) = t\nisType (f [a = Int]) [a = 3]', 'True'],
+    ['Quote = [quote : String, year : Int]\n(to Quote [year = 1]).year', '1'],
+    ['f (t : Type) = t\nisType (f [a : Int]) [a = 3]', 'True'],
     // A string iterates its characters.
     ['"ab" * c -> to String c', '["\'a\'","\'b\'"]'],
     // A record its type made takes updates to its fields, and a literal copy new ones.
-    ['Quote = [quote = String, year = Int]\nq = Quote []\nq.year = 3\nq "quote" = "x"\n[use q, more = 1]', '[quote = "x", year = 3, more = 1]'],
+    ['Quote = [quote : String, year : Int]\nq = Quote []\nq.year = 3\nq "quote" = "x"\n[use q, more = 1]', '[quote = "x", year = 3, more = 1]'],
     // A name defined as an import opens the module where it is a statement.
     // A list item may take a value apart with a constructor, as a block's statement may.
     ['import "option"\n[Some v = Some 3, v + 1]', '[4]'],
@@ -151,14 +151,16 @@ for (const source of [
     '([1] : Vect 2 Int)',
     'f g = [g 1, g "a"]; f (x -> 0)',
     'bad = (xs : Vect n a) -> (ys : Vect m a) -> ({\n    xs ~ [\n        [] -> ys\n        x::xs -> x :: bad xs ys\n    ]\n} : Vect (n + m + 1) a)',
-    'Quote = [quote = String, year = Int]; from Quote [quote = "q", year = 1]',
-    'Quote = [quote = String, year = Int]; to Quote [year = "x"]',
+    'Quote = [quote : String, year : Int]; from Quote [quote = "q", year = 1]',
+    'Quote = [quote : String, year : Int]; to Quote [year = "x"]',
+    // A field bound to a type is a value: the record is no type.
+    'f (t : Type) = t; f [a = Int]',
     '"ab" * c -> c + 1',
     // A record its type made keeps its fields.
-    'Quote = [quote = String, year = Int]; q = Quote []; q.yaer = 1',
-    'Quote = [quote = String, year = Int]; q = Quote []; q "yaer" = 1',
-    'Quote = [quote = String, year = Int]; f (q : Quote) = { q.x = 1; q }',
-    'Quote = [quote = String, year = Int]; conv r = Quote r; (conv [year = "x"]).year',
+    'Quote = [quote : String, year : Int]; q = Quote []; q.yaer = 1',
+    'Quote = [quote : String, year : Int]; q = Quote []; q "yaer" = 1',
+    'Quote = [quote : String, year : Int]; f (q : Quote) = { q.x = 1; q }',
+    'Quote = [quote : String, year : Int]; conv r = Quote r; (conv [year = "x"]).year',
     // Only a statement opens a module: not a field of it, a binding, or a block's statement.
     'numbers = import "number"\nnumbers.sq 2\nsq 3',
     'numbers = import "number"\n{ numbers; 1 }\nsq 3',

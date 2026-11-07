@@ -246,8 +246,12 @@ exported by `function`. Tests: `tests/language-cast-test.ts`,
   (a function's clauses wrapped in a block), `use e` as the key `_`, keeping
   the items as `items`, from which the interpreter's `recordCode` and the
   checker's record `code` give its code where code is read (`++`, `toAST`).
-  Both evaluate fields in order, each in scope for those after it. Declared
-  fields (`x : T`) are kept in `declaredKeys` for printing the literal back.
+  Both evaluate fields in order, each in scope for those after it. The node's
+  `declared` lists the fields written with their type; the record value's
+  `bound` (the checker's record `bound` alike) the fields bound to a value,
+  which a field holding a type is a slot only when it is not (`slotField`).
+  Updates and copies keep `bound` (`keepType`), a new field is bound, and what
+  a template builds is bound throughout.
   `src/record-keys.ts` writes a key back (`keySource`, backticks when it is
   not a name) and a field (`fieldSource`); pairs, iteration, HashMap
   conversion and FFI symbol names give the key's text.

@@ -611,9 +611,12 @@ holding the type, or `x : Float = 1`, a typed value), or `use r`, which spreads
 `r`'s fields. Fields are code, as a block's statements are: each is in scope
 for those after it (`[x = 1, y = x + 1]`), and `x = x + 1` reads the `x` before
 it. The record keeps that code, so code joins and reads it as a list:
-`[x = 1] ++ [x + 1]` is the code `[x = 1, x + 1]` (see [code](#code)). A field
-holding a type prints as its declaration (`[x : Float]`), any other as its
-binding (`[x = 1]`).
+`[x = 1] ++ [x + 1]` is the code `[x = 1, x + 1]` (see [code](#code)). A
+declaration alone (`x : Float`) is a slot, which makes the record a template
+(see [templates](templates-and-types.md)); a binding holds its value, a type
+included: `[x = Float]` is a record holding `Float`, not a template. Each
+prints as it was written; what a template builds holds values (`[x : Float]
+[1]` is `[x = 1.0]`).
 
 A field's name is its key: a name, or any text in backticks, which printing
 writes when the key is not a name. A string names a field too:

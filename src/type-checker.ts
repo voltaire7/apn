@@ -70,8 +70,10 @@ type Ty =
     // bound nowhere yet (a list joined before it may bind them), by where read.
     // endless: infinitely many elements, [Int..] ([1..], a range of a type).
     | { k: "list"; element: Ty; length?: Index; items?: Ty[]; endless?: boolean; contracted?: boolean; preserve?: Set<number>; formula?: Formula; open?: Map<string, { expr: Expr; within?: Expr }> }
-    // code: the items a record written as a list literal keeps (see asCode).
-    | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string>; closed?: boolean; code?: FormulaItem[] }
+    // code: the items a record written as a list literal keeps (see asCode);
+    // bound: its fields bound to their value (x = Float), no slot even when
+    // the value is a type (as the interpreter's record's bound).
+    | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string>; closed?: boolean; code?: FormulaItem[]; bound?: Set<string> }
     // chosen: one of value's choices, picked by a condition known only at runtime.
     // given: an indexed family's index values written so far, by parameter (Vec 2 Int).
     // applied: how many of a family's arguments are given (Pair a, Vec 2).
@@ -518,7 +520,8 @@ function text(
                 if (t.endless) return `[${operand(t.element)}..]`;
                 return t.length ? `Vect ${argument(indexText(t.length))} ${argument(show(t.element))}` : `List ${argument(show(t.element))}`;
             case "record":
-                return `[${[...t.fields].map(([k, v]) => fieldSource(k, operand(v), true)).join(", ")}]`;
+                // A field bound to a type (x = Int) holds a Type.
+                return `[${[...t.fields].map(([k, v]) => fieldSource(k, t.bound?.has(k) && resolve(v).k === "type" ? "Type" : operand(v), true)).join(", ")}]`;
             case "type":
                 return `Type (${show(t.value)})`;
             // An undecided return: m T, for the monad a context will name.
@@ -1101,7 +1104,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.op === "merge-record") {
             if (isExplicit(a) || isExplicit(b)) return explicitDynamic;
             if (a.k !== "record" || b.k !== "record") return problem("record flattening expects a record");
-            return { k: "record", fields: new Map([...a.fields, ...b.fields]) };
+            const bound = new Set([...a.bound ?? []].filter(key => !b.fields.has(key)).concat([...b.bound ?? []]));
+            return { k: "record", fields: new Map([...a.fields, ...b.fields]), ...bound.size ? { bound } : {} };
         }
         if (t.op === "remainder") {
             if (isExplicit(a)) { runtimeChecks++; return explicitDynamic; }
@@ -2725,21 +2729,22 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // value as its old one requires; a new one is added unless a record type
     // made the record. A copy of an open record stays open.
     function assignFields(rec: Extract<Ty, { k: "record" }>, entries: Array<[string, Ty, Expr]>, e: Expr): Ty {
-        const fields = new Map(rec.fields);
+        const fields = new Map(rec.fields), bound = new Set(rec.bound);
         for (const [key, incoming, at] of entries) {
-            if (!fields.has(key)) newField(rec, key, e);
-            fields.set(key, slotValue(fields.get(key), incoming, at));
+            // A new field is bound to its value, as assignment binds.
+            if (!fields.has(key)) { newField(rec, key, e); bound.add(key); }
+            fields.set(key, slotValue(fields.get(key), incoming, at, bound.has(key)));
         }
-        return { k: "record", fields, open: rec.open, closed: rec.closed };
+        return { k: "record", fields, open: rec.open, closed: rec.closed, ...bound.size ? { bound } : {} };
     }
     // A field's new value, as its old one requires (the interpreter's
     // assignSlot): holding a type, given a type (it changes; a Type field
     // takes it as its value) or a value converted to it; holding a value,
     // given one of that value's type.
-    function slotValue(previous: Ty | undefined, incoming: Ty, at: Expr): Ty {
+    function slotValue(previous: Ty | undefined, incoming: Ty, at: Expr, bound = false): Ty {
         const old = previous && resolve(previous);
         if (!old) return incoming;
-        if (holdsTypeTy(old)) return holdsTypeTy(resolve(incoming)) ? incoming : convert(old.k === "type" ? old.value : schemaValue(old, at), incoming, at);
+        if (!bound && holdsTypeTy(old)) return holdsTypeTy(resolve(incoming)) ? incoming : convert(old.k === "type" ? old.value : schemaValue(old, at), incoming, at);
         return ["atom", "variant", "fn"].includes(old.k) ? convert(old, incoming, at) : incoming;
     }
     function holdsTypeTy(t: Ty): boolean { return t.k === "type" || describing(t); }
@@ -3230,9 +3235,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 : undefined;
             // A record holding a type, given values (not types, unless for a
             // Type field), builds one; any other is updated exactly as by field
-            // assignment (model [name: n]; Vector3 [x: Int] is Vector3.x = Int).
-            const building = [...f.fields.values()].some(field => holdsTypeTy(resolve(field)))
-                && !(given ?? []).some(([key, type]) => holdsTypeTy(resolve(type)) && !typeOfTypes(f.fields.get(key)));
+            // assignment (model [name = n]; Vector3 [x : Int] is Vector3.x = Int).
+            // (A field bound to a type, x = Int, is a value, not a slot.)
+            const building = [...f.fields].some(([key, field]) => !f.bound?.has(key) && holdsTypeTy(resolve(field)))
+                && !(given ?? []).some(([key, type]) => holdsTypeTy(resolve(type)) && !(a.k === "record" && a.bound?.has(key)) && !typeOfTypes(f.fields.get(key)));
             if (given && !building) return assignFields(f, given, e);
             // A value not known yet (a parameter, Dynamic, a computed one) is
             // converted at runtime; it is the record the schema describes.
@@ -3304,14 +3310,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return x.k === "type" || !!sharedType(x)
             || x.k === "list" && !!x.items?.length && x.items.every(item => describing(resolve(item)))
             || x.k === "list" && !!x.endless && describing(resolve(x.element))
-            || x.k === "record" && x.fields.size > 0 && [...x.fields.values()].every(field => describing(resolve(field)));
+            || x.k === "record" && x.fields.size > 0 && [...x.fields].every(([key, field]) => !x.bound?.has(key) && describing(resolve(field)));
     }
     // A record a record schema made keeps its fields, as at runtime.
     function newField(rec: Extract<Ty, { k: "record" }>, key: string, e: Expr): void {
         if (!rec.closed) return;
         const near = didYouMean(key, [...rec.fields.keys()]);
         problem(`${text(rec)} has no field '${key}'`, e, near ? `did you mean '${near}'?`
-            : `a record its type made keeps its fields; copy it to add one: [_: record, ${key}: value]`);
+            : `a record its type made keeps its fields; copy it to add one: [use record, ${key} = value]`);
     }
     let inferenceDepth = 0;
     // The type each expression was last inferred with, for facts read right after.
@@ -3625,10 +3631,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "record": {
                 // Each field is in scope for those after it, as at runtime.
+                // A field is bound to its value, except a slot: x : T alone.
                 let result: Ty = { k: "record", fields: new Map() }, fieldScope: Scope = scope;
+                const slot = (key: string, value: Expr) => !!e.declared?.includes(key) && !(value.t === "app" && value.ascribed);
                 for (const [key, value] of e.v) {
                     const type = infer(value, fieldScope);
-                    result = operation("merge-record", [result, key === "_" ? type : { k: "record", fields: new Map([[key, type]]) }]);
+                    const field: Ty = { k: "record", fields: new Map([[key, type]]), ...slot(key, value) ? {} : { bound: new Set([key]) } };
+                    result = operation("merge-record", [result, key === "_" ? type : field]);
                     fieldScope = new Map(fieldScope);
                     if (key !== "_") fieldScope.set(key, { type });
                     else { const opened = resolve(type); if (opened.k === "record") for (const [name, field] of opened.fields) fieldScope.set(name, { type: field }); }
@@ -3944,14 +3953,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const [name, type] = entry, [old, held] = entries[n];
                     if (name !== old && rec.fields.has(name)) return problem(`the record already has a field '${name}'`, e.value);
                     if (name !== old) newField(rec, name, e);
-                    entries[n] = [name, name === old ? slotValue(held, type, e.value) : type];
-                    return { k: "record", fields: new Map(entries), closed: rec.closed };
+                    const bound = new Set(rec.bound);
+                    if (name !== old) { bound.delete(old); bound.add(name); }
+                    entries[n] = [name, name === old ? slotValue(held, type, e.value, bound.has(old)) : type];
+                    return { k: "record", fields: new Map(entries), closed: rec.closed, ...bound.size ? { bound } : {} };
                 }
                 if (rec.k === "record" && field !== undefined) {
-                    const fields = new Map(rec.fields), old = fields.get(field);
-                    if (!old) newField(rec, field, e);
-                    fields.set(field, slotValue(old, value, e.value));
-                    return { k: "record", fields, closed: rec.closed };
+                    const fields = new Map(rec.fields), old = fields.get(field), bound = new Set(rec.bound);
+                    if (!old) { newField(rec, field, e); bound.add(field); }
+                    fields.set(field, slotValue(old, value, e.value, bound.has(field)));
+                    return { k: "record", fields, closed: rec.closed, ...bound.size ? { bound } : {} };
                 }
                 return unknown();
             }

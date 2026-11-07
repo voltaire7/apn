@@ -33,7 +33,7 @@ for (const [source, expected] of [
     ['cell = Mutable 1\nv = [cell = cell] []\nset v.cell $ 2\ncell', '2'],
     ['Option a = Some a | None\n[Option, Option Int]', '[Option, Option Int]'],
     ['Option a = Some a | None\n[choice : Option Int] []', '[choice = None]'],
-    ['User = | MkUser Int String\n[user = User] []', '[user = MkUser 0 ""]'],
+    ['User = | MkUser Int String\n[user : User] []', '[user = MkUser 0 ""]'],
     ['BoxType a = | MkBox a\n[box = BoxType (BoxType Int)] []', '[box = MkBox (MkBox 0)]'],
     ['Node = Next Node | End\n[node : Node] []', '[node = End]'],
     ['Node = | Next Node\nNode', 'Node'],
@@ -63,8 +63,8 @@ for (const source of [
     'v = [x : Int] []\nv.x = .2',
     'v = [x : Int8] []\nv.x = 128',
     '[x : Int] [1,2]',
-    'Node = | Next Node\n[node = Node] []',
-    'BoxType a = | MkBox a\n[box = BoxType] []',
+    'Node = | Next Node\n[node : Node] []',
+    'BoxType a = | MkBox a\n[box : BoxType] []',
     '[fn : Function] []', '[cell : Mutable] []', '[ty : Type] []',
 ]) Deno.test(`reject invalid construction or bare-type data: ${source}`, () => {
     try { result(source); } catch { return; }
@@ -111,7 +111,7 @@ for (const [source, expected] of [
     ['xs = [Int]\nxs 0 = 1\nxs', '[1]'],
     ['xs = [Int,Float]\nxs (-1) = 2\nxs', '[Int,2.0]'],
     ['xs = [Int]\ni = 0\nxs (i + 0) = 1\nxs', '[1]'],
-    ['UserId (x : Int) = _\nv = [id = UserId]\nv.id = UserId 3\nv', '[id = UserId 3]'],
+    ['UserId (x : Int) = _\nv = [id : UserId]\nv.id = UserId 3\nv', '[id = UserId 3]'],
     ['(identity : Int -> Int) <- return (x -> x); v = [f = typeOf identity]\nv.f = (+ 1)\nv.f 2', '3'],
 ] as const) Deno.test(`assignment gives a type field a default: ${source}`, () => {
     const actual = result(source);

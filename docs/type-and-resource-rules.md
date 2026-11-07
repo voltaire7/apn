@@ -47,7 +47,7 @@ accepts only a `UserId`. Applying `UserId` makes one from an `Int`, checking the
 value as `Int` would (`UserId .2` is a lossy conversion); nothing else converts
 to one (`UserId (OrderId 3)` and assigning `3` to a `UserId` slot are errors).
 Its name is also its type where a type is expected: an omitted record slot
-(`[id = UserId] []` is `[id = UserId 0]`), another constructor's field
+(`[id : UserId] []` is `[id = UserId 0]`), another constructor's field
 (`Order (UserId u) (n : Int) = _`), `isType UserId`, `List UserId`.
 
 ## Variant list indexes
