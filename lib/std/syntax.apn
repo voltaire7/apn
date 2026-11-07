@@ -5,8 +5,9 @@ use std.[sequence,text]
 # an application is a list, function first (["f","x"], ["+",1,2]); other
 # syntax is a list headed by a token no name can be (["[]",1,2] is [1,2]).
 # fromAST writes such data as source; eval runs it at the program's top level.
-(load "syntax/source" : Dynamic)
-(load "syntax/lambda" : Dynamic)
+source <- (load "syntax/source" : Dynamic)
+lambda <- (load "syntax/lambda" : Dynamic)
+use [source,lambda]
 fromAST syntax = (_fromAST syntax : Dynamic) : String
 eval syntax = intrinsics.eval (fromAST syntax)
 # toLambda gives code desugared to lambdas and application, as code: each

@@ -98,7 +98,7 @@ Deno.test("a browser build bundles the local modules a program imports", () => {
 });
 Deno.test("a browser build bundles the files a program loads", () => {
     const directory = new URL("./fixtures/bundle-load/", import.meta.url).pathname;
-    const source = 'load "helpers"\nanswer = caption 0 ++ mark';
+    const source = 'helpers <- load "helpers"\nuse helpers\nanswer = caption 0 ++ mark';
     const bundle = bundleProgram(source, directory);
     const local = Object.keys(bundle).filter(path => path.startsWith("/app/")).sort();
     // Each load is relative to the loading file; unused files stay out.
@@ -119,7 +119,7 @@ Deno.test("a browser build bundles the files a program loads", () => {
 });
 Deno.test("a browser build bundles the whole folder for a computed load", () => {
     const directory = new URL("./fixtures/bundle-load/", import.meta.url).pathname;
-    const source = 'part = "suffix"\nanswer = load ("parts/" ++ part) : Dynamic';
+    const source = 'part = "suffix"\nanswer <- (load ("parts/" ++ part) : Dynamic)';
     const bundle = bundleProgram(source, directory);
     const local = Object.keys(bundle).filter(path => path.startsWith("/app/")).sort();
     if (JSON.stringify(local) !== '["/app/helpers.apn","/app/parts/extra.apn","/app/parts/suffix.apn","/app/unused.apn"]') throw new Error(JSON.stringify(local));

@@ -384,7 +384,7 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   each do-block's monad in `doBlocks`, and its view analysis and `topNames`
   skip instance clauses. Tests: `tests/monad-test.ts`.
 - `pattern <- expression` sets AST `patDef.eager`: the value must be an action
-  (`isLoadCall` excepts `load`), run with `runIO` and its result `reference`d
+  (`isLoadCall` reads `load` unevaluated), run with `runIO` and its result `reference`d
   before matching, keeping Mutable/Pointer references and lazy container
   fields. The checker never re-derives an eager binding (no `definition`), and
   view/key analysis sees through `return`/`return`. Don't change `=` semantics.
@@ -392,9 +392,11 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
 - `Interpreter.eval` consumes internal `TailCall` transfers for fully applied
   functions, chosen `match` alternatives (a ternary's branches), and block
   tails. `TailLoad` transfers propagate only from a loaded program's final
-  expression. `loadFile` owns the iterative
-  loop and pending export merges and restores caller scope/`sourceDir` on
-  success, error, or interruption. Non-tail calls keep the depth guard
+  expression. `loadFile` owns the iterative loop, keeps the first file's
+  record, and restores caller scope/`sourceDir` on success, error, or
+  interruption. `load` and `intrinsics.import` actions keep the `dynamicDepth`
+  they were made at, so one written inside `Dynamic` runs unchecked. Non-tail
+  calls keep the depth guard
   (`STACK_LIMIT`). Tests: `tests/tail-call-test.ts`, `tests/repl-interrupt-pty.py`.
 - `load` rejects explicit extensions before any file access.
 - Versions: `Interpreter.bindNames` defines a name new to the scope in its
@@ -404,19 +406,18 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   exports), and `newest` is the version `eval` runs in. A load or `use`
   publishes the same way, and its statement adopts the version
   (`adoptPublished`). The runtime tags the records `importStandard` and
-  `loadFile` make (`moduleValues`, with their origin); a statement opens only a
-  load's (`opens`), and the checker's load records are `ModuleFields` with
-  `opens` (kept through `copy`), whose statements `opensModule` records in
-  `moduleStatements`, whose results the runtime demands. `use` of a module
+  `loadFile` make (`moduleValues`, with their origin; the REPL echoes none),
+  and the checker types both as `ModuleFields` (kept through `copy`); no
+  statement opens one. `use` of a module
   record publishes its names with the module's origin; the checker opens the
   module's scope entries (clauses too) and settles each type (`validate`) as a
-  statement's value is, so later code meets its calls decided. A load in an
-  expression publishes nothing;
-  only a tail load's file publishes into its loader. Tests: `tests/load-test.ts`,
+  statement's value is, so later code meets its calls decided; a module
+  leaves out of its record the names it bound to the modules it read
+  (`readsModule`, the runtime's `moduleValues`). Tests: `tests/load-test.ts`,
   `tests/default-checking-test.ts`. The checker never re-checks a reader: a reader's types
   are its version's. Its static block evaluation (`evaluateBlock`) follows
   the same rule. Tests: `tests/semantics-test.ts`, `tests/default-checking-test.ts`.
-- A statically checked load (`verifyLoad` ran) publishes without
+- A statically checked load's record (`verifyLoad` ran) publishes by `use` without
   `protectDynamicWrite`. For other loads, `publishForeignBindings` records,
   per caller scope, which origin (path plus source text) published each
   binding (`publishedBy`), and skips the guard only when the same origin

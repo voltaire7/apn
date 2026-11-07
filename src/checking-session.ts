@@ -2,7 +2,7 @@ import { APNError } from "./errors.ts";
 import { parse } from "./parser.ts";
 import { loadPath, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { type CheckOptions, checkTypes, copyTypeScope, dynamicEntry, isModuleType, mayMutate, moduleType, type TypeBridge, type TypeScope } from "./type-checker.ts";
-import type { Expr, TopLevel } from "./ast.ts";
+import { readsModule, type Expr, type TopLevel } from "./ast.ts";
 import { NATIVE_EXPORTS } from "./native-exports.ts";
 
 /** Static state is separate from evaluation: checking never runs an APN action. */
@@ -29,7 +29,6 @@ export class CheckingSession {
     valueTypes = new Map<string, unknown>();
     patternTypes = new WeakMap<Expr, unknown>();
     bridge?: TypeBridge;
-    moduleStatements = new Set<string>();
     /** Names the interpreter can resolve, so the checker can tell a typo from a runtime-only builtin. */
     runtimeNames?: () => Iterable<string>;
     /** The program's input when checking right before a run (see CheckOptions.inputs). */
@@ -68,7 +67,8 @@ export class CheckingSession {
 
     /** Whether any program this session has checked may write a Mutable cell. */
     private mutation = false;
-    /** Programs that used use on a record of unknown fields. */
+    /** Programs sharing a scope (the REPL's inputs, loaded files) that used use
+     * on a record of unknown fields. */
     private opaqueUses = new Set<TopLevel[]>();
 
     private check(program: TopLevel[], directory: string, initial: TypeScope, library: boolean, before?: CheckOptions["before"], file = true): { scope: TypeScope; exports: TypeScope } {
@@ -87,7 +87,6 @@ export class CheckingSession {
             valueTypes: this.valueTypes,
             patternTypes: this.patternTypes,
             bridge: bridge => { this.bridge = bridge; },
-            moduleStatements: this.moduleStatements,
             loadedNames: path => this.loadedNames(path, directory),
             imports: module => {
                 const fields = this.module(module, directory);
@@ -99,7 +98,8 @@ export class CheckingSession {
             },
             result: (value, published) => { scope = value; exports = published; },
         });
-        if (result.opaqueUse) this.opaqueUses.add(program);
+        // A module's use opens names in its own scope, which no other program shares.
+        if (result.opaqueUse && !library) this.opaqueUses.add(program);
         if (result.issues.length) {
             const issue = result.issues[0];
             const error = new APNError("type", issue.message, issue);
@@ -127,7 +127,7 @@ export class CheckingSession {
                 }
                 for (const [name, entry] of checked.exports) {
                     // A module the file names for itself (std <- import "std") is its own.
-                    if (isModuleType(entry.type)) continue;
+                    if (isModuleType(entry.type) || entry.bound && readsModule(entry.bound)) continue;
                     entry.nonGeneric = undefined; entry.mono = false;
                     exports.set(name, entry);
                 }

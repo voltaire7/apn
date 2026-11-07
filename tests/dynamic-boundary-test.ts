@@ -60,7 +60,7 @@ Deno.test('Dynamic construction and patterns preserve Mutable identity', () => {
 });
 
 Deno.test('load exports cannot invalidate checked bindings', () => {
-    const source = 'x = "old"; (load "dynamic-overwrite" : Dynamic); x';
+    const source = 'x = "old"; m <- (load "dynamic-overwrite" : Dynamic); use m; x';
     requireChecked(source);
     const i = new Interpreter(); i.checkedExecution = true;
     i.sourceDir = new URL('./fixtures/', import.meta.url).pathname;
@@ -102,16 +102,15 @@ Deno.test("set on an explicit Dynamic target is checked at runtime", () => {
 Deno.test('loading a file again replaces its definitions', () => {
     const fixtures = new URL('./fixtures/', import.meta.url).pathname;
     const i = new Interpreter(); i.enableChecking(); i.sourceDir = fixtures;
-    // Each use of h runs the load again; it replaces only what it published.
-    i.run(parseDocument('h = load "reload"\nfirst = h.double 1\nsecond = h.double h.limit'));
+    i.run(parseDocument('h <- load "reload"\nfirst = h.double 1\nsecond = h.double h.limit'));
     if (i.renderString(i.run(parseDocument('[first,second]'))) !== '[2,20]') throw new Error('reload');
-    // A checked load replaces a name rebound in between, as a definition would.
+    // A checked load's names replace a name rebound in between, as a definition would.
     const j = new Interpreter(); j.enableChecking(); j.sourceDir = fixtures;
-    j.run(parseDocument('load "reload"\ndouble n = n + 1\nload "reload"'));
+    j.run(parseDocument('r <- load "reload"\nuse r\ndouble n = n + 1\nagain <- load "reload"\nuse again'));
     if (j.renderString(j.run(parseDocument('double 5'))) !== '10') throw new Error('rebound reload');
     // An unchecked (Dynamic) load still cannot replace it.
     const k = new Interpreter(); k.enableChecking(); k.sourceDir = fixtures;
-    try { k.run(parseDocument('load "reload"\ndouble n = n + 1\n(load "reload" : Dynamic)')); } catch (error) {
+    try { k.run(parseDocument('r <- load "reload"\nuse r\ndouble n = n + 1\nagain <- (load "reload" : Dynamic)\nuse again')); } catch (error) {
         if (String(error).includes("Dynamic write to 'double'")) return;
         throw error;
     }

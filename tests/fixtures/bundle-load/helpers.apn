@@ -1,2 +1,3 @@
 caption n = "clicked " ++ to String n
-load "parts/extra"
+extra <- load "parts/extra"
+use extra

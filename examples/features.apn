@@ -74,11 +74,10 @@ print (to (List Char) "hi")              # => ['h','i']
 # ---------------------------------------------------------
 # Modules
 # ---------------------------------------------------------
-# An import statement opens a module's names into the block it is in, as =
-# binds a name; a list imports several. Any statement whose value is a module
-# opens it (a name bound to one, here), and reading one of its fields opens
-# nothing. Your own files and folders import the same way; load "file" runs a
-# file by its path.
+# A module is a record of what its file binds. import "path" is an action
+# yielding one (std, the library, is a record of its modules), and use opens a
+# record's names into the block it is in. Your own files and folders import
+# the same way; load "file" runs a file by its path, its record the result.
 std <- import "std"
 use std.[option,number,syntax]
 parser <- import "std/parser"
@@ -87,7 +86,7 @@ print (parser.parse parser.number "12")  # => Ok 12
 {
     text <- import "std/text"
     print (text.words "a b")             # => ["a","b"]
-    text
+    use text
     print (unwords ["c","d"])            # => c d
 }
 

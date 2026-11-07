@@ -854,12 +854,11 @@ print (foldl (_, b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 # 17. EXIT, LOAD & HALT
 #    exit n    ends the whole process with status code n (n must be an int);
 #              works anywhere: top level, inside blocks, lambdas, iteration, ...
-#    load p    imports a file RELATIVE TO THE CURRENT FILE. Two effects:
-#              (1) as a STATEMENT it merges the file's own definitions into
-#                  the current scope (an `include`);
-#              (2) as a VALUE it returns them as a MODULE record, so
-#                  numbers = load "../../lib/std/number"; numbers.sq 4 ... is namespaced access.
-#              Inside a { } block the merge stays scoped to that block.
+#    load p    runs a file RELATIVE TO THE CURRENT FILE, in the caller's scope:
+#              an action yielding the file's MODULE record, as import's does,
+#              which only use opens:
+#                  numbers <- load "../../lib/std/number"; numbers.sq 4
+#              Inside a { } block, use opens it in that block alone.
 #    halt      is NOT a builtin. It is defined in system — the standard
 #              library — as  `halt = exit 0`. Expression 0-arg defs are LAZY, so
 #              importing system doesn't terminate the program; `halt` only
@@ -869,20 +868,21 @@ print (foldl (_, b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 [halt = selectedHalt] <- import "std/system"
 # selectedHalt is available; other exports are not introduced by this binding.
 {
-    load "../../lib/std/number"           # extensionless name; sq joins this block
+    numbers <- load "../../lib/std/number"   # extensionless name
+    use numbers                    # sq joins this block
     print (sq 5)                   # => 25
 }
-# In the REPL, bare load does not echo the returned module or force its exports.
+# In the REPL, a statement running a load or an import does not echo its module.
 std <- import "std"
 use std.system               # halt is a deferred action
 
-numbers = load "../../lib/std/number"      # namespaced module record
+numbers <- load "../../lib/std/number"     # the module record
 print (numbers.sq 4)           # => 16
-print (numbers.cube 2)         # => 8; each use loads the file again, replacing its own definitions
+print (numbers.cube 2)         # => 8
 {
-    load "../../lib/std/number"
-    sq x = x + 1                   # rebinding a loaded name ...
-    load "../../lib/std/number"           # ... does not stop a later load from replacing it
+    use numbers
+    sq x = x + 1                   # rebinding an opened name ...
+    use numbers                    # ... does not stop opening it again from replacing it
     print (sq 3)                   # => 9
 }
 # A value never changes: a rebinding is a new version from there on, and
@@ -910,9 +910,9 @@ debug $ step 1 halt          # => exit 0
 # print RUNS the level, so this terminates the program:
 #   print $ step 1 halt
 
-# a load inside a { } block stays in the block's scope
+# a use inside a { } block stays in the block's scope
 scoped = {
-    load "../../lib/std/number"
+    use numbers
     sq 6
 }
 print scoped                # => 36

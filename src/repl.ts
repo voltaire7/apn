@@ -78,20 +78,14 @@ function runSourceValue(src: string, interp: Interpreter, binding = false, file 
         throw new APNError("runtime", (err as Error).message.replace(/^Runtime: /, ""));
     }
     if (binding) return null; // an assignment binds — never forced, never echoed
-    // A bare load executes a file; displaying all exports could force infinite
-    // lists or failing lazy bindings. Explicit print and module access still work.
+    // A statement running an import or a load yields a module: showing all of
+    // it could force infinite lists or failing lazy bindings. Print and field
+    // reads still show its parts.
     const last = program[program.length - 1];
-    if (last?.t === "expr" && isLoadCommand(last.value)) return null;
+    if (last?.t === "expr" && interp.isModule(val)) return null;
     val = interp.force(val);
     if (last?.t === "expr" && interp.ranAction && val.kind === "list" && val.v.length === 0) return null;
     return val;
-}
-
-function isLoadCommand(e: Expr): boolean {
-    if (e.t === "app") return e.f.t === "var" && e.f.name === "load";
-    if (e.t === "pipe") return e.f.t === "var" && e.f.name === "load";
-    if (e.t === "block" && e.stmts.length === 1) return isLoadCommand(e.stmts[0]);
-    return false;
 }
 
 // Does the chunk END in a binding (def / pattern binding / type)? Those are
@@ -377,10 +371,9 @@ function helpText(): string {
         `Builtins: head tail take drop length null enumerate map filter zipWith`,
         `          foldl foldr pairs format to from exit load step`,
         ``,
-        `load "lib/std/number"  loads lib/std/number.apn (omit the extension): as a`,
-        `               statement (or one whose value is its module) it opens into`,
-        `               the block; elsewhere it is a module (numbers.sq 4). halting is`,
-        `               system's  halt = exit 0  (lazy: fires only when used).`,
+        `numbers <- load "lib/std/number"  runs lib/std/number.apn (omit the extension)`,
+        `               in this scope, its record the result (numbers.sq 4); use numbers`,
+        `               opens it. halting is system's  halt = exit 0  (fires when used).`,
         `0-arg defs: ordinary value bodies are lazy and memoized; an ACTION`,
         `               body (f = { ... } / f = print "hi" — same thing) declares`,
         `               a 0-arg FUNCTION: the bare name at statement level runs it`,

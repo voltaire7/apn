@@ -62,10 +62,10 @@ class TailLoad {
 }
 
 // Natives with effects: applying one builds an IO action; running it performs them.
-export const IO_NATIVES = new Set(["intrinsics.import", "print", "echo", "emit", "repl", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
+export const IO_NATIVES = new Set(["intrinsics.import", "load", "print", "echo", "emit", "repl", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
 // What the actions of IO builtins yield, for showing their types (IO []).
 const IO_RESULTS: Record<string, string> = {
-    "intrinsics.import": "Module", print: "[]", echo: "[]", emit: "[]", repl: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
+    "intrinsics.import": "Module", load: "Module", print: "[]", echo: "[]", emit: "[]", repl: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
     entropy: "Int", currentTime: "Int", zoneOffset: "Int",
 };
 
@@ -209,25 +209,12 @@ export class Interpreter {
     private modules = new Map<string, Extract<Value, { kind: "record" }>>();
     private importing = new Set<string>();
 
-    // A load's module opens its names into the block of a statement that runs
-    // it, as = binds one, however the statement gets it (load "x", a name for
-    // it, f [] returning it); the module is its value. Anywhere else it is a
-    // value: a field reads one and opens nothing. An import's opens by use.
-    // (Records import gives are modules too, use publishing their names as
-    // the module's, but no statement opens them: load marks its own.)
-    private moduleValues = new WeakMap<Value, { origin?: string; checked?: boolean; load?: boolean }>();
-    private opens(result: Value, statement: Expr): boolean {
-        // A result kept unevaluated (return (import "std/system")) is evaluated when
-        // the check found the statement yields a module.
-        const at = sourceLocations.get(statement);
-        const value = at && this.types?.moduleStatements.has(`${at.file}:${at.start}`) ? this.demand(result) : result;
-        const module = this.moduleValues.get(value);
-        if (!module?.load) return false;
-        const checked = module.checked ?? (!!this.checking && !this.dynamicDepth);
-        this.publishForeignBindings(this.env, (value as Extract<Value, { kind: "record" }>).v, module.origin, checked);
-        this.adoptPublished();
-        return true;
-    }
+    // The records import and load yield are modules: nothing opens one but
+    // use, which publishes its names as the module's (its origin, and whether
+    // the static check typed them).
+    private moduleValues = new WeakMap<Value, { origin?: string; checked?: boolean }>();
+    /** Whether a value is a module's record (what import and load yield). */
+    isModule(v: Value): boolean { return this.moduleValues.has(v); }
 
     importStandard(module: string): Value {
         // The static check follows an import outside Dynamic, so it typed what
@@ -279,9 +266,9 @@ export class Interpreter {
             // The bundled cast is already installed from this exact source.
             // Reuse its identity when type reexports it.
             if (file.std === "type" && file.source === typeSource) this.env.setLocal("cast", this.preludeBindings.get("cast")!);
-            // A module the file names for itself (std <- import "std") is its own.
-            const imported = new Set<Value>(this.modules.values());
-            return [...this.env.bindings().entries()].filter(([, value]) => !imported.has(this.reference(value)));
+            // A module the file names for itself (std <- import "std", or a
+            // load's) is its own: <- bound the record itself, so nothing is forced.
+            return [...this.env.bindings().entries()].filter(([, value]) => !this.moduleValues.has(value));
         } finally {
             this.env = caller;
             this.sourceDir = callerDir;
@@ -400,7 +387,6 @@ export class Interpreter {
                 this.ranAction = false;
                 last = this.runStmt(value, tail, index < program.length - 1 || file && ran ? tl.value : undefined);
                 ran = true;
-                if (this.opens(last, tl.value)) last = { kind: "list", v: [] };
                 this.adoptPublished();
             }
             succeeded = true;
@@ -1344,9 +1330,9 @@ export class Interpreter {
     // the block's continuation.
     // As in Haskell, a block's statement that binds nothing, but the last, is in
     // its monad (see the checker): what the check could not decide is checked
-    // here. [] is the unit, a module opens names, and a list block takes lists.
+    // here. [] is the unit, and a list block takes lists.
     private dropped(s: Expr, value: Value, listBlock: boolean): void {
-        if (["io", "pending"].includes(value.kind) || this.moduleValues.has(value)) return;
+        if (["io", "pending"].includes(value.kind)) return;
         if (value.kind === "variant" && value.family && this.familiesOf(">>=").has(value.family)) return;
         if (this.isList(value) && (listBlock || this.cell(value) === null)) return;
         const at = sourceLocations.get(s);
@@ -1365,7 +1351,6 @@ export class Interpreter {
                 if (i === start && first) {
                     const result = this.runIO(first);
                     if (s.t === "patDef") this.bindResult(s, result);
-                    else this.opens(result, s);
                 }
                 else if (s.t === "stmDef") this.evalDef(s.name, s.clauses);
                 else if (s.t === "typeDef") this.declare(s.def, this.env);
@@ -1373,7 +1358,7 @@ export class Interpreter {
                 else if (i < e.stmts.length - 1) {
                     const value = this.demand(this.eval(s));
                     this.dropped(s, value, false);
-                    this.opens(this.runStmt(value), s);
+                    this.runStmt(value);
                     this.adoptPublished();
                 }
                 else {
@@ -1718,7 +1703,6 @@ export class Interpreter {
                                 // return and the like, else the value's own (a list, an Option).
                                 // A discarded list is pure: [] is also the unit value.
                                 const value = s.t === "patDef" ? (isLoadCall(s.value) ? undefined : this.reference(this.eval(s.value))) : this.demand(this.eval(s));
-                                if (s.t !== "patDef" && this.opens(value!, s)) { r = value!; continue; }
                                 // The rest of the block runs in the scope as it is here.
                                 const block = e, start = si, here = this.env;
                                 if (!value || value.kind === "io") {
@@ -4368,6 +4352,15 @@ export class Interpreter {
         // passed in (a name, a parameter) is the one it is.
         if (!perform && IO_NATIVES.has(name)) {
             const fresh = (v: Value): Value => v.kind === "thunk" && v.env ? { kind: "thunk", body: v.body, env: v.env } : v;
+            // A module read inside Dynamic is read unchecked wherever it runs.
+            if (name === "load" || name === "intrinsics.import") {
+                const depth = this.dynamicDepth;
+                return { kind: "io", result: IO_RESULTS[name], run: () => {
+                    const outer = this.dynamicDepth;
+                    this.dynamicDepth = depth;
+                    try { return this.callNative(name, argsIn.map(fresh), tag, true); } finally { this.dynamicDepth = outer; }
+                } };
+            }
             return { kind: "io", result: IO_RESULTS[name], run: () => this.callNative(name, argsIn.map(fresh), tag, true) };
         }
         if (name === "assert") {
@@ -4802,16 +4795,19 @@ export class Interpreter {
         throw new Error(`Runtime: unknown native '${name}'`);
     }
 
-    // Files retain include/module semantics. Pending merges live on the heap,
-    // so a tail load never retains a JavaScript evaluator stack frame.
+    // Running load "file" runs the file in the caller's scope; its record (the
+    // module) is what the file's top level bound, as its newest version has it.
+    // A file whose last statement loads another (a tail load) ends there: the
+    // other runs in its place, as a tail call, and its record is dropped.
     loadFile(pathValue: Value): Value {
         const caller = this.env, callerDir = this.sourceDir;
-        // Each file's scope, and its newest version once it has run (a tail
-        // load from a block leaves the block's; the file's is below it).
-        const frames: Array<{ caller: Env; loaded: Env; latest?: Env; origin: string; checked: boolean }> = [];
-        const latest = (env: Env, scope: Env): Env => {
-            for (let e: Env | null = env; e; e = e.parent) if (e.root() === scope) return e;
-            return scope;
+        // The first file's scope, and its record once its tail is reached (a
+        // tail load from a block leaves the block's scope; the file's is below it).
+        let first: { loaded: Env; origin: string; checked: boolean; record?: Extract<Value, { kind: "record" }> } | undefined;
+        const recordOf = (env: Env, scope: Env): Extract<Value, { kind: "record" }> => {
+            let newest = scope;
+            for (let e: Env | null = env; e; e = e.parent) if (e.root() === scope) { newest = e; break; }
+            return { kind: "record", v: [...newest.bindings()] };
         };
         try {
             for (;;) {
@@ -4842,7 +4838,7 @@ export class Interpreter {
                 const checked = !!this.checking && !this.dynamicDepth;
                 if (checked) this.checking!.verifyLoad(pathValue.v, this.sourceDir, src);
                 const loaded = new Env(this.env);
-                frames.push({ caller: this.env, loaded, origin: `${path}\0${src}`, checked });
+                first ??= { loaded, origin: `${path}\0${src}`, checked };
                 this.env = loaded;
                 this.sourceDir = dirname(path);
                 try {
@@ -4852,26 +4848,12 @@ export class Interpreter {
                 catch (step) {
                     if (!(step instanceof TailLoad)) throw step;
                     pathValue = step.path;
+                    first.record ??= recordOf(step.env, first.loaded);
                     this.env = step.env;
-                    frames[frames.length - 1].latest = latest(step.env, frames[frames.length - 1].loaded);
                     continue;
                 }
-                // Each file's exports are its scope's bindings as its newest
-                // version has them; a file a tail load ran publishes into its loader's.
-                frames[frames.length - 1].latest = latest(this.env, frames[frames.length - 1].loaded);
-                let result: Value = { kind: "record", v: [] };
-                while (frames.length) {
-                    checkInterrupt();
-                    const frame = frames.pop()!, bindings = frame.latest!.bindings();
-                    const loader = frames[frames.length - 1];
-                    // A file a tail load ran opens into its loader's scope (a
-                    // statement there); the first file's module opens where a
-                    // statement runs it (see opens).
-                    const published = loader && this.publishForeignBindings(frame.caller, [...bindings], frame.origin, frame.checked);
-                    result = { kind: "record", v: [...bindings.keys()].map((key): [string, Value] => [key, (published ?? bindings).get(key)!]) };
-                    if (loader) loader.latest = latest(published!, loader.loaded);
-                    else this.moduleValues.set(result, { origin: frame.origin, checked: frame.checked, load: true });
-                }
+                const result = first.record ?? recordOf(this.env, first.loaded);
+                this.moduleValues.set(result, { origin: first.origin, checked: first.checked });
                 return result;
             }
         } finally {

@@ -67,8 +67,8 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
             if (bound) records.set(bound[0], { sources: sourcesOf(bound[1], from), spec: importedPath(bound[1]) });
             if (node.t !== "expr") continue;
             const e = node.value;
-            // use opens records; a statement opens only a load's (an import's opens by use).
-            open(e.t === "app" && e.f.t === "var" && e.f.name === "use" ? used(e.a) : importedPath(e) ? [] : sourcesOf(e, from));
+            // Only use opens records.
+            if (e.t === "app" && e.f.t === "var" && e.f.name === "use") open(used(e.a));
         }
     };
     declare(program, directory);

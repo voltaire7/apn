@@ -59,9 +59,10 @@ A record pattern takes some names of a module and leaves the rest:
 `[halt] <- import "std/system"` binds `halt`, and `[halt = stop] <- import
 "std/system"` binds only `stop`.
 
-`load "file"` remains file execution (the `.apn` extension must be omitted): paths are relative to the source file,
-loading executes again each time, and it uses the caller's scope; `import`
-runs a module once, in its own scope.
+`load "file"` is file execution (the `.apn` extension must be omitted): an
+action that runs the file in the caller's scope, again each time it runs, with
+paths relative to the source file, and yields its record; `import` runs a
+module once, in its own scope (see [module imports](semantics.md#module-imports)).
 Names without an extension receive `.apn`; explicitly supplied extensions are
 used literally. `load` parses file contents as APN regardless of their extension.
 `sq` lives in `number`; `halt` lives in `system`.
@@ -507,11 +508,11 @@ GLSL, with `vec`, `swizzle`, `fract`, `distance`, `mix`, `getTexture` and
 It selects the first matching unary function from a lazy list of alternatives.
 See [pattern functions and contracts](pattern-functions.md).
 
-A bare `load "file"` in the REPL runs the file without automatically displaying
-its exported record. This avoids forcing unused exports such as infinite lists.
-Explicit output in the file still prints. Use `module <- load "file"` to retain
-the record, then inspect selected fields. Explicit `print (load "file")` still
-requests the full record and can stream indefinitely if it contains infinite lists.
+A bare `load "file"` (or `import "path"`) in the REPL runs it without displaying
+the module it yields. This avoids forcing unused exports such as infinite lists.
+Explicit output in the file still prints. Use `module <- load "file"` to keep
+the record, then inspect selected fields or `use module`. Printing the whole
+record (`print module`) can stream indefinitely if it holds infinite lists.
 
 ## Resource scopes and type utilities
 

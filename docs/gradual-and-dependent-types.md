@@ -76,7 +76,7 @@ pattern against a `Dynamic` value (`(Got (Ok q))` for a `Got Dynamic` field) is 
 runtime check, as matching a `Dynamic` scrutinee is.
 
 A function, lambda, or lazy value reads the names it uses when it runs, so
-after a name is rebound (by a definition or a checked `load`) it calls the new
+after a name is rebound (by a definition or a `use` of a checked load) it calls the new
 definition. The checker follows this: code that reads a rebound name is
 checked again against the new definition, and so is code that reads that
 code in turn. A later use is checked against the result. A definition that
@@ -478,7 +478,7 @@ existing behavior; repeated patterns do not prove function equivalence.
 ## Static boundaries and limits
 
 Static checking follows literal `import` and `load` dependencies and infers their
-exports. Namespaced imports stay namespaced. `use` opens statically known records
+records. Nothing opens a record but `use`, which opens statically known records
 or lists of records. Loaded files are checked with their lexical caller scope;
 a source change between checking and execution is rejected. Resubmit the loading
 definition to check the new source. A file's final `load` of itself (or of a

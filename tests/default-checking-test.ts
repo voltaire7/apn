@@ -282,7 +282,7 @@ Deno.test("namespaced import does not open conflicting exports", () => {
 Deno.test("load checks dependencies with the lexical caller scope", () => {
     const i = session();
     const file = new URL('fixtures/static-checking/local', import.meta.url).pathname;
-    const actual = run(i, `f localValue = {\n    module = load "${file}"\n    module.answer\n}\nf 41`);
+    const actual = run(i, `f localValue = {\n    module <- load "${file}"\n    return module.answer\n}\nanswer <- f 41\nanswer`);
     if (actual !== '42') throw new Error(actual);
 });
 Deno.test("invalid loaded source is rejected before any output", () => {
@@ -1259,8 +1259,8 @@ Deno.test("a later REPL input or load rebinds a name for what comes after it", (
     rejected(i, 'f "a"');
     const j = session();
     j.sourceDir = new URL("./fixtures/", import.meta.url).pathname;
-    run(j, 'load "reload"; twice x = double x; []');
-    run(j, 'load "reload-text"; []');
+    run(j, 'r <- load "reload"; use r; twice x = double x; []');
+    run(j, 't <- load "reload-text"; use t; []');
     if (run(j, 'twice 2') !== '4' || run(j, 'double "a"') !== '"aa"') throw new Error("load");
     rejected(j, 'twice "a"');
 });

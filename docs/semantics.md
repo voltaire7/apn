@@ -1506,14 +1506,16 @@ library, a bare name is a module beside the file. A module is evaluated in a
 scope of its own, with the prelude and what it imports; the caller's bindings
 do not reach it. A method it defines (`map`, `>>=`, `return`, ...) is an
 instance from the moment it runs, opened or not (see "Monads and instances").
-`load` remains uncached file execution relative to the current source file;
-a statement running one opens the file's definitions into its block.
-`numbers = load "number"` is repeatable like a zero-argument definition, so each use
-of `numbers` loads the file again. A load the static check follows (a literal
-path outside `Dynamic`) rebinds the file's definitions as a definition
-would, even names the program rebound in between. A `Dynamic` load may
-replace only what the same file (with unchanged text) published, plus what
-its usual write checks allow.
+`load "file"` is an action too: running it runs the file (found relative to the
+current source file, and run again each time) in the caller's scope, and
+yields the file's record as an import yields a module's. It opens nothing:
+`numbers <- load "number"; use numbers`. `numbers = load "number"` names the
+action, so each `<-` of it loads the file again. The check follows a load with
+a literal path outside `Dynamic`, in the caller's scope; `use` of its record
+rebinds the file's definitions as a definition would, even names the program
+rebound in between, while a `Dynamic` load's record may replace only what the
+same file (with unchanged text) published, plus what its usual write checks
+allow.
 See [the standard library reference](standard-library.md) for APIs and limits.
 
 ## REPL clauses
@@ -1589,13 +1591,15 @@ large deferred accumulator can still overflow when finally forced. Use `<-` to
 compute an accumulator on each iteration when appropriate.
 
 A loaded file may finish with `load "itself"`, directly or through a tail-called
-function/action. This repeats without growing the host call stack; Ctrl+C stops
-it and restores the REPL's scope and source directory. Each load still reads
-and executes the file, resolves paths relative to that file, and merges its
-exports when it returns. Pending module scopes/merges are retained on the heap,
-so recursive loading is stack-safe but not constant-memory. Ordinary tail calls
-have no pending module merges. `load` before another statement returns normally
-before that statement executes; circular loads are not rejected.
+function/action: that load runs in place of the file's last statement, as a
+tail call, so it repeats without growing the host call stack; Ctrl+C stops it
+and restores the REPL's scope and source directory. Each load still reads and
+runs the file and resolves paths relative to it. The record is the first
+file's, as its top level bound it before the tail, and a tail-loaded file's
+record is dropped. Each file runs in a scope over the one before, so recursive
+loading is stack-safe but not constant-memory. `load` before another statement
+returns normally before that statement executes; circular loads are not
+rejected.
 
 ## Sequencing expression lists
 

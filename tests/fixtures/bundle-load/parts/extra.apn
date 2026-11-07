@@ -1,1 +1,2 @@
-load "suffix"
+suffix <- load "suffix"
+use suffix

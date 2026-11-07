@@ -23,13 +23,15 @@ for (const [source, expected] of [
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
-for (const [file, expected] of [['repeat', '[0,42]'], ['outer', '[0,10,20]']] as const) {
-    Deno.test(`tail load preserves exports and relative paths: ${file}`, () => {
+// A tail load runs in place of the file's last statement: the record is the
+// first file's, and each file's paths are relative to it.
+for (const [file, expected] of [['repeat', '[0,42]'], ['outer', '[0,10]']] as const) {
+    Deno.test(`tail load keeps the first file's record and relative paths: ${file}`, () => {
         const i = new Interpreter();
         const scope = i.env;
         const directory = new URL('./fixtures/tail-load/', import.meta.url).pathname;
         i.sourceDir = directory;
-        const expression = file === 'repeat' ? '[counter,module.exported]' : '[counter,module.outerValue,module.innerValue]';
+        const expression = file === 'repeat' ? '[counter,module.exported]' : '[counter,module.outerValue]';
         const actual = i.renderString(i.run(parseDocument(`counter = Mutable 1500\nmodule <- load "${file}"\n${expression}`)));
         if (actual !== expected) throw new Error(actual);
         if (i.env !== scope || i.sourceDir !== directory || i.stack !== 0) throw new Error('execution context leaked');
@@ -70,7 +72,7 @@ Deno.test('tail load keeps block exports scoped and resumes non-tail loads', () 
     i.run(parseDocument('counter = Mutable 3; module <- load "scoped"'));
     if (i.env.get('exported')) throw new Error('block-local export escaped');
     if (i.renderString(i.run(parseDocument('module.outside'))) !== '1') throw new Error('outer export lost');
-    const value = i.run(parseDocument('set counter $ 3; load "non-tail"; after'));
+    const value = i.run(parseDocument('set counter $ 3; module <- load "non-tail"; module.after'));
     if (i.renderString(value) !== '7') throw new Error('non-tail continuation lost');
 });
 Deno.test('tail load failure restores context without publishing unfinished exports', () => {

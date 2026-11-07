@@ -257,8 +257,6 @@ export interface CheckOptions {
     /** Receives this check's own test of whether a type is accepted where a
      * typed pattern's type is (as a typed parameter accepts it). */
     bridge?: (bridge: TypeBridge) => void;
-    /** The statements (by source location) whose value is a module, which the runtime opens. */
-    moduleStatements?: Set<string>;
     /** Whether any code in this session may write a Mutable cell (see mayMutate),
      * asked when a cell is read; computed from the program when unset. */
     mutation?: () => boolean;
@@ -354,19 +352,17 @@ function moduleOf(t: Ty): TypeScope | undefined {
 }
 // A module's record: each field's type is its scope entry's, read when needed.
 // A folder's entry is a module read (and checked) when it is first used.
-// opens: a load's, which a statement running it opens (an import's opens
-// only by use).
 class ModuleFields extends Map<string, Ty> {
     private read?: () => TypeScope;
     private known?: TypeScope;
-    constructor(scope: TypeScope | (() => TypeScope), readonly opens = false) {
+    constructor(scope: TypeScope | (() => TypeScope)) {
         super();
         if (typeof scope === "function") this.read = scope; else this.known = scope;
     }
     get scope(): TypeScope { return this.known ??= this.read!(); }
     // A copy, still unread if this one is.
     copied(): ModuleFields {
-        return new ModuleFields(this.known ? copyTypeScope(this.known) : () => copyTypeScope(this.scope), this.opens);
+        return new ModuleFields(this.known ? copyTypeScope(this.known) : () => copyTypeScope(this.scope));
     }
     override get size() { return this.scope.size; }
     override get(name: string) { return this.scope.get(name)?.type; }
@@ -1980,11 +1976,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // As in Haskell (do { e; ss } = e >> do { ss }), a statement that binds
     // nothing, but the last, is in its block's monad, in any block and at the
     // top level: a plain value would be computed and dropped. [] is the unit
-    // (what print yields); a module opens names.
+    // (what print yields).
     function discarded(s: Expr, type: Ty, blockMonad?: Ty): void {
         const fits = (t: Ty): boolean => {
             const v = resolve(t);
-            if (["var", "operation", "dynamic", "intrinsic"].includes(v.k) || isIO(v) || isPending(v) || moduleOf(v)) return true;
+            if (["var", "operation", "dynamic", "intrinsic"].includes(v.k) || isIO(v) || isPending(v)) return true;
             // The block picks an overload (undecided); a value is any of its
             // choices, each one in the block's monad.
             if (v.k === "union") {
@@ -2123,12 +2119,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         dynamicBoundaries++;
     }
     // What would bind a name: a retired native's replacement, a module bound
-    // to a name (it opens only where that name is a statement), or the standard
-    // module defining it.
+    // to a name (use opens it), or the standard module defining it.
     function unboundHint(name: string, scope?: Scope): string | undefined {
         const module = standardModule(name), now = RETIRED_NATIVES[name];
         const holder = scope && [...scope].find(([, entry]) => moduleOf(entry.type)?.has(name))?.[0];
-        return now ? `write \`${now} x\`` : holder ? `write \`${holder}.${name}\`, or the statement \`${holder}\` to open its names`
+        return now ? `write \`${now} x\`` : holder ? `write \`${holder}.${name}\`, or \`use ${holder}\` to open its names`
             : module ? `${openHint(module)} to use \`${name}\`` : undefined;
     }
 
@@ -3563,18 +3558,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             throw error;
         } finally { choosing--; pending.length = saved; }
     }
-    // A statement whose value is a load's module opens its names into its
-    // block, however it gets it (see Interpreter.opens); an import's opens
-    // only by use.
-    function opensModule(statement: Expr, scope: Scope, t: Ty): void {
-        // An action yielding a module opens it when the statement runs it.
-        const ran = resolve(t), held = resolve(isIO(ran) ? (ran as Extract<Ty, { k: "variant" }>).args[0] : ran);
-        const module = held.k === "record" && held.fields instanceof ModuleFields && held.fields.opens ? held.fields.scope : undefined;
-        if (!module) return;
-        for (const [name, entry] of copyTypeScope(module)) scope.set(name, entry);
-        const at = sourceLocations.get(statement);
-        if (at && !choosing) options.moduleStatements?.add(`${at.file}:${at.start}`);
-    }
     // A call whose type is a choice of types, and whose value the checker can
     // compute, has the type of that value: func true is a String when
     // func x = x ? "yes" : false.
@@ -3751,7 +3734,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return io({ k: "record", fields: new ModuleFields(copyTypeScope(options.imports(a.v))) });
                 }
                 if (resolved.k === "intrinsic" && resolved.name === "load" && a.t === "string" && options.loads) {
-                    return { k: "record", fields: new ModuleFields(options.loads(a.v, scope, e === tailStatement), true) };
+                    // load "file": an action running the file here, yielding its record.
+                    return io({ k: "record", fields: new ModuleFields(options.loads(a.v, scope, e === tailStatement)) });
                 }
                 if (resolved.k === "intrinsic" && resolved.name === "do" && a.t === "list") {
                     return infer({ t: "block", stmts: a.v, style: "{" }, scope);
@@ -4167,7 +4151,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     for (const [n, s] of e.stmts.entries()) {
                         result = infer(s, child);
                         const binds = s.t === "patDef" || s.t === "stmDef" || s.t === "typeDef";
-                        if (!binds) opensModule(s, child, result);
                         // A <- binding, or a discarded statement in a monad, makes the
                         // block a do-block: its last statement is the action (or the
                         // Option, ...) whose result it yields, in the block's monad.
@@ -7355,7 +7338,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 executeTopLevel(statement.value, scope);
                 const type = infer(statement.value, scope);
                 validate(type);
-                opensModule(statement.value, scope, type);
                 // The top level is a block: what binds nothing is an action.
                 const last = index === program.length - 1;
                 if (!last || options.file && ran) discarded(statement.value, type);

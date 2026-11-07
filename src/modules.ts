@@ -13,7 +13,7 @@
 
 import { parse, parseDocument } from "./parser.ts";
 import { NATIVE_EXPORTS } from "./native-exports.ts";
-import { type Expr, importedPath, METHODS } from "./ast.ts";
+import { type Expr, importedPath, METHODS, readsModule } from "./ast.ts";
 
 export const STD_DIRECTORY = new URL("../lib/std/", import.meta.url);
 export const BUNDLE_LIB = "/lib/";
@@ -304,7 +304,7 @@ export function standardExports(): Map<string, string[]> {
         try {
             for (const item of parseDocument(Deno.readTextFileSync(new URL(file, STD_DIRECTORY)))) {
                 if (item.t === "def") add(item.name, module);
-                if (item.t === "patDef" && item.pattern.p === "var") add(item.pattern.name, module);
+                if (item.t === "patDef" && item.pattern.p === "var" && !readsModule(item.value)) add(item.pattern.name, module);
                 if (item.t === "type") { add(item.def.name, module); item.def.variants.forEach(v => add(v.tag, module)); }
             }
         } catch { /* a module that does not parse alone offers nothing */ }
