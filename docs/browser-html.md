@@ -79,8 +79,8 @@ Msg = Tick Posix | AdjustTimeZone Zone
 init = [[zone = utc, time = millisToPosix 0], task.perform AdjustTimeZone here]
 
 update msg model = msg ~ [
-    (Tick newTime) -> { model.time = newTime; [model,browser.none] }
-    (AdjustTimeZone newZone) -> { model.zone = newZone; [model,browser.none] }
+    Tick newTime -> { model.time = newTime; [model,browser.none] }
+    AdjustTimeZone newZone -> { model.zone = newZone; [model,browser.none] }
 ]
 
 subscriptions _ = every 1000 Tick

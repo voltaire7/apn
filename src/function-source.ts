@@ -1,11 +1,10 @@
 import type { Expr, Pattern } from "./ast.ts";
 import type { Value } from "./types.ts";
-import { exprToSource, patternSource, PRIMITIVE_OPERATORS, sectionSource } from "./parser.ts";
+import { exprToSource, PRIMITIVE_OPERATORS, sectionSource, wholePatternSource } from "./parser.ts";
 import { compoundArgument, valueToString } from "./types.ts";
 
 // Function text is source text (exprToSource): an argument is written as one.
 const source = (e: Expr, argument = false) => exprToSource(e, argument ? { kind: "argument", min: 0, follows: -1 } : undefined);
-const pattern = patternSource;
 // Inspect syntax only: never demand bound arguments or walk a captured environment.
 export function argument(v: Value): string {
     if (v.kind === "thunk") return source(v.body, true);
@@ -39,13 +38,10 @@ export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" 
     const args = v.applied.map(a => ` ${argument(a)}`).join("");
     return v.clauses.map(c => args ? `(${clauseSource(c)})${args}` : clauseSource(c)).join("\n");
 }
-// A clause as a pattern lambda. A lone constructor pattern needs no
-// parentheses (Some x -> x); among several parameters it keeps them
-// ((Some x), y -> x). A typed one keeps them: (x : Int) -> x.
+// A clause as a pattern lambda, each parameter a whole pattern: Some x, y -> x.
+// A typed one keeps its parentheses: (x : Int) -> x.
 function clauseSource(c: { params: Pattern[]; body: Expr; guard?: Expr }): string {
-    const [first] = c.params, written = c.params.map(pattern);
-    const lone = c.params.length === 1 && first.p === "constr" && first.args.length && written[0].startsWith(`(${first.tag} `);
-    const params = lone ? written[0].slice(1, -1) : written.join(", ");
+    const params = c.params.map(wholePatternSource).join(", ");
     return `${params}${c.guard ? " | " + exprToSource(c.guard, { kind: "guard", min: 0, follows: -1 }) : ""} -> ${source(c.body)}`;
 }
 

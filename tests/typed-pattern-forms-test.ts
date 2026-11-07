@@ -17,13 +17,13 @@ function failure(source: string): { kind?: string; message: string; hint?: strin
 
 for (const [source, expected] of [
     [VEC + "len (xs : Vec n a) = n\nlen (Cons 1 (Cons 2 Nil))", "2"],
-    [VEC + "app : Vec n a -> Vec m a -> Vec (n + m) a\napp xs ys = [xs,ys] ~ [[Nil,r] -> r, [(Cons x rest), r] -> Cons x (app rest r)]\ntypeOf (app (Cons 1 Nil) (Cons 2 Nil))", "Vec 2 Int"],
+    [VEC + "app : Vec n a -> Vec m a -> Vec (n + m) a\napp xs ys = [xs,ys] ~ [[Nil,r] -> r, [Cons x rest, r] -> Cons x (app rest r)]\ntypeOf (app (Cons 1 Nil) (Cons 2 Nil))", "Vec 2 Int"],
     // A typed pattern binds its length, so a recursive call may pass any length.
     ["f (x::rest : Vect n a) = f rest\n1", "1"],
     ["f (xs : Vect n a) = null xs ? 0 : 1 + f (tail xs)\nf [1,2,3]", "3"],
     // x:xs in an alternative takes the scrutinee's tail, one shorter.
-    ["count (xs : Vect n a) = xs ~ [[] -> 0, (x::rest) -> 1 + count rest]\ncount [1,2]", "2"],
-    ["app (xs : Vect n a) (ys : Vect m a) = [xs,ys] ~ [[[],r] -> r, [(x::rest),r] -> x :: app rest r]\napp [1] [2,3]", "[1,2,3]"],
+    ["count (xs : Vect n a) = xs ~ [[] -> 0, x::rest -> 1 + count rest]\ncount [1,2]", "2"],
+    ["app (xs : Vect n a) (ys : Vect m a) = [xs,ys] ~ [[[],r] -> r, [x::rest,r] -> x :: app rest r]\napp [1] [2,3]", "[1,2,3]"],
 ] as const) {
     Deno.test(`typed pattern forms: ${source}`, () => {
         const actual = run(source);
@@ -78,7 +78,7 @@ for (const checked of [false, true]) for (const [source, expected] of [
 const APPEND = "append (xs : Vect n a) (ys : Vect m a) = {\n    xs ~ [\n        [] -> ys\n        x :: rest -> x :: append rest ys\n    ]\n} : Vect (n + m) a\n";
 for (const [source, expected] of [
     [APPEND + "typeOf (append [1,2] [3])", "Vect 3 Int"],
-    ["app : Vect n a -> Vect m a -> Vect (n + m) a\napp xs ys = [xs,ys] ~ [[[],r] -> r, [(x::rest),r] -> x :: app rest r]\ntypeOf (app [1] [2,3])", "Vect 3 Int"],
+    ["app : Vect n a -> Vect m a -> Vect (n + m) a\napp xs ys = [xs,ys] ~ [[[],r] -> r, [x::rest,r] -> x :: app rest r]\ntypeOf (app [1] [2,3])", "Vect 3 Int"],
 ] as const) {
     Deno.test(`a claim around a match: ${JSON.stringify(source)}`, () => {
         const actual = run(source);

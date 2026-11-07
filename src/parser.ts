@@ -111,6 +111,12 @@ function reach(e: Expr): number {
     }
 }
 
+// Where a pattern's parentheses are needed (see Parser.judgePattern): around
+// a negative number, which bare reads as subtraction; around a binding's
+// as-pattern (a.b = v sets a field) or name ((x) = v is no binding).
+const negative = (p: Pattern) => (p.p === "int" || p.p === "float") && p.v < 0;
+const bindingNeeds = (p: Pattern) => p.p === "as" || p.p === "var" || negative(p);
+
 class Parser {
     toks: Token[];
     i = 0;
@@ -379,6 +385,26 @@ class Parser {
 
     // ---- patterns
 
+    // A plain grouped pattern, (p), by its ( token's index: where it stands
+    // decides whether it needs the parentheses (see judgePattern).
+    patternGroups = new WeakMap<Pattern, number>();
+    // Parentheses around a pattern that reads the same without them are
+    // unnecessary, as around an expression: needed tells where they are not.
+    judgePattern(p: Pattern, needed: (p: Pattern) => boolean): void {
+        const open = this.patternGroups.get(p);
+        // A type applied to a value ((Int x)) is the old typed spelling, whose
+        // own error says how to write it.
+        const typed = p.p === "constr" && (TYPE_NAMES.includes(p.tag) || declaredTypes.has(p.tag) && !declaredCtors.has(p.tag));
+        if (open !== undefined) this.unnecessary.set(open, !typed && !needed(p));
+    }
+
+    // A constructor's field stands alone: it is parenthesized only to apply
+    // a constructor or to write a cons or an as-pattern (Some (Ok x), not Some (x)).
+    field(p: Pattern): Pattern {
+        this.judgePattern(p, q => q.p === "constr" && q.args.length > 0 || q.p === "cons" || q.p === "as" || negative(q));
+        return p;
+    }
+
     parsePattern(): Pattern {
         const left = this.parsePatternAtom();
         return this.eatSym(".") ? { p: "as", left, right: this.parsePattern() } : left;
@@ -473,6 +499,7 @@ class Parser {
                 return typedPattern(p, type);
             }
             this.expectSym(close);
+            if (close === ")") this.patternGroups.set(p, this.toks.indexOf(t));
             return p;
         }
         if (t.k === "sym" && t.v === "[") {
@@ -515,7 +542,10 @@ class Parser {
                 } else {
                     if (mode === "keyed") throw new Error("Parser: a pattern cannot mix bare names and 'field = name' entries");
                     mode = "bare";
-                    ps.push(this.parseConsPattern());
+                    // An item is a whole pattern, up to its ',': [Some x, y].
+                    const item = this.parseConsPattern();
+                    this.judgePattern(item, negative);
+                    ps.push(item);
                 }
                 if (this.eatSym(",")) continue;
                 break;
@@ -536,7 +566,7 @@ class Parser {
                 while (this.startsParam(this.peek())) {
                     const token = this.peek();
                     if (token.k === "ident" && /^[A-Z]/.test(token.v) && token.v !== "_") { this.next(); args.push({ p: "constr", tag: token.v, args: [] }); }
-                    else args.push(this.parsePattern());
+                    else args.push(this.field(this.parsePattern()));
                 }
                 return { p: "constr", tag: name, args };
             }
@@ -547,7 +577,7 @@ class Parser {
                 while (this.startsParam(this.peek())) {
                     const token = this.peek();
                     if (token.k === "ident" && /^[A-Z]/.test(token.v)) { this.next(); args.push({ p: "constr", tag: token.v, args: [] }); }
-                    else args.push(this.parsePattern());
+                    else args.push(this.field(this.parsePattern()));
                 }
                 return { p: "constr", tag: name, args };
             }
@@ -589,7 +619,11 @@ class Parser {
         const t = this.peek();
         if (t.k === "sym" && isConstructorOperator(t.v)) {
             this.next();
+            // Cons groups to the right and takes applied constructors:
+            // Some x :: rest, x :: y :: rest; (x :: y) :: rest needs them.
+            this.judgePattern(p, q => q.p === "cons" || q.p === "as" || negative(q));
             const tail = this.parseConsPattern();
+            this.judgePattern(tail, q => q.p === "as" || negative(q));
             return { p: "cons", head: p, tail, ...t.v !== "::" ? { op: t.v } : {} };
         }
         return p;
@@ -1300,7 +1334,10 @@ class Parser {
             this.next();
             return { p: "typeBind", name: t.k === "ident" ? t.v : "_", value: this.parseConsPattern() };
         }
-        return this.parseConsPattern();
+        // A lambda's parameter is a whole pattern (Some x -> x, x :: xs -> x).
+        const p = this.parseConsPattern();
+        this.judgePattern(p, negative);
+        return p;
     }
     // The innermost bracket open at token index i ("" at statement level).
     private enclosingCache?: string[];
@@ -1495,6 +1532,7 @@ class Parser {
 
     parseEagerBinding(): Expr {
         const pattern = this.parseConsPattern();
+        this.judgePattern(pattern, bindingNeeds);
         this.expectSym("<-");
         return { t: "patDef", pattern, value: this.parseDefBody("<-"), eager: true };
     }
@@ -1528,6 +1566,7 @@ class Parser {
 
     parsePatBinding(): Expr {
         const pattern = this.parseConsPattern();
+        this.judgePattern(pattern, bindingNeeds);
         this.expectSym("=");
         const value = this.parseDefBody();
         const update = pattern.p === "as" && pattern.left.p === "var"
@@ -1612,6 +1651,11 @@ class Parser {
                 // xs -2 = 5 gives xs -2, as f -1 passes -1: no definition of -.
                 if (this.isSym("=") && !this.negated(name)) {
                     this.next();
+                    // An operand is a constructor applied without them, as an
+                    // application binds tighter than any operator: Some x >>= f.
+                    const needed = (q: Pattern) => q.p === "cons" || q.p === "as" || negative(q);
+                    this.judgePattern(left, needed);
+                    this.judgePattern(right, needed);
                     return { name: name.v, clauses: [{ params: [left, right], body: this.parseDefBody("=") }] };
                 }
             }
@@ -1643,6 +1687,10 @@ class Parser {
             return { p: "constr", tag: t.v, args: [] };
         }
         const p = this.parseConsPattern(), last = this.toks[this.i - 1];
+        // A parameter is parenthesized only to apply a constructor, to write a
+        // cons or an as-pattern as one, or to set an item (xs (i) = v, while
+        // xs i = v defines xs): f (Some x), not f (None) or f (-1).
+        this.judgePattern(p, q => q.p === "constr" && q.args.length > 0 || q.p === "cons" || q.p === "as" || q.p === "var");
         if (p.p !== "cons" || t.k === "sym" && (t.v === "(" || t.v === "{") && this.closer(start) === this.i - 1) return p;
         const text = this.source.slice(t.pos, last.pos + tokLen(last));
         throw new APNError("parse", `the parameter \`${text}\` is one pattern: write it in parentheses`, {
@@ -2790,7 +2838,7 @@ function bareSource(e: Expr, where: Place): string {
             for (; head.t === "app"; head = ungrouped(head.f)) args.unshift(head.a);
             return [of(head, place("head")), ...args.map(a => of(a, place("argument")))].join(" ");
         }
-        case "patternLambda": return `${e.params.map(patternSource).join(", ")}${e.guard ? " | " + of(e.guard, place("guard")) : ""} -> ${of(e.body)}`;
+        case "patternLambda": return `${e.params.map(wholePatternSource).join(", ")}${e.guard ? " | " + of(e.guard, place("guard")) : ""} -> ${of(e.body)}`;
         case "lambda": return sectionSource(e.params, e.body, x => of(x, place("operand", 8))) ?? `${e.params.join(", ")} -> ${of(e.body)}`;
         case "list": return `[${itemsText(e.v.map(x => of(x, place("item"))))}]`;
         case "record": return `[${recordFieldsSource(e, x => of(x)).join(", ")}]`;
@@ -2819,9 +2867,16 @@ function bareSource(e: Expr, where: Place): string {
         case "stmDef": return e.clauses.map(c => [e.name, ...c.params.map(patternSource)].join(" ") + ` = ${of(c.body)}`).join("; ");
         case "patDef":
             if (e.value.t === "setItem" || e.value.t === "setFields") return of(e.value);
-            return `${patternSource(e.pattern)} ${e.eager ? "<-" : "="} ${of(e.value)}`;
+            return `${wholePatternSource(e.pattern)} ${e.eager ? "<-" : "="} ${of(e.value)}`;
         default: return "<expr>";
     }
+}
+// A pattern standing where a whole one is read (a lambda's parameter, a
+// binding, a list's item): a constructor's fields and a cons need no
+// parentheses there (Some x -> x, x :: xs = ys); a typed one keeps them.
+export function wholePatternSource(p: Pattern): string {
+    const written = patternSource(p);
+    return p.p === "cons" || p.p === "constr" && p.args.length && written.startsWith(`(${p.tag} `) ? written.slice(1, -1) : written;
 }
 export function patternSource(p: Pattern): string {
     switch (p.p) {
@@ -2843,7 +2898,7 @@ export function patternSource(p: Pattern): string {
         case "char": return charLiteral(p.v);
         case "float": return numberText({ kind: "float", v: p.v });
         // An item stands alone up to its ',': [x :: _, d], [Some x, y].
-        case "list": return `[${itemsText(p.v.map(q => q.p === "cons" || q.p === "constr" && q.args.length ? patternSource(q).slice(1, -1) : patternSource(q)))}]`;
+        case "list": return `[${itemsText(p.v.map(wholePatternSource))}]`;
         case "cons": return `(${patternSource(p.head)} ${p.op ?? "::"} ${patternSource(p.tail)})`;
         // A type's pattern is written as the value it types: (xs : Vect n a).
         case "constr":

@@ -20,7 +20,7 @@ for (const [source, expected] of [
     [VEC + "typeOf (1 :: 2 :: Nil)", "Vec 2 Int"],
     [VEC + APP + "(x :: app r ys : Vec (n + m) a)\ntypeOf (app (1 :: Nil) (2 :: Nil))", "Vec 2 Int"],
     ["P a b = | MkP a b\n(:+) = MkP\nswap (x :+ y) = y :+ x\nswap (1 :+ \"a\")", 'MkP "a" 1'],
-    ["P a b = | MkP a b\n(:+) = MkP\n1 :+ 2 ~ [(x :+ y) -> x + y]", "3"],
+    ["P a b = | MkP a b\n(:+) = MkP\n1 :+ 2 ~ [x :+ y -> x + y]", "3"],
 ] as const) {
     Deno.test(`infix constructor patterns: ${JSON.stringify(source)}`, () => {
         for (const checked of [true, false]) {

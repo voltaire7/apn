@@ -109,7 +109,7 @@ for (const [source, expected] of [
     ['v = [x : Int]\nv "x" = 1\nv', '[x = 1]'],
     ['v = [x : Int, y : Float]\nv.[x,y] = [1,2]\nv', '[x = 1, y = 2.0]'],
     ['xs = [Int]\nxs 0 = 1\nxs', '[1]'],
-    ['xs = [Int,Float]\nxs (-1) = 2\nxs', '[Int,2.0]'],
+    ['xs = [Int,Float]\nxs -1 = 2\nxs', '[Int,2.0]'],
     ['xs = [Int]\ni = 0\nxs (i + 0) = 1\nxs', '[1]'],
     ['UserId (x : Int) = _\nv = [id : UserId]\nv.id = UserId 3\nv', '[id = UserId 3]'],
     ['(identity : Int -> Int) <- return (x -> x); v = [f = typeOf identity]\nv.f = (+ 1)\nv.f 2', '3'],

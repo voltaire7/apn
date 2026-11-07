@@ -34,7 +34,7 @@ for (const [name, source, expected] of [
     ["prelude fixities", "print (1 + 2 * 3)\nprint (2 ^ 3 ^ 2)\nprint (10 - 3 - 2)\nprint (1 :: 2 :: [3])\nprint (-2 ^ 2)", ["7", "512", "5", "[1,2,3]", "-4"]],
     ["cons stays lazy", "ones = 1::ones\nprint (take 3 ones)", ["[1,1,1]"]],
     ["&& and || short-circuit", "print (False && head [])\nprint (True || head [])", ["False", "True"]],
-    ["an overload falls back to the builtin", "Money = | Money Int\n(Money a) + (Money b) = Money (a + b)\nprint (Money 3 + Money 4)\nprint (1 + 2)\nprint (\"a\" + \"b\")",
+    ["an overload falls back to the builtin", "Money = | Money Int\nMoney a + Money b = Money (a + b)\nprint (Money 3 + Money 4)\nprint (1 + 2)\nprint (\"a\" + \"b\")",
         ["Money 7", "3", "ab"]],
     ["a literal clause falls back to the builtin for other arguments", "1 + 1 = 3\nprint (1 + 1)\nprint (1 + 2)\nprint (2 + 2)", ["3", "3", "4"]],
     ["a new operator with a fixity", "infixr 5 +|+\nxs +|+ ys = xs ++ [0] ++ ys\nprint ([1] +|+ [2] +|+ [3])", ["[1,0,2,0,3]"]],

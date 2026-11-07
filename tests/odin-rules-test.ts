@@ -10,7 +10,7 @@ function result(source: string): string {
 for (const [source, expected] of [
     ['UserId (x : Int) = _\n[UserId, UserId 3, typeOf (UserId 3)]', '[UserId, UserId 3, UserId]'],
     // A new type has only the operations its clauses define.
-    ['Distance (x : Float) = _\n(Distance a) + (Distance b) = Distance (a + b)\nDistance 2 + Distance 3', 'Distance 5.0'],
+    ['Distance (x : Float) = _\nDistance a + Distance b = Distance (a + b)\nDistance 2 + Distance 3', 'Distance 5.0'],
     ['UserId (x : Int) = _\nf (x : t) = [t,x]\nf (UserId 3)', '[UserId, UserId 3]'],
     ['UserId (x : Int) = _\nAlias = UserId\n[Alias == UserId, Alias 3 == UserId 3]', '[True,True]'],
     ['UserId (x : Int) = _\nOrderId (x : Int) = _\n[UserId == OrderId, UserId 3 == OrderId 3, UserId 3 == 3]', '[False,False,False]'],

@@ -270,7 +270,7 @@ failure("a demanded invalid tail reports a list error",
 example("cons patterns bind at statement level", `
 x::xs = [1,2,3,4]
 print [x,xs]
-(a::b::rest) = [5,6,7]
+a::b::rest = [5,6,7]
 print [a,b,rest]
 h::t <- return [8,9]
 print t
@@ -486,7 +486,7 @@ example("cons parameters parse", `
 f (x::rest) = rest
 g (x :: rest) = rest
 one (x::[]) = x
-lam = (x::rest) -> rest
+lam = x::rest -> rest
 print [f [1,2], g [3,4], one [5], lam [6,7]]`, ["[[2],[4],5,[7]]"]);
 example("boolean literal patterns", `
 h x = x ~ [False -> "f", True -> "t"]

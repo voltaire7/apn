@@ -13,7 +13,7 @@ Count = Int
 
 (5 : Count) + 1             # 6, a Count: a Count and a plain Int give a Count
 ((5 : Count) : Int)         # 5
-sqrt (4 : Count)            # 2: builtins and (Int x) patterns see the Int
+sqrt (4 : Count)            # 2: builtins and (x : Int) patterns see the Int
 (5 : Count) == 5            # True
 (1 : Count) + Age 2         # error: cannot combine Count and Age (Age = Int)
 ```

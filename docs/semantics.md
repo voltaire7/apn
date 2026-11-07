@@ -153,7 +153,13 @@ so `f Some x = ...` is a static error, as `Some -> 1` is. A cons is
 parenthesized too: `len x :: xs = ...` is an error (write `len (x :: xs)`). A
 lambda's parameter, an operator definition's operand and a binding's pattern
 take a whole pattern, as an operand does: `Some x -> x`,
-`(Money a) + Money b = ...`, `Some v = m`.
+`Money a + Money b = ...`, `Some v = m`, as does a list's item
+(`[Some x, y]`), and cons takes applied constructors (`Some x :: rest`). So
+parentheses around a pattern follow the rule above: `f (Some x)`,
+`Some (Ok x)`, `(x :: xs) ++ ys` and `(x :: y) :: z` need them, while
+`f (None)`, `f (-1)`, `Some (x)`, `(Some x) >>= f`, `(Some x) -> x`,
+`[(Some x), y]` and `(Some v) = m` are errors, and a name keeps them only to set
+an item (`xs (i) = v`).
 
 Lists print the same way: `print [1,2,[3]]` shows `[1,2,[3]]` and records show
 `[x = 1, y = 2]`. A list prints its items once its `,` is decided: when an item
@@ -281,7 +287,7 @@ to all its parameters, a type that remembers how it was written (`Point`,
 `Pairs 2 Int`), as do the values made with it (`typeOf p` is `Point`), which
 patterns read back (`(Pairs n a xs)`). A scalar
 type (`Count = Int`) makes a named subtype: a `Count` is an `Int` wherever one is accepted and keeps its name when
-a result fits (`(5 : Count) + 1` is `6`, a `Count`). A constructor (`UserId (Int id) =
+a result fits (`(5 : Count) + 1` is `6`, a `Count`). A constructor (`UserId (id : Int) =
 _`) makes a distinct type: `UserId 1` has none of an Int's operations, builtins
 and `(x : Int)` patterns reject it, its clauses give it what it needs
 (`UserId a + UserId b = UserId (a + b)`), and `(UserId x)` takes it apart.

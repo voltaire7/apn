@@ -5,7 +5,7 @@ browser <- import "std/browser"
 GreetingMsg = NameChanged String | ClearName
 
 update msg _ = msg ~ [
-    (NameChanged name) -> name
+    NameChanged name -> name
     ClearName -> ""
 ]
 

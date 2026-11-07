@@ -15,7 +15,7 @@ function failure(source: string): { kind?: string; message: string } {
     }
     throw new Error(`accepted: ${source}`);
 }
-const TEMPERATURE = "Celsius = | C Float\nFahrenheit = | F Float\nto Celsius = (F f) -> C ((f - 32) * 5 / 9)\n";
+const TEMPERATURE = "Celsius = | C Float\nFahrenheit = | F Float\nto Celsius = F f -> C ((f - 32) * 5 / 9)\n";
 
 for (const [source, expected] of [
     ["to String 1.5 ++ \"!\"", '"1.5!"'],
@@ -64,7 +64,7 @@ for (const [source, kind, message] of [
 // An operand of a type the program defines, met by one of another type that no
 // clause of the operator takes, converts the other through a to instance, and
 // the operator runs again. Checked and unchecked runs agree.
-const MONEY = "Money (m : Float) = _\n(Money a) + (Money b) = Money (a + b)\n(Money a) < (Money b) = a < b\n";
+const MONEY = "Money (m : Float) = _\nMoney a + Money b = Money (a + b)\nMoney a < Money b = a < b\n";
 const CENTS = "Cents (c : Int) = _\nCents a + Cents b = Cents (a + b)\nto Money (Cents c) = Money ((c : Float) / 100)\n";
 for (const checked of [true, false]) {
     const each = (source: string) => {

@@ -15,7 +15,7 @@ _parserInput text = isType String text ? to (List Char) text : text
 # Ok of the value a parser reads from all of the input, or Err.
 parse parser text = _parserRun parser (_parserInput text) ~ [
     Ok [value,[]] -> Ok value
-    Ok [_, (next :: _)] -> Err ("unexpected " ++ _parserShown next)
+    Ok [_, next :: _] -> Err ("unexpected " ++ _parserShown next)
     Err message -> Err message
 ]
 _parserShown x = isType Char x ? "'" ++ from (List Char) [x] ++ "'" : to String x

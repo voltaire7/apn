@@ -68,7 +68,7 @@ MkCounter g >>= f = MkCounter (s -> {
 return x = MkCounter (s -> [x,s])
 tick = MkCounter (s -> [s, s + 1])`;
 
-const mapText = "map\nf, (Some x) -> Some (f x)\n_, None -> None\nf, (Ok x) -> Ok (f x)\n_, (Err error) -> Err error";
+const mapText = "map\nf, Some x -> Some (f x)\n_, None -> None\nf, Ok x -> Ok (f x)\n_, Err error -> Err error";
 for (const [name, source, expected] of [
     // A do-block over a parameter's monad binds what that monad holds, once
     // a call gives it: x is the Option's value, not the Option.
@@ -85,7 +85,7 @@ for (const [name, source, expected] of [
     ["an Option do-block stops at None", 'std <- import "std"; use std.option\nfound = {\n    a <- Some 1\n    b <- None\n    return (a + b)\n} : Option Int\nprint found\nboth = {\n    a <- Some 1\n    b <- Some 2\n    return (a + b)\n} : Option Int\nprint both',
         ["None", "Some 3"]],
     ["a method prints its builtin and every instance", 'std <- import "std"; use std.option\nprint map\nprint return\nprint (>>=)\nprint (<$>)',
-        [mapText, "return\nSome\nOk", "(>>=)\n[], f -> []\n(x :: rest), f -> f x ++ (rest >>= f)\n(Some x), f -> f x\nNone, _ -> None\n(Ok x), f -> f x\n(Err error), _ -> Err error", mapText]],
+        [mapText, "return\nSome\nOk", "(>>=)\n[], f -> []\nx :: rest, f -> f x ++ (rest >>= f)\nSome x, f -> f x\nNone, _ -> None\nOk x, f -> f x\nErr error, _ -> Err error", mapText]],
     ["Result instances", 'std <- import "std"; use std.option\nprint (map (+ 1) (Ok 1))\nprint (map (+ 1) (Err "bad"))\nprint (Ok 3 >>= x -> Ok (x + 1))', ["Ok 2", 'Err "bad"', "Ok 4"]],
     ["<*> derives from >>=", 'std <- import "std"; use std.option\nprint (Some (+ 1) <*> Some 41)\nprint ([(+ 1), (* 2)] <*> [10,20])', ["Some 42", "[11,21,20,40]"]],
     ["a user-defined monad", `${counter}\ncounted = ({\n    a <- tick\n    b <- tick\n    return (a * 100 + b)\n} : Counter Int Int)\nprint (runCounter counted 5)\nprint (runCounter (map (* 2) tick) 3)`,

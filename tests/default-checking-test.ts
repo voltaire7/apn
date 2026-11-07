@@ -105,7 +105,7 @@ for (const [source, expected] of [
     ['Point = [x : Float, y : Float]\nShape = | Path (List Point)\nPath [[x = 1, y = 2]]', 'Path [[x = 1.0, y = 2.0]]'],
     ['browser <- import "std/browser"\nMsg = Resized browser.Viewport | Other\nResized [width = 1, height = 2]', 'Resized [width = 1, height = 2]'],
     // A constructor pattern on a Dynamic field is checked when it runs.
-    ['std <- import "std"; use std.option\nMsg = More | Got Dynamic\nf msg = msg ~ [More -> 0, (Got (Ok q)) -> q, (Got (Err _)) -> 1]\nf (Got (Ok 5))', '5'],
+    ['std <- import "std"; use std.option\nMsg = More | Got Dynamic\nf msg = msg ~ [More -> 0, Got (Ok q) -> q, Got (Err _) -> 1]\nf (Got (Ok 5))', '5'],
     // More clauses are a new version: label keeps the clauses it saw.
     ['describe 0 = "zero"; label x = describe x; describe 1 = "one"; [describe 1, label 0]', '["one","zero"]'],
     // h keeps the c it was written with; a later c is another version.
@@ -330,8 +330,8 @@ for (const [source, expected] of [
     ['xs = map (x -> x + 1) [1,2]\nys = map (x -> x * 2) [1,2,3]\ng [a,b] = a + b\n[g xs, length ys]', '[5,3]'],
     ['x (x::xs) = 42; x [x]', '42'],
     // A [] inside a pattern tests that part without making the argument empty.
-    ['g [[],y] = y; g [(x::_),_] = x; g [[1,2],3]', '1'],
-    ['j xs ys = [xs,ys] ~ [[[],r] -> r, [(x::m),r] -> x :: j m r]; j [1,2] [3]', '[1,2,3]'],
+    ['g [[],y] = y; g [x::_,_] = x; g [[1,2],3]', '1'],
+    ['j xs ys = [xs,ys] ~ [[[],r] -> r, [x::m,r] -> x :: j m r]; j [1,2] [3]', '[1,2,3]'],
     ['f xs = xs ~ [[] -> 0, [_] -> 1, _ -> 2]; [f [], f [1], f [1,2]]', '[0,1,2]'],
     // A free name in a typed pattern binds what the value has there.
     ['f (xs : List _) = xs; f [1,2]', '[1,2]'],
@@ -1112,7 +1112,7 @@ for (const source of [
 for (const source of ['x::xs = []', 'x::y::z = [1]', 'f n = { x::xs = []; x }']) Deno.test(`a cons binding of a list known too short is rejected: ${source}`, () => rejected(session(), source));
 Deno.test("an unknown constructor in a pattern is named, with the module that declares it", () => {
     for (const [source, message, hint] of [
-        ["func ((Some x)::xs) = print [x,xs]", "unknown constructor 'Some' in a pattern", "add `std <- import \"std\"; use std.option` to use `Some`"],
+        ["func (Some x::xs) = print [x,xs]", "unknown constructor 'Some' in a pattern", "add `std <- import \"std\"; use std.option` to use `Some`"],
         ["print None", "unbound variable 'None'", "add `std <- import \"std\"; use std.option` to use `None`"],
         // In code too: a name the library defines is a missing import, not open code.
         ["print [x <- Some 1, return x]", "unbound variable 'Some'", "add `std <- import \"std\"; use std.option` to use `Some`"],
@@ -1126,7 +1126,7 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
         }
         throw new Error(`accepted: ${source}`);
     }
-    if (run(session(), 'std <- import "std"\nuse std.option\nfunc ((Some x)::xs) = [x,xs]; func [Some 1, None]') !== "[1,[None]]") throw new Error("with the import");
+    if (run(session(), 'std <- import "std"\nuse std.option\nfunc (Some x::xs) = [x,xs]; func [Some 1, None]') !== "[1,[None]]") throw new Error("with the import");
 });
 // An unbound name is reported where it is written, with the standard module
 // exporting it, before any check of what it would have been.
@@ -1299,7 +1299,7 @@ for (const [source, expected] of [
     ['g [(a : UInt8), (b : UInt8)] = a; h x = g [x, x * 100]; h 1', '1'],
     ['std <- import "std"; use std.option; g (Some (x : UInt8)) = x; g (Some 3)', '3'],
     ['std <- import "std"; use std.option; g (Some (x : Float)) = x; g (Some 1)', '1.0'],
-    ['std <- import "std"; use std.option; (Some (x : Float)) = Some 1; x', '1.0'],
+    ['std <- import "std"; use std.option; Some (x : Float) = Some 1; x', '1.0'],
     // An imported constructor destructures without parentheses, as a declared one does.
     ['std <- import "std"\nuse std.option\nSome v = Some 123; f (Some (x : Float)) = x; [v, f (Some 1)]', '[123,1.0]'],
     ['std <- import "std"; use std.option; g (Some (x : UInt8)) = x; k = Some 3; g k', '3'],
@@ -1314,7 +1314,7 @@ for (const [source, expected] of [
     ['Pair a b = MkPair a b | NoPair; g (MkPair (x : Float) (y : UInt8)) = x; g (MkPair 1 3)', '1.0'],
     ['P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; g (P2 1 3)', '3'],
     ['P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; h v = g (P2 1 v); h 3', '3'],
-    ['P = P2 Int Int | P0; (P2 a (y : UInt8)) = P2 1 3; y', '3'],
+    ['P = P2 Int Int | P0; P2 a (y : UInt8) = P2 1 3; y', '3'],
     ['g (r : [x : UInt8]) = r.x; k = [x = 3]; g k', '3'],
     ['g (r : [x : UInt8]) = r.x; h r = g r; h [x = 3]', '3'],
     ['g (r : [x : UInt8]) = r.x; h v = g [x = v * 100]; h 1', '100'],
@@ -1341,14 +1341,14 @@ for (const source of ['x : Int = "a"', 'x : Int = 2.5', 'x : Int8 = 300',
     'g [(a : UInt8), (b : UInt8)] = a; g [3,300]', 'g [(a : UInt8), (b : UInt8)] = a; g [3,-1]', 'g [(a : UInt8), (b : UInt8)] = a; h x = g [x, x * 100]; h 3',
     '[(a : UInt8), (b : UInt8)] = [3, 300]', 'g [(s : String), (n : Int)] = s; g [1,2]',
     'std <- import "std"\nuse std.option\ng (Some (x : UInt8)) = x; g (Some 300)', 'std <- import "std"\nuse std.option\ng (Some (x : UInt8)) = x; g (Some -1)',
-    'std <- import "std"\nuse std.option\ng (Some (x : Int)) = x; g (Some 2.5)', 'std <- import "std"\nuse std.option\n(Some (x : UInt8)) = Some 300',
+    'std <- import "std"\nuse std.option\ng (Some (x : Int)) = x; g (Some 2.5)', 'std <- import "std"\nuse std.option\nSome (x : UInt8) = Some 300',
     'std <- import "std"\nuse std.option\ng (Some (x : String)) = x; g (Some 1)', 'std <- import "std"\nuse std.option\ng (Some (x : UInt8)) = x; k = Some 300; g k',
     'std <- import "std"\nuse std.option\ng (Some (x : UInt8)) = x; h x = g (Some x); h 300', 'std <- import "std"\nuse std.option\ng (Some (x : UInt8)) = x; h x = g x; h (Some 300)',
     'B = Byte UInt8 | NoByte; Byte 300', 'B = Byte UInt8 | NoByte; Byte -1', 'B = Byte UInt8 | NoByte; Byte "a"',
     'P = P2 Float Int | P0; P2 1 2.5', 'B = Byte UInt8 | NoByte; mk x = Byte x; mk 300', 'B = Byte UInt8 | NoByte; k = 300; Byte k',
     'Pair a b = MkPair a b | NoPair; g (MkPair (x : Float) (y : UInt8)) = y; g (MkPair 1 300)',
     'P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; g (P2 1 300)', 'P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; k = P2 1 300; g k',
-    'P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; h v = g (P2 1 v); h 300', 'P = P2 Int Int | P0; (P2 a (y : UInt8)) = P2 1 300',
+    'P = P2 Int Int | P0; g (P2 a (y : UInt8)) = y; h v = g (P2 1 v); h 300', 'P = P2 Int Int | P0; P2 a (y : UInt8) = P2 1 300',
     'Pair a b = MkPair a b | NoPair\ng (MkPair (x : Float) (y : UInt8)) = y\nh x = g x\nh (MkPair 1 300)',
     'g (r : [x : UInt8]) = r.x; g [x = 300]', 'g (r : [x : UInt8]) = r.x; k = [x = 300]; g k', 'g (r : [x : UInt8]) = r.x; h r = g r; h [x = 300]',
     'g (r : [x : UInt8]) = r.x; h v = g [x = v * 100]; h 3', 'Pt = [x : UInt8, y : UInt8]; g (p : Pt) = p.y; g [x = 1, y = 300]',
@@ -1387,11 +1387,11 @@ for (const [source, expected] of [
     // A list indexed by a lambda's parameter.
     ['f (xs : List _) = map (n -> xs n) [0..1]\nf [5,6]', '[5,6]'],
     // An overloaded operator in a function whose operands are parameters.
-    ['Money = | Money Int\n(Money a) + (Money b) = Money (a + b)\nf x y = x + y\nf (Money 1) (Money 2)', 'Money 3'],
-    ['Money = | Money Int\n(Money a) + (Money b) = Money (a + b)\nf x y = x + y\nf 1 2', '3'],
+    ['Money = | Money Int\nMoney a + Money b = Money (a + b)\nf x y = x + y\nf (Money 1) (Money 2)', 'Money 3'],
+    ['Money = | Money Int\nMoney a + Money b = Money (a + b)\nf x y = x + y\nf 1 2', '3'],
     // ... and one whose result is the parameter of a recursive call.
-    ['Q (a : Int) (b : Int) = _\n(Q a b) + (Q c d) = Q (a * d + c * b) (b * d)\nf k acc = k > 3 ? acc : f (k + 1) (acc + Q 1 2)\nf 1 (Q 0 1)', 'Q 12 8'],
-    ['Q a b = _\n(Q a b) + (Q c d) = Q (a * d + c * b) (b * d)\nf k acc = k > 3 ? acc : f (k + 1) (acc + Q 1 k)\nf 1 (Q 0 1)', 'Q 11 6'],
+    ['Q (a : Int) (b : Int) = _\nQ a b + Q c d = Q (a * d + c * b) (b * d)\nf k acc = k > 3 ? acc : f (k + 1) (acc + Q 1 2)\nf 1 (Q 0 1)', 'Q 12 8'],
+    ['Q a b = _\nQ a b + Q c d = Q (a * d + c * b) (b * d)\nf k acc = k > 3 ? acc : f (k + 1) (acc + Q 1 k)\nf 1 (Q 0 1)', 'Q 11 6'],
     // The checker knows what indexing gives: a list's item, a record's field,
     // or what clauses for get give.
     ['f 20 = "x"\nf n = 5\nxs = [10,20,30]\nr = [a = 20]\nf (xs 1) ++ f (xs -2) ++ f (r "a") ++ f r.a', '"xxxx"'],

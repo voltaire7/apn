@@ -56,7 +56,7 @@ for (const checked of [true, false]) {
         [CTOR + "map (Rect 1) [2,3]", "[Rect 1.0 2.0, Rect 1.0 3.0]"],
         [CTOR + 'f (Rect w h) = "rect"\nf _ = "other"\n[f (Rect 1 2), f [1,2]]', '["rect","other"]'],
         [ID + "[UserId 5, typeOf (UserId 5), UserId 3 == 3]", "[UserId 5, UserId, False]"],
-        [ID + "(UserId a) + (UserId b) = UserId (a + b)\nUserId 2 + UserId 3", "UserId 5"],
+        [ID + "UserId a + UserId b = UserId (a + b)\nUserId 2 + UserId 3", "UserId 5"],
         // A constructor sharing its type's name is the type where one is
         // expected: a field's or a slot's type, isType, a type's argument.
         [ID + "Order (UserId u) (n : Int) = _\nOrder (UserId 5) 3", "Order (UserId 5) 3"],
@@ -78,7 +78,7 @@ for (const checked of [true, false]) {
         [OPTION + "Node a = Leaf | Cons a (Node a)\nxs = Cons 1 xs\n[typeOf (Cons 1 Leaf), typeOf xs, typeOf (Some 1) == Option]",
             "[Node Int, Node Int, True]"],
         [PERCENT + "[Percent 150, Percent 50, typeOf (Percent 1)]", "[Percent 100.0, Percent 50.0, Percent]"],
-        [PERCENT + "(Percent a) + (Percent b) = Percent (a + b)\nPercent 90 + Percent 20", "Percent 100.0"],
+        [PERCENT + "Percent a + Percent b = Percent (a + b)\nPercent 90 + Percent 20", "Percent 100.0"],
         [PERCENT + "g (Percent v) = v\n[g (Percent 150), g (tag Percent Percent [150.0])]", "[100.0,150.0]"],
         [PERCENT + "map Percent [1,200]", "[Percent 1.0, Percent 100.0]"],
         ["Low (x : Int) = x > 5 ? Low 5 : _\n[l : Low] [l = Low 9]", "[l = Low 5]"],

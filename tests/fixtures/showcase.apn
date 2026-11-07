@@ -133,7 +133,7 @@ print (safeM [])            # => None
 # A [] inside a pattern tests that part; the value it matches can be any list.
 joinM xs ys = [xs,ys] ~ [
     [[],rest] -> rest
-    [(x::more),rest] -> x :: joinM more rest
+    [x::more,rest] -> x :: joinM more rest
 ]
 print (joinM [1,2] [3])    # => [1,2,3]
 
@@ -367,7 +367,7 @@ print greeting             # => Hello, record!
 # A cons pattern takes a list apart, bare or parenthesized.
 first::rest = [1,2,3,4]
 print [first,rest]        # => [1,[2,3,4]]
-(one::two::others) = [1,2,3,4]
+one::two::others = [1,2,3,4]
 # A literal is a pattern too: 1 = 1 matches; 1 = 2 is a static error.
 4 = length [first,two,3,4]
 print others               # => [3,4]
@@ -387,7 +387,7 @@ point = [x = 1, y = 2, z = 3]
 [x = val1, y = val2] = point
 print [val1,val2]        # => [1,2]
 # works in function params and match alternatives too:
-sumXY ([x = xv, y = yv]) = xv + yv
+sumXY [x = xv, y = yv] = xv + yv
 print (sumXY point)        # => 3
 
 # ---------------------------------------------------------
@@ -804,7 +804,7 @@ print -.5                   # => -0.5
 # List assignment rebinds a copy, like record field assignment.
 editable = [1,2,3]
 editable 0 = 10
-editable (-1) = 30
+editable -1 = 30
 print editable               # => [10,2,30]
 editable 1 = editable 0 + 1
 print editable               # => [10,11,30]
@@ -1093,7 +1093,7 @@ describeType String = "text"
 print [describeType Int, describeType String]  # => ["integer","text"]
 TempC = | InC Float
 TempF = | InF Float
-to TempC = (InF f) -> InC ((f - 32) * 5 / 9)
+to TempC = InF f -> InC ((f - 32) * 5 / 9)
 print (to TempC (InF 212))                 # => InC 100.0
 # A method prints as an overloaded function: its builtin (IO and lists),
 # then each instance, one per line.
@@ -1981,7 +1981,7 @@ print (revVec pairVec Nil)               # => Cons 2 (Cons 1 Nil)
 # takes the scrutinee's tail as one shorter, as a clause's does.
 vecSize (_ : Vec n _) = n
 print (vecSize pairVec)                  # => 2
-countVect (xs : Vect _ _) = xs ~ [[] -> 0, (_::rest) -> 1 + countVect rest]
+countVect (xs : Vect _ _) = xs ~ [[] -> 0, _::rest -> 1 + countVect rest]
 # Vect is the prelude's family of lists counting their elements:
 # Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a, the clauses
 # Vect Z a = [] and Vect (S k) a = a :: Vect k a. A program's family of

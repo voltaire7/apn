@@ -33,7 +33,7 @@ for (const [source, expected] of [
     ['[x : Int] [x = 123, y = 2]', '[x = 123, y = 2]'],
     ['[x : [Int,Int]] [x = [1,2]]', '[x = [1,2]]'],
     ['xs = [Int].[0]\nxs 0 = floor .2\nxs 0 = 123\nxs', '[123]'],
-    ['xs = [Int,Float].[0,0]\nxs (-1) = 3\nxs', '[0,3.0]'],
+    ['xs = [Int,Float].[0,0]\nxs -1 = 3\nxs', '[0,3.0]'],
     ['v = [x : Int, y : Int] []\nv.y = 321\nv', '[x = 0, y = 321]'],
     ['v = [x : Int, y : Int] [x = 123]\nv.y = 321\nv.y = floor .2\nv', '[x = 123, y = 0]'],
     ['v = [x : Int, y : Int] []\nv "y" = 321\nv', '[x = 0, y = 321]'],

@@ -110,7 +110,7 @@ explicit in its definition:
 
 ```apn
 twice (x : Int) = { x + x } : Int
-# Equivalent lambda: twice = (Int x) -> Int { x + x }
+# Equivalent lambda: twice = (x : Int) -> (x + x : Int)
 print (typeOf twice)                   # Int -> Int
 ```
 
@@ -421,7 +421,7 @@ constrains the length. For computed type expressions, the existing form
 
 The checker refines `n` to zero in the empty branch. In the cons branch the
 tail has length `n - 1`, and so does an `x::xs` alternative of a `match` on the
-vector (`xs ~ [[] -> 0, (x::rest) -> 1 + count rest]`): an alternative meets
+vector (`xs ~ [[] -> 0, x::rest -> 1 + count rest]`): an alternative meets
 the scrutinee as a clause meets its parameter. A parameter whose typed pattern
 binds its length takes a list of any length, so a recursive call may pass a
 shorter one. A claim around a `match` (or a ternary) is checked in each alternative under

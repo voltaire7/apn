@@ -61,7 +61,7 @@ _clauses left right rest = _isDefinition left
         dropWhile (_sameDefinition (head left)) rest
     ]
     : [[["=",left,right]],rest]
-_sameDefinition name ["=", (other :: _), _] = other == name
+_sameDefinition name ["=", other :: _, _] = other == name
 _sameDefinition _ _ = False
 _isDefinition (name :: _) = _isName name
 _isDefinition _ = False

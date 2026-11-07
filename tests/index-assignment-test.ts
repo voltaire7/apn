@@ -3,7 +3,7 @@ import { Interpreter } from "../src/interp.ts";
 
 for (const [name, source, expected] of [
     ["positive index", "arr = [1,2,3]\narr 0 = 10\narr", "[10,2,3]"],
-    ["negative index", "arr = [1,2,3]\narr (-1) = 10\narr", "[1,2,10]"],
+    ["negative index", "arr = [1,2,3]\narr -1 = 10\narr", "[1,2,10]"],
     ["consecutive updates and old RHS", "arr = [1,2,3]\narr 0 = 10\narr 1 = arr 0 + 1\narr", "[10,11,3]"],
     ["block shadows outer binding", "arr = [1,2]\ninner = { arr 0 = 9; arr }\n[inner,arr]", "[[9,2],[1,2]]"],
     ["existing aliases are not mutated", "arr = [1,2]\nold = arr\nseen <- return old\narr 0 = 9\n[old,arr]", "[[1,2],[9,2]]"],
@@ -20,7 +20,7 @@ for (const [name, source, expected] of [
     });
 }
 
-for (const index of ["2", "(-3)", "9007199254740993"]) {
+for (const index of ["2", "-3", "9007199254740993"]) {
     Deno.test(`out-of-bounds assignment preserves original list: ${index}`, () => {
         const interp = new Interpreter();
         interp.run(parse("arr = [1,2]"));

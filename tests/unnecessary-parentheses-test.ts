@@ -14,6 +14,16 @@ for (const source of [
     "-(f x)",
     "y = (a + b)",
     "c ? ((a ? 1 : 2)) : 3",
+    // A pattern reads as an expression does: an operand of an operator
+    // clause is a constructor applied without them, as is a parameter alone.
+    "(Some x) >>= f = f x",
+    "a + (Some b) = a",
+    "f (None) = 1",
+    "f (-1) = 1",
+    "f = (Some x) -> x",
+    "xs ~ [(x :: _) -> x]",
+    "(Some v) = m",
+    "(Some v) <- m",
 ]) Deno.test(`unnecessary parentheses: ${source}`, () => {
     try { parse(source); } catch (error) {
         if (String(error).includes("unnecessary parentheses")) return;
@@ -57,6 +67,10 @@ for (const source of [
     "[(x, y -> x)]",
     "xs (i) = 2",
     "c ? (a $ b) : d",
+    "f (Some x) = x",
+    "f (x :: xs) = x",
+    "(x :: xs) ++ ys = ys",
+    "a - (-1) = a",
 ]) Deno.test(`necessary parentheses: ${source}`, () => { parse(source); });
 
 Deno.test("--loose accepts unnecessary parentheses", () => {

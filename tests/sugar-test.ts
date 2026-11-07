@@ -12,7 +12,7 @@ function result(source: string, checked: boolean): string {
 for (const [sugar, expansion] of [
     ["1 + 2", "(+) 1 2"],
     ['1 + "a"', '(+) 1 "a"'],
-    ["V = | V Int\n(V a) + (V b) = V (a + b)\nV 1 + V 2", "V = | V Int\n(V a) + (V b) = V (a + b)\n(+) (V 1) (V 2)"],
+    ["V = | V Int\nV a + V b = V (a + b)\nV 1 + V 2", "V = | V Int\nV a + V b = V (a + b)\n(+) (V 1) (V 2)"],
     ["head (1 :: missing)", "head ((::) 1 missing)"],
     // A list is its items consed onto [], with what :: means there, in
     // values and patterns alike.
