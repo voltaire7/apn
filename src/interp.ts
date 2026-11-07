@@ -20,7 +20,7 @@ import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, listUnion, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
-import { enumerationPositions } from "./ast.ts";
+import { enumerationPositions, isUse } from "./ast.ts";
 import { canonicalTypeText, compoundArgument, slotField, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
@@ -37,7 +37,7 @@ type Written = { expr: Expr; env: Env; binds?: Map<string, Value>; runs?: boolea
 // Code running item by item: the bindings so far, the names bound
 // differently than when the items after were written, and the scope the
 // current run of items written in one scope shares.
-type CodeState = { before: Map<string, Value>; changed: Set<string>; env?: Env; scope?: Env };
+type CodeState = { before: Map<string, Value>; changed: Set<string>; env?: Env; scope?: Env; running?: Set<string> };
 
 // Natives by name, and the intrinsics (intrinsics.add, ...) as fields of one record.
 function bindNatives(env: Env, natives: Iterable<readonly [string, number]>): void {
@@ -1524,8 +1524,10 @@ export class Interpreter {
                         // Arguments stay lazy; a completed call can hand its body
                         // straight back to this loop instead of nesting eval calls.
                         const head = this.eval(e.f), argument: Value = { kind: "thunk", body: e.a, env: this.env };
-                        // e : T: a type applied to a value, as a member of it.
-                        const type = e.ascribed ? this.force(head) : undefined;
+                        // e : T: a type applied to a value, as a member of it. A
+                        // constructor named as its type is the type there (Point, Box Int).
+                        const ascribed = e.ascribed ? this.force(head) : undefined;
+                        const type = ascribed && (this.sharedType(ascribed) ?? ascribed);
                         if (type?.kind === "type") { r = this.typeValue(type, argument); break; }
                         this.writtenApplication = !e.ascribed;
                         const result = this.apply(head, argument, false, true, tailLoad);
@@ -1542,8 +1544,9 @@ export class Interpreter {
                     case "list": {
                         // [a, b] is a :: b :: [], with what :: means here; the
                         // prelude's builds the list in place.
-                        if (e.v.length && !this.preludeCons() && !e.v.some(x => x.t === "stmDef" || x.t === "patDef")) { next = new TailCall(listExpansion(e), this.env); break; }
-                        if (!e.v.some(x => x.t === "stmDef" || x.t === "patDef")) { r = { kind: "lazyList", exprs: e.v, env: this.env }; break; }
+                        const binds = e.v.some(x => x.t === "stmDef" || x.t === "patDef" || isUse(x));
+                        if (e.v.length && !this.preludeCons() && !binds) { next = new TailCall(listExpansion(e), this.env); break; }
+                        if (!binds) { r = { kind: "lazyList", exprs: e.v, env: this.env }; break; }
                         r = this.codeList(e.v, this.env);
                         break;
                     }
@@ -2640,6 +2643,20 @@ export class Interpreter {
                 for (const [name, bound] of binds) { state.before.set(name, bound); state.changed.add(name); }
                 return this.writtenAs(mkList([]), { expr, env: item.env, binds, joined });
             }
+            // use r binds r's fields for the items after it, as a binding does
+            // (one of a record an x <- m item binds runs only when the code does).
+            if (isUse(expr) && !(state.running && mentions(expr.a, state.running))) {
+                const opened = this.dataValue(this.delay(expr.a));
+                const records = this.isList(opened) ? this.items(opened).map(v => this.dataValue(v)) : [opened];
+                const binds = new Map<string, Value>();
+                for (const record of records) {
+                    if (record.kind !== "record") throw new APNError("runtime", "use expects a record or a list of records");
+                    for (const [name, value] of record.v) binds.set(name, value);
+                }
+                for (const [name, bound] of binds) { this.env.setLocal(name, bound); state.before.set(name, bound); state.changed.add(name); }
+                state.scope = this.env;
+                return this.writtenAs(mkList([]), { expr, env: item.env, binds, joined });
+            }
             if (expr.t !== "stmDef" && expr.t !== "patDef") return this.writtenAs(this.delay(expr), { expr, env: item.env, joined });
             // x <- m: its value is the action m; x is bound when the code runs
             // (do runs m and joins x = its result before the items after it).
@@ -2647,7 +2664,7 @@ export class Interpreter {
                 const binds = new Map(patternVariables(expr.pattern).map(name => [name, this.defer(() => {
                     throw new APNError("runtime", `'${name}' is bound when the code runs`, { hint: "run the list with do, which runs each x <- m in turn" });
                 })]));
-                for (const [name, bound] of binds) { this.env.setLocal(name, bound); state.before.set(name, bound); state.changed.add(name); }
+                for (const [name, bound] of binds) { this.env.setLocal(name, bound); state.before.set(name, bound); state.changed.add(name); (state.running ??= new Set()).add(name); }
                 return this.writtenAs(this.delay(expr.value), { expr, env: item.env, binds, runs: true, joined });
             }
             // Some v = m takes a value apart, as a pattern binding does.

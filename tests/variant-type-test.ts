@@ -56,3 +56,16 @@ Deno.test("a type named apart from its constructor describes a field", () => {
     const source = 'Box a = | MkBox a\nWrap a = | Wrap (Box a)\nWrap (MkBox 1)';
     if (result(source) !== "Wrap (MkBox 1)") throw new Error(result(source));
 });
+// A constructor named as its type is the type where a type is expected:
+// after a declaration's or an ascription's ':', checked and run alike.
+for (const [source, expected] of [
+    ['Point = | Point Int Int\nr : Point = Point 1 2\nr', 'Point 1 2'],
+    ['Point = | Point Int Int\nx : Point\nx = Point 1 2\nx', 'Point 1 2'],
+    ['Box a = | Box a\nq : Box Int = Box 4\n[q, typeOf q]', '[Box 4, Box Int]'],
+    ['Point = | Point Int Int\nps : List Point = [Point 1 2]\nps', '[Point 1 2]'],
+] as const) for (const checked of [true, false]) Deno.test(`a constructor names its type (checked=${checked}): ${source}`, () => {
+    const interpreter = new Interpreter();
+    if (checked) interpreter.enableChecking();
+    const actual = interpreter.renderString(interpreter.run(parseDocument(source)));
+    if (actual !== expected) throw new Error(actual);
+});

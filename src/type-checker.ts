@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -2052,7 +2052,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 type = binding(item.expr) ? bindingValue(item.expr, here) ?? variable() : item.slot ? slotValue(item.slot, t, item.expr) : t;
                 if (runs && !binding(item.expr)) infer({ t: "block", stmts: [...statements, item.expr], style: "{" }, item.scope ?? here);
             } finally { openNames = outer; }
-            const names = item.expr.t === "patDef" ? patternNames(item.expr.pattern)
+            const names = isUse(item.expr) ? usedNames.get(item.expr) ?? []
+                : item.expr.t === "patDef" ? patternNames(item.expr.pattern)
                 : item.expr.t === "stmDef" && /^[A-Z]/.test(item.expr.name) && item.expr.clauses[0].params.length ? item.expr.clauses[0].params.flatMap(patternNames)
                 : item.expr.t === "stmDef" ? [item.expr.name] : [];
             const binds = names.length ? new Map(names.flatMap(name => { const entry = here.get(name); return entry ? [[name, entry] as const] : []; })) : undefined;
@@ -2064,7 +2065,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return { k: "list", element: types.length ? union(types) : variable(), length: constant(BigInt(types.length)), items: types, formula: { items: out }, open: open.size ? open : undefined };
         }
     }
-    const binding = (e: Expr) => e.t === "stmDef" || e.t === "patDef";
+    const binding = (e: Expr) => e.t === "stmDef" || e.t === "patDef" || isUse(e);
+    // The names each use opened (a use item binds them).
+    const usedNames = new WeakMap<Expr, string[]>();
     // code n = e: the code with item n replaced by e, written here (see
     // codeList), so code 0 = (x = 10) binds x for the items after it; at known
     // indices only.
@@ -3330,6 +3333,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         while (out.k === "fn") out = resolve(out.output);
         return out.k === "variant" ? { ...out, shared: undefined } : out;
     }
+    // Whether a type expression is headed by a constructor sharing its type's
+    // name (Point, Box Int), which is that type where a type is expected.
+    function namesItsType(e: Expr, scope: Scope): boolean {
+        while (e.t === "app") e = e.f;
+        if (e.t !== "var") return false;
+        const t = resolve(scope.get(e.name)?.type ?? dynamic);
+        return (t.k === "fn" || t.k === "variant") && !!t.shared;
+    }
     // How many types a constructor sharing its type's name takes where a type
     // is expected: its type's parameters, when its fields are exactly them
     // (Box x = _), so (Box Int x) is a value of Box Int; 0 otherwise.
@@ -3723,7 +3734,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const selection = boolSelection(e);
                 if (selection && preludeSelection(selection, scope)) return inferMatch(selection, e, scope);
                 callees.add(e.f);
-                let callee = infer(e.f, scope), resolved = resolve(callee);
+                // e : T, T a constructor named as its type (Point, Box Int): the type there.
+                let callee = e.t === "app" && e.ascribed && namesItsType(e.f, scope) ? { k: "type", value: typeExpr(e.f, scope) } as Ty : infer(e.f, scope), resolved = resolve(callee);
                 // A type one of several, chosen by code (elemType flag): evaluate
                 // the code to learn which, as the program would.
                 if (resolved.k === "type" && resolved.chosen && e.f.t !== "var") {
@@ -3752,8 +3764,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return explicitDynamic;
                 }
                 if (resolved.k === "intrinsic" && resolved.name === "use") {
+                    const names: string[] = [];
+                    usedNames.set(e, names);
                     const open = (type: Ty): void => {
                         const t = resolve(type);
+                        if (t.k === "record") names.push(...t.fields.keys());
                         // A module's names open as its scope holds them (their clauses
                         // too, for static evaluation), each type settled as a statement's
                         // value is (a module in it is checked when used); a record's

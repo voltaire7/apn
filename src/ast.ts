@@ -463,6 +463,11 @@ export function readsModule(e: Expr): boolean {
     if (e.t === "app" && e.ascribed) return readsModule(e.a);
     return isLoadCall(e) || (e.t === "app" || e.t === "pipe") && e.f.t === "var" && e.f.name === "import";
 }
+// A use (use r): it binds the names it opens and yields nothing, as = does,
+// so in code it is a binding's item.
+export function isUse(e: Expr): e is Extract<Expr, { t: "app" }> {
+    return e.t === "app" && e.f.t === "var" && e.f.name === "use";
+}
 // The path an import written with a literal one reads (import "std/text").
 export function importedPath(e: Expr): string | undefined {
     if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return importedPath(e.stmts[0]);

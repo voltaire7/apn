@@ -13,6 +13,9 @@ for (const [source, expected] of [
     ['x = 1\n[{ use [x = 2]; x }, x]', '[2,1]'],
     ['cell = Mutable 1\nuse [alias = cell]\nset alias 2\ncell', '2'],
     ['outer = 10\nf x = outer + x\nuse [outer = 20, add = f]\nadd 1', '11'],
+    // In code, use binds and yields nothing, as = does.
+    ['[use [a = 1], a + 1]', '[2]'],
+    ['code = [use [a = 1], a + 1]\n[length code, do code, code.a]', '[2,2,1]'],
 ]) Deno.test(`use: ${source}`, () => {
     const actual = result(new Interpreter(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

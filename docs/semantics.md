@@ -372,7 +372,9 @@ print [1 + 1, 2]            # [2,2]
 
 A list item may be a binding, as a group's statement may: it binds for the
 items after it and, as in a block, yields no value of its own (`print [x = 1,
-x + 1]` prints `[2]`, and `do [x = 1, x + 1]` is 2). A list of bindings alone
+x + 1]` prints `[2]`, and `do [x = 1, x + 1]` is 2). A `use r` item is one,
+binding `r`'s fields (`print [use [a = 1], a]` prints `[1]`); one whose record
+an `x <- m` item before it binds opens it when the code runs. A list of bindings alone
 is a [record](#records), which keeps them as its code. An `x <- m` item is a
 statement too: its value is the action `m`, and `do` runs it, binding `x` for
 the items after it, in any monad (`do [x <- [1,2], return (x * 10)]` is
@@ -1139,7 +1141,10 @@ errors, so the choice never depends on checking; code no check reaches
 Any other count is a static error (`(Pair x)` for `Pair a b`).
 A type without parameters takes its value at once (`(x : Int)`, `(c : Color)`), and
 a constructor sharing its type's name (`Box x = _`) is the constructor
-there, and its type is written after a value: `(b : Box Int)`.
+there, and its type is written after a value: `(b : Box Int)`. After any `:`
+it is the type (`p : Point = Point 1 2`, `q : Box Int = Box 4`): a type and the
+constructor named after it are two things a name can mean, by where it stands
+(see [templates and types](templates-and-types.md)).
 
 Destructuring definitions immediately perform the pattern match, but bound
 variables remain deferred. Blocks create child scopes. Environments are

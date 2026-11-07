@@ -589,8 +589,10 @@ redefined (see [constructor functions](#constructor-functions)).
 An unspecialized parent pattern `(value : Option _)` still binds the whole variant.
 A constructor pattern `(Some value)` extracts its field. A constructor sharing
 its type's name (`Box x = _`, `Box a = | Box a`) is the constructor where a
-value is expected and the type where one is expected: a field's type
-(`Wrap (Box b) = _`), a record slot (`[b : Box] []` is `[b = Box 0]` for
+value is expected and the type where one is expected: after a declaration's or
+an ascription's `:` (`p : Point = Point 1 2`, `q : Box Int = Box 4`,
+`ps : List Point`), a field's type (`Wrap (Box b) = _`), a record slot
+(`[b : Box] []` is `[b = Box 0]` for
 `Box (x : Int) = _`), `isType Box`, a type's argument (`List Box`), a union.
 Applied to a type for each of its type's parameters, it is likewise a value
 (`Box Int`, a `Box` holding `Int`) that reads as that type applied to them

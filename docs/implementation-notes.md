@@ -508,7 +508,9 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
   checker through the `shared` mark on its type and on the values it makes
   (`sharedType`, read by `describing`, `schemaValue`, the union intrinsic and
   `alternative`). Applied to types it is the type applied (`typeArguments`,
-  `sharedParameters` for the flat typed pattern).
+  `sharedParameters` for the flat typed pattern). An ascription's head reads
+  it so too: `sharedType` of the forced head at runtime, `namesItsType` then
+  `typeExpr` in the checker.
 - `X = A | B` stays a `type` statement; runtime and checker decide what it is
   by what its names are bound to (`unionKind`, worded once in `ast.ts`): a
   union is run and checked as `X = intrinsics.union [A, B]` (`unionClause`),
