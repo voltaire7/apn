@@ -7092,7 +7092,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("isType", [variable(), variable()], bool);
     native("parse", [str], explicitDynamic);
     native("step", [int, variable()], explicitDynamic);
-    for (const name of ["debug", "intrinsics.eval", "use", "load"]) scope.set(name, { type: { k: "intrinsic", name } });
+    for (const name of ["debug", "intrinsics.eval", "use"]) scope.set(name, { type: { k: "intrinsic", name } });
+    scope.set("intrinsics.load", { type: { k: "intrinsic", name: "load" } });
     // A list's code: probe shows it, toAST gives it as lists; reduce gives
     // the values alone (a plain list, not code).
     native("intrinsics.written", [variable()], str);

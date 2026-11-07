@@ -62,10 +62,10 @@ class TailLoad {
 }
 
 // Natives with effects: applying one builds an IO action; running it performs them.
-export const IO_NATIVES = new Set(["intrinsics.import", "load", "print", "echo", "emit", "repl", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
+export const IO_NATIVES = new Set(["intrinsics.import", "intrinsics.load", "print", "echo", "emit", "repl", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
 // What the actions of IO builtins yield, for showing their types (IO []).
 const IO_RESULTS: Record<string, string> = {
-    "intrinsics.import": "Module", load: "Module", print: "[]", echo: "[]", emit: "[]", repl: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
+    "intrinsics.import": "Module", "intrinsics.load": "Module", print: "[]", echo: "[]", emit: "[]", repl: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
     entropy: "Int", currentTime: "Int", zoneOffset: "Int",
 };
 
@@ -90,7 +90,7 @@ export const NATIVES: Array<[string, number]> = [
     ["print", 1], ["echo", 1], ["repl", 0], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
-    ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["load", 1], ["use", 1],
+    ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["use", 1],
     ["emit", 1], ["step", 2], ["intrinsics.syntax", 1], ["intrinsics.written", 1], ["intrinsics.binding", 1], ["intrinsics.yields", 1], ["intrinsics.runs", 1], ["intrinsics.bound", 2], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
@@ -107,8 +107,9 @@ export const NATIVES: Array<[string, number]> = [
     ["intrinsics.with", 3],
     // A union of types (Mixed = Int | String).
     ["intrinsics.union", 1],
-    // import path: an action reading a module, its record the result.
-    ["intrinsics.import", 1],
+    // import path: an action reading a module, its record the result; load
+    // path one running a file in the caller's scope.
+    ["intrinsics.import", 1], ["intrinsics.load", 1],
 ];
 // The names editors color as built-in functions (the natives, cast and do).
 // The names natives are bound by (each intrinsic is a field of intrinsics).
@@ -2168,7 +2169,7 @@ export class Interpreter {
                 if (args.length < f.arity) return { ...f, applied: args };
                 if (f.invoke) return f.invoke(args);
                 if (f.name === "__constr") return this.variantValue(f.tag!, args, f.family);
-                if (f.name === "load" && tailLoad) throw new TailLoad(this.demand(args[0]), this.env);
+                if (f.name === "intrinsics.load" && tailLoad) throw new TailLoad(this.demand(args[0]), this.env);
                 return this.callNative(f.name, args, f.tag);
             }
             case "clauseFn": {
@@ -4353,7 +4354,7 @@ export class Interpreter {
         if (!perform && IO_NATIVES.has(name)) {
             const fresh = (v: Value): Value => v.kind === "thunk" && v.env ? { kind: "thunk", body: v.body, env: v.env } : v;
             // A module read inside Dynamic is read unchecked wherever it runs.
-            if (name === "load" || name === "intrinsics.import") {
+            if (name === "intrinsics.load" || name === "intrinsics.import") {
                 const depth = this.dynamicDepth;
                 return { kind: "io", result: IO_RESULTS[name], run: () => {
                     const outer = this.dynamicDepth;
@@ -4789,7 +4790,7 @@ export class Interpreter {
                     throw new APNError("runtime", "exit status must fit a signed 32-bit integer");
                 }
                 return Deno.exit(Number(a.v));
-            case "load": return this.loadFile(a);
+            case "intrinsics.load": return this.loadFile(a);
 
         }
         throw new Error(`Runtime: unknown native '${name}'`);

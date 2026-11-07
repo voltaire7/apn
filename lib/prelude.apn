@@ -83,6 +83,9 @@ toAST code = intrinsics.syntax code
 # file or folder beside the program), its record the result. Each module runs
 # once: std <- import "std", then use std.[option,text] opens two of them.
 import = intrinsics.import
+# load file: an action running file.apn (beside the running file) in the
+# caller's scope, again each time; its record, what the file bound, the result.
+load = intrinsics.load
 
 # Functor, Applicative and Monad. IO and lists are built in; any other type
 # joins by defining instances of map, >>= and return (as the option
