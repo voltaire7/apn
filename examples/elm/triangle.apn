@@ -2,9 +2,10 @@
 # A spinning triangle, its corners red, green and blue. Elm draws it with
 # WebGL shaders; here a p5 WEBGL canvas in the view draws it each frame,
 # with the camera the model's time puts it at.
-import "html"
-browser = import "browser"
-p5 = import "p5"
+std <- import "std"
+use std.html
+browser <- import "std/browser"
+p5 <- import "std/p5"
 
 Msg = | TimeDelta Number
 

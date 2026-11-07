@@ -1,8 +1,9 @@
 # Book, from https://elm-lang.org/examples/book
 # Make a GET request to load a book called "Public Opinion".
-import ["html","option"]
-browser = import "browser"
-http = import "http"
+std <- import "std"
+use std.[html,option]
+browser <- import "std/browser"
+http <- import "std/http"
 
 Model = Failure | Loading | Success String
 Msg = | GotText (Result String http.HttpError)

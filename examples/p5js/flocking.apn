@@ -1,7 +1,8 @@
 # Flocking, from https://p5js.org/examples/classes-and-objects-flocking/
 # Simulate birds flocking: each keeps apart from, heads with and stays near
 # its neighbors.
-import ["html","number","p5"]
+std <- import "std"
+use std.[html,number,p5]
 
 # A boid: where it is, its velocity and its hue.
 Boid = [position : [Float,Float], velocity : [Float,Float], hue : Float]

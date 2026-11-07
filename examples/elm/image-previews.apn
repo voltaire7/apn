@@ -1,9 +1,10 @@
 # Image Previews, from https://elm-lang.org/examples/image-previews
 # Image upload with a drag and drop zone. See image previews!
-import "html"
-browser = import "browser"
-file = import "file"
-task = import "task"
+std <- import "std"
+use std.html
+browser <- import "std/browser"
+file <- import "std/file"
+task <- import "std/task"
 
 Msg =
     | Pick

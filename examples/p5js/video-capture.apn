@@ -1,6 +1,7 @@
 # Video Capture, from https://p5js.org/examples/imported-media-video-capture/
 # Display a live video feed from a camera.
-import "p5"
+std <- import "std"
+use std.p5
 
 # The camera (the browser asks first).
 capture = createCapture

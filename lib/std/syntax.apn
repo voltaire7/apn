@@ -1,4 +1,5 @@
-import ["sequence","text"]
+std <- import "std"
+use std.[sequence,text]
 # Code as data. toAST (in the prelude) gives an expression as lists: a leaf is
 # a number, a Bool, a name or a literal's source text ("x", "\"x\"", "'c'");
 # an application is a list, function first (["f","x"], ["+",1,2]); other

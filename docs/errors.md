@@ -16,8 +16,8 @@ rendered by `formatError(err, color)`:
 - **Type errors** name an unknown name, where it is written, before any
   other error its unknown value leads to: `unbound variable 'x'`, or
   `unknown constructor 'Some' in a pattern`. A name the standard library
-  exports gets a hint naming the import (``add `import "option"` to use
-  `okOr` ``); others get `did you mean '...'?`.
+  exports gets a hint naming the import (``add `std <- import "std"; use
+  std.option` to use `okOr` ``); others get `did you mean '...'?`.
 - Code in a hint is in backticks: ``bind a value with `=` ``, ``bind its
   result first: `x <- action` ``.
 - Messages carry no `Parser:`/`Lexer:`/`Runtime:` prefixes — the headline

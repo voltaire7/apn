@@ -36,7 +36,7 @@ UserId 3 == UserId 3        # True: every value has equality and printing
 extract (UserId value) = value
 extract (UserId 123)        # 123
 UserId 2 + 1                # error: + cannot combine UserId and Int
-(UserId a) + (UserId b) = UserId (a + b)
+UserId a + UserId b = UserId (a + b)
 UserId 2 + UserId 1         # UserId 3
 ```
 
@@ -118,7 +118,8 @@ failure does not run cleanup. Nested scopes release in reverse order. As with
 other process-level effects, forced process termination cannot run APN cleanup.
 
 ```apn
-import "function"
+std <- import "std"
+use std.function
 released = Mutable False
 answer <- bracket 42 (_ -> set released True) (n -> [n, n + 1])
 # answer is [42,43]; released is True
@@ -135,7 +136,8 @@ resource implementations must enforce their own lifetime.
 `io` exports `withFile path use`, a read-only UTF-8 file scope:
 
 ```apn
-import "io"
+std <- import "std"
+use std.io
 text <- withFile "input.txt" (file -> file.read)
 ```
 

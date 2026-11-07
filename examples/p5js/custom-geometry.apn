@@ -1,6 +1,7 @@
 # Custom Geometry, from https://p5js.org/examples/3d-custom-geometry/
 # Combine 3D shapes into a model, and draw it again and again.
-import "p5"
+std <- import "std"
+use std.p5
 
 drawSnake (p : Sketch) = {
     p.call "colorMode" [p.HSB,100]

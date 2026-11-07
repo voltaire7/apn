@@ -6,8 +6,8 @@ import { describeElementType, describeType } from "./type-description.ts";
 import { OVERLOADED_FUNCTIONS, METHODS, sourceLocations, boolSelection, ternaryExpansion, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { fieldSource, keySource } from "./record-keys.ts";
-import typeSource from "../lib/type.apn" with { type: "text" };
-import doSource from "../lib/do.apn" with { type: "text" };
+import typeSource from "../lib/std/type.apn" with { type: "text" };
+import doSource from "../lib/std/do.apn" with { type: "text" };
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { NATIVE_EXPORTS, RETIRED_NATIVES } from "./native-exports.ts";
@@ -207,57 +207,50 @@ export class Interpreter {
     private modules = new Map<string, Extract<Value, { kind: "record" }>>();
     private importing = new Set<string>();
 
-    // A module (what import or load gives) opens its names into the block of
-    // a statement that runs it, as = binds one, however the statement gets it
-    // (import "system", system, f [] returning it); the module is its value.
-    // Anywhere else it is a value: system.halt reads a field and opens nothing.
-    private moduleValues = new WeakMap<Value, { origin?: string; checked?: boolean }>();
+    // A load's module opens its names into the block of a statement that runs
+    // it, as = binds one, however the statement gets it (load "x", a name for
+    // it, f [] returning it); the module is its value. Anywhere else it is a
+    // value: a field reads one and opens nothing. An import's opens by use.
+    // (Records import gives are modules too, use publishing their names as
+    // the module's, but no statement opens them: load marks its own.)
+    private moduleValues = new WeakMap<Value, { origin?: string; checked?: boolean; load?: boolean }>();
     private opens(result: Value, statement: Expr): boolean {
-        // A result kept unevaluated (return (import "system")) is evaluated when
+        // A result kept unevaluated (return (import "std/system")) is evaluated when
         // the check found the statement yields a module.
         const at = sourceLocations.get(statement);
         const value = at && this.types?.moduleStatements.has(`${at.file}:${at.start}`) ? this.demand(result) : result;
         const module = this.moduleValues.get(value);
-        if (!module) return false;
+        if (!module?.load) return false;
         const checked = module.checked ?? (!!this.checking && !this.dynamicDepth);
         this.publishForeignBindings(this.env, (value as Extract<Value, { kind: "record" }>).v, module.origin, checked);
         this.adoptPublished();
         return true;
     }
 
-    importStandard(module: string | string[]): Value {
+    importStandard(module: string): Value {
         // The static check follows an import outside Dynamic, so it typed what
         // the module's bindings replace (its step over the debugger's).
         const checked = !!this.checking && !this.dynamicDepth;
         if (checked) this.checking!.module(module, this.sourceDir);
-        if (Array.isArray(module)) {
-            const fields = new Map<string, Value>();
-            for (const name of module) {
-                const record = this.importStandard(name) as Extract<Value, { kind: "record" }>;
-                for (const [key, value] of record.v) fields.set(key, value);
-            }
-            const record: Value = { kind: "record", v: [...fields] };
-            this.moduleValues.set(record, {});
-            return record;
-        }
-        const resolved = resolveModule(module, this.sourceDir, this.moduleSources, this.moduleRoot);
+        return this.importModule(module, this.sourceDir);
+    }
+    // The module spec names from directory, imported once.
+    private importModule(module: string, directory: string): Value {
+        const resolved = resolveModule(module, directory, this.moduleSources, this.moduleRoot);
         if (!resolved) { const { message, hint } = unknownModule(module, !!this.moduleSources); throw new APNError("runtime", message, { hint }); }
         let record = this.modules.get(resolved.key);
         if (!record) {
             if (this.importing.has(resolved.key)) throw new APNError("runtime", `cyclic import '${module}'`);
             this.importing.add(resolved.key);
             try {
-                // A folder's files are modules of their own; their exports merge.
+                // A file's exports, or a folder's entries, each a module
+                // imported when it is used.
                 const fields = new Map<string, Value>();
-                for (const file of resolved.files) {
-                    for (const [name, value] of this.runModuleFile(file)) {
-                        if (fields.has(name) && resolved.files.length > 1) throw new APNError("runtime", `'${name}' is defined by more than one file of '${module}'`);
-                        fields.set(name, value);
-                    }
-                }
+                for (const file of resolved.files) for (const [name, value] of this.runModuleFile(file)) fields.set(name, value);
+                for (const entry of resolved.entries) fields.set(entry.name, this.defer(() => this.importModule(entry.spec, entry.directory)));
                 record = { kind: "record", v: [...fields] };
                 this.modules.set(resolved.key, record);
-                this.moduleValues.set(record, {});
+                this.moduleValues.set(record, { origin: resolved.key });
             } finally { this.importing.delete(resolved.key); }
         }
         return record;
@@ -284,7 +277,9 @@ export class Interpreter {
             // The bundled cast is already installed from this exact source.
             // Reuse its identity when type reexports it.
             if (file.std === "type" && file.source === typeSource) this.env.setLocal("cast", this.preludeBindings.get("cast")!);
-            return [...this.env.bindings().entries()];
+            // A module the file names for itself (std <- import "std") is its own.
+            const imported = new Set<Value>(this.modules.values());
+            return [...this.env.bindings().entries()].filter(([, value]) => !imported.has(this.reference(value)));
         } finally {
             this.env = caller;
             this.sourceDir = callerDir;
@@ -654,11 +649,6 @@ export class Interpreter {
         }
         // Value-style def: single clause, no params.
         const value = clauses[0].body;
-        if (value.t === "import") {
-            const imported = this.defer(() => this.importStandard(value.module));
-            this.bindNames([[name, imported]]);
-            return imported;
-        }
         // Lambda bodies become closures (with recursion via shared env), like before.
         if (value.t === "lambda") {
             const child = new Env(this.env);
@@ -966,13 +956,10 @@ export class Interpreter {
             if (b.update.error) throw new APNError("runtime", b.update.error);
             return this.evalPatBinding({ pattern: { p: "var", name: b.update.name }, value: b.update.value });
         }
-        // Selecting fields must not first open every export into this scope.
-        const evaluated = b.pattern.p === "as" && !b.eager ? this.delay(b.value) : b.value.t === "import"
-            ? this.importStandard(b.value.module)
-            : this.eval(b.value);
+        const evaluated = b.pattern.p === "as" && !b.eager ? this.delay(b.value) : this.eval(b.value);
         // x <- action runs the action and binds its result; anything else is
         // an error, except a load (which runs a file and yields its exports).
-        if (b.eager && !isLoadCall(b.value) && b.value.t !== "import") {
+        if (b.eager && !isLoadCall(b.value)) {
             const action = this.reference(evaluated);
             if (action.kind !== "io" && action.kind !== "pending") throw new APNError("runtime", `<- runs an action, not a ${action.kind}`, { hint: "bind a value with `=`" });
         }
@@ -1003,7 +990,7 @@ export class Interpreter {
         const range = (low: Value, high: Value | undefined, next: Value | undefined) =>
             node(text(".."), low, high ?? mkList([]), ...next ? [next] : []);
         switch (e.t) {
-            case "import": return node(text("import"), ...[e.module].flat().map(text));
+            case "import": return node(text("import"), text(e.module));
             case "numeric": return e.v;
             case "int": return mkInt(e.v);
             case "float": return { kind: "float", v: e.v };
@@ -1440,7 +1427,8 @@ export class Interpreter {
                         r = this.range(lo, e.second && this.eval(e.second), e.hi && this.eval(e.hi));
                         break;
                     }
-                    case "import": r = this.importStandard(e.module); break;
+                    // import "path": an action reading the module, its record the result.
+                    case "import": { const module = e.module; r = { kind: "io", result: "Module", run: () => this.importStandard(module) }; break; }
                     case "numeric": r = e.v; break;
                     case "int": r = mkInt(e.v); break;
                     case "float": r = { kind: "float", v: e.v }; break;
@@ -1718,7 +1706,7 @@ export class Interpreter {
                                 // A binding last is followed by {}: { x = 1 } is (x -> {}) 1, [].
                                 if (s.t === "stmDef") { this.evalDef(s.name, s.clauses); r = mkList([]); continue; }
                                 if (s.t === "typeDef") { this.declare(s.def, this.env); r = mkList([]); continue; }
-                                if (s.t === "patDef" && !(s.eager && s.value.t !== "import" && !(s.update && this.env.get(s.update.name)))) { this.evalPatBinding(s); r = mkList([]); continue; }
+                                if (s.t === "patDef" && !(s.eager && !(s.update && this.env.get(s.update.name)))) { this.evalPatBinding(s); r = mkList([]); continue; }
                                 if (s.t !== "patDef" && si === e.stmts.length - 1) {
                                     forceResult = true;
                                     next = new TailCall(s, this.env);
@@ -1730,7 +1718,7 @@ export class Interpreter {
                                 // Its monad: IO for an action (or a load), undecided for
                                 // return and the like, else the value's own (a list, an Option).
                                 // A discarded list is pure: [] is also the unit value.
-                                const value = s.t === "patDef" ? (isLoadCall(s.value) || s.value.t === "import" ? undefined : this.reference(this.eval(s.value))) : this.demand(this.eval(s));
+                                const value = s.t === "patDef" ? (isLoadCall(s.value) ? undefined : this.reference(this.eval(s.value))) : this.demand(this.eval(s));
                                 if (s.t !== "patDef" && this.opens(value!, s)) { r = value!; continue; }
                                 // The rest of the block runs in the scope as it is here.
                                 const block = e, start = si, here = this.env;
@@ -3178,7 +3166,7 @@ export class Interpreter {
         if (this.isList(m) && this.preludeListBind()) return this.concatMapList(m, k);
         const result = this.instance(">>=", [m, k]);
         if (result) return result;
-        throw new APNError("runtime", `no >>= instance for ${valueToString(target)}`, { hint: "define one, such as `(Some x) >>= f = f x`" });
+        throw new APNError("runtime", `no >>= instance for ${valueToString(target)}`, { hint: "define one, such as `Some x >>= f = f x`" });
     }
 
     private bindTargets = new WeakMap<Value, string | undefined>();
@@ -4440,18 +4428,25 @@ export class Interpreter {
         if (name === "use") {
             const value = this.dataValue(argsIn[0]);
             const records = this.isList(value) ? this.items(value).map(v => this.dataValue(v)) : [value];
-            const bindings: Array<[string, Value]> = [];
+            const opened: Array<{ bindings: Array<[string, Value]>; module?: { origin?: string; checked?: boolean } }> = [];
             for (const record of records) {
                 if (record.kind !== "record") throw new APNError("runtime", "use expects a record or a list of records");
+                const bindings: Array<[string, Value]> = [];
                 for (const [key, field] of record.v) {
-                    if (!/^[A-Za-z_][A-Za-z0-9_']*$/.test(key) || key === "_" || KEYWORDS.has(key)) {
+                    // A field is a name or an operator (a module's <|>).
+                    if (!/^[A-Za-z_][A-Za-z0-9_']*$/.test(key) && !isOperatorName(key) || key === "_" || KEYWORDS.has(key)) {
                         throw new APNError("runtime", `use cannot bind field ${JSON.stringify(key)}: expected an identifier`);
                     }
                     bindings.push([key, field]);
                 }
+                opened.push({ bindings, module: this.moduleValues.get(record) });
             }
             // Validate the whole input before publishing; keep the field values lazy.
-            this.publishForeignBindings(this.env, bindings);
+            // A module's names are published as its own (as the static check typed them).
+            for (const { bindings, module } of opened) {
+                if (!module) { this.publishForeignBindings(this.env, bindings); continue; }
+                this.publishForeignBindings(this.env, bindings, module.origin, module.checked ?? (!!this.checking && !this.dynamicDepth));
+            }
             return { kind: "list", v: [] };
         }
         // while [condition] action: runs the code again before each pass, its
@@ -4592,7 +4587,7 @@ export class Interpreter {
         // expression-level natives: they consume the argument's UNEVALUATED form
         // Source text read as syntax data (toAST's lists).
         // Code as data: a list's items as written (or source text), as lists
-        // (see lib/syntax.apn).
+        // (see lib/std/syntax.apn).
         if (name === "intrinsics.syntax") {
             const code = this.code(this.dataValue(argsIn[0]));
             // Source text reads as the program's code does.
@@ -4871,7 +4866,7 @@ export class Interpreter {
                     const published = loader && this.publishForeignBindings(frame.caller, [...bindings], frame.origin, frame.checked);
                     result = { kind: "record", v: [...bindings.keys()].map((key): [string, Value] => [key, (published ?? bindings).get(key)!]) };
                     if (loader) loader.latest = latest(published!, loader.loaded);
-                    else this.moduleValues.set(result, { origin: frame.origin, checked: frame.checked });
+                    else this.moduleValues.set(result, { origin: frame.origin, checked: frame.checked, load: true });
                 }
                 return result;
             }

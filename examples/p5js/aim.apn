@@ -1,6 +1,7 @@
 # Aim, from https://p5js.org/examples/angles-and-motion-aim/
 # Rotate toward a point.
-import "p5"
+std <- import "std"
+use std.p5
 
 setup (p : Sketch) = {
     p.createCanvas 400 400

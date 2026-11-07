@@ -6,7 +6,7 @@ function result(source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['import "text"\ncast String $ to (List Char) "hello"', '"hello"'],
+    ['std <- import "std"; use std.text\ncast String $ to (List Char) "hello"', '"hello"'],
     ['cast String $ cast [Char,Char,Char] $ "a😀é"', '"a😀é"'],
     ['cast String []', '""'],
     ["(['h','i'] : String)", '"hi"'],
@@ -46,8 +46,8 @@ for (const [source, error] of [
     ['x = .2 : Float\ny = cast Int x\n[y,x]', 'lossy conversion'],
     ['mine t x = x ~ [(value : source) -> (value : t)]\nmine Int (.2 : Float)', 'lossy conversion'],
     ['mine t (x : source) = x : t\nmine Int (.2 : Complex)', 'lossy conversion'],
-    ['types = import "type"\ntypes.cast Int (.2 : Float)', 'lossy conversion'],
-    ['import "type"\ncast Int (.2 : Float)', 'lossy conversion'],
+    ['types <- import "std/type"\ntypes.cast Int (.2 : Float)', 'lossy conversion'],
+    ['std <- import "std"; use std.type\ncast Int (.2 : Float)', 'lossy conversion'],
     ['cast String [1]', 'list of Char'],
     ['cast String ["h"]', 'list of Char'],
     ["(['h',missing] : String)", 'unbound variable'],

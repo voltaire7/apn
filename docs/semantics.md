@@ -284,7 +284,7 @@ type (`Count = Int`) makes a named subtype: a `Count` is an `Int` wherever one i
 a result fits (`(5 : Count) + 1` is `6`, a `Count`). A constructor (`UserId (Int id) =
 _`) makes a distinct type: `UserId 1` has none of an Int's operations, builtins
 and `(x : Int)` patterns reject it, its clauses give it what it needs
-(`(UserId a) + (UserId b) = UserId (a + b)`), and `(UserId x)` takes it apart.
+(`UserId a + UserId b = UserId (a + b)`), and `(UserId x)` takes it apart.
 See [named and distinct types](type-and-resource-rules.md#distinct-types).
 
 A declaration or an ascription states a type (see
@@ -552,7 +552,7 @@ meaning, so the builtin behavior stays available:
 
 ```apn
 Money (m : Int) = _
-(Money a) + (Money b) = Money (a + b)   # the inner + is the builtin one
+Money a + Money b = Money (a + b)   # the inner + is the builtin one
 Money 3 + Money 4                       # Money 7
 1 + 2                                   # 3
 ```
@@ -887,12 +887,12 @@ by **instances**: definitions of these methods,
 written like ordinary overloads, with parameters or curried (`map = mapTree`,
 `return = Some`). An instance adds to the method everywhere (prelude helpers,
 do-blocks and other modules see it) instead of shadowing it, and the newest
-instance whose clauses accept the arguments runs. `lib/option.apn` holds Option's and Result's:
+instance whose clauses accept the arguments runs. `lib/std/option.apn` holds Option's and Result's:
 
 ```apn
 map f (Some x) = Some (f x)
 map _ None = None
-(Some x) >>= f = f x
+Some x >>= f = f x
 None >>= _ = None
 return = Some                      # return in Option
 ```
@@ -1472,40 +1472,33 @@ variable, as in `(t x) (t y)`, requires both arguments to have the same type.
 
 ## Module imports
 
-`import "name"` evaluates a module once per interpreter; its value is the
-module, a record of its exports. Like `=`, it also binds, as a statement: a
-statement whose value is a module opens the module's exports into the block
-it is in (`{}`, `()` and `do []` alike), however it gets the module: the
-import itself, a name for it, a function returning it, or an action yielding
-it.
+`import "name"` is an action yielding the module: a record of what its file's
+top level binds or opens with `use` (as a record literal's `use` spreads),
+except the modules it imports for itself. Running it evaluates the file once
+per interpreter; later imports yield the cached record. Like any action, it is
+run by `<-` or as a statement, and it opens nothing: `use` opens a record.
 
 ```
-system = import "system"   # binds system; opens nothing
-system.halt                # a field of the module: opens nothing
-system                     # opens halt into this block
-f _ = { print "f"; return system }
-f []                       # prints f, then opens halt
+std <- import "std"            # the standard library, a record of its modules
+use std.[function,option]      # opens both modules' names
+use std.text                   # opens one module's names
+option <- import "std/option"  # one module: option.withDefault, option.Some
+[halt] <- import "std/system"  # one name, by a record pattern
 ```
 
-Anywhere else a module is a value and opens nothing: a binding
-(`m = f []`), an argument, or a field read. A module is not an action, so a
-do-block yielding one ends with `return`. The check records which statements
-yield a module, so one kept unevaluated (`return (import "system")`) is
-evaluated to open it. A `load` opens the file's definitions by the same rule.
-A plain record is not a module: only `use` opens one.
-The name is looked up next to the importing file (the
-current directory in the REPL) as `name.apn`, then as a `name/` folder, whose
-`.apn` files (not subfolders: `import "name/sub"`) form one module; a file wins
-over a folder of the same name. Failing that, each parent folder is searched
-the same way up to the program's folder (the nearest match wins). Otherwise it
-is a standard module such as
-`function`, `option`, `sequence`, `number`, `text` or `map`. Standard modules
-take no prefix; `import "std"` and `import "std/text"` are errors. Module
-evaluation uses an isolated scope with builtins and explicit dependencies;
-caller bindings do not affect it. Reimporting opens the cached exports
-again. A definition such as `s = import "sequence"` defers importing until
-demanded.
-`load` remains uncached file execution relative to the current source file.
+`std` is the library's folder; `std/name` one of its modules. Any other name
+is looked up next to the importing file (the current directory in the REPL)
+as `name.apn`, else as a `name/` folder, then the same way in each parent
+folder up to the program's folder (the nearest match wins). A folder is a
+record of its entries, each `.apn` file or subfolder a module of its own read
+when first used (`shapes.solid.box`); a file wins over a folder of the same
+name, whose folder is then reached by path (`import "report/lines"`). Inside the
+library, a bare name is a module beside the file. A module is evaluated in a
+scope of its own, with the prelude and what it imports; the caller's bindings
+do not reach it. A method it defines (`map`, `>>=`, `return`, ...) is an
+instance from the moment it runs, opened or not (see "Monads and instances").
+`load` remains uncached file execution relative to the current source file;
+a statement running one opens the file's definitions into its block.
 `numbers = load "number"` is repeatable like a zero-argument definition, so each use
 of `numbers` loads the file again. A load the static check follows (a literal
 path outside `Dynamic`) rebinds the file's definitions as a definition
@@ -1557,7 +1550,7 @@ equations; partially applied functions include their bound arguments without
 forcing them. Captured environments are not expanded. A method (`map`, `return`,
 `>>=`, `<*>`, `to`, `from`) displays like an overloaded function: its builtin's name (what
 IO and other built-in values do), then each instance's clauses, one per line. After
-`import "option"`, `print return` shows `return`, `Some` and `Ok`.
+`use std.option`, `print return` shows `return`, `Some` and `Ok`.
 
 ## Pattern functions
 

@@ -1,6 +1,7 @@
 # Clock, from https://p5js.org/examples/calculating-values-clock/
 # Get the current time.
-import "p5"
+std <- import "std"
+use std.p5
 
 setup (p : Sketch) = {
     p.createCanvas 710 400

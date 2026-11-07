@@ -32,7 +32,7 @@ Deno.test("parent type pattern resolves in the function's module scope", () => {
     const interpreter = new Interpreter();
     interpreter.moduleSources = { "/lib/option.apn": 'Option x = Some x | None\nf (x : Option _) = 42' };
     interpreter.sourceDir = "/app/";
-    const actual = interpreter.renderString(interpreter.run(parseDocument('m = import "option"\nOption x = | Other x\nm.f (m.Some missing)')));
+    const actual = interpreter.renderString(interpreter.run(parseDocument('m <- import "std/option"\nOption x = | Other x\nm.f (m.Some missing)')));
     if (actual !== '42') throw new Error(actual);
 });
 Deno.test("user's original pattern dispatch prints the payload", () => {

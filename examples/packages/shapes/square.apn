@@ -1,2 +1,3 @@
-# shapes/ is a folder module: import "shapes" opens every .apn file in it.
+# shapes/ is a folder: its record holds square, rectangle and solid, each
+# imported when it is used.
 squareArea side = side * side

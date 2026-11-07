@@ -22,7 +22,7 @@ const signatures = `[
 function run(source: string): string {
     const interpreter = new Interpreter();
     // The library's path on a line of its own: a temporary directory's may be long.
-    const prelude = `ffi = import "ffi"\nlibrary = ${JSON.stringify(library ?? "")}\n`;
+    const prelude = `ffi <- import "std/ffi"\nlibrary = ${JSON.stringify(library ?? "")}\n`;
     // The value and its type: what C returns is the subject.
     const value = interpreter.run(parseDocument(prelude + source));
     return `${interpreter.renderString(value)} : ${interpreter.typeText(value)}`;

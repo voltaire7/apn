@@ -35,8 +35,9 @@ this way, and `examples/p5js` [p5.js's](https://p5js.org/examples/) (see
 ## Sandboxes
 
 ```apn
-import "html"
-browser = import "browser"
+std <- import "std"
+use std.html
+browser <- import "std/browser"
 
 Msg = Increment | Decrement
 
@@ -68,9 +69,10 @@ model` returns `[model, command]`, and `subscriptions model` names the events
 the program listens to:
 
 ```apn
-import ["html","time"]
-browser = import "browser"
-task = import "task"
+std <- import "std"
+use std.[html,time]
+browser <- import "std/browser"
+task <- import "std/task"
 
 Msg = Tick Posix | AdjustTimeZone Zone
 
@@ -147,7 +149,7 @@ pass the event as a record: `value` and `checked` (the target's), `key`,
 `pageX` and `pageY` (`Float`s, as Elm's), and `files` (the target's or a
 drop's, each a `file.File`).
 
-`svg = import "svg"` gives SVG elements and attributes, as Elm's `Svg` and
+`std.svg` gives SVG elements and attributes, as Elm's `Svg` and
 `Svg.Attributes` (`svg.svg`, `svg.circle`, `svg.rect`, `svg.line`, `svg.path`,
 `svg.text_`, `svg.viewBox`, `svg.fill`, `svg.strokeWidth`, ...). An `svg`
 element and everything inside it is SVG; attribute names keep their case.
@@ -179,7 +181,7 @@ These follow Elm's modules of the same names; the
   xs`, `random.weighted [w,x] pairs`, `random.list n g`; generators are
   monads (`map`, `>>=`, `return`, `map2`, ...). `random.step generator seed`
   runs one without a page; `random.initialSeed n` makes a seed.
-- `decode`: JSON decoders, as `Json.Decode` (open it, `import "decode"`, as Quotes
+- `decode`: JSON decoders, as `Json.Decode` (open it, `use std.decode`, as Quotes
   does, unless the program also uses `random`, which shares `int`, `float` and `list`).
   `decode.decodeValue decoder value` is `Ok` or `Err`; `decode.string`,
   `decode.int`, `decode.float`, `decode.bool`, `decode.field name d`,
@@ -204,13 +206,14 @@ type first), `GotFiles file.File (List file.File)`, `GotViewport browser.Viewpor
 
 ## Playground
 
-`import "playground"` draws pictures, animations and games from shapes, as
+`std.playground` draws pictures, animations and games from shapes, as
 [Elm's Playground](https://package.elm-lang.org/packages/evancz/elm-playground/latest/),
 as SVG filling the window. The origin is the window's center, y grows upward,
 and angles are degrees, counterclockwise:
 
 ```apn
-import "playground"
+std <- import "std"
+use std.playground
 main = picture [
     moveDown 80 $ rectangle brown 40 200
     moveUp 100 $ circle green 100

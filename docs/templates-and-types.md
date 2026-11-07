@@ -494,7 +494,7 @@ only what it stored.
 ```apn
 Percent (x : Float) = x > 100 ? Percent 100.0 : _
 Percent 150                   # Percent 100.0
-(Percent a) + (Percent b) = Percent (a + b)
+Percent a + Percent b = Percent (a + b)
 Percent 90 + Percent 20       # Percent 100.0: the clause calls Percent, so its logic runs
 Span (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _
 ```

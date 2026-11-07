@@ -4,7 +4,7 @@ import { parse } from "../src/parser.ts";
 function result(code: string, checked = false): string {
     const i = new Interpreter();
     if (checked) i.enableChecking();
-    return i.renderString(i.run(parse('import ["option","sequence"]; ' + code)));
+    return i.renderString(i.run(parse('std <- import "std"\nuse std.[option,sequence]\n' + code)));
 }
 for (const [code, expected] of [
     ['(Some x -> x) (Some 123)', '123'],

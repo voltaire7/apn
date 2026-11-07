@@ -1,6 +1,7 @@
 # Mario, from https://elm-lang.org/examples/mario
 # Walk around with the arrow keys. Press the UP arrow to jump!
-import "playground"
+std <- import "std"
+use std.playground
 
 view computer mario = {
     w = computer.screen.width

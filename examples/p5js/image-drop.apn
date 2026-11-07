@@ -1,8 +1,9 @@
 # Image Drop, from https://p5js.org/examples/input-elements-image-drop/
 # Display an image that the page visitor dragged and dropped.
-import ["html","text","p5"]
-browser = import "browser"
-file = import "file"
+std <- import "std"
+use std.[html,text,p5]
+browser <- import "std/browser"
+file <- import "std/file"
 
 # The canvas shows a message, or the image dropped on it (by its URL).
 Shown = Message String | Dropped String

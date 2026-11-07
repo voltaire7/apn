@@ -1,6 +1,7 @@
 # Forces, from https://p5js.org/examples/math-and-physics-forces/
 # Simulate gravity, and the drag of a liquid, on falling balls.
-import "p5"
+std <- import "std"
+use std.p5
 
 # A ball: its mass, where it is, its velocity and its hue.
 Mover = [mass : Float, position : [Float,Float], velocity : [Float,Float], hue : Int]

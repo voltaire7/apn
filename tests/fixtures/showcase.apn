@@ -7,7 +7,8 @@
 #    The option module declares  Option a = Some a | None : the unary
 #    constructor `Some` wraps a value; bare `None` is a tag.
 # ---------------------------------------------------------
-import "option"
+std <- import "std"
+use std.option
 
 print (Some 42)        # => Some 42
 print None             # => None
@@ -440,7 +441,7 @@ print [not 0, !0]                         # => [True,True]
 # overloading: these clauses run first; anything else falls back to the
 # builtin +, as the inner (a + b) on two Ints does
 Cents = | Cents Int
-(Cents a) + (Cents b) = Cents (a + b)
+Cents a + Cents b = Cents (a + b)
 print (Cents 150 + Cents 75)              # => Cents 225
 print (1 + 2)                             # => 3
 # a function using + on its parameters takes either meaning
@@ -648,8 +649,9 @@ print (take 1 edited ++ [x * 3])          # => [30]
 print (toAST [1 + 2])         # => ["[]",["+",1,2]]
 print (toAST [f x "y"])       # => ["[]",["f","x","\"y\""]]
 print (toAST [x -> x, 2])     # => ["[]",["->",["x"],"x"],2]
-# import "syntax": fromAST writes such data back; eval runs it at the top level.
-import "syntax"
+# import "std/syntax": fromAST writes such data back; eval runs it at the top level.
+std <- import "std"
+use std.syntax
 print (fromAST (toAST [n -> n * 2 + 1]))  # => [n -> n * 2 + 1]
 doubled e = ["*",e,2]         # building code is building a list
 print (fromAST (doubled (toAST [x + 1] 1)))  # => (x + 1) * 2
@@ -661,7 +663,7 @@ probe (toLambda [x = 10, y = x + 1, y])  # => [(x -> (y -> y) (x + 1)) 10]
 print (toLambda [fact n = n == 0 ? 1 : n * fact (n - 1), fact 5])  # => [120]
 probe (toLambda [{ a <- return 1; return (a + 1) }])  # => [return 1 >>= a -> return (a + 1)]
 # Parsers, as Haskell's Parsec, are monads: a do-block reads input in order.
-parser = import "parser"
+parser <- import "std/parser"
 date = {
     y <- parser.number
     parser.char '-'
@@ -856,7 +858,7 @@ print (foldl (_, b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 #              (1) as a STATEMENT it merges the file's own definitions into
 #                  the current scope (an `include`);
 #              (2) as a VALUE it returns them as a MODULE record, so
-#                  numbers = load "../../lib/number"; numbers.sq 4 ... is namespaced access.
+#                  numbers = load "../../lib/std/number"; numbers.sq 4 ... is namespaced access.
 #              Inside a { } block the merge stays scoped to that block.
 #    halt      is NOT a builtin. It is defined in system — the standard
 #              library — as  `halt = exit 0`. Expression 0-arg defs are LAZY, so
@@ -864,22 +866,23 @@ print (foldl (_, b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 #              fires (exits 0) when it is actually USED.
 # ---------------------------------------------------------
 # Selective imports bind only the requested names.
-[halt = selectedHalt] = import "system"
+[halt = selectedHalt] <- import "std/system"
 # selectedHalt is available; other exports are not introduced by this binding.
 {
-    load "../../lib/number"           # extensionless name; sq joins this block
+    load "../../lib/std/number"           # extensionless name; sq joins this block
     print (sq 5)                   # => 25
 }
 # In the REPL, bare load does not echo the returned module or force its exports.
-import "system"               # halt is a deferred action
+std <- import "std"
+use std.system               # halt is a deferred action
 
-numbers = load "../../lib/number"      # namespaced module record
+numbers = load "../../lib/std/number"      # namespaced module record
 print (numbers.sq 4)           # => 16
 print (numbers.cube 2)         # => 8; each use loads the file again, replacing its own definitions
 {
-    load "../../lib/number"
+    load "../../lib/std/number"
     sq x = x + 1                   # rebinding a loaded name ...
-    load "../../lib/number"           # ... does not stop a later load from replacing it
+    load "../../lib/std/number"           # ... does not stop a later load from replacing it
     print (sq 3)                   # => 9
 }
 # A value never changes: a rebinding is a new version from there on, and
@@ -909,7 +912,7 @@ debug $ step 1 halt          # => exit 0
 
 # a load inside a { } block stays in the block's scope
 scoped = {
-    load "../../lib/number"
+    load "../../lib/std/number"
     sq 6
 }
 print scoped                # => 36
@@ -1052,7 +1055,7 @@ print [(throw "x" : Option Int), (throw "x" : Result Int String)] # => [None, Er
 # A monad of your own: a counter threading a number through each step.
 Counter s a = | MkCounter (s -> [a,s])
 runCounter (MkCounter f) s = f s
-(MkCounter g) >>= f = MkCounter (s -> {
+MkCounter g >>= f = MkCounter (s -> {
     [a,s1] = g s
     runCounter (f a) s1
 })
@@ -1075,7 +1078,7 @@ print (doubleAll (Some 4))                 # => Some 8
 # return is also overloaded on its result: return = MkLabel is return in Label.
 # Any definition of map, >>=, <*> or return is an instance, curried or not.
 Label a = | MkLabel a
-(MkLabel x) >>= f = f x
+MkLabel x >>= f = f x
 return = MkLabel
 print ({ return 9 } : Label Int)           # => MkLabel 9
 # to T x writes x as a T and from T x reads it back; they are methods too.
@@ -1340,26 +1343,23 @@ myTypeOf (5 : Int32) # => Int32
 #       headers: [Authorization = "Basic <token>", `Content-Type` = "application/json"]
 #       body: to JSON [ids = ["jawed"]]
 #   ]
-import ["http","json"]
+std <- import "std"
+use std.[http,json]
 reply <- fetch "data:application/json,{\"ids\":[\"jawed\"]}" [method = "GET"]
 print [reply.status,reply.ok]               # => [200,True]
 print (from JSON reply.body).ids             # => ["jawed"]
 print (to JSON [ids = ["jawed"], count = 1]) # => {"ids":["jawed"], "count":1}
-header = [`Content-Type` = "json", `my value` = 1] # bare keys may hold '-' and spaces
-print (header "Content-Type")                # => json  (not the quoted key "Content-Type")
+header = [`Content-Type` = "json", `my value` = 1] # a key that is not a name is in backticks
+print (header "Content-Type")                # => json  (a string names a field)
 decoded <- fetchJson "data:application/json,[1,2.5,null]" []
 print decoded                                 # => [1,2.5,[]]
 
-# Standard modules are cached imports, separate from file execution with load.
-# Each is imported by name (there is no whole-library module); a list imports
-# several, each once: import ["option","option"] is a parse error. Editors
-# completing a standard name add its import (into the first import, as a list).
-# Before its import, using any standard export (fail, upper, okOr) is a static
-# error at the name, whose hint names the import: add `import "function"` to use `fail`.
-import [
-    "type","function","option","sequence","array","number","text","map"
-    "combinator","io","system","search"
-]
+# The standard library is the folder lib/std/: std <- import "std" names its
+# record, whose fields are its modules, each imported when it is used, and use
+# opens them (use std.option one, use std.[option,text] several). import
+# "std/option" reads one module alone. Using a standard export before its module
+# is opened (fail, upper, okOr) is a static error at the name naming the module.
+use std.[type,function,option,sequence,array,number,text,map,combinator,io,system,search]
 print (cast String $ to (List Char) "hello") # => "hello"
 # reverse is implemented in APN with a linear-time accumulator fold.
 print (head (reverse [1..10000]))   # 10000
@@ -1401,7 +1401,8 @@ perItem total count = okOr "no items" (safeDiv total count)
 print [perItem 300 2, perItem 300 3]  # [Err "share too large", Ok 200]
 
 # The language evaluates source through its APN-written reader and evaluator.
-import "meta"
+std <- import "std"
+use std.meta
 print (metaEval "id x = x; id 42")                 # 42
 print (metaEval "x = 1 :: x; take 4 x")           # [1,1,1,1]
 print (metaEval "True ? 7 : missing")              # 7
@@ -1545,7 +1546,7 @@ print (rangeFactorial 5)                       # 120
 # and the files it loads; a load of a computed path bundles the program's whole folder.
 # A module in a subfolder imports packages from parent folders up to the program's.
 # examples/packages/main.apn demonstrates file, folder and subfolder packages.
-html = import "html"
+html <- import "std/html"
 browserPreview = html.div [] [
     html.button [] [html.text "-"]
     html.div [] [html.text "0"]
@@ -1594,7 +1595,7 @@ do (map (x -> set mutableCounter $ x) [5,1])
 print (onlyOne (vowelOrPair (vowelIfShort (take mutableCounter [7,8,9]))))  # 1
 
 # p5 sketches are descriptions until built for the browser.
-p5 = import "p5"
+p5 <- import "std/p5"
 print (typeOf (p5.sketch [draw = p -> p.background "black"])) # P5Program
 # apn --html examples/browser/p5-sketch.apn p5-sketch.html
 
@@ -1602,11 +1603,11 @@ print (typeOf (p5.sketch [draw = p -> p.background "black"])) # P5Program
 # with an editor): commands and subscriptions are data the page runs, and
 # generators, decoders, times and shapes are ordinary values.
 print (typeOf (p5.canvas [draw = p -> p.background "black"]))   # Html (a sketch inside a view)
-random = import "random"
+random <- import "std/random"
 [roll,_] = random.step (random.int 1 6) (random.initialSeed 42)
 print (roll >= 1 && roll <= 6)                 # True
 print (head (random.step (random.list 3 (random.uniform "a" ["b"])) 7))  # ["a","b","b"]
-decode = import "decode"
+decode <- import "std/decode"
 pointDecoder = map2 (x, y -> [x = x, y = y])
     (decode.field "x" decode.int)
     (decode.field "y" decode.int)
@@ -1625,11 +1626,11 @@ lamp.lit = True
 print [use lamp, size = 2]                     # [x = 0, y = 0, lit = True, size = 2] (a copy)
 asPixel value = Pixel value                    # converted when it runs
 print (asPixel [lit = True]).lit               # True
-clock = import "time"
+clock <- import "std/time"
 print (clock.toMinute clock.utc (clock.millisToPosix 754000))     # 12
 print (map2 (+) (Some 1) (Some 2))             # Some 3
 print (numbers.degrees 180 == numbers.pi)      # True
-playground = import "playground"
+playground <- import "std/playground"
 # Placed 0 10 30 1 1 (Rectangle (Rgb 52 101 164) 4 4)
 print (playground.rotate 30 $ playground.moveUp 10 $ playground.square playground.blue 4)
 # Message types say what they carry: a record alias is a type argument, and a
@@ -1683,7 +1684,7 @@ exampleParameter (ExampleOption a) = a
 print (exampleParameter (ExampleOption Int)) # => Int
 
 # C interop is opt-in: importing it and declaring signatures runs no C code.
-ffiExample = import "ffi"
+ffiExample <- import "std/ffi"
 print (isType Type Pointer)                   # => True
 print (ffiExample.function [Int32,Int32] Int32) # signature record
 # ./examples/c-interop/run-demo demonstrates C calls and mutable Pointer memory.
@@ -1748,13 +1749,13 @@ print $ map (x -> {
 print ([1,2,3] * (+ 1) \ (* 2))         # => [3,5,7]
 print ((+ 1) \ (* 2) $ 3)                 # => 7
 
-# Import a list of modules, returning their combined namespace.
-combinedNamespace = import ["function","number"]
-print (combinedNamespace.id 42)           # => 42
+# A module is a record: its fields are read like any record's.
+numberModule <- import "std/number"
+print (numberModule.sq 7)                 # => 49
 
 # REPL/Neovim: load and use share import's keyword color.
 # Open namespace records (or a list of them) in the current scope.
-standardNamespace = import "combinator"
+standardNamespace <- import "std/combinator"
 use standardNamespace
 print (identity 123)                     # => 123
 use [[useFirst = 10], [useSecond = 20]]
@@ -1788,7 +1789,8 @@ ArrayVector = [x : Float, y : Float, z : Float]
 # (ArrayVector[1,2,3], without the space, is an error)
 print (ArrayVector [1,2,3] * 2)         # => [x = 2.0, y = 4.0, z = 6.0]
 print ([1,2] ++ [3,4])                 # => [1,2,3,4]
-import "array"
+std <- import "std"
+use std.array
 print (shape [[1,2],[3,4]])            # => [2,2]
 print (dot [1,2,3] [4,5,6])           # => 32
 print (transpose [[1,2,3],[4,5,6]])  # => [[1,4],[2,5],[3,6]]
@@ -1884,12 +1886,14 @@ print (assert (compassName Up == "up") "up")  # => up (assert c x is x once c ho
 # assert (1 == 2) []                # error includes expression, source file and line
 
 # Scoped cleanup runs after returned lazy data has been evaluated.
-import "function"
+std <- import "std"
+use std.function
 released = Mutable False
 bracketed <- bracket 42 (_ -> set released True) (n -> [n, n + 1])
 print bracketed                    # => [42,43]
 print released                     # => True
-import "io"
+std <- import "std"
+use std.io
 # A read-only OS device keeps this program independent of its working directory.
 nothing <- withFile "/dev/null" (file -> file.read)
 print nothing                      # => empty line

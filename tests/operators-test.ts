@@ -86,7 +86,7 @@ for (const [spellings, text] of [
 ] as const) for (const source of spellings) Deno.test(`one typing for each spelling: ${JSON.stringify(source)}`, () => fails(source, text, "type"));
 for (const [source, expected] of [
     ["print (not 0)", ["True"]],
-    ["Cents = | Cents Int\n(Cents a) + (Cents b) = Cents (a + b)\nprint ((+) (Cents 1) (Cents 2))\nprint (zipWith (+) [1] [2])", ["Cents 3", "[3]"]],
+    ["Cents = | Cents Int\nCents a + Cents b = Cents (a + b)\nprint ((+) (Cents 1) (Cents 2))\nprint (zipWith (+) [1] [2])", ["Cents 3", "[3]"]],
     ["print (+)\nprint ((+) 1)\nprobe [(+)]", ["(+)", "(1 +)", "[(+)]"]],
 ] as const) Deno.test(`operators as functions: ${JSON.stringify(source)}`, () => {
     const actual = run(source);
@@ -96,7 +96,7 @@ for (const [source, expected] of [
 // The checker's evaluator knows an operator's result in each spelling: f
 // checks only when the take count, and so the list's length, is known, also
 // through a take written in APN, which passes the count on.
-const TK = 'import "function"; tk2 0 _ = []; tk2 _ [] = []; tk2 n (x :: rest) = x :: tk2 (n - 1) rest\n' +
+const TK = 'std <- import "std"\nuse std.function\ntk2 0 _ = []; tk2 _ [] = []; tk2 n (x :: rest) = x :: tk2 (n - 1) rest\n' +
     'tk (n : Int) xs = n < 0 ? fail "negative" : tk2 n xs\n';
 for (const count of ["1 + 1", "(+) 1 1", "intrinsics.add 1 1", "(1 +) 1", "($) id 2", "intrinsics.apply id 2",
     "(-) 3 1", "intrinsics.sub 3 1", "length ((++) [1] [2])", "length (intrinsics.cons 1 [5])", "negate -2"]) {

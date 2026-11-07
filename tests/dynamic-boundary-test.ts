@@ -19,8 +19,8 @@ for (const [source, expected] of [
     ['(([1,2] : Dynamic) : Vect 2 Int)', '[1,2]'],
     ['xs <- return (([1,missing] : Dynamic) : Vect 2 Int); head xs', '1'],
     ['([(1 : Dynamic), (2 : Dynamic)] : Vect 2 Int)', '[1,2]'],
-    ['(import "function" : Dynamic); 123', '123'],
-    ['(import ["text","type"] : Dynamic); 123', '123'],
+    ['(import "std/function" : Dynamic); 123', '123'],
+    ['m <- (import "std/text" : Dynamic); use m; 123', '123'],
     ['x = 1; (use [x = 2] : Dynamic); x', '2'],
 ] as const) Deno.test(`explicit Dynamic boundary: ${source}`, () => {
     const result = requireChecked(source);
@@ -71,9 +71,9 @@ Deno.test('load exports cannot invalidate checked bindings', () => {
     throw new Error('missing runtime error');
 });
 
-for (const module of ['"function"', '["type","function"]']) {
-    Deno.test(`import protects existing bindings: ${module}`, () => {
-        const source = `x = "old"; (import ${module} : Dynamic); x`;
+for (const module of ['"std/function"']) {
+    Deno.test(`use protects existing bindings: ${module}`, () => {
+        const source = `x = "old"; m <- (import ${module} : Dynamic); use m; x`;
         requireChecked(source);
         const i = new Interpreter(); i.checkedExecution = true;
         i.moduleSources = { "/lib/function.apn": 'x = 123', "/lib/type.apn": '' };
@@ -91,7 +91,7 @@ for (const module of ['"function"', '["type","function"]']) {
 Deno.test("a checked import replaces a builtin function", () => {
     const i = new Interpreter();
     i.enableChecking();
-    const actual = i.renderString(i.run(parseDocument('import "random"\nstep (Generator (s -> [1,s])) 0')));
+    const actual = i.renderString(i.run(parseDocument('std <- import "std"; use std.random\nstep (Generator (s -> [1,s])) 0')));
     if (actual !== "[1,0]") throw new Error(actual);
 });
 Deno.test("set on an explicit Dynamic target is checked at runtime", () => {

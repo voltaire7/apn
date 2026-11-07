@@ -85,7 +85,6 @@ _node _ "=" [left,right] = _bare _end left ++ " = " ++ _shown _end right
 _node _ "<-" [left,right] = _bare _end left ++ " <- " ++ _shown _end right
 _node _ "()" [op,x] = "(" ++ op ++ " " ++ _shown ["operand",8,-1] x ++ ")"
 _node _ "import" [m] = "import " ++ to String m
-_node _ "import" ms = "import [" ++ _items (map (to String) ms) ++ "]"
 _node place function args = length args == 2 && _isOperator function && !_tag function
     ? _infix place function args
     : _application place function args

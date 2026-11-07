@@ -1,7 +1,8 @@
 # Standard library
 
 ```apn
-import ["sequence","number","text","map"]
+std <- import "std"
+use std.[sequence,number,text,map]
 take 10 primes
 mean [1,2]                         # Some 3/2
 frequencies $ words $ "one two one" # HashMap [["one",2],["two",1]]
@@ -17,60 +18,34 @@ and the Functor, Applicative
 and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
 `sequence`, `mapM`, `map2`–`map4`, `when`, `unless`, `loop`, `while`, `for`, `return`, `throw`, `empty`, `guard`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).
 
-`import` accepts a literal module name or a list of literal module names.
-For example, `import ["number","text"]` as a statement opens both modules
-(see [module imports](semantics.md#module-imports)); its value is a merged
-export record. Later modules win name collisions, and `import []`
-returns an empty record. Commas or newlines separate module names, and a list
-names each module once (`import ["option","option"]` is a parse error). Standard
-modules are imported by name, with no prefix: `import "text"`. There is no
-whole-library module; `import "std"` and `import "std/text"` are errors.
-Dependencies are imported with them. Imports require Deno read permission (the
-`apn` launcher already provides it).
+The standard library is the folder `lib/std/`, imported as `std`: a record of
+its modules, each checked and run the first time it is used. `use std.[a,b]`
+opens several modules' names, `use std.name` one module's, and
+`name <- import "std/name"` binds one module without opening it. Imports, their
+lookup and what a module's record holds are described in
+[module imports](semantics.md#module-imports); imports require Deno read
+permission (the `apn` launcher provides it).
 
-A name is looked up next to the importing file (the current directory in the
-REPL) before the standard library:
-
-- `import "name"` imports `name.apn`;
-- otherwise, if `name/` is a folder, it imports every `.apn` file directly in
-  it, in name order, as one module. A name two of its files define is an
-  error. Subfolders are not included; import them as `import "name/sub"`;
-- when both `name.apn` and `name/` exist, the file is the package's entry and
-  `name/...` reaches inside (like `lib/meta.apn` beside `lib/meta/`).
-
-When the importing file's folder has neither, each parent folder is searched
-the same way, up to the program's folder (the main program's, or the current
-directory in the REPL), so `widgets/view.apn` can `import "labels"` from
-`labels.apn` beside the program. The nearest match wins, and the search never
-goes above the program's folder.
-
-`examples/packages/main.apn` uses each of these: a file module, a folder
-module, a subfolder package, a file that is its folder's entry, and imports
-from a parent folder (`apn examples/packages/main.apn`).
-
-A local `text.apn` therefore shadows the standard `text` module for code in
-its folder and below. Each file of a module runs in its own scope of builtins,
-and resolves its own imports and loads relative to its directory. Browser builds (`apn
---html`) bundle the standard library, the local modules the program imports
-and the files it loads (every `.apn` file in the program's folder once a
-load names a computed path), so the same imports and loads work in the
-browser.
-
-Each interpreter evaluates each module once in a scope containing builtins and
-its dependencies, independent of caller bindings. Reimporting restores the same
-exports without reexecuting the module. Existing local names are replaced by
-imported names. A bare import statement is silent. In an expression, imports return a record: `s = import "sequence"` allows `s.sum`.
-Like other lazy definitions, this form takes effect when `s` is demanded.
+A program's own modules are found the same way, next to the importing file and
+then in its parent folders up to the program's folder, so a local `text.apn`
+shadows nothing in `std` (`std.text` is always the library's).
+`examples/packages/main.apn` uses each kind: a file module, a folder module, a
+subfolder, a file beside its folder, and an import from a parent folder (`apn
+examples/packages/main.apn`). Each module resolves its own imports and loads
+relative to its directory. Browser builds (`apn --html`) bundle the standard
+library, the local modules the program imports and the files it loads (every
+`.apn` file in the program's folder once a load names a computed path), so the
+same imports and loads work in the browser.
 
 `use record` brings its fields into the current scope without forcing their
 values. `use [recordA,recordB]` opens a finite list of records in order; later
-fields replace earlier bindings. It returns `()`. Fields must be valid binding
+fields replace earlier bindings. It returns `[]`. Fields must be valid binding
 identifiers (not backticked keys that are not names, or keywords). Invalid input is
 rejected before any fields are installed. Bindings inside a block stay local.
 
 ```apn
-combinators = import "combinator"
-use combinators
+std <- import "std"
+use std.combinator
 identity 123
 
 use [[first = 10], [second = 20]]
@@ -79,26 +54,21 @@ first + second                         # 30
 
 `use` is an ordinary builtin function, so aliases and pipelines work too.
 An APN wrapper function opens the record in its own scope, not its caller's.
-
-List imports support the same selection: `[id,sum] = import ["function","sequence"]`.
-
-Destructuring imports select only the requested exports: `[halt] = import "system"`
-binds `halt` without introducing the module's other names.
-Renaming works too: `[halt = stop] = import "system"` binds only `stop`. Unselected
-local bindings remain unchanged, including when the module is already cached.
+A record pattern takes some names of a module and leaves the rest:
+`[halt] <- import "std/system"` binds `halt`, and `[halt = stop] <- import
+"std/system"` binds only `stop`.
 
 `load "file"` remains file execution (the `.apn` extension must be omitted): paths are relative to the source file,
 loading executes again each time, and it uses the caller's scope; `import`
 runs a module once, in its own scope.
 Names without an extension receive `.apn`; explicitly supplied extensions are
 used literally. `load` parses file contents as APN regardless of their extension.
-`sq` lives in `number`; `halt` lives in `system`. The obsolete
-`lib/core.apn` has been removed; replace its loads with these imports.
+`sq` lives in `number`; `halt` lives in `system`.
 
 ## Types — `type`
 
 `cast Type value` is an ordinary APN compatibility wrapper for `(value : Type)`,
-implemented in `lib/type.apn` and loaded by the default prelude. Both require
+implemented in `lib/std/type.apn` and loaded by the default prelude. Both require
 lossless conversion. Use `(floor value : Int)`, `(truncate value : Int)`, or
 `(inexact value : Float)` to choose the intended rounding explicitly.
 See [zero initialization](zero-initialization.md) for type defaults and inspection.
@@ -278,7 +248,8 @@ Run `apn examples/standard-library.apn` for a complete example.
 
 ```apn
 toAST [f x + 1]                        # ["[]",["+",["f","x"],1]]   (prelude)
-import "syntax"
+std <- import "std"
+use std.syntax
 fromAST (toAST [n -> n * 2 + 1])       # "[n -> n * 2 + 1]"
 doubled e = ["*",e,2]
 eval (doubled ["sqrt",16])             # 8
@@ -342,7 +313,8 @@ as a new version of the outer `x`.
 ## Parsers — `parser`
 
 ```apn
-import "parser"
+std <- import "std"
+use std.parser
 date = {
     y <- number
     char '-'
@@ -370,8 +342,8 @@ input is a list, and a string is its characters, so a list of anything parses
 
 `<|>` does not undo what `p` read before it failed, and `many` stops at the
 first item `p` cannot read, so `parse` reports what follows it. Its names
-repeat others' (`string`, as `decode`'s): a program using both imports one
-qualified (`parser = import "parser"`).
+repeat others' (`string`, as `decode`'s): a program using both opens one
+and reads the other qualified (`std.parser.string`).
 
 ## Metacircular evaluator — `meta`
 
@@ -425,7 +397,8 @@ response, whatever its status, as a record:
 name that is not a name is in backticks (`` `Content-Type` = "application/json" ``).
 
 ```apn
-import ["http","json"]
+std <- import "std"
+use std.[http,json]
 response <- fetch "https://www.youtube-transcript.io/api/channels" [
     method = "POST"
     headers = [
@@ -490,8 +463,8 @@ Modules for browser programs, after Elm's packages of the same names. See
 | `gallery` | an examples site's index page: `page`, `examples` (a section) and `link` |
 
 `random` and `decode` share names (`int`, `float`, `list`), as do `svg` and
-`playground` (`circle`, `image`): a program using both of a pair imports one
-qualified (`random = import "random"`; `random.int 1 6`). Each alone may be
+`playground` (`circle`, `image`): a program using both of a pair opens
+one and reads the other qualified (`std.random.int 1 6`). Each alone may be
 opened, as Elm's examples open `Json.Decode`.
 
 ## Process control — `system`
@@ -517,7 +490,7 @@ scope.
 
 ## Creative coding — `p5`, `glsl`
 
-`import "p5"` exposes `sketch callbacks`, `canvas callbacks` for a sketch
+`std.p5` exposes `sketch callbacks`, `canvas callbacks` for a sketch
 inside an HTML view, the `Sketch` type of a callback's `p`, the objects
 (`loadImage`, `createGraphics`, `buildGeometry`, ...), shaders with hooks in
 APN (`buildFilterShader`, `buildColorShader`, `buildMaterialShader`), and

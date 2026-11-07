@@ -35,10 +35,10 @@ for (const [source, expected] of [
     ['head ([1,missing] * 2)', '2'],
     ['head ([1] + [2,3])', '3'],
     ['unused = missing + 1\n([x = 1, y = unused] + [y = 2, x = 3]).x', '4'],
-    ['import "array"\ndot [1,2,3] [4,5,6]', '32'],
-    ['import "array"\ntranspose [[1,2,3],[4,5,6]]', '[[1,4],[2,5],[3,6]]'],
-    ['import "array"\nmatmul [[1,2],[3,4]] [[5,6],[7,8]]', '[[19,22],[43,50]]'],
-    ['import "array"\n[shape 1, shape [], shape [[1,2],[3,4]], transpose [], matmul [[]] []]', '[[],[0],[2,2],[],[[]]]'],
+    ['std <- import "std"; use std.array\ndot [1,2,3] [4,5,6]', '32'],
+    ['std <- import "std"; use std.array\ntranspose [[1,2,3],[4,5,6]]', '[[1,4],[2,5],[3,6]]'],
+    ['std <- import "std"; use std.array\nmatmul [[1,2],[3,4]] [[5,6],[7,8]]', '[[19,22],[43,50]]'],
+    ['std <- import "std"; use std.array\n[shape 1, shape [], shape [[1,2],[3,4]], transpose [], matmul [[]] []]', '[[],[0],[2,2],[],[[]]]'],
 ]) Deno.test(`array arithmetic: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -53,10 +53,10 @@ for (const [source, error] of [
     ['["a"] + ["b"]', 'numeric leaves'],
     ['[(127 : Int8)] + 1', 'out of range'],
     ['[1] / 0', 'zero'],
-    ['import "array"\ntranspose [[1],[2,3]]', 'equal row lengths'],
-    ['import "array"\nmatmul [[1]] [[],[]]', 'dimensions'],
-    ['import "array"\nmatmul [[1],[2,3]] [[1]]', 'equal lengths'],
-    ['import "array"\nshape [[1],[2,3]]', 'rectangular'],
+    ['std <- import "std"; use std.array\ntranspose [[1],[2,3]]', 'equal row lengths'],
+    ['std <- import "std"; use std.array\nmatmul [[1]] [[],[]]', 'dimensions'],
+    ['std <- import "std"; use std.array\nmatmul [[1],[2,3]] [[1]]', 'equal lengths'],
+    ['std <- import "std"; use std.array\nshape [[1],[2,3]]', 'rectangular'],
 ]) Deno.test(`array arithmetic rejects: ${source}`, () => {
     try { result(source); } catch (e) {
         if (String(e).includes(error)) return;

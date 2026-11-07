@@ -1,7 +1,8 @@
 # Turtle, from https://elm-lang.org/examples/turtle
 # Use arrow keys to move the turtle around.
 # Forward with UP and turn with LEFT and RIGHT.
-import ["playground","number"]
+std <- import "std"
+use std.[playground,number]
 
 view computer turtle = [
     rectangle blue computer.screen.width computer.screen.height

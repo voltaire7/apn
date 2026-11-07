@@ -58,8 +58,8 @@ for (const [sugar, expansion] of [
     // statement m >> ..., a binding x = e (x -> ...) e.
     ["v = {\n    x <- [1,2]\n    return (x * 10)\n}\nv", "v = [1,2] >>= x -> return (x * 10)\nv"],
     ["{\n    print 1\n    print 2\n}", "print 1 >> print 2"],
-    ['import "option"\n({\n    x <- Some 1\n    return (x + 1)\n} : Option Int)', 'import "option"\n(Some 1 >>= x -> return (x + 1) : Option Int)'],
-    ['import "option"\n({\n    None\n    return 1\n} : Option Int)', 'import "option"\n(None >> return 1 : Option Int)'],
+    ['std <- import "std"; use std.option\n({\n    x <- Some 1\n    return (x + 1)\n} : Option Int)', 'std <- import "std"; use std.option\n(Some 1 >>= x -> return (x + 1) : Option Int)'],
+    ['std <- import "std"; use std.option\n({\n    None\n    return 1\n} : Option Int)', 'std <- import "std"; use std.option\n(None >> return 1 : Option Int)'],
     ["v = {\n    x <- [1,2,3]\n    guard (x > 1)\n    return x\n}\nv", "v = [1,2,3] >>= x -> guard (x > 1) >> return x\nv"],
     ["xs = {\n    x <- [1,2]\n    y <- [10,20]\n    return (x + y)\n}\nxs", "xs = [1,2] >>= x -> [10,20] >>= y -> return (x + y)\nxs"],
     ["v = {\n    a = 1\n    b = a + 1\n    [a,b]\n}\nv", "v = (a -> (b -> [a,b]) (a + 1)) 1\nv"],
@@ -82,7 +82,7 @@ for (const [sugar, expansion] of [
     ["(::) = a, b -> a\nf [x] = x\nf 1", "(::) = a, b -> a\nf (x :: []) = x\nf 1"],
     ["[Int..3]", "enumFromTo Int 3"],
     ["(::) = a, b -> a\n1 ~ [x -> 2]", "(::) = a, b -> a\nm = (~)\nm 1 [x -> 2]"],
-    ['import "option"\n({\n    x <- Some 1\n    5\n} : Option Int)', 'import "option"\nSome 1 >>= x -> 5'],
+    ['std <- import "std"; use std.option\n({\n    x <- Some 1\n    5\n} : Option Int)', 'std <- import "std"; use std.option\nSome 1 >>= x -> 5'],
 ] as const) for (const checked of [false, true]) {
     Deno.test(`sugar fails as its expansion does${checked ? ", checked" : ""}: ${JSON.stringify(sugar)}`, () => {
         const a = result(sugar, checked), b = result(expansion, checked);

@@ -1,7 +1,8 @@
 # Animation, from https://elm-lang.org/examples/animation
 # Create animations that spin, wave, and zig-zag.
 # This one is a little red wagon bumping along a dirt road.
-import "playground"
+std <- import "std"
+use std.playground
 
 view time = [
     rotate (spin 3 time) $ moveLeft 100 $ octagon darkGray 36

@@ -1,6 +1,7 @@
 # Sine and Cosine, from https://p5js.org/examples/angles-and-motion-sine-cosine/
 # Animate circular, back and forth, and wave motion.
-import ["number","p5"]
+std <- import "std"
+use std.[number,p5]
 
 [circleX,circleY,circleRadius] = [200,150,75]
 [graphX,graphY,graphAmplitude,graphPeriod] = [50,300,50,300]

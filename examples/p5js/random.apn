@@ -1,6 +1,7 @@
 # Random, from https://p5js.org/examples/calculating-values-random/
 # Get random numbers.
-import "p5"
+std <- import "std"
+use std.p5
 
 # The circle's position and color, chosen at random.
 position = Mutable [0.0,0.0]

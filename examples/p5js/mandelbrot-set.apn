@@ -1,6 +1,7 @@
 # Mandelbrot Set, from https://p5js.org/examples/math-and-physics-mandelbrot/
 # Color each point by how quickly it escapes as z² + c repeats from 0.
-import "p5"
+std <- import "std"
+use std.p5
 
 maxIterations = 100
 # The view: 4 wide, centered on 0, as tall as the canvas's proportions.

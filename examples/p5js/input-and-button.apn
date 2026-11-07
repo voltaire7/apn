@@ -1,7 +1,8 @@
 # Input and Button, from https://p5js.org/examples/input-elements-input-button/
 # Use text input from the page visitor.
-import ["html","p5"]
-browser = import "browser"
+std <- import "std"
+use std.[html,p5]
+browser <- import "std/browser"
 
 # The name being typed, and the one submitted last.
 Model = [typing : String, name : String]

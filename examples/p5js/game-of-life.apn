@@ -1,6 +1,7 @@
 # Game of Life, from https://p5js.org/examples/math-and-physics-game-of-life/
 # Play John Conway's Game of Life: click to start from a random board.
-import ["p5","sequence"]
+std <- import "std"
+use std.[p5,sequence]
 
 cellSize = 20
 # The board, a row of 0s (dead) and 1s (alive) each, wrapping around its edges.

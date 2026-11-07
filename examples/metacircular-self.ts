@@ -5,5 +5,5 @@ import { Interpreter } from "../src/interp.ts";
 import { parse } from "../main.ts";
 
 const i = new Interpreter();
-i.programArgs = [new URL("../lib/meta/evaluator.apn", import.meta.url).pathname];
+i.programArgs = [new URL("../lib/std/meta/evaluator.apn", import.meta.url).pathname];
 i.run(parse(Deno.readTextFileSync(new URL("./metacircular-self.apn", import.meta.url))));

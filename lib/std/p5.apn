@@ -1,7 +1,7 @@
 # Callback records are ordinary APN values; drawing starts in the browser.
-_html = import "html"
-_array = import "array"
-_glsl = import "glsl"
+_html <- import "std/html"
+_array <- import "std/array"
+_glsl <- import "std/glsl"
 P5Program = | P5Sketch Dynamic
 sketch callbacks = P5Sketch callbacks
 # A sketch inside an HTML view (an element program's): it keeps drawing across

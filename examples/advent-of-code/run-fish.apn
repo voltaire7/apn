@@ -1,4 +1,5 @@
-import "io"
+std <- import "std"
+use std.io
 load "lanternfish"
 input <- readInput
 print (solveFish input)

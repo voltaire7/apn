@@ -7,7 +7,7 @@ for (const [source, expected] of [
     [String.raw`((x -> x + 1) \ (x -> x * 2) \ x -> x - 3) 5`, "5"],
     [String.raw`(x -> x + 1) \ (x -> x * 2) $ 3`, "7"],
     [String.raw`((x -> 42) \ x -> missing) missing`, "42"],
-    [String.raw`import "sequence"
+    [String.raw`std <- import "std"; use std.sequence
 even n = n % 2 == 0
 calculate bottom top = (sum \ filter even) [bottom..top]
 calculate 1 10`, "30"],
@@ -25,7 +25,7 @@ h = increment \ double
 
 for (const source of [
     String.raw`print \ format "%: %" ["x",1]`,
-    String.raw`import "sequence"
+    String.raw`std <- import "std"; use std.sequence
 even n = n % 2 == 0
 calculate bottom top = sum \ filter even [bottom..top]
 calculate 1 10`,

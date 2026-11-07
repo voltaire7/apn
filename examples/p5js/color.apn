@@ -1,6 +1,7 @@
 # Color, from https://p5js.org/examples/shapes-and-color-color/
 # Add color to your sketch.
-import "p5"
+std <- import "std"
+use std.p5
 
 setup (p : Sketch) = {
     p.textOutput

@@ -1,6 +1,7 @@
 # Translate, from https://p5js.org/examples/transformation-translate/
 # Move the coordinate system origin.
-import "p5"
+std <- import "std"
+use std.p5
 
 setup (p : Sketch) = {
     p.createCanvas 720 400

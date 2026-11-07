@@ -1,4 +1,5 @@
-import "text"
+std <- import "std"
+use std.text
 
 # A source reader written in APN. Tokens are [kind,value]; no native parser.
 # It reads into toAST's lists (lib/syntax.apn): a string literal is its quoted

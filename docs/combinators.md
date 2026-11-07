@@ -1,7 +1,8 @@
 # Self-application and combinators
 
 ```apn
-import "combinator"
+std <- import "std"
+use std.combinator
 
 selfFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))
 selfFactorial 5  # 120
@@ -19,9 +20,9 @@ combinators.Theta factorialStep 5  # 120
 fix factorialStep 5               # 120
 ```
 
-All definitions are APN code in `lib/combinator.apn`. Importing `std` includes
-them too. Conventional capital names are record fields, since APN reserves
-capital bindings for constructors. Descriptive functions are also exported.
+All definitions are APN code in `lib/std/combinator.apn` (`std.combinator`).
+Conventional capital names are record fields, since APN reserves capital
+bindings for constructors. Descriptive functions are also exported.
 
 ## Classical basis and common derived combinators
 

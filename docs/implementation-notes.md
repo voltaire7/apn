@@ -29,7 +29,7 @@ alongside the code, and don't restate the user-facing rules here.
   parse: when unsure it keeps the group. Pattern groups are not judged. The
   printers write each piece for its place by the same rules: `exprToSource`
   (with `level`/`reach`, also behind function text and `probe`) and
-  `fromAST` (`lib/syntax/source.apn`), each checked by a strict round trip
+  `fromAST` (`lib/std/syntax/source.apn`), each checked by a strict round trip
   (`tests/unnecessary-parentheses-test.ts`, `tests/syntax-test.ts`).
 
 ## Evaluation core
@@ -401,14 +401,17 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   root (`Env.root`) and gives a rebound one a version (`new Env(env, True)`),
   which the statement loops (top level, blocks, do-blocks) go on in;
   `Env.bindings` reads a scope through its versions (module and load
-  exports), and `newest` is the version `eval` runs in. An import, load or `use`
+  exports), and `newest` is the version `eval` runs in. A load or `use`
   publishes the same way, and its statement adopts the version
-  (`adoptPublished`). A statement opens a module by its value: the runtime
-  tags the records `importStandard` and `loadFile` make (`moduleValues`, with a
-  load's origin) and `opens` publishes a statement's tagged result; the
-  checker's module records keep `ModuleFields` (also through `copy`) and its
-  `opensModule` records each such statement in `moduleStatements`, whose
-  results the runtime demands. A load in an expression publishes nothing;
+  (`adoptPublished`). The runtime tags the records `importStandard` and
+  `loadFile` make (`moduleValues`, with their origin); a statement opens only a
+  load's (`opens`), and the checker's load records are `ModuleFields` with
+  `opens` (kept through `copy`), whose statements `opensModule` records in
+  `moduleStatements`, whose results the runtime demands. `use` of a module
+  record publishes its names with the module's origin; the checker opens the
+  module's scope entries (clauses too) and settles each type (`validate`) as a
+  statement's value is, so later code meets its calls decided. A load in an
+  expression publishes nothing;
   only a tail load's file publishes into its loader. Tests: `tests/load-test.ts`,
   `tests/default-checking-test.ts`. The checker never re-checks a reader: a reader's types
   are its version's. Its static block evaluation (`evaluateBlock`) follows
@@ -420,13 +423,16 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   replaces the exact value it published. Tests: `tests/dynamic-boundary-test.ts`.
 - `use` validates every key as a binding identifier before publishing and opens
   the active evaluation scope, so wrapper functions don't export into their
-  caller. Failed list imports must not install earlier modules' names.
-  Tests: `tests/use-test.ts`, `tests/import-list-test.ts`, `tests/load-test.ts`.
+  caller. Tests: `tests/use-test.ts`, `tests/std-import-test.ts`, `tests/load-test.ts`.
 - `src/modules.ts` `resolveModule` is the one place imports resolve, used by
   both `Interpreter.importStandard` and `CheckingSession.module`; both cache by
   the resolved path (`key`), so a module and its checked types always come from
-  the same files. Each file of a folder module runs (and is checked) in its own
-  builtins scope with `sourceDir` set to its directory. The parent-folder
+  the same files. A module runs (and is checked) in its own builtins scope with
+  `sourceDir` set to its directory; a folder's record holds its entries
+  deferred (`Interpreter.defer`, the checker's `moduleType`), each resolved,
+  run and checked when first read. A module's record leaves out the module
+  records it imported for itself, so `std <- import "std"` in a library module
+  makes no cycle through `std`. The parent-folder
   search stops at the program's folder: `Interpreter.moduleRoot` (the outermost
   run's `sourceDir`) and `CheckingSession.prepare`'s directory, passed as
   `resolveModule`'s `root`. With `moduleSources`
@@ -459,7 +465,7 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
 
 `arrayArithmetic` / `arrayNegate` implement collection arithmetic; reuse
 `typedArithmetic` and `numericNative` so numeric checks stay consistent.
-Array helpers belong in `lib/array.apn`. Tests: `tests/array-test.ts`.
+Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
 
 ## Nominal types and resources
 
@@ -856,8 +862,8 @@ code it cannot follow makes them a runtime check. `toAST` reads items with
 `intrinsics.syntax` (`sexprOf` of each item's expression; source text, which
 the tests and the meta reader compare against, reads with `readSource`): operator
 sections become names, partial applications or `"()"` nodes, and an
-application's spine is flattened. `lib/syntax.apn` loads its printer
-(`lib/syntax/source.apn`) and `toLambda`'s desugarer (`lib/syntax/lambda.apn`)
+application's spine is flattened. `lib/std/syntax.apn` loads its printer
+(`lib/std/syntax/source.apn`) and `toLambda`'s desugarer (`lib/std/syntax/lambda.apn`)
 behind `Dynamic`, as `meta` does, since syntax data mixes leaves and nodes;
 both load into one scope, so their `_` helpers need distinct names; `intrinsics.fixity` gives it the parser's fixities. `eval`
 parses `fromAST`'s text with the parser itself, spacing rules and line limit
@@ -866,7 +872,7 @@ off, so evaluated code cannot drift from written code. Tests:
 
 ## Metacircular evaluator
 
-`lib/meta.apn` exposes `meta`; the implementation lives in `lib/meta/`. It
+`lib/std/meta.apn` exposes `meta`; the implementation lives in `lib/std/meta/`. It
 must never delegate object source to host `parse`, `toAST`, `load`, or an eval
 callback, and its core must stay within the reader's supported subset. After
 changes run `tests/metacircular-test.ts` and

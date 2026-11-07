@@ -8,7 +8,7 @@ function run(source: string): string {
     i.enableChecking();
     return i.renderString(i.run(parse(source)));
 }
-const HEADER = `import "option"
+const HEADER = `std <- import "std"; use std.option
 safeDiv _ 0 = None
 safeDiv a b = Some (a / b)
 okOr _ (Some x) = Ok x

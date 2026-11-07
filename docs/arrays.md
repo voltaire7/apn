@@ -42,7 +42,7 @@ selection. Matrix multiplication is explicit via `matmul`.
 
 ## APN-defined helpers
 
-`import "array"` provides:
+`std.array` provides:
 
 | Function | Meaning |
 | --- | --- |
@@ -51,14 +51,15 @@ selection. Matrix multiplication is explicit via `matmul`.
 | `matmul left right` | Matrix multiplication; rectangular matrices with matching inner dimensions |
 | `shape array` | Dimensions of a finite rectangular numeric list; a number has shape `[]`, an empty list `[0]` |
 
-These helpers are written in `lib/array.apn`. `shape` traverses the input;
+These helpers are written in `lib/std/array.apn`. `shape` traverses the input;
 `matmul` checks finite row lengths up front and computes result entries lazily.
 `transpose` needs a finite number of rows and checks lengths as it produces
 columns. `dot` needs finite vectors to return a sum. An empty outer matrix is
 interpreted as 0-by-0; `matmul [[]] []` yields `[[]]`.
 
 ```apn
-import "array"
+std <- import "std"
+use std.array
 dot [1,2,3] [4,5,6]                # 32
 transpose [[1,2,3],[4,5,6]]       # [[1,4],[2,5],[3,6]]
 matmul [[1,2],[3,4]] [[5,6],[7,8]]  # [[19,22],[43,50]]

@@ -1,8 +1,9 @@
 # Examples, from https://elm-lang.org/examples
 # The page listing these examples. apn --site examples/elm OUTPUT builds it,
 # with an editor for each example.
-import ["html","text"]
-gallery = import "gallery"
+std <- import "std"
+use std.[html,text]
+gallery <- import "std/gallery"
 
 main = gallery.page "Examples" [
     text "Elm's "

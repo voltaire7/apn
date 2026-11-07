@@ -5,7 +5,7 @@ import { parse } from "../src/parser.ts";
 for (const name of ["number"]) {
     for (const absolute of [false, true]) Deno.test(`load ${name}: ${absolute ? "absolute" : "source-relative"}`, () => {
         const i = new Interpreter();
-        const directory = new URL("../lib/", import.meta.url).pathname;
+        const directory = new URL("../lib/std/", import.meta.url).pathname;
         i.sourceDir = directory;
         const path = absolute ? `${directory}${name}` : name;
         const result = i.run(parse(`load ${JSON.stringify(path)}; sq 7`));
@@ -18,7 +18,7 @@ for (const name of ["number"]) {
 Deno.test("a library file loaded through .. shares the library's modules", () => {
     const i = new Interpreter();
     i.sourceDir = new URL("fixtures", import.meta.url).pathname;
-    i.run(parse('import "option"\nsix = { load "../../lib/number"; sq 6 }\nsix'));
+    i.run(parse('std <- import "std"; use std.option\nsix = { load "../../lib/std/number"; sq 6 }\nsix'));
     if (i.renderString(i.run(parse("({ return 1 } : Option Int)"))) !== "Some 1") throw new Error("a second Option");
 });
 Deno.test("extensionless load reports the resolved APN path", () => {
@@ -33,28 +33,25 @@ Deno.test("extensionless load reports the resolved APN path", () => {
 
 Deno.test("system exposes halt as a deferred action", () => {
     const i = new Interpreter();
-    const module = i.run(parse('system = import "system"; [system]')) as Extract<Value, { kind: "list" }>;
+    const module = i.run(parse('system <- import "std/system"; [system]')) as Extract<Value, { kind: "list" }>;
     if (i.env.get("halt")) throw new Error("namespaced import opened halt");
     const record = i.force(module.v[0]);
     if (record.kind !== "record" || !record.v.some(([key]) => key === "halt")) throw new Error("halt was not exported in the module");
     if (!i.renderString(record).includes("halt =")) throw new Error("module inspection lost halt");
 });
 
-// A module opens its names where a statement runs it, however it gets it (the
-// import, a name for it, a function returning it, an action yielding it); a
-// field of it, a binding of it, or a block's statement opens none here.
+// An import's module opens its names only by use, which opens them in its own
+// block; a field of it or a binding of it opens none.
 for (const [source, opened] of [
-    ['system = import "system"\nsystem', true],
-    ['system = import "system"\nmodule = system\nmodule', true],
-    ['system = import "system"\nmodule _ = system\nmodule []', true],
-    ['f _ = {\n    print "test"\n    return (import "system")\n}\nf []', true],
-    ['system = import "system"\n{ system; 1 }', false],
-    ['system = import "system"\nhaltAction = system.halt', false],
-    ['system = import "system"\nmodule _ = system\nm = module []', false],
-    ['(import "system" : Dynamic)', true],
-    ['numbers = load "../lib/number"\nnumbers', true],
-    ['numbers = load "../lib/number"\nnumbers.sq 2', false],
-] as const) Deno.test(`a statement opens a module: ${JSON.stringify(source)}`, () => {
+    ['system <- import "std/system"\nuse system', true],
+    ['std <- import "std"\nuse std.system', true],
+    ['std <- import "std"\nuse std.[system,option]', true],
+    ['system <- import "std/system"\n{ use system; 1 }', false],
+    ['system <- import "std/system"\nhaltAction = system.halt', false],
+    ['system <- import "std/system"\nmodule _ = system\nm = module []', false],
+    ['numbers = load "../lib/std/number"\nnumbers', true],
+    ['numbers = load "../lib/std/number"\nnumbers.sq 2', false],
+] as const) Deno.test(`use opens a module: ${JSON.stringify(source)}`, () => {
     // Checked, as programs run: the check finds a result return keeps unevaluated.
     const i = new Interpreter();
     i.enableChecking();
@@ -64,7 +61,7 @@ for (const [source, opened] of [
     if (!!i.env.get(name) !== opened) throw new Error(`${name} ${opened ? "not opened" : "opened"}`);
 });
 
-for (const path of ['number.apn', 'number.APN', 'number.txt', '../lib/number.apn', '/tmp/number.apn', '', 'folder/']) {
+for (const path of ['number.apn', 'number.APN', 'number.txt', '../lib/std/number.apn', '/tmp/number.apn', '', 'folder/']) {
     Deno.test(`load rejects explicit extensions or missing names: ${path}`, () => {
         const i = new Interpreter();
         const scope = i.env, directory = i.sourceDir;

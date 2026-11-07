@@ -1,16 +1,11 @@
 import { APNError } from "./errors.ts";
 import { parse } from "./parser.ts";
 import { loadPath, readLoad, resolveModule, unknownModule } from "./modules.ts";
-import { type CheckOptions, checkTypes, copyTypeScope, dynamicEntry, mayMutate, type TypeBridge, type TypeScope } from "./type-checker.ts";
+import { type CheckOptions, checkTypes, copyTypeScope, dynamicEntry, isModuleType, mayMutate, moduleType, type TypeBridge, type TypeScope } from "./type-checker.ts";
 import type { Expr, TopLevel } from "./ast.ts";
 import { NATIVE_EXPORTS } from "./native-exports.ts";
 
 /** Static state is separate from evaluation: checking never runs an APN action. */
-// A module file's name within its package, for messages.
-function fileName(label: string): string {
-    return label.slice(label.lastIndexOf("/") + 1).replace(/\.apn$/, "") + ".apn";
-}
-
 export class CheckingSession {
     private scope: TypeScope = new Map();
     private modules = new Map<string, TypeScope>();
@@ -114,20 +109,16 @@ export class CheckingSession {
         return { scope, exports };
     }
 
-    module(module: string | string[], directory = "."): TypeScope {
-        if (Array.isArray(module)) {
-            const fields: TypeScope = new Map();
-            for (const item of module) for (const [name, value] of this.module(item, directory)) fields.set(name, value);
-            return fields;
-        }
+    module(module: string, directory = "."): TypeScope {
         const resolved = resolveModule(module, directory, this.moduleSources, this.root);
         if (!resolved) { const { message, hint } = unknownModule(module, !!this.moduleSources); throw new APNError("type", message, { hint }); }
         if (this.modules.has(resolved.key)) return copyTypeScope(this.modules.get(resolved.key)!);
         if (this.loading.has(resolved.key)) throw new APNError("type", `cyclic import '${module}'`);
         this.loading.add(resolved.key);
         try {
-            // A folder's files are modules of their own; their exports merge.
-            const exports: TypeScope = new Map(), from = new Map<string, string>();
+            // A file's exports, or a folder's entries, each a module checked
+            // when it is first used.
+            const exports: TypeScope = new Map();
             for (const file of resolved.files) {
                 const checked = this.check(parse(file.source, file.label), file.directory, new Map(), true);
                 for (const key of file.std ? NATIVE_EXPORTS[file.std] ?? [] : []) {
@@ -135,12 +126,13 @@ export class CheckingSession {
                     if (entry) checked.exports.set(key, entry);
                 }
                 for (const [name, entry] of checked.exports) {
-                    if (from.has(name) && resolved.files.length > 1) throw new APNError("type", `'${name}' is defined by both ${from.get(name)} and ${fileName(file.label)}`);
+                    // A module the file names for itself (std <- import "std") is its own.
+                    if (isModuleType(entry.type)) continue;
                     entry.nonGeneric = undefined; entry.mono = false;
                     exports.set(name, entry);
-                    from.set(name, fileName(file.label));
                 }
             }
+            for (const entry of resolved.entries) exports.set(entry.name, { type: moduleType(() => this.module(entry.spec, entry.directory)) });
             this.modules.set(resolved.key, exports);
             return copyTypeScope(exports);
         } catch (error) {

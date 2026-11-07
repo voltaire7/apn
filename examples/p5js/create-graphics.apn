@@ -1,6 +1,7 @@
 # Create Graphics, from https://p5js.org/examples/advanced-canvas-rendering-create-graphics/
 # Draw on a graphic, a canvas of its own, then draw it on the canvas.
-import "p5"
+std <- import "std"
+use std.p5
 
 # The graphic, drawn into the canvas's middle.
 graphic = createGraphics 405 250

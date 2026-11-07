@@ -1224,25 +1224,14 @@ class Parser {
         const t = this.peek() as { v: string };
         switch (t.v) {
             case "import": {
-                this.next();
-                if (this.eatSym("[")) {
-                    const modules: string[] = [];
-                    this.skipListLeading();
-                    while (!this.isSym("]")) {
-                        const module = this.next();
-                        if (module.k !== "str") throw new Error("Parser: import expects module name strings");
-                        if (modules.includes(module.v)) throw new APNError("parse", `'${module.v}' is imported twice`, { pos: module.pos, hint: `list each module once; remove this '${module.v}'` });
-                        modules.push(module.v);
-                        if (!this.isSym("]") && !this.isSym(",") && this.peek().k !== "newline" && this.peek().k !== "dedent") {
-                            throw new Error("Parser: separate import module names with commas or newlines");
-                        }
-                        this.skipListSeparators();
-                    }
-                    this.next();
-                    return { t: "import", module: modules };
+                // import "path" reads a file or folder: an action yielding its record.
+                const at = this.next();
+                if (this.isSym("[")) {
+                    throw new APNError("parse", "import reads one module", { pos: at.pos,
+                        hint: 'name the library and open its modules: std <- import "std"; use std.[option,text]' });
                 }
                 const module = this.next();
-                if (module.k !== "str") throw new Error("Parser: import expects a module name string or a list of strings");
+                if (module.k !== "str") throw new Error("Parser: import expects a module path string: import \"std/option\"");
                 return { t: "import", module: module.v };
             }
             case "True": this.next(); return { t: "bool", v: true };
@@ -2257,8 +2246,7 @@ class Parser {
             if (t.k === "kw") {
                 if (this.isPatBinding()) { out.push(this.parsePatBinding() as TopLevel); continue; }
                 // Keyword-led expressions still include trailing operators and pipes.
-                const e = this.parseExpr();
-                out.push({ t: "expr", value: e });
+                out.push({ t: "expr", value: this.parseExpr() });
                 continue;
             }
 
@@ -2295,8 +2283,7 @@ class Parser {
                         } else out.push({ t: "def", ...declaration });
                         continue;
                     }
-                    const e = this.parseExpr();
-                    out.push({ t: "expr", value: e });
+                    out.push({ t: "expr", value: this.parseExpr() });
                     continue;
                 }
                 if (this.isDef()) {
@@ -2316,8 +2303,7 @@ class Parser {
                 else if (this.isPatBinding()) {
                     out.push(this.parsePatBinding() as TopLevel);
                 } else {
-                    const e = this.parseExpr();
-                    out.push({ t: "expr", value: e });
+                    out.push({ t: "expr", value: this.parseExpr() });
                 }
                 continue;
             }
@@ -2325,8 +2311,7 @@ class Parser {
             if (t.k === "int" || t.k === "float" || t.k === "bool" ||
                     t.k === "str" || t.k === "char") {
                 if (this.isPatBinding()) { out.push(this.parsePatBinding() as TopLevel); continue; }
-                const e = this.parseExpr();
-                out.push({ t: "expr", value: e });
+                out.push({ t: "expr", value: this.parseExpr() });
                 continue;
             }
 

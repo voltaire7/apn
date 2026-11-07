@@ -29,13 +29,14 @@ Import standard modules by name from any directory (and your own files or
 folders the same way, see [the standard library](docs/standard-library.md)):
 
 ```apn
-import ["sequence","number","text","map"]
+std <- import "std"
+use std.[sequence,number,text,map]
 take 10 primes
 mean [1,2]                        # Some 3/2
 frequencies $ words $ "one two one"
 ```
 
-Load individual modules with `import "text"`, `import "map"`, etc.
+Bind one module without opening it with `text <- import "std/text"`.
 See the [standard library reference](docs/standard-library.md) or run
 `apn examples/standard-library.apn`. Imports are cached; `load "file"`
 executes a file each time, relative to the current source file.
@@ -106,7 +107,7 @@ See [editor tooling](docs/editor-tooling.md) for session-only LazyVim setup and 
 
 ## C interop
 
-`import "ffi"` exposes typed native calls and `Pointer` memory access.
+`std.ffi` exposes typed native calls and `Pointer` memory access.
 Run `./examples/c-interop/run-demo` for a compiled C example, or
 `./examples/c-interop/run-donut` for a terminal donut driven by APN (Ctrl+C stops).
 The scripts build temporary libraries using `cc`; nothing is installed.

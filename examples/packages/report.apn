@@ -1,4 +1,5 @@
-# report.apn beside report/ is the package's entry: import "report" runs this
+# report.apn beside report/ is the package's module: import "report" reads this
 # file, which reaches inside its folder with import "report/lines".
-import "report/lines"
+listing <- import "report/lines"
+use listing
 report shapes = joinLines (map describe shapes)

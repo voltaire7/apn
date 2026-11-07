@@ -1,7 +1,8 @@
 # Random values, as in Elm's Random: a generator turns a seed into a value
 # and the next seed, in APN. int, float and list are also the decode module's
-# names: a program using both imports one qualified (random = import "random").
-import "task"
+# names: a program using both imports one qualified (random <- import "std/random").
+std <- import "std"
+use std.task
 # A seed is a 32-bit Int: initialSeed n makes one from any Int.
 Generator a = | Generator (Int -> [a,Int])
 initialSeed n = modulo n 4294967296
@@ -14,7 +15,7 @@ map f (Generator g) = Generator (seed -> {
     [value,rest] = g seed
     [f value, rest]
 })
-(Generator g) >>= f = Generator (seed -> {
+Generator g >>= f = Generator (seed -> {
     [value,rest] = g seed
     step (f value) rest
 })

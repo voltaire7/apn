@@ -1,6 +1,7 @@
 # Kaleidoscope, from https://p5js.org/examples/repetition-kaleidoscope/
 # Draw mirrored designs with the mouse.
-import "p5"
+std <- import "std"
+use std.p5
 
 symmetry = 6
 angle = 360 / symmetry

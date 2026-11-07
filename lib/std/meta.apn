@@ -1,4 +1,5 @@
-import "text"
+std <- import "std"
+use std.text
 (load "meta/parser" : Dynamic)
 (load "meta/evaluator" : Dynamic)
 (load "meta/primitives" : Dynamic)

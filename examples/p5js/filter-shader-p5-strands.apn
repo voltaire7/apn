@@ -1,6 +1,7 @@
 # Filter Shader (p5.strands), from https://p5js.org/examples/3d-filter-shader-p5strands/
 # Manipulate imagery with a shader written in APN.
-import ["glsl","p5"]
+std <- import "std"
+use std.[glsl,p5]
 
 video = createVideo "assets/DiagonalCrosswalkYongeDundas.mp4"
 

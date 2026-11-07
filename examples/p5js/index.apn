@@ -1,8 +1,9 @@
 # Examples, from https://p5js.org/examples/
 # The page listing these examples. apn --site examples/p5js OUTPUT builds it,
 # with an editor for each example.
-import ["html","text"]
-gallery = import "gallery"
+std <- import "std"
+use std.[html,text]
+gallery <- import "std/gallery"
 
 main = gallery.page "p5.js Examples" [
     text "The "

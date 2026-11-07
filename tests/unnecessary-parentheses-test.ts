@@ -89,7 +89,7 @@ for (const source of [
 // Some, then x) is a static error.
 Deno.test("a constructor pattern without its fields is an error", async () => {
     const { Interpreter } = await import("../src/interp.ts");
-    for (const source of ['import "option"\nf Some x = x', 'import "option"\ng = Some -> 1']) {
+    for (const source of ['std <- import "std"; use std.option\nf Some x = x', 'std <- import "std"; use std.option\ng = Some -> 1']) {
         const i = new Interpreter();
         i.enableChecking();
         try { i.run(parse(source)); } catch (error) {

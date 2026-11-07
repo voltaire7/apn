@@ -1,7 +1,8 @@
 # APN evaluating APN
 
 ```apn
-import "meta"
+std <- import "std"
+use std.meta
 metaEval "fact n = n == 0 ? 1 : n * fact (n - 1); fact 5"  # 120
 metaEval "x = 1 :: x; take 6 x"                          # [1,1,1,1,1,1]
 ```
@@ -21,7 +22,7 @@ deno test --allow-read tests/metacircular-test.ts
 ```
 
 The self-evaluation demo prints `42` three times. It reads the actual
-`lib/meta/evaluator.apn` file as plain text with `readFile` (the path is its
+`lib/std/meta/evaluator.apn` file as plain text with `readFile` (the path is its
 first argument, defaulting to the repository-relative one); the small
 TypeScript driver only supplies the absolute path. All parsing and evaluation
 happens in APN:
@@ -40,10 +41,10 @@ the live evaluator source, so the proof cannot silently drift from the code.
 
 | File | Responsibility |
 | --- | --- |
-| `lib/meta.apn` | `metaEval source`, `metaEvalSyntax syntax` and `metaSelfEval evaluatorSource source` |
-| `lib/meta/parser.apn` | Character tokenizer and precedence parser |
-| `lib/meta/evaluator.apn` | Environments, closures, recursive scope, application, dispatch |
-| `lib/meta/primitives.apn` | Explicit object-language primitive environment |
+| `lib/std/meta.apn` | `metaEval source`, `metaEvalSyntax syntax` and `metaSelfEval evaluatorSource source` |
+| `lib/std/meta/parser.apn` | Character tokenizer and precedence parser |
+| `lib/std/meta/evaluator.apn` | Environments, closures, recursive scope, application, dispatch |
+| `lib/std/meta/primitives.apn` | Explicit object-language primitive environment |
 
 Syntax is data, in the lists [`toAST`](standard-library.md#code-as-data--syntax)
 gives (an item's, as `toAST [e] 1`): `metaParse "fact n = n * 2; fact 5"` is
@@ -100,7 +101,7 @@ standalone executable without the existing runtime.
 The object environment exposes arithmetic/comparisons, scalar types, list
 operations, HashMap construction/access, character conversion, `seq`, and
 `fail`. Those are explicit value-level operations, not evaluation shortcuts.
-`lib/meta/primitives.apn` is the complete list.
+`lib/std/meta/primitives.apn` is the complete list.
 
 The non-I/O standard-library native layer contains six functions: `seq`,
 `fail`, `upper`, `lower`, and the character conversions behind

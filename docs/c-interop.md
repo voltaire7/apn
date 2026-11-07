@@ -3,7 +3,7 @@
 APN calls shared C libraries through Deno FFI. No new call syntax is required:
 
 ```apn
-ffi = import "ffi"
+ffi <- import "std/ffi"
 ffi.withLibrary "./libmath.dylib" [
     add = ffi.function [Int32,Int32] Int32
 ] c -> {
@@ -108,7 +108,7 @@ or memory with an explicit native ownership protocol.
 ## Pointer memory
 
 ```apn
-ffi = import "ffi"
+ffi <- import "std/ffi"
 p = ffi.allocate Int32 2
 set p $ 41
 ffi.peek Int32 p                # 41

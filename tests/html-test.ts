@@ -28,8 +28,8 @@ Deno.test("input messages carry strings and boolean attributes update", () => {
     if (!content(greeting.dispatch(1)).includes('Hello, !')) throw new Error("clear message");
 });
 Deno.test("event messages are lazy and failed updates leave the old model usable", () => {
-    const counter = app(`import "html"
-import "browser"
+    const counter = app(`std <- import "std"
+use std.[html,browser]
 HtmlTestMsg = GoodEvent | BadEvent
 update msg model = msg ~ [GoodEvent -> model + 1, BadEvent -> missing]
 view model = div [] [
@@ -50,7 +50,7 @@ for (const [view, error] of [
     ['input [] [text "child"]', 'cannot have children'],
     ['42', 'view must return'],
 ]) Deno.test(`HTML rejects invalid nodes: ${view}`, () => {
-    const test = app(`import "html"\nimport "browser"\nmain = sandbox [\n    init = 0\n    update = (msg, model -> model)\n    view = model -> ${view}\n]`);
+    const test = app(`std <- import "std"\nuse std.[html,browser]\nmain = sandbox [\n    init = 0\n    update = (msg, model -> model)\n    view = model -> ${view}\n]`);
     try { test.render(); }
     catch (e) { if (e instanceof Error && e.message.includes(error)) return; throw e; }
     throw new Error("Expected error");
@@ -58,12 +58,12 @@ for (const [view, error] of [
 Deno.test("bundled modules load without filesystem access", () => {
     const i = new Interpreter();
     i.moduleSources = {
-        "/lib/html.apn": Deno.readTextFileSync(new URL("../lib/html.apn", import.meta.url)),
-        "/lib/browser.apn": Deno.readTextFileSync(new URL("../lib/browser.apn", import.meta.url)),
-        "/lib/time.apn": Deno.readTextFileSync(new URL("../lib/time.apn", import.meta.url)),
+        "/lib/html.apn": Deno.readTextFileSync(new URL("../lib/std/html.apn", import.meta.url)),
+        "/lib/browser.apn": Deno.readTextFileSync(new URL("../lib/std/browser.apn", import.meta.url)),
+        "/lib/time.apn": Deno.readTextFileSync(new URL("../lib/std/time.apn", import.meta.url)),
     };
     i.sourceDir = "/app/";
-    i.run(parse('import "html"\nimport "browser"\nmain = sandbox [init = 1, update = (msg, model -> model), view = n -> text (to String n)]'));
+    i.run(parse('std <- import "std"\nuse std.[html,browser]\nmain = sandbox [init = 1, update = (msg, model -> model), view = n -> text (to String n)]'));
     if (content(new BrowserApp(i, i.env.get("main")!).render()) !== '1') throw new Error("bundled app failed");
     try { i.importStandard('text'); }
     catch (error) { if (error instanceof Error && error.message.includes('not bundled')) return; throw error; }
@@ -76,11 +76,11 @@ Deno.test("nullary constructor function clauses do not consume the next paramete
 });
 Deno.test("a browser build bundles the local modules a program imports", () => {
     const directory = new URL("./fixtures/packages/", import.meta.url).pathname;
-    const source = 'import ["uses-hello","shapes"]\nanswer = [exported, square 3]';
+    const source = 'u <- import "uses-hello"\nshapes <- import "shapes"\nuse u\nuse shapes.square\nanswer = [exported, square 3]';
     const bundle = bundleProgram(source, directory);
     const local = Object.keys(bundle).filter(path => path.startsWith("/app/")).sort();
-    // The imported files and what they import, not the rest of the folder.
-    if (JSON.stringify(local) !== '["/app/hello.apn","/app/shapes/cube.apn","/app/shapes/square.apn","/app/uses-hello.apn"]') throw new Error(JSON.stringify(local));
+    // The imported modules (a folder's every entry) and what they import, not the rest of the folder.
+    if (JSON.stringify(local) !== '["/app/hello.apn","/app/shapes/cube.apn","/app/shapes/solid/box.apn","/app/shapes/square.apn","/app/uses-hello.apn"]') throw new Error(JSON.stringify(local));
     if (!bundle["/lib/option.apn"]) throw new Error("standard library missing");
     for (const checked of [false, true]) {
         const i = new Interpreter();
@@ -89,7 +89,7 @@ Deno.test("a browser build bundles the local modules a program imports", () => {
         if (checked) i.enableChecking();
         i.run(parse(source));
         if (i.renderString(i.run(parse("answer"))) !== '["hi pkg",9]') throw new Error(`checked=${checked}`);
-        try { i.run(parse('import "both"')); } catch (error) {
+        try { i.run(parse('both <- import "both"')); } catch (error) {
             if (error instanceof Error && error.message.includes("not bundled")) continue;
             throw error;
         }
@@ -139,8 +139,8 @@ Deno.test("a browser build bundles the whole folder for a computed load", () => 
 });
 Deno.test("standard modules that load their own files work from a bundle", () => {
     const i = new Interpreter();
-    i.moduleSources = bundleProgram('import "meta"', "/tmp");
+    i.moduleSources = bundleProgram('std <- import "std"; use std.meta', "/tmp");
     i.sourceDir = "/app/";
-    i.run(parse('import "meta"'));
+    i.run(parse('std <- import "std"; use std.meta'));
     if (i.renderString(i.run(parse('metaEval "1 + 2"'))) !== "3") throw new Error("meta from the bundle");
 });

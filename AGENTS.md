@@ -43,7 +43,7 @@ Key files:
 - `src/type-checker.ts`, `src/checking-session.ts` — static checking (evaluates pure code, never performs effects)
 - `src/errors.ts` — `APNError`, `didYouMean`
 - `src/repl.ts` — REPL editor and drivers
-- `lib/*.apn` — standard library (`import "text"`, `import ["option","map"]`, ...)
+- `lib/std/*.apn` — standard library (`std <- import "std"; use std.[option,map]`, ...)
 - `examples/features.apn` — a short tour of the language in the manner of
   Odin's overview, not a list of every feature; `tests/semantics-test.ts`
   asserts observable evaluation rules

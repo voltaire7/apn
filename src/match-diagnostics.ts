@@ -17,17 +17,19 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
         parameters.set(name, count);
         for (const [tag] of variants) constructors.set(tag, name);
     };
+    // A module's files, by the path an import names, from a file's folder.
+    const moduleSources = (spec: string, from: string): Source[] => {
+        let module;
+        try { module = resolveModule(spec, from); } catch { return []; }
+        return module ? module.files.map((file, n) => ({ key: `${module.key}#${n}`, text: file.source, directory: file.directory })) : [];
+    };
     // The files an expression brings in: a module it imports or a file it
     // loads (also through Dynamic), resolved from a file's folder.
     type Source = { key: string; text: string; directory: string };
     const sourcesOf = (e: Expr, from: string): Source[] => {
         if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return sourcesOf(e.stmts[0], from);
         if ((e.t === "app" || e.t === "pipe") && e.f.t === "var" && e.f.name === "Dynamic") return sourcesOf(e.t === "app" ? e.a : e.x, from);
-        if (e.t === "import") return [e.module].flat().flatMap(spec => {
-            let module;
-            try { module = resolveModule(spec, from); } catch { return []; }
-            return module ? module.files.map((file, n) => ({ key: `${module.key}#${n}`, text: file.source, directory: file.directory })) : [];
-        });
+        if (e.t === "import") return moduleSources(e.module, from);
         const argument = isLoadCall(e) && (e.t === "app" ? e.a : e.t === "pipe" ? e.x : undefined);
         if (!argument || argument.t !== "string") return [];
         let path;
@@ -40,7 +42,8 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
     // a list of them.
     const visited = new Set<string>();
     const declare = (statements: TopLevel[], from: string) => {
-        const records = new Map<string, Source[]>();
+        // A name's sources, and the import path it names (std's entries are std/name).
+        const records = new Map<string, { sources: Source[]; spec?: string }>();
         const open = (sources: Source[]) => {
             for (const source of sources) {
                 if (visited.has(source.key)) continue;
@@ -50,16 +53,21 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
                 declare(parsed, source.directory);
             }
         };
-        const used = (e: Expr): Source[] => e.t === "var" ? records.get(e.name) ?? []
-            : e.t === "list" ? e.v.flatMap(used) : sourcesOf(e, from);
+        const specOf = (e: Expr) => e.t === "var" ? records.get(e.name)?.spec : undefined;
+        const used = (e: Expr): Source[] => e.t === "var" ? records.get(e.name)?.sources ?? []
+            : e.t === "list" ? e.v.flatMap(used)
+            : e.t === "recordAccess" && !e.scoped && specOf(e.rec) ? moduleSources(`${specOf(e.rec)}/${e.field}`, from)
+            : e.t === "pluck" && specOf(e.rec) ? e.entries.flatMap(entry => typeof entry === "string" ? moduleSources(`${specOf(e.rec)}/${entry}`, from) : [])
+            : sourcesOf(e, from);
         for (const node of statements) {
             if (node.t === "type") add(node.def.name, node.def.parameters?.length ?? 0, node.def.variants.map(v => [v.tag, v.arity]));
             const bound = node.t === "def" && !node.clauses[0].params.length ? [node.name, node.clauses[0].body] as const
                 : node.t === "patDef" && node.pattern.p === "var" ? [node.pattern.name, node.value] as const : undefined;
-            if (bound) records.set(bound[0], sourcesOf(bound[1], from));
+            if (bound) records.set(bound[0], { sources: sourcesOf(bound[1], from), spec: bound[1].t === "import" ? bound[1].module : undefined });
             if (node.t !== "expr") continue;
             const e = node.value;
-            open(e.t === "app" && e.f.t === "var" && e.f.name === "use" ? used(e.a) : sourcesOf(e, from));
+            // use opens records; a statement opens only a load's (an import's opens by use).
+            open(e.t === "app" && e.f.t === "var" && e.f.name === "use" ? used(e.a) : e.t === "import" ? [] : sourcesOf(e, from));
         }
     };
     declare(program, directory);

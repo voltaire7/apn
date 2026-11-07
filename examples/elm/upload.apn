@@ -1,8 +1,9 @@
 # Upload, from https://elm-lang.org/examples/upload
 # File upload with the <input type="file"> node.
-import "html"
-browser = import "browser"
-file = import "file"
+std <- import "std"
+use std.html
+browser <- import "std/browser"
+file <- import "std/file"
 
 Msg = | GotFiles (List file.File)
 

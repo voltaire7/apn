@@ -1,6 +1,7 @@
 # Soft Body, from https://p5js.org/examples/math-and-physics-soft-body/
 # Make a shape that springs toward the mouse and wobbles as it moves.
-import ["number","p5"]
+std <- import "std"
+use std.[number,p5]
 
 # Around the center, five nodes, each wobbling at its own frequency (degrees a
 # frame) as the body accelerates; organic is how loosely the curve bends.

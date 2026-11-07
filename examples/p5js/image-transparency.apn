@@ -1,6 +1,7 @@
 # Image Transparency, from https://p5js.org/examples/imported-media-image-transparency/
 # Make an image translucent on the canvas.
-import "p5"
+std <- import "std"
+use std.p5
 
 photo = loadImage "assets/moonwalk.jpg"
 # The top image's position, eased toward the mouse.

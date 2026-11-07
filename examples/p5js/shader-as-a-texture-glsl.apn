@@ -1,7 +1,8 @@
 # Shader as a Texture (GLSL), from
 # https://p5js.org/examples/advanced-canvas-rendering-shader-as-a-texture/
 # Paint shapes with a shader, as a texture.
-import "p5"
+std <- import "std"
+use std.p5
 
 # Rotated tiles of concentric circles, which turn with the time and the mouse.
 theShader = createShader "

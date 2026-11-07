@@ -1,9 +1,10 @@
-import ["meta","io"]
+std <- import "std"
+use std.[meta,io]
 
 # The evaluator's own source, read as plain text. Pass its path as the first
 # argument, or run from the repository root to use the default.
 args <- getArgs
-evaluatorSource <- readFile (null args ? "lib/meta/evaluator.apn" : head args)
+evaluatorSource <- readFile (null args ? "lib/std/meta/evaluator.apn" : head args)
 
 # The APN reader parses that text. The APN evaluator runs the parsed evaluator.
 # That interpreted evaluator then runs each of these programs.

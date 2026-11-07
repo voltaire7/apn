@@ -1,4 +1,5 @@
-import "sequence"
+std <- import "std"
+use std.sequence
 # Exact arithmetic remains exact through these functions.
 sq x = x * x
 cube x = x * x * x

@@ -1,7 +1,8 @@
 # Adjusting Positions with a Shader (GLSL), from
 # https://p5js.org/examples/3d-adjusting-positions-with-a-shader/
 # Move a model's vertices with a vertex shader.
-import "p5"
+std <- import "std"
+use std.p5
 
 # Each vertex moved up and down over time, a little later along the ribbon.
 wiggleShader = createShader "

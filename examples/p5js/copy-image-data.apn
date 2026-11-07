@@ -1,6 +1,7 @@
 # Copy Image Data, from https://p5js.org/examples/imported-media-copy-image-data/
 # Paint from an image file onto the canvas.
-import "p5"
+std <- import "std"
+use std.p5
 
 colorImage = loadImage "assets/parrot-color.png"
 grayImage = loadImage "assets/parrot-bw.png"

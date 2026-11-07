@@ -1,4 +1,5 @@
-import "p5"
+std <- import "std"
+use std.p5
 clicks = Mutable 0
 setup (p : Sketch) = {
     p.createCanvas 640 360

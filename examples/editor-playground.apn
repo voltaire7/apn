@@ -1,4 +1,5 @@
-import "option"
+std <- import "std"
+use std.option
 # Open with: ./editors/neovim/try-apn examples/editor-playground.apn
 # Try K over double, or Ctrl-X Ctrl-O after typing part of a name.
 # Delete the 2 below: a diagnostic appears. Restore it: the error clears.

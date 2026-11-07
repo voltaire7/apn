@@ -1,7 +1,8 @@
 # Keyboard, from https://elm-lang.org/examples/keyboard
 # Move a square around with the arrow keys: UP, DOWN, LEFT, RIGHT
 # Try making it move around more quickly!
-import "playground"
+std <- import "std"
+use std.playground
 
 view _ [x,y] = [move x y $ square blue 40]
 

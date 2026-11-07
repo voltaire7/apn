@@ -1,6 +1,7 @@
 # Shake Ball Bounce, from https://p5js.org/examples/classes-and-objects-shake-ball-bounce/
 # Bounce balls around when a mobile device is shaken.
-import ["p5","sequence"]
+std <- import "std"
+use std.[p5,sequence]
 
 # A ball: where it is, its size, its speed and direction along the way, and
 # its speed at rest.

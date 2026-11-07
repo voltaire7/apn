@@ -15,28 +15,29 @@ function result(i: Interpreter, source: string): string {
 for (const checked of [false, true]) {
     Deno.test(`import finds files and folders next to the code (checked=${checked})`, () => {
         const i = interpreter(checked);
-        const actual = result(i, 'import ["hello","shapes","shapes/solid"]; [greet "you", square 3, cube 2, volume 2]');
+        const source = 'hello <- import "hello"\nshapes <- import "shapes"\nuse hello\nuse shapes.[square,cube]\nuse shapes.solid.box\n'
+            + '[greet "you", square 3, cube 2, volume 2]';
+        const actual = result(i, source);
         if (actual !== '["hi you",9,8,8]') throw new Error(actual);
-        if (result(i, 'sh = import "shapes"; sh.square 4') !== "16") throw new Error("namespaced");
-        // A folder's subfolders are not part of it.
-        let excluded = false;
-        try { result(interpreter(checked), 'import "shapes"; volume 2'); } catch { excluded = true; }
-        if (!excluded) throw new Error("subfolder imported with its parent");
+        // A folder's record holds its entries, each a module: files and subfolders.
+        if (result(i, 'sh <- import "shapes"; sh.square.square 4') !== "16") throw new Error("namespaced");
+        if (result(interpreter(checked), 'sh <- import "shapes"; map head (pairs sh)') !== '["cube","solid","square"]') throw new Error("entries");
     });
     Deno.test(`a file wins over a folder of the same name (checked=${checked})`, () => {
         const i = interpreter(checked);
-        if (result(i, 'import "both"; fromFile') !== "1") throw new Error("file");
-        if (result(i, 'import "both/inside"; fromFolder') !== "2") throw new Error("inside the folder");
+        if (result(i, 'both <- import "both"; [both.fromFile, length (pairs both)]') !== "[1,1]") throw new Error("file");
+        if (result(i, 'inside <- import "both/inside"; inside.fromFolder') !== "2") throw new Error("inside the folder");
     });
     Deno.test(`a module's own imports resolve next to it (checked=${checked})`, () => {
-        if (result(interpreter(checked), 'import "uses-hello"; exported') !== '"hi pkg"') throw new Error("relative import");
-        // A local module shadows a standard one of the same name.
-        if (result(interpreter(checked), 'import "local-text/user"; result') !== '"shadowed"') throw new Error("shadowing");
+        if (result(interpreter(checked), 'u <- import "uses-hello"; u.exported') !== '"hi pkg"') throw new Error("relative import");
+        // A bare name is a local module: text beside the program is not std/text.
+        if (result(interpreter(checked), 'user <- import "local-text/user"; user.result') !== '"shadowed"') throw new Error("local");
     });
-    Deno.test(`standard modules take no prefix and there is no std module (checked=${checked})`, () => {
-        if (result(interpreter(checked), 'import "option"; Some 1') !== "Some 1") throw new Error("bare name");
-        for (const [source, hint] of [['import "std/option"', 'import "option"'], ['import "std"', "standard modules you need"], ['import "nope"', "no nope.apn or nope/"]]) {
-            try { result(interpreter(checked), source); } catch (error) {
+    Deno.test(`std is the standard library (checked=${checked})`, () => {
+        if (result(interpreter(checked), 'std <- import "std"; use std.option; Some 1') !== "Some 1") throw new Error("std");
+        for (const [source, hint] of [['import "option"', 'a standard module is std.option'], ['import "nope"', "no nope.apn or nope/"],
+            ['import "std/nope"', "the standard library has no module 'nope'"]]) {
+            try { result(interpreter(checked), `m <- ${source}`); } catch (error) {
                 const e = error as { message: string; hint?: string };
                 if (!e.message.startsWith("unknown module") || !e.hint?.includes(hint)) throw new Error(`${source}: ${e.message} (${e.hint})`);
                 continue;
@@ -44,18 +45,14 @@ for (const checked of [false, true]) {
             throw new Error(`accepted: ${source}`);
         }
     });
-    Deno.test(`a name defined by two files of a folder is an error (checked=${checked})`, () => {
-        try { result(interpreter(checked), 'import "clash"'); } catch (error) {
-            if (!String((error as Error).message).includes("twice")) throw error;
-            return;
-        }
-        throw new Error("accepted a clash");
+    Deno.test(`a folder's files are modules of their own (checked=${checked})`, () => {
+        if (result(interpreter(checked), 'clash <- import "clash"; [clash.a.twice,clash.b.twice]') !== "[1,2]") throw new Error("entries");
     });
 }
 for (const checked of [false, true]) Deno.test(`a module imports packages from parent folders up to the program's (checked=${checked})`, () => {
     // nested/deep/inner.apn imports hello (two folders up) and greeting,
     // of which nested/greeting.apn is nearer than the program's.
-    const actual = result(interpreter(checked), 'import "nested/deep/inner"; inner');
+    const actual = result(interpreter(checked), 'inner <- import "nested/deep/inner"; inner.inner');
     if (actual !== '["hi deep","near"]') throw new Error(actual);
 });
 Deno.test("imports never search above the program's folder", () => {

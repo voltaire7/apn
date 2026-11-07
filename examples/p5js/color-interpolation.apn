@@ -1,6 +1,7 @@
 # Color Interpolation, from https://p5js.org/examples/repetition-color-interpolation/
 # Fade between two colors.
-import "p5"
+std <- import "std"
+use std.p5
 
 stripeCount = 12
 

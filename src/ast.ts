@@ -13,7 +13,7 @@ export type UnOp = "neg" | "not";
 export type Expr =
     // lo null: [..], the list type of anything.
     | { t: "range"; lo: Expr; second: Expr | null; hi: Expr | null }
-    | { t: "import"; module: string | string[] }
+    | { t: "import"; module: string }
     | { t: "numeric"; v: Numeric }
     | { t: "int"; v: bigint }
     | { t: "float"; v: number }

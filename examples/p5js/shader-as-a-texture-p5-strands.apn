@@ -1,7 +1,8 @@
 # Shader as a Texture (p5.strands), from
 # https://p5js.org/examples/advanced-canvas-rendering-shader-as-a-texture-p5strands/
 # Paint shapes with a shader written in APN, as a texture.
-import ["glsl","number","p5"]
+std <- import "std"
+use std.[glsl,number,p5]
 
 # Rotated tiles of concentric circles, which turn with the time and the mouse:
 # a pixel's color, from its inputs.

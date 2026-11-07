@@ -1,13 +1,13 @@
 import { Interpreter } from "../src/interp.ts";
 import { parse } from "../src/parser.ts";
 
-// toAST gives code, a list's items as written, as lists; lib/syntax.apn's
+// toAST gives code, a list's items as written, as lists; lib/std/syntax.apn's
 // fromAST gives its source back, and eval evaluates it at the program's top
 // level.
 function session(): Interpreter {
     const i = new Interpreter();
     i.enableChecking();
-    i.run(parse('import "syntax"'));
+    i.run(parse('std <- import "std"; use std.syntax'));
     return i;
 }
 const shown = (i: Interpreter, source: string, raw = false) => i.renderString(i.run(parse(source)), raw);
@@ -36,7 +36,7 @@ for (const [source, expected] of [
     ["[(2 +)]", '["[]",["+",2]]'],
     ["[1 + missing]", '["[]",["+",1,"missing"]]'],
 ] as const) Deno.test(`toAST: ${source}`, () => {
-    const actual = shown(session(), `import "option"\ntoAST ${source}`);
+    const actual = shown(session(), `std <- import "std"; use std.option\ntoAST ${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 
@@ -49,7 +49,7 @@ for (const source of [
     "c ? 1 : 2", "c ? (d ? 1 : 2) : 3", "c ? 1 : (d ? 2 : 3)", "f (c ? 1 : 2)", "a $ b ? c : d",
     "c ? (a $ b) : d", "x, y -> x * y", "(n : Int), [a,b] | n > 0 -> a", "{ a <- return 1; print a }",
     "[x = 1, x + 1]", "f n = n * 2", "x :: xs = ys", "!b", "map (+ 1) xs", "head $ [1,2]", "f $ g $ x",
-    "{}", 'import ["option","map"]', "Some (Some 1)", "-x ^ 2", "n -> n ~ [0 -> 1, _ -> 2]", "(+)",
+    "{}", 'std <- import "std"; use std.[option,map]', "Some (Some 1)", "-x ^ 2", "n -> n ~ [0 -> 1, _ -> 2]", "(+)",
     "(- 2)", "(10 -)", "xs >>= x -> f x", "xs >>= (x -> f x) >>= g", "(x -> x) 1", "f (x -> x) y",
     "run (x -> x)", "withFile path (file -> file.read)", 'withFile "notes" $ file -> file.read',
     "bracket 1 (_ -> []) (x -> y -> x)", "[(x, y -> x)]", "[x -> x]", "foo Bar (x -> x)",

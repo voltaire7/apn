@@ -1,6 +1,7 @@
 # Snowflakes, from https://p5js.org/examples/classes-and-objects-snowflakes/
 # Simulate falling snow with a list of records.
-import ["number","p5"]
+std <- import "std"
+use std.[number,p5]
 
 # A snowflake: its height, its starting angle about the middle (it swings
 # from side to side as the angle turns), its size and its color.

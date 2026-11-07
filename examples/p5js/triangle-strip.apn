@@ -1,7 +1,8 @@
 # Triangle Strip, from https://p5js.org/examples/angles-and-motion-triangle-strip/
 # Split a ring into triangles.
-import ["html","number","p5"]
-browser = import "browser"
+std <- import "std"
+use std.[html,number,p5]
+browser <- import "std/browser"
 
 Msg = | Counted Int
 

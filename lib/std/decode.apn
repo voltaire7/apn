@@ -3,8 +3,9 @@
 # the result or Err of what went wrong. A type decodes as fromType reads it, so
 # one stands wherever a decoder goes (field "year" Int, list Quote). int, float
 # and list are also random's names: a program using both imports one qualified
-# (decode = import "decode").
-import "option"
+# (decode <- import "std/decode").
+std <- import "std"
+use std.option
 Decoder a = | Decoder (value -> Result a String)
 expecting what test = Decoder (value -> test value ? Ok value : Err ("Expecting " ++ what))
 string = expecting "a STRING" (isType String)
@@ -45,7 +46,7 @@ map f (Decoder decoder) = Decoder (value -> decoder value ~ [
     Ok x -> Ok (f x)
     Err error -> Err error
 ])
-(Decoder decoder) >>= f = Decoder (value -> decoder value ~ [
+Decoder decoder >>= f = Decoder (value -> decoder value ~ [
     Ok x -> decodeValue (f x) value
     Err error -> Err error
 ])

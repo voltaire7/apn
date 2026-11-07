@@ -19,8 +19,9 @@ fetchJson url options = {
 
 # Requests as commands, as in Elm's Http: the browser sends them without
 # blocking, and the expectation turns the answer into a message.
-import "option"
-_decode = import "decode"
+std <- import "std"
+use std.option
+_decode <- import "std/decode"
 HttpError = BadUrl String | Timeout | NetworkError | BadStatus Int | BadBody String
 HttpEffect = | HttpGet Dynamic Dynamic
 get request = HttpGet request.url request.expect

@@ -1,9 +1,10 @@
 # Cube, from https://elm-lang.org/examples/cube
 # Render a spinning cube. Elm draws it with WebGL shaders; here a p5 WEBGL
 # canvas in the view draws its triangles, rotated by the model's angle.
-import ["html","sequence"]
-browser = import "browser"
-p5 = import "p5"
+std <- import "std"
+use std.[html,sequence]
+browser <- import "std/browser"
+p5 <- import "std/p5"
 
 Msg = | TimeDelta Number
 

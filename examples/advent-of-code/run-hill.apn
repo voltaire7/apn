@@ -1,4 +1,5 @@
-import "io"
+std <- import "std"
+use std.io
 load "hill-climbing"
 input <- readInput
 print (solveHill input)

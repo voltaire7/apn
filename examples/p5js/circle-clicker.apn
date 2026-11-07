@@ -1,6 +1,7 @@
 # Circle Clicker, from https://p5js.org/examples/games-circle-clicker/
 # Make a game about clicking a circle quickly and save the high score.
-import "p5"
+std <- import "std"
+use std.p5
 
 # The circle (a radius of 0 shows the start screen), its largest radius now,
 # the score and the high score.

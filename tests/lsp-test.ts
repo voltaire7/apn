@@ -134,24 +134,25 @@ Deno.test("completing a standard name adds its import, as a list beside another"
         const item = items.find((x: any) => x.label === name);
         return item && [item.detail, item.additionalTextEdits?.map((e: any) => [e.range.start.line, e.range.start.character, e.range.end.character, e.newText])];
     };
-    equal(complete("x = 1", "sum"), ['From import "sequence"', [[0, 0, 0, 'import "sequence"\n\n']]]);
-    equal(complete("\nx = 1", "sum")?.[1], [[0, 0, 0, 'import "sequence"\n']]);
-    equal(complete('import "io" # files\nx = 1', "upper"), ['From import "text"', [[0, 7, 11, '["io","text"]']]]);
-    equal(complete('import [\n    "io"\n]\nimport ["io","text"]', "sum"), ['From import "sequence"', [[3, 7, 20, '["io","text","sequence"]']]]);
+    equal(complete("x = 1", "sum"), ['From std.sequence', [[0, 0, 0, 'std <- import "std"\nuse std.sequence\n\n']]]);
+    equal(complete("\nx = 1", "sum")?.[1], [[0, 0, 0, 'std <- import "std"\nuse std.sequence\n']]);
+    equal(complete('std <- import "std"\nuse std.io # files\nx = 1', "upper"), ['From std.text', [[1, 8, 10, '[io,text]']]]);
+    equal(complete('std <- import "std"\nuse std.[io,text]', "sum"), ['From std.sequence', [[1, 8, 17, '[io,text,sequence]']]]);
+    equal(complete('std <- import "std"\nx = 1', "sum")?.[1], [[1, 0, 0, 'use std.sequence\n']]);
     // Already imported, defined here, or in the prelude: nothing to add.
-    equal(complete('import ["io","text"]', "readFile"), ['From import "io"', undefined]);
+    equal(complete('std <- import "std"\nuse std.[io,text]', "readFile"), ['From std.io', undefined]);
     equal(complete("sum xs = 0", "sum")?.[1], undefined);
     equal(complete("x = 1", "print")?.[1], undefined);
     // Retired natives are not offered; a native needing an import names it.
     equal(complete("x = 1", "toString"), undefined);
-    equal(complete("x = 1", "withFile")?.[1]?.[0]?.[3], 'import "io"\n\n');
+    equal(complete("x = 1", "withFile")?.[1]?.[0]?.[3], 'std <- import "std"\nuse std.io\n\n');
 });
 Deno.test("lint reports a clause or alternative that never runs", () => {
     const unreachable = (source: string) => lint(source).filter(d => d.code === "unreachable-clause").map(d => d.range.start.line);
     // After a clause taking any argument, a list, cons or program constructor
     // pattern ranks no higher, so its clause never runs; in a block too.
     equal(unreachable("f xs = 0\nf [a,b] = a + b\ng x = 0\ng (x :: _) = x"), [1, 3]);
-    equal(unreachable("import \"option\"\nm _ = 0\nm (Some y) = y"), [2]);
+    equal(unreachable("std <- import \"std\"; use std.option\nm _ = 0\nm (Some y) = y"), [2]);
     equal(unreachable("b = {\n    q x = 0\n    q [a] = a\n    q 1\n}"), [2]);
     equal(lint("f xs = 0\nf [a,b] = a + b")[0].message, "This clause of 'f' never runs: the clause on line 1 takes any argument and comes first.");
     // A literal or a built-in type outranks a name; an equivalent clause
@@ -161,10 +162,10 @@ Deno.test("lint reports a clause or alternative that never runs", () => {
     equal(unreachable("n x x = 0\nn [a] b = 1\nw = x | x > 0 -> 1\nw [a] = 2\nr x = 0\nr = 5\nr [a] = 1"), []);
     // Constructors of imported modules, standard or the program's own, rank no
     // higher either; one the linter cannot resolve is left alone.
-    equal(unreachable("import \"browser\"\nv _ = 0\nv Visible = 1"), [2]);
+    equal(unreachable("std <- import \"std\"; use std.browser\nv _ = 0\nv Visible = 1"), [2]);
     const cards = new URL("./fixtures/lint/", import.meta.url).pathname;
-    equal(lint("import \"cards\"\ns _ = 0\ns Hearts = 1", false, cards).filter(d => d.code === "unreachable-clause").map(d => d.range.start.line), [2]);
-    equal(unreachable("import \"cards\"\ns _ = 0\ns Hearts = 1"), []);
+    equal(lint("cards <- import \"cards\"\nuse [cards]\ns _ = 0\ns Hearts = 1", false, cards).filter(d => d.code === "unreachable-clause").map(d => d.range.start.line), [3]);
+    equal(unreachable("cards <- import \"cards\"\nuse [cards]\ns _ = 0\ns Hearts = 1"), []);
     // So are those of a file a statement loads (load "f", (load "f" : Dynamic)).
     for (const load of ['load "cards"', '(load "cards" : Dynamic)', 'load "missing"']) {
         equal(lint(`${load}\ns _ = 0\ns Hearts = 1`, false, cards).filter(d => d.code === "unreachable-clause").length, load.includes("cards") ? 1 : 0);
@@ -172,11 +173,11 @@ Deno.test("lint reports a clause or alternative that never runs", () => {
     // And of a record use opens: one bound to an import or a load, written in
     // place, or in a list; not a record never opened, or rebound to another.
     const opened = (source: string) => lint(source, false, cards).filter(d => d.code === "unreachable-clause").length;
-    equal(opened('opt = import "option"\nuse opt\nf _ = 0\nf (Some x) = x'), 1);
+    equal(opened('opt <- import "std/option"\nuse [opt]\nf _ = 0\nf (Some x) = x'), 1);
     equal(opened('t <- load "cards"\nuse [t]\ns _ = 0\ns Hearts = 1'), 1);
-    equal(opened('use (import "cards")\ns _ = 0\ns Hearts = 1'), 1);
-    equal(opened('opt = import "option"\nf _ = 0\nf (Some x) = x'), 0);
-    equal(opened('t <- load "cards"\nt = [x = 1]\nuse t\ns _ = 0\ns Hearts = 1'), 0);
+    equal(opened('std <- import "std"\nuse std.option\nf _ = 0\nf (Some x) = x'), 1);
+    equal(opened('opt <- import "std/option"\nf _ = 0\nf (Some x) = x'), 0);
+    equal(opened('t <- load "cards"\nt = [x = 1]\nuse [t]\ns _ = 0\ns Hearts = 1'), 0);
     // match ranks its alternatives as clauses: a literal after an unconditional
     // one still runs, another name or list pattern never does.
     equal(unreachable("v = 3 ~ [\n    x -> 0\n    1 -> 5\n]"), []);

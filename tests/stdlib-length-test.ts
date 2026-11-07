@@ -18,7 +18,7 @@ const inputs = ["[]", "[7]", "[3,1]", "[2,2,2]", "[5,1,4,1,5,9,2,6]", "[9,8,7,6,
 for (const [name, call] of Object.entries(calls)) {
     Deno.test(`${name} returns a list as long as its argument`, () => {
         const i = new Interpreter();
-        i.run(parse('import "sequence"'));
+        i.run(parse('std <- import "std"; use std.sequence'));
         for (const input of inputs) {
             const lengths = i.renderString(i.run(parse(`xs = ${input}; [length xs, length (${call})]`)));
             const [before, after] = JSON.parse(lengths);

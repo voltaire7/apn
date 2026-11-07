@@ -222,7 +222,7 @@ export interface CheckOptions {
     library?: boolean;
     loads?: (path: string, scope: TypeScope, tail?: boolean) => TypeScope;
     initial?: TypeScope;
-    imports?: (module: string | string[]) => TypeScope;
+    imports?: (module: string) => TypeScope;
     result?: (scope: TypeScope, exports: TypeScope) => void;
     /** Names bound in the running interpreter; with it, other unknown names are reported as unbound. */
     runtimeNames?: ReadonlySet<string>;
@@ -341,14 +341,33 @@ class BlockScope extends Map<string, Entry> {
     override [Symbol.iterator]() { return this.entries(); }
     override forEach(f: (value: Entry, key: string, map: Map<string, Entry>) => void) { for (const [k, v] of this.entries()) f(v, k, this); }
 }
+// A module's record type, its names read (and checked) when first needed.
+export function moduleType(read: () => TypeScope): Ty { return { k: "record", fields: new ModuleFields(read) }; }
+// Whether a type is a module's record (an import's or a load's).
+export function isModuleType(t: Ty): boolean { return t.k === "record" && t.fields instanceof ModuleFields; }
+// What opens a standard module (std/name), for a hint.
+function openHint(module: string): string { return `add \`std <- import "std"; use std.${module.slice("std/".length)}\``; }
 // The names a module type holds, for a record a module made.
 function moduleOf(t: Ty): TypeScope | undefined {
     const module = resolve(t);
     return module.k === "record" && module.fields instanceof ModuleFields ? module.fields.scope : undefined;
 }
 // A module's record: each field's type is its scope entry's, read when needed.
+// A folder's entry is a module read (and checked) when it is first used.
+// opens: a load's, which a statement running it opens (an import's opens
+// only by use).
 class ModuleFields extends Map<string, Ty> {
-    constructor(readonly scope: TypeScope) { super(); }
+    private read?: () => TypeScope;
+    private known?: TypeScope;
+    constructor(scope: TypeScope | (() => TypeScope), readonly opens = false) {
+        super();
+        if (typeof scope === "function") this.read = scope; else this.known = scope;
+    }
+    get scope(): TypeScope { return this.known ??= this.read!(); }
+    // A copy, still unread if this one is.
+    copied(): ModuleFields {
+        return new ModuleFields(this.known ? copyTypeScope(this.known) : () => copyTypeScope(this.scope), this.opens);
+    }
     override get size() { return this.scope.size; }
     override get(name: string) { return this.scope.get(name)?.type; }
     override has(name: string) { return this.scope.has(name); }
@@ -715,7 +734,7 @@ function copy(
         case "record":
             Object.assign(result, {
                 // A module's fields are its own generic names: copied as an import copies them.
-                fields: t.fields instanceof ModuleFields ? new ModuleFields(copyTypeScope(t.fields.scope))
+                fields: t.fields instanceof ModuleFields ? t.fields.copied()
                     : new Map([...t.fields].map(([k, v]) => [k, go(v)])),
             });
             break;
@@ -2110,7 +2129,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const module = standardModule(name), now = RETIRED_NATIVES[name];
         const holder = scope && [...scope].find(([, entry]) => moduleOf(entry.type)?.has(name))?.[0];
         return now ? `write \`${now} x\`` : holder ? `write \`${holder}.${name}\`, or the statement \`${holder}\` to open its names`
-            : module ? `add \`import "${module}"\` to use \`${name}\`` : undefined;
+            : module ? `${openHint(module)} to use \`${name}\`` : undefined;
     }
 
     function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr, bound = new Set<string>()): void {
@@ -2242,7 +2261,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const module = standardModule(p.tag);
                     const near = didYouMean(p.tag, [...scope.keys()].filter(name => /^[A-Z]/.test(name)));
                     firstUnbound = { expr: e, name: p.tag, inPattern: true,
-                        hint: module ? `add \`import "${module}"\` to use \`${p.tag}\`` : near ? `did you mean '${near}'?`
+                        hint: module ? `${openHint(module)} to use \`${p.tag}\`` : near ? `did you mean '${near}'?`
                             : `declare a type with \`${p.tag}\` first${p.tag === "Nil" || p.tag === "Cons" ? "; a list's patterns are `[]` and `(x :: xs)`" : ""}` };
                 }
                 // A bare constructor sharing its type's name is the type there,
@@ -3424,7 +3443,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function boundBy(v: Ty, rhs: Expr): Ty {
         const block = doBlocks[doBlocks.length - 1];
         if (isPending(v)) return (v as Extract<Ty, { k: "variant" }>).args[0];
-        if (["var", "operation", "dynamic", "intrinsic"].includes(v.k) || rhs.t === "import" || isLoadCall(rhs)) return runType(v);
+        if (["var", "operation", "dynamic", "intrinsic"].includes(v.k) || isLoadCall(rhs)) return runType(v);
         const mixed = (m: Ty) => block?.monad && monadKind(block.monad) !== monadKind(m);
         if (isIO(v)) {
             if (block && mixed(v)) return problem(`<- needs a ${text(block.monad!)} here, not ${text(v)}`, rhs);
@@ -3544,11 +3563,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             throw error;
         } finally { choosing--; pending.length = saved; }
     }
-    // A statement whose value is a module (what import or load gives) opens its
-    // names into its block, however it gets it (see Interpreter.opens).
+    // A statement whose value is a load's module opens its names into its
+    // block, however it gets it (see Interpreter.opens); an import's opens
+    // only by use.
     function opensModule(statement: Expr, scope: Scope, t: Ty): void {
         // An action yielding a module opens it when the statement runs it.
-        const ran = resolve(t), module = moduleOf(isIO(ran) ? (ran as Extract<Ty, { k: "variant" }>).args[0] : ran);
+        const ran = resolve(t), held = resolve(isIO(ran) ? (ran as Extract<Ty, { k: "variant" }>).args[0] : ran);
+        const module = held.k === "record" && held.fields instanceof ModuleFields && held.fields.opens ? held.fields.scope : undefined;
         if (!module) return;
         for (const [name, entry] of copyTypeScope(module)) scope.set(name, entry);
         const at = sourceLocations.get(statement);
@@ -3635,9 +3656,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "placeholder":
                 return variable();
+            // An action yielding the module's record.
             case "import":
-                if (!options.imports) return unknown();
-                return { k: "record", fields: new ModuleFields(copyTypeScope(options.imports(e.module))) };
+                if (!options.imports) return io(unknown());
+                return io({ k: "record", fields: new ModuleFields(copyTypeScope(options.imports(e.module))) });
             case "list": {
                 // [a, b] is a :: b :: [], with what :: means here, as at runtime.
                 if (e.v.length && !e.v.some(binding) && !preludeCons(scope)) return infer(listExpansion(e), scope, expected);
@@ -3726,7 +3748,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     if (chosen) { callee = chosen; resolved = resolve(chosen); }
                 }
                 if (resolved.k === "intrinsic" && resolved.name === "load" && a.t === "string" && options.loads) {
-                    return { k: "record", fields: new ModuleFields(options.loads(a.v, scope, e === tailStatement)) };
+                    return { k: "record", fields: new ModuleFields(options.loads(a.v, scope, e === tailStatement), true) };
                 }
                 if (resolved.k === "intrinsic" && resolved.name === "do" && a.t === "list") {
                     return infer({ t: "block", stmts: a.v, style: "{" }, scope);
@@ -3741,9 +3763,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (resolved.k === "intrinsic" && resolved.name === "use") {
                     const open = (type: Ty): void => {
                         const t = resolve(type);
-                        if (t.k === "record") for (const [name, type] of t.fields) scope.set(name, { type, opened: a });
+                        // A module's names open as its scope holds them (their clauses
+                        // too, for static evaluation), each type settled as a statement's
+                        // value is (a module in it is checked when used); a record's
+                        // names open as its fields' types.
+                        if (t.k === "record" && t.fields instanceof ModuleFields) for (const [name, entry] of copyTypeScope(t.fields.scope)) {
+                            if (!isModuleType(resolve(entry.type))) validate(entry.type);
+                            scope.set(name, entry);
+                        }
+                        else if (t.k === "record") for (const [name, type] of t.fields) scope.set(name, { type, opened: a });
                         else if (t.k === "list" && t.items) t.items.forEach(open);
                         else if (isExplicit(t)) { runtimeChecks++; opaqueUse = true; }
+                        // A record not known here (an import the check cannot read) was
+                        // counted unknown where it was made: it opens unknown names.
+                        else if (t.k === "dynamic") opaqueUse = true;
                         else problem("use needs a statically known record or list of records; use Dynamic for runtime exports", a);
                     };
                     open(infer(a, scope));
@@ -4638,8 +4671,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return { cells, lazies, all };
     }
     // The names the files x loads mention, when every load in x names its
-    // file literally and the session checked that file (and it loads nothing,
-    // nor uses use).
+    // file literally and the session checked that file (and it loads nothing).
+    // A use there opens names from records it names, so it reaches nothing more.
     function loadedNames(x: Expr): Set<string> | undefined {
         const names = new Set<string>();
         let loads = 0, literal = 0, ok = true;
@@ -4651,7 +4684,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (n.t === "app" && (n.f as Record<string, unknown>)?.t === "var" && (n.f as Record<string, unknown>).name === "load" && (n.a as Record<string, unknown>)?.t === "string") {
                 literal++;
                 const mentioned = options.loadedNames?.((n.a as { v: string }).v);
-                if (!mentioned || ["load", "use"].some(name => mentioned.has(name))) ok = false;
+                if (!mentioned || mentioned.has("load")) ok = false;
                 else mentioned.forEach(name => names.add(name));
             }
             Object.values(n).forEach(value => value && typeof value === "object" && walk(value));
@@ -7058,7 +7091,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             cast: fn({ k: "type", value: a }, fn(explicitDynamic, a)),
         })
     ) scope.set(name, { type });
-    // fail, like the other standard natives, reaches programs through import "function".
+    // fail, like the other standard natives, reaches programs through import "std/function".
     if (options.library) scope.set("fail", { type: fn(atom("String"), variable()) });
     const standardOnly = new Set(["seq", "chars", "fromChars", "upper", "lower", "readFile", "readStdin", "getArgs", "fetch", "toJson", "prettyJson", "fromJson", "entropy", "currentTime", "zoneOffset", "p5Object", "p5SketchType"]);
     const native = (name: string, inputs: Ty[], output: Ty) => {
@@ -7110,7 +7143,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("readStdin", [], io(str));
     native("getArgs", [], io(list(str)));
     for (const name of ["entropy", "currentTime", "zoneOffset"]) native(name, [], io(int));
-    // An operator's [precedence,associativity] (lib/syntax.apn's fromAST).
+    // An operator's [precedence,associativity] (lib/std/syntax.apn's fromAST).
     native("intrinsics.fixity", [str], { k: "list", element: { k: "union", choices: [int, str] }, items: [int, str], length: constant(2n) });
     // p5's Sketch (a callback's p) and its objects: records whose methods are
     // Dynamic (their arguments are checked as they run).

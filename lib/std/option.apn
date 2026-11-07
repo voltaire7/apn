@@ -1,4 +1,5 @@
-import "function"
+std <- import "std"
+use std.function
 # Explicit absence and recoverable errors. No exceptions hidden in pipelines.
 Option a = Some a | None
 Result a e = Ok a | Err e
@@ -6,14 +7,14 @@ Result a e = Ok a | Err e
 # None and Err e pass through (return in Option is Some, in Result Ok).
 map f (Some x) = Some (f x)
 map _ None = None
-(Some x) >>= f = f x
+Some x >>= f = f x
 None >>= _ = None
 return = Some
 throw _ = None
 map f (Ok x) = Ok (f x)
 map _ (Err error) = Err error
-(Ok x) >>= f = f x
-(Err error) >>= _ = Err error
+Ok x >>= f = f x
+Err error >>= _ = Err error
 return = Ok
 throw = Err
 isSome (Some _) = True

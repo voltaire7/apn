@@ -20,7 +20,7 @@ const CTOR = "Box x = _\nRect (w : Float) (h : Float) = _\nNothing = _\n";
 // A union of such constructors claims them: one type, as a declaration makes.
 const MAYBE = "Just x = _\nNada = _\nMaybe a = Just a | Nada\n";
 const SHAPE = "Circle (r : Float) = _\nSquare (s : Float) = _\nShape = Circle | Square\n";
-const OPTION = 'import "option"\n';
+const OPTION = 'std <- import "std"; use std.option\n';
 // A union of existing types is a type of its own values: made of nothing new.
 const MIXED = "Mixed = Int | String\n";
 const ID = "UserId (x : Int) = _\n";
@@ -46,7 +46,7 @@ for (const checked of [true, false]) {
         [MAYBE + "[Just 5, Nada, typeOf (Just 5)]", "[Just 5, Nada, Maybe Int]"],
         [MAYBE + "f (Just x) = x\nf Nada = 0\n[f (Just 3), f Nada]", "[3,0]"],
         [MAYBE + "(Just 2 : Maybe Int)", "Just 2"],
-        [MAYBE + "return = Just\n(Just x) >>= f = f x\nNada >>= f = Nada\n({ x <- Just 2; return (x * 3) } : Maybe Int)", "Just 6"],
+        [MAYBE + "return = Just\nJust x >>= f = f x\nNada >>= f = Nada\n({ x <- Just 2; return (x * 3) } : Maybe Int)", "Just 6"],
         [SHAPE + "area (Circle r) = 3 * r * r\narea (Square s) = s * s\nmap area [Circle 1, Square 2]", "[3.0,4.0]"],
         [SHAPE + 'g (s : Shape) = "shape"\n[typeOf (Circle 1), g (Square 1)]', '[Shape,"shape"]'],
         [MIXED + "[Mixed, (Mixed : Type)]", "[Mixed, Int | String]"],
@@ -109,7 +109,7 @@ for (const checked of [true, false]) {
         [ID + "f (UserId u) = u\nf 5", checked ? "cannot use Int where UserId is required" : "no clause"],
         [ID + "Order (UserId u) (n : Int) = _\nOrder 5 3", checked ? "cannot use Int where UserId is required" : "UserId expects a UserId variant"],
         [PERCENT + "Percent 50 + 1", checked ? "cannot combine Percent and Int" : "cannot apply '+'"],
-        ['import "function"\nSpan (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _\n[s : Span] [s = Span 2 1]', "empty span"],
+        ['std <- import "std"; use std.function\nSpan (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _\n[s : Span] [s = Span 2 1]', "empty span"],
         ["Low (_ : Float) = 1 > 0 ? Low 1 : _\n1", "a constructor with logic names each field"],
         // A lowercase definition's _ stays unfinished.
         ["f x = _\nf 1", "not implemented"],
@@ -119,7 +119,7 @@ for (const checked of [true, false]) {
     });
 }
 // A to String instance is how a value shows, wherever it is.
-const SHOW = 'import "option"\nPoint x y = _\nto String (Point x y) = to String x ++ "@" ++ to String y\n';
+const SHOW = 'std <- import "std"; use std.option\nPoint x y = _\nto String (Point x y) = to String x ++ "@" ++ to String y\n';
 for (const checked of [true, false]) for (const [source, expected] of [
     [SHOW + "[Point 1 2, Point 3 4]", "[1@2,3@4]"],
     [SHOW + "Some (Point 1 2)", "Some (1@2)"],
@@ -146,7 +146,7 @@ for (const checked of [true, false]) Deno.test(`a later union claims constructor
     if (checked) i.enableChecking();
     const each = (source: string) => i.renderString(i.run(parseDocument(source)));
     each("Just x = _\nNada = _");
-    each("Maybe a = Just a | Nada\nreturn = Just\n(Just x) >>= f = f x\nNada >>= f = Nada");
+    each("Maybe a = Just a | Nada\nreturn = Just\nJust x >>= f = f x\nNada >>= f = Nada");
     const shown = each("[typeOf (Just 5), typeOf Nada, ({ x <- Just 2; return (x * 3) } : Maybe Int)]");
     if (shown !== "[Maybe Int, Maybe a, Just 6]") throw new Error(shown);
     each("Box x = _");

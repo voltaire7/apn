@@ -1,5 +1,6 @@
-import "html"
-browser = import "browser"
+std <- import "std"
+use std.html
+browser <- import "std/browser"
 
 GreetingMsg = NameChanged String | ClearName
 

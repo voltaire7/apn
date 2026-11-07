@@ -1,6 +1,7 @@
 # Shape Primitives, from https://p5js.org/examples/shapes-and-color-shape-primitives/
 # Draw 2D shapes.
-import "p5"
+std <- import "std"
+use std.p5
 
 setup (p : Sketch) = {
     # A description of the canvas for screen readers.

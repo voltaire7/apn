@@ -1,2 +1,3 @@
-import "text"
+text <- import "text"
+use text
 result = upper "x"

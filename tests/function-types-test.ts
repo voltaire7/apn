@@ -34,10 +34,10 @@ for (const [name, source, expected] of [
     // f a: a type variable applied to a type, any type holding an a.
     ["a type variable applied to a type", 'print (((a -> b) -> f a -> f b) == typeOf map)\nprint (((a -> b) -> g x -> g y) == typeOf map)\nprint (((a -> b) -> List a -> List b) == typeOf map)',
         ["True", "False", "False"]],
-    ["f a in a contract takes any type holding an a", 'import "option"\napply2 (m : (a -> b) -> f a -> f b) xs = m (* 2) xs\nprint [apply2 map [1,2], apply2 map (Some 3)]\nprint (typeOf apply2)\ntwice (h : f a -> f a) x = h (h x)\nprint (twice tail [1,2,3])',
+    ["f a in a contract takes any type holding an a", 'std <- import "std"; use std.option\napply2 (m : (a -> b) -> f a -> f b) xs = m (* 2) xs\nprint [apply2 map [1,2], apply2 map (Some 3)]\nprint (typeOf apply2)\ntwice (h : f a -> f a) x = h (h x)\nprint (twice tail [1,2,3])',
         ["[[2,4], Some 6]", "((a -> b) -> f a -> f b) -> f a -> f b", "[3]"]],
     // f a e: the type's first two parameters (as a parameter ((f a) e), as (Vec n a xs)).
-    ["a type variable applied to several types", 'import "option"\nboth (m : (a -> b) -> f a e -> f b e) r = m (* 2) r\nprint [both map (Ok 3), both map (Err "no")]\nprint (typeOf both)\nk (h : a -> List (f a e)) = h\nprint (k (x -> [Ok x]) 1)\nprint (isType ((f a e) -> f a e) (x -> x))\nprint (isType ((e : f a) -> f a e) (x -> x))\nprint (isType (f a e -> f a e) (x -> x))',
+    ["a type variable applied to several types", 'std <- import "std"; use std.option\nboth (m : (a -> b) -> f a e -> f b e) r = m (* 2) r\nprint [both map (Ok 3), both map (Err "no")]\nprint (typeOf both)\nk (h : a -> List (f a e)) = h\nprint (k (x -> [Ok x]) 1)\nprint (isType ((f a e) -> f a e) (x -> x))\nprint (isType ((e : f a) -> f a e) (x -> x))\nprint (isType (f a e -> f a e) (x -> x))',
         ['[Ok 6, Err "no"]', "((a -> b) -> f a c -> f b c) -> f a c -> f b c", "[Ok 1]", "True", "True", "True"]],
     ["a list's type is exact: [Int] is one Int; any number of them is List Int", "print (List Int == typeOf [1,2,3])\nprint ([Int] == typeOf [1])\nprint (typeOf [1,\"a\"])\nprint (typeOf [1] == List)\nprint (isType (List Int) [1,2,3])\nprint [Vect 3 Int == [Int,Int,Int], [Int,Int] == Vect 2 Int, Vect 2 Int == [Int]]",
         ["False", "True", "[Int,String]", "True", "True", "[True,True,False]"]],
@@ -60,7 +60,7 @@ for (const [source, message] of [
     ["bad (m : (a -> b) -> f a -> f b) = m (* 2) 5", "cannot use Int where f a is required"],
     ['nope (h : f Int -> f Int) = h\nprint (nope (x -> x) "s")', "cannot use String where f Int is required"],
     ["two (h : f a e -> f a e) = h\nprint (two (x -> x) [1])", "where f a b is required"],
-    ['import "option"\ntwo (h : (f a e) -> f a e) = h\nprint (two (x -> x) (Some 1))', "cannot use Option Int where f a b is required"],
+    ['std <- import "std"; use std.option\ntwo (h : (f a e) -> f a e) = h\nprint (two (x -> x) (Some 1))', "cannot use Option Int where f a b is required"],
     ["v = [f = (* 2)]\nv.f = 1", "cannot use Int where a -> b is required"],
     ["v = [f = g -> g 1]\nv.f = 1", "cannot use Int where (Int -> a) -> a is required"],
     ["print ([x -> x] ++ 1)", "cannot append Vect 1 (a -> a) and Int"],

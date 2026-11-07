@@ -1,5 +1,5 @@
-import "function"
-import "option"
+std <- import "std"
+use std.[function,option]
 # Producers and prefix consumers work with infinite lists.
 repeat x = x :: repeat x
 replicate n x = take n (repeat x)

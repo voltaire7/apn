@@ -1,8 +1,9 @@
 # Shapes, from https://elm-lang.org/examples/shapes
 # Scalable Vector Graphics (SVG) can be a nice way to draw things in 2D.
 # Here are some common SVG shapes.
-import "html"
-svg = import "svg"
+std <- import "std"
+use std.html
+svg <- import "std/svg"
 
 main = svg.svg [svg.viewBox "0 0 400 400", svg.width "400", svg.height "400"] [
     svg.circle [

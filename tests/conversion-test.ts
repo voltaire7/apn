@@ -65,7 +65,7 @@ for (const [source, kind, message] of [
 // clause of the operator takes, converts the other through a to instance, and
 // the operator runs again. Checked and unchecked runs agree.
 const MONEY = "Money (m : Float) = _\n(Money a) + (Money b) = Money (a + b)\n(Money a) < (Money b) = a < b\n";
-const CENTS = "Cents (c : Int) = _\n(Cents a) + (Cents b) = Cents (a + b)\nto Money (Cents c) = Money ((c : Float) / 100)\n";
+const CENTS = "Cents (c : Int) = _\nCents a + Cents b = Cents (a + b)\nto Money (Cents c) = Money ((c : Float) / 100)\n";
 for (const checked of [true, false]) {
     const each = (source: string) => {
         const i = new Interpreter();

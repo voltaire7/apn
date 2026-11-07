@@ -1,4 +1,5 @@
 # Hello, from https://elm-lang.org/examples/hello
-import "html"
+std <- import "std"
+use std.html
 
 main = text "Hello!"

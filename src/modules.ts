@@ -1,10 +1,11 @@
 // Where `import "name"` finds its code. Next to the importing file (the
-// current directory in the REPL): name.apn, else every .apn file directly in
-// a name/ folder (subfolders are imported as name/sub). Then the same in each
-// parent folder up to the program's root (the main program's folder), so a
-// module in a subfolder can import its siblings' packages; the nearest wins.
-// Otherwise the standard library, found the same way under lib/. Standard modules take no prefix and
-// there is no whole-library module: "std" and "std/name" are errors.
+// current directory in the REPL): name.apn, else a name/ folder, whose
+// entries (its .apn files and subfolders) are the module's fields, each
+// imported when used (beside name.apn, name/ is reached by path: name/sub).
+// Then the same in each parent folder up to the program's root (the main
+// program's folder), so a module in a subfolder can import its siblings'
+// packages; the nearest wins. "std" is the standard library, the folder
+// lib/std/, and "std/name" one of its modules.
 //
 // The files come from the disk, or from a bundle (a browser build): a map
 // from virtual paths to sources, with the standard library under BUNDLE_LIB
@@ -14,18 +15,24 @@ import { parse, parseDocument } from "./parser.ts";
 import { NATIVE_EXPORTS } from "./native-exports.ts";
 import { METHODS } from "./ast.ts";
 
-export const STD_DIRECTORY = new URL("../lib/", import.meta.url);
+export const STD_DIRECTORY = new URL("../lib/std/", import.meta.url);
 export const BUNDLE_LIB = "/lib/";
 export const BUNDLE_APP = "/app/";
 
 /** One file of a module: its source, a label for errors, and its directory. */
 export interface ModuleFile { source: string; label: string; directory: string; std?: string }
-/** A resolved module: a cache key (its path) and its files, in import order. */
-export interface ResolvedModule { key: string; files: ModuleFile[] }
+/**
+ * A resolved module: a cache key (its path), and its file (name.apn) or its
+ * folder's entries (name/'s files and subfolders, by name), each a module of
+ * its own: the spec that resolves it from directory.
+ */
+export interface ResolvedModule { key: string; files: ModuleFile[]; entries: ModuleEntry[] }
+export interface ModuleEntry { name: string; spec: string; directory: string }
 
 const NAME = /^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*$/;
 
-// Reading files and listing a folder's .apn files, by absolute path.
+// Reading files and listing a folder's .apn files and subfolders (with a
+// trailing /), by absolute path.
 interface Files { read(path: string): string | undefined; list(folder: string): string[] | undefined; lib: string }
 
 const disk: Files = {
@@ -33,8 +40,10 @@ const disk: Files = {
         try { return Deno.readTextFileSync(path); } catch { return undefined; }
     },
     list(folder) {
-        try { return [...Deno.readDirSync(folder)].filter(entry => entry.isFile && entry.name.endsWith(".apn")).map(entry => entry.name); }
-        catch { return undefined; }
+        try {
+            return [...Deno.readDirSync(folder)].filter(entry => !entry.name.startsWith(".")
+                && (entry.isFile && entry.name.endsWith(".apn") || entry.isDirectory)).map(entry => entry.isDirectory ? `${entry.name}/` : entry.name);
+        } catch { return undefined; }
     },
     lib: STD_DIRECTORY.pathname,
 };
@@ -42,8 +51,13 @@ function bundleFiles(bundle: Record<string, string>): Files {
     return {
         read: path => bundle[path],
         list(folder) {
-            const names = Object.keys(bundle).filter(path => path.startsWith(folder) && path.endsWith(".apn") && !path.slice(folder.length).includes("/"));
-            return names.length ? names.map(path => path.slice(folder.length)) : undefined;
+            const names = new Set<string>();
+            for (const path of Object.keys(bundle)) {
+                if (!path.startsWith(folder) || !path.endsWith(".apn")) continue;
+                const rest = path.slice(folder.length), slash = rest.indexOf("/");
+                names.add(slash < 0 ? rest : rest.slice(0, slash + 1));
+            }
+            return names.size ? [...names] : undefined;
         },
         lib: BUNDLE_LIB,
     };
@@ -62,21 +76,19 @@ function absolute(directory: string, files: Files): string {
     return folder.endsWith("/") ? folder : `${folder}/`;
 }
 
-// name.apn, else name/*.apn, under the folder base.
+// name.apn, else the folder name/, under the folder base (name "" is base
+// itself): the file, or the folder's entries.
 function find(files: Files, base: string, name: string, std: boolean): ResolvedModule | undefined {
-    const tag = (label: string) => std ? { std: label } : {};
-    const path = `${base}${name}.apn`, source = files.read(path);
-    if (source !== undefined) return { key: path, files: [{ source, label: std ? name : path, directory: path.slice(0, path.lastIndexOf("/") + 1), ...tag(name) }] };
-    const folder = `${base}${name}/`;
-    const names = files.list(folder)?.sort();
-    if (!names?.length) return undefined;
-    return {
-        key: folder,
-        files: names.map(file => {
-            const label = `${name}/${file.slice(0, -4)}`;
-            return { source: files.read(folder + file)!, label: std ? label : folder + file, directory: folder, ...tag(label) };
-        }),
-    };
+    const path = `${base}${name}.apn`, source = name ? files.read(path) : undefined;
+    if (source !== undefined) {
+        return { key: path, files: [{ source, label: std ? name : path, directory: path.slice(0, path.lastIndexOf("/") + 1), ...std ? { std: name } : {} }], entries: [] };
+    }
+    const folder = name ? `${base}${name}/` : base;
+    const listed = files.list(folder)?.sort();
+    if (!listed?.length) return undefined;
+    const entries = listed.map(entry => entry.replace(/(\.apn|\/)$/, "")).filter((entry, n, all) => all.indexOf(entry) === n)
+        .map(entry => ({ name: entry, spec: entry, directory: folder }));
+    return { key: folder, files: [], entries };
 }
 
 // The folders an import from directory searches: it, then its parents up
@@ -96,24 +108,30 @@ function searchFolders(directory: string, root: string | undefined): string[] {
  * searching parent folders up to root (the program's folder).
  */
 export function resolveModule(spec: string, directory: string, bundle?: Record<string, string>, root?: string): ResolvedModule | undefined {
-    if (!NAME.test(spec) || spec === "std" || spec.startsWith("std/")) return undefined;
+    if (!NAME.test(spec)) return undefined;
     const files = bundle ? bundleFiles(bundle) : disk;
+    if (spec === "std" || spec.startsWith("std/")) {
+        const resolved = find(files, files.lib, spec.slice(4), true);
+        // The library's entries are its modules: std/name each.
+        if (resolved) resolved.entries = resolved.entries.map(entry => ({ ...entry, spec: `${spec}/${entry.name}`, directory: files.lib }));
+        return resolved;
+    }
     const start = absolute(directory, files);
-    // Inside the standard library, local modules are the library's own.
-    if (start.startsWith(files.lib)) return find(files, start, spec, true) ?? find(files, files.lib, spec, true);
+    // Inside the standard library, a bare name is a module beside the file.
+    if (start.startsWith(files.lib)) return find(files, start, spec, true);
     for (const folder of searchFolders(start, root === undefined ? undefined : absolute(root, files))) {
         const local = find(files, folder, spec, false);
         if (local) return local;
     }
-    return find(files, files.lib, spec, true);
+    return undefined;
 }
 
 /** Why an import could not be resolved, with a hint. */
 export function unknownModule(spec: string, bundled = false): { message: string; hint: string } {
-    if (spec === "std") return { message: "unknown module 'std'", hint: `import the standard modules you need, such as \`import "option"\` or \`import ["option", "text"]\`` };
-    if (spec.startsWith("std/")) return { message: `unknown module '${spec}'`, hint: `standard modules take no prefix: \`import "${spec.slice(4)}"\`` };
+    if (spec.startsWith("std/")) return { message: `unknown module '${spec}'`, hint: `the standard library has no module '${spec.slice(4)}'` };
     if (bundled) return { message: `module '${spec}' is not bundled`, hint: "a browser build bundles the standard library and the local modules the program imports" };
-    return { message: `unknown module '${spec}'`, hint: `no ${spec}.apn or ${spec}/ here or in a parent folder of the program, and no standard module '${spec}'` };
+    const standard = !spec.includes("/") && resolveModule(`std/${spec}`, ".") ? `; a standard module is std.${spec}: \`std <- import "std"; use std.${spec}\`` : "";
+    return { message: `unknown module '${spec}'`, hint: `no ${spec}.apn or ${spec}/ here or in a parent folder of the program${standard}` };
 }
 
 /**
@@ -173,7 +191,7 @@ function dependenciesOf(source: string, label: string): { imports: string[]; loa
         if (Array.isArray(node)) { node.forEach(walk); return; }
         const n = node as Record<string, any>;
         if (isLoad(n)) mentions++;
-        if (n.t === "import") imports.push(...[n.module as string | string[]].flat());
+        if (n.t === "import") imports.push(n.module as string);
         if (n.t === "app" && isLoad(n.f) && n.a?.t === "string") loads.push(n.a.v);
         if (n.t === "pipe" && isLoad(n.f) && n.x?.t === "string") loads.push(n.x.v);
         if (n.t === "string" && typeof n.v === "string" && n.v && !n.v.includes("\n")) strings.push(n.v);
@@ -203,7 +221,7 @@ export function bundleProgram(source: string, directory: string): Record<string,
     };
     addLib(STD_DIRECTORY, "");
     const root = absolute(directory, disk);
-    const seen = new Set<string>();
+    const seen = new Set<string>(), modulesSeen = new Set<string>();
     let everything = false;
     const addAll = (folder: string) => {
         for (const entry of [...Deno.readDirSync(folder)].sort((a, b) => a.name < b.name ? -1 : 1)) {
@@ -224,11 +242,15 @@ export function bundleProgram(source: string, directory: string): Record<string,
     const visit = (code: string, label: string, from: string) => {
         let dependencies;
         try { dependencies = dependenciesOf(code, label); } catch { return; }
-        for (const spec of dependencies.imports) {
-            const module = resolveModule(spec, from, undefined, root);
-            if (!module || module.files.some(file => file.std)) continue;
+        // A local module's file and, as any may be used, its folder's entries.
+        const addModule = (spec: string, directory: string) => {
+            const module = resolveModule(spec, directory, undefined, root);
+            if (!module || modulesSeen.has(module.key)) return;
+            modulesSeen.add(module.key);
             for (const file of module.files) add(file.label, file.source);
-        }
+            for (const entry of module.entries) addModule(entry.spec, entry.directory);
+        };
+        for (const spec of dependencies.imports) if (spec !== "std" && !spec.startsWith("std/")) addModule(spec, from);
         for (const name of dependencies.loads) {
             const path = loadPath(name, from), source = disk.read(path);
             if (source !== undefined) add(path, source);
@@ -260,8 +282,9 @@ let standardIndex: Map<string, string[]> | undefined;
 export function standardExports(): Map<string, string[]> {
     if (standardIndex) return standardIndex;
     const index = new Map<string, string[]>();
+    // Each module by the spec that imports it: std/name.
     const add = (name: string, module: string) => {
-        if (/^[A-Za-z]/.test(name) && !METHODS.has(name)) index.set(name, [...new Set([...index.get(name) ?? [], module])]);
+        if (/^[A-Za-z]/.test(name) && !METHODS.has(name)) index.set(name, [...new Set([...index.get(name) ?? [], `std/${module}`])]);
     };
     for (const [module, names] of Object.entries(NATIVE_EXPORTS)) names.forEach(name => add(name, module));
     let files: string[] = [];

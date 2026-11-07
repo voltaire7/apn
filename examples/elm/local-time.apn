@@ -1,8 +1,9 @@
 # Time, from https://elm-lang.org/examples/time
 # Show the current time in your time zone.
-import ["html","time"]
-browser = import "browser"
-task = import "task"
+std <- import "std"
+use std.[html,time]
+browser <- import "std/browser"
+task <- import "std/task"
 
 Msg = Tick Posix | AdjustTimeZone Zone
 

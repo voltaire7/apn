@@ -79,12 +79,13 @@ print (to (List Char) "hi")              # => ['h','i']
 # opens it (a name bound to one, here), and reading one of its fields opens
 # nothing. Your own files and folders import the same way; load "file" runs a
 # file by its path.
-import ["option","number","syntax"]
-parser = import "parser"
+std <- import "std"
+use std.[option,number,syntax]
+parser <- import "std/parser"
 print (sq 12)                            # => 144
 print (parser.parse parser.number "12")  # => Ok 12
 {
-    text = import "text"
+    text <- import "std/text"
     print (text.words "a b")             # => ["a","b"]
     text
     print (unwords ["c","d"])            # => c d
@@ -167,13 +168,13 @@ print (2 * [x = 1, y = 2])               # => [x = 2, y = 4]
 
 # A clause for some arguments overloads an operator; others reach the rest.
 Cents (c : Int) = _
-(Cents a) + (Cents b) = Cents (a + b)
+Cents a + Cents b = Cents (a + b)
 print [Cents 150 + Cents 75, 1 + 2]      # => [Cents 225, 3]
 
 # A constructor's body holding _ is its logic: it runs whenever one is made,
 # and _ is the value itself. A to instance lets other types join an operator.
 Mod7 (n : Int) = 0 <= n && n < 7 ? _ : Mod7 (modulo n 7)
-(Mod7 a) + (Mod7 b) = Mod7 (a + b)
+Mod7 a + Mod7 b = Mod7 (a + b)
 to Mod7 (n : Int) = Mod7 n
 print [Mod7 12, Mod7 5 + 4, Mod7 -3]     # => [Mod7 5, Mod7 2, Mod7 4]
 
@@ -330,6 +331,6 @@ probe (toLambda [x = 1, x + 1])          # => [(x -> x + 1) 1]
 #   files, random numbers, arrays and more.
 # - Browser programs in the Elm style and p5.js sketches (examples/elm,
 #   examples/p5js; docs/browser-html.md): apn --html FILE.apn OUT.html.
-# - C functions through import "ffi" (docs/c-interop.md).
+# - C functions through import "std/ffi" (docs/c-interop.md).
 # - APN evaluating APN (docs/metacircular-evaluator.md).
 # - The REPL (docs/repl.md) and editor tooling (docs/editor-tooling.md).

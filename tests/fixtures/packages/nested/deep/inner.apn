@@ -1,2 +1,4 @@
-import ["hello","greeting"]
+hello <- import "hello"
+greetings <- import "greeting"
+use [hello,greetings]
 inner = [greet "deep", greeting]

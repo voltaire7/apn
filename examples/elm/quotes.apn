@@ -1,8 +1,9 @@
 # Quotes, from https://elm-lang.org/examples/quotes
 # Press a button to send a GET request for random quotes.
-import ["html","option","decode"]
-browser = import "browser"
-http = import "http"
+std <- import "std"
+use std.[html,option,decode]
+browser <- import "std/browser"
+http <- import "std/http"
 
 Quote = [quote : String, source : String, author : String, year : Int]
 Model = Failure | Loading | Success Quote

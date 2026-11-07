@@ -1,7 +1,7 @@
 import { requireChecked, checkSource } from "../src/type-checker.ts";
 import { Interpreter } from "../src/interp.ts";
 import { parse } from "../src/parser.ts";
-for (const source of ['import "function"', 'env', 'missing', 'load "file"']) {
+for (const source of ['std <- import "std"; use std.function', 'env', 'missing', 'load "file"']) {
     Deno.test(`checked execution rejects unknowns: ${source}`, () => {
         try { requireChecked(source); } catch (e) {
             if (String(e).includes('cannot establish static types')) return;
@@ -11,7 +11,7 @@ for (const source of ['import "function"', 'env', 'missing', 'load "file"']) {
     });
 }
 Deno.test('gradual editor analysis remains available', () => {
-    const result = checkSource('import "function"');
+    const result = checkSource('std <- import "std"; use std.function');
     if (result.issues.length || !result.dynamicBoundaries) throw new Error(JSON.stringify(result));
 });
 for (const source of ['id x = x; [id 1, id True]', 'loop x = loop x', 'self f = f f; self (x -> 123)', 'x = x']) {
@@ -39,12 +39,12 @@ for (const source of ['f x = x + 1; f "bad"', 'f x y = x < y; f 1 "bad"']) {
 for (const [source, module] of [['fail "x"', "function"], ['upper "x"', "text"]]) {
     Deno.test(`standard natives need their module: ${source}`, () => {
         const [issue] = checkSource(source, '<test>', { strict: true, runtimeNames: new Set(["print"]) }).issues;
-        if (issue?.message !== `unbound variable '${source.split(" ")[0]}'` || issue.hint !== `add \`import "${module}"\` to use \`${source.split(" ")[0]}\``) throw new Error(JSON.stringify(issue));
+        if (issue?.message !== `unbound variable '${source.split(" ")[0]}'` || issue.hint !== `add \`std <- import "std"; use std.${module}\` to use \`${source.split(" ")[0]}\``) throw new Error(JSON.stringify(issue));
     });
 }
-Deno.test('fail is available after import "function"', () => {
+Deno.test('fail is available after import "std/function"', () => {
     const i = new Interpreter();
     i.enableChecking();
-    const result = i.renderString(i.run(parse('import "function"; f x = x > 0 ? x : fail "negative"; f 1')));
+    const result = i.renderString(i.run(parse('std <- import "std"; use std.function; f x = x > 0 ? x : fail "negative"; f 1')));
     if (result !== "1") throw new Error(result);
 });

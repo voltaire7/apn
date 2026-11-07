@@ -1,5 +1,5 @@
 // Startup loads the bundled interpreter prelude; editor launchers must allow
-// reading lib/prelude.apn, lib/type.apn and lib/do.apn for Deno versions that gate text imports on permissions.
+// reading lib/prelude.apn, lib/std/type.apn and lib/std/do.apn for Deno versions that gate text imports on permissions.
 import { lint, position, type Range } from "./lint.ts";
 import { parseDocument, setLooseSpacing } from "./parser.ts";
 import { lex, KEYWORDS } from "./lexer.ts";
@@ -8,7 +8,6 @@ import { semanticTokens, TOKEN_TYPES } from "./highlight.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { RETIRED_NATIVES, nativeModule } from "./native-exports.ts";
 import { standardExports } from "./modules.ts";
-import { itemsText } from "./separators.ts";
 
 // A file URI's folder, where its imports resolve; "." for any other document.
 function folderOf(uri: string): string {
@@ -86,27 +85,28 @@ const builtins = new Map<string, string>([
 ]);
 
 // The document's one-line imports (import "x", import ["x","y"]), in order.
+// The standard modules a document opens: its use std.x and use std.[x,y]
+// lines, as the paths that import them (std/x), with where their names stand.
 function importsOf(text: string): { line: number; start: number; end: number; modules: string[] }[] {
     const found: { line: number; start: number; end: number; modules: string[] }[] = [];
     text.split("\n").forEach((line, n) => {
-        const [, keyword, target] = line.match(/^(import\s+)(.+?)\s*(#.*)?$/) ?? [];
+        const [, before, target] = line.match(/^(\s*use std\.)(\[[a-z0-9_,]*\]|[a-z0-9_]+)\s*(#.*)?$/) ?? [];
         if (!target) return;
-        try {
-            const value = JSON.parse(target);
-            const modules = Array.isArray(value) ? value : [value];
-            if (modules.every(m => typeof m === "string")) found.push({ line: n, start: keyword.length, end: keyword.length + target.length, modules });
-        } catch { /* not a plain import */ }
+        const names = target.startsWith("[") ? target.slice(1, -1).split(",").filter(Boolean) : [target];
+        found.push({ line: n, start: before.length, end: before.length + target.length, modules: names.map(name => `std/${name}`) });
     });
     return found;
 }
-// The edit importing module: added to the first import, which becomes a list
-// (import ["x","module"]), or a new import "module" on the first line,
-// a blank line apart from what follows.
+// The edit opening module (std/name): its name joins the first use std line
+// (use std.[x,name]); else use std.name follows the line binding std; else
+// both lines start the document, a blank line apart from what follows.
 function importEdit(text: string, module: string): { range: Range; newText: string } {
-    const first = importsOf(text)[0];
-    const target = (modules: string[]) => modules.length === 1 ? JSON.stringify(modules[0]) : `[${itemsText(modules.map(m => JSON.stringify(m)))}]`;
-    if (first) return { range: { start: { line: first.line, character: first.start }, end: { line: first.line, character: first.end } }, newText: target([...first.modules, module]) };
-    return { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, newText: `import ${target([module])}\n${/^\s*(\n|$)/.test(text) ? "" : "\n"}` };
+    const name = module.slice("std/".length), first = importsOf(text)[0];
+    const at = (line: number, start = 0, end = start) => ({ start: { line, character: start }, end: { line, character: end } });
+    if (first) return { range: at(first.line, first.start, first.end), newText: `[${[...first.modules.map(m => m.slice("std/".length)), name].join(",")}]` };
+    const std = text.split("\n").findIndex(line => /^std <- import "std"\s*(#.*)?$/.test(line));
+    if (std >= 0) return { range: at(std + 1), newText: `use std.${name}\n` };
+    return { range: at(0), newText: `std <- import "std"\nuse std.${name}\n${/^\s*(\n|$)/.test(text) ? "" : "\n"}` };
 }
 type CompletionItem = { label: string; detail: string; kind: number; documentation?: string; additionalTextEdits?: { range: Range; newText: string }[] };
 
@@ -182,7 +182,7 @@ export class LanguageServer {
                     const kind = /^[A-Z]/.test(name) ? 4 : 3;
                     const have = modules.find(m => imported.has(m));
                     const documentation = builtins.get(name);
-                    const item: CompletionItem = { label: name, detail: `From import "${have ?? modules[0]}"`, kind, ...documentation ? { documentation } : {} };
+                    const item: CompletionItem = { label: name, detail: `From ${(have ?? modules[0]).replace("/", ".")}`, kind, ...documentation ? { documentation } : {} };
                     if (!have) item.additionalTextEdits = [importEdit(text, modules[0])];
                     entries.set(name, item);
                 }

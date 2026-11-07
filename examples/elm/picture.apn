@@ -1,6 +1,7 @@
 # Picture, from https://elm-lang.org/examples/picture
 # Create pictures from simple shapes. Like a tree!
-import "playground"
+std <- import "std"
+use std.playground
 
 main = picture [
     moveDown 80 $ rectangle brown 40 200

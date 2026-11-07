@@ -2,9 +2,10 @@
 # Thwomp looks at your mouse. What is it up to? Elm textures its block with
 # images from elm-lang.org, which WebGL cannot use from another site, so this
 # stone block's face and sides are drawn into p5 graphics.
-import ["html","number"]
-browser = import "browser"
-p5 = import "p5"
+std <- import "std"
+use std.[html,number]
+browser <- import "std/browser"
+p5 <- import "std/p5"
 
 Msg = GotViewport browser.Viewport | Resized Number Number | MouseMoved Number Number
 

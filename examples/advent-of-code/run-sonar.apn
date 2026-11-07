@@ -1,4 +1,5 @@
-import "io"
+std <- import "std"
+use std.io
 load "sonar-sweep"
 input <- readInput
 print (solveSonar input)

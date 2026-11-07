@@ -23,9 +23,9 @@ function rejected(i: Interpreter, source: string): void {
     throw new Error(`accepted: ${source}`);
 }
 for (const [source, expected] of [
-    ['import "sequence"; sum [1,2,3]', '6'],
-    ['seqs = import "sequence"; seqs.sum (Int * [1,2,3])', '6'],
-    ['import ["function","number"]; id (sq 3)', '9'],
+    ['std <- import "std"; use std.sequence; sum [1,2,3]', '6'],
+    ['seqs <- import "std/sequence"; seqs.sum (Int * [1,2,3])', '6'],
+    ['std <- import "std"; use std.[function,number]; id (sq 3)', '9'],
     ['ns = [double = x -> x * 2]; use ns; double 3', '6'],
     ['use [[one = 1], [two = 2]]; one + two', '3'],
     ['x = Mutable 1; set x 2; x + 1', '3'],
@@ -44,10 +44,10 @@ for (const [source, expected] of [
     ['z [] = []; z (x :: r) = [x]; w xs = z xs; f [a] = a; f (w [1..])', '1'],
     // An operation reads its operands once its calls are decided: hd x with a
     // fail clause is the element there, compared as one.
-    ['import "function"; hd (x :: _) = x; hd [] = fail "e"; h x = hd x > 1; h [1]', 'False'],
+    ['std <- import "std"\nuse std.function\nhd (x :: _) = x; hd [] = fail "e"; h x = hd x > 1; h [1]', 'False'],
     // A call whose argument holds the call itself stays undecided: left's
     // elements are what hd gives, in a branch of what left is.
-    ['import "function"; hd (x :: _) = x; hd [] = fail "empty"; nl [] = True; nl (_ :: _) = False\n' +
+    ['std <- import "std"\nuse std.function\nhd (x :: _) = x; hd [] = fail "empty"; nl [] = True; nl (_ :: _) = False\n' +
         'm left right = nl left ? right : (nl right ? left : [hd left])\nm [1] [2]', '[1]'],
     // A call no clause ranking decides, its recursive clause's result free,
     // has the definition's type as a whole: fl's is (a -> b -> a) -> a -> List b -> a.
@@ -88,7 +88,7 @@ for (const [source, expected] of [
     ['f (xs : List String) = "strings"; f (xs : List Int) = "ints"; [f [1], f ["a"]]', '["ints","strings"]'],
     ['f x = x + 1; [f 1, f 2.0]', '[2,3.0]'],
     ['factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))\nfactorial 5', '120'],
-    ['import "type"; cast Float32 (.2 : Float64)', '0.2'],
+    ['std <- import "std"; use std.type; cast Float32 (.2 : Float64)', '0.2'],
     // A parameter's record is known from the fields code uses, also when it assigns them.
     ['f r = { r.a = 5; r }; f [a = 1, b = 2]', '[a = 5, b = 2]'],
     ['g r = { r.p.q = 3; r }; g [p = [q = 1, z = 0]]', '[p = [q = 3, z = 0]]'],
@@ -101,11 +101,11 @@ for (const [source, expected] of [
     ['f c = c ? [1.0,2.0,3.0] : [0.0,0.0,0.0]; [1.0,1.0,1.0] + f True', '[2.0,3.0,4.0]'],
     // A record alias is a type argument (List Point, Result Point e); a field
     // may name another module's type (browser.Viewport).
-    ['import "option"\nPoint = [x : Float, y : Float]\nMsg = | Got (Result Point String)\nGot (Ok [x = 1, y = 2])', 'Got (Ok [x = 1.0, y = 2.0])'],
+    ['std <- import "std"; use std.option\nPoint = [x : Float, y : Float]\nMsg = | Got (Result Point String)\nGot (Ok [x = 1, y = 2])', 'Got (Ok [x = 1.0, y = 2.0])'],
     ['Point = [x : Float, y : Float]\nShape = | Path (List Point)\nPath [[x = 1, y = 2]]', 'Path [[x = 1.0, y = 2.0]]'],
-    ['browser = import "browser"\nMsg = Resized browser.Viewport | Other\nResized [width = 1, height = 2]', 'Resized [width = 1, height = 2]'],
+    ['browser <- import "std/browser"\nMsg = Resized browser.Viewport | Other\nResized [width = 1, height = 2]', 'Resized [width = 1, height = 2]'],
     // A constructor pattern on a Dynamic field is checked when it runs.
-    ['import "option"\nMsg = More | Got Dynamic\nf msg = msg ~ [More -> 0, (Got (Ok q)) -> q, (Got (Err _)) -> 1]\nf (Got (Ok 5))', '5'],
+    ['std <- import "std"; use std.option\nMsg = More | Got Dynamic\nf msg = msg ~ [More -> 0, (Got (Ok q)) -> q, (Got (Err _)) -> 1]\nf (Got (Ok 5))', '5'],
     // More clauses are a new version: label keeps the clauses it saw.
     ['describe 0 = "zero"; label x = describe x; describe 1 = "one"; [describe 1, label 0]', '["one","zero"]'],
     // h keeps the c it was written with; a later c is another version.
@@ -132,21 +132,21 @@ for (const [source, expected] of [
     ['f w = w.[x,y]\nf [x = 1, y = 2]', '[1,2]'],
     // A record its type made takes updates to its fields, and a literal copy new ones.
     ['Quote = [quote : String, year : Int]\nq = Quote []\nq.year = 3\nq "quote" = "x"\n[use q, more = 1]', '[quote = "x", year = 3, more = 1]'],
-    // A name defined as an import opens the module where it is a statement.
     // A list item may take a value apart with a constructor, as a block's statement may.
-    ['import "option"\n[Some v = Some 3, v + 1]', '[4]'],
-    ['import "option"\ncode = [Some v = Some 3] ++ [v]\ncode 0 = (Some v = Some 5)\ncode', '[5]'],
-    ['numbers = import "number"\nnumbers\nsq 3', '9'],
-    ['numbers = import "number"\nalias = numbers\n{ alias; cube 2 }', '8'],
-    ['random = { import "random"; import "number" }\nrandom.sq 4', '16'],
-    ['numbers = import "number"\nf _ = numbers\nf []\nsq 3', '9'],
-    ['f _ = {\n    print "f"\n    return (import "number")\n}\nf []\nsq 3', '9'],
+    ['std <- import "std"; use std.option\n[Some v = Some 3, v + 1]', '[4]'],
+    ['std <- import "std"; use std.option\ncode = [Some v = Some 3] ++ [v]\ncode 0 = (Some v = Some 5)\ncode', '[5]'],
+    // use opens a module, however the program got it: a name, a field, a call.
+    ['numbers <- import "std/number"\nuse numbers\nsq 3', '9'],
+    ['numbers <- import "std/number"\nalias = numbers\n{ use alias; cube 2 }', '8'],
+    ['std <- import "std"\nrandom = std.number\nrandom.sq 4', '16'],
+    ['numbers <- import "std/number"\nf _ = numbers\nuse (f [])\nsq 3', '9'],
+    ['f _ = {\n    print "f"\n    import "std/number"\n}\nm <- f []\nuse m\nsq 3', '9'],
 ] as const) Deno.test(`default checking session: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "sequence"; sum ["bad"]',
+    'std <- import "std"; use std.sequence; sum ["bad"]',
     'f x = x + 1; f "bad"',
     'apply f x = f x; apply (x -> x + 1) "bad"',
     'x | missingGuard -> x',
@@ -165,11 +165,12 @@ for (const source of [
     'Quote = [quote : String, year : Int]; q = Quote []; q "yaer" = 1',
     'Quote = [quote : String, year : Int]; f (q : Quote) = { q.x = 1; q }',
     'Quote = [quote : String, year : Int]; conv r = Quote r; (conv [year = "x"]).year',
-    // Only a statement opens a module: not a field of it, a binding, or a block's statement.
-    'numbers = import "number"\nnumbers.sq 2\nsq 3',
-    'numbers = import "number"\n{ numbers; 1 }\nsq 3',
-    'numbers = import "number"\nf _ = numbers\nm = f []\nsq 3',
-    'random = { import "number" }\nsq 3',
+    // Only use opens a module, in its own block: not a statement, a field of it or a binding.
+    'numbers <- import "std/number"\nnumbers.sq 2\nsq 3',
+    'numbers <- import "std/number"\n{ use numbers; 1 }\nsq 3',
+    'numbers <- import "std/number"\nf _ = numbers\nm = f []\nsq 3',
+    'random = { std <- import "std"; use std.number }\nsq 3',
+    'std <- import "std"\nstd.number\nsq 3',
     // A record's entry is written as a [key,value] pair, within the record.
     'v = [x = 1]\nv 0 = [x1 = 22]',
     'v = [x = 1]\nv 1 = ["a",1]',
@@ -182,7 +183,7 @@ for (const source of [
 // A choice between values (a ternary's branches, a match's arms, a function's
 // clauses) has either type, as a list's items do: used where every one fits,
 // or narrowed by a pattern. Where the checker knows which is taken, it is that.
-const choices = 'import "time"\nt <- currentTime\nfunc x = x ? "yes" : False\n' +
+const choices = 'std <- import "std"; use std.time\nt <- currentTime\nfunc x = x ? "yes" : False\n' +
     'h x = x ~ [\n    0 -> "zero"\n    _ -> False\n]\ng 0 = "zero"\ng _ = False\n';
 for (const [source, expected] of [
     ['[func True, func False, h 0, h 1, g 0, g 1]', '["yes",False,"zero",False,"zero",False]'],
@@ -262,7 +263,7 @@ Deno.test("REPL clauses and polymorphism survive separate submissions", () => {
     // A clause with another result type: either, where the call cannot tell.
     run(i, 'func 2 = "two"');
     if (run(i, '[func 0, func 2]') !== '[2,"two"]') throw new Error('lost the new clause');
-    rejected(i, 'import "time"; t <- currentTime; func t ++ "!"');
+    rejected(i, 'std <- import "std"; use std.time; t <- currentTime; func t ++ "!"');
     run(i, 'id x = x');
     if (run(i, 'id 1') !== '1' || run(i, 'id True') !== 'True') throw new Error('lost polymorphism');
 });
@@ -274,7 +275,7 @@ Deno.test("runtime failure restores bindings and their checking state", () => {
     rejected(i, 'existing ++ "bad"');
 });
 Deno.test("namespaced import does not open conflicting exports", () => {
-    const i = session(); run(i, 'span = 123; html = import "html"');
+    const i = session(); run(i, 'span = 123; html <- import "std/html"');
     run(i, 'html.text "hello"');
     if (run(i, 'span') !== '123' || i.env.get('button')) throw new Error('namespace leaked');
 });
@@ -290,7 +291,7 @@ Deno.test("invalid loaded source is rejected before any output", () => {
 });
 Deno.test("all standard modules check without evaluation", () => {
     const checker = new CheckingSession();
-    for (const name of ['type', 'function', 'option', 'sequence', 'array', 'number', 'text', 'map', 'combinator', 'io', 'system', 'search', 'meta', 'html', 'browser', 'p5', 'ffi']) checker.module(name);
+    for (const name of ['type', 'function', 'option', 'sequence', 'array', 'number', 'text', 'map', 'combinator', 'io', 'system', 'search', 'meta', 'html', 'browser', 'p5', 'ffi']) checker.module(`std/${name}`);
 });
 
 Deno.test("Dynamic writes cannot invalidate a checked Mutable payload", () => {
@@ -321,10 +322,10 @@ Deno.test("default checking reports an unbound name with a suggestion", () => {
 // A variable bound to a union containing itself (v = v | t) resolves to t,
 // and functions that return their list parameter preserve its length.
 for (const [source, expected] of [
-    ['import "sequence"; g [a,b] = forceList [b, a + b]; repeatApply 3 g [1,2]', '[5,8]'],
-    ['import "sequence"\ntick [a,b,c,d,e,f,g,h,i] = forceList [b, c, d, e, f, g, h + a, i, a]\nsum (repeatApply 80 tick [0,1,1,2,1,0,0,0,0])', '5934'],
+    ['std <- import "std"; use std.sequence; g [a,b] = forceList [b, a + b]; repeatApply 3 g [1,2]', '[5,8]'],
+    ['std <- import "std"; use std.sequence\ntick [a,b,c,d,e,f,g,h,i] = forceList [b, c, d, e, f, g, h + a, i, a]\nsum (repeatApply 80 tick [0,1,1,2,1,0,0,0,0])', '5934'],
     ['f (xs : List _) = xs; g [a,b] = f [b, a + b]; g (g [1,2])', '[3,5]'],
-    ['import "sequence"; g [a,b] = a + b; g (forceList [1,2])', '3'],
+    ['std <- import "std"; use std.sequence; g [a,b] = a + b; g (forceList [1,2])', '3'],
     ['g [a,b] = a + b; g (map (x -> x * 2) [1,2])', '6'],
     ['xs = map (x -> x + 1) [1,2]\nys = map (x -> x * 2) [1,2,3]\ng [a,b] = a + b\n[g xs, length ys]', '[5,3]'],
     ['x (x::xs) = 42; x [x]', '42'],
@@ -351,8 +352,8 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "sequence"; g [a,b] = forceList [b, a ++ "x"]; repeatApply 3 g [1,2]',
-    'import "sequence"; g [a,b] = a + b; g (forceList [1,2,3])',
+    'std <- import "std"; use std.sequence; g [a,b] = forceList [b, a ++ "x"]; repeatApply 3 g [1,2]',
+    'std <- import "std"; use std.sequence; g [a,b] = a + b; g (forceList [1,2,3])',
     'g [a,b] = a + b; g (map (x -> x) [1,2,3])',
     'toList 0 = []; toList k = k - 1 :: toList (k - 1); g [a,_] = a; g (toList 3)',
     'h (_ : Vect n a) (_ : Vect n a) = n; h [1,2] [3]',
@@ -361,7 +362,7 @@ for (const source of [
     'g [a,b] = tail [0, b, a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1,2]',
     `${TK2}tk n xs = n < 0 ? [] : tk2 n xs\nf (tk 1 [1,2,3])`,
     `${TK2}tk n xs = n > 0 ? tk2 n xs : []\nf (tk 0 [1,2,3])`,
-    'import "function"; hd (x :: _) = x; hd [] = fail "e"; h x = hd x > 1; h ["a"]',
+    'std <- import "std"; use std.function; hd (x :: _) = x; hd [] = fail "e"; h x = hd x > 1; h ["a"]',
     // A recursive call has the whole function's type: f rest is a number.
     'f [] = 0; f (x :: rest) = x + f rest; f ["a"]',
     'f [] = 0; f (x :: rest) = f rest + x; f ["a"]',
@@ -396,18 +397,18 @@ for (const source of [
 // change a list's length (folds, cons, append, filter) stay unknown, even when
 // their result has the same type as their input.
 for (const [source, expected] of [
-    ['import "sequence"; g [a,b] = a + b; g (reverse [1,2])','3'],
-    ['import "sequence"; g [a,b] = a - b; g (sort [2,1])','-1'],
-    ['import "sequence"; g [a,b] = a - b; g (sortBy compare [2,1])','-1'],
-    ['import "sequence"; g [a,b] = a - b; g (sortOn (x -> -x) [1,2])','1'],
-    ['import "sequence"; g [p,q] = p; g (zipWithIndex [5,6])','[0,5]'],
-    ['import "sequence"; reverse "abc" ++ "!"','"cba!"'],
+    ['std <- import "std"; use std.sequence; g [a,b] = a + b; g (reverse [1,2])','3'],
+    ['std <- import "std"; use std.sequence; g [a,b] = a - b; g (sort [2,1])','-1'],
+    ['std <- import "std"; use std.sequence; g [a,b] = a - b; g (sortBy compare [2,1])','-1'],
+    ['std <- import "std"; use std.sequence; g [a,b] = a - b; g (sortOn (x -> -x) [1,2])','1'],
+    ['std <- import "std"; use std.sequence; g [p,q] = p; g (zipWithIndex [5,6])','[0,5]'],
+    ['std <- import "std"; use std.sequence; reverse "abc" ++ "!"','"cba!"'],
 ] as const) Deno.test(`stdlib keeps list lengths: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "sequence"; g [a,b] = a + b; g (reverse [1,2,3])',
+    'std <- import "std"; use std.sequence; g [a,b] = a + b; g (reverse [1,2,3])',
     'f xs = foldl (acc, x -> x :: acc) xs [1,2]; g [a,b] = a + b; g (f [1,2])',
     // A recursive clause's result is the function's type as a whole, its
     // lengths found by the run: fl's x :: acc makes [1,2] three long.
@@ -434,7 +435,7 @@ for (const [source, expected] of [
     ['h a b = [map (x -> x) a, map (x -> x) b]; g [[x],[y,z]] = x + y + z; g (h [1] [1,2])', '4'],
     ['pairUp a b = [a,b]; g [[x],[y,z]] = x + y + z; g (pairUp [1] [2,3])', '6'],
     ['h a b = [map (x -> x) a, map (x -> x) b]\nh2 a b = h b a\ng [[x,y],[z]] = x + y + z\ng (h2 [1] [1,2])', '4'],
-    ['import "sequence"; both xs = [sort xs, reverse xs]; g [[a,b],[c,d]] = a + d; g (both [2,1])', '3'],
+    ['std <- import "std"\nuse std.sequence\nboth xs = [sort xs, reverse xs]; g [[a,b],[c,d]] = a + d; g (both [2,1])', '3'],
 ] as const) Deno.test(`checker tracks nested list lengths: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -446,7 +447,7 @@ for (const source of [
     'keep xs = xs * x -> x\ndrop1 xs = tail xs\npick b = b ? keep : drop1\ng [a,b,c] = a\ng (pick False [1,2,3])',
     'keep xs = xs * x -> x\ndrop1 xs = tail xs\nh = False ? keep : drop1\ng [a,b,c] = a\ng (h [1,2,3])',
     'keep xs = xs * x -> x\ndrop1 xs = tail xs\nfs = [keep,drop1]\ng [a,b,c] = a\ng (fs 1 [1,2,3])',
-    'import "sequence"; p = sortBy compare; g [a,b] = a; g (p [2,1])',
+    'std <- import "std"; use std.sequence; p = sortBy compare; g [a,b] = a; g (p [2,1])',
 ]) Deno.test(`checker does not assume lengths: ${source}`, () => rejected(session(), source));
 // An empty-list pattern rejects a list known to be non-empty (it would fail at
 // runtime), while lists of unknown length still reach it, as recursion needs.
@@ -539,8 +540,8 @@ for (const source of [
     'f (n : Int) = [1,2]; f 0 = [0]; g [a] = a; g (f 3)',
     // Clauses with different result types: where the call cannot tell which
     // runs (the time is not known), the result is either, used as both.
-    'import "time"; f (n : Int) = "a"; f 0 = 1; t <- currentTime; f t ++ "b"',
-    'import "time"; f (n : Int) = ["a","b"]; f 0 = [1]; t <- currentTime; head (f t) + 1',
+    'std <- import "std"; use std.time; f (n : Int) = "a"; f 0 = 1; t <- currentTime; f t ++ "b"',
+    'std <- import "std"; use std.time; f (n : Int) = ["a","b"]; f 0 = [1]; t <- currentTime; head (f t) + 1',
     'f (n : Int) = "a"; f 0 = 1; f 0 ++ "b"',
 ]) Deno.test(`clauses with different results stay checked: ${source}`, () => rejected(session(), source));
 // A literal passed through function parameters still selects clauses: a
@@ -603,9 +604,9 @@ for (const [source, expected] of [
     ['f 2.0 = [0]; f x = [1,2]; g [a] = a; g (f 2)','0'],
     ['f [1..3] = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h 2','0'],
     ['f [1..3] = [0]; f x = [1,2]; h x = g (f x); g [a,b] = a; h 7','1'],
-    ['import "option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h None','0'],
-    ['import "option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a,b] = a; h (Some 1)','1'],
-    ['import "option"; f (Some x) = [x]; f other = [1,2]; h v = g (f v); g [a] = a; h (Some 7)','7'],
+    ['std <- import "std"; use std.option; f None = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h None','0'],
+    ['std <- import "std"\nuse std.option\nf None = [0]; f x = [1,2]; h x = g (f x); g [a,b] = a; h (Some 1)','1'],
+    ['std <- import "std"\nuse std.option\nf (Some x) = [x]; f other = [1,2]; h v = g (f v); g [a] = a; h (Some 7)','7'],
     ['Light = Off | On; f On = [1]; f x = [0,0]; h l = g (f l); g [a] = a; h On','1'],
 ] as const) Deno.test(`more literal kinds select clauses: ${source}`, () => {
     const actual = run(session(), source);
@@ -615,19 +616,19 @@ for (const source of [
     "f 'a' = [0]; f c = [1,2]; h x = g (f x); g [a] = a; h 'b'",
     'f 1.5 = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h 2.5',
     'f [1..3] = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h 7',
-    'import "option"; f None = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h (Some 1)',
+    'std <- import "std"; use std.option; f None = [0]; f x = [1,2]; h x = g (f x); g [a] = a; h (Some 1)',
     'Light = Off | On; f On = [1]; f x = [0,0]; h l = g (f l); g [a] = a; h Off',
 ]) Deno.test(`more literal kinds stay checked: ${source}`, () => rejected(session(), source));
 // A function's result value (a literal or constructor, or one of its
 // arguments) is known at direct calls by name, so clause ranking can use it.
 for (const [source, expected] of [
-    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; g (f (mk 1))', '0'],
-    ['import "option"; f None = [0]; f x = [1,2]; g [a,b] = a; mk x = Some x; g (f (mk 1))', '1'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nh v = g (f v)\nh (mk 3)', '0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nh v = g (f (mk v))\nh 3', '0'],
-    ['import "option"; f None = [0]; f x = [1,2]; g [a] = a; pass v = v; g (f (pass None))', '0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nmk2 y = mk y\ng (f (mk2 1))', '0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : None\ng (f (pick True))', '0'],
+    ['std <- import "std"\nuse std.option\nf None = [0]; f x = [1,2]; g [a] = a; mk x = None; g (f (mk 1))', '0'],
+    ['std <- import "std"\nuse std.option\nf None = [0]; f x = [1,2]; g [a,b] = a; mk x = Some x; g (f (mk 1))', '1'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nh v = g (f v)\nh (mk 3)', '0'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nh v = g (f (mk v))\nh 3', '0'],
+    ['std <- import "std"\nuse std.option\nf None = [0]; f x = [1,2]; g [a] = a; pass v = v; g (f (pass None))', '0'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nmk2 y = mk y\ng (f (mk2 1))', '0'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : None\ng (f (pick True))', '0'],
     ['f 0 = [0]; f x = [1,2]; g [a] = a; zero x = 0; g (f (zero 9))', '0'],
     ['f "x" = [0]; f s = [1,2]; g [a] = a; named x = "x"; g (f (named 1))', '0'],
     ["f 'a' = [0]; f s = [1,2]; g [a] = a; letter x = 'a'; g (f (letter 1))", '0'],
@@ -636,11 +637,11 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = Some x; g (f (mk 1))',
-    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; pass v = v; g (f (pass (Some 2)))',
+    'std <- import "std"; use std.option; f None = [0]; f x = [1,2]; g [a] = a; mk x = Some x; g (f (mk 1))',
+    'std <- import "std"\nuse std.option\nf None = [0]; f x = [1,2]; g [a] = a; pass v = v; g (f (pass (Some 2)))',
     // Results that depend on a value, or calls through a variable, stay unknown.
-    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nmk2 x = Some x\nmkv = False ? mk : mk2\ng (f (mkv 1))',
-    'import "option"; f None = [0]; f x = [1,2]; g [a] = a; mk x = None; mkv = mk; g (f (mkv 1))',
+    'std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nmk2 x = Some x\nmkv = False ? mk : mk2\ng (f (mkv 1))',
+    'std <- import "std"\nuse std.option\nf None = [0]; f x = [1,2]; g [a] = a; mk x = None; mkv = mk; g (f (mkv 1))',
     // Code after a rebinding reads the new version.
     "f 'a' = [0]; f x = [1,2]; g [a] = a; c = 'a'; h u = g (f c); c = 'b'; g (f c)",
 ]) Deno.test(`function results stay checked: ${source}`, () => rejected(session(), source));
@@ -648,36 +649,36 @@ for (const source of [
 // called function's clauses and conditions with what is known about the
 // arguments, and decides calls through parameters at the enclosing calls.
 for (const [source, expected] of [
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : Some 1\ng (f (pick True))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a,b] = a\npick b = b ? None : Some 1\ng (f (pick False))','1'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 0))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a,b] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 5))','1'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\ng (f (safe -3))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a,b] = a\nsafe n = n > 0 ? Some n : None\ng (f (safe 4))','1'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n - 1 > 0 ? Some n : None\ng (f (safe 1))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nboth p q = p && q ? Some 1 : None\ng (f (both True False))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nz n = !n ? None : Some 1\ng (f (z 0))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nis s = s == "x" ? None : Some 1\ng (f (is "x"))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\ncount 0 = None\ncount n = count (n - 1)\ng (f (count 5))','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 0','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a,b] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 5','1'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nk w = h w\nk -1','0'],
-    ['import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh (v : Int) = g (f (safe v))\nh 0','0'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : Some 1\ng (f (pick True))','0'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a,b] = a\npick b = b ? None : Some 1\ng (f (pick False))','1'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 0))','0'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a,b] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 5))','1'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\ng (f (safe -3))','0'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a,b] = a\nsafe n = n > 0 ? Some n : None\ng (f (safe 4))','1'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n - 1 > 0 ? Some n : None\ng (f (safe 1))','0'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nboth p q = p && q ? Some 1 : None\ng (f (both True False))','0'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nz n = !n ? None : Some 1\ng (f (z 0))','0'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nis s = s == "x" ? None : Some 1\ng (f (is "x"))','0'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\ncount 0 = None\ncount n = count (n - 1)\ng (f (count 5))','0'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 0','0'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a,b] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 5','1'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nk w = h w\nk -1','0'],
+    ['std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh (v : Int) = g (f (safe v))\nh 0','0'],
     ['fib 0 = 0\nfib 1 = 1\nfib n = fib (n - 1) + fib (n - 2)\nf 6765 = [0]\nf x = [1,2]\ng [a] = a\ng (f (fib 20))','0'],
 ] as const) Deno.test(`value-dependent results: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : Some 1\ng (f (pick False))',
-    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 5))',
-    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 3',
-    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nk w = h w\nk 9',
-    'import "option"\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\n[h 0, h 1]',
+    'std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\npick b = b ? None : Some 1\ng (f (pick False))',
+    'std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk 0 = None\nmk n = Some n\ng (f (mk 5))',
+    'std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nh 3',
+    'std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\nk w = h w\nk 9',
+    'std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nsafe n = n > 0 ? Some n : None\nh v = g (f (safe v))\n[h 0, h 1]',
 ]) Deno.test(`value-dependent results stay checked: ${source}`, () => rejected(session(), source));
 // Floating-point and exact rational conditions are evaluated with the
 // runtime's own arithmetic and comparison, including NaN and lossy-mix rules.
-const optionClauses = 'import "option"; f None = [0]; f x = [1,2]';
+const optionClauses = 'std <- import "std"; use std.option; f None = [0]; f x = [1,2]';
 for (const [source, expected] of [
     ['g [a] = a; small x = x < 0.5 ? None : Some x; g (f (small 0.25))', '0'],
     ['g [a,b] = a; small x = x < 0.5 ? None : Some x; g (f (small 0.75))', '1'],
@@ -764,7 +765,7 @@ for (const source of [
 // The builtin length of a list or String is known when its size is: from a
 // literal, a parameter at its calls, cons, append, shaped builtins (map, sort)
 // and recursion over list patterns.
-const sizeClauses = 'import ["option","sequence","number"]; g [a] = a; sm n = n < 2 ? None : Some n\n'
+const sizeClauses = 'std <- import "std"\nuse std.[option,sequence,number]\ng [a] = a; sm n = n < 2 ? None : Some n\n'
     + 'q xs = length xs < 2 ? None : Some 1; len [] = 0; len (x::xs) = 1 + len xs';
 for (const [source, expected] of [
     ['g (f (sm (length [1])))', '0'],
@@ -861,7 +862,7 @@ for (const source of [
 ]) Deno.test(`zip and takeWhile lengths stay checked: ${source}`, () => rejected(session(), `${optionClauses}\n${sizeClauses}\n${source}`));
 // The pure builtins and the standard library written in APN (folds, endless
 // lists, text, local definitions) are evaluated on known values too.
-const textClauses = 'import "text"; r b = b ? None : Some 1';
+const textClauses = 'std <- import "std"; use std.text; r b = b ? None : Some 1';
 for (const [source, expected] of [
     ['g (f (q (dropWhile (< 2) [1,2])))', '0'],
     ['g (f (q (words "a")))', '0'],
@@ -1111,10 +1112,10 @@ for (const source of [
 for (const source of ['x::xs = []', 'x::y::z = [1]', 'f n = { x::xs = []; x }']) Deno.test(`a cons binding of a list known too short is rejected: ${source}`, () => rejected(session(), source));
 Deno.test("an unknown constructor in a pattern is named, with the module that declares it", () => {
     for (const [source, message, hint] of [
-        ["func ((Some x)::xs) = print [x,xs]", "unknown constructor 'Some' in a pattern", "add `import \"option\"` to use `Some`"],
-        ["print None", "unbound variable 'None'", "add `import \"option\"` to use `None`"],
+        ["func ((Some x)::xs) = print [x,xs]", "unknown constructor 'Some' in a pattern", "add `std <- import \"std\"; use std.option` to use `Some`"],
+        ["print None", "unbound variable 'None'", "add `std <- import \"std\"; use std.option` to use `None`"],
         // In code too: a name the library defines is a missing import, not open code.
-        ["print [x <- Some 1, return x]", "unbound variable 'Some'", "add `import \"option\"` to use `Some`"],
+        ["print [x <- Some 1, return x]", "unbound variable 'Some'", "add `std <- import \"std\"; use std.option` to use `Some`"],
         ["print [y + 1]", "unbound variable 'y'", "bind it in code joined before this"],
         ["Option a = Some a | None; k (Smoe x) = x", "unknown constructor 'Smoe' in a pattern", "did you mean 'Some'?"],
     ]) {
@@ -1125,7 +1126,7 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
         }
         throw new Error(`accepted: ${source}`);
     }
-    if (run(session(), 'import "option"; func ((Some x)::xs) = [x,xs]; func [Some 1, None]') !== "[1,[None]]") throw new Error("with the import");
+    if (run(session(), 'std <- import "std"\nuse std.option\nfunc ((Some x)::xs) = [x,xs]; func [Some 1, None]') !== "[1,[None]]") throw new Error("with the import");
 });
 // An unbound name is reported where it is written, with the standard module
 // exporting it, before any check of what it would have been.
@@ -1136,7 +1137,7 @@ for (const [source, name, module] of [
 ] as const) Deno.test(`an unbound name is located and named: ${JSON.stringify(source)}`, () => {
     try { run(session(), source); } catch (error) {
         const e = error as { message: string; hint?: string; pos?: number };
-        if (e.message !== `unbound variable '${name}'` || e.pos !== source.indexOf(name) || module && e.hint !== `add \`import "${module}"\` to use \`${name}\``) throw new Error(`${e.pos}: ${e.message} (${e.hint})`);
+        if (e.message !== `unbound variable '${name}'` || e.pos !== source.indexOf(name) || module && e.hint !== `add \`std <- import "std"; use std.${module}\` to use \`${name}\``) throw new Error(`${e.pos}: ${e.message} (${e.hint})`);
         return;
     }
     throw new Error(`accepted: ${source}`);
@@ -1151,11 +1152,11 @@ Deno.test("a set from an earlier REPL input keeps later cell reads unknown", () 
 // When checking right before a run, readFile and getArgs see the program's
 // input; the run reads the same snapshot. Lint and editor checks do not.
 const fish = "examples/advent-of-code/samples/fish.input", hill = "examples/advent-of-code/samples/hill.input";
-const inputPrelude = `import "io"; ${effectPrelude}`;
+const inputPrelude = `std <- import "std"; use std.io; ${effectPrelude}`;
 // Over input the checker cannot know, a fold keeps the length its step keeps:
 // splitOn's state is [fields, current] at every step.
 Deno.test("a fold keeps a length its step keeps, over unknown input", () => {
-    const source = `import "io"\n${FL}fst [a,b] = a; step [a,b] x = [x :: a, b]\n` +
+    const source = `std <- import "std"; use std.io\n${FL}fst [a,b] = a; step [a,b] x = [x :: a, b]\n` +
         'input <- readInput\nprint (fst (fl step [[],[]] (to (List Char) input)))';
     // Checked as an example is, without the input it will read.
     new CheckingSession().prepare(parse(source, "fold.apn"), Deno.cwd(), Deno.cwd());
@@ -1195,7 +1196,7 @@ Deno.test("checking without a run does not read input", () => {
 Deno.test("the run reads the file contents the checker saw", () => {
     const i = session();
     const text = Deno.readTextFileSync(fish);
-    if (run(i, `import "io"\nimport "text"\ncontents <- readFile "${fish}"\nwords contents`) !== `["${text.trim()}"]`) throw new Error("run");
+    if (run(i, `std <- import "std"\nuse std.[io,text]\ncontents <- readFile "${fish}"\nwords contents`) !== `["${text.trim()}"]`) throw new Error("run");
     // One snapshot per run: the checker's read is the one the run used.
     if (i.inputFile(fish) !== text) throw new Error("snapshot");
 });
@@ -1223,7 +1224,7 @@ for (const source of [
 for (const [source, line, column] of [
     ['g (n : UInt) = n\nh x = g -x\nprint (h 2)', 3, 8],
     ['g (n : UInt) = n\nh x = g x\nd y = h "a"', 3, 7],
-    ['import "text"\ng (n : UInt) = n\nh x = {\n    y = g x\n    z = upper x\n    y\n}', 4, 11],
+    ['std <- import "std"; use std.text\ng (n : UInt) = n\nh x = {\n    y = g x\n    z = upper x\n    y\n}', 4, 11],
 ] as const) Deno.test(`a deferred numeric call reports at line ${line}: ${source}`, () => {
     try { run(session(), source); } catch (error) {
         const { pos } = error as { pos: number };
@@ -1296,14 +1297,14 @@ for (const [source, expected] of [
     ['[(a : UInt8), (b : UInt8)] = [3, 3]; a + b', '6'],
     ['(x : Float)::rest = [1,2]; x', '1.0'],
     ['g [(a : UInt8), (b : UInt8)] = a; h x = g [x, x * 100]; h 1', '1'],
-    ['import "option"; g (Some (x : UInt8)) = x; g (Some 3)', '3'],
-    ['import "option"; g (Some (x : Float)) = x; g (Some 1)', '1.0'],
-    ['import "option"; (Some (x : Float)) = Some 1; x', '1.0'],
+    ['std <- import "std"; use std.option; g (Some (x : UInt8)) = x; g (Some 3)', '3'],
+    ['std <- import "std"; use std.option; g (Some (x : Float)) = x; g (Some 1)', '1.0'],
+    ['std <- import "std"; use std.option; (Some (x : Float)) = Some 1; x', '1.0'],
     // An imported constructor destructures without parentheses, as a declared one does.
-    ['import "option"; Some v = Some 123; f (Some (x : Float)) = x; [v, f (Some 1)]', '[123,1.0]'],
-    ['import "option"; g (Some (x : UInt8)) = x; k = Some 3; g k', '3'],
-    ['import "option"; g (Some (x : UInt8)) = x; h x = g (Some x); h 3', '3'],
-    ['import "option"; g (Some (x : UInt8)) = x; h x = g x; h (Some 3)', '3'],
+    ['std <- import "std"\nuse std.option\nSome v = Some 123; f (Some (x : Float)) = x; [v, f (Some 1)]', '[123,1.0]'],
+    ['std <- import "std"; use std.option; g (Some (x : UInt8)) = x; k = Some 3; g k', '3'],
+    ['std <- import "std"; use std.option; g (Some (x : UInt8)) = x; h x = g (Some x); h 3', '3'],
+    ['std <- import "std"; use std.option; g (Some (x : UInt8)) = x; h x = g x; h (Some 3)', '3'],
     ['Shape = Circle Float | Sq Float; Circle 2', 'Circle 2.0'],
     ['P = P2 Float Int | P0; P2 1 2', 'P2 1.0 2'],
     ['B = Byte UInt8 | NoByte; mk x = Byte x; mk 3', 'Byte 3'],
@@ -1334,15 +1335,15 @@ for (const source of ['x : Int = "a"', 'x : Int = 2.5', 'x : Int8 = 300',
     'g (n : UInt) = n; h x = g -x; h 2', 'g (n : UInt) = n; h x = g x; h -2', 'g (n : UInt) = n; h x = g x; h "a"',
     'g (n : Int) = n; h x = g x; h 2.5', 'g (n : UInt) = n; h x = g -x; d y = h (y * 2); d 1',
     'g (n : UInt) = n; h x = g -x; d y = h 2; 1', 'g (n : UInt) = n; h x = g x; d y = h "a"; 1',
-    'import "text"; g (n : UInt) = n; h x = { y = g x; z = upper x; y }; 1',
+    'std <- import "std"; use std.text; g (n : UInt) = n; h x = { y = g x; z = upper x; y }; 1',
     'Pt = [x : UInt, y : UInt]; g (p : Pt) = p.x; h x = g [x,-x]; h 2', 'Pt = [x : UInt, y : UInt]; g (p : Pt) = p.x; h x = g x; h [2,-2]',
     'Pt = [x : Float, y : Float]; g (p : Pt) = p.x; h x = g x; h [1]', 'g (f : Int -> Int) = f 1; h x = g x; h 5', 'g (s : String) = s; h x = g x; h 1',
     'g [(a : UInt8), (b : UInt8)] = a; g [3,300]', 'g [(a : UInt8), (b : UInt8)] = a; g [3,-1]', 'g [(a : UInt8), (b : UInt8)] = a; h x = g [x, x * 100]; h 3',
     '[(a : UInt8), (b : UInt8)] = [3, 300]', 'g [(s : String), (n : Int)] = s; g [1,2]',
-    'import "option"; g (Some (x : UInt8)) = x; g (Some 300)', 'import "option"; g (Some (x : UInt8)) = x; g (Some -1)',
-    'import "option"; g (Some (x : Int)) = x; g (Some 2.5)', 'import "option"; (Some (x : UInt8)) = Some 300',
-    'import "option"; g (Some (x : String)) = x; g (Some 1)', 'import "option"; g (Some (x : UInt8)) = x; k = Some 300; g k',
-    'import "option"; g (Some (x : UInt8)) = x; h x = g (Some x); h 300', 'import "option"; g (Some (x : UInt8)) = x; h x = g x; h (Some 300)',
+    'std <- import "std"\nuse std.option\ng (Some (x : UInt8)) = x; g (Some 300)', 'std <- import "std"\nuse std.option\ng (Some (x : UInt8)) = x; g (Some -1)',
+    'std <- import "std"\nuse std.option\ng (Some (x : Int)) = x; g (Some 2.5)', 'std <- import "std"\nuse std.option\n(Some (x : UInt8)) = Some 300',
+    'std <- import "std"\nuse std.option\ng (Some (x : String)) = x; g (Some 1)', 'std <- import "std"\nuse std.option\ng (Some (x : UInt8)) = x; k = Some 300; g k',
+    'std <- import "std"\nuse std.option\ng (Some (x : UInt8)) = x; h x = g (Some x); h 300', 'std <- import "std"\nuse std.option\ng (Some (x : UInt8)) = x; h x = g x; h (Some 300)',
     'B = Byte UInt8 | NoByte; Byte 300', 'B = Byte UInt8 | NoByte; Byte -1', 'B = Byte UInt8 | NoByte; Byte "a"',
     'P = P2 Float Int | P0; P2 1 2.5', 'B = Byte UInt8 | NoByte; mk x = Byte x; mk 300', 'B = Byte UInt8 | NoByte; k = 300; Byte k',
     'Pair a b = MkPair a b | NoPair; g (MkPair (x : Float) (y : UInt8)) = y; g (MkPair 1 300)',
@@ -1363,7 +1364,7 @@ for (const source of ['Int = 5', 'Int x y = 5']) Deno.test(`a built-in type name
 
 // A binding whose pattern its known value can never match is a static error,
 // as a call no clause matches is.
-for (const source of ["1 = 2", "[a,1] = [5,2]", 'import "option"\nNone = Some 1', '"x" = "y"']) {
+for (const source of ["1 = 2", "[a,1] = [5,2]", 'std <- import "std"; use std.option\nNone = Some 1', '"x" = "y"']) {
     Deno.test(`a binding that can never match is rejected statically: ${JSON.stringify(source)}`, () => rejected(session(), source));
 }
 for (const source of ["1 = 1", "[a,1] = [5,1]", "f x = { 1 = x; x }"]) {
@@ -1402,15 +1403,15 @@ for (const [source, expected] of [
     ['x = 1.0 / 4.0\nr = [v = 0.5]\n{ r.v = x; r }', '[v = 0.25]'],
     ['b = True\n((b ? 1 : 2.5) : Float)', '1.0'],
     // A recursive function of a sketch, whose methods yield [].
-    ['import "p5"\nb (p : Sketch) n = when (n > 2) (b p (n / 2))\nmain = sketch [draw = (p : Sketch) -> b p 120]\ntypeOf main', 'P5Program'],
+    ['std <- import "std"; use std.p5\nb (p : Sketch) n = when (n > 2) (b p (n / 2))\nmain = sketch [draw = (p : Sketch) -> b p 120]\ntypeOf main', 'P5Program'],
     ['pairs []', '[]'],
     // A block may start with a comment line.
     ['f = {\n    # first a comment\n    1\n}\nf', '1'],
     // Comparisons stay exact (a float against an integer beyond 2^53 too).
     ['[2 ^ 53 + 1 > 9007199254740992.0, 0.5 < 1, 0.1 + 0.2 > 0.3]', '[True,True,True]'],
     // A cell holding a p5 object takes another, as itself.
-    ['import "p5"\nc = Mutable (loadImage "a.png")\nset c (loadImage "b.png")\ntypeOf c', 'Mutable'],
-    ['import "glsl"\nglsl (vec [Glsl "a", 1] * sin (Glsl "t"))', '"(vec2(a, 1.0) * sin(t))"'],
+    ['std <- import "std"; use std.p5\nc = Mutable (loadImage "a.png")\nset c (loadImage "b.png")\ntypeOf c', 'Mutable'],
+    ['std <- import "std"; use std.glsl\nglsl (vec [Glsl "a", 1] * sin (Glsl "t"))', '"(vec2(a, 1.0) * sin(t))"'],
 ]) {
     Deno.test(`p5.js-example typing: ${source}`, () => {
         const actual = run(session(), source);

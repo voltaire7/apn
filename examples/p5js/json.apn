@@ -1,10 +1,11 @@
 # JSON, from https://p5js.org/examples/loading-and-saving-data-json/
 # Load data from a JSON file, and save it to one.
-import ["html","io","option","p5"]
-browser = import "browser"
-file = import "file"
-http = import "http"
-task = import "task"
+std <- import "std"
+use std.[html,io,option,p5]
+browser <- import "std/browser"
+file <- import "std/file"
+http <- import "std/http"
+task <- import "std/task"
 
 # Bubbles, each a circle with a name; and the press a new one starts from,
 # while one is being made.

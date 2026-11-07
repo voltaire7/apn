@@ -43,14 +43,14 @@ for (const source of ['parseInt "1.5"', 'parseInt "1/2"', 'solveFish "9"', 'solv
     });
 }
 Deno.test("readInput uses program arguments and reads UTF-8 from cwd-relative or absolute paths", () => {
-    const i = new Interpreter(); i.run(parse('import "io"'));
+    const i = new Interpreter(); i.run(parse('std <- import "std"; use std.io'));
     const file = new URL("../examples/advent-of-code/samples/sonar.input", import.meta.url).pathname;
     i.programArgs = [file];
     const actual = i.demand(i.run(parse('readInput')));
     if (actual.kind !== "string" || actual.v !== Deno.readTextFileSync(file)) throw new Error("readInput failed");
 });
 Deno.test("file read failures identify the operation", () => {
-    const i = new Interpreter(); i.run(parse('import "io"'));
+    const i = new Interpreter(); i.run(parse('std <- import "std"; use std.io'));
     try { result(i, 'readFile "/__apn_missing_input__/missing.input"'); }
     catch (error) { if (error instanceof Error && error.message.startsWith("readFile:")) return; throw error; }
     throw new Error("expected a read error");

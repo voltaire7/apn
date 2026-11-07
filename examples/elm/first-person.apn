@@ -2,9 +2,10 @@
 # Walk around in 3D space using the keyboard. Elm textures its crate with
 # https://elm-lang.org/images/wood-crate.jpg, an image WebGL cannot use from
 # another site, so this crate's wood is drawn into a p5 graphic (as in Crate).
-import "html"
-browser = import "browser"
-p5 = import "p5"
+std <- import "std"
+use std.html
+browser <- import "std/browser"
+p5 <- import "std/p5"
 
 eyeLevel = 2
 noKeys = [up = False, left = False, down = False, right = False, space = False]

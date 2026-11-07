@@ -75,7 +75,8 @@ takes any argument (`f xs = 0` then `f [a,b] = a + b`), and about a `match`
 alternative after one that takes any value. The constructors it knows are
 the program's and those its imports, `load` statements (`load "f"`, also
 `(load "f" : Dynamic)`) and `use` statements declare, where `use` opens a record
-bound to an import or a load (`opt = import "option"; use opt`), written in
+bound to an import or a load (`opt <- import "std/option"; use opt`, or
+`use std.option`), written in
 place, or a list of them: it resolves each from the file's folder as the
 interpreter does and reads (never runs) it, so a file it cannot read declares
 nothing. It warns
@@ -103,10 +104,10 @@ completion offers only the standard natives. Standard output is reserved for LSP
 - Diagnostics on opening or changing a document; closing clears them.
 - Completion for built-ins, type constructors, keywords, identifiers in the
   current document, and the standard library's exports. Accepting a standard
-  name whose module is not imported yet adds the import: into the first
-  one-line import, which becomes a list (`import "io"` becomes
-  `import ["io","sequence"]`), or as `import "sequence"` on the first line,
-  followed by a blank line.
+  name whose module is not opened yet opens it: into the first `use std.`
+  line, which becomes a list (`use std.io` becomes `use std.[io,sequence]`),
+  else as `use std.sequence` after `std <- import "std"`, else as both lines
+  at the top, followed by a blank line.
   Document identifiers are lexical suggestions, not validated scope
   resolution. On invalid source, built-in completion remains available.
 - APN applies functions without parentheses, so the Neovim integration adds
