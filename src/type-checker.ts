@@ -8,7 +8,7 @@ import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, numericType, SCALAR_TYPES, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
 import { APNError, didYouMean, formatFileReadError, typeApplied, withArticle } from "./errors.ts";
-import { parse, parseDocument, patternSource, PRIMITIVE_OPERATORS } from "./parser.ts";
+import { bindingItem, parse, parseDocument, patternSource, PRIMITIVE_OPERATORS } from "./parser.ts";
 import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
@@ -2071,12 +2071,28 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             while (expr.t === "block" && expr.style === "(" && expr.stmts.length === 1) expr = expr.stmts[0];
             edits.push([n, expr]);
         }
-        const changed = new Set<string>(), next = [...items];
+        return replaceItems(rec, edits, scope);
+    }
+    // Code with these items replaced by code, run in it (the interpreter's
+    // setIndex): the items after them reading a name either binds run again.
+    function replaceItems(rec: Extract<Ty, { k: "list" }>, edits: [number, Expr][], scope: Scope): Ty {
+        const changed = new Set<string>(), next = [...rec.formula!.items];
         for (const [n, expr] of edits) {
             for (const name of next[n].binds?.keys() ?? []) changed.add(name);
             next[n] = { expr, scope, slot: binding(expr) ? undefined : rec.items?.[n] };
         }
         return codeList(next, changed);
+    }
+    // The item of code that binds name last, as the interpreter's codeBinding.
+    function codeBinding(rec: Extract<Ty, { k: "list" }>, name: string): { index: number; entry: Entry; simple: boolean } | undefined {
+        const items = rec.formula?.items ?? [];
+        for (let n = items.length - 1; n >= 0; n--) {
+            const e = items[n].expr, runs = e?.t === "patDef" && e.eager && patternNames(e.pattern).includes(name);
+            const entry = items[n].binds?.get(name) ?? (runs ? { type: unknown() } : undefined);
+            if (runs) problem(`code binds ${name} only when it runs`, e!, "do runs the code: x <- m binds x for the items after it");
+            if (entry) return { index: n, entry, simple: e?.t === "stmDef" ? e.name === name : e?.t === "patDef" && e.pattern.p === "var" };
+        }
+        return undefined;
     }
     // Code whose values are needed must name only what is bound: an open
     // list's names are unbound where they are read.
@@ -3808,6 +3824,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     rec = resolve(child);
                 }
                 if (rec.k === "dynamic") return unknown();
+                // code.x = v replaces the item binding x with x = v.
+                const [only] = e.entries;
+                const coded = rec.k === "list" && e.entries.length === 1 && !e.aliases && only !== "_" ? codeBinding(rec, only) : undefined;
+                if (coded && rec.k === "list") {
+                    if (!coded.simple) return problem(`code binds ${only} with a pattern; replace the item: code ${coded.index} = (...)`, e);
+                    let result = replaceItems(rec, [[coded.index, bindingItem(only, e.value)]], scope);
+                    for (let i = parents.length - 1; i >= 0; i--) {
+                        const [parent, key, open] = parents[i];
+                        result = { k: "record", fields: new Map([...parent, [key, result]]), open };
+                    }
+                    return result;
+                }
                 if (rec.k === "list" && rec.items?.length === 0) rec = { k: "record", fields: new Map() };
                 if (rec.k === "var") rec = opened(rec);
                 // Another value's fields are set by clauses for with that take it.
@@ -3994,6 +4022,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // A Mutable cell's fields are its contents' (as it applies as them).
                 while (rec.k === "mutable") rec = resolve(rec.value);
                 if (isExplicit(rec)) { runtimeChecks++; return explicitDynamic; }
+                // code.x: the value code's binding of x gives.
+                const bound = rec.k === "list" && !e.scoped ? codeBinding(rec, e.field) : undefined;
+                if (bound) return bound.entry.type;
                 if (rec.k === "list") return template(rec, infer(e.argument ?? { t: "var", name: e.field }, scope), e.argument ?? e);
                 if (e.scoped && e.argument) {
                     if (rec.k === "dynamic" || rec.k === "var") return unknown();

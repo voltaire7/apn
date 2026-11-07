@@ -2483,6 +2483,13 @@ function recordFieldsSource(e: Extract<Expr, { t: "record" }>, of: (x: Expr) => 
         return typed ? `${fieldSource(key, of(typed.f), true)} = ${of(typed.a)}` : fieldSource(key, of(x), true);
     });
 }
+// The item code.x = v puts in place of the item binding x: x = v (a field
+// assignment's value is the list of its fields' values; one field's is its
+// only item).
+export function bindingItem(name: string, value: Expr): Expr {
+    const body: Expr = value.t === "list" && value.v.length === 1 ? value.v[0] : { t: "app", f: value, a: { t: "int", v: 0n } };
+    return { t: "stmDef", name, clauses: [{ params: [], body }] };
+}
 // A list whose items are all fields is a record: [x = 1, y = x + 1] (each
 // field in scope for those after it), [x : Float, y : Float = 1.0] (a declared
 // field holds its type, or its default as one), [use base, x = 1] (a spread).

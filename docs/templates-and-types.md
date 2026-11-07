@@ -323,7 +323,7 @@ obj.[x = a, y = b] = obj.[a = y, b = x] # swap
 Every entry must be renamed; the RHS must be a record with exactly the selected
 output names. Targets must already exist. Updates use the original slots'
 conversion rules and publish only after all replacements pass. Nested targets
-such as `obj.child.[a = x]` follow the same rule. Ordinary `obj.[x,y]` assignment
+such as `obj.child.[x = a] = r` follow the same rule. Ordinary `obj.[x,y]` assignment
 continues to require a list.
 
 ### Nested records

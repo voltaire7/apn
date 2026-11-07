@@ -24,7 +24,7 @@ import { enumerationPositions } from "./ast.ts";
 import { canonicalTypeText, compoundArgument, slotField, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
-import { parse, exprToSource, patternSource, patternVariables, isOperatorName, PRIMITIVE_OPERATORS, fixityOf, getLooseSpacing, setLooseSpacing } from "./parser.ts";
+import { bindingItem, parse, exprToSource, patternSource, patternVariables, isOperatorName, PRIMITIVE_OPERATORS, fixityOf, getLooseSpacing, setLooseSpacing } from "./parser.ts";
 import { charLiteral, itemsText, spacedItem, stringLiteral } from "./separators.ts";
 
 // ---------------- Evaluator ----------------
@@ -1546,6 +1546,10 @@ export class Interpreter {
                     case "recordAccess": {
                         // Resolve aliases/actions to the outer record, leaving its fields lazy.
                         const rec = this.dataValue(this.eval(e.rec));
+                        // code.x: the value code's binding of x gives, as a
+                        // record's field is (a list binding nothing applies).
+                        const binding = this.isList(rec) && !e.scoped ? this.codeBinding(rec, e.field) : undefined;
+                        if (binding) { r = binding.value; break; }
                         if (this.isList(rec) && e.argument) {
                             r = this.templateList(rec, this.eval(e.argument));
                             break;
@@ -1619,6 +1623,19 @@ export class Interpreter {
                             if (rec.kind !== "record") throw new APNError("runtime", "nested field assignment requires a record");
                             parents.push([rec, key]);
                             rec = this.dataValue(this.recordField(rec, key));
+                        }
+                        // code.x = v replaces the item binding x with x = v, as
+                        // code i = (x = v) does: the items after it see it.
+                        const [only] = e.entries;
+                        const binding = this.isList(rec) && e.entries.length === 1 && !e.aliases && only !== "_" ? this.codeBinding(rec, only) : undefined;
+                        if (binding) {
+                            if (!binding.simple) throw new APNError("runtime", `code binds ${only} with a pattern; replace the item: code ${binding.index} = (...)`);
+                            r = this.setIndex(rec, binding.index, mkList([]), { expr: bindingItem(only, e.value), env: this.env });
+                            for (let n = parents.length - 1; n >= 0; n--) {
+                                const [parent, key] = parents[n], child = r;
+                                r = this.keepType(parent, { kind: "record", v: parent.v.map(([k, v]) => [k, k === key ? child : v]) });
+                            }
+                            break;
                         }
                         if (this.isList(rec) && this.cell(rec) === null) rec = mkList([]);
                         let base: Array<[string, Value]> | null = null;
@@ -2675,6 +2692,26 @@ export class Interpreter {
     private code(value: Value): Value {
         const written = value.kind === "record" ? this.recordCode.get(value) : undefined;
         return written ? written.code ??= this.codeList(written.exprs, written.env) : value;
+    }
+    // The item of code that binds name last (what the code leaves it as):
+    // its position, the value, and whether it binds name alone (x = ...).
+    // An x <- m item binds x only when do runs the code. Only items written
+    // as code are walked.
+    private codeBinding(code: Value, name: string): { index: bigint; value: Value; simple: boolean } | undefined {
+        let found: { index: bigint; value: Value; simple: boolean } | undefined, index = 0n;
+        for (let rest = code;; index++) {
+            const cell = this.cell(rest);
+            if (!cell) return found;
+            const item = this.written(cell.head);
+            if (!item) return found;
+            const value = item.binds?.get(name);
+            if (value && item.runs) throw new APNError("runtime", `code binds ${name} only when it runs`, { hint: "do runs the code: x <- m binds x for the items after it" });
+            if (value) {
+                const e = item.expr;
+                found = { index, value, simple: e.t === "stmDef" ? e.name === name : e.t === "patDef" && e.pattern.p === "var" };
+            }
+            rest = cell.tail;
+        }
     }
     // xs ++ ys: xs's items, then ys's, which see the bindings xs's make (see
     // rerun): [x = 1] ++ [x + 1] is the code [x = 1, x + 1].

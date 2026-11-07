@@ -393,6 +393,22 @@ print code                  # [11,5]
 code 1 = x * 3              # x is the list's: [30,5]
 ```
 
+Code's bindings are its fields, as a record's are: `code.x` is the value
+the last item binding `x` gives, and `code.x = v` replaces that item with
+`x = v`, an update as above (`code.[x] = [v]` too). A list binding no `x`
+keeps dotted application (`[Int].x` applies `[Int]` to `x`). An `x <- m`
+item binds `x` only when `do` runs the code, so `code.x` is an error there,
+as is replacing a binding made by a pattern (`[a,b] = ...`), which replaces
+as an item (`code 0 = ...`):
+
+```apn
+code = [x = 1, x + 1]
+code.x                      # 1
+code.x = 10
+probe code                  # [x = 10, x + 1]
+print code                  # [11]
+```
+
 A list function passes the items it keeps on as written, with their values
 (`take 1 code ++ [x * 5]` prints `[50]`); only `++` and an update run items
 again. One that makes new items (`map f xs`) makes values. Using an open

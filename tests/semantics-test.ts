@@ -572,6 +572,26 @@ probe (reduce [1 + 1])
 print (length edited)`, ["[x = 1, x + 1]", "[2]", "[11,5]", "[x = 10, x + 1, 5]", "[30,5]", "[2]",
     "[x = 10, x * 5]", "[50]", "[1,2,1,2,1]", "[2]", "3"]);
 failure("an open list's values need its names", "print [x + 1]", "unbound variable 'x'");
+// Code's bindings are its fields: code.x reads the last binding of x, and
+// code.x = v replaces it, the items after it seeing the new x.
+example("code.x reads a binding and code.x = v replaces it", `
+code = [x = 1, x + 1]
+print code.x
+code.x = 10
+probe code
+print code
+joined = [x = 1] ++ [y = x * 2, y + 1]
+print [joined.x,joined.y]
+r = [c = [n = 3, n * n]]
+r.c.n = 4
+print r.c
+twice = [x = 1, x = x + 1, x]
+print twice.x
+print [Int].[1]`, ["1", "[x = 10, x + 1]", "[11]", "[1,2]", "[16]", "2", "[1]"]);
+failure("an x <- m item binds when the code runs", "w = [x <- [1,2], return (x * 10)]\nprint w.x",
+    "only when it runs");
+failure("a binding by a pattern is replaced as an item", "pc = [[a,b] = [3,4], a + b]\npc.a = 9",
+    "replace the item");
 example("List a = [] | a :: List a: each element an a, endless lists too", `
 print [isType (List Int) [], isType (List Int) [1,2], isType (List Int) [1,"a"]]
 ones = 1 :: ones
