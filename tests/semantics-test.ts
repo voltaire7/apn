@@ -572,6 +572,18 @@ probe (reduce [1 + 1])
 print (length edited)`, ["[x = 1, x + 1]", "[2]", "[11,5]", "[x = 10, x + 1, 5]", "[30,5]", "[2]",
     "[x = 10, x * 5]", "[50]", "[1,2,1,2,1]", "[2]", "3"]);
 failure("an open list's values need its names", "print [x + 1]", "unbound variable 'x'");
+// A list of definition heads = a list of bodies defines each by its own.
+example("[f x, g y] = [x, y] defines f and g", `
+[f x, g y] = [x, y]
+print [f 1, g 2]
+[a, h n] = [10, n * a]
+print (h 3)
+k = {
+    [p x, q y] = [x + 1, y * 2]
+    p 1 + q 2
+}
+print k`, ["[1,2]", "30", "6"]);
+failure("a list of definitions takes a list of bodies", "pair = [1,2]\n[f x, g y] = pair", "write a list of 2 bodies");
 // Code's bindings are its fields: code.x reads the last binding of x, and
 // code.x = v replaces it, the items after it seeing the new x.
 example("code.x reads a binding and code.x = v replaces it", `

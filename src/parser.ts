@@ -135,7 +135,7 @@ class Parser {
             if (t.k === "sym" && t.v === "=") this.checkEqualsSpacing(t);
             if (t.k === "sym" && t.v === ",") {
                 this.checkTrailingComma(index);
-                this.checkCommaSpacing(t, holds[holds.length - 1] ?? "params", tight.has(index));
+                this.checkCommaSpacing(t, holds[holds.length - 1] ?? "params", tight.has(index), this.pairedCommas.has(index));
             }
             if (t.k === "sym" && t.v === ";") this.checkSemicolon(index);
             this.checkOperatorSpacing(index);
@@ -241,7 +241,7 @@ class Parser {
     // item it separates has a space ([1,2,3]), one space otherwise ([x = 1, y = 2],
     // [1 + 1, 2], and always between lambda parameters: x, y -> x). A newline already separates items, so a
     // ',' ending its line is redundant.
-    checkCommaSpacing(t: Token, holds: "record" | "list" | "params", tight: boolean): void {
+    checkCommaSpacing(t: Token, holds: "record" | "list" | "params", tight: boolean, paired = false): void {
         const after = this.source.slice(t.pos + 1).split("\n", 1)[0];
         this.seen = t;
         if (/^\s*(#.*)?$/.test(after)) throw new Error("Parser: a newline already separates items; remove the ',' at the end of the line");
@@ -250,7 +250,7 @@ class Parser {
         const what = holds === "record" ? "record fields" : "list items";
         throw new Error(tight
             ? `Parser: separate ${what} with no spaces in them by ',' alone (write [1,2,3])`
-            : `Parser: separate ${what} by ', ' when one has a space (write ${holds === "record" ? "[x = 1, y = 2]" : "[1 + 1, 2]"})`);
+            : `Parser: separate ${what} by ', ' when one has a space${paired ? ", on either side of =" : ""} (write ${holds === "record" ? "[x = 1, y = 2]" : paired ? "[f x, g y] = [x, y]" : "[1 + 1, 2]"})`);
     }
 
     // The commas whose items have no space in them (outside strings and
@@ -272,21 +272,27 @@ class Parser {
             }
             return /\s/.test((text + this.source.slice(at, toks[b].pos)).replace(/#.*$/, "").trimEnd());
         };
-        type Frame = { list: boolean; start: number; items: [number, number][]; commas: number[] };
+        // A bracket's commas, and whether any of its items has a space.
+        type Bracket = { open: number; commas: number[]; spaced: boolean };
+        type Frame = { list: boolean; open: number; start: number; items: [number, number][]; commas: number[]; whole: Bracket };
         const decide = (frame: Frame, end: number) => {
-            if (frame.commas.length && frame.start < end) frame.items.push([frame.start, end]);
-            if (frame.commas.length && frame.items.every(([a, b]) => !spaced(a, b))) frame.commas.forEach(c => tight.add(c));
+            if (frame.start < end) frame.items.push([frame.start, end]);
+            const segmentSpaced = frame.items.some(([a, b]) => spaced(a, b));
+            if (frame.commas.length && !segmentSpaced) frame.commas.forEach(c => tight.add(c));
+            if (frame.list) { frame.whole.commas.push(...frame.commas); frame.whole.spaced ||= segmentSpaced; }
             frame.items = []; frame.commas = [];
         };
-        const frames: Frame[] = [{ list: false, start: 0, items: [], commas: [] }];
+        const closed = new Map<number, Bracket>(), opened = new Map<number, Bracket>();
+        const frames: Frame[] = [{ list: false, open: -1, start: 0, items: [], commas: [], whole: { open: -1, commas: [], spaced: false } }];
         for (let i = 0; i < toks.length; i++) {
             const t = toks[i], frame = frames[frames.length - 1];
             if (opens(t)) {
-                frames.push({ list: t.k === "sym" && t.v === "[", start: i + 1, items: [], commas: [] });
+                frames.push({ list: t.k === "sym" && t.v === "[", open: i, start: i + 1, items: [], commas: [], whole: { open: i, commas: [], spaced: false } });
                 continue;
             }
             if (closes(t) || layout(t)) {
                 decide(frame, i);
+                if (closes(t) && frame.list) { closed.set(i, frame.whole); opened.set(frame.open, frame.whole); }
                 if (closes(t) && frames.length > 1) frames.pop();
                 let next = i + 1;
                 while (layout(toks[next])) next++;
@@ -299,8 +305,28 @@ class Parser {
                 frame.start = i + 1;
             }
         }
+        // [f x, g y] = [x, y]: a bracket that is the whole left side of =
+        // (a statement's start, in a block too, or the fields v.[x,y] names) pairs its items
+        // with the right's, so one rule spaces both: ', ' when an item on
+        // either side has a space. (f [x,y] = [...] is a parameter and a body.)
+        const starts = (t?: Token) => !t || layout(t) || t.k === "sym" && [";", "{", "("].includes(t.v);
+        const whole = (open: number) => {
+            let at = open;
+            // v.[x,y] or obj.child.[x,y]: the selection's chain starts the statement.
+            while (toks[at - 1]?.k === "sym" && (toks[at - 1] as { v: string }).v === "." && toks[at - 2]?.k === "ident") at -= 2;
+            return starts(toks[at - 1]);
+        };
+        toks.forEach((t, i) => {
+            const left = closed.get(i - 1), right = opened.get(i + 1);
+            if (t.k !== "sym" || t.v !== "=" || !left || !right || !whole(left.open)) return;
+            const commas = [...left.commas, ...right.commas];
+            commas.forEach(c => this.pairedCommas.add(c));
+            if (left.spaced || right.spaced) commas.forEach(c => tight.delete(c));
+        });
         return tight;
     }
+    // Commas whose spacing both sides of an = decide (see tightCommas).
+    private pairedCommas = new Set<number>();
 
 
     lineIndent(token: Token): number {
@@ -1087,7 +1113,10 @@ class Parser {
                                 for (const d of this.parseTypeDeclaration(tb)) stmts.push(d.t === "type" ? { t: "typeDef", def: d.def } : d.t === "def" ? { t: "stmDef", name: d.name, clauses: d.clauses } : d.value);
                                 continue;
                             }
-                            if (this.isEagerBinding()) {
+                            const paired = this.pairedDefs();
+                            if (paired) {
+                                for (const d of paired) stmts.push({ t: "stmDef", ...d });
+                            } else if (this.isEagerBinding()) {
                                 stmts.push(this.parseEagerBinding());
                             } else if (this.isFieldAssignStart()) {
                                 stmts.push(this.parseFieldAssign());
@@ -1695,6 +1724,36 @@ class Parser {
             value: { t: "setItem", rec: left.f, index: left.a, value } };
     }
 
+    // [f x, g y] = [e1, e2]: one definition per pair, as f x = e1 and
+    // g y = e2 (each body in its own parameters' scope). A list of names
+    // alone is a destructuring binding instead.
+    pairedDefs(): { name: string; clauses: DefClause[] }[] | undefined {
+        if (!this.isSym("[")) return undefined;
+        const save = this.i;
+        const heads: { name: string; params: Pattern[] }[] = [];
+        try {
+            this.next();
+            this.skipListLeading();
+            while (!this.isSym("]")) {
+                const t = this.next();
+                if (t.k !== "ident" || !/^[a-z_]/.test(t.v)) throw new Error("not a head");
+                const params: Pattern[] = [];
+                while (this.startsParam(this.peek()) || this.negativeLiteral()) params.push(this.parameter());
+                heads.push({ name: t.v, params });
+                this.skipListSeparators();
+            }
+            this.next();
+            if (!heads.some(h => h.params.length) || !this.isSym("=")) throw new Error("not paired");
+        } catch { this.i = save; return undefined; }
+        this.next();
+        const at = this.peek(), value = this.parseDefBody();
+        if (value.t !== "list" || value.v.length !== heads.length) {
+            throw new APNError("parse", `[${heads.map(h => h.name).join(", ")}] = ... defines each by its own item: write a list of ${heads.length} bodies`, {
+                pos: at.pos, hint: "[f x, g y] = [x + 1, y * 2] is f x = x + 1 and g y = y * 2" });
+        }
+        return heads.map((h, n) => ({ name: h.name, clauses: [{ params: h.params, body: value.v[n] }] }));
+    }
+
     // A definition inside a `{ }` block (a statement, not a value expression).
     parseBlockDef(): Extract<Expr, { t: "stmDef" }> {
         const d = this.parseDefStatement();
@@ -2252,7 +2311,9 @@ class Parser {
             }
 
             if (t.k === "sym") {
-                if (this.isPatBinding()) {
+                const paired = this.pairedDefs();
+                if (paired) for (const d of paired) out.push({ t: "def", ...d });
+                else if (this.isPatBinding()) {
                     out.push(this.parsePatBinding() as TopLevel);
                 } else {
                     const e = this.parseExpr();

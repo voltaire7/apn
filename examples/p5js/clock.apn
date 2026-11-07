@@ -13,7 +13,7 @@ draw (p : Sketch) = {
     # The hands' lengths and the face's size, from the canvas's (the sketch's
     # values are Dynamic: Number converts them for min).
     radius = min (p.width : Number) (p.height : Number) / 2
-    [secondsRadius,minutesRadius,hoursRadius] = [radius * 0.71, radius * 0.6, radius * 0.5]
+    [secondsRadius, minutesRadius, hoursRadius] = [radius * 0.71, radius * 0.6, radius * 0.5]
     clockDiameter = radius * 1.7
     p.background 230
     p.translate (p.width / 2) (p.height / 2)

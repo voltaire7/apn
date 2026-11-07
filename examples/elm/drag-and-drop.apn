@@ -13,7 +13,7 @@ update msg model = msg ~ [
     DragEnter -> { model.hover = True; [model,browser.none] }
     DragLeave -> { model.hover = False; [model,browser.none] }
     GotFiles first others -> {
-        model.[files,hover] = [first :: others, False]
+        model.[files, hover] = [first :: others, False]
         [model,browser.none]
     }
 ]

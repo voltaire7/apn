@@ -320,6 +320,7 @@ function helpText(): string {
         `  xs +++ ys = ...; (<+>) = f   new operators work but are not recommended`,
         `  ( ) and { } are groups/blocks: [] when empty, value = last stmt`,
         `  spacing: x = 1, lists [1,2,3] and [1 + 1, 2], records [x = 1, y = 2], (x), { x } (--loose: none)`,
+        `  [f x, g y] = [x, y]   (defines f x = x and g y = y; both sides of = space their commas alike)`,
         `  operators spaced on both sides or neither: 1 + 2, 1+2 (not 1 +2); -x negates, f -1 passes -1`,
         `  ; or newline       statement separators (blocks & top level)`,
         `  print, readFile, fetch, set ... are IO actions: statements and <- run them`,

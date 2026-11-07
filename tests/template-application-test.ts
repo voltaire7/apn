@@ -37,7 +37,7 @@ for (const [source, expected] of [
     ['v = [x : Int, y : Int] []\nv.y = 321\nv', '[x = 0, y = 321]'],
     ['v = [x : Int, y : Int] [x = 123]\nv.y = 321\nv.y = floor .2\nv', '[x = 123, y = 0]'],
     ['v = [x : Int, y : Int] []\nv "y" = 321\nv', '[x = 0, y = 321]'],
-    ['v = [x : Int, y : Float] []\nv.[x,y] = [floor .2, 3]\nv', '[x = 0, y = 3.0]'],
+    ['v = [x : Int, y : Float] []\nv.[x, y] = [floor .2, 3]\nv', '[x = 0, y = 3.0]'],
     ['take 4 (map Int [0..])', '[0,1,2,3]'],
     ['take 2 [Int,Int,Int].[1,2,missing]', '[1,2]'],
     ['head [x -> 42].[missing]', '42'],

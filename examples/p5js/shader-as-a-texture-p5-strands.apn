@@ -8,8 +8,8 @@ import ["glsl","number","p5"]
 tiles inputs = {
     [size,mouse,time] = map Glsl ["size","mouse","time"]
     rotate2D st angle = {
-        [c,s] = [cos angle, sin angle]
-        [x,y] = [swizzle "x" st - 0.5, swizzle "y" st - 0.5]
+        [c, s] = [cos angle, sin angle]
+        [x, y] = [swizzle "x" st - 0.5, swizzle "y" st - 0.5]
         vec [c * x - s * y + 0.5, s * x + c * y + 0.5]
     }
     tile st zoom = fract (st * zoom)

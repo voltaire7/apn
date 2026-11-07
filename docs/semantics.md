@@ -95,7 +95,10 @@ Spacing is part of the syntax (a parse error otherwise):
   bracket, so `[[1,2],[3]]` but `[[1 + 1], [3]]`, and `[1, 2]` or `[1 + 1,2]` is
   an error. This covers list items and patterns, record fields, bare
   selections (`v.[x,y]`), ranges (`[1,3..9]`), `match` clause lists and import
-  lists. Lambda parameters, which start a spaced lambda, always take one space:
+  lists. A bracket that is the whole left side of `=` pairs its items with the
+  right's, so both sides count as one: `[a, b] = [f 1, 2]` and
+  `[f x, g y] = [x, y]`, but `[a,b] = [1,2]` (a parameter's pattern,
+  `f [x,y] = [x + 1, y]`, is not paired). Lambda parameters, which start a spaced lambda, always take one space:
   `x, y -> x + y`, `(x : Int), y -> x`.
 - A `,` separates two items on one line. A newline already separates items,
   so a `,` ending a line is an error, as is a trailing one (`[1,2,]`); a
@@ -265,7 +268,9 @@ rebinding may have another type. The left side may be a pattern:
 constructor), a literal (`1 = n` asserts that `n` is 1), or a keyed
 record pattern `[x = a] = record`. A failed match is an error: before the
 run when the value is known (`1 = 2`, `None = Some 1`), otherwise when the
-binding runs. A bare `[x,y]`
+binding runs. A list of definition heads defines each by its own item of a list
+written on the right: `[f x, g y] = [x, y]` is `f x = x` and `g y = y` (a list
+of names alone, `[a,b] = [1,2]`, is the pattern binding above). A bare `[x,y]`
 pattern also matches a record, selecting the fields named `x` and `y` (extra
 fields are ignored), in bindings, function parameters, and `match` alternatives. A new capitalized name on the
 left defines a function that computes (a type alias among them), or with the
@@ -712,7 +717,7 @@ ordinary record, open to new fields.
 
 A typed entry declares its field anew, as `x : T = e` does in a literal, so
 the field's type becomes `T` (`v.[x : Float] = [3]` makes `x` the Float
-`3.0`, where `v.x = 3.0` keeps an Int field an Int): `v.[x : T, y] = [a,b]`
+`3.0`, where `v.x = 3.0` keeps an Int field an Int): `v.[x : T, y] = [a, b]`
 is `v = [use v, x : T = a].[y] = [b]`, the untyped entries assigned as usual,
 renamed ones too (`v.[x : T = a] = r`), and `T` is any type expression.
 

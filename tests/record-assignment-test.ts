@@ -14,7 +14,7 @@ for (const [name, source, expected] of [
     ["action returning record", 'obj = { [x = 1] }\nobj "x" = 10\nobj', '[x = 10]'],
     // A typed entry declares the field anew, as x : T = e does; the others
     // are assigned as usual.
-    ["typed entries declare", 'v = [x = 1, y = 2]\nv.[x : Float, y] = [3,4]\n[v, typeOf v.y]', '[[x = 3.0, y = 4], Int]'],
+    ["typed entries declare", 'v = [x = 1, y = 2]\nv.[x : Float, y] = [3, 4]\n[v, typeOf v.y]', '[[x = 3.0, y = 4], Int]'],
     ["typed entries from a value", 'v = [x = 1]\nvs = [5]\nt = Int8\nv.[x : t] = vs\ntypeOf v.x', 'Int8'],
     ["typed renamed entries", 'w = [x = 1, y = 2]\nw.[x : Float = p, y = q] = [p = 9, q = 8]\nw', '[x = 9.0, y = 8]'],
     ["typed nested entries", 'r = [c = [n = 1]]\nr.c.[n : Float] = [2]\nr', '[c = [n = 2.0]]'],

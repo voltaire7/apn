@@ -36,7 +36,7 @@ escape x y = {
     q = (x - 0.25) * (x - 0.25) + y * y
     inside = q * (q + x - 0.25) <= y * y / 4 || (x + 1) * (x + 1) + y * y <= 0.0625
     repeat a b n = {
-        [aa,bb] = [a * a, b * b]
+        [aa, bb] = [a * a, b * b]
         n == maxIterations || aa * aa + bb * bb > 256.0
             ? n : repeat (aa - bb + x) (2.0 * a * b + y) (n + 1)
     }

@@ -229,7 +229,7 @@ _advance updateMemory msg game = {
             }
         }
         GameMouseMove pageX pageY -> {
-            game.computer.mouse.[x,y] = [
+            game.computer.mouse.[x, y] = [
                 computer.screen.left + pageX
                 computer.screen.top - pageY
             ]

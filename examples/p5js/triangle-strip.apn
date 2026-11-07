@@ -33,7 +33,7 @@ setup (p : Sketch) = {
 # A strip of triangles between two circles, more of them further right.
 draw shown (p : Sketch) = {
     p.background 0
-    [centerX,centerY] = [p.width / 2, p.height / 2]
+    [centerX, centerY] = [p.width / 2, p.height / 2]
     p.translate -centerX -centerY
     # The sketch's values are Dynamic: Number converts one for round.
     count = round (remap p.mouseX 0 p.width 6 60 : Number) : Int

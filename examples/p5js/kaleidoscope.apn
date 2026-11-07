@@ -19,8 +19,8 @@ draw (p : Sketch) = {
     # While the mouse is pressed on the canvas, the stroke from its last
     # position, in each section and mirrored.
     when (inside && p.mouseIsPressed) {
-        [x1,y1] = [p.mouseX - p.width / 2, p.mouseY - p.height / 2]
-        [x2,y2] = [p.pmouseX - p.width / 2, p.pmouseY - p.height / 2]
+        [x1, y1] = [p.mouseX - p.width / 2, p.mouseY - p.height / 2]
+        [x2, y2] = [p.pmouseX - p.width / 2, p.pmouseY - p.height / 2]
         mapM (_ -> {
             p.rotate angle
             p.stroke 255

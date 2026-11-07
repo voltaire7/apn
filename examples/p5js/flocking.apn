@@ -54,7 +54,7 @@ fly width height flock boid = {
     [x,y] = boid.position
     neighbor other = {
         [otherX,otherY] = other.position
-        [dx,dy] = [x - otherX, y - otherY]
+        [dx, dy] = [x - otherX, y - otherY]
         [sqrt (dx * dx + dy * dy), [dx,dy], other]
     }
     near = filter ([d,_,_] -> d > 0 && d < 50) (map neighbor flock)

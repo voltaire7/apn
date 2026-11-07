@@ -85,7 +85,7 @@ match them.
 List patterns require the exact length. Their elements may be type
 patterns, which convert as a whole-argument type pattern does:
 `pair [(a : UInt8), (b : UInt8)] = a + b` accepts `pair [3,3]` (and
-`[(a : UInt8), (b : UInt8)] = [3,3]` as a binding), while `pair [3,300]` is a static
+`[(a : UInt8), (b : UInt8)] = [3, 3]` as a binding), while `pair [3,300]` is a static
 range error; `firstFloat ((x : Float)::rest) = x` returns `1.0` for `[1,2]`.
 Variant payloads convert the same way: `g (Some (x : Float)) = x` returns `1.0`
 for `g (Some 1)`, and `g (Some 300)` is a static range error for

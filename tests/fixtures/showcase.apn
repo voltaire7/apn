@@ -358,7 +358,7 @@ greeting = {
 print greeting             # => Hello, world!
 
 greeting = {
-    [name,hello] = [hello = "Hello", name = "record"] # fields by name
+    [name, hello] = [hello = "Hello", name = "record"] # fields by name
     hello ++ ", " ++ name ++ "!"
 }
 print greeting             # => Hello, record!
