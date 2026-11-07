@@ -21,7 +21,9 @@ export type Expr =
     | { t: "char"; v: string }
     | { t: "placeholder" }
     | { t: "var"; name: string }
-    | { t: "binop"; op: BinOp; l: Expr; r: Expr }
+    // reassociate: a chain holding an operator of a fixity its file cannot
+    // see, regrouped where it runs (see parser.ts reassociate).
+    | { t: "binop"; op: BinOp; l: Expr; r: Expr; reassociate?: true }
     | { t: "unop"; op: UnOp; e: Expr }
     // ascribed: e : T as the parser expands it, the one application of a type to a value.
     | { t: "app"; f: Expr; a: Expr; ascribed?: true }

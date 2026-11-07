@@ -544,8 +544,10 @@ xs +++ ys = xs ++ [0] ++ ys  # an infix definition; (+++) = f binds a function
 ```
 
 A fixity declaration stands on its own line, anywhere at the top level of the
-file that uses the operator; it applies to the whole file and to later REPL
-input. An operator without one is `infixl 9`. `infix` operators do not chain:
+file defining the operator; it applies to the whole file, and travels with the
+operator's value: a program that opens it with `use` (`infixr 3 <|>` is
+`std.parser`'s), an alias of it, clauses added to it and later REPL input group
+its chains by it. An operator without one is `infixl 9`. `infix` operators do not chain:
 `a == b == c` is fine (`==` is `infixl`), but two `infix` operators of the
 same precedence side by side need parentheses, as do two of one precedence
 and different associativity (`Int | String == t` is an error; write

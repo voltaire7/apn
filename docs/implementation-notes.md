@@ -402,7 +402,14 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   `verifyLoad` checks. The checker types the prelude's `load` by its rule
   (`PRELUDE_TYPINGS`). Non-tail calls keep the depth guard
   (`STACK_LIMIT`). Tests: `tests/tail-call-test.ts`, `tests/repl-interrupt-pty.py`.
-- `load` rejects explicit extensions before any file access.
+- Fixity: the parser sees the prelude's declarations and the parsed file's
+  (`fileFixities`, one table per `parse`, `fixitiesOf(program)`); a chain
+  holding another operator is marked `reassociate` (its parentheses are kept
+  as written) and regrouped where it is evaluated or checked (`regroup`, cached
+  per set of fixities) by the fixity its operator's value carries:
+  `Interpreter.valueFixities` (through aliases and `fallback`s) and the
+  checker's `Entry.fixity`, both set where a program defines the operator and
+  kept by added clauses. Tests: `tests/operators-test.ts`.
 - Versions: `Interpreter.bindNames` defines a name new to the scope in its
   root (`Env.root`) and gives a rebound one a version (`new Env(env, True)`),
   which the statement loops (top level, blocks, do-blocks) go on in;

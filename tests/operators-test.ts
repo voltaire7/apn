@@ -105,3 +105,22 @@ for (const count of ["1 + 1", "(+) 1 1", "intrinsics.add 1 1", "(1 +) 1", "($) i
         if (actual.join() !== "1") throw new Error(actual.join());
     });
 }
+
+// An operator's fixity travels with its value: a module's declaration groups
+// the chains of a program that opens it, a later REPL input's, an alias's, and
+// those of clauses added to it (10 <-> 3 <-> 2 is 10 - (3 - 2)).
+for (const checked of [true, false]) Deno.test(`a fixity travels with its value (checked=${checked})`, () => {
+    const i = new Interpreter();
+    if (checked) i.enableChecking();
+    i.sourceDir = new URL("./fixtures/fixity/", import.meta.url).pathname;
+    i.run(parse('minus <- import "minus"\nuse minus'));
+    const shown = (source: string) => i.renderString(i.run(parse(source)));
+    if (shown("10 <-> 3 <-> 2") !== "9") throw new Error("a module's fixity");
+    if (shown("f x = x <-> 1 <-> 1\nf 5") !== "5") throw new Error("in a function");
+    if (shown('intrinsics.fixity "<->"') !== '[5,"right"]') throw new Error("fixity");
+    i.run(parse('[a,b] <-> c = a <-> b <-> c'));
+    if (shown("10 <-> 3 <-> 2") !== "9") throw new Error("added clauses");
+    const repl = new Interpreter();
+    repl.run(parse("infixr 5 <~>\na <~> b = a - b"));
+    if (repl.renderString(repl.run(parse("10 <~> 3 <~> 2"))) !== "9") throw new Error("a later input");
+});

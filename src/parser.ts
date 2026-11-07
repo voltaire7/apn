@@ -16,14 +16,28 @@ import { charLiteral, itemsText, stringLiteral } from "./separators.ts";
 // declarations: the prelude's, and any a program makes (infixl 6 +, infixr 5
 // ++ +++, infix 4 ==). An undeclared operator is infixl 9.
 export interface Fixity { prec: number; assoc: "left" | "right" | "none" }
-const fixities = new Map<string, Fixity>();
-export function fixityOf(op: string): Fixity {
-    return fixities.get(op) ?? { prec: 9, assoc: "left" };
+// The prelude's fixities hold everywhere; a file's own, in the file. Another
+// operator's is its value's, where the code runs (see reassociate).
+const preludeFixities = new Map<string, Fixity>();
+let fileFixities = new Map<string, Fixity>();
+export const DEFAULT_FIXITY: Fixity = { prec: 9, assoc: "left" };
+// The fixity the file being parsed can see for an operator, if any.
+export function declaredFixity(op: string): Fixity | undefined {
+    return fileFixities.get(op) ?? preludeFixities.get(op);
 }
+export function fixityOf(op: string): Fixity {
+    return declaredFixity(op) ?? DEFAULT_FIXITY;
+}
+export function preludeFixity(op: string): Fixity | undefined { return preludeFixities.get(op); }
+// The fixities each parsed program declares, for the values it binds.
+const programFixities = new WeakMap<TopLevel[], Map<string, Fixity>>();
+export function fixitiesOf(program: TopLevel[]): Map<string, Fixity> | undefined { return programFixities.get(program); }
+const fixityKind = (f: Fixity) => `infix${f.assoc === "none" ? "" : f.assoc[0]} ${f.prec}`;
 // Operators of one level and two associativities group only as parentheses
 // say: (Int | String) == t, as Int | String == t is neither grouping.
 function mixable(first: { op: string; fixity: Fixity }, second: Extract<Token, { k: "sym" }>): void {
-    const next = fixityOf(second.v), kind = (f: Fixity) => `infix${f.assoc === "none" ? "" : f.assoc[0]} ${f.prec}`;
+    if (!declaredFixity(first.op) || !declaredFixity(second.v)) return;
+    const next = fixityOf(second.v), kind = fixityKind;
     if (next.prec !== first.fixity.prec || next.assoc === first.fixity.assoc) return;
     throw new APNError("parse", `'${first.op}' (${kind(first.fixity)}) and '${second.v}' (${kind(next)}) share a level but not an associativity`,
         { pos: second.pos, hint: "add parentheses" });
@@ -67,7 +81,7 @@ function isFixityStart(toks: Token[], i: number): boolean {
 // Record a source's fixity declarations, wherever they stand in it, before
 // it is parsed; they then hold for every later parse too (REPL inputs, and
 // files parsed after the module that declares them).
-function declareFixities(toks: Token[]): void {
+function declareFixities(toks: Token[], fixities: Map<string, Fixity>): void {
     for (let i = 0; i < toks.length; i++) {
         if (!isFixityStart(toks, i)) continue;
         const kind = (toks[i] as { v: string }).v, level = Number((toks[i + 1] as { v: bigint }).v);
@@ -79,7 +93,52 @@ function declareFixities(toks: Token[]): void {
         if (j === i + 2) throw new APNError("parse", `${kind} needs the operators it declares (write ${kind} 6 +)`, { pos: toks[i].pos });
     }
 }
-declareFixities(lex(preludeSource));
+declareFixities(lex(preludeSource), preludeFixities);
+
+// A chain of operators the parse could not see every fixity of (one a module
+// defines), regrouped by the fixities its operators have where it runs (the
+// fixity of each operator's value there): one grouping per set of fixities.
+const regroupings = new WeakMap<Expr, Map<string, Expr>>();
+export function regroup(e: Expr, fixityHere: (op: string) => Fixity): Expr {
+    const ops: string[] = [];
+    const walk = (x: Expr): void => { if (x.t === "binop") { walk(x.l); ops.push(x.op); walk(x.r); } };
+    walk(e);
+    const fixities = new Map(ops.map(op => [op, fixityHere(op)]));
+    const key = [...fixities].map(([op, f]) => `${op} ${f.prec}${f.assoc}`).join(",");
+    let cached = regroupings.get(e);
+    if (!cached) regroupings.set(e, cached = new Map());
+    let grouped = cached.get(key);
+    if (!grouped) cached.set(key, grouped = reassociate(e, op => fixities.get(op)!));
+    return grouped;
+}
+// The chain's operands as written (a group, in parentheses, is one) with its
+// operators, grouped by the fixities given.
+function reassociate(e: Expr, fixity: (op: string) => Fixity): Expr {
+    const operands: Expr[] = [], ops: string[] = [];
+    const flatten = (x: Expr): void => {
+        if (x.t === "binop") { flatten(x.l); ops.push(x.op); flatten(x.r); } else operands.push(x);
+    };
+    flatten(e);
+    const at = sourceLocations.get(e);
+    let j = 0;
+    const chain = (min: number): Expr => {
+        let left = operands[j];
+        while (j < ops.length && fixity(ops[j]).prec >= min) {
+            const op = ops[j], f = fixity(op);
+            j++;
+            const right = chain(f.assoc === "right" ? f.prec : f.prec + 1);
+            const next = ops[j], g = next === undefined ? undefined : fixity(next);
+            if (g && g.prec === f.prec && (g.assoc !== f.assoc || f.assoc === "none")) {
+                throw new APNError("runtime", f.assoc === "none" && g.assoc === "none" ? `'${op}' is non-associative (${fixityKind(f)}); add parentheses`
+                    : `'${op}' (${fixityKind(f)}) and '${next}' (${fixityKind(g)}) share a level but not an associativity`, { hint: "add parentheses" });
+            }
+            left = { t: "binop", op: op as BinOp, l: left, r: right };
+            if (at) sourceLocations.set(left, at);
+        }
+        return left;
+    };
+    return chain(0);
+}
 
 // ---------------- Parser ----------------
 
@@ -706,8 +765,10 @@ class Parser {
 
     // outer: the operator whose right operand this is, which one of its
     // level and another associativity cannot follow without parentheses.
+    // Operators met whose fixity this file cannot see (see reassociate).
+    unknownOperators = 0;
     parseOperators(minPrec: number, outer?: { op: string; fixity: Fixity }): Expr {
-        const start = this.peek().pos;
+        const start = this.peek().pos, unknownBefore = this.unknownOperators;
         const at = this.nextToken();
         let left = this.parseOperand();
         this.judge(left, e => level(e) >= minPrec && this.fitsBefore(e) &&
@@ -739,6 +800,7 @@ class Parser {
             if (after.k === "sym" && (after.v === ")" || after.v === "}")) break;
             const fixity = fixityOf(t.v);
             if (fixity.prec < minPrec) break;
+            if (!declaredFixity(t.v)) this.unknownOperators++;
             if (outer) mixable(outer, t);
             this.next();
             this.skipContinuation();
@@ -754,11 +816,13 @@ class Parser {
                 left = { t: "binop", op: t.v, l: left, r: right };
             }
             const following = this.peek();
-            if (fixity.assoc === "none" && following.k === "sym" && isOperatorName(following.v) && fixityOf(following.v).prec === fixity.prec) {
+            if (fixity.assoc === "none" && following.k === "sym" && isOperatorName(following.v) && declaredFixity(following.v) && fixityOf(following.v).prec === fixity.prec) {
                 throw new Error(`Parser: '${t.v}' is non-associative (infix ${fixity.prec}); add parentheses`);
             }
             if (following.k === "sym" && isOperatorName(following.v)) mixable({ op: t.v, fixity }, following);
         }
+        // A whole chain holding an operator of unknown fixity is regrouped where it runs.
+        if (!outer && this.unknownOperators > unknownBefore && left.t === "binop") left.reassociate = true;
         return left;
     }
 
@@ -852,7 +916,13 @@ class Parser {
     unnecessary = new Map<number, boolean>();
     judge(group: Expr, fits: (e: Expr) => boolean): void {
         const open = this.groups.get(group);
-        if (open !== undefined) this.unnecessary.set(open, fits((group as Extract<Expr, { t: "block" }>).stmts[0]));
+        if (open === undefined) return;
+        // Beside an operator this file cannot see the fixity of, or holding a
+        // chain of one, parentheses may group as the operator's fixity needs.
+        const inner = (group as Extract<Expr, { t: "block" }>).stmts[0], close = this.closer(open);
+        const unknown = (t?: Token) => t?.k === "sym" && isOperatorName(t.v) && !declaredFixity(t.v);
+        const unseen = unknown(this.toks[open - 1]) || unknown(this.toks[close + 1]) || inner.t === "binop" && (!!inner.reassociate || !declaredFixity(inner.op));
+        this.unnecessary.set(open, !unseen && fits(inner));
     }
 
     // Whether what follows the group leaves its expression, written bare, as
@@ -2500,8 +2570,10 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
     }
     if (!looseSpacing) checkLineLengths(src, toks);
     const p = new Parser(toks, src, file);
+    const outerFixities = fileFixities;
+    fileFixities = new Map();
     try {
-        declareFixities(toks);
+        declareFixities(toks, fileFixities);
         p.checkColons();
         if (!looseSpacing) p.checkBracketSpacing();
         const out = p.parseTopLevel();
@@ -2515,6 +2587,7 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
             const counts = tl.t === "def" ? countingOf(tl.name, tl.clauses) : undefined;
             if (tl.t === "def" && TYPE_NAMES.includes(tl.name) && !(counts?.scale === 1n && !counts.offset)) throw new Error("Parser: built-in type names cannot be reassigned");
         }
+        if (fileFixities.size) programFixities.set(grouped, fileFixities);
         return grouped;
     } catch (err) {
         if (err instanceof APNError) {
@@ -2529,7 +2602,7 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
         });
         e.src = src;
         throw e;
-    }
+    } finally { fileFixities = outerFixities; }
 }
 
 // A family of lists is sugar for a type function's clauses: each

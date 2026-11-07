@@ -8,7 +8,7 @@ import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, numericType, SCALAR_TYPES, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
 import { APNError, didYouMean, formatFileReadError, typeApplied, withArticle } from "./errors.ts";
-import { bindingItem, parse, parseDocument, patternSource, PRIMITIVE_OPERATORS } from "./parser.ts";
+import { bindingItem, DEFAULT_FIXITY, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
 import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
@@ -194,6 +194,8 @@ interface Entry {
     selfInputs?: Ty[];
     selfOpen?: boolean[];
     nonGeneric?: Set<Ty>;
+    // fixity: an operator's, which its value carries (a declaration made it).
+    fixity?: Fixity;
     // definition: the value expression of a value binding (its identity).
     definition?: Expr;
 }
@@ -4085,6 +4087,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "ternary": return infer(ternaryExpansion(e), scope, expected);
             case "binop": {
+                if (e.reassociate) return infer(regrouped(e, scope), scope, expected);
                 // Against a type, a lambda written in place is read as one, as
                 // at runtime: (a -> b) == typeOf f.
                 if (e.op === "==" || e.op === "!=") {
@@ -4498,6 +4501,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const executedParts = new Map<Expr, Known | undefined>();
     const unforced = new Set<Known>();
     let touchedTopLevel = false, opaqueUse = false;
+    // A chain holding an operator its file could not see the fixity of, grouped
+    // by the fixities the operators' entries carry here (see regroup).
+    function regrouped(e: Expr, scope: Scope): Expr {
+        return regroup(e, op => scope.get(op)?.fixity ?? preludeFixity(op) ?? DEFAULT_FIXITY);
+    }
     function bodiesOf(clauses: { params: Pattern[]; body: Expr }[] | undefined): Expr[] {
         return (clauses ?? []).map(c => c.body);
     }
@@ -5463,7 +5471,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             let r: Known | Tail | undefined;
             if (!fresh && env.size === 0 && (e.t === "app" || e.t === "binop" || e.t === "block")) r = evaluateShared(e, scope, depth);
             else switch (e.t) {
-                case "binop": r = evaluateBinop(e, env, scope, depth); break;
+                case "binop": r = e.reassociate ? evaluateKnown(regrouped(e, scope), env, scope, depth) : evaluateBinop(e, env, scope, depth); break;
                 case "app": app = true; r = evaluateAppExpr(e, env, scope, depth); break;
                 case "block": r = evaluateBlock(e, env, scope, depth); break;
                 case "ternary": r = evaluateTernary(e, env, scope, depth); break;
@@ -7327,6 +7335,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try {
             statementWrote = false;
             if (statement.t === "def") {
+                const kept = scope.get(statement.name)?.fixity;
                 if (!analyzed.has(statement)) {
                     // A top-level value is lazy: it runs when first used, so a cell
                     // it creates is a top-level cell, and it reads no top-level cell.
@@ -7334,6 +7343,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     try { define(statement.name, statement.clauses, scope, statement.clauses[0].body); }
                     finally { topLevelDefinition = creatingTopLevel = false; }
                 }
+                // An operator's fixity is its value's: declared here, or kept by clauses added to it.
+                const fixity = fixitiesOf(program)?.get(statement.name) ?? kept, entry = scope.get(statement.name);
+                if (fixity && entry) entry.fixity = fixity;
             }
             else if (statement.t === "type") declare(statement.def, scope);
             else if (statement.t === "expr") {

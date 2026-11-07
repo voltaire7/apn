@@ -24,7 +24,7 @@ import { enumerationPositions } from "./ast.ts";
 import { canonicalTypeText, compoundArgument, slotField, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
-import { bindingItem, parse, exprToSource, patternSource, patternVariables, isOperatorName, PRIMITIVE_OPERATORS, fixityOf, getLooseSpacing, setLooseSpacing } from "./parser.ts";
+import { bindingItem, parse, exprToSource, patternSource, patternVariables, isOperatorName, PRIMITIVE_OPERATORS, DEFAULT_FIXITY, type Fixity, fixitiesOf, getLooseSpacing, preludeFixity, regroup, setLooseSpacing } from "./parser.ts";
 import { charLiteral, itemsText, spacedItem, stringLiteral } from "./separators.ts";
 
 // ---------------- Evaluator ----------------
@@ -217,6 +217,23 @@ export class Interpreter {
     // use, which publishes its names as the module's (its origin, and whether
     // the static check typed them).
     private moduleValues = new WeakMap<Value, { origin?: string; checked?: boolean }>();
+    // An operator's fixity travels with its value: a program's declaration
+    // marks the value it binds, which use, an alias or added clauses keep.
+    private valueFixities = new WeakMap<Value, Fixity>();
+    private valueFixity(op: string): Fixity {
+        return this.fixityOfValue(this.env.get(op)) ?? preludeFixity(op) ?? DEFAULT_FIXITY;
+    }
+    private fixityOfValue(value: Value | undefined): Fixity | undefined {
+        for (let v = value, seen = 0; v && seen < 64; seen++) {
+            const fixity = this.valueFixities.get(v);
+            if (fixity) return fixity;
+            const next: Value | undefined = v.kind === "thunk" || v.kind === "deferred" ? this.reference(v) : v.kind === "clauseFn" ? v.fallback : undefined;
+            if (next === v) break;
+            v = next;
+        }
+        return undefined;
+    }
+    private regrouped(e: Expr): Expr { return regroup(e, op => this.valueFixity(op)); }
     /** Whether a value is a module's record (what import and load yield). */
     isModule(v: Value): boolean { return this.moduleValues.has(v); }
     // Text readFileFrom read: its file, and whether the static check could
@@ -406,7 +423,11 @@ export class Interpreter {
                     continue;
                 }
                 if (tl.t === "def") {
+                    // An operator's fixity is its value's: declared here, or kept by clauses added to it.
+                    const kept = isOperatorName(tl.name) ? this.fixityOfValue(this.env.get(tl.name)) : undefined;
                     last = this.evalDef(tl.name, tl.clauses);
+                    const fixity = fixitiesOf(program)?.get(tl.name) ?? kept;
+                    if (fixity) { const bound = this.env.get(tl.name); if (bound) this.valueFixities.set(bound, fixity); }
                     continue;
                 }
                 if (tl.t === "patDef") {
@@ -1019,7 +1040,10 @@ export class Interpreter {
             case "char": return text(charLiteral(e.v));
             case "placeholder": return text("_");
             case "var": return text(e.name);
-            case "binop": return node(text(e.op), of(e.l), of(e.r));
+            case "binop": {
+                if (e.reassociate) return of(this.regrouped(e));
+                return node(text(e.op), of(e.l), of(e.r));
+            }
             case "pipe": return node(text("$"), of(e.f), of(e.x));
             case "unop": return node(text(e.op === "neg" ? "negate" : "not"), of(e.e));
             case "app": {
@@ -1465,6 +1489,7 @@ export class Interpreter {
                         break;
                     }
                     case "binop": {
+                        if (e.reassociate) { next = new TailCall(this.regrouped(e), this.env); break; }
                         // The builtin ~ with written alternatives runs here, as
                         // a call of it does, its chosen body in place of the match.
                         const written = e.op === "~" ? writtenMatch(e) : undefined;
@@ -4666,7 +4691,7 @@ export class Interpreter {
         if (name === "intrinsics.fixity") {
             const op = this.dataValue(argsIn[0]);
             if (op.kind !== "string") throw new APNError("runtime", "fixity needs an operator name");
-            const { prec, assoc } = fixityOf(op.v);
+            const { prec, assoc } = this.valueFixity(op.v);
             return mkList([mkInt(BigInt(prec)), mkStr(assoc)]);
         }
         // eval's source runs at the program's top level, as a group: its
