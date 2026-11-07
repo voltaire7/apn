@@ -106,8 +106,17 @@ export class IOTail { constructor(public next: Value) {} }
 
 // A record's field that is a slot, holding a type it was not bound to,
 // prints as its declaration (x : Float); any other as its binding (x = Float).
-export function slotField(record: Extract<Value, { kind: "record" }>, key: string, v: Value): boolean {
-    return (v.kind === "type" || v.kind === "functionType") && !record.bound?.has(key);
+// A record whose fields are all slots is a type too (typeOf [p = [q = 1.5]]
+// is [p : [q : Float]]); reveal gives a field's value, as far as it is known.
+export function slotField(record: Extract<Value, { kind: "record" }>, key: string, v: Value,
+    reveal: (v: Value) => Value = known, depth = 0): boolean {
+    if (record.bound?.has(key)) return false;
+    if (v.kind === "type" || v.kind === "functionType") return true;
+    return v.kind === "record" && v.v.length > 0 && depth < 8 && v.v.every(([k, x]) => slotField(v, k, reveal(x), reveal, depth + 1));
+}
+function known(v: Value): Value {
+    while ((v.kind === "thunk" || v.kind === "deferred") && v.value) v = v.value;
+    return v;
 }
 
 export function valueToString(v: Value): string {
@@ -138,7 +147,7 @@ export function valueToString(v: Value): string {
             return `[${itemsText(out.map(valueToString))}]`;
         }
         case "record":
-            return `[${v.v.map(([k, val]) => fieldSource(k, valueToString(val), slotField(v, k, val))).join(", ")}]`;
+            return `[${v.v.map(([k, val]) => fieldSource(k, valueToString(val), slotField(v, k, known(val)))).join(", ")}]`;
         // A named subtype's value is its base's (5 : Count prints 5); a
         // constructor's shows it (UserId 5).
         case "variant": return v.family?.base && v.v.length === 1 ? valueToString(v.v[0]) : v.tag + v.v.map(argumentText).join("");

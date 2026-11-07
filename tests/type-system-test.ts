@@ -11,7 +11,11 @@ for (const [source, expected] of [
     ["typeOf $ 'a'", "Char"],
     ["typeOf $ []", "[]"],
     ["typeOf $ [1..]", "[Int..]"],
-    ["typeOf $ [x = 1]", "Record"],
+    // A record's type is its fields' types, found when shown.
+    ["typeOf $ [x = 1]", "[x : Int]"],
+    ["typeOf [x = 1, y = Float, p = [q = 1.5]]", "[x : Int, y : Type, p : [q : Float]]"],
+    ["t = typeOf [x = head [], y = 2]\n[t.y, typeOf [x = 1] == [x : Int]]", "[Int,True]"],
+    ["Quote = [quote : String]\ntypeOf (Quote [])", "Quote"],
     ["typeOf $ sqrt", "Number -> Number"],
     // Builtins show the checker's signatures.
     ["typeOf $ S", "UInt -> UInt"],

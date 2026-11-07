@@ -1533,7 +1533,14 @@ export class Interpreter {
                         };
                         try {
                             for (const [key, expression] of e.v) {
-                                if (key !== "_") { bind(key, this.eval(expression), !slots.has(key)); continue; }
+                                // A bound value is computed when used, as a list's item
+                                // is. A function is made where it is written (its
+                                // clauses read the scope here, not a later use's), a
+                                // literal costs nothing, and a declared field is checked
+                                // now (a slot's type is known: see holdsType).
+                                const now = !!e.declared?.includes(key) || ["int", "float", "numeric", "string", "char", "bool"].includes(expression.t)
+                                    || expression.t === "block" && expression.stmts[0]?.t === "stmDef";
+                                if (key !== "_") { bind(key, now ? this.eval(expression) : this.delay(expression), !slots.has(key)); continue; }
                                 const spread = this.dataValue(this.eval(expression));
                                 if (spread.kind !== "record") throw new APNError("runtime", "use in a record opens a record");
                                 for (const [name, value] of spread.v) bind(name, value, !!spread.bound?.has(name));
@@ -3378,7 +3385,7 @@ export class Interpreter {
                     // Inspect module actions without running halt; ordinary data
                     // fields still render their memoized values.
                     const field = this.force(val);
-                    emit(slotField(v, key, field) ? " : " : " = ");
+                    emit(slotField(v, key, field, x => this.force(x)) ? " : " : " = ");
                     if (field.kind === "closure" && !field.params.length) emit(valueToString(field), field.kind);
                     else this.render(field, emit, false, ancestors);
                 });
@@ -4537,6 +4544,9 @@ export class Interpreter {
             if (isNumeric(value)) return { kind: "type", inspect: true, name: numericType(value) };
             if (value.kind === "list" && value.schema) return this.inspectType(value.schema);
             if (this.isList(value)) return { kind: "type", inspect: true, name: "List", description: describeType(value) };
+            // A record's type is its fields' types ([x = 1] is a [x : Int]),
+            // each found when shown; a shared object's fields are live.
+            if (value.kind === "record" && !value.shared) return { kind: "record", v: value.v.map(([key, field]): [string, Value] => [key, this.defer(() => this.callNative("typeOf", [field]))]) };
             const names: Partial<Record<Value["kind"], string>> = {
                 bool: "Bool", string: "String", char: "Char",
                 hashmap: "HashMap", record: "Record", variant: "Variant", type: "Type", pointer: "Pointer",

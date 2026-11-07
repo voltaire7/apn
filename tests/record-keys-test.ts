@@ -25,6 +25,7 @@ for (const [name, source, expected] of [
     ["bare destructuring", '[x] = [x = 1, y = 2]\nx', '1'],
     ["pattern dispatch", 'f [x = value] = value + 10\n[f [x = 1], f [x = 2]]', '[11,12]'],
     ["unused values stay deferred", 'unused = missing + 1\nobj = [x = 1, y = unused]\nobj "x"', '1'],
+    ["fields are computed when used", 'obj = [x = head [], y = 2]\nobj.y', '2'],
     ["pairs give the key's text", 'pairs [x = 1, `a b` = 2]', '[["x",1],["a b",2]]'],
     ["a record to HashMap", 'm = HashMap [x = 1]\nm "x"', '1'],
     ["function source keys", 'f obj = obj.`a b`\nf', 'obj -> obj.`a b`'],

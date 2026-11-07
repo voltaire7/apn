@@ -9,6 +9,13 @@ repeatable, as described below. `tests/semantics-test.ts` asserts these rules.
 
 ### Layout and blocks
 
+Layout and spacing are rigid on purpose: much APN code is written by coding
+agents, and a language that accepts only one tidy spelling of each line keeps
+them from writing ugly production code. So spacing is checked, not formatted:
+indentation, the spaces around operators and `=`, and comma spacing each have
+one correct form, and any other is a syntax error saying which (`--loose`
+accepts any spacing).
+
 Indentation is strict: every nested level is exactly four spaces deeper than
 its parent (`+2`, `+8`, and other steps are syntax errors). Blank and
 comment-only lines are ignored for layout. A newline at the same level ends a
@@ -1441,7 +1448,7 @@ Type constructors also work directly with function iteration: `100 * Int`
 returns typed integers `0` through `99`; `[1..100] * Int` returns `1` through
 `100`. This differs from `100 * (0 : Int)`, which multiplies and returns typed zero.
 
-The nonnumeric types returned by `typeOf` are also first-class constructors:
+The nonnumeric type names are also first-class constructors:
 `Bool`, `String`, `Char`, `List`, `Record`, `Function`, `Type`, and
 `Variant`. Except for `Bool`, they validate and return a value of the corresponding
 kind without forcing list elements or coercing unrelated values. `Bool` converts
@@ -1666,7 +1673,10 @@ returns `[1,2.0]`, evaluating the input expression in the surrounding scope.
 
 A list value's type is exact, the list of its items' types: `typeOf [1,2,3]`
 displays `[Int,Int,Int]`, `typeOf [1,"a"]` is `[Int,String]`, and `typeOf []`
-is `[]`, the empty list's type. A list built with `::` onto a written list is
+is `[]`, the empty list's type. A record's is the record of its fields' types,
+each found when it is shown: `typeOf [x = 1, y = Float]` is
+`[x : Int, y : Type]`, and `typeOf [p = [q = 1.5]]` is `[p : [q : Float]]`. A
+record a record type made has that type (`typeOf (Quote [])` is `Quote`). A list built with `::` onto a written list is
 exact too (`typeOf ([1,2]::[3,4])` is `[[Int,Int],Int,Int]`, as for
 `[[1,2],3,4]`), reading its unevaluated tail without running it. An endless
 list is endlessly many of its elements' type: `typeOf [1..]` is `[Int..]`, and
