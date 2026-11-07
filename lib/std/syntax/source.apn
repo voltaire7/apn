@@ -30,7 +30,7 @@ _kind (n : Number) = {
 _kind (function :: args) = contains function ["[]","[:]","{}",".","..","()"] ? "piece"
     : (function == "->" ? "lambda"
     : (function == "?:" ? "ternary"
-    : (contains function ["=","<-","import"] ? function
+    : (contains function ["=","<-"] ? function
     : (_isOperator function && length args == 2 ? "infix"
     : "call"))))
 _digits (n : Number) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) (to String n))
@@ -84,7 +84,6 @@ _node _ ".." [low,high,next] = "[" ++ _items [_bound low, _bound next ++ ".." ++
 _node _ "=" [left,right] = _bare _end left ++ " = " ++ _shown _end right
 _node _ "<-" [left,right] = _bare _end left ++ " <- " ++ _shown _end right
 _node _ "()" [op,x] = "(" ++ op ++ " " ++ _shown ["operand",8,-1] x ++ ")"
-_node _ "import" [m] = "import " ++ to String m
 _node place function args = length args == 2 && _isOperator function && !_tag function
     ? _infix place function args
     : _application place function args
@@ -112,7 +111,7 @@ _application _ function args =
 _isOperator (name : String) = _operator name
 _isOperator _ = False
 # The heads that are syntax, not functions.
-_tag head = contains head ["[]","[:]","->","?:",".","{}","..","=","<-","()","import","|"]
+_tag head = contains head ["[]","[:]","->","?:",".","{}","..","=","<-","()","|"]
 _operator name = contains (head (to (List Char) name)) (to (List Char) "!$%&*+-/<=>\\^|~:")
 
 # A ',' takes a space only when an item it separates has one (outside string

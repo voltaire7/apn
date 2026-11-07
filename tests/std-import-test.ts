@@ -28,6 +28,10 @@ for (const [source, message] of [
     ['m = import "std/function"\nm.id 1', 'an action has no fields'],
     ['import "option"', "a standard module is std.option"],
     ['import "std/nothing"', "the standard library has no module 'nothing'"],
+    // import is a prelude function of one module's path.
+    ['import ["std/option"]', "import reads one module"],
+    ['import [123]', "import reads one module"],
+    ['import 123', "import reads one module"],
 ] as const) Deno.test(`std import rejects: ${source}`, () => {
     try { result(new Interpreter(), source); } catch (error) {
         if (`${String(error)} ${(error as { hint?: string }).hint ?? ""}`.includes(message)) return;
@@ -35,12 +39,6 @@ for (const [source, message] of [
     }
     throw new Error(`expected ${message}`);
 });
-for (const source of ['import ["std/option"]', 'import [123]', 'import 123']) {
-    Deno.test(`import reads one module: ${source}`, () => {
-        try { parseDocument(source); } catch { return; }
-        throw new Error('expected parse error');
-    });
-}
 Deno.test('an import round-trips', () => {
     const [ast] = parseDocument('import "std/option"');
     if (ast.t !== 'expr' || exprToSource(ast.value) !== 'import "std/option"') throw new Error('changed syntax');

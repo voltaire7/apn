@@ -12,7 +12,7 @@ import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { NATIVE_EXPORTS, RETIRED_NATIVES } from "./native-exports.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
-import { bundledText, loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
+import { bundledText, IMPORT_ONE, loadPath, type ModuleFile, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, typeApplied, withArticle } from "./errors.ts";
@@ -62,10 +62,10 @@ class TailLoad {
 }
 
 // Natives with effects: applying one builds an IO action; running it performs them.
-export const IO_NATIVES = new Set(["print", "echo", "emit", "repl", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
+export const IO_NATIVES = new Set(["intrinsics.import", "print", "echo", "emit", "repl", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
 // What the actions of IO builtins yield, for showing their types (IO []).
 const IO_RESULTS: Record<string, string> = {
-    print: "[]", echo: "[]", emit: "[]", repl: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
+    "intrinsics.import": "Module", print: "[]", echo: "[]", emit: "[]", repl: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
     entropy: "Int", currentTime: "Int", zoneOffset: "Int",
 };
 
@@ -107,6 +107,8 @@ export const NATIVES: Array<[string, number]> = [
     ["intrinsics.with", 3],
     // A union of types (Mixed = Int | String).
     ["intrinsics.union", 1],
+    // import path: an action reading a module, its record the result.
+    ["intrinsics.import", 1],
 ];
 // The names editors color as built-in functions (the natives, cast and do).
 // The names natives are bound by (each intrinsic is a field of intrinsics).
@@ -981,7 +983,7 @@ export class Interpreter {
     // token no name can be: ["[]",...] a list, ["[:]",[key,value]...] a record,
     // ["->",[params],body], ["?:",c,a,b], [".",r,key], ["{}",...] a block,
     // ["..",low,high,next], ["=",left,right], ["<-",left,right], ["()","+",x]
-    // the section (+ x), ["import",...]. A pattern is written as an expression.
+    // the section (+ x). A pattern is written as an expression.
     sexprOf(e: Expr): Value {
         const of = (x: Expr) => this.sexprOf(x);
         const node = (...items: Value[]) => mkList(items);
@@ -990,7 +992,6 @@ export class Interpreter {
         const range = (low: Value, high: Value | undefined, next: Value | undefined) =>
             node(text(".."), low, high ?? mkList([]), ...next ? [next] : []);
         switch (e.t) {
-            case "import": return node(text("import"), text(e.module));
             case "numeric": return e.v;
             case "int": return mkInt(e.v);
             case "float": return { kind: "float", v: e.v };
@@ -1427,8 +1428,6 @@ export class Interpreter {
                         r = this.range(lo, e.second && this.eval(e.second), e.hi && this.eval(e.hi));
                         break;
                     }
-                    // import "path": an action reading the module, its record the result.
-                    case "import": { const module = e.module; r = { kind: "io", result: "Module", run: () => this.importStandard(module) }; break; }
                     case "numeric": r = e.v; break;
                     case "int": r = mkInt(e.v); break;
                     case "float": r = { kind: "float", v: e.v }; break;
@@ -4698,6 +4697,11 @@ export class Interpreter {
             case "intrinsics.get": return this.builtinGet(this.force(args[0]), args[1]);
             case "intrinsics.with": return this.assignItem(this.dataValue(args[0]), this.dataValue(args[1]), args[2]);
             case "intrinsics.union": return this.union([...this.elements(args[0])].map(x => this.reference(x)));
+            case "intrinsics.import": {
+                const path = this.force(args[0]);
+                if (path.kind !== "string") throw new APNError("runtime", IMPORT_ONE.message, { hint: IMPORT_ONE.hint });
+                return this.importStandard(path.v);
+            }
             case "toString":
                 return mkStr(this.renderString(a));
             case "parse": {

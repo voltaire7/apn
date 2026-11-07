@@ -1,4 +1,4 @@
-import { clauseKey, isLoadCall, matchOperands, METHODS, sourceLocations, type Expr, type Pattern, type TopLevel } from "./ast.ts";
+import { clauseKey, importedPath, isLoadCall, matchOperands, METHODS, sourceLocations, type Expr, type Pattern, type TopLevel } from "./ast.ts";
 import type { Diagnostic } from "./lint.ts";
 import { loadPath, readLoad, resolveModule } from "./modules.ts";
 import { parseDocument } from "./parser.ts";
@@ -29,7 +29,8 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
     const sourcesOf = (e: Expr, from: string): Source[] => {
         if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return sourcesOf(e.stmts[0], from);
         if ((e.t === "app" || e.t === "pipe") && e.f.t === "var" && e.f.name === "Dynamic") return sourcesOf(e.t === "app" ? e.a : e.x, from);
-        if (e.t === "import") return moduleSources(e.module, from);
+        const imported = importedPath(e);
+        if (imported) return moduleSources(imported, from);
         const argument = isLoadCall(e) && (e.t === "app" ? e.a : e.t === "pipe" ? e.x : undefined);
         if (!argument || argument.t !== "string") return [];
         let path;
@@ -63,11 +64,11 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
             if (node.t === "type") add(node.def.name, node.def.parameters?.length ?? 0, node.def.variants.map(v => [v.tag, v.arity]));
             const bound = node.t === "def" && !node.clauses[0].params.length ? [node.name, node.clauses[0].body] as const
                 : node.t === "patDef" && node.pattern.p === "var" ? [node.pattern.name, node.value] as const : undefined;
-            if (bound) records.set(bound[0], { sources: sourcesOf(bound[1], from), spec: bound[1].t === "import" ? bound[1].module : undefined });
+            if (bound) records.set(bound[0], { sources: sourcesOf(bound[1], from), spec: importedPath(bound[1]) });
             if (node.t !== "expr") continue;
             const e = node.value;
             // use opens records; a statement opens only a load's (an import's opens by use).
-            open(e.t === "app" && e.f.t === "var" && e.f.name === "use" ? used(e.a) : e.t === "import" ? [] : sourcesOf(e, from));
+            open(e.t === "app" && e.f.t === "var" && e.f.name === "use" ? used(e.a) : importedPath(e) ? [] : sourcesOf(e, from));
         }
     };
     declare(program, directory);

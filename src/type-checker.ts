@@ -3,7 +3,7 @@ import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, 
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
-import { standardModule } from "./modules.ts";
+import { IMPORT_ONE, standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, numericType, SCALAR_TYPES, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
@@ -3656,10 +3656,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "placeholder":
                 return variable();
-            // An action yielding the module's record.
-            case "import":
-                if (!options.imports) return io(unknown());
-                return io({ k: "record", fields: new ModuleFields(copyTypeScope(options.imports(e.module))) });
             case "list": {
                 // [a, b] is a :: b :: [], with what :: means here, as at runtime.
                 if (e.v.length && !e.v.some(binding) && !preludeCons(scope)) return infer(listExpansion(e), scope, expected);
@@ -3746,6 +3742,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (resolved.k === "type" && resolved.chosen && e.f.t !== "var") {
                     const chosen = peek(() => computed(e.f, scope).type, undefined);
                     if (chosen) { callee = chosen; resolved = resolve(chosen); }
+                }
+                // import "path": an action yielding the module's record, read (and
+                // checked) here when the path is written; another is decided by the run.
+                if (resolved.k === "intrinsic" && resolved.name === "import") {
+                    if (["list", "int", "float", "numeric", "char", "bool", "record"].includes(a.t)) return problem(IMPORT_ONE.message, a, IMPORT_ONE.hint);
+                    if (a.t !== "string" || !options.imports) return io(unknown());
+                    return io({ k: "record", fields: new ModuleFields(copyTypeScope(options.imports(a.v))) });
                 }
                 if (resolved.k === "intrinsic" && resolved.name === "load" && a.t === "string" && options.loads) {
                     return { k: "record", fields: new ModuleFields(options.loads(a.v, scope, e === tailStatement), true) };
@@ -7195,6 +7198,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("intrinsics.union", { type: { k: "intrinsic", name: "union", arity: 1 } });
     scope.set("intrinsics.get", { type: { k: "intrinsic", name: "get", arity: 2 } });
     scope.set("intrinsics.with", { type: { k: "intrinsic", name: "with", arity: 3 } });
+    scope.set("intrinsics.import", { type: { k: "intrinsic", name: "import" } });
     // to T x writes x as a T, from T x reads it back (to String, to JSON, to (List Char)).
     for (const name of ["to", "from"]) scope.set(name, { type: { k: "intrinsic", name, arity: 2 } });
     if (options.library) {

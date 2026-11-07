@@ -13,7 +13,6 @@ export type UnOp = "neg" | "not";
 export type Expr =
     // lo null: [..], the list type of anything.
     | { t: "range"; lo: Expr; second: Expr | null; hi: Expr | null }
-    | { t: "import"; module: string }
     | { t: "numeric"; v: Numeric }
     | { t: "int"; v: bigint }
     | { t: "float"; v: number }
@@ -454,5 +453,11 @@ export function mergeClauses<C extends { params: Pattern[]; guard?: Expr }>(name
 export function isLoadCall(e: Expr): boolean {
     if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return isLoadCall(e.stmts[0]);
     return (e.t === "app" || e.t === "pipe") && e.f.t === "var" && e.f.name === "load";
+}
+// The path an import written with a literal one reads (import "std/text").
+export function importedPath(e: Expr): string | undefined {
+    if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return importedPath(e.stmts[0]);
+    const path = e.t === "app" ? e.a : e.t === "pipe" ? e.x : undefined;
+    return (e.t === "app" || e.t === "pipe") && e.f.t === "var" && e.f.name === "import" && path?.t === "string" ? path.v : undefined;
 }
 

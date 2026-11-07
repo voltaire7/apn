@@ -90,7 +90,7 @@ declareFixities(lex(preludeSource));
 // operator after it that it would take in (a lambda's body takes everything).
 const isLambda = (e: Expr) => e.t === "lambda" || e.t === "patternLambda";
 // An ascription is written in its own parentheses: (x : T).
-const primary = (e: Expr) => e.t === "app" && !!e.ascribed || !["binop", "pipe", "unop", "app", "ternary", "lambda", "patternLambda", "import"].includes(e.t);
+const primary = (e: Expr) => e.t === "app" && !!e.ascribed || !["binop", "pipe", "unop", "app", "ternary", "lambda", "patternLambda"].includes(e.t);
 // (r.1).2 is not r.1.2, which reads the float 1.2.
 const postfixHead = (e: Expr) => primary(e) && !["int", "float", "numeric"].includes(e.t) && !(e.t === "recordAccess" && /^\d/.test(e.field));
 function level(e: Expr): number {
@@ -710,7 +710,7 @@ class Parser {
         const start = this.peek().pos;
         const at = this.nextToken();
         let left = this.parseOperand();
-        this.judge(left, e => e.t !== "import" && level(e) >= minPrec && this.fitsBefore(e) &&
+        this.judge(left, e => level(e) >= minPrec && this.fitsBefore(e) &&
             !(isLambda(e) && (this.noLambda || this.listedParams(left))) && !(e.t === "unop" && this.afterPrefix(left)) &&
             !(e.t === "ternary" && this.branches.has(at)));
         for (;;) {
@@ -1257,17 +1257,6 @@ class Parser {
     parseKeyword(): Expr {
         const t = this.peek() as { v: string };
         switch (t.v) {
-            case "import": {
-                // import "path" reads a file or folder: an action yielding its record.
-                const at = this.next();
-                if (this.isSym("[")) {
-                    throw new APNError("parse", "import reads one module", { pos: at.pos,
-                        hint: 'name the library and open its modules: std <- import "std"; use std.[option,text]' });
-                }
-                const module = this.next();
-                if (module.k !== "str") throw new Error("Parser: import expects a module path string: import \"std/option\"");
-                return { t: "import", module: module.v };
-            }
             case "True": this.next(); return { t: "bool", v: true };
             case "False": this.next(); return { t: "bool", v: false };
             default:
@@ -2815,7 +2804,6 @@ function bareSource(e: Expr, where: Place): string {
             if (e.lo === null) return `[${end}]`;
             return `[${itemsText(e.second === null ? [of(e.lo, place("operand", 6)) + end] : [of(e.lo, place("operand", 6)), of(e.second, place("operand", 6)) + end])}]`;
         }
-        case "import": return `import ${Array.isArray(e.module) ? `[${itemsText(e.module.map(m => JSON.stringify(m)))}]` : JSON.stringify(e.module)}`;
         case "numeric": return numberText(e.v);
         case "int": return String(e.v);
         case "float": return numberText({ kind: "float", v: e.v });

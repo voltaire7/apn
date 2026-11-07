@@ -1480,9 +1480,12 @@ variable, as in `(t x) (t y)`, requires both arguments to have the same type.
 
 `import "name"` is an action yielding the module: a record of what its file's
 top level binds or opens with `use` (as a record literal's `use` spreads),
-except the modules it imports for itself. Running it evaluates the file once
-per interpreter; later imports yield the cached record. Like any action, it is
-run by `<-` or as a statement, and it opens nothing: `use` opens a record.
+except the modules it imports for itself. `import` is a prelude function
+(`import = intrinsics.import`), not syntax; the check follows a path written
+as a literal, and another is decided by the run (`Dynamic`). Running it
+evaluates the file once per interpreter; later imports yield the cached
+record. Like any action, it is run by `<-` or as a statement, and it opens
+nothing: `use` opens a record.
 
 ```
 std <- import "std"            # the standard library, a record of its modules

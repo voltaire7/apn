@@ -13,7 +13,8 @@ operator (`(+) = intrinsics.add`, ...; the `intrinsics` record holds the
 functions APN cannot define) and its fixity, `negate` and `not` (the functions
 `-x` and `!x` are), `enumFrom`, `enumFromThen`, `enumFromTo` and
 `enumFromThenTo` (the functions ranges are: `[a..]` is `enumFrom a`),
-`probe`, `reduce` and `toAST` (see [code](semantics.md#code)),
+`probe`, `reduce` and `toAST` (see [code](semantics.md#code)), `import`
+(see [module imports](semantics.md#module-imports)),
 and the Functor, Applicative
 and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
 `sequence`, `mapM`, `map2`–`map4`, `when`, `unless`, `loop`, `while`, `for`, `return`, `throw`, `empty`, `guard`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).

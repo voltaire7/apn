@@ -13,7 +13,7 @@
 
 import { parse, parseDocument } from "./parser.ts";
 import { NATIVE_EXPORTS } from "./native-exports.ts";
-import { METHODS } from "./ast.ts";
+import { type Expr, importedPath, METHODS } from "./ast.ts";
 
 export const STD_DIRECTORY = new URL("../lib/std/", import.meta.url);
 export const BUNDLE_LIB = "/lib/";
@@ -126,6 +126,12 @@ export function resolveModule(spec: string, directory: string, bundle?: Record<s
     return undefined;
 }
 
+/** import given anything but one module's path (a list of them, say). */
+export const IMPORT_ONE = {
+    message: "import reads one module, named by a path string",
+    hint: 'name the library and open its modules: std <- import "std"; use std.[option,text]',
+};
+
 /** Why an import could not be resolved, with a hint. */
 export function unknownModule(spec: string, bundled = false): { message: string; hint: string } {
     if (spec.startsWith("std/")) return { message: `unknown module '${spec}'`, hint: `the standard library has no module '${spec.slice(4)}'` };
@@ -184,21 +190,24 @@ function dataEntry(path: string): string {
 // load any other way (a computed path).
 function dependenciesOf(source: string, label: string): { imports: string[]; loads: string[]; strings: string[]; computed: boolean } {
     const imports: string[] = [], loads: string[] = [], strings: string[] = [];
-    let mentions = 0;
+    let mentions = 0, importMentions = 0;
     const isLoad = (f: unknown) => !!f && typeof f === "object" && (f as Record<string, unknown>).t === "var" && (f as { name: string }).name === "load";
     const walk = (node: unknown): void => {
         if (!node || typeof node !== "object") return;
         if (Array.isArray(node)) { node.forEach(walk); return; }
         const n = node as Record<string, any>;
         if (isLoad(n)) mentions++;
-        if (n.t === "import") imports.push(n.module as string);
+        // An import of a computed path may read any module, as a load may any file.
+        if (n.t === "var" && n.name === "import") importMentions++;
+        const imported = (n.t === "app" || n.t === "pipe") && importedPath(n as Expr);
+        if (imported) imports.push(imported);
         if (n.t === "app" && isLoad(n.f) && n.a?.t === "string") loads.push(n.a.v);
         if (n.t === "pipe" && isLoad(n.f) && n.x?.t === "string") loads.push(n.x.v);
         if (n.t === "string" && typeof n.v === "string" && n.v && !n.v.includes("\n")) strings.push(n.v);
         Object.values(n).forEach(walk);
     };
     walk(parse(source, label));
-    return { imports, loads, strings, computed: mentions > loads.length };
+    return { imports, loads, strings, computed: mentions > loads.length || importMentions > imports.length };
 }
 
 /**
