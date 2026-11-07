@@ -202,6 +202,7 @@ named arguments, see [lists and records as arguments](pattern-functions.md#lists
 | Nested field selection | `obj.child.[x,y]` | `obj.child.[x,y] = [a,b]` |
 | Record, positional entry | `obj 0` returns `[key,value]` | `obj 0 = [key,value]` |
 | Record, renamed selection | `obj.[a = x, b = y]` | `obj.[x = a, y = b] = [a = 10, b = 20]` |
+| Record, typed fields | `obj.[x : Float]` declares `x` | `obj.[x : Float, y] = [1,2]` declares `x` anew |
 
 A field after `.` is a name, in backticks when it is not one (``obj.`my value` ``).
 Use `obj key` for a computed name. `obj.(expression)` performs

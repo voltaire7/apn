@@ -127,6 +127,9 @@ for (const [source, expected] of [
     ['f (t : Type) = t\nisType (f [a : Int]) [a = 3]', 'True'],
     // A string iterates its characters.
     ['"ab" * c -> to String c', '["\'a\'","\'b\'"]'],
+    // A selection of fields named nowhere in scope opens a parameter as a record.
+    ['f w = w.[first = x]\n(f [x = 1]).first', '1'],
+    ['f w = w.[x,y]\nf [x = 1, y = 2]', '[1,2]'],
     // A record its type made takes updates to its fields, and a literal copy new ones.
     ['Quote = [quote : String, year : Int]\nq = Quote []\nq.year = 3\nq "quote" = "x"\n[use q, more = 1]', '[quote = "x", year = 3, more = 1]'],
     // A name defined as an import opens the module where it is a statement.
@@ -153,6 +156,7 @@ for (const source of [
     'bad = (xs : Vect n a) -> (ys : Vect m a) -> ({\n    xs ~ [\n        [] -> ys\n        x::xs -> x :: bad xs ys\n    ]\n} : Vect (n + m + 1) a)',
     'Quote = [quote : String, year : Int]; from Quote [quote = "q", year = 1]',
     'Quote = [quote : String, year : Int]; to Quote [year = "x"]',
+    'f w = w.[x,y]; f [x = 1]',
     // A field bound to a type is a value: the record is no type.
     'f (t : Type) = t; f [a = Int]',
     '"ab" * c -> c + 1',

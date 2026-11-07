@@ -703,6 +703,12 @@ the run when the checker knows the record, otherwise when the assignment runs.
 An update's copy keeps the type; a literal copy (`[use q, extra = 1]`) is an
 ordinary record, open to new fields.
 
+A typed entry declares its field anew, as `x : T = e` does in a literal, so
+the field's type becomes `T` (`v.[x : Float] = [3]` makes `x` the Float
+`3.0`, where `v.x = 3.0` keeps an Int field an Int): `v.[x : T, y] = [a,b]`
+is `v = [use v, x : T = a].[y] = [b]`, the untyped entries assigned as usual,
+renamed ones too (`v.[x : T = a] = r`), and `T` is any type expression.
+
 A record applied to a record of fields is the same update: `r [f = v, g = w]`
 is `{ r.f = v; r.g = w; r }` in every way, as Elm's `{ r | f = v, g = w }`,
 for a record of values and for a type given types (`Vector3 [x : Int]` is

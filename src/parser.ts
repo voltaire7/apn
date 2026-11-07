@@ -1362,23 +1362,11 @@ class Parser {
         try {
             this.next();
             if (!this.eatSym(".")) return false;
-            if (this.eatSym("[")) {
-                this.skipListLeading();
-                while (!this.isSym("]")) {
-                    this.parseEntryKey();
-                    if (this.eatSym("=")) this.parseEntryKey();
-                    this.skipListSeparators();
-                }
-                this.next();
-            } else {
+            if (this.isSym("[")) this.parseAssignEntries();
+            else {
                 this.parseKey();
                 while (this.eatSym(".")) {
-                    if (this.eatSym("[")) {
-                        this.skipListLeading();
-                        while (!this.isSym("]")) { this.parseEntryKey(); if (this.eatSym("=")) this.parseEntryKey(); this.skipListSeparators(); }
-                        this.next();
-                        break;
-                    }
+                    if (this.isSym("[")) { this.parseAssignEntries(); break; }
                     this.parseKey();
                 }
             }
@@ -1397,8 +1385,8 @@ class Parser {
         if (nt.k !== "ident") throw new Error("Parser: expected a name before '.'");
         const name = nt.v;
         this.next(); // "."
-        const entries: string[] = [];
-        const aliases: string[] = [];
+        let entries: string[] = [];
+        let aliases: string[] = [];
         const path: string[] = [];
         while (!this.isSym("[")) {
             if (this.isSym("(") || this.isSym("{")) {
@@ -1417,32 +1405,65 @@ class Parser {
             path.push(key);
         }
         const bracketed = this.isSym("[");
-        if (bracketed) {
-            this.next();
-            this.skipListLeading();
-            while (!this.isSym("]")) {
-                entries.push(this.parseEntryKey());
-                if (this.eatSym("=")) aliases.push(this.parseEntryKey());
-                this.skipListSeparators();
-                if (this.isSym("]")) break;
-                if (this.peek().k === "eof") {
-                    throw new Error("Parser: unexpected end of file inside field-assignment entries");
-                }
-            }
-            this.next(); // ]
-        } else {
-            entries.push(this.parseKey());
-        }
+        let types: (Expr | undefined)[] = [];
+        if (bracketed) ({ entries, aliases, types } = this.parseAssignEntries());
+        else entries.push(this.parseKey());
         this.expectSym("=");
         const rhs = this.parseDefBody();
         // Unnamed bracketed selection takes a list; renamed selection takes a record.
         // Only direct field assignment wraps its scalar RHS.
         if (aliases.length && aliases.length !== entries.length) throw new Error("Parser: cannot mix renamed and unnamed assignment entries");
+        if (types.some(t => t)) return { t: "patDef", pattern: { p: "var", name }, value: this.typedAssignment(name, path, rhs, entries, aliases, types) };
         const value = bracketed ? rhs : { t: "list", v: [rhs] } as Expr;
         const update: Expr = { t: "setFields", rec: { t: "var", name }, entries, value, ...(aliases.length ? { aliases } : {}), ...(path.length ? { path } : {}) };
         return pattern?.p === "as"
             ? { t: "patDef", pattern, value: rhs, update: { name, value: update } }
             : { t: "patDef", pattern: { p: "var", name }, value: update };
+    }
+
+    // A field assignment's [ ] entries: x, x = a (renamed), each typed or not
+    // (x : T, x : T = a).
+    parseAssignEntries(): { entries: string[]; aliases: string[]; types: (Expr | undefined)[] } {
+        const entries: string[] = [], aliases: string[] = [], types: (Expr | undefined)[] = [];
+        this.expectSym("[");
+        this.skipListLeading();
+        while (!this.isSym("]")) {
+            entries.push(this.parseEntryKey());
+            types.push(this.eatSym(":") ? this.typeExpr(this.typeEnd("item").end) : undefined);
+            if (this.eatSym("=")) aliases.push(this.parseEntryKey());
+            this.skipListSeparators();
+            if (this.isSym("]")) break;
+            if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside field-assignment entries");
+        }
+        this.next(); // ]
+        return { entries, aliases, types };
+    }
+    // v.[x : T, y] = [a, b] declares x anew, as x : T = a does in a literal:
+    // v = [use v, x : T = a].[y] = [b], the typed fields in a copy and the
+    // others assigned to it as usual. A value that is not a list literal is
+    // read once (vs = rhs, then vs 0, vs 1, ...); a renamed one gives each
+    // field by its name. A path's last record is the one copied.
+    typedAssignment(name: string, path: string[], rhs: Expr, entries: string[], aliases: string[], types: (Expr | undefined)[]): Expr {
+        const held = this.freshName(), from: Expr = { t: "var", name: held };
+        const literal = !aliases.length && rhs.t === "list" && rhs.v.length === entries.length ? rhs.v : undefined;
+        const given = (n: number): Expr => literal ? literal[n]
+            : aliases.length ? { t: "recordAccess", rec: from, field: aliases[n] } : { t: "app", f: from, a: { t: "int", v: BigInt(n) } };
+        const target = path.reduce((rec: Expr, field): Expr => ({ t: "recordAccess", rec, field }), { t: "var", name });
+        const fields: Array<[string, Expr]> = [["_", target]], declared: string[] = [];
+        entries.forEach((entry, n) => {
+            if (!types[n]) return;
+            fields.push([entry, ascribed(given(n), types[n]!, this.freshName())]);
+            declared.push(entry);
+        });
+        const rest = entries.flatMap((entry, n) => types[n] ? [] : [[entry, n] as const]);
+        const copy: Expr = { t: "record", v: fields, declared };
+        const updated: Expr = !rest.length ? copy : aliases.length
+            ? { t: "setFields", rec: copy, entries: rest.map(([entry]) => entry), aliases: rest.map(([, n]) => aliases[n]), value: { t: "record", v: rest.map(([, n]): [string, Expr] => [aliases[n], given(n)]) } }
+            : { t: "setFields", rec: copy, entries: rest.map(([entry]) => entry), value: { t: "list", v: rest.map(([, n]) => given(n)) } };
+        const placed: Expr = path.length
+            ? { t: "setFields", rec: { t: "var", name }, entries: [path[path.length - 1]], value: { t: "list", v: [updated] }, ...path.length > 1 ? { path: path.slice(0, -1) } : {} }
+            : updated;
+        return literal ? placed : { t: "block", style: "(", stmts: [{ t: "stmDef", name: held, clauses: [{ params: [], body: rhs }] }, placed] };
     }
 
     isEagerBinding(): boolean {

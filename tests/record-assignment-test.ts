@@ -12,6 +12,13 @@ for (const [name, source, expected] of [
     ["string pattern functions", 'f "x" = 10\nf "y" = 20\n[f "x", f "y"]', '[10,20]'],
     ["existing functions", 'f x = x\nf "x" = 10\nf "x"', '10'],
     ["action returning record", 'obj = { [x = 1] }\nobj "x" = 10\nobj', '[x = 10]'],
+    // A typed entry declares the field anew, as x : T = e does; the others
+    // are assigned as usual.
+    ["typed entries declare", 'v = [x = 1, y = 2]\nv.[x : Float, y] = [3,4]\n[v, typeOf v.y]', '[[x = 3.0, y = 4], Int]'],
+    ["typed entries from a value", 'v = [x = 1]\nvs = [5]\nt = Int8\nv.[x : t] = vs\ntypeOf v.x', 'Int8'],
+    ["typed renamed entries", 'w = [x = 1, y = 2]\nw.[x : Float = p, y = q] = [p = 9, q = 8]\nw', '[x = 9.0, y = 8]'],
+    ["typed nested entries", 'r = [c = [n = 1]]\nr.c.[n : Float] = [2]\nr', '[c = [n = 2.0]]'],
+    ["typed entries add a field", 'v = [x = 1]\nv.[z : Float] = [1]\nv', '[x = 1, z = 1.0]'],
 ] as const) {
     Deno.test(`record assignment: ${name}`, () => {
         const i = new Interpreter();
@@ -27,6 +34,7 @@ Deno.test("REPL record assignment preserves the record", () => {
     if (actual !== '[x = 10]') throw new Error(actual);
 });
 for (const [assignment, error] of [
+    ['obj.[x : Int8] = [300]', "out of range"],
     ['obj "x" = missing', "unbound variable"],
     ['obj key = 10', 'unbound variable'],
     ['obj "x" "y" = 10', 'one index'],

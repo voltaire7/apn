@@ -3995,8 +3995,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return unknown();
             }
             case "pluck": {
-                const rec = resolve(infer(e.rec, scope));
+                let rec = resolve(infer(e.rec, scope));
                 if (isExplicit(rec)) { runtimeChecks++; return explicitDynamic; }
+                // A value known only by its uses (a parameter): a field named
+                // nowhere in scope can only be selected, so it is a record with
+                // those fields, as w.x opens one. With every name bound it may
+                // be a list given their values, which the run decides.
+                const keys = e.entries.map(entry => typeof entry === "string" ? entry : entry[0]);
+                if (rec.k === "var" && e.quoted !== false && keys.some(key => !scope.has(key))) {
+                    unify(rec, { k: "record", fields: new Map(keys.map(key => [key, variable()])), open: true }, e);
+                    rec = resolve(rec);
+                }
                 if (rec.k === "record" && e.quoted !== false) {
                     const selected = e.entries.map(entry => {
                         const key = typeof entry === "string" ? entry : entry[0];
