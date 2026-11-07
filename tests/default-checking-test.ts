@@ -1006,6 +1006,8 @@ for (const source of [
 // bindings and operands run in order, and a lazy binding is read when used.
 for (const [source, expected] of [
     ['k y = { c = Mutable 1; set c (c + 1); set c (c * 10); return (c + 0) }\nw <- k 0\ng (f (r (w == 20)))', '0'],
+    // A local cell rebinding a visible name is the block's own each run.
+    ['c = 2\nk _ = { c = Mutable 1; set c (c + 1); return (c + 0) }\nw <- k 0\ng (f (r (w == 2)))', '0'],
     ['k y = { c = Mutable 1; a <- return (c + 0); set c 5; return (a + 0) }\nw <- k 0\ng (f (r (w == 1)))', '0'],
     ['k y = { c = Mutable 1; a = c + 0; set c 5; return (a + 0) }; w <- k 0; g (f (r (w == 5)))', '0'],
     ['bump c = set c (c + 1)\nk y = { c = Mutable 1; bump c; bump c; return (c + 0) }\nw <- k 0\ng (f (r (w == 3)))', '0'],
@@ -1135,8 +1137,10 @@ for (const [source, name, module] of [
 });
 Deno.test("a set from an earlier REPL input keeps later cell reads unknown", () => {
     const i = session();
-    run(i, `${effectPrelude}\nbump c = set c 9`);
-    rejected(i, 'g (f (r (Mutable 5 + 1 == 6)))');
+    run(i, `${effectPrelude}\nm = Mutable 5\nbump c = set c 9`);
+    rejected(i, 'g (f (r (m + 1 == 6)))');
+    // A cell the input makes is its own: nothing before can have written it.
+    run(i, 'g (f (r (Mutable 5 + 1 == 6)))');
 });
 // When checking right before a run, readFile and getArgs see the program's
 // input; the run reads the same snapshot. Lint and editor checks do not.

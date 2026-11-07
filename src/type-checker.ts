@@ -5778,6 +5778,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 : head.name === "set" && n === 0 ? demand(value(a)) : readMutable(value(a))), depth, { exprs: args, env });
         }
         if (head.name === "Mutable" && builtin && args.length === 1) {
+            // A local cell belongs to the evaluation that made it: its making is
+            // never shared (see cachedEvaluation), as a rebound name's Mutable 1
+            // would be. A top-level cell is made once, for the whole program.
+            if (!creatingTopLevel) cellEvents++;
             const cell: KnownCell = { value: value(args[0]) ?? {}, root, program: creatingTopLevel };
             if (cell.program) programCells.add(cell);
             return { mutable: cell };
