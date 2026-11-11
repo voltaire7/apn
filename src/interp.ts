@@ -665,7 +665,7 @@ export class Interpreter {
                         const value = this.reference(this.eval(clauses[0].body));
                         // A scalar type names a subtype: Money = Float. A Money is
                         // a Float wherever one is accepted, but keeps its name,
-                        // and (Money x) accepts only Money values.
+                        // and (x : Money) takes a Money or a Float it converts.
                         if (value.kind === "type" && NAMED_BASES.has(value.name) && !value.family && !value.alias && !value.arguments?.length && !value.variable) {
                             return { kind: "type", name, family: { name, base: value } };
                         }
@@ -5924,14 +5924,15 @@ export class Interpreter {
                     const input = type.kind === "record" ? this.recordPatternInput(type, actual) : this.isList(actual) ? actual : null;
                     return input !== null && this.matchPattern(p.args[0], this.conform(type, input), binds);
                 }
-                // A named refinement's takes one of its values, or a plain value
-                // its refinement holds, as (x : Int32) takes 5: either binds the
-                // plain value.
-                const refined = type.kind === "type" && type.family?.base && this.reference(type.family.base);
-                if (refined && refined.kind === "type" && refined.refine && p.args.length === 1) {
+                // A named subtype's takes one of its values, or a plain value it
+                // converts (as (x : Int32) takes 5 and (x : Float) takes 1),
+                // either binding the plain value; never another name's.
+                if (type.kind === "type" && type.family?.base && p.args.length === 1 && !parameters) {
                     const actual = this.dataValue(v);
-                    if (actual.kind === "variant" && actual.family === (type as Extract<Value, { kind: "type" }>).family) return this.matchPattern(p.args[0], actual.v[0], binds);
-                    return !(actual.kind === "variant" && actual.family?.base) && this.refinedPattern(refined, p.args[0], v, binds);
+                    if (actual.kind === "variant" && actual.family === type.family) return this.matchPattern(p.args[0], actual.v[0], binds);
+                    if (actual.kind === "variant" && actual.family?.base) return false;
+                    const member = this.refinedMember(type, v);
+                    return member?.kind === "variant" && this.matchPattern(p.args[0], member.v[0], binds);
                 }
                 // A type without parameters takes its value: (Color c) takes Red,
                 // (Money x) Money 2's payload.

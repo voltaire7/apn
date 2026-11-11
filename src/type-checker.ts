@@ -2585,10 +2585,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const made = builtinTyped(t.name, a, e);
             if (made) return convert(target, made, e, explicitFloat, seen, runtimeProjection);
         }
-        // Converting a value of its base to a := type makes one, as applying the
-        // type (List UserId [1]) or updating a slot does; a typed parameter
-        // only matches (see matching).
-        if (t.k === "variant" && t.base && a.k !== "variant" && !matching) {
+        // Converting a value of its base to a named subtype makes one, as
+        // applying the type (List Count [1]) or updating a slot does, and a
+        // typed parameter takes one so, as (x : Int32) takes 5, at runtime.
+        if (t.k === "variant" && t.base && a.k !== "variant") {
             convert(t.base, a, e, explicitFloat, seen, runtimeProjection);
             return target;
         }

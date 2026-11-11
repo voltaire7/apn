@@ -18,12 +18,15 @@ sqrt (4 : Count)            # 2: builtins and (x : Int) patterns see the Int
 (1 : Count) + Age 2         # error: cannot combine Count and Age (Age = Int)
 ```
 
-Its own pattern, `(Count c)`, is chosen before `(n : Int)` and accepts only a
-`Count` (a plain `5` is not one); applying `Count` or a list type
-(`([1,2] : List Count)`) makes one. A refinement of a scalar named so
-(`Positive = (n : Int) | n > 0`) is a named subtype too, whose values also hold
-its condition and whose typed pattern takes a plain value that does, as the
-sized integers' do (see [refinement types](semantics.md#refinement-types)).
+Applying `Count` or a list type (`([1,2] : List Count)`) makes one. Its typed
+pattern, `(c : Count)`, takes a `Count` or a plain value it converts, as
+`(x : Int32)` takes `5` and `(x : Float)` takes `1`, binding the plain value;
+never another name's (`(2 : Age)`). Given a plain `5`, an `Int`'s own clause,
+an exact match, is chosen first: with `k (c : Count) = "count"` and
+`k (n : Int) = "int"`, `k 5` is `"int"` and `k (5 : Count)` is `"count"`. A
+refinement of a scalar named so (`Positive = (n : Int) | n > 0`) is a named
+subtype too, whose values also hold its condition (see
+[refinement types](semantics.md#refinement-types)).
 
 A constructor makes a distinct type instead (see
 [variants](templates-and-types.md#variants-parameters-and-distinct-wrappers)):
