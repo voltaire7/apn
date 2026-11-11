@@ -486,6 +486,12 @@ function indexText(n: Index): string {
 function argument(type: string): string {
     return /\s/.test(type) && !/^[[(]/.test(type) ? `(${type})` : type;
 }
+// A mismatch between two types; two that print alike are told apart (a
+// program's own Int shadowing the built-in one).
+function cannotUse(actual: Ty, expected: Ty): string {
+    const [a, b] = [text(actual), text(expected)];
+    return `cannot use ${a} where ${b} is required` + (a === b ? ` (two different types are named ${a})` : "");
+}
 // Unresolved types are named a, b, ... in order of appearance, as typeOf names
 // them (an unsolved operation's result, x * 2 of an unknown x, is one too);
 // an applied one is named f, g, ...: f a.
@@ -1443,14 +1449,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (other.k === "apply" && other.args.length === n) return both([app.head, other.head], other.args);
             if (other.k === "list" && n === 1) return both([app.head, { k: "ctor", name: "List", args: [] }], [other.element]);
             if (other.k === "variant" && other.args.length >= n) return both([app.head, { k: "ctor", name: other.name, args: other.args.slice(n) }], other.args);
-            return problem(`cannot use ${text(actual)} where ${text(expected)} is required`, e);
+            return problem(cannotUse(actual, expected), e);
         }
         if (expected.k === "ctor" || actual.k === "ctor") {
             if (expected.k === "ctor" && actual.k === "ctor" && expected.name === actual.name && expected.args.length === actual.args.length) {
                 expected.args.forEach((x, n) => unify(x, actual.args[n], e, seen));
                 return;
             }
-            return problem(`cannot use ${text(actual)} where ${text(expected)} is required`, e);
+            return problem(cannotUse(actual, expected), e);
         }
         if (expected.k === "union") {
             if (actual.k === "union") { for (const choice of actual.choices) unify(expected, choice, e, seen); return; }
@@ -1458,7 +1464,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 try { unify(copy(choice), copy(actual), e); } catch { continue; }
                 unify(choice, actual, e, seen); return;
             }
-            return problem(`cannot use ${text(actual)} where ${text(expected)} is required`, e);
+            return problem(cannotUse(actual, expected), e);
         }
         if (actual.k === "union") { for (const choice of actual.choices) unify(expected, choice, e, seen); return; }
         // A pending monadic value takes the type of the monad it is used in.
@@ -1466,7 +1472,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const pending = (isPending(expected) ? expected : actual) as Extract<Ty, { k: "variant" }>;
             const other = pending === expected ? actual : expected;
             const held = monadHeld(other);
-            if (held === undefined) return problem(`cannot use ${text(actual)} where ${text(expected)} is required`, e);
+            if (held === undefined) return problem(cannotUse(actual, expected), e);
             if (held !== null) unify(pending.args[0], held, e, seen);
             return;
         }
@@ -1576,7 +1582,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return unify(rest, fn(other, union([expected.input, other])), e, seen);
         }
         problem(
-            `cannot use ${text(actual)} where ${text(expected)} is required`,
+            cannotUse(actual, expected),
             e,
         );
     }

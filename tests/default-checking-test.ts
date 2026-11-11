@@ -1357,9 +1357,21 @@ for (const source of ['x : Int = "a"', 'x : Int = 2.5', 'x : Int8 = 300',
     'g (r : [x : UInt8, y : UInt8]) = r.y; h b = g [use b, x = 3]; h [x = 1, y = 300]', 'g (r : [x : UInt8]) = r.x; h v = g [use [x = v]]; h 300']) {
     Deno.test(`typed binding rejects: ${source}`, () => rejected(session(), source));
 }
-for (const source of ['Int = 5', 'Int x y = 5']) Deno.test(`a built-in type name is not redefined: ${source}`, () => {
-    try { parse(source); } catch (error) { if (String(error).includes("built-in type names cannot be reassigned")) return; throw error; }
-    throw new Error("parsed");
+// A built-in type's name is a name like any other: a program may rebind it, and
+// from then on Int means the program's Int (patterns, ascription, typeOf).
+for (const [source, output] of [['Int = 5\nInt + 1', '6'], ['Int x y = x + y\nInt 2 3', '5'],
+    ['Int = Pos UInt | Neg UInt\ng (x : Int) = x\ng (Neg 2)', 'Neg 2'],
+    ['Int = Pos UInt | Neg UInt\ntypeOf (Pos 1)', 'Int'], ['Int = Pos UInt | Neg UInt\nx = Pos 2 : Int\nx', 'Pos 2'],
+    ['Bool = Yes | No\nh (b : Bool) = b\nh No', 'No']]) {
+    Deno.test(`a built-in type name can be rebound: ${JSON.stringify(source)}`, () => {
+        const shown = run(session(), source);
+        if (shown !== output) throw new Error(`expected ${output}, got ${shown}`);
+    });
+}
+Deno.test("a shadowed built-in type is not the program's type", () => {
+    try { run(session(), 'Int = Pos UInt | Neg UInt\ng (x : Int) = x\nprint (g 5)'); }
+    catch (error) { if (String(error).includes("two different types are named Int")) return; throw error; }
+    throw new Error("accepted");
 });
 
 // A binding whose pattern its known value can never match is a static error,

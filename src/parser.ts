@@ -2390,11 +2390,6 @@ class Parser {
                 if (/^[A-Z]/.test(t.v)) {
                     if (this.isDef()) {
                         const declaration = this.parseDefStatement();
-                        // (A clause of a function counting a list's elements, as the
-                        // prelude's Vect Z a = [], is checked once its clauses are grouped.)
-                        const [first] = declaration.clauses[0].params, counting = declaration.clauses[0].params.length === 2 &&
-                            (first.p === "int" || first.p === "constr" && (first.tag === "Z" || first.tag === "S"));
-                        if (TYPE_NAMES.includes(declaration.name) && !counting) throw new Error("Parser: built-in type names cannot be reassigned");
                         const [clause] = declaration.clauses;
                         if (holdsPlaceholder(clause.body)) {
                             const logic = clause.body.t === "placeholder" ? undefined : clause.body;
@@ -2598,11 +2593,6 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
         const grouped = groupClauses(out);
         rejectOldSpellings(grouped);
         knownArguments(grouped);
-        for (const tl of grouped) {
-            // (Vect may be defined only as the list of n elements.)
-            const counts = tl.t === "def" ? countingOf(tl.name, tl.clauses) : undefined;
-            if (tl.t === "def" && TYPE_NAMES.includes(tl.name) && !(counts?.scale === 1n && !counts.offset)) throw new Error("Parser: built-in type names cannot be reassigned");
-        }
         if (fileFixities.size) programFixities.set(grouped, fileFixities);
         return grouped;
     } catch (err) {

@@ -234,6 +234,15 @@ export class Interpreter {
         return undefined;
     }
     private regrouped(e: Expr): Expr { return regroup(e, op => this.valueFixity(op)); }
+    // Whether a name is a built-in type here: one of TYPE_NAMES that the scope
+    // still binds to it (a program's own Int, shadowing it, is its own).
+    private builtinType(name: string, scope: Env = this.env): boolean {
+        if (!TYPE_NAMES.includes(name)) return false;
+        const bound = scope.get(name);
+        if (!bound || this.loadingPrelude) return true;
+        if (PRELUDE_TYPES.has(name)) return bound === this.preludeBindings.get(name);
+        return bound.kind === "type" && bound.name === name && !bound.family;
+    }
     /** Whether a value is a module's record (what import and load yield). */
     isModule(v: Value): boolean { return this.moduleValues.has(v); }
     // Text readFileFrom read: its file, and whether the static check could
@@ -3250,7 +3259,7 @@ export class Interpreter {
         const instances = this.instances.get(">>=") ?? [];
         return instances.slice(1).every(fn => {
             const f = this.force(fn);
-            return f.kind === "clauseFn" && f.clauses.every(c => c.params[0]?.p === "constr" && !TYPE_NAMES.includes(c.params[0].tag));
+            return f.kind === "clauseFn" && f.clauses.every(c => c.params[0]?.p === "constr" && !this.builtinType(c.params[0].tag));
         });
     }
     // xs >>= k as the prelude's clauses make it: k's lists joined, lazily.
@@ -3489,7 +3498,7 @@ export class Interpreter {
     // for one it holds; undefined for any other pattern.
     private bareType(p: Pattern, v: Value): "same" | "within" | false | undefined {
         if (p.p !== "constr" || p.args.length) return undefined;
-        const bound = TYPE_NAMES.includes(p.tag) ? { kind: "type", name: p.tag } as Value : this.env.get(p.tag), named = bound && this.reference(bound);
+        const bound = this.builtinType(p.tag) ? { kind: "type", name: p.tag } as Value : this.env.get(p.tag), named = bound && this.reference(bound);
         if (named?.kind !== "type") return undefined;
         const given = this.demand(v);
         if (!(given.kind === "type" || given.kind === "functionType" || this.isList(given)) || !this.isTypeValue(given)) return false;
@@ -3501,7 +3510,7 @@ export class Interpreter {
     private closedType(p: Pattern): Value | undefined {
         if (p.p === "wildcard") return { kind: "type", name: "$any" };
         if (p.p !== "constr") return undefined;
-        const bound = TYPE_NAMES.includes(p.tag) && !PRELUDE_TYPES.has(p.tag) ? { kind: "type", name: p.tag } as Value : this.env.get(p.tag);
+        const bound = this.builtinType(p.tag) && !PRELUDE_TYPES.has(p.tag) ? { kind: "type", name: p.tag } as Value : this.env.get(p.tag);
         const head = bound && this.reference(bound);
         if (head?.kind !== "type" || head.arguments?.length) return undefined;
         if (p.args.length && p.args.length !== (head.alias?.parameters.length ?? this.typeParameters(p.tag))) return undefined;
@@ -3527,11 +3536,11 @@ export class Interpreter {
         const named = this.reference(arg);
         if (named.kind === "variant" && named.family?.base) {
             if (pattern.tag === named.family.name) return 35;
-            if (TYPE_NAMES.includes(pattern.tag)) arg = named.v[0];
+            if (this.builtinType(pattern.tag)) arg = named.v[0];
         }
         const binding = this.env.get(pattern.tag);
         if (binding && this.counted(this.reference(binding))) return this.isList(this.dataValue(arg)) ? 30 : -1000;
-        if (!TYPE_NAMES.includes(pattern.tag)) return 0;
+        if (!this.builtinType(pattern.tag)) return 0;
         // An undecided call fits a typed pattern as an exact type would.
         const undecided = this.reference(arg);
         if (undecided.kind === "pending" && undecided.step.op === "call") return 30;
@@ -3557,7 +3566,7 @@ export class Interpreter {
     // The most a pattern can score for any argument.
     private bestPatternScore(pattern: Pattern): number {
         if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
-        return pattern.p === "constr" && TYPE_NAMES.includes(pattern.tag) ? 30 : 0;
+        return pattern.p === "constr" && this.builtinType(pattern.tag) ? 30 : 0;
     }
 
     // A named subtype's value as its base: Money 1.2 is 1.2 to builtins.
@@ -5499,7 +5508,7 @@ export class Interpreter {
         this.spellingChecked.add(place);
         const visit = (p: Pattern): void => {
             if (p.p === "constr" && p.args.length && !p.typed) {
-                const bound = TYPE_NAMES.includes(p.tag) && !PRELUDE_TYPES.has(p.tag) ? { kind: "type", name: p.tag } as Value : scope.get(p.tag);
+                const bound = this.builtinType(p.tag, scope) && !PRELUDE_TYPES.has(p.tag) ? { kind: "type", name: p.tag } as Value : scope.get(p.tag);
                 const type = bound && this.reference(bound);
                 const count = type?.kind === "type" ? type.alias?.parameters.length ?? this.typeParameters(p.tag, scope) : undefined;
                 if (count !== undefined && p.args.length > count) {
@@ -5824,7 +5833,7 @@ export class Interpreter {
                 return this.isTypeValue(given) && (this.sameType(named, given) || this.within(given, named));
             }
         }
-        if (p.p === "constr" && (!TYPE_NAMES.includes(p.tag) || p.tag === "Vect")) {
+        if (p.p === "constr" && (!this.builtinType(p.tag) || p.tag === "Vect")) {
             const binding = this.env.get(p.tag);
             if (binding) {
                 const type = this.reference(binding);
@@ -5858,7 +5867,7 @@ export class Interpreter {
         }
         // A named subtype matches its base's patterns: (Float x) takes Money 1.2;
         // another type of the program's, what its to instance makes: (Int i) takes East.
-        if (p.p === "constr" && TYPE_NAMES.includes(p.tag) && !["Type", "Mutable", "Dynamic"].includes(p.tag)) v = this.baseValue(this.reference(v));
+        if (p.p === "constr" && this.builtinType(p.tag) && !["Type", "Mutable", "Dynamic"].includes(p.tag)) v = this.baseValue(this.reference(v));
         if (p.p === "constr" && SCALAR_TYPES.has(p.tag)) v = this.builtinValue(p.tag, this.dataValue(v)) ?? v;
         v = p.p === "typeBind" || (p.p === "constr" && p.tag === "Type") ? this.demand(v) : this.dataValue(v);
         switch (p.p) {
@@ -5938,7 +5947,7 @@ export class Interpreter {
             case "constr": {
                 const bare = this.bareType(p, v);
                 if (bare !== undefined) return !!bare;
-                if (TYPE_NAMES.includes(p.tag)) {
+                if (this.builtinType(p.tag)) {
                     if (p.args.length !== 1) return false;
                     if (!NUMERIC_TYPES.includes(p.tag)) return this.matchesValueType(p.tag, v) && this.matchPattern(p.args[0], v, binds);
                     if (!isNumeric(v)) return false;

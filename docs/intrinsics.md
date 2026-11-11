@@ -6,16 +6,15 @@ errors. The interpreter only stores and computes it faster (a bigint for a
 natural, IEEE 754 hardware for a float). Where the two disagree, the definition
 is right and the interpreter is wrong. `List` and `Vect` are defined this way in
 the prelude already; for the others the definitions here are the model, written
-as a program would write them (a program cannot redefine these names).
+as a program would write them. A built-in type's name is a name like any other:
+a program that defines `Int` shadows the built-in one, as it can shadow `map`,
+and from then on `Int` in its patterns, ascriptions and `typeOf` is its own.
 
 Each definition uses only the language's own forms: a constructor is a
 definition whose body is `_`, a union of types is `(A | B)`, a family of types
 is a definition with parameters, and an operator is a prelude function. Where
 the language cannot yet say something, this page says so: those gaps are what
-the language still lacks, not exceptions the built-ins enjoy. One exception
-remains: the parser refuses to rebind a built-in type's name (`Int = ...` is an
-error), so the blocks that define one cannot run as written; by this rule a
-program should be able to shadow `Int` as it shadows `map`.
+the language still lacks, not exceptions the built-ins enjoy.
 
 ## Bool
 
