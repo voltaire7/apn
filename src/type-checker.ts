@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -2226,8 +2226,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "cons": {
                 // An infix pattern's operator names a constructor: list cons, or
                 // one a program bound it to (rewritten to that constructor already).
+                // (Cons h t, Cons the prelude's, is one too: see rewriteListConstructors.)
                 const op = p.op ?? "::";
-                if (p.op || scope.has("::") && builtinOperator(scope.get("::")!.type) !== "::") {
+                if (scope.has(op) ? builtinOperator(scope.get(op)!.type) !== "::" : op !== "::") {
                     problem(`'${op}' is not a constructor, so it cannot take a value apart`, e, `bind it to a two-field constructor, as in \`(${op}) = Cons\``);
                 }
                 const a = variable(), t = list(a);
@@ -2270,7 +2271,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const near = didYouMean(p.tag, [...scope.keys()].filter(name => /^[A-Z]/.test(name)));
                     firstUnbound = { expr: e, name: p.tag, inPattern: true,
                         hint: module ? `${openHint(module)} to use \`${p.tag}\`` : near ? `did you mean '${near}'?`
-                            : `declare a type with \`${p.tag}\` first${p.tag === "Nil" || p.tag === "Cons" ? "; a list's patterns are `[]` and `(x :: xs)`" : ""}` };
+                            : `declare a type with \`${p.tag}\` first` };
                 }
                 // A bare constructor sharing its type's name is the type there,
                 // as a bare type name is: to Money (Float x) = ...
@@ -7300,8 +7301,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A type declaration (Color = Red | Green), at the top level or in a block
     // (scope), as at runtime. Constructors declared with _ where the parser
     // could not see them are claimed here.
+    // What a name is bound to, if the list's own constructor: the empty list
+    // or the list's cons (the prelude's Nil and Cons).
+    function listConstructor(tag: string, scope: Scope): "nil" | "cons" | undefined {
+        const entry = scope.get(tag), t = entry && resolve(entry.type);
+        if (builtinOperator(t) === "::") return "cons";
+        return t?.k === "list" && t.items?.length === 0 ? "nil" : undefined;
+    }
     function declare(written: DataDef, scope: Scope): void {
+        written = listAlternatives(written, tag => listConstructor(tag, scope));
         if (listUnion(written)) { scope.set(written.name, { type: { k: "type", value: atom("List") } }); return; }
+        if (written.variants.some(v => v.result && (v.tag === "[]" || v.tag === "::"))) {
+            const clauses = listClauses(written.variants);
+            define(written.name, clauses, scope, clauses[0].body);
+            return;
+        }
         // Another union of list types (Pairs a = [] | a :: a :: Pairs a) is
         // unfolded as a value is read, when it runs: here, lists whose
         // elements are decided then.
@@ -7387,6 +7401,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (t?.k === "variant" && body.t === "var") constructorOperators.set(statement.name, body.name);
             else constructorOperators.delete(statement.name);
         }
+        rewriteListConstructors(statement, tag => listConstructor(tag, scope) === "cons");
         rewriteInfixConstructors(statement, op => constructorOperators.get(op));
         checkingExpression = statement.t === "expr" || statement.t === "patDef" ? statement.value : statement.t === "def" ? statement.clauses[0].body : undefined;
         try {
@@ -7533,7 +7548,7 @@ let prelude: TypeScope | undefined;
 function preludeScope(): TypeScope {
     if (prelude) return prelude;
     let read: TypeScope = new Map();
-    const result = checkTypes(parse(preludeSource), { prelude: true, result: (_, exports) => { read = exports; } });
+    const result = checkTypes(parseDocument(preludeSource), { prelude: true, result: (_, exports) => { read = exports; } });
     if (result.issues.length) throw new Error(`the checker rejects the prelude: ${result.issues[0].message}`);
     return prelude = read;
 }

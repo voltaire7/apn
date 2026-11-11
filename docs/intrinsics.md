@@ -40,17 +40,22 @@ add (S n) m = S (add n m)
 A `UInt` is stored as a bigint, and `Z` and `S` are its constructors as a view:
 `f (S k) = k` takes `5` apart as `S 4`, and `S (S Z)` prints `2`. A natural is
 a list of units, `List []`, its length the only thing it keeps: the two have
-the same shape (`Z` is `[]`, `S n` is `[] :: n`).
+the same shape (`Z` is `Nil`, `S n` is `Cons [] n`).
 
 ## Lists
 
 ```apn
-List a = [] | a :: List a                                  # the prelude's line
-Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a  # the prelude's line
+Nil = []
+Cons = intrinsics.cons
+List a = Nil | Cons a (List a)                                  # the prelude's
+Vect n a = Nil -> Vect Z a | Cons a (Vect k a) -> Vect (S k) a  # the prelude's
 ```
 
-`Vect n a` is a list indexed by its length, the natural each list forgets its
-elements down to.
+`[]` and `::` only write `Nil` and `Cons` another way. `Vect n a` is a list
+indexed by its length, the natural each list forgets its elements down to. It
+reuses `List`'s constructors rather than declaring its own (Idris's `Vect` has
+its own `Nil` and `::`): its values are the same lists, so `Vect 3 Int <=
+List Int` and no conversion is needed.
 
 ## Integers and the other exact numbers
 

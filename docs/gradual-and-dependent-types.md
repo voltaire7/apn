@@ -307,25 +307,27 @@ labelled 2 ++ "!"                      # "few!"
 
 A variant's constructor may say which type it makes, after `->`: its family's
 arguments can then be values, computed from its fields (as Idris writes
-`Nil : Vect Z a` and `(::) : a -> Vect k a -> Vect (S k) a`).
+`Nil : Vect Z a` and `(::) : a -> Vect k a -> Vect (S k) a`). `VNil` and
+`VCons` below are new constructors, so `Vec` is a type of its own; a family
+naming the list's own `Nil` and `Cons` is one of lists, as `Vect` is (below).
 
 ```apn
-Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a
-xs = Cons 1 (Cons 2 Nil)
+Vec n a = VNil -> Vec Z a | VCons a (Vec k a) -> Vec (S k) a
+xs = VCons 1 (VCons 2 VNil)
 typeOf xs                         # Vec 2 Int
-typeOf Nil                        # Vec 0 a
+typeOf VNil                        # Vec 0 a
 (xs : Vec 2 Int)                  # checks; Vec 3 Int xs is a static error
 
-append Nil ys = ys
-append (Cons x rest) ys = Cons x (append rest ys)
+append VNil ys = ys
+append (VCons x rest) ys = VCons x (append rest ys)
 typeOf (append xs xs)             # Vec 4 Int
 
 len (_ : Vec n _) = n             # binds the index: len xs is 2
-first (Cons x _) = x              # first Nil is a static error
+first (VCons x _) = x              # first VNil is a static error
 ```
 
 A family's parameters may also be written as a lambda, as `f = x -> e` is
-`f x = e`: `Vec = n, a -> (Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a)`
+`f x = e`: `Vec = n, a -> (VNil -> Vec Z a | VCons a (Vec k a) -> Vec (S k) a)`
 (or `n -> a -> (...)`) declares the same `Vec`; the constructors stand in the
 parentheses, on one line or each on its own line after a `|`.
 
@@ -333,19 +335,19 @@ A constructor without `->` makes the family with its arguments open, as for
 any variant. A value's indices are the constructor's result type with the
 names its fields give: `k` from the tail's own indices, `a` from the
 element; they are computed when asked for (`typeOf`, a typed pattern, a
-conversion). A name nothing gives is any type (`Nil`'s `a`). Applying the
+conversion). A name nothing gives is any type (`VNil`'s `a`). Applying the
 family to a value of it checks the indices: statically when evaluation knows
 them, otherwise when the program runs. A clause may state its result's
 indices, checked the same way:
 
 ```apn
-app (Nil : Vec n a) (ys : Vec m a) = ys : Vec (n + m) a
-app (Cons x r : Vec n a) (ys : Vec m a) = Cons x (app r ys) : Vec (n + m) a
+app (VNil : Vec n a) (ys : Vec m a) = ys : Vec (n + m) a
+app (VCons x r : Vec n a) (ys : Vec m a) = VCons x (app r ys) : Vec (n + m) a
 ```
 
 The checker proves such claims by induction, as Idris does. Indices are sums
 over naturals (`Z`, `S k`, literals, `+`, `*` by a literal). A constructor
-pattern refines its parameter's index: `Nil` makes `n` zero, and `Cons x r`
+pattern refines its parameter's index: `VNil` makes `n` zero, and `VCons x r`
 makes it one more than `r`'s. A recursive call meets the claim of the clause
 it takes, one case per clause, but only where one argument position shrinks
 (a part of the parameter's pattern, like `r`) in every recursive call. A
@@ -354,9 +356,9 @@ A claim that differs from its body by a constant, in a case that can happen,
 is a static error at the definition, whether or not anything calls it:
 
 ```apn
-app (Nil : Vec n a) (ys : Vec m a) = ys : Vec (n + m) a
-app (Cons x r : Vec n a) (ys : Vec m a) = Cons x (app r ys) : Vec (n + m + 1) a
-# the claim Vec (n + m + 1) a does not hold: when r is Nil, n + m + 1 is
+app (VNil : Vec n a) (ys : Vec m a) = ys : Vec (n + m) a
+app (VCons x r : Vec n a) (ys : Vec m a) = VCons x (app r ys) : Vec (n + m + 1) a
+# the claim Vec (n + m + 1) a does not hold: when r is VNil, n + m + 1 is
 # m + 2 but the body's index is m + 1
 ```
 
@@ -384,21 +386,23 @@ values available in the body. `Vector` was renamed `Vect`, which the prelude
 declares as the family of lists counting their elements:
 
 ```apn
-Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a
+Vect n a = Nil -> Vect Z a | Cons a (Vect k a) -> Vect (S k) a
 ```
 
-A family of lists is sugar for a type function's clauses: each alternative is
-the clause its result names, so this is
+A family of lists, one whose alternatives are the list's own constructors
+(`Nil` and `Cons`, or `[]` and `a :: Vect k a`, by what the names are bound
+to), is sugar for a type function's clauses: each alternative is the clause
+its result names, so this is
 
 ```apn
-Vect Z a = []
-Vect (S k) a = a :: Vect k a
+Vect Z a = Nil
+Vect (S k) a = Cons a (Vect k a)
 ```
 
 and an index is a pattern (`Z` or `0`, `S k` or `k + 1`, a name).
 
 `Vect 3 Int` is the type of three `Int`s, and its values are ordinary lists:
-`Vect` is the prelude's `List a = [] | a :: List a` (see
+`Vect` is the prelude's `List a = Nil | Cons a (List a)` (see
 [type descriptions](semantics.md#type-descriptions)) with each alternative saying its index.
 Nothing about `Vect` is built in: its length, `n`, is read off its clauses by
 induction (the base clause gives `d` elements, each step `c` more, so the

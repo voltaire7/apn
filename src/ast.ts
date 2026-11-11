@@ -1,5 +1,6 @@
 import type { Numeric, Real } from "./numbers.ts";
 import type { DefClause } from "./types.ts";
+import { APNError } from "./errors.ts";
 
 // ---------------- AST ----------------
 
@@ -129,6 +130,45 @@ export function unionKind(def: DataDef, kind: (name: string) => Alternative): "d
 export function unclaimedMix(name: string, other: string): string {
     return `${name} unions constructors declared with _, and ${other} is not one`;
 }
+// Nil and Cons a (X a) in a union, by what their names are bound to (the
+// empty list and the list's cons, as the prelude names them), are the list's
+// own alternatives, as [] and a :: X a are: List a = Nil | Cons a (List a).
+export function listAlternatives(def: DataDef, bound: (tag: string) => "nil" | "cons" | undefined): DataDef {
+    if (def.claims) return def;
+    let changed = false;
+    const variants = def.variants.map(v => {
+        const kind = v.tag === "[]" || v.tag === "::" ? undefined : bound(v.tag);
+        if (!(kind === "nil" && !v.arity || kind === "cons" && v.arity === 2)) return v;
+        changed = true;
+        return { ...v, tag: kind === "nil" ? "[]" : "::" };
+    });
+    return changed ? { ...def, variants } : def;
+}
+// A family of lists (after listAlternatives) is a type function's clauses: each
+// alternative, [] -> Vect Z a or a :: Vect k a -> Vect (S k) a, is the
+// clause its result names, Vect Z a = [] or Vect (S k) a = a :: Vect k a.
+export function listClauses(variants: DataVariant[]): DefClause[] {
+    const pattern = (e: Expr): Pattern => {
+        while (e.t === "block" && e.stmts.length === 1) e = e.stmts[0];
+        if (e.t === "int") return { p: "int", v: e.v };
+        // k + 1 is the natural after k, as S k is.
+        if (e.t === "binop" && e.op === "+" && e.l.t === "var" && e.r.t === "int" && e.r.v === 1n) return { p: "constr", tag: "S", args: [pattern(e.l)] };
+        if (e.t === "var") return e.name === "_" ? { p: "wildcard" } : /^[A-Z]/.test(e.name) ? { p: "constr", tag: e.name, args: [] } : { p: "var", name: e.name };
+        const args: Expr[] = [];
+        let head: Expr = e;
+        while (head.t === "app") { args.unshift(head.a); head = head.f; }
+        if (head.t === "var" && /^[A-Z]/.test(head.name)) return { p: "constr", tag: head.name, args: args.map(pattern) };
+        throw new APNError("parse", "a family's index is a pattern: a name, a number, Z, S k or k + 1");
+    };
+    return variants.map(v => {
+        const args: Expr[] = [];
+        let head: Expr = v.result!;
+        while (head.t === "app") { args.unshift(head.a); head = head.f; }
+        const body: Expr = v.tag === "[]" ? { t: "list", v: [] } : { t: "binop", op: "::", l: v.fields![0], r: v.fields![1] };
+        return { params: args.map(pattern), body };
+    });
+}
+
 // A union of a list's own alternatives is a union of list types, unfolded as
 // a value is read (see Interpreter.belongsToType). One of this shape,
 // X a = [] | a :: X a, is the type of lists of a, endless ones among them (its
@@ -277,6 +317,19 @@ export function rewriteInfixConstructors(node: unknown, tagOf: (op: string) => s
     const args = [n.head, n.tail];
     for (const key of Object.keys(n)) delete n[key];
     Object.assign(n, { p: "constr", tag, args });
+}
+// A constructor pattern whose constructor is the list's cons (the prelude's
+// Cons, by what the name is bound to: isCons) is that list cell, as h :: t
+// is; it keeps the name it was written with (see patternSource).
+export function rewriteListConstructors(node: unknown, isCons: (tag: string) => boolean): void {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) { node.forEach(x => rewriteListConstructors(x, isCons)); return; }
+    const n = node as Record<string, unknown>;
+    for (const value of Object.values(n)) if (value && typeof value === "object") rewriteListConstructors(value, isCons);
+    if (n.p !== "constr" || (n.args as Pattern[]).length !== 2 || !isCons(n.tag as string)) return;
+    const [head, tail] = n.args as Pattern[], op = n.tag;
+    for (const key of Object.keys(n)) delete n[key];
+    Object.assign(n, { p: "cons", head, tail, op });
 }
 // A pattern with every flat typed pattern in it read as its typed form,
 // copied where that changes it: the pattern as written stays as it is.

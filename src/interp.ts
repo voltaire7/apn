@@ -17,14 +17,14 @@ import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWit
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, listAlternatives, listClauses, listUnion, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, isUse } from "./ast.ts";
 import { canonicalTypeText, compoundArgument, slotField, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
-import { bindingItem, parse, exprToSource, patternSource, patternVariables, isOperatorName, PRIMITIVE_OPERATORS, DEFAULT_FIXITY, type Fixity, fixitiesOf, getLooseSpacing, preludeFixity, regroup, setLooseSpacing } from "./parser.ts";
+import { bindingItem, parse, parseDocument, exprToSource, patternSource, patternVariables, isOperatorName, PRIMITIVE_OPERATORS, DEFAULT_FIXITY, type Fixity, fixitiesOf, getLooseSpacing, preludeFixity, regroup, setLooseSpacing } from "./parser.ts";
 import { charLiteral, itemsText, spacedItem, stringLiteral } from "./separators.ts";
 
 // ---------------- Evaluator ----------------
@@ -368,7 +368,7 @@ export class Interpreter {
         const outer = this.env;
         this.env = new Env(outer);
         this.env.setLocal("fail", { kind: "native", name: "fail", arity: 1, applied: [] });
-        this.run(parse(preludeSource));
+        this.run(parseDocument(preludeSource));
         // Bind each operator to its value itself, so evaluation finds the intrinsic.
         for (const [name, value] of this.env.bindings()) if (name !== "fail") this.preludeBindings.set(name, this.reference(value));
         this.run(parse(typeSource));
@@ -383,7 +383,13 @@ export class Interpreter {
     // declared for its whole scope (scope), as a new name is. A union of
     // existing types is a definition instead: the value it makes.
     private declare(def: DataDef, scope: Env): Value | undefined {
+        def = listAlternatives(def, tag => {
+            if (this.namesCons(tag)) return "cons";
+            const bound = this.env.get(tag), value = bound && this.reference(bound);
+            return value && this.isList(value) && this.cell(value) === null ? "nil" : undefined;
+        });
         if (listUnion(def)) { scope.setLocal(def.name, { kind: "type", name: "List" }); return undefined; }
+        if (def.variants.some(v => v.result && (v.tag === "[]" || v.tag === "::"))) return this.evalDef(def.name, listClauses(def.variants));
         const written = def, kind = unionKind(def, name => this.alternative(name, written.name));
         if (kind === "union") return this.evalDef(def.name, [unionClause(def)]);
         // Constructors declared with _ where the parser could not see
@@ -443,6 +449,7 @@ export class Interpreter {
             for (const [index, written] of program.entries()) {
                 if (this.runDepth === 1 && !this.dynamicDepth) this.running = { program, index };
                 const tl = written;
+                rewriteListConstructors(tl, tag => this.namesCons(tag));
                 if (tl.t === "type") {
                     last = this.declare(tl.def, this.env.root()) ?? last;
                     continue;
@@ -4257,6 +4264,11 @@ export class Interpreter {
         };
         return rangeValue(real(lo), second && real(second), hi && real(hi));
     }
+    // Whether a name is bound to the list's cons (the prelude's Cons).
+    private namesCons(name: string): boolean {
+        const bound = this.env.get(name), cons = bound && this.reference(bound);
+        return cons?.kind === "native" && cons.name === "intrinsics.cons" && !cons.applied.length;
+    }
     // Whether :: here is the prelude's (or not bound yet), so a written list
     // is the list it writes rather than its expansion (a :: b :: []).
     private preludeCons(): boolean {
@@ -5279,10 +5291,11 @@ export class Interpreter {
     }
     // A type a capitalized name gives, remembering how it was written: a
     // type or a schema (a record or list of types), not a scalar (see Count =
-    // Int) nor a constructor (an alias of one is that constructor).
+    // Int) nor a constructor (an alias of one is that constructor), nor the
+    // empty list, a value first (Nil = []).
     private remembered(name: string, args: Value[], made: Value): Value {
         const remembers = made.kind === "type" ? !made.variable && !(NAMED_BASES.has(made.name) && !made.arguments?.length && !made.family)
-            : (made.kind === "record" || this.isList(made)) && this.isTypeValue(made);
+            : (made.kind === "record" || this.isList(made) && this.cell(made) !== null) && this.isTypeValue(made);
         if (!remembers) return made;
         // A union of list types is known by its name (Pairs Int), not its unread choices.
         const named = (made.kind === "type" && made.choices && !made.name

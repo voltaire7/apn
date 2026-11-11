@@ -4,7 +4,7 @@ import { parse } from "../src/parser.ts";
 // A type applied to its parameters and one more pattern is a typed pattern,
 // for every type: (Vec n a xs) is ((Vec n a) xs), as (Vect n a xs) is. A
 // match's alternatives meet its scrutinee as clauses meet their parameters.
-const VEC = "Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a\n";
+const VEC = "Vec n a = VNil -> Vec Z a | VCons a (Vec k a) -> Vec (S k) a\n";
 function run(source: string, checked = true): string {
     const i = new Interpreter();
     if (checked) i.enableChecking();
@@ -16,8 +16,8 @@ function failure(source: string): { kind?: string; message: string; hint?: strin
 }
 
 for (const [source, expected] of [
-    [VEC + "len (xs : Vec n a) = n\nlen (Cons 1 (Cons 2 Nil))", "2"],
-    [VEC + "app : Vec n a -> Vec m a -> Vec (n + m) a\napp xs ys = [xs,ys] ~ [[Nil,r] -> r, [Cons x rest, r] -> Cons x (app rest r)]\ntypeOf (app (Cons 1 Nil) (Cons 2 Nil))", "Vec 2 Int"],
+    [VEC + "len (xs : Vec n a) = n\nlen (VCons 1 (VCons 2 VNil))", "2"],
+    [VEC + "app : Vec n a -> Vec m a -> Vec (n + m) a\napp xs ys = [xs,ys] ~ [[VNil,r] -> r, [VCons x rest, r] -> VCons x (app rest r)]\ntypeOf (app (VCons 1 VNil) (VCons 2 VNil))", "Vec 2 Int"],
     // A typed pattern binds its length, so a recursive call may pass any length.
     ["f (x::rest : Vect n a) = f rest\n1", "1"],
     ["f (xs : Vect n a) = null xs ? 0 : 1 + f (tail xs)\nf [1,2,3]", "3"],
@@ -32,14 +32,14 @@ for (const [source, expected] of [
 }
 
 Deno.test("flat typed patterns match the same without checking", () => {
-    const actual = run(VEC + "len (xs : Vec n a) = n\nlen (Cons 1 (Cons 2 Nil))", false);
+    const actual = run(VEC + "len (xs : Vec n a) = n\nlen (VCons 1 (VCons 2 VNil))", false);
     if (actual !== "2") throw new Error(actual);
 });
 
 Deno.test("an unknown constructor in a match alternative is reported where it is written", () => {
-    const source = "f xs ys = [xs,ys] ~ [[Nil,r] -> r]\n1";
+    const source = "f xs ys = [xs,ys] ~ [[Empty,r] -> r]\n1";
     const error = failure(source);
-    if (error.pos !== source.indexOf("Nil") || !error.hint?.includes("`(x :: xs)`")) throw new Error(`${error.pos}: ${error.hint}`);
+    if (error.pos !== source.indexOf("Empty") || !error.hint?.includes("declare a type with `Empty`")) throw new Error(`${error.pos}: ${error.hint}`);
 });
 
 Deno.test("x:xs as a list item is cons written the old way, and the error says so", () => {

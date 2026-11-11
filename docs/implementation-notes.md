@@ -547,7 +547,8 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
   checker's scope declares the prelude's): `vectorParts` and
   `matchVectorPattern` turn the index into the length and back, and a call
   solves a parameter's `c * n + d` for `n` (`application`). A family of lists
-  is parsed into clauses (`listClauses`). The checker
+  is read as clauses (`listClauses`) where it is declared, its `Nil` and `Cons`
+  by what they are bound to (`listAlternatives`). The checker
   leaves such patterns to the run (`explicitDynamic` parameters); `constructed` is the type a
   pattern of it takes (a tagging function's `fields` variant). The parser
   joins adjacent clauses (`continues`);

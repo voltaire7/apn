@@ -1945,12 +1945,12 @@ extentOf (xs : Vect extent a) = extent
 extent xs = length xs
 print (extentOf [7,8,9])                # => 3
 # An indexed family: each constructor says the type it makes.
-Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a
+Vec n a = VNil -> Vec Z a | VCons a (Vec k a) -> Vec (S k) a
 # Its parameters may also be written as a lambda, as f = x -> e is f x = e.
 Pair = a, b -> (MkPair a b | NoPair)
 print (MkPair 1 "x")                     # => MkPair 1 "x"
 # An operator starting with ':' bound to a constructor is an infix pattern
-# too: (::) = Cons would make x :: xs build and match Cons x xs.
+# too: (::) = VCons would make x :: xs build and match VCons x xs.
 (:+) = MkPair
 swapPair (x :+ y) = y :+ x
 print (swapPair (1 :+ "x"))              # => MkPair "x" 1
@@ -1959,23 +1959,23 @@ print {
     1 + 1 = 3
     [1 + 1, 1 + 2]
 }                                        # => [3,3]
-pairVec = Cons 1 (Cons 2 Nil)
+pairVec = VCons 1 (VCons 2 VNil)
 print (typeOf pairVec)                   # => Vec 2 Int
-joinVec Nil ys = ys
-joinVec (Cons x rest) ys = Cons x (joinVec rest ys)
+joinVec VNil ys = ys
+joinVec (VCons x rest) ys = VCons x (joinVec rest ys)
 print (typeOf (joinVec pairVec pairVec)) # => Vec 4 Int
 vecLength (_ : Vec n _) = n
 print (vecLength pairVec + 1)            # => 3
-firstVec (Cons x _) = x
+firstVec (VCons x _) = x
 print (firstVec pairVec)                 # => 1
-# firstVec Nil and Vec 3 Int pairVec are static errors.
+# firstVec VNil and Vec 3 Int pairVec are static errors.
 # A clause may claim its result's index; the checker proves each claim by
-# induction: Nil makes n 0, Cons x r makes it one more than r's, and the
+# induction: VNil makes n 0, VCons x r makes it one more than r's, and the
 # recursive call on the smaller r meets its own clause's claim. Claiming
 # n + m + 1 in the second clause is a static error at the definition.
-revVec (Nil : Vec n a) (acc : Vec m a) = acc : Vec (n + m) a
-revVec (Cons x r : Vec n a) (acc : Vec m a) = revVec r (Cons x acc) : Vec (n + m) a
-print (revVec pairVec Nil)               # => Cons 2 (Cons 1 Nil)
+revVec (VNil : Vec n a) (acc : Vec m a) = acc : Vec (n + m) a
+revVec (VCons x r : Vec n a) (acc : Vec m a) = revVec r (VCons x acc) : Vec (n + m) a
+print (revVec pairVec VNil)               # => VCons 2 (VCons 1 VNil)
 # (Vec n a xs) is ((Vec n a) xs), as for Vect. A match alternative's x:xs
 # takes the scrutinee's tail as one shorter, as a clause's does.
 vecSize (_ : Vec n _) = n

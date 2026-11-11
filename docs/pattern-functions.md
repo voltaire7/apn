@@ -66,11 +66,12 @@ mean `add 1 2`. A collection variable works the same way as a literal.
 `x :: xs` matches the constructor `::` names, as any infix pattern with an
 operator starting with `:` does (as in Haskell). By default that is list cons;
 bound to a two-field constructor, it takes that constructor's values apart:
-after `(::) = Cons`, `x :: xs` builds and matches `Cons x xs`, and after
+after `(::) = Push`, `x :: xs` builds and matches `Push x xs`, and after
 `(:+) = MkPair`, `(x :+ y)` matches `MkPair x y`. An operator bound to anything
 else cannot take a value apart, which is an error. A list pattern is its items
 consed onto `[]` ([sugar](semantics.md#sugar)), so it follows `::` too: after
-`(::) = Cons`, `[x]` matches `Cons x []`.
+`(::) = Push`, `[x]` matches `Push x []`. (The prelude's `(::) = Cons` is list
+cons: `Cons x xs` is `x :: xs`.)
 
 ```apn
 sumPair [x,y] = x + y

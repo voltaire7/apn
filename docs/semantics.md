@@ -1710,15 +1710,19 @@ siblings, whose prelude clauses do both; see [sugar](#sugar)): `[Int..]` is the 
 endless lists of Ints, so `to [Int..] [1,2]` is a length mismatch and
 `isType [Int..] [1..]` is `True`. A type has no step or bound
 (`[Int,String..]` and `[Int..String]` are errors). `List` is the prelude's
-recursive type, `List a = [] | a :: List a`: a list is empty or an element on a
-list. `List Int` is the union of its unfoldings, `[] | [Int] | [Int,Int] | ...`,
+recursive type, `List a = Nil | Cons a (List a)`: a list is empty or an element
+on a list. `[]` and `::` only write them another way (the prelude's `Nil = []`,
+`Cons = intrinsics.cons` and `(::) = Cons`): `[1,2]` is `Cons 1 (Cons 2 Nil)`,
+and the patterns `Cons x xs` and `x :: xs` are the same. A union naming them,
+by what the names are bound to, is one of lists, so `Vect` and any list type a
+program writes reuse them rather than declaring their own. `List Int` is the union of its unfoldings, `[] | [Int] | [Int,Int] | ...`,
 each a different member (`List Int == [Int]` is `False`, as a union is none of
 its members), and endless lists belong too, as their unfoldings never end:
 `[Int..]` is `Int :: [Int..]`, so `isType (List Int) [1..]` is `True`, and
 `isType (List Int) [1,"a"]` is `False`. A type test reads a list as it
 unfolds, accepting a cell it meets again (`ones = 1 :: ones`) or an endless
 range, whose elements share one type. Any union of this shape
-(`Seq a = [] | a :: Seq a`) is the same type. Any other union of list types is
+(`Seq a = Nil | Cons a (Seq a)`) is the same type. Any other union of list types is
 a union too, unfolded the same way: `Pairs a = [] | a :: a :: Pairs a` holds
 the even-length lists of `a` (`isType (Pairs Int) [1,2,3]` is `False`),
 `Ints = [] | Int :: Ints` is `List Int`'s members, and `Tree = [] | Tree :: Tree`

@@ -52,3 +52,20 @@ for (const [source, message] of [
         if (!actual.includes(message)) throw new Error(actual);
     });
 }
+
+// A list is Nil or Cons x xs (the prelude's List a = Nil | Cons a (List a));
+// [] and :: only write them another way. A union or a family naming them, by
+// what the names are bound to, is one of lists.
+for (const [source, expected] of [
+    ["Cons 1 (Cons 2 Nil)", "[1,2]"], ["[Cons 1 Nil == [1], Nil == [], 1 :: Nil]", "[True,True,[1]]"],
+    ["len Nil = 0\nlen (Cons _ xs) = 1 + len xs\nlen [1,2,3]", "3"],
+    ["f (Cons x (Cons y _)) = x + y\nf (5 :: 6 :: [])", "11"], ["g (x :: xs) = xs\ng (Cons 1 Nil)", "[]"],
+    ["typeOf (Cons 1 (Cons 2 Nil) : Vect 2 Int)", "Vect 2 Int"],
+    ["Seq a = Nil | Cons a (Seq a)\n[Seq Int == List Int, isType (Seq Int) [1,2]]", "[True,True]"],
+    ["Pairs a = Nil | Cons a (Cons a (Pairs a))\n[isType (Pairs Int) [1,2,3,4], isType (Pairs Int) [1,2,3]]", "[True,False]"],
+    ["Lst n a = Nil -> Lst 0 a | Cons a (Lst k a) -> Lst (k + 1) a\ntypeOf ([1,2] : Lst 2 Int)", "Vect 2 Int"],
+    ["Cons x xs = [1,2,3]\nxs", "[2,3]"],
+]) Deno.test(`a list is Nil or Cons: ${JSON.stringify(source)}`, () => {
+    const actual = run(source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});

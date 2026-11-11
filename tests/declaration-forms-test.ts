@@ -13,13 +13,13 @@ function failure(source: string): string {
     try { run(source); } catch (error) { return (error as Error).message; }
     throw new Error(`accepted: ${source}`);
 }
-const USE = "\n[typeOf (Cons 1 (Cons 2 Nil)), typeOf Nil]";
+const USE = "\n[typeOf (VCons 1 (VCons 2 VNil)), typeOf VNil]";
 for (const declaration of [
-    "Vec n a = Nil -> Vec 0 a | Cons a (Vec k a) -> Vec (k + 1) a",
-    "Vec n a =\n    | Nil -> Vec 0 a\n    | Cons a (Vec k a) -> Vec (k + 1) a",
-    "Vec = n -> a -> (Nil -> Vec 0 a | Cons a (Vec k a) -> Vec (k + 1) a)",
-    "Vec = n, a -> (Nil -> Vec 0 a | Cons a (Vec k a) -> Vec (k + 1) a)",
-    "Vec = n, a -> (\n    | Nil -> Vec 0 a\n    | Cons a (Vec k a) -> Vec (k + 1) a\n)",
+    "Vec n a = VNil -> Vec 0 a | VCons a (Vec k a) -> Vec (k + 1) a",
+    "Vec n a =\n    | VNil -> Vec 0 a\n    | VCons a (Vec k a) -> Vec (k + 1) a",
+    "Vec = n -> a -> (VNil -> Vec 0 a | VCons a (Vec k a) -> Vec (k + 1) a)",
+    "Vec = n, a -> (VNil -> Vec 0 a | VCons a (Vec k a) -> Vec (k + 1) a)",
+    "Vec = n, a -> (\n    | VNil -> Vec 0 a\n    | VCons a (Vec k a) -> Vec (k + 1) a\n)",
 ]) {
     Deno.test(`one family, however declared: ${JSON.stringify(declaration)}`, () => {
         const actual = run(declaration + USE);
@@ -31,9 +31,9 @@ Deno.test("a single constructor marks its one-line declaration with '|'", () => 
     if (run("Box = a -> (| MkBox a)\nMkBox 1") !== "MkBox 1") throw new Error("lambda Box");
 });
 for (const [source, message] of [
-    ["Vec n a = | Nil -> Vec 0 a | Cons a (Vec k a) -> Vec (k + 1) a", "a one-line declaration takes no leading '|' (write Vec n a = A | B)"],
-    ["Vec n a =\n    Nil -> Vec 0 a\n    | Cons a (Vec k a) -> Vec (k + 1) a", "start each constructor's line with '|'"],
-    ["Vec n a = Nil -> Vec 0 a\n    | Cons a (Vec k a) -> Vec (k + 1) a", "starts on the line after '='"],
+    ["Vec n a = | VNil -> Vec 0 a | VCons a (Vec k a) -> Vec (k + 1) a", "a one-line declaration takes no leading '|' (write Vec n a = A | B)"],
+    ["Vec n a =\n    VNil -> Vec 0 a\n    | VCons a (Vec k a) -> Vec (k + 1) a", "start each constructor's line with '|'"],
+    ["Vec n a = VNil -> Vec 0 a\n    | VCons a (Vec k a) -> Vec (k + 1) a", "starts on the line after '='"],
     ["Light =\n    | Off | On", "put each constructor of a multi-line declaration on its own line"],
 ] as const) {
     Deno.test(`declaration layout rejects: ${JSON.stringify(source)}`, () => {

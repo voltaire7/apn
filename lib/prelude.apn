@@ -46,7 +46,11 @@ get False _ = b -> b
 (>) = intrinsics.gt
 (<=) = intrinsics.le
 (>=) = intrinsics.ge
-(::) = intrinsics.cons
+# A list is Nil or Cons x xs; [] and :: only rearrange how they are written
+# ([1,2] is Cons 1 (Cons 2 Nil), x :: xs is Cons x xs).
+Nil = []
+Cons = intrinsics.cons
+(::) = Cons
 # The union of two types: a value of either is one of it (Int | String).
 a | b = intrinsics.union [a,b]
 (+) = intrinsics.add
@@ -146,9 +150,9 @@ tag = intrinsics.tag
 #     with (Grid cells) [Int r, Int c] x = Grid (with cells (3 * r + c) x)
 with = intrinsics.with
 # A list is empty or an element on a list: endless lists, whose unfoldings
-# never end, are lists too ([Int..] is Int :: [Int..]).
-List a = [] | a :: List a
-# The length-indexed list: [] has length zero, and x :: xs one more than xs.
-# A family of lists is a type function's clauses (Vect Z a = [] and
-# Vect (S k) a = a :: Vect k a); any of this shape is the same type.
-Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a
+# never end, are lists too ([Int..] is Cons Int [Int..]).
+List a = Nil | Cons a (List a)
+# The length-indexed list, the same values: Nil has length zero, and Cons x xs
+# one more than xs. A family of lists is a type function's clauses (Vect Z a =
+# Nil and Vect (S k) a = Cons a (Vect k a)); any of this shape is the same type.
+Vect n a = Nil -> Vect Z a | Cons a (Vect k a) -> Vect (S k) a

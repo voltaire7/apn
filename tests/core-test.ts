@@ -75,7 +75,7 @@ for (const checked of [true, false]) {
         // and one nothing decides is a type variable.
         [OPTION + CTOR + "Pair a b = _\n[typeOf (Box 5), typeOf (Pair 1 \"x\"), typeOf (Some (Some 1)), typeOf None, typeOf (Ok 2)]",
             "[Box Int, Pair Int String, Option (Option Int), Option a, Result Int e]"],
-        [OPTION + "Node a = Leaf | Cons a (Node a)\nxs = Cons 1 xs\n[typeOf (Cons 1 Leaf), typeOf xs, typeOf (Some 1) == Option]",
+        [OPTION + "Node a = Leaf | Branch a (Node a)\nxs = Branch 1 xs\n[typeOf (Branch 1 Leaf), typeOf xs, typeOf (Some 1) == Option]",
             "[Node Int, Node Int, True]"],
         [PERCENT + "[Percent 150, Percent 50, typeOf (Percent 1)]", "[Percent 100.0, Percent 50.0, Percent]"],
         [PERCENT + "Percent a + Percent b = Percent (a + b)\nPercent 90 + Percent 20", "Percent 100.0"],

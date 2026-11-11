@@ -2328,11 +2328,8 @@ class Parser {
             out.splice(at, 0, { t: "type", def });
             return [];
         }
-        // A family of lists is sugar for a type function's clauses.
-        if (variants.some(v => v.result && (v.tag === "[]" || v.tag === "::"))) {
-            return [{ t: "def", name, clauses: listClauses(variants) }];
-        }
-        // A union of list types (Pairs a = [] | a :: a :: Pairs a) is a union.
+        // A union of list types (Pairs a = [] | a :: a :: Pairs a) is a union;
+        // a family of lists, its type function's clauses (see listClauses).
         if (variants.some(v => v.tag === "[]" || v.tag === "::")) {
             declaredTypes.add(name); typeArity.set(name, parameters.length);
             return [{ t: "type", def: { name, parameters, variants } }];
@@ -2638,31 +2635,6 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
         e.src = src;
         throw e;
     } finally { fileFixities = outerFixities; }
-}
-
-// A family of lists is sugar for a type function's clauses: each
-// alternative, [] -> Vect Z a or a :: Vect k a -> Vect (S k) a, is the
-// clause its result names, Vect Z a = [] or Vect (S k) a = a :: Vect k a.
-function listClauses(variants: { tag: string; fields: Expr[]; result?: Expr }[]): DefClause[] {
-    const pattern = (e: Expr): Pattern => {
-        while (e.t === "block" && e.stmts.length === 1) e = e.stmts[0];
-        if (e.t === "int") return { p: "int", v: e.v };
-        // k + 1 is the natural after k, as S k is.
-        if (e.t === "binop" && e.op === "+" && e.l.t === "var" && e.r.t === "int" && e.r.v === 1n) return { p: "constr", tag: "S", args: [pattern(e.l)] };
-        if (e.t === "var") return e.name === "_" ? { p: "wildcard" } : /^[A-Z]/.test(e.name) ? { p: "constr", tag: e.name, args: [] } : { p: "var", name: e.name };
-        const args: Expr[] = [];
-        let head: Expr = e;
-        while (head.t === "app") { args.unshift(head.a); head = head.f; }
-        if (head.t === "var" && /^[A-Z]/.test(head.name)) return { p: "constr", tag: head.name, args: args.map(pattern) };
-        throw new Error("Parser: a family's index is a pattern: a name, a number, Z, S k or k + 1");
-    };
-    return variants.map(v => {
-        const args: Expr[] = [];
-        let head: Expr = v.result!;
-        while (head.t === "app") { args.unshift(head.a); head = head.f; }
-        const body: Expr = v.tag === "[]" ? { t: "list", v: [] } : { t: "binop", op: "::", l: v.fields[0], r: v.fields[1] };
-        return { params: args.map(pattern), body };
-    });
 }
 
 // Consecutive Haskell-style clauses of the same function are one definition:
@@ -2995,7 +2967,8 @@ export function patternSource(p: Pattern): string {
         case "float": return numberText({ kind: "float", v: p.v });
         // An item stands alone up to its ',': [x :: _, d], [Some x, y].
         case "list": return `[${itemsText(p.v.map(wholePatternSource))}]`;
-        case "cons": return `(${patternSource(p.head)} ${p.op ?? "::"} ${patternSource(p.tail)})`;
+        // A cell written with a constructor's name (Cons h t) shows as written.
+        case "cons": return p.op && /^[A-Z]/.test(p.op) ? `(${p.op} ${patternSource(p.head)} ${patternSource(p.tail)})` : `(${patternSource(p.head)} ${p.op ?? "::"} ${patternSource(p.tail)})`;
         // A type's pattern is written as the value it types: (xs : Vect n a).
         case "constr":
             if (!p.args.length) return p.tag;
