@@ -63,10 +63,10 @@ class TailLoad {
 }
 
 // Natives with effects: applying one builds an IO action; running it performs them.
-export const IO_NATIVES = new Set(["intrinsics.import", "intrinsics.visibility", "intrinsics.readFileFrom", "print", "echo", "emit", "repl", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
+export const IO_NATIVES = new Set(["intrinsics.import", "intrinsics.readFileFrom", "print", "echo", "emit", "repl", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
 // What the actions of IO builtins yield, for showing their types (IO []).
 const IO_RESULTS: Record<string, string> = {
-    "intrinsics.import": "Module", "intrinsics.visibility": "[]", "intrinsics.readFileFrom": "String", print: "[]", echo: "[]", emit: "[]", repl: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
+    "intrinsics.import": "Module", "intrinsics.readFileFrom": "String", print: "[]", echo: "[]", emit: "[]", repl: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
     entropy: "Int", currentTime: "Int", zoneOffset: "Int",
 };
 
@@ -108,9 +108,6 @@ export const NATIVES: Array<[string, number]> = [
     ["intrinsics.with", 3],
     // A union of types (Mixed = Int | String).
     ["intrinsics.union", 1],
-    // visibility open: an action making what a file's top level binds after
-    // it public (True) or the file's own (False): public and private.
-    ["intrinsics.visibility", 1],
     // refine T p: the values of T for which p is True (Positive = (n : Int) | n > 0).
     ["intrinsics.refine", 2],
     // import path: an action reading a module, its record the result.
@@ -346,9 +343,7 @@ export class Interpreter {
             if (file.std === "type" && file.source === typeSource) this.env.setLocal("cast", this.preludeBindings.get("cast")!);
             // A module the file names for itself (std <- import "std", or a
             // load's) is its own: <- bound the record itself, so nothing is forced.
-            // Nor are the names it keeps private.
-            const privacy = this.env.root().privacy;
-            return [...this.env.bindings().entries()].filter(([name, value]) => !this.moduleValues.has(value) && privacy!.names.get(name) !== false);
+            return [...this.env.bindings().entries()].filter(([, value]) => !this.moduleValues.has(value));
         } finally {
             this.env = caller;
             this.sourceDir = callerDir;
@@ -356,9 +351,6 @@ export class Interpreter {
     }
 
     env = new Env();
-    // The top levels run has run in (a file's, a module's, code's that use
-    // splices): where private and public may stand.
-    private tops = new WeakSet<Env>();
     // The program's top-level scope, where eval runs.
     programEnv!: Env;
     stack = 0;
@@ -444,8 +436,6 @@ export class Interpreter {
         if (top && this.types) this.checkedHeads = new WeakMap();
         // A failed run leaves the scope as it was: its definitions and versions.
         const savedEnv = this.env, root = this.env.root(), saved = candidate ? new Map(root.map) : undefined;
-        this.tops.add(root);
-        root.privacy ??= { open: true, names: new Map() };
         let succeeded = false;
         this.runDepth++;
         try {
@@ -2802,18 +2792,16 @@ export class Interpreter {
     // An x <- m item binds x only when do runs the code. Only items written
     // as code are walked.
     private codeBinding(code: Value, name: string): { index: bigint; value: Value; simple: boolean } | undefined {
-        let found: { index: bigint; value: Value; simple: boolean } | undefined, index = 0n, open = true;
+        let found: { index: bigint; value: Value; simple: boolean } | undefined, index = 0n;
         for (let rest = code;; index++) {
             const cell = this.cell(rest);
             if (!cell) return found;
             const item = this.written(cell.head);
             if (!item) return found;
-            // What code binds after the prelude's private is its own.
-            const e = item.expr;
-            if (e.t === "var" && (e.name === "private" || e.name === "public") && this.env.get(e.name) === this.preludeBindings.get(e.name)) open = e.name === "public";
-            const value = open ? item.binds?.get(name) : undefined;
+            const value = item.binds?.get(name);
             if (value && item.runs) throw new APNError("runtime", `code binds ${name} only when it runs`, { hint: "do runs the code: x <- m binds x for the items after it" });
             if (value) {
+                const e = item.expr;
                 found = { index, value, simple: e.t === "stmDef" ? e.name === name : e.t === "patDef" && e.pattern.p === "var" };
             }
             rest = cell.tail;
@@ -4840,12 +4828,6 @@ export class Interpreter {
             case "intrinsics.get": return this.builtinGet(this.force(args[0]), args[1]);
             case "intrinsics.with": return this.assignItem(this.dataValue(args[0]), this.dataValue(args[1]), args[2]);
             case "intrinsics.union": return this.union([...this.elements(args[0])].map(x => this.reference(x)));
-            case "intrinsics.visibility": {
-                const root = this.env.root();
-                if (!this.tops.has(root)) throw new APNError("runtime", "private and public mark a file's top level", { hint: "write it as a statement of its own at the top level" });
-                root.privacy!.open = this.truthy(this.force(args[0]));
-                return mkList([]);
-            }
             case "intrinsics.refine": {
                 const base = this.reference(this.demand(args[0]));
                 if (!this.isTypeValue(base)) throw new APNError("runtime", `a refinement refines a type, and ${this.renderString(base)} is not one`);
@@ -5006,7 +4988,7 @@ export class Interpreter {
             const scopes: Env[] = [];
             for (let e: Env | null = this.env; e && e !== caller; e = e.parent) scopes.unshift(e);
             const bindings = new Map<string, Value>();
-            for (const scope of scopes) for (const [name, value] of scope.map) if (scope.root().privacy?.names.get(name) !== false) bindings.set(name, value);
+            for (const scope of scopes) for (const [name, value] of scope.map) bindings.set(name, value);
             this.env = running;
             this.sourceDir = callerDir;
             // The statement running use adopts the scope this publishes.

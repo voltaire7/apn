@@ -7170,7 +7170,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A range's bounds ([] none); [1..] and the like are typed where written.
     { const n = variable(); native("intrinsics.range", [n, variable(), variable()], list(n)); }
     native("exit", [int], io(empty));
-    native("intrinsics.visibility", [bool], io(empty));
     native("null", [variable()], bool);
     native("length", [list(variable())], int);
     for (const name of ["take", "drop"]) { const t = variable(); native(name, [int, list(t)], list(t)); }
@@ -7374,31 +7373,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Whether a statement ran yet: a file's last statement then is in its monad.
     let ran = false;
-    // A file's top level after the prelude's private, as at runtime (see
-    // Env.privacy): each name's part (true: public), recorded for each
-    // statement when the next one starts.
-    const privacy = { open: true, names: new Map<string, boolean>() };
-    let previous: TopLevel | undefined;
-    const settlePrivacy = () => {
-        if (!previous) return;
-        const s = previous, at = s.t === "def" ? s.clauses[0].body : s.t === "type" ? undefined : s.value;
-        const names = s.t === "def" ? [s.name] : s.t === "type" ? [s.def.name, ...s.def.variants.map(v => v.tag)]
-            : s.t === "patDef" ? patternNames(s.pattern) : usedNames.get(s.value) ?? [];
-        for (const name of names) {
-            const was = privacy.names.get(name);
-            try { if (was !== undefined && was !== privacy.open) problem(`'${name}' is bound both public and private in this file`, at, "bind each name in one part of the file"); }
-            catch (error) { if (error && typeof error === "object" && "pos" in error && "message" in error) issues.push(error as TypeIssue); else throw error; }
-            privacy.names.set(name, privacy.open);
-        }
-    };
     for (const [index, written] of program.entries()) {
         if (options.before?.index === index) options.before.scope(new Map(scope));
         const statement = written;
-        settlePrivacy();
-        previous = statement;
-        if (statement.t === "expr" && statement.value.t === "var" && ["private", "public"].includes(statement.value.name) && scope.get(statement.value.name)?.builtin) {
-            privacy.open = statement.value.name === "public";
-        }
         // Each top-level statement gets the same bounded work, so a long module
         // is not limited by its length.
         budget = STATEMENT_BUDGET;
@@ -7458,7 +7435,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             } else throw error;
         }
     }
-    settlePrivacy();
     // A check that still waits only because a value was symbolic must not be
     // skipped: decide it now, treating that value as unknown.
     // So must one whose operands became known after it was last seen (a check
@@ -7498,7 +7474,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         issues.push({ message: `cannot establish static types: ${dynamicBoundaries} unresolved dynamic boundaries; mark runtime code with Dynamic`,
             ...unknownLength ? { hint: "the checker cannot find this list's length: mark it `Dynamic`, or write a clause per pattern so each clause's length follows" } : {}, pos: loc?.start ?? 0, len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)), source: loc?.source, file: loc?.file });
     }
-    options.result?.(scope, new Map([...scope].filter(([name, entry]) => originalScope.get(name) !== entry && privacy.names.get(name) !== false)));
+    options.result?.(scope, new Map([...scope].filter(([name, entry]) => originalScope.get(name) !== entry)));
     return { issues, dynamicBoundaries, runtimeChecks, opaqueUse };
 }
 // A builtin's type as APN writes one (a -> List a), or undefined when it has

@@ -1531,26 +1531,6 @@ files beside that file. The check follows a load with a literal path outside
 definitions as a definition would, even names the program rebound in between,
 while a `Dynamic` load's may replace only what the same file (with unchanged
 text) published, plus what its usual write checks allow.
-
-A file's names are public. `private` and `public` are prelude actions
-(`private = intrinsics.visibility False`, `public = intrinsics.visibility
-True`), run as statements of a file's top level, as Jai's `#scope_file` and
-`#scope_export` are written: what the top level binds after `private` is the
-file's own, until `public`. An import's record and a `use` of the file's code
-leave the private names out (as `m.x` of its code does), while the public
-definitions keep seeing them, as any definition sees what was in scope where
-it was written. A name is in one part only: binding it in both is an error.
-Run elsewhere (in a block), either is an error.
-
-```
-pi = 3
-area r = pi * r * r            # public, as is pi
-private
-square x = x * x               # shapes.square is no field of the import's record
-public
-perimeter r = 2 * pi * r
-```
-
 See [the standard library reference](standard-library.md) for APIs and limits.
 
 ## REPL clauses
