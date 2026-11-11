@@ -114,8 +114,12 @@ export function unionKind(def: DataDef, kind: (name: string) => Alternative): "d
     if (unclaimed === kinds.length) return "claim";
     if (unclaimed) return unclaimedMix(def.name, def.variants.find((_, n) => kinds[n] !== "unclaimed")!.tag);
     // One type is no union: a leading | declares a constructor (Box a = | Box a).
+    // Types joined without parentheses declare nothing: their union is an
+    // expression, X = (A | B); only a union of list types is written bare.
     if (kinds.every(k => k === "type")) {
-        return kinds.length > 1 ? "union" : `${def.name} = | ${def.variants[0].tag} declares a constructor, and ${def.variants[0].tag} is a type already (a built-in type cannot be replaced)`;
+        if (kinds.length === 1) return `${def.name} = | ${def.variants[0].tag} declares a constructor, and ${def.variants[0].tag} is a type already (a built-in type cannot be replaced)`;
+        if (def.variants.every(v => v.tag === "[]" || v.tag === "::")) return "union";
+        return `${def.name} = ${def.variants.map(v => v.tag).join(" | ")} declares constructors, and ${def.variants.find(v => v.tag !== "[]" && v.tag !== "::")!.tag} is a type already; their union is written in parentheses: ${def.name}${def.parameters?.length ? " " + def.parameters.join(" ") : ""} = (${def.variants.map(v => v.tag).join(" | ")})`;
     }
     const owned = def.variants.find((_, n) => kinds[n] === "constructor");
     if (owned) return `${def.name}'s alternative ${owned.tag} is a constructor of another type; a union lists types`;

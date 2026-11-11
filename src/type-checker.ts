@@ -4119,6 +4119,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 const bound = scope.get(e.op);
                 if (!bound) return problem(`unbound operator '${e.op}'`, e);
+                // The prelude's a | b is intrinsics.union [a,b]: checked as that call,
+                // so a union of types is that type (Int | String), as at runtime.
+                if (e.op === "|" && bound.builtin) {
+                    const union: Expr = { t: "app", f: { t: "recordAccess", rec: { t: "var", name: "intrinsics" }, field: "union" }, a: { t: "list", v: [e.l, e.r] } };
+                    const at = sourceLocations.get(e);
+                    if (at) sourceLocations.set(union, at);
+                    return infer(union, scope, expected);
+                }
                 let op = builtinOperator(bound.type), operands: [Ty, Ty] | undefined;
                 if (op === undefined) {
                     // A user's operator is applied like any function. One that

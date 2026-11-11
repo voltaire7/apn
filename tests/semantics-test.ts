@@ -613,8 +613,8 @@ Seq a = [] | a :: Seq a
 print [Seq Int == List Int, isType (Seq Int) [1,2]]`, ["[True,True,False]", "[True,True,False]",
     "[True,False,False]", "[True,True]"]);
 example("types compare as the sets of their values", `
-U = Int | String
-V = String | Int
+U = (Int | String)
+V = (String | Int)
 print [U == V, Int <= Number, Number <= Int, Int < Number, Integer <= Real]
 print [typeOf [1,2,3] <= List Int, typeOf [1,"a"] <= List Int, List Int <= typeOf [1,2]]
 print [[Int..] <= List Int, List Int == typeOf [1,2,3], List Int == [Int]]
@@ -636,7 +636,7 @@ print [describe Int, describe Float, describe Number]
 print (typeOf [1] ~ [List -> "list", _ -> "other"])
 Pairs a = [] | a :: a :: Pairs a
 print (typeOf [1,2] ~ [Pairs Int -> "pairs", _ -> "other"])
-IS = Int | String
+IS = (Int | String)
 print [typeOf "s" ~ [IS -> "either", _ -> "other"], typeOf 1.5 ~ [IS -> "either", _ -> "other"]]`,
     ["ints", "other", '["int","number","number"]', "list", "pairs", '["either","other"]']);
 example("a union in parentheses matches a value of one of its types", `

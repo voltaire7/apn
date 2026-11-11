@@ -919,7 +919,7 @@ a type the check knows only as some type is decided by the run). In
 parentheses, a union matches a value instead, as `(a -> a)` matches a
 function: `x ~ [(Int | String) -> e]` takes an Int or a String, and
 `((Int | String) n)` names it; a union of types matches by its name
-(`IS = Int | String`, then `typeOf x ~ [IS -> e]`), and unparenthesized,
+(`IS = (Int | String)`, then `typeOf x ~ [IS -> e]`), and unparenthesized,
 `Int | String -> e` is the parameter `Int` with the guard `String`. So an
 instance names its type:
 `to Celsius (F f) = C ((f - 32) * 5 / 9)`. A `to String` instance is also how
@@ -1746,7 +1746,8 @@ makes: `Vect 3 Int == [Int,Int,Int]` is true. A description is not an enforced
 schema; use a typed pattern or contract when you need validation.
 
 A type is the set of its values: `a | b` is their union (the prelude's
-`a | b = intrinsics.union [a,b]`, which `X = A | B` declares too), and types
+`a | b = intrinsics.union [a,b]`; `X = (A | B)` names one, while a bare
+`X = A | B` declares constructors), and types
 compare as sets. `a <= b` is
 containment, every value of `a` being one of `b` (`Int <= Number`,
 `typeOf [1,2,3] <= List Int`, `[Int..] <= List Int`, `Pairs Int <= List Int`);

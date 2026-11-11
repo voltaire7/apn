@@ -22,7 +22,7 @@ const MAYBE = "Just x = _\nNada = _\nMaybe a = Just a | Nada\n";
 const SHAPE = "Circle (r : Float) = _\nSquare (s : Float) = _\nShape = Circle | Square\n";
 const OPTION = 'std <- import "std"; use std.option\n';
 // A union of existing types is a type of its own values: made of nothing new.
-const MIXED = "Mixed = Int | String\n";
+const MIXED = "Mixed = (Int | String)\n";
 const ID = "UserId (x : Int) = _\n";
 // A body holding _ is the constructor's logic: it runs whenever one is made,
 // and its _ is the value itself, the fields as the parameters bound them.
@@ -52,7 +52,7 @@ for (const checked of [true, false]) {
         [MIXED + "[Mixed, (Mixed : Type)]", "[Mixed, Int | String]"],
         [MIXED + 'f (m : Mixed) = "mixed"\nf _ = "other"\n[f 1, f "a", f 2.5]', '["mixed","mixed","other"]'],
         [MIXED + '[(5 : Mixed), isType Mixed "s"]', "[5,True]"],
-        [OPTION + "OptOrList a = Option a | List a\n[OptOrList Int, isType (OptOrList Int) [1]]", "[OptOrList Int, True]"],
+        [OPTION + "OptOrList a = (Option a | List a)\n[OptOrList Int, isType (OptOrList Int) [1]]", "[OptOrList Int, True]"],
         [CTOR + "map (Rect 1) [2,3]", "[Rect 1.0 2.0, Rect 1.0 3.0]"],
         [CTOR + 'f (Rect w h) = "rect"\nf _ = "other"\n[f (Rect 1 2), f [1,2]]', '["rect","other"]'],
         [ID + "[UserId 5, typeOf (UserId 5), UserId 3 == 3]", "[UserId 5, UserId, False]"],

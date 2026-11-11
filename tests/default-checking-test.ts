@@ -36,7 +36,7 @@ for (const [source, expected] of [
     ['Seq a = [] | a :: Seq a; f (xs : Seq Int) = length xs; f [1,2]', '2'],
     ['[isType (List Int) [1,"a"], isType (List Int) [1..]]', '[False,True]'],
     // Types compare as the sets of their values.
-    ['U = Int | String; V = String | Int; [U == V, typeOf [1,2] <= List Int, Int < Number]', '[True,True,True]'],
+    ['U = (Int | String); V = (String | Int); [U == V, typeOf [1,2] <= List Int, Int < Number]', '[True,True,True]'],
     // A type pattern matches each type within the one it names, the type itself first.
     ['describe Int = "int"; describe Number = "number"; [describe Int, describe Float]', '["int","number"]'],
     ['typeOf [1,2] ~ [List Int -> 1, _ -> 0]', '1'],

@@ -522,19 +522,23 @@ Square (s : Float) = _
 Shape = Circle | Square       # typeOf (Circle 1) is Shape
 ```
 
-What `X = A | B` is depends on what its alternatives' names are bound to
-where it runs. All new names declare them as constructors of `X`; all
-constructors declared with `_` that no union owns yet are claimed, as above.
-All existing types make `X` their union, which makes nothing: a value of any of
-them is one of it, `(v : X)` matches it, and applying `X` checks membership. A
-mix (a type and a new name, or another type's constructor) is an error that
-names the odd one out.
+Written bare, `X = A | B` is a statement making constructors of `X`: all new
+names are declared, and constructors declared with `_` that no union owns yet
+are claimed, as above. Naming an existing type there is an error. The union
+of existing types is the expression `A | B`, the prelude's `|`
+(`a | b = intrinsics.union [a,b]`), so it is written in parentheses:
+`X = (A | B)` defines `X` as that type, which makes nothing: a value of any of
+them is one of it, `(v : X)` matches it, and applying `X` checks membership.
+As with a guard's `|` (`f x | x > 0 = x`), where the bar stands decides what
+it is (a list type's own alternatives, `Pairs a = [] | a :: a :: Pairs a`, name
+no constructors, and stay bare).
 
 ```apn
-Mixed = Int | String          # Type Mixed is Int | String
+Mixed = (Int | String)        # Type Mixed is Int | String
 f (m : Mixed) = m             # takes 1 and "a", not 2.5
 (2.5 : Mixed)                 # error: Float is not one of Int | String
-OptOrList a = Option a | List a
+OptOrList a = (Option a | List a)
+# Mixed = Int | String        # error: Int is a type already; write (Int | String)
 ```
 
 A `|` distinguishes a constructor declaration from a type alias. On one line,

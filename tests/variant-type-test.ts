@@ -69,3 +69,19 @@ for (const [source, expected] of [
     const actual = interpreter.renderString(interpreter.run(parseDocument(source)));
     if (actual !== expected) throw new Error(actual);
 });
+// Bare, X = A | B declares constructors; the union of existing types is the
+// expression in parentheses, checked as the union it is.
+for (const checked of [true, false]) Deno.test(`a union of types is written in parentheses (checked=${checked})`, () => {
+    const run = (source: string) => {
+        const interpreter = new Interpreter();
+        if (checked) interpreter.enableChecking();
+        return interpreter.renderString(interpreter.run(parseDocument(source)));
+    };
+    if (run('IS = (Int | String)\nf (x : IS) = x\n[f 1, f "a", Int <= IS]') !== '[1,"a",True]') throw new Error("union");
+    if (run('g (x : Int | String) = x\ng 2') !== '2') throw new Error("written in place");
+    try { run('IS = Int | String\n1'); } catch (error) {
+        if (String(error).includes("their union is written in parentheses")) return;
+        throw error;
+    }
+    throw new Error("a bare union of types was accepted");
+});

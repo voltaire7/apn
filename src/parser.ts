@@ -1920,6 +1920,10 @@ class Parser {
             throw new Error(`Parser: expected an expression after '${operator}'; use '_' for an unfinished definition`);
         }
         const body = this.parseExpr();
+        // X = (A | B) is the union of A and B; without its parentheses the
+        // statement declares constructors (see isTypeDeclaration): they're needed.
+        const group = this.groups.get(body);
+        if (group !== undefined && (body as Extract<Expr, { t: "block" }>).stmts[0]?.t === "binop" && ((body as Extract<Expr, { t: "block" }>).stmts[0] as Extract<Expr, { t: "binop" }>).op === "|") this.unnecessary.set(group, false);
         // x = e : T, outermost.
         if (operator === "=" && this.isSym(":")) return this.ascription(body, this.next(), "statement");
         return body;

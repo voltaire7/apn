@@ -511,10 +511,14 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
   `sharedParameters` for the flat typed pattern). An ascription's head reads
   it so too: `sharedType` of the forced head at runtime, `namesItsType` then
   `typeExpr` in the checker.
-- `X = A | B` stays a `type` statement; runtime and checker decide what it is
-  by what its names are bound to (`unionKind`, worded once in `ast.ts`): a
-  union is run and checked as `X = intrinsics.union [A, B]` (`unionClause`),
-  a `type` value with `choices` at runtime and a `union` type in the checker.
+- `X = A | B` written bare stays a `type` statement; runtime and checker decide
+  whether it declares or claims by what its names are bound to (`unionKind`,
+  worded once in `ast.ts`), and an existing type there is an error; only a
+  union of list types is run as `X = intrinsics.union [...]` (`unionClause`).
+  `X = (A | B)` is a definition whose body is the prelude's `|`, which the
+  checker reads as `intrinsics.union [A, B]` while `|` is the prelude's; the
+  parser keeps those parentheses (`parseDefBody`). Either way the union is a
+  `type` value with `choices` at runtime and a `union` type in the checker.
 - A constructor's logic (`ConstructorLogic`) is parsed with its `_` filled
   by `intrinsics.tag Owner Name [fields]` (`constructorDeclaration`); a union
   claiming it renames the owner. At runtime the constructor's native runs it

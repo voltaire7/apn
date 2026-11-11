@@ -71,6 +71,8 @@ for (const source of [
     "f (x :: xs) = x",
     "(x :: xs) ++ ys = ys",
     "a - (-1) = a",
+    // X = (A | B) is the union; bare, the statement declares constructors.
+    "IS = (Int | String)",
 ]) Deno.test(`necessary parentheses: ${source}`, () => { parse(source); });
 
 Deno.test("--loose accepts unnecessary parentheses", () => {
