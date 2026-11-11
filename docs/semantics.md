@@ -1761,12 +1761,43 @@ round. `==` is having the same values, `a <= b` and `b <= a`: the order of a
 union does not matter (`Int | String == String | Int`), nor how it is written
 (`List Int == E` for `E = [] | Int :: List Int`; `Seq Int == List Int`), but a
 union is none of its members (`List Int == [Int]` is `False`), so
-`isType t x` is `typeOf x <= t` where `typeOf` is exact. Containment is decided
+`isType t x` is `typeOf x <= t` where `typeOf` is exact (and `t` is no
+[refinement](#refinement-types)). Containment is decided
 as a type test is: unions alternative by alternative, list types as they
 unfold (a head within the heads it may be, the rest within their rests), a
 pair of types met again holding, as their unfoldings never end. A type
 variable in a description (`List a`) is any type. A union of list types may
 list written lists, `Two = [Int] | [Int,Int]` being `Int :: [] | Int :: [Int]`.
+
+### Refinement types
+
+`X = (p : T) | condition` defines `X` as the values of `T` that the pattern
+`(p : T)` takes and for which the condition holds: the guard of a clause
+(`f (n : Int) | n > 0 = n`) read as a set, `{ n : Int | n > 0 }`. It makes
+nothing and names no constructor: it is the expression
+`intrinsics.refine T (v -> v ~ [(p : T) -> condition, _ -> False])`, the set
+of `T`'s values for which a function is truthy.
+
+```apn
+Positive = (n : Int) | n > 0
+Small = (n : Positive) | n < 10       # a refinement of a refinement
+Bounded lo hi = (n : Int) | lo <= n && n <= hi
+Ordered = ([a,b] : [Int,Int]) | a <= b
+f (x : Positive) = x                  # f -3 matches no clause
+(3 : Bounded 1 10)                    # 3
+(-3 : Positive)                       # error: -3 is not in Positive
+```
+
+A refinement's values are its base's: `typeOf (3 : Positive)` is `Int`, and
+arithmetic on one gives an `Int`. Ascription and typed patterns take a value
+as the base's would (converted: `(c : Scalar)` takes `65` as `(c : UInt)`
+does), then test the condition; `isType X v`, a constructor field and a union
+holding `X` test membership. A refinement is within its base and its base's
+supersets (`Positive <= Int`), but nothing is within it except itself and its
+own refinements (`Int <= Positive` and `Small <= Positive` compare no
+conditions: the second is `True` only because `Small` refines `Positive`). The
+static check decides the condition on values it knows (`f -3` above is a
+static error) and leaves the rest to the run.
 
 ## Function types
 

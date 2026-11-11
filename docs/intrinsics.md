@@ -66,10 +66,18 @@ positive, so every fraction has one spelling; a `Fraction` whose denominator is
 `ComplexExact [re : Fraction, im : Fraction]` with the same care.
 
 The sized integers (`Int8` ... `Int128`, `UInt8` ... `UInt128`) are `Int`
-restricted to a range: `Int8` is the integers from -128 to 127. That is a
-refinement type (a set given by a condition), which APN cannot yet write as a
-type; today the range is checked where a value becomes one (`300 : UInt8` is an
-error), never by wrapping around.
+restricted to a range, a [refinement type](semantics.md#refinement-types):
+
+```apn
+Int8 = (n : Int) | -128 <= n && n <= 127
+UInt8 = (n : UInt) | n <= 255
+```
+
+The range is checked where a value becomes one (`300 : UInt8` is an error),
+never by wrapping around. One thing the definitions leave out: a refinement's
+values are its base's, while an `Int8` keeps its name (`typeOf (1 : Int8)` is
+`Int8`), as a named subtype's values do (`Meters = Float`); a program cannot
+yet name a refinement that way.
 
 ## Inexact numbers
 
@@ -98,12 +106,14 @@ because every `Int` is in the union.
 
 ## Text
 
+A `Char`'s number is a Unicode scalar value, a code point that is no
+surrogate:
+
 ```apn
-Char = | Char UInt             # a Unicode scalar value
+Scalar = (n : UInt) | n <= 1114111 && (n < 55296 || n > 57343)
+Char = | Char Scalar
 String = | String (List Char)  # text: to (List Char) and from (List Char) convert
 ```
-
-A `Char`'s number is a code point that is no surrogate (another refinement).
 
 ## Records, functions and types
 

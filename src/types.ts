@@ -38,7 +38,7 @@ export type Value =
     | { kind: "mutable"; v: Value; schema?: Value }
     // variable: a type variable (the a of a -> a), named by name.
     // counts: a type function of lists whose length its index makes (Vect's n, see Counting).
-    | { kind: "type"; name: string; inspect?: boolean; description?: string; family?: VariantFamily; arguments?: Value[]; alias?: { parameters: string[]; run: Value }; choices?: Value[]; variable?: boolean; counts?: Counting }
+    | { kind: "type"; name: string; inspect?: boolean; description?: string; family?: VariantFamily; arguments?: Value[]; alias?: { parameters: string[]; run: Value }; choices?: Value[]; refine?: Value; variable?: boolean; counts?: Counting }
     | { kind: "hashmap"; entries: Map<string, [Value, Value]> }
     | Numeric
     | { kind: "rationalRange"; lo: Real; step: Real; hi: Real | null }

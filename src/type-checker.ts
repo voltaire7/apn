@@ -77,7 +77,7 @@ type Ty =
     // chosen: one of value's choices, picked by a condition known only at runtime.
     // given: an indexed family's index values written so far, by parameter (Vec 2 Int).
     // applied: how many of a family's arguments are given (Pair a, Vec 2).
-    | { k: "type"; value: Ty; chosen?: boolean; given?: Map<number, Known>; applied?: number }
+    | { k: "type"; value: Ty; chosen?: boolean; given?: Map<number, Known>; applied?: number; refined?: { fn?: KnownFunction; name?: string } }
     // A type function of lists whose length its index makes (Vect's n, see Counting).
     | { k: "factory"; args: Entry[]; counts: Counting; name: string }
     // A capitalized function (see construct); clauses: when it has patterns
@@ -1871,7 +1871,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A capitalized name for a scalar type names a subtype (Money = Float), as
     // at runtime; undefined for anything else.
     function namedSubtype(name: string, t: Ty): Ty | undefined {
-        const type = resolve(t), base = type.k === "type" ? resolve(type.value) : undefined;
+        const type = resolve(t), base = type.k === "type" && !type.refined ? resolve(type.value) : undefined;
         if (base?.k !== "atom" || !NAMED_BASES.has(base.name)) return undefined;
         return { k: "type", value: { k: "variant", name, args: [], base } };
     }
@@ -2445,21 +2445,33 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A known value against the pattern that matches it, part by part: each
     // typed part (Int n) converts its known value, inside variant payloads
     // (any number of fields), list elements and cons cells.
-    function castPattern(p: Pattern, known: Known, e: Expr): void {
+    // A refinement's condition on a value the check knows is decided now, as
+    // a known number's range is (300 : UInt8); one it cannot decide is left
+    // to the run.
+    function refinementFails(t: Ty, known: Known, e: Expr): boolean {
+        const r = resolve(t);
+        if (r.k !== "type" || !r.refined?.fn || applyKnown(r.refined.fn, [known], 0)?.boolean !== false) return false;
+        problem(`${renderKnown(known) ?? "the value"} is not in ${r.refined.name ?? "the refinement"}`, e);
+        return true;
+    }
+    function castPattern(p: Pattern, known: Known, e: Expr, scope?: Scope): void {
         known = freshKnown(known);
         switch (p.p) {
-            case "as": castPattern(p.left, known, e); castPattern(p.right, known, e); return;
-            case "typeBind": castPattern(p.value, known, e); return;
+            case "as": castPattern(p.left, known, e, scope); castPattern(p.right, known, e, scope); return;
+            case "typeBind": castPattern(p.value, known, e, scope); return;
             case "list":
-                if (known.items?.length === p.v.length) p.v.forEach((item, n) => castPattern(item, known.items![n], e.t === "list" ? e.v[n] ?? e : e));
+                if (known.items?.length === p.v.length) p.v.forEach((item, n) => castPattern(item, known.items![n], e.t === "list" ? e.v[n] ?? e : e, scope));
                 return;
             case "cons":
                 if (known.items?.length) {
-                    castPattern(p.head, known.items[0], e.t === "list" ? e.v[0] ?? e : e);
-                    castPattern(p.tail, { items: known.items.slice(1) }, e);
+                    castPattern(p.head, known.items[0], e.t === "list" ? e.v[0] ?? e : e, scope);
+                    castPattern(p.tail, { items: known.items.slice(1) }, e, scope);
                 }
                 return;
             case "constr": {
+                // (x : T), T a refinement.
+                const type = p.typed && p.args.length === 1 ? scope?.get(p.tag)?.type : undefined;
+                if (type && refinementFails(type, known, e)) return;
                 if (NUMERIC_TYPES.includes(p.tag) && p.args.length === 1) {
                     const number = knownNumberOf(known);
                     if (number) try { castNumeric(p.tag, number); } catch (error) { problem((error as Error).message, e); }
@@ -2467,7 +2479,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 if (known.tag !== p.tag || !known.payload) return;
                 const args = payloadExprs(e, p.args.length);
-                p.args.forEach((arg, n) => { if (known.payload![n]) castPattern(arg, known.payload![n], args[n] ?? e); });
+                p.args.forEach((arg, n) => { if (known.payload![n]) castPattern(arg, known.payload![n], args[n] ?? e, scope); });
                 return;
             }
             default: return;
@@ -2831,6 +2843,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!types?.every(t => t)) { runtimeChecks++; return explicitDynamic; }
                 return { k: "type", value: union(types as Ty[]) };
             }
+            // A refinement of T is T to the check; whether its condition holds
+            // is decided when it runs.
+            if (f.name === "refine") {
+                const base = resolve(args[0]);
+                runtimeChecks++;
+                return base.k === "type" ? { k: "type", value: base.value, refined: { fn: entries[1].fn } } : explicitDynamic;
+            }
             // A tag whose owner or constructor is computed is decided when it runs.
             if (f.name === "tag") { runtimeChecks++; return explicitDynamic; }
             // with v k x, called itself: its copy's type is decided when it runs
@@ -2995,6 +3014,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 runtimeChecks++;
                 return explicitDynamic;
             }
+            if (refinementFails(f, argument, e)) return f;
             const t = resolve(f.value);
             let a = resolve(argument.type);
             // A list or record of types (Point = [x : Float, y : Float]) given as a
@@ -3164,7 +3184,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (options.strict && !f.coerce) unify(f.input, argument.type, e);
                 else convert(f.input, argument.type, e, false, new Map(), !!f.coerce, !!f.coerce);
                 if (f.coerce) castKnown(f.input, argument, e);
-                if (f.coerce && f.pattern) castPattern(f.pattern, argument, e);
+                if (f.coerce && f.pattern) castPattern(f.pattern, argument, e, f.summary?.scope);
             } catch (error) {
                 if (f.selfName && error && typeof error === "object" && "message" in error &&
                     /^(cannot use |Dynamic requires an explicit conversion)/.test(String(error.message))) {
@@ -3842,7 +3862,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (head.t === "var" && READS_CODE.has(head.name)) argumentType = asCode(resolve(argumentType));
                 else closed(argumentType);
                 closed(callee);
-                const result = application(callee, { type: argumentType, ...valueEntry(a, scope) }, a);
+                // A refinement's condition, written as a function, is kept to decide
+                // known values (see application).
+                const condition = resolved.k === "intrinsic" && resolved.name === "refine" && resolved.args?.length === 1 && a.t === "lambda"
+                    ? { fn: { e: a, env: [], scope } } : {};
+                const result = application(callee, { type: argumentType, ...valueEntry(a, scope), ...condition }, a);
                 if (!callees.has(e)) noClauseMatches(e, scope);
                 // A partial application that leaves its call chain is an ordinary function value.
                 return callees.has(e) ? result : withoutShapes(result);
@@ -4295,7 +4319,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     convert(target, t, e.value, false, new Map(), true);
                     const known = valueEntry(e.value, scope);
                     castKnown(target, known, e.value);
-                    castPattern(e.pattern, known, e.value);
+                    castPattern(e.pattern, known, e.value, scope);
                     for (const name of patternNames(e.pattern)) { const entry = scope.get(name); if (entry) entry.bound = e.value; }
                 } else {
                     bind(e.pattern, recordSelection(e.pattern, t, e.value), scope, e);
@@ -6812,6 +6836,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         defineBinding(name, clauses, scope, location, scope.get(name));
         const defined = /^[A-Z]/.test(name) && scope.get(name), named = defined && namedSubtype(name, defined.type);
         if (defined && named) scope.set(name, { ...defined, type: named });
+        // A refinement is known by its name in what it rejects.
+        const refined = defined && resolve(defined.type);
+        if (refined && refined.k === "type" && refined.refined) scope.set(name, { ...defined, type: { ...refined, refined: { ...refined.refined, name } } });
     }
     // A definition's code, inferred as that definition (deferred when lazy).
     function inferDefinition<T>(definition: Definition | undefined, lazy: boolean, run: () => T): T {
@@ -7218,6 +7245,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("intrinsics.match", { type: { k: "intrinsic", name: "match", arity: 2 } });
     scope.set("intrinsics.tag", { type: { k: "intrinsic", name: "tag", arity: 3 } });
     scope.set("intrinsics.union", { type: { k: "intrinsic", name: "union", arity: 1 } });
+    scope.set("intrinsics.refine", { type: { k: "intrinsic", name: "refine", arity: 2 } });
     scope.set("intrinsics.get", { type: { k: "intrinsic", name: "get", arity: 2 } });
     scope.set("intrinsics.with", { type: { k: "intrinsic", name: "with", arity: 3 } });
     scope.set("intrinsics.import", { type: { k: "intrinsic", name: "import" } });

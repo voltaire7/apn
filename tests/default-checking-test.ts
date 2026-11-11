@@ -1442,3 +1442,35 @@ Deno.test("the checker accepts the prelude it reads", async () => {
     const issues = checkTypes(parse(source), { prelude: true }).issues;
     if (issues.length) throw new Error(issues[0].message);
 });
+
+// A refinement type, X = (p : T) | condition: T's values for which it holds
+// (docs/semantics.md#refinement-types), checked by the run and, on values the
+// check knows, statically.
+const POSITIVE = "Positive = (n : Int) | n > 0\n";
+for (const [source, output] of [
+    [POSITIVE + 'x = 3 : Positive\nx', '3'], [POSITIVE + 'f (x : Positive) = x * 2\nf 4', '8'],
+    [POSITIVE + 'd (x : Positive) = "positive"\nd x = "other"\nmap d [-1,1]', '["other","positive"]'],
+    [POSITIVE + '[Positive <= Int, Int <= Positive, isType Positive 3, isType Positive -3]', '[True,False,True,False]'],
+    [POSITIVE + 'typeOf (3 : Positive)', 'Int'], [POSITIVE + 'Small = (n : Positive) | n < 10\n[Small <= Positive, isType Small 12]', '[True,False]'],
+    ['Bounded lo hi = (n : Int) | lo <= n && n <= hi\nx = 5 : Bounded 1 10\nx', '5'],
+    ['Ordered = ([a,b] : [Int,Int]) | a <= b\n[isType Ordered [1,2], isType Ordered [2,1]]', '[True,False]'],
+    [POSITIVE + 'PosOrText = (Positive | String)\n[isType PosOrText "a", isType PosOrText 4, isType PosOrText -4]', '[True,True,False]'],
+    [POSITIVE + 'Box (x : Positive) = _\nBox 2', 'Box 2'],
+    ['Scalar = (n : UInt) | n <= 1114111 && (n < 55296 || n > 57343)\nc (x : Scalar) = x\nc 65', '65'],
+]) {
+    Deno.test(`a refinement type: ${JSON.stringify(source)}`, () => {
+        const shown = run(session(), source);
+        if (shown !== output) throw new Error(`expected ${output}, got ${shown}`);
+    });
+}
+for (const [source, message] of [
+    [POSITIVE + 'x = -3 : Positive', '-3 is not in Positive'], [POSITIVE + 'f (x : Positive) = x\nf -3', '-3 is not in Positive'],
+    [POSITIVE + 'f (x : Positive) = x\nh y = f y\nh 0', '0 is not in Positive'],
+    [POSITIVE + 'g [(a : Positive), b] = a\ng [-1,2]', '-1 is not in Positive'],
+    [POSITIVE + 'k = 0 - 2\nBox (x : Positive) = _\nBox k', '-2 is not in Positive'],
+]) {
+    Deno.test(`a refinement type rejects: ${JSON.stringify(source)}`, () => {
+        try { run(session(), source); } catch (error) { if (String(error).includes(message)) return; throw error; }
+        throw new Error("accepted");
+    });
+}

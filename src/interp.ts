@@ -108,6 +108,8 @@ export const NATIVES: Array<[string, number]> = [
     ["intrinsics.with", 3],
     // A union of types (Mixed = Int | String).
     ["intrinsics.union", 1],
+    // refine T p: the values of T for which p is True (Positive = (n : Int) | n > 0).
+    ["intrinsics.refine", 2],
     // import path: an action reading a module, its record the result.
     ["intrinsics.import", 1],
     // readFileFrom path: an action reading a file beside the running one;
@@ -242,6 +244,20 @@ export class Interpreter {
         if (!bound || this.loadingPrelude) return true;
         if (PRELUDE_TYPES.has(name)) return bound === this.preludeBindings.get(name);
         return bound.kind === "type" && bound.name === name && !bound.family;
+    }
+    // (p : T), T a refinement: the value as its base's pattern takes it
+    // (converted: (c : Scalar) takes 65 as (c : UInt) does), its condition
+    // holding, then p.
+    private refinedPattern(type: Extract<Value, { kind: "type" }>, p: Pattern, v: Value, binds: Map<string, Value>): boolean {
+        const member = this.refinedMember(type, v);
+        return member !== undefined && this.matchPattern(p, member, binds);
+    }
+    private refinedMember(type: Value, v: Value): Value | undefined {
+        if (type.kind === "type" && type.refine) {
+            const member = this.refinedMember(this.reference(type.choices![0]), v);
+            return member !== undefined && this.truthy(this.demand(this.apply(type.refine, member))) ? member : undefined;
+        }
+        try { return this.conform(type, v); } catch (error) { if (error instanceof APNError) return undefined; throw error; }
     }
     /** Whether a value is a module's record (what import and load yield). */
     isModule(v: Value): boolean { return this.moduleValues.has(v); }
@@ -3702,6 +3718,12 @@ export class Interpreter {
 
     conform(typeIn: Value, value: Value): Value {
         const read = this.reference(typeIn);
+        // A refinement's value is its base's, for which its condition holds.
+        if (read.kind === "type" && read.refine) {
+            const member = this.conform(read.choices![0], value);
+            if (this.truthy(this.demand(this.apply(read.refine, member)))) return member;
+            throw new APNError("runtime", `${this.renderString(member)} is not in ${read.name || "the refinement"}`);
+        }
         const written = this.asWritten.get(read);
         if (written) return this.writtenValue(read, this.conform(written.made, value));
         const type = read.kind === "closure" || read.kind === "clauseFn" ? this.asType(read) ?? read : this.sharedType(read) ?? typeIn;
@@ -3922,6 +3944,13 @@ export class Interpreter {
         a = this.sharedType(a) ?? a; b = this.sharedType(b) ?? b;
         if (this.sameType(a, b)) return true;
         if (b.kind === "type" && !b.family && !b.arguments?.length && (b.name === "$any" || b.name === "Dynamic")) return true;
+        // A refinement is within its base; only itself, or a refinement of
+        // it, is within it (a condition is not compared with another).
+        if (b.kind === "type" && b.refine) {
+            for (let t: Value = a; t.kind === "type" && t.refine; t = this.reference(t.choices![0])) if (t.refine === b.refine) return true;
+            return false;
+        }
+        if (a.kind === "type" && a.refine) return this.within(a.choices![0], b, met);
         if (this.listShaped(a) && this.listShaped(b)) {
             const key = `${this.typeKey(a)} <= ${this.typeKey(b)}`;
             if (met.has(key)) return true;
@@ -4018,7 +4047,7 @@ export class Interpreter {
         }
         if (a.kind === "type" && b.kind === "type") {
             const other = b.arguments ?? [];
-            return a.name === b.name && a.family === b.family && a.alias === b.alias &&
+            return a.name === b.name && a.family === b.family && a.alias === b.alias && a.refine === b.refine &&
                 (a.arguments?.length ?? 0) === other.length && (a.arguments ?? []).every((v, index) => this.sameType(v, other[index]));
         }
         if (isNumeric(a) && isNumeric(b)) return equalNumbers(a, b);
@@ -4052,6 +4081,10 @@ export class Interpreter {
     // tested on (see unfolded).
     belongsToType(type: Value, value: Value, met = new Map<unknown, Set<unknown>>()): boolean {
         type = this.reference(type); value = this.reference(value);
+        // A refinement's values are its base's for which its condition holds.
+        if (type.kind === "type" && type.refine) {
+            return this.belongsToType(type.choices![0], value, met) && this.truthy(this.demand(this.apply(type.refine, value)));
+        }
         if (type.kind === "type" && type.choices) {
             if (!type.choices.some(choice => this.isList(choice))) return type.choices.some(choice => this.belongsToType(choice, value, met));
             // A union of list types unfolds as the value is read: met again on
@@ -4795,6 +4828,11 @@ export class Interpreter {
             case "intrinsics.get": return this.builtinGet(this.force(args[0]), args[1]);
             case "intrinsics.with": return this.assignItem(this.dataValue(args[0]), this.dataValue(args[1]), args[2]);
             case "intrinsics.union": return this.union([...this.elements(args[0])].map(x => this.reference(x)));
+            case "intrinsics.refine": {
+                const base = this.reference(this.demand(args[0]));
+                if (!this.isTypeValue(base)) throw new APNError("runtime", `a refinement refines a type, and ${this.renderString(base)} is not one`);
+                return { kind: "type", name: "", choices: [base], refine: this.reference(args[1]) };
+            }
             case "intrinsics.readFileFrom": {
                 const path = this.force(args[0]);
                 if (path.kind !== "string") throw new APNError("runtime", "readFileFrom expects a file path string");
@@ -5370,7 +5408,7 @@ export class Interpreter {
     private union(types: Value[]): Value {
         const choices: Value[] = [];
         let unfolds = false;
-        for (const type of types.flatMap(t => t.kind === "type" && t.choices ? t.choices : [t])) {
+        for (const type of types.flatMap(t => t.kind === "type" && t.choices && !t.refine ? t.choices : [t])) {
             if (this.isList(type)) { unfolds = true; choices.push(type); continue; }
             if (!this.isTypeValue(type)) throw new APNError("runtime", `a union lists types, and ${this.renderString(type)} is not one`);
             if (!choices.some(c => !this.isList(c) && this.sameType(c, type))) choices.push(this.sharedType(this.reference(type)) ?? type);
@@ -5472,6 +5510,7 @@ export class Interpreter {
     typeValue(f: Extract<Value, { kind: "type" }>, arg: Value): Value {
         if (f.name === "$any" && !f.family && !f.alias) return arg;
         if (f.name === "Bool" && !f.family && !f.alias && !f.choices) return mkBool(this.truthy(arg));
+        if (f.refine) return this.conform(f, arg);
         // Applying a union checks that the value is one of its types.
         if (f.choices) {
             const value = this.demand(arg);
@@ -5726,6 +5765,7 @@ export class Interpreter {
             if (type.kind === "type") {
                 if (type.alias) return false;
                 // ((Int | String) x): a value of one of the union's types.
+                if (type.refine) return this.refinedPattern(type, p.value, actual, binds);
                 if (type.choices) return this.belongsToType(type, actual) && this.matchPattern(p.value, actual, binds);
                 // (List Int xs): a list, its elements converted as they are used
                 // (as a variant's payload is), so an infinite one matches too.
@@ -5779,6 +5819,7 @@ export class Interpreter {
                 if (!args && p.args.length > count) {
                     const types = p.args.slice(0, count).map(arg => arg.p === "constr" && !arg.args.length ? this.env.get(arg.tag) : undefined);
                     const made = types.every(Boolean) ? this.reference(this.construct(alias as Extract<Value, { kind: "type" }>, types as Value[])) : undefined;
+                    if (made?.kind === "type" && made.refine) return this.refinedPattern(made, p.args[count], given, binds);
                     if (made?.kind === "type" && made.choices) return this.belongsToType(made, given) && this.matchPattern(p.args[count], given, binds);
                 }
                 if (written || args) {
@@ -5838,6 +5879,7 @@ export class Interpreter {
             if (binding) {
                 const type = this.reference(binding);
                 // (Mixed m): a value of any of a union's types.
+                if (type.kind === "type" && type.refine) return p.args.length === 1 && this.refinedPattern(type, p.args[0], v, binds);
                 if (type.kind === "type" && type.choices) return p.args.length === 1 && this.belongsToType(type, v) && this.matchPattern(p.args[0], v, binds);
                 if (p.args.length === 1 && type.kind === "type" && this.counted(type)) return this.matchPattern(p.args[0], this.conform(type, v), binds);
                 if (p.args.length === 1 && type.kind === "type" && !type.family && !type.alias) {

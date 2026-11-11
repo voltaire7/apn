@@ -545,6 +545,10 @@ OptOrList a = (Option a | List a)
 # Mixed = Int | String        # error: Int is a type already; write (Int | String)
 ```
 
+A bar after a typed pattern is a condition instead, as a clause's guard is:
+`Positive = (n : Int) | n > 0` is a [refinement type](semantics.md#refinement-types),
+the `Int`s for which it holds.
+
 A `|` distinguishes a constructor declaration from a type alias. On one line,
 constructors are separated by `|` with no leading one, except a single
 constructor, which needs a leading pipe to be a declaration. On several lines,

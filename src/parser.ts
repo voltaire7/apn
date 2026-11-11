@@ -1929,6 +1929,8 @@ class Parser {
             this.isSym(";") || this.isSym("}") || this.isSym(")") || this.isSym("]")) {
             throw new Error(`Parser: expected an expression after '${operator}'; use '_' for an unfinished definition`);
         }
+        const refined = operator === "=" ? this.refinement() : undefined;
+        if (refined) return refined;
         const body = this.parseExpr();
         // X = (A | B) is the union of A and B; without its parentheses the
         // statement declares constructors (see isTypeDeclaration): they're needed.
@@ -1937,6 +1939,33 @@ class Parser {
         // x = e : T, outermost.
         if (operator === "=" && this.isSym(":")) return this.ascription(body, this.next(), "statement");
         return body;
+    }
+
+    // A refinement type, X = (p : T) | condition: the values of T matching p
+    // for which the condition holds, as a guarded clause's parameter accepts
+    // them. It is refine T (v -> v ~ [(p : T) -> condition, _ -> False]).
+    refinement(): Expr | undefined {
+        if (!this.isSym("(")) return undefined;
+        const start = this.i;
+        let pattern: Pattern, type: Expr;
+        try {
+            this.next();
+            const p = this.parseConsPattern();
+            if (!this.eatSym(":")) throw new Error("no type");
+            type = this.typeExpr(this.typeEnd("group").end);
+            this.expectSym(")");
+            if (!this.isSym("|")) throw new Error("no condition");
+            pattern = typedPattern(p, type);
+        } catch { this.i = start; return undefined; }
+        this.next();
+        const condition = this.parseExpr(), value = this.freshName();
+        const intrinsic = (field: string): Expr => ({ t: "recordAccess", rec: { t: "var", name: "intrinsics" }, field });
+        const arms: Expr = { t: "list", v: [
+            { t: "patternLambda", params: [pattern], body: condition },
+            { t: "patternLambda", params: [{ p: "wildcard" }], body: { t: "bool", v: false } },
+        ] };
+        const test: Expr = { t: "lambda", params: [value], body: { t: "app", f: { t: "app", f: { t: "var", name: "~" }, a: { t: "var", name: value } }, a: arms } };
+        return { t: "app", f: { t: "app", f: intrinsic("refine"), a: type }, a: test };
     }
 
     // ---- Declarations and ascription (name : T, e : T, (p : T)) ----

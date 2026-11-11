@@ -298,6 +298,7 @@ function helpText(): string {
         `  f x = 1; f x = "one"   overloads by result type: (f 0 : Int) is 1, (f 0 : String) "one"`,
         `  Option a = Some a | None`,
         `  Count = Int     (a named Int: an Int wherever one is accepted, keeps its name)`,
+        `  Positive = (n : Int) | n > 0   (a refinement: the Ints for which the condition holds)`,
         `  Box x = _   (a constructor: Box 5 stands for itself; Rect (w : Float) (h : Float) = _ converts fields)`,
         `  UserId (id : Int) = _   (a distinct type: none of Int's operations; UserId x patterns unwrap)`,
         `  Percent (x : Float) = x > 100 ? Percent 100.0 : _   (a constructor's logic; _ is the value itself)`,
