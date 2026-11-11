@@ -1,0 +1,140 @@
+# Intrinsic types, defined in APN
+
+**Intrinsics don't get special treatment.** A built-in type behaves exactly as
+the APN definition below would: the same values, the same patterns, the same
+errors. The interpreter only stores and computes it faster (a bigint for a
+natural, IEEE 754 hardware for a float). Where the two disagree, the definition
+is right and the interpreter is wrong. `List` and `Vect` are defined this way in
+the prelude already; for the others the definitions here are the model, written
+as a program would write them (a program cannot redefine these names).
+
+Each definition uses only the language's own forms: a constructor is a
+definition whose body is `_`, a union of types is `(A | B)`, a family of types
+is a definition with parameters, and an operator is a prelude function. Where
+the language cannot yet say something, this page says so: those gaps are what
+the language still lacks, not exceptions the built-ins enjoy. One exception
+remains: the parser refuses to rebind a built-in type's name (`Int = ...` is an
+error), so the blocks that define one cannot run as written; by this rule a
+program should be able to shadow `Int` as it shadows `map`.
+
+## Bool
+
+```apn
+Bool = True | False
+# A Bool applied to two values is one of them (the prelude's own clauses), so
+# c ? a : b is (c : Bool) a b, and not swaps the two.
+get True a = _ -> a
+get False _ = b -> b
+not x = (x : Bool) False True
+```
+
+`True` and `False` are spelled as keywords; they are these two constructors.
+
+## Natural numbers: `UInt`
+
+```apn
+UInt = Z | S UInt              # S (S Z) is 2
+add Z m = m
+add (S n) m = S (add n m)
+```
+
+A `UInt` is stored as a bigint, and `Z` and `S` are its constructors as a view:
+`f (S k) = k` takes `5` apart as `S 4`, and `S (S Z)` prints `2`. A natural is
+a list of units, `List []`, its length the only thing it keeps: the two have
+the same shape (`Z` is `[]`, `S n` is `[] :: n`).
+
+## Lists
+
+```apn
+List a = [] | a :: List a                                  # the prelude's line
+Vect n a = [] -> Vect Z a | a :: Vect k a -> Vect (S k) a  # the prelude's line
+```
+
+`Vect n a` is a list indexed by its length, the natural each list forgets its
+elements down to.
+
+## Integers and the other exact numbers
+
+```apn
+Int = Pos UInt | Neg UInt
+Neg Z = Pos Z                  # one zero
+Fraction (n : Int) (d : Int) = d == 0 ? fail "zero denominator" : lowest n d _
+```
+
+`lowest` divides by the greatest common divisor and makes the denominator
+positive, so every fraction has one spelling; a `Fraction` whose denominator is
+1 is never made (`6 / 3` is `2`, an `Int`). `ComplexExact` is
+`ComplexExact [re : Fraction, im : Fraction]` with the same care.
+
+The sized integers (`Int8` ... `Int128`, `UInt8` ... `UInt128`) are `Int`
+restricted to a range: `Int8` is the integers from -128 to 127. That is a
+refinement type (a set given by a condition), which APN cannot yet write as a
+type; today the range is checked where a value becomes one (`300 : UInt8` is an
+error), never by wrapping around.
+
+## Inexact numbers
+
+```apn
+Float = | Float [sign : Bool, exponent : Int, significand : UInt]
+Complex = | Complex [re : Float, im : Float]
+```
+
+A `Float` is an IEEE 754 binary64 number: its arithmetic rounds each result to
+the nearest representable value. The model above is correct and slow, which is
+the whole reason the type is intrinsic. `Float32` is the binary32 one.
+
+## The numeric unions
+
+```apn
+Integer = (Int | UInt | Int8 | UInt8 | Int16 | UInt16 | Int32 | UInt32 | Int64 | UInt64
+    | Int128 | UInt128)
+Exact = (Integer | Fraction | ComplexExact)
+Inexact = (Float | Float32 | Complex)
+Real = (Integer | Fraction | Float | Float32)
+Number = (Real | Complex | ComplexExact)
+```
+
+These name sets of the types above and make nothing: `Int <= Real` is `True`
+because every `Int` is in the union.
+
+## Text
+
+```apn
+Char = | Char UInt             # a Unicode scalar value
+String = | String (List Char)  # text: to (List Char) and from (List Char) convert
+```
+
+A `Char`'s number is a code point that is no surrogate (another refinement).
+
+## Records, functions and types
+
+- A **record** is code: a list of bindings (`[x = 1, y = x + 1]`), each field
+  the value its binding gives. `Record` is the set of all of them.
+- A **function** is what the rest of this page is made of: a definition's
+  clauses, applied by substitution. Its model is the language itself, and
+  `(a -> b)` is the set of functions taking an `a` to a `b`.
+- A **type** is a set of values. `Type` is the set of types, and itself one of
+  them (`Type : Type`): consistent for programming, though not as a logic.
+- A **variant** is any constructor's application; `Variant` is the set of all.
+
+## Effects and references
+
+```apn
+IO a = | IO (World -> [a,World])
+Mutable a = | Mutable Ref
+Pointer = | Pointer UInt
+HashMap k v = | HashMap (List [k,v])
+```
+
+An action is a function from the state of the world to a result and the next
+state, and `>>=` threads that state through, which is why no action runs when
+it is applied, only when something runs it. `World` and `Ref` would be types
+whose values no program can make (abstract types), which APN cannot yet
+declare. A `Mutable` cell is a reference into the world's store, and `set` an
+action that changes the store; a `HashMap` is an association list whose keys
+appear once.
+
+## Dynamic
+
+`Dynamic` is the set of all values. What sets it apart is when its values are
+checked: as they are used, at runtime, rather than before the program runs.

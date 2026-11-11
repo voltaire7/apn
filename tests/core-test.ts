@@ -95,7 +95,7 @@ for (const checked of [true, false]) {
         ["Box a = tag Box (x -> x) [a]\nBox 1", "tag's constructor must be a capitalized definition"],
         [CTOR + 'Rect "a" 2', checked ? "cannot use String where Float is required" : "Float expects a number"],
         [CTOR + "Box 5 + 1", checked ? "cannot combine Box Int and Int" : "cannot apply '+'"],
-        ["Bad [x] = _\n1", "a constructor's field is a name or a typed name"],
+        ["Bad [x] = _\n1", "a constructor's field is a name, a typed name or a record of typed fields"],
         [MAYBE + '(Just "a" : Maybe Int)', checked ? "cannot use String where Int is required" : "Int expects a number"],
         ["Just x = _\nMaybe a = Just a | Nope\n1", "Maybe unions constructors declared with _, and Nope is not one"],
         [MIXED + "(2.5 : Mixed)", checked ? "cannot use Float where Int | String is required" : "Float is not one of Int | String"],

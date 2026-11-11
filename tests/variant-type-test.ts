@@ -85,3 +85,21 @@ for (const checked of [true, false]) Deno.test(`a union of types is written in p
     }
     throw new Error("a bare union of types was accepted");
 });
+// A record of typed fields is a pattern of that record's type, binding each
+// field to its name; a constructor takes one as a field, converting a list.
+for (const [source, expected] of [
+    ['len3 [x : Int, y : Int, z : Int] = x + y + z\n[len3 [1,2,3], len3 [x = 1, y = 2, z = 4]]', '[6,7]'],
+    ['Vector3 [x : Int, y : Int, z : Int] = _\nv = Vector3 [1,2,3]\nsx (Vector3 [x = a]) = a\n[v, sx v, typeOf v]', '[Vector3 [x = 1, y = 2, z = 3], 1, Vector3]'],
+] as const) for (const checked of [true, false]) Deno.test(`a record pattern of types (checked=${checked}): ${source}`, () => {
+    const interpreter = new Interpreter();
+    if (checked) interpreter.enableChecking();
+    const actual = interpreter.renderString(interpreter.run(parseDocument(source)));
+    if (actual !== expected) throw new Error(actual);
+});
+// typeOf widens each part to its type: a Box holding a type is a Box Type.
+Deno.test("typeOf widens each part of a value", () => {
+    const interpreter = new Interpreter();
+    interpreter.enableChecking();
+    const actual = interpreter.renderString(interpreter.run(parseDocument('Box a = | Box a\n[typeOf Int, typeOf (Box 3), typeOf (Box Int), isType Type (Box Int)]')));
+    if (actual !== "[Type, Box Int, Box Type, True]") throw new Error(actual);
+});

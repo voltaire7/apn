@@ -476,11 +476,15 @@ to it.
 A capitalized definition whose body is `_` declares a constructor: its
 application stands for nothing but itself, so it is a value, with one field per
 parameter. A name holds anything (a type parameter); a typed name converts its
-field as a typed parameter does. A lowercase definition's `_` stays unfinished.
+field as a typed parameter does, and so does a record of typed fields, a pattern
+of that record's type whose fields bind their names (in any parameter:
+`len3 [x : Int, y : Int, z : Int] = x + y + z`, then `len3 [1,2,3]` is 6). A
+lowercase definition's `_` stays unfinished.
 
 ```apn
 Box x = _                     # the same as Box a = | Box a
 Rect (w : Float) (h : Float) = _ # Rect 3 4 is Rect 3.0 4.0
+Vector3 [x : Int, y : Int, z : Int] = _ # Vector3 [1,2,3] is Vector3 [x = 1, y = 2, z = 3]
 Nothing = _                   # a constructor without fields
 unbox (Box x) = x             # unbox (Box 5) is 5
 ```

@@ -411,6 +411,7 @@ class Parser {
         return t;
     }
     isSym(v: string) { const t = this.peek(); return t.k === "sym" && t.v === v; }
+    isSymAt(n: number, v: string) { const t = this.peek(n); return t.k === "sym" && t.v === v; }
     isKw(v: string) { const t = this.peek(); return t.k === "kw" && t.v === v; }
     eatSym(v: string): boolean {
         if (this.isSym(v)) { this.i++; return true; }
@@ -560,6 +561,15 @@ class Parser {
             this.expectSym(close);
             if (close === ")") this.patternGroups.set(p, this.toks.indexOf(t));
             return p;
+        }
+        // [x : Int, y : Int]: a record of those fields' types, each bound to its
+        // name, as (r : [x : Int, y : Int]) is the record and r.x its field.
+        if (t.k === "sym" && t.v === "[" && this.peek(1).k === "ident" && this.isSymAt(2, ":")) {
+            const type = this.parsePrimary();
+            if (type.t === "record" && type.declared?.length === type.v.length) {
+                return { p: "schema", type, value: { p: "recPat", v: type.v.map(([key]) => [key, key] as [string, string]) } };
+            }
+            throw new Error("Parser: a record pattern of types gives each field a type: [x : Int, y : Int]");
         }
         if (t.k === "sym" && t.v === "[") {
             this.next();
@@ -2435,7 +2445,9 @@ class Parser {
 // Name params = _ declares a constructor: its applications stand for nothing
 // but themselves, so each is a value (Box 5), with one field per parameter. A
 // name holds anything (a type parameter); a typed name converts its field, as a
-// typed parameter does ((Float w)). It is the declaration Name a = | Name a is.
+// typed parameter does ((w : Float)), and a record of typed fields is a field
+// of that record's type ([x : Int, y : Int]). It is the declaration
+// Name a = | Name a is.
 function constructorDeclaration(name: string, params: Pattern[], pos: number, body?: Expr): Extract<TopLevel, { t: "type" }> {
     const parameters: string[] = [], names: string[] = [];
     const typeOf = (p: Pattern): Expr | undefined => p.p === "var" ? { t: "var", name: p.name }
@@ -2445,11 +2457,11 @@ function constructorDeclaration(name: string, params: Pattern[], pos: number, bo
     const fields = params.map(p => {
         if (p.p === "var") { parameters.push(p.name); names.push(p.name); return typeOf(p)!; }
         const [type, named] = p.p === "schema" ? [p.type, p.value] : p.p === "constr" && p.args.length ? [typeOf({ ...p, args: p.args.slice(0, -1) }), p.args[p.args.length - 1]] : [];
-        if (!type || !named || named.p !== "var" && named.p !== "wildcard") {
-            throw new APNError("parse", "a constructor's field is a name or a typed name", { pos, hint: `${name} (Float x) = _` });
+        if (!type || !named || named.p !== "var" && named.p !== "wildcard" && !(named.p === "recPat" && p.p === "schema" && p.type.t === "record")) {
+            throw new APNError("parse", "a constructor's field is a name, a typed name or a record of typed fields", { pos, hint: `${name} (x : Float) = _` });
         }
         if (named.p === "var") names.push(named.name);
-        else if (body) throw new APNError("parse", "a constructor with logic names each field, which its _ holds", { pos, hint: `${name} (Float x) = ... _` });
+        else if (body) throw new APNError("parse", "a constructor with logic names each field, which its _ holds", { pos, hint: `${name} (x : Float) = ... _` });
         return type;
     });
     if (new Set(names).size !== names.length) throw new APNError("parse", "a constructor's field names are distinct", { pos });

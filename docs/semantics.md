@@ -1415,7 +1415,12 @@ typed `Fraction`. Float32 arithmetic rounds its result to binary32. Other numeri
 native functions return their natural numeric result types; use a constructor to
 impose a specific width on them.
 
-`typeOf value` returns a type descriptor. `isType Type value` tests membership
+`typeOf value` returns a type descriptor: the smallest type the value is in, each
+part widened to its type. `typeOf 5` is `Int` and `typeOf Int` is `Type`, a type
+being a value too; with `Box a = | Box a`, `typeOf (Box 3)` is `Box Int` and
+`typeOf (Box Int)` is `Box Type`, a `Box` holding a type, which is in `Type` as
+well because `Box Int` names one (`isType Type (Box Int)` is true; `Box Type`
+is the smaller). `isType Type value` tests membership
 without casting. `Number`, `Real`, `Integer`, `Exact`, and `Inexact` are aggregate
 numeric guards. For example `isType Number (1 : Int32)` is true.
 
